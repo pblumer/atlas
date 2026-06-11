@@ -94,3 +94,24 @@ func readHeader(src []byte) (RecordHeader, []byte, error) {
 	}
 	return h, src[HeaderSize:], nil
 }
+
+// AppendValue appends v's payload bytes (no record header) to dst and returns
+// the extended slice. The state store uses this to persist materialized values;
+// the log uses AppendRecord, which frames a full header around the payload.
+func AppendValue(dst []byte, v Value) []byte {
+	return v.encode(dst)
+}
+
+// DecodeValue decodes a payload of the given value type from src into a freshly
+// allocated Value. It returns an error if vt has no payload type or src is too
+// short for it.
+func DecodeValue(vt ValueType, src []byte) (Value, error) {
+	v := newValue(vt)
+	if v == nil {
+		return nil, fmt.Errorf("model: no payload type for %s", vt)
+	}
+	if err := v.decode(src); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
