@@ -115,3 +115,10 @@ func DecodeValue(vt ValueType, src []byte) (Value, error) {
 	}
 	return v, nil
 }
+
+// DecodeValueInto decodes a payload from src into the caller-provided v. Unlike
+// DecodeValue it allocates nothing, so a hot-path reader can decode into a reused
+// struct (invariant I1). v must be the concrete type matching the bytes.
+func DecodeValueInto(v Value, src []byte) error {
+	return v.decode(src)
+}
