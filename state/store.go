@@ -100,6 +100,25 @@ func (s *Store) DueTimers(now int64, fn func(timerKey uint64, v *model.TimerValu
 	})
 }
 
+// ActiveProcessInstanceCount returns how many process instances are live.
+func (s *Store) ActiveProcessInstanceCount() (int, error) {
+	return s.countPrefix([]byte{byte(cfProcessInstance)})
+}
+
+// ActiveElementInstanceCount returns how many element instances are live.
+func (s *Store) ActiveElementInstanceCount() (int, error) {
+	return s.countPrefix([]byte{byte(cfElementInstance)})
+}
+
+func (s *Store) countPrefix(prefix []byte) (int, error) {
+	count := 0
+	err := s.scanPrefix(prefix, func(_, _ []byte) error {
+		count++
+		return nil
+	})
+	return count, err
+}
+
 func (s *Store) scanPrefix(prefix []byte, fn func(k, v []byte) error) error {
 	return s.scanRange(prefix, prefixEnd(prefix), fn)
 }

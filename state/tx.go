@@ -1,6 +1,8 @@
 package state
 
 import (
+	"encoding/binary"
+
 	"github.com/cockroachdb/pebble"
 
 	"github.com/pblumer/chrampfer/model"
@@ -109,4 +111,72 @@ func (t *Tx) PutTimer(key uint64, v *model.TimerValue) error {
 // its index key; on recovery it comes from the event payload.
 func (t *Tx) DeleteTimer(key uint64, v *model.TimerValue) error {
 	return t.b.Delete(keyTimer(v.DueDate, key), nil)
+}
+
+// --- ProcessInstance ---
+
+// PutProcessInstance writes the process instance.
+func (t *Tx) PutProcessInstance(key uint64, v *model.ProcessInstanceValue) error {
+	return t.b.Set(keyProcessInstance(key), t.encodeValue(v), nil)
+}
+
+// GetProcessInstance returns the process instance, or nil if absent.
+func (t *Tx) GetProcessInstance(key uint64) (*model.ProcessInstanceValue, error) {
+	raw, ok, err := getCopy(t.b, keyProcessInstance(key))
+	if err != nil || !ok {
+		return nil, err
+	}
+	v, err := model.DecodeValue(model.VTProcessInstance, raw)
+	if err != nil {
+		return nil, err
+	}
+	return v.(*model.ProcessInstanceValue), nil
+}
+
+// DeleteProcessInstance removes the process instance.
+func (t *Tx) DeleteProcessInstance(key uint64) error {
+	return t.b.Delete(keyProcessInstance(key), nil)
+}
+
+// --- Active-children counter ---
+//
+// Each scope (a process instance or a subprocess instance) tracks how many
+// child element instances are active. A scope completes when its counter hits
+// zero. The counter is pure state — mutated only from applyToState — so it is
+// rebuilt identically on recovery.
+
+// IncrementActiveChildren adds one active child to scope.
+func (t *Tx) IncrementActiveChildren(scope uint64) error {
+	n, err := t.ActiveChildren(scope)
+	if err != nil {
+		return err
+	}
+	return t.setActiveChildren(scope, n+1)
+}
+
+// DecrementActiveChildren removes one active child from scope, deleting the
+// counter entry when it reaches zero.
+func (t *Tx) DecrementActiveChildren(scope uint64) error {
+	n, err := t.ActiveChildren(scope)
+	if err != nil {
+		return err
+	}
+	if n <= 1 {
+		return t.b.Delete(keyActiveChildren(scope), nil)
+	}
+	return t.setActiveChildren(scope, n-1)
+}
+
+// ActiveChildren returns the active-child count for scope (0 if none).
+func (t *Tx) ActiveChildren(scope uint64) (int32, error) {
+	raw, ok, err := getCopy(t.b, keyActiveChildren(scope))
+	if err != nil || !ok {
+		return 0, err
+	}
+	return int32(binary.BigEndian.Uint32(raw)), nil
+}
+
+func (t *Tx) setActiveChildren(scope uint64, n int32) error {
+	t.scratch = appendBE32(t.scratch[:0], uint32(n))
+	return t.b.Set(keyActiveChildren(scope), t.scratch, nil)
 }

@@ -10,16 +10,16 @@ Status legend: 🔲 not started · 🚧 in progress · ✅ done
 
 The skeleton that proves the three pillars fit together end to end.
 
-- 🔲 Project layout, module, CI (build, test, lint, vet, race detector)
-- 🔲 `model`: record header, `ValueType`/`Intent`, hand-written binary codec + round-trip tests
-- 🔲 `wal`: segmented append-only log, group commit (one fsync per batch), forward iteration
-- 🔲 `state`: Pebble-backed store, transactions, column-family/index helpers
-- 🔲 `engine`: single-writer processor loop, batch cycle, `ProcessingContext`
-- 🔲 `applyToState` used identically live and on recovery; crash-recovery test
-- 🔲 Minimal `compiler`: parse a trivial process, linearize to `CompiledProcess`
-- 🔲 Behaviors: none/start event, end event, sequence flow, **service task**
-- 🔲 `job`: in-process job store + a stub worker
-- 🔲 **Goal: execute `Start → ServiceTask → End` and recover it across a restart**
+- ✅ Project layout, module, CI (build, test, lint, vet, race detector)
+- ✅ `model`: record header, `ValueType`/`Intent`, hand-written binary codec + round-trip tests
+- ✅ `wal`: segmented append-only log, group commit (one fsync per batch), forward iteration
+- ✅ `state`: Pebble-backed store, transactions, column-family/index helpers
+- ✅ `engine`: single-writer processor loop, batch cycle, `ProcessingContext`
+- ✅ `applyToState` used identically live and on recovery; crash-recovery test
+- 🚧 Minimal `compiler`: linearize to `CompiledProcess` done (programmatic builder); BPMN-XML parse front end still to come
+- ✅ Behaviors: none/start event, end event, sequence flow, **service task**
+- 🚧 `job`: job store lives in `state`; completion via the command API drives a worker stub; a dedicated `job` package + real worker subscription is still pending
+- ✅ **Goal: execute `Start → ServiceTask → End` and recover it across a restart** (deployment is programmatic for now, pending the XML front end)
 
 ## Milestone 1 — Core BPMN 🔲
 

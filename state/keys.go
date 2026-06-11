@@ -16,6 +16,8 @@ const (
 	cfJob             columnFamily = 0x03 // job:<jobKey> → JobValue
 	cfJobActivatable  columnFamily = 0x04 // jobActivatable:<jobType>:<jobKey> → nil
 	cfTimer           columnFamily = 0x05 // timer:<dueDate>:<timerKey> → TimerValue
+	cfProcessInstance columnFamily = 0x06 // pi:<piKey> → ProcessInstanceValue
+	cfActiveChildren  columnFamily = 0x07 // activeChildren:<scopeKey> → int32 count
 )
 
 func appendBE64(dst []byte, v uint64) []byte { return binary.BigEndian.AppendUint64(dst, v) }
@@ -54,6 +56,14 @@ func jobActivatablePrefix(jobType int32) []byte {
 
 func keyTimer(dueDate int64, key uint64) []byte {
 	return appendBE64(appendOrderedInt64([]byte{byte(cfTimer)}, dueDate), key)
+}
+
+func keyProcessInstance(key uint64) []byte {
+	return appendBE64([]byte{byte(cfProcessInstance)}, key)
+}
+
+func keyActiveChildren(scope uint64) []byte {
+	return appendBE64([]byte{byte(cfActiveChildren)}, scope)
 }
 
 func keyMeta(name string) []byte {
