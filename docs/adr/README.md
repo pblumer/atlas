@@ -1,0 +1,27 @@
+# Architecture Decision Records
+
+This directory records the significant architectural decisions made on Chrampfer, using the [MADR](https://adr.github.io/madr/)-influenced format described in [`template.md`](template.md).
+
+An ADR captures a decision, the context that forced it, the options considered, and the consequences accepted. ADRs are immutable once accepted: if a decision changes, a new ADR supersedes the old one rather than editing it.
+
+## Index
+
+| ADR | Title | Status |
+|-----|-------|--------|
+| [0001](0001-event-sourcing-and-log-structured-state.md) | Event sourcing and log-structured state | Accepted |
+| [0002](0002-single-writer-partition-model.md) | Single-writer partition model | Accepted |
+| [0003](0003-pebble-as-state-store.md) | Pebble as embedded state store | Accepted |
+| [0004](0004-compile-bpmn-to-indexed-graph.md) | Compile BPMN to an integer-indexed graph | Accepted |
+| [0005](0005-group-commit-and-fsync-strategy.md) | Group commit and fsync strategy | Accepted |
+| [0006](0006-partition-routing-and-cross-partition.md) | Partition routing and cross-partition communication | Accepted |
+| [0007](0007-job-worker-protocol.md) | Job worker protocol | Accepted |
+| [0008](0008-feel-expression-strategy.md) | FEEL expression compilation strategy | Accepted |
+| [0009](0009-record-serialization-format.md) | Record serialization format | Accepted |
+| [0010](0010-go-and-no-cgo.md) | Go as implementation language, no CGO | Accepted |
+
+## Status values
+
+- **Proposed** — under discussion
+- **Accepted** — decided and in effect
+- **Superseded by ADR-XXXX** — replaced by a later decision
+- **Deprecated** — no longer relevant
