@@ -1,0 +1,33 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/bin/
+/dist/
+
+# Test and coverage
+*.test
+*.out
+coverage.*
+/coverage/
+
+# Go workspace
+go.work
+go.work.sum
+
+# Profiling
+*.prof
+*.pprof
+
+# Local data / engine artifacts (WAL segments, state store)
+/data/
+*.wal
+/.chrampfer/
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
