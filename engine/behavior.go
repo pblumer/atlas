@@ -42,16 +42,16 @@ func (p *Processor) registerBehaviors() {
 // handleProcessInstanceActivating creates the process instance and activates
 // each start event.
 func handleProcessInstanceActivating(c *ProcessingContext) {
-	pv := c.cmd.Value.(*model.ProcessInstanceValue)
+	defKey := c.cmd.Value.process.ProcessDefKey
 	piKey := c.NewKey()
-	c.AppendFollowupEvent(piKey, model.IntentActivated, pv)
+	c.AppendProcessInstanceEvent(piKey, model.IntentActivated, model.ProcessInstanceValue{ProcessDefKey: defKey})
 
-	cp := c.process(pv.ProcessDefKey)
+	cp := c.process(defKey)
 	for _, startID := range cp.StartEvents() {
 		node := cp.Node(startID)
-		c.AppendFollowupCommand(c.NewKey(), model.IntentActivating, &model.ElementInstanceValue{
+		c.AppendElementCommand(c.NewKey(), model.IntentActivating, model.ElementInstanceValue{
 			ProcessInstanceKey: piKey,
-			ProcessDefKey:      pv.ProcessDefKey,
+			ProcessDefKey:      defKey,
 			ElementId:          startID,
 			FlowScopeKey:       piKey, // root elements are scoped by the instance
 			BpmnElementType:    uint8(node.Type),
@@ -62,15 +62,15 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 // handleElementActivating emits the Activated lifecycle event, then runs the
 // element-type behavior.
 func handleElementActivating(c *ProcessingContext) {
-	ei := c.cmd.Value.(*model.ElementInstanceValue)
-	c.AppendFollowupEvent(c.cmd.Key, model.IntentActivated, ei)
-	c.p.behavior(ei).OnActivated(c, c.cmd.Key, ei)
+	ei := &c.cmd.Value.element
+	c.AppendElementEvent(c.cmd.Key, model.IntentActivated, *ei)
+	c.p.behavior(ei.BpmnElementType).OnActivated(c, c.cmd.Key, ei)
 }
 
 // handleElementCompleting runs the element-type completion behavior.
 func handleElementCompleting(c *ProcessingContext) {
-	ei := c.cmd.Value.(*model.ElementInstanceValue)
-	c.p.behavior(ei).OnCompleting(c, c.cmd.Key, ei)
+	ei := &c.cmd.Value.element
+	c.p.behavior(ei.BpmnElementType).OnCompleting(c, c.cmd.Key, ei)
 }
 
 // handleJobCompleted retires the job and tells its element to complete.
@@ -79,17 +79,16 @@ func handleJobCompleted(c *ProcessingContext) {
 	if job == nil {
 		return // already gone or never existed; nothing to do
 	}
-	c.AppendFollowupEvent(c.cmd.Key, model.IntentJobCompleted, job)
+	c.AppendJobEvent(c.cmd.Key, model.IntentJobCompleted, *job)
 
-	ei := c.GetElementInstance(job.ElementInstanceKey)
-	if ei != nil {
-		c.AppendFollowupCommand(job.ElementInstanceKey, model.IntentCompleting, ei)
+	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
+		c.AppendElementCommand(job.ElementInstanceKey, model.IntentCompleting, *ei)
 	}
 }
 
-// behavior resolves the behavior for an element instance's type.
-func (p *Processor) behavior(ei *model.ElementInstanceValue) bpmnBehavior {
-	return p.behaviors[ei.BpmnElementType]
+// behavior resolves the behavior for a BPMN element type.
+func (p *Processor) behavior(bpmnType uint8) bpmnBehavior {
+	return p.behaviors[bpmnType]
 }
 
 // --- element behaviors ---
@@ -97,7 +96,7 @@ func (p *Processor) behavior(ei *model.ElementInstanceValue) bpmnBehavior {
 // completeAndTakeFlows is the default OnCompleting: emit Completed, then
 // activate the targets of every outgoing flow.
 func completeAndTakeFlows(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
-	c.AppendFollowupEvent(key, model.IntentCompleted, ei)
+	c.AppendElementEvent(key, model.IntentCompleted, *ei)
 	takeOutgoingFlows(c, ei)
 }
 
@@ -108,7 +107,7 @@ func takeOutgoingFlows(c *ProcessingContext, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	for _, flowID := range cp.Outgoing(ei.ElementId) {
 		target := cp.Node(cp.Flow(flowID).Target)
-		c.AppendFollowupCommand(c.NewKey(), model.IntentActivating, &model.ElementInstanceValue{
+		c.AppendElementCommand(c.NewKey(), model.IntentActivating, model.ElementInstanceValue{
 			ProcessInstanceKey: ei.ProcessInstanceKey,
 			ProcessDefKey:      ei.ProcessDefKey,
 			ElementId:          target.ElementId,
@@ -122,7 +121,7 @@ func takeOutgoingFlows(c *ProcessingContext, ei *model.ElementInstanceValue) {
 type startEventBehavior struct{}
 
 func (startEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
-	c.AppendFollowupCommand(key, model.IntentCompleting, ei)
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
 }
 
 func (startEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
@@ -136,15 +135,14 @@ type serviceTaskBehavior struct{}
 func (serviceTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.ServiceTask(cp.Node(ei.ElementId).Detail)
-	job := &model.JobValue{
+	jobKey := c.NewKey()
+	c.AppendJobEvent(jobKey, model.IntentJobCreated, model.JobValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ElementInstanceKey: key,
 		JobType:            detail.JobType,
 		Retries:            detail.Retries,
-	}
-	jobKey := c.NewKey()
-	c.AppendFollowupEvent(jobKey, model.IntentJobCreated, job)
-	c.SideEffect(func() { c.p.notifyJobAvailable(detail.JobType) })
+	})
+	c.NotifyJobAvailable(detail.JobType)
 	// Stays Activated: no Completing until a worker completes the job.
 }
 
@@ -157,14 +155,14 @@ func (serviceTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *mo
 type endEventBehavior struct{}
 
 func (endEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
-	c.AppendFollowupCommand(key, model.IntentCompleting, ei)
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
 }
 
 func (endEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
-	c.AppendFollowupEvent(key, model.IntentCompleted, ei) // decrements scope's active children
+	c.AppendElementEvent(key, model.IntentCompleted, *ei) // decrements scope's active children
 	if c.ActiveChildren(ei.FlowScopeKey) == 0 {
 		if pi := c.GetProcessInstance(ei.ProcessInstanceKey); pi != nil {
-			c.AppendFollowupEvent(ei.ProcessInstanceKey, model.IntentCompleted, pi)
+			c.AppendProcessInstanceEvent(ei.ProcessInstanceKey, model.IntentCompleted, *pi)
 		}
 	}
 }

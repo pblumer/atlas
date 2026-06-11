@@ -7,10 +7,11 @@
 // record happen in exactly one place, applyToState, used identically live and on
 // recovery (invariant I4), which is what makes crash recovery a simple replay.
 //
-// This first cut favors a correct, deterministic, recoverable loop over
-// hot-path allocation tuning: building per-command value structs still
-// allocates. Pooling those (invariant I1) is a tracked follow-up to be done with
-// benchmarks, as the architecture docs describe.
+// The processor path is allocation-free per command and per event (invariant
+// I1): payloads flow by value (see inflightValue), and the batch buffers, queue,
+// side-effect list, and encode buffer are reused across batches. State reads
+// (which decode from the store) and the per-batch state transaction are the
+// remaining allocation sources, tracked separately.
 package engine
 
 import (
@@ -37,15 +38,16 @@ type Processor struct {
 
 	jobNotifier func(jobType int32)
 
-	queue    []Command
-	position uint64 // highest log position assigned
+	queue        []Command
+	queueScratch []Command // double-buffers queue so advancing it never allocates
+	position     uint64    // highest log position assigned
 
 	// per-batch reused buffers
 	tx           *stateTx
 	ctx          ProcessingContext
-	batchRecords []model.Record
+	batchRecords []eventRecord
 	followups    []Command
-	sideEffects  []func()
+	sideEffects  []sideEffect
 	encBuf       []byte
 	fatalErr     error
 }
@@ -72,8 +74,8 @@ func New(partition uint16, log *wal.Log, store *state.Store, clock Clock) *Proce
 // Deploy registers an immutable compiled definition so instances can run it.
 func (p *Processor) Deploy(cp *compiler.CompiledProcess) { p.processes[cp.Key] = cp }
 
-// SetJobNotifier installs the hook the service-task behavior calls (after fsync)
-// when a job of a type becomes available.
+// SetJobNotifier installs the hook the service-task behavior triggers (after
+// fsync) when a job of a type becomes available.
 func (p *Processor) SetJobNotifier(fn func(jobType int32)) { p.jobNotifier = fn }
 
 // CreateInstance enqueues creation of a new instance of the given definition.
@@ -82,7 +84,7 @@ func (p *Processor) CreateInstance(defKey uint64) {
 	p.queue = append(p.queue, Command{
 		ValueType: model.VTProcessInstance,
 		Intent:    model.IntentActivating,
-		Value:     &model.ProcessInstanceValue{ProcessDefKey: defKey},
+		Value:     inflightValue{process: model.ProcessInstanceValue{ProcessDefKey: defKey}},
 	})
 }
 
@@ -137,7 +139,9 @@ func (p *Processor) processBatch() error {
 
 	// Phase 2: durability — encode events, append, then the ONLY fsync.
 	for i := range p.batchRecords {
-		p.encBuf = model.AppendRecord(p.encBuf[:0], &p.batchRecords[i])
+		er := &p.batchRecords[i]
+		rec := model.Record{Header: er.header, Value: er.value.asValue(er.header.ValueType)}
+		p.encBuf = model.AppendRecord(p.encBuf[:0], &rec)
 		if err := p.log.Append(p.encBuf); err != nil {
 			tx.Close()
 			return err
@@ -149,7 +153,7 @@ func (p *Processor) processBatch() error {
 	}
 
 	// Phase 3: make state visible, recording the applied position atomically.
-	lastPos := p.batchRecords[len(p.batchRecords)-1].Header.Position
+	lastPos := p.batchRecords[len(p.batchRecords)-1].header.Position
 	if err := tx.SetLastAppliedPosition(lastPos); err != nil {
 		tx.Close()
 		return err
@@ -163,7 +167,7 @@ func (p *Processor) processBatch() error {
 	// Phase 4: followups go to the next batch; Phase 5: side effects post-fsync.
 	p.advanceQueue(n)
 	for _, se := range p.sideEffects {
-		se()
+		p.notifyJobAvailable(se.jobType)
 	}
 	return nil
 }
@@ -177,13 +181,12 @@ func (p *Processor) processOne(cmd Command) {
 	h(&p.ctx)
 }
 
-// advanceQueue drops the n consumed commands and appends this batch's followups.
+// advanceQueue drops the n consumed commands and appends this batch's followups,
+// reusing a scratch buffer so it does not allocate once warmed.
 func (p *Processor) advanceQueue(n int) {
-	remaining := p.queue[n:]
-	next := make([]Command, 0, len(remaining)+len(p.followups))
-	next = append(next, remaining...)
-	next = append(next, p.followups...)
-	p.queue = next
+	p.queueScratch = append(p.queueScratch[:0], p.queue[n:]...)
+	p.queueScratch = append(p.queueScratch, p.followups...)
+	p.queue, p.queueScratch = p.queueScratch, p.queue
 }
 
 func (p *Processor) fail(err error) {
@@ -233,7 +236,8 @@ func (p *Processor) Recover() error {
 		if h.RecordType != model.RecordEvent || h.Position <= lastApplied {
 			return nil // commands aren't replayed; already-applied events are skipped
 		}
-		if err := applyToState(tx, h, rec.Value); err != nil {
+		iv := inflightFromRecord(rec)
+		if err := applyToState(tx, h, &iv); err != nil {
 			return err
 		}
 		applied = true

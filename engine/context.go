@@ -61,44 +61,63 @@ func (c *ProcessingContext) ActiveChildren(scope uint64) int32 {
 	return n
 }
 
-// AppendFollowupEvent records a fact: it appends an event to the batch AND
-// mutates state from that same event via applyToState. Doing both from one
-// record is what keeps the log and state in lockstep — recovery replays the
-// exact same applyToState.
-func (c *ProcessingContext) AppendFollowupEvent(key uint64, intent model.Intent, v model.Value) {
+// AppendProcessInstanceEvent records a process-instance lifecycle fact.
+func (c *ProcessingContext) AppendProcessInstanceEvent(key uint64, intent model.Intent, v model.ProcessInstanceValue) {
+	c.appendEvent(key, model.VTProcessInstance, intent, inflightValue{process: v})
+}
+
+// AppendElementEvent records an element-instance lifecycle fact.
+func (c *ProcessingContext) AppendElementEvent(key uint64, intent model.Intent, v model.ElementInstanceValue) {
+	c.appendEvent(key, model.VTElementInstance, intent, inflightValue{element: v})
+}
+
+// AppendJobEvent records a job lifecycle fact.
+func (c *ProcessingContext) AppendJobEvent(key uint64, intent model.Intent, v model.JobValue) {
+	c.appendEvent(key, model.VTJob, intent, inflightValue{job: v})
+}
+
+// AppendElementCommand schedules an element-instance command for a later batch.
+func (c *ProcessingContext) AppendElementCommand(key uint64, intent model.Intent, v model.ElementInstanceValue) {
+	c.appendCommand(key, model.VTElementInstance, intent, inflightValue{element: v})
+}
+
+// NotifyJobAvailable registers a post-fsync notification that a job of the given
+// type is available (invariant I2: runs after the batch is durable).
+func (c *ProcessingContext) NotifyJobAvailable(jobType int32) {
+	c.p.sideEffects = append(c.p.sideEffects, sideEffect{jobType: jobType})
+}
+
+// appendEvent writes an event into the batch AND mutates state from that same
+// record via applyToState. Doing both from one record is what keeps the log and
+// state in lockstep — recovery replays the exact same applyToState.
+func (c *ProcessingContext) appendEvent(key uint64, vt model.ValueType, intent model.Intent, v inflightValue) {
 	c.p.position++
-	rec := model.Record{
-		Header: model.RecordHeader{
+	c.p.batchRecords = append(c.p.batchRecords, eventRecord{
+		header: model.RecordHeader{
 			Position:    c.p.position,
 			SourcePos:   c.cmd.SourcePos,
 			Key:         key,
 			Timestamp:   c.p.clock.Now(),
 			RecordType:  model.RecordEvent,
-			ValueType:   v.ValueType(),
+			ValueType:   vt,
 			Intent:      intent,
 			PartitionId: c.p.partition,
 		},
-		Value: v,
-	}
-	c.p.batchRecords = append(c.p.batchRecords, rec)
-	c.lastPos = rec.Header.Position
-	c.p.fail(applyToState(c.tx, rec.Header, v))
+		value: v,
+	})
+	er := &c.p.batchRecords[len(c.p.batchRecords)-1]
+	c.lastPos = er.header.Position
+	c.p.fail(applyToState(c.tx, er.header, &er.value))
 }
 
-// AppendFollowupCommand schedules an internal command for a later batch. Its
-// SourcePos points at the most recent event written here, threading causality.
-func (c *ProcessingContext) AppendFollowupCommand(key uint64, intent model.Intent, v model.Value) {
+// appendCommand schedules an internal command for a later batch. Its SourcePos
+// points at the most recent event written here, threading causality.
+func (c *ProcessingContext) appendCommand(key uint64, vt model.ValueType, intent model.Intent, v inflightValue) {
 	c.p.followups = append(c.p.followups, Command{
 		Key:       key,
-		ValueType: v.ValueType(),
+		ValueType: vt,
 		Intent:    intent,
 		Value:     v,
 		SourcePos: c.lastPos,
 	})
-}
-
-// SideEffect registers work to run after the batch's fsync — never before
-// (invariant I2). Worker notifications and client responses go here.
-func (c *ProcessingContext) SideEffect(fn func()) {
-	c.p.sideEffects = append(c.p.sideEffects, fn)
 }

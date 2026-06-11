@@ -13,16 +13,23 @@ const maxBatchSize = 1024
 
 // Command is an intention handed to the processor. Commands are processed but
 // never persisted (only the events they produce are); on recovery they are not
-// replayed (invariant I6).
+// replayed (invariant I6). The payload is held by value (see inflightValue) so
+// queuing a command does not allocate.
 type Command struct {
 	Key       uint64
 	ValueType model.ValueType
 	Intent    model.Intent
-	Value     model.Value
+	Value     inflightValue
 	// SourcePos is the log position of the event that scheduled this command
 	// (0 for externally submitted commands), used to thread causality into the
 	// events the command produces.
 	SourcePos uint64
+}
+
+// sideEffect is work to run after the batch's fsync (invariant I2). It is a
+// typed value, not a closure, so registering one does not allocate.
+type sideEffect struct {
+	jobType int32 // notify that a job of this type became available
 }
 
 // Clock supplies wall-clock time. It is injected so tests can drive time

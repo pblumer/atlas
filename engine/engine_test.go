@@ -22,7 +22,7 @@ const (
 
 // linearProcess builds Start → ServiceTask → End and returns it with the
 // interned job type.
-func linearProcess(t *testing.T) (*compiler.CompiledProcess, int32) {
+func linearProcess(t testing.TB) (*compiler.CompiledProcess, int32) {
 	t.Helper()
 	b := compiler.NewBuilder(defKey, "linear", 1)
 	start := b.AddStartEvent()
