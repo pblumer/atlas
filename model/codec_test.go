@@ -64,7 +64,7 @@ func TestRecordRoundTrip(t *testing.T) {
 		},
 		{
 			name:   "header only, no payload",
-			vt:     VTProcessInstance,
+			vt:     VTSignal, // a value type without a payload codec yet
 			intent: IntentActivating,
 			value:  nil,
 		},

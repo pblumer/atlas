@@ -207,6 +207,92 @@ func TestDeleteTimerRemovesFromIndex(t *testing.T) {
 	}
 }
 
+func TestActiveChildrenCounter(t *testing.T) {
+	s := openStore(t)
+	scope := model.NewKey(1, 1)
+
+	read := func() int32 {
+		tx := s.NewTransaction()
+		defer tx.Close()
+		n, err := tx.ActiveChildren(scope)
+		if err != nil {
+			t.Fatalf("ActiveChildren: %v", err)
+		}
+		return n
+	}
+
+	// Absent scope reads as zero.
+	if got := read(); got != 0 {
+		t.Fatalf("initial count = %d, want 0", got)
+	}
+
+	// Read-your-writes within a transaction: a pending merge is visible.
+	tx := s.NewTransaction()
+	if err := tx.IncrementActiveChildren(scope); err != nil {
+		t.Fatalf("Increment: %v", err)
+	}
+	if err := tx.IncrementActiveChildren(scope); err != nil {
+		t.Fatalf("Increment: %v", err)
+	}
+	if n, err := tx.ActiveChildren(scope); err != nil || n != 2 {
+		t.Fatalf("in-tx count = %d, %v, want 2", n, err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+	tx.Close()
+
+	if got := read(); got != 2 {
+		t.Fatalf("after +2 = %d, want 2", got)
+	}
+
+	// Decrement back to zero across separate transactions.
+	commit(t, s, func(tx *state.Tx) error {
+		if err := tx.DecrementActiveChildren(scope); err != nil {
+			return err
+		}
+		return tx.DecrementActiveChildren(scope)
+	})
+	if got := read(); got != 0 {
+		t.Fatalf("after -2 = %d, want 0", got)
+	}
+}
+
+func TestActiveChildrenSurvivesReopen(t *testing.T) {
+	dir := t.TempDir()
+	scope := model.NewKey(1, 1)
+
+	s1, err := state.Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	tx := s1.NewTransaction()
+	for range 3 {
+		if err := tx.IncrementActiveChildren(scope); err != nil {
+			t.Fatalf("Increment: %v", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+	tx.Close()
+	if err := s1.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	// The merged counter must fold correctly after reopening.
+	s2, err := state.Open(dir)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer s2.Close()
+	tx2 := s2.NewTransaction()
+	defer tx2.Close()
+	if n, err := tx2.ActiveChildren(scope); err != nil || n != 3 {
+		t.Errorf("after reopen = %d, %v, want 3", n, err)
+	}
+}
+
 func TestLastAppliedPosition(t *testing.T) {
 	s := openStore(t)
 	if pos, err := s.LastAppliedPosition(); err != nil || pos != 0 {

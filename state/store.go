@@ -33,6 +33,11 @@ const metaLastApplied = "last_applied_position"
 // Store wraps a Pebble database.
 type Store struct {
 	db *pebble.DB
+	// freeBatch caches one indexed batch for reuse across transactions. The
+	// store is single-writer (invariant I3), so at most one transaction is live
+	// at a time and a single cached batch suffices — this keeps NewTransaction
+	// from allocating a Pebble batch every batch cycle (invariant I1).
+	freeBatch *pebble.Batch
 }
 
 // Open opens (creating if needed) the state store rooted at dir.
@@ -40,7 +45,7 @@ func Open(dir string) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	db, err := pebble.Open(dir, &pebble.Options{})
+	db, err := pebble.Open(dir, &pebble.Options{Merger: counterMerger})
 	if err != nil {
 		return nil, err
 	}
@@ -48,12 +53,37 @@ func Open(dir string) (*Store, error) {
 }
 
 // Close flushes and closes the store.
-func (s *Store) Close() error { return s.db.Close() }
+func (s *Store) Close() error {
+	if s.freeBatch != nil {
+		s.freeBatch.Close()
+		s.freeBatch = nil
+	}
+	return s.db.Close()
+}
 
 // NewTransaction starts a transaction. Reads through it see its own pending
-// writes (it is an indexed batch). Mutations become visible only on Commit.
+// writes (it is an indexed batch). Mutations become visible only on Commit. The
+// underlying batch is drawn from the store's cache when available, so steady-
+// state processing does not allocate one (invariant I1).
 func (s *Store) NewTransaction() *Tx {
-	return &Tx{b: s.db.NewIndexedBatch()}
+	b := s.freeBatch
+	if b != nil {
+		s.freeBatch = nil
+		b.Reset()
+	} else {
+		b = s.db.NewIndexedBatch()
+	}
+	return &Tx{b: b, store: s}
+}
+
+// recycle returns a finished batch to the cache for reuse, or closes it if one
+// is already cached.
+func (s *Store) recycle(b *pebble.Batch) error {
+	if s.freeBatch == nil {
+		s.freeBatch = b
+		return nil
+	}
+	return b.Close()
 }
 
 // LastAppliedPosition returns the highest log position folded into committed
@@ -98,6 +128,25 @@ func (s *Store) DueTimers(now int64, fn func(timerKey uint64, v *model.TimerValu
 		}
 		return fn(trailingKey(k), v.(*model.TimerValue))
 	})
+}
+
+// ActiveProcessInstanceCount returns how many process instances are live.
+func (s *Store) ActiveProcessInstanceCount() (int, error) {
+	return s.countPrefix([]byte{byte(cfProcessInstance)})
+}
+
+// ActiveElementInstanceCount returns how many element instances are live.
+func (s *Store) ActiveElementInstanceCount() (int, error) {
+	return s.countPrefix([]byte{byte(cfElementInstance)})
+}
+
+func (s *Store) countPrefix(prefix []byte) (int, error) {
+	count := 0
+	err := s.scanPrefix(prefix, func(_, _ []byte) error {
+		count++
+		return nil
+	})
+	return count, err
 }
 
 func (s *Store) scanPrefix(prefix []byte, fn func(k, v []byte) error) error {

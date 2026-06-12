@@ -122,10 +122,35 @@ func (v *TimerValue) decode(src []byte) error {
 	return nil
 }
 
+// ProcessInstanceValue is the running instance as a whole — the root scope a
+// process's element instances live under. Minimal for now; fields grow as
+// features (parent/call-activity links, state flags) land.
+type ProcessInstanceValue struct {
+	ProcessDefKey uint64
+}
+
+const processInstanceSize = 8
+
+func (*ProcessInstanceValue) ValueType() ValueType { return VTProcessInstance }
+
+func (v *ProcessInstanceValue) encode(dst []byte) []byte {
+	return binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
+}
+
+func (v *ProcessInstanceValue) decode(src []byte) error {
+	if len(src) < processInstanceSize {
+		return ErrShortBuffer
+	}
+	v.ProcessDefKey = binary.LittleEndian.Uint64(src[0:])
+	return nil
+}
+
 // newValue returns a zero payload for the value types that have one. Value
 // types without a payload yet return nil; their records carry only a header.
 func newValue(vt ValueType) Value {
 	switch vt {
+	case VTProcessInstance:
+		return &ProcessInstanceValue{}
 	case VTElementInstance:
 		return &ElementInstanceValue{}
 	case VTJob:
