@@ -124,3 +124,13 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 func (b *Builder) validNode(id int32) bool {
 	return id >= 0 && int(id) < len(b.nodes)
 }
+
+// hasStartEvent reports whether any start event has been added.
+func (b *Builder) hasStartEvent() bool {
+	for i := range b.nodes {
+		if b.nodes[i].Type == TypeStartEvent {
+			return true
+		}
+	}
+	return false
+}

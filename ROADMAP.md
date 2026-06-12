@@ -16,7 +16,7 @@ The skeleton that proves the three pillars fit together end to end.
 - ✅ `state`: Pebble-backed store, transactions, column-family/index helpers
 - ✅ `engine`: single-writer processor loop, batch cycle, `ProcessingContext`
 - ✅ `applyToState` used identically live and on recovery; crash-recovery test
-- 🚧 Minimal `compiler`: linearize to `CompiledProcess` done (programmatic builder); BPMN-XML parse front end still to come
+- ✅ Minimal `compiler`: BPMN-XML parse → resolve → linearize to `CompiledProcess` (programmatic builder + `Parse`); deeper validation (reachability, gateway coverage) still to come
 - ✅ Behaviors: none/start event, end event, sequence flow, **service task**
 - 🚧 `job`: job store lives in `state`; completion via the command API drives a worker stub; a dedicated `job` package + real worker subscription is still pending
 - ✅ **Goal: execute `Start → ServiceTask → End` and recover it across a restart** (deployment is programmatic for now, pending the XML front end)
