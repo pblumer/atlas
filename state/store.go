@@ -130,6 +130,21 @@ func (s *Store) DueTimers(now int64, fn func(timerKey uint64, v *model.TimerValu
 	})
 }
 
+// GetJob returns the committed job for key, reporting whether it was present.
+// Unlike Tx.GetJob it reads outside a transaction, for queries such as a worker
+// runner pulling activatable jobs.
+func (s *Store) GetJob(key uint64) (*model.JobValue, bool, error) {
+	raw, ok, err := getCopy(s.db, keyJob(key))
+	if err != nil || !ok {
+		return nil, ok, err
+	}
+	v, err := model.DecodeValue(model.VTJob, raw)
+	if err != nil {
+		return nil, false, err
+	}
+	return v.(*model.JobValue), true, nil
+}
+
 // ActiveProcessInstanceCount returns how many process instances are live.
 func (s *Store) ActiveProcessInstanceCount() (int, error) {
 	return s.countPrefix([]byte{byte(cfProcessInstance)})

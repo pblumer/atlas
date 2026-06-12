@@ -6,7 +6,7 @@ Status legend: 🔲 not started · 🚧 in progress · ✅ done
 
 ---
 
-## Milestone 0 — Foundations 🚧
+## Milestone 0 — Foundations ✅
 
 The skeleton that proves the three pillars fit together end to end.
 
@@ -18,7 +18,7 @@ The skeleton that proves the three pillars fit together end to end.
 - ✅ `applyToState` used identically live and on recovery; crash-recovery test
 - ✅ Minimal `compiler`: BPMN-XML parse → resolve → linearize to `CompiledProcess` (programmatic builder + `Parse`); deeper validation (reachability, gateway coverage) still to come
 - ✅ Behaviors: none/start event, end event, sequence flow, **service task**
-- 🚧 `job`: job store lives in `state`; completion via the command API drives a worker stub; a dedicated `job` package + real worker subscription is still pending
+- ✅ `job`: dedicated `job` package — in-process worker subscription that pulls activatable jobs and feeds completions back (ADR-0007); gRPC streaming transport + leases/retry are Milestone 4
 - ✅ **Goal: execute `Start → ServiceTask → End` and recover it across a restart** (deployment is programmatic for now, pending the XML front end)
 
 ## Milestone 1 — Core BPMN 🔲
