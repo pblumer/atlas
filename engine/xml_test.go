@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pblumer/chrampfer/compiler"
-	"github.com/pblumer/chrampfer/engine"
+	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/engine"
 )
 
 const orderBPMN = `<?xml version="1.0" encoding="UTF-8"?>

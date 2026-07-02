@@ -4,9 +4,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pblumer/chrampfer/engine"
-	"github.com/pblumer/chrampfer/state"
-	"github.com/pblumer/chrampfer/wal"
+	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/state"
+	"github.com/pblumer/atlas/wal"
 )
 
 // BenchmarkInstanceLifecycle runs a full Start → ServiceTask → End instance

@@ -1,4 +1,4 @@
-// Package engine is the heart of Chrampfer: a single-writer processor that folds
+// Package engine is the heart of Atlas: a single-writer processor that folds
 // commands into durable events and applies them to state.
 //
 // One partition is driven by one goroutine (invariant I3), so there are no locks
@@ -15,10 +15,10 @@
 package engine
 
 import (
-	"github.com/pblumer/chrampfer/compiler"
-	"github.com/pblumer/chrampfer/model"
-	"github.com/pblumer/chrampfer/state"
-	"github.com/pblumer/chrampfer/wal"
+	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/model"
+	"github.com/pblumer/atlas/state"
+	"github.com/pblumer/atlas/wal"
 )
 
 // stateTx aliases the state transaction type for brevity in the engine.

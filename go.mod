@@ -1,4 +1,4 @@
-module github.com/pblumer/chrampfer
+module github.com/pblumer/atlas
 
 go 1.26
 

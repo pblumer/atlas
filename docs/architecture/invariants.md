@@ -1,6 +1,6 @@
 # Invariants
 
-The load-bearing rules of Chrampfer. Every one of these is something the engine's **correctness or performance depends on** — they are not style preferences. Breaking one may not fail a local test, but it breaks the system's guarantees.
+The load-bearing rules of Atlas. Every one of these is something the engine's **correctness or performance depends on** — they are not style preferences. Breaking one may not fail a local test, but it breaks the system's guarantees.
 
 This document is the compact, checkable reference. The reasoning lives in the linked ADRs and deep-dives. If a change must break an invariant, that requires a new ADR superseding the relevant decision — not a workaround.
 

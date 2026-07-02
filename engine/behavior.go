@@ -1,8 +1,8 @@
 package engine
 
 import (
-	"github.com/pblumer/chrampfer/compiler"
-	"github.com/pblumer/chrampfer/model"
+	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/model"
 )
 
 // bpmnBehavior is the per-element-type logic invoked at lifecycle transitions.

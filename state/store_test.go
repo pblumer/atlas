@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/pblumer/chrampfer/model"
-	"github.com/pblumer/chrampfer/state"
+	"github.com/pblumer/atlas/model"
+	"github.com/pblumer/atlas/state"
 )
 
 func openStore(t *testing.T) *state.Store {

@@ -2,7 +2,7 @@
 
 ## Status
 
-Chrampfer is in early development and is **not yet ready for production use**. There are no supported releases and no security guarantees at this stage. Treat the current code as experimental.
+Atlas is in early development and is **not yet ready for production use**. There are no supported releases and no security guarantees at this stage. Treat the current code as experimental.
 
 ## Reporting a vulnerability
 
@@ -28,7 +28,7 @@ Because the project is pre-release, fixes will generally land on the main branch
 
 ## Scope notes
 
-When Chrampfer matures, areas of particular security relevance will include:
+When Atlas matures, areas of particular security relevance will include:
 
 - **Expression evaluation** (FEEL): untrusted process definitions must not be able to escape the evaluator or exhaust resources.
 - **Deployment input**: BPMN XML parsing must be hardened against malicious input (entity expansion, oversized models).

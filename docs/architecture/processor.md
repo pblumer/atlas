@@ -1,6 +1,6 @@
 # Processor
 
-The processor is the heart of Chrampfer. It is a **single-threaded loop per partition** that turns commands into durable events and applies them to state. This document covers the batch cycle, the processing context that BPMN behaviors use, the state applier, recovery, and behavior dispatch.
+The processor is the heart of Atlas. It is a **single-threaded loop per partition** that turns commands into durable events and applies them to state. This document covers the batch cycle, the processing context that BPMN behaviors use, the state applier, recovery, and behavior dispatch.
 
 ## Mental model
 

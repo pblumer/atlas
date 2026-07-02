@@ -1,6 +1,6 @@
-# Chrampfer Architecture
+# Atlas Architecture
 
-This document describes the architecture of Chrampfer, a durable, high-throughput BPMN 2.x workflow engine written in Go. It is the canonical reference for how the system is structured and why. For the reasoning behind specific decisions, see the [Architecture Decision Records](adr/).
+This document describes the architecture of Atlas, a durable, high-throughput BPMN 2.x workflow engine written in Go. It is the canonical reference for how the system is structured and why. For the reasoning behind specific decisions, see the [Architecture Decision Records](adr/).
 
 ## Table of contents
 
@@ -24,13 +24,13 @@ This document describes the architecture of Chrampfer, a durable, high-throughpu
 
 ## Design philosophy
 
-Chrampfer is built on four convictions, each of which shapes the whole system. They are not independent features bolted together — they reinforce one another.
+Atlas is built on four convictions, each of which shapes the whole system. They are not independent features bolted together — they reinforce one another.
 
 **Compile, don't interpret.** A BPMN model is parsed and validated exactly once, at deploy time, and turned into a flat, integer-indexed execution graph. At runtime there is no XML, no string lookups, no map access on the hot path — only array indexing over cache-friendly slices. The expensive work happens when a human is watching (deployment); the cheap work happens millions of times (execution).
 
 **Event sourcing over state mutation.** State is never overwritten in place. Every meaningful transition is appended as an immutable event to a write-ahead log. The current state is a *materialization* (a fold) of that log. This makes the log the single source of truth, gives us crash recovery almost for free, and removes an entire class of "did the DB write and the in-memory change both succeed?" consistency bugs.
 
-**Group commit for durability.** Durability comes from `fsync`, and `fsync` is expensive. Doing one per event caps throughput at a few thousand per second. Chrampfer batches many events and makes them durable with a *single* `fsync`, so throughput scales with batch size, not with disk round-trips. Under low load batches are small (low latency); under high load batches grow (high throughput). The system self-tunes.
+**Group commit for durability.** Durability comes from `fsync`, and `fsync` is expensive. Doing one per event caps throughput at a few thousand per second. Atlas batches many events and makes them durable with a *single* `fsync`, so throughput scales with batch size, not with disk round-trips. Under low load batches are small (low latency); under high load batches grow (high throughput). The system self-tunes.
 
 **Single writer per partition.** Each partition is driven by exactly one goroutine that processes commands sequentially. This sounds counter-intuitive for a "fast" system, but it eliminates lock contention, keeps state access on one hot CPU core, and makes execution deterministic — which in turn makes recovery a trivial log replay. Horizontal scale comes from running many independent partitions, not from threading a single one.
 
@@ -40,7 +40,7 @@ See [ADR-0001](adr/0001-event-sourcing-and-log-structured-state.md), [ADR-0002](
 
 ```
                           ┌─────────────────────────────────────────────┐
-                          │                  Chrampfer                   │
+                          │                  Atlas                   │
                           │                                              │
    Deploy BPMN  ────────► │  ┌────────────────┐                         │
                           │  │  Graph Compiler │  (once per deployment)  │
@@ -71,7 +71,7 @@ A client never talks to the state store directly. Everything is a **command** su
 
 ## The three pillars
 
-Chrampfer's core is three tightly-coupled subsystems. The interfaces between them are deliberately narrow.
+Atlas's core is three tightly-coupled subsystems. The interfaces between them are deliberately narrow.
 
 | Pillar | Responsibility | Key property |
 |--------|----------------|--------------|
@@ -87,7 +87,7 @@ The seams where they meet are the parts to get right:
 
 ## Execution model
 
-Chrampfer uses a **token model** consistent with the BPMN specification, but tokens are not heap-allocated objects. A token is the presence of an active *element instance* in the state store. Token movement is the creation and completion of element instances, recorded as events.
+Atlas uses a **token model** consistent with the BPMN specification, but tokens are not heap-allocated objects. A token is the presence of an active *element instance* in the state store. Token movement is the creation and completion of element instances, recorded as events.
 
 ### The element-instance lifecycle
 
@@ -203,7 +203,7 @@ BPMN's hierarchy (subprocesses, attached boundary events) is flattened into inde
 
 ## State store and indexes
 
-The log is the truth; the state store is a fast, queryable materialization. Chrampfer uses an embedded, pure-Go LSM-tree store (Pebble — see [ADR-0003](adr/0003-pebble-as-state-store.md)). State is organized as several key-prefix "column families" that act as indexes:
+The log is the truth; the state store is a fast, queryable materialization. Atlas uses an embedded, pure-Go LSM-tree store (Pebble — see [ADR-0003](adr/0003-pebble-as-state-store.md)). State is organized as several key-prefix "column families" that act as indexes:
 
 ```
 el:<elementInstanceKey>          → ElementInstanceValue       (primary state)
@@ -257,16 +257,16 @@ The target is full BPMN 2.0 execution semantics. Coverage is delivered in phases
 
 ## Failure handling and incidents
 
-When something cannot proceed — a job fails after exhausting retries, an expression cannot be evaluated, a variable is missing — Chrampfer does not crash the instance. It raises an **incident**: a first-class state entity that pauses the affected token and surfaces the problem for operator intervention. Resolving an incident produces a command that resumes execution. This keeps long-running processes robust against transient and operator-fixable failures.
+When something cannot proceed — a job fails after exhausting retries, an expression cannot be evaluated, a variable is missing — Atlas does not crash the instance. It raises an **incident**: a first-class state entity that pauses the affected token and surfaces the problem for operator intervention. Resolving an incident produces a command that resumes execution. This keeps long-running processes robust against transient and operator-fixable failures.
 
 ## Observability
 
-Because every state transition is an event in an ordered log, the log itself is the primary observability surface: a complete, replayable audit trail of everything that ever happened. On top of it Chrampfer exposes metrics (throughput, batch sizes, fsync latency, queue depth per partition), structured logs, and tracing hooks around command processing. The exported-log stream is also the integration point for downstream analytics.
+Because every state transition is an event in an ordered log, the log itself is the primary observability surface: a complete, replayable audit trail of everything that ever happened. On top of it Atlas exposes metrics (throughput, batch sizes, fsync latency, queue depth per partition), structured logs, and tracing hooks around command processing. The exported-log stream is also the integration point for downstream analytics.
 
 ## Component map
 
 ```
-chrampfer/
+atlas/
 ├── compiler/      BPMN XML → CompiledProcess (parse, resolve, intern, expr, validate, linearize)
 ├── model/         Record, header, ValueType/Intent, payload encode/decode
 ├── engine/        Partition, processor loop, batching, ProcessingContext

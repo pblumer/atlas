@@ -1,6 +1,6 @@
 package engine
 
-import "github.com/pblumer/chrampfer/model"
+import "github.com/pblumer/atlas/model"
 
 // inflightValue carries a record's payload by value through the hot path. Only
 // the field selected by the accompanying ValueType is meaningful. Holding the

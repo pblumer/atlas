@@ -1,6 +1,6 @@
 package engine
 
-import "github.com/pblumer/chrampfer/model"
+import "github.com/pblumer/atlas/model"
 
 // applyToState mutates state from a single event record. It is the one place
 // state changes from a record, and it runs identically live (in the processor)
