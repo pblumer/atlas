@@ -149,3 +149,4 @@ concepts per step:
 - respects ADR-0001, ADR-0002, ADR-0005 (runtime store stays event-sourced,
   single-writer, durable-before-visible; design-time store is separate)
 - the public API this builds on is itself Milestone-4 scope
+- the UI surfaces here are on-by-default and opt-out per ADR-0012
