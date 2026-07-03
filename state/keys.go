@@ -18,6 +18,9 @@ const (
 	cfTimer           columnFamily = 0x05 // timer:<dueDate>:<timerKey> → TimerValue
 	cfProcessInstance columnFamily = 0x06 // pi:<piKey> → ProcessInstanceValue
 	cfActiveChildren  columnFamily = 0x07 // activeChildren:<scopeKey> → int32 count
+	cfUserTask        columnFamily = 0x08 // ut:<taskKey> → UserTaskValue
+	cfUserTaskGroup   columnFamily = 0x09 // utGroup:<candidateGroup>:<taskKey> → nil (claimable queue)
+	cfUserTaskAssign  columnFamily = 0x0a // utAssign:<assignee>:<taskKey> → nil (claimed tasks)
 )
 
 func appendBE64(dst []byte, v uint64) []byte { return binary.BigEndian.AppendUint64(dst, v) }
@@ -52,6 +55,26 @@ func keyJobActivatable(jobType int32, key uint64) []byte {
 
 func jobActivatablePrefix(jobType int32) []byte {
 	return appendBE32([]byte{byte(cfJobActivatable)}, uint32(jobType))
+}
+
+func keyUserTask(key uint64) []byte {
+	return appendBE64([]byte{byte(cfUserTask)}, key)
+}
+
+func keyUserTaskGroup(candidateGroup int32, key uint64) []byte {
+	return appendBE64(userTaskGroupPrefix(candidateGroup), key)
+}
+
+func userTaskGroupPrefix(candidateGroup int32) []byte {
+	return appendBE32([]byte{byte(cfUserTaskGroup)}, uint32(candidateGroup))
+}
+
+func keyUserTaskAssign(assignee int32, key uint64) []byte {
+	return appendBE64(userTaskAssignPrefix(assignee), key)
+}
+
+func userTaskAssignPrefix(assignee int32) []byte {
+	return appendBE32([]byte{byte(cfUserTaskAssign)}, uint32(assignee))
 }
 
 func keyTimer(dueDate int64, key uint64) []byte {

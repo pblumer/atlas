@@ -36,7 +36,8 @@ type Processor struct {
 	handlers  map[uint16]func(*ProcessingContext)
 	behaviors [compiler.NumBpmnTypes]bpmnBehavior
 
-	jobNotifier func(jobType int32)
+	jobNotifier      func(jobType int32)
+	userTaskNotifier func(candidateGroup int32)
 
 	queue        []Command
 	queueScratch []Command // double-buffers queue so advancing it never allocates
@@ -78,6 +79,10 @@ func (p *Processor) Deploy(cp *compiler.CompiledProcess) { p.processes[cp.Key] =
 // fsync) when a job of a type becomes available.
 func (p *Processor) SetJobNotifier(fn func(jobType int32)) { p.jobNotifier = fn }
 
+// SetUserTaskNotifier installs the hook the user-task behavior triggers (after
+// fsync) when a task is offered to a candidate group.
+func (p *Processor) SetUserTaskNotifier(fn func(candidateGroup int32)) { p.userTaskNotifier = fn }
+
 // CreateInstance enqueues creation of a new instance of the given definition.
 // Call RunUntilIdle to process it.
 func (p *Processor) CreateInstance(defKey uint64) {
@@ -94,6 +99,28 @@ func (p *Processor) CompleteJob(jobKey uint64) {
 		Key:       jobKey,
 		ValueType: model.VTJob,
 		Intent:    model.IntentJobCompleted,
+	})
+}
+
+// ClaimUserTask enqueues a human claiming a task, setting its assignee (an
+// interned identity index). The claim is rejected silently if the task is gone
+// or already claimed.
+func (p *Processor) ClaimUserTask(taskKey uint64, assignee int32) {
+	p.queue = append(p.queue, Command{
+		Key:       taskKey,
+		ValueType: model.VTUserTask,
+		Intent:    model.IntentUserTaskClaimed,
+		Value:     inflightValue{userTask: model.UserTaskValue{Assignee: assignee}},
+	})
+}
+
+// CompleteUserTask enqueues completion of a user task by a human, driving its
+// element instance onward.
+func (p *Processor) CompleteUserTask(taskKey uint64) {
+	p.queue = append(p.queue, Command{
+		Key:       taskKey,
+		ValueType: model.VTUserTask,
+		Intent:    model.IntentUserTaskCompleted,
 	})
 }
 
@@ -167,7 +194,12 @@ func (p *Processor) processBatch() error {
 	// Phase 4: followups go to the next batch; Phase 5: side effects post-fsync.
 	p.advanceQueue(n)
 	for _, se := range p.sideEffects {
-		p.notifyJobAvailable(se.jobType)
+		switch se.kind {
+		case seJobAvailable:
+			p.notifyJobAvailable(se.arg)
+		case seUserTaskAvailable:
+			p.notifyUserTaskAvailable(se.arg)
+		}
 	}
 	return nil
 }
@@ -198,6 +230,12 @@ func (p *Processor) fail(err error) {
 func (p *Processor) notifyJobAvailable(jobType int32) {
 	if p.jobNotifier != nil {
 		p.jobNotifier(jobType)
+	}
+}
+
+func (p *Processor) notifyUserTaskAvailable(candidateGroup int32) {
+	if p.userTaskNotifier != nil {
+		p.userTaskNotifier(candidateGroup)
 	}
 }
 

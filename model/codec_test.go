@@ -51,6 +51,32 @@ func TestRecordRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name:   "claimed user task",
+			vt:     VTUserTask,
+			intent: IntentUserTaskClaimed,
+			value: &UserTaskValue{
+				ProcessInstanceKey: NewKey(4, 30),
+				ElementInstanceKey: NewKey(4, 31),
+				CandidateGroup:     12,
+				Assignee:           99,
+				FormRef:            7,
+				State:              UserTaskClaimed,
+			},
+		},
+		{
+			name:   "unassigned user task",
+			vt:     VTUserTask,
+			intent: IntentUserTaskCreated,
+			value: &UserTaskValue{
+				ProcessInstanceKey: NewKey(4, 40),
+				ElementInstanceKey: NewKey(4, 41),
+				CandidateGroup:     -1,
+				Assignee:           -1,
+				FormRef:            -1,
+				State:              UserTaskCreated,
+			},
+		},
+		{
 			name:   "timer with infinite repetitions",
 			vt:     VTTimer,
 			intent: IntentTimerCreated,

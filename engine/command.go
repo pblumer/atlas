@@ -26,10 +26,19 @@ type Command struct {
 	SourcePos uint64
 }
 
+// sideEffectKind selects which post-fsync notification a sideEffect carries.
+type sideEffectKind uint8
+
+const (
+	seJobAvailable      sideEffectKind = iota // arg = job type
+	seUserTaskAvailable                       // arg = candidate group
+)
+
 // sideEffect is work to run after the batch's fsync (invariant I2). It is a
 // typed value, not a closure, so registering one does not allocate.
 type sideEffect struct {
-	jobType int32 // notify that a job of this type became available
+	kind sideEffectKind
+	arg  int32 // job type or candidate group, per kind
 }
 
 // Clock supplies wall-clock time. It is injected so tests can drive time

@@ -53,6 +53,13 @@ func (c *ProcessingContext) GetProcessInstance(key uint64) *model.ProcessInstanc
 	return v
 }
 
+// GetUserTask reads user-task state through the in-flight transaction.
+func (c *ProcessingContext) GetUserTask(key uint64) *model.UserTaskValue {
+	v, err := c.tx.GetUserTask(key)
+	c.p.fail(err)
+	return v
+}
+
 // ActiveChildren returns the active-child count of a scope (e.g. to detect that
 // a process instance has finished).
 func (c *ProcessingContext) ActiveChildren(scope uint64) int32 {
@@ -76,6 +83,11 @@ func (c *ProcessingContext) AppendJobEvent(key uint64, intent model.Intent, v mo
 	c.appendEvent(key, model.VTJob, intent, inflightValue{job: v})
 }
 
+// AppendUserTaskEvent records a user-task lifecycle fact.
+func (c *ProcessingContext) AppendUserTaskEvent(key uint64, intent model.Intent, v model.UserTaskValue) {
+	c.appendEvent(key, model.VTUserTask, intent, inflightValue{userTask: v})
+}
+
 // AppendElementCommand schedules an element-instance command for a later batch.
 func (c *ProcessingContext) AppendElementCommand(key uint64, intent model.Intent, v model.ElementInstanceValue) {
 	c.appendCommand(key, model.VTElementInstance, intent, inflightValue{element: v})
@@ -84,7 +96,13 @@ func (c *ProcessingContext) AppendElementCommand(key uint64, intent model.Intent
 // NotifyJobAvailable registers a post-fsync notification that a job of the given
 // type is available (invariant I2: runs after the batch is durable).
 func (c *ProcessingContext) NotifyJobAvailable(jobType int32) {
-	c.p.sideEffects = append(c.p.sideEffects, sideEffect{jobType: jobType})
+	c.p.sideEffects = append(c.p.sideEffects, sideEffect{kind: seJobAvailable, arg: jobType})
+}
+
+// NotifyUserTaskAvailable registers a post-fsync notification that a task was
+// offered to the given candidate group (invariant I2: runs after fsync).
+func (c *ProcessingContext) NotifyUserTaskAvailable(candidateGroup int32) {
+	c.p.sideEffects = append(c.p.sideEffects, sideEffect{kind: seUserTaskAvailable, arg: candidateGroup})
 }
 
 // appendEvent writes an event into the batch AND mutates state from that same

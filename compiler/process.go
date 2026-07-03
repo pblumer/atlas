@@ -18,6 +18,7 @@ const (
 	TypeStartEvent
 	TypeEndEvent
 	TypeServiceTask
+	TypeUserTask
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
 	numBpmnTypes = 16
@@ -34,6 +35,8 @@ func (t BpmnType) String() string {
 		return "EndEvent"
 	case TypeServiceTask:
 		return "ServiceTask"
+	case TypeUserTask:
+		return "UserTask"
 	default:
 		return "Unspecified"
 	}
@@ -64,6 +67,15 @@ type ServiceTaskDetail struct {
 	Retries int32
 }
 
+// UserTaskDetail is the per-user-task data a behavior needs at runtime (ADR-0013).
+// Both fields are interned string indices, resolved to concrete values when the
+// task is created; -1 means unset. Assignee expressions (FEEL) will resolve at
+// runtime into the creating event — for now assignment is via candidate group.
+type UserTaskDetail struct {
+	CandidateGroup int32 // interned group offered the task, -1 if none
+	FormRef        int32 // interned form reference (ADR-0014), -1 if none
+}
+
 // CompiledProcess is the immutable result of compiling one process definition.
 // It is safe for concurrent reads without synchronization.
 type CompiledProcess struct {
@@ -76,6 +88,7 @@ type CompiledProcess struct {
 
 	outgoingFlows []int32 // shared topology: flow ids grouped by source node
 	serviceTasks  []ServiceTaskDetail
+	userTasks     []UserTaskDetail
 	startEvents   []int32
 	strings       []string // intern table (index → string), for debug/export
 }
@@ -96,6 +109,11 @@ func (p *CompiledProcess) Outgoing(id int32) []int32 {
 // ServiceTask returns the detail at the given table index.
 func (p *CompiledProcess) ServiceTask(detail int32) *ServiceTaskDetail {
 	return &p.serviceTasks[detail]
+}
+
+// UserTask returns the detail at the given table index.
+func (p *CompiledProcess) UserTask(detail int32) *UserTaskDetail {
+	return &p.userTasks[detail]
 }
 
 // StartEvents returns the process's entry-point element ids.

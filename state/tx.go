@@ -131,6 +131,65 @@ func (t *Tx) DeleteJob(key uint64, v *model.JobValue) error {
 	return t.b.Delete(keyJobActivatable(v.JobType, key), nil)
 }
 
+// --- UserTask ---
+//
+// A user task lives in cfUserTask and in exactly one queue index at a time: the
+// candidate-group queue (cfUserTaskGroup) while unclaimed, moving to the
+// assignee index (cfUserTaskAssign) when claimed. All three mutations run from
+// applyToState so the indexes are rebuilt identically on recovery (invariant I4).
+
+// PutUserTaskCreated writes a newly created task and offers it to its candidate
+// group's claimable queue.
+func (t *Tx) PutUserTaskCreated(key uint64, v *model.UserTaskValue) error {
+	if err := t.b.Set(keyUserTask(key), t.encodeValue(v), nil); err != nil {
+		return err
+	}
+	return t.b.Set(keyUserTaskGroup(v.CandidateGroup, key), nil, nil)
+}
+
+// ApplyUserTaskClaimed records a claim: the task moves out of its group's
+// claimable queue and into the assignee's index, and its stored value (now
+// carrying the assignee and claimed state) is rewritten. v is the post-claim
+// value, so its CandidateGroup still locates the queue entry to remove.
+func (t *Tx) ApplyUserTaskClaimed(key uint64, v *model.UserTaskValue) error {
+	if err := t.b.Set(keyUserTask(key), t.encodeValue(v), nil); err != nil {
+		return err
+	}
+	if err := t.b.Delete(keyUserTaskGroup(v.CandidateGroup, key), nil); err != nil {
+		return err
+	}
+	return t.b.Set(keyUserTaskAssign(v.Assignee, key), nil, nil)
+}
+
+// GetUserTaskInto decodes the task into dst without allocating, reporting whether
+// it was present.
+func (t *Tx) GetUserTaskInto(key uint64, dst *model.UserTaskValue) (bool, error) {
+	return t.readInto(keyUserTask(key), dst)
+}
+
+// GetUserTask returns the task, or nil if absent.
+func (t *Tx) GetUserTask(key uint64) (*model.UserTaskValue, error) {
+	var v model.UserTaskValue
+	ok, err := t.GetUserTaskInto(key, &v)
+	if err != nil || !ok {
+		return nil, err
+	}
+	return &v, nil
+}
+
+// DeleteUserTask removes the task and whichever queue entry it currently holds —
+// the assignee index if claimed, otherwise the candidate-group queue. The value
+// supplies the state and keys; on recovery it comes from the event payload.
+func (t *Tx) DeleteUserTask(key uint64, v *model.UserTaskValue) error {
+	if err := t.b.Delete(keyUserTask(key), nil); err != nil {
+		return err
+	}
+	if v.State == model.UserTaskClaimed {
+		return t.b.Delete(keyUserTaskAssign(v.Assignee, key), nil)
+	}
+	return t.b.Delete(keyUserTaskGroup(v.CandidateGroup, key), nil)
+}
+
 // --- Timer ---
 
 // PutTimer writes the timer into the due-date index, which is its primary store.

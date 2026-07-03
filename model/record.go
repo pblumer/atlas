@@ -57,6 +57,7 @@ const (
 	VTSignal
 	VTError             // error-event propagation
 	VTProcessDefinition // a deployed definition
+	VTUserTask          // a human task awaiting completion via the tasklist (ADR-0013)
 )
 
 func (t ValueType) String() string {
@@ -83,6 +84,8 @@ func (t ValueType) String() string {
 		return "Error"
 	case VTProcessDefinition:
 		return "ProcessDefinition"
+	case VTUserTask:
+		return "UserTask"
 	default:
 		return "ValueType(?)"
 	}
@@ -128,6 +131,12 @@ const (
 	// Incident.
 	IntentIncidentCreated
 	IntentIncidentResolved
+
+	// User task (ADR-0013). Created on activation; claimed/completed by a human
+	// via the tasklist, each transition flowing back as a command.
+	IntentUserTaskCreated
+	IntentUserTaskClaimed
+	IntentUserTaskCompleted
 )
 
 func (i Intent) String() string {
@@ -174,6 +183,12 @@ func (i Intent) String() string {
 		return "IncidentCreated"
 	case IntentIncidentResolved:
 		return "IncidentResolved"
+	case IntentUserTaskCreated:
+		return "UserTaskCreated"
+	case IntentUserTaskClaimed:
+		return "UserTaskClaimed"
+	case IntentUserTaskCompleted:
+		return "UserTaskCompleted"
 	default:
 		return "Intent(?)"
 	}

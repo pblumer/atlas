@@ -38,6 +38,16 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 		case model.IntentJobCompleted, model.IntentJobFailed:
 			return tx.DeleteJob(h.Key, &v.job)
 		}
+
+	case model.VTUserTask:
+		switch h.Intent {
+		case model.IntentUserTaskCreated:
+			return tx.PutUserTaskCreated(h.Key, &v.userTask)
+		case model.IntentUserTaskClaimed:
+			return tx.ApplyUserTaskClaimed(h.Key, &v.userTask)
+		case model.IntentUserTaskCompleted:
+			return tx.DeleteUserTask(h.Key, &v.userTask)
+		}
 	}
 	return nil
 }

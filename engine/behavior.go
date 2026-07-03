@@ -28,6 +28,8 @@ func (p *Processor) registerHandlers() {
 		handlerKey(model.VTElementInstance, model.IntentActivating): handleElementActivating,
 		handlerKey(model.VTElementInstance, model.IntentCompleting): handleElementCompleting,
 		handlerKey(model.VTJob, model.IntentJobCompleted):           handleJobCompleted,
+		handlerKey(model.VTUserTask, model.IntentUserTaskClaimed):   handleUserTaskClaim,
+		handlerKey(model.VTUserTask, model.IntentUserTaskCompleted): handleUserTaskComplete,
 	}
 }
 
@@ -35,6 +37,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeStartEvent] = startEventBehavior{}
 	p.behaviors[compiler.TypeEndEvent] = endEventBehavior{}
 	p.behaviors[compiler.TypeServiceTask] = serviceTaskBehavior{}
+	p.behaviors[compiler.TypeUserTask] = userTaskBehavior{}
 }
 
 // --- command handlers ---
@@ -83,6 +86,32 @@ func handleJobCompleted(c *ProcessingContext) {
 
 	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
 		c.AppendElementCommand(job.ElementInstanceKey, model.IntentCompleting, *ei)
+	}
+}
+
+// handleUserTaskClaim assigns a claimant to an open task. It is a no-op if the
+// task is gone or already claimed, so a duplicate or racing claim is rejected
+// without persisting anything.
+func handleUserTaskClaim(c *ProcessingContext) {
+	ut := c.GetUserTask(c.cmd.Key)
+	if ut == nil || ut.State == model.UserTaskClaimed {
+		return
+	}
+	ut.Assignee = c.cmd.Value.userTask.Assignee
+	ut.State = model.UserTaskClaimed
+	c.AppendUserTaskEvent(c.cmd.Key, model.IntentUserTaskClaimed, *ut)
+}
+
+// handleUserTaskComplete retires the task and tells its element to complete.
+func handleUserTaskComplete(c *ProcessingContext) {
+	ut := c.GetUserTask(c.cmd.Key)
+	if ut == nil {
+		return // already gone or never existed; nothing to do
+	}
+	c.AppendUserTaskEvent(c.cmd.Key, model.IntentUserTaskCompleted, *ut)
+
+	if ei := c.GetElementInstance(ut.ElementInstanceKey); ei != nil {
+		c.AppendElementCommand(ut.ElementInstanceKey, model.IntentCompleting, *ei)
 	}
 }
 
@@ -147,6 +176,32 @@ func (serviceTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *mod
 }
 
 func (serviceTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// userTaskBehavior: create a human task on activation and wait; complete when a
+// person completes the task through the tasklist (ADR-0013). The mechanism
+// mirrors the service task (hand out work, wait, complete via command), but the
+// task is offered to a candidate group and claimed rather than leased.
+type userTaskBehavior struct{}
+
+func (userTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.UserTask(cp.Node(ei.ElementId).Detail)
+	taskKey := c.NewKey()
+	c.AppendUserTaskEvent(taskKey, model.IntentUserTaskCreated, model.UserTaskValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		CandidateGroup:     detail.CandidateGroup,
+		Assignee:           -1, // unassigned until claimed
+		FormRef:            detail.FormRef,
+		State:              model.UserTaskCreated,
+	})
+	c.NotifyUserTaskAvailable(detail.CandidateGroup)
+	// Stays Activated: no Completing until a human completes the task.
+}
+
+func (userTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	completeAndTakeFlows(c, key, ei)
 }
 

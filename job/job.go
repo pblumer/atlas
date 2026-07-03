@@ -1,4 +1,4 @@
-// Package job is Chrampfer's in-process worker harness: it bridges the engine's
+// Package job is Atlas's in-process worker harness: it bridges the engine's
 // activatable jobs to worker handlers and feeds their results back as commands
 // (ADR-0007, streaming pull with completion-as-command).
 //

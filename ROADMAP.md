@@ -44,7 +44,7 @@ Making processes wait, react, and time out.
 - 🔲 Error events and error propagation
 - 🔲 Boundary events: interrupting and non-interrupting
 - 🔲 Receive tasks
-- 🔲 User tasks: create, claim/assign, complete; candidate users/groups; scope cancellation (ADR-0013)
+- 🚧 User tasks: create, claim/assign, complete; candidate users/groups; scope cancellation (ADR-0013) — create/claim/complete + candidate-group queue done; assign/unassign, scope cancellation, and form output still to come
 - 🔲 Incident model: raise/resolve, operator resume
 
 ## Milestone 3 — Structure 🔲

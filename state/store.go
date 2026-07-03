@@ -145,6 +145,42 @@ func (s *Store) GetJob(key uint64) (*model.JobValue, bool, error) {
 	return v.(*model.JobValue), true, nil
 }
 
+// ClaimableUserTasks calls fn with the key of every unclaimed task offered to
+// the given candidate group, via the cfUserTaskGroup queue — the tasklist's
+// "group inbox" access pattern (ADR-0013).
+func (s *Store) ClaimableUserTasks(candidateGroup int32, fn func(taskKey uint64) error) error {
+	return s.scanPrefix(userTaskGroupPrefix(candidateGroup), func(k, _ []byte) error {
+		return fn(trailingKey(k))
+	})
+}
+
+// UserTasksByAssignee calls fn with the key of every task claimed by the given
+// assignee, via the cfUserTaskAssign index — the tasklist's "my tasks" pattern.
+func (s *Store) UserTasksByAssignee(assignee int32, fn func(taskKey uint64) error) error {
+	return s.scanPrefix(userTaskAssignPrefix(assignee), func(k, _ []byte) error {
+		return fn(trailingKey(k))
+	})
+}
+
+// GetUserTask returns the committed task for key, reporting whether it was
+// present. Reads outside a transaction, for tasklist queries.
+func (s *Store) GetUserTask(key uint64) (*model.UserTaskValue, bool, error) {
+	raw, ok, err := getCopy(s.db, keyUserTask(key))
+	if err != nil || !ok {
+		return nil, ok, err
+	}
+	v, err := model.DecodeValue(model.VTUserTask, raw)
+	if err != nil {
+		return nil, false, err
+	}
+	return v.(*model.UserTaskValue), true, nil
+}
+
+// ActiveUserTaskCount returns how many user tasks are live.
+func (s *Store) ActiveUserTaskCount() (int, error) {
+	return s.countPrefix([]byte{byte(cfUserTask)})
+}
+
 // ActiveProcessInstanceCount returns how many process instances are live.
 func (s *Store) ActiveProcessInstanceCount() (int, error) {
 	return s.countPrefix([]byte{byte(cfProcessInstance)})

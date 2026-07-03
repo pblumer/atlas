@@ -14,6 +14,7 @@ type Builder struct {
 	nodes        []CompiledNode
 	flows        []CompiledFlow
 	serviceTasks []ServiceTaskDetail
+	userTasks    []UserTaskDetail
 
 	interner map[string]int32
 	strings  []string
@@ -70,6 +71,17 @@ func (b *Builder) AddServiceTask(jobType string, retries int32) int32 {
 	return b.addNode(TypeServiceTask, detail)
 }
 
+// AddUserTask adds a user task offered to the given candidate group and bound to
+// the given form (either may be "" for none) and returns its element id (ADR-0013).
+func (b *Builder) AddUserTask(candidateGroup, formRef string) int32 {
+	detail := int32(len(b.userTasks))
+	b.userTasks = append(b.userTasks, UserTaskDetail{
+		CandidateGroup: b.intern(candidateGroup),
+		FormRef:        b.intern(formRef),
+	})
+	return b.addNode(TypeUserTask, detail)
+}
+
 // Connect adds a sequence flow from source to target.
 func (b *Builder) Connect(source, target int32) {
 	b.flows = append(b.flows, CompiledFlow{
@@ -116,6 +128,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		flows:         b.flows,
 		outgoingFlows: outgoing,
 		serviceTasks:  b.serviceTasks,
+		userTasks:     b.userTasks,
 		startEvents:   startEvents,
 		strings:       b.strings,
 	}, nil

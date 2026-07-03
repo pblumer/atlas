@@ -88,6 +88,55 @@ func (v *JobValue) decode(src []byte) error {
 	return nil
 }
 
+// User-task lifecycle sub-states carried in UserTaskValue.State. The BPMN
+// element lifecycle (Activating…Completed) still applies to the task's element
+// instance; this sub-state tracks the human interaction the tasklist drives.
+const (
+	UserTaskCreated uint8 = iota // offered, not yet claimed
+	UserTaskClaimed              // an assignee has taken it
+)
+
+// UserTaskValue is a human task awaiting completion via the tasklist (ADR-0013).
+// Like a job it is work handed out and later completed by a command, but its
+// consumer is a person: it is offered to a candidate group, claimed by an
+// assignee, and never leased. Assignment and the form reference are resolved at
+// compile/runtime and written into the creating event so replay is deterministic
+// (invariant I6). Variables (the form output) live in their own state, not here.
+type UserTaskValue struct {
+	ProcessInstanceKey uint64
+	ElementInstanceKey uint64
+	CandidateGroup     int32 // interned group offered the task, -1 if none
+	Assignee           int32 // interned assignee; -1 until claimed
+	FormRef            int32 // interned form reference (ADR-0014), -1 if none
+	State              uint8 // UserTaskCreated | UserTaskClaimed
+}
+
+const userTaskSize = 8 + 8 + 4 + 4 + 4 + 1
+
+func (*UserTaskValue) ValueType() ValueType { return VTUserTask }
+
+func (v *UserTaskValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ElementInstanceKey)
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.CandidateGroup))
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.Assignee))
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.FormRef))
+	return append(dst, v.State)
+}
+
+func (v *UserTaskValue) decode(src []byte) error {
+	if len(src) < userTaskSize {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src[0:])
+	v.ElementInstanceKey = binary.LittleEndian.Uint64(src[8:])
+	v.CandidateGroup = int32(binary.LittleEndian.Uint32(src[16:]))
+	v.Assignee = int32(binary.LittleEndian.Uint32(src[20:]))
+	v.FormRef = int32(binary.LittleEndian.Uint32(src[24:]))
+	v.State = src[28]
+	return nil
+}
+
 // TimerValue is a timer-event subscription. The due-date index makes "which
 // timers are due now" a range scan; see data-model.md.
 type TimerValue struct {
@@ -155,6 +204,8 @@ func newValue(vt ValueType) Value {
 		return &ElementInstanceValue{}
 	case VTJob:
 		return &JobValue{}
+	case VTUserTask:
+		return &UserTaskValue{}
 	case VTTimer:
 		return &TimerValue{}
 	default:

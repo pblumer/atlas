@@ -44,6 +44,10 @@ func TestEncodeBatchNoAlloc(t *testing.T) {
 			header: model.RecordHeader{Position: 3, ValueType: model.VTJob, Intent: model.IntentJobCreated},
 			value:  inflightValue{job: model.JobValue{JobType: 7, Retries: 3}},
 		},
+		{
+			header: model.RecordHeader{Position: 4, ValueType: model.VTUserTask, Intent: model.IntentUserTaskCreated},
+			value:  inflightValue{userTask: model.UserTaskValue{CandidateGroup: 2, Assignee: -1, FormRef: 5}},
+		},
 	}
 	p.encBuf = make([]byte, 0, 256)
 
