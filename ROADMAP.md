@@ -44,6 +44,7 @@ Making processes wait, react, and time out.
 - 🔲 Error events and error propagation
 - 🔲 Boundary events: interrupting and non-interrupting
 - 🔲 Receive tasks
+- 🔲 User tasks: create, claim/assign, complete; candidate users/groups; scope cancellation (ADR-0013)
 - 🔲 Incident model: raise/resolve, operator resume
 
 ## Milestone 3 — Structure 🔲
@@ -68,6 +69,11 @@ What it takes to run this for real.
 - 🔲 Log compaction / snapshotting so recovery doesn't replay from genesis
 - 🔲 Exported-log stream for downstream analytics
 - 🔲 Operator tooling: list/inspect instances, incidents, jobs
+- 🔲 `atlasd` server binary hosting the API + surfaces; batteries-on/opt-out config (ADR-0011, ADR-0012)
+- 🔲 Operations console (web UI over the query API) — ADR-0011 phase 1
+- 🔲 Design-time model repository + modeler (bpmn-js), deploy + test loop — ADR-0011 phase 2
+- 🔲 Forms: native form engine (default) + forms.io provider — ADR-0014
+- 🔲 Tasklist surface: claim/complete user tasks, render forms — ADR-0011 phase 3, ADR-0013
 
 ## Milestone 5 — Scale-out 🔲
 
@@ -94,9 +100,12 @@ Adoption and polish.
 
 ## Explicit non-goals (for now)
 
-- A graphical BPMN modeler — Atlas executes models, it doesn't draw them.
-- A batteries-included application server — the engine core is a library first.
 - DMN decision evaluation as a product surface (FEEL is used internally for expressions).
+
+> A graphical modeler and a server to host it were previously non-goals. **ADR-0011**
+> and **ADR-0012** reverse that: Atlas now ships an `atlasd` server with modeler,
+> operations, and tasklist surfaces (batteries-on, opt-out). The engine **core
+> remains a library** — the surfaces live in `atlasd`, not in the core.
 
 ## Guiding constraints
 

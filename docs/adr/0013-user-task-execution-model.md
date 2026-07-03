@@ -1,6 +1,6 @@
 # ADR-0013: User-task execution model
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-03
 - **Deciders:** Core team
 

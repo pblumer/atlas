@@ -18,10 +18,10 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0008](0008-feel-expression-strategy.md) | FEEL expression compilation strategy | Accepted |
 | [0009](0009-record-serialization-format.md) | Record serialization format | Accepted |
 | [0010](0010-go-and-no-cgo.md) | Go as implementation language, no CGO | Accepted |
-| [0011](0011-modeler-and-operations-surfaces.md) | Modeler and operations surfaces | Proposed |
-| [0012](0012-batteries-on-by-default-opt-out-config.md) | Batteries-on-by-default, opt-out configuration | Proposed |
-| [0013](0013-user-task-execution-model.md) | User-task execution model | Proposed |
-| [0014](0014-pluggable-form-providers.md) | Pluggable form providers | Proposed |
+| [0011](0011-modeler-and-operations-surfaces.md) | Modeler and operations surfaces | Accepted |
+| [0012](0012-batteries-on-by-default-opt-out-config.md) | Batteries-on-by-default, opt-out configuration | Accepted |
+| [0013](0013-user-task-execution-model.md) | User-task execution model | Accepted |
+| [0014](0014-pluggable-form-providers.md) | Pluggable form providers | Accepted |
 
 ## Status values
 

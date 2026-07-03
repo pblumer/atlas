@@ -1,6 +1,6 @@
 # ADR-0012: Batteries-on-by-default, opt-out configuration
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-03
 - **Deciders:** Core team
 

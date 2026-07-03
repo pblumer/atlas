@@ -1,6 +1,6 @@
 # ADR-0011: Modeler and operations surfaces
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-03
 - **Deciders:** Core team
 

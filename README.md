@@ -58,8 +58,12 @@ The three core pillars:
 
 ## Non-goals (for now)
 
-- A graphical modeler — Atlas executes BPMN, it doesn't draw it
-- A full-stack, batteries-included server — Atlas is a library/engine core first
+- DMN decision evaluation as a product surface (FEEL is used internally for expressions)
+
+The **engine core stays a library**, but Atlas now also ships an `atlasd` server
+with modeler, operations, and tasklist surfaces (batteries-on, opt-out) —
+see [ADR-0011](docs/adr/0011-modeler-and-operations-surfaces.md) and
+[ADR-0012](docs/adr/0012-batteries-on-by-default-opt-out-config.md).
 
 ## License
 
