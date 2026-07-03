@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" fill="none" role="img" aria-label="Atlas">
   <title>Atlas</title>
-  <!-- Simplified mark that stays legible down to 16px: ring + two eye nodes + token. -->
-  <ellipse cx="128" cy="128" rx="108" ry="44" transform="rotate(-20 128 128)" stroke="#1E5FD0" stroke-width="9"/>
-  <circle cx="128" cy="128" r="56" stroke="#1E5FD0" stroke-width="18"/>
-  <circle cx="108" cy="120" r="10" fill="#3E86F5"/>
-  <circle cx="148" cy="120" r="10" fill="#3E86F5"/>
-  <circle cx="174" cy="73" r="26" fill="#14B8D4" opacity="0.18"/>
-  <circle cx="174" cy="73" r="16" fill="#14B8D4"/>
+  <!-- Bolder hex + flow so it stays legible down to 16px. -->
+  <path d="M128 34 210 82 210 174 128 222 46 174 46 82Z" stroke="#2563EB" stroke-width="22" stroke-linejoin="round"/>
+  <path d="M102 104 128 162" stroke="#2563EB" stroke-width="12" stroke-linecap="round"/>
+  <path d="M154 104 128 162" stroke="#2563EB" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="102" cy="104" r="13" fill="#2563EB"/>
+  <circle cx="154" cy="104" r="13" fill="#2563EB"/>
+  <circle cx="128" cy="162" r="15" fill="#2563EB"/>
 </svg>

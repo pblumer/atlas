@@ -1,17 +1,17 @@
 # Atlas — Brand assets
 
-The Atlas mark is **Orbit**: a token circling the process graph. The face is a
-converging flow — two eye-nodes join into one — and the orbiting token says the
-same thing the engine does: *processes are running, durably and fast.*
+The Atlas mark is a **hexagon holding a converging flow** — two nodes join into
+one, a BPMN gateway. The hexagon is the durable tile Atlas carries; the flow is
+what runs inside it. A single bold blue, no fine detail, so it stays legible
+from a hero down to a 16px favicon.
 
-The mark uses fixed colors (no theme dependency) so it reads on **any**
+The mark uses a fixed color (no theme dependency) so it reads on **any**
 background, light or dark.
 
 | Color | Hex | Used for |
 |-------|-----|----------|
-| Royal blue | `#1E5FD0` | Head ring + orbit (structure) |
-| Azure | `#3E86F5` | Graph / face nodes + edges |
-| Cyan | `#14B8D4` | The live token (accent) |
+| Blue | `#2563EB` | The whole mark (hexagon + flow) |
+| Blue (bright) | `#4C8DF5` | Mark on dark grounds (e.g. the social card) |
 
 ## Files
 

@@ -18,17 +18,14 @@
   <rect width="1200" height="630" fill="url(#bg)"/>
   <rect width="1200" height="630" fill="url(#grid)" mask="url(#gm)"/>
 
-  <!-- Mark, scaled from the 256 grid: scale 1.42, centred near x=250,y=315 -->
-  <g transform="translate(122,133) scale(1.42)">
-    <ellipse cx="128" cy="128" rx="108" ry="44" transform="rotate(-20 128 128)" fill="none" stroke="#2A6BE0" stroke-width="7"/>
-    <circle cx="128" cy="128" r="54" fill="none" stroke="#2A6BE0" stroke-width="13"/>
-    <path d="M110 116 128 150" stroke="#5A97F7" stroke-width="4.5" stroke-linecap="round" fill="none"/>
-    <path d="M146 116 128 150" stroke="#5A97F7" stroke-width="4.5" stroke-linecap="round" fill="none"/>
-    <circle cx="110" cy="116" r="7" fill="#5A97F7"/>
-    <circle cx="146" cy="116" r="7" fill="#5A97F7"/>
-    <circle cx="128" cy="150" r="7" fill="#5A97F7"/>
-    <circle cx="174" cy="73" r="24" fill="#22C7E6" opacity="0.20"/>
-    <circle cx="174" cy="73" r="12" fill="#22C7E6"/>
+  <!-- Hex-flow mark, scaled from the 256 grid -->
+  <g transform="translate(68,133) scale(1.42)" fill="none">
+    <path d="M128 38 208 84 208 172 128 218 48 172 48 84Z" stroke="#4C8DF5" stroke-width="18" stroke-linejoin="round"/>
+    <path d="M104 106 128 160" stroke="#4C8DF5" stroke-width="9" stroke-linecap="round"/>
+    <path d="M152 106 128 160" stroke="#4C8DF5" stroke-width="9" stroke-linecap="round"/>
+    <circle cx="104" cy="106" r="11" fill="#4C8DF5"/>
+    <circle cx="152" cy="106" r="11" fill="#4C8DF5"/>
+    <circle cx="128" cy="160" r="13" fill="#4C8DF5"/>
   </g>
 
   <!-- Wordmark + copy -->

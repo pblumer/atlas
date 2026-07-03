@@ -1,16 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" fill="none" role="img" aria-label="Atlas">
   <title>Atlas</title>
-  <!-- Orbit: a token circling the process graph. Fixed colors so the mark reads on any background. -->
-  <ellipse cx="128" cy="128" rx="108" ry="44" transform="rotate(-20 128 128)" stroke="#1E5FD0" stroke-width="7"/>
-  <!-- Head ring -->
-  <circle cx="128" cy="128" r="54" stroke="#1E5FD0" stroke-width="13"/>
-  <!-- Face = a converging flow: two eye nodes join into one -->
-  <path d="M110 116 128 150" stroke="#3E86F5" stroke-width="4.5" stroke-linecap="round"/>
-  <path d="M146 116 128 150" stroke="#3E86F5" stroke-width="4.5" stroke-linecap="round"/>
-  <circle cx="110" cy="116" r="7" fill="#3E86F5"/>
-  <circle cx="146" cy="116" r="7" fill="#3E86F5"/>
-  <circle cx="128" cy="150" r="7" fill="#3E86F5"/>
-  <!-- The live token -->
-  <circle cx="174" cy="73" r="23" fill="#14B8D4" opacity="0.16"/>
-  <circle cx="174" cy="73" r="12" fill="#14B8D4"/>
+  <!-- Hexagon tile: the durable stone Atlas carries. Fixed color so it reads on any background. -->
+  <path d="M128 38 208 84 208 172 128 218 48 172 48 84Z" stroke="#2563EB" stroke-width="18" stroke-linejoin="round"/>
+  <!-- Converging flow: two nodes join into one (a BPMN gateway) -->
+  <path d="M104 106 128 160" stroke="#2563EB" stroke-width="9" stroke-linecap="round"/>
+  <path d="M152 106 128 160" stroke="#2563EB" stroke-width="9" stroke-linecap="round"/>
+  <circle cx="104" cy="106" r="11" fill="#2563EB"/>
+  <circle cx="152" cy="106" r="11" fill="#2563EB"/>
+  <circle cx="128" cy="160" r="13" fill="#2563EB"/>
 </svg>
