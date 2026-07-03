@@ -18,6 +18,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0008](0008-feel-expression-strategy.md) | FEEL expression compilation strategy | Accepted |
 | [0009](0009-record-serialization-format.md) | Record serialization format | Accepted |
 | [0010](0010-go-and-no-cgo.md) | Go as implementation language, no CGO | Accepted |
+| [0011](0011-modeler-and-operations-surfaces.md) | Modeler and operations surfaces | Proposed |
 
 ## Status values
 
