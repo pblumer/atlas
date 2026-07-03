@@ -27,12 +27,15 @@ lifecycle:
 | **Business + business engineer** — *draws* the process | Design-time | BPMN canvas, collaboration/comments, a model repository with versioning |
 | **Business engineer / developer** — *automates* the process | Design-time → **test** | Service/job wiring, event & message definitions, form building, deploy **and a test-run loop against a live engine** |
 | **Operator** — *runs & optimizes* the process | Run-time | Operations console: instances, incidents, jobs, metrics, re-deploy/migration |
-| *(End user — completes user tasks via forms)* | Run-time | *A tasklist surface — recognized but out of initial scope (see follow-ups)* |
+| **End user** — *completes* assigned user tasks | Run-time | A tasklist surface: claim/complete user tasks and render the forms built by the automation persona |
 
 The personas span two time domains (design vs. run) but depend on **one** shared
 substrate: the public API. Notably, the automation persona's core activity —
 **testing** — requires a running engine, so an offline, engine-less modeler does
-not serve the persona that would most use it.
+not serve the persona that would most use it. The end-user (tasklist) persona
+closes the loop: the forms the automation persona builds are consumed at runtime
+by the people who complete user tasks, so authoring and completion are two ends
+of the same form definition.
 
 ## Decision drivers
 
@@ -69,10 +72,11 @@ not serve the persona that would most use it.
 
 **Topology: option 1 — a single `cmd/atlasd` binary.** It exposes the public API,
 owns a **model/resource repository stored separately from the engine's runtime
-store**, and serves the UI surfaces as `go:embed`-ded static assets. The three
+store**, and serves the UI surfaces as `go:embed`-ded static assets. The four
 personas are UI *surfaces* (a design studio for the draw/automate personas, an
-operations console for the operator), not separate deployments — they share the
-API and auth layer and differ only in *when* in the lifecycle they act.
+operations console for the operator, a tasklist for the end user), not separate
+deployments — they share the API and auth layer and differ only in *when* in the
+lifecycle they act.
 
 **Modeler basis: option A — embed `bpmn-js`.** The modeler is a web frontend, not
 a Go program. We wrap `bpmn-js` and add the Atlas-specific layers: automation
@@ -85,8 +89,11 @@ concepts per step:
 1. **Operations console (operator persona).** Depends only on the query API; it
    is Milestone-4 work and useful the moment there is anything to run.
 2. **Model repository + import/deploy + test loop (automation persona).**
-   Introduces the design-time store and the test-run loop.
-3. **Full editor + collaboration (draw persona).** The heaviest surface; built
+   Introduces the design-time store, form authoring, and the test-run loop.
+3. **Tasklist (end-user persona).** Consumes the forms from phase 2 and the
+   engine's user-task runtime to claim and complete assigned tasks. Gated on
+   user-task support existing in the engine.
+4. **Full editor + collaboration (draw persona).** The heaviest surface; built
    last on top of the now-proven repository and API.
 
 ### Consequences
@@ -105,9 +112,12 @@ concepts per step:
   testing needs a reachable engine.
 - **Follow-ups / risks to watch:** Choose the design-time store (it must **not**
   reuse or contaminate the runtime `wal`/`state` — likely plain Pebble or files,
-  separate lifecycle). Decide whether the **end-user / tasklist** persona is in
-  scope; if so it is a fourth surface on the same binary. Define the model
-  repository's versioning and deployment-artifact model. Keep the API the single
+  separate lifecycle). The **end-user / tasklist** persona is in scope as a
+  fourth surface on the same binary; it depends on **engine user-task support**
+  (a runtime concept not yet on the roadmap) and on the forms produced in phase
+  2, so it is gated behind both — define the user-task and form runtime model
+  before building it. Define the model repository's versioning and
+  deployment-artifact model. Keep the API the single
   entry point so no UI reaches into engine internals. Update `ROADMAP.md`
   non-goals and milestones once this is Accepted.
 
