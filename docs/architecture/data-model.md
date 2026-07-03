@@ -1,6 +1,6 @@
 # Data Model
 
-Everything that flows through Chrampfer is a **keyed record** with a `(ValueType, Intent)` discriminator. This document is the reference for records, keys, value types, intents, payloads, serialization, and the state-store index layout.
+Everything that flows through Atlas is a **keyed record** with a `(ValueType, Intent)` discriminator. This document is the reference for records, keys, value types, intents, payloads, serialization, and the state-store index layout.
 
 ## Command vs. Event vs. State
 

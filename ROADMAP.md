@@ -1,6 +1,6 @@
-# Chrampfer Roadmap
+# Atlas Roadmap
 
-This roadmap describes the intended evolution of Chrampfer. It is a direction, not a contract — order and scope will shift as the project learns. Milestones are deliberately vertical: each one should produce something that *runs*, not just a layer that sits unused.
+This roadmap describes the intended evolution of Atlas. It is a direction, not a contract — order and scope will shift as the project learns. Milestones are deliberately vertical: each one should produce something that *runs*, not just a layer that sits unused.
 
 Status legend: 🔲 not started · 🚧 in progress · ✅ done
 
@@ -94,7 +94,7 @@ Adoption and polish.
 
 ## Explicit non-goals (for now)
 
-- A graphical BPMN modeler — Chrampfer executes models, it doesn't draw them.
+- A graphical BPMN modeler — Atlas executes models, it doesn't draw them.
 - A batteries-included application server — the engine core is a library first.
 - DMN decision evaluation as a product surface (FEEL is used internally for expressions).
 

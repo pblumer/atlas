@@ -5,7 +5,7 @@ import (
 
 	"github.com/cockroachdb/pebble"
 
-	"github.com/pblumer/chrampfer/model"
+	"github.com/pblumer/atlas/model"
 )
 
 // readInto decodes the value at key into dst without allocating: it decodes

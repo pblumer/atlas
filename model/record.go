@@ -1,4 +1,4 @@
-// Package model defines the records that flow through Chrampfer and their
+// Package model defines the records that flow through Atlas and their
 // on-disk binary encoding.
 //
 // Everything the engine processes is a keyed [Record] discriminated by a

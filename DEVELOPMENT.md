@@ -1,6 +1,6 @@
 # Development
 
-Setup and workflow details for working on Chrampfer. For the architectural rules you must follow, see [`AGENTS.md`](AGENTS.md) and [`docs/architecture/invariants.md`](docs/architecture/invariants.md).
+Setup and workflow details for working on Atlas. For the architectural rules you must follow, see [`AGENTS.md`](AGENTS.md) and [`docs/architecture/invariants.md`](docs/architecture/invariants.md).
 
 ## Prerequisites
 
@@ -11,8 +11,8 @@ Setup and workflow details for working on Chrampfer. For the architectural rules
 ## Getting started
 
 ```bash
-git clone https://github.com/pblumer/chrampfer.git
-cd chrampfer
+git clone https://github.com/pblumer/atlas.git
+cd atlas
 make check        # build + vet + format check + race tests
 ```
 
@@ -42,7 +42,7 @@ go test ./engine/ -run TestProcessorRecovery -v
 
 ## Testing philosophy
 
-Chrampfer's correctness hinges on a few properties that ordinary unit tests don't automatically cover. See [`AGENTS.md`](AGENTS.md#testing-conventions) for the full list. The two most important:
+Atlas's correctness hinges on a few properties that ordinary unit tests don't automatically cover. See [`AGENTS.md`](AGENTS.md#testing-conventions) for the full list. The two most important:
 
 - **Recovery tests.** The core invariant is "state built live == state rebuilt by replaying the log." Anything that emits events should have a test that processes commands, simulates a restart, replays, and asserts equality.
 - **Determinism.** No dependence on wall-clock time or goroutine scheduling. Inject the `Clock`; drive the processor synchronously where possible.

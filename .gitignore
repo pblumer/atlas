@@ -24,7 +24,7 @@ go.work.sum
 # Local data / engine artifacts (WAL segments, state store)
 /data/
 *.wal
-/.chrampfer/
+/.atlas/
 
 # Editor / OS
 .idea/

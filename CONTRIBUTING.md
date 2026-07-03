@@ -1,6 +1,6 @@
-# Contributing to Chrampfer
+# Contributing to Atlas
 
-Thanks for your interest in Chrampfer. The project is in early development, so the most valuable contributions right now are discussion, design feedback, and help landing the Milestone 0/1 foundations (see the [roadmap](ROADMAP.md)).
+Thanks for your interest in Atlas. The project is in early development, so the most valuable contributions right now are discussion, design feedback, and help landing the Milestone 0/1 foundations (see the [roadmap](ROADMAP.md)).
 
 ## Before you start
 
@@ -10,7 +10,7 @@ Thanks for your interest in Chrampfer. The project is in early development, so t
 
 ## Architectural guardrails
 
-Chrampfer's performance and correctness rest on a few load-bearing decisions, captured as **invariants** in [`docs/architecture/invariants.md`](docs/architecture/invariants.md). Changes that violate these need an ADR, not just a PR:
+Atlas's performance and correctness rest on a few load-bearing decisions, captured as **invariants** in [`docs/architecture/invariants.md`](docs/architecture/invariants.md). Changes that violate these need an ADR, not just a PR:
 
 1. **No allocation on the hot path.** Pool records, reuse buffers, prefer value types. The processor batch cycle must not allocate per command.
 2. **Durable before visible.** The ordering is fsync → state commit → side effects. Never expose or act on an event that isn't on disk.

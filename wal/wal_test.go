@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pblumer/chrampfer/wal"
+	"github.com/pblumer/atlas/wal"
 )
 
 // replayAll collects every durable record in order.

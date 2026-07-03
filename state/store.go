@@ -1,4 +1,4 @@
-// Package state is Chrampfer's materialized state store: the queryable fold of
+// Package state is Atlas's materialized state store: the queryable fold of
 // the event log (ADR-0001), backed by Pebble (ADR-0003).
 //
 // State is never the source of truth — the WAL is. Durability therefore belongs
@@ -24,7 +24,7 @@ import (
 	"os"
 
 	"github.com/cockroachdb/pebble"
-	"github.com/pblumer/chrampfer/model"
+	"github.com/pblumer/atlas/model"
 )
 
 // metaLastApplied keys the highest log position folded into the store.

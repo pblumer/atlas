@@ -1,14 +1,14 @@
 # AGENTS.md
 
-Operational guide for AI coding agents working on Chrampfer. Human contributors: see [`CONTRIBUTING.md`](CONTRIBUTING.md). This file follows the [agents.md](https://agents.md) convention; [`CLAUDE.md`](CLAUDE.md) points here.
+Operational guide for AI coding agents working on Atlas. Human contributors: see [`CONTRIBUTING.md`](CONTRIBUTING.md). This file follows the [agents.md](https://agents.md) convention; [`CLAUDE.md`](CLAUDE.md) points here.
 
-> **Read this whole file before writing code.** Chrampfer's correctness and performance rest on a handful of non-negotiable invariants. A change that looks locally correct can silently break the engine if it violates one of them. The invariants are listed below and in [`docs/architecture/invariants.md`](docs/architecture/invariants.md).
+> **Read this whole file before writing code.** Atlas's correctness and performance rest on a handful of non-negotiable invariants. A change that looks locally correct can silently break the engine if it violates one of them. The invariants are listed below and in [`docs/architecture/invariants.md`](docs/architecture/invariants.md).
 
 ---
 
 ## What this project is
 
-Chrampfer is a durable, high-throughput **BPMN 2.x workflow engine** in Go. It executes business process models by moving tokens through a compiled graph, persisting every state transition as an event in an append-only log, and materializing state in an embedded key-value store.
+Atlas is a durable, high-throughput **BPMN 2.x workflow engine** in Go. It executes business process models by moving tokens through a compiled graph, persisting every state transition as an event in an append-only log, and materializing state in an embedded key-value store.
 
 Three pillars (each has a deep-dive doc):
 - **Compiler** ([`docs/architecture/compiler.md`](docs/architecture/compiler.md)) — BPMN XML → immutable, integer-indexed `CompiledProcess`.

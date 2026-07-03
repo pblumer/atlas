@@ -9,7 +9,7 @@ import (
 
 // counterMergerName identifies the merge operator in the Pebble manifest. It
 // must stay stable: a store written with it can only be reopened with it.
-const counterMergerName = "chrampfer.counter.sum.v1"
+const counterMergerName = "atlas.counter.sum.v1"
 
 // counterMerger sums signed int64 deltas. It backs the active-children counters
 // so increments and decrements are write-only Merge operations — no read on the

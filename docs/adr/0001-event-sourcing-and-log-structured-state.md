@@ -6,7 +6,7 @@
 
 ## Context and problem statement
 
-Chrampfer must be durable (survive crashes, run multi-week process instances) *and* high-throughput (many instances per second). The naive approach — interpret BPMN and write process state to a SQL database, one `UPDATE` per state transition — fails on throughput: every update is a disk round-trip with lock contention, and it introduces a two-phase consistency hazard (the in-memory state and the persisted state can disagree after a crash).
+Atlas must be durable (survive crashes, run multi-week process instances) *and* high-throughput (many instances per second). The naive approach — interpret BPMN and write process state to a SQL database, one `UPDATE` per state transition — fails on throughput: every update is a disk round-trip with lock contention, and it introduces a two-phase consistency hazard (the in-memory state and the persisted state can disagree after a crash).
 
 We need a persistence model that delivers durability without paying a synchronous random-write per transition, and that makes crash recovery simple and provably consistent.
 

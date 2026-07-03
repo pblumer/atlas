@@ -1,6 +1,6 @@
 # Glossary
 
-Terms used throughout Chrampfer's documentation and code.
+Terms used throughout Atlas's documentation and code.
 
 **Behavior** — The type-specific logic for a BPMN element (service task, gateway, timer event, subprocess). Implements `OnActivated`, `OnCompleting`, `OnTerminating`. Dispatched by `BpmnElementType`.
 
@@ -56,7 +56,7 @@ Terms used throughout Chrampfer's documentation and code.
 
 **Struct-of-arrays** — The layout where topology (incoming/outgoing flows) lives in shared contiguous arrays indexed by offset+count, rather than per-node slices.
 
-**Token** — Conceptually, the thread of control moving through a BPMN model. In Chrampfer, represented by active element instances rather than allocated objects.
+**Token** — Conceptually, the thread of control moving through a BPMN model. In Atlas, represented by active element instances rather than allocated objects.
 
 **ValueType** — Part of the record discriminator. Which kind of entity a record concerns (ElementInstance, Job, Timer, Message, ...).
 

@@ -1,4 +1,4 @@
-// Package wal is Chrampfer's write-ahead log: a segmented, append-only record
+// Package wal is Atlas's write-ahead log: a segmented, append-only record
 // store with group commit.
 //
 // The log is the single source of truth (ADR-0001). Durability comes from

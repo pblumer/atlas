@@ -1,4 +1,4 @@
-# Chrampfer — developer command entry point.
+# Atlas — developer command entry point.
 # Agents and CI: prefer these targets so the canonical commands live in one place.
 
 .PHONY: all build test race vet fmt fmt-check lint check tidy clean

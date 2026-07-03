@@ -3,7 +3,7 @@ package engine
 import (
 	"testing"
 
-	"github.com/pblumer/chrampfer/model"
+	"github.com/pblumer/atlas/model"
 )
 
 // These white-box tests pin invariant I1 for the engine's own hot path: building

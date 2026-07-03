@@ -1,8 +1,8 @@
-# Chrampfer
+# Atlas
 
 > A blazing-fast, durable BPMN 2.x workflow engine in Go.
 
-**Chrampfer** is named after the Bernese German word for someone who works hard and never quits. Because that's exactly what it does: it *chrampfet* through millions of process instances, batch after batch, and never drops a token.
+**Atlas** is named after the Titan who bears an immense load without ever letting it drop. That's exactly what it does: it carries millions of process instances, batch after batch, and never drops a token.
 
 > 🚧 **Early development.** APIs are unstable and changing fast. Not ready for production use. See the [roadmap](ROADMAP.md).
 
@@ -10,7 +10,7 @@
 
 ## Why another workflow engine?
 
-Most BPMN engines spend their time interpreting XML at runtime and writing process state to a SQL database one transaction at a time. Both are throughput killers. Chrampfer takes a different path, borrowed from the design lineage of log-structured, event-sourced systems:
+Most BPMN engines spend their time interpreting XML at runtime and writing process state to a SQL database one transaction at a time. Both are throughput killers. Atlas takes a different path, borrowed from the design lineage of log-structured, event-sourced systems:
 
 - **Compile, don't interpret.** BPMN models are compiled once at deploy time into a flat, integer-indexed execution graph. At runtime there are no string lookups, no XML parsing, no map access on the hot path — just pointer arithmetic over cache-friendly slices.
 - **Event sourcing over state mutation.** State is never written in place. Every state transition is an append-only event in a write-ahead log. The live state is a materialization of that log, kept in an embedded key-value store.
@@ -58,8 +58,8 @@ The three core pillars:
 
 ## Non-goals (for now)
 
-- A graphical modeler — Chrampfer executes BPMN, it doesn't draw it
-- A full-stack, batteries-included server — Chrampfer is a library/engine core first
+- A graphical modeler — Atlas executes BPMN, it doesn't draw it
+- A full-stack, batteries-included server — Atlas is a library/engine core first
 
 ## License
 
@@ -67,4 +67,4 @@ The three core pillars:
 
 ---
 
-*Built by someone who appreciates a good chrampfer.*
+*Built by someone who appreciates a good atlas.*

@@ -3,7 +3,7 @@ package engine
 import (
 	"time"
 
-	"github.com/pblumer/chrampfer/model"
+	"github.com/pblumer/atlas/model"
 )
 
 // maxBatchSize caps how many commands one batch folds before flushing. Under
