@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Atlas — Operations</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f7f9; --fg: #12151a; --muted: #5c6773;
+      --card: #ffffff; --border: #e3e6ea; --accent: #2f6feb;
+      --warn-bg: #fff7e6; --warn-fg: #7a5300; --warn-border: #f0d9a8;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f1216; --fg: #e6e9ee; --muted: #97a0ad;
+        --card: #171b21; --border: #262c34; --accent: #6ea0ff;
+        --warn-bg: #2a2310; --warn-fg: #e8c877; --warn-border: #4a3d18;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--fg);
+      font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    header { padding: 20px 24px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+    header h1 { font-size: 18px; margin: 0; font-weight: 650; }
+    header .sub { color: var(--muted); font-size: 13px; }
+    main { max-width: 960px; margin: 0 auto; padding: 24px; }
+    .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+    .card { background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px 18px; }
+    .card h2 { font-size: 14px; margin: 0 0 6px; font-weight: 600; }
+    .card p { margin: 0; color: var(--muted); font-size: 13px; }
+    .status { display: inline-block; padding: 2px 8px; border-radius: 999px;
+      font-size: 12px; font-weight: 600; background: var(--warn-bg);
+      color: var(--warn-fg); border: 1px solid var(--warn-border); }
+    dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; margin: 0; }
+    dt { color: var(--muted); font-size: 13px; }
+    dd { margin: 0; font-variant-numeric: tabular-nums; }
+    .banner { margin-bottom: 20px; padding: 12px 16px; border-radius: 10px;
+      background: var(--warn-bg); color: var(--warn-fg);
+      border: 1px solid var(--warn-border); font-size: 13px; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Atlas — Operations</h1>
+    <span class="sub" id="version">connecting…</span>
+  </header>
+  <main>
+    <div class="banner">
+      Scaffold (ADR-0011, phase 1). The runtime query API is not wired to the
+      engine yet — the panels below reflect the intended surface and report the
+      backend status honestly.
+    </div>
+    <div class="grid">
+      <section class="card">
+        <h2>Instances</h2>
+        <p id="instances"><span class="status">checking…</span></p>
+      </section>
+      <section class="card">
+        <h2>Incidents</h2>
+        <p id="incidents"><span class="status">checking…</span></p>
+      </section>
+      <section class="card">
+        <h2>Jobs</h2>
+        <p id="jobs"><span class="status">checking…</span></p>
+      </section>
+      <section class="card">
+        <h2>Server</h2>
+        <dl id="serverinfo">
+          <dt>version</dt><dd id="i-version">—</dd>
+          <dt>web</dt><dd id="i-web">—</dd>
+          <dt>mcp</dt><dd id="i-mcp">—</dd>
+        </dl>
+      </section>
+    </div>
+  </main>
+  <script>
+    async function loadInfo() {
+      try {
+        const r = await fetch('api/v1/info');
+        const d = await r.json();
+        document.getElementById('version').textContent = 'v' + d.version;
+        document.getElementById('i-version').textContent = d.version;
+        document.getElementById('i-web').textContent = d.surfaces.web ? 'enabled' : 'disabled';
+        document.getElementById('i-mcp').textContent = d.surfaces.mcp ? 'enabled' : 'disabled';
+      } catch (e) {
+        document.getElementById('version').textContent = 'unreachable';
+      }
+    }
+    async function probe(path, elemId) {
+      const el = document.getElementById(elemId);
+      try {
+        const r = await fetch('api/v1/' + path);
+        if (r.status === 501) {
+          const d = await r.json();
+          el.innerHTML = '<span class="status">backend pending</span> ' +
+            (d.detail || '');
+        } else if (r.ok) {
+          const d = await r.json();
+          const n = Array.isArray(d) ? d.length : (d.count ?? '—');
+          el.textContent = n + ' ' + path;
+        } else {
+          el.innerHTML = '<span class="status">error ' + r.status + '</span>';
+        }
+      } catch (e) {
+        el.innerHTML = '<span class="status">unreachable</span>';
+      }
+    }
+    loadInfo();
+    probe('instances', 'instances');
+    probe('incidents', 'incidents');
+    probe('jobs', 'jobs');
+  </script>
+</body>
+</html>
