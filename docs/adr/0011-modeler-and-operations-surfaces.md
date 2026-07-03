@@ -160,3 +160,4 @@ concepts per step:
   single-writer, durable-before-visible; design-time store is separate)
 - the public API this builds on is itself Milestone-4 scope
 - the UI surfaces here are on-by-default and opt-out per ADR-0012
+- the tasklist's user tasks are executed per ADR-0013; its forms are pluggable per ADR-0014

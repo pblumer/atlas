@@ -20,6 +20,8 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0010](0010-go-and-no-cgo.md) | Go as implementation language, no CGO | Accepted |
 | [0011](0011-modeler-and-operations-surfaces.md) | Modeler and operations surfaces | Proposed |
 | [0012](0012-batteries-on-by-default-opt-out-config.md) | Batteries-on-by-default, opt-out configuration | Proposed |
+| [0013](0013-user-task-execution-model.md) | User-task execution model | Proposed |
+| [0014](0014-pluggable-form-providers.md) | Pluggable form providers | Proposed |
 
 ## Status values
 
