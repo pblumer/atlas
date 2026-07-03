@@ -1,4 +1,4 @@
-// Package job is Chrampfer's in-process worker harness: it bridges the engine's
+// Package job is Atlas's in-process worker harness: it bridges the engine's
 // activatable jobs to worker handlers and feeds their results back as commands
 // (ADR-0007, streaming pull with completion-as-command).
 //
@@ -13,7 +13,7 @@ package job
 import (
 	"fmt"
 
-	"github.com/pblumer/chrampfer/state"
+	"github.com/pblumer/atlas/state"
 )
 
 // Job is the unit of work handed to a worker.

@@ -5,11 +5,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pblumer/chrampfer/compiler"
-	"github.com/pblumer/chrampfer/engine"
-	"github.com/pblumer/chrampfer/job"
-	"github.com/pblumer/chrampfer/state"
-	"github.com/pblumer/chrampfer/wal"
+	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/job"
+	"github.com/pblumer/atlas/state"
+	"github.com/pblumer/atlas/wal"
 )
 
 type fixedClock struct{ t int64 }
