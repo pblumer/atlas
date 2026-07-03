@@ -13,7 +13,7 @@ package job
 import (
 	"fmt"
 
-	"github.com/pblumer/chrampfer/state"
+	"github.com/pblumer/atlas/state"
 )
 
 // Job is the unit of work handed to a worker.
