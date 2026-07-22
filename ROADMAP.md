@@ -60,7 +60,14 @@ Making processes wait, react, and time out.
   event continues. Recovery-tested (a pending timer is restored from the log and
   fires afterward). Date/cycle timers, boundary timers, and FEEL duration
   expressions still to come.
-- 🔲 Message events + subscriptions + correlation (single-partition)
+- ✅ **Message events + subscriptions + correlation** (single-partition):
+  intermediate **message catch** events subscribe on a FEEL correlation key and
+  wait; intermediate **message throw** events and an HTTP `POST /api/v1/messages`
+  publish, correlating against open subscriptions through one shared path and
+  carrying an optional variable payload into the woken instance. Recovery-tested
+  (an open subscription is restored from the log and correlates afterward).
+  Message buffering, message start/boundary events, and cross-partition
+  correlation still to come (ADR-0020).
 - 🔲 Signal events (broadcast)
 - 🔲 Error events and error propagation
 - 🔲 Boundary events: interrupting and non-interrupting
@@ -154,7 +161,7 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   reloads it on startup, re-registering definitions with the processor — so
   diagrams, versions, and recovered instances survive a restart. An interim
   mechanism until the Milestone 4 public API makes deploy a first-class event.
-- ✅ Diagram drafts ([ADR-0020](docs/adr/0020-diagram-drafts.md)): a **Save**
+- ✅ Diagram drafts ([ADR-0021](docs/adr/0021-diagram-drafts.md)): a **Save**
   action in the Modeler persists work-in-progress (raw, uncompiled XML) to a
   durable draft store keyed by process id, so incomplete models survive and can be
   reopened — distinct from deploying, which compiles, versions, and runs.

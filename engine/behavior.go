@@ -30,6 +30,7 @@ func (p *Processor) registerHandlers() {
 		handlerKey(model.VTElementInstance, model.IntentCompleting): handleElementCompleting,
 		handlerKey(model.VTJob, model.IntentJobCompleted):           handleJobCompleted,
 		handlerKey(model.VTTimer, model.IntentTimerTriggered):       handleTimerTriggered,
+		handlerKey(model.VTMessage, model.IntentMessagePublished):   handleMessagePublished,
 	}
 }
 
@@ -41,6 +42,8 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeBusinessRuleTask] = businessRuleTaskBehavior{}
 	p.behaviors[compiler.TypeExclusiveGateway] = exclusiveGatewayBehavior{}
 	p.behaviors[compiler.TypeTimerCatchEvent] = timerCatchEventBehavior{}
+	p.behaviors[compiler.TypeMessageCatchEvent] = messageCatchEventBehavior{}
+	p.behaviors[compiler.TypeMessageThrowEvent] = messageThrowEventBehavior{}
 }
 
 // --- command handlers ---
@@ -108,6 +111,15 @@ func handleTimerTriggered(c *ProcessingContext) {
 	if ei := c.GetElementInstance(timer.ElementInstanceKey); ei != nil {
 		c.AppendElementCommand(timer.ElementInstanceKey, model.IntentCompleting, *ei)
 	}
+}
+
+// handleMessagePublished correlates an externally published message (from the
+// HTTP API) against the open subscriptions. The command carries the message name
+// and correlation key (in its subscription payload) and any payload variables (in
+// StartVars); correlation is the same path a message throw event uses.
+func handleMessagePublished(c *ProcessingContext) {
+	pub := c.cmd.Value.subscription
+	correlateMessage(c, pub.MessageName, pub.CorrelationKey, c.cmd.StartVars)
 }
 
 // behavior resolves the behavior for a BPMN element type.
@@ -248,6 +260,96 @@ func (timerCatchEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei 
 
 func (timerCatchEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	completeAndTakeFlows(c, key, ei)
+}
+
+// messageCatchEventBehavior: an intermediate message catch event. On activation
+// it evaluates its correlation-key expression over the instance's variables,
+// opens a subscription on (message name, key), and waits (stays Activated). A
+// later publish or throw that matches correlates the subscription, which drives
+// the element to complete and take its outgoing flows (ADR-0020). The key is
+// evaluated here (command processing) and frozen into the SubscriptionCreated
+// event; applyToState never re-evaluates it (invariant I6).
+type messageCatchEventBehavior struct{}
+
+func (messageCatchEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.MessageCatch(cp.Node(ei.ElementId).Detail)
+	c.AppendMessageSubscriptionEvent(key, model.IntentSubscriptionCreated, model.MessageSubscriptionValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		MessageName:        detail.MessageName,
+		CorrelationKey:     evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey),
+	})
+	// Stays Activated: no Completing until a message correlates.
+}
+
+func (messageCatchEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// messageThrowEventBehavior: an intermediate message throw event. On activation
+// it evaluates the referenced message's correlation-key expression over its own
+// variables and correlates — waking any instance already waiting on that (name,
+// key) — then completes and takes its outgoing flows. Producing and consuming a
+// message share one path (correlateMessage), so a throw event and an API publish
+// behave identically (ADR-0020).
+type messageThrowEventBehavior struct{}
+
+func (messageThrowEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.MessageThrow(cp.Node(ei.ElementId).Detail)
+	correlateMessage(c, detail.MessageName, evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey), nil)
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (messageThrowEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// evalCorrelationKey evaluates a compiled correlation-key expression over a
+// scope's variables and returns its FEEL canonical string form — the value a
+// subscription is keyed by and a publish matches against. A nil expression (an
+// empty correlationKey) or an evaluation error yields "".
+func evalCorrelationKey(c *ProcessingContext, e *expr.Compiled, scope uint64) string {
+	if e == nil {
+		return ""
+	}
+	v, err := e.Eval(bindInputs(c, e.Inputs(), scope))
+	if err != nil {
+		return ""
+	}
+	return v.String()
+}
+
+// correlateMessage delivers a message with the given name and correlation key to
+// every open subscription that matches. For each match it emits
+// SubscriptionCorrelated (which retires the subscription), writes the message's
+// payload variables into that instance's scope, and commands the waiting element
+// instance to complete. Matches are collected before any mutation so retiring a
+// subscription can't disturb the scan. A message that matches nothing is a no-op
+// — there is no buffering yet (ADR-0020).
+func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []model.VariableValue) {
+	type match struct {
+		elKey uint64
+		sub   model.MessageSubscriptionValue
+	}
+	var matches []match
+	c.p.fail(c.tx.CorrelatableSubscriptions(name, correlationKey, func(elKey uint64, v *model.MessageSubscriptionValue) error {
+		matches = append(matches, match{elKey: elKey, sub: *v})
+		return nil
+	}))
+	for i := range matches {
+		m := matches[i]
+		c.AppendMessageSubscriptionEvent(m.elKey, model.IntentSubscriptionCorrelated, m.sub)
+		for j := range vars {
+			vv := vars[j]
+			vv.ScopeKey = m.sub.ProcessInstanceKey
+			c.AppendVariableEvent(model.IntentVariableCreated, vv)
+		}
+		if ei := c.GetElementInstance(m.elKey); ei != nil {
+			c.AppendElementCommand(m.elKey, model.IntentCompleting, *ei)
+		}
+	}
 }
 
 // exclusiveGatewayBehavior: a data-based XOR split. It takes exactly one outgoing

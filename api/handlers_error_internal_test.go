@@ -61,6 +61,7 @@ func TestReadBodyErrors(t *testing.T) {
 		{"deploy", "/api/v1/deployments"},
 		{"save draft", "/api/v1/drafts"},
 		{"create instance", "/api/v1/processes/1/instances"},
+		{"publish message", "/api/v1/messages"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

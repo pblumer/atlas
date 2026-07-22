@@ -534,6 +534,65 @@ func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, append(active, done...))
 }
 
+type publishMessageResp struct {
+	Name           string    `json:"name"`
+	CorrelationKey string    `json:"correlationKey"`
+	Stats          statsResp `json:"stats"`
+}
+
+// handlePublishMessage publishes a message by name and correlation key, with
+// optional payload variables, then runs the processor to idle so any waiting
+// instance advances. It correlates against open subscriptions through the engine;
+// a message that matches nothing is accepted as a no-op (no buffering yet,
+// ADR-0020). Body: {"name","correlationKey","variables":{…}}.
+func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	var payload struct {
+		Name           string `json:"name"`
+		CorrelationKey string `json:"correlationKey"`
+	}
+	if len(bytes.TrimSpace(body)) > 0 {
+		if err := json.Unmarshal(body, &payload); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+			return
+		}
+	}
+	if payload.Name == "" {
+		writeError(w, http.StatusBadRequest, "message name is required")
+		return
+	}
+	vars, err := parseStartVariables(body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	var (
+		runErr  error
+		statErr error
+		stats   statsResp
+	)
+	s.do(func() {
+		s.proc.PublishMessage(payload.Name, payload.CorrelationKey, vars...)
+		if err := s.proc.RunUntilIdle(); err != nil {
+			runErr = err
+			return
+		}
+		stats, statErr = s.readStats()
+	})
+	switch {
+	case runErr != nil:
+		writeError(w, http.StatusInternalServerError, "publish message: "+runErr.Error())
+	case statErr != nil:
+		writeError(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
+	default:
+		writeJSON(w, http.StatusOK, publishMessageResp{Name: payload.Name, CorrelationKey: payload.CorrelationKey, Stats: stats})
+	}
+}
+
 // handleStats returns the live instance counts.
 func (s *Server) handleStats(w http.ResponseWriter, _ *http.Request) {
 	var (

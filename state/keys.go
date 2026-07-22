@@ -20,6 +20,7 @@ const (
 	cfActiveChildren         columnFamily = 0x07 // activeChildren:<scopeKey> → int32 count
 	cfVariable               columnFamily = 0x08 // var:<scopeKey>:<name> → VariableValue
 	cfProcessInstanceHistory columnFamily = 0x09 // piHist:<piKey> → ProcessInstanceValue (terminal)
+	cfMessageSubscription    columnFamily = 0x0A // msgSub:<name>:<corrKey>:<elKey> → MessageSubscriptionValue
 )
 
 func appendBE64(dst []byte, v uint64) []byte { return binary.BigEndian.AppendUint64(dst, v) }
@@ -84,6 +85,27 @@ func variablePrefix(scope uint64) []byte {
 // variable-length component, so a scope's variables are one prefix scan.
 func keyVariable(scope uint64, name string) []byte {
 	return append(variablePrefix(scope), name...)
+}
+
+// appendLenString appends a uint32 length prefix followed by s, so a
+// variable-length string can be an unambiguous key component (the length marks
+// where it ends, letting a later component follow).
+func appendLenString(dst []byte, s string) []byte {
+	return append(appendBE32(dst, uint32(len(s))), s...)
+}
+
+// messageSubscriptionPrefix is the exact-match scan prefix for all subscriptions
+// waiting on a (message name, correlation key) pair — the publish access pattern.
+func messageSubscriptionPrefix(name, correlationKey string) []byte {
+	b := appendLenString([]byte{byte(cfMessageSubscription)}, name)
+	return appendLenString(b, correlationKey)
+}
+
+// keyMessageSubscription keys a subscription by its (name, correlationKey) match
+// pair with the element-instance key as the trailing disambiguator, so several
+// instances can wait on the same message and key.
+func keyMessageSubscription(name, correlationKey string, elKey uint64) []byte {
+	return appendBE64(messageSubscriptionPrefix(name, correlationKey), elKey)
 }
 
 // prefixEnd returns the smallest key strictly greater than every key beginning

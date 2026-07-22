@@ -45,39 +45,10 @@ func (d *draftStore) fileFor(processID string) string {
 	return filepath.Join(d.dir, hex.EncodeToString([]byte(processID))+".json")
 }
 
-// save writes a draft durably (temp → fsync → rename → dir fsync), overwriting any
-// existing draft for the same process id. Durable before the caller treats it as
-// saved (I2, ADR-0019).
+// save writes a draft durably (atomic write + directory fsync), overwriting any
+// existing draft for the same process id (I2 / ADR-0021).
 func (d *draftStore) save(rec draft) error {
-	data, err := json.Marshal(rec)
-	if err != nil {
-		return fmt.Errorf("draftstore: marshal: %w", err)
-	}
-	final := d.fileFor(rec.ProcessID)
-	tmp := final + ".tmp"
-	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
-	if err != nil {
-		return fmt.Errorf("draftstore: open temp: %w", err)
-	}
-	if _, err := f.Write(data); err != nil {
-		_ = f.Close()
-		_ = os.Remove(tmp)
-		return fmt.Errorf("draftstore: write: %w", err)
-	}
-	if err := f.Sync(); err != nil {
-		_ = f.Close()
-		_ = os.Remove(tmp)
-		return fmt.Errorf("draftstore: sync temp: %w", err)
-	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("draftstore: close temp: %w", err)
-	}
-	if err := os.Rename(tmp, final); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("draftstore: rename: %w", err)
-	}
-	return d.syncDir()
+	return atomicWriteJSON(d.dir, d.fileFor(rec.ProcessID), rec)
 }
 
 // get returns the draft for a process id, or ok=false if none is saved.
@@ -101,20 +72,7 @@ func (d *draftStore) delete(processID string) error {
 	if err := os.Remove(d.fileFor(processID)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("draftstore: remove: %w", err)
 	}
-	return d.syncDir()
-}
-
-// syncDir fsyncs the drafts directory so a create/rename/remove is itself durable.
-func (d *draftStore) syncDir() error {
-	dir, err := os.Open(d.dir)
-	if err != nil {
-		return fmt.Errorf("draftstore: open dir: %w", err)
-	}
-	defer dir.Close()
-	if err := dir.Sync(); err != nil {
-		return fmt.Errorf("draftstore: sync dir: %w", err)
-	}
-	return nil
+	return fsyncDir(d.dir)
 }
 
 // loadAll reads every draft, most recently saved first — the order the Modeler

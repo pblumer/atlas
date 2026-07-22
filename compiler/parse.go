@@ -34,6 +34,37 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 	}
 	proc := defs.Processes[0]
 
+	// Messages are declared at the <definitions> level and referenced by a
+	// message event's <messageEventDefinition messageRef="…">. Index them by id so
+	// catch/throw events can resolve their name and correlation-key expression.
+	messages := make(map[string]xmlMessage, len(defs.Messages))
+	for _, m := range defs.Messages {
+		if m.Id != "" {
+			messages[m.Id] = m
+		}
+	}
+	// resolveMessage turns a messageRef into the message name and its compiled
+	// correlation-key expression. An empty correlation key compiles to nil, which
+	// evaluates to "" — matching only publishes with an empty key.
+	resolveMessage := func(ownerId, messageRef string) (string, *expr.Compiled, error) {
+		m, ok := messages[messageRef]
+		if !ok {
+			return "", nil, fmt.Errorf("compiler: message event %q references unknown message %q", ownerId, messageRef)
+		}
+		if m.Name == "" {
+			return "", nil, fmt.Errorf("compiler: message %q referenced by %q has no name", messageRef, ownerId)
+		}
+		var keyExpr *expr.Compiled
+		if text := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(m.Subscription.CorrelationKey), "=")); text != "" {
+			ce, err := expr.CompileAuto(text)
+			if err != nil {
+				return "", nil, fmt.Errorf("compiler: message %q correlationKey: %w", messageRef, err)
+			}
+			keyExpr = ce
+		}
+		return m.Name, keyExpr, nil
+	}
+
 	b := NewBuilder(key, proc.Id, version)
 	ids := make(map[string]int32, len(proc.StartEvents)+len(proc.ServiceTasks)+len(proc.EndEvents))
 	register := func(id string, nodeID int32) error {
@@ -120,16 +151,38 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 		}
 	}
 	for _, ev := range proc.IntermediateCatchEvents {
-		if ev.Timer == nil {
-			return nil, fmt.Errorf("compiler: intermediate catch event %q: only timer events are supported yet", ev.Id)
+		switch {
+		case ev.Timer != nil:
+			text := strings.TrimSpace(ev.Timer.TimeDuration)
+			text = strings.TrimSpace(strings.TrimPrefix(text, "=")) // tolerate a FEEL '=' prefix
+			nanos, err := parseISO8601Duration(text)
+			if err != nil {
+				return nil, fmt.Errorf("compiler: intermediate catch event %q timer: %w", ev.Id, err)
+			}
+			if err := register(ev.Id, b.AddTimerCatchEvent(nanos)); err != nil {
+				return nil, err
+			}
+		case ev.Message != nil:
+			name, keyExpr, err := resolveMessage(ev.Id, ev.Message.MessageRef)
+			if err != nil {
+				return nil, err
+			}
+			if err := register(ev.Id, b.AddMessageCatchEvent(name, keyExpr)); err != nil {
+				return nil, err
+			}
+		default:
+			return nil, fmt.Errorf("compiler: intermediate catch event %q: only timer and message events are supported yet", ev.Id)
 		}
-		text := strings.TrimSpace(ev.Timer.TimeDuration)
-		text = strings.TrimSpace(strings.TrimPrefix(text, "=")) // tolerate a FEEL '=' prefix
-		nanos, err := parseISO8601Duration(text)
+	}
+	for _, ev := range proc.IntermediateThrowEvents {
+		if ev.Message == nil {
+			return nil, fmt.Errorf("compiler: intermediate throw event %q: only message events are supported yet", ev.Id)
+		}
+		name, keyExpr, err := resolveMessage(ev.Id, ev.Message.MessageRef)
 		if err != nil {
-			return nil, fmt.Errorf("compiler: intermediate catch event %q timer: %w", ev.Id, err)
+			return nil, err
 		}
-		if err := register(ev.Id, b.AddTimerCatchEvent(nanos)); err != nil {
+		if err := register(ev.Id, b.AddMessageThrowEvent(name, keyExpr)); err != nil {
 			return nil, err
 		}
 	}
@@ -157,7 +210,8 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 	} {
 		if len(u.nodes) > 0 {
 			return nil, fmt.Errorf("compiler: element %q is a <%s>, which Atlas can't execute yet "+
-				"(supported: start/end events, service tasks, script tasks, business rule tasks, and exclusive gateways)", u.nodes[0].Id, u.label)
+				"(supported: start/end events, service tasks, script tasks, business rule tasks, exclusive gateways, "+
+				"and timer/message intermediate events)", u.nodes[0].Id, u.label)
 		}
 	}
 
@@ -204,6 +258,23 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 
 type xmlDefinitions struct {
 	Processes []xmlProcess `xml:"process"`
+	Messages  []xmlMessage `xml:"message"`
+}
+
+// A top-level message declaration. Its Zeebe subscription carries the FEEL
+// correlationKey expression shared by every catch/throw event that references it.
+type xmlMessage struct {
+	Id           string               `xml:"id,attr"`
+	Name         string               `xml:"name,attr"`
+	Subscription xmlZeebeSubscription `xml:"extensionElements>subscription"`
+}
+
+type xmlZeebeSubscription struct {
+	CorrelationKey string `xml:"correlationKey,attr"`
+}
+
+type xmlMessageEventDefinition struct {
+	MessageRef string `xml:"messageRef,attr"`
 }
 
 type xmlProcess struct {
@@ -216,6 +287,7 @@ type xmlProcess struct {
 	ExclusiveGateways []xmlExclusiveGateway `xml:"exclusiveGateway"`
 
 	IntermediateCatchEvents []xmlIntermediateCatchEvent `xml:"intermediateCatchEvent"`
+	IntermediateThrowEvents []xmlIntermediateThrowEvent `xml:"intermediateThrowEvent"`
 
 	Flows []xmlSequenceFlow `xml:"sequenceFlow"`
 
@@ -237,11 +309,18 @@ type xmlExclusiveGateway struct {
 	Default string `xml:"default,attr"`
 }
 
-// An intermediate catch event; only the timer variant is executable so far. Timer
-// is a pointer so a non-timer catch event (message/signal) is detected as absent.
+// An intermediate catch event; the timer and message variants are executable.
+// Each definition is a pointer so an absent one is detected as nil.
 type xmlIntermediateCatchEvent struct {
-	Id    string                   `xml:"id,attr"`
-	Timer *xmlTimerEventDefinition `xml:"timerEventDefinition"`
+	Id      string                     `xml:"id,attr"`
+	Timer   *xmlTimerEventDefinition   `xml:"timerEventDefinition"`
+	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
+}
+
+// An intermediate throw event; only the message variant is executable so far.
+type xmlIntermediateThrowEvent struct {
+	Id      string                     `xml:"id,attr"`
+	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
 }
 
 type xmlTimerEventDefinition struct {

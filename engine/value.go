@@ -8,11 +8,12 @@ import "github.com/pblumer/atlas/model"
 // interface — means commands and events never box a value or allocate one per
 // record on the processor path (invariant I1).
 type inflightValue struct {
-	process  model.ProcessInstanceValue
-	element  model.ElementInstanceValue
-	job      model.JobValue
-	variable model.VariableValue
-	timer    model.TimerValue
+	process      model.ProcessInstanceValue
+	element      model.ElementInstanceValue
+	job          model.JobValue
+	variable     model.VariableValue
+	timer        model.TimerValue
+	subscription model.MessageSubscriptionValue
 }
 
 // asValue returns a model.Value pointing at the active field, for encoding. The
@@ -30,6 +31,8 @@ func (v *inflightValue) asValue(vt model.ValueType) model.Value {
 		return &v.variable
 	case model.VTTimer:
 		return &v.timer
+	case model.VTMessageSubscription:
+		return &v.subscription
 	}
 	return nil
 }
@@ -66,6 +69,10 @@ func inflightFromRecord(rec model.Record) inflightValue {
 	case model.VTTimer:
 		if v, ok := rec.Value.(*model.TimerValue); ok {
 			iv.timer = *v
+		}
+	case model.VTMessageSubscription:
+		if v, ok := rec.Value.(*model.MessageSubscriptionValue); ok {
+			iv.subscription = *v
 		}
 	}
 	return iv

@@ -1,4 +1,4 @@
-# ADR-0020: Diagram drafts, separate from deployments
+# ADR-0021: Diagram drafts, separate from deployments
 
 - **Status:** Accepted
 - **Date:** 2026-07-22

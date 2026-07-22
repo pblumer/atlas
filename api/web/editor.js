@@ -202,11 +202,71 @@ function upsertExt(modeler, element, type, props) {
   modeling.updateProperties(element, { extensionElements: ext });
 }
 
+// messageFieldsHTML renders the shared Message name + correlation-key inputs for
+// a message catch or throw event. med is the bpmn:MessageEventDefinition.
+function messageFieldsHTML(med, hint) {
+  const msg = med.messageRef;
+  const name = (msg && msg.name) || "";
+  let key = "";
+  const vals = msg && msg.extensionElements && msg.extensionElements.values;
+  if (vals) {
+    const sub = vals.find((v) => v.$type === "zeebe:Subscription");
+    if (sub && sub.correlationKey) key = sub.correlationKey.replace(/^=\s*/, "");
+  }
+  return `<h3>Message</h3>
+    <label class="field"><span>Message name</span>
+      <input type="text" id="f-msgname" value="${esc(name)}" placeholder="payment-received"/></label>
+    <label class="field"><span>Correlation key (FEEL)</span>
+      <input type="text" id="f-corrkey" value="${esc(key)}" placeholder="orderId"/></label>
+    <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
 const isActivity = (bo) => /Task$/.test((bo && bo.$type) || "");
 
 // timerDefOf returns an event's bpmn:TimerEventDefinition, or null.
 function timerDefOf(bo) {
   return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:TimerEventDefinition") || null;
+}
+
+// messageDefOf returns an event's bpmn:MessageEventDefinition, or null.
+function messageDefOf(bo) {
+  return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:MessageEventDefinition") || null;
+}
+
+// definitionsOf returns the diagram's <bpmn:definitions> moddle element, where
+// top-level <bpmn:message> declarations live.
+function definitionsOf(modeler) {
+  try { if (typeof modeler.getDefinitions === "function") return modeler.getDefinitions(); } catch { /* older bpmn-js */ }
+  try { return modeler.get("canvas").getRootElement().businessObject.$parent; } catch { return null; }
+}
+
+// upsertMessage points a message event definition at a top-level bpmn:Message
+// with the given name and zeebe correlation key, creating the message (and its
+// zeebe:subscription) if needed. The messageRef change goes through the modeling
+// API (undo/redo); the message element is registered on the definitions so it
+// serializes on deploy. A leading '=' on the key is normalized to Zeebe form.
+function upsertMessage(modeler, element, med, name, correlationKey) {
+  const moddle = modeler.get("moddle");
+  const modeling = modeler.get("modeling");
+  let msg = med.messageRef;
+  if (!msg) {
+    msg = moddle.create("bpmn:Message");
+    msg.id = "Message_" + Math.random().toString(36).slice(2, 8);
+    const defs = definitionsOf(modeler);
+    if (defs) {
+      msg.$parent = defs;
+      defs.rootElements = [...(defs.rootElements || []), msg];
+    }
+  }
+  msg.name = name;
+  let ext = msg.extensionElements;
+  if (!ext) { ext = moddle.create("bpmn:ExtensionElements", { values: [] }); ext.$parent = msg; }
+  let sub = (ext.values || []).find((v) => v.$type === "zeebe:Subscription");
+  if (!sub) { sub = moddle.create("zeebe:Subscription"); sub.$parent = ext; ext.values = [...(ext.values || []), sub]; }
+  const key = (correlationKey || "").trim();
+  sub.correlationKey = key === "" ? "" : (key.startsWith("=") ? key : "= " + key);
+  msg.extensionElements = ext;
+  modeling.updateModdleProperties(element, med, { messageRef: msg });
 }
 
 // rootProcess returns the diagram's process business object, or null if the root
@@ -311,14 +371,24 @@ function wireProperties(root, modeler) {
           <p class="muted" style="font-size:12px">Evaluated when the token reaches the gateway; the first branch whose condition holds is taken.</p>`;
       } else if (bo.$type === "bpmn:IntermediateCatchEvent") {
         const timer = timerDefOf(bo);
+        const msg = messageDefOf(bo);
         if (timer) {
           const dur = (timer.timeDuration && timer.timeDuration.body) || "";
           html += `<h3>Timer</h3>
             <label class="field"><span>Duration (ISO&nbsp;8601)</span>
               <input type="text" id="f-duration" value="${esc(dur)}" placeholder="PT30S"/></label>
             <p class="muted" style="font-size:12px">e.g. PT30S (30s), PT5M, PT1H, P1DT2H. The event waits this long, then continues.</p>`;
+        } else if (msg) {
+          html += messageFieldsHTML(msg, "The event waits until a message with this name and a matching correlation key is published.");
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b> intermediate catch event, then set its duration here.</p>`;
+          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b> or <b>Message</b> intermediate catch event, then configure it here.</p>`;
+        }
+      } else if (bo.$type === "bpmn:IntermediateThrowEvent") {
+        const msg = messageDefOf(bo);
+        if (msg) {
+          html += messageFieldsHTML(msg, "On reaching this event the message is published; any instance waiting on the same name and correlation key continues.");
+        } else {
+          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Message</b> throw event, then configure it here.</p>`;
         }
       }
     } else if (isGatewayFlow && !isDefaultFlow) {
@@ -374,6 +444,20 @@ function wireProperties(root, modeler) {
         td.body = (fdur.value || "").trim();
         modeling.updateModdleProperties(element, timer, { timeDuration: td });
       });
+    }
+
+    const fmsgname = body.querySelector("#f-msgname");
+    const fcorrkey = body.querySelector("#f-corrkey");
+    if (fmsgname || fcorrkey) {
+      const saveMsg = () => {
+        const med = messageDefOf(element.businessObject);
+        if (!med) return;
+        upsertMessage(modeler, element, med,
+          (fmsgname && fmsgname.value || "").trim(),
+          (fcorrkey && fcorrkey.value || "").trim());
+      };
+      if (fmsgname) fmsgname.addEventListener("change", saveMsg);
+      if (fcorrkey) fcorrkey.addEventListener("change", saveMsg);
     }
 
     const fcond = body.querySelector("#f-cond");
