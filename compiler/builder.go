@@ -14,6 +14,7 @@ type Builder struct {
 	nodes        []CompiledNode
 	flows        []CompiledFlow
 	serviceTasks []ServiceTaskDetail
+	elementIds   []int32 // interned source BPMN id per node, -1 if unset
 
 	interner map[string]int32
 	strings  []string
@@ -50,7 +51,17 @@ func (b *Builder) addNode(t BpmnType, detail int32) int32 {
 		FlowScope: -1, // process root; nested scopes arrive with subprocesses
 		Detail:    detail,
 	})
+	b.elementIds = append(b.elementIds, -1) // kept in lockstep with nodes
 	return id
+}
+
+// SetElementBpmnId records the source BPMN element id (e.g. "StartEvent_1") for a
+// node so it can be mapped back for diagnostics and the live diagram overlay. It
+// is optional: nodes without one report "" from CompiledProcess.ElementBpmnId.
+func (b *Builder) SetElementBpmnId(nodeID int32, bpmnID string) {
+	if b.validNode(nodeID) {
+		b.elementIds[nodeID] = b.intern(bpmnID)
+	}
 }
 
 // AddStartEvent adds a none start event and returns its element id.
@@ -117,6 +128,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		outgoingFlows: outgoing,
 		serviceTasks:  b.serviceTasks,
 		startEvents:   startEvents,
+		elementIds:    b.elementIds,
 		strings:       b.strings,
 	}, nil
 }

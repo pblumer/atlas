@@ -18,6 +18,9 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0008](0008-feel-expression-strategy.md) | FEEL expression compilation strategy | Accepted |
 | [0009](0009-record-serialization-format.md) | Record serialization format | Accepted |
 | [0010](0010-go-and-no-cgo.md) | Go as implementation language, no CGO | Accepted |
+| [0011](0011-single-binary-distribution-and-web-ui.md) | Single-binary distribution with an embedded web viewer and editor | Accepted |
+| [0012](0012-web-ui-app-shell.md) | A buildless, self-contained web UI app shell | Accepted |
+| [0013](0013-embed-bpmn-js-modeler.md) | Embed the bpmn-js modeler as a vendored asset | Accepted |
 
 ## Status values
 

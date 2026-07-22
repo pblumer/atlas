@@ -150,9 +150,35 @@ func (s *Store) ActiveProcessInstanceCount() (int, error) {
 	return s.countPrefix([]byte{byte(cfProcessInstance)})
 }
 
+// ActiveProcessInstances calls fn with the key and value of every live process
+// instance, via the process-instance column family — the operator "list running
+// instances" access pattern.
+func (s *Store) ActiveProcessInstances(fn func(key uint64, v *model.ProcessInstanceValue) error) error {
+	return s.scanPrefix([]byte{byte(cfProcessInstance)}, func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTProcessInstance, raw)
+		if err != nil {
+			return err
+		}
+		return fn(trailingKey(k), v.(*model.ProcessInstanceValue))
+	})
+}
+
 // ActiveElementInstanceCount returns how many element instances are live.
 func (s *Store) ActiveElementInstanceCount() (int, error) {
 	return s.countPrefix([]byte{byte(cfElementInstance)})
+}
+
+// ActiveElementInstances calls fn with the key and value of every live element
+// instance. Each carries the BPMN element (as a compiled-graph index) it sits on,
+// which the live diagram overlay maps back to a diagram element.
+func (s *Store) ActiveElementInstances(fn func(key uint64, v *model.ElementInstanceValue) error) error {
+	return s.scanPrefix([]byte{byte(cfElementInstance)}, func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTElementInstance, raw)
+		if err != nil {
+			return err
+		}
+		return fn(trailingKey(k), v.(*model.ElementInstanceValue))
+	})
 }
 
 func (s *Store) countPrefix(prefix []byte) (int, error) {

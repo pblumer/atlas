@@ -40,6 +40,7 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 			return fmt.Errorf("compiler: duplicate element id %q", id)
 		}
 		ids[id] = nodeID
+		b.SetElementBpmnId(nodeID, id) // retain for the live diagram overlay
 		return nil
 	}
 

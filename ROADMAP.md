@@ -90,12 +90,43 @@ Adoption and polish.
 - 🔲 Documentation site, tutorials, examples
 - 🔲 1.0 API stability commitment
 
+## Milestone S — Single-binary server & web UI 🚧
+
+A parallel track (not strictly sequential with the engine milestones): make Atlas
+something you *start*, not only something you *import*. Everything ships in one
+self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-and-web-ui.md).
+
+- ✅ `api` + `cmd/atlas`: single binary embedding the engine over an HTTP surface,
+  serving an embedded web UI (`go:embed`). Deploy XML, create instance, stats,
+  health, process list/XML, info.
+- ✅ **App shell** (ADR-0012): top bar, app switcher, Atlas app naming
+  (Console, Modeler, Tasks, Operations, Insights), hash router; Console dashboard
+  and Modeler home wired to real engine data.
+- ✅ **BPMN editor** (ADR-0013): embedded `bpmn-js` modeler (canvas, palette,
+  context pad), a hand-written Details panel, and **Deploy & run** (deploy the
+  drawn XML, then start an instance). Authoring is gated by the compiler — it
+  rejects elements it can't execute yet.
+- ✅ **Live overlay** of runtime state on the diagram (Operations → a process's
+  live view): active elements highlighted with token counts, polled from a
+  `/processes/{key}/runtime` endpoint — the differentiator a standalone modeler
+  can't offer. Incidents/history overlays still to come.
+- ✅ **Instance management** view: Operations lists running process instances
+  (process, version, tokens, status) and links each to its live diagram.
+- 🔲 Auto-layout for deployed models that carry no BPMN-DI, so API-deployed XML
+  renders in the viewer.
+- 🔲 Full properties panel (would vendor a pre-bundled `bpmn-js-properties-panel`).
+- 🔲 Durable deployments (depends on the Milestone 4 public API persisting them).
+- 🔲 Later: a polished "workbench" experience on top.
+
 ---
 
 ## Explicit non-goals (for now)
 
-- A graphical BPMN modeler — Atlas executes models, it doesn't draw them.
-- A batteries-included application server — the engine core is a library first.
+- **A *bespoke* graphical BPMN modeler.** Atlas ships a viewer/editor by embedding
+  the standard `bpmn-js` toolkit (see Milestone S / ADR-0011); it does not
+  reimplement BPMN rendering or modeling from scratch.
+- A batteries-included application server beyond the single-binary server above —
+  the engine core stays a library first, with the server embedding it.
 - DMN decision evaluation as a product surface (FEEL is used internally for expressions).
 
 ## Guiding constraints
