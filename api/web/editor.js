@@ -447,6 +447,17 @@ export async function mountLive(root, { api, toast, key }) {
         <span class="pill ok" style="margin-left:8px"><span class="dot"></span><b id="inst-count">0</b>&nbsp;running</span>
         <span class="pill" style="margin-left:8px"><b id="token-count">0</b>&nbsp;tokens total</span>
       </div>
+      <div class="start-panel" id="start-panel" hidden>
+        <label class="field">
+          <span>Start variables — a JSON object of scalars (number, string, boolean, null). Leave empty to start with none.</span>
+          <textarea id="start-vars" rows="4" spellcheck="false" placeholder='{ "amount": 100, "customer": "acme", "priority": true }'></textarea>
+        </label>
+        <div class="row">
+          <button class="btn" id="start-go">Start instance</button>
+          <button class="btn neutral" id="start-cancel">Cancel</button>
+          <span class="err" id="start-err"></span>
+        </div>
+      </div>
       <div class="editor-body">
         <div id="canvas"></div>
       </div>
@@ -512,18 +523,59 @@ export async function mountLive(root, { api, toast, key }) {
 
   // Start a fresh instance of this already-deployed definition. The demo and the
   // Modeler's "Deploy & run" both couple starting to a deployment; this is the
-  // path for a model that's already live — start it again straight from its view.
+  // path for a model that's already live — start it again straight from its view,
+  // optionally seeded with start variables entered in the panel below the toolbar.
   const startBtn = root.querySelector("#start");
-  startBtn.addEventListener("click", async () => {
-    startBtn.disabled = true;
+  const panel = root.querySelector("#start-panel");
+  const varsEl = root.querySelector("#start-vars");
+  const goBtn = root.querySelector("#start-go");
+  const errEl = root.querySelector("#start-err");
+  const closePanel = () => { panel.hidden = true; errEl.textContent = ""; };
+
+  startBtn.addEventListener("click", () => {
+    panel.hidden = !panel.hidden;
+    errEl.textContent = "";
+    if (!panel.hidden) varsEl.focus();
+  });
+  root.querySelector("#start-cancel").addEventListener("click", closePanel);
+
+  // Turn the textarea into a request body, validating client-side so an obvious
+  // typo fails here instead of after a round-trip. Empty means no variables. The
+  // server accepts only scalars (parseStartVariables), so reject objects/arrays.
+  function buildBody() {
+    const raw = varsEl.value.trim();
+    if (!raw) return {};
+    let obj;
+    try { obj = JSON.parse(raw); }
+    catch (e) { throw new Error("not valid JSON: " + e.message); }
+    if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
+      throw new Error('expected a JSON object, e.g. { "amount": 100 }');
+    }
+    for (const [name, v] of Object.entries(obj)) {
+      const t = typeof v;
+      if (v !== null && t !== "number" && t !== "string" && t !== "boolean") {
+        throw new Error(`variable "${name}": only scalar values (number, string, boolean, null)`);
+      }
+    }
+    return { variables: obj };
+  }
+
+  goBtn.addEventListener("click", async () => {
+    let body;
+    try { body = buildBody(); }
+    catch (e) { errEl.textContent = e.message; return; }
+    goBtn.disabled = true;
     try {
-      await api("POST", `/api/v1/processes/${key}/instances`, {});
-      toast("Started a new instance", "ok");
+      await api("POST", `/api/v1/processes/${key}/instances`, body);
+      const n = body.variables ? Object.keys(body.variables).length : 0;
+      toast(n ? `Started a new instance with ${n} variable${n === 1 ? "" : "s"}` : "Started a new instance", "ok");
+      closePanel();
+      varsEl.value = "";
       await poll();
     } catch (e) {
-      toast("start failed: " + e.message, "err");
+      errEl.textContent = e.message;
     } finally {
-      startBtn.disabled = false;
+      goBtn.disabled = false;
     }
   });
 
