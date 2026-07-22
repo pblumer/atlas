@@ -77,6 +77,7 @@ type CompiledProcess struct {
 	outgoingFlows []int32 // shared topology: flow ids grouped by source node
 	serviceTasks  []ServiceTaskDetail
 	startEvents   []int32
+	elementIds    []int32  // interned source BPMN id per node id (-1 if unset)
 	strings       []string // intern table (index → string), for debug/export
 }
 
@@ -107,4 +108,14 @@ func (p *CompiledProcess) Intern(idx int32) string {
 		return ""
 	}
 	return p.strings[idx]
+}
+
+// ElementBpmnId returns the source BPMN element id for a node (the string id
+// bpmn-js uses, e.g. "StartEvent_1"), or "" if the node index is out of range or
+// no id was recorded. Used to map runtime element instances back onto a diagram.
+func (p *CompiledProcess) ElementBpmnId(id int32) string {
+	if id < 0 || int(id) >= len(p.elementIds) {
+		return ""
+	}
+	return p.Intern(p.elementIds[id])
 }

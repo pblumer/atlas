@@ -34,6 +34,17 @@ type infoResp struct {
 	Version string `json:"version"`
 }
 
+type runtimeElement struct {
+	ElementID string `json:"elementId"`
+	Type      string `json:"type"`
+	Tokens    int    `json:"tokens"`
+}
+
+type runtimeResp struct {
+	Instances int              `json:"instances"`
+	Elements  []runtimeElement `json:"elements"`
+}
+
 type instanceResp struct {
 	Key              uint64 `json:"key"`
 	ProcessDefKey    uint64 `json:"processDefKey"`
@@ -94,6 +105,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 			Version:    version,
 			DeployedAt: time.Now().Unix(),
 			xml:        body,
+			cp:         cp,
 		}
 		s.order = append(s.order, key)
 		s.nextKey++
@@ -144,6 +156,69 @@ func (s *Server) handleProcessXML(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	_, _ = w.Write(xml)
+}
+
+// handleProcessRuntime returns, for one definition, how many instances are live
+// and how many tokens (element instances) currently sit on each BPMN element —
+// the data the browser overlays onto the diagram.
+func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid definition key")
+		return
+	}
+	var (
+		found   bool
+		scanErr error
+		resp    = runtimeResp{Elements: []runtimeElement{}}
+	)
+	s.do(func() {
+		d, ok := s.deployments[key]
+		if !ok {
+			return
+		}
+		found = true
+
+		byElement := map[string]*runtimeElement{}
+		var order []string
+		scanErr = s.store.ActiveElementInstances(func(_ uint64, v *model.ElementInstanceValue) error {
+			if v.ProcessDefKey != key {
+				return nil
+			}
+			bid := d.cp.ElementBpmnId(v.ElementId)
+			if bid == "" {
+				return nil
+			}
+			e := byElement[bid]
+			if e == nil {
+				e = &runtimeElement{ElementID: bid, Type: d.cp.Node(v.ElementId).Type.String()}
+				byElement[bid] = e
+				order = append(order, bid)
+			}
+			e.Tokens++
+			return nil
+		})
+		if scanErr != nil {
+			return
+		}
+		for _, bid := range order {
+			resp.Elements = append(resp.Elements, *byElement[bid])
+		}
+		scanErr = s.store.ActiveProcessInstances(func(_ uint64, v *model.ProcessInstanceValue) error {
+			if v.ProcessDefKey == key {
+				resp.Instances++
+			}
+			return nil
+		})
+	})
+	switch {
+	case !found:
+		writeError(w, http.StatusNotFound, "no deployment with that key")
+	case scanErr != nil:
+		writeError(w, http.StatusInternalServerError, "read runtime: "+scanErr.Error())
+	default:
+		writeJSON(w, http.StatusOK, resp)
+	}
 }
 
 // handleCreateInstance starts one instance of a deployed definition and runs the

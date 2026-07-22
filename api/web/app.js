@@ -82,7 +82,8 @@ function setChrome(appId, route) {
   ).join("");
   document.querySelectorAll("#drawer-apps a").forEach((a) =>
     a.classList.toggle("active", a.dataset.app === appId));
-  document.body.classList.toggle("editor-mode", appId === "modeler" && route.includes("/d/") || route.endsWith("/new"));
+  const fullBleed = route.includes("/modeler/d/") || route.endsWith("/new") || route.includes("/operations/p/");
+  document.body.classList.toggle("editor-mode", fullBleed);
 }
 
 // ---------- Views ----------
@@ -211,8 +212,8 @@ async function viewInstances() {
     element instances (tokens) as it moves through the engine.</p>
     <div class="card" style="padding:0">
       <table>
-        <thead><tr><th>Instance</th><th>Process</th><th>Version</th><th>Tokens</th><th>Status</th></tr></thead>
-        <tbody id="rows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+        <thead><tr><th>Instance</th><th>Process</th><th>Version</th><th>Tokens</th><th>Status</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>`;
   const load = async () => {
@@ -220,21 +221,24 @@ async function viewInstances() {
       const rows = await api("GET", "/api/v1/instances");
       const tbody = document.getElementById("rows");
       if (!rows.length) {
-        tbody.innerHTML = `<tr><td colspan="5" class="empty">
+        tbody.innerHTML = `<tr><td colspan="6" class="empty">
           No running instances. Start one from the <a href="#/modeler">Modeler</a>.</td></tr>`;
         return;
       }
       tbody.innerHTML = rows.map((r) => `
         <tr>
           <td><b>${r.key}</b></td>
-          <td>${r.processId ? esc(r.processId) : '<span class="muted">def ' + r.processDefKey + "</span>"}</td>
+          <td>${r.processId
+            ? `<a href="#/operations/p/${r.processDefKey}">${esc(r.processId)}</a>`
+            : '<span class="muted">def ' + r.processDefKey + "</span>"}</td>
           <td>${r.version ? "v" + r.version : "—"}</td>
           <td>${r.elementInstances}</td>
           <td><span class="pill ok"><span class="dot"></span>${esc(r.state)}</span></td>
+          <td style="text-align:right"><a class="btn ghost" href="#/operations/p/${r.processDefKey}">Live view</a></td>
         </tr>`).join("");
     } catch (e) {
       document.getElementById("rows").innerHTML =
-        `<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`;
+        `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;
     }
   };
   document.getElementById("refresh").addEventListener("click", load);
@@ -256,11 +260,17 @@ async function viewEditor(key) {
   await mod.mountEditor(view, { api, toast, key });
 }
 
+async function viewLive(key) {
+  const mod = await import("./editor.js");
+  await mod.mountLive(view, { api, toast, key });
+}
+
 // ---------- Router ----------
 async function route() {
-  // Any navigation closes the app switcher.
+  // Any navigation closes the app switcher and tears down an editor/live view.
   document.getElementById("drawer").hidden = true;
   document.getElementById("scrim").hidden = true;
+  if (window.__atlasCleanup) { try { window.__atlasCleanup(); } catch { /* ignore */ } }
 
   const hash = location.hash || "#/console";
   const [path, arg] = [hash.replace(/\?.*$/, ""), hash];
@@ -283,6 +293,8 @@ async function route() {
     const m = path.match(/^#\/modeler\/d\/(\d+)$/);
     if (m) return await viewEditor(Number(m[1]));
     if (path === "#/operations") return await viewInstances();
+    const lm = path.match(/^#\/operations\/p\/(\d+)$/);
+    if (lm) return await viewLive(Number(lm[1]));
     if (appId !== "console" && appId !== "modeler") return viewComingSoon(appId);
     // Unknown route → dashboard.
     location.hash = "#/console";

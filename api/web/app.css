@@ -185,3 +185,21 @@ label.field span { display: block; font-size: 12px; color: var(--muted); margin-
 
 /* bpmn-js watermark must remain visible (license). Just ensure it isn't clipped. */
 .bjs-powered-by { z-index: 5; }
+
+/* ---------- Live overlay ---------- */
+/* In the live view the diagram is read-only: hide editing affordances. */
+.live .djs-palette, .live .djs-context-pad, .live .djs-direct-editing-parent { display: none !important; }
+/* Highlight elements that currently hold tokens. */
+.djs-element.atlas-active .djs-visual > :nth-child(1) {
+  stroke: var(--accent) !important; stroke-width: 2.5px !important;
+}
+.token-badge {
+  background: var(--accent); color: #fff; border-radius: 999px;
+  min-width: 20px; height: 20px; padding: 0 6px;
+  font: 700 12px/20px system-ui, sans-serif; text-align: center;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.35); pointer-events: none;
+}
+.legend-swatch {
+  display: inline-block; width: 22px; height: 0;
+  border-top: 2.5px solid var(--accent); vertical-align: middle; margin-right: 4px;
+}

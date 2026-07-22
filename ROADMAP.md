@@ -106,10 +106,12 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   context pad), a hand-written Details panel, and **Deploy & run** (deploy the
   drawn XML, then start an instance). Authoring is gated by the compiler — it
   rejects elements it can't execute yet.
-- 🔲 **Live overlay** of runtime state (waiting tokens, incidents) on the diagram —
-  the differentiator a standalone modeler can't offer.
-- 🔲 **Instance management** view: list/inspect/manage running process instances
-  from the Console (overlaps Milestone 4 operator tooling).
+- ✅ **Live overlay** of runtime state on the diagram (Operations → a process's
+  live view): active elements highlighted with token counts, polled from a
+  `/processes/{key}/runtime` endpoint — the differentiator a standalone modeler
+  can't offer. Incidents/history overlays still to come.
+- ✅ **Instance management** view: Operations lists running process instances
+  (process, version, tokens, status) and links each to its live diagram.
 - 🔲 Auto-layout for deployed models that carry no BPMN-DI, so API-deployed XML
   renders in the viewer.
 - 🔲 Full properties panel (would vendor a pre-bundled `bpmn-js-properties-panel`).

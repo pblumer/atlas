@@ -147,6 +147,27 @@ func TestDeployRunAndStats(t *testing.T) {
 	if len(insts) != 1 || insts[0].ProcessID != "order" || insts[0].ElementInstances != 1 || insts[0].State != "active" {
 		t.Fatalf("instances = %+v, want one active order instance with 1 token", insts)
 	}
+
+	// The live overlay data: the token sits on the service task "task".
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/processes/1/runtime", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("runtime status=%d body=%s", code, body)
+	}
+	var rt struct {
+		Instances int `json:"instances"`
+		Elements  []struct {
+			ElementID string `json:"elementId"`
+			Type      string `json:"type"`
+			Tokens    int    `json:"tokens"`
+		} `json:"elements"`
+	}
+	if err := json.Unmarshal(body, &rt); err != nil {
+		t.Fatalf("decode runtime: %v (%s)", err, body)
+	}
+	if rt.Instances != 1 || len(rt.Elements) != 1 ||
+		rt.Elements[0].ElementID != "task" || rt.Elements[0].Type != "ServiceTask" || rt.Elements[0].Tokens != 1 {
+		t.Fatalf("runtime = %+v, want 1 instance with 1 token on service task \"task\"", rt)
+	}
 }
 
 // TestDeployInvalidModel rejects a model with no start event as a client error.

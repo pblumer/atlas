@@ -44,7 +44,16 @@ const BLANK = `<?xml version="1.0" encoding="UTF-8"?>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
-let current; // active modeler, destroyed on remount
+let current; // active modeler/viewer, destroyed on remount
+let liveTimer; // active live-overlay poll, cleared on remount/leave
+
+// cleanup tears down the current modeler and any live poll. app.js calls it (via
+// window.__atlasCleanup) when navigating away so nothing keeps running.
+export function cleanup() {
+  if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+  if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
+}
+window.__atlasCleanup = cleanup;
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -52,7 +61,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 const shortType = (t) => (t || "").replace(/^bpmn:/, "");
 
 export async function mountEditor(root, { api, toast, key }) {
-  if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
+  cleanup();
 
   root.innerHTML = `
     <div class="editor">
@@ -197,4 +206,91 @@ function wireActions(root, modeler, api, toast) {
       deployBtn.disabled = false;
     }
   });
+}
+
+// mountLive renders a deployed process read-only and overlays live runtime state
+// (active elements highlighted, token counts as badges), polling for updates.
+// This is the differentiator a standalone modeler can't offer — the diagram shows
+// where the engine's tokens actually are right now.
+export async function mountLive(root, { api, toast, key }) {
+  cleanup();
+
+  let procName = `definition ${key}`;
+  try {
+    const procs = await api("GET", "/api/v1/processes");
+    const p = procs.find((x) => x.key === key);
+    if (p) procName = `${p.processId} v${p.version}`;
+  } catch { /* header is cosmetic */ }
+
+  root.innerHTML = `
+    <div class="editor live">
+      <div class="editor-bar">
+        <a class="btn neutral" href="#/operations">&larr; Instances</a>
+        <span class="crumbs" style="margin-left:8px">Live &middot; <b>${esc(procName)}</b></span>
+        <div style="flex:1"></div>
+        <button class="btn neutral" id="refresh">Refresh</button>
+        <span class="pill ok" style="margin-left:8px"><span class="dot"></span><b id="inst-count">0</b>&nbsp;running</span>
+      </div>
+      <div class="editor-body">
+        <div id="canvas"></div>
+      </div>
+      <div class="problems">
+        <span class="legend-swatch"></span> active element
+        <span class="badge" style="margin-left:12px">N</span> tokens on the element
+        <span style="flex:1"></span>
+        <span class="muted">Polling every 1.5s</span>
+      </div>
+    </div>`;
+
+  let BpmnJS;
+  try {
+    BpmnJS = await loadBpmn();
+  } catch (e) {
+    root.querySelector("#canvas").innerHTML = `<div class="coming"><p>${esc(e.message)}</p></div>`;
+    return;
+  }
+
+  const viewer = new BpmnJS({ container: root.querySelector("#canvas") });
+  current = viewer;
+
+  try {
+    const xml = await api("GET", `/api/v1/processes/${key}/xml`);
+    await viewer.importXML(typeof xml === "string" ? xml : String(xml));
+    viewer.get("canvas").zoom("fit-viewport");
+  } catch (e) {
+    root.querySelector("#canvas").innerHTML =
+      `<div class="coming"><p>This model has no diagram layout to render.</p>
+       <p class="muted">Deploy it from the editor (which stores layout) to see the live overlay.</p></div>`;
+    return;
+  }
+
+  const canvas = viewer.get("canvas");
+  const overlays = viewer.get("overlays");
+  const registry = viewer.get("elementRegistry");
+  const countEl = root.querySelector("#inst-count");
+  let marked = [];
+
+  async function poll() {
+    let rt;
+    try { rt = await api("GET", `/api/v1/processes/${key}/runtime`); }
+    catch (e) { return; } // transient; try again next tick
+    if (current !== viewer) return; // navigated away mid-flight
+    overlays.clear();
+    for (const id of marked) canvas.removeMarker(id, "atlas-active");
+    marked = [];
+    for (const e of rt.elements) {
+      if (!registry.get(e.elementId)) continue;
+      canvas.addMarker(e.elementId, "atlas-active");
+      marked.push(e.elementId);
+      overlays.add(e.elementId, "tokens", {
+        position: { bottom: 4, right: 4 },
+        html: `<div class="token-badge" title="${e.tokens} token(s)">${e.tokens}</div>`,
+      });
+    }
+    countEl.textContent = rt.instances;
+  }
+
+  root.querySelector("#refresh").addEventListener("click", poll);
+  await poll();
+  liveTimer = setInterval(poll, 1500);
 }

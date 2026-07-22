@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/state"
 )
@@ -49,6 +50,7 @@ type deployment struct {
 	Version    int32
 	DeployedAt int64 // unix seconds, for the UI's "last changed" column
 	xml        []byte
+	cp         *compiler.CompiledProcess // for the live overlay's element-id mapping
 }
 
 // Server hosts the engine behind an HTTP surface. Construct it with New, mount
@@ -137,6 +139,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/deployments", s.handleDeploy)
 	mux.HandleFunc("GET /api/v1/processes", s.handleListProcesses)
 	mux.HandleFunc("GET /api/v1/processes/{key}/xml", s.handleProcessXML)
+	mux.HandleFunc("GET /api/v1/processes/{key}/runtime", s.handleProcessRuntime)
 	mux.HandleFunc("POST /api/v1/processes/{key}/instances", s.handleCreateInstance)
 	mux.HandleFunc("GET /api/v1/instances", s.handleListInstances)
 	mux.HandleFunc("GET /api/v1/stats", s.handleStats)
