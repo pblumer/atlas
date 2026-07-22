@@ -132,11 +132,15 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
 - ✅ Auto-layout for deployed models that carry no BPMN-DI: a generated
   left-to-right layered layout is injected when serving XML, so API-deployed
   semantic-only models render in the editor and the live overlay.
-- ✅ **MCP server** ([ADR-0016](docs/adr/0016-mcp-server-over-http-api.md)): an
-  `atlas mcp` subcommand speaks the Model Context Protocol over stdio and proxies
-  tool calls to a running `atlas serve`, so an AI agent (Claude Desktop, Claude
-  Code, …) can deploy a model, start an instance, and read live runtime state.
+- ✅ **MCP server** ([ADR-0016](docs/adr/0016-mcp-server-over-http-api.md)): the
+  Model Context Protocol over two transports — an `atlas mcp` subcommand on
+  **stdio** for a local client (Claude Desktop, Claude Code), and a **Streamable
+  HTTP** endpoint mounted at `/mcp` in `atlas serve` for a remote connector (e.g.
+  a claude.ai custom connector). Both proxy tool calls to the Atlas HTTP API, so
+  an AI agent can deploy a model, start an instance, and read live runtime state.
   Hand-written, no new dependency; the engine invariants stay behind the HTTP API.
+  The `/mcp` endpoint is unauthenticated — front it with a reverse proxy before
+  exposing it publicly.
 - 🔲 Full properties panel (would vendor a pre-bundled `bpmn-js-properties-panel`).
 - 🔲 Durable deployments (depends on the Milestone 4 public API persisting them).
 - 🔲 Later: a polished "workbench" experience on top.
