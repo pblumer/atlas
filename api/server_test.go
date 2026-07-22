@@ -170,6 +170,33 @@ func TestDeployRunAndStats(t *testing.T) {
 	}
 }
 
+// TestDeleteProcess removes a deployment, and refuses while an instance runs.
+func TestDeleteProcess(t *testing.T) {
+	ts := newTestServer(t)
+	// Deploy two definitions.
+	for i := 0; i < 2; i++ {
+		if code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", sampleBPMN, "application/xml"); code != http.StatusOK {
+			t.Fatalf("deploy %d: status=%d body=%s", i, code, body)
+		}
+	}
+	// Delete definition 2 (no instances) → 204, then it's gone from the list.
+	if code, body := doReq(t, ts, http.MethodDelete, "/api/v1/processes/2", "", ""); code != http.StatusNoContent {
+		t.Fatalf("delete status=%d body=%s", code, body)
+	}
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/processes", "", "")
+	if code != http.StatusOK || strings.Contains(string(body), `"key":2`) {
+		t.Fatalf("definition 2 still listed: %s", body)
+	}
+
+	// Start an instance of definition 1, then deletion must be refused (409).
+	if code, _ := doReq(t, ts, http.MethodPost, "/api/v1/processes/1/instances", "{}", "application/json"); code != http.StatusOK {
+		t.Fatalf("create instance failed")
+	}
+	if code, _ := doReq(t, ts, http.MethodDelete, "/api/v1/processes/1", "", ""); code != http.StatusConflict {
+		t.Fatalf("delete with running instance: status=%d, want 409", code)
+	}
+}
+
 // TestDeployInvalidModel rejects a model with no start event as a client error.
 func TestDeployInvalidModel(t *testing.T) {
 	ts := newTestServer(t)

@@ -60,6 +60,43 @@ func scriptProcess(t testing.TB, exprText, resultVar string) *compiler.CompiledP
 	return cp
 }
 
+// routerProcess builds Start → XOR gateway → (cond "amount > 100" → high) or
+// (default → low); each branch is a script task writing "path" then an End.
+func routerProcess(t testing.TB) *compiler.CompiledProcess {
+	t.Helper()
+	b := compiler.NewBuilder(defKey, "router", 1)
+	start := b.AddStartEvent()
+	gw := b.AddExclusiveGateway()
+
+	high := b.AddScriptTask(mustCompile(t, `"high"`), "path")
+	low := b.AddScriptTask(mustCompile(t, `"low"`), "path")
+	endHigh := b.AddEndEvent()
+	endLow := b.AddEndEvent()
+
+	b.Connect(start, gw)
+	fHigh := b.Connect(gw, high)
+	b.SetFlowCondition(fHigh, mustCompile(t, "amount > 100"))
+	fLow := b.Connect(gw, low)
+	b.SetFlowDefault(fLow)
+	b.Connect(high, endHigh)
+	b.Connect(low, endLow)
+
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return cp
+}
+
+func mustCompile(t testing.TB, src string) *expr.Compiled {
+	t.Helper()
+	c, err := expr.CompileAuto(src)
+	if err != nil {
+		t.Fatalf("CompileAuto(%q): %v", src, err)
+	}
+	return c
+}
+
 // readVar returns a scope's variable by name, or nil.
 func readVar(t *testing.T, s *state.Store, scope uint64, name string) *model.VariableValue {
 	t.Helper()
@@ -231,6 +268,88 @@ func TestScriptTaskReadsInputVariables(t *testing.T) {
 	got := readVar(t, h.store, scope, "gross")
 	if got == nil || got.Kind != model.VarNumber || got.Text != "119" {
 		t.Fatalf("gross = %+v, want number 119", got)
+	}
+}
+
+// TestExclusiveGatewayRoutesOnCondition drives an instance through an XOR gateway
+// whose branch is chosen by a FEEL condition over an input variable.
+func TestExclusiveGatewayRoutesOnCondition(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		amount string
+		want   string
+	}{
+		{"condition true takes high branch", "200", "high"},
+		{"condition false falls to default", "50", "low"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := openHarness(t, t.TempDir())
+			defer h.close(t)
+			cp := routerProcess(t)
+
+			p := engine.New(1, h.log, h.store, &manualClock{})
+			p.Deploy(cp)
+			if err := p.Recover(); err != nil {
+				t.Fatalf("Recover: %v", err)
+			}
+			p.CreateInstance(cp.Key, model.VariableValue{Name: "amount", Kind: model.VarNumber, Text: tc.amount})
+			if err := p.RunUntilIdle(); err != nil {
+				t.Fatalf("RunUntilIdle: %v", err)
+			}
+
+			if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+				t.Fatalf("after run: process=%d element=%d, want 0 and 0", pi, ei)
+			}
+			got := readVar(t, h.store, model.NewKey(1, 1), "path")
+			if got == nil || got.Text != tc.want {
+				t.Fatalf("path = %+v, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestExclusiveGatewayRecovers confirms the chosen branch survives replay: the
+// decision is captured by which element got activated, not re-evaluated.
+func TestExclusiveGatewayRecovers(t *testing.T) {
+	dir := t.TempDir()
+	cp := routerProcess(t)
+	clock := &manualClock{}
+
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clock)
+	p1.Deploy(cp)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.CreateInstance(cp.Key, model.VariableValue{Name: "amount", Kind: model.VarNumber, Text: "999"})
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	h1.close(t)
+
+	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open 2: %v", err)
+	}
+	store2, err := state.Open(filepath.Join(dir, "state2"))
+	if err != nil {
+		t.Fatalf("state.Open 2: %v", err)
+	}
+	defer func() {
+		if err := store2.Close(); err != nil {
+			t.Errorf("store2.Close: %v", err)
+		}
+		if err := log2.Close(); err != nil {
+			t.Errorf("log2.Close: %v", err)
+		}
+	}()
+	p2 := engine.New(1, log2, store2, clock)
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2 (replay): %v", err)
+	}
+	if got := readVar(t, store2, model.NewKey(1, 1), "path"); got == nil || got.Text != "high" {
+		t.Fatalf("replayed path = %+v, want \"high\"", got)
 	}
 }
 

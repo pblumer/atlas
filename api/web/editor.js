@@ -84,7 +84,6 @@ export async function mountEditor(root, { api, toast, key }) {
         <div class="etabs">
           <button data-tab="design" class="active">Design</button>
           <button data-tab="implement">Implement</button>
-          <button data-tab="play">Play</button>
         </div>
         <div style="flex:1"></div>
         <button class="btn neutral" id="export">Export XML</button>
@@ -92,9 +91,6 @@ export async function mountEditor(root, { api, toast, key }) {
       </div>
       <div class="editor-body">
         <div id="canvas"></div>
-        <div id="play" class="coming" hidden>
-          <div><p><b>Play</b></p><p class="muted">Interactive token play is on the roadmap.</p></div>
-        </div>
         <aside class="props" id="props">
           <div class="phead"><span class="ptype" id="p-icon">–</span>
             <div><div class="kv" id="p-typename">No selection</div><b id="p-name">—</b></div></div>
@@ -142,15 +138,10 @@ export async function mountEditor(root, { api, toast, key }) {
 }
 
 function wireTabs(root) {
-  const canvas = root.querySelector("#canvas");
-  const play = root.querySelector("#play");
   root.querySelectorAll(".etabs button").forEach((b) => {
     b.addEventListener("click", () => {
       root.querySelectorAll(".etabs button").forEach((x) => x.classList.remove("active"));
       b.classList.add("active");
-      const isPlay = b.dataset.tab === "play";
-      play.hidden = !isPlay;
-      canvas.style.visibility = isPlay ? "hidden" : "visible";
     });
   });
 }
@@ -185,6 +176,15 @@ function upsertExt(modeler, element, type, props) {
 
 const isActivity = (bo) => /Task$/.test((bo && bo.$type) || "");
 
+// rootProcess returns the diagram's process business object, or null if the root
+// isn't a plain process (e.g. a collaboration with pools).
+function rootProcess(modeler) {
+  try {
+    const bo = modeler.get("canvas").getRootElement().businessObject;
+    return bo && /:Process$/.test(bo.$type || "") ? bo : null;
+  } catch { return null; }
+}
+
 function wireProperties(root, modeler) {
   const icon = root.querySelector("#p-icon");
   const typename = root.querySelector("#p-typename");
@@ -195,6 +195,27 @@ function wireProperties(root, modeler) {
 
   function show(element) {
     if (!element) {
+      // Nothing selected → show the process itself, so its id/name can be edited
+      // (this is how you rename a diagram; the id is the deployed process id).
+      const rootBo = rootProcess(modeler);
+      if (rootBo) {
+        icon.textContent = "PR"; typename.textContent = "Process";
+        nameEl.textContent = rootBo.name || rootBo.id || "(process)";
+        body.innerHTML = `
+          <h3>Process</h3>
+          <label class="field"><span>Name</span><input type="text" id="f-pname" value="${esc(rootBo.name || "")}" placeholder="Order fulfillment"/></label>
+          <label class="field"><span>Process ID</span><input type="text" id="f-pid" value="${esc(rootBo.id || "")}" placeholder="order-fulfillment"/></label>
+          <p class="muted" style="font-size:12px">The Process ID is the identity deployments and instances are grouped by. Renaming it and deploying creates a new process rather than a new version.</p>`;
+        const rootEl = modeler.get("canvas").getRootElement();
+        body.querySelector("#f-pname").addEventListener("change", (e) => {
+          try { modeling.updateProperties(rootEl, { name: e.target.value }); } catch { /* ignore */ }
+        });
+        body.querySelector("#f-pid").addEventListener("change", (e) => {
+          const v = (e.target.value || "").trim();
+          if (v) { try { modeling.updateProperties(rootEl, { id: v }); } catch { toast("invalid process id", "err"); } }
+        });
+        return;
+      }
       icon.textContent = "–"; typename.textContent = "No selection"; nameEl.textContent = "—";
       body.innerHTML = `<p class="muted">Select an element to see its properties.</p>`;
       return;
