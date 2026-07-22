@@ -159,4 +159,17 @@ func TestHealthAndUI(t *testing.T) {
 	if code, body := doReq(t, ts, http.MethodGet, "/", "", ""); code != http.StatusOK || !strings.Contains(string(body), "<title>Atlas</title>") {
 		t.Fatalf("index status=%d body=%s", code, body)
 	}
+	if code, body := doReq(t, ts, http.MethodGet, "/api/v1/info", "", ""); code != http.StatusOK || !strings.Contains(string(body), `"product":"Atlas"`) {
+		t.Fatalf("info status=%d body=%s", code, body)
+	}
+}
+
+// TestServesVendoredModeler confirms the embedded bpmn-js asset is served, so the
+// editor is genuinely self-contained (ADR-0013).
+func TestServesVendoredModeler(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodGet, "/vendor/bpmn/bpmn-modeler.js", "", "")
+	if code != http.StatusOK || len(body) < 100_000 {
+		t.Fatalf("modeler asset status=%d size=%d, want 200 and a sizable bundle", code, len(body))
+	}
 }

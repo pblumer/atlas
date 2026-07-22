@@ -96,14 +96,23 @@ A parallel track (not strictly sequential with the engine milestones): make Atla
 something you *start*, not only something you *import*. Everything ships in one
 self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-and-web-ui.md).
 
-- 🚧 `api` + `cmd/atlas`: single binary embedding the engine over an HTTP surface,
-  serving an embedded web UI (`go:embed`). Skeleton: deploy XML, create instance,
-  stats, health, static UI shell.
-- 🔲 Read-only **BPMN viewer** in the browser (reuse `bpmn-js`, embedded assets).
+- ✅ `api` + `cmd/atlas`: single binary embedding the engine over an HTTP surface,
+  serving an embedded web UI (`go:embed`). Deploy XML, create instance, stats,
+  health, process list/XML, info.
+- ✅ **App shell** (ADR-0012): top bar, app switcher, Atlas app naming
+  (Console, Modeler, Tasks, Operations, Insights), hash router; Console dashboard
+  and Modeler home wired to real engine data.
+- ✅ **BPMN editor** (ADR-0013): embedded `bpmn-js` modeler (canvas, palette,
+  context pad), a hand-written Details panel, and **Deploy & run** (deploy the
+  drawn XML, then start an instance). Authoring is gated by the compiler — it
+  rejects elements it can't execute yet.
 - 🔲 **Live overlay** of runtime state (waiting tokens, incidents) on the diagram —
   the differentiator a standalone modeler can't offer.
-- 🔲 **Editor** by embedding the `bpmn-js` *modeler* (not a bespoke build), with its
-  authoring scope gated to what the compiler can execute (uses M1 validation).
+- 🔲 **Instance management** view: list/inspect/manage running process instances
+  from the Console (overlaps Milestone 4 operator tooling).
+- 🔲 Auto-layout for deployed models that carry no BPMN-DI, so API-deployed XML
+  renders in the viewer.
+- 🔲 Full properties panel (would vendor a pre-bundled `bpmn-js-properties-panel`).
 - 🔲 Durable deployments (depends on the Milestone 4 public API persisting them).
 - 🔲 Later: a polished "workbench" experience on top.
 

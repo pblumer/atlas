@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/pblumer/atlas/compiler"
 )
@@ -21,9 +22,15 @@ type deployResp struct {
 }
 
 type processResp struct {
-	Key       uint64 `json:"key"`
-	ProcessID string `json:"processId"`
-	Version   int32  `json:"version"`
+	Key        uint64 `json:"key"`
+	ProcessID  string `json:"processId"`
+	Version    int32  `json:"version"`
+	DeployedAt int64  `json:"deployedAt"`
+}
+
+type infoResp struct {
+	Product string `json:"product"`
+	Version string `json:"version"`
 }
 
 type statsResp struct {
@@ -34,6 +41,11 @@ type statsResp struct {
 type createInstanceResp struct {
 	DefinitionKey uint64    `json:"definitionKey"`
 	Stats         statsResp `json:"stats"`
+}
+
+// handleInfo reports product/version metadata for the UI shell.
+func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, infoResp{Product: "Atlas", Version: Version})
 }
 
 // handleDeploy parses a BPMN XML body, compiles and deploys it, and returns the
@@ -66,7 +78,13 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 
 		key := s.nextKey
 		s.proc.Deploy(cp)
-		s.deployments[key] = &deployment{Key: key, ProcessID: pid, Version: version, xml: body}
+		s.deployments[key] = &deployment{
+			Key:        key,
+			ProcessID:  pid,
+			Version:    version,
+			DeployedAt: time.Now().Unix(),
+			xml:        body,
+		}
 		s.order = append(s.order, key)
 		s.nextKey++
 		resp = deployResp{Key: key, ProcessID: pid, Version: version}
@@ -85,7 +103,12 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
 	s.do(func() {
 		for _, key := range s.order {
 			d := s.deployments[key]
-			list = append(list, processResp{Key: d.Key, ProcessID: d.ProcessID, Version: d.Version})
+			list = append(list, processResp{
+				Key:        d.Key,
+				ProcessID:  d.ProcessID,
+				Version:    d.Version,
+				DeployedAt: d.DeployedAt,
+			})
 		}
 	})
 	writeJSON(w, http.StatusOK, list)

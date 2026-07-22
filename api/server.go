@@ -35,14 +35,20 @@ import (
 //go:embed web
 var webFS embed.FS
 
+// Version is the Atlas product version reported to the UI. It is UI/display
+// metadata only and unrelated to a deployment's process version.
+const Version = "0.1.0-dev"
+
 // deployment is the server-side record of a deployed definition. The compiled
 // process itself lives in the processor; here we keep the metadata the UI needs
-// plus the original XML so the viewer can render it.
+// plus the original XML so the viewer can render it. DeployedAt is server-side
+// display metadata (wall-clock at deploy time), not engine state.
 type deployment struct {
-	Key       uint64
-	ProcessID string
-	Version   int32
-	xml       []byte
+	Key        uint64
+	ProcessID  string
+	Version    int32
+	DeployedAt int64 // unix seconds, for the UI's "last changed" column
+	xml        []byte
 }
 
 // Server hosts the engine behind an HTTP surface. Construct it with New, mount
@@ -127,6 +133,7 @@ func (s *Server) Handler() http.Handler {
 		_, _ = w.Write([]byte("ok\n"))
 	})
 
+	mux.HandleFunc("GET /api/v1/info", s.handleInfo)
 	mux.HandleFunc("POST /api/v1/deployments", s.handleDeploy)
 	mux.HandleFunc("GET /api/v1/processes", s.handleListProcesses)
 	mux.HandleFunc("GET /api/v1/processes/{key}/xml", s.handleProcessXML)
