@@ -442,6 +442,7 @@ export async function mountLive(root, { api, toast, key }) {
         <a class="btn neutral" href="#/operations">&larr; Instances</a>
         <span class="crumbs" style="margin-left:8px">Live &middot; <b>${esc(procName)}</b></span>
         <div style="flex:1"></div>
+        <button class="btn" id="start">Start instance</button>
         <button class="btn neutral" id="refresh">Refresh</button>
         <span class="pill ok" style="margin-left:8px"><span class="dot"></span><b id="inst-count">0</b>&nbsp;running</span>
         <span class="pill" style="margin-left:8px"><b id="token-count">0</b>&nbsp;tokens total</span>
@@ -508,6 +509,24 @@ export async function mountLive(root, { api, toast, key }) {
   }
 
   root.querySelector("#refresh").addEventListener("click", poll);
+
+  // Start a fresh instance of this already-deployed definition. The demo and the
+  // Modeler's "Deploy & run" both couple starting to a deployment; this is the
+  // path for a model that's already live — start it again straight from its view.
+  const startBtn = root.querySelector("#start");
+  startBtn.addEventListener("click", async () => {
+    startBtn.disabled = true;
+    try {
+      await api("POST", `/api/v1/processes/${key}/instances`, {});
+      toast("Started a new instance", "ok");
+      await poll();
+    } catch (e) {
+      toast("start failed: " + e.message, "err");
+    } finally {
+      startBtn.disabled = false;
+    }
+  });
+
   await poll();
   liveTimer = setInterval(poll, 1500);
 }
