@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,8 +27,22 @@ type deployResp struct {
 type processResp struct {
 	Key        uint64 `json:"key"`
 	ProcessID  string `json:"processId"`
+	Name       string `json:"name"`
 	Version    int32  `json:"version"`
 	DeployedAt int64  `json:"deployedAt"`
+}
+
+// processName extracts the first <process name="…"> from BPMN XML, for display.
+func processName(body []byte) string {
+	var d struct {
+		Processes []struct {
+			Name string `xml:"name,attr"`
+		} `xml:"process"`
+	}
+	if err := xml.Unmarshal(body, &d); err != nil || len(d.Processes) == 0 {
+		return ""
+	}
+	return d.Processes[0].Name
 }
 
 type infoResp struct {
@@ -104,6 +119,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		s.deployments[key] = &deployment{
 			Key:        key,
 			ProcessID:  pid,
+			Name:       processName(body),
 			Version:    version,
 			DeployedAt: time.Now().Unix(),
 			xml:        body,
@@ -130,6 +146,7 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
 			list = append(list, processResp{
 				Key:        d.Key,
 				ProcessID:  d.ProcessID,
+				Name:       d.Name,
 				Version:    d.Version,
 				DeployedAt: d.DeployedAt,
 			})

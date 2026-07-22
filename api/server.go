@@ -48,6 +48,7 @@ const Version = "0.1.0-dev"
 type deployment struct {
 	Key        uint64
 	ProcessID  string
+	Name       string // human-readable <process name="…">, for display
 	Version    int32
 	DeployedAt int64 // unix seconds, for the UI's "last changed" column
 	xml        []byte

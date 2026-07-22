@@ -128,6 +128,8 @@ export async function mountEditor(root, { api, toast, key }) {
       await modeler.importXML(typeof xml === "string" ? xml : String(xml));
     }
     modeler.get("canvas").zoom("fit-viewport");
+    const pbo = rootProcess(modeler);
+    if (pbo) root.querySelector(".crumbs").textContent = pbo.name || pbo.id || "Diagram";
   } catch (e) {
     toast("could not open diagram: " + e.message, "err");
   }
