@@ -112,8 +112,9 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   can't offer. Incidents/history overlays still to come.
 - ✅ **Instance management** view: Operations lists running process instances
   (process, version, tokens, status) and links each to its live diagram.
-- 🔲 Auto-layout for deployed models that carry no BPMN-DI, so API-deployed XML
-  renders in the viewer.
+- ✅ Auto-layout for deployed models that carry no BPMN-DI: a generated
+  left-to-right layered layout is injected when serving XML, so API-deployed
+  semantic-only models render in the editor and the live overlay.
 - 🔲 Full properties panel (would vendor a pre-bundled `bpmn-js-properties-panel`).
 - 🔲 Durable deployments (depends on the Milestone 4 public API persisting them).
 - 🔲 Later: a polished "workbench" experience on top.

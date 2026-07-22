@@ -259,8 +259,8 @@ export async function mountLive(root, { api, toast, key }) {
     viewer.get("canvas").zoom("fit-viewport");
   } catch (e) {
     root.querySelector("#canvas").innerHTML =
-      `<div class="coming"><p>This model has no diagram layout to render.</p>
-       <p class="muted">Deploy it from the editor (which stores layout) to see the live overlay.</p></div>`;
+      `<div class="coming"><p>Could not render this model.</p>
+       <p class="muted">${esc(e.message)}</p></div>`;
     return;
   }
 

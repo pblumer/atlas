@@ -136,26 +136,27 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, list)
 }
 
-// handleProcessXML returns the original BPMN XML of a deployed definition, for
-// the browser viewer to render.
+// handleProcessXML returns a deployed definition's BPMN XML for the browser to
+// render. If the model carries no diagram layout, a generated left-to-right
+// layout is injected so it still renders (ensureDiagramLayout).
 func (s *Server) handleProcessXML(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid definition key")
 		return
 	}
-	var xml []byte
+	var raw []byte
 	s.do(func() {
 		if d, ok := s.deployments[key]; ok {
-			xml = d.xml
+			raw = d.xml
 		}
 	})
-	if xml == nil {
+	if raw == nil {
 		writeError(w, http.StatusNotFound, "no deployment with that key")
 		return
 	}
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
-	_, _ = w.Write(xml)
+	_, _ = w.Write(ensureDiagramLayout(raw))
 }
 
 // handleProcessRuntime returns, for one definition, how many instances are live
