@@ -4,6 +4,7 @@ go 1.26
 
 require (
 	github.com/cockroachdb/pebble v1.1.5
+	github.com/pblumer/feel v0.0.0-20260722114835-38f697db2c7d
 	github.com/pblumer/temis v0.0.0-20260722083752-d4f4af9995bc
 )
 

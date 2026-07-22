@@ -6,6 +6,8 @@ import (
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/expr"
+	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
 )
@@ -36,6 +38,42 @@ func linearProcess(t testing.TB) (*compiler.CompiledProcess, int32) {
 	}
 	jobType := cp.ServiceTask(cp.Node(task).Detail).JobType
 	return cp, jobType
+}
+
+// scriptProcess builds Start → ScriptTask(exprText → resultVar) → End.
+func scriptProcess(t testing.TB, exprText, resultVar string) *compiler.CompiledProcess {
+	t.Helper()
+	b := compiler.NewBuilder(defKey, "scripted", 1)
+	start := b.AddStartEvent()
+	e, err := expr.CompileAuto(exprText)
+	if err != nil {
+		t.Fatalf("expr.CompileAuto: %v", err)
+	}
+	task := b.AddScriptTask(e, resultVar)
+	end := b.AddEndEvent()
+	b.Connect(start, task)
+	b.Connect(task, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return cp
+}
+
+// readVar returns a scope's variable by name, or nil.
+func readVar(t *testing.T, s *state.Store, scope uint64, name string) *model.VariableValue {
+	t.Helper()
+	var out *model.VariableValue
+	if err := s.VariablesOfScope(scope, func(v *model.VariableValue) error {
+		if v.Name == name {
+			c := *v
+			out = &c
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("VariablesOfScope: %v", err)
+	}
+	return out
 }
 
 // harness bundles an open wal+store and lets us reopen them to simulate a crash.
@@ -133,6 +171,126 @@ func TestExecuteStartServiceTaskEnd(t *testing.T) {
 	}
 	if jobs := activatableJobs(t, h.store, jobType); len(jobs) != 0 {
 		t.Errorf("leftover activatable jobs = %d, want 0", len(jobs))
+	}
+}
+
+// TestScriptTaskRunsToCompletion executes Start → ScriptTask → End with no
+// external worker: the script task evaluates its FEEL expression in-engine,
+// writes the result variable, and the instance runs straight to completion.
+func TestScriptTaskRunsToCompletion(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	cp := scriptProcess(t, "6 * 7", "answer")
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	// The instance finished on its own.
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after run: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+	// The first minted key is the process instance; it owns the result variable.
+	scope := model.NewKey(1, 1)
+	got := readVar(t, h.store, scope, "answer")
+	if got == nil {
+		t.Fatal(`variable "answer" not written`)
+	}
+	if got.Kind != model.VarNumber || got.Text != "42" {
+		t.Fatalf("answer = {kind:%d text:%q}, want number 42", got.Kind, got.Text)
+	}
+}
+
+// TestScriptTaskReadsInputVariables seeds a start variable and checks the script
+// task computes from it: amount 100 with taxRate 0.19 → gross 119.
+func TestScriptTaskReadsInputVariables(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	cp := scriptProcess(t, "amount * (1 + taxRate)", "gross")
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key,
+		model.VariableValue{Name: "amount", Kind: model.VarNumber, Text: "100"},
+		model.VariableValue{Name: "taxRate", Kind: model.VarNumber, Text: "0.19"},
+	)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	scope := model.NewKey(1, 1)
+	got := readVar(t, h.store, scope, "gross")
+	if got == nil || got.Kind != model.VarNumber || got.Text != "119" {
+		t.Fatalf("gross = %+v, want number 119", got)
+	}
+}
+
+// TestScriptTaskRecovers is the recovery property for variables: replaying the
+// log into a fresh store rebuilds exactly the state the live run produced
+// (invariant I4) — including the FEEL result, which is read back from the event,
+// never re-evaluated (invariant I6).
+func TestScriptTaskRecovers(t *testing.T) {
+	dir := t.TempDir()
+	cp := scriptProcess(t, `if 1 < 2 then "yes" else "no"`, "verdict")
+	clock := &manualClock{}
+
+	// Live run to completion.
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clock)
+	p1.Deploy(cp)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.CreateInstance(cp.Key)
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	scope := model.NewKey(1, 1)
+	live := readVar(t, h1.store, scope, "verdict")
+	if live == nil || live.Kind != model.VarString || live.Text != "yes" {
+		t.Fatalf("live verdict = %+v, want string \"yes\"", live)
+	}
+	h1.close(t)
+
+	// Replay the same log into a fresh, empty store.
+	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open 2: %v", err)
+	}
+	store2, err := state.Open(filepath.Join(dir, "state2"))
+	if err != nil {
+		t.Fatalf("state.Open 2: %v", err)
+	}
+	defer func() {
+		if err := store2.Close(); err != nil {
+			t.Errorf("store2.Close: %v", err)
+		}
+		if err := log2.Close(); err != nil {
+			t.Errorf("log2.Close: %v", err)
+		}
+	}()
+	p2 := engine.New(1, log2, store2, clock)
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2 (replay): %v", err)
+	}
+
+	// Rebuilt state matches the live run.
+	if pi, ei := counts(t, store2); pi != 0 || ei != 0 {
+		t.Fatalf("after replay: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+	replayed := readVar(t, store2, scope, "verdict")
+	if replayed == nil || replayed.Kind != live.Kind || replayed.Text != live.Text {
+		t.Fatalf("replayed verdict = %+v, want %+v", replayed, live)
 	}
 }
 

@@ -9,6 +9,8 @@
 // milestone; the linearized result here is the shape the engine consumes.
 package compiler
 
+import "github.com/pblumer/atlas/expr"
+
 // BpmnType is the kind of a BPMN element. It is stored in element-instance state
 // (as uint8) for O(1) behavior dispatch.
 type BpmnType uint8
@@ -18,6 +20,7 @@ const (
 	TypeStartEvent
 	TypeEndEvent
 	TypeServiceTask
+	TypeScriptTask
 	TypeBusinessRuleTask
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
@@ -35,6 +38,8 @@ func (t BpmnType) String() string {
 		return "EndEvent"
 	case TypeServiceTask:
 		return "ServiceTask"
+	case TypeScriptTask:
+		return "ScriptTask"
 	case TypeBusinessRuleTask:
 		return "BusinessRuleTask"
 	default:
@@ -67,6 +72,14 @@ type ServiceTaskDetail struct {
 	Retries int32
 }
 
+// ScriptTaskDetail is the per-script-task data a behavior needs at runtime: a
+// FEEL expression compiled once at deploy time (ADR-0008/0015) and the name of
+// the variable its result is written to.
+type ScriptTaskDetail struct {
+	Expr      *expr.Compiled
+	ResultVar string
+}
+
 // BusinessRuleTaskDetail is the per-business-rule-task data a behavior needs at
 // runtime. A business rule task delegates to a DMN decision, evaluated off the
 // hot path by the temis engine (ADR-0014). Like a service task it runs as a job,
@@ -93,6 +106,7 @@ type CompiledProcess struct {
 
 	outgoingFlows     []int32 // shared topology: flow ids grouped by source node
 	serviceTasks      []ServiceTaskDetail
+	scriptTasks       []ScriptTaskDetail
 	businessRuleTasks []BusinessRuleTaskDetail
 	startEvents       []int32
 	elementIds        []int32  // interned source BPMN id per node id (-1 if unset)
@@ -115,6 +129,11 @@ func (p *CompiledProcess) Outgoing(id int32) []int32 {
 // ServiceTask returns the detail at the given table index.
 func (p *CompiledProcess) ServiceTask(detail int32) *ServiceTaskDetail {
 	return &p.serviceTasks[detail]
+}
+
+// ScriptTask returns the detail at the given table index.
+func (p *CompiledProcess) ScriptTask(detail int32) *ScriptTaskDetail {
+	return &p.scriptTasks[detail]
 }
 
 // BusinessRuleTask returns the detail at the given table index.

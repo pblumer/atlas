@@ -172,6 +172,23 @@ func (t *Tx) DeleteProcessInstance(key uint64) error {
 	return t.b.Delete(keyProcessInstance(key), nil)
 }
 
+// --- Variable ---
+
+// PutVariable writes (upserts) a process variable under its scope and name.
+func (t *Tx) PutVariable(v *model.VariableValue) error {
+	return t.b.Set(keyVariable(v.ScopeKey, v.Name), t.encodeValue(v), nil)
+}
+
+// GetVariable returns a scope's variable by name, or nil if absent.
+func (t *Tx) GetVariable(scope uint64, name string) (*model.VariableValue, error) {
+	var v model.VariableValue
+	ok, err := t.readInto(keyVariable(scope, name), &v)
+	if err != nil || !ok {
+		return nil, err
+	}
+	return &v, nil
+}
+
 // --- Active-children counter ---
 //
 // Each scope (a process instance or a subprocess instance) tracks how many

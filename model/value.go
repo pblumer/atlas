@@ -145,6 +145,86 @@ func (v *ProcessInstanceValue) decode(src []byte) error {
 	return nil
 }
 
+// VarKind tags the scalar subset of FEEL values Atlas persists for a variable.
+type VarKind uint8
+
+const (
+	VarNull   VarKind = iota // no value
+	VarBool                  // Bool is meaningful
+	VarNumber                // Text is the canonical decimal string
+	VarString                // Text is the string contents
+)
+
+// VariableValue is a process variable: a named value owned by a scope (the
+// process instance root for now). Unlike the graph-derived payloads, a variable
+// carries genuine runtime data (its name and contents), so its encoding is
+// length-prefixed rather than fixed-size.
+type VariableValue struct {
+	ScopeKey uint64 // owning scope (process instance key today)
+	Name     string
+	Kind     VarKind
+	Bool     bool
+	Text     string // number canonical string or string contents; empty otherwise
+}
+
+func (*VariableValue) ValueType() ValueType { return VTVariable }
+
+func (v *VariableValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ScopeKey)
+	dst = appendString(dst, v.Name)
+	dst = append(dst, byte(v.Kind))
+	if v.Bool {
+		dst = append(dst, 1)
+	} else {
+		dst = append(dst, 0)
+	}
+	return appendString(dst, v.Text)
+}
+
+func (v *VariableValue) decode(src []byte) error {
+	if len(src) < 8 {
+		return ErrShortBuffer
+	}
+	v.ScopeKey = binary.LittleEndian.Uint64(src)
+	rest := src[8:]
+	name, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.Name = name
+	if len(rest) < 2 {
+		return ErrShortBuffer
+	}
+	v.Kind = VarKind(rest[0])
+	v.Bool = rest[1] != 0
+	text, _, err := readString(rest[2:])
+	if err != nil {
+		return err
+	}
+	v.Text = text
+	return nil
+}
+
+// appendString writes a uint32 length prefix followed by the bytes of s.
+func appendString(dst []byte, s string) []byte {
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(len(s)))
+	return append(dst, s...)
+}
+
+// readString reads a length-prefixed string from the front of src, returning the
+// string and the remaining bytes.
+func readString(src []byte) (string, []byte, error) {
+	if len(src) < 4 {
+		return "", nil, ErrShortBuffer
+	}
+	n := binary.LittleEndian.Uint32(src)
+	src = src[4:]
+	if uint32(len(src)) < n {
+		return "", nil, ErrShortBuffer
+	}
+	return string(src[:n]), src[n:], nil
+}
+
 // newValue returns a zero payload for the value types that have one. Value
 // types without a payload yet return nil; their records carry only a header.
 func newValue(vt ValueType) Value {
@@ -157,6 +237,8 @@ func newValue(vt ValueType) Value {
 		return &JobValue{}
 	case VTTimer:
 		return &TimerValue{}
+	case VTVariable:
+		return &VariableValue{}
 	default:
 		return nil
 	}

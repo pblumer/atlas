@@ -21,16 +21,24 @@ The skeleton that proves the three pillars fit together end to end.
 - ✅ `job`: dedicated `job` package — in-process worker subscription that pulls activatable jobs and feeds completions back (ADR-0007); gRPC streaming transport + leases/retry are Milestone 4
 - ✅ **Goal: execute `Start → ServiceTask → End` and recover it across a restart** (deployment is programmatic for now, pending the XML front end)
 
-## Milestone 1 — Core BPMN 🔲
+## Milestone 1 — Core BPMN 🚧
 
 The control-flow basics most real models use.
 
-- 🔲 Exclusive gateway (conditions via compiled FEEL subset)
+- ✅ `expr`: FEEL compile-once/eval-many with `inputs` analysis — reused from
+  `github.com/pblumer/feel` behind an `expr` boundary ([ADR-0015](docs/adr/0015-reuse-feel-engine.md)).
+- ✅ **Script tasks**: evaluate FEEL in-engine (reading input variables) and write
+  the result variable, so an instance runs to completion with no external worker.
+  Recovery-tested (the result is written into the event and re-applied on replay,
+  never re-evaluated).
+- 🚧 Process variables: a variable store with **input binding** — instances start
+  with variables (`{"variables": {…}}`), script tasks read them, and Operations
+  shows them per instance. Variable scopes (local vs. propagated), copy-on-write,
+  and output mappings still to come.
+- 🔲 Exclusive gateway (conditions via compiled FEEL)
 - 🔲 Parallel gateway (fork + join with scope counters)
 - 🔲 Inclusive gateway
 - 🔲 Input/output variable mappings
-- 🔲 Variable scopes (local vs. propagated) with copy-on-write
-- 🔲 `expr`: FEEL subset → AST evaluation, with `inputs` analysis
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
 - 🔲 Conformance tests against a curated BPMN model set
 - 🚧 **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)
@@ -110,16 +118,20 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   and Modeler home wired to real engine data.
 - ✅ **BPMN editor** (ADR-0013): embedded `bpmn-js` modeler (canvas, palette,
   context pad), a hand-written Details panel, and **Deploy & run** (deploy the
-  drawn XML, then start an instance). Authoring is gated by the compiler — it
-  rejects elements it can't execute yet.
+  drawn XML, then start an instance). The panel authors executable tasks — pick a
+  task type (script/service) and set a **script task's FEEL expression + result
+  variable** or a **service task's job type**, written as the `zeebe:script` /
+  `zeebe:taskDefinition` extensions the engine runs (the zeebe moddle is vendored
+  alongside bpmn-js). Authoring is gated by the compiler.
 - ✅ **Live overlay** of runtime state on the diagram (Operations → a process's
   live view): active elements highlighted with token counts, polled from a
   `/processes/{key}/runtime` endpoint — the differentiator a standalone modeler
   can't offer. Incidents/history overlays still to come.
 - ✅ **Instance management** view: Operations lists running process instances
   (process, version, tokens, status) and links each to its live diagram.
-- 🔲 Auto-layout for deployed models that carry no BPMN-DI, so API-deployed XML
-  renders in the viewer.
+- ✅ Auto-layout for deployed models that carry no BPMN-DI: a generated
+  left-to-right layered layout is injected when serving XML, so API-deployed
+  semantic-only models render in the editor and the live overlay.
 - 🔲 Full properties panel (would vendor a pre-bundled `bpmn-js-properties-panel`).
 - 🔲 Durable deployments (depends on the Milestone 4 public API persisting them).
 - 🔲 Later: a polished "workbench" experience on top.

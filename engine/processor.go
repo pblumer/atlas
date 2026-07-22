@@ -78,13 +78,14 @@ func (p *Processor) Deploy(cp *compiler.CompiledProcess) { p.processes[cp.Key] =
 // fsync) when a job of a type becomes available.
 func (p *Processor) SetJobNotifier(fn func(jobType int32)) { p.jobNotifier = fn }
 
-// CreateInstance enqueues creation of a new instance of the given definition.
-// Call RunUntilIdle to process it.
-func (p *Processor) CreateInstance(defKey uint64) {
+// CreateInstance enqueues creation of a new instance of the given definition,
+// optionally seeded with initial variables. Call RunUntilIdle to process it.
+func (p *Processor) CreateInstance(defKey uint64, startVars ...model.VariableValue) {
 	p.queue = append(p.queue, Command{
 		ValueType: model.VTProcessInstance,
 		Intent:    model.IntentActivating,
 		Value:     inflightValue{process: model.ProcessInstanceValue{ProcessDefKey: defKey}},
+		StartVars: startVars,
 	})
 }
 

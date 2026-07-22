@@ -3,6 +3,8 @@ package compiler
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/pblumer/atlas/expr"
 )
 
 // DMNJobType is the reserved job type business rule tasks carry. The in-process
@@ -22,6 +24,7 @@ type Builder struct {
 	nodes             []CompiledNode
 	flows             []CompiledFlow
 	serviceTasks      []ServiceTaskDetail
+	scriptTasks       []ScriptTaskDetail
 	businessRuleTasks []BusinessRuleTaskDetail
 	elementIds        []int32 // interned source BPMN id per node, -1 if unset
 
@@ -88,6 +91,14 @@ func (b *Builder) AddServiceTask(jobType string, retries int32) int32 {
 		Retries: retries,
 	})
 	return b.addNode(TypeServiceTask, detail)
+}
+
+// AddScriptTask adds a script task that evaluates the given compiled FEEL
+// expression and writes the result to resultVar. Returns its element id.
+func (b *Builder) AddScriptTask(e *expr.Compiled, resultVar string) int32 {
+	detail := int32(len(b.scriptTasks))
+	b.scriptTasks = append(b.scriptTasks, ScriptTaskDetail{Expr: e, ResultVar: resultVar})
+	return b.addNode(TypeScriptTask, detail)
 }
 
 // AddBusinessRuleTask adds a business rule task that evaluates the named DMN
@@ -160,6 +171,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		flows:             b.flows,
 		outgoingFlows:     outgoing,
 		serviceTasks:      b.serviceTasks,
+		scriptTasks:       b.scriptTasks,
 		businessRuleTasks: b.businessRuleTasks,
 		startEvents:       startEvents,
 		elementIds:        b.elementIds,

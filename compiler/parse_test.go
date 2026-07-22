@@ -202,6 +202,18 @@ func TestParseErrors(t *testing.T) {
 				<startEvent id="s"/><endEvent id="s"/></process></definitions>`,
 		},
 		{
+			name: "unsupported plain task",
+			xml: `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
+				<startEvent id="s"/><task id="t"/><endEvent id="e"/>
+				<sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+				<sequenceFlow id="f2" sourceRef="t" targetRef="e"/></process></definitions>`,
+		},
+		{
+			name: "unsupported gateway",
+			xml: `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
+				<startEvent id="s"/><exclusiveGateway id="g"/></process></definitions>`,
+		},
+		{
 			name: "malformed xml",
 			xml:  `<definitions><process`,
 		},
@@ -212,5 +224,69 @@ func TestParseErrors(t *testing.T) {
 				t.Errorf("Parse(%s) = nil error, want error", tt.name)
 			}
 		})
+	}
+}
+
+// TestParseScriptTask compiles a Zeebe script task and checks its detail: a
+// compiled FEEL expression and a result variable.
+func TestParseScriptTask(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+	             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+	  <process id="p" isExecutable="true">
+	    <startEvent id="s"/>
+	    <scriptTask id="calc">
+	      <extensionElements><zeebe:script expression="= 6 * 7" resultVariable="answer"/></extensionElements>
+	    </scriptTask>
+	    <endEvent id="e"/>
+	    <sequenceFlow id="f1" sourceRef="s" targetRef="calc"/>
+	    <sequenceFlow id="f2" sourceRef="calc" targetRef="e"/>
+	  </process>
+	</definitions>`
+	cp, err := Parse(1, 1, strings.NewReader(xml))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	// Registration order: start(0), scriptTask(1), end(2).
+	node := cp.Node(1)
+	if node.Type != TypeScriptTask {
+		t.Fatalf("node 1 type = %v, want ScriptTask", node.Type)
+	}
+	detail := cp.ScriptTask(node.Detail)
+	if detail.ResultVar != "answer" {
+		t.Errorf("result var = %q, want answer", detail.ResultVar)
+	}
+	if detail.Expr == nil {
+		t.Error("script task has no compiled expression")
+	}
+}
+
+// TestParseScriptTaskRejectsBadExpression fails deploy when the FEEL is invalid.
+func TestParseScriptTaskRejectsBadExpression(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+	             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+	  <process id="p"><startEvent id="s"/>
+	    <scriptTask id="calc"><extensionElements>
+	      <zeebe:script expression="= 6 * " resultVariable="answer"/></extensionElements>
+	    </scriptTask></process></definitions>`
+	if _, err := Parse(1, 1, strings.NewReader(xml)); err == nil {
+		t.Fatal("want a compile error for a malformed FEEL expression")
+	}
+}
+
+// TestParseUnsupportedElementMessage locks in the actionable error text for an
+// unsupported element (a plain task) rather than a confusing "unknown targetRef".
+func TestParseUnsupportedElementMessage(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
+		<startEvent id="s"/><task id="Activity_1"/><endEvent id="e"/>
+		<sequenceFlow id="f1" sourceRef="s" targetRef="Activity_1"/>
+		<sequenceFlow id="f2" sourceRef="Activity_1" targetRef="e"/></process></definitions>`
+	_, err := Parse(1, 1, strings.NewReader(xml))
+	if err == nil {
+		t.Fatal("want error for a plain <task>")
+	}
+	for _, want := range []string{"Activity_1", "task", "service task"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q should mention %q", err.Error(), want)
+		}
 	}
 }

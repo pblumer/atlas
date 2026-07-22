@@ -8,7 +8,7 @@ const BPMN_CSS = [
   "vendor/bpmn/assets/bpmn-font/css/bpmn-embedded.css",
 ];
 
-let bpmnReady; // memoized loader promise
+let bpmnReady; // memoized loader promise → { BpmnJS, zeebe }
 function loadBpmn() {
   if (bpmnReady) return bpmnReady;
   bpmnReady = new Promise((resolve, reject) => {
@@ -20,11 +20,25 @@ function loadBpmn() {
     }
     const s = document.createElement("script");
     s.src = "vendor/bpmn/bpmn-modeler.js";
-    s.onload = () => resolve(window.BpmnJS);
+    s.onload = async () => {
+      try {
+        // The zeebe moddle lets bpmn-js read/write the zeebe extension elements
+        // Atlas executes (zeebe:script, zeebe:taskDefinition). See ADR-0013.
+        const zeebe = await (await fetch("vendor/bpmn/zeebe.json")).json();
+        resolve({ BpmnJS: window.BpmnJS, zeebe });
+      } catch (e) {
+        reject(new Error("failed to load the zeebe moddle: " + e.message));
+      }
+    };
     s.onerror = () => reject(new Error("failed to load the BPMN modeler assets"));
     document.head.appendChild(s);
   });
   return bpmnReady;
+}
+
+// newModeler/newViewer construct a bpmn-js instance with the zeebe moddle wired.
+function newModeler(BpmnJS, zeebe, container) {
+  return new BpmnJS({ container, moddleExtensions: { zeebe } });
 }
 
 const BLANK = `<?xml version="1.0" encoding="UTF-8"?>
@@ -96,17 +110,18 @@ export async function mountEditor(root, { api, toast, key }) {
       </div>
     </div>`;
 
-  let BpmnJS;
+  let lib;
   try {
-    BpmnJS = await loadBpmn();
+    lib = await loadBpmn();
   } catch (e) {
     document.getElementById("canvas").innerHTML =
       `<div class="coming"><p>${esc(e.message)}</p></div>`;
     return;
   }
 
-  const modeler = new BpmnJS({ container: root.querySelector("#canvas") });
+  const modeler = newModeler(lib.BpmnJS, lib.zeebe, root.querySelector("#canvas"));
   current = modeler;
+  window.__atlasModeler = modeler; // exposed for scripted/end-to-end testing
 
   // Load content.
   try {
@@ -140,12 +155,43 @@ function wireTabs(root) {
   });
 }
 
+// findExt returns a business object's extension element of the given moddle type.
+function findExt(bo, type) {
+  const ext = bo && bo.extensionElements;
+  if (!ext || !ext.values) return null;
+  return ext.values.find((v) => v.$type === type) || null;
+}
+
+// upsertExt ensures element has an extension element of `type` and applies props,
+// through the modeling API so it participates in undo/redo.
+function upsertExt(modeler, element, type, props) {
+  const moddle = modeler.get("moddle");
+  const modeling = modeler.get("modeling");
+  const bo = element.businessObject;
+  let ext = bo.extensionElements;
+  if (!ext) {
+    ext = moddle.create("bpmn:ExtensionElements", { values: [] });
+    ext.$parent = bo;
+  }
+  let node = (ext.values || []).find((v) => v.$type === type);
+  if (!node) {
+    node = moddle.create(type);
+    node.$parent = ext;
+    ext.values = [...(ext.values || []), node];
+  }
+  Object.assign(node, props);
+  modeling.updateProperties(element, { extensionElements: ext });
+}
+
+const isActivity = (bo) => /Task$/.test((bo && bo.$type) || "");
+
 function wireProperties(root, modeler) {
   const icon = root.querySelector("#p-icon");
   const typename = root.querySelector("#p-typename");
   const nameEl = root.querySelector("#p-name");
   const body = root.querySelector("#p-body");
   const modeling = modeler.get("modeling");
+  const selection = modeler.get("selection");
 
   function show(element) {
     if (!element) {
@@ -158,21 +204,76 @@ function wireProperties(root, modeler) {
     icon.textContent = type.slice(0, 2).toUpperCase();
     typename.textContent = type;
     nameEl.textContent = bo.name || bo.id || "(unnamed)";
-    body.innerHTML = `
+
+    let html = `
       <h3>General</h3>
       <label class="field"><span>Name</span><input type="text" id="f-name" value="${esc(bo.name || "")}"/></label>
-      <label class="field"><span>ID</span><input type="text" id="f-id" value="${esc(bo.id || "")}" readonly/></label>
-      <label class="field"><span>Type</span><input type="text" value="${esc(type)}" readonly/></label>`;
-    const fname = body.querySelector("#f-name");
-    fname.addEventListener("change", () => {
-      try { modeling.updateProperties(element, { name: fname.value }); }
-      catch (e) { /* selection may have changed */ }
+      <label class="field"><span>ID</span><input type="text" value="${esc(bo.id || "")}" readonly/></label>`;
+
+    if (isActivity(bo)) {
+      const t = bo.$type;
+      html += `
+        <label class="field"><span>Task type</span>
+          <select id="f-tasktype">
+            <option value="bpmn:Task" ${t === "bpmn:Task" ? "selected" : ""}>Undefined task</option>
+            <option value="bpmn:ScriptTask" ${t === "bpmn:ScriptTask" ? "selected" : ""}>Script task (FEEL)</option>
+            <option value="bpmn:ServiceTask" ${t === "bpmn:ServiceTask" ? "selected" : ""}>Service task (job worker)</option>
+          </select></label>`;
+
+      if (t === "bpmn:ScriptTask") {
+        const s = findExt(bo, "zeebe:Script") || {};
+        const exprText = (s.expression || "").replace(/^=\s*/, "");
+        html += `<h3>Script (FEEL)</h3>
+          <label class="field"><span>Expression</span>
+            <textarea id="f-expr" rows="3" placeholder="amount * (1 + taxRate)">${esc(exprText)}</textarea></label>
+          <label class="field"><span>Result variable</span>
+            <input type="text" id="f-result" value="${esc(s.resultVariable || "")}" placeholder="gross"/></label>`;
+      } else if (t === "bpmn:ServiceTask") {
+        const d = findExt(bo, "zeebe:TaskDefinition") || {};
+        html += `<h3>Task definition</h3>
+          <label class="field"><span>Job type</span>
+            <input type="text" id="f-jobtype" value="${esc(d.type || "")}" placeholder="payment"/></label>`;
+      }
+    }
+    body.innerHTML = html;
+
+    body.querySelector("#f-name").addEventListener("change", (e) => {
+      try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
     });
+
+    const tasktype = body.querySelector("#f-tasktype");
+    if (tasktype) {
+      tasktype.addEventListener("change", (e) => {
+        try {
+          const el = modeler.get("bpmnReplace").replaceElement(element, { type: e.target.value });
+          selection.select(el);
+          show(el);
+        } catch (err) { /* stale */ }
+      });
+    }
+    const fexpr = body.querySelector("#f-expr");
+    const fresult = body.querySelector("#f-result");
+    const saveScript = () => {
+      const raw = (fexpr.value || "").trim();
+      upsertExt(modeler, element, "zeebe:Script", {
+        expression: raw === "" ? "" : (raw.startsWith("=") ? raw : "= " + raw),
+        resultVariable: (fresult.value || "").trim(),
+      });
+    };
+    if (fexpr) fexpr.addEventListener("change", saveScript);
+    if (fresult) fresult.addEventListener("change", saveScript);
+
+    const fjob = body.querySelector("#f-jobtype");
+    if (fjob) {
+      fjob.addEventListener("change", () => {
+        upsertExt(modeler, element, "zeebe:TaskDefinition", { type: (fjob.value || "").trim() });
+      });
+    }
   }
 
   modeler.on("selection.changed", (e) => show((e.newSelection || [])[0]));
   modeler.on("element.changed", (e) => {
-    const sel = modeler.get("selection").get();
+    const sel = selection.get();
     if (sel[0] && e.element && sel[0].id === e.element.id) show(sel[0]);
   });
   show(null);
@@ -242,15 +343,15 @@ export async function mountLive(root, { api, toast, key }) {
       </div>
     </div>`;
 
-  let BpmnJS;
+  let lib;
   try {
-    BpmnJS = await loadBpmn();
+    lib = await loadBpmn();
   } catch (e) {
     root.querySelector("#canvas").innerHTML = `<div class="coming"><p>${esc(e.message)}</p></div>`;
     return;
   }
 
-  const viewer = new BpmnJS({ container: root.querySelector("#canvas") });
+  const viewer = newModeler(lib.BpmnJS, lib.zeebe, root.querySelector("#canvas"));
   current = viewer;
 
   try {
@@ -259,8 +360,8 @@ export async function mountLive(root, { api, toast, key }) {
     viewer.get("canvas").zoom("fit-viewport");
   } catch (e) {
     root.querySelector("#canvas").innerHTML =
-      `<div class="coming"><p>This model has no diagram layout to render.</p>
-       <p class="muted">Deploy it from the editor (which stores layout) to see the live overlay.</p></div>`;
+      `<div class="coming"><p>Could not render this model.</p>
+       <p class="muted">${esc(e.message)}</p></div>`;
     return;
   }
 

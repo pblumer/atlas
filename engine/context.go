@@ -53,6 +53,14 @@ func (c *ProcessingContext) GetProcessInstance(key uint64) *model.ProcessInstanc
 	return v
 }
 
+// GetVariable reads a scope's variable by name through the in-flight transaction
+// (sees writes from earlier in this batch, e.g. seeded start variables).
+func (c *ProcessingContext) GetVariable(scope uint64, name string) *model.VariableValue {
+	v, err := c.tx.GetVariable(scope, name)
+	c.p.fail(err)
+	return v
+}
+
 // ActiveChildren returns the active-child count of a scope (e.g. to detect that
 // a process instance has finished).
 func (c *ProcessingContext) ActiveChildren(scope uint64) int32 {
@@ -74,6 +82,13 @@ func (c *ProcessingContext) AppendElementEvent(key uint64, intent model.Intent, 
 // AppendJobEvent records a job lifecycle fact.
 func (c *ProcessingContext) AppendJobEvent(key uint64, intent model.Intent, v model.JobValue) {
 	c.appendEvent(key, model.VTJob, intent, inflightValue{job: v})
+}
+
+// AppendVariableEvent records a variable write. The value is data (a name and
+// contents), so unlike the graph-derived events this one does allocate for its
+// strings — variables are runtime data, not hot-path token movement.
+func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.VariableValue) {
+	c.appendEvent(v.ScopeKey, model.VTVariable, intent, inflightValue{variable: v})
 }
 
 // AppendElementCommand schedules an element-instance command for a later batch.
