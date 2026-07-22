@@ -43,6 +43,7 @@ type runtimeElement struct {
 
 type runtimeResp struct {
 	Instances int              `json:"instances"`
+	Tokens    int              `json:"tokens"`
 	Elements  []runtimeElement `json:"elements"`
 }
 
@@ -248,6 +249,7 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 				order = append(order, bid)
 			}
 			e.Tokens++
+			resp.Tokens++
 			return nil
 		})
 		if scanErr != nil {

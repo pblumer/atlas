@@ -352,6 +352,7 @@ export async function mountLive(root, { api, toast, key }) {
         <div style="flex:1"></div>
         <button class="btn neutral" id="refresh">Refresh</button>
         <span class="pill ok" style="margin-left:8px"><span class="dot"></span><b id="inst-count">0</b>&nbsp;running</span>
+        <span class="pill" style="margin-left:8px"><b id="token-count">0</b>&nbsp;tokens total</span>
       </div>
       <div class="editor-body">
         <div id="canvas"></div>
@@ -390,6 +391,7 @@ export async function mountLive(root, { api, toast, key }) {
   const overlays = viewer.get("overlays");
   const registry = viewer.get("elementRegistry");
   const countEl = root.querySelector("#inst-count");
+  const tokenEl = root.querySelector("#token-count");
   let marked = [];
 
   async function poll() {
@@ -410,6 +412,7 @@ export async function mountLive(root, { api, toast, key }) {
       });
     }
     countEl.textContent = rt.instances;
+    tokenEl.textContent = rt.tokens;
   }
 
   root.querySelector("#refresh").addEventListener("click", poll);

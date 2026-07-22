@@ -155,6 +155,7 @@ func TestDeployRunAndStats(t *testing.T) {
 	}
 	var rt struct {
 		Instances int `json:"instances"`
+		Tokens    int `json:"tokens"`
 		Elements  []struct {
 			ElementID string `json:"elementId"`
 			Type      string `json:"type"`
@@ -164,9 +165,9 @@ func TestDeployRunAndStats(t *testing.T) {
 	if err := json.Unmarshal(body, &rt); err != nil {
 		t.Fatalf("decode runtime: %v (%s)", err, body)
 	}
-	if rt.Instances != 1 || len(rt.Elements) != 1 ||
+	if rt.Instances != 1 || rt.Tokens != 1 || len(rt.Elements) != 1 ||
 		rt.Elements[0].ElementID != "task" || rt.Elements[0].Type != "ServiceTask" || rt.Elements[0].Tokens != 1 {
-		t.Fatalf("runtime = %+v, want 1 instance with 1 token on service task \"task\"", rt)
+		t.Fatalf("runtime = %+v, want 1 instance with 1 token total on service task \"task\"", rt)
 	}
 }
 
