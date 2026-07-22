@@ -232,12 +232,23 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 
 // handleProcessRuntime returns, for one definition, how many instances are live
 // and how many tokens (element instances) currently sit on each BPMN element —
-// the data the browser overlays onto the diagram.
+// the data the browser overlays onto the diagram. An optional ?instance=<key>
+// filter narrows the result to a single process instance, so the live view can
+// isolate one instance on the diagram instead of aggregating all of them.
 func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid definition key")
 		return
+	}
+	// instanceFilter == 0 means "all instances"; instance keys are never 0.
+	var instanceFilter uint64
+	if q := r.URL.Query().Get("instance"); q != "" {
+		instanceFilter, err = strconv.ParseUint(q, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid instance key")
+			return
+		}
 	}
 	var (
 		found   bool
@@ -255,6 +266,9 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 		var order []string
 		scanErr = s.store.ActiveElementInstances(func(_ uint64, v *model.ElementInstanceValue) error {
 			if v.ProcessDefKey != key {
+				return nil
+			}
+			if instanceFilter != 0 && v.ProcessInstanceKey != instanceFilter {
 				return nil
 			}
 			bid := d.cp.ElementBpmnId(v.ElementId)
@@ -277,10 +291,14 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 		for _, bid := range order {
 			resp.Elements = append(resp.Elements, *byElement[bid])
 		}
-		scanErr = s.store.ActiveProcessInstances(func(_ uint64, v *model.ProcessInstanceValue) error {
-			if v.ProcessDefKey == key {
-				resp.Instances++
+		scanErr = s.store.ActiveProcessInstances(func(piKey uint64, v *model.ProcessInstanceValue) error {
+			if v.ProcessDefKey != key {
+				return nil
 			}
+			if instanceFilter != 0 && piKey != instanceFilter {
+				return nil
+			}
+			resp.Instances++
 			return nil
 		})
 	})

@@ -426,21 +426,43 @@ function wireActions(root, modeler, api, toast) {
 // (active elements highlighted, token counts as badges), polling for updates.
 // This is the differentiator a standalone modeler can't offer — the diagram shows
 // where the engine's tokens actually are right now.
+//
+// The view is organized around one process: a version picker swaps which deployed
+// definition is shown, and an instance picker either aggregates every instance's
+// tokens on the diagram or isolates a single one. The selected instance's
+// variables are listed below the diagram.
 export async function mountLive(root, { api, toast, key }) {
   cleanup();
 
+  // Resolve the process this definition version belongs to, and all its versions,
+  // so the version picker can offer them. One /processes call feeds both.
   let procName = `definition ${key}`;
+  let versions = []; // [{key, version, name}], newest first
   try {
     const procs = await api("GET", "/api/v1/processes");
-    const p = procs.find((x) => x.key === key);
-    if (p) procName = `${p.processId} v${p.version}`;
-  } catch { /* header is cosmetic */ }
+    const here = procs.find((x) => x.key === key);
+    if (here) {
+      procName = here.name || here.processId;
+      versions = procs
+        .filter((x) => x.processId === here.processId)
+        .sort((a, b) => b.version - a.version);
+    }
+  } catch { /* header/version picker are best-effort */ }
+
+  const versionOptions = versions.length
+    ? versions.map((v) =>
+        `<option value="${v.key}"${v.key === key ? " selected" : ""}>v${v.version}</option>`).join("")
+    : `<option value="${key}" selected>current</option>`;
 
   root.innerHTML = `
     <div class="editor live">
       <div class="editor-bar">
         <a class="btn neutral" href="#/operations">&larr; Instances</a>
         <span class="crumbs" style="margin-left:8px">Live &middot; <b>${esc(procName)}</b></span>
+        <label class="bar-select"><span>Version</span>
+          <select id="version-sel">${versionOptions}</select></label>
+        <label class="bar-select"><span>Instance</span>
+          <select id="instance-sel"><option value="all">All instances</option></select></label>
         <div style="flex:1"></div>
         <button class="btn" id="start">Start instance</button>
         <button class="btn neutral" id="refresh">Refresh</button>
@@ -461,6 +483,7 @@ export async function mountLive(root, { api, toast, key }) {
       <div class="editor-body">
         <div id="canvas"></div>
       </div>
+      <div class="var-panel" id="var-panel"></div>
       <div class="problems">
         <span class="legend-swatch"></span> active element
         <span class="badge" style="margin-left:12px">N</span> tokens on the element
@@ -468,6 +491,13 @@ export async function mountLive(root, { api, toast, key }) {
         <span class="muted">Polling every 1.5s</span>
       </div>
     </div>`;
+
+  // Switching version loads a different deployed definition, so re-route to its
+  // live view (a full remount — the diagram itself changes).
+  root.querySelector("#version-sel").addEventListener("change", (e) => {
+    const next = Number(e.target.value);
+    if (next && next !== key) location.hash = `#/operations/p/${next}`;
+  });
 
   let lib;
   try {
@@ -496,11 +526,76 @@ export async function mountLive(root, { api, toast, key }) {
   const registry = viewer.get("elementRegistry");
   const countEl = root.querySelector("#inst-count");
   const tokenEl = root.querySelector("#token-count");
+  const instSel = root.querySelector("#instance-sel");
+  const varPanel = root.querySelector("#var-panel");
   let marked = [];
+  let selected = "all";     // "all" or an instance key (as a string)
+  let instances = [];       // this version's instances, cached for the picker/variables
+  let instSig = "";         // signature of the picker's current option set
+
+  // refreshInstances pulls this version's instances and, only when the set of
+  // instances (or their state) actually changed, rebuilds the picker — so the
+  // operator's current selection isn't reset on every poll. Newest activity first.
+  async function refreshInstances() {
+    let all;
+    try { all = await api("GET", "/api/v1/instances"); }
+    catch { return; } // transient; the picker just keeps its current options
+    instances = all
+      .filter((r) => r.processDefKey === key)
+      .sort((a, b) => (a.state === b.state ? b.key - a.key : a.state === "active" ? -1 : 1));
+    const sig = instances.map((r) => `${r.key}:${r.state}`).join(",");
+    if (sig === instSig) return;
+    instSig = sig;
+    // Drop a selection that no longer exists (e.g. its definition was deleted).
+    if (selected !== "all" && !instances.some((r) => String(r.key) === selected)) selected = "all";
+    instSel.innerHTML =
+      `<option value="all"${selected === "all" ? " selected" : ""}>All instances (${instances.length})</option>` +
+      instances.map((r) =>
+        `<option value="${r.key}"${String(r.key) === selected ? " selected" : ""}>${r.key} · ${esc(r.state)}</option>`
+      ).join("");
+  }
+
+  const varChips = (list) => !list || !list.length
+    ? '<span class="muted">No variables.</span>'
+    : list.map((v) => `<span class="chip">${esc(v.name)}=${esc(v.value)}</span>`).join(" ");
+  // completedAt is unix nanoseconds; Date wants milliseconds.
+  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "";
+
+  // renderVariables shows the selected instance's variables, or — for "All
+  // instances" — a compact per-instance table, beneath the diagram.
+  function renderVariables() {
+    if (selected === "all") {
+      if (!instances.length) {
+        varPanel.innerHTML = `<div class="vp-head">Variables</div>
+          <p class="muted" style="margin:0">No instances yet — start one to see its variables here.</p>`;
+        return;
+      }
+      varPanel.innerHTML = `<div class="vp-head">Variables · all instances</div>
+        <table class="vp-table"><tbody>${instances.map((r) => `
+          <tr><td><b>${r.key}</b></td>
+            <td>${r.state === "active"
+              ? '<span class="pill ok"><span class="dot"></span>active</span>'
+              : `<span class="pill">${esc(r.state)}</span>`}</td>
+            <td>${varChips(r.variables)}</td></tr>`).join("")}</tbody></table>`;
+      return;
+    }
+    const inst = instances.find((r) => String(r.key) === selected);
+    if (!inst) { varPanel.innerHTML = `<div class="vp-head">Variables</div>
+      <p class="muted" style="margin:0">Instance no longer available.</p>`; return; }
+    const when = inst.state === "active" ? "" : fmtNano(inst.completedAt);
+    varPanel.innerHTML = `<div class="vp-head">Variables · instance ${inst.key}
+        ${inst.state === "active"
+          ? '<span class="pill ok"><span class="dot"></span>active</span>'
+          : `<span class="pill">${esc(inst.state)}</span>${when ? ` <span class="muted">${esc(when)}</span>` : ""}`}
+      </div>
+      <div>${varChips(inst.variables)}</div>`;
+  }
 
   async function poll() {
+    await refreshInstances();
+    const q = selected === "all" ? "" : `?instance=${encodeURIComponent(selected)}`;
     let rt;
-    try { rt = await api("GET", `/api/v1/processes/${key}/runtime`); }
+    try { rt = await api("GET", `/api/v1/processes/${key}/runtime${q}`); }
     catch (e) { return; } // transient; try again next tick
     if (current !== viewer) return; // navigated away mid-flight
     overlays.clear();
@@ -517,7 +612,12 @@ export async function mountLive(root, { api, toast, key }) {
     }
     countEl.textContent = rt.instances;
     tokenEl.textContent = rt.tokens;
+    renderVariables();
   }
+
+  // Selecting an instance isolates it on the diagram; re-poll right away so the
+  // overlay and variables switch without waiting for the next tick.
+  instSel.addEventListener("change", () => { selected = instSel.value; poll(); });
 
   root.querySelector("#refresh").addEventListener("click", poll);
 
