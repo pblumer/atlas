@@ -103,6 +103,21 @@ func (p *Processor) CompleteJob(jobKey uint64) {
 	})
 }
 
+// PublishMessage enqueues publication of a message with the given name and
+// correlation key, optionally carrying payload variables that are written into
+// every correlated instance's scope. It correlates against open subscriptions
+// through the same path a message throw event uses; a message that matches no
+// subscription is a no-op (no buffering yet, ADR-0020). Call RunUntilIdle to
+// process it.
+func (p *Processor) PublishMessage(name, correlationKey string, vars ...model.VariableValue) {
+	p.queue = append(p.queue, Command{
+		ValueType: model.VTMessage,
+		Intent:    model.IntentMessagePublished,
+		Value:     inflightValue{subscription: model.MessageSubscriptionValue{MessageName: name, CorrelationKey: correlationKey}},
+		StartVars: vars,
+	})
+}
+
 // TriggerDueTimers enqueues a trigger command for every timer due at or before
 // the current clock, carrying each timer's value so the handler needs no extra
 // read. Call RunUntilIdle (or TickTimers) to process them. It is time-driven, so

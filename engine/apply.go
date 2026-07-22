@@ -67,6 +67,14 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 		case model.IntentTimerTriggered:
 			return tx.DeleteTimer(h.Key, &v.timer)
 		}
+
+	case model.VTMessageSubscription:
+		switch h.Intent {
+		case model.IntentSubscriptionCreated:
+			return tx.PutMessageSubscription(&v.subscription)
+		case model.IntentSubscriptionCorrelated:
+			return tx.DeleteMessageSubscription(&v.subscription)
+		}
 	}
 	return nil
 }

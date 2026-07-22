@@ -27,6 +27,8 @@ type Builder struct {
 	scriptTasks       []ScriptTaskDetail
 	businessRuleTasks []BusinessRuleTaskDetail
 	timerCatches      []TimerCatchDetail
+	messageCatches    []MessageDetail
+	messageThrows     []MessageDetail
 	elementIds        []int32 // interned source BPMN id per node, -1 if unset
 
 	interner map[string]int32
@@ -139,6 +141,26 @@ func (b *Builder) AddTimerCatchEvent(durationNanos int64) int32 {
 	return b.addNode(TypeTimerCatchEvent, detail)
 }
 
+// AddMessageCatchEvent adds an intermediate message catch event that, on
+// activation, subscribes to the named message with a correlation key produced by
+// the given compiled FEEL expression (evaluated over the instance's variables),
+// then waits until a matching message is correlated. Returns its element id.
+func (b *Builder) AddMessageCatchEvent(messageName string, correlationKey *expr.Compiled) int32 {
+	detail := int32(len(b.messageCatches))
+	b.messageCatches = append(b.messageCatches, MessageDetail{MessageName: messageName, CorrelationKey: correlationKey})
+	return b.addNode(TypeMessageCatchEvent, detail)
+}
+
+// AddMessageThrowEvent adds an intermediate message throw event that, on
+// activation, publishes the named message with a correlation key produced by the
+// given compiled FEEL expression (evaluated over the throwing instance's
+// variables), then completes. Returns its element id.
+func (b *Builder) AddMessageThrowEvent(messageName string, correlationKey *expr.Compiled) int32 {
+	detail := int32(len(b.messageThrows))
+	b.messageThrows = append(b.messageThrows, MessageDetail{MessageName: messageName, CorrelationKey: correlationKey})
+	return b.addNode(TypeMessageThrowEvent, detail)
+}
+
 // Connect adds a sequence flow from source to target and returns its flow id, so
 // the caller can attach a condition or mark it the default.
 func (b *Builder) Connect(source, target int32) int32 {
@@ -206,6 +228,8 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		scriptTasks:       b.scriptTasks,
 		businessRuleTasks: b.businessRuleTasks,
 		timerCatches:      b.timerCatches,
+		messageCatches:    b.messageCatches,
+		messageThrows:     b.messageThrows,
 		startEvents:       startEvents,
 		elementIds:        b.elementIds,
 		strings:           b.strings,

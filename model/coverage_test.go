@@ -45,6 +45,11 @@ func TestAppendValueRoundTrip(t *testing.T) {
 			vt:   VTVariable,
 			v:    &VariableValue{ScopeKey: NewKey(1, 1), Name: "x", Kind: VarNumber, Text: "42"},
 		},
+		{
+			name: "message subscription",
+			vt:   VTMessageSubscription,
+			v:    &MessageSubscriptionValue{ProcessInstanceKey: NewKey(1, 1), ElementInstanceKey: NewKey(1, 2), MessageName: "order", CorrelationKey: "42"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -86,7 +91,7 @@ func TestDecodeValueNoPayloadType(t *testing.T) {
 // TestDecodeValueShortBuffer covers the decode error propagation for each
 // payload type on a truncated buffer.
 func TestDecodeValueShortBuffer(t *testing.T) {
-	for _, vt := range []ValueType{VTElementInstance, VTJob, VTTimer, VTProcessInstance, VTVariable} {
+	for _, vt := range []ValueType{VTElementInstance, VTJob, VTTimer, VTProcessInstance, VTVariable, VTMessageSubscription} {
 		if _, err := DecodeValue(vt, nil); !errors.Is(err, ErrShortBuffer) {
 			t.Errorf("DecodeValue(%v, nil) err = %v, want ErrShortBuffer", vt, err)
 		}
@@ -110,6 +115,34 @@ func TestVariableDecodeErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var v VariableValue
+			if err := v.decode(tt.src); !errors.Is(err, ErrShortBuffer) {
+				t.Errorf("decode(%d bytes) err = %v, want ErrShortBuffer", len(tt.src), err)
+			}
+		})
+	}
+}
+
+// TestMessageSubscriptionDecodeErrors exercises the truncation guards in
+// MessageSubscriptionValue.decode: the fixed prefix and each length-prefixed
+// string.
+func TestMessageSubscriptionDecodeErrors(t *testing.T) {
+	full := AppendValue(nil, &MessageSubscriptionValue{
+		ProcessInstanceKey: NewKey(1, 1),
+		ElementInstanceKey: NewKey(1, 2),
+		MessageName:        "n",
+		CorrelationKey:     "k",
+	})
+	tests := []struct {
+		name string
+		src  []byte
+	}{
+		{"short prefix", full[:8]},               // less than the two 8-byte keys
+		{"truncated name", full[:18]},            // 16 prefix + partial name length/bytes
+		{"truncated correlation key", full[:21]}, // name consumed, key length prefix truncated
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var v MessageSubscriptionValue
 			if err := v.decode(tt.src); !errors.Is(err, ErrShortBuffer) {
 				t.Errorf("decode(%d bytes) err = %v, want ErrShortBuffer", len(tt.src), err)
 			}
@@ -155,6 +188,7 @@ func TestValueTypeMethods(t *testing.T) {
 		{(&TimerValue{}), VTTimer},
 		{(&ProcessInstanceValue{}), VTProcessInstance},
 		{(&VariableValue{}), VTVariable},
+		{(&MessageSubscriptionValue{}), VTMessageSubscription},
 	}
 	for _, c := range cases {
 		if got := c.v.ValueType(); got != c.want {

@@ -234,6 +234,48 @@ func (v *VariableValue) decode(src []byte) error {
 	return nil
 }
 
+// MessageSubscriptionValue is an open subscription: an element instance (a
+// message intermediate catch event) waiting for a named message whose
+// correlation key matches. Like a variable it carries genuine runtime data (the
+// message name and the evaluated correlation key), so its encoding is
+// length-prefixed rather than fixed-size. The (MessageName, CorrelationKey) pair
+// is the match key a publish scans for; see ADR-0020.
+type MessageSubscriptionValue struct {
+	ProcessInstanceKey uint64
+	ElementInstanceKey uint64
+	MessageName        string
+	CorrelationKey     string // FEEL correlation key, evaluated at subscribe time
+}
+
+func (*MessageSubscriptionValue) ValueType() ValueType { return VTMessageSubscription }
+
+func (v *MessageSubscriptionValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ElementInstanceKey)
+	dst = appendString(dst, v.MessageName)
+	return appendString(dst, v.CorrelationKey)
+}
+
+func (v *MessageSubscriptionValue) decode(src []byte) error {
+	if len(src) < 16 {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src[0:])
+	v.ElementInstanceKey = binary.LittleEndian.Uint64(src[8:])
+	rest := src[16:]
+	name, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.MessageName = name
+	key, _, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.CorrelationKey = key
+	return nil
+}
+
 // appendString writes a uint32 length prefix followed by the bytes of s.
 func appendString(dst []byte, s string) []byte {
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(len(s)))
@@ -268,6 +310,8 @@ func newValue(vt ValueType) Value {
 		return &TimerValue{}
 	case VTVariable:
 		return &VariableValue{}
+	case VTMessageSubscription:
+		return &MessageSubscriptionValue{}
 	default:
 		return nil
 	}
