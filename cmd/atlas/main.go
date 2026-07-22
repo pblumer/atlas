@@ -16,6 +16,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -59,6 +60,21 @@ func main() {
 }
 
 func isFlag(s string) bool { return len(s) > 0 && s[0] == '-' }
+
+// loopbackURL turns a listen address (":8080", "0.0.0.0:8080", "localhost:8080")
+// into a URL the process can use to reach its own HTTP server. A wildcard or
+// empty host becomes 127.0.0.1 so the in-process MCP adapter can call back in.
+func loopbackURL(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "http://127.0.0.1" + addr
+	}
+	switch host {
+	case "", "0.0.0.0", "::", "[::]":
+		host = "127.0.0.1"
+	}
+	return "http://" + net.JoinHostPort(host, port)
+}
 
 func usage() {
 	fmt.Fprint(os.Stderr, `Atlas — a durable BPMN workflow engine.
@@ -113,7 +129,21 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration) error {
 	srv := api.New(proc, store)
 	defer srv.Close()
 
-	httpSrv := &http.Server{Addr: addr, Handler: srv.Handler()}
+	// Mount the MCP "Streamable HTTP" transport at /mcp alongside the API and UI,
+	// so a remote MCP client (e.g. a claude.ai custom connector) can reach the
+	// same tools the stdio adapter exposes. It stays a pure adapter (ADR-0016):
+	// it proxies to this server's own HTTP API over loopback rather than touching
+	// the engine, so the single-writer invariant is untouched.
+	//
+	// The endpoint is UNAUTHENTICATED. Put auth in front of it (reverse proxy)
+	// before exposing it publicly.
+	mcpSrv := mcp.NewServer(mcp.NewClient(loopbackURL(addr)))
+	root := http.NewServeMux()
+	root.Handle("/mcp", mcpSrv)
+	root.Handle("/mcp/", mcpSrv)
+	root.Handle("/", srv.Handler())
+
+	httpSrv := &http.Server{Addr: addr, Handler: root}
 
 	// Shut down cleanly on SIGINT/SIGTERM.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -121,7 +151,8 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Printf("listening on %s (UI at http://localhost%s/)", addr, addr)
+		base := loopbackURL(addr)
+		log.Printf("listening on %s (UI at %s/, MCP at %s/mcp)", addr, base, base)
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 			return
