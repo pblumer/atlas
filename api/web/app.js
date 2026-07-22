@@ -165,41 +165,80 @@ function viewConsoleOrg() {
     </div>`;
 }
 
+// groupByProcess collapses deployment versions into one entry per process id,
+// newest version first, so the list shows a process — not a row per version.
+function groupByProcess(procs) {
+  const byId = new Map();
+  for (const p of procs) {
+    if (!byId.has(p.processId)) byId.set(p.processId, []);
+    byId.get(p.processId).push(p);
+  }
+  const groups = [...byId.entries()].map(([processId, versions]) => {
+    versions.sort((a, b) => b.version - a.version);
+    return { processId, versions, latest: versions[0] };
+  });
+  groups.sort((a, b) => b.latest.deployedAt - a.latest.deployedAt);
+  return groups;
+}
+
 async function viewModelerHome() {
   view.innerHTML = `
     <div class="between">
       <h1>Modeler</h1>
       <a class="btn" href="#/modeler/new">New diagram</a>
     </div>
-    <div class="tabs">
-      <button class="active">Diagrams</button>
-      <button disabled title="not available yet">Recently deleted</button>
-    </div>
     <div class="card" style="padding:0">
       <table>
-        <thead><tr><th>Name</th><th>Version</th><th>Deployed</th><th></th></tr></thead>
+        <thead><tr><th>Process</th><th>Latest</th><th>Deployed</th><th></th></tr></thead>
         <tbody id="rows"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>`;
-  try {
-    const procs = await api("GET", "/api/v1/processes");
-    const rows = document.getElementById("rows");
-    if (!procs.length) {
-      rows.innerHTML = `<tr><td colspan="4" class="empty">
-        No diagrams yet. <a href="#/modeler/new">Create one</a> or deploy BPMN XML.</td></tr>`;
-      return;
+  const rows = document.getElementById("rows");
+
+  const render = async () => {
+    try {
+      const groups = groupByProcess(await api("GET", "/api/v1/processes"));
+      if (!groups.length) {
+        rows.innerHTML = `<tr><td colspan="4" class="empty">
+          No diagrams yet. <a href="#/modeler/new">Create one</a> or deploy BPMN XML.</td></tr>`;
+        return;
+      }
+      rows.innerHTML = groups.map((g) => {
+        const older = g.versions.length > 1
+          ? ` <span class="muted">· ${g.versions.length} versions</span>` : "";
+        return `<tr>
+          <td><a href="#/modeler/d/${g.latest.key}"><b>${esc(g.processId)}</b></a></td>
+          <td>v${g.latest.version}${older}</td>
+          <td class="muted">${esc(fmtTime(g.latest.deployedAt))}</td>
+          <td style="text-align:right; white-space:nowrap">
+            <a class="btn ghost" href="#/modeler/d/${g.latest.key}">Open</a>
+            <button class="btn ghost danger" data-del="${esc(g.processId)}">Delete</button>
+          </td>
+        </tr>`;
+      }).join("");
+      for (const b of rows.querySelectorAll("button[data-del]")) {
+        b.addEventListener("click", () => deleteProcess(b.dataset.del, groups, render));
+      }
+    } catch (e) {
+      rows.innerHTML = `<tr><td colspan="4" class="empty">${esc(e.message)}</td></tr>`;
     }
-    rows.innerHTML = procs.map((p) => `
-      <tr>
-        <td><a href="#/modeler/d/${p.key}"><b>${esc(p.processId)}</b></a></td>
-        <td>v${p.version}</td>
-        <td class="muted">${esc(fmtTime(p.deployedAt))}</td>
-        <td style="text-align:right"><a class="btn ghost" href="#/modeler/d/${p.key}">Open</a></td>
-      </tr>`).join("");
-  } catch (e) {
-    document.getElementById("rows").innerHTML =
-      `<tr><td colspan="4" class="empty">${esc(e.message)}</td></tr>`;
+  };
+  await render();
+}
+
+async function deleteProcess(processId, groups, reload) {
+  const group = groups.find((g) => g.processId === processId);
+  if (!group) return;
+  const n = group.versions.length;
+  if (!window.confirm(`Delete process "${processId}"${n > 1 ? ` and all ${n} versions` : ""}?`)) return;
+  let failed = 0;
+  for (const v of group.versions) {
+    try { await api("DELETE", `/api/v1/processes/${v.key}`); }
+    catch (e) { failed++; }
   }
+  if (failed) toast(`Could not delete ${failed} version(s) — running instances?`, "err");
+  else toast(`Deleted "${processId}"`, "ok");
+  await reload();
 }
 
 async function viewInstances() {

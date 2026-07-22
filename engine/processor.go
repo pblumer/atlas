@@ -74,6 +74,11 @@ func New(partition uint16, log *wal.Log, store *state.Store, clock Clock) *Proce
 // Deploy registers an immutable compiled definition so instances can run it.
 func (p *Processor) Deploy(cp *compiler.CompiledProcess) { p.processes[cp.Key] = cp }
 
+// Undeploy removes a definition so no new instances of it can be created. It is
+// the caller's responsibility not to undeploy a definition with running
+// instances (they resolve their definition by key on every batch).
+func (p *Processor) Undeploy(defKey uint64) { delete(p.processes, defKey) }
+
 // SetJobNotifier installs the hook the service-task behavior triggers (after
 // fsync) when a job of a type becomes available.
 func (p *Processor) SetJobNotifier(fn func(jobType int32)) { p.jobNotifier = fn }

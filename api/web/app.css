@@ -121,6 +121,8 @@ ol.steps li { margin: 6px 0; }
 .btn.ghost:hover { background: var(--accent-soft); }
 .btn.neutral { background: var(--surface); color: var(--text); border-color: var(--border-strong); }
 .btn.neutral:hover { background: var(--bg); }
+.btn.ghost.danger { color: var(--danger); }
+.btn.ghost.danger:hover { background: #fdecea; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* Stat tiles */

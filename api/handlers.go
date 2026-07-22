@@ -161,6 +161,55 @@ func (s *Server) handleProcessXML(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(ensureDiagramLayout(raw))
 }
 
+// handleDeleteProcess removes a deployed definition (one version). It refuses if
+// the definition still has running instances, since a live instance resolves its
+// definition by key on every batch.
+func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid definition key")
+		return
+	}
+	var (
+		found   bool
+		running int
+		scanErr error
+	)
+	s.do(func() {
+		if _, ok := s.deployments[key]; !ok {
+			return
+		}
+		found = true
+		scanErr = s.store.ActiveProcessInstances(func(_ uint64, v *model.ProcessInstanceValue) error {
+			if v.ProcessDefKey == key {
+				running++
+			}
+			return nil
+		})
+		if scanErr != nil || running > 0 {
+			return
+		}
+		s.proc.Undeploy(key)
+		delete(s.deployments, key)
+		for i, k := range s.order {
+			if k == key {
+				s.order = append(s.order[:i], s.order[i+1:]...)
+				break
+			}
+		}
+	})
+	switch {
+	case !found:
+		writeError(w, http.StatusNotFound, "no deployment with that key")
+	case scanErr != nil:
+		writeError(w, http.StatusInternalServerError, "check instances: "+scanErr.Error())
+	case running > 0:
+		writeError(w, http.StatusConflict, fmt.Sprintf("cannot delete: %d running instance(s); cancel them first", running))
+	default:
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 // handleProcessRuntime returns, for one definition, how many instances are live
 // and how many tokens (element instances) currently sit on each BPMN element —
 // the data the browser overlays onto the diagram.
