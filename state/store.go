@@ -145,6 +145,22 @@ func (s *Store) GetJob(key uint64) (*model.JobValue, bool, error) {
 	return v.(*model.JobValue), true, nil
 }
 
+// GetElementInstance returns the committed element instance for key, reporting
+// whether it was present. Like GetJob it reads outside a transaction, for
+// consumers such as the in-process DMN worker resolving the decision an
+// activatable business-rule job belongs to.
+func (s *Store) GetElementInstance(key uint64) (*model.ElementInstanceValue, bool, error) {
+	raw, ok, err := getCopy(s.db, keyElementInstance(key))
+	if err != nil || !ok {
+		return nil, ok, err
+	}
+	v, err := model.DecodeValue(model.VTElementInstance, raw)
+	if err != nil {
+		return nil, false, err
+	}
+	return v.(*model.ElementInstanceValue), true, nil
+}
+
 // ActiveProcessInstanceCount returns how many process instances are live.
 func (s *Store) ActiveProcessInstanceCount() (int, error) {
 	return s.countPrefix([]byte{byte(cfProcessInstance)})

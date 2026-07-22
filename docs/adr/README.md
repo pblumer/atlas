@@ -21,6 +21,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0011](0011-single-binary-distribution-and-web-ui.md) | Single-binary distribution with an embedded web viewer and editor | Accepted |
 | [0012](0012-web-ui-app-shell.md) | A buildless, self-contained web UI app shell | Accepted |
 | [0013](0013-embed-bpmn-js-modeler.md) | Embed the bpmn-js modeler as a vendored asset | Accepted |
+| [0014](0014-dmn-business-rule-tasks-via-temis.md) | DMN business rule tasks via the temis engine | Accepted |
 
 ## Status values
 

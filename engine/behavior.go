@@ -35,6 +35,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeStartEvent] = startEventBehavior{}
 	p.behaviors[compiler.TypeEndEvent] = endEventBehavior{}
 	p.behaviors[compiler.TypeServiceTask] = serviceTaskBehavior{}
+	p.behaviors[compiler.TypeBusinessRuleTask] = businessRuleTaskBehavior{}
 }
 
 // --- command handlers ---
@@ -147,6 +148,33 @@ func (serviceTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *mod
 }
 
 func (serviceTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// businessRuleTaskBehavior: delegate a DMN decision to the temis engine. The
+// engine treats it exactly like a service task — create a job on activation and
+// wait — but the job carries the reserved DMN job type, so the in-process DMN
+// worker (package dmn) picks it up, evaluates the decision off the hot path, and
+// completes it. Keeping DMN evaluation on the worker side, not in a behavior,
+// keeps the processor allocation-free (I1) and the temis dependency out of the
+// engine hot path (ADR-0014).
+type businessRuleTaskBehavior struct{}
+
+func (businessRuleTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.BusinessRuleTask(cp.Node(ei.ElementId).Detail)
+	jobKey := c.NewKey()
+	c.AppendJobEvent(jobKey, model.IntentJobCreated, model.JobValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		JobType:            detail.JobType,
+		Retries:            detail.Retries,
+	})
+	c.NotifyJobAvailable(detail.JobType)
+	// Stays Activated until the DMN worker completes the job.
+}
+
+func (businessRuleTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	completeAndTakeFlows(c, key, ei)
 }
 
