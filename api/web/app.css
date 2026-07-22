@@ -149,7 +149,11 @@ textarea, input[type=text], select { width: 100%; font: 13px/1.5 ui-monospace, m
 select { font-family: inherit; cursor: pointer; }
 input[type=text] { font-family: inherit; }
 label.field { display: block; margin: 10px 0; }
-label.field span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+/* Direct child only: the field's caption. A descendant selector here would also
+   capture nested <span>s such as the FEEL editor's syntax-highlight tokens,
+   forcing them to display:block (stacking every token on its own line) and
+   repainting them muted. */
+label.field > span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 
 /* Toast */
 #toast {
