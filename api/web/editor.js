@@ -2,6 +2,8 @@
 // palette, and context pad come from bpmn-js; the Details panel and Deploy&run
 // wiring are ours. Assets load lazily so non-editor pages stay light.
 
+import { attachFeelEditor } from "./feel.js";
+
 const BPMN_CSS = [
   "vendor/bpmn/assets/diagram-js.css",
   "vendor/bpmn/assets/bpmn-js.css",
@@ -174,6 +176,36 @@ function activeTab(root) {
   return (b && b.dataset.tab) || "design";
 }
 
+// collectFeelVariables gathers names an author is likely to reference in a FEEL
+// expression, for the completion popup. Process variables aren't declared up
+// front, so the best static signal is the result variables written by script
+// tasks elsewhere in the diagram — a token that has run through one carries that
+// variable downstream. Best-effort: a failure just yields no variable hints.
+function collectFeelVariables(modeler) {
+  const vars = new Set();
+  try {
+    modeler.get("elementRegistry").forEach((el) => {
+      const s = findExt(el.businessObject, "zeebe:Script");
+      if (s && s.resultVariable) vars.add(s.resultVariable);
+    });
+  } catch { /* best-effort */ }
+  return [...vars].sort();
+}
+
+// enhanceFeel turns the FEEL <textarea> matched by `sel` into a syntax-highlighted
+// editor with completions, and drops a one-line hint beneath it. No-op if the
+// field isn't present for the current selection.
+function enhanceFeel(body, sel, vars) {
+  const ta = body.querySelector(sel);
+  if (!ta) return;
+  attachFeelEditor(ta, { variables: vars });
+  const hint = document.createElement("p");
+  hint.className = "feel-hint";
+  hint.innerHTML = "FEEL — <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions";
+  const wrap = ta.closest(".feel-editor");
+  if (wrap) wrap.after(hint);
+}
+
 // findExt returns a business object's extension element of the given moddle type.
 function findExt(bo, type) {
   const ext = bo && bo.extensionElements;
@@ -217,7 +249,7 @@ function messageFieldsHTML(med, hint) {
     <label class="field"><span>Message name</span>
       <input type="text" id="f-msgname" value="${esc(name)}" placeholder="payment-received"/></label>
     <label class="field"><span>Correlation key (FEEL)</span>
-      <input type="text" id="f-corrkey" value="${esc(key)}" placeholder="orderId"/></label>
+      <textarea id="f-corrkey" rows="1" placeholder="orderId">${esc(key)}</textarea></label>
     <p class="muted" style="font-size:12px">${hint}</p>`;
 }
 
@@ -508,6 +540,16 @@ function wireProperties(root, modeler) {
         }
         try { modeling.updateProperties(element, props); } catch { /* stale */ }
       });
+    }
+
+    // Upgrade every FEEL field in this panel into a code editor (highlighting +
+    // completion). The textareas keep their identity, so the change-to-save
+    // handlers wired above are untouched.
+    if (tab === "implement") {
+      const feelVars = collectFeelVariables(modeler);
+      enhanceFeel(body, "#f-expr", feelVars);
+      enhanceFeel(body, "#f-cond", feelVars);
+      enhanceFeel(body, "#f-corrkey", feelVars);
     }
   }
 
