@@ -152,7 +152,8 @@ func TestDeployRunAndStats(t *testing.T) {
 		t.Fatalf("instances = %+v, want one active order instance with 1 token", insts)
 	}
 
-	// The live overlay data: the token sits on the service task "task".
+	// The live overlay data: one live token sits on the service task "task", and
+	// the start event, already left behind, shows up as history (a visit).
 	code, body = doReq(t, ts, http.MethodGet, "/api/v1/processes/1/runtime", "", "")
 	if code != http.StatusOK {
 		t.Fatalf("runtime status=%d body=%s", code, body)
@@ -164,14 +165,28 @@ func TestDeployRunAndStats(t *testing.T) {
 			ElementID string `json:"elementId"`
 			Type      string `json:"type"`
 			Tokens    int    `json:"tokens"`
+			Visits    int    `json:"visits"`
 		} `json:"elements"`
 	}
 	if err := json.Unmarshal(body, &rt); err != nil {
 		t.Fatalf("decode runtime: %v (%s)", err, body)
 	}
-	if rt.Instances != 1 || rt.Tokens != 1 || len(rt.Elements) != 1 ||
-		rt.Elements[0].ElementID != "task" || rt.Elements[0].Type != "ServiceTask" || rt.Elements[0].Tokens != 1 {
-		t.Fatalf("runtime = %+v, want 1 instance with 1 token total on service task \"task\"", rt)
+	byID := map[string]struct {
+		typ            string
+		tokens, visits int
+	}{}
+	for _, e := range rt.Elements {
+		byID[e.ElementID] = struct {
+			typ            string
+			tokens, visits int
+		}{e.Type, e.Tokens, e.Visits}
+	}
+	task := byID["task"]
+	if rt.Instances != 1 || rt.Tokens != 1 || task.typ != "ServiceTask" || task.tokens != 1 {
+		t.Fatalf("runtime = %+v, want 1 instance with 1 live token on service task \"task\"", rt)
+	}
+	if start := byID["start"]; start.tokens != 0 || start.visits != 1 {
+		t.Fatalf("start element = %+v, want history-only {tokens:0 visits:1}", start)
 	}
 }
 
@@ -342,13 +357,19 @@ func TestDeployDemoParksToken(t *testing.T) {
 		Elements  []struct {
 			ElementID string `json:"elementId"`
 			Tokens    int    `json:"tokens"`
+			Visits    int    `json:"visits"`
 		} `json:"elements"`
 	}
 	if err := json.Unmarshal(body, &rt); err != nil {
 		t.Fatalf("decode runtime: %v (%s)", err, body)
 	}
-	if rt.Instances != 1 || rt.Tokens != 1 || len(rt.Elements) != 1 ||
-		rt.Elements[0].ElementID != "review" || rt.Elements[0].Tokens != 1 {
+	review := struct{ tokens, visits int }{}
+	for _, e := range rt.Elements {
+		if e.ElementID == "review" {
+			review = struct{ tokens, visits int }{e.Tokens, e.Visits}
+		}
+	}
+	if rt.Instances != 1 || rt.Tokens != 1 || review.tokens != 1 || review.visits != 1 {
 		t.Fatalf("runtime = %+v, want 1 instance with 1 token parked on \"review\"", rt)
 	}
 }
