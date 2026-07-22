@@ -1,6 +1,7 @@
 package compiler
 
 import (
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -65,6 +66,30 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 			return nil, err
 		}
 	}
+	for _, brt := range proc.BusinessRuleTasks {
+		if brt.CalledDecision.DecisionId == "" {
+			return nil, fmt.Errorf("compiler: business rule task %q has no calledDecision decisionId", brt.Id)
+		}
+		retries := int32(defaultRetries)
+		if r := brt.CalledDecision.Retries; r != "" {
+			n, err := strconv.Atoi(r)
+			if err != nil {
+				return nil, fmt.Errorf("compiler: business rule task %q has invalid retries %q: %w", brt.Id, r, err)
+			}
+			retries = int32(n)
+		}
+		inputs, err := decisionInputs(brt.Inputs)
+		if err != nil {
+			return nil, fmt.Errorf("compiler: business rule task %q: %w", brt.Id, err)
+		}
+		node, err := b.AddBusinessRuleTask(brt.CalledDecision.DecisionId, inputs, retries)
+		if err != nil {
+			return nil, err
+		}
+		if err := register(brt.Id, node); err != nil {
+			return nil, err
+		}
+	}
 	for _, e := range proc.EndEvents {
 		if err := register(e.Id, b.AddEndEvent()); err != nil {
 			return nil, err
@@ -98,11 +123,12 @@ type xmlDefinitions struct {
 }
 
 type xmlProcess struct {
-	Id           string            `xml:"id,attr"`
-	StartEvents  []xmlNode         `xml:"startEvent"`
-	EndEvents    []xmlNode         `xml:"endEvent"`
-	ServiceTasks []xmlServiceTask  `xml:"serviceTask"`
-	Flows        []xmlSequenceFlow `xml:"sequenceFlow"`
+	Id                string                `xml:"id,attr"`
+	StartEvents       []xmlNode             `xml:"startEvent"`
+	EndEvents         []xmlNode             `xml:"endEvent"`
+	ServiceTasks      []xmlServiceTask      `xml:"serviceTask"`
+	BusinessRuleTasks []xmlBusinessRuleTask `xml:"businessRuleTask"`
+	Flows             []xmlSequenceFlow     `xml:"sequenceFlow"`
 }
 
 type xmlNode struct {
@@ -117,6 +143,52 @@ type xmlServiceTask struct {
 type xmlTaskDefinition struct {
 	Type    string `xml:"type,attr"`
 	Retries string `xml:"retries,attr"`
+}
+
+// A business rule task references a DMN decision via the Zeebe calledDecision
+// extension (<zeebe:calledDecision decisionId="..."/>). Static inputs — a
+// stand-in until process variables land — are given as Atlas decisionInput
+// extension elements (<atlas:decisionInput name="Season" value="Winter"/>);
+// each value is parsed as JSON when it parses, else kept as a string, so numbers
+// and booleans reach the decision with their FEEL types.
+type xmlBusinessRuleTask struct {
+	Id             string             `xml:"id,attr"`
+	CalledDecision xmlCalledDecision  `xml:"extensionElements>calledDecision"`
+	Inputs         []xmlDecisionInput `xml:"extensionElements>decisionInput"`
+}
+
+type xmlCalledDecision struct {
+	DecisionId string `xml:"decisionId,attr"`
+	Retries    string `xml:"retries,attr"`
+}
+
+type xmlDecisionInput struct {
+	Name  string `xml:"name,attr"`
+	Value string `xml:"value,attr"`
+}
+
+// decisionInputs turns parsed <decisionInput> elements into a name→value map,
+// parsing each value as JSON when possible so numbers and booleans keep their
+// types (a plain string that is not valid JSON is used verbatim).
+func decisionInputs(in []xmlDecisionInput) (map[string]any, error) {
+	if len(in) == 0 {
+		return nil, nil
+	}
+	m := make(map[string]any, len(in))
+	for _, di := range in {
+		if di.Name == "" {
+			return nil, fmt.Errorf("decisionInput with empty name")
+		}
+		if _, dup := m[di.Name]; dup {
+			return nil, fmt.Errorf("duplicate decisionInput name %q", di.Name)
+		}
+		var v any
+		if err := json.Unmarshal([]byte(di.Value), &v); err != nil {
+			v = di.Value // not JSON: treat as a literal string
+		}
+		m[di.Name] = v
+	}
+	return m, nil
 }
 
 type xmlSequenceFlow struct {

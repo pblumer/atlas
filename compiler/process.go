@@ -18,6 +18,7 @@ const (
 	TypeStartEvent
 	TypeEndEvent
 	TypeServiceTask
+	TypeBusinessRuleTask
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
 	numBpmnTypes = 16
@@ -34,6 +35,8 @@ func (t BpmnType) String() string {
 		return "EndEvent"
 	case TypeServiceTask:
 		return "ServiceTask"
+	case TypeBusinessRuleTask:
+		return "BusinessRuleTask"
 	default:
 		return "Unspecified"
 	}
@@ -64,6 +67,20 @@ type ServiceTaskDetail struct {
 	Retries int32
 }
 
+// BusinessRuleTaskDetail is the per-business-rule-task data a behavior needs at
+// runtime. A business rule task delegates to a DMN decision, evaluated off the
+// hot path by the temis engine (ADR-0014). Like a service task it runs as a job,
+// so it carries a JobType (a reserved DMN sentinel) the in-process DMN worker
+// subscribes to; DecisionId names the decision to evaluate, and Inputs is an
+// interned JSON object of the static input context to feed it (a stand-in until
+// the variable subsystem lands in Milestone 1).
+type BusinessRuleTaskDetail struct {
+	JobType    int32 // interned reserved DMN job type → index
+	DecisionId int32 // interned DMN decision id → index
+	Inputs     int32 // interned JSON object of static inputs → index, -1 if none
+	Retries    int32
+}
+
 // CompiledProcess is the immutable result of compiling one process definition.
 // It is safe for concurrent reads without synchronization.
 type CompiledProcess struct {
@@ -74,11 +91,12 @@ type CompiledProcess struct {
 	nodes []CompiledNode
 	flows []CompiledFlow
 
-	outgoingFlows []int32 // shared topology: flow ids grouped by source node
-	serviceTasks  []ServiceTaskDetail
-	startEvents   []int32
-	elementIds    []int32  // interned source BPMN id per node id (-1 if unset)
-	strings       []string // intern table (index → string), for debug/export
+	outgoingFlows     []int32 // shared topology: flow ids grouped by source node
+	serviceTasks      []ServiceTaskDetail
+	businessRuleTasks []BusinessRuleTaskDetail
+	startEvents       []int32
+	elementIds        []int32  // interned source BPMN id per node id (-1 if unset)
+	strings           []string // intern table (index → string), for debug/export
 }
 
 // Node returns the node with the given ElementId.
@@ -97,6 +115,11 @@ func (p *CompiledProcess) Outgoing(id int32) []int32 {
 // ServiceTask returns the detail at the given table index.
 func (p *CompiledProcess) ServiceTask(detail int32) *ServiceTaskDetail {
 	return &p.serviceTasks[detail]
+}
+
+// BusinessRuleTask returns the detail at the given table index.
+func (p *CompiledProcess) BusinessRuleTask(detail int32) *BusinessRuleTaskDetail {
+	return &p.businessRuleTasks[detail]
 }
 
 // StartEvents returns the process's entry-point element ids.

@@ -1,6 +1,14 @@
 package compiler
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+)
+
+// DMNJobType is the reserved job type business rule tasks carry. The in-process
+// DMN worker subscribes to it to pick up decisions for evaluation, the same way
+// an external worker subscribes to a service task's job type.
+const DMNJobType = "io.atlas.dmn"
 
 // Builder constructs a CompiledProcess programmatically. It stands in for the
 // XML parse/resolve/linearize pipeline until that front end exists: callers add
@@ -11,10 +19,11 @@ type Builder struct {
 	bpmnProcessId string
 	version       int32
 
-	nodes        []CompiledNode
-	flows        []CompiledFlow
-	serviceTasks []ServiceTaskDetail
-	elementIds   []int32 // interned source BPMN id per node, -1 if unset
+	nodes             []CompiledNode
+	flows             []CompiledFlow
+	serviceTasks      []ServiceTaskDetail
+	businessRuleTasks []BusinessRuleTaskDetail
+	elementIds        []int32 // interned source BPMN id per node, -1 if unset
 
 	interner map[string]int32
 	strings  []string
@@ -81,6 +90,30 @@ func (b *Builder) AddServiceTask(jobType string, retries int32) int32 {
 	return b.addNode(TypeServiceTask, detail)
 }
 
+// AddBusinessRuleTask adds a business rule task that evaluates the named DMN
+// decision with the given static input context, and returns its element id. The
+// inputs map is JSON-encoded and interned at deploy time (never on the hot path,
+// invariant I5); a nil or empty map records no inputs. It returns an error if the
+// inputs cannot be encoded.
+func (b *Builder) AddBusinessRuleTask(decisionId string, inputs map[string]any, retries int32) (int32, error) {
+	inputsIdx := int32(-1)
+	if len(inputs) > 0 {
+		encoded, err := json.Marshal(inputs)
+		if err != nil {
+			return -1, fmt.Errorf("compiler: business rule task %q inputs: %w", decisionId, err)
+		}
+		inputsIdx = b.intern(string(encoded))
+	}
+	detail := int32(len(b.businessRuleTasks))
+	b.businessRuleTasks = append(b.businessRuleTasks, BusinessRuleTaskDetail{
+		JobType:    b.intern(DMNJobType),
+		DecisionId: b.intern(decisionId),
+		Inputs:     inputsIdx,
+		Retries:    retries,
+	})
+	return b.addNode(TypeBusinessRuleTask, detail), nil
+}
+
 // Connect adds a sequence flow from source to target.
 func (b *Builder) Connect(source, target int32) {
 	b.flows = append(b.flows, CompiledFlow{
@@ -120,16 +153,17 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 	}
 
 	return &CompiledProcess{
-		Key:           b.key,
-		BpmnProcessId: b.intern(b.bpmnProcessId),
-		Version:       b.version,
-		nodes:         b.nodes,
-		flows:         b.flows,
-		outgoingFlows: outgoing,
-		serviceTasks:  b.serviceTasks,
-		startEvents:   startEvents,
-		elementIds:    b.elementIds,
-		strings:       b.strings,
+		Key:               b.key,
+		BpmnProcessId:     b.intern(b.bpmnProcessId),
+		Version:           b.version,
+		nodes:             b.nodes,
+		flows:             b.flows,
+		outgoingFlows:     outgoing,
+		serviceTasks:      b.serviceTasks,
+		businessRuleTasks: b.businessRuleTasks,
+		startEvents:       startEvents,
+		elementIds:        b.elementIds,
+		strings:           b.strings,
 	}, nil
 }
 

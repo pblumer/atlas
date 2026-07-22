@@ -1,6 +1,7 @@
 package compiler
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -83,6 +84,91 @@ func TestParseDefaultRetries(t *testing.T) {
 	}
 	if detail := cp.ServiceTask(cp.Node(task).Detail); detail.Retries != defaultRetries {
 		t.Errorf("retries = %d, want default %d", detail.Retries, defaultRetries)
+	}
+}
+
+const businessRuleBPMN = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0" id="defs">
+  <bpmn:process id="dinner" isExecutable="true">
+    <bpmn:startEvent id="start"/>
+    <bpmn:businessRuleTask id="decide" name="Pick dish">
+      <bpmn:extensionElements>
+        <zeebe:calledDecision decisionId="Dish" retries="5"/>
+        <atlas:decisionInput name="Season" value="Winter"/>
+        <atlas:decisionInput name="Guests" value="8"/>
+      </bpmn:extensionElements>
+    </bpmn:businessRuleTask>
+    <bpmn:endEvent id="end"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="decide"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="decide" targetRef="end"/>
+  </bpmn:process>
+</bpmn:definitions>`
+
+func TestParseBusinessRuleTask(t *testing.T) {
+	cp, err := Parse(7, 1, strings.NewReader(businessRuleBPMN))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	task := cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target
+	if cp.Node(task).Type != TypeBusinessRuleTask {
+		t.Fatalf("expected business rule task after start, got %v", cp.Node(task).Type)
+	}
+	detail := cp.BusinessRuleTask(cp.Node(task).Detail)
+	if got := cp.Intern(detail.DecisionId); got != "Dish" {
+		t.Errorf("decisionId = %q, want Dish", got)
+	}
+	if cp.Intern(detail.JobType) != DMNJobType {
+		t.Errorf("jobType = %q, want %q", cp.Intern(detail.JobType), DMNJobType)
+	}
+	if detail.Retries != 5 {
+		t.Errorf("retries = %d, want 5", detail.Retries)
+	}
+	// Inputs are stored as a JSON object; the string value stays a string and the
+	// numeric value keeps its JSON number type.
+	var inputs map[string]any
+	if err := json.Unmarshal([]byte(cp.Intern(detail.Inputs)), &inputs); err != nil {
+		t.Fatalf("inputs not valid JSON: %v", err)
+	}
+	if inputs["Season"] != "Winter" {
+		t.Errorf("Season = %#v, want \"Winter\"", inputs["Season"])
+	}
+	if inputs["Guests"] != float64(8) {
+		t.Errorf("Guests = %#v, want 8", inputs["Guests"])
+	}
+	if out := cp.Outgoing(task); len(out) != 1 || cp.Node(cp.Flow(out[0]).Target).Type != TypeEndEvent {
+		t.Errorf("expected end event after business rule task")
+	}
+}
+
+func TestParseBusinessRuleTaskDefaults(t *testing.T) {
+	const noRetries = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="p">
+    <startEvent id="s"/>
+    <businessRuleTask id="t"><extensionElements><calledDecision decisionId="D"/></extensionElements></businessRuleTask>
+    <sequenceFlow id="f" sourceRef="s" targetRef="t"/>
+  </process>
+</definitions>`
+	cp, err := Parse(1, 1, strings.NewReader(noRetries))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	task := cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target
+	detail := cp.BusinessRuleTask(cp.Node(task).Detail)
+	if detail.Retries != defaultRetries {
+		t.Errorf("retries = %d, want default %d", detail.Retries, defaultRetries)
+	}
+	if detail.Inputs != -1 {
+		t.Errorf("Inputs index = %d, want -1 (no inputs)", detail.Inputs)
+	}
+}
+
+func TestParseBusinessRuleTaskWithoutDecision(t *testing.T) {
+	const missing = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="p"><startEvent id="s"/><businessRuleTask id="t"/></process></definitions>`
+	if _, err := Parse(1, 1, strings.NewReader(missing)); err == nil {
+		t.Fatal("Parse of business rule task without decisionId = nil error, want error")
 	}
 }
 
