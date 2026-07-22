@@ -24,6 +24,8 @@ const (
 	TypeBusinessRuleTask
 	TypeExclusiveGateway
 	TypeTimerCatchEvent
+	TypeMessageCatchEvent
+	TypeMessageThrowEvent
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
 	numBpmnTypes = 16
@@ -48,6 +50,10 @@ func (t BpmnType) String() string {
 		return "ExclusiveGateway"
 	case TypeTimerCatchEvent:
 		return "TimerCatchEvent"
+	case TypeMessageCatchEvent:
+		return "MessageCatchEvent"
+	case TypeMessageThrowEvent:
+		return "MessageThrowEvent"
 	default:
 		return "Unspecified"
 	}
@@ -110,6 +116,16 @@ type TimerCatchDetail struct {
 	DurationNanos int64
 }
 
+// MessageDetail is the per-message-event data a behavior needs at runtime,
+// shared by the message intermediate catch and throw events. MessageName is the
+// message's name (a subscription matches on it); CorrelationKey is the FEEL
+// expression compiled once at deploy time (ADR-0015) that each side evaluates
+// over its own variables to produce the correlation key (ADR-0019).
+type MessageDetail struct {
+	MessageName    string
+	CorrelationKey *expr.Compiled
+}
+
 // CompiledProcess is the immutable result of compiling one process definition.
 // It is safe for concurrent reads without synchronization.
 type CompiledProcess struct {
@@ -125,6 +141,8 @@ type CompiledProcess struct {
 	scriptTasks       []ScriptTaskDetail
 	businessRuleTasks []BusinessRuleTaskDetail
 	timerCatches      []TimerCatchDetail
+	messageCatches    []MessageDetail
+	messageThrows     []MessageDetail
 	startEvents       []int32
 	elementIds        []int32  // interned source BPMN id per node id (-1 if unset)
 	strings           []string // intern table (index → string), for debug/export
@@ -151,6 +169,16 @@ func (p *CompiledProcess) ServiceTask(detail int32) *ServiceTaskDetail {
 // TimerCatch returns the timer-catch detail at the given table index.
 func (p *CompiledProcess) TimerCatch(detail int32) *TimerCatchDetail {
 	return &p.timerCatches[detail]
+}
+
+// MessageCatch returns the message-catch detail at the given table index.
+func (p *CompiledProcess) MessageCatch(detail int32) *MessageDetail {
+	return &p.messageCatches[detail]
+}
+
+// MessageThrow returns the message-throw detail at the given table index.
+func (p *CompiledProcess) MessageThrow(detail int32) *MessageDetail {
+	return &p.messageThrows[detail]
 }
 
 // ScriptTask returns the detail at the given table index.

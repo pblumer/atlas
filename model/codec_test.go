@@ -114,6 +114,17 @@ func TestRecordRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name:   "message subscription",
+			vt:     VTMessageSubscription,
+			intent: IntentSubscriptionCreated,
+			value: &MessageSubscriptionValue{
+				ProcessInstanceKey: NewKey(2, 30),
+				ElementInstanceKey: NewKey(2, 31),
+				MessageName:        "payment-received",
+				CorrelationKey:     "order-42",
+			},
+		},
+		{
 			name:   "header only, no payload",
 			vt:     VTSignal, // a value type without a payload codec yet
 			intent: IntentActivating,

@@ -60,7 +60,14 @@ Making processes wait, react, and time out.
   event continues. Recovery-tested (a pending timer is restored from the log and
   fires afterward). Date/cycle timers, boundary timers, and FEEL duration
   expressions still to come.
-- 🔲 Message events + subscriptions + correlation (single-partition)
+- ✅ **Message events + subscriptions + correlation** (single-partition):
+  intermediate **message catch** events subscribe on a FEEL correlation key and
+  wait; intermediate **message throw** events and an HTTP `POST /api/v1/messages`
+  publish, correlating against open subscriptions through one shared path and
+  carrying an optional variable payload into the woken instance. Recovery-tested
+  (an open subscription is restored from the log and correlates afterward).
+  Message buffering, message start/boundary events, and cross-partition
+  correlation still to come (ADR-0019).
 - 🔲 Signal events (broadcast)
 - 🔲 Error events and error propagation
 - 🔲 Boundary events: interrupting and non-interrupting

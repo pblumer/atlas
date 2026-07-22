@@ -179,6 +179,44 @@ func (t *Tx) PutProcessInstanceHistory(key uint64, v *model.ProcessInstanceValue
 	return t.b.Set(keyProcessInstanceHistory(key), t.encodeValue(v), nil)
 }
 
+// --- MessageSubscription ---
+
+// PutMessageSubscription writes an open message subscription, keyed by its
+// (name, correlationKey) match pair plus its element-instance key.
+func (t *Tx) PutMessageSubscription(v *model.MessageSubscriptionValue) error {
+	return t.b.Set(keyMessageSubscription(v.MessageName, v.CorrelationKey, v.ElementInstanceKey), t.encodeValue(v), nil)
+}
+
+// DeleteMessageSubscription removes a subscription. The value supplies the name,
+// correlation key, and element-instance key that locate its index entry; on
+// recovery they come from the event payload.
+func (t *Tx) DeleteMessageSubscription(v *model.MessageSubscriptionValue) error {
+	return t.b.Delete(keyMessageSubscription(v.MessageName, v.CorrelationKey, v.ElementInstanceKey), nil)
+}
+
+// CorrelatableSubscriptions calls fn for every open subscription matching the
+// given (message name, correlation key), via a prefix scan — the publish access
+// pattern. It reads through the in-flight batch, so it observes subscriptions
+// created earlier in the same batch (ADR-0019).
+func (t *Tx) CorrelatableSubscriptions(name, correlationKey string, fn func(elKey uint64, v *model.MessageSubscriptionValue) error) error {
+	prefix := messageSubscriptionPrefix(name, correlationKey)
+	iter, err := t.b.NewIter(&pebble.IterOptions{LowerBound: prefix, UpperBound: prefixEnd(prefix)})
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+	for iter.First(); iter.Valid(); iter.Next() {
+		var v model.MessageSubscriptionValue
+		if err := model.DecodeValueInto(&v, iter.Value()); err != nil {
+			return err
+		}
+		if err := fn(trailingKey(iter.Key()), &v); err != nil {
+			return err
+		}
+	}
+	return iter.Error()
+}
+
 // --- Variable ---
 
 // PutVariable writes (upserts) a process variable under its scope and name.

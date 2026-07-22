@@ -96,6 +96,14 @@ func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.Var
 	c.appendEvent(v.ScopeKey, model.VTVariable, intent, inflightValue{variable: v})
 }
 
+// AppendMessageSubscriptionEvent records a message-subscription fact (created or
+// correlated). The key is the waiting element instance's key, and the value
+// carries the match pair, so applyToState can locate the index entry from the
+// event alone (invariant I4).
+func (c *ProcessingContext) AppendMessageSubscriptionEvent(key uint64, intent model.Intent, v model.MessageSubscriptionValue) {
+	c.appendEvent(key, model.VTMessageSubscription, intent, inflightValue{subscription: v})
+}
+
 // AppendElementCommand schedules an element-instance command for a later batch.
 func (c *ProcessingContext) AppendElementCommand(key uint64, intent model.Intent, v model.ElementInstanceValue) {
 	c.appendCommand(key, model.VTElementInstance, intent, inflightValue{element: v})
