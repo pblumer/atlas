@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   check:
-    name: build · vet · fmt · race
+    name: build · vet · fmt · race · cover
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,3 +39,6 @@ jobs:
 
       - name: Test (race detector)
         run: go test -race ./...
+
+      - name: Coverage floor (>= 95%, ADR-0018)
+        run: ./scripts/check-coverage.sh 95
