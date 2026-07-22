@@ -1,12 +1,20 @@
 # Atlas — developer command entry point.
 # Agents and CI: prefer these targets so the canonical commands live in one place.
 
-.PHONY: all build test race vet fmt fmt-check lint check tidy clean
+.PHONY: all build test race vet fmt fmt-check lint check tidy clean run server
 
 all: check
 
 build:
 	go build ./...
+
+# Build the single-binary server into bin/atlas.
+server:
+	go build -o bin/atlas ./cmd/atlas
+
+# Run the single-binary server (override flags via ARGS, e.g. ARGS="--addr :9090").
+run:
+	go run ./cmd/atlas $(ARGS)
 
 test:
 	go test ./...

@@ -58,8 +58,8 @@ The three core pillars:
 
 ## Non-goals (for now)
 
-- A graphical modeler — Atlas executes BPMN, it doesn't draw it
-- A full-stack, batteries-included server — Atlas is a library/engine core first
+- A *bespoke* graphical modeler — Atlas ships a browser viewer/editor by embedding the standard [`bpmn-js`](https://bpmn.io) toolkit ([ADR-0011](docs/adr/0011-single-binary-distribution-and-web-ui.md)), rather than reimplementing BPMN rendering from scratch
+- A full-stack, batteries-included server beyond the single self-contained binary — the engine core stays a library first, embedded by the server
 
 ## License
 

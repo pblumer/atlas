@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Atlas</title>
+<style>
+  :root { color-scheme: light dark; --gap: 1rem; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font: 15px/1.5 system-ui, sans-serif;
+    max-width: 60rem; padding: var(--gap); margin-inline: auto;
+  }
+  header { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 1.5rem; }
+  .tag { font-size: 0.75rem; opacity: 0.7; border: 1px solid currentColor; border-radius: 999px; padding: 0.05rem 0.5rem; }
+  .muted { opacity: 0.7; }
+  section { margin-top: 1.5rem; }
+  h2 { font-size: 1rem; border-bottom: 1px solid rgba(128,128,128,0.35); padding-bottom: 0.3rem; }
+  textarea { width: 100%; min-height: 9rem; font: 13px/1.4 ui-monospace, monospace; }
+  button { font: inherit; padding: 0.35rem 0.8rem; cursor: pointer; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 0.3rem 0.5rem; border-bottom: 1px solid rgba(128,128,128,0.25); }
+  .stats { display: flex; gap: 2rem; }
+  .stat b { display: block; font-size: 1.6rem; }
+  .stat span { font-size: 0.8rem; opacity: 0.7; }
+  #msg { min-height: 1.4rem; font-size: 0.85rem; }
+  #msg.err { color: #c0392b; }
+  #msg.ok { color: #2d8a4e; }
+  .note { background: rgba(128,128,128,0.1); border-radius: 6px; padding: 0.6rem 0.8rem; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Atlas</h1>
+    <span class="tag">single-binary server</span>
+  </header>
+  <p class="muted">Durable BPMN 2.x workflow engine. This is the Milestone&nbsp;S skeleton UI.</p>
+
+  <p class="note">
+    A browser <strong>BPMN viewer</strong> (and later an editor) will render here, reusing
+    <code>bpmn-js</code> with its assets embedded in this binary (see ADR-0011). For now this
+    shell exercises the HTTP API directly. Deployments are held in memory and are lost on
+    restart until durable deployment lands.
+  </p>
+
+  <section>
+    <h2>Deploy a BPMN model</h2>
+    <p class="muted">Paste BPMN 2.0 XML (start event → service task → end event is supported today).</p>
+    <textarea id="xml" spellcheck="false" placeholder="&lt;bpmn:definitions&gt; …"></textarea>
+    <p><button id="deploy">Deploy</button></p>
+  </section>
+
+  <section>
+    <h2>Deployed processes</h2>
+    <table>
+      <thead><tr><th>Key</th><th>Process ID</th><th>Version</th><th></th></tr></thead>
+      <tbody id="procs"><tr><td colspan="4" class="muted">none yet</td></tr></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Live state</h2>
+    <div class="stats">
+      <div class="stat"><b id="pi">0</b><span>active process instances</span></div>
+      <div class="stat"><b id="ei">0</b><span>active element instances</span></div>
+    </div>
+  </section>
+
+  <p id="msg"></p>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const msg = (text, kind) => { const m = $("msg"); m.textContent = text; m.className = kind || ""; };
+
+async function api(method, path, body, isXML) {
+  const opts = { method };
+  if (body !== undefined) {
+    opts.body = body;
+    opts.headers = { "Content-Type": isXML ? "application/xml" : "application/json" };
+  }
+  const res = await fetch(path, opts);
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+  if (!res.ok) throw new Error((data && data.error) || res.statusText);
+  return data;
+}
+
+async function refresh() {
+  try {
+    const procs = await api("GET", "/api/v1/processes");
+    const tbody = $("procs");
+    if (!procs.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="muted">none yet</td></tr>';
+    } else {
+      tbody.innerHTML = procs.map(p =>
+        `<tr><td>${p.key}</td><td>${escapeHtml(p.processId)}</td><td>${p.version}</td>` +
+        `<td><button data-key="${p.key}" class="run">Start instance</button></td></tr>`
+      ).join("");
+      for (const b of tbody.querySelectorAll("button.run")) {
+        b.addEventListener("click", () => startInstance(b.dataset.key));
+      }
+    }
+    const stats = await api("GET", "/api/v1/stats");
+    $("pi").textContent = stats.activeProcessInstances;
+    $("ei").textContent = stats.activeElementInstances;
+  } catch (e) { msg(e.message, "err"); }
+}
+
+async function deploy() {
+  const xml = $("xml").value.trim();
+  if (!xml) { msg("nothing to deploy", "err"); return; }
+  try {
+    const d = await api("POST", "/api/v1/deployments", xml, true);
+    msg(`deployed ${d.processId} (key ${d.key}, v${d.version})`, "ok");
+    await refresh();
+  } catch (e) { msg("deploy failed: " + e.message, "err"); }
+}
+
+async function startInstance(key) {
+  try {
+    await api("POST", `/api/v1/processes/${key}/instances`, "{}");
+    msg(`started an instance of definition ${key}`, "ok");
+    await refresh();
+  } catch (e) { msg("start failed: " + e.message, "err"); }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+$("deploy").addEventListener("click", deploy);
+refresh();
+</script>
+</body>
+</html>

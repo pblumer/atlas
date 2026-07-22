@@ -90,12 +90,32 @@ Adoption and polish.
 - 🔲 Documentation site, tutorials, examples
 - 🔲 1.0 API stability commitment
 
+## Milestone S — Single-binary server & web UI 🚧
+
+A parallel track (not strictly sequential with the engine milestones): make Atlas
+something you *start*, not only something you *import*. Everything ships in one
+self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-and-web-ui.md).
+
+- 🚧 `api` + `cmd/atlas`: single binary embedding the engine over an HTTP surface,
+  serving an embedded web UI (`go:embed`). Skeleton: deploy XML, create instance,
+  stats, health, static UI shell.
+- 🔲 Read-only **BPMN viewer** in the browser (reuse `bpmn-js`, embedded assets).
+- 🔲 **Live overlay** of runtime state (waiting tokens, incidents) on the diagram —
+  the differentiator a standalone modeler can't offer.
+- 🔲 **Editor** by embedding the `bpmn-js` *modeler* (not a bespoke build), with its
+  authoring scope gated to what the compiler can execute (uses M1 validation).
+- 🔲 Durable deployments (depends on the Milestone 4 public API persisting them).
+- 🔲 Later: a polished "workbench" experience on top.
+
 ---
 
 ## Explicit non-goals (for now)
 
-- A graphical BPMN modeler — Atlas executes models, it doesn't draw them.
-- A batteries-included application server — the engine core is a library first.
+- **A *bespoke* graphical BPMN modeler.** Atlas ships a viewer/editor by embedding
+  the standard `bpmn-js` toolkit (see Milestone S / ADR-0011); it does not
+  reimplement BPMN rendering or modeling from scratch.
+- A batteries-included application server beyond the single-binary server above —
+  the engine core stays a library first, with the server embedding it.
 - DMN decision evaluation as a product surface (FEEL is used internally for expressions).
 
 ## Guiding constraints
