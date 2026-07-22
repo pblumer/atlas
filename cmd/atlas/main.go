@@ -126,7 +126,7 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration) error {
 		return err
 	}
 
-	srv, err := api.New(proc, store, filepath.Join(dataDir, "deployments"))
+	srv, err := api.New(proc, store, dataDir)
 	if err != nil {
 		return err
 	}

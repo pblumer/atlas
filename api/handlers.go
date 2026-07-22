@@ -35,15 +35,24 @@ type processResp struct {
 
 // processName extracts the first <process name="…"> from BPMN XML, for display.
 func processName(body []byte) string {
+	_, name := processIdentity(body)
+	return name
+}
+
+// processIdentity extracts the first process element's id and name from BPMN XML.
+// encoding/xml matches on local name, so it works whether or not the element
+// carries a namespace prefix (<process> or <bpmn:process>).
+func processIdentity(body []byte) (id, name string) {
 	var d struct {
 		Processes []struct {
+			ID   string `xml:"id,attr"`
 			Name string `xml:"name,attr"`
 		} `xml:"process"`
 	}
 	if err := xml.Unmarshal(body, &d); err != nil || len(d.Processes) == 0 {
-		return ""
+		return "", ""
 	}
-	return d.Processes[0].Name
+	return d.Processes[0].ID, d.Processes[0].Name
 }
 
 type infoResp struct {
@@ -537,6 +546,92 @@ func (s *Server) handleStats(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, stats)
+}
+
+type draftResp struct {
+	ProcessID string `json:"processId"`
+	Name      string `json:"name"`
+	SavedAt   int64  `json:"savedAt"`
+}
+
+// handleSaveDraft persists a diagram as a draft: the raw BPMN XML is stored as-is,
+// keyed by its process id, WITHOUT compiling it — so an incomplete or not-yet
+// executable model can still be saved and reopened. Re-saving the same process id
+// overwrites the previous draft rather than creating a version.
+func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	if len(body) == 0 {
+		writeError(w, http.StatusBadRequest, "empty request body: expected BPMN XML")
+		return
+	}
+	pid, name := processIdentity(body)
+	if pid == "" {
+		writeError(w, http.StatusBadRequest, "cannot save draft: no <process id> in the diagram")
+		return
+	}
+	rec := draft{ProcessID: pid, Name: name, SavedAt: time.Now().Unix(), XML: string(body)}
+	var saveErr error
+	s.do(func() { saveErr = s.drafts.save(rec) })
+	if saveErr != nil {
+		writeError(w, http.StatusInternalServerError, "save draft: "+saveErr.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, draftResp{ProcessID: pid, Name: name, SavedAt: rec.SavedAt})
+}
+
+// handleListDrafts lists saved drafts, most recently saved first.
+func (s *Server) handleListDrafts(w http.ResponseWriter, _ *http.Request) {
+	list := []draftResp{}
+	var loadErr error
+	s.do(func() {
+		var recs []draft
+		recs, loadErr = s.drafts.loadAll()
+		for _, d := range recs {
+			list = append(list, draftResp{ProcessID: d.ProcessID, Name: d.Name, SavedAt: d.SavedAt})
+		}
+	})
+	if loadErr != nil {
+		writeError(w, http.StatusInternalServerError, "list drafts: "+loadErr.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
+// handleDraftXML returns a draft's raw BPMN XML so the editor can reopen it.
+func (s *Server) handleDraftXML(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var (
+		rec     draft
+		ok      bool
+		readErr error
+	)
+	s.do(func() { rec, ok, readErr = s.drafts.get(id) })
+	switch {
+	case readErr != nil:
+		writeError(w, http.StatusInternalServerError, "read draft: "+readErr.Error())
+	case !ok:
+		writeError(w, http.StatusNotFound, "no draft with that process id")
+	default:
+		w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+		_, _ = w.Write([]byte(rec.XML))
+	}
+}
+
+// handleDeleteDraft removes a saved draft. Deleting an absent draft succeeds, so
+// the operation is idempotent.
+func (s *Server) handleDeleteDraft(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var delErr error
+	s.do(func() { delErr = s.drafts.delete(id) })
+	if delErr != nil {
+		writeError(w, http.StatusInternalServerError, "delete draft: "+delErr.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

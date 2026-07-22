@@ -154,6 +154,10 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   reloads it on startup, re-registering definitions with the processor — so
   diagrams, versions, and recovered instances survive a restart. An interim
   mechanism until the Milestone 4 public API makes deploy a first-class event.
+- ✅ Diagram drafts ([ADR-0020](docs/adr/0020-diagram-drafts.md)): a **Save**
+  action in the Modeler persists work-in-progress (raw, uncompiled XML) to a
+  durable draft store keyed by process id, so incomplete models survive and can be
+  reopened — distinct from deploying, which compiles, versions, and runs.
 - 🔲 Later: a polished "workbench" experience on top.
 
 ---

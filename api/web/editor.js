@@ -84,18 +84,20 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 
 const shortType = (t) => (t || "").replace(/^bpmn:/, "");
 
-export async function mountEditor(root, { api, toast, key }) {
+export async function mountEditor(root, { api, toast, key, draftId }) {
   cleanup();
 
+  const crumb = draftId != null ? "Draft" : key == null ? "New diagram" : "Deployment " + key;
   root.innerHTML = `
     <div class="editor">
       <div class="editor-bar">
-        <span class="crumbs">${key == null ? "New diagram" : "Deployment " + key}</span>
+        <span class="crumbs">${crumb}</span>
         <div class="etabs">
           <button data-tab="design" class="active">Design</button>
           <button data-tab="implement">Implement</button>
         </div>
         <div style="flex:1"></div>
+        <button class="btn neutral" id="save">Save</button>
         <button class="btn neutral" id="export">Export XML</button>
         <button class="btn" id="deploy">Deploy &amp; run</button>
       </div>
@@ -129,9 +131,12 @@ export async function mountEditor(root, { api, toast, key }) {
   current = modeler;
   window.__atlasModeler = modeler; // exposed for scripted/end-to-end testing
 
-  // Load content.
+  // Load content: a saved draft, a deployed definition, or a fresh blank diagram.
   try {
-    if (key == null) {
+    if (draftId != null) {
+      const xml = await api("GET", `/api/v1/drafts/${encodeURIComponent(draftId)}/xml`);
+      await modeler.importXML(typeof xml === "string" ? xml : String(xml));
+    } else if (key == null) {
       await modeler.importXML(blankXML());
     } else {
       const xml = await api("GET", `/api/v1/processes/${key}/xml`);
@@ -403,6 +408,23 @@ function wireProperties(root, modeler) {
 }
 
 function wireActions(root, modeler, api, toast) {
+  // Save persists the diagram as a draft (raw XML, no compile), keyed by process
+  // id, so incomplete work survives and can be reopened from the Modeler home.
+  const saveBtn = root.querySelector("#save");
+  saveBtn.addEventListener("click", async () => {
+    saveBtn.disabled = true;
+    try {
+      const { xml } = await modeler.saveXML({ format: true });
+      const d = await api("POST", "/api/v1/drafts", xml, true);
+      root.querySelector(".crumbs").textContent = d.name || d.processId || "Draft";
+      toast(`Saved draft “${d.name || d.processId}”`, "ok");
+    } catch (e) {
+      toast("save failed: " + e.message, "err");
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+
   root.querySelector("#export").addEventListener("click", async () => {
     try {
       const { xml } = await modeler.saveXML({ format: true });

@@ -36,7 +36,7 @@ func newServerForErrors(t *testing.T) *Server {
 	if err := proc.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	srv, err := New(proc, store, filepath.Join(dir, "deployments"))
+	srv, err := New(proc, store, dir)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -59,6 +59,7 @@ func TestReadBodyErrors(t *testing.T) {
 		path string
 	}{
 		{"deploy", "/api/v1/deployments"},
+		{"save draft", "/api/v1/drafts"},
 		{"create instance", "/api/v1/processes/1/instances"},
 	}
 	for _, tc := range cases {
@@ -95,7 +96,7 @@ func TestDoAfterCloseIsNoop(t *testing.T) {
 		_ = log.Close()
 	})
 
-	srv, err := New(proc, store, filepath.Join(dir, "deployments"))
+	srv, err := New(proc, store, dir)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

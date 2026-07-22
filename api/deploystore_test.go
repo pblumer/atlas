@@ -152,6 +152,36 @@ func TestDeployStoreSaveFailsWithoutDir(t *testing.T) {
 	}
 }
 
+// TestDeployStoreSaveRenameError covers save's rename branch: a directory sitting
+// at the destination path makes the atomic rename fail.
+func TestDeployStoreSaveRenameError(t *testing.T) {
+	ds, err := newDeployStore(filepath.Join(t.TempDir(), "deployments"))
+	if err != nil {
+		t.Fatalf("newDeployStore: %v", err)
+	}
+	if err := os.MkdirAll(ds.fileFor(1), 0o755); err != nil {
+		t.Fatalf("make dir at record path: %v", err)
+	}
+	if err := ds.save(sampleRecord(1)); err == nil {
+		t.Error("save onto a directory path: want rename error, got nil")
+	}
+}
+
+// TestDeployStoreDeleteError covers delete's non-not-exist error branch: removing
+// a non-empty directory at the record path fails.
+func TestDeployStoreDeleteError(t *testing.T) {
+	ds, err := newDeployStore(filepath.Join(t.TempDir(), "deployments"))
+	if err != nil {
+		t.Fatalf("newDeployStore: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(ds.fileFor(1), "child"), 0o755); err != nil {
+		t.Fatalf("make non-empty dir at record path: %v", err)
+	}
+	if err := ds.delete(1); err == nil {
+		t.Error("delete of a non-empty directory: want error, got nil")
+	}
+}
+
 // TestDeployStoreLoadAllDecodeError covers the decode error branch: a record file
 // with invalid JSON fails the load rather than being silently skipped.
 func TestDeployStoreLoadAllDecodeError(t *testing.T) {

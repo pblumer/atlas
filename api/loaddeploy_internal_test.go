@@ -43,7 +43,7 @@ func TestNewFailsOnUncompilableStoredDeployment(t *testing.T) {
 		t.Fatalf("write record: %v", err)
 	}
 
-	srv, err := New(proc, store, depDir)
+	srv, err := New(proc, store, dir)
 	if err == nil {
 		srv.Close()
 		t.Fatal("New with an uncompilable stored deployment: want error, got nil")
