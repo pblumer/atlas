@@ -355,7 +355,7 @@ function wireProperties(root, modeler) {
         if (!timer) return;
         const moddle = modeler.get("moddle");
         let td = timer.timeDuration;
-        if (!td) { td = moddle.create("bpmn:TimeDuration"); td.$parent = timer; }
+        if (!td) { td = moddle.create("bpmn:FormalExpression"); td.$parent = timer; }
         td.body = (fdur.value || "").trim();
         modeling.updateModdleProperties(element, timer, { timeDuration: td });
       });
