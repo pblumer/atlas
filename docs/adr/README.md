@@ -28,6 +28,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0018](0018-test-driven-development.md) | Test-driven development as the default workflow | Accepted |
 | [0019](0019-durable-deployments.md) | Durable deployments via an on-disk sidecar store | Accepted |
 | [0020](0020-message-correlation.md) | Message events and correlation | Accepted |
+| [0021](0021-diagram-drafts.md) | Diagram drafts, separate from deployments | Accepted |
 
 ## Status values
 

@@ -46,7 +46,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	if err := proc.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	srv, err := api.New(proc, store, filepath.Join(dir, "deployments"))
+	srv, err := api.New(proc, store, dir)
 	if err != nil {
 		t.Fatalf("api.New: %v", err)
 	}

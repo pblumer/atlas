@@ -115,7 +115,7 @@ function setChrome(appId, route) {
   ).join("");
   document.querySelectorAll("#drawer-apps a").forEach((a) =>
     a.classList.toggle("active", a.dataset.app === appId));
-  const fullBleed = route.includes("/modeler/d/") || route.endsWith("/new") || route.includes("/operations/p/");
+  const fullBleed = route.includes("/modeler/d/") || route.includes("/modeler/draft/") || route.endsWith("/new") || route.includes("/operations/p/");
   document.body.classList.toggle("editor-mode", fullBleed);
 }
 
@@ -220,6 +220,8 @@ async function viewModelerHome() {
       <h1>Modeler</h1>
       <a class="btn" href="#/modeler/new">New diagram</a>
     </div>
+    <div id="drafts-section"></div>
+    <h2 style="margin:22px 0 10px">Deployed</h2>
     <div class="card" style="padding:0">
       <table>
         <thead><tr><th>Process</th><th>Latest</th><th>Deployed</th><th></th></tr></thead>
@@ -227,13 +229,45 @@ async function viewModelerHome() {
       </table>
     </div>`;
   const rows = document.getElementById("rows");
+  const draftsSection = document.getElementById("drafts-section");
+
+  // renderDrafts shows saved-but-not-deployed diagrams — work in progress the
+  // operator can reopen. Hidden entirely when there are none.
+  const renderDrafts = async () => {
+    let drafts = [];
+    try { drafts = await api("GET", "/api/v1/drafts"); } catch { drafts = []; }
+    if (!drafts.length) { draftsSection.innerHTML = ""; return; }
+    draftsSection.innerHTML = `
+      <h2 style="margin:6px 0 10px">Drafts <span class="muted" style="font-size:13px">· saved, not deployed</span></h2>
+      <div class="card" style="padding:0">
+        <table>
+          <thead><tr><th>Process</th><th>Saved</th><th></th></tr></thead>
+          <tbody>${drafts.map((d) => {
+            const label = d.name || d.processId;
+            const sub = d.name ? `<div class="muted" style="font-size:12px">${esc(d.processId)}</div>` : "";
+            const href = `#/modeler/draft/${encodeURIComponent(d.processId)}`;
+            return `<tr>
+              <td><a href="${href}"><b>${esc(label)}</b></a>${sub}</td>
+              <td class="muted">${esc(fmtTime(d.savedAt))}</td>
+              <td style="text-align:right; white-space:nowrap">
+                <a class="btn ghost" href="${href}">Open</a>
+                <button class="btn ghost danger" data-draftdel="${esc(d.processId)}">Delete</button>
+              </td>
+            </tr>`;
+          }).join("")}</tbody>
+        </table>
+      </div>`;
+    for (const b of draftsSection.querySelectorAll("button[data-draftdel]")) {
+      b.addEventListener("click", () => deleteDraft(b.dataset.draftdel, renderDrafts));
+    }
+  };
 
   const render = async () => {
     try {
       const groups = groupByProcess(await api("GET", "/api/v1/processes"));
       if (!groups.length) {
         rows.innerHTML = `<tr><td colspan="4" class="empty">
-          No diagrams yet. <a href="#/modeler/new">Create one</a> or deploy BPMN XML.</td></tr>`;
+          Nothing deployed yet. <a href="#/modeler/new">Create a diagram</a>, save it as a draft, then Deploy &amp; run.</td></tr>`;
         return;
       }
       rows.innerHTML = groups.map((g) => {
@@ -259,7 +293,18 @@ async function viewModelerHome() {
       rows.innerHTML = `<tr><td colspan="4" class="empty">${esc(e.message)}</td></tr>`;
     }
   };
-  await render();
+  await Promise.all([renderDrafts(), render()]);
+}
+
+async function deleteDraft(processId, reload) {
+  if (!window.confirm(`Delete draft "${processId}"?`)) return;
+  try {
+    await api("DELETE", `/api/v1/drafts/${encodeURIComponent(processId)}`);
+    toast(`Deleted draft "${processId}"`, "ok");
+  } catch (e) {
+    toast("could not delete draft: " + e.message, "err");
+  }
+  await reload();
 }
 
 async function deleteProcess(processId, groups, reload) {
@@ -381,6 +426,11 @@ async function viewEditor(key) {
   await mod.mountEditor(view, { api, toast, key });
 }
 
+async function viewEditorDraft(id) {
+  const mod = await import("./editor.js");
+  await mod.mountEditor(view, { api, toast, draftId: id });
+}
+
 async function viewLive(key) {
   const mod = await import("./editor.js");
   await mod.mountLive(view, { api, toast, key });
@@ -411,6 +461,8 @@ async function route() {
     if (path === "#/console/org") return viewConsoleOrg();
     if (path === "#/modeler") return await viewModelerHome();
     if (path === "#/modeler/new") return await viewEditor(null);
+    const dm = path.match(/^#\/modeler\/draft\/(.+)$/);
+    if (dm) return await viewEditorDraft(decodeURIComponent(dm[1]));
     const m = path.match(/^#\/modeler\/d\/(\d+)$/);
     if (m) return await viewEditor(Number(m[1]));
     if (path === "#/operations") return await viewInstances();

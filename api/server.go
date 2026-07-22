@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -78,16 +79,22 @@ type Server struct {
 	nextKey     uint64
 	versions    map[string]int32 // bpmnProcessId → highest version deployed
 	deploys     *deployStore     // durable sidecar for deployments (ADR-0019)
+	drafts      *draftStore      // durable sidecar for saved-but-not-deployed diagrams
 }
 
 // New builds a Server over an already-recovered processor and its store and
-// starts the run-loop goroutine. deployDir is the directory the durable
-// deployment store lives in (ADR-0019); New reloads any deployments found there,
+// starts the run-loop goroutine. dataDir is the base data directory; the durable
+// deployment and draft sidecar stores live in its "deployments" and "drafts"
+// subdirectories (ADR-0019). New reloads any deployments found there,
 // re-registering them with the processor so recovered instances resolve their
 // definition and the UI can render diagrams again. The caller retains ownership
 // of proc and store (Close here stops only the loop, not the engine).
-func New(proc *engine.Processor, store *state.Store, deployDir string) (*Server, error) {
-	ds, err := newDeployStore(deployDir)
+func New(proc *engine.Processor, store *state.Store, dataDir string) (*Server, error) {
+	ds, err := newDeployStore(filepath.Join(dataDir, "deployments"))
+	if err != nil {
+		return nil, err
+	}
+	drafts, err := newDraftStore(filepath.Join(dataDir, "drafts"))
 	if err != nil {
 		return nil, err
 	}
@@ -100,6 +107,7 @@ func New(proc *engine.Processor, store *state.Store, deployDir string) (*Server,
 		nextKey:     1,
 		versions:    map[string]int32{},
 		deploys:     ds,
+		drafts:      drafts,
 	}
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
@@ -213,6 +221,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/info", s.handleInfo)
 	mux.HandleFunc("POST /api/v1/deployments", s.handleDeploy)
 	mux.HandleFunc("GET /api/v1/processes", s.handleListProcesses)
+	mux.HandleFunc("POST /api/v1/drafts", s.handleSaveDraft)
+	mux.HandleFunc("GET /api/v1/drafts", s.handleListDrafts)
+	mux.HandleFunc("GET /api/v1/drafts/{id}/xml", s.handleDraftXML)
+	mux.HandleFunc("DELETE /api/v1/drafts/{id}", s.handleDeleteDraft)
 	mux.HandleFunc("GET /api/v1/processes/{key}/xml", s.handleProcessXML)
 	mux.HandleFunc("DELETE /api/v1/processes/{key}", s.handleDeleteProcess)
 	mux.HandleFunc("GET /api/v1/processes/{key}/runtime", s.handleProcessRuntime)

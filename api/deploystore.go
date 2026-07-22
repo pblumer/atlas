@@ -44,40 +44,10 @@ func (d *deployStore) fileFor(key uint64) string {
 	return filepath.Join(d.dir, strconv.FormatUint(key, 10)+".json")
 }
 
-// save writes a deployment durably: encode to a temp file, fsync it, rename over
-// the target, then fsync the directory so the rename itself is durable. This is
-// the "durable before visible" discipline (I2) applied to the sidecar store — the
-// caller may treat a nil return as "on disk".
+// save writes a deployment durably (atomic write + directory fsync), so the
+// caller may treat a nil return as "on disk" (I2 / ADR-0019).
 func (d *deployStore) save(rec persistedDeployment) error {
-	data, err := json.Marshal(rec)
-	if err != nil {
-		return fmt.Errorf("deploystore: marshal: %w", err)
-	}
-	final := d.fileFor(rec.Key)
-	tmp := final + ".tmp"
-	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
-	if err != nil {
-		return fmt.Errorf("deploystore: open temp: %w", err)
-	}
-	if _, err := f.Write(data); err != nil {
-		_ = f.Close()
-		_ = os.Remove(tmp)
-		return fmt.Errorf("deploystore: write: %w", err)
-	}
-	if err := f.Sync(); err != nil {
-		_ = f.Close()
-		_ = os.Remove(tmp)
-		return fmt.Errorf("deploystore: sync temp: %w", err)
-	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("deploystore: close temp: %w", err)
-	}
-	if err := os.Rename(tmp, final); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("deploystore: rename: %w", err)
-	}
-	return d.syncDir()
+	return atomicWriteJSON(d.dir, d.fileFor(rec.Key), rec)
 }
 
 // delete removes a deployment's record. A missing file is not an error, so
@@ -86,21 +56,7 @@ func (d *deployStore) delete(key uint64) error {
 	if err := os.Remove(d.fileFor(key)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("deploystore: remove: %w", err)
 	}
-	return d.syncDir()
-}
-
-// syncDir fsyncs the deployment directory so a create/rename/remove of a record
-// file is itself durable.
-func (d *deployStore) syncDir() error {
-	dir, err := os.Open(d.dir)
-	if err != nil {
-		return fmt.Errorf("deploystore: open dir: %w", err)
-	}
-	defer dir.Close()
-	if err := dir.Sync(); err != nil {
-		return fmt.Errorf("deploystore: sync dir: %w", err)
-	}
-	return nil
+	return fsyncDir(d.dir)
 }
 
 // loadAll reads every deployment record, sorted by key ascending so registration
