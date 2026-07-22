@@ -179,6 +179,20 @@ func (s *Store) ActiveProcessInstances(fn func(key uint64, v *model.ProcessInsta
 	})
 }
 
+// CompletedProcessInstances calls fn with the key and value of every process
+// instance that has reached a terminal state, via the history column family —
+// the operator "list finished instances" access pattern (ADR-0017). Each value
+// carries its terminal State and CompletedAt.
+func (s *Store) CompletedProcessInstances(fn func(key uint64, v *model.ProcessInstanceValue) error) error {
+	return s.scanPrefix([]byte{byte(cfProcessInstanceHistory)}, func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTProcessInstance, raw)
+		if err != nil {
+			return err
+		}
+		return fn(trailingKey(k), v.(*model.ProcessInstanceValue))
+	})
+}
+
 // ActiveElementInstanceCount returns how many element instances are live.
 func (s *Store) ActiveElementInstanceCount() (int, error) {
 	return s.countPrefix([]byte{byte(cfElementInstance)})

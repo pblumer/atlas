@@ -10,15 +10,16 @@ import "encoding/binary"
 type columnFamily byte
 
 const (
-	cfMeta            columnFamily = 0x00 // meta:<name> → bytes
-	cfElementInstance columnFamily = 0x01 // el:<elKey> → ElementInstanceValue
-	cfElByProc        columnFamily = 0x02 // elByProc:<procKey>:<elKey> → nil
-	cfJob             columnFamily = 0x03 // job:<jobKey> → JobValue
-	cfJobActivatable  columnFamily = 0x04 // jobActivatable:<jobType>:<jobKey> → nil
-	cfTimer           columnFamily = 0x05 // timer:<dueDate>:<timerKey> → TimerValue
-	cfProcessInstance columnFamily = 0x06 // pi:<piKey> → ProcessInstanceValue
-	cfActiveChildren  columnFamily = 0x07 // activeChildren:<scopeKey> → int32 count
-	cfVariable        columnFamily = 0x08 // var:<scopeKey>:<name> → VariableValue
+	cfMeta                   columnFamily = 0x00 // meta:<name> → bytes
+	cfElementInstance        columnFamily = 0x01 // el:<elKey> → ElementInstanceValue
+	cfElByProc               columnFamily = 0x02 // elByProc:<procKey>:<elKey> → nil
+	cfJob                    columnFamily = 0x03 // job:<jobKey> → JobValue
+	cfJobActivatable         columnFamily = 0x04 // jobActivatable:<jobType>:<jobKey> → nil
+	cfTimer                  columnFamily = 0x05 // timer:<dueDate>:<timerKey> → TimerValue
+	cfProcessInstance        columnFamily = 0x06 // pi:<piKey> → ProcessInstanceValue
+	cfActiveChildren         columnFamily = 0x07 // activeChildren:<scopeKey> → int32 count
+	cfVariable               columnFamily = 0x08 // var:<scopeKey>:<name> → VariableValue
+	cfProcessInstanceHistory columnFamily = 0x09 // piHist:<piKey> → ProcessInstanceValue (terminal)
 )
 
 func appendBE64(dst []byte, v uint64) []byte { return binary.BigEndian.AppendUint64(dst, v) }
@@ -61,6 +62,10 @@ func keyTimer(dueDate int64, key uint64) []byte {
 
 func keyProcessInstance(key uint64) []byte {
 	return appendBE64([]byte{byte(cfProcessInstance)}, key)
+}
+
+func keyProcessInstanceHistory(key uint64) []byte {
+	return appendBE64([]byte{byte(cfProcessInstanceHistory)}, key)
 }
 
 func keyActiveChildren(scope uint64) []byte {

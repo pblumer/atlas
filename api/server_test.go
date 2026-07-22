@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -155,6 +156,7 @@ func TestDeployRunAndStats(t *testing.T) {
 	}
 	var rt struct {
 		Instances int `json:"instances"`
+		Tokens    int `json:"tokens"`
 		Elements  []struct {
 			ElementID string `json:"elementId"`
 			Type      string `json:"type"`
@@ -164,9 +166,9 @@ func TestDeployRunAndStats(t *testing.T) {
 	if err := json.Unmarshal(body, &rt); err != nil {
 		t.Fatalf("decode runtime: %v (%s)", err, body)
 	}
-	if rt.Instances != 1 || len(rt.Elements) != 1 ||
+	if rt.Instances != 1 || rt.Tokens != 1 || len(rt.Elements) != 1 ||
 		rt.Elements[0].ElementID != "task" || rt.Elements[0].Type != "ServiceTask" || rt.Elements[0].Tokens != 1 {
-		t.Fatalf("runtime = %+v, want 1 instance with 1 token on service task \"task\"", rt)
+		t.Fatalf("runtime = %+v, want 1 instance with 1 token total on service task \"task\"", rt)
 	}
 }
 
@@ -194,6 +196,59 @@ func TestDeleteProcess(t *testing.T) {
 	}
 	if code, _ := doReq(t, ts, http.MethodDelete, "/api/v1/processes/1", "", ""); code != http.StatusConflict {
 		t.Fatalf("delete with running instance: status=%d, want 409", code)
+	}
+}
+
+// TestListInstancesIncludesCompleted deploys a process that runs straight to the
+// end (no wait point), starts it, and checks the instance list now carries it as
+// a finished instance with a completion time — the history view (ADR-0017).
+func TestListInstancesIncludesCompleted(t *testing.T) {
+	ts := newTestServer(t)
+
+	const straightThrough = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="passthrough" isExecutable="true">
+    <startEvent id="start"/>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="end"/>
+  </process>
+</definitions>`
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", straightThrough, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v (%s)", err, body)
+	}
+
+	// Starting the instance runs it to completion synchronously.
+	code, body = doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key), "{}", "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("create instance status=%d body=%s", code, body)
+	}
+
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/instances", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("list status=%d body=%s", code, body)
+	}
+	var insts []struct {
+		ProcessID        string `json:"processId"`
+		State            string `json:"state"`
+		CompletedAt      int64  `json:"completedAt"`
+		ElementInstances int    `json:"elementInstances"`
+	}
+	if err := json.Unmarshal(body, &insts); err != nil {
+		t.Fatalf("decode instances: %v (%s)", err, body)
+	}
+	if len(insts) != 1 {
+		t.Fatalf("instances = %d, want 1 (%s)", len(insts), body)
+	}
+	if insts[0].ProcessID != "passthrough" || insts[0].State != "completed" ||
+		insts[0].CompletedAt == 0 || insts[0].ElementInstances != 0 {
+		t.Fatalf("instance = %+v, want completed passthrough with a completion time and 0 tokens", insts[0])
 	}
 }
 
@@ -227,6 +282,71 @@ func TestHealthAndUI(t *testing.T) {
 	}
 	if code, body := doReq(t, ts, http.MethodGet, "/api/v1/info", "", ""); code != http.StatusOK || !strings.Contains(string(body), `"product":"Atlas"`) {
 		t.Fatalf("info status=%d body=%s", code, body)
+	}
+}
+
+// demoBPMN mirrors DEMO_BPMN in api/web/app.js: the one-click demo the UI
+// deploys. Kept in sync here so a compiler change that would reject the model
+// (or stop it parking a token) fails a test instead of a user's button click.
+const demoBPMN = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             targetNamespace="http://atlas/demo">
+  <process id="order-review" isExecutable="true">
+    <startEvent id="start" name="Order received"/>
+    <serviceTask id="review" name="Review order">
+      <extensionElements><zeebe:taskDefinition type="review" retries="3"/></extensionElements>
+    </serviceTask>
+    <serviceTask id="charge" name="Charge payment">
+      <extensionElements><zeebe:taskDefinition type="charge" retries="3"/></extensionElements>
+    </serviceTask>
+    <endEvent id="end" name="Done"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="review"/>
+    <sequenceFlow id="f2" sourceRef="review" targetRef="charge"/>
+    <sequenceFlow id="f3" sourceRef="charge" targetRef="end"/>
+  </process>
+</definitions>`
+
+// TestDeployDemoParksToken deploys the UI's demo model, starts an instance, and
+// confirms one token parks on the "review" service task — the wait point that
+// keeps the instance visible and gives the live token total something to show.
+func TestDeployDemoParksToken(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", demoBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy demo status=%d body=%s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v (%s)", err, body)
+	}
+
+	code, body = doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key), "{}", "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("create instance status=%d body=%s", code, body)
+	}
+
+	code, body = doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/processes/%d/runtime", dep.Key), "", "")
+	if code != http.StatusOK {
+		t.Fatalf("runtime status=%d body=%s", code, body)
+	}
+	var rt struct {
+		Instances int `json:"instances"`
+		Tokens    int `json:"tokens"`
+		Elements  []struct {
+			ElementID string `json:"elementId"`
+			Tokens    int    `json:"tokens"`
+		} `json:"elements"`
+	}
+	if err := json.Unmarshal(body, &rt); err != nil {
+		t.Fatalf("decode runtime: %v (%s)", err, body)
+	}
+	if rt.Instances != 1 || rt.Tokens != 1 || len(rt.Elements) != 1 ||
+		rt.Elements[0].ElementID != "review" || rt.Elements[0].Tokens != 1 {
+		t.Fatalf("runtime = %+v, want 1 instance with 1 token parked on \"review\"", rt)
 	}
 }
 

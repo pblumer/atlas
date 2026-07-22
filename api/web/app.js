@@ -30,6 +30,39 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 
 const fmtTime = (unix) => unix ? new Date(unix * 1000).toLocaleString() : "—";
 
+// A ready-to-run demo process. Its "Review order" service task creates a job
+// that no worker completes, so a token parks there and the instance stays active
+// — giving the Operations views (and the live token total) something to show
+// without hand-modelling a wait point first. The server auto-lays-out models
+// that carry no BPMN diagram interchange, so no DI is needed here.
+const DEMO_BPMN = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             targetNamespace="http://atlas/demo">
+  <process id="order-review" isExecutable="true">
+    <startEvent id="start" name="Order received"/>
+    <serviceTask id="review" name="Review order">
+      <extensionElements><zeebe:taskDefinition type="review" retries="3"/></extensionElements>
+    </serviceTask>
+    <serviceTask id="charge" name="Charge payment">
+      <extensionElements><zeebe:taskDefinition type="charge" retries="3"/></extensionElements>
+    </serviceTask>
+    <endEvent id="end" name="Done"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="review"/>
+    <sequenceFlow id="f2" sourceRef="review" targetRef="charge"/>
+    <sequenceFlow id="f3" sourceRef="charge" targetRef="end"/>
+  </process>
+</definitions>`;
+
+// deployDemo deploys DEMO_BPMN, starts one instance, and opens its live view so
+// the parked token (and the token total) is visible immediately.
+async function deployDemo() {
+  const dep = await api("POST", "/api/v1/deployments", DEMO_BPMN, true);
+  await api("POST", `/api/v1/processes/${dep.key}/instances`, {});
+  toast(`Started ${dep.processId} v${dep.version} — a token is parked on “Review order”`, "ok");
+  location.hash = `#/operations/p/${dep.key}`;
+}
+
 // ---------- Apps (Atlas naming; reference product names removed) ----------
 const APPS = [
   { id: "console", name: "Console", route: "#/console", on: true },
@@ -245,10 +278,15 @@ async function viewInstances() {
   view.innerHTML = `
     <div class="between">
       <h1>Instances</h1>
-      <button class="btn neutral" id="refresh">Refresh</button>
+      <div class="row">
+        <button class="btn" id="demo">Deploy demo</button>
+        <button class="btn neutral" id="refresh">Refresh</button>
+      </div>
     </div>
-    <p class="muted">Running process instances on this server. Each holds one or more
-    element instances (tokens) as it moves through the engine.</p>
+    <p class="muted">Process instances on this server: running ones (each holding one or
+    more element instances — tokens — as it moves through the engine), then finished ones
+    with their completion time. Start the demo to park a token on a waiting task and watch
+    the live token total.</p>
     <div class="card" style="padding:0">
       <table>
         <thead><tr><th>Instance</th><th>Process</th><th>Version</th><th>Tokens</th><th>Variables</th><th>Status</th><th></th></tr></thead>
@@ -261,30 +299,50 @@ async function viewInstances() {
       const tbody = document.getElementById("rows");
       if (!rows.length) {
         tbody.innerHTML = `<tr><td colspan="7" class="empty">
-          No running instances. Start one from the <a href="#/modeler">Modeler</a>.</td></tr>`;
+          No running instances. Click <b>Deploy demo</b> above, or start one from the
+          <a href="#/modeler">Modeler</a>.</td></tr>`;
         return;
       }
       const vars = (list) => !list || !list.length
         ? '<span class="muted">—</span>'
         : list.map((v) => `<span class="chip">${esc(v.name)}=${esc(v.value)}</span>`).join(" ");
-      tbody.innerHTML = rows.map((r) => `
-        <tr>
+      // completedAt is unix nanoseconds; Date wants milliseconds.
+      const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "";
+      const status = (r) => {
+        if (r.state === "active") {
+          return `<span class="pill ok"><span class="dot"></span>active</span>`;
+        }
+        const when = fmtNano(r.completedAt);
+        return `<span class="pill">${esc(r.state)}</span>` +
+          (when ? ` <span class="muted">${esc(when)}</span>` : "");
+      };
+      tbody.innerHTML = rows.map((r) => {
+        const done = r.state !== "active";
+        return `
+        <tr${done ? ' class="done"' : ""}>
           <td><b>${r.key}</b></td>
           <td>${r.processId
             ? `<a href="#/operations/p/${r.processDefKey}">${esc(r.processId)}</a>`
             : '<span class="muted">def ' + r.processDefKey + "</span>"}</td>
           <td>${r.version ? "v" + r.version : "—"}</td>
-          <td>${r.elementInstances}</td>
+          <td>${done ? '<span class="muted">—</span>' : r.elementInstances}</td>
           <td>${vars(r.variables)}</td>
-          <td><span class="pill ok"><span class="dot"></span>${esc(r.state)}</span></td>
-          <td style="text-align:right"><a class="btn ghost" href="#/operations/p/${r.processDefKey}">Live view</a></td>
-        </tr>`).join("");
+          <td>${status(r)}</td>
+          <td style="text-align:right"><a class="btn ghost" href="#/operations/p/${r.processDefKey}">${done ? "View" : "Live view"}</a></td>
+        </tr>`;
+      }).join("");
     } catch (e) {
       document.getElementById("rows").innerHTML =
         `<tr><td colspan="7" class="empty">${esc(e.message)}</td></tr>`;
     }
   };
   document.getElementById("refresh").addEventListener("click", load);
+  const demoBtn = document.getElementById("demo");
+  demoBtn.addEventListener("click", async () => {
+    demoBtn.disabled = true;
+    try { await deployDemo(); }
+    catch (e) { toast("demo failed: " + e.message, "err"); demoBtn.disabled = false; }
+  });
   await load();
 }
 
