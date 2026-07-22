@@ -1,0 +1,140 @@
+package api
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+)
+
+// persistedDeployment is the on-disk form of a deployed definition: the metadata
+// the UI needs plus the original BPMN XML, enough to recompile the definition and
+// render its diagram after a restart. See ADR-0019.
+type persistedDeployment struct {
+	Key        uint64 `json:"key"`
+	ProcessID  string `json:"processId"`
+	Name       string `json:"name"`
+	Version    int32  `json:"version"`
+	DeployedAt int64  `json:"deployedAt"`
+	XML        string `json:"xml"`
+}
+
+// deployStore is a small durable store for deployments, backed by one JSON file
+// per deployment under a single directory (ADR-0019). It is an interim mechanism
+// for the single-binary server, sidestepping the WAL until deployment becomes a
+// first-class event at the Milestone 4 public API. It is owned exclusively by the
+// server's run-loop goroutine, so it needs no locking of its own.
+type deployStore struct {
+	dir string
+}
+
+// newDeployStore opens (creating if needed) the deployment directory.
+func newDeployStore(dir string) (*deployStore, error) {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("deploystore: create dir: %w", err)
+	}
+	return &deployStore{dir: dir}, nil
+}
+
+// fileFor returns the record path for a definition key.
+func (d *deployStore) fileFor(key uint64) string {
+	return filepath.Join(d.dir, strconv.FormatUint(key, 10)+".json")
+}
+
+// save writes a deployment durably: encode to a temp file, fsync it, rename over
+// the target, then fsync the directory so the rename itself is durable. This is
+// the "durable before visible" discipline (I2) applied to the sidecar store — the
+// caller may treat a nil return as "on disk".
+func (d *deployStore) save(rec persistedDeployment) error {
+	data, err := json.Marshal(rec)
+	if err != nil {
+		return fmt.Errorf("deploystore: marshal: %w", err)
+	}
+	final := d.fileFor(rec.Key)
+	tmp := final + ".tmp"
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	if err != nil {
+		return fmt.Errorf("deploystore: open temp: %w", err)
+	}
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return fmt.Errorf("deploystore: write: %w", err)
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return fmt.Errorf("deploystore: sync temp: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("deploystore: close temp: %w", err)
+	}
+	if err := os.Rename(tmp, final); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("deploystore: rename: %w", err)
+	}
+	return d.syncDir()
+}
+
+// delete removes a deployment's record. A missing file is not an error, so
+// cleanup is idempotent.
+func (d *deployStore) delete(key uint64) error {
+	if err := os.Remove(d.fileFor(key)); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("deploystore: remove: %w", err)
+	}
+	return d.syncDir()
+}
+
+// syncDir fsyncs the deployment directory so a create/rename/remove of a record
+// file is itself durable.
+func (d *deployStore) syncDir() error {
+	dir, err := os.Open(d.dir)
+	if err != nil {
+		return fmt.Errorf("deploystore: open dir: %w", err)
+	}
+	defer dir.Close()
+	if err := dir.Sync(); err != nil {
+		return fmt.Errorf("deploystore: sync dir: %w", err)
+	}
+	return nil
+}
+
+// loadAll reads every deployment record, sorted by key ascending so registration
+// order (and thus assigned keys) is reconstructed deterministically. Files that
+// are not <key>.json records are ignored.
+func (d *deployStore) loadAll() ([]persistedDeployment, error) {
+	entries, err := os.ReadDir(d.dir)
+	if err != nil {
+		return nil, fmt.Errorf("deploystore: read dir: %w", err)
+	}
+	var out []persistedDeployment
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasSuffix(name, ".json") {
+			continue
+		}
+		// Skip anything whose stem is not a plain key (e.g. leftover *.tmp is
+		// already excluded by the suffix check; a stray README.json is skipped).
+		if _, err := strconv.ParseUint(strings.TrimSuffix(name, ".json"), 10, 64); err != nil {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(d.dir, name))
+		if err != nil {
+			return nil, fmt.Errorf("deploystore: read %s: %w", name, err)
+		}
+		var rec persistedDeployment
+		if err := json.Unmarshal(data, &rec); err != nil {
+			return nil, fmt.Errorf("deploystore: decode %s: %w", name, err)
+		}
+		out = append(out, rec)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	return out, nil
+}

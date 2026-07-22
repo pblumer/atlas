@@ -126,7 +126,10 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration) error {
 		return err
 	}
 
-	srv := api.New(proc, store)
+	srv, err := api.New(proc, store, filepath.Join(dataDir, "deployments"))
+	if err != nil {
+		return err
+	}
 	defer srv.Close()
 
 	// Mount the MCP "Streamable HTTP" transport at /mcp alongside the API and UI,

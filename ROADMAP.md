@@ -149,7 +149,11 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   The `/mcp` endpoint is unauthenticated — front it with a reverse proxy before
   exposing it publicly.
 - 🔲 Full properties panel (would vendor a pre-bundled `bpmn-js-properties-panel`).
-- 🔲 Durable deployments (depends on the Milestone 4 public API persisting them).
+- ✅ Durable deployments ([ADR-0019](docs/adr/0019-durable-deployments.md)): the
+  server persists each deployment (XML + metadata) to an on-disk sidecar store and
+  reloads it on startup, re-registering definitions with the processor — so
+  diagrams, versions, and recovered instances survive a restart. An interim
+  mechanism until the Milestone 4 public API makes deploy a first-class event.
 - 🔲 Later: a polished "workbench" experience on top.
 
 ---

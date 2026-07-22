@@ -36,7 +36,10 @@ func newServerForErrors(t *testing.T) *Server {
 	if err := proc.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	srv := New(proc, store)
+	srv, err := New(proc, store, filepath.Join(dir, "deployments"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 	t.Cleanup(func() {
 		srv.Close()
 		_ = store.Close()
@@ -92,7 +95,10 @@ func TestDoAfterCloseIsNoop(t *testing.T) {
 		_ = log.Close()
 	})
 
-	srv := New(proc, store)
+	srv, err := New(proc, store, filepath.Join(dir, "deployments"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 	srv.Close() // stop the loop
 
 	ran := false
