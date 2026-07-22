@@ -45,7 +45,10 @@ func newAtlas(t *testing.T) *httptest.Server {
 	if err := proc.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	srv := api.New(proc, store)
+	srv, err := api.New(proc, store, filepath.Join(dir, "deployments"))
+	if err != nil {
+		t.Fatalf("api.New: %v", err)
+	}
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(func() {
 		ts.Close()

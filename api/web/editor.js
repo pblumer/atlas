@@ -41,22 +41,32 @@ function newModeler(BpmnJS, zeebe, container) {
   return new BpmnJS({ container, moddleExtensions: { zeebe } });
 }
 
-const BLANK = `<?xml version="1.0" encoding="UTF-8"?>
+// blankXML builds an empty diagram with a UNIQUE process id. The process id is
+// the identity deployments and instances are grouped by (see the Details panel),
+// so a fixed "Process_new" would make every new diagram a silent new *version* of
+// the same process — the previous diagram would appear lost. A per-diagram id
+// keeps distinct diagrams distinct; re-opening a deployment and redeploying still
+// reuses its id, which is the intended way to cut a new version.
+function blankXML() {
+  const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const pid = `Process_${suffix}`;
+  return `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
   xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
-  id="Definitions_new" targetNamespace="http://atlas/bpmn">
-  <bpmn:process id="Process_new" isExecutable="true">
+  id="Definitions_${suffix}" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="${pid}" isExecutable="true">
     <bpmn:startEvent id="StartEvent_1" name="Start"/>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
-    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_new">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="${pid}">
       <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
         <dc:Bounds x="180" y="160" width="36" height="36"/>
       </bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
+}
 
 let current; // active modeler/viewer, destroyed on remount
 let liveTimer; // active live-overlay poll, cleared on remount/leave
@@ -122,7 +132,7 @@ export async function mountEditor(root, { api, toast, key }) {
   // Load content.
   try {
     if (key == null) {
-      await modeler.importXML(BLANK);
+      await modeler.importXML(blankXML());
     } else {
       const xml = await api("GET", `/api/v1/processes/${key}/xml`);
       await modeler.importXML(typeof xml === "string" ? xml : String(xml));

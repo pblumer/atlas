@@ -67,7 +67,7 @@ Making processes wait, react, and time out.
   carrying an optional variable payload into the woken instance. Recovery-tested
   (an open subscription is restored from the log and correlates afterward).
   Message buffering, message start/boundary events, and cross-partition
-  correlation still to come (ADR-0019).
+  correlation still to come (ADR-0020).
 - 🔲 Signal events (broadcast)
 - 🔲 Error events and error propagation
 - 🔲 Boundary events: interrupting and non-interrupting
@@ -156,7 +156,11 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   The `/mcp` endpoint is unauthenticated — front it with a reverse proxy before
   exposing it publicly.
 - 🔲 Full properties panel (would vendor a pre-bundled `bpmn-js-properties-panel`).
-- 🔲 Durable deployments (depends on the Milestone 4 public API persisting them).
+- ✅ Durable deployments ([ADR-0019](docs/adr/0019-durable-deployments.md)): the
+  server persists each deployment (XML + metadata) to an on-disk sidecar store and
+  reloads it on startup, re-registering definitions with the processor — so
+  diagrams, versions, and recovered instances survive a restart. An interim
+  mechanism until the Milestone 4 public API makes deploy a first-class event.
 - 🔲 Later: a polished "workbench" experience on top.
 
 ---

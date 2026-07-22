@@ -36,7 +36,10 @@ func newServerForErrors(t *testing.T) *Server {
 	if err := proc.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	srv := New(proc, store)
+	srv, err := New(proc, store, filepath.Join(dir, "deployments"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 	t.Cleanup(func() {
 		srv.Close()
 		_ = store.Close()
@@ -57,6 +60,7 @@ func TestReadBodyErrors(t *testing.T) {
 	}{
 		{"deploy", "/api/v1/deployments"},
 		{"create instance", "/api/v1/processes/1/instances"},
+		{"publish message", "/api/v1/messages"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -92,7 +96,10 @@ func TestDoAfterCloseIsNoop(t *testing.T) {
 		_ = log.Close()
 	})
 
-	srv := New(proc, store)
+	srv, err := New(proc, store, filepath.Join(dir, "deployments"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 	srv.Close() // stop the loop
 
 	ran := false

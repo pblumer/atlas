@@ -120,7 +120,7 @@ type TimerCatchDetail struct {
 // shared by the message intermediate catch and throw events. MessageName is the
 // message's name (a subscription matches on it); CorrelationKey is the FEEL
 // expression compiled once at deploy time (ADR-0015) that each side evaluates
-// over its own variables to produce the correlation key (ADR-0019).
+// over its own variables to produce the correlation key (ADR-0020).
 type MessageDetail struct {
 	MessageName    string
 	CorrelationKey *expr.Compiled

@@ -266,7 +266,7 @@ func (timerCatchEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei
 // it evaluates its correlation-key expression over the instance's variables,
 // opens a subscription on (message name, key), and waits (stays Activated). A
 // later publish or throw that matches correlates the subscription, which drives
-// the element to complete and take its outgoing flows (ADR-0019). The key is
+// the element to complete and take its outgoing flows (ADR-0020). The key is
 // evaluated here (command processing) and frozen into the SubscriptionCreated
 // event; applyToState never re-evaluates it (invariant I6).
 type messageCatchEventBehavior struct{}
@@ -292,7 +292,7 @@ func (messageCatchEventBehavior) OnCompleting(c *ProcessingContext, key uint64, 
 // variables and correlates — waking any instance already waiting on that (name,
 // key) — then completes and takes its outgoing flows. Producing and consuming a
 // message share one path (correlateMessage), so a throw event and an API publish
-// behave identically (ADR-0019).
+// behave identically (ADR-0020).
 type messageThrowEventBehavior struct{}
 
 func (messageThrowEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
@@ -327,7 +327,7 @@ func evalCorrelationKey(c *ProcessingContext, e *expr.Compiled, scope uint64) st
 // payload variables into that instance's scope, and commands the waiting element
 // instance to complete. Matches are collected before any mutation so retiring a
 // subscription can't disturb the scan. A message that matches nothing is a no-op
-// — there is no buffering yet (ADR-0019).
+// — there is no buffering yet (ADR-0020).
 func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []model.VariableValue) {
 	type match struct {
 		elKey uint64

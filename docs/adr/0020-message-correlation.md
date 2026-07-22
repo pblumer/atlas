@@ -1,4 +1,4 @@
-# ADR-0019: Message events and correlation
+# ADR-0020: Message events and correlation
 
 - **Status:** Accepted
 - **Date:** 2026-07-22

@@ -103,8 +103,9 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var (
-		resp    deployResp
-		compErr error
+		resp       deployResp
+		compErr    error
+		persistErr error
 	)
 	s.do(func() {
 		cp, err := compiler.Parse(s.nextKey, 1, bytes.NewReader(body))
@@ -114,17 +115,34 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		}
 		pid := cp.Intern(cp.BpmnProcessId)
 		version := s.versions[pid] + 1
-		s.versions[pid] = version
 		cp.Version = version
-
 		key := s.nextKey
+		name := processName(body)
+		deployedAt := time.Now().Unix()
+
+		// Durable before visible (I2, ADR-0019): persist the deployment to the
+		// sidecar store before registering it in memory or with the processor. If
+		// the write fails, nothing becomes visible and no key is consumed.
+		if err := s.deploys.save(persistedDeployment{
+			Key:        key,
+			ProcessID:  pid,
+			Name:       name,
+			Version:    version,
+			DeployedAt: deployedAt,
+			XML:        string(body),
+		}); err != nil {
+			persistErr = err
+			return
+		}
+
+		s.versions[pid] = version
 		s.proc.Deploy(cp)
 		s.deployments[key] = &deployment{
 			Key:        key,
 			ProcessID:  pid,
-			Name:       processName(body),
+			Name:       name,
 			Version:    version,
-			DeployedAt: time.Now().Unix(),
+			DeployedAt: deployedAt,
 			xml:        body,
 			cp:         cp,
 		}
@@ -132,12 +150,15 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		s.nextKey++
 		resp = deployResp{Key: key, ProcessID: pid, Version: version}
 	})
-	if compErr != nil {
+	switch {
+	case compErr != nil:
 		// A compile failure is a client error: the submitted model is invalid.
 		writeError(w, http.StatusBadRequest, compErr.Error())
-		return
+	case persistErr != nil:
+		writeError(w, http.StatusInternalServerError, "persist deployment: "+persistErr.Error())
+	default:
+		writeJSON(w, http.StatusOK, resp)
 	}
-	writeJSON(w, http.StatusOK, resp)
 }
 
 // handleListProcesses lists deployed definitions in registration order.
@@ -191,9 +212,10 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var (
-		found   bool
-		running int
-		scanErr error
+		found      bool
+		running    int
+		scanErr    error
+		persistErr error
 	)
 	s.do(func() {
 		if _, ok := s.deployments[key]; !ok {
@@ -207,6 +229,12 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 			return nil
 		})
 		if scanErr != nil || running > 0 {
+			return
+		}
+		// Durable before visible (I2, ADR-0019): remove the on-disk record first,
+		// so a deletion that is acknowledged never reappears on restart.
+		if err := s.deploys.delete(key); err != nil {
+			persistErr = err
 			return
 		}
 		s.proc.Undeploy(key)
@@ -225,6 +253,8 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "check instances: "+scanErr.Error())
 	case running > 0:
 		writeError(w, http.StatusConflict, fmt.Sprintf("cannot delete: %d running instance(s); cancel them first", running))
+	case persistErr != nil:
+		writeError(w, http.StatusInternalServerError, "remove deployment: "+persistErr.Error())
 	default:
 		w.WriteHeader(http.StatusNoContent)
 	}
@@ -505,7 +535,7 @@ type publishMessageResp struct {
 // optional payload variables, then runs the processor to idle so any waiting
 // instance advances. It correlates against open subscriptions through the engine;
 // a message that matches nothing is accepted as a no-op (no buffering yet,
-// ADR-0019). Body: {"name","correlationKey","variables":{…}}.
+// ADR-0020). Body: {"name","correlationKey","variables":{…}}.
 func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {

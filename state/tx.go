@@ -197,7 +197,7 @@ func (t *Tx) DeleteMessageSubscription(v *model.MessageSubscriptionValue) error 
 // CorrelatableSubscriptions calls fn for every open subscription matching the
 // given (message name, correlation key), via a prefix scan — the publish access
 // pattern. It reads through the in-flight batch, so it observes subscriptions
-// created earlier in the same batch (ADR-0019).
+// created earlier in the same batch (ADR-0020).
 func (t *Tx) CorrelatableSubscriptions(name, correlationKey string, fn func(elKey uint64, v *model.MessageSubscriptionValue) error) error {
 	prefix := messageSubscriptionPrefix(name, correlationKey)
 	iter, err := t.b.NewIter(&pebble.IterOptions{LowerBound: prefix, UpperBound: prefixEnd(prefix)})

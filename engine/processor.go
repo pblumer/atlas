@@ -107,7 +107,7 @@ func (p *Processor) CompleteJob(jobKey uint64) {
 // correlation key, optionally carrying payload variables that are written into
 // every correlated instance's scope. It correlates against open subscriptions
 // through the same path a message throw event uses; a message that matches no
-// subscription is a no-op (no buffering yet, ADR-0019). Call RunUntilIdle to
+// subscription is a no-op (no buffering yet, ADR-0020). Call RunUntilIdle to
 // process it.
 func (p *Processor) PublishMessage(name, correlationKey string, vars ...model.VariableValue) {
 	p.queue = append(p.queue, Command{

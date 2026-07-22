@@ -239,7 +239,7 @@ func (v *VariableValue) decode(src []byte) error {
 // correlation key matches. Like a variable it carries genuine runtime data (the
 // message name and the evaluated correlation key), so its encoding is
 // length-prefixed rather than fixed-size. The (MessageName, CorrelationKey) pair
-// is the match key a publish scans for; see ADR-0019.
+// is the match key a publish scans for; see ADR-0020.
 type MessageSubscriptionValue struct {
 	ProcessInstanceKey uint64
 	ElementInstanceKey uint64
