@@ -61,6 +61,24 @@ func (c *ProcessingContext) GetVariable(scope uint64, name string) *model.Variab
 	return v
 }
 
+// ForEachElementInstance calls fn with the key of every element instance
+// belonging to a process instance, via the committed elByProc index. Keys are
+// collected before fn runs so fn may mutate element-instance state (e.g. emit
+// terminations) without disturbing the scan.
+func (c *ProcessingContext) ForEachElementInstance(procKey uint64, fn func(elKey uint64)) {
+	var keys []uint64
+	if err := c.p.store.ElementInstancesOfProcess(procKey, func(k uint64) error {
+		keys = append(keys, k)
+		return nil
+	}); err != nil {
+		c.p.fail(err)
+		return
+	}
+	for _, k := range keys {
+		fn(k)
+	}
+}
+
 // ActiveChildren returns the active-child count of a scope (e.g. to detect that
 // a process instance has finished).
 func (c *ProcessingContext) ActiveChildren(scope uint64) int32 {

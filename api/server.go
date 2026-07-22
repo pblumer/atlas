@@ -129,7 +129,9 @@ func (s *Server) loadDeployments() error {
 		return err
 	}
 	for _, rec := range recs {
-		cp, err := compiler.Parse(rec.Key, rec.Version, bytes.NewReader([]byte(rec.XML)))
+		// Recompile exactly the process this record represents (a collaboration's
+		// XML holds several), keyed as originally assigned (ADR-0019/0022).
+		cp, err := compiler.ParseNamed(rec.Key, rec.Version, bytes.NewReader([]byte(rec.XML)), rec.ProcessID)
 		if err != nil {
 			// A stored model that no longer compiles is a hard, actionable error
 			// rather than a silently dropped definition (ADR-0019).
@@ -230,6 +232,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/processes/{key}/runtime", s.handleProcessRuntime)
 	mux.HandleFunc("POST /api/v1/processes/{key}/instances", s.handleCreateInstance)
 	mux.HandleFunc("GET /api/v1/instances", s.handleListInstances)
+	mux.HandleFunc("DELETE /api/v1/instances/{key}", s.handleCancelInstance)
 	mux.HandleFunc("POST /api/v1/messages", s.handlePublishMessage)
 	mux.HandleFunc("GET /api/v1/stats", s.handleStats)
 

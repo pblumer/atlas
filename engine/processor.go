@@ -103,6 +103,19 @@ func (p *Processor) CompleteJob(jobKey uint64) {
 	})
 }
 
+// CancelInstance enqueues termination of a running process instance: every
+// active element instance is terminated and the instance is recorded as
+// terminated in history (ADR-0017). Any timer/subscription/job the instance left
+// waiting is self-retiring — when it later fires or correlates it finds no
+// element and does nothing. Call RunUntilIdle to process it.
+func (p *Processor) CancelInstance(piKey uint64) {
+	p.queue = append(p.queue, Command{
+		Key:       piKey,
+		ValueType: model.VTProcessInstance,
+		Intent:    model.IntentTerminating,
+	})
+}
+
 // PublishMessage enqueues publication of a message with the given name and
 // correlation key, optionally carrying payload variables that are written into
 // every correlated instance's scope. It correlates against open subscriptions

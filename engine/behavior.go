@@ -25,12 +25,13 @@ func handlerKey(vt model.ValueType, intent model.Intent) uint16 {
 
 func (p *Processor) registerHandlers() {
 	p.handlers = map[uint16]func(*ProcessingContext){
-		handlerKey(model.VTProcessInstance, model.IntentActivating): handleProcessInstanceActivating,
-		handlerKey(model.VTElementInstance, model.IntentActivating): handleElementActivating,
-		handlerKey(model.VTElementInstance, model.IntentCompleting): handleElementCompleting,
-		handlerKey(model.VTJob, model.IntentJobCompleted):           handleJobCompleted,
-		handlerKey(model.VTTimer, model.IntentTimerTriggered):       handleTimerTriggered,
-		handlerKey(model.VTMessage, model.IntentMessagePublished):   handleMessagePublished,
+		handlerKey(model.VTProcessInstance, model.IntentActivating):  handleProcessInstanceActivating,
+		handlerKey(model.VTProcessInstance, model.IntentTerminating): handleProcessInstanceTerminating,
+		handlerKey(model.VTElementInstance, model.IntentActivating):  handleElementActivating,
+		handlerKey(model.VTElementInstance, model.IntentCompleting):  handleElementCompleting,
+		handlerKey(model.VTJob, model.IntentJobCompleted):            handleJobCompleted,
+		handlerKey(model.VTTimer, model.IntentTimerTriggered):        handleTimerTriggered,
+		handlerKey(model.VTMessage, model.IntentMessagePublished):    handleMessagePublished,
 	}
 }
 
@@ -73,6 +74,26 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 			BpmnElementType:    uint8(node.Type),
 		})
 	}
+}
+
+// handleProcessInstanceTerminating cancels a running instance: it terminates
+// every active element instance (each Terminated event deletes the element and
+// decrements its scope's child counter) and then records the instance itself as
+// terminated, moving it to the history index. A waiting timer/subscription/job is
+// left to self-retire when it next fires (it finds no element instance and does
+// nothing). Terminating an instance that is already gone is a no-op.
+func handleProcessInstanceTerminating(c *ProcessingContext) {
+	piKey := c.cmd.Key
+	pi := c.GetProcessInstance(piKey)
+	if pi == nil {
+		return
+	}
+	c.ForEachElementInstance(piKey, func(elKey uint64) {
+		if ei := c.GetElementInstance(elKey); ei != nil {
+			c.AppendElementEvent(elKey, model.IntentTerminated, *ei)
+		}
+	})
+	c.AppendProcessInstanceEvent(piKey, model.IntentTerminated, *pi)
 }
 
 // handleElementActivating emits the Activated lifecycle event, then runs the

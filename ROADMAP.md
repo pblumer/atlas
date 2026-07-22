@@ -78,6 +78,14 @@ Making processes wait, react, and time out.
 
 Composition and reuse.
 
+- ✅ **Collaborations & pools** (participants): a `<collaboration>` deploys one
+  runnable definition per pool (each executable `<process>`), keyed and versioned
+  independently and reloadable after a restart; a black-box pool (no process) is
+  allowed. The pools' runtime link is message correlation (Milestone 2) — a
+  message flow is the diagram's depiction of a message catch/throw pair. The
+  viewer auto-lays-out DI-less collaborations as stacked pools; the editor
+  authors pools, message flows, and pool names (ADR-0023). Atomic multi-pool
+  deploy and message-flow validation still to come.
 - 🔲 Embedded subprocesses (scope lifecycle via child counters)
 - 🔲 Event subprocesses (interrupting and non-interrupting)
 - 🔲 Call activities (single-partition)

@@ -25,28 +25,110 @@ const defaultRetries = 3
 // (<zeebe:taskDefinition type="..." retries="..."/>), the de-facto standard for
 // executable BPMN.
 func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
-	var defs xmlDefinitions
-	if err := xml.NewDecoder(r).Decode(&defs); err != nil {
-		return nil, fmt.Errorf("compiler: parse BPMN: %w", err)
+	defs, err := decodeDefinitions(r)
+	if err != nil {
+		return nil, err
 	}
 	if len(defs.Processes) == 0 {
 		return nil, fmt.Errorf("compiler: no <process> element in definitions")
 	}
-	proc := defs.Processes[0]
+	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs))
+}
 
-	// Messages are declared at the <definitions> level and referenced by a
-	// message event's <messageEventDefinition messageRef="…">. Index them by id so
-	// catch/throw events can resolve their name and correlation-key expression.
+// Deployable is one executable process compiled from a model, plus the display
+// metadata a collaboration provides. PoolName is the participant (pool) name that
+// references the process — "" for a standalone <process> outside any
+// <collaboration>; ProcessName is the process's own name attribute.
+type Deployable struct {
+	Process     *CompiledProcess
+	PoolName    string
+	ProcessName string
+}
+
+// ParseAll compiles every executable process in a model — the collaboration case,
+// where a <collaboration> has several <participant> pools, each referencing a
+// <process>. A process is executable (and thus returned) iff it has a start
+// event; a participant whose process is a black box (no start event, or none) is
+// skipped rather than erroring, since a message-flow counterpart pool is often
+// left unmodeled. The i-th executable process (document order) is keyed baseKey+i,
+// so a caller assigning keys sequentially advances its counter by len(result). It
+// errors only if the model has no executable process at all.
+func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) {
+	defs, err := decodeDefinitions(r)
+	if err != nil {
+		return nil, err
+	}
+	resolve := buildMessageResolver(defs)
+	poolName := participantNames(defs)
+
+	var out []Deployable
+	for _, proc := range defs.Processes {
+		if len(proc.StartEvents) == 0 {
+			continue // black-box pool: nothing to run
+		}
+		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, Deployable{Process: cp, PoolName: poolName[proc.Id], ProcessName: proc.Name})
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("compiler: no executable <process> (a process needs a start event)")
+	}
+	return out, nil
+}
+
+// ParseNamed compiles the single process with the given BPMN process id. It is
+// the reload path: a stored deployment records which process (by id) within its
+// (possibly collaboration) XML it represents, so recovery recompiles exactly that
+// one under its original key.
+func ParseNamed(key uint64, version int32, r io.Reader, processId string) (*CompiledProcess, error) {
+	defs, err := decodeDefinitions(r)
+	if err != nil {
+		return nil, err
+	}
+	for _, proc := range defs.Processes {
+		if proc.Id == processId {
+			return compileProcess(key, version, proc, buildMessageResolver(defs))
+		}
+	}
+	return nil, fmt.Errorf("compiler: no <process> with id %q in model", processId)
+}
+
+func decodeDefinitions(r io.Reader) (xmlDefinitions, error) {
+	var defs xmlDefinitions
+	if err := xml.NewDecoder(r).Decode(&defs); err != nil {
+		return xmlDefinitions{}, fmt.Errorf("compiler: parse BPMN: %w", err)
+	}
+	return defs, nil
+}
+
+// participantNames maps each referenced process id to its participant (pool) name.
+func participantNames(defs xmlDefinitions) map[string]string {
+	if defs.Collaboration == nil {
+		return nil
+	}
+	m := make(map[string]string, len(defs.Collaboration.Participants))
+	for _, p := range defs.Collaboration.Participants {
+		if p.ProcessRef != "" {
+			m[p.ProcessRef] = p.Name
+		}
+	}
+	return m
+}
+
+// buildMessageResolver indexes a model's top-level <message> declarations and
+// returns a resolver from a messageRef to the message's name and its compiled
+// correlation-key expression. An empty correlation key compiles to nil, which
+// evaluates to "" — matching only publishes with an empty key.
+func buildMessageResolver(defs xmlDefinitions) func(ownerId, messageRef string) (string, *expr.Compiled, error) {
 	messages := make(map[string]xmlMessage, len(defs.Messages))
 	for _, m := range defs.Messages {
 		if m.Id != "" {
 			messages[m.Id] = m
 		}
 	}
-	// resolveMessage turns a messageRef into the message name and its compiled
-	// correlation-key expression. An empty correlation key compiles to nil, which
-	// evaluates to "" — matching only publishes with an empty key.
-	resolveMessage := func(ownerId, messageRef string) (string, *expr.Compiled, error) {
+	return func(ownerId, messageRef string) (string, *expr.Compiled, error) {
 		m, ok := messages[messageRef]
 		if !ok {
 			return "", nil, fmt.Errorf("compiler: message event %q references unknown message %q", ownerId, messageRef)
@@ -64,7 +146,12 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 		}
 		return m.Name, keyExpr, nil
 	}
+}
 
+// compileProcess linearizes one <process> into an immutable CompiledProcess,
+// resolving message references through resolveMessage (shared across a
+// collaboration's processes).
+func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error)) (*CompiledProcess, error) {
 	b := NewBuilder(key, proc.Id, version)
 	ids := make(map[string]int32, len(proc.StartEvents)+len(proc.ServiceTasks)+len(proc.EndEvents))
 	register := func(id string, nodeID int32) error {
@@ -257,8 +344,22 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 // (bpmn:, zeebe:) are handled transparently by encoding/xml.
 
 type xmlDefinitions struct {
-	Processes []xmlProcess `xml:"process"`
-	Messages  []xmlMessage `xml:"message"`
+	Processes     []xmlProcess      `xml:"process"`
+	Messages      []xmlMessage      `xml:"message"`
+	Collaboration *xmlCollaboration `xml:"collaboration"`
+}
+
+// A collaboration groups participant pools. Each participant references the
+// <process> it contains; the participant carries the pool's display name (a
+// process in a collaboration is often unnamed, the pool is what's labelled).
+type xmlCollaboration struct {
+	Participants []xmlParticipant `xml:"participant"`
+}
+
+type xmlParticipant struct {
+	Id         string `xml:"id,attr"`
+	Name       string `xml:"name,attr"`
+	ProcessRef string `xml:"processRef,attr"`
 }
 
 // A top-level message declaration. Its Zeebe subscription carries the FEEL
@@ -279,6 +380,7 @@ type xmlMessageEventDefinition struct {
 
 type xmlProcess struct {
 	Id                string                `xml:"id,attr"`
+	Name              string                `xml:"name,attr"`
 	StartEvents       []xmlNode             `xml:"startEvent"`
 	EndEvents         []xmlNode             `xml:"endEvent"`
 	ServiceTasks      []xmlServiceTask      `xml:"serviceTask"`

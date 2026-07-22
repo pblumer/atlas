@@ -19,10 +19,23 @@ import (
 // bound, not a tuning knob.
 const maxXMLBytes = 4 << 20 // 4 MiB
 
-type deployResp struct {
+// deployedProcess is one process registered by a deployment. A collaboration
+// deploys several (one per executable pool); a plain model deploys one.
+type deployedProcess struct {
 	Key       uint64 `json:"key"`
 	ProcessID string `json:"processId"`
+	Name      string `json:"name"`
 	Version   int32  `json:"version"`
+}
+
+// deployResp echoes the first deployed process flat (single-process clients read
+// key/processId/version) and lists every process the model deployed, so a
+// collaboration surfaces all its pools.
+type deployResp struct {
+	Key         uint64            `json:"key"`
+	ProcessID   string            `json:"processId"`
+	Version     int32             `json:"version"`
+	Deployments []deployedProcess `json:"deployments"`
 }
 
 type processResp struct {
@@ -31,12 +44,6 @@ type processResp struct {
 	Name       string `json:"name"`
 	Version    int32  `json:"version"`
 	DeployedAt int64  `json:"deployedAt"`
-}
-
-// processName extracts the first <process name="…"> from BPMN XML, for display.
-func processName(body []byte) string {
-	_, name := processIdentity(body)
-	return name
 }
 
 // processIdentity extracts the first process element's id and name from BPMN XML.
@@ -94,13 +101,23 @@ type createInstanceResp struct {
 	Stats         statsResp `json:"stats"`
 }
 
+type cancelInstanceResp struct {
+	InstanceKey uint64    `json:"instanceKey"`
+	State       string    `json:"state"`
+	Stats       statsResp `json:"stats"`
+}
+
 // handleInfo reports product/version metadata for the UI shell.
 func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, infoResp{Product: "Atlas", Version: Version})
 }
 
-// handleDeploy parses a BPMN XML body, compiles and deploys it, and returns the
-// assigned definition key, process id, and version.
+// handleDeploy parses a BPMN XML body, compiles and deploys every executable
+// process it contains — one for a plain model, several for a collaboration (one
+// per pool) — and returns the assigned key/id/version for each. Each pool's
+// process becomes its own runnable definition; the message flows between pools
+// are the diagram's counterpart of the message events that link them at runtime
+// (ADR-0023).
 func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
@@ -118,47 +135,64 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		persistErr error
 	)
 	s.do(func() {
-		cp, err := compiler.Parse(s.nextKey, 1, bytes.NewReader(body))
+		deployables, err := compiler.ParseAll(s.nextKey, 1, bytes.NewReader(body))
 		if err != nil {
 			compErr = err
 			return
 		}
-		pid := cp.Intern(cp.BpmnProcessId)
-		version := s.versions[pid] + 1
-		cp.Version = version
-		key := s.nextKey
-		name := processName(body)
 		deployedAt := time.Now().Unix()
+		deployed := make([]deployedProcess, 0, len(deployables))
+		for i := range deployables {
+			cp := deployables[i].Process
+			pid := cp.Intern(cp.BpmnProcessId)
+			version := s.versions[pid] + 1
+			cp.Version = version
+			key := cp.Key // ParseAll assigned s.nextKey+i in document order
+			// A pool's name labels its process; fall back to the process's own name.
+			name := deployables[i].PoolName
+			if name == "" {
+				name = deployables[i].ProcessName
+			}
 
-		// Durable before visible (I2, ADR-0019): persist the deployment to the
-		// sidecar store before registering it in memory or with the processor. If
-		// the write fails, nothing becomes visible and no key is consumed.
-		if err := s.deploys.save(persistedDeployment{
-			Key:        key,
-			ProcessID:  pid,
-			Name:       name,
-			Version:    version,
-			DeployedAt: deployedAt,
-			XML:        string(body),
-		}); err != nil {
-			persistErr = err
-			return
-		}
+			// Durable before visible (I2, ADR-0019): persist before registering. A
+			// mid-collaboration failure leaves earlier pools deployed (no rollback
+			// yet) and returns 500 — an honest limitation until deployment is a
+			// first-class WAL event (ADR-0023).
+			if err := s.deploys.save(persistedDeployment{
+				Key:        key,
+				ProcessID:  pid,
+				Name:       name,
+				Version:    version,
+				DeployedAt: deployedAt,
+				XML:        string(body),
+			}); err != nil {
+				persistErr = err
+				return
+			}
 
-		s.versions[pid] = version
-		s.proc.Deploy(cp)
-		s.deployments[key] = &deployment{
-			Key:        key,
-			ProcessID:  pid,
-			Name:       name,
-			Version:    version,
-			DeployedAt: deployedAt,
-			xml:        body,
-			cp:         cp,
+			s.versions[pid] = version
+			s.proc.Deploy(cp)
+			s.deployments[key] = &deployment{
+				Key:        key,
+				ProcessID:  pid,
+				Name:       name,
+				Version:    version,
+				DeployedAt: deployedAt,
+				xml:        body,
+				cp:         cp,
+			}
+			s.order = append(s.order, key)
+			if key >= s.nextKey {
+				s.nextKey = key + 1
+			}
+			deployed = append(deployed, deployedProcess{Key: key, ProcessID: pid, Name: name, Version: version})
 		}
-		s.order = append(s.order, key)
-		s.nextKey++
-		resp = deployResp{Key: key, ProcessID: pid, Version: version}
+		resp = deployResp{
+			Key:         deployed[0].Key,
+			ProcessID:   deployed[0].ProcessID,
+			Version:     deployed[0].Version,
+			Deployments: deployed,
+		}
 	})
 	switch {
 	case compErr != nil:
@@ -613,6 +647,56 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
 	default:
 		writeJSON(w, http.StatusOK, publishMessageResp{Name: payload.Name, CorrelationKey: payload.CorrelationKey, Stats: stats})
+	}
+}
+
+// handleCancelInstance terminates a running process instance: it terminates
+// every active element instance and records the instance as terminated in
+// history, so it disappears from the running list and the live overlay and shows
+// as "terminated" in the finished list. Useful for a stuck instance (e.g. one
+// parked on a wait that will never complete). 404 if no active instance has the
+// key. Returns the resulting live counts.
+func (s *Server) handleCancelInstance(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid instance key")
+		return
+	}
+	var (
+		found   bool
+		scanErr error
+		runErr  error
+		statErr error
+		stats   statsResp
+	)
+	s.do(func() {
+		scanErr = s.store.ActiveProcessInstances(func(k uint64, _ *model.ProcessInstanceValue) error {
+			if k == key {
+				found = true
+			}
+			return nil
+		})
+		if scanErr != nil || !found {
+			return
+		}
+		s.proc.CancelInstance(key)
+		if err := s.proc.RunUntilIdle(); err != nil {
+			runErr = err
+			return
+		}
+		stats, statErr = s.readStats()
+	})
+	switch {
+	case scanErr != nil:
+		writeError(w, http.StatusInternalServerError, "find instance: "+scanErr.Error())
+	case !found:
+		writeError(w, http.StatusNotFound, "no active instance with that key")
+	case runErr != nil:
+		writeError(w, http.StatusInternalServerError, "cancel instance: "+runErr.Error())
+	case statErr != nil:
+		writeError(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
+	default:
+		writeJSON(w, http.StatusOK, cancelInstanceResp{InstanceKey: key, State: "terminated", Stats: stats})
 	}
 }
 

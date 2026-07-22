@@ -30,6 +30,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0020](0020-message-correlation.md) | Message events and correlation | Accepted |
 | [0021](0021-diagram-drafts.md) | Diagram drafts, separate from deployments | Accepted |
 | [0022](0022-element-visit-history.md) | Retain a per-element token-visit history for the Operations overlay | Accepted |
+| [0023](0023-collaborations-and-pools.md) | Collaborations and pools as multi-process deployments | Accepted |
 
 ## Status values
 
