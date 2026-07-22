@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pblumer/atlas/api"
 	"github.com/pblumer/atlas/engine"
@@ -249,6 +250,78 @@ func TestListInstancesIncludesCompleted(t *testing.T) {
 	if insts[0].ProcessID != "passthrough" || insts[0].State != "completed" ||
 		insts[0].CompletedAt == 0 || insts[0].ElementInstances != 0 {
 		t.Fatalf("instance = %+v, want completed passthrough with a completion time and 0 tokens", insts[0])
+	}
+}
+
+// TestHistorySweepPurgesViaServer wires retention through the server: with a
+// tiny window and a background sweep, a finished instance is dropped from the
+// instances list without any manual purge call (ADR-0018).
+func TestHistorySweepPurgesViaServer(t *testing.T) {
+	dir := t.TempDir()
+	wl, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open: %v", err)
+	}
+	store, err := state.Open(filepath.Join(dir, "state"))
+	if err != nil {
+		t.Fatalf("state.Open: %v", err)
+	}
+	proc := engine.New(1, wl, store, nil)
+	if err := proc.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	proc.SetHistoryRetention(time.Nanosecond) // anything already completed is expired
+	srv := api.New(proc, store)
+	srv.StartHistorySweep(5 * time.Millisecond)
+	ts := httptest.NewServer(srv.Handler())
+	t.Cleanup(func() {
+		ts.Close()
+		srv.Close()
+		_ = store.Close()
+		_ = wl.Close()
+	})
+
+	const passthrough = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="passthrough" isExecutable="true">
+    <startEvent id="start"/>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="end"/>
+  </process>
+</definitions>`
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", passthrough, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v (%s)", err, body)
+	}
+	if code, body := doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key), "{}", "application/json"); code != http.StatusOK {
+		t.Fatalf("create instance status=%d body=%s", code, body)
+	}
+
+	// The sweep runs every 5ms; poll generously for the completed instance to
+	// disappear from the list.
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		code, body := doReq(t, ts, http.MethodGet, "/api/v1/instances", "", "")
+		if code != http.StatusOK {
+			t.Fatalf("list status=%d body=%s", code, body)
+		}
+		var insts []struct{}
+		if err := json.Unmarshal(body, &insts); err != nil {
+			t.Fatalf("decode instances: %v (%s)", err, body)
+		}
+		if len(insts) == 0 {
+			return // purged
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("instance not purged within deadline; still listed: %s", body)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

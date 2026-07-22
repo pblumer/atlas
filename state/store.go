@@ -193,6 +193,20 @@ func (s *Store) CompletedProcessInstances(fn func(key uint64, v *model.ProcessIn
 	})
 }
 
+// ExpiredHistory calls fn with the key and completion time of every finished
+// instance completed at or before cutoff, oldest first — the retention sweep's
+// access pattern (ADR-0018). Because completion time is the index prefix, this
+// is a bounded range scan from the start of the history-by-time family up to
+// cutoff, mirroring DueTimers. Both values come from the index key; the history
+// value itself is not read.
+func (s *Store) ExpiredHistory(cutoff int64, fn func(piKey uint64, completedAt int64) error) error {
+	lo := []byte{byte(cfHistoryByTime)}
+	hi := prefixEnd(appendOrderedInt64([]byte{byte(cfHistoryByTime)}, cutoff))
+	return s.scanRange(lo, hi, func(k, _ []byte) error {
+		return fn(trailingKey(k), completedAtFromHistoryKey(k))
+	})
+}
+
 // ActiveElementInstanceCount returns how many element instances are live.
 func (s *Store) ActiveElementInstanceCount() (int, error) {
 	return s.countPrefix([]byte{byte(cfElementInstance)})

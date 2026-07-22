@@ -20,6 +20,7 @@ const (
 	cfActiveChildren         columnFamily = 0x07 // activeChildren:<scopeKey> → int32 count
 	cfVariable               columnFamily = 0x08 // var:<scopeKey>:<name> → VariableValue
 	cfProcessInstanceHistory columnFamily = 0x09 // piHist:<piKey> → ProcessInstanceValue (terminal)
+	cfHistoryByTime          columnFamily = 0x0a // histByTime:<completedAt>:<piKey> → nil (retention scan)
 )
 
 func appendBE64(dst []byte, v uint64) []byte { return binary.BigEndian.AppendUint64(dst, v) }
@@ -68,6 +69,13 @@ func keyProcessInstanceHistory(key uint64) []byte {
 	return appendBE64([]byte{byte(cfProcessInstanceHistory)}, key)
 }
 
+// keyHistoryByTime keys a finished instance by completion time then instance
+// key, so retention can range-scan the oldest completions first (like the timer
+// index). completedAt is the prefix; piKey breaks ties for a total order.
+func keyHistoryByTime(completedAt int64, key uint64) []byte {
+	return appendBE64(appendOrderedInt64([]byte{byte(cfHistoryByTime)}, completedAt), key)
+}
+
 func keyActiveChildren(scope uint64) []byte {
 	return appendBE64([]byte{byte(cfActiveChildren)}, scope)
 }
@@ -104,4 +112,10 @@ func prefixEnd(prefix []byte) []byte {
 // index key whose suffix is that key.
 func trailingKey(k []byte) uint64 {
 	return binary.BigEndian.Uint64(k[len(k)-8:])
+}
+
+// completedAtFromHistoryKey decodes the completion time from a history-by-time
+// index key (1 cf byte, then the ordered int64), inverting appendOrderedInt64.
+func completedAtFromHistoryKey(k []byte) int64 {
+	return int64(binary.BigEndian.Uint64(k[1:9]) ^ (1 << 63))
 }

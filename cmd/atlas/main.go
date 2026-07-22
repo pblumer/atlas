@@ -93,13 +93,31 @@ func runServe(args []string) error {
 	addr := fs.String("addr", ":8080", "HTTP listen address")
 	dataDir := fs.String("data-dir", "atlas-data", "directory for the write-ahead log and state store")
 	shutdownTimeout := fs.Duration("shutdown-timeout", 10*time.Second, "grace period for in-flight requests on shutdown")
+	historyRetention := fs.Duration("history-retention", 7*24*time.Hour, "how long finished instances stay inspectable before retention purges them (0 disables purging)")
+	historySweep := fs.Duration("history-sweep-interval", time.Hour, "how often the history-retention sweep runs")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	return serve(*addr, *dataDir, *shutdownTimeout)
+	return serve(serveConfig{
+		addr:             *addr,
+		dataDir:          *dataDir,
+		shutdownTimeout:  *shutdownTimeout,
+		historyRetention: *historyRetention,
+		historySweep:     *historySweep,
+	})
 }
 
-func serve(addr, dataDir string, shutdownTimeout time.Duration) error {
+// serveConfig holds the serve subcommand's parameters.
+type serveConfig struct {
+	addr             string
+	dataDir          string
+	shutdownTimeout  time.Duration
+	historyRetention time.Duration
+	historySweep     time.Duration
+}
+
+func serve(cfg serveConfig) error {
+	addr, dataDir, shutdownTimeout := cfg.addr, cfg.dataDir, cfg.shutdownTimeout
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return err
 	}
@@ -126,8 +144,18 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration) error {
 		return err
 	}
 
+	// Bound the finished-instance history so it does not grow without limit
+	// (ADR-0018): the engine purges instances completed longer ago than the
+	// retention window, and the server drives that sweep on a cadence.
+	if cfg.historyRetention > 0 {
+		proc.SetHistoryRetention(cfg.historyRetention)
+	}
+
 	srv := api.New(proc, store)
 	defer srv.Close()
+	if cfg.historyRetention > 0 {
+		srv.StartHistorySweep(cfg.historySweep)
+	}
 
 	// Mount the MCP "Streamable HTTP" transport at /mcp alongside the API and UI,
 	// so a remote MCP client (e.g. a claude.ai custom connector) can reach the

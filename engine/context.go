@@ -53,6 +53,15 @@ func (c *ProcessingContext) GetProcessInstance(key uint64) *model.ProcessInstanc
 	return v
 }
 
+// GetProcessInstanceHistory reads a finished instance's terminal history value
+// through the in-flight transaction, or nil if absent (used by the retention
+// sweep to build a faithful HistoryPurged event).
+func (c *ProcessingContext) GetProcessInstanceHistory(key uint64) *model.ProcessInstanceValue {
+	v, err := c.tx.GetProcessInstanceHistory(key)
+	c.p.fail(err)
+	return v
+}
+
 // GetVariable reads a scope's variable by name through the in-flight transaction
 // (sees writes from earlier in this batch, e.g. seeded start variables).
 func (c *ProcessingContext) GetVariable(scope uint64, name string) *model.VariableValue {

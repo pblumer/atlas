@@ -173,10 +173,42 @@ func (t *Tx) DeleteProcessInstance(key uint64) error {
 }
 
 // PutProcessInstanceHistory records a terminal (completed/terminated) process
-// instance in the history index. Written from applyToState when an instance
-// ends, from the event alone, so it replays identically on recovery (ADR-0017).
+// instance in the history index, and indexes it by completion time so retention
+// can find the oldest first. Written from applyToState when an instance ends,
+// from the event alone, so it replays identically on recovery (ADR-0017).
 func (t *Tx) PutProcessInstanceHistory(key uint64, v *model.ProcessInstanceValue) error {
-	return t.b.Set(keyProcessInstanceHistory(key), t.encodeValue(v), nil)
+	if err := t.b.Set(keyProcessInstanceHistory(key), t.encodeValue(v), nil); err != nil {
+		return err
+	}
+	return t.b.Set(keyHistoryByTime(v.CompletedAt, key), nil, nil)
+}
+
+// DeleteProcessInstanceHistory removes a finished instance from the history
+// index — its value, its completion-time index entry, and the variables still
+// held under its scope. Driven by a HistoryPurged event so it replays identically
+// (ADR-0018). The value supplies CompletedAt, which locates the time-index key.
+func (t *Tx) DeleteProcessInstanceHistory(key uint64, v *model.ProcessInstanceValue) error {
+	if err := t.b.Delete(keyProcessInstanceHistory(key), nil); err != nil {
+		return err
+	}
+	if err := t.b.Delete(keyHistoryByTime(v.CompletedAt, key), nil); err != nil {
+		return err
+	}
+	// Reclaim the instance's variables (keyed by its scope); a whole-prefix
+	// range delete avoids reading them back first.
+	prefix := variablePrefix(key)
+	return t.b.DeleteRange(prefix, prefixEnd(prefix), nil)
+}
+
+// GetProcessInstanceHistory returns the terminal history value for key, or nil
+// if absent. Used by the retention sweep to build a faithful HistoryPurged event.
+func (t *Tx) GetProcessInstanceHistory(key uint64) (*model.ProcessInstanceValue, error) {
+	var v model.ProcessInstanceValue
+	ok, err := t.readInto(keyProcessInstanceHistory(key), &v)
+	if err != nil || !ok {
+		return nil, err
+	}
+	return &v, nil
 }
 
 // --- Variable ---

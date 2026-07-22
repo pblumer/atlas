@@ -25,6 +25,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0015](0015-reuse-feel-engine.md) | Reuse the external FEEL engine behind an `expr` boundary | Accepted |
 | [0016](0016-mcp-server-over-http-api.md) | Model Context Protocol server as a stdio adapter over the HTTP API | Accepted |
 | [0017](0017-process-instance-history.md) | Retain finished process instances in a history index | Accepted |
+| [0018](0018-history-retention.md) | Age-based retention for finished-instance history | Accepted |
 
 ## Status values
 

@@ -30,6 +30,12 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 				return err
 			}
 			return tx.DeleteProcessInstance(h.Key)
+		case model.IntentHistoryPurged:
+			// Retention dropped an expired finished instance. The event carries
+			// the instance's terminal value (its CompletedAt locates the
+			// time-index entry), so replay deletes exactly the same records —
+			// invariant I4, ADR-0018.
+			return tx.DeleteProcessInstanceHistory(h.Key, &v.process)
 		}
 
 	case model.VTElementInstance:

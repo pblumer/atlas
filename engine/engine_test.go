@@ -564,3 +564,140 @@ func TestCompletedInstanceHistoryRecovers(t *testing.T) {
 		t.Fatalf("replayed history = %v, want %v", replayed, live)
 	}
 }
+
+// passthroughProcess builds Start → End: it runs straight to completion with no
+// wait point, so creating an instance finishes it and lands one history record.
+func passthroughProcess(t testing.TB) *compiler.CompiledProcess {
+	t.Helper()
+	b := compiler.NewBuilder(defKey, "passthrough", 1)
+	start := b.AddStartEvent()
+	end := b.AddEndEvent()
+	b.Connect(start, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return cp
+}
+
+// TestHistoryRetentionPurgesExpired runs two instances far apart in completion
+// time, then sweeps with a window that covers only the older one: it is dropped
+// from history (with its variables), the recent one is kept (ADR-0018).
+func TestHistoryRetentionPurgesExpired(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	cp := passthroughProcess(t)
+
+	clock := &manualClock{}
+	p := engine.New(1, h.log, h.store, clock)
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.SetHistoryRetention(100) // 100 "ns" on the manual clock
+
+	// Old instance: completes early, seeded with a variable under its scope.
+	p.CreateInstance(cp.Key, model.VariableValue{Name: "x", Kind: model.VarNumber, Text: "1"})
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle old: %v", err)
+	}
+	oldKey := model.NewKey(1, 1) // first minted key is the first instance
+	if readVar(t, h.store, oldKey, "x") == nil {
+		t.Fatal("seeded variable not written for the old instance")
+	}
+
+	// Jump the clock far forward, then run a recent instance.
+	clock.t = 1000
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle recent: %v", err)
+	}
+	if got := completedInstances(t, h.store); len(got) != 2 {
+		t.Fatalf("before purge: %d history records, want 2", len(got))
+	}
+
+	// Sweep: cutoff = now - 100 lands between the two completions.
+	p.PurgeExpiredHistory()
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle purge: %v", err)
+	}
+
+	hist := completedInstances(t, h.store)
+	if len(hist) != 1 {
+		t.Fatalf("after purge: %d history records, want 1 (%v)", len(hist), hist)
+	}
+	if _, stillThere := hist[oldKey]; stillThere {
+		t.Fatalf("old instance %d survived the purge", oldKey)
+	}
+	if readVar(t, h.store, oldKey, "x") != nil {
+		t.Fatal("purge did not reclaim the old instance's variables")
+	}
+}
+
+// TestHistoryRetentionRecovers is the recovery property for retention: the purge
+// is recorded as events, so replaying the log into a fresh store reproduces the
+// exact post-purge history — the sweep's clock read never touches the replay path
+// (invariant I4, ADR-0018).
+func TestHistoryRetentionRecovers(t *testing.T) {
+	dir := t.TempDir()
+	cp := passthroughProcess(t)
+	clock := &manualClock{}
+
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clock)
+	p1.Deploy(cp)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.SetHistoryRetention(100)
+
+	p1.CreateInstance(cp.Key)
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle old: %v", err)
+	}
+	clock.t = 1000
+	p1.CreateInstance(cp.Key)
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle recent: %v", err)
+	}
+	p1.PurgeExpiredHistory()
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle purge: %v", err)
+	}
+	live := completedInstances(t, h1.store)
+	if len(live) != 1 {
+		t.Fatalf("live post-purge history = %d, want 1", len(live))
+	}
+	h1.close(t)
+
+	// Replay the log (completions + the purge) into a fresh, empty store.
+	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open 2: %v", err)
+	}
+	store2, err := state.Open(filepath.Join(dir, "state2"))
+	if err != nil {
+		t.Fatalf("state.Open 2: %v", err)
+	}
+	defer func() {
+		if err := store2.Close(); err != nil {
+			t.Errorf("store2.Close: %v", err)
+		}
+		if err := log2.Close(); err != nil {
+			t.Errorf("log2.Close: %v", err)
+		}
+	}()
+	p2 := engine.New(1, log2, store2, clock)
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2 (replay): %v", err)
+	}
+
+	replayed := completedInstances(t, store2)
+	if len(replayed) != 1 {
+		t.Fatalf("replayed post-purge history = %d, want 1", len(replayed))
+	}
+	if _, purgedSurvived := replayed[model.NewKey(1, 1)]; purgedSurvived {
+		t.Fatal("replay resurrected the purged instance — purge was not deterministic")
+	}
+}

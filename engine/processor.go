@@ -15,6 +15,8 @@
 package engine
 
 import (
+	"time"
+
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
@@ -37,6 +39,11 @@ type Processor struct {
 	behaviors [compiler.NumBpmnTypes]bpmnBehavior
 
 	jobNotifier func(jobType int32)
+
+	// historyRetention bounds how long finished instances stay in the history
+	// index; PurgeExpiredHistory drops those completed longer ago than this.
+	// Zero disables retention (history is kept forever). See ADR-0018.
+	historyRetention int64 // nanoseconds
 
 	queue        []Command
 	queueScratch []Command // double-buffers queue so advancing it never allocates
@@ -82,6 +89,20 @@ func (p *Processor) Undeploy(defKey uint64) { delete(p.processes, defKey) }
 // SetJobNotifier installs the hook the service-task behavior triggers (after
 // fsync) when a job of a type becomes available.
 func (p *Processor) SetJobNotifier(fn func(jobType int32)) { p.jobNotifier = fn }
+
+// SetHistoryRetention sets how long a finished instance stays in the history
+// index before PurgeExpiredHistory may drop it. A non-positive duration disables
+// retention (history is kept forever). See ADR-0018.
+func (p *Processor) SetHistoryRetention(d time.Duration) { p.historyRetention = int64(d) }
+
+// PurgeExpiredHistory enqueues a sweep that drops finished instances completed
+// longer ago than the configured retention. It is a no-op when retention is
+// disabled or nothing has expired. Call RunUntilIdle to process it. The sweep
+// reads wall-clock time once (outside applyToState) and records each drop as a
+// HistoryPurged event, so recovery replays the same deletions (invariant I4).
+func (p *Processor) PurgeExpiredHistory() {
+	p.queue = append(p.queue, Command{ValueType: model.VTProcessInstance, Intent: model.IntentPurgeHistory})
+}
 
 // CreateInstance enqueues creation of a new instance of the given definition,
 // optionally seeded with initial variables. Call RunUntilIdle to process it.

@@ -25,10 +25,11 @@ func handlerKey(vt model.ValueType, intent model.Intent) uint16 {
 
 func (p *Processor) registerHandlers() {
 	p.handlers = map[uint16]func(*ProcessingContext){
-		handlerKey(model.VTProcessInstance, model.IntentActivating): handleProcessInstanceActivating,
-		handlerKey(model.VTElementInstance, model.IntentActivating): handleElementActivating,
-		handlerKey(model.VTElementInstance, model.IntentCompleting): handleElementCompleting,
-		handlerKey(model.VTJob, model.IntentJobCompleted):           handleJobCompleted,
+		handlerKey(model.VTProcessInstance, model.IntentActivating):   handleProcessInstanceActivating,
+		handlerKey(model.VTElementInstance, model.IntentActivating):   handleElementActivating,
+		handlerKey(model.VTElementInstance, model.IntentCompleting):   handleElementCompleting,
+		handlerKey(model.VTJob, model.IntentJobCompleted):             handleJobCompleted,
+		handlerKey(model.VTProcessInstance, model.IntentPurgeHistory): handlePurgeHistory,
 	}
 }
 
@@ -94,6 +95,37 @@ func handleJobCompleted(c *ProcessingContext) {
 
 	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
 		c.AppendElementCommand(job.ElementInstanceKey, model.IntentCompleting, *ei)
+	}
+}
+
+// handlePurgeHistory sweeps finished instances that completed longer ago than
+// the configured retention and emits a HistoryPurged event for each (ADR-0018).
+// The cutoff is read from the clock once here — outside applyToState — and the
+// per-instance deletions are recorded as events, so replay reproduces them
+// deterministically. Expired keys are collected before any event is emitted, so
+// emitting (which mutates the history index) never disturbs the scan.
+func handlePurgeHistory(c *ProcessingContext) {
+	retention := c.p.historyRetention
+	if retention <= 0 {
+		return // retention disabled: keep history forever
+	}
+	cutoff := c.Now() - retention
+
+	var expired []uint64
+	err := c.p.store.ExpiredHistory(cutoff, func(piKey uint64, _ int64) error {
+		expired = append(expired, piKey)
+		return nil
+	})
+	if err != nil {
+		c.p.fail(err)
+		return
+	}
+	for _, piKey := range expired {
+		pi := c.GetProcessInstanceHistory(piKey)
+		if pi == nil {
+			continue // raced away since the scan; nothing to purge
+		}
+		c.AppendProcessInstanceEvent(piKey, model.IntentHistoryPurged, *pi)
 	}
 }
 

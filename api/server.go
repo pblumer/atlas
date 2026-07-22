@@ -25,8 +25,10 @@ package api
 import (
 	"embed"
 	"io/fs"
+	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
@@ -118,8 +120,40 @@ func (s *Server) do(fn func()) {
 	}
 }
 
-// Close stops the run-loop goroutine. It does not close the processor, log, or
-// store — the caller owns those.
+// StartHistorySweep launches a background ticker that periodically asks the
+// engine to purge expired finished instances (ADR-0018). The retention window
+// itself is configured on the processor (SetHistoryRetention); this only drives
+// the sweep on a cadence so history is bounded even without new activity. A
+// non-positive interval is a no-op. The ticker stops with the server (Close).
+func (s *Server) StartHistorySweep(interval time.Duration) {
+	if interval <= 0 {
+		return
+	}
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for {
+			select {
+			case <-s.quit:
+				return
+			case <-t.C:
+				s.do(func() {
+					s.proc.PurgeExpiredHistory()
+					if err := s.proc.RunUntilIdle(); err != nil {
+						// A purge failure is not fatal to serving; the next tick
+						// retries. Surface it for operators without crashing.
+						log.Printf("history sweep: %v", err)
+					}
+				})
+			}
+		}
+	}()
+}
+
+// Close stops the run-loop goroutine (and the history sweeper, if started). It
+// does not close the processor, log, or store — the caller owns those.
 func (s *Server) Close() {
 	close(s.quit)
 	s.wg.Wait()

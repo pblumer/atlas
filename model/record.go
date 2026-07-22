@@ -128,6 +128,12 @@ const (
 	// Incident.
 	IntentIncidentCreated
 	IntentIncidentResolved
+
+	// History retention (ADR-0018). PurgeHistory is a command that asks the
+	// engine to sweep expired finished instances; HistoryPurged is the event
+	// that records one such instance being dropped from the history index.
+	IntentPurgeHistory
+	IntentHistoryPurged
 )
 
 func (i Intent) String() string {
@@ -174,6 +180,10 @@ func (i Intent) String() string {
 		return "IncidentCreated"
 	case IntentIncidentResolved:
 		return "IncidentResolved"
+	case IntentPurgeHistory:
+		return "PurgeHistory"
+	case IntentHistoryPurged:
+		return "HistoryPurged"
 	default:
 		return "Intent(?)"
 	}
