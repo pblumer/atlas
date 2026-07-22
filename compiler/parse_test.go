@@ -328,6 +328,45 @@ func TestParseExclusiveGatewayBadCondition(t *testing.T) {
 	}
 }
 
+// TestParseTimerCatchEvent parses an intermediate timer catch event.
+func TestParseTimerCatchEvent(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="p" isExecutable="true">
+	    <startEvent id="s"/>
+	    <intermediateCatchEvent id="wait">
+	      <timerEventDefinition><timeDuration>PT30S</timeDuration></timerEventDefinition>
+	    </intermediateCatchEvent>
+	    <endEvent id="e"/>
+	    <sequenceFlow id="f1" sourceRef="s" targetRef="wait"/>
+	    <sequenceFlow id="f2" sourceRef="wait" targetRef="e"/>
+	  </process></definitions>`
+	cp, err := Parse(1, 1, strings.NewReader(xml))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	node := cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target
+	if cp.Node(node).Type != TypeTimerCatchEvent {
+		t.Fatalf("node type = %v, want TimerCatchEvent", cp.Node(node).Type)
+	}
+	if d := cp.TimerCatch(cp.Node(node).Detail); d.DurationNanos != 30e9 {
+		t.Errorf("duration = %d, want %d", d.DurationNanos, int64(30e9))
+	}
+}
+
+// TestParseTimerCatchEventErrors rejects a non-timer catch event and a bad duration.
+func TestParseTimerCatchEventErrors(t *testing.T) {
+	for _, xml := range []string{
+		`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
+			<startEvent id="s"/><intermediateCatchEvent id="w"/></process></definitions>`,
+		`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
+			<startEvent id="s"/><intermediateCatchEvent id="w"><timerEventDefinition><timeDuration>soon</timeDuration></timerEventDefinition></intermediateCatchEvent></process></definitions>`,
+	} {
+		if _, err := Parse(1, 1, strings.NewReader(xml)); err == nil {
+			t.Errorf("want error for %.60s", xml)
+		}
+	}
+}
+
 // TestParseUnsupportedElementMessage locks in the actionable error text for an
 // unsupported element (a plain task) rather than a confusing "unknown targetRef".
 func TestParseUnsupportedElementMessage(t *testing.T) {

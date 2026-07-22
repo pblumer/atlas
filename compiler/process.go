@@ -23,6 +23,7 @@ const (
 	TypeScriptTask
 	TypeBusinessRuleTask
 	TypeExclusiveGateway
+	TypeTimerCatchEvent
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
 	numBpmnTypes = 16
@@ -45,6 +46,8 @@ func (t BpmnType) String() string {
 		return "BusinessRuleTask"
 	case TypeExclusiveGateway:
 		return "ExclusiveGateway"
+	case TypeTimerCatchEvent:
+		return "TimerCatchEvent"
 	default:
 		return "Unspecified"
 	}
@@ -100,6 +103,13 @@ type BusinessRuleTaskDetail struct {
 	Retries    int32
 }
 
+// TimerCatchDetail is the per-timer-intermediate-catch-event data: how long the
+// event waits before continuing, as a fixed duration in nanoseconds (a literal
+// ISO-8601 duration today; FEEL duration expressions and date/cycle timers later).
+type TimerCatchDetail struct {
+	DurationNanos int64
+}
+
 // CompiledProcess is the immutable result of compiling one process definition.
 // It is safe for concurrent reads without synchronization.
 type CompiledProcess struct {
@@ -114,6 +124,7 @@ type CompiledProcess struct {
 	serviceTasks      []ServiceTaskDetail
 	scriptTasks       []ScriptTaskDetail
 	businessRuleTasks []BusinessRuleTaskDetail
+	timerCatches      []TimerCatchDetail
 	startEvents       []int32
 	elementIds        []int32  // interned source BPMN id per node id (-1 if unset)
 	strings           []string // intern table (index → string), for debug/export
@@ -135,6 +146,11 @@ func (p *CompiledProcess) Outgoing(id int32) []int32 {
 // ServiceTask returns the detail at the given table index.
 func (p *CompiledProcess) ServiceTask(detail int32) *ServiceTaskDetail {
 	return &p.serviceTasks[detail]
+}
+
+// TimerCatch returns the timer-catch detail at the given table index.
+func (p *CompiledProcess) TimerCatch(detail int32) *TimerCatchDetail {
+	return &p.timerCatches[detail]
 }
 
 // ScriptTask returns the detail at the given table index.

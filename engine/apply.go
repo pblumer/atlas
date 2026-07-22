@@ -44,6 +44,14 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 		case model.IntentVariableCreated, model.IntentVariableUpdated:
 			return tx.PutVariable(&v.variable)
 		}
+
+	case model.VTTimer:
+		switch h.Intent {
+		case model.IntentTimerCreated:
+			return tx.PutTimer(h.Key, &v.timer)
+		case model.IntentTimerTriggered:
+			return tx.DeleteTimer(h.Key, &v.timer)
+		}
 	}
 	return nil
 }

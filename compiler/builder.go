@@ -26,6 +26,7 @@ type Builder struct {
 	serviceTasks      []ServiceTaskDetail
 	scriptTasks       []ScriptTaskDetail
 	businessRuleTasks []BusinessRuleTaskDetail
+	timerCatches      []TimerCatchDetail
 	elementIds        []int32 // interned source BPMN id per node, -1 if unset
 
 	interner map[string]int32
@@ -130,6 +131,14 @@ func (b *Builder) AddBusinessRuleTask(decisionId string, inputs map[string]any, 
 // and SetFlowDefault.
 func (b *Builder) AddExclusiveGateway() int32 { return b.addNode(TypeExclusiveGateway, -1) }
 
+// AddTimerCatchEvent adds an intermediate timer catch event that waits the given
+// fixed duration (nanoseconds) before continuing, and returns its element id.
+func (b *Builder) AddTimerCatchEvent(durationNanos int64) int32 {
+	detail := int32(len(b.timerCatches))
+	b.timerCatches = append(b.timerCatches, TimerCatchDetail{DurationNanos: durationNanos})
+	return b.addNode(TypeTimerCatchEvent, detail)
+}
+
 // Connect adds a sequence flow from source to target and returns its flow id, so
 // the caller can attach a condition or mark it the default.
 func (b *Builder) Connect(source, target int32) int32 {
@@ -196,6 +205,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		serviceTasks:      b.serviceTasks,
 		scriptTasks:       b.scriptTasks,
 		businessRuleTasks: b.businessRuleTasks,
+		timerCatches:      b.timerCatches,
 		startEvents:       startEvents,
 		elementIds:        b.elementIds,
 		strings:           b.strings,

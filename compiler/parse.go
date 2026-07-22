@@ -119,6 +119,20 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 			return nil, err
 		}
 	}
+	for _, ev := range proc.IntermediateCatchEvents {
+		if ev.Timer == nil {
+			return nil, fmt.Errorf("compiler: intermediate catch event %q: only timer events are supported yet", ev.Id)
+		}
+		text := strings.TrimSpace(ev.Timer.TimeDuration)
+		text = strings.TrimSpace(strings.TrimPrefix(text, "=")) // tolerate a FEEL '=' prefix
+		nanos, err := parseISO8601Duration(text)
+		if err != nil {
+			return nil, fmt.Errorf("compiler: intermediate catch event %q timer: %w", ev.Id, err)
+		}
+		if err := register(ev.Id, b.AddTimerCatchEvent(nanos)); err != nil {
+			return nil, err
+		}
+	}
 	for _, e := range proc.EndEvents {
 		if err := register(e.Id, b.AddEndEvent()); err != nil {
 			return nil, err
@@ -200,7 +214,10 @@ type xmlProcess struct {
 	ScriptTasks       []xmlScriptTask       `xml:"scriptTask"`
 	BusinessRuleTasks []xmlBusinessRuleTask `xml:"businessRuleTask"`
 	ExclusiveGateways []xmlExclusiveGateway `xml:"exclusiveGateway"`
-	Flows             []xmlSequenceFlow     `xml:"sequenceFlow"`
+
+	IntermediateCatchEvents []xmlIntermediateCatchEvent `xml:"intermediateCatchEvent"`
+
+	Flows []xmlSequenceFlow `xml:"sequenceFlow"`
 
 	// Captured only to give a clear "unsupported element" error (see Parse); none
 	// of these are executable yet.
@@ -218,6 +235,17 @@ type xmlProcess struct {
 type xmlExclusiveGateway struct {
 	Id      string `xml:"id,attr"`
 	Default string `xml:"default,attr"`
+}
+
+// An intermediate catch event; only the timer variant is executable so far. Timer
+// is a pointer so a non-timer catch event (message/signal) is detected as absent.
+type xmlIntermediateCatchEvent struct {
+	Id    string                   `xml:"id,attr"`
+	Timer *xmlTimerEventDefinition `xml:"timerEventDefinition"`
+}
+
+type xmlTimerEventDefinition struct {
+	TimeDuration string `xml:"timeDuration"` // ISO-8601 duration, e.g. PT30S
 }
 
 type xmlNode struct {

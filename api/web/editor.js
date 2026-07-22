@@ -176,6 +176,11 @@ function upsertExt(modeler, element, type, props) {
 
 const isActivity = (bo) => /Task$/.test((bo && bo.$type) || "");
 
+// timerDefOf returns an event's bpmn:TimerEventDefinition, or null.
+function timerDefOf(bo) {
+  return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:TimerEventDefinition") || null;
+}
+
 // rootProcess returns the diagram's process business object, or null if the root
 // isn't a plain process (e.g. a collaboration with pools).
 function rootProcess(modeler) {
@@ -255,6 +260,17 @@ function wireProperties(root, modeler) {
           <label class="field"><span>Job type</span>
             <input type="text" id="f-jobtype" value="${esc(d.type || "")}" placeholder="payment"/></label>`;
       }
+    } else if (bo.$type === "bpmn:IntermediateCatchEvent") {
+      const timer = timerDefOf(bo);
+      if (timer) {
+        const dur = (timer.timeDuration && timer.timeDuration.body) || "";
+        html += `<h3>Timer</h3>
+          <label class="field"><span>Duration (ISO&nbsp;8601)</span>
+            <input type="text" id="f-duration" value="${esc(dur)}" placeholder="PT30S"/></label>
+          <p class="muted" style="font-size:12px">e.g. PT30S (30s), PT5M, PT1H, P1DT2H. The event waits this long, then continues.</p>`;
+      } else {
+        html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b> intermediate catch event, then set its duration here.</p>`;
+      }
     }
     body.innerHTML = html;
 
@@ -288,6 +304,19 @@ function wireProperties(root, modeler) {
     if (fjob) {
       fjob.addEventListener("change", () => {
         upsertExt(modeler, element, "zeebe:TaskDefinition", { type: (fjob.value || "").trim() });
+      });
+    }
+
+    const fdur = body.querySelector("#f-duration");
+    if (fdur) {
+      fdur.addEventListener("change", () => {
+        const timer = timerDefOf(element.businessObject);
+        if (!timer) return;
+        const moddle = modeler.get("moddle");
+        let td = timer.timeDuration;
+        if (!td) { td = moddle.create("bpmn:TimeDuration"); td.$parent = timer; }
+        td.body = (fdur.value || "").trim();
+        modeling.updateModdleProperties(element, timer, { timeDuration: td });
       });
     }
   }

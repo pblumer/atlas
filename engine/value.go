@@ -12,6 +12,7 @@ type inflightValue struct {
 	element  model.ElementInstanceValue
 	job      model.JobValue
 	variable model.VariableValue
+	timer    model.TimerValue
 }
 
 // asValue returns a model.Value pointing at the active field, for encoding. The
@@ -27,6 +28,8 @@ func (v *inflightValue) asValue(vt model.ValueType) model.Value {
 		return &v.job
 	case model.VTVariable:
 		return &v.variable
+	case model.VTTimer:
+		return &v.timer
 	}
 	return nil
 }
@@ -59,6 +62,10 @@ func inflightFromRecord(rec model.Record) inflightValue {
 	case model.VTVariable:
 		if v, ok := rec.Value.(*model.VariableValue); ok {
 			iv.variable = *v
+		}
+	case model.VTTimer:
+		if v, ok := rec.Value.(*model.TimerValue); ok {
+			iv.timer = *v
 		}
 	}
 	return iv
