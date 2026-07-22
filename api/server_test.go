@@ -129,6 +129,24 @@ func TestDeployRunAndStats(t *testing.T) {
 	if ci.Stats.ActiveProcessInstances != 1 || ci.Stats.ActiveElementInstances != 1 {
 		t.Fatalf("stats = %+v, want 1 and 1", ci.Stats)
 	}
+
+	// The running instance shows up in the operations list with its process.
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/instances", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("instances status=%d body=%s", code, body)
+	}
+	var insts []struct {
+		Key              uint64 `json:"key"`
+		ProcessID        string `json:"processId"`
+		ElementInstances int    `json:"elementInstances"`
+		State            string `json:"state"`
+	}
+	if err := json.Unmarshal(body, &insts); err != nil {
+		t.Fatalf("decode instances: %v (%s)", err, body)
+	}
+	if len(insts) != 1 || insts[0].ProcessID != "order" || insts[0].ElementInstances != 1 || insts[0].State != "active" {
+		t.Fatalf("instances = %+v, want one active order instance with 1 token", insts)
+	}
 }
 
 // TestDeployInvalidModel rejects a model with no start event as a client error.

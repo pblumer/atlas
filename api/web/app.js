@@ -35,7 +35,7 @@ const APPS = [
   { id: "console", name: "Console", route: "#/console", on: true },
   { id: "modeler", name: "Modeler", route: "#/modeler", on: true },
   { id: "tasks", name: "Tasks", route: "#/tasks", on: false },
-  { id: "operations", name: "Operations", route: "#/operations", on: false },
+  { id: "operations", name: "Operations", route: "#/operations", on: true },
   { id: "insights", name: "Insights", route: "#/insights", on: false },
 ];
 
@@ -47,7 +47,8 @@ const TOPNAV = {
     { name: "Organization", route: "#/console/org" },
   ],
   modeler: [{ name: "Home", route: "#/modeler" }],
-  tasks: [], operations: [], insights: [],
+  operations: [{ name: "Instances", route: "#/operations" }],
+  tasks: [], insights: [],
 };
 
 // ---------- Shell ----------
@@ -109,7 +110,7 @@ async function viewConsoleDashboard() {
         <a class="btn neutral" href="#/modeler/new">New diagram</a>
       </div>
       <div class="card">
-        <div class="between"><h2>Engine</h2><span class="pill ok"><span class="dot"></span>running</span></div>
+        <div class="between"><h2>Engine</h2><a href="#/operations">Instances</a></div>
         <div class="stats" style="margin-top:6px">
           <div class="stat"><b id="s-pi">0</b><span>active process instances</span></div>
           <div class="stat"><b id="s-ei">0</b><span>active element instances</span></div>
@@ -200,6 +201,46 @@ async function viewModelerHome() {
   }
 }
 
+async function viewInstances() {
+  view.innerHTML = `
+    <div class="between">
+      <h1>Instances</h1>
+      <button class="btn neutral" id="refresh">Refresh</button>
+    </div>
+    <p class="muted">Running process instances on this server. Each holds one or more
+    element instances (tokens) as it moves through the engine.</p>
+    <div class="card" style="padding:0">
+      <table>
+        <thead><tr><th>Instance</th><th>Process</th><th>Version</th><th>Tokens</th><th>Status</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>`;
+  const load = async () => {
+    try {
+      const rows = await api("GET", "/api/v1/instances");
+      const tbody = document.getElementById("rows");
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="5" class="empty">
+          No running instances. Start one from the <a href="#/modeler">Modeler</a>.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = rows.map((r) => `
+        <tr>
+          <td><b>${r.key}</b></td>
+          <td>${r.processId ? esc(r.processId) : '<span class="muted">def ' + r.processDefKey + "</span>"}</td>
+          <td>${r.version ? "v" + r.version : "—"}</td>
+          <td>${r.elementInstances}</td>
+          <td><span class="pill ok"><span class="dot"></span>${esc(r.state)}</span></td>
+        </tr>`).join("");
+    } catch (e) {
+      document.getElementById("rows").innerHTML =
+        `<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`;
+    }
+  };
+  document.getElementById("refresh").addEventListener("click", load);
+  await load();
+}
+
 function viewComingSoon(appId) {
   const name = (APPS.find((a) => a.id === appId) || {}).name || "This app";
   view.innerHTML = `
@@ -241,6 +282,7 @@ async function route() {
     if (path === "#/modeler/new") return await viewEditor(null);
     const m = path.match(/^#\/modeler\/d\/(\d+)$/);
     if (m) return await viewEditor(Number(m[1]));
+    if (path === "#/operations") return await viewInstances();
     if (appId !== "console" && appId !== "modeler") return viewComingSoon(appId);
     // Unknown route → dashboard.
     location.hash = "#/console";

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/model"
 )
 
 // maxXMLBytes caps a deployment body. BPMN models are small; this is a sanity
@@ -31,6 +32,15 @@ type processResp struct {
 type infoResp struct {
 	Product string `json:"product"`
 	Version string `json:"version"`
+}
+
+type instanceResp struct {
+	Key              uint64 `json:"key"`
+	ProcessDefKey    uint64 `json:"processDefKey"`
+	ProcessID        string `json:"processId"`
+	Version          int32  `json:"version"`
+	ElementInstances int    `json:"elementInstances"`
+	State            string `json:"state"`
 }
 
 type statsResp struct {
@@ -172,6 +182,42 @@ func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusOK, createInstanceResp{DefinitionKey: key, Stats: stats})
 	}
+}
+
+// handleListInstances lists live process instances with their definition and
+// how many element instances (tokens) each currently holds — the operator
+// "running instances" view.
+func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
+	list := []instanceResp{}
+	var scanErr error
+	s.do(func() {
+		scanErr = s.store.ActiveProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
+			elements := 0
+			if err := s.store.ElementInstancesOfProcess(key, func(uint64) error {
+				elements++
+				return nil
+			}); err != nil {
+				return err
+			}
+			r := instanceResp{
+				Key:              key,
+				ProcessDefKey:    v.ProcessDefKey,
+				ElementInstances: elements,
+				State:            "active",
+			}
+			if d, ok := s.deployments[v.ProcessDefKey]; ok {
+				r.ProcessID = d.ProcessID
+				r.Version = d.Version
+			}
+			list = append(list, r)
+			return nil
+		})
+	})
+	if scanErr != nil {
+		writeError(w, http.StatusInternalServerError, "list instances: "+scanErr.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
 }
 
 // handleStats returns the live instance counts.

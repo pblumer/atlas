@@ -150,6 +150,19 @@ func (s *Store) ActiveProcessInstanceCount() (int, error) {
 	return s.countPrefix([]byte{byte(cfProcessInstance)})
 }
 
+// ActiveProcessInstances calls fn with the key and value of every live process
+// instance, via the process-instance column family — the operator "list running
+// instances" access pattern.
+func (s *Store) ActiveProcessInstances(fn func(key uint64, v *model.ProcessInstanceValue) error) error {
+	return s.scanPrefix([]byte{byte(cfProcessInstance)}, func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTProcessInstance, raw)
+		if err != nil {
+			return err
+		}
+		return fn(trailingKey(k), v.(*model.ProcessInstanceValue))
+	})
+}
+
 // ActiveElementInstanceCount returns how many element instances are live.
 func (s *Store) ActiveElementInstanceCount() (int, error) {
 	return s.countPrefix([]byte{byte(cfElementInstance)})
