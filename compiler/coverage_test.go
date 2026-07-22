@@ -18,6 +18,10 @@ func TestBpmnTypeString(t *testing.T) {
 		{TypeScriptTask, "ScriptTask"},
 		{TypeBusinessRuleTask, "BusinessRuleTask"},
 		{TypeExclusiveGateway, "ExclusiveGateway"},
+		{TypeTimerCatchEvent, "TimerCatchEvent"},
+		{TypeMessageCatchEvent, "MessageCatchEvent"},
+		{TypeMessageThrowEvent, "MessageThrowEvent"},
+		{TypeTask, "Task"},
 		{TypeUnspecified, "Unspecified"},
 		{BpmnType(200), "Unspecified"},
 	}

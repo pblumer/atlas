@@ -26,6 +26,7 @@ const (
 	TypeTimerCatchEvent
 	TypeMessageCatchEvent
 	TypeMessageThrowEvent
+	TypeTask // an undefined/manual task: no execution semantics, passes straight through
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
 	numBpmnTypes = 16
@@ -54,6 +55,8 @@ func (t BpmnType) String() string {
 		return "MessageCatchEvent"
 	case TypeMessageThrowEvent:
 		return "MessageThrowEvent"
+	case TypeTask:
+		return "Task"
 	default:
 		return "Unspecified"
 	}

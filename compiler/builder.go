@@ -128,6 +128,12 @@ func (b *Builder) AddBusinessRuleTask(decisionId string, inputs map[string]any, 
 	return b.addNode(TypeBusinessRuleTask, detail), nil
 }
 
+// AddTask adds an undefined/manual task — one with no execution semantics — and
+// returns its element id. It carries no detail and simply passes the token
+// straight through, so a model can be drafted and its routing tested before its
+// tasks are given real implementations.
+func (b *Builder) AddTask() int32 { return b.addNode(TypeTask, -1) }
+
 // AddExclusiveGateway adds a data-based exclusive gateway (XOR split) and returns
 // its element id. Its outgoing flows carry the conditions; see SetFlowCondition
 // and SetFlowDefault.

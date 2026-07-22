@@ -202,9 +202,9 @@ func TestParseErrors(t *testing.T) {
 				<startEvent id="s"/><endEvent id="s"/></process></definitions>`,
 		},
 		{
-			name: "unsupported plain task",
+			name: "unsupported user task",
 			xml: `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
-				<startEvent id="s"/><task id="t"/><endEvent id="e"/>
+				<startEvent id="s"/><userTask id="t"/><endEvent id="e"/>
 				<sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
 				<sequenceFlow id="f2" sourceRef="t" targetRef="e"/></process></definitions>`,
 		},
@@ -368,19 +368,37 @@ func TestParseTimerCatchEventErrors(t *testing.T) {
 }
 
 // TestParseUnsupportedElementMessage locks in the actionable error text for an
-// unsupported element (a plain task) rather than a confusing "unknown targetRef".
+// unsupported element (a user task) rather than a confusing "unknown targetRef".
 func TestParseUnsupportedElementMessage(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
-		<startEvent id="s"/><task id="Activity_1"/><endEvent id="e"/>
+		<startEvent id="s"/><userTask id="Activity_1"/><endEvent id="e"/>
 		<sequenceFlow id="f1" sourceRef="s" targetRef="Activity_1"/>
 		<sequenceFlow id="f2" sourceRef="Activity_1" targetRef="e"/></process></definitions>`
 	_, err := Parse(1, 1, strings.NewReader(xml))
 	if err == nil {
-		t.Fatal("want error for a plain <task>")
+		t.Fatal("want error for a <userTask>")
 	}
-	for _, want := range []string{"Activity_1", "task", "service task"} {
+	for _, want := range []string{"Activity_1", "userTask", "service"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q should mention %q", err.Error(), want)
 		}
+	}
+}
+
+// TestParsePlainTaskPassThrough confirms an undefined <task> and a <manualTask>
+// now compile (as pass-through nodes) rather than being rejected.
+func TestParsePlainTaskPassThrough(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
+		<startEvent id="s"/><task id="t1"/><manualTask id="t2"/><endEvent id="e"/>
+		<sequenceFlow id="f1" sourceRef="s" targetRef="t1"/>
+		<sequenceFlow id="f2" sourceRef="t1" targetRef="t2"/>
+		<sequenceFlow id="f3" sourceRef="t2" targetRef="e"/></process></definitions>`
+	cp, err := Parse(1, 1, strings.NewReader(xml))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	task := cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target
+	if cp.Node(task).Type != TypeTask {
+		t.Fatalf("node after start = %v, want Task (pass-through)", cp.Node(task).Type)
 	}
 }
