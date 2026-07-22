@@ -112,8 +112,11 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   and Modeler home wired to real engine data.
 - ✅ **BPMN editor** (ADR-0013): embedded `bpmn-js` modeler (canvas, palette,
   context pad), a hand-written Details panel, and **Deploy & run** (deploy the
-  drawn XML, then start an instance). Authoring is gated by the compiler — it
-  rejects elements it can't execute yet.
+  drawn XML, then start an instance). The panel authors executable tasks — pick a
+  task type (script/service) and set a **script task's FEEL expression + result
+  variable** or a **service task's job type**, written as the `zeebe:script` /
+  `zeebe:taskDefinition` extensions the engine runs (the zeebe moddle is vendored
+  alongside bpmn-js). Authoring is gated by the compiler.
 - ✅ **Live overlay** of runtime state on the diagram (Operations → a process's
   live view): active elements highlighted with token counts, polled from a
   `/processes/{key}/runtime` endpoint — the differentiator a standalone modeler

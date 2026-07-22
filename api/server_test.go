@@ -211,4 +211,8 @@ func TestServesVendoredModeler(t *testing.T) {
 	if code != http.StatusOK || len(body) < 100_000 {
 		t.Fatalf("modeler asset status=%d size=%d, want 200 and a sizable bundle", code, len(body))
 	}
+	// The zeebe moddle must be served too, so the editor can author zeebe extensions.
+	if code, body := doReq(t, ts, http.MethodGet, "/vendor/bpmn/zeebe.json", "", ""); code != http.StatusOK || !strings.Contains(string(body), `"prefix": "zeebe"`) {
+		t.Fatalf("zeebe moddle status=%d body=%.60s", code, body)
+	}
 }
