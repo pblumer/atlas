@@ -75,6 +75,24 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 		return nil, fmt.Errorf("compiler: process %q has no start event", proc.Id)
 	}
 
+	// Report an unsupported element with a clear message rather than letting it
+	// surface later as a confusing "unknown targetRef" when a flow points at it.
+	for _, u := range []struct {
+		label string
+		nodes []xmlNode
+	}{
+		{"task", proc.Tasks}, {"userTask", proc.UserTasks}, {"scriptTask", proc.ScriptTasks},
+		{"sendTask", proc.SendTasks}, {"receiveTask", proc.ReceiveTasks},
+		{"businessRuleTask", proc.BusinessRuleTasks}, {"manualTask", proc.ManualTasks},
+		{"exclusiveGateway", proc.ExclusiveGateways}, {"parallelGateway", proc.ParallelGateways},
+		{"inclusiveGateway", proc.InclusiveGateways},
+	} {
+		if len(u.nodes) > 0 {
+			return nil, fmt.Errorf("compiler: element %q is a <%s>, which Atlas can't execute yet "+
+				"(supported: start/end events and service tasks with a task definition)", u.nodes[0].Id, u.label)
+		}
+	}
+
 	for _, f := range proc.Flows {
 		src, ok := ids[f.SourceRef]
 		if !ok {
@@ -103,6 +121,19 @@ type xmlProcess struct {
 	EndEvents    []xmlNode         `xml:"endEvent"`
 	ServiceTasks []xmlServiceTask  `xml:"serviceTask"`
 	Flows        []xmlSequenceFlow `xml:"sequenceFlow"`
+
+	// Captured only to give a clear "unsupported element" error (see Parse); none
+	// of these are executable yet.
+	Tasks             []xmlNode `xml:"task"`
+	UserTasks         []xmlNode `xml:"userTask"`
+	ScriptTasks       []xmlNode `xml:"scriptTask"`
+	SendTasks         []xmlNode `xml:"sendTask"`
+	ReceiveTasks      []xmlNode `xml:"receiveTask"`
+	BusinessRuleTasks []xmlNode `xml:"businessRuleTask"`
+	ManualTasks       []xmlNode `xml:"manualTask"`
+	ExclusiveGateways []xmlNode `xml:"exclusiveGateway"`
+	ParallelGateways  []xmlNode `xml:"parallelGateway"`
+	InclusiveGateways []xmlNode `xml:"inclusiveGateway"`
 }
 
 type xmlNode struct {
