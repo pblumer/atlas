@@ -87,17 +87,26 @@ func TestRuntimeIgnoresOtherDefinitions(t *testing.T) {
 	}
 	var rt struct {
 		Instances int `json:"instances"`
+		Tokens    int `json:"tokens"`
 		Elements  []struct {
 			ElementID string `json:"elementId"`
 			Tokens    int    `json:"tokens"`
+			Visits    int    `json:"visits"`
 		} `json:"elements"`
 	}
 	if err := json.Unmarshal(body, &rt); err != nil {
 		t.Fatalf("decode runtime: %v (%s)", err, body)
 	}
-	// Only definition 1's single instance and its one token must be reported.
-	if rt.Instances != 1 || len(rt.Elements) != 1 || rt.Elements[0].Tokens != 1 {
+	// Only definition 1's single instance is reported: one live token on the task,
+	// and no element visited more than once (definition 2's instance must not leak
+	// its own visits into definition 1's heatmap).
+	if rt.Instances != 1 || rt.Tokens != 1 {
 		t.Fatalf("runtime = %+v, want exactly definition 1's one instance/token", rt)
+	}
+	for _, e := range rt.Elements {
+		if e.Tokens > 1 || e.Visits > 1 {
+			t.Fatalf("element %s = %+v, want no counts above 1 (definition 2 leaked)", e.ElementID, e)
+		}
 	}
 }
 
@@ -158,13 +167,21 @@ func TestRuntimeFilterByInstance(t *testing.T) {
 		Elements  []struct {
 			ElementID string `json:"elementId"`
 			Tokens    int    `json:"tokens"`
+			Visits    int    `json:"visits"`
 		} `json:"elements"`
 	}
 	if err := json.Unmarshal(body, &one); err != nil {
 		t.Fatalf("decode filtered runtime: %v (%s)", err, body)
 	}
-	if one.Instances != 1 || one.Tokens != 1 || len(one.Elements) != 1 || one.Elements[0].Tokens != 1 {
+	// Isolated to one instance: its single live token on the task, and no element
+	// visited more than once (the other instance's visits are filtered out).
+	if one.Instances != 1 || one.Tokens != 1 {
 		t.Fatalf("filtered runtime = %+v, want exactly one instance's single token", one)
+	}
+	for _, e := range one.Elements {
+		if e.Tokens > 1 || e.Visits > 1 {
+			t.Fatalf("element %s = %+v, want no counts above 1 under the instance filter", e.ElementID, e)
+		}
 	}
 
 	// A well-formed key that is not an instance of this definition yields nothing.
@@ -182,6 +199,113 @@ func TestRuntimeFilterByInstance(t *testing.T) {
 	// A non-numeric instance filter is a client error.
 	if code, _ := doReq(t, ts, http.MethodGet, "/api/v1/processes/1/runtime?instance=abc", "", ""); code != http.StatusBadRequest {
 		t.Fatalf("bad instance filter status=%d, want 400", code)
+	}
+}
+
+// TestRuntimeReportsVisitHistory starts an instance of the sample process, whose
+// token parks on the service task. The start event, having already been left
+// behind, must report zero live tokens but a visit count of 1 — the gray history
+// heatmap the overlay draws — while the task reports both a live token and a
+// visit.
+func TestRuntimeReportsVisitHistory(t *testing.T) {
+	ts := newTestServer(t)
+
+	if code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", sampleBPMN, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	if code, body := doReq(t, ts, http.MethodPost, "/api/v1/processes/1/instances", "{}", "application/json"); code != http.StatusOK {
+		t.Fatalf("instance status=%d body=%s", code, body)
+	}
+
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/processes/1/runtime", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("runtime status=%d body=%s", code, body)
+	}
+	var rt struct {
+		Tokens   int `json:"tokens"`
+		Elements []struct {
+			ElementID string `json:"elementId"`
+			Tokens    int    `json:"tokens"`
+			Visits    int    `json:"visits"`
+		} `json:"elements"`
+	}
+	if err := json.Unmarshal(body, &rt); err != nil {
+		t.Fatalf("decode runtime: %v (%s)", err, body)
+	}
+
+	byID := map[string]struct{ tokens, visits int }{}
+	for _, e := range rt.Elements {
+		byID[e.ElementID] = struct{ tokens, visits int }{e.Tokens, e.Visits}
+	}
+	// One live token overall (parked on the task).
+	if rt.Tokens != 1 {
+		t.Fatalf("live tokens = %d, want 1", rt.Tokens)
+	}
+	// The start event is history-only: the token has moved on, but it was visited.
+	if got := byID["start"]; got.tokens != 0 || got.visits != 1 {
+		t.Fatalf("start = %+v, want {tokens:0 visits:1}", got)
+	}
+	// The service task holds the live token and has been visited once.
+	if got := byID["task"]; got.tokens != 1 || got.visits != 1 {
+		t.Fatalf("task = %+v, want {tokens:1 visits:1}", got)
+	}
+	// The end event has not been reached, so it appears nowhere.
+	if _, ok := byID["end"]; ok {
+		t.Fatalf("end reported before being reached: %v", rt.Elements)
+	}
+}
+
+// TestRuntimeVisitHistoryByInstance checks the ?instance= filter narrows the
+// visit heatmap to a single instance: with two instances of the sample process,
+// the aggregate counts the start event twice while each instance counts it once.
+func TestRuntimeVisitHistoryByInstance(t *testing.T) {
+	ts := newTestServer(t)
+
+	if code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", sampleBPMN, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	for i := 0; i < 2; i++ {
+		if code, body := doReq(t, ts, http.MethodPost, "/api/v1/processes/1/instances", "{}", "application/json"); code != http.StatusOK {
+			t.Fatalf("instance %d status=%d body=%s", i, code, body)
+		}
+	}
+
+	startVisits := func(query string) int {
+		code, body := doReq(t, ts, http.MethodGet, "/api/v1/processes/1/runtime"+query, "", "")
+		if code != http.StatusOK {
+			t.Fatalf("runtime%s status=%d body=%s", query, code, body)
+		}
+		var rt struct {
+			Elements []struct {
+				ElementID string `json:"elementId"`
+				Visits    int    `json:"visits"`
+			} `json:"elements"`
+		}
+		if err := json.Unmarshal(body, &rt); err != nil {
+			t.Fatalf("decode runtime: %v (%s)", err, body)
+		}
+		for _, e := range rt.Elements {
+			if e.ElementID == "start" {
+				return e.Visits
+			}
+		}
+		return 0
+	}
+
+	// Find one instance key to isolate.
+	_, ilist := doReq(t, ts, http.MethodGet, "/api/v1/instances", "", "")
+	var insts []struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(ilist, &insts); err != nil || len(insts) != 2 {
+		t.Fatalf("decode instances: %v (%s)", err, ilist)
+	}
+
+	if got := startVisits(""); got != 2 {
+		t.Fatalf("aggregate start visits = %d, want 2", got)
+	}
+	if got := startVisits(fmt.Sprintf("?instance=%d", insts[0].Key)); got != 1 {
+		t.Fatalf("single-instance start visits = %d, want 1", got)
 	}
 }
 

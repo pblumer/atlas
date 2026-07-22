@@ -63,6 +63,59 @@ func TestElementInstancePutGetDelete(t *testing.T) {
 	}
 }
 
+// TestElementVisitHistory records visits for two instances of one definition and
+// checks that ElementVisitHistory both aggregates them (instanceFilter 0) and
+// isolates one instance (instanceFilter set). Repeated visits to the same element
+// accumulate via the counter merger.
+func TestElementVisitHistory(t *testing.T) {
+	s := openStore(t)
+	def := model.NewKey(1, 2)
+	otherDef := model.NewKey(1, 9)
+	i1 := model.NewKey(1, 10)
+	i2 := model.NewKey(1, 11)
+
+	commit(t, s, func(tx *state.Tx) error {
+		// Instance 1 walks start(0) → task(1) → end(2), and loops back over task once.
+		for _, el := range []int32{0, 1, 2, 1} {
+			if err := tx.RecordElementVisit(def, i1, el); err != nil {
+				return err
+			}
+		}
+		// Instance 2 walks start(0) → task(1) only.
+		for _, el := range []int32{0, 1} {
+			if err := tx.RecordElementVisit(def, i2, el); err != nil {
+				return err
+			}
+		}
+		// A visit under a different definition must not leak into def's scan.
+		return tx.RecordElementVisit(otherDef, model.NewKey(1, 20), 0)
+	})
+
+	fold := func(filter uint64) map[int32]int64 {
+		out := map[int32]int64{}
+		if err := s.ElementVisitHistory(def, filter, func(elementId int32, count int64) error {
+			out[elementId] += count
+			return nil
+		}); err != nil {
+			t.Fatalf("ElementVisitHistory(%d): %v", filter, err)
+		}
+		return out
+	}
+
+	// Aggregate across both instances: start twice, task three times, end once.
+	if got, want := fold(0), map[int32]int64{0: 2, 1: 3, 2: 1}; !reflect.DeepEqual(got, want) {
+		t.Errorf("aggregate visits = %v, want %v", got, want)
+	}
+	// Isolated to instance 1: its own walk, including the extra task loop.
+	if got, want := fold(i1), map[int32]int64{0: 1, 1: 2, 2: 1}; !reflect.DeepEqual(got, want) {
+		t.Errorf("instance-1 visits = %v, want %v", got, want)
+	}
+	// Isolated to instance 2: start and task once each, no end.
+	if got, want := fold(i2), map[int32]int64{0: 1, 1: 1}; !reflect.DeepEqual(got, want) {
+		t.Errorf("instance-2 visits = %v, want %v", got, want)
+	}
+}
+
 func TestTransactionSeesOwnWrites(t *testing.T) {
 	s := openStore(t)
 	key := model.NewKey(1, 5)

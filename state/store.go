@@ -211,6 +211,25 @@ func (s *Store) ActiveElementInstances(fn func(key uint64, v *model.ElementInsta
 	})
 }
 
+// ElementVisitHistory folds the token-visit counters for a process definition,
+// calling fn with each visited element index and how many tokens have passed
+// through it. With instanceFilter == 0 it aggregates every instance of the
+// definition (the heatmap the live overlay draws in gray); with a non-zero
+// instanceFilter it reports only that one instance's visits. Because the key
+// ends with the element index and the same element sits under a distinct
+// instance-key prefix per instance, a definition-wide scan can report the same
+// element index once per instance — the caller sums the counts. Pebble folds
+// the merge deltas for each key, so raw carries the current total for that key.
+func (s *Store) ElementVisitHistory(procDefKey, instanceFilter uint64, fn func(elementId int32, count int64) error) error {
+	prefix := elementVisitDefPrefix(procDefKey)
+	if instanceFilter != 0 {
+		prefix = elementVisitInstancePrefix(procDefKey, instanceFilter)
+	}
+	return s.scanPrefix(prefix, func(k, raw []byte) error {
+		return fn(elementIdFromVisitKey(k), decodeCounter(raw))
+	})
+}
+
 // VariablesOfScope calls fn with every variable owned by the given scope, via
 // the variable column family. Used to build a FEEL evaluation scope and to
 // surface an instance's variables to operators.

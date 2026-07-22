@@ -63,7 +63,8 @@ type infoResp struct {
 type runtimeElement struct {
 	ElementID string `json:"elementId"`
 	Type      string `json:"type"`
-	Tokens    int    `json:"tokens"`
+	Tokens    int    `json:"tokens"` // tokens sitting here now (live — drawn green)
+	Visits    int    `json:"visits"` // tokens that have ever passed through (history — drawn gray)
 }
 
 type runtimeResp struct {
@@ -303,6 +304,25 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 
 		byElement := map[string]*runtimeElement{}
 		var order []string
+		// get returns the accumulator for an element index, creating it (and
+		// recording its position) on first sight. Both the live-token scan and the
+		// visit-history scan funnel through it, so an element carries its live and
+		// historical counts on one entry.
+		get := func(elementId int32) *runtimeElement {
+			bid := d.cp.ElementBpmnId(elementId)
+			if bid == "" {
+				return nil
+			}
+			e := byElement[bid]
+			if e == nil {
+				e = &runtimeElement{ElementID: bid, Type: d.cp.Node(elementId).Type.String()}
+				byElement[bid] = e
+				order = append(order, bid)
+			}
+			return e
+		}
+
+		// Live tokens: element instances sitting on an element right now.
 		scanErr = s.store.ActiveElementInstances(func(_ uint64, v *model.ElementInstanceValue) error {
 			if v.ProcessDefKey != key {
 				return nil
@@ -310,18 +330,21 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			if instanceFilter != 0 && v.ProcessInstanceKey != instanceFilter {
 				return nil
 			}
-			bid := d.cp.ElementBpmnId(v.ElementId)
-			if bid == "" {
-				return nil
+			if e := get(v.ElementId); e != nil {
+				e.Tokens++
+				resp.Tokens++
 			}
-			e := byElement[bid]
-			if e == nil {
-				e = &runtimeElement{ElementID: bid, Type: d.cp.Node(v.ElementId).Type.String()}
-				byElement[bid] = e
-				order = append(order, bid)
+			return nil
+		})
+		if scanErr != nil {
+			return
+		}
+		// History: every token that has ever passed through an element, so the
+		// overlay shows the flow distribution even once instances have finished.
+		scanErr = s.store.ElementVisitHistory(key, instanceFilter, func(elementId int32, count int64) error {
+			if e := get(elementId); e != nil {
+				e.Visits += int(count)
 			}
-			e.Tokens++
-			resp.Tokens++
 			return nil
 		})
 		if scanErr != nil {

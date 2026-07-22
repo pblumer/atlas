@@ -538,10 +538,12 @@ function wireActions(root, modeler, api, toast) {
   });
 }
 
-// mountLive renders a deployed process read-only and overlays live runtime state
-// (active elements highlighted, token counts as badges), polling for updates.
-// This is the differentiator a standalone modeler can't offer — the diagram shows
-// where the engine's tokens actually are right now.
+// mountLive renders a deployed process read-only and overlays runtime state,
+// polling for updates: elements holding a token right now are green, elements a
+// token has only passed through are gray (the history heatmap), each badged with
+// its count. This is the differentiator a standalone modeler can't offer — the
+// diagram shows where the engine's tokens are now and the distribution of where
+// they have flowed, so a finished process still tells its story.
 //
 // The view is organized around one process: a version picker swaps which deployed
 // definition is shown, and an instance picker either aggregates every instance's
@@ -601,8 +603,9 @@ export async function mountLive(root, { api, toast, key }) {
       </div>
       <div class="var-panel" id="var-panel"></div>
       <div class="problems">
-        <span class="legend-swatch"></span> active element
-        <span class="badge" style="margin-left:12px">N</span> tokens on the element
+        <span class="legend-swatch live"></span> live token
+        <span class="legend-swatch history" style="margin-left:12px"></span> passed through
+        <span class="badge" style="margin-left:12px">N</span> token count
         <span style="flex:1"></span>
         <span class="muted">Polling every 1.5s</span>
       </div>
@@ -715,15 +718,26 @@ export async function mountLive(root, { api, toast, key }) {
     catch (e) { return; } // transient; try again next tick
     if (current !== viewer) return; // navigated away mid-flight
     overlays.clear();
-    for (const id of marked) canvas.removeMarker(id, "atlas-active");
+    for (const [id, marker] of marked) canvas.removeMarker(id, marker);
     marked = [];
+    // Each element is drawn in one of two states: green if it holds a live token
+    // right now, gray if tokens have only passed through it (history). Together
+    // they show the flow distribution even once every instance has finished — a
+    // gray trail with green where tokens are still alive.
     for (const e of rt.elements) {
       if (!registry.get(e.elementId)) continue;
-      canvas.addMarker(e.elementId, "atlas-active");
-      marked.push(e.elementId);
+      const live = e.tokens > 0;
+      if (!live && !(e.visits > 0)) continue;
+      const marker = live ? "atlas-active" : "atlas-visited";
+      canvas.addMarker(e.elementId, marker);
+      marked.push([e.elementId, marker]);
+      const count = live ? e.tokens : e.visits;
+      const title = live
+        ? `${e.tokens} live token(s)`
+        : `${e.visits} token(s) passed through`;
       overlays.add(e.elementId, "tokens", {
         position: { bottom: 4, right: 4 },
-        html: `<div class="token-badge" title="${e.tokens} token(s)">${e.tokens}</div>`,
+        html: `<div class="token-badge${live ? "" : " history"}" title="${title}">${count}</div>`,
       });
     }
     countEl.textContent = rt.instances;

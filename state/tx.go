@@ -259,6 +259,25 @@ func (t *Tx) mergeActiveChildren(scope uint64, delta int64) error {
 	return t.b.Merge(keyActiveChildren(scope), t.scratch, nil)
 }
 
+// --- Element-visit history ---
+//
+// Every time a token activates an element, its per-(definition, instance,
+// element) counter is bumped. Unlike the active element-instance record — which
+// applyToState deletes on completion — the visit counter is retained, so the
+// Operations overlay can show where tokens have flowed even after the instances
+// finished (the gray "history" heatmap; live tokens stay green). Like the
+// active-children counter it is a write-only Merge, so it does not read or
+// allocate on the hot path (invariant I1) and rebuilds identically on replay
+// (invariant I4). Retention is unbounded for now, as with the process-instance
+// history index (ADR-0017, ADR-0022).
+
+// RecordElementVisit adds one to the visit counter for an element instance's
+// element. Called from applyToState when an element instance is activated.
+func (t *Tx) RecordElementVisit(procDefKey, piKey uint64, elementId int32) error {
+	t.scratch = appendCounter(t.scratch[:0], 1)
+	return t.b.Merge(keyElementVisit(procDefKey, piKey, elementId), t.scratch, nil)
+}
+
 // ActiveChildren returns the active-child count for scope (0 if none). This read
 // folds the merged deltas, so it is used only where the current count is needed
 // (e.g. detecting a finished scope), not on every increment.

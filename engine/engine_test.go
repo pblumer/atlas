@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
@@ -186,6 +187,20 @@ func completedInstances(t *testing.T, s *state.Store) map[uint64]model.ProcessIn
 		return nil
 	}); err != nil {
 		t.Fatalf("CompletedProcessInstances: %v", err)
+	}
+	return out
+}
+
+// elementVisits reads the element-visit history for a definition into a map of
+// element index → total tokens that have passed through it (ADR-0022).
+func elementVisits(t *testing.T, s *state.Store, defKey uint64) map[int32]int64 {
+	t.Helper()
+	out := map[int32]int64{}
+	if err := s.ElementVisitHistory(defKey, 0, func(elementId int32, count int64) error {
+		out[elementId] += count
+		return nil
+	}); err != nil {
+		t.Fatalf("ElementVisitHistory: %v", err)
 	}
 	return out
 }
@@ -676,5 +691,77 @@ func TestCompletedInstanceHistoryRecovers(t *testing.T) {
 	replayed := completedInstances(t, store2)
 	if len(replayed) != 1 || replayed[instKey] != got {
 		t.Fatalf("replayed history = %v, want %v", replayed, live)
+	}
+}
+
+// TestElementVisitHistoryRecovers is the recovery property for the element-visit
+// heatmap (ADR-0022): every element a token activates is counted, the count is
+// retained after the element instance is deleted on completion, and replaying the
+// log rebuilds an identical count — the visit is derived only from the event
+// payload, never re-generated (invariant I4).
+func TestElementVisitHistoryRecovers(t *testing.T) {
+	dir := t.TempDir()
+	cp, jobType := linearProcess(t) // start → service task → end
+	clock := &manualClock{}
+
+	// Live run all the way to completion.
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clock)
+	p1.Deploy(cp)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.CreateInstance(cp.Key)
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle 1: %v", err)
+	}
+	jobs := activatableJobs(t, h1.store, jobType)
+	p1.CompleteJob(jobs[0])
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle 2: %v", err)
+	}
+
+	// The instance has finished — no live element instances remain — yet the visit
+	// history still records every one of the three elements a token walked through.
+	if _, ei := counts(t, h1.store); ei != 0 {
+		t.Fatalf("active element instances = %d, want 0", ei)
+	}
+	live := elementVisits(t, h1.store, cp.Key)
+	if len(live) != 3 {
+		t.Fatalf("visited elements = %d (%v), want 3 (start, task, end)", len(live), live)
+	}
+	for el, n := range live {
+		if n != 1 {
+			t.Fatalf("element %d visited %d times, want 1", el, n)
+		}
+	}
+	h1.close(t)
+
+	// Replay the same log into a fresh, empty store.
+	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open 2: %v", err)
+	}
+	store2, err := state.Open(filepath.Join(dir, "state2"))
+	if err != nil {
+		t.Fatalf("state.Open 2: %v", err)
+	}
+	defer func() {
+		if err := store2.Close(); err != nil {
+			t.Errorf("store2.Close: %v", err)
+		}
+		if err := log2.Close(); err != nil {
+			t.Errorf("log2.Close: %v", err)
+		}
+	}()
+	p2 := engine.New(1, log2, store2, clock)
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2 (replay): %v", err)
+	}
+
+	// Rebuilt visit heatmap matches the live run exactly.
+	if replayed := elementVisits(t, store2, cp.Key); !reflect.DeepEqual(replayed, live) {
+		t.Fatalf("replayed visits = %v, want %v", replayed, live)
 	}
 }
