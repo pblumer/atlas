@@ -35,6 +35,54 @@ The three core pillars:
 2. **The processor** moves tokens through that graph as a deterministic fold over an event log. A single batch loop collects commands, processes them purely in-memory against a transaction, makes the whole batch durable with one fsync, then runs visible side effects.
 3. **The data model** makes every step a keyed record with a `(ValueType, Intent)` discriminator. The same `applyToState` function runs live and during recovery, so the log and the state can never diverge.
 
+## Drive it from an AI agent (MCP)
+
+Atlas speaks the [Model Context Protocol](https://modelcontextprotocol.io), so an
+AI agent can deploy a BPMN model, start an instance, and read live runtime state.
+Both transports proxy to the same HTTP API ([ADR-0016](docs/adr/0016-mcp-server-over-http-api.md)).
+
+**Remote connector (claude.ai, Streamable HTTP).** `atlas serve` mounts the
+transport at `/mcp`:
+
+```bash
+atlas serve --addr :8080          # engine + HTTP API + web UI + /mcp
+```
+
+Then add a custom connector in claude.ai (Settings → Connectors → Add custom
+connector) pointing at your server:
+
+```
+https://<your-host>/mcp
+```
+
+> ⚠️ **The `/mcp` endpoint is unauthenticated** — anything that can reach it can
+> deploy and run processes. Put authentication in front of it (reverse proxy)
+> before exposing it publicly, and make sure the proxy forwards `POST /mcp`.
+
+**Local client (Claude Desktop / Claude Code, stdio).** Run the per-agent stdio
+adapter against a running server:
+
+```bash
+atlas mcp --server http://localhost:8080
+```
+
+For Claude Desktop, add it to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "atlas": {
+      "command": "atlas",
+      "args": ["mcp", "--server", "http://localhost:8080"]
+    }
+  }
+}
+```
+
+Tools: `atlas_deploy`, `atlas_list_processes`, `atlas_get_process_xml`,
+`atlas_process_runtime`, `atlas_create_instance`, `atlas_list_instances`,
+`atlas_stats`, `atlas_info`.
+
 ## Documentation
 
 - **[Architecture overview](docs/ARCHITECTURE.md)** — the canonical reference for how the system fits together
