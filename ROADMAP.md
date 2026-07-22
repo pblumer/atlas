@@ -26,7 +26,7 @@ The skeleton that proves the three pillars fit together end to end.
 The control-flow basics most real models use.
 
 - ✅ `expr`: FEEL compile-once/eval-many with `inputs` analysis — reused from
-  `github.com/pblumer/feel` behind an `expr` boundary ([ADR-0014](docs/adr/0014-reuse-feel-engine.md)).
+  `github.com/pblumer/feel` behind an `expr` boundary ([ADR-0015](docs/adr/0015-reuse-feel-engine.md)).
 - ✅ **Script tasks**: evaluate FEEL in-engine (reading input variables) and write
   the result variable, so an instance runs to completion with no external worker.
   Recovery-tested (the result is written into the event and re-applied on replay,

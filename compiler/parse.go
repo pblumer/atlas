@@ -78,7 +78,7 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 		if st.Script.ResultVariable == "" {
 			return nil, fmt.Errorf("compiler: script task %q has no result variable", st.Id)
 		}
-		// FEEL is compiled once, at deploy time (ADR-0008/0014). CompileAuto
+		// FEEL is compiled once, at deploy time (ADR-0008/0015). CompileAuto
 		// discovers the process variables the expression reads; a syntax or type
 		// error fails here — i.e. fails deploy.
 		e, err := expr.CompileAuto(text)

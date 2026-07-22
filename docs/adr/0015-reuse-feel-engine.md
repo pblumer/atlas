@@ -1,4 +1,4 @@
-# ADR-0014: Reuse the external FEEL engine behind an `expr` boundary
+# ADR-0015: Reuse the external FEEL engine behind an `expr` boundary
 
 - **Status:** Accepted
 - **Date:** 2026-07-22

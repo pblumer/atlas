@@ -10,7 +10,7 @@
 //
 // Reuse of an existing FEEL engine (versus building our own subset) is exactly
 // what ADR-0008 permits when the library offers a genuine compile-once/eval-many
-// API; feel does. See ADR-0014.
+// API; feel does. See ADR-0015.
 package expr
 
 import (

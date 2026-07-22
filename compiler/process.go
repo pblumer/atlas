@@ -70,7 +70,7 @@ type ServiceTaskDetail struct {
 }
 
 // ScriptTaskDetail is the per-script-task data a behavior needs at runtime: a
-// FEEL expression compiled once at deploy time (ADR-0008/0014) and the name of
+// FEEL expression compiled once at deploy time (ADR-0008/0015) and the name of
 // the variable its result is written to.
 type ScriptTaskDetail struct {
 	Expr      *expr.Compiled
