@@ -106,6 +106,12 @@ type createInstanceResp struct {
 	Stats         statsResp `json:"stats"`
 }
 
+type cancelInstanceResp struct {
+	InstanceKey uint64    `json:"instanceKey"`
+	State       string    `json:"state"`
+	Stats       statsResp `json:"stats"`
+}
+
 // handleInfo reports product/version metadata for the UI shell.
 func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, infoResp{Product: "Atlas", Version: Version})
@@ -624,6 +630,56 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
 	default:
 		writeJSON(w, http.StatusOK, publishMessageResp{Name: payload.Name, CorrelationKey: payload.CorrelationKey, Stats: stats})
+	}
+}
+
+// handleCancelInstance terminates a running process instance: it terminates
+// every active element instance and records the instance as terminated in
+// history, so it disappears from the running list and the live overlay and shows
+// as "terminated" in the finished list. Useful for a stuck instance (e.g. one
+// parked on a wait that will never complete). 404 if no active instance has the
+// key. Returns the resulting live counts.
+func (s *Server) handleCancelInstance(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid instance key")
+		return
+	}
+	var (
+		found   bool
+		scanErr error
+		runErr  error
+		statErr error
+		stats   statsResp
+	)
+	s.do(func() {
+		scanErr = s.store.ActiveProcessInstances(func(k uint64, _ *model.ProcessInstanceValue) error {
+			if k == key {
+				found = true
+			}
+			return nil
+		})
+		if scanErr != nil || !found {
+			return
+		}
+		s.proc.CancelInstance(key)
+		if err := s.proc.RunUntilIdle(); err != nil {
+			runErr = err
+			return
+		}
+		stats, statErr = s.readStats()
+	})
+	switch {
+	case scanErr != nil:
+		writeError(w, http.StatusInternalServerError, "find instance: "+scanErr.Error())
+	case !found:
+		writeError(w, http.StatusNotFound, "no active instance with that key")
+	case runErr != nil:
+		writeError(w, http.StatusInternalServerError, "cancel instance: "+runErr.Error())
+	case statErr != nil:
+		writeError(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
+	default:
+		writeJSON(w, http.StatusOK, cancelInstanceResp{InstanceKey: key, State: "terminated", Stats: stats})
 	}
 }
 

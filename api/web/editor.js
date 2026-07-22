@@ -606,6 +606,7 @@ export async function mountLive(root, { api, toast, key }) {
           <select id="instance-sel"><option value="all">All instances</option></select></label>
         <div style="flex:1"></div>
         <button class="btn" id="start">Start instance</button>
+        <button class="btn ghost danger" id="cancel-inst" hidden>Cancel instance</button>
         <button class="btn neutral" id="refresh">Refresh</button>
         <span class="pill ok" style="margin-left:8px"><span class="dot"></span><b id="inst-count">0</b>&nbsp;running</span>
         <span class="pill" style="margin-left:8px"><b id="token-count">0</b>&nbsp;tokens total</span>
@@ -734,6 +735,7 @@ export async function mountLive(root, { api, toast, key }) {
 
   async function poll() {
     await refreshInstances();
+    updateCancelBtn();
     const q = selected === "all" ? "" : `?instance=${encodeURIComponent(selected)}`;
     let rt;
     try { rt = await api("GET", `/api/v1/processes/${key}/runtime${q}`); }
@@ -756,9 +758,35 @@ export async function mountLive(root, { api, toast, key }) {
     renderVariables();
   }
 
+  // The Cancel button targets the selected instance; it is shown only when a
+  // single, still-active instance is selected (there is nothing to cancel for
+  // "All instances" or an already-finished one).
+  const cancelBtn = root.querySelector("#cancel-inst");
+  function updateCancelBtn() {
+    const inst = instances.find((r) => String(r.key) === selected);
+    cancelBtn.hidden = !(inst && inst.state === "active");
+  }
+
   // Selecting an instance isolates it on the diagram; re-poll right away so the
   // overlay and variables switch without waiting for the next tick.
-  instSel.addEventListener("change", () => { selected = instSel.value; poll(); });
+  instSel.addEventListener("change", () => { selected = instSel.value; updateCancelBtn(); poll(); });
+
+  cancelBtn.addEventListener("click", async () => {
+    if (selected === "all") return;
+    if (!window.confirm(`Cancel (terminate) instance ${selected}? Its token is discarded and it moves to the finished list as "terminated".`)) return;
+    cancelBtn.disabled = true;
+    try {
+      await api("DELETE", `/api/v1/instances/${selected}`);
+      toast(`Instance ${selected} terminated`, "ok");
+      await refreshInstances();
+      await poll();
+      updateCancelBtn();
+    } catch (e) {
+      toast("cancel failed: " + e.message, "err");
+    } finally {
+      cancelBtn.disabled = false;
+    }
+  });
 
   root.querySelector("#refresh").addEventListener("click", poll);
 
