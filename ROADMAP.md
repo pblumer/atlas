@@ -41,6 +41,12 @@ The control-flow basics most real models use.
 - 🔲 Input/output variable mappings
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
 - 🔲 Conformance tests against a curated BPMN model set
+- 🚧 **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)
+  engine, [ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)): the
+  element, its behavior, and off-hot-path evaluation through the job path landed
+  as a vertical slice. It currently feeds a decision static inputs and surfaces
+  outputs via a sink; wiring real input/output variable mappings depends on the
+  variable subsystem above.
 
 ## Milestone 2 — Events and timers 🔲
 
@@ -139,7 +145,11 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   reimplement BPMN rendering or modeling from scratch.
 - A batteries-included application server beyond the single-binary server above —
   the engine core stays a library first, with the server embedding it.
-- DMN decision evaluation as a product surface (FEEL is used internally for expressions).
+- A standalone DMN authoring/product surface. Atlas *executes* the DMN decisions
+  a model references, via business rule tasks that delegate to the embedded temis
+  engine ([ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)); it does
+  not ship a DMN modeler or decision-management product of its own. (FEEL is also
+  used internally for expressions.)
 
 ## Guiding constraints
 
