@@ -15,15 +15,19 @@
 // # Scope of the skeleton
 //
 // This is the Milestone S skeleton (ROADMAP.md): deploy XML, create an instance,
-// read stats, health, and a static UI shell. Two honest limitations for now:
-// deployments are held in memory and are lost on restart (durable deployment
-// waits on the Milestone 4 public API), and there is no job-worker HTTP surface
-// yet (that follows the gRPC job protocol, ADR-0007), so an instance parks at its
-// service task — which is exactly the "waiting token" the live viewer will show.
+// read stats, health, and a static UI shell. Deployments are durable via an
+// on-disk sidecar store (ADR-0019) reloaded on startup, so diagrams, versions,
+// and recovered instances survive a restart; the eventual event-sourced
+// deployment path arrives with the Milestone 4 public API. One honest limitation
+// remains: there is no job-worker HTTP surface yet (that follows the gRPC job
+// protocol, ADR-0007), so an instance parks at its service task — which is
+// exactly the "waiting token" the live viewer will show.
 package api
 
 import (
+	"bytes"
 	"embed"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"sync"
@@ -73,12 +77,20 @@ type Server struct {
 	order       []uint64 // deployment keys in registration order, for stable listing
 	nextKey     uint64
 	versions    map[string]int32 // bpmnProcessId → highest version deployed
+	deploys     *deployStore     // durable sidecar for deployments (ADR-0019)
 }
 
 // New builds a Server over an already-recovered processor and its store and
-// starts the run-loop goroutine. The caller retains ownership of proc and store
-// (Close here stops only the loop, not the engine).
-func New(proc *engine.Processor, store *state.Store) *Server {
+// starts the run-loop goroutine. deployDir is the directory the durable
+// deployment store lives in (ADR-0019); New reloads any deployments found there,
+// re-registering them with the processor so recovered instances resolve their
+// definition and the UI can render diagrams again. The caller retains ownership
+// of proc and store (Close here stops only the loop, not the engine).
+func New(proc *engine.Processor, store *state.Store, deployDir string) (*Server, error) {
+	ds, err := newDeployStore(deployDir)
+	if err != nil {
+		return nil, err
+	}
 	s := &Server{
 		proc:        proc,
 		store:       store,
@@ -87,11 +99,54 @@ func New(proc *engine.Processor, store *state.Store) *Server {
 		deployments: map[uint64]*deployment{},
 		nextKey:     1,
 		versions:    map[string]int32{},
+		deploys:     ds,
+	}
+	if err := s.loadDeployments(); err != nil {
+		return nil, err
 	}
 	s.wg.Add(2)
 	go s.loop()
 	go s.timerScheduler(time.Second)
-	return s
+	return s, nil
+}
+
+// loadDeployments rebuilds the in-memory deployment registry and re-registers
+// each definition with the processor from the durable store, so a restart
+// restores diagrams, names, versions, and the ability to advance recovered
+// instances (ADR-0019). It runs before the loop serves traffic, so touching the
+// registry and the processor directly here respects the single-writer invariant.
+func (s *Server) loadDeployments() error {
+	recs, err := s.deploys.loadAll()
+	if err != nil {
+		return err
+	}
+	for _, rec := range recs {
+		cp, err := compiler.Parse(rec.Key, rec.Version, bytes.NewReader([]byte(rec.XML)))
+		if err != nil {
+			// A stored model that no longer compiles is a hard, actionable error
+			// rather than a silently dropped definition (ADR-0019).
+			return fmt.Errorf("api: reload deployment %d (%s v%d): %w", rec.Key, rec.ProcessID, rec.Version, err)
+		}
+		cp.Version = rec.Version
+		s.proc.Deploy(cp)
+		s.deployments[rec.Key] = &deployment{
+			Key:        rec.Key,
+			ProcessID:  rec.ProcessID,
+			Name:       rec.Name,
+			Version:    rec.Version,
+			DeployedAt: rec.DeployedAt,
+			xml:        []byte(rec.XML),
+			cp:         cp,
+		}
+		s.order = append(s.order, rec.Key)
+		if rec.Version > s.versions[rec.ProcessID] {
+			s.versions[rec.ProcessID] = rec.Version
+		}
+		if rec.Key >= s.nextKey {
+			s.nextKey = rec.Key + 1
+		}
+	}
+	return nil
 }
 
 // timerScheduler fires due timers on the run-loop goroutine at a fixed cadence,
