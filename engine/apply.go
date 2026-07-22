@@ -38,7 +38,13 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err := tx.PutElementInstance(h.Key, &v.element); err != nil {
 				return err
 			}
-			return tx.IncrementActiveChildren(v.element.FlowScopeKey)
+			if err := tx.IncrementActiveChildren(v.element.FlowScopeKey); err != nil {
+				return err
+			}
+			// Retain a token-visit count per element so the Operations overlay can
+			// show where tokens have flowed even after instances finish (ADR-0022).
+			// Derived only from the event payload, so replay rebuilds it (I4).
+			return tx.RecordElementVisit(v.element.ProcessDefKey, v.element.ProcessInstanceKey, v.element.ElementId)
 		case model.IntentCompleted, model.IntentTerminated:
 			if err := tx.DeleteElementInstance(h.Key, &v.element); err != nil {
 				return err

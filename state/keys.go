@@ -21,6 +21,7 @@ const (
 	cfVariable               columnFamily = 0x08 // var:<scopeKey>:<name> → VariableValue
 	cfProcessInstanceHistory columnFamily = 0x09 // piHist:<piKey> → ProcessInstanceValue (terminal)
 	cfMessageSubscription    columnFamily = 0x0A // msgSub:<name>:<corrKey>:<elKey> → MessageSubscriptionValue
+	cfElementVisit           columnFamily = 0x0B // elVisit:<procDefKey>:<piKey>:<elementId> → int64 count
 )
 
 func appendBE64(dst []byte, v uint64) []byte { return binary.BigEndian.AppendUint64(dst, v) }
@@ -75,6 +76,32 @@ func keyActiveChildren(scope uint64) []byte {
 
 func keyMeta(name string) []byte {
 	return append([]byte{byte(cfMeta)}, name...)
+}
+
+// keyElementVisit keys the per-instance visit counter for one BPMN element. The
+// process-definition key leads, so every visit across a definition's instances
+// is one prefix scan (the aggregate heatmap); the process-instance key follows,
+// so a single instance's visits are a narrower prefix scan; the element index is
+// the trailing component the scan folds by. All big-endian so lexicographic byte
+// order matches numeric order.
+func keyElementVisit(procDefKey, piKey uint64, elementId int32) []byte {
+	return appendBE32(elementVisitInstancePrefix(procDefKey, piKey), uint32(elementId))
+}
+
+// elementVisitDefPrefix scans every element visit recorded for a definition,
+// across all of its instances.
+func elementVisitDefPrefix(procDefKey uint64) []byte {
+	return appendBE64([]byte{byte(cfElementVisit)}, procDefKey)
+}
+
+// elementVisitInstancePrefix scans the element visits of a single instance.
+func elementVisitInstancePrefix(procDefKey, piKey uint64) []byte {
+	return appendBE64(elementVisitDefPrefix(procDefKey), piKey)
+}
+
+// elementIdFromVisitKey extracts the trailing element index from a visit key.
+func elementIdFromVisitKey(k []byte) int32 {
+	return int32(binary.BigEndian.Uint32(k[len(k)-4:]))
 }
 
 func variablePrefix(scope uint64) []byte {

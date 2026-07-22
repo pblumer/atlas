@@ -120,7 +120,7 @@ func TestDeploymentSurvivesRestart(t *testing.T) {
 // TestCollaborationSurvivesRestart proves the multi-process reload path: a
 // deployed collaboration's pools each persist as their own record and reload via
 // ParseNamed (each record recompiles exactly its own process out of the shared
-// collaboration XML) after a restart (ADR-0022).
+// collaboration XML) after a restart (ADR-0023).
 func TestCollaborationSurvivesRestart(t *testing.T) {
 	dir := t.TempDir()
 

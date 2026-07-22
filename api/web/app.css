@@ -194,20 +194,28 @@ label.field span { display: block; font-size: 12px; color: var(--muted); margin-
 /* ---------- Live overlay ---------- */
 /* In the live view the diagram is read-only: hide editing affordances. */
 .live .djs-palette, .live .djs-context-pad, .live .djs-direct-editing-parent { display: none !important; }
-/* Highlight elements that currently hold tokens. */
+/* Elements are highlighted in two states: green where tokens live right now,
+   gray where tokens have only passed through (the history heatmap). */
 .djs-element.atlas-active .djs-visual > :nth-child(1) {
-  stroke: var(--accent) !important; stroke-width: 2.5px !important;
+  stroke: var(--ok) !important; stroke-width: 2.5px !important;
+}
+.djs-element.atlas-visited .djs-visual > :nth-child(1) {
+  stroke: var(--muted) !important; stroke-width: 2px !important;
+  stroke-dasharray: 4 3 !important;
 }
 .token-badge {
-  background: var(--accent); color: #fff; border-radius: 999px;
+  background: var(--ok); color: #fff; border-radius: 999px;
   min-width: 20px; height: 20px; padding: 0 6px;
   font: 700 12px/20px system-ui, sans-serif; text-align: center;
   box-shadow: 0 1px 4px rgba(0,0,0,0.35); pointer-events: none;
 }
+/* History badge: a token that has flowed through but is no longer here. */
+.token-badge.history { background: var(--muted); }
 .legend-swatch {
   display: inline-block; width: 22px; height: 0;
-  border-top: 2.5px solid var(--accent); vertical-align: middle; margin-right: 4px;
+  border-top: 2.5px solid var(--ok); vertical-align: middle; margin-right: 4px;
 }
+.legend-swatch.history { border-top: 2px dashed var(--muted); }
 /* Inline version/instance pickers in the live toolbar. */
 .bar-select { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; }
 .bar-select > span { font-size: 12px; color: var(--muted); }

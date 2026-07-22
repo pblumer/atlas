@@ -1,4 +1,4 @@
-# ADR-0022: Collaborations and pools as multi-process deployments
+# ADR-0023: Collaborations and pools as multi-process deployments
 
 - **Status:** Accepted
 - **Date:** 2026-07-22

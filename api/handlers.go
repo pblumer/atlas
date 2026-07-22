@@ -46,12 +46,6 @@ type processResp struct {
 	DeployedAt int64  `json:"deployedAt"`
 }
 
-// processName extracts the first <process name="…"> from BPMN XML, for display.
-func processName(body []byte) string {
-	_, name := processIdentity(body)
-	return name
-}
-
 // processIdentity extracts the first process element's id and name from BPMN XML.
 // encoding/xml matches on local name, so it works whether or not the element
 // carries a namespace prefix (<process> or <bpmn:process>).
@@ -76,7 +70,8 @@ type infoResp struct {
 type runtimeElement struct {
 	ElementID string `json:"elementId"`
 	Type      string `json:"type"`
-	Tokens    int    `json:"tokens"`
+	Tokens    int    `json:"tokens"` // tokens sitting here now (live — drawn green)
+	Visits    int    `json:"visits"` // tokens that have ever passed through (history — drawn gray)
 }
 
 type runtimeResp struct {
@@ -122,7 +117,7 @@ func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
 // per pool) — and returns the assigned key/id/version for each. Each pool's
 // process becomes its own runnable definition; the message flows between pools
 // are the diagram's counterpart of the message events that link them at runtime
-// (ADR-0022).
+// (ADR-0023).
 func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
@@ -162,7 +157,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 			// Durable before visible (I2, ADR-0019): persist before registering. A
 			// mid-collaboration failure leaves earlier pools deployed (no rollback
 			// yet) and returns 500 — an honest limitation until deployment is a
-			// first-class WAL event (ADR-0022).
+			// first-class WAL event (ADR-0023).
 			if err := s.deploys.save(persistedDeployment{
 				Key:        key,
 				ProcessID:  pid,
@@ -343,6 +338,25 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 
 		byElement := map[string]*runtimeElement{}
 		var order []string
+		// get returns the accumulator for an element index, creating it (and
+		// recording its position) on first sight. Both the live-token scan and the
+		// visit-history scan funnel through it, so an element carries its live and
+		// historical counts on one entry.
+		get := func(elementId int32) *runtimeElement {
+			bid := d.cp.ElementBpmnId(elementId)
+			if bid == "" {
+				return nil
+			}
+			e := byElement[bid]
+			if e == nil {
+				e = &runtimeElement{ElementID: bid, Type: d.cp.Node(elementId).Type.String()}
+				byElement[bid] = e
+				order = append(order, bid)
+			}
+			return e
+		}
+
+		// Live tokens: element instances sitting on an element right now.
 		scanErr = s.store.ActiveElementInstances(func(_ uint64, v *model.ElementInstanceValue) error {
 			if v.ProcessDefKey != key {
 				return nil
@@ -350,18 +364,21 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			if instanceFilter != 0 && v.ProcessInstanceKey != instanceFilter {
 				return nil
 			}
-			bid := d.cp.ElementBpmnId(v.ElementId)
-			if bid == "" {
-				return nil
+			if e := get(v.ElementId); e != nil {
+				e.Tokens++
+				resp.Tokens++
 			}
-			e := byElement[bid]
-			if e == nil {
-				e = &runtimeElement{ElementID: bid, Type: d.cp.Node(v.ElementId).Type.String()}
-				byElement[bid] = e
-				order = append(order, bid)
+			return nil
+		})
+		if scanErr != nil {
+			return
+		}
+		// History: every token that has ever passed through an element, so the
+		// overlay shows the flow distribution even once instances have finished.
+		scanErr = s.store.ElementVisitHistory(key, instanceFilter, func(elementId int32, count int64) error {
+			if e := get(elementId); e != nil {
+				e.Visits += int(count)
 			}
-			e.Tokens++
-			resp.Tokens++
 			return nil
 		})
 		if scanErr != nil {
