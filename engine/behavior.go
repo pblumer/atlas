@@ -45,6 +45,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeTimerCatchEvent] = timerCatchEventBehavior{}
 	p.behaviors[compiler.TypeMessageCatchEvent] = messageCatchEventBehavior{}
 	p.behaviors[compiler.TypeMessageThrowEvent] = messageThrowEventBehavior{}
+	p.behaviors[compiler.TypeTask] = passThroughBehavior{}
 }
 
 // --- command handlers ---
@@ -197,6 +198,20 @@ func (startEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *mode
 }
 
 func (startEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// passThroughBehavior: an undefined/manual task with no execution semantics. It
+// has no work of its own, so it completes on activation and takes its outgoing
+// flow — the token flows straight through, exactly like a none event. This makes
+// a routing test (e.g. of a gateway) runnable before its tasks are implemented.
+type passThroughBehavior struct{}
+
+func (passThroughBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (passThroughBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	completeAndTakeFlows(c, key, ei)
 }
 

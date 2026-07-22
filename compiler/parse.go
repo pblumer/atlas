@@ -273,6 +273,20 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			return nil, err
 		}
 	}
+	// An undefined <task> and a <manualTask> have no execution semantics, so Atlas
+	// runs them as pass-throughs (the token flows straight on). This lets a model
+	// be drafted and its routing — e.g. a gateway's branches — tested before its
+	// tasks are given real implementations.
+	for _, t := range proc.Tasks {
+		if err := register(t.Id, b.AddTask()); err != nil {
+			return nil, err
+		}
+	}
+	for _, t := range proc.ManualTasks {
+		if err := register(t.Id, b.AddTask()); err != nil {
+			return nil, err
+		}
+	}
 	for _, e := range proc.EndEvents {
 		if err := register(e.Id, b.AddEndEvent()); err != nil {
 			return nil, err
@@ -289,16 +303,15 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		label string
 		nodes []xmlNode
 	}{
-		{"task", proc.Tasks}, {"userTask", proc.UserTasks},
+		{"userTask", proc.UserTasks},
 		{"sendTask", proc.SendTasks}, {"receiveTask", proc.ReceiveTasks},
-		{"manualTask", proc.ManualTasks},
 		{"parallelGateway", proc.ParallelGateways},
 		{"inclusiveGateway", proc.InclusiveGateways},
 	} {
 		if len(u.nodes) > 0 {
 			return nil, fmt.Errorf("compiler: element %q is a <%s>, which Atlas can't execute yet "+
-				"(supported: start/end events, service tasks, script tasks, business rule tasks, exclusive gateways, "+
-				"and timer/message intermediate events)", u.nodes[0].Id, u.label)
+				"(supported: start/end events, tasks (undefined/manual pass-through, service, script, "+
+				"business rule), exclusive gateways, and timer/message intermediate events)", u.nodes[0].Id, u.label)
 		}
 	}
 

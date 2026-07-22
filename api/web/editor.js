@@ -514,18 +514,31 @@ function wireProperties(root, modeler) {
     if (fcond) {
       fcond.addEventListener("change", () => {
         const raw = (fcond.value || "").trim();
+        const beo = element.businessObject;
+        const prevCond = ((beo.conditionExpression && beo.conditionExpression.body) || "").replace(/^=\s*/, "").trim();
+        const curName = (beo.name || "").trim();
+        // The flow's diagram label mirrors its condition — so a conditional branch
+        // shows its guard on the canvas — unless the modeler gave it a distinct
+        // descriptive label (then that label is left alone).
+        const mirrors = curName === "" || curName === prevCond;
+        const props = {};
         if (raw === "") {
-          // Clearing the field removes the guard, turning the branch unconditional.
-          try { modeling.updateProperties(element, { conditionExpression: undefined }); } catch { /* stale */ }
-          return;
+          // Clearing the field removes the guard, turning the branch unconditional;
+          // an auto-derived label goes with it.
+          props.conditionExpression = undefined;
+          if (mirrors && curName !== "") props.name = "";
+        } else {
+          // Store as a FEEL expression, '=' prefixed per Zeebe (Atlas strips it).
+          const moddle = modeler.get("moddle");
+          const expr = moddle.create("bpmn:FormalExpression", {
+            body: raw.startsWith("=") ? raw : "= " + raw,
+          });
+          expr.$parent = beo;
+          props.conditionExpression = expr;
+          const plain = raw.replace(/^=\s*/, "");
+          if (mirrors && curName !== plain) props.name = plain;
         }
-        // Store as a FEEL expression, '=' prefixed per Zeebe (Atlas strips it).
-        const moddle = modeler.get("moddle");
-        const expr = moddle.create("bpmn:FormalExpression", {
-          body: raw.startsWith("=") ? raw : "= " + raw,
-        });
-        expr.$parent = element.businessObject;
-        try { modeling.updateProperties(element, { conditionExpression: expr }); } catch { /* stale */ }
+        try { modeling.updateProperties(element, props); } catch { /* stale */ }
       });
     }
 
