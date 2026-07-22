@@ -208,6 +208,25 @@ label.field span { display: block; font-size: 12px; color: var(--muted); margin-
   display: inline-block; width: 22px; height: 0;
   border-top: 2.5px solid var(--accent); vertical-align: middle; margin-right: 4px;
 }
+/* Inline version/instance pickers in the live toolbar. */
+.bar-select { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; }
+.bar-select > span { font-size: 12px; color: var(--muted); }
+.bar-select select { width: auto; min-width: 96px; max-width: 240px; padding: 5px 8px; font-size: 13px; }
+
+/* Variables panel beneath the live diagram. */
+.var-panel {
+  border-top: 1px solid var(--border); background: var(--surface);
+  padding: 12px 16px; max-height: 30vh; overflow: auto; flex: 0 0 auto;
+}
+.var-panel .vp-head {
+  font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em;
+  color: var(--muted); margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+}
+.var-panel .vp-table { width: 100%; }
+.var-panel .vp-table td { padding: 6px 10px 6px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+.var-panel .vp-table td:first-child { font: 12px/1.6 ui-monospace, monospace; white-space: nowrap; }
+.var-panel .chip { margin: 0 4px 4px 0; }
+
 /* Start-variables input, revealed under the live toolbar by "Start instance". */
 .start-panel {
   padding: 12px 16px; border-bottom: 1px solid var(--border);

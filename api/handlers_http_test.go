@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -97,6 +98,90 @@ func TestRuntimeIgnoresOtherDefinitions(t *testing.T) {
 	// Only definition 1's single instance and its one token must be reported.
 	if rt.Instances != 1 || len(rt.Elements) != 1 || rt.Elements[0].Tokens != 1 {
 		t.Fatalf("runtime = %+v, want exactly definition 1's one instance/token", rt)
+	}
+}
+
+// TestRuntimeFilterByInstance starts two instances of one definition and asks for
+// the runtime of a single one via ?instance=<key>: only that instance's token is
+// reported (Instances=1), so the live view can isolate one instance on the diagram.
+func TestRuntimeFilterByInstance(t *testing.T) {
+	ts := newTestServer(t)
+
+	if code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", sampleBPMN, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	for i := 0; i < 2; i++ {
+		if code, body := doReq(t, ts, http.MethodPost, "/api/v1/processes/1/instances", "{}", "application/json"); code != http.StatusOK {
+			t.Fatalf("instance %d status=%d body=%s", i, code, body)
+		}
+	}
+
+	// Grab the two live instance keys.
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/instances", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("instances status=%d body=%s", code, body)
+	}
+	var insts []struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &insts); err != nil {
+		t.Fatalf("decode instances: %v (%s)", err, body)
+	}
+	if len(insts) != 2 {
+		t.Fatalf("want 2 instances, got %d (%s)", len(insts), body)
+	}
+
+	// Unfiltered: both instances, two tokens on the one service task.
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/processes/1/runtime", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("runtime status=%d body=%s", code, body)
+	}
+	var all struct {
+		Instances int `json:"instances"`
+		Tokens    int `json:"tokens"`
+	}
+	if err := json.Unmarshal(body, &all); err != nil {
+		t.Fatalf("decode runtime: %v (%s)", err, body)
+	}
+	if all.Instances != 2 || all.Tokens != 2 {
+		t.Fatalf("unfiltered runtime = %+v, want 2 instances / 2 tokens", all)
+	}
+
+	// Filtered to one instance: exactly its single token, reported as one instance.
+	code, body = doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/processes/1/runtime?instance=%d", insts[0].Key), "", "")
+	if code != http.StatusOK {
+		t.Fatalf("filtered runtime status=%d body=%s", code, body)
+	}
+	var one struct {
+		Instances int `json:"instances"`
+		Tokens    int `json:"tokens"`
+		Elements  []struct {
+			ElementID string `json:"elementId"`
+			Tokens    int    `json:"tokens"`
+		} `json:"elements"`
+	}
+	if err := json.Unmarshal(body, &one); err != nil {
+		t.Fatalf("decode filtered runtime: %v (%s)", err, body)
+	}
+	if one.Instances != 1 || one.Tokens != 1 || len(one.Elements) != 1 || one.Elements[0].Tokens != 1 {
+		t.Fatalf("filtered runtime = %+v, want exactly one instance's single token", one)
+	}
+
+	// A well-formed key that is not an instance of this definition yields nothing.
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/processes/1/runtime?instance=999999", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("unknown-instance runtime status=%d body=%s", code, body)
+	}
+	if err := json.Unmarshal(body, &one); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	if one.Instances != 0 || one.Tokens != 0 {
+		t.Fatalf("unknown instance runtime = %+v, want zero", one)
+	}
+
+	// A non-numeric instance filter is a client error.
+	if code, _ := doReq(t, ts, http.MethodGet, "/api/v1/processes/1/runtime?instance=abc", "", ""); code != http.StatusBadRequest {
+		t.Fatalf("bad instance filter status=%d, want 400", code)
 	}
 }
 
