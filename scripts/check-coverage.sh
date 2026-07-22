@@ -15,9 +15,13 @@ profile="${outdir}/cover.out"
 
 mkdir -p "${outdir}"
 
-# One merged profile across every package. Packages without tests (e.g. the
-# cmd/atlas main package) contribute no statements and are simply absent.
-go test -covermode=atomic -coverprofile="${profile}" ./...
+# One merged profile across every importable library package. The floor covers
+# library code, not the thin cmd/* binary entrypoints (which carry no tests):
+# excluding main packages also keeps this independent of the `covdata` tool,
+# which some trimmed toolchains omit and which is only needed to instrument
+# main packages.
+mapfile -t pkgs < <(go list -f '{{if ne .Name "main"}}{{.ImportPath}}{{end}}' ./... | grep .)
+go test -covermode=atomic -coverprofile="${profile}" "${pkgs[@]}"
 
 total="$(go tool cover -func="${profile}" | awk '/^total:/ {gsub(/%/,"",$3); print $3}')"
 
