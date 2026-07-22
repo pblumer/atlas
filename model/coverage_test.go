@@ -36,9 +36,9 @@ func TestAppendValueRoundTrip(t *testing.T) {
 			v:    &TimerValue{ProcessInstanceKey: NewKey(1, 1), ElementInstanceKey: NewKey(1, 2), TargetElementId: 4, DueDate: 555, Repetitions: -1},
 		},
 		{
-			name: "process instance",
+			name: "process instance (terminal history record)",
 			vt:   VTProcessInstance,
-			v:    &ProcessInstanceValue{ProcessDefKey: NewKey(2, 8)},
+			v:    &ProcessInstanceValue{ProcessDefKey: NewKey(2, 8), State: PICompleted, CompletedAt: 1_700_000_000_000_000_000},
 		},
 		{
 			name: "variable",
@@ -114,6 +114,25 @@ func TestVariableDecodeErrors(t *testing.T) {
 				t.Errorf("decode(%d bytes) err = %v, want ErrShortBuffer", len(tt.src), err)
 			}
 		})
+	}
+}
+
+// TestProcessInstanceStateString covers ProcessInstanceState.String() for each
+// terminal state and the default (active / unknown) arm.
+func TestProcessInstanceStateString(t *testing.T) {
+	cases := []struct {
+		s    ProcessInstanceState
+		want string
+	}{
+		{PIActive, "active"},
+		{PICompleted, "completed"},
+		{PITerminated, "terminated"},
+		{ProcessInstanceState(99), "active"}, // unknown value falls through to default
+	}
+	for _, c := range cases {
+		if got := c.s.String(); got != c.want {
+			t.Errorf("ProcessInstanceState(%d).String() = %q, want %q", c.s, got, c.want)
+		}
 	}
 }
 

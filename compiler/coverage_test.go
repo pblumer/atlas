@@ -17,6 +17,7 @@ func TestBpmnTypeString(t *testing.T) {
 		{TypeServiceTask, "ServiceTask"},
 		{TypeScriptTask, "ScriptTask"},
 		{TypeBusinessRuleTask, "BusinessRuleTask"},
+		{TypeExclusiveGateway, "ExclusiveGateway"},
 		{TypeUnspecified, "Unspecified"},
 		{BpmnType(200), "Unspecified"},
 	}
