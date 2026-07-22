@@ -134,6 +134,11 @@ func (b *Builder) AddBusinessRuleTask(decisionId string, inputs map[string]any, 
 // tasks are given real implementations.
 func (b *Builder) AddTask() int32 { return b.addNode(TypeTask, -1) }
 
+// AddParallelGateway adds a parallel (AND) gateway and returns its element id. It
+// forks a token onto every outgoing flow and joins by waiting until a token has
+// arrived on each of its incoming flows.
+func (b *Builder) AddParallelGateway() int32 { return b.addNode(TypeParallelGateway, -1) }
+
 // AddExclusiveGateway adds a data-based exclusive gateway (XOR split) and returns
 // its element id. Its outgoing flows carry the conditions; see SetFlowCondition
 // and SetFlowDefault.
@@ -214,6 +219,12 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 			}
 		}
 		n.OutgoingCount = int32(len(outgoing)) - n.OutgoingStart
+	}
+
+	// Count incoming flows per node, so a parallel join knows how many tokens to
+	// wait for.
+	for _, f := range b.flows {
+		b.nodes[f.Target].IncomingCount++
 	}
 
 	var startEvents []int32

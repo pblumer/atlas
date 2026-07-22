@@ -211,7 +211,7 @@ func TestParseErrors(t *testing.T) {
 		{
 			name: "unsupported gateway",
 			xml: `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
-				<startEvent id="s"/><parallelGateway id="g"/></process></definitions>`,
+				<startEvent id="s"/><inclusiveGateway id="g"/></process></definitions>`,
 		},
 		{
 			name: "malformed xml",
@@ -382,6 +382,39 @@ func TestParseUnsupportedElementMessage(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q should mention %q", err.Error(), want)
 		}
+	}
+}
+
+// TestParseParallelGateway parses a fork/join and checks the join's incoming
+// count (what a parallel join waits on) is compiled correctly.
+func TestParseParallelGateway(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
+		<startEvent id="s"/>
+		<parallelGateway id="fork"/>
+		<task id="a"/><task id="b"/>
+		<parallelGateway id="join"/>
+		<endEvent id="e"/>
+		<sequenceFlow id="f0" sourceRef="s" targetRef="fork"/>
+		<sequenceFlow id="f1" sourceRef="fork" targetRef="a"/>
+		<sequenceFlow id="f2" sourceRef="fork" targetRef="b"/>
+		<sequenceFlow id="f3" sourceRef="a" targetRef="join"/>
+		<sequenceFlow id="f4" sourceRef="b" targetRef="join"/>
+		<sequenceFlow id="f5" sourceRef="join" targetRef="e"/></process></definitions>`
+	cp, err := Parse(1, 1, strings.NewReader(xml))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	fork := cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target
+	if cp.Node(fork).Type != TypeParallelGateway {
+		t.Fatalf("node after start = %v, want ParallelGateway", cp.Node(fork).Type)
+	}
+	if got := cp.Node(fork).OutgoingCount; got != 2 {
+		t.Errorf("fork OutgoingCount = %d, want 2", got)
+	}
+	// The join is the fork's outgoing tasks' shared target; it has two incoming.
+	join := cp.Flow(cp.Outgoing(cp.Flow(cp.Outgoing(fork)[0]).Target)[0]).Target
+	if cp.Node(join).Type != TypeParallelGateway || cp.Node(join).IncomingCount != 2 {
+		t.Errorf("join type=%v incoming=%d, want ParallelGateway and 2", cp.Node(join).Type, cp.Node(join).IncomingCount)
 	}
 }
 

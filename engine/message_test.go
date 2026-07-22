@@ -198,6 +198,46 @@ func TestMessageSubscriptionRecovers(t *testing.T) {
 	}
 }
 
+// TestMessageCatchWithoutCorrelationKey covers a message subscription with no
+// correlation key (a nil key expression): it correlates to a publish carrying an
+// empty key, matching purely by message name.
+func TestMessageCatchWithoutCorrelationKey(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	b := compiler.NewBuilder(7, "keyless", 1)
+	start := b.AddStartEvent()
+	catch := b.AddMessageCatchEvent("ping", nil) // nil correlation-key expression
+	end := b.AddEndEvent()
+	b.Connect(start, catch)
+	b.Connect(catch, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if pi := activeProcs(t, h.store); pi != 1 {
+		t.Fatalf("after start: active=%d, want 1 (waiting on keyless subscription)", pi)
+	}
+
+	p.PublishMessage("ping", "") // empty key matches the keyless subscription
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (publish): %v", err)
+	}
+	if pi := activeProcs(t, h.store); pi != 0 {
+		t.Fatalf("after publish: active=%d, want 0 (correlated by name)", pi)
+	}
+}
+
 // activeProcs returns the live process-instance count.
 func activeProcs(t *testing.T, s *state.Store) int {
 	t.Helper()

@@ -38,7 +38,12 @@ The control-flow basics most real models use.
 - ✅ Exclusive gateway (data-based XOR): takes the first outgoing flow whose
   compiled-FEEL condition is true, else the default flow. Recovery-tested (the
   chosen branch is captured by which element activates, never re-evaluated).
-- 🔲 Parallel gateway (fork + join with scope counters)
+- ✅ **Parallel gateway** (AND): forks a token onto every outgoing flow and joins
+  by waiting until a token has arrived on each incoming flow, then fires once.
+  Synchronization rides the element-instance lifecycle (arrived branches park on
+  the join), so it replays deterministically and a half-arrived join survives a
+  restart — recovery-tested. Cyclic joins and inclusive (OR) joins still to come
+  (ADR-0024).
 - 🔲 Inclusive gateway
 - 🔲 Input/output variable mappings
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency

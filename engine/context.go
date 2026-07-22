@@ -79,6 +79,22 @@ func (c *ProcessingContext) ForEachElementInstance(procKey uint64, fn func(elKey
 	}
 }
 
+// ElementInstancesOnNode returns the keys of every live element instance sitting
+// on the given BPMN node within a process instance, seen through the in-flight
+// transaction (so it includes one activated earlier in this batch). A parallel
+// join uses it to count how many tokens have arrived on its incoming flows.
+func (c *ProcessingContext) ElementInstancesOnNode(procKey uint64, elementId int32) []uint64 {
+	var keys []uint64
+	err := c.tx.ElementInstancesOfProcess(procKey, func(elKey uint64, v *model.ElementInstanceValue) error {
+		if v.ElementId == elementId {
+			keys = append(keys, elKey)
+		}
+		return nil
+	})
+	c.p.fail(err)
+	return keys
+}
+
 // ActiveChildren returns the active-child count of a scope (e.g. to detect that
 // a process instance has finished).
 func (c *ProcessingContext) ActiveChildren(scope uint64) int32 {

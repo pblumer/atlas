@@ -46,6 +46,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeMessageCatchEvent] = messageCatchEventBehavior{}
 	p.behaviors[compiler.TypeMessageThrowEvent] = messageThrowEventBehavior{}
 	p.behaviors[compiler.TypeTask] = passThroughBehavior{}
+	p.behaviors[compiler.TypeParallelGateway] = parallelGatewayBehavior{}
 }
 
 // --- command handlers ---
@@ -418,6 +419,40 @@ func (exclusiveGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, e
 		FlowScopeKey:       ei.FlowScopeKey,
 		BpmnElementType:    uint8(target.Type),
 	})
+}
+
+// parallelGatewayBehavior: an AND gateway. As a fork (one incoming) it fires at
+// once, producing a token on every outgoing flow. As a join (several incoming) it
+// waits until a token has arrived on each incoming flow — every arrival parks as a
+// live element instance on the gateway — then consumes them all and fires the
+// outgoing flow(s) once. The synchronization is captured entirely by which
+// element instances exist and by the Completed/Activating events emitted, so it
+// replays deterministically without re-counting (invariants I4/I6).
+type parallelGatewayBehavior struct{}
+
+func (parallelGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	node := c.process(ei.ProcessDefKey).Node(ei.ElementId)
+	if node.IncomingCount <= 1 {
+		c.AppendElementCommand(key, model.IntentCompleting, *ei) // fork: fire now
+		return
+	}
+	// Join: fire only when a token sits on every incoming flow. Until then this
+	// arrival waits here (stays Activated).
+	arrived := c.ElementInstancesOnNode(ei.ProcessInstanceKey, ei.ElementId)
+	if int32(len(arrived)) < node.IncomingCount {
+		return
+	}
+	// All arrived: consume every waiting token, then fire the outgoing flow(s) once.
+	for _, k := range arrived {
+		if a := c.GetElementInstance(k); a != nil {
+			c.AppendElementEvent(k, model.IntentCompleted, *a)
+		}
+	}
+	takeOutgoingFlows(c, ei)
+}
+
+func (parallelGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
 }
 
 // selectExclusiveFlow returns the outgoing flow an exclusive gateway takes: the
