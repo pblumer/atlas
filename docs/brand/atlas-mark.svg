@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" fill="none" role="img" aria-label="Atlas">
+  <title>Atlas</title>
+  <!-- Hexagon tile: the durable stone Atlas carries. Fixed color so it reads on any background. -->
+  <path d="M128 38 208 84 208 172 128 218 48 172 48 84Z" stroke="#2563EB" stroke-width="18" stroke-linejoin="round"/>
+  <!-- Converging flow: two nodes join into one (a BPMN gateway) -->
+  <path d="M104 106 128 160" stroke="#2563EB" stroke-width="9" stroke-linecap="round"/>
+  <path d="M152 106 128 160" stroke="#2563EB" stroke-width="9" stroke-linecap="round"/>
+  <circle cx="104" cy="106" r="11" fill="#2563EB"/>
+  <circle cx="152" cy="106" r="11" fill="#2563EB"/>
+  <circle cx="128" cy="160" r="13" fill="#2563EB"/>
+</svg>

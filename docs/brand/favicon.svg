@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" fill="none" role="img" aria-label="Atlas">
+  <title>Atlas</title>
+  <!-- Bolder hex + flow so it stays legible down to 16px. -->
+  <path d="M128 34 210 82 210 174 128 222 46 174 46 82Z" stroke="#2563EB" stroke-width="22" stroke-linejoin="round"/>
+  <path d="M102 104 128 162" stroke="#2563EB" stroke-width="12" stroke-linecap="round"/>
+  <path d="M154 104 128 162" stroke="#2563EB" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="102" cy="104" r="13" fill="#2563EB"/>
+  <circle cx="154" cy="104" r="13" fill="#2563EB"/>
+  <circle cx="128" cy="162" r="15" fill="#2563EB"/>
+</svg>
