@@ -17,6 +17,12 @@ type manualClock struct{ t int64 }
 
 func (c *manualClock) Now() int64 { c.t++; return c.t }
 
+// fixedClock reads a settable time without advancing, so a test can control when
+// a timer becomes due.
+type fixedClock struct{ t int64 }
+
+func (c *fixedClock) Now() int64 { return c.t }
+
 const (
 	defKey  = 7
 	jobName = "work"
@@ -95,6 +101,24 @@ func mustCompile(t testing.TB, src string) *expr.Compiled {
 		t.Fatalf("CompileAuto(%q): %v", src, err)
 	}
 	return c
+}
+
+// timerProcess builds Start → timer catch (durNanos) → script("yes"→done) → End.
+func timerProcess(t testing.TB, durNanos int64) *compiler.CompiledProcess {
+	t.Helper()
+	b := compiler.NewBuilder(defKey, "timed", 1)
+	start := b.AddStartEvent()
+	timer := b.AddTimerCatchEvent(durNanos)
+	done := b.AddScriptTask(mustCompile(t, `"yes"`), "done")
+	end := b.AddEndEvent()
+	b.Connect(start, timer)
+	b.Connect(timer, done)
+	b.Connect(done, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return cp
 }
 
 // readVar returns a scope's variable by name, or nil.
@@ -364,6 +388,96 @@ func TestExclusiveGatewayRecovers(t *testing.T) {
 	}
 	if got := readVar(t, store2, model.NewKey(1, 1), "path"); got == nil || got.Text != "high" {
 		t.Fatalf("replayed path = %+v, want \"high\"", got)
+	}
+}
+
+// TestTimerCatchEventWaitsThenContinues checks a timer intermediate catch event
+// holds the token until its due date, then continues.
+func TestTimerCatchEventWaitsThenContinues(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	const dur = int64(30e9) // PT30S
+	cp := timerProcess(t, dur)
+	clk := &fixedClock{t: 1_000}
+
+	p := engine.New(1, h.log, h.store, clk)
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	// Waiting at the timer: one process, one element (the catch event).
+	if pi, ei := counts(t, h.store); pi != 1 || ei != 1 {
+		t.Fatalf("waiting: process=%d element=%d, want 1 and 1", pi, ei)
+	}
+	// A tick before the due date fires nothing.
+	if err := p.TickTimers(); err != nil {
+		t.Fatalf("TickTimers early: %v", err)
+	}
+	if pi, _ := counts(t, h.store); pi != 1 {
+		t.Fatal("timer fired before it was due")
+	}
+	// Advance past the due date; the tick now fires it and the instance finishes.
+	clk.t = 1_000 + dur + 1
+	if err := p.TickTimers(); err != nil {
+		t.Fatalf("TickTimers due: %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after fire: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+	if got := readVar(t, h.store, model.NewKey(1, 1), "done"); got == nil || got.Text != "yes" {
+		t.Fatalf("done = %+v, want \"yes\"", got)
+	}
+}
+
+// TestTimerCatchEventRecovers proves a pending timer survives a crash: replaying
+// into a fresh store restores it in the due-date index, and it fires afterward.
+func TestTimerCatchEventRecovers(t *testing.T) {
+	dir := t.TempDir()
+	const dur = int64(10e9)
+	cp := timerProcess(t, dur)
+	clk := &fixedClock{t: 5_000}
+
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clk)
+	p1.Deploy(cp)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.CreateInstance(cp.Key)
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	h1.close(t)
+
+	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open 2: %v", err)
+	}
+	store2, err := state.Open(filepath.Join(dir, "state2"))
+	if err != nil {
+		t.Fatalf("state.Open 2: %v", err)
+	}
+	defer func() { _ = store2.Close(); _ = log2.Close() }()
+	p2 := engine.New(1, log2, store2, clk)
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2 (replay): %v", err)
+	}
+	// The timer was restored and is still pending.
+	if pi, ei := counts(t, store2); pi != 1 || ei != 1 {
+		t.Fatalf("after replay: process=%d element=%d, want 1 and 1", pi, ei)
+	}
+	// Past due → fires, the instance finishes.
+	clk.t = 5_000 + dur + 1
+	if err := p2.TickTimers(); err != nil {
+		t.Fatalf("TickTimers: %v", err)
+	}
+	if got := readVar(t, store2, model.NewKey(1, 1), "done"); got == nil || got.Text != "yes" {
+		t.Fatalf("done = %+v, want \"yes\"", got)
 	}
 }
 

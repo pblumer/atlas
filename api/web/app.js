@@ -239,8 +239,11 @@ async function viewModelerHome() {
       rows.innerHTML = groups.map((g) => {
         const older = g.versions.length > 1
           ? ` <span class="muted">· ${g.versions.length} versions</span>` : "";
+        const label = g.latest.name || g.processId;
+        const sub = g.latest.name
+          ? `<div class="muted" style="font-size:12px">${esc(g.processId)}</div>` : "";
         return `<tr>
-          <td><a href="#/modeler/d/${g.latest.key}"><b>${esc(g.processId)}</b></a></td>
+          <td><a href="#/modeler/d/${g.latest.key}"><b>${esc(label)}</b></a>${sub}</td>
           <td>v${g.latest.version}${older}</td>
           <td class="muted">${esc(fmtTime(g.latest.deployedAt))}</td>
           <td style="text-align:right; white-space:nowrap">

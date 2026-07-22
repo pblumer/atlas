@@ -27,6 +27,7 @@ import (
 	"io/fs"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
@@ -47,6 +48,7 @@ const Version = "0.1.0-dev"
 type deployment struct {
 	Key        uint64
 	ProcessID  string
+	Name       string // human-readable <process name="…">, for display
 	Version    int32
 	DeployedAt int64 // unix seconds, for the UI's "last changed" column
 	xml        []byte
@@ -86,9 +88,27 @@ func New(proc *engine.Processor, store *state.Store) *Server {
 		nextKey:     1,
 		versions:    map[string]int32{},
 	}
-	s.wg.Add(1)
+	s.wg.Add(2)
 	go s.loop()
+	go s.timerScheduler(time.Second)
 	return s
+}
+
+// timerScheduler fires due timers on the run-loop goroutine at a fixed cadence,
+// so intermediate timer events wake up without any external command. The tick is
+// coarse (whole seconds) — timers are "fire at or after due", not real-time.
+func (s *Server) timerScheduler(every time.Duration) {
+	defer s.wg.Done()
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-s.quit:
+			return
+		case <-t.C:
+			s.do(func() { _ = s.proc.TickTimers() })
+		}
+	}
 }
 
 // loop is the single owner of the processor. Every processor and registry access

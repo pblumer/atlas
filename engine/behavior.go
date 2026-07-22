@@ -29,6 +29,7 @@ func (p *Processor) registerHandlers() {
 		handlerKey(model.VTElementInstance, model.IntentActivating): handleElementActivating,
 		handlerKey(model.VTElementInstance, model.IntentCompleting): handleElementCompleting,
 		handlerKey(model.VTJob, model.IntentJobCompleted):           handleJobCompleted,
+		handlerKey(model.VTTimer, model.IntentTimerTriggered):       handleTimerTriggered,
 	}
 }
 
@@ -39,6 +40,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeScriptTask] = scriptTaskBehavior{}
 	p.behaviors[compiler.TypeBusinessRuleTask] = businessRuleTaskBehavior{}
 	p.behaviors[compiler.TypeExclusiveGateway] = exclusiveGatewayBehavior{}
+	p.behaviors[compiler.TypeTimerCatchEvent] = timerCatchEventBehavior{}
 }
 
 // --- command handlers ---
@@ -94,6 +96,17 @@ func handleJobCompleted(c *ProcessingContext) {
 
 	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
 		c.AppendElementCommand(job.ElementInstanceKey, model.IntentCompleting, *ei)
+	}
+}
+
+// handleTimerTriggered fires a due timer: it retires the timer and tells its
+// waiting element instance to complete. The command carries the timer value
+// (supplied by TriggerDueTimers), so no extra read is needed.
+func handleTimerTriggered(c *ProcessingContext) {
+	timer := c.cmd.Value.timer
+	c.AppendTimerEvent(c.cmd.Key, model.IntentTimerTriggered, timer)
+	if ei := c.GetElementInstance(timer.ElementInstanceKey); ei != nil {
+		c.AppendElementCommand(timer.ElementInstanceKey, model.IntentCompleting, *ei)
 	}
 }
 
@@ -209,6 +222,31 @@ func (scriptTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *mode
 }
 
 func (scriptTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// timerCatchEventBehavior: an intermediate timer catch event. On activation it
+// creates a timer due after the configured duration and then waits (stays
+// Activated). A due timer is fired by TriggerDueTimers, which drives
+// handleTimerTriggered → the element completes and takes its outgoing flows.
+type timerCatchEventBehavior struct{}
+
+func (timerCatchEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.TimerCatch(cp.Node(ei.ElementId).Detail)
+	// Now() is read here (command processing) and frozen into the event's due
+	// date; applyToState never reads the clock (invariant I4).
+	due := c.Now() + detail.DurationNanos
+	c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		TargetElementId:    ei.ElementId,
+		DueDate:            due,
+	})
+	// Stays Activated: no Completing until the timer fires.
+}
+
+func (timerCatchEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	completeAndTakeFlows(c, key, ei)
 }
 

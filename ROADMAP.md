@@ -50,11 +50,16 @@ The control-flow basics most real models use.
   outputs via a sink; wiring real input/output variable mappings depends on the
   variable subsystem above.
 
-## Milestone 2 — Events and timers 🔲
+## Milestone 2 — Events and timers 🚧
 
 Making processes wait, react, and time out.
 
-- 🔲 Timer events (date, duration, cycle) + due-date index scanning
+- 🚧 Timer events + due-date index scanning: **intermediate timer catch events**
+  with an ISO-8601 **duration** (e.g. PT30S) execute — the token waits, a
+  server-side scheduler fires due timers on the partition goroutine, and the
+  event continues. Recovery-tested (a pending timer is restored from the log and
+  fires afterward). Date/cycle timers, boundary timers, and FEEL duration
+  expressions still to come.
 - 🔲 Message events + subscriptions + correlation (single-partition)
 - 🔲 Signal events (broadcast)
 - 🔲 Error events and error propagation

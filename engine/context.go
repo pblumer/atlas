@@ -84,6 +84,11 @@ func (c *ProcessingContext) AppendJobEvent(key uint64, intent model.Intent, v mo
 	c.appendEvent(key, model.VTJob, intent, inflightValue{job: v})
 }
 
+// AppendTimerEvent records a timer lifecycle fact (created or triggered).
+func (c *ProcessingContext) AppendTimerEvent(key uint64, intent model.Intent, v model.TimerValue) {
+	c.appendEvent(key, model.VTTimer, intent, inflightValue{timer: v})
+}
+
 // AppendVariableEvent records a variable write. The value is data (a name and
 // contents), so unlike the graph-derived events this one does allocate for its
 // strings — variables are runtime data, not hot-path token movement.

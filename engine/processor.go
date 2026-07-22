@@ -103,6 +103,43 @@ func (p *Processor) CompleteJob(jobKey uint64) {
 	})
 }
 
+// TriggerDueTimers enqueues a trigger command for every timer due at or before
+// the current clock, carrying each timer's value so the handler needs no extra
+// read. Call RunUntilIdle (or TickTimers) to process them. It is time-driven, so
+// it belongs off the command path — a scheduler calls it periodically.
+func (p *Processor) TriggerDueTimers() error {
+	now := p.clock.Now()
+	type due struct {
+		key uint64
+		v   model.TimerValue
+	}
+	var fire []due
+	if err := p.store.DueTimers(now, func(k uint64, v *model.TimerValue) error {
+		fire = append(fire, due{key: k, v: *v})
+		return nil
+	}); err != nil {
+		return err
+	}
+	for _, d := range fire {
+		p.queue = append(p.queue, Command{
+			Key:       d.key,
+			ValueType: model.VTTimer,
+			Intent:    model.IntentTimerTriggered,
+			Value:     inflightValue{timer: d.v},
+		})
+	}
+	return nil
+}
+
+// TickTimers fires all due timers and processes the resulting work to idle. A
+// server scheduler calls it on the partition's goroutine (invariant I3).
+func (p *Processor) TickTimers() error {
+	if err := p.TriggerDueTimers(); err != nil {
+		return err
+	}
+	return p.RunUntilIdle()
+}
+
 // RunUntilIdle processes batches until the queue (including generated followups)
 // drains. Deterministic and synchronous — the basis for tests and simple
 // embedding; the channel-driven concurrent loop arrives with the API milestone.
