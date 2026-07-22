@@ -81,19 +81,37 @@ func (p *Processor) SetJobNotifier(fn func(jobType int32)) { p.jobNotifier = fn 
 // CreateInstance enqueues creation of a new instance of the given definition.
 // Call RunUntilIdle to process it.
 func (p *Processor) CreateInstance(defKey uint64) {
+	p.CreateInstanceWithVariables(defKey, nil)
+}
+
+// CreateInstanceWithVariables enqueues creation of a new instance seeded with the
+// given variables. Each becomes a VariableCreated event scoped to the new
+// instance, so its elements (e.g. a business rule task reading input variables)
+// can see them.
+func (p *Processor) CreateInstanceWithVariables(defKey uint64, vars []model.NamedVariable) {
 	p.queue = append(p.queue, Command{
 		ValueType: model.VTProcessInstance,
 		Intent:    model.IntentActivating,
 		Value:     inflightValue{process: model.ProcessInstanceValue{ProcessDefKey: defKey}},
+		Vars:      vars,
 	})
 }
 
 // CompleteJob enqueues completion of a job by a worker.
 func (p *Processor) CompleteJob(jobKey uint64) {
+	p.CompleteJobWithVariables(jobKey, nil)
+}
+
+// CompleteJobWithVariables enqueues completion of a job together with the
+// variables it produced (e.g. a business rule task's decision outputs). The
+// variables are written back into the job's process instance before the element
+// completes.
+func (p *Processor) CompleteJobWithVariables(jobKey uint64, vars []model.NamedVariable) {
 	p.queue = append(p.queue, Command{
 		Key:       jobKey,
 		ValueType: model.VTJob,
 		Intent:    model.IntentJobCompleted,
+		Vars:      vars,
 	})
 }
 

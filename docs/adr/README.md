@@ -22,6 +22,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0012](0012-web-ui-app-shell.md) | A buildless, self-contained web UI app shell | Accepted |
 | [0013](0013-embed-bpmn-js-modeler.md) | Embed the bpmn-js modeler as a vendored asset | Accepted |
 | [0014](0014-dmn-business-rule-tasks-via-temis.md) | DMN business rule tasks via the temis engine | Accepted |
+| [0015](0015-process-variables-and-business-rule-io-mappings.md) | Process variables and business-rule I/O mappings | Accepted |
 
 ## Status values
 

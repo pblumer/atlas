@@ -28,17 +28,24 @@ The control-flow basics most real models use.
 - 🔲 Exclusive gateway (conditions via compiled FEEL subset)
 - 🔲 Parallel gateway (fork + join with scope counters)
 - 🔲 Inclusive gateway
-- 🔲 Input/output variable mappings
-- 🔲 Variable scopes (local vs. propagated) with copy-on-write
+- 🚧 Input/output variable mappings — an instance-scoped process-variable store
+  (events folded by `applyToState`, seeded at instance creation, written back on
+  job completion) landed with business rule tasks
+  ([ADR-0015](docs/adr/0015-process-variables-and-business-rule-io-mappings.md)).
+  Mappings are name-based for now; FEEL-expression mappings still to come.
+- 🔲 Variable scopes (local vs. propagated) with copy-on-write — variables are
+  instance-scoped only so far
 - 🔲 `expr`: FEEL subset → AST evaluation, with `inputs` analysis
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
 - 🔲 Conformance tests against a curated BPMN model set
 - 🚧 **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)
   engine, [ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)): the
   element, its behavior, and off-hot-path evaluation through the job path landed
-  as a vertical slice. It currently feeds a decision static inputs and surfaces
-  outputs via a sink; wiring real input/output variable mappings depends on the
-  variable subsystem above.
+  as a vertical slice. Input mappings (decision input ← process variable) and
+  output write-back (decision result → a result variable) are now wired on top of
+  the instance-scoped variable store
+  ([ADR-0015](docs/adr/0015-process-variables-and-business-rule-io-mappings.md));
+  static inputs remain supported and merge under the mappings.
 
 ## Milestone 2 — Events and timers 🔲
 

@@ -31,6 +31,69 @@ func commit(t *testing.T, s *state.Store, fn func(tx *state.Tx) error) {
 	}
 }
 
+func TestVariablePutGetScanDelete(t *testing.T) {
+	s := openStore(t)
+	piA := model.NewKey(1, 1)
+	piB := model.NewKey(1, 2)
+
+	commit(t, s, func(tx *state.Tx) error {
+		if err := tx.PutVariable(&model.VariableValue{ProcessInstanceKey: piA, Name: "season", Value: []byte(`"Winter"`)}); err != nil {
+			return err
+		}
+		if err := tx.PutVariable(&model.VariableValue{ProcessInstanceKey: piA, Name: "guests", Value: []byte(`8`)}); err != nil {
+			return err
+		}
+		// A same-named variable on another instance must not collide.
+		return tx.PutVariable(&model.VariableValue{ProcessInstanceKey: piB, Name: "season", Value: []byte(`"Summer"`)})
+	})
+
+	// Point read, scoped by instance.
+	if v, ok, err := s.GetVariable(piA, "season"); err != nil || !ok || string(v) != `"Winter"` {
+		t.Errorf("GetVariable(piA, season) = %q ok=%v err=%v, want \"Winter\"", v, ok, err)
+	}
+	if v, ok, _ := s.GetVariable(piB, "season"); !ok || string(v) != `"Summer"` {
+		t.Errorf("GetVariable(piB, season) = %q, want \"Summer\"", v)
+	}
+	if _, ok, _ := s.GetVariable(piA, "missing"); ok {
+		t.Errorf("GetVariable of missing var reported present")
+	}
+
+	// Scan returns only the instance's own variables.
+	got := map[string]string{}
+	if err := s.VariablesOfProcess(piA, func(name string, value []byte) error {
+		got[name] = string(value)
+		return nil
+	}); err != nil {
+		t.Fatalf("VariablesOfProcess: %v", err)
+	}
+	want := map[string]string{"season": `"Winter"`, "guests": `8`}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("piA variables = %v, want %v", got, want)
+	}
+
+	// HasVariable drives the created-vs-updated decision.
+	commit(t, s, func(tx *state.Tx) error {
+		has, err := tx.HasVariable(piA, "season")
+		if err != nil || !has {
+			t.Errorf("HasVariable(season) = %v err=%v, want true", has, err)
+		}
+		has, err = tx.HasVariable(piA, "nope")
+		if err != nil || has {
+			t.Errorf("HasVariable(nope) = %v err=%v, want false", has, err)
+		}
+		return nil
+	})
+
+	// Deleting piA's variables leaves piB's intact.
+	commit(t, s, func(tx *state.Tx) error { return tx.DeleteVariablesOfProcess(piA) })
+	if _, ok, _ := s.GetVariable(piA, "season"); ok {
+		t.Errorf("piA season present after DeleteVariablesOfProcess")
+	}
+	if _, ok, _ := s.GetVariable(piB, "season"); !ok {
+		t.Errorf("piB season wrongly deleted")
+	}
+}
+
 func TestElementInstancePutGetDelete(t *testing.T) {
 	s := openStore(t)
 	key := model.NewKey(1, 100)

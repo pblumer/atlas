@@ -71,14 +71,30 @@ type ServiceTaskDetail struct {
 // runtime. A business rule task delegates to a DMN decision, evaluated off the
 // hot path by the temis engine (ADR-0014). Like a service task it runs as a job,
 // so it carries a JobType (a reserved DMN sentinel) the in-process DMN worker
-// subscribes to; DecisionId names the decision to evaluate, and Inputs is an
-// interned JSON object of the static input context to feed it (a stand-in until
-// the variable subsystem lands in Milestone 1).
+// subscribes to; DecisionId names the decision to evaluate.
+//
+// The decision's inputs come from two sources, merged at evaluation with
+// mappings winning: Inputs, an interned JSON object of static constants, and
+// InputMappings, which bind a decision input name to a process variable read at
+// runtime. The decision's outputs are written back into the instance under the
+// ResultVariable name (if set).
 type BusinessRuleTaskDetail struct {
-	JobType    int32 // interned reserved DMN job type → index
-	DecisionId int32 // interned DMN decision id → index
-	Inputs     int32 // interned JSON object of static inputs → index, -1 if none
-	Retries    int32
+	JobType        int32 // interned reserved DMN job type → index
+	DecisionId     int32 // interned DMN decision id → index
+	Inputs         int32 // interned JSON object of static inputs → index, -1 if none
+	ResultVariable int32 // interned output variable name → index, -1 if none
+	Retries        int32
+	// InputMappings binds decision input names to process variable names. Held
+	// inline (read-only compiled data, never mutated at runtime).
+	InputMappings []VariableMapping
+}
+
+// VariableMapping binds a decision input to a process variable: the decision
+// receives Target ← the current value of the variable named Source. Both are
+// interned string indices.
+type VariableMapping struct {
+	Target int32 // interned decision input name → index
+	Source int32 // interned process variable name → index
 }
 
 // CompiledProcess is the immutable result of compiling one process definition.

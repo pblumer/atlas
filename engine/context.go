@@ -76,6 +76,34 @@ func (c *ProcessingContext) AppendJobEvent(key uint64, intent model.Intent, v mo
 	c.appendEvent(key, model.VTJob, intent, inflightValue{job: v})
 }
 
+// AppendVariableEvent records a process-variable fact. The key is the owning
+// process-instance key, which both scopes the variable and routes it to the
+// instance's partition.
+func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.VariableValue) {
+	c.appendEvent(v.ProcessInstanceKey, model.VTVariable, intent, inflightValue{variable: v})
+}
+
+// SetVariables writes each named variable into the given process instance,
+// emitting a VariableCreated event for a new name and VariableUpdated for an
+// existing one. Used to seed an instance's variables at creation and to write a
+// job's output variables back.
+func (c *ProcessingContext) SetVariables(piKey uint64, vars []model.NamedVariable) {
+	for i := range vars {
+		intent := model.IntentVariableCreated
+		if has, err := c.tx.HasVariable(piKey, vars[i].Name); err != nil {
+			c.p.fail(err)
+			return
+		} else if has {
+			intent = model.IntentVariableUpdated
+		}
+		c.AppendVariableEvent(intent, model.VariableValue{
+			ProcessInstanceKey: piKey,
+			Name:               vars[i].Name,
+			Value:              vars[i].Value,
+		})
+	}
+}
+
 // AppendElementCommand schedules an element-instance command for a later batch.
 func (c *ProcessingContext) AppendElementCommand(key uint64, intent model.Intent, v model.ElementInstanceValue) {
 	c.appendCommand(key, model.VTElementInstance, intent, inflightValue{element: v})

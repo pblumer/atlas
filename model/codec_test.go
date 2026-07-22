@@ -63,6 +63,16 @@ func TestRecordRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name:   "variable",
+			vt:     VTVariable,
+			intent: IntentVariableCreated,
+			value: &VariableValue{
+				ProcessInstanceKey: NewKey(4, 30),
+				Name:               "Season",
+				Value:              []byte(`"Winter"`),
+			},
+		},
+		{
 			name:   "header only, no payload",
 			vt:     VTSignal, // a value type without a payload codec yet
 			intent: IntentActivating,

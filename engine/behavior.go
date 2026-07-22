@@ -46,6 +46,7 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 	defKey := c.cmd.Value.process.ProcessDefKey
 	piKey := c.NewKey()
 	c.AppendProcessInstanceEvent(piKey, model.IntentActivated, model.ProcessInstanceValue{ProcessDefKey: defKey})
+	c.SetVariables(piKey, c.cmd.Vars) // seed initial variables before elements run
 
 	cp := c.process(defKey)
 	for _, startID := range cp.StartEvents() {
@@ -81,6 +82,7 @@ func handleJobCompleted(c *ProcessingContext) {
 		return // already gone or never existed; nothing to do
 	}
 	c.AppendJobEvent(c.cmd.Key, model.IntentJobCompleted, *job)
+	c.SetVariables(job.ProcessInstanceKey, c.cmd.Vars) // write the job's output variables back
 
 	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
 		c.AppendElementCommand(job.ElementInstanceKey, model.IntentCompleting, *ei)

@@ -13,6 +13,7 @@ package job
 import (
 	"fmt"
 
+	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
 
@@ -25,16 +26,17 @@ type Job struct {
 	Retries            int32
 }
 
-// Handler does a job's work. Returning nil completes the job; returning an error
-// leaves it pending and surfaces the error (retry/incident handling is a later
-// milestone).
-type Handler func(Job) error
+// Handler does a job's work. It returns the variables the job produced (nil for
+// none) to be written back into the process instance on completion. Returning an
+// error leaves the job pending and surfaces the error (retry/incident handling is
+// a later milestone).
+type Handler func(Job) ([]model.NamedVariable, error)
 
 // Engine is the slice of the processor the runner drives: process queued
-// commands, and accept job completions.
+// commands, and accept job completions (with any variables the worker produced).
 type Engine interface {
 	RunUntilIdle() error
-	CompleteJob(jobKey uint64)
+	CompleteJobWithVariables(jobKey uint64, vars []model.NamedVariable)
 }
 
 // Runner dispatches activatable jobs to registered handlers.
@@ -83,10 +85,11 @@ func (r *Runner) PollOnce() (int, error) {
 				ElementInstanceKey: jv.ElementInstanceKey,
 				Retries:            jv.Retries,
 			}
-			if err := h(job); err != nil {
+			vars, err := h(job)
+			if err != nil {
 				return dispatched, fmt.Errorf("job %d (type %d): %w", k, jv.JobType, err)
 			}
-			r.engine.CompleteJob(k)
+			r.engine.CompleteJobWithVariables(k, vars)
 			dispatched++
 		}
 	}

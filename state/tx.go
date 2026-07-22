@@ -172,6 +172,33 @@ func (t *Tx) DeleteProcessInstance(key uint64) error {
 	return t.b.Delete(keyProcessInstance(key), nil)
 }
 
+// --- Variable ---
+
+// PutVariable writes (or overwrites) a process variable. The value bytes are
+// stored directly under var:<piKey>:<name>; the name lives in the key, so it is
+// not re-encoded. Used identically for create and update — the distinction is
+// only in the event intent, not the state mutation.
+func (t *Tx) PutVariable(v *model.VariableValue) error {
+	return t.b.Set(keyVariable(v.ProcessInstanceKey, v.Name), v.Value, nil)
+}
+
+// HasVariable reports whether a variable of the given name exists on the
+// instance. The handler uses it to choose between a Created and an Updated
+// event; both apply the same mutation.
+func (t *Tx) HasVariable(piKey uint64, name string) (bool, error) {
+	_, ok, err := getCopy(t.b, keyVariable(piKey, name))
+	return ok, err
+}
+
+// DeleteVariablesOfProcess removes every variable of an instance in one range
+// delete. Called from applyToState when the instance completes or terminates, so
+// finished instances leave no variable state behind. It is deterministic (a
+// prefix range), so it replays identically on recovery (invariant I4).
+func (t *Tx) DeleteVariablesOfProcess(piKey uint64) error {
+	lo := variablePrefix(piKey)
+	return t.b.DeleteRange(lo, prefixEnd(lo), nil)
+}
+
 // --- Active-children counter ---
 //
 // Each scope (a process instance or a subprocess instance) tracks how many

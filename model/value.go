@@ -122,6 +122,59 @@ func (v *TimerValue) decode(src []byte) error {
 	return nil
 }
 
+// NamedVariable is a name/value pair carried on a command — the variables seeded
+// when an instance is created, or produced when a job completes. It is not a
+// persisted [Value]; the processor turns each into a scoped VariableValue event.
+// The value bytes are the same opaque encoding VariableValue stores (JSON today).
+type NamedVariable struct {
+	Name  string
+	Value []byte
+}
+
+// VariableValue is one process variable: a named value scoped to a process
+// instance. The value is opaque encoded bytes (JSON today) so the engine can
+// carry any shape without knowing its type; names are runtime data, not
+// compile-time interned strings, because a variable's name may be produced at
+// runtime (e.g. a decision output key). Variables are how a business rule task
+// reads its inputs and writes its outputs (ADR-0014).
+type VariableValue struct {
+	ProcessInstanceKey uint64
+	Name               string
+	Value              []byte
+}
+
+func (*VariableValue) ValueType() ValueType { return VTVariable }
+
+func (v *VariableValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(len(v.Name)))
+	dst = append(dst, v.Name...)
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(len(v.Value)))
+	return append(dst, v.Value...)
+}
+
+func (v *VariableValue) decode(src []byte) error {
+	if len(src) < 8+4 {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src)
+	pos := 8
+	nameLen := int(binary.LittleEndian.Uint32(src[pos:]))
+	pos += 4
+	if len(src) < pos+nameLen+4 {
+		return ErrShortBuffer
+	}
+	v.Name = string(src[pos : pos+nameLen]) // copies out of the transient buffer
+	pos += nameLen
+	valLen := int(binary.LittleEndian.Uint32(src[pos:]))
+	pos += 4
+	if len(src) < pos+valLen {
+		return ErrShortBuffer
+	}
+	v.Value = append([]byte(nil), src[pos:pos+valLen]...) // owned copy
+	return nil
+}
+
 // ProcessInstanceValue is the running instance as a whole — the root scope a
 // process's element instances live under. Minimal for now; fields grow as
 // features (parent/call-activity links, state flags) land.
@@ -157,6 +210,8 @@ func newValue(vt ValueType) Value {
 		return &JobValue{}
 	case VTTimer:
 		return &TimerValue{}
+	case VTVariable:
+		return &VariableValue{}
 	default:
 		return nil
 	}

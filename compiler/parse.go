@@ -78,11 +78,17 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 			}
 			retries = int32(n)
 		}
-		inputs, err := decisionInputs(brt.Inputs)
+		statics, mappings, err := decisionInputs(brt.Inputs)
 		if err != nil {
 			return nil, fmt.Errorf("compiler: business rule task %q: %w", brt.Id, err)
 		}
-		node, err := b.AddBusinessRuleTask(brt.CalledDecision.DecisionId, inputs, retries)
+		node, err := b.AddBusinessRuleTask(BusinessRule{
+			DecisionId:     brt.CalledDecision.DecisionId,
+			StaticInputs:   statics,
+			InputMappings:  mappings,
+			ResultVariable: brt.CalledDecision.ResultVariable,
+			Retries:        retries,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -146,11 +152,16 @@ type xmlTaskDefinition struct {
 }
 
 // A business rule task references a DMN decision via the Zeebe calledDecision
-// extension (<zeebe:calledDecision decisionId="..."/>). Static inputs — a
-// stand-in until process variables land — are given as Atlas decisionInput
-// extension elements (<atlas:decisionInput name="Season" value="Winter"/>);
-// each value is parsed as JSON when it parses, else kept as a string, so numbers
-// and booleans reach the decision with their FEEL types.
+// extension (<zeebe:calledDecision decisionId="..." resultVariable="..."/>) and
+// binds the decision's inputs with Atlas decisionInput extension elements. A
+// decisionInput is either static or a variable binding:
+//
+//	<atlas:decisionInput name="Season" value="Winter"/>   static constant
+//	<atlas:decisionInput name="Guests" variable="guests"/> read from a variable
+//
+// A static value is parsed as JSON when it parses (so numbers and booleans keep
+// their FEEL types), else used verbatim as a string. resultVariable, if set,
+// names the variable the decision's outputs are written back into.
 type xmlBusinessRuleTask struct {
 	Id             string             `xml:"id,attr"`
 	CalledDecision xmlCalledDecision  `xml:"extensionElements>calledDecision"`
@@ -158,37 +169,48 @@ type xmlBusinessRuleTask struct {
 }
 
 type xmlCalledDecision struct {
-	DecisionId string `xml:"decisionId,attr"`
-	Retries    string `xml:"retries,attr"`
+	DecisionId     string `xml:"decisionId,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	Retries        string `xml:"retries,attr"`
 }
 
 type xmlDecisionInput struct {
-	Name  string `xml:"name,attr"`
-	Value string `xml:"value,attr"`
+	Name     string `xml:"name,attr"`
+	Value    string `xml:"value,attr"`
+	Variable string `xml:"variable,attr"`
 }
 
-// decisionInputs turns parsed <decisionInput> elements into a name→value map,
-// parsing each value as JSON when possible so numbers and booleans keep their
-// types (a plain string that is not valid JSON is used verbatim).
-func decisionInputs(in []xmlDecisionInput) (map[string]any, error) {
-	if len(in) == 0 {
-		return nil, nil
-	}
-	m := make(map[string]any, len(in))
+// decisionInputs splits parsed <decisionInput> elements into static constants
+// (name→value) and variable bindings (decision input name→variable name). A
+// decisionInput naming a variable is a binding; otherwise it is a static value,
+// parsed as JSON when possible. A name may not be declared twice, in either form.
+func decisionInputs(in []xmlDecisionInput) (statics map[string]any, mappings map[string]string, err error) {
+	seen := map[string]bool{}
 	for _, di := range in {
 		if di.Name == "" {
-			return nil, fmt.Errorf("decisionInput with empty name")
+			return nil, nil, fmt.Errorf("decisionInput with empty name")
 		}
-		if _, dup := m[di.Name]; dup {
-			return nil, fmt.Errorf("duplicate decisionInput name %q", di.Name)
+		if seen[di.Name] {
+			return nil, nil, fmt.Errorf("duplicate decisionInput name %q", di.Name)
+		}
+		seen[di.Name] = true
+		if di.Variable != "" {
+			if mappings == nil {
+				mappings = map[string]string{}
+			}
+			mappings[di.Name] = di.Variable
+			continue
 		}
 		var v any
-		if err := json.Unmarshal([]byte(di.Value), &v); err != nil {
+		if jerr := json.Unmarshal([]byte(di.Value), &v); jerr != nil {
 			v = di.Value // not JSON: treat as a literal string
 		}
-		m[di.Name] = v
+		if statics == nil {
+			statics = map[string]any{}
+		}
+		statics[di.Name] = v
 	}
-	return m, nil
+	return statics, mappings, nil
 }
 
 type xmlSequenceFlow struct {

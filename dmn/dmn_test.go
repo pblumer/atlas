@@ -9,6 +9,7 @@ import (
 	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/job"
+	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
 )
@@ -36,25 +37,47 @@ const dishModel = `<?xml version="1.0" encoding="UTF-8"?>
 
 const dishDefKey = 42
 
-// dishProcess builds Start → BusinessRuleTask(decision "Dish") → End with a
-// static Season input, and returns it with the business-rule job type index.
-func dishProcess(t *testing.T, season string) (*compiler.CompiledProcess, int32) {
+// dishProcess builds Start → BusinessRuleTask(cfg) → End (optionally with a
+// holding service task after the rule task, so the instance stays alive for
+// output-variable assertions), and returns it with the business-rule job type.
+func dishProcess(t *testing.T, cfg compiler.BusinessRule, hold bool) (*compiler.CompiledProcess, int32) {
 	t.Helper()
 	b := compiler.NewBuilder(dishDefKey, "dinner", 1)
 	start := b.AddStartEvent()
-	rule, err := b.AddBusinessRuleTask("Dish", map[string]any{"Season": season}, 3)
+	rule, err := b.AddBusinessRuleTask(cfg)
 	if err != nil {
 		t.Fatalf("AddBusinessRuleTask: %v", err)
 	}
 	end := b.AddEndEvent()
 	b.Connect(start, rule)
-	b.Connect(rule, end)
+	if hold {
+		hold := b.AddServiceTask("hold", 1) // no worker registered → instance waits here
+		b.Connect(rule, hold)
+		b.Connect(hold, end)
+	} else {
+		b.Connect(rule, end)
+	}
 	cp, err := b.Build()
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 	jobType := cp.BusinessRuleTask(cp.Node(rule).Detail).JobType
 	return cp, jobType
+}
+
+func openStore(t *testing.T) (*wal.Log, *state.Store) {
+	t.Helper()
+	dir := t.TempDir()
+	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open: %v", err)
+	}
+	store, err := state.Open(filepath.Join(dir, "state"))
+	if err != nil {
+		t.Fatalf("state.Open: %v", err)
+	}
+	t.Cleanup(func() { store.Close(); log.Close() })
+	return log, store
 }
 
 func active(t *testing.T, s *state.Store) (pi, ei int) {
@@ -70,23 +93,52 @@ func active(t *testing.T, s *state.Store) (pi, ei int) {
 	return pi, ei
 }
 
-// TestBusinessRuleTaskEvaluatesDMN is the vertical slice end to end: a business
-// rule task creates a DMN job, the in-process temis worker evaluates the
-// decision against the task's static input, completes the job, and the instance
-// runs to completion — proving Atlas drives temis through the normal job path.
-func TestBusinessRuleTaskEvaluatesDMN(t *testing.T) {
-	dir := t.TempDir()
-	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
-	if err != nil {
-		t.Fatalf("wal.Open: %v", err)
+func onlyInstanceKey(t *testing.T, s *state.Store) uint64 {
+	t.Helper()
+	var keys []uint64
+	if err := s.ActiveProcessInstances(func(k uint64, _ *model.ProcessInstanceValue) error {
+		keys = append(keys, k)
+		return nil
+	}); err != nil {
+		t.Fatalf("ActiveProcessInstances: %v", err)
 	}
-	store, err := state.Open(filepath.Join(dir, "state"))
-	if err != nil {
-		t.Fatalf("state.Open: %v", err)
+	if len(keys) != 1 {
+		t.Fatalf("active instances = %d, want 1", len(keys))
 	}
-	t.Cleanup(func() { store.Close(); log.Close() })
+	return keys[0]
+}
 
-	cp, jobType := dishProcess(t, "Winter")
+func variableJSON(t *testing.T, s *state.Store, piKey uint64, name string) (string, bool) {
+	t.Helper()
+	raw, ok, err := s.GetVariable(piKey, name)
+	if err != nil {
+		t.Fatalf("GetVariable %q: %v", name, err)
+	}
+	return string(raw), ok
+}
+
+func lookupOf(cp *compiler.CompiledProcess) dmn.ProcessLookup {
+	return func(defKey uint64) *compiler.CompiledProcess {
+		if defKey == cp.Key {
+			return cp
+		}
+		return nil
+	}
+}
+
+// TestBusinessRuleTaskMapsVariables is the input/output mapping slice end to
+// end: an instance is seeded with a "theSeason" variable, the business rule task
+// maps it into the decision's Season input, evaluates via temis, and writes the
+// outputs back into the "dish" variable. A holding service task keeps the
+// instance alive so the written-back variable can be observed in state.
+func TestBusinessRuleTaskMapsVariables(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := dishProcess(t, compiler.BusinessRule{
+		DecisionId:     "Dish",
+		InputMappings:  map[string]string{"Season": "theSeason"},
+		ResultVariable: "dish",
+		Retries:        3,
+	}, true)
 
 	reg := dmn.NewRegistry()
 	if err := reg.Deploy(cp.Key, []byte(dishModel)); err != nil {
@@ -101,49 +153,95 @@ func TestBusinessRuleTaskEvaluatesDMN(t *testing.T) {
 
 	var got []dmn.Result
 	runner := job.NewRunner(store, p)
-	lookup := func(defKey uint64) *compiler.CompiledProcess {
-		if defKey == cp.Key {
-			return cp
-		}
-		return nil
+	runner.Handle(jobType, dmn.Handler(store, lookupOf(cp), reg, func(r dmn.Result) { got = append(got, r) }))
+
+	p.CreateInstanceWithVariables(cp.Key, []model.NamedVariable{
+		{Name: "theSeason", Value: []byte(`"Winter"`)},
+	})
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("Drive: %v", err)
 	}
-	runner.Handle(jobType, dmn.Handler(store, lookup, reg, func(r dmn.Result) { got = append(got, r) }))
+
+	// Input mapping fed the seeded variable into the decision.
+	if len(got) != 1 || got[0].Outputs["Dish"] != "Roastbeef" {
+		t.Fatalf("results = %#v, want one Roastbeef (mapped from theSeason=Winter)", got)
+	}
+
+	// The instance waits at the holding service task, so its variables are live.
+	if pi, _ := active(t, store); pi != 1 {
+		t.Fatalf("active instances = %d, want 1 (held at service task)", pi)
+	}
+	piKey := onlyInstanceKey(t, store)
+
+	// Output mapping wrote the decision result back into the "dish" variable.
+	if v, ok := variableJSON(t, store, piKey, "dish"); !ok || v != `{"Dish":"Roastbeef"}` {
+		t.Errorf("dish variable = %q (present=%v), want {\"Dish\":\"Roastbeef\"}", v, ok)
+	}
+	// The seeded input variable is untouched.
+	if v, ok := variableJSON(t, store, piKey, "theSeason"); !ok || v != `"Winter"` {
+		t.Errorf("theSeason variable = %q (present=%v), want \"Winter\"", v, ok)
+	}
+}
+
+// TestBusinessRuleTaskStaticInputs runs a task whose inputs are static
+// constants (no variables) straight through to completion.
+func TestBusinessRuleTaskStaticInputs(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := dishProcess(t, compiler.BusinessRule{
+		DecisionId:   "Dish",
+		StaticInputs: map[string]any{"Season": "Winter"},
+		Retries:      3,
+	}, false)
+
+	reg := dmn.NewRegistry()
+	if err := reg.Deploy(cp.Key, []byte(dishModel)); err != nil {
+		t.Fatalf("Registry.Deploy: %v", err)
+	}
+
+	p := engine.New(1, log, store, &fixedClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+
+	var got []dmn.Result
+	runner := job.NewRunner(store, p)
+	runner.Handle(jobType, dmn.Handler(store, lookupOf(cp), reg, func(r dmn.Result) { got = append(got, r) }))
 
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)
 	}
 
-	if len(got) != 1 {
-		t.Fatalf("decisions evaluated = %d, want 1", len(got))
-	}
-	if got[0].DecisionId != "Dish" {
-		t.Errorf("decision id = %q, want Dish", got[0].DecisionId)
-	}
-	if dish := got[0].Outputs["Dish"]; dish != "Roastbeef" {
-		t.Errorf("Dish = %#v, want Roastbeef", dish)
+	if len(got) != 1 || got[0].Outputs["Dish"] != "Roastbeef" {
+		t.Fatalf("results = %#v, want one Roastbeef", got)
 	}
 	if pi, ei := active(t, store); pi != 0 || ei != 0 {
 		t.Fatalf("after Drive: process=%d element=%d, want 0 and 0", pi, ei)
 	}
 }
 
-// TestBusinessRuleTaskRecoversAcrossRestart runs to the waiting DMN job,
-// simulates a crash (reopen the log and store), recovers state by replaying the
-// log, then lets the worker evaluate the decision and finish the instance —
-// proving the business rule job survives recovery like any other job.
-func TestBusinessRuleTaskRecoversAcrossRestart(t *testing.T) {
+// TestVariableMappingRecoversAcrossRestart proves the variable subsystem
+// survives recovery: an instance is seeded with a variable, run to the waiting
+// DMN job, crashed, and recovered — the seeded variable is rebuilt by replaying
+// VariableCreated events through applyToState, and the recovered job then maps
+// it and finishes the instance.
+func TestVariableMappingRecoversAcrossRestart(t *testing.T) {
 	dir := t.TempDir()
-	cp, jobType := dishProcess(t, "Summer")
+	cp, jobType := dishProcess(t, compiler.BusinessRule{
+		DecisionId:     "Dish",
+		InputMappings:  map[string]string{"Season": "theSeason"},
+		ResultVariable: "dish",
+		Retries:        3,
+	}, false)
 	clock := &fixedClock{}
 
 	reg := dmn.NewRegistry()
 	if err := reg.Deploy(cp.Key, []byte(dishModel)); err != nil {
 		t.Fatalf("Registry.Deploy: %v", err)
 	}
-	lookup := func(uint64) *compiler.CompiledProcess { return cp }
 
-	// First run: start an instance and stop at the waiting business rule job.
+	// First run: seed a variable and stop at the waiting business rule job.
 	log1, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
 	if err != nil {
 		t.Fatalf("wal.Open: %v", err)
@@ -157,23 +255,16 @@ func TestBusinessRuleTaskRecoversAcrossRestart(t *testing.T) {
 	if err := p1.Recover(); err != nil {
 		t.Fatalf("Recover 1: %v", err)
 	}
-	p1.CreateInstance(cp.Key)
+	p1.CreateInstanceWithVariables(cp.Key, []model.NamedVariable{
+		{Name: "theSeason", Value: []byte(`"Summer"`)},
+	})
 	if err := p1.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle 1: %v", err)
 	}
-	var before []uint64
-	if err := store1.ActivatableJobs(jobType, func(k uint64) error { before = append(before, k); return nil }); err != nil {
-		t.Fatalf("ActivatableJobs: %v", err)
-	}
-	if len(before) != 1 {
-		t.Fatalf("before crash: activatable jobs = %d, want 1", len(before))
-	}
-
-	// Crash.
 	store1.Close()
 	log1.Close()
 
-	// Restart: reopen and recover from the log.
+	// Restart: recover from the log.
 	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
 	if err != nil {
 		t.Fatalf("wal.Open 2: %v", err)
@@ -188,14 +279,17 @@ func TestBusinessRuleTaskRecoversAcrossRestart(t *testing.T) {
 	if err := p2.Recover(); err != nil {
 		t.Fatalf("Recover 2: %v", err)
 	}
-	if pi, ei := active(t, store2); pi != 1 || ei != 1 {
-		t.Fatalf("after recovery: process=%d element=%d, want 1 and 1", pi, ei)
+
+	// The seeded variable was rebuilt by replay.
+	piKey := onlyInstanceKey(t, store2)
+	if v, ok := variableJSON(t, store2, piKey, "theSeason"); !ok || v != `"Summer"` {
+		t.Fatalf("recovered theSeason = %q (present=%v), want \"Summer\"", v, ok)
 	}
 
-	// The recovered job evaluates and drives the instance to completion.
+	// The recovered job maps it and drives the instance to completion.
 	var got []dmn.Result
 	runner := job.NewRunner(store2, p2)
-	runner.Handle(jobType, dmn.Handler(store2, lookup, reg, func(r dmn.Result) { got = append(got, r) }))
+	runner.Handle(jobType, dmn.Handler(store2, lookupOf(cp), reg, func(r dmn.Result) { got = append(got, r) }))
 	if err := runner.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)
 	}

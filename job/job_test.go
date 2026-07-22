@@ -8,6 +8,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/job"
+	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
 )
@@ -69,9 +70,9 @@ func TestRunnerDrivesToCompletion(t *testing.T) {
 
 	var got []job.Job
 	runner := job.NewRunner(store, p)
-	runner.Handle(jobType, func(j job.Job) error {
+	runner.Handle(jobType, func(j job.Job) ([]model.NamedVariable, error) {
 		got = append(got, j)
-		return nil
+		return nil, nil
 	})
 
 	p.CreateInstance(defKey)
@@ -98,7 +99,7 @@ func TestPollOnceDispatchesActivatableJob(t *testing.T) {
 
 	runner := job.NewRunner(store, p)
 	calls := 0
-	runner.Handle(jobType, func(job.Job) error { calls++; return nil })
+	runner.Handle(jobType, func(job.Job) ([]model.NamedVariable, error) { calls++; return nil, nil })
 
 	// Run to the waiting job, then a single poll dispatches it.
 	p.CreateInstance(defKey)
@@ -132,7 +133,7 @@ func TestHandlerErrorSurfaces(t *testing.T) {
 
 	runner := job.NewRunner(store, p)
 	sentinel := errors.New("boom")
-	runner.Handle(jobType, func(job.Job) error { return sentinel })
+	runner.Handle(jobType, func(job.Job) ([]model.NamedVariable, error) { return nil, sentinel })
 
 	p.CreateInstance(defKey)
 	err := runner.Drive()

@@ -24,6 +24,11 @@ type Command struct {
 	// (0 for externally submitted commands), used to thread causality into the
 	// events the command produces.
 	SourcePos uint64
+	// Vars carries variables into the processor from outside: those seeded when
+	// an instance is created and those a job completion writes back. It is nil for
+	// internally generated followup commands, so the control-flow hot path never
+	// allocates for it (invariant I1).
+	Vars []model.NamedVariable
 }
 
 // sideEffect is work to run after the batch's fsync (invariant I2). It is a

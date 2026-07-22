@@ -161,6 +161,22 @@ func (s *Store) GetElementInstance(key uint64) (*model.ElementInstanceValue, boo
 	return v.(*model.ElementInstanceValue), true, nil
 }
 
+// GetVariable returns the raw encoded value of a process variable, reporting
+// whether it was present. It reads outside a transaction, for the in-process DMN
+// worker resolving a business rule task's input variables.
+func (s *Store) GetVariable(piKey uint64, name string) ([]byte, bool, error) {
+	return getCopy(s.db, keyVariable(piKey, name))
+}
+
+// VariablesOfProcess calls fn with the name and raw value of every variable of
+// an instance, via the variable column family — the "read this instance's
+// variables" access pattern (queries, tests).
+func (s *Store) VariablesOfProcess(piKey uint64, fn func(name string, value []byte) error) error {
+	return s.scanPrefix(variablePrefix(piKey), func(k, v []byte) error {
+		return fn(variableName(k), v)
+	})
+}
+
 // ActiveProcessInstanceCount returns how many process instances are live.
 func (s *Store) ActiveProcessInstanceCount() (int, error) {
 	return s.countPrefix([]byte{byte(cfProcessInstance)})

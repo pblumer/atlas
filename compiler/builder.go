@@ -90,26 +90,54 @@ func (b *Builder) AddServiceTask(jobType string, retries int32) int32 {
 	return b.addNode(TypeServiceTask, detail)
 }
 
-// AddBusinessRuleTask adds a business rule task that evaluates the named DMN
-// decision with the given static input context, and returns its element id. The
-// inputs map is JSON-encoded and interned at deploy time (never on the hot path,
-// invariant I5); a nil or empty map records no inputs. It returns an error if the
-// inputs cannot be encoded.
-func (b *Builder) AddBusinessRuleTask(decisionId string, inputs map[string]any, retries int32) (int32, error) {
+// BusinessRule configures a business rule task added via AddBusinessRuleTask.
+type BusinessRule struct {
+	// DecisionId names the DMN decision to evaluate (required).
+	DecisionId string
+	// StaticInputs are constant inputs merged into the evaluation context.
+	StaticInputs map[string]any
+	// InputMappings binds a decision input name to a process variable name
+	// (decision input → variable). Mappings win over static inputs of the same
+	// name.
+	InputMappings map[string]string
+	// ResultVariable, if set, is the process variable the decision's outputs are
+	// written back into.
+	ResultVariable string
+	// Retries is the job's retry budget.
+	Retries int32
+}
+
+// AddBusinessRuleTask adds a business rule task from cfg and returns its element
+// id. Static inputs are JSON-encoded and every name is interned at deploy time
+// (never on the hot path, invariant I5). It returns an error if cfg has no
+// decision id or its static inputs cannot be encoded.
+func (b *Builder) AddBusinessRuleTask(cfg BusinessRule) (int32, error) {
+	if cfg.DecisionId == "" {
+		return -1, fmt.Errorf("compiler: business rule task has no decision id")
+	}
 	inputsIdx := int32(-1)
-	if len(inputs) > 0 {
-		encoded, err := json.Marshal(inputs)
+	if len(cfg.StaticInputs) > 0 {
+		encoded, err := json.Marshal(cfg.StaticInputs)
 		if err != nil {
-			return -1, fmt.Errorf("compiler: business rule task %q inputs: %w", decisionId, err)
+			return -1, fmt.Errorf("compiler: business rule task %q inputs: %w", cfg.DecisionId, err)
 		}
 		inputsIdx = b.intern(string(encoded))
 	}
+	var mappings []VariableMapping
+	for target, source := range cfg.InputMappings {
+		mappings = append(mappings, VariableMapping{
+			Target: b.intern(target),
+			Source: b.intern(source),
+		})
+	}
 	detail := int32(len(b.businessRuleTasks))
 	b.businessRuleTasks = append(b.businessRuleTasks, BusinessRuleTaskDetail{
-		JobType:    b.intern(DMNJobType),
-		DecisionId: b.intern(decisionId),
-		Inputs:     inputsIdx,
-		Retries:    retries,
+		JobType:        b.intern(DMNJobType),
+		DecisionId:     b.intern(cfg.DecisionId),
+		Inputs:         inputsIdx,
+		ResultVariable: b.intern(cfg.ResultVariable),
+		Retries:        cfg.Retries,
+		InputMappings:  mappings,
 	})
 	return b.addNode(TypeBusinessRuleTask, detail), nil
 }

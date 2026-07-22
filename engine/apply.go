@@ -14,7 +14,16 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 		case model.IntentActivated:
 			return tx.PutProcessInstance(h.Key, &v.process)
 		case model.IntentCompleted, model.IntentTerminated:
+			if err := tx.DeleteVariablesOfProcess(h.Key); err != nil {
+				return err
+			}
 			return tx.DeleteProcessInstance(h.Key)
+		}
+
+	case model.VTVariable:
+		switch h.Intent {
+		case model.IntentVariableCreated, model.IntentVariableUpdated:
+			return tx.PutVariable(&v.variable)
 		}
 
 	case model.VTElementInstance:

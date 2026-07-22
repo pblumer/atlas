@@ -95,9 +95,10 @@ const businessRuleBPMN = `<?xml version="1.0" encoding="UTF-8"?>
     <bpmn:startEvent id="start"/>
     <bpmn:businessRuleTask id="decide" name="Pick dish">
       <bpmn:extensionElements>
-        <zeebe:calledDecision decisionId="Dish" retries="5"/>
+        <zeebe:calledDecision decisionId="Dish" resultVariable="dish" retries="5"/>
         <atlas:decisionInput name="Season" value="Winter"/>
         <atlas:decisionInput name="Guests" value="8"/>
+        <atlas:decisionInput name="Mood" variable="currentMood"/>
       </bpmn:extensionElements>
     </bpmn:businessRuleTask>
     <bpmn:endEvent id="end"/>
@@ -125,8 +126,11 @@ func TestParseBusinessRuleTask(t *testing.T) {
 	if detail.Retries != 5 {
 		t.Errorf("retries = %d, want 5", detail.Retries)
 	}
-	// Inputs are stored as a JSON object; the string value stays a string and the
-	// numeric value keeps its JSON number type.
+	if got := cp.Intern(detail.ResultVariable); got != "dish" {
+		t.Errorf("resultVariable = %q, want dish", got)
+	}
+	// Static inputs are stored as a JSON object; the string value stays a string
+	// and the numeric value keeps its JSON number type.
 	var inputs map[string]any
 	if err := json.Unmarshal([]byte(cp.Intern(detail.Inputs)), &inputs); err != nil {
 		t.Fatalf("inputs not valid JSON: %v", err)
@@ -136,6 +140,17 @@ func TestParseBusinessRuleTask(t *testing.T) {
 	}
 	if inputs["Guests"] != float64(8) {
 		t.Errorf("Guests = %#v, want 8", inputs["Guests"])
+	}
+	if _, isStatic := inputs["Mood"]; isStatic {
+		t.Errorf("Mood should be a variable mapping, not a static input")
+	}
+	// The variable-bound input becomes an input mapping (Mood ← currentMood).
+	if len(detail.InputMappings) != 1 {
+		t.Fatalf("input mappings = %d, want 1", len(detail.InputMappings))
+	}
+	m := detail.InputMappings[0]
+	if cp.Intern(m.Target) != "Mood" || cp.Intern(m.Source) != "currentMood" {
+		t.Errorf("mapping = %q ← %q, want Mood ← currentMood", cp.Intern(m.Target), cp.Intern(m.Source))
 	}
 	if out := cp.Outgoing(task); len(out) != 1 || cp.Node(cp.Flow(out[0]).Target).Type != TypeEndEvent {
 		t.Errorf("expected end event after business rule task")
