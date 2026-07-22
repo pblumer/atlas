@@ -172,6 +172,13 @@ func (t *Tx) DeleteProcessInstance(key uint64) error {
 	return t.b.Delete(keyProcessInstance(key), nil)
 }
 
+// PutProcessInstanceHistory records a terminal (completed/terminated) process
+// instance in the history index. Written from applyToState when an instance
+// ends, from the event alone, so it replays identically on recovery (ADR-0017).
+func (t *Tx) PutProcessInstanceHistory(key uint64, v *model.ProcessInstanceValue) error {
+	return t.b.Set(keyProcessInstanceHistory(key), t.encodeValue(v), nil)
+}
+
 // --- Variable ---
 
 // PutVariable writes (upserts) a process variable under its scope and name.

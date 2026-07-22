@@ -14,6 +14,21 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 		case model.IntentActivated:
 			return tx.PutProcessInstance(h.Key, &v.process)
 		case model.IntentCompleted, model.IntentTerminated:
+			// Retain a history record so operators can inspect finished
+			// instances, then drop the active record. The terminal state and
+			// completion time come only from this event (its intent and header
+			// timestamp), so replay rebuilds identical history — invariant I4,
+			// ADR-0017.
+			hist := v.process
+			if h.Intent == model.IntentTerminated {
+				hist.State = model.PITerminated
+			} else {
+				hist.State = model.PICompleted
+			}
+			hist.CompletedAt = h.Timestamp
+			if err := tx.PutProcessInstanceHistory(h.Key, &hist); err != nil {
+				return err
+			}
 			return tx.DeleteProcessInstance(h.Key)
 		}
 

@@ -283,9 +283,10 @@ async function viewInstances() {
         <button class="btn neutral" id="refresh">Refresh</button>
       </div>
     </div>
-    <p class="muted">Running process instances on this server. Each holds one or more
-    element instances (tokens) as it moves through the engine. Start the demo to
-    park a token on a waiting task and watch the live token total.</p>
+    <p class="muted">Process instances on this server: running ones (each holding one or
+    more element instances — tokens — as it moves through the engine), then finished ones
+    with their completion time. Start the demo to park a token on a waiting task and watch
+    the live token total.</p>
     <div class="card" style="padding:0">
       <table>
         <thead><tr><th>Instance</th><th>Process</th><th>Version</th><th>Tokens</th><th>Variables</th><th>Status</th><th></th></tr></thead>
@@ -305,18 +306,31 @@ async function viewInstances() {
       const vars = (list) => !list || !list.length
         ? '<span class="muted">—</span>'
         : list.map((v) => `<span class="chip">${esc(v.name)}=${esc(v.value)}</span>`).join(" ");
-      tbody.innerHTML = rows.map((r) => `
-        <tr>
+      // completedAt is unix nanoseconds; Date wants milliseconds.
+      const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "";
+      const status = (r) => {
+        if (r.state === "active") {
+          return `<span class="pill ok"><span class="dot"></span>active</span>`;
+        }
+        const when = fmtNano(r.completedAt);
+        return `<span class="pill">${esc(r.state)}</span>` +
+          (when ? ` <span class="muted">${esc(when)}</span>` : "");
+      };
+      tbody.innerHTML = rows.map((r) => {
+        const done = r.state !== "active";
+        return `
+        <tr${done ? ' class="done"' : ""}>
           <td><b>${r.key}</b></td>
           <td>${r.processId
             ? `<a href="#/operations/p/${r.processDefKey}">${esc(r.processId)}</a>`
             : '<span class="muted">def ' + r.processDefKey + "</span>"}</td>
           <td>${r.version ? "v" + r.version : "—"}</td>
-          <td>${r.elementInstances}</td>
+          <td>${done ? '<span class="muted">—</span>' : r.elementInstances}</td>
           <td>${vars(r.variables)}</td>
-          <td><span class="pill ok"><span class="dot"></span>${esc(r.state)}</span></td>
-          <td style="text-align:right"><a class="btn ghost" href="#/operations/p/${r.processDefKey}">Live view</a></td>
-        </tr>`).join("");
+          <td>${status(r)}</td>
+          <td style="text-align:right"><a class="btn ghost" href="#/operations/p/${r.processDefKey}">${done ? "View" : "Live view"}</a></td>
+        </tr>`;
+      }).join("");
     } catch (e) {
       document.getElementById("rows").innerHTML =
         `<tr><td colspan="7" class="empty">${esc(e.message)}</td></tr>`;

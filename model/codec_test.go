@@ -96,6 +96,24 @@ func TestRecordRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name:   "active process instance",
+			vt:     VTProcessInstance,
+			intent: IntentActivated,
+			value: &ProcessInstanceValue{
+				ProcessDefKey: NewKey(3, 2),
+			},
+		},
+		{
+			name:   "completed process instance (history)",
+			vt:     VTProcessInstance,
+			intent: IntentCompleted,
+			value: &ProcessInstanceValue{
+				ProcessDefKey: NewKey(3, 2),
+				State:         PICompleted,
+				CompletedAt:   1_700_000_000_000_000_000,
+			},
+		},
+		{
 			name:   "header only, no payload",
 			vt:     VTSignal, // a value type without a payload codec yet
 			intent: IntentActivating,

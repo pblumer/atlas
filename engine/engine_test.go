@@ -152,6 +152,20 @@ func activatableJobs(t *testing.T, s *state.Store, jobType int32) []uint64 {
 	return keys
 }
 
+// completedInstances reads the process-instance history index into a map keyed
+// by instance key.
+func completedInstances(t *testing.T, s *state.Store) map[uint64]model.ProcessInstanceValue {
+	t.Helper()
+	out := map[uint64]model.ProcessInstanceValue{}
+	if err := s.CompletedProcessInstances(func(k uint64, v *model.ProcessInstanceValue) error {
+		out[k] = *v
+		return nil
+	}); err != nil {
+		t.Fatalf("CompletedProcessInstances: %v", err)
+	}
+	return out
+}
+
 func counts(t *testing.T, s *state.Store) (procInstances, elementInstances int) {
 	t.Helper()
 	pi, err := s.ActiveProcessInstanceCount()
@@ -467,5 +481,86 @@ func TestRecoverAcrossRestart(t *testing.T) {
 	}
 	if pi, ei := counts(t, h2.store); pi != 0 || ei != 0 {
 		t.Fatalf("after completion: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+}
+
+// TestCompletedInstanceHistoryRecovers is the recovery property for the process
+// instance history index (ADR-0017): finishing an instance moves it out of the
+// active family and into history with a terminal state and completion time, and
+// replaying the log rebuilds byte-identical history — the completion timestamp
+// comes from the event header, never re-read from the clock (invariant I4).
+func TestCompletedInstanceHistoryRecovers(t *testing.T) {
+	dir := t.TempDir()
+	cp, jobType := linearProcess(t)
+	clock := &manualClock{}
+
+	// Live run to completion.
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clock)
+	p1.Deploy(cp)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.CreateInstance(cp.Key)
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle 1: %v", err)
+	}
+	jobs := activatableJobs(t, h1.store, jobType)
+	p1.CompleteJob(jobs[0])
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle 2: %v", err)
+	}
+
+	// Gone from the active family, present in history as completed.
+	if pi, _ := counts(t, h1.store); pi != 0 {
+		t.Fatalf("active process instances = %d, want 0", pi)
+	}
+	live := completedInstances(t, h1.store)
+	if len(live) != 1 {
+		t.Fatalf("completed instances = %d, want 1", len(live))
+	}
+	instKey := model.NewKey(1, 1) // the first minted key is the process instance
+	got, ok := live[instKey]
+	if !ok {
+		t.Fatalf("instance %d not in history (have %v)", instKey, live)
+	}
+	if got.State != model.PICompleted {
+		t.Fatalf("history state = %v, want completed", got.State)
+	}
+	if got.ProcessDefKey != cp.Key {
+		t.Fatalf("history defKey = %d, want %d", got.ProcessDefKey, cp.Key)
+	}
+	if got.CompletedAt == 0 {
+		t.Fatal("history CompletedAt = 0, want the event timestamp")
+	}
+	h1.close(t)
+
+	// Replay the same log into a fresh, empty store.
+	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open 2: %v", err)
+	}
+	store2, err := state.Open(filepath.Join(dir, "state2"))
+	if err != nil {
+		t.Fatalf("state.Open 2: %v", err)
+	}
+	defer func() {
+		if err := store2.Close(); err != nil {
+			t.Errorf("store2.Close: %v", err)
+		}
+		if err := log2.Close(); err != nil {
+			t.Errorf("log2.Close: %v", err)
+		}
+	}()
+	p2 := engine.New(1, log2, store2, clock)
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2 (replay): %v", err)
+	}
+
+	// Rebuilt history matches the live run exactly — including the timestamp.
+	replayed := completedInstances(t, store2)
+	if len(replayed) != 1 || replayed[instKey] != got {
+		t.Fatalf("replayed history = %v, want %v", replayed, live)
 	}
 }

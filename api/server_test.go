@@ -199,6 +199,59 @@ func TestDeleteProcess(t *testing.T) {
 	}
 }
 
+// TestListInstancesIncludesCompleted deploys a process that runs straight to the
+// end (no wait point), starts it, and checks the instance list now carries it as
+// a finished instance with a completion time — the history view (ADR-0017).
+func TestListInstancesIncludesCompleted(t *testing.T) {
+	ts := newTestServer(t)
+
+	const straightThrough = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="passthrough" isExecutable="true">
+    <startEvent id="start"/>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="end"/>
+  </process>
+</definitions>`
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", straightThrough, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v (%s)", err, body)
+	}
+
+	// Starting the instance runs it to completion synchronously.
+	code, body = doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key), "{}", "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("create instance status=%d body=%s", code, body)
+	}
+
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/instances", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("list status=%d body=%s", code, body)
+	}
+	var insts []struct {
+		ProcessID        string `json:"processId"`
+		State            string `json:"state"`
+		CompletedAt      int64  `json:"completedAt"`
+		ElementInstances int    `json:"elementInstances"`
+	}
+	if err := json.Unmarshal(body, &insts); err != nil {
+		t.Fatalf("decode instances: %v (%s)", err, body)
+	}
+	if len(insts) != 1 {
+		t.Fatalf("instances = %d, want 1 (%s)", len(insts), body)
+	}
+	if insts[0].ProcessID != "passthrough" || insts[0].State != "completed" ||
+		insts[0].CompletedAt == 0 || insts[0].ElementInstances != 0 {
+		t.Fatalf("instance = %+v, want completed passthrough with a completion time and 0 tokens", insts[0])
+	}
+}
+
 // TestDeployInvalidModel rejects a model with no start event as a client error.
 func TestDeployInvalidModel(t *testing.T) {
 	ts := newTestServer(t)

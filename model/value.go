@@ -122,19 +122,46 @@ func (v *TimerValue) decode(src []byte) error {
 	return nil
 }
 
-// ProcessInstanceValue is the running instance as a whole — the root scope a
-// process's element instances live under. Minimal for now; fields grow as
-// features (parent/call-activity links, state flags) land.
-type ProcessInstanceValue struct {
-	ProcessDefKey uint64
+// ProcessInstanceState marks where an instance is in its lifecycle. The zero
+// value is Active; the terminal states are only ever stored in the history
+// index (an active instance's record always carries Active). See ADR-0017.
+type ProcessInstanceState uint8
+
+const (
+	PIActive     ProcessInstanceState = iota // running
+	PICompleted                              // reached its end normally
+	PITerminated                             // ended by termination
+)
+
+func (s ProcessInstanceState) String() string {
+	switch s {
+	case PICompleted:
+		return "completed"
+	case PITerminated:
+		return "terminated"
+	default:
+		return "active"
+	}
 }
 
-const processInstanceSize = 8
+// ProcessInstanceValue is the running instance as a whole — the root scope a
+// process's element instances live under. State and CompletedAt are set only
+// on the history record written when an instance ends (ADR-0017); while live,
+// they carry their zero values (Active, 0).
+type ProcessInstanceValue struct {
+	ProcessDefKey uint64
+	State         ProcessInstanceState
+	CompletedAt   int64 // unix nano when it reached a terminal state; 0 while active
+}
+
+const processInstanceSize = 8 + 1 + 8
 
 func (*ProcessInstanceValue) ValueType() ValueType { return VTProcessInstance }
 
 func (v *ProcessInstanceValue) encode(dst []byte) []byte {
-	return binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
+	dst = append(dst, byte(v.State))
+	return binary.LittleEndian.AppendUint64(dst, uint64(v.CompletedAt))
 }
 
 func (v *ProcessInstanceValue) decode(src []byte) error {
@@ -142,6 +169,8 @@ func (v *ProcessInstanceValue) decode(src []byte) error {
 		return ErrShortBuffer
 	}
 	v.ProcessDefKey = binary.LittleEndian.Uint64(src[0:])
+	v.State = ProcessInstanceState(src[8])
+	v.CompletedAt = int64(binary.LittleEndian.Uint64(src[9:]))
 	return nil
 }
 

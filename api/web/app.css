@@ -133,6 +133,7 @@ ol.steps li { margin: 6px 0; }
 .chip { display: inline-block; font: 12px/1.6 ui-monospace, monospace; padding: 1px 7px; border-radius: 5px; background: var(--bg); border: 1px solid var(--border); white-space: nowrap; }
 .pill.ok { background: #e7f6ec; color: var(--ok); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); display: inline-block; }
+tr.done { opacity: .72; } /* finished instances are de-emphasized vs running ones */
 
 /* Tables */
 table { border-collapse: collapse; width: 100%; }

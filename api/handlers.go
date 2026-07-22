@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
@@ -54,6 +55,7 @@ type instanceResp struct {
 	Version          int32          `json:"version"`
 	ElementInstances int            `json:"elementInstances"`
 	State            string         `json:"state"`
+	CompletedAt      int64          `json:"completedAt,omitempty"`
 	Variables        []variableView `json:"variables"`
 }
 
@@ -389,13 +391,26 @@ func toVariableView(v *model.VariableValue) variableView {
 	return out
 }
 
-// handleListInstances lists live process instances with their definition and
-// how many element instances (tokens) each currently holds — the operator
-// "running instances" view.
+// handleListInstances lists process instances — live ones (with their current
+// token count) followed by finished ones from the history index, most recently
+// completed first (ADR-0017). It is the operator "instances" view.
 func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
-	list := []instanceResp{}
+	active := []instanceResp{}
+	done := []instanceResp{}
 	var scanErr error
 	s.do(func() {
+		// Attach the definition's id/version and the scope's variables to a row.
+		enrich := func(r *instanceResp, key uint64) error {
+			if d, ok := s.deployments[r.ProcessDefKey]; ok {
+				r.ProcessID = d.ProcessID
+				r.Version = d.Version
+			}
+			return s.store.VariablesOfScope(key, func(vv *model.VariableValue) error {
+				r.Variables = append(r.Variables, toVariableView(vv))
+				return nil
+			})
+		}
+
 		scanErr = s.store.ActiveProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
 			elements := 0
 			if err := s.store.ElementInstancesOfProcess(key, func(uint64) error {
@@ -411,17 +426,28 @@ func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
 				State:            "active",
 				Variables:        []variableView{},
 			}
-			if d, ok := s.deployments[v.ProcessDefKey]; ok {
-				r.ProcessID = d.ProcessID
-				r.Version = d.Version
-			}
-			if err := s.store.VariablesOfScope(key, func(vv *model.VariableValue) error {
-				r.Variables = append(r.Variables, toVariableView(vv))
-				return nil
-			}); err != nil {
+			if err := enrich(&r, key); err != nil {
 				return err
 			}
-			list = append(list, r)
+			active = append(active, r)
+			return nil
+		})
+		if scanErr != nil {
+			return
+		}
+
+		scanErr = s.store.CompletedProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
+			r := instanceResp{
+				Key:           key,
+				ProcessDefKey: v.ProcessDefKey,
+				State:         v.State.String(),
+				CompletedAt:   v.CompletedAt,
+				Variables:     []variableView{},
+			}
+			if err := enrich(&r, key); err != nil {
+				return err
+			}
+			done = append(done, r)
 			return nil
 		})
 	})
@@ -429,7 +455,9 @@ func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusInternalServerError, "list instances: "+scanErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, list)
+	// Finished instances: most recently completed first.
+	sort.Slice(done, func(i, j int) bool { return done[i].CompletedAt > done[j].CompletedAt })
+	writeJSON(w, http.StatusOK, append(active, done...))
 }
 
 // handleStats returns the live instance counts.
