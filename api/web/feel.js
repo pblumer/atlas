@@ -453,6 +453,15 @@ export function attachFeelEditor(textarea, opts = {}) {
   function handleBracket(e) {
     if (e.ctrlKey || e.metaKey || e.altKey) return false;
     const { selectionStart: s, selectionEnd: eSel, value } = textarea;
+    // Skip over an auto-inserted closer when the user types it explicitly. This
+    // must come first: a quote is both an opener and a closer, so typing the
+    // closing quote of an auto-closed pair should step over it, not open a new
+    // pair. (Only with an empty selection — a selection means "wrap this".)
+    if (s === eSel && CLOSERS.has(e.key) && value[s] === e.key) {
+      e.preventDefault();
+      textarea.setSelectionRange(s + 1, s + 1);
+      return true;
+    }
     if (OPENERS[e.key]) {
       e.preventDefault();
       const sel = value.slice(s, eSel);
@@ -460,11 +469,6 @@ export function attachFeelEditor(textarea, opts = {}) {
       const pos = s + 1 + sel.length;
       textarea.setSelectionRange(sel ? s + 1 : pos, sel ? eSel + 1 : pos);
       afterEdit();
-      return true;
-    }
-    if (CLOSERS.has(e.key) && s === eSel && value[s] === e.key) {
-      e.preventDefault();
-      textarea.setSelectionRange(s + 1, s + 1);
       return true;
     }
     return false;
