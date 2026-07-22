@@ -134,18 +134,29 @@ export async function mountEditor(root, { api, toast, key }) {
     toast("could not open diagram: " + e.message, "err");
   }
 
-  wireProperties(root, modeler);
-  wireTabs(root);
+  const rerender = wireProperties(root, modeler);
+  wireTabs(root, rerender);
   wireActions(root, modeler, api, toast);
 }
 
-function wireTabs(root) {
+// wireTabs toggles the Design/Implement tabs. Design is the descriptive view
+// (eCH-0158 level: names/labels and control flow only); Implement surfaces the
+// executable detail (FEEL conditions, script expressions, job types). Switching
+// tabs re-renders the properties panel for the current selection via onChange.
+function wireTabs(root, onChange) {
   root.querySelectorAll(".etabs button").forEach((b) => {
     b.addEventListener("click", () => {
       root.querySelectorAll(".etabs button").forEach((x) => x.classList.remove("active"));
       b.classList.add("active");
+      if (onChange) onChange();
     });
   });
+}
+
+// activeTab reads which properties view is selected, defaulting to design.
+function activeTab(root) {
+  const b = root.querySelector(".etabs button.active");
+  return (b && b.dataset.tab) || "design";
 }
 
 // findExt returns a business object's extension element of the given moddle type.
@@ -233,46 +244,74 @@ function wireProperties(root, modeler) {
     typename.textContent = type;
     nameEl.textContent = bo.name || bo.id || "(unnamed)";
 
+    const tab = activeTab(root);
+    const isSeqFlow = /:SequenceFlow$/.test(bo.$type || "");
+    const src = bo.sourceRef;
+    // A conditional branch is a flow out of an exclusive/inclusive gateway. Its
+    // name is the descriptive label (Design); its conditionExpression is the FEEL
+    // guard (Implement). The gateway's default flow carries no condition.
+    const isGatewayFlow = isSeqFlow && src && /(Exclusive|Inclusive)Gateway$/.test(src.$type || "");
+    const isDefaultFlow = isGatewayFlow && src.default === bo;
+
+    // General: the descriptive view shared by both tabs. For a sequence flow the
+    // name IS the diagram label (e.g. the branch outcome "Großauftrag").
     let html = `
       <h3>General</h3>
-      <label class="field"><span>Name</span><input type="text" id="f-name" value="${esc(bo.name || "")}"/></label>
+      <label class="field"><span>${isSeqFlow ? "Label" : "Name"}</span><input type="text" id="f-name" value="${esc(bo.name || "")}"${isSeqFlow ? ' placeholder="Großauftrag"' : ""}/></label>
       <label class="field"><span>ID</span><input type="text" value="${esc(bo.id || "")}" readonly/></label>`;
 
-    if (isActivity(bo)) {
-      const t = bo.$type;
-      html += `
-        <label class="field"><span>Task type</span>
-          <select id="f-tasktype">
-            <option value="bpmn:Task" ${t === "bpmn:Task" ? "selected" : ""}>Undefined task</option>
-            <option value="bpmn:ScriptTask" ${t === "bpmn:ScriptTask" ? "selected" : ""}>Script task (FEEL)</option>
-            <option value="bpmn:ServiceTask" ${t === "bpmn:ServiceTask" ? "selected" : ""}>Service task (job worker)</option>
-          </select></label>`;
+    if (tab === "implement") {
+      if (isActivity(bo)) {
+        const t = bo.$type;
+        html += `
+          <label class="field"><span>Task type</span>
+            <select id="f-tasktype">
+              <option value="bpmn:Task" ${t === "bpmn:Task" ? "selected" : ""}>Undefined task</option>
+              <option value="bpmn:ScriptTask" ${t === "bpmn:ScriptTask" ? "selected" : ""}>Script task (FEEL)</option>
+              <option value="bpmn:ServiceTask" ${t === "bpmn:ServiceTask" ? "selected" : ""}>Service task (job worker)</option>
+            </select></label>`;
 
-      if (t === "bpmn:ScriptTask") {
-        const s = findExt(bo, "zeebe:Script") || {};
-        const exprText = (s.expression || "").replace(/^=\s*/, "");
-        html += `<h3>Script (FEEL)</h3>
+        if (t === "bpmn:ScriptTask") {
+          const s = findExt(bo, "zeebe:Script") || {};
+          const exprText = (s.expression || "").replace(/^=\s*/, "");
+          html += `<h3>Script (FEEL)</h3>
+            <label class="field"><span>Expression</span>
+              <textarea id="f-expr" rows="3" placeholder="amount * (1 + taxRate)">${esc(exprText)}</textarea></label>
+            <label class="field"><span>Result variable</span>
+              <input type="text" id="f-result" value="${esc(s.resultVariable || "")}" placeholder="gross"/></label>`;
+        } else if (t === "bpmn:ServiceTask") {
+          const d = findExt(bo, "zeebe:TaskDefinition") || {};
+          html += `<h3>Task definition</h3>
+            <label class="field"><span>Job type</span>
+              <input type="text" id="f-jobtype" value="${esc(d.type || "")}" placeholder="payment"/></label>`;
+        }
+      } else if (isDefaultFlow) {
+        html += `<h3>Condition (FEEL)</h3>
+          <p class="muted" style="font-size:12px">This is the gateway's <b>default flow</b> — taken when no other branch's condition matches, so it carries no condition of its own.</p>`;
+      } else if (isGatewayFlow) {
+        const condText = ((bo.conditionExpression && bo.conditionExpression.body) || "").replace(/^=\s*/, "");
+        html += `<h3>Condition (FEEL)</h3>
           <label class="field"><span>Expression</span>
-            <textarea id="f-expr" rows="3" placeholder="amount * (1 + taxRate)">${esc(exprText)}</textarea></label>
-          <label class="field"><span>Result variable</span>
-            <input type="text" id="f-result" value="${esc(s.resultVariable || "")}" placeholder="gross"/></label>`;
-      } else if (t === "bpmn:ServiceTask") {
-        const d = findExt(bo, "zeebe:TaskDefinition") || {};
-        html += `<h3>Task definition</h3>
-          <label class="field"><span>Job type</span>
-            <input type="text" id="f-jobtype" value="${esc(d.type || "")}" placeholder="payment"/></label>`;
+            <textarea id="f-cond" rows="2" placeholder="amount > 100">${esc(condText)}</textarea></label>
+          <p class="muted" style="font-size:12px">Evaluated when the token reaches the gateway; the first branch whose condition holds is taken.</p>`;
+      } else if (bo.$type === "bpmn:IntermediateCatchEvent") {
+        const timer = timerDefOf(bo);
+        if (timer) {
+          const dur = (timer.timeDuration && timer.timeDuration.body) || "";
+          html += `<h3>Timer</h3>
+            <label class="field"><span>Duration (ISO&nbsp;8601)</span>
+              <input type="text" id="f-duration" value="${esc(dur)}" placeholder="PT30S"/></label>
+            <p class="muted" style="font-size:12px">e.g. PT30S (30s), PT5M, PT1H, P1DT2H. The event waits this long, then continues.</p>`;
+        } else {
+          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b> intermediate catch event, then set its duration here.</p>`;
+        }
       }
-    } else if (bo.$type === "bpmn:IntermediateCatchEvent") {
-      const timer = timerDefOf(bo);
-      if (timer) {
-        const dur = (timer.timeDuration && timer.timeDuration.body) || "";
-        html += `<h3>Timer</h3>
-          <label class="field"><span>Duration (ISO&nbsp;8601)</span>
-            <input type="text" id="f-duration" value="${esc(dur)}" placeholder="PT30S"/></label>
-          <p class="muted" style="font-size:12px">e.g. PT30S (30s), PT5M, PT1H, P1DT2H. The event waits this long, then continues.</p>`;
-      } else {
-        html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b> intermediate catch event, then set its duration here.</p>`;
-      }
+    } else if (isGatewayFlow && !isDefaultFlow) {
+      // Design tab: point to where the executable rule lives.
+      const has = bo.conditionExpression && bo.conditionExpression.body;
+      html += `<p class="muted" style="font-size:12px">${has
+        ? "A FEEL condition is set on this branch — edit it in the <b>Implement</b> tab."
+        : "Set this branch's FEEL condition in the <b>Implement</b> tab."}</p>`;
     }
     body.innerHTML = html;
 
@@ -321,6 +360,25 @@ function wireProperties(root, modeler) {
         modeling.updateModdleProperties(element, timer, { timeDuration: td });
       });
     }
+
+    const fcond = body.querySelector("#f-cond");
+    if (fcond) {
+      fcond.addEventListener("change", () => {
+        const raw = (fcond.value || "").trim();
+        if (raw === "") {
+          // Clearing the field removes the guard, turning the branch unconditional.
+          try { modeling.updateProperties(element, { conditionExpression: undefined }); } catch { /* stale */ }
+          return;
+        }
+        // Store as a FEEL expression, '=' prefixed per Zeebe (Atlas strips it).
+        const moddle = modeler.get("moddle");
+        const expr = moddle.create("bpmn:FormalExpression", {
+          body: raw.startsWith("=") ? raw : "= " + raw,
+        });
+        expr.$parent = element.businessObject;
+        try { modeling.updateProperties(element, { conditionExpression: expr }); } catch { /* stale */ }
+      });
+    }
   }
 
   modeler.on("selection.changed", (e) => show((e.newSelection || [])[0]));
@@ -329,6 +387,9 @@ function wireProperties(root, modeler) {
     if (sel[0] && e.element && sel[0].id === e.element.id) show(sel[0]);
   });
   show(null);
+
+  // Returned so a Design/Implement tab switch re-renders the current selection.
+  return () => show(selection.get()[0]);
 }
 
 function wireActions(root, modeler, api, toast) {
