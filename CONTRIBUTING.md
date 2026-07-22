@@ -20,15 +20,24 @@ Atlas's performance and correctness rest on a few load-bearing decisions, captur
 
 ## Development
 
+Atlas is developed **test-first** — TDD is the default workflow, not an aspiration ([ADR-0018](docs/adr/0018-test-driven-development.md)):
+
+1. **Red** — write a test that states the behavior you want and watch it fail for the right reason. Anything that emits events gets a recovery/replay test up front; a bug fix starts with a failing regression test.
+2. **Green** — write the minimum code to make it pass.
+3. **Refactor** — clean up with the test holding the line.
+
+Narrow, *stated* exceptions: purely mechanical changes with no behavioral surface (renames, docs, gofmt, dependency bumps), and throwaway spikes that are re-done test-first before merge. If you skip tests, say why in the PR.
+
 ```bash
 go build ./...
 go test ./...
 go test -race ./...      # the race detector is mandatory before pushing
+go test -cover ./...     # repository-wide statement coverage must stay >= 95%
 go vet ./...
 gofmt -l .               # must be empty
 ```
 
-CI runs build, test, `-race`, vet, and formatting checks. Please run them locally first.
+CI runs build, test, `-race`, vet, formatting, and the 95% coverage floor. Please run them locally first.
 
 ## Coding conventions
 

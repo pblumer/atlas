@@ -1,7 +1,7 @@
 # Atlas — developer command entry point.
 # Agents and CI: prefer these targets so the canonical commands live in one place.
 
-.PHONY: all build test race vet fmt fmt-check lint check tidy clean run server
+.PHONY: all build test race vet fmt fmt-check lint check cover tidy clean run server
 
 all: check
 
@@ -37,8 +37,13 @@ fmt-check:
 lint:
 	golangci-lint run
 
+# Enforce the repository-wide statement-coverage floor (ADR-0018). Override the
+# threshold via THRESHOLD, e.g. make cover THRESHOLD=90.
+cover:
+	./scripts/check-coverage.sh $(THRESHOLD)
+
 # The full gate. A change is "done" when this passes.
-check: build vet fmt-check race
+check: build vet fmt-check race cover
 
 tidy:
 	go mod tidy

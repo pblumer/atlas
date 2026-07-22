@@ -79,12 +79,14 @@ Packages may not all exist yet — the project is at Milestone 0 (see [`ROADMAP.
 1. **Locate it on the roadmap.** [`ROADMAP.md`](ROADMAP.md) is organized by milestone. Confirm the task belongs to the current milestone and isn't blocked by an unstarted dependency.
 2. **Read the relevant deep-dive(s)** for the package you're touching, plus any ADR they reference.
 3. **Check the invariants** above against your plan *before* writing code.
-4. **Write tests.** New behavior needs tests. Anything touching persistence or the processor needs a recovery/replay test (process some commands, simulate restart, replay the log, assert state matches).
+4. **Work test-first (TDD is the default — [ADR-0018](docs/adr/0018-test-driven-development.md)).** Write a failing test that states the intended behavior, watch it fail for the right reason, then write the minimum code to make it pass, then refactor with the test as a safety net. Anything touching persistence or the processor needs a recovery/replay test written up front (process some commands, simulate restart, replay the log, assert state matches). A bug fix starts with a failing regression test. See *Testing conventions* for the narrow, stated exceptions.
 5. **Run the full check sequence** (see Commands) until green, including `-race`.
 6. **If you changed an architectural decision**, write a new ADR (copy [`docs/adr/template.md`](docs/adr/template.md)) instead of silently diverging, and update [`docs/adr/README.md`](docs/adr/README.md).
 
 ## Testing conventions
 
+- **Test-driven by default (red → green → refactor).** Write the test before the code it covers ([ADR-0018](docs/adr/0018-test-driven-development.md)). The point is that tests describe *intended behavior*, not whatever implementation happens to exist. Cover error and recovery paths as deliberately as happy paths — in an event-sourced engine, that's where defects hide. **Honest exceptions** (say so in the change, don't pretend): purely mechanical edits with no behavioral surface (renames, docs, gofmt, dep bumps), and throwaway design spikes that get re-done test-first before merge.
+- **Coverage floor: 95% statements, repository-wide**, checked in CI as one number. It is a floor, not a ceiling, and not a per-change delta gate — we chose a single repo-wide number precisely to avoid coverage theatre (lines executed with no meaningful assertion). If a genuinely unreachable defensive branch isn't worth a contrived test, say so in review rather than gaming it.
 - **Recovery tests are first-class.** The core correctness property is "state after replay == state built live." Test it explicitly for anything that emits events.
 - **Determinism.** Tests must not depend on wall-clock time or goroutine scheduling. Inject the `Clock`; drive the processor synchronously where possible.
 - **Hot-path allocation.** For processor-path changes, consider `testing.AllocsPerRun` / benchmark with `-benchmem` to confirm you haven't introduced per-command allocations.

@@ -81,6 +81,28 @@ func TestCompileAutoStillRejectsSyntaxErrors(t *testing.T) {
 	}
 }
 
+// TestIsTrue covers the boolean coercion a sequence-flow condition relies on:
+// only FEEL boolean true is true; false, null, and every non-boolean value are
+// not (so a guard that doesn't evaluate to true is simply not taken).
+func TestIsTrue(t *testing.T) {
+	cases := []struct {
+		name string
+		v    expr.Value
+		want bool
+	}{
+		{"bool true", expr.Bool(true), true},
+		{"bool false", expr.Bool(false), false},
+		{"null", expr.Null, false},
+		{"number", expr.Number(1), false},
+		{"string", expr.String("true"), false},
+	}
+	for _, tc := range cases {
+		if got := expr.IsTrue(tc.v); got != tc.want {
+			t.Errorf("IsTrue(%s) = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestFromStoredRoundTrip(t *testing.T) {
 	for _, tc := range []struct {
 		kind expr.ValueKind
