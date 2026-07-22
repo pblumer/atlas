@@ -278,6 +278,15 @@ function rootProcess(modeler) {
   } catch { return null; }
 }
 
+// isCollaborationRoot reports whether the diagram root is a collaboration (pools),
+// rather than a single process.
+function isCollaborationRoot(modeler) {
+  try {
+    const bo = modeler.get("canvas").getRootElement().businessObject;
+    return !!bo && /:Collaboration$/.test(bo.$type || "");
+  } catch { return false; }
+}
+
 function wireProperties(root, modeler) {
   const icon = root.querySelector("#p-icon");
   const typename = root.querySelector("#p-typename");
@@ -307,6 +316,15 @@ function wireProperties(root, modeler) {
           const v = (e.target.value || "").trim();
           if (v) { try { modeling.updateProperties(rootEl, { id: v }); } catch { toast("invalid process id", "err"); } }
         });
+        return;
+      }
+      // A collaboration root has no single process to rename; each pool
+      // (participant) is renamed by selecting it and editing its Name.
+      if (isCollaborationRoot(modeler)) {
+        icon.textContent = "CO"; typename.textContent = "Collaboration"; nameEl.textContent = "(collaboration)";
+        body.innerHTML = `
+          <h3>Collaboration</h3>
+          <p class="muted" style="font-size:12px">This diagram has several <b>pools</b> — each deploys as its own process. Select a pool to rename it, or an element inside a pool to configure it. Pools talk to each other through <b>message events</b> (a catch/throw with a matching correlation key), which is what a message flow between them means at runtime.</p>`;
         return;
       }
       icon.textContent = "–"; typename.textContent = "No selection"; nameEl.textContent = "—";
@@ -527,8 +545,15 @@ function wireActions(root, modeler, api, toast) {
     try {
       const { xml } = await modeler.saveXML({ format: true });
       const dep = await api("POST", "/api/v1/deployments", xml, true);
-      await api("POST", `/api/v1/processes/${dep.key}/instances`, {});
-      toast(`Deployed ${dep.processId} v${dep.version} and started an instance`, "ok");
+      const all = dep.deployments || [{ key: dep.key, processId: dep.processId, version: dep.version }];
+      if (all.length > 1) {
+        // A collaboration deploys one definition per pool; which pool to start is
+        // ambiguous, so just report what was deployed (start pools from Operations).
+        toast(`Deployed ${all.length} pools: ${all.map((d) => d.processId).join(", ")}`, "ok");
+      } else {
+        await api("POST", `/api/v1/processes/${dep.key}/instances`, {});
+        toast(`Deployed ${dep.processId} v${dep.version} and started an instance`, "ok");
+      }
     } catch (e) {
       // The Atlas compiler rejects elements it can't execute yet — surface that.
       toast("deploy failed: " + e.message, "err");

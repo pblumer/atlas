@@ -19,10 +19,23 @@ import (
 // bound, not a tuning knob.
 const maxXMLBytes = 4 << 20 // 4 MiB
 
-type deployResp struct {
+// deployedProcess is one process registered by a deployment. A collaboration
+// deploys several (one per executable pool); a plain model deploys one.
+type deployedProcess struct {
 	Key       uint64 `json:"key"`
 	ProcessID string `json:"processId"`
+	Name      string `json:"name"`
 	Version   int32  `json:"version"`
+}
+
+// deployResp echoes the first deployed process flat (single-process clients read
+// key/processId/version) and lists every process the model deployed, so a
+// collaboration surfaces all its pools.
+type deployResp struct {
+	Key         uint64            `json:"key"`
+	ProcessID   string            `json:"processId"`
+	Version     int32             `json:"version"`
+	Deployments []deployedProcess `json:"deployments"`
 }
 
 type processResp struct {
@@ -98,8 +111,12 @@ func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, infoResp{Product: "Atlas", Version: Version})
 }
 
-// handleDeploy parses a BPMN XML body, compiles and deploys it, and returns the
-// assigned definition key, process id, and version.
+// handleDeploy parses a BPMN XML body, compiles and deploys every executable
+// process it contains — one for a plain model, several for a collaboration (one
+// per pool) — and returns the assigned key/id/version for each. Each pool's
+// process becomes its own runnable definition; the message flows between pools
+// are the diagram's counterpart of the message events that link them at runtime
+// (ADR-0022).
 func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
@@ -117,47 +134,64 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		persistErr error
 	)
 	s.do(func() {
-		cp, err := compiler.Parse(s.nextKey, 1, bytes.NewReader(body))
+		deployables, err := compiler.ParseAll(s.nextKey, 1, bytes.NewReader(body))
 		if err != nil {
 			compErr = err
 			return
 		}
-		pid := cp.Intern(cp.BpmnProcessId)
-		version := s.versions[pid] + 1
-		cp.Version = version
-		key := s.nextKey
-		name := processName(body)
 		deployedAt := time.Now().Unix()
+		deployed := make([]deployedProcess, 0, len(deployables))
+		for i := range deployables {
+			cp := deployables[i].Process
+			pid := cp.Intern(cp.BpmnProcessId)
+			version := s.versions[pid] + 1
+			cp.Version = version
+			key := cp.Key // ParseAll assigned s.nextKey+i in document order
+			// A pool's name labels its process; fall back to the process's own name.
+			name := deployables[i].PoolName
+			if name == "" {
+				name = deployables[i].ProcessName
+			}
 
-		// Durable before visible (I2, ADR-0019): persist the deployment to the
-		// sidecar store before registering it in memory or with the processor. If
-		// the write fails, nothing becomes visible and no key is consumed.
-		if err := s.deploys.save(persistedDeployment{
-			Key:        key,
-			ProcessID:  pid,
-			Name:       name,
-			Version:    version,
-			DeployedAt: deployedAt,
-			XML:        string(body),
-		}); err != nil {
-			persistErr = err
-			return
-		}
+			// Durable before visible (I2, ADR-0019): persist before registering. A
+			// mid-collaboration failure leaves earlier pools deployed (no rollback
+			// yet) and returns 500 — an honest limitation until deployment is a
+			// first-class WAL event (ADR-0022).
+			if err := s.deploys.save(persistedDeployment{
+				Key:        key,
+				ProcessID:  pid,
+				Name:       name,
+				Version:    version,
+				DeployedAt: deployedAt,
+				XML:        string(body),
+			}); err != nil {
+				persistErr = err
+				return
+			}
 
-		s.versions[pid] = version
-		s.proc.Deploy(cp)
-		s.deployments[key] = &deployment{
-			Key:        key,
-			ProcessID:  pid,
-			Name:       name,
-			Version:    version,
-			DeployedAt: deployedAt,
-			xml:        body,
-			cp:         cp,
+			s.versions[pid] = version
+			s.proc.Deploy(cp)
+			s.deployments[key] = &deployment{
+				Key:        key,
+				ProcessID:  pid,
+				Name:       name,
+				Version:    version,
+				DeployedAt: deployedAt,
+				xml:        body,
+				cp:         cp,
+			}
+			s.order = append(s.order, key)
+			if key >= s.nextKey {
+				s.nextKey = key + 1
+			}
+			deployed = append(deployed, deployedProcess{Key: key, ProcessID: pid, Name: name, Version: version})
 		}
-		s.order = append(s.order, key)
-		s.nextKey++
-		resp = deployResp{Key: key, ProcessID: pid, Version: version}
+		resp = deployResp{
+			Key:         deployed[0].Key,
+			ProcessID:   deployed[0].ProcessID,
+			Version:     deployed[0].Version,
+			Deployments: deployed,
+		}
 	})
 	switch {
 	case compErr != nil:

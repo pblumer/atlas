@@ -38,7 +38,18 @@ func ensureDiagramLayout(src []byte) []byte {
 // --- parsing (independent of the compiler's own XML structs) ---
 
 type layoutDefs struct {
-	Processes []layoutProcess `xml:"process"`
+	Processes     []layoutProcess `xml:"process"`
+	Collaboration *layoutCollab   `xml:"collaboration"`
+}
+
+type layoutCollab struct {
+	Id           string              `xml:"id,attr"`
+	Participants []layoutParticipant `xml:"participant"`
+}
+
+type layoutParticipant struct {
+	Id         string `xml:"id,attr"`
+	ProcessRef string `xml:"processRef,attr"`
 }
 
 type layoutProcess struct {
@@ -79,18 +90,40 @@ type layoutNode struct {
 	x, y int
 }
 
-// generateDI parses the first process and returns a BPMNDiagram fragment for it,
-// reporting whether it produced anything usable.
+// generateDI parses the model and returns a BPMNDiagram fragment, reporting
+// whether it produced anything usable. A collaboration is laid out as stacked
+// pools (one per participant); a plain model as a single left-to-right process.
 func generateDI(src []byte) (string, bool) {
 	var defs layoutDefs
-	if err := xml.Unmarshal(src, &defs); err != nil || len(defs.Processes) == 0 {
+	if err := xml.Unmarshal(src, &defs); err != nil {
+		return "", false
+	}
+	if defs.Collaboration != nil && defs.Collaboration.Id != "" && len(defs.Collaboration.Participants) > 0 {
+		return generateCollaborationDI(defs)
+	}
+	if len(defs.Processes) == 0 {
 		return "", false
 	}
 	p := defs.Processes[0]
 	if p.Id == "" {
 		return "", false
 	}
+	nodes := collectNodes(p)
+	if len(nodes) == 0 {
+		return "", false
+	}
+	idx := nodeIndex(nodes)
+	positionNodes(nodes, idx, p.Flows)
 
+	var b strings.Builder
+	openPlane(&b, p.Id)
+	renderShapesAndEdges(&b, nodes, idx, p.Flows)
+	closePlane(&b)
+	return b.String(), true
+}
+
+// collectNodes gathers a process's layout nodes (events, tasks, gateways).
+func collectNodes(p layoutProcess) []layoutNode {
 	var nodes []layoutNode
 	add := func(elems []layoutElem, k nodeKind) {
 		for _, e := range elems {
@@ -106,18 +139,99 @@ func generateDI(src []byte) (string, bool) {
 	add(p.UserTasks, kindTask)
 	add(p.ExclusiveGws, kindGateway)
 	add(p.ParallelGws, kindGateway)
-	if len(nodes) == 0 {
-		return "", false
-	}
+	return nodes
+}
 
+func nodeIndex(nodes []layoutNode) map[string]int {
 	idx := make(map[string]int, len(nodes))
 	for i, n := range nodes {
 		idx[n.id] = i
 	}
+	return idx
+}
 
-	positionNodes(nodes, idx, p.Flows)
+// generateCollaborationDI lays out a collaboration as horizontally stacked pools.
+// Each participant's process is laid out left-to-right inside its own band; a
+// participant with no resolvable/eventful process still gets an (empty) pool so
+// the collaboration structure is visible. The plane binds to the collaboration.
+func generateCollaborationDI(defs layoutDefs) (string, bool) {
+	byID := make(map[string]layoutProcess, len(defs.Processes))
+	for _, p := range defs.Processes {
+		byID[p.Id] = p
+	}
 
-	return renderDI(p.Id, nodes, idx, p.Flows), true
+	const (
+		poolLeft   = 30
+		poolTop0   = 40
+		poolGap    = 40
+		labelStrip = 30 // pool header lane on the left
+		innerPadY  = 30
+		emptyPoolH = 120
+		emptyPoolW = 600
+	)
+
+	var b strings.Builder
+	openPlane(&b, defs.Collaboration.Id)
+
+	poolTop := poolTop0
+	any := false
+	for _, part := range defs.Collaboration.Participants {
+		if part.Id == "" {
+			continue
+		}
+		proc, ok := byID[part.ProcessRef]
+		nodes := []layoutNode(nil)
+		if ok {
+			nodes = collectNodes(proc)
+		}
+		if len(nodes) == 0 {
+			// Black-box pool: an empty band, still part of the picture.
+			poolShape(&b, part.Id, poolLeft, poolTop, emptyPoolW, emptyPoolH)
+			poolTop += emptyPoolH + poolGap
+			any = true
+			continue
+		}
+		idx := nodeIndex(nodes)
+		positionNodes(nodes, idx, proc.Flows)
+
+		// Shift the process's nodes into this pool's band (past the label strip and
+		// below the band top), and measure the band.
+		minY, maxYBot, maxXRight := nodeExtents(nodes)
+		yShift := poolTop + innerPadY - minY
+		for i := range nodes {
+			nodes[i].x += labelStrip
+			nodes[i].y += yShift
+		}
+		poolH := (maxYBot - minY) + 2*innerPadY
+		poolW := maxXRight + labelStrip + innerPadY
+
+		poolShape(&b, part.Id, poolLeft, poolTop, poolW, poolH)
+		renderShapesAndEdges(&b, nodes, idx, proc.Flows)
+		poolTop += poolH + poolGap
+		any = true
+	}
+	closePlane(&b)
+	if !any {
+		return "", false
+	}
+	return b.String(), true
+}
+
+// nodeExtents returns the min top, max bottom, and max right edge of nodes.
+func nodeExtents(nodes []layoutNode) (minY, maxYBot, maxXRight int) {
+	minY = nodes[0].y
+	for _, n := range nodes {
+		if n.y < minY {
+			minY = n.y
+		}
+		if bot := n.y + n.kind.h; bot > maxYBot {
+			maxYBot = bot
+		}
+		if right := n.x + n.kind.w; right > maxXRight {
+			maxXRight = right
+		}
+	}
+	return minY, maxYBot, maxXRight
 }
 
 // positionNodes assigns each node a coordinate using longest-path layering: a
@@ -163,15 +277,32 @@ func positionNodes(nodes []layoutNode, idx map[string]int, flows []layoutFlow) {
 	}
 }
 
-func renderDI(procID string, nodes []layoutNode, idx map[string]int, flows []layoutFlow) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "\n  <bpmndi:BPMNDiagram xmlns:bpmndi=%q xmlns:omgdc=%q xmlns:omgdi=%q id=\"BPMNDiagram_atlas\">\n",
+// openPlane writes the BPMNDiagram + BPMNPlane opening, bound to planeElement (a
+// process id for a plain model, the collaboration id for a collaboration).
+func openPlane(b *strings.Builder, planeElement string) {
+	fmt.Fprintf(b, "\n  <bpmndi:BPMNDiagram xmlns:bpmndi=%q xmlns:omgdc=%q xmlns:omgdi=%q id=\"BPMNDiagram_atlas\">\n",
 		nsBpmnDI, nsOmgDC, nsOmgDI)
-	fmt.Fprintf(&b, "    <bpmndi:BPMNPlane id=\"BPMNPlane_atlas\" bpmnElement=\"%s\">\n", attr(procID))
+	fmt.Fprintf(b, "    <bpmndi:BPMNPlane id=\"BPMNPlane_atlas\" bpmnElement=\"%s\">\n", attr(planeElement))
+}
 
+func closePlane(b *strings.Builder) {
+	b.WriteString("    </bpmndi:BPMNPlane>\n  </bpmndi:BPMNDiagram>\n")
+}
+
+// poolShape writes a participant (pool) shape. isHorizontal marks it a lane band
+// so bpmn-js renders the pool with its label strip on the left.
+func poolShape(b *strings.Builder, id string, x, y, w, h int) {
+	fmt.Fprintf(b, "      <bpmndi:BPMNShape id=\"%s\" bpmnElement=\"%s\" isHorizontal=\"true\">\n", attr(id+"_di"), attr(id))
+	fmt.Fprintf(b, "        <omgdc:Bounds x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\"/>\n", x, y, w, h)
+	b.WriteString("      </bpmndi:BPMNShape>\n")
+}
+
+// renderShapesAndEdges writes the BPMNShape for each node and the BPMNEdge for
+// each sequence flow, using the nodes' assigned coordinates.
+func renderShapesAndEdges(b *strings.Builder, nodes []layoutNode, idx map[string]int, flows []layoutFlow) {
 	for _, n := range nodes {
-		fmt.Fprintf(&b, "      <bpmndi:BPMNShape id=\"%s\" bpmnElement=\"%s\">\n", attr(n.id+"_di"), attr(n.id))
-		fmt.Fprintf(&b, "        <omgdc:Bounds x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\"/>\n",
+		fmt.Fprintf(b, "      <bpmndi:BPMNShape id=\"%s\" bpmnElement=\"%s\">\n", attr(n.id+"_di"), attr(n.id))
+		fmt.Fprintf(b, "        <omgdc:Bounds x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\"/>\n",
 			n.x, n.y, n.kind.w, n.kind.h)
 		b.WriteString("      </bpmndi:BPMNShape>\n")
 	}
@@ -186,14 +317,11 @@ func renderDI(procID string, nodes []layoutNode, idx map[string]int, flows []lay
 		y1 := nodes[s].y + nodes[s].kind.h/2
 		x2 := nodes[t].x
 		y2 := nodes[t].y + nodes[t].kind.h/2
-		fmt.Fprintf(&b, "      <bpmndi:BPMNEdge id=\"%s\" bpmnElement=\"%s\">\n", attr(f.Id+"_di"), attr(f.Id))
-		fmt.Fprintf(&b, "        <omgdi:waypoint x=\"%d\" y=\"%d\"/>\n", x1, y1)
-		fmt.Fprintf(&b, "        <omgdi:waypoint x=\"%d\" y=\"%d\"/>\n", x2, y2)
+		fmt.Fprintf(b, "      <bpmndi:BPMNEdge id=\"%s\" bpmnElement=\"%s\">\n", attr(f.Id+"_di"), attr(f.Id))
+		fmt.Fprintf(b, "        <omgdi:waypoint x=\"%d\" y=\"%d\"/>\n", x1, y1)
+		fmt.Fprintf(b, "        <omgdi:waypoint x=\"%d\" y=\"%d\"/>\n", x2, y2)
 		b.WriteString("      </bpmndi:BPMNEdge>\n")
 	}
-
-	b.WriteString("    </bpmndi:BPMNPlane>\n  </bpmndi:BPMNDiagram>\n")
-	return b.String()
 }
 
 var definitionsClose = regexp.MustCompile(`(?is)</\s*([a-z0-9_.]+:)?definitions\s*>`)

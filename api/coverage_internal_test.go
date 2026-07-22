@@ -6,17 +6,6 @@ import (
 	"testing"
 )
 
-// TestProcessNameEdgeCases covers processName's non-happy branches: XML that does
-// not parse, and XML with no <process> element, both of which yield "".
-func TestProcessNameEdgeCases(t *testing.T) {
-	if got := processName([]byte("this is not xml <<<")); got != "" {
-		t.Errorf("processName(garbage) = %q, want \"\"", got)
-	}
-	if got := processName([]byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"></definitions>`)); got != "" {
-		t.Errorf("processName(no process) = %q, want \"\"", got)
-	}
-}
-
 // TestLoadAllSkipsAndDecodeError covers loadAll's filtering branches (a
 // subdirectory and a non-key .json file are skipped) and its decode-error branch
 // (a well-named record whose contents are not valid JSON).

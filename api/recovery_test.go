@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
@@ -113,6 +114,49 @@ func TestDeploymentSurvivesRestart(t *testing.T) {
 	}
 	if dep2.Version != 2 {
 		t.Fatalf("redeploy version=%d, want 2 (version counter must survive restart)", dep2.Version)
+	}
+}
+
+// TestCollaborationSurvivesRestart proves the multi-process reload path: a
+// deployed collaboration's pools each persist as their own record and reload via
+// ParseNamed (each record recompiles exactly its own process out of the shared
+// collaboration XML) after a restart (ADR-0022).
+func TestCollaborationSurvivesRestart(t *testing.T) {
+	dir := t.TempDir()
+
+	first := boot(t, dir)
+	code, body := doReq(t, first.ts, "POST", "/api/v1/deployments", collabBPMN, "application/xml")
+	if code != 200 {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	var dep collabDeployResp
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(dep.Deployments) != 2 {
+		t.Fatalf("deployed pools = %d, want 2", len(dep.Deployments))
+	}
+	first.shutdown()
+
+	second := boot(t, dir)
+	defer second.shutdown()
+
+	// Both pools are restored, each recompiled from its own process id.
+	code, body = doReq(t, second.ts, "GET", "/api/v1/processes", "", "")
+	if code != 200 {
+		t.Fatalf("processes after restart: status=%d body=%s", code, body)
+	}
+	for _, want := range []string{`"processId":"buyer"`, `"processId":"seller"`} {
+		if !strings.Contains(string(body), want) {
+			t.Fatalf("pool %s missing after restart: %s", want, body)
+		}
+	}
+	// Each restored definition still renders its diagram.
+	for _, d := range dep.Deployments {
+		code, xmlBody := doReq(t, second.ts, "GET", fmt.Sprintf("/api/v1/processes/%d/xml", d.Key), "", "")
+		if code != 200 || !strings.Contains(string(xmlBody), "BPMNDiagram") {
+			t.Fatalf("xml for pool %s (key %d) after restart: status=%d", d.ProcessID, d.Key, code)
+		}
 	}
 }
 
