@@ -76,6 +76,13 @@ func (c *ProcessingContext) AppendJobEvent(key uint64, intent model.Intent, v mo
 	c.appendEvent(key, model.VTJob, intent, inflightValue{job: v})
 }
 
+// AppendVariableEvent records a variable write. The value is data (a name and
+// contents), so unlike the graph-derived events this one does allocate for its
+// strings — variables are runtime data, not hot-path token movement.
+func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.VariableValue) {
+	c.appendEvent(v.ScopeKey, model.VTVariable, intent, inflightValue{variable: v})
+}
+
 // AppendElementCommand schedules an element-instance command for a later batch.
 func (c *ProcessingContext) AppendElementCommand(key uint64, intent model.Intent, v model.ElementInstanceValue) {
 	c.appendCommand(key, model.VTElementInstance, intent, inflightValue{element: v})

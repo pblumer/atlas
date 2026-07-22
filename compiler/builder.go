@@ -1,6 +1,10 @@
 package compiler
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/pblumer/atlas/expr"
+)
 
 // Builder constructs a CompiledProcess programmatically. It stands in for the
 // XML parse/resolve/linearize pipeline until that front end exists: callers add
@@ -14,6 +18,7 @@ type Builder struct {
 	nodes        []CompiledNode
 	flows        []CompiledFlow
 	serviceTasks []ServiceTaskDetail
+	scriptTasks  []ScriptTaskDetail
 	elementIds   []int32 // interned source BPMN id per node, -1 if unset
 
 	interner map[string]int32
@@ -81,6 +86,14 @@ func (b *Builder) AddServiceTask(jobType string, retries int32) int32 {
 	return b.addNode(TypeServiceTask, detail)
 }
 
+// AddScriptTask adds a script task that evaluates the given compiled FEEL
+// expression and writes the result to resultVar. Returns its element id.
+func (b *Builder) AddScriptTask(e *expr.Compiled, resultVar string) int32 {
+	detail := int32(len(b.scriptTasks))
+	b.scriptTasks = append(b.scriptTasks, ScriptTaskDetail{Expr: e, ResultVar: resultVar})
+	return b.addNode(TypeScriptTask, detail)
+}
+
 // Connect adds a sequence flow from source to target.
 func (b *Builder) Connect(source, target int32) {
 	b.flows = append(b.flows, CompiledFlow{
@@ -127,6 +140,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		flows:         b.flows,
 		outgoingFlows: outgoing,
 		serviceTasks:  b.serviceTasks,
+		scriptTasks:   b.scriptTasks,
 		startEvents:   startEvents,
 		elementIds:    b.elementIds,
 		strings:       b.strings,

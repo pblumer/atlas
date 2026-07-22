@@ -141,6 +141,52 @@ func TestParseErrors(t *testing.T) {
 	}
 }
 
+// TestParseScriptTask compiles a Zeebe script task and checks its detail: a
+// compiled FEEL expression and a result variable.
+func TestParseScriptTask(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+	             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+	  <process id="p" isExecutable="true">
+	    <startEvent id="s"/>
+	    <scriptTask id="calc">
+	      <extensionElements><zeebe:script expression="= 6 * 7" resultVariable="answer"/></extensionElements>
+	    </scriptTask>
+	    <endEvent id="e"/>
+	    <sequenceFlow id="f1" sourceRef="s" targetRef="calc"/>
+	    <sequenceFlow id="f2" sourceRef="calc" targetRef="e"/>
+	  </process>
+	</definitions>`
+	cp, err := Parse(1, 1, strings.NewReader(xml))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	// Registration order: start(0), scriptTask(1), end(2).
+	node := cp.Node(1)
+	if node.Type != TypeScriptTask {
+		t.Fatalf("node 1 type = %v, want ScriptTask", node.Type)
+	}
+	detail := cp.ScriptTask(node.Detail)
+	if detail.ResultVar != "answer" {
+		t.Errorf("result var = %q, want answer", detail.ResultVar)
+	}
+	if detail.Expr == nil {
+		t.Error("script task has no compiled expression")
+	}
+}
+
+// TestParseScriptTaskRejectsBadExpression fails deploy when the FEEL is invalid.
+func TestParseScriptTaskRejectsBadExpression(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+	             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+	  <process id="p"><startEvent id="s"/>
+	    <scriptTask id="calc"><extensionElements>
+	      <zeebe:script expression="= 6 * " resultVariable="answer"/></extensionElements>
+	    </scriptTask></process></definitions>`
+	if _, err := Parse(1, 1, strings.NewReader(xml)); err == nil {
+		t.Fatal("want a compile error for a malformed FEEL expression")
+	}
+}
+
 // TestParseUnsupportedElementMessage locks in the actionable error text for an
 // unsupported element (a plain task) rather than a confusing "unknown targetRef".
 func TestParseUnsupportedElementMessage(t *testing.T) {

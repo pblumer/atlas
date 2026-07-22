@@ -55,6 +55,36 @@ func (c *Compiled) Eval(vars map[string]Value) (Value, error) {
 	return c.fn(c.env.NewScope(vars))
 }
 
+// ValueKind classifies a FEEL value into the scalar subset Atlas persists today.
+type ValueKind uint8
+
+const (
+	KindNull ValueKind = iota
+	KindBool
+	KindNumber
+	KindString
+)
+
+// Classify reduces a FEEL value to a storable (kind, bool, text) triple: text is
+// the number's canonical decimal string or the string's contents. Non-scalar
+// values (lists, contexts, temporals) are rendered to their canonical FEEL text
+// and stored as a string — lossy but stable — until Atlas models them natively.
+func Classify(v Value) (ValueKind, bool, string) {
+	if value.IsNull(v) {
+		return KindNull, false, ""
+	}
+	switch v.Kind() {
+	case value.KindBool:
+		return KindBool, bool(v.(value.Bool)), ""
+	case value.KindNumber:
+		return KindNumber, false, v.String()
+	case value.KindString:
+		return KindString, false, v.String()
+	default:
+		return KindString, false, v.String()
+	}
+}
+
 // Number returns a FEEL number value for an integer, for building bindings.
 func Number(i int64) Value { return value.NumberFromInt64(i) }
 

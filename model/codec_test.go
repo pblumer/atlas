@@ -51,6 +51,39 @@ func TestRecordRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name:   "number variable",
+			vt:     VTVariable,
+			intent: IntentVariableCreated,
+			value: &VariableValue{
+				ScopeKey: NewKey(1, 5),
+				Name:     "answer",
+				Kind:     VarNumber,
+				Text:     "42",
+			},
+		},
+		{
+			name:   "string variable",
+			vt:     VTVariable,
+			intent: IntentVariableUpdated,
+			value: &VariableValue{
+				ScopeKey: NewKey(1, 5),
+				Name:     "Season Label",
+				Kind:     VarString,
+				Text:     "Winter",
+			},
+		},
+		{
+			name:   "bool variable",
+			vt:     VTVariable,
+			intent: IntentVariableCreated,
+			value: &VariableValue{
+				ScopeKey: NewKey(1, 5),
+				Name:     "ok",
+				Kind:     VarBool,
+				Bool:     true,
+			},
+		},
+		{
 			name:   "timer with infinite repetitions",
 			vt:     VTTimer,
 			intent: IntentTimerCreated,

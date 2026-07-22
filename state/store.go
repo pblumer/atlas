@@ -181,6 +181,19 @@ func (s *Store) ActiveElementInstances(fn func(key uint64, v *model.ElementInsta
 	})
 }
 
+// VariablesOfScope calls fn with every variable owned by the given scope, via
+// the variable column family. Used to build a FEEL evaluation scope and to
+// surface an instance's variables to operators.
+func (s *Store) VariablesOfScope(scope uint64, fn func(v *model.VariableValue) error) error {
+	return s.scanPrefix(variablePrefix(scope), func(_, raw []byte) error {
+		v, err := model.DecodeValue(model.VTVariable, raw)
+		if err != nil {
+			return err
+		}
+		return fn(v.(*model.VariableValue))
+	})
+}
+
 func (s *Store) countPrefix(prefix []byte) (int, error) {
 	count := 0
 	err := s.scanPrefix(prefix, func(_, _ []byte) error {

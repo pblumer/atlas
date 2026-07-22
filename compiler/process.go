@@ -9,6 +9,8 @@
 // milestone; the linearized result here is the shape the engine consumes.
 package compiler
 
+import "github.com/pblumer/atlas/expr"
+
 // BpmnType is the kind of a BPMN element. It is stored in element-instance state
 // (as uint8) for O(1) behavior dispatch.
 type BpmnType uint8
@@ -18,6 +20,7 @@ const (
 	TypeStartEvent
 	TypeEndEvent
 	TypeServiceTask
+	TypeScriptTask
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
 	numBpmnTypes = 16
@@ -34,6 +37,8 @@ func (t BpmnType) String() string {
 		return "EndEvent"
 	case TypeServiceTask:
 		return "ServiceTask"
+	case TypeScriptTask:
+		return "ScriptTask"
 	default:
 		return "Unspecified"
 	}
@@ -64,6 +69,14 @@ type ServiceTaskDetail struct {
 	Retries int32
 }
 
+// ScriptTaskDetail is the per-script-task data a behavior needs at runtime: a
+// FEEL expression compiled once at deploy time (ADR-0008/0014) and the name of
+// the variable its result is written to.
+type ScriptTaskDetail struct {
+	Expr      *expr.Compiled
+	ResultVar string
+}
+
 // CompiledProcess is the immutable result of compiling one process definition.
 // It is safe for concurrent reads without synchronization.
 type CompiledProcess struct {
@@ -76,6 +89,7 @@ type CompiledProcess struct {
 
 	outgoingFlows []int32 // shared topology: flow ids grouped by source node
 	serviceTasks  []ServiceTaskDetail
+	scriptTasks   []ScriptTaskDetail
 	startEvents   []int32
 	elementIds    []int32  // interned source BPMN id per node id (-1 if unset)
 	strings       []string // intern table (index → string), for debug/export
@@ -97,6 +111,11 @@ func (p *CompiledProcess) Outgoing(id int32) []int32 {
 // ServiceTask returns the detail at the given table index.
 func (p *CompiledProcess) ServiceTask(detail int32) *ServiceTaskDetail {
 	return &p.serviceTasks[detail]
+}
+
+// ScriptTask returns the detail at the given table index.
+func (p *CompiledProcess) ScriptTask(detail int32) *ScriptTaskDetail {
+	return &p.scriptTasks[detail]
 }
 
 // StartEvents returns the process's entry-point element ids.

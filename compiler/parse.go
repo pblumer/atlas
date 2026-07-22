@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
+
+	"github.com/pblumer/atlas/expr"
 )
 
 // defaultRetries is used when a service task's task definition omits retries.
@@ -65,6 +68,26 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 			return nil, err
 		}
 	}
+	for _, st := range proc.ScriptTasks {
+		text := strings.TrimSpace(st.Script.Expression)
+		text = strings.TrimPrefix(text, "=") // Zeebe marks expressions with a leading '='
+		text = strings.TrimSpace(text)
+		if text == "" {
+			return nil, fmt.Errorf("compiler: script task %q has no expression", st.Id)
+		}
+		if st.Script.ResultVariable == "" {
+			return nil, fmt.Errorf("compiler: script task %q has no result variable", st.Id)
+		}
+		// FEEL is compiled once, at deploy time (ADR-0008/0014). A syntax error or
+		// a reference to an undeclared variable fails here — i.e. fails deploy.
+		e, err := expr.Compile(text)
+		if err != nil {
+			return nil, fmt.Errorf("compiler: script task %q: %w", st.Id, err)
+		}
+		if err := register(st.Id, b.AddScriptTask(e, st.Script.ResultVariable)); err != nil {
+			return nil, err
+		}
+	}
 	for _, e := range proc.EndEvents {
 		if err := register(e.Id, b.AddEndEvent()); err != nil {
 			return nil, err
@@ -81,7 +104,7 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 		label string
 		nodes []xmlNode
 	}{
-		{"task", proc.Tasks}, {"userTask", proc.UserTasks}, {"scriptTask", proc.ScriptTasks},
+		{"task", proc.Tasks}, {"userTask", proc.UserTasks},
 		{"sendTask", proc.SendTasks}, {"receiveTask", proc.ReceiveTasks},
 		{"businessRuleTask", proc.BusinessRuleTasks}, {"manualTask", proc.ManualTasks},
 		{"exclusiveGateway", proc.ExclusiveGateways}, {"parallelGateway", proc.ParallelGateways},
@@ -89,7 +112,7 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 	} {
 		if len(u.nodes) > 0 {
 			return nil, fmt.Errorf("compiler: element %q is a <%s>, which Atlas can't execute yet "+
-				"(supported: start/end events and service tasks with a task definition)", u.nodes[0].Id, u.label)
+				"(supported: start/end events, service tasks, and script tasks)", u.nodes[0].Id, u.label)
 		}
 	}
 
@@ -122,11 +145,12 @@ type xmlProcess struct {
 	ServiceTasks []xmlServiceTask  `xml:"serviceTask"`
 	Flows        []xmlSequenceFlow `xml:"sequenceFlow"`
 
+	ScriptTasks []xmlScriptTask `xml:"scriptTask"`
+
 	// Captured only to give a clear "unsupported element" error (see Parse); none
 	// of these are executable yet.
 	Tasks             []xmlNode `xml:"task"`
 	UserTasks         []xmlNode `xml:"userTask"`
-	ScriptTasks       []xmlNode `xml:"scriptTask"`
 	SendTasks         []xmlNode `xml:"sendTask"`
 	ReceiveTasks      []xmlNode `xml:"receiveTask"`
 	BusinessRuleTasks []xmlNode `xml:"businessRuleTask"`
@@ -148,6 +172,18 @@ type xmlServiceTask struct {
 type xmlTaskDefinition struct {
 	Type    string `xml:"type,attr"`
 	Retries string `xml:"retries,attr"`
+}
+
+// Zeebe script tasks carry the FEEL expression and its result variable in a
+// <zeebe:script> extension element.
+type xmlScriptTask struct {
+	Id     string         `xml:"id,attr"`
+	Script xmlZeebeScript `xml:"extensionElements>script"`
+}
+
+type xmlZeebeScript struct {
+	Expression     string `xml:"expression,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
 }
 
 type xmlSequenceFlow struct {

@@ -18,6 +18,7 @@ const (
 	cfTimer           columnFamily = 0x05 // timer:<dueDate>:<timerKey> → TimerValue
 	cfProcessInstance columnFamily = 0x06 // pi:<piKey> → ProcessInstanceValue
 	cfActiveChildren  columnFamily = 0x07 // activeChildren:<scopeKey> → int32 count
+	cfVariable        columnFamily = 0x08 // var:<scopeKey>:<name> → VariableValue
 )
 
 func appendBE64(dst []byte, v uint64) []byte { return binary.BigEndian.AppendUint64(dst, v) }
@@ -68,6 +69,16 @@ func keyActiveChildren(scope uint64) []byte {
 
 func keyMeta(name string) []byte {
 	return append([]byte{byte(cfMeta)}, name...)
+}
+
+func variablePrefix(scope uint64) []byte {
+	return appendBE64([]byte{byte(cfVariable)}, scope)
+}
+
+// keyVariable keys a variable by its scope and name. The name is the trailing,
+// variable-length component, so a scope's variables are one prefix scan.
+func keyVariable(scope uint64, name string) []byte {
+	return append(variablePrefix(scope), name...)
 }
 
 // prefixEnd returns the smallest key strictly greater than every key beginning

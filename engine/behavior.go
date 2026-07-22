@@ -2,6 +2,7 @@ package engine
 
 import (
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 )
 
@@ -35,6 +36,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeStartEvent] = startEventBehavior{}
 	p.behaviors[compiler.TypeEndEvent] = endEventBehavior{}
 	p.behaviors[compiler.TypeServiceTask] = serviceTaskBehavior{}
+	p.behaviors[compiler.TypeScriptTask] = scriptTaskBehavior{}
 }
 
 // --- command handlers ---
@@ -148,6 +150,57 @@ func (serviceTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *mod
 
 func (serviceTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	completeAndTakeFlows(c, key, ei)
+}
+
+// scriptTaskBehavior: on activation, evaluate the task's compiled FEEL
+// expression, write the result to its result variable, and complete — the whole
+// task runs inside the engine, so the instance advances without an external
+// worker. FEEL evaluation happens here (command processing), and its result is
+// written into the variable event; on replay applyToState re-applies that stored
+// result rather than re-evaluating (invariant I6), so applyToState stays pure.
+type scriptTaskBehavior struct{}
+
+func (scriptTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.ScriptTask(cp.Node(ei.ElementId).Detail)
+
+	// No input variables are bound yet (deploy-time expressions reference none);
+	// instance variables become available in a later step.
+	result, err := detail.Expr.Eval(nil)
+	if err != nil {
+		// Incidents are not modeled yet (Milestone 2); FEEL is null-propagating,
+		// so a failed evaluation yields null rather than halting the processor.
+		result = expr.Null
+	}
+
+	kind, b, text := expr.Classify(result)
+	c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+		ScopeKey: ei.ProcessInstanceKey,
+		Name:     detail.ResultVar,
+		Kind:     toVarKind(kind),
+		Bool:     b,
+		Text:     text,
+	})
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (scriptTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// toVarKind maps the expr scalar kind to the model's stored kind (same order,
+// mapped explicitly so the two enums can evolve independently).
+func toVarKind(k expr.ValueKind) model.VarKind {
+	switch k {
+	case expr.KindBool:
+		return model.VarBool
+	case expr.KindNumber:
+		return model.VarNumber
+	case expr.KindString:
+		return model.VarString
+	default:
+		return model.VarNull
+	}
 }
 
 // endEventBehavior: a none end event completes and, if it was the last active

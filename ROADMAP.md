@@ -21,16 +21,21 @@ The skeleton that proves the three pillars fit together end to end.
 - ✅ `job`: dedicated `job` package — in-process worker subscription that pulls activatable jobs and feeds completions back (ADR-0007); gRPC streaming transport + leases/retry are Milestone 4
 - ✅ **Goal: execute `Start → ServiceTask → End` and recover it across a restart** (deployment is programmatic for now, pending the XML front end)
 
-## Milestone 1 — Core BPMN 🔲
+## Milestone 1 — Core BPMN 🚧
 
 The control-flow basics most real models use.
 
-- 🔲 Exclusive gateway (conditions via compiled FEEL subset)
+- ✅ `expr`: FEEL compile-once/eval-many with `inputs` analysis — reused from
+  `github.com/pblumer/feel` behind an `expr` boundary ([ADR-0014](docs/adr/0014-reuse-feel-engine.md)).
+- 🚧 **Script tasks**: evaluate FEEL in-engine and write the result variable, so
+  an instance runs to completion with no external worker. Recovery-tested (the
+  result is written into the event and re-applied on replay, never re-evaluated).
+- 🚧 Process variables: a minimal variable store (write + read-back). Input
+  variable binding, scopes (local vs. propagated) and copy-on-write still to come.
+- 🔲 Exclusive gateway (conditions via compiled FEEL)
 - 🔲 Parallel gateway (fork + join with scope counters)
 - 🔲 Inclusive gateway
 - 🔲 Input/output variable mappings
-- 🔲 Variable scopes (local vs. propagated) with copy-on-write
-- 🔲 `expr`: FEEL subset → AST evaluation, with `inputs` analysis
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
 - 🔲 Conformance tests against a curated BPMN model set
 
