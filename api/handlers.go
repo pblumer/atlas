@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -46,12 +47,13 @@ type runtimeResp struct {
 }
 
 type instanceResp struct {
-	Key              uint64 `json:"key"`
-	ProcessDefKey    uint64 `json:"processDefKey"`
-	ProcessID        string `json:"processId"`
-	Version          int32  `json:"version"`
-	ElementInstances int    `json:"elementInstances"`
-	State            string `json:"state"`
+	Key              uint64         `json:"key"`
+	ProcessDefKey    uint64         `json:"processDefKey"`
+	ProcessID        string         `json:"processId"`
+	Version          int32          `json:"version"`
+	ElementInstances int            `json:"elementInstances"`
+	State            string         `json:"state"`
+	Variables        []variableView `json:"variables"`
 }
 
 type statsResp struct {
@@ -222,12 +224,23 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleCreateInstance starts one instance of a deployed definition and runs the
-// processor until idle, then returns the resulting live counts.
+// handleCreateInstance starts one instance of a deployed definition, optionally
+// seeded with variables from the request body ({"variables": {"amount": 100}}),
+// runs the processor until idle, and returns the resulting live counts.
 func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid definition key")
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	startVars, err := parseStartVariables(body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	var (
@@ -241,7 +254,7 @@ func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
-		s.proc.CreateInstance(key)
+		s.proc.CreateInstance(key, startVars...)
 		if err := s.proc.RunUntilIdle(); err != nil {
 			runErr = err
 			return
@@ -258,6 +271,71 @@ func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusOK, createInstanceResp{DefinitionKey: key, Stats: stats})
 	}
+}
+
+// parseStartVariables reads {"variables": {name: scalar}} from a request body
+// into VariableValues. Only scalar JSON (number, string, boolean, null) is
+// supported; numbers keep their exact textual form for FEEL's decimal semantics.
+func parseStartVariables(body []byte) ([]model.VariableValue, error) {
+	if len(bytes.TrimSpace(body)) == 0 {
+		return nil, nil
+	}
+	var payload struct {
+		Variables map[string]any `json:"variables"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	if err := dec.Decode(&payload); err != nil {
+		return nil, fmt.Errorf("invalid JSON body: %v", err)
+	}
+	if len(payload.Variables) == 0 {
+		return nil, nil
+	}
+	out := make([]model.VariableValue, 0, len(payload.Variables))
+	for name, raw := range payload.Variables {
+		vv := model.VariableValue{Name: name}
+		switch x := raw.(type) {
+		case nil:
+			vv.Kind = model.VarNull
+		case bool:
+			vv.Kind, vv.Bool = model.VarBool, x
+		case json.Number:
+			vv.Kind, vv.Text = model.VarNumber, x.String()
+		case string:
+			vv.Kind, vv.Text = model.VarString, x
+		default:
+			return nil, fmt.Errorf("variable %q: only scalar values (number, string, boolean, null) are supported yet", name)
+		}
+		out = append(out, vv)
+	}
+	return out, nil
+}
+
+// variableView renders a variable for the operator UI.
+type variableView struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+	Kind  string `json:"kind"`
+}
+
+func toVariableView(v *model.VariableValue) variableView {
+	out := variableView{Name: v.Name}
+	switch v.Kind {
+	case model.VarBool:
+		out.Kind = "boolean"
+		if v.Bool {
+			out.Value = "true"
+		} else {
+			out.Value = "false"
+		}
+	case model.VarNumber:
+		out.Kind, out.Value = "number", v.Text
+	case model.VarString:
+		out.Kind, out.Value = "string", v.Text
+	default:
+		out.Kind, out.Value = "null", "null"
+	}
+	return out
 }
 
 // handleListInstances lists live process instances with their definition and
@@ -280,10 +358,17 @@ func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
 				ProcessDefKey:    v.ProcessDefKey,
 				ElementInstances: elements,
 				State:            "active",
+				Variables:        []variableView{},
 			}
 			if d, ok := s.deployments[v.ProcessDefKey]; ok {
 				r.ProcessID = d.ProcessID
 				r.Version = d.Version
+			}
+			if err := s.store.VariablesOfScope(key, func(vv *model.VariableValue) error {
+				r.Variables = append(r.Variables, toVariableView(vv))
+				return nil
+			}); err != nil {
+				return err
 			}
 			list = append(list, r)
 			return nil

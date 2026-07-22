@@ -212,8 +212,8 @@ async function viewInstances() {
     element instances (tokens) as it moves through the engine.</p>
     <div class="card" style="padding:0">
       <table>
-        <thead><tr><th>Instance</th><th>Process</th><th>Version</th><th>Tokens</th><th>Status</th><th></th></tr></thead>
-        <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+        <thead><tr><th>Instance</th><th>Process</th><th>Version</th><th>Tokens</th><th>Variables</th><th>Status</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>`;
   const load = async () => {
@@ -221,10 +221,13 @@ async function viewInstances() {
       const rows = await api("GET", "/api/v1/instances");
       const tbody = document.getElementById("rows");
       if (!rows.length) {
-        tbody.innerHTML = `<tr><td colspan="6" class="empty">
+        tbody.innerHTML = `<tr><td colspan="7" class="empty">
           No running instances. Start one from the <a href="#/modeler">Modeler</a>.</td></tr>`;
         return;
       }
+      const vars = (list) => !list || !list.length
+        ? '<span class="muted">—</span>'
+        : list.map((v) => `<span class="chip">${esc(v.name)}=${esc(v.value)}</span>`).join(" ");
       tbody.innerHTML = rows.map((r) => `
         <tr>
           <td><b>${r.key}</b></td>
@@ -233,12 +236,13 @@ async function viewInstances() {
             : '<span class="muted">def ' + r.processDefKey + "</span>"}</td>
           <td>${r.version ? "v" + r.version : "—"}</td>
           <td>${r.elementInstances}</td>
+          <td>${vars(r.variables)}</td>
           <td><span class="pill ok"><span class="dot"></span>${esc(r.state)}</span></td>
           <td style="text-align:right"><a class="btn ghost" href="#/operations/p/${r.processDefKey}">Live view</a></td>
         </tr>`).join("");
     } catch (e) {
       document.getElementById("rows").innerHTML =
-        `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;
+        `<tr><td colspan="7" class="empty">${esc(e.message)}</td></tr>`;
     }
   };
   document.getElementById("refresh").addEventListener("click", load);

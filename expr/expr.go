@@ -14,6 +14,8 @@
 package expr
 
 import (
+	"strings"
+
 	"github.com/pblumer/feel"
 	"github.com/pblumer/feel/value"
 )
@@ -42,6 +44,49 @@ func Compile(src string, vars ...string) (*Compiled, error) {
 		return nil, err
 	}
 	return &Compiled{fn: fn, env: env, inputs: refs}, nil
+}
+
+// CompileAuto compiles src while discovering the variable names it references:
+// it starts with no declared variables and, each time the FEEL compiler reports
+// an "unknown variable", declares that name and retries, until the expression
+// compiles. This lets a script author reference process variables without
+// declaring them up front, while still letting the compiler — not us — decide
+// what is a genuine free variable (bound loop/quantifier names, path members and
+// built-ins never surface as unknown). A syntax or type error (not a missing
+// declaration) is returned as-is.
+func CompileAuto(src string) (*Compiled, error) {
+	var declared []string
+	seen := map[string]bool{}
+	for {
+		env := feel.NewEnv(declared...)
+		fn, refs, err := feel.CompileStringRefs(src, env)
+		if err == nil {
+			return &Compiled{fn: fn, env: env, inputs: refs}, nil
+		}
+		name, ok := unknownVariable(err)
+		if !ok || seen[name] {
+			return nil, err // a real error, or we already declared it (no progress)
+		}
+		seen[name] = true
+		declared = append(declared, name)
+	}
+}
+
+// unknownVariable extracts the name from a FEEL "unknown variable %q" compile
+// error, reporting whether the error was of that shape.
+func unknownVariable(err error) (string, bool) {
+	const marker = `unknown variable "`
+	msg := err.Error()
+	i := strings.Index(msg, marker)
+	if i < 0 {
+		return "", false
+	}
+	rest := msg[i+len(marker):]
+	j := strings.IndexByte(rest, '"')
+	if j < 0 {
+		return "", false
+	}
+	return rest[:j], true
 }
 
 // Inputs returns the variable names the expression actually reads (sorted,
@@ -82,6 +127,26 @@ func Classify(v Value) (ValueKind, bool, string) {
 		return KindString, false, v.String()
 	default:
 		return KindString, false, v.String()
+	}
+}
+
+// FromStored reconstructs a FEEL value from Atlas's stored scalar form — the
+// inverse of Classify — for binding variables into an evaluation. An unparseable
+// number becomes null.
+func FromStored(kind ValueKind, b bool, text string) Value {
+	switch kind {
+	case KindBool:
+		return value.BoolOf(b)
+	case KindNumber:
+		n, err := value.ParseNumber(text)
+		if err != nil {
+			return value.Null
+		}
+		return n
+	case KindString:
+		return value.Str(text)
+	default:
+		return value.Null
 	}
 }
 

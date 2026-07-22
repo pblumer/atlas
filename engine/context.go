@@ -53,6 +53,14 @@ func (c *ProcessingContext) GetProcessInstance(key uint64) *model.ProcessInstanc
 	return v
 }
 
+// GetVariable reads a scope's variable by name through the in-flight transaction
+// (sees writes from earlier in this batch, e.g. seeded start variables).
+func (c *ProcessingContext) GetVariable(scope uint64, name string) *model.VariableValue {
+	v, err := c.tx.GetVariable(scope, name)
+	c.p.fail(err)
+	return v
+}
+
 // ActiveChildren returns the active-child count of a scope (e.g. to detect that
 // a process instance has finished).
 func (c *ProcessingContext) ActiveChildren(scope uint64) int32 {

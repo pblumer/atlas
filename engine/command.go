@@ -24,6 +24,10 @@ type Command struct {
 	// (0 for externally submitted commands), used to thread causality into the
 	// events the command produces.
 	SourcePos uint64
+	// StartVars carries the initial variables for a process-instance creation
+	// command. It is used only there (an external, non-hot-path intent), so a
+	// slice here does not affect the token-movement fast path.
+	StartVars []model.VariableValue
 }
 
 // sideEffect is work to run after the batch's fsync (invariant I2). It is a

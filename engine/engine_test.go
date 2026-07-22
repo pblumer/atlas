@@ -45,9 +45,9 @@ func scriptProcess(t testing.TB, exprText, resultVar string) *compiler.CompiledP
 	t.Helper()
 	b := compiler.NewBuilder(defKey, "scripted", 1)
 	start := b.AddStartEvent()
-	e, err := expr.Compile(exprText)
+	e, err := expr.CompileAuto(exprText)
 	if err != nil {
-		t.Fatalf("expr.Compile: %v", err)
+		t.Fatalf("expr.CompileAuto: %v", err)
 	}
 	task := b.AddScriptTask(e, resultVar)
 	end := b.AddEndEvent()
@@ -204,6 +204,33 @@ func TestScriptTaskRunsToCompletion(t *testing.T) {
 	}
 	if got.Kind != model.VarNumber || got.Text != "42" {
 		t.Fatalf("answer = {kind:%d text:%q}, want number 42", got.Kind, got.Text)
+	}
+}
+
+// TestScriptTaskReadsInputVariables seeds a start variable and checks the script
+// task computes from it: amount 100 with taxRate 0.19 → gross 119.
+func TestScriptTaskReadsInputVariables(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	cp := scriptProcess(t, "amount * (1 + taxRate)", "gross")
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key,
+		model.VariableValue{Name: "amount", Kind: model.VarNumber, Text: "100"},
+		model.VariableValue{Name: "taxRate", Kind: model.VarNumber, Text: "0.19"},
+	)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	scope := model.NewKey(1, 1)
+	got := readVar(t, h.store, scope, "gross")
+	if got == nil || got.Kind != model.VarNumber || got.Text != "119" {
+		t.Fatalf("gross = %+v, want number 119", got)
 	}
 }
 

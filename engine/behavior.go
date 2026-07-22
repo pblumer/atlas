@@ -48,6 +48,13 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 	piKey := c.NewKey()
 	c.AppendProcessInstanceEvent(piKey, model.IntentActivated, model.ProcessInstanceValue{ProcessDefKey: defKey})
 
+	// Seed the instance's start variables under its scope before any element runs.
+	for i := range c.cmd.StartVars {
+		v := c.cmd.StartVars[i]
+		v.ScopeKey = piKey
+		c.AppendVariableEvent(model.IntentVariableCreated, v)
+	}
+
 	cp := c.process(defKey)
 	for _, startID := range cp.StartEvents() {
 		node := cp.Node(startID)
@@ -164,9 +171,18 @@ func (scriptTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *mode
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.ScriptTask(cp.Node(ei.ElementId).Detail)
 
-	// No input variables are bound yet (deploy-time expressions reference none);
-	// instance variables become available in a later step.
-	result, err := detail.Expr.Eval(nil)
+	// Bind the process variables the expression reads (its inputs) from the
+	// instance scope, then evaluate.
+	var vars map[string]expr.Value
+	if inputs := detail.Expr.Inputs(); len(inputs) > 0 {
+		vars = make(map[string]expr.Value, len(inputs))
+		for _, name := range inputs {
+			if vv := c.GetVariable(ei.ProcessInstanceKey, name); vv != nil {
+				vars[name] = expr.FromStored(toExprKind(vv.Kind), vv.Bool, vv.Text)
+			}
+		}
+	}
+	result, err := detail.Expr.Eval(vars)
 	if err != nil {
 		// Incidents are not modeled yet (Milestone 2); FEEL is null-propagating,
 		// so a failed evaluation yields null rather than halting the processor.
@@ -200,6 +216,21 @@ func toVarKind(k expr.ValueKind) model.VarKind {
 		return model.VarString
 	default:
 		return model.VarNull
+	}
+}
+
+// toExprKind is the inverse of toVarKind, for binding a stored variable back into
+// an evaluation.
+func toExprKind(k model.VarKind) expr.ValueKind {
+	switch k {
+	case model.VarBool:
+		return expr.KindBool
+	case model.VarNumber:
+		return expr.KindNumber
+	case model.VarString:
+		return expr.KindString
+	default:
+		return expr.KindNull
 	}
 }
 
