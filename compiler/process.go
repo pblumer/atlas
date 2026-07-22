@@ -22,6 +22,7 @@ const (
 	TypeServiceTask
 	TypeScriptTask
 	TypeBusinessRuleTask
+	TypeExclusiveGateway
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
 	numBpmnTypes = 16
@@ -42,6 +43,8 @@ func (t BpmnType) String() string {
 		return "ScriptTask"
 	case TypeBusinessRuleTask:
 		return "BusinessRuleTask"
+	case TypeExclusiveGateway:
+		return "ExclusiveGateway"
 	default:
 		return "Unspecified"
 	}
@@ -58,12 +61,15 @@ type CompiledNode struct {
 	Detail        int32 // index into the matching detail table, -1 if none
 }
 
-// CompiledFlow is a sequence flow between two nodes.
+// CompiledFlow is a sequence flow between two nodes. Condition is the compiled
+// FEEL guard an exclusive gateway evaluates to decide whether to take this flow
+// (nil = unconditional); Default marks the flow taken when no condition matches.
 type CompiledFlow struct {
-	Id     int32
-	Source int32 // ElementId
-	Target int32 // ElementId
-	// Condition (compiled FEEL) arrives with the gateway milestone.
+	Id        int32
+	Source    int32 // ElementId
+	Target    int32 // ElementId
+	Condition *expr.Compiled
+	Default   bool
 }
 
 // ServiceTaskDetail is the per-service-task data a behavior needs at runtime.

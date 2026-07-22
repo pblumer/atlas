@@ -35,7 +35,9 @@ The control-flow basics most real models use.
   with variables (`{"variables": {…}}`), script tasks read them, and Operations
   shows them per instance. Variable scopes (local vs. propagated), copy-on-write,
   and output mappings still to come.
-- 🔲 Exclusive gateway (conditions via compiled FEEL)
+- ✅ Exclusive gateway (data-based XOR): takes the first outgoing flow whose
+  compiled-FEEL condition is true, else the default flow. Recovery-tested (the
+  chosen branch is captured by which element activates, never re-evaluated).
 - 🔲 Parallel gateway (fork + join with scope counters)
 - 🔲 Inclusive gateway
 - 🔲 Input/output variable mappings

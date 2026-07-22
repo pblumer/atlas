@@ -125,13 +125,36 @@ func (b *Builder) AddBusinessRuleTask(decisionId string, inputs map[string]any, 
 	return b.addNode(TypeBusinessRuleTask, detail), nil
 }
 
-// Connect adds a sequence flow from source to target.
-func (b *Builder) Connect(source, target int32) {
+// AddExclusiveGateway adds a data-based exclusive gateway (XOR split) and returns
+// its element id. Its outgoing flows carry the conditions; see SetFlowCondition
+// and SetFlowDefault.
+func (b *Builder) AddExclusiveGateway() int32 { return b.addNode(TypeExclusiveGateway, -1) }
+
+// Connect adds a sequence flow from source to target and returns its flow id, so
+// the caller can attach a condition or mark it the default.
+func (b *Builder) Connect(source, target int32) int32 {
+	id := int32(len(b.flows))
 	b.flows = append(b.flows, CompiledFlow{
-		Id:     int32(len(b.flows)),
+		Id:     id,
 		Source: source,
 		Target: target,
 	})
+	return id
+}
+
+// SetFlowCondition attaches a compiled FEEL guard to a flow (an exclusive gateway
+// takes the first flow whose condition is true).
+func (b *Builder) SetFlowCondition(flowID int32, c *expr.Compiled) {
+	if flowID >= 0 && int(flowID) < len(b.flows) {
+		b.flows[flowID].Condition = c
+	}
+}
+
+// SetFlowDefault marks a flow as its gateway's default (taken when no condition matches).
+func (b *Builder) SetFlowDefault(flowID int32) {
+	if flowID >= 0 && int(flowID) < len(b.flows) {
+		b.flows[flowID].Default = true
+	}
 }
 
 // Build linearizes the accumulated nodes and flows into an immutable

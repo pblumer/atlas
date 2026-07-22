@@ -114,6 +114,11 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 			return nil, err
 		}
 	}
+	for _, g := range proc.ExclusiveGateways {
+		if err := register(g.Id, b.AddExclusiveGateway()); err != nil {
+			return nil, err
+		}
+	}
 	for _, e := range proc.EndEvents {
 		if err := register(e.Id, b.AddEndEvent()); err != nil {
 			return nil, err
@@ -133,15 +138,18 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 		{"task", proc.Tasks}, {"userTask", proc.UserTasks},
 		{"sendTask", proc.SendTasks}, {"receiveTask", proc.ReceiveTasks},
 		{"manualTask", proc.ManualTasks},
-		{"exclusiveGateway", proc.ExclusiveGateways}, {"parallelGateway", proc.ParallelGateways},
+		{"parallelGateway", proc.ParallelGateways},
 		{"inclusiveGateway", proc.InclusiveGateways},
 	} {
 		if len(u.nodes) > 0 {
 			return nil, fmt.Errorf("compiler: element %q is a <%s>, which Atlas can't execute yet "+
-				"(supported: start/end events, service tasks, script tasks, and business rule tasks)", u.nodes[0].Id, u.label)
+				"(supported: start/end events, service tasks, script tasks, business rule tasks, and exclusive gateways)", u.nodes[0].Id, u.label)
 		}
 	}
 
+	// Connect flows, compiling any FEEL condition, and remember each BPMN flow id
+	// so a gateway's default flow can be marked afterwards.
+	flowIdx := make(map[string]int32, len(proc.Flows))
 	for _, f := range proc.Flows {
 		src, ok := ids[f.SourceRef]
 		if !ok {
@@ -151,7 +159,27 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 		if !ok {
 			return nil, fmt.Errorf("compiler: flow %q references unknown targetRef %q", f.Id, f.TargetRef)
 		}
-		b.Connect(src, tgt)
+		fid := b.Connect(src, tgt)
+		flowIdx[f.Id] = fid
+		if cond := strings.TrimSpace(f.Condition); cond != "" {
+			cond = strings.TrimSpace(strings.TrimPrefix(cond, "=")) // FEEL condition, '=' prefix per Zeebe
+			ce, err := expr.CompileAuto(cond)
+			if err != nil {
+				return nil, fmt.Errorf("compiler: flow %q condition: %w", f.Id, err)
+			}
+			b.SetFlowCondition(fid, ce)
+		}
+	}
+	// Mark each exclusive gateway's default flow.
+	for _, g := range proc.ExclusiveGateways {
+		if g.Default == "" {
+			continue
+		}
+		fid, ok := flowIdx[g.Default]
+		if !ok {
+			return nil, fmt.Errorf("compiler: exclusive gateway %q default references unknown flow %q", g.Id, g.Default)
+		}
+		b.SetFlowDefault(fid)
 	}
 
 	return b.Build()
@@ -171,6 +199,7 @@ type xmlProcess struct {
 	ServiceTasks      []xmlServiceTask      `xml:"serviceTask"`
 	ScriptTasks       []xmlScriptTask       `xml:"scriptTask"`
 	BusinessRuleTasks []xmlBusinessRuleTask `xml:"businessRuleTask"`
+	ExclusiveGateways []xmlExclusiveGateway `xml:"exclusiveGateway"`
 	Flows             []xmlSequenceFlow     `xml:"sequenceFlow"`
 
 	// Captured only to give a clear "unsupported element" error (see Parse); none
@@ -180,9 +209,15 @@ type xmlProcess struct {
 	SendTasks         []xmlNode `xml:"sendTask"`
 	ReceiveTasks      []xmlNode `xml:"receiveTask"`
 	ManualTasks       []xmlNode `xml:"manualTask"`
-	ExclusiveGateways []xmlNode `xml:"exclusiveGateway"`
 	ParallelGateways  []xmlNode `xml:"parallelGateway"`
 	InclusiveGateways []xmlNode `xml:"inclusiveGateway"`
+}
+
+// A data-based exclusive gateway; default names the flow taken when no outgoing
+// condition matches.
+type xmlExclusiveGateway struct {
+	Id      string `xml:"id,attr"`
+	Default string `xml:"default,attr"`
 }
 
 type xmlNode struct {
@@ -261,4 +296,6 @@ type xmlSequenceFlow struct {
 	Id        string `xml:"id,attr"`
 	SourceRef string `xml:"sourceRef,attr"`
 	TargetRef string `xml:"targetRef,attr"`
+	// Condition is the FEEL guard text from a <conditionExpression> child, if any.
+	Condition string `xml:"conditionExpression"`
 }

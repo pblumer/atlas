@@ -38,6 +38,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeServiceTask] = serviceTaskBehavior{}
 	p.behaviors[compiler.TypeScriptTask] = scriptTaskBehavior{}
 	p.behaviors[compiler.TypeBusinessRuleTask] = businessRuleTaskBehavior{}
+	p.behaviors[compiler.TypeExclusiveGateway] = exclusiveGatewayBehavior{}
 }
 
 // --- command handlers ---
@@ -127,6 +128,21 @@ func takeOutgoingFlows(c *ProcessingContext, ei *model.ElementInstanceValue) {
 	}
 }
 
+// bindInputs reads the named variables from a scope into a FEEL binding map for
+// evaluation. A name absent from the scope is simply left unbound (FEEL null).
+func bindInputs(c *ProcessingContext, inputs []string, scope uint64) map[string]expr.Value {
+	if len(inputs) == 0 {
+		return nil
+	}
+	vars := make(map[string]expr.Value, len(inputs))
+	for _, name := range inputs {
+		if vv := c.GetVariable(scope, name); vv != nil {
+			vars[name] = expr.FromStored(toExprKind(vv.Kind), vv.Bool, vv.Text)
+		}
+	}
+	return vars
+}
+
 // startEventBehavior: a none start event has no work; it completes at once.
 type startEventBehavior struct{}
 
@@ -174,16 +190,7 @@ func (scriptTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *mode
 
 	// Bind the process variables the expression reads (its inputs) from the
 	// instance scope, then evaluate.
-	var vars map[string]expr.Value
-	if inputs := detail.Expr.Inputs(); len(inputs) > 0 {
-		vars = make(map[string]expr.Value, len(inputs))
-		for _, name := range inputs {
-			if vv := c.GetVariable(ei.ProcessInstanceKey, name); vv != nil {
-				vars[name] = expr.FromStored(toExprKind(vv.Kind), vv.Bool, vv.Text)
-			}
-		}
-	}
-	result, err := detail.Expr.Eval(vars)
+	result, err := detail.Expr.Eval(bindInputs(c, detail.Expr.Inputs(), ei.ProcessInstanceKey))
 	if err != nil {
 		// Incidents are not modeled yet (Milestone 2); FEEL is null-propagating,
 		// so a failed evaluation yields null rather than halting the processor.
@@ -203,6 +210,60 @@ func (scriptTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *mode
 
 func (scriptTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	completeAndTakeFlows(c, key, ei)
+}
+
+// exclusiveGatewayBehavior: a data-based XOR split. It takes exactly one outgoing
+// flow — the first whose FEEL condition is true (in flow order), an unconditional
+// flow, or the default flow if none match. Like any gateway it has no work of its
+// own, so it decides and completes at once. The decision is captured by which
+// target gets an Activating command (and thus an Activated event); on replay that
+// event is re-applied, not re-evaluated (invariant I6), so the same branch runs.
+type exclusiveGatewayBehavior struct{}
+
+func (exclusiveGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (exclusiveGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendElementEvent(key, model.IntentCompleted, *ei)
+	cp := c.process(ei.ProcessDefKey)
+	flowID := selectExclusiveFlow(c, cp, ei)
+	if flowID < 0 {
+		// No condition matched and there is no default flow: nothing is taken.
+		// This is a modeling error that becomes an incident once incidents land
+		// (Milestone 2); for now the branch simply ends here.
+		return
+	}
+	target := cp.Node(cp.Flow(flowID).Target)
+	c.AppendElementCommand(c.NewKey(), model.IntentActivating, model.ElementInstanceValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ProcessDefKey:      ei.ProcessDefKey,
+		ElementId:          target.ElementId,
+		FlowScopeKey:       ei.FlowScopeKey,
+		BpmnElementType:    uint8(target.Type),
+	})
+}
+
+// selectExclusiveFlow returns the outgoing flow an exclusive gateway takes: the
+// first (in flow order) whose FEEL condition is true, an unconditional non-default
+// flow, or the default flow; -1 if none apply.
+func selectExclusiveFlow(c *ProcessingContext, cp *compiler.CompiledProcess, ei *model.ElementInstanceValue) int32 {
+	defaultFlow := int32(-1)
+	for _, flowID := range cp.Outgoing(ei.ElementId) {
+		f := cp.Flow(flowID)
+		if f.Default {
+			defaultFlow = flowID
+			continue
+		}
+		if f.Condition == nil {
+			return flowID // an unconditional flow is taken whenever reached
+		}
+		v, err := f.Condition.Eval(bindInputs(c, f.Condition.Inputs(), ei.ProcessInstanceKey))
+		if err == nil && expr.IsTrue(v) {
+			return flowID
+		}
+	}
+	return defaultFlow
 }
 
 // toVarKind maps the expr scalar kind to the model's stored kind (same order,

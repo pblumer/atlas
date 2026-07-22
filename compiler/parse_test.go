@@ -211,7 +211,7 @@ func TestParseErrors(t *testing.T) {
 		{
 			name: "unsupported gateway",
 			xml: `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
-				<startEvent id="s"/><exclusiveGateway id="g"/></process></definitions>`,
+				<startEvent id="s"/><parallelGateway id="g"/></process></definitions>`,
 		},
 		{
 			name: "malformed xml",
@@ -270,6 +270,61 @@ func TestParseScriptTaskRejectsBadExpression(t *testing.T) {
 	    </scriptTask></process></definitions>`
 	if _, err := Parse(1, 1, strings.NewReader(xml)); err == nil {
 		t.Fatal("want a compile error for a malformed FEEL expression")
+	}
+}
+
+// TestParseExclusiveGateway checks a gateway parses with a conditional flow and a
+// marked default flow.
+func TestParseExclusiveGateway(t *testing.T) {
+	const gwBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="router" isExecutable="true">
+	    <startEvent id="s"/>
+	    <exclusiveGateway id="gw" default="toLow"/>
+	    <endEvent id="high"/>
+	    <endEvent id="low"/>
+	    <sequenceFlow id="s2gw" sourceRef="s" targetRef="gw"/>
+	    <sequenceFlow id="toHigh" sourceRef="gw" targetRef="high">
+	      <conditionExpression>= amount &gt; 100</conditionExpression>
+	    </sequenceFlow>
+	    <sequenceFlow id="toLow" sourceRef="gw" targetRef="low"/>
+	  </process>
+	</definitions>`
+	cp, err := Parse(1, 1, strings.NewReader(gwBPMN))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	// start(0) → gateway(1)
+	gw := cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target
+	if cp.Node(gw).Type != TypeExclusiveGateway {
+		t.Fatalf("expected exclusive gateway, got %v", cp.Node(gw).Type)
+	}
+	var conditional, deflt int
+	for _, fid := range cp.Outgoing(gw) {
+		f := cp.Flow(fid)
+		if f.Condition != nil {
+			conditional++
+		}
+		if f.Default {
+			deflt++
+		}
+	}
+	if conditional != 1 {
+		t.Errorf("conditional flows = %d, want 1", conditional)
+	}
+	if deflt != 1 {
+		t.Errorf("default flows = %d, want 1", deflt)
+	}
+}
+
+// TestParseExclusiveGatewayBadCondition fails deploy on invalid FEEL in a guard.
+func TestParseExclusiveGatewayBadCondition(t *testing.T) {
+	const bad = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="p"><startEvent id="s"/><exclusiveGateway id="gw"/><endEvent id="e"/>
+	    <sequenceFlow id="a" sourceRef="s" targetRef="gw"/>
+	    <sequenceFlow id="b" sourceRef="gw" targetRef="e"><conditionExpression>= amount &gt;</conditionExpression></sequenceFlow>
+	  </process></definitions>`
+	if _, err := Parse(1, 1, strings.NewReader(bad)); err == nil {
+		t.Fatal("want a compile error for a malformed flow condition")
 	}
 }
 

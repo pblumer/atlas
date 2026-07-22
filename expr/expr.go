@@ -150,6 +150,14 @@ func FromStored(kind ValueKind, b bool, text string) Value {
 	}
 }
 
+// IsTrue reports whether v is FEEL boolean true. A non-boolean (including null,
+// the result of a failed comparison) is not true — which is how a sequence-flow
+// condition that doesn't evaluate to true is simply not taken.
+func IsTrue(v Value) bool {
+	b, ok := v.(value.Bool)
+	return ok && bool(b)
+}
+
 // Number returns a FEEL number value for an integer, for building bindings.
 func Number(i int64) Value { return value.NumberFromInt64(i) }
 
