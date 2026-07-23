@@ -53,6 +53,12 @@ func (c *Client) post(path, contentType string, body []byte) ([]byte, error) {
 	return c.do(http.MethodPost, path, contentType, body)
 }
 
+// del issues a DELETE and returns the raw response body on 2xx, or an *apiError.
+// A 204 No Content yields an empty body, which handlers turn into a confirmation.
+func (c *Client) del(path string) ([]byte, error) {
+	return c.do(http.MethodDelete, path, "", nil)
+}
+
 func (c *Client) do(method, path, contentType string, body []byte) ([]byte, error) {
 	var reader io.Reader
 	if body != nil {
