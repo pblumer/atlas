@@ -806,6 +806,7 @@ function wireProperties(root, modeler, api) {
               <option value="bpmn:ScriptTask" ${t === "bpmn:ScriptTask" ? "selected" : ""}>Script task (FEEL)</option>
               <option value="bpmn:ServiceTask" ${t === "bpmn:ServiceTask" ? "selected" : ""}>Service task (job worker)</option>
               <option value="bpmn:BusinessRuleTask" ${t === "bpmn:BusinessRuleTask" ? "selected" : ""}>Business rule task (DMN)</option>
+              <option value="bpmn:UserTask" ${t === "bpmn:UserTask" ? "selected" : ""}>User task</option>
             </select></label>`;
 
         if (t === "bpmn:ScriptTask") {
@@ -834,6 +835,13 @@ function wireProperties(root, modeler, api) {
             <h3>Decision inputs</h3>
             <p class="muted" style="font-size:12px">Each row feeds one decision input from a FEEL expression over the instance's variables. Leave a row's name blank to drop it.</p>
             <div id="dmn-inputs">${inputs.map((p, i) => decisionInputRowHTML(i, p.source, p.target)).join("")}${decisionInputRowHTML(inputs.length, "", "")}</div>`;
+        } else if (t === "bpmn:UserTask") {
+          const a = findExt(bo, "zeebe:AssignmentDefinition") || {};
+          html += `<h3>Assignment</h3>
+            <label class="field"><span>Assignee</span>
+              <input type="text" id="f-assignee" value="${esc(a.assignee || "")}" placeholder="editor"/></label>
+            <label class="field"><span>Candidate groups</span>
+              <input type="text" id="f-groups" value="${esc(a.candidateGroups || "")}" placeholder="reviewers"/></label>`;
         }
       } else if (isDefaultFlow) {
         html += `<h3>Condition (FEEL)</h3>
@@ -947,6 +955,17 @@ function wireProperties(root, modeler, api) {
       };
       [...inputsWrap.querySelectorAll(".dmn-input-row")].forEach(wireRow);
     }
+
+    const fassignee = body.querySelector("#f-assignee");
+    const fgroups = body.querySelector("#f-groups");
+    const saveAssignment = () => {
+      upsertExt(modeler, element, "zeebe:AssignmentDefinition", {
+        assignee: (fassignee.value || "").trim(),
+        candidateGroups: (fgroups.value || "").trim(),
+      });
+    };
+    if (fassignee) fassignee.addEventListener("change", saveAssignment);
+    if (fgroups) fgroups.addEventListener("change", saveAssignment);
 
     const fdur = body.querySelector("#f-duration");
     if (fdur) {

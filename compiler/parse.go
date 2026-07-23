@@ -258,6 +258,12 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			return nil, err
 		}
 	}
+	for _, ut := range proc.UserTasks {
+		retries := int32(defaultRetries)
+		if err := register(ut.Id, b.AddUserTask(ut.Assignment.Assignee, ut.Assignment.CandidateGroups, retries)); err != nil {
+			return nil, err
+		}
+	}
 	for _, g := range proc.ExclusiveGateways {
 		if err := register(g.Id, b.AddExclusiveGateway()); err != nil {
 			return nil, err
@@ -339,13 +345,12 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		label string
 		nodes []xmlNode
 	}{
-		{"userTask", proc.UserTasks},
 		{"sendTask", proc.SendTasks}, {"receiveTask", proc.ReceiveTasks},
 	} {
 		if len(u.nodes) > 0 {
 			return nil, fmt.Errorf("compiler: element %q is a <%s>, which Atlas can't execute yet "+
 				"(supported: start/end events, tasks (undefined/manual pass-through, service, script, "+
-				"business rule), exclusive/parallel/inclusive gateways, and timer/message intermediate events)", u.nodes[0].Id, u.label)
+				"business rule, user), exclusive/parallel/inclusive gateways, and timer/message intermediate events)", u.nodes[0].Id, u.label)
 		}
 	}
 
@@ -457,9 +462,10 @@ type xmlProcess struct {
 	ParallelGateways  []xmlNode             `xml:"parallelGateway"`
 	InclusiveGateways []xmlInclusiveGateway `xml:"inclusiveGateway"`
 
+	UserTasks []xmlUserTask `xml:"userTask"`
+
 	// Captured only to give a clear "unsupported element" error (see Parse); none
 	// of these are executable yet.
-	UserTasks    []xmlNode `xml:"userTask"`
 	SendTasks    []xmlNode `xml:"sendTask"`
 	ReceiveTasks []xmlNode `xml:"receiveTask"`
 }
@@ -508,6 +514,18 @@ type xmlTimerEventDefinition struct {
 
 type xmlNode struct {
 	Id string `xml:"id,attr"`
+}
+
+// A user task parks a token for human completion (ADR-0028). It optionally
+// carries a zeebe:assignmentDefinition for assignee/candidateGroups.
+type xmlUserTask struct {
+	Id         string                  `xml:"id,attr"`
+	Assignment xmlAssignmentDefinition `xml:"extensionElements>assignmentDefinition"`
+}
+
+type xmlAssignmentDefinition struct {
+	Assignee        string `xml:"assignee,attr"`
+	CandidateGroups string `xml:"candidateGroups,attr"`
 }
 
 type xmlServiceTask struct {

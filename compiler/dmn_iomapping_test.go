@@ -98,3 +98,24 @@ func TestBusinessRuleTaskIOMappingErrors(t *testing.T) {
 		}
 	})
 }
+
+// TestParseRejectsBadInputMapping proves a business rule task with an
+// uncompilable io-mapping source fails the whole parse (deploy), surfacing the
+// error through compileProcess rather than deferring it to runtime.
+func TestParseRejectsBadInputMapping(t *testing.T) {
+	const bad = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="p" isExecutable="true">
+    <startEvent id="s"/>
+    <businessRuleTask id="decide">
+      <extensionElements>
+        <calledDecision decisionId="Dish"/>
+        <ioMapping><input source="= 1 +" target="Season"/></ioMapping>
+      </extensionElements>
+    </businessRuleTask>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="decide"/>
+  </process>
+</definitions>`
+	if _, err := Parse(1, 1, strings.NewReader(bad)); err == nil {
+		t.Fatal("Parse with an uncompilable input-mapping source: got nil error, want an error")
+	}
+}

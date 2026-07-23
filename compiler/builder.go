@@ -22,6 +22,17 @@ const DMNJobType = "io.atlas.dmn"
 // interns to >= 1). See ADR-0014.
 const DMNJobTypeIndex int32 = 0
 
+// UserTaskJobType is the reserved job type user tasks carry. The in-process Tasks
+// app (or an external task client) subscribes to it to list and complete human
+// tasks, the same way the DMN worker subscribes to DMNJobType (ADR-0028).
+const UserTaskJobType = "io.atlas.user-task"
+
+// UserTaskJobTypeIndex is the interned index UserTaskJobType is guaranteed to
+// occupy in every compiled process: NewBuilder reserves it second (after DMN),
+// so it is always 1. This lets the task-list endpoint scan activatable jobs by
+// a single global index, the same way the DMN worker uses DMNJobTypeIndex.
+const UserTaskJobTypeIndex int32 = 1
+
 // ClioWriteJobType is the reserved job type a clio "write-events" connector task
 // carries. The in-process clio connector worker subscribes to it to append the
 // event to the configured clio instance (ADR-0036), the same way the DMN worker
@@ -44,6 +55,7 @@ type Builder struct {
 	businessRuleTasks []BusinessRuleTaskDetail
 	timerCatches      []TimerCatchDetail
 	connectorTasks    []ConnectorTaskDetail
+	userTasks         []UserTaskDetail
 	messageCatches    []MessageDetail
 	messageThrows     []MessageDetail
 	messageStarts     []MessageDetail
@@ -64,7 +76,8 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 		version:       version,
 		interner:      map[string]int32{},
 	}
-	b.intern(DMNJobType) // reserve DMNJobTypeIndex == 0
+	b.intern(DMNJobType)      // reserve DMNJobTypeIndex == 0
+	b.intern(UserTaskJobType) // reserve UserTaskJobTypeIndex == 1
 	return b
 }
 
@@ -194,6 +207,20 @@ func (b *Builder) AddClioWriteTask(connector, subject, eventType string, retries
 	return b.addNode(TypeConnectorTask, detail)
 }
 
+// AddUserTask adds a user task that parks a token and creates a job for a human
+// to complete via the Tasks app (ADR-0028). assignee and candidateGroups are
+// optional (empty strings are stored as -1). Returns its element id.
+func (b *Builder) AddUserTask(assignee, candidateGroups string, retries int32) int32 {
+	detail := int32(len(b.userTasks))
+	b.userTasks = append(b.userTasks, UserTaskDetail{
+		JobType:         b.intern(UserTaskJobType),
+		Assignee:        b.intern(assignee),
+		CandidateGroups: b.intern(candidateGroups),
+		Retries:         retries,
+	})
+	return b.addNode(TypeUserTask, detail)
+}
+
 // AddTask adds an undefined/manual task — one with no execution semantics — and
 // returns its element id. It carries no detail and simply passes the token
 // straight through, so a model can be drafted and its routing tested before its
@@ -319,6 +346,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		businessRuleTasks: b.businessRuleTasks,
 		timerCatches:      b.timerCatches,
 		connectorTasks:    b.connectorTasks,
+		userTasks:         b.userTasks,
 		messageCatches:    b.messageCatches,
 		messageThrows:     b.messageThrows,
 		messageStarts:     b.messageStarts,
