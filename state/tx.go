@@ -263,6 +263,29 @@ func (t *Tx) GetVariable(scope uint64, name string) (*model.VariableValue, error
 	return &v, nil
 }
 
+// VariablesOfScope calls fn with every variable owned by scope, via a prefix scan
+// over the variable column family. It reads through the in-flight batch, so it
+// observes variables written earlier in the same batch. A message throw event
+// uses it to gather the payload it publishes (ADR-0035).
+func (t *Tx) VariablesOfScope(scope uint64, fn func(v *model.VariableValue) error) error {
+	prefix := variablePrefix(scope)
+	iter, err := t.b.NewIter(&pebble.IterOptions{LowerBound: prefix, UpperBound: prefixEnd(prefix)})
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+	for iter.First(); iter.Valid(); iter.Next() {
+		var v model.VariableValue
+		if err := model.DecodeValueInto(&v, iter.Value()); err != nil {
+			return err
+		}
+		if err := fn(&v); err != nil {
+			return err
+		}
+	}
+	return iter.Error()
+}
+
 // --- Active-children counter ---
 //
 // Each scope (a process instance or a subprocess instance) tracks how many

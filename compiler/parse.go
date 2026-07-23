@@ -167,14 +167,21 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	}
 
 	for _, s := range proc.StartEvents {
+		if s.Message != nil {
+			name, keyExpr, err := resolveMessage(s.Id, s.Message.MessageRef)
+			if err != nil {
+				return nil, err
+			}
+			if err := register(s.Id, b.AddMessageStartEvent(name, keyExpr)); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		if err := register(s.Id, b.AddStartEvent()); err != nil {
 			return nil, err
 		}
 	}
 	for _, st := range proc.ServiceTasks {
-		if st.TaskDefinition.Type == "" {
-			return nil, fmt.Errorf("compiler: service task %q has no task definition type", st.Id)
-		}
 		retries := int32(defaultRetries)
 		if r := st.TaskDefinition.Retries; r != "" {
 			n, err := strconv.Atoi(r)
@@ -182,6 +189,21 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 				return nil, fmt.Errorf("compiler: service task %q has invalid retries %q: %w", st.Id, r, err)
 			}
 			retries = int32(n)
+		}
+		// A service task bearing an <atlas:clioConnector> extension is a connector
+		// task: it delegates to a server-registered clio connector via the job path
+		// (ADR-0036), not to an external service-task worker.
+		if c := st.Clio; c != nil {
+			if c.Connector == "" || c.Subject == "" || c.EventType == "" {
+				return nil, fmt.Errorf("compiler: clio connector task %q needs connector, subject, and eventType", st.Id)
+			}
+			if err := register(st.Id, b.AddClioWriteTask(c.Connector, c.Subject, c.EventType, retries)); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if st.TaskDefinition.Type == "" {
+			return nil, fmt.Errorf("compiler: service task %q has no task definition type", st.Id)
 		}
 		if err := register(st.Id, b.AddServiceTask(st.TaskDefinition.Type, retries)); err != nil {
 			return nil, err
@@ -414,7 +436,7 @@ type xmlMessageEventDefinition struct {
 type xmlProcess struct {
 	Id                string                `xml:"id,attr"`
 	Name              string                `xml:"name,attr"`
-	StartEvents       []xmlNode             `xml:"startEvent"`
+	StartEvents       []xmlStartEvent       `xml:"startEvent"`
 	EndEvents         []xmlNode             `xml:"endEvent"`
 	ServiceTasks      []xmlServiceTask      `xml:"serviceTask"`
 	ScriptTasks       []xmlScriptTask       `xml:"scriptTask"`
@@ -443,6 +465,16 @@ type xmlProcess struct {
 type xmlExclusiveGateway struct {
 	Id      string `xml:"id,attr"`
 	Default string `xml:"default,attr"`
+}
+
+// A start event. A plain (none) start event is a manual entry point; one bearing
+// a messageEventDefinition is a message start event, instantiated by a
+// correlating message (ADR-0035). The definition is a pointer so an absent one
+// is detected as nil.
+type xmlStartEvent struct {
+	Id      string                     `xml:"id,attr"`
+	Name    string                     `xml:"name,attr"`
+	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
 }
 
 // A data-based inclusive gateway; default names the flow taken when no outgoing
@@ -477,6 +509,20 @@ type xmlNode struct {
 type xmlServiceTask struct {
 	Id             string            `xml:"id,attr"`
 	TaskDefinition xmlTaskDefinition `xml:"extensionElements>taskDefinition"`
+	// Clio, when present, marks this service task a clio connector task (ADR-0036).
+	// The pointer is nil when the <atlas:clioConnector> extension is absent.
+	Clio *xmlClioConnector `xml:"extensionElements>clioConnector"`
+}
+
+// A clio connector task's parameters, carried on a service task as an
+// <atlas:clioConnector connector="..." subject="..." eventType="..."/> extension
+// element. connector names a server-registered connector (its endpoint and
+// credentials live in the server config, never in the model); subject and
+// eventType are the clio coordinates the appended event lands under.
+type xmlClioConnector struct {
+	Connector string `xml:"connector,attr"`
+	Subject   string `xml:"subject,attr"`
+	EventType string `xml:"eventType,attr"`
 }
 
 type xmlTaskDefinition struct {

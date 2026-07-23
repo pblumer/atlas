@@ -42,6 +42,8 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0032](0032-modeler-ai-copilot.md) | In-Modeler AI copilot over the MCP/HTTP surface | Proposed |
 | [0033](0033-inclusive-gateway-join.md) | Inclusive gateway join synchronization | Accepted |
 | [0034](0034-projects-and-artifacts.md) | Projects as containers for heterogeneous artifacts | Accepted |
+| [0035](0035-message-start-events.md) | Message start events and the processInstanceKey built-in | Accepted |
+| [0036](0036-clio-connector.md) | A clio connector — server-registered event-store integration | Accepted |
 
 ## Status values
 
