@@ -1,4 +1,4 @@
-# ADR-0025: Inclusive gateway join synchronization
+# ADR-0033: Inclusive gateway join synchronization
 
 - **Status:** Accepted
 - **Date:** 2026-07-23
