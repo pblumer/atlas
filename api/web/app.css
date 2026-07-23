@@ -425,6 +425,53 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .start-panel .row { align-items: center; gap: 8px; }
 .start-panel .err { font-size: 12px; color: var(--danger, #c0392b); }
 
+/* ---------- Collaboration replay ---------- */
+/* A message travelling along a message-flow edge: an envelope dot with a soft
+   halo, drawn in a dedicated SVG layer above the diagram (ADR-0038). */
+.atlas-msg-dot { fill: var(--accent); stroke: #fff; stroke-width: 1.5px; }
+.atlas-msg-halo { fill: var(--accent); opacity: 0.18; }
+/* The edge a message is crossing right now: accent stroke with marching ants so
+   the direction of travel reads at a glance. */
+.djs-connection.atlas-flow-active .djs-visual > :nth-child(1) {
+  stroke: var(--accent) !important; stroke-width: 2.5px !important;
+  stroke-dasharray: 6 4 !important; animation: atlas-ants 0.6s linear infinite;
+}
+@keyframes atlas-ants { to { stroke-dashoffset: -10; } }
+/* The receiving element pulses as a message lands on it. */
+.djs-element.atlas-flow-hit .djs-visual > :nth-child(1) {
+  stroke: var(--accent) !important; stroke-width: 3px !important;
+  animation: atlas-pulse 0.7s ease-out;
+}
+@keyframes atlas-pulse { 0% { stroke-width: 1px; } 40% { stroke-width: 4px; } 100% { stroke-width: 2px; } }
+
+/* Replay transport bar under the toolbar: play/scrub controls + a clock. */
+.replay-bar {
+  display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+  border-bottom: 1px solid var(--border); background: var(--surface);
+}
+.replay-bar .btn.play { min-width: 84px; }
+.replay-bar input[type="range"] { flex: 1; accent-color: var(--accent); }
+.replay-bar .clock { font: 12px ui-monospace, monospace; color: var(--muted); min-width: 150px; text-align: right; }
+.replay-bar .speed { width: auto; min-width: 64px; padding: 5px 8px; font-size: 13px; }
+
+/* Message-flow log beneath the diagram: one row per delivery, the current step
+   highlighted as the playhead crosses it. */
+.flow-log { border-top: 1px solid var(--border); background: var(--surface); max-height: 30vh; overflow: auto; flex: 0 0 auto; }
+.flow-log .fl-head {
+  font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em;
+  color: var(--muted); padding: 10px 16px 6px; display: flex; align-items: center; gap: 8px;
+}
+.flow-log table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.flow-log td { padding: 6px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.flow-log td.tnum { font: 12px ui-monospace, monospace; color: var(--muted); white-space: nowrap; width: 1%; }
+.flow-log tr.cur td { background: var(--accent-soft); }
+.flow-log tr.done td:not(.tnum) { color: var(--text); }
+.flow-log tr.pending td:not(.tnum) { color: var(--muted); }
+.flow-log .arrow { color: var(--muted); margin: 0 6px; }
+.flow-log .msg-name { font-weight: 600; }
+.flow-log .empty { padding: 14px 16px; color: var(--muted); }
+.replay-link { margin-left: 8px; font-size: 12px; }
+
 /* ---------- Collapsible sections ---------- */
 .section-toggle {
   display: inline-flex; align-items: center; gap: 6px; background: none; border: none;

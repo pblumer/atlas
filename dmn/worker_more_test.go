@@ -67,7 +67,7 @@ func putElementInstance(t *testing.T, store *state.Store, key, defKey uint64, no
 func TestHandlerMissingElementInstance(t *testing.T) {
 	store := openStore(t)
 	h := dmn.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, dmn.NewRegistry(), nil)
-	if err := h(job.Job{Key: 5, ElementInstanceKey: 999}); err != nil {
+	if _, err := h(job.Job{Key: 5, ElementInstanceKey: 999}); err != nil {
 		t.Fatalf("handler for missing element instance = %v, want nil", err)
 	}
 }
@@ -80,7 +80,7 @@ func TestHandlerNoCompiledProcess(t *testing.T) {
 	putElementInstance(t, store, 10, cp.Key, node)
 
 	h := dmn.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, dmn.NewRegistry(), nil)
-	if err := h(job.Job{Key: 5, ElementInstanceKey: 10}); err == nil {
+	if _, err := h(job.Job{Key: 5, ElementInstanceKey: 10}); err == nil {
 		t.Fatal("handler with no compiled process: got nil error, want an error")
 	}
 }
@@ -97,7 +97,7 @@ func TestHandlerEvaluateError(t *testing.T) {
 	lookup := func(uint64) *compiler.CompiledProcess { return cp }
 	// Fresh registry: no model deployed under cp.Key, so Evaluate must error.
 	h := dmn.Handler(store, lookup, dmn.NewRegistry(), nil)
-	if err := h(job.Job{Key: 5, ElementInstanceKey: 20}); err == nil {
+	if _, err := h(job.Job{Key: 5, ElementInstanceKey: 20}); err == nil {
 		t.Fatal("handler with undeployed decision: got nil error, want an error")
 	}
 }

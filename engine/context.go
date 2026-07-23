@@ -183,6 +183,15 @@ func (c *ProcessingContext) AppendMessageSubscriptionEvent(key uint64, intent mo
 	c.appendEvent(key, model.VTMessageSubscription, intent, inflightValue{subscription: v})
 }
 
+// AppendMessageFlowEvent retains one delivered message flow as history for the
+// collaboration replay (ADR-0038). It is keyed by its receiving definition (the
+// state index leads with it); the event's header timestamp and position order it
+// on the replay timeline. Emitted once per correlated catch event and once per
+// message-start instantiation, so both kinds of cross-pool delivery are recorded.
+func (c *ProcessingContext) AppendMessageFlowEvent(v model.MessageFlowValue) {
+	c.appendEvent(v.ReceiverProcessDefKey, model.VTMessageFlow, model.IntentMessagePublished, inflightValue{messageFlow: v})
+}
+
 // AppendElementCommand schedules an element-instance command for a later batch.
 func (c *ProcessingContext) AppendElementCommand(key uint64, intent model.Intent, v model.ElementInstanceValue) {
 	c.appendCommand(key, model.VTElementInstance, intent, inflightValue{element: v})

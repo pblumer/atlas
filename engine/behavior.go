@@ -129,13 +129,25 @@ func handleElementCompleting(c *ProcessingContext) {
 	}
 }
 
-// handleJobCompleted retires the job and tells its element to complete.
+// handleJobCompleted retires the job, writes the worker's output variables into
+// the job's process instance scope, and tells its element to complete. The
+// outputs (carried on the completion command as StartVars) are written before the
+// element completes so a downstream condition can read them; the values are frozen
+// into VariableCreated events, so replay re-applies them rather than re-running
+// the worker (invariant I6). Writing here mirrors how instance creation seeds its
+// start variables — deterministic state mutation from already-decided data.
 func handleJobCompleted(c *ProcessingContext) {
 	job := c.GetJob(c.cmd.Key)
 	if job == nil {
 		return // already gone or never existed; nothing to do
 	}
 	c.AppendJobEvent(c.cmd.Key, model.IntentJobCompleted, *job)
+
+	for i := range c.cmd.StartVars {
+		v := c.cmd.StartVars[i]
+		v.ScopeKey = job.ProcessInstanceKey
+		c.AppendVariableEvent(model.IntentVariableCreated, v)
+	}
 
 	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
 		c.AppendElementCommand(job.ElementInstanceKey, model.IntentCompleting, *ei)
@@ -159,7 +171,8 @@ func handleTimerTriggered(c *ProcessingContext) {
 // StartVars); correlation is the same path a message throw event uses.
 func handleMessagePublished(c *ProcessingContext) {
 	pub := c.cmd.Value.subscription
-	correlateMessage(c, pub.MessageName, pub.CorrelationKey, c.cmd.StartVars)
+	// An API publish has no sending instance, so the recorded flow's sender is 0.
+	correlateMessage(c, pub.MessageName, pub.CorrelationKey, c.cmd.StartVars, 0)
 }
 
 // behavior resolves the behavior for a BPMN element type.
@@ -194,7 +207,7 @@ func activateElement(c *ProcessingContext, ei *model.ElementInstanceValue, targe
 // attached to the host activity that just activated (ei/hostKey). Each armed
 // instance carries AttachedToKey = hostKey so it can later interrupt its host, and
 // its own OnActivated arms the timer/subscription it waits on. A no-op for a node
-// with no attached boundary events (ADR-0038).
+// with no attached boundary events (ADR-0040).
 func armBoundaryEvents(c *ProcessingContext, hostKey uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	for _, beID := range cp.BoundaryEvents(ei.ElementId) {
@@ -457,6 +470,8 @@ func (messageCatchEventBehavior) OnActivated(c *ProcessingContext, key uint64, e
 		ElementInstanceKey: key,
 		MessageName:        detail.MessageName,
 		CorrelationKey:     evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey),
+		ProcessDefKey:      ei.ProcessDefKey,
+		ElementId:          ei.ElementId,
 	})
 	// Stays Activated: no Completing until a message correlates.
 }
@@ -481,7 +496,7 @@ func (messageThrowEventBehavior) OnActivated(c *ProcessingContext, key uint64, e
 	// seeded with them (ADR-0035). Reading the payload here (command processing)
 	// keeps applyToState pure (I4).
 	payload := instanceVariables(c, ei.ProcessInstanceKey)
-	correlateMessage(c, detail.MessageName, evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey), payload)
+	correlateMessage(c, detail.MessageName, evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey), payload, ei.ProcessInstanceKey)
 	c.AppendElementCommand(key, model.IntentCompleting, *ei)
 }
 
@@ -511,7 +526,7 @@ func evalCorrelationKey(c *ProcessingContext, e *expr.Compiled, scope uint64) st
 // instance to complete. Matches are collected before any mutation so retiring a
 // subscription can't disturb the scan. A message that matches nothing is a no-op
 // — there is no buffering yet (ADR-0020).
-func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []model.VariableValue) {
+func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []model.VariableValue, senderPIKey uint64) {
 	type match struct {
 		elKey uint64
 		sub   model.MessageSubscriptionValue
@@ -524,6 +539,16 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 	for i := range matches {
 		m := matches[i]
 		c.AppendMessageSubscriptionEvent(m.elKey, model.IntentSubscriptionCorrelated, m.sub)
+		// Retain the delivery to the waiting catch event for the collaboration
+		// replay (ADR-0038), before the subscription's fields are needed elsewhere.
+		c.AppendMessageFlowEvent(model.MessageFlowValue{
+			SenderProcessInstanceKey:   senderPIKey,
+			ReceiverProcessInstanceKey: m.sub.ProcessInstanceKey,
+			ReceiverProcessDefKey:      m.sub.ProcessDefKey,
+			ReceiverElementId:          m.sub.ElementId,
+			MessageName:                name,
+			CorrelationKey:             correlationKey,
+		})
 		for j := range vars {
 			vv := vars[j]
 			vv.ScopeKey = m.sub.ProcessInstanceKey
@@ -539,8 +564,18 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 	// runs after the subscription scan so a single message can both correlate a
 	// waiting instance and start new ones, all recovered from the events the
 	// created instances emit.
-	for _, defKey := range c.p.messageStarts[name] {
-		c.AppendCreateInstanceCommand(defKey, vars)
+	for _, ref := range c.p.messageStarts[name] {
+		c.AppendCreateInstanceCommand(ref.defKey, vars)
+		// Retain the delivery into the message-start event too, so the replay shows
+		// the message that opened the receiving pool. The receiver instance does not
+		// exist yet (the create is a followup), so its key is left 0 (ADR-0038).
+		c.AppendMessageFlowEvent(model.MessageFlowValue{
+			SenderProcessInstanceKey: senderPIKey,
+			ReceiverProcessDefKey:    ref.defKey,
+			ReceiverElementId:        ref.elementId,
+			MessageName:              name,
+			CorrelationKey:           correlationKey,
+		})
 	}
 }
 
@@ -789,7 +824,7 @@ func (userTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model
 }
 
 // boundaryEventBehavior: a timer/message event attached to a host activity
-// (ADR-0038). On activation it arms its trigger — a timer keyed to itself (like an
+// (ADR-0040). On activation it arms its trigger — a timer keyed to itself (like an
 // intermediate timer catch) or a message subscription — and waits. When the
 // trigger fires, the existing timer/message path drives it to Completing:
 //   - interrupting: cancel the host (and its job and other boundary siblings),

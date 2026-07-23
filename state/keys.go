@@ -22,7 +22,8 @@ const (
 	cfProcessInstanceHistory columnFamily = 0x09 // piHist:<piKey> → ProcessInstanceValue (terminal)
 	cfMessageSubscription    columnFamily = 0x0A // msgSub:<name>:<corrKey>:<elKey> → MessageSubscriptionValue
 	cfElementVisit           columnFamily = 0x0B // elVisit:<procDefKey>:<piKey>:<elementId> → int64 count
-	cfJobByElement           columnFamily = 0x0C // jobByEl:<elKey> → jobKey (reverse lookup for boundary cancel)
+	cfMessageFlow            columnFamily = 0x0C // msgFlow:<receiverDefKey>:<ts>:<pos> → MessageFlowValue
+	cfJobByElement           columnFamily = 0x0D // jobByEl:<elKey> → jobKey (reverse lookup for boundary cancel)
 )
 
 func appendBE64(dst []byte, v uint64) []byte { return binary.BigEndian.AppendUint64(dst, v) }
@@ -110,6 +111,34 @@ func elementVisitInstancePrefix(procDefKey, piKey uint64) []byte {
 // elementIdFromVisitKey extracts the trailing element index from a visit key.
 func elementIdFromVisitKey(k []byte) int32 {
 	return int32(binary.BigEndian.Uint32(k[len(k)-4:]))
+}
+
+// keyMessageFlow keys a retained message-flow history record. The receiver
+// definition leads, so every message a pool received is one prefix scan; the
+// event timestamp follows so the scan yields them in the order they occurred
+// (the replay timeline), and the log position is the trailing disambiguator so
+// two flows in the same nanosecond keep distinct keys. All big-endian / sign-
+// flipped so lexicographic byte order matches numeric (and thus time) order.
+func keyMessageFlow(receiverDefKey uint64, ts int64, pos uint64) []byte {
+	b := appendOrderedInt64(messageFlowDefPrefix(receiverDefKey), ts)
+	return appendBE64(b, pos)
+}
+
+// messageFlowDefPrefix scans every message flow a definition received, in time
+// order.
+func messageFlowDefPrefix(receiverDefKey uint64) []byte {
+	return appendBE64([]byte{byte(cfMessageFlow)}, receiverDefKey)
+}
+
+// timestampFromFlowKey extracts the event timestamp from a message-flow key,
+// inverting the sign-flip appendOrderedInt64 applied.
+func timestampFromFlowKey(k []byte) int64 {
+	return int64(binary.BigEndian.Uint64(k[len(k)-16:]) ^ (1 << 63))
+}
+
+// positionFromFlowKey extracts the trailing log position from a message-flow key.
+func positionFromFlowKey(k []byte) uint64 {
+	return binary.BigEndian.Uint64(k[len(k)-8:])
 }
 
 func variablePrefix(scope uint64) []byte {

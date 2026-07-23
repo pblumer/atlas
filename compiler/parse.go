@@ -14,6 +14,25 @@ import (
 // defaultRetries is used when a service task's task definition omits retries.
 const defaultRetries = 3
 
+// restMethods is the set of HTTP methods a REST connector task may use. The set
+// is validated at deploy time (invariant I5) so the runtime worker never has to.
+var restMethods = map[string]bool{
+	"GET": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true, "HEAD": true,
+}
+
+// normalizeHTTPMethod upper-cases a REST connector's method (defaulting to GET
+// when omitted) and rejects anything outside restMethods.
+func normalizeHTTPMethod(m string) (string, error) {
+	if m == "" {
+		return "GET", nil
+	}
+	up := strings.ToUpper(strings.TrimSpace(m))
+	if !restMethods[up] {
+		return "", fmt.Errorf("unsupported HTTP method %q", m)
+	}
+	return up, nil
+}
+
 // Parse reads a BPMN 2.0 XML model and compiles the first <process> into an
 // immutable CompiledProcess keyed by key at the given version. It is the front
 // end to the linearizer (compiler.md stages 1–2 and 6): it parses the XML,
@@ -202,6 +221,22 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			}
 			continue
 		}
+		// A service task bearing an <atlas:restConnector> extension is an HTTP-REST
+		// connector task: it delegates to a server-registered REST connector via the
+		// job path (ADR-0036), not to an external service-task worker.
+		if c := st.Rest; c != nil {
+			if c.Connector == "" || c.Path == "" {
+				return nil, fmt.Errorf("compiler: rest connector task %q needs connector and path", st.Id)
+			}
+			method, err := normalizeHTTPMethod(c.Method)
+			if err != nil {
+				return nil, fmt.Errorf("compiler: rest connector task %q: %w", st.Id, err)
+			}
+			if err := register(st.Id, b.AddRestConnectorTask(c.Connector, method, c.Path, retries)); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		if st.TaskDefinition.Type == "" {
 			return nil, fmt.Errorf("compiler: service task %q has no task definition type", st.Id)
 		}
@@ -246,7 +281,11 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		if err != nil {
 			return nil, fmt.Errorf("compiler: business rule task %q: %w", brt.Id, err)
 		}
-		node, err := b.AddBusinessRuleTask(brt.CalledDecision.DecisionId, inputs, retries)
+		mappings, err := decisionInputMappings(brt.Id, brt.InputMappings)
+		if err != nil {
+			return nil, err
+		}
+		node, err := b.AddBusinessRuleTaskMapped(brt.CalledDecision.DecisionId, brt.CalledDecision.ResultVariable, inputs, mappings, retries)
 		if err != nil {
 			return nil, err
 		}
@@ -331,7 +370,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 	}
 	// Boundary events are registered last: each attaches to a host activity by id,
-	// which must already be registered so attachedToRef resolves (ADR-0038). An
+	// which must already be registered so attachedToRef resolves (ADR-0040). An
 	// absent or "true" cancelActivity is interrupting (BPMN default); "false" is
 	// non-interrupting.
 	for _, ev := range proc.BoundaryEvents {
@@ -541,7 +580,7 @@ type xmlIntermediateThrowEvent struct {
 // it runs. CancelActivity mirrors BPMN's attribute: absent or "true" is
 // interrupting (cancels the host on fire), "false" is non-interrupting. The timer
 // and message variants are executable; each definition is a pointer so an absent
-// one is detected as nil (ADR-0038).
+// one is detected as nil (ADR-0040).
 type xmlBoundaryEvent struct {
 	Id             string                     `xml:"id,attr"`
 	AttachedToRef  string                     `xml:"attachedToRef,attr"`
@@ -576,6 +615,10 @@ type xmlServiceTask struct {
 	// Clio, when present, marks this service task a clio connector task (ADR-0036).
 	// The pointer is nil when the <atlas:clioConnector> extension is absent.
 	Clio *xmlClioConnector `xml:"extensionElements>clioConnector"`
+	// Rest, when present, marks this service task an HTTP-REST connector task
+	// (ADR-0036). The pointer is nil when the <atlas:restConnector> extension is
+	// absent.
+	Rest *xmlRestConnector `xml:"extensionElements>restConnector"`
 }
 
 // A clio connector task's parameters, carried on a service task as an
@@ -587,6 +630,18 @@ type xmlClioConnector struct {
 	Connector string `xml:"connector,attr"`
 	Subject   string `xml:"subject,attr"`
 	EventType string `xml:"eventType,attr"`
+}
+
+// An HTTP-REST connector task's parameters, carried on a service task as an
+// <atlas:restConnector connector="..." method="..." path="..."/> extension
+// element. connector names a server-registered connector (its base endpoint and
+// credentials live in the server config, never in the model); method is the HTTP
+// method and path is appended to the connector's base endpoint to form the
+// request URL.
+type xmlRestConnector struct {
+	Connector string `xml:"connector,attr"`
+	Method    string `xml:"method,attr"`
+	Path      string `xml:"path,attr"`
 }
 
 type xmlTaskDefinition struct {
@@ -607,25 +662,44 @@ type xmlZeebeScript struct {
 }
 
 // A business rule task references a DMN decision via the Zeebe calledDecision
-// extension (<zeebe:calledDecision decisionId="..."/>). Static inputs — a
-// stand-in until process variables land — are given as Atlas decisionInput
-// extension elements (<atlas:decisionInput name="Season" value="Winter"/>);
-// each value is parsed as JSON when it parses, else kept as a string, so numbers
-// and booleans reach the decision with their FEEL types.
+// extension (<zeebe:calledDecision decisionId="..." resultVariable="..."/>). Its
+// input context comes from two layers merged at evaluation time:
+//
+//   - Variable-driven inputs — the real wiring — are Zeebe io-mapping inputs
+//     (<zeebe:ioMapping><zeebe:input source="=order.total" target="Amount"/>), a
+//     FEEL source evaluated over the instance's variables bound to a decision
+//     input name.
+//   - Static inputs are constant Atlas decisionInput elements
+//     (<atlas:decisionInput name="Season" value="Winter"/>); each value is parsed
+//     as JSON when it parses, else kept as a string, so numbers and booleans reach
+//     the decision with their FEEL types. They are a constant base a mapping of the
+//     same name overrides.
+//
+// The decision's result is written back into the resultVariable process variable.
 type xmlBusinessRuleTask struct {
-	Id             string             `xml:"id,attr"`
-	CalledDecision xmlCalledDecision  `xml:"extensionElements>calledDecision"`
-	Inputs         []xmlDecisionInput `xml:"extensionElements>decisionInput"`
+	Id             string               `xml:"id,attr"`
+	CalledDecision xmlCalledDecision    `xml:"extensionElements>calledDecision"`
+	Inputs         []xmlDecisionInput   `xml:"extensionElements>decisionInput"`
+	InputMappings  []xmlZeebeIOMapInput `xml:"extensionElements>ioMapping>input"`
 }
 
 type xmlCalledDecision struct {
-	DecisionId string `xml:"decisionId,attr"`
-	Retries    string `xml:"retries,attr"`
+	DecisionId     string `xml:"decisionId,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	Retries        string `xml:"retries,attr"`
 }
 
 type xmlDecisionInput struct {
 	Name  string `xml:"name,attr"`
 	Value string `xml:"value,attr"`
+}
+
+// xmlZeebeIOMapInput is a Zeebe io-mapping input: a FEEL source expression bound
+// to a target name. For a business rule task the target is the DMN decision input
+// name the source's value feeds.
+type xmlZeebeIOMapInput struct {
+	Source string `xml:"source,attr"`
+	Target string `xml:"target,attr"`
 }
 
 // decisionInputs turns parsed <decisionInput> elements into a name→value map,
@@ -650,6 +724,34 @@ func decisionInputs(in []xmlDecisionInput) (map[string]any, error) {
 		m[di.Name] = v
 	}
 	return m, nil
+}
+
+// decisionInputMappings compiles a business rule task's io-mapping inputs into
+// variable-driven decision inputs. Each source is a FEEL expression (compiled
+// once at deploy time, invariant I5) evaluated over the instance's variables at
+// evaluation time; target names the decision input it feeds. A leading '=' (the
+// Zeebe expression marker) is trimmed. An empty target or an uncompilable source
+// fails the deploy, exactly like a bad script-task expression.
+func decisionInputMappings(taskID string, in []xmlZeebeIOMapInput) ([]DecisionInputMapping, error) {
+	if len(in) == 0 {
+		return nil, nil
+	}
+	out := make([]DecisionInputMapping, 0, len(in))
+	for _, im := range in {
+		if im.Target == "" {
+			return nil, fmt.Errorf("compiler: business rule task %q has an input mapping with no target", taskID)
+		}
+		text := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(im.Source), "="))
+		if text == "" {
+			return nil, fmt.Errorf("compiler: business rule task %q input mapping for %q has no source expression", taskID, im.Target)
+		}
+		e, err := expr.CompileAuto(text)
+		if err != nil {
+			return nil, fmt.Errorf("compiler: business rule task %q input mapping for %q: %w", taskID, im.Target, err)
+		}
+		out = append(out, DecisionInputMapping{Target: im.Target, Source: e})
+	}
+	return out, nil
 }
 
 type xmlSequenceFlow struct {

@@ -1,4 +1,4 @@
-# ADR-0038: Boundary events — timer and message, interrupting and non-interrupting
+# ADR-0040: Boundary events — timer and message, interrupting and non-interrupting
 
 - **Status:** Accepted
 - **Date:** 2026-07-23

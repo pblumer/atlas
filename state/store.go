@@ -230,6 +230,21 @@ func (s *Store) ElementVisitHistory(procDefKey, instanceFilter uint64, fn func(e
 	})
 }
 
+// MessageFlowHistory folds the retained message flows a definition received,
+// calling fn with each flow's event timestamp, log position, and payload in the
+// order they occurred (the replay timeline). Because the key sorts by timestamp
+// then position, a definition-wide scan yields a monotonic sequence. The caller
+// resolves the receiver element index to a diagram id via the compiled process.
+func (s *Store) MessageFlowHistory(receiverDefKey uint64, fn func(ts int64, pos uint64, v *model.MessageFlowValue) error) error {
+	return s.scanPrefix(messageFlowDefPrefix(receiverDefKey), func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTMessageFlow, raw)
+		if err != nil {
+			return err
+		}
+		return fn(timestampFromFlowKey(k), positionFromFlowKey(k), v.(*model.MessageFlowValue))
+	})
+}
+
 // VariablesOfScope calls fn with every variable owned by the given scope, via
 // the variable column family. Used to build a FEEL evaluation scope and to
 // surface an instance's variables to operators.
