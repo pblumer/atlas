@@ -227,7 +227,9 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   "no DMN authoring surface" non-goal (Phase 2, ADR-0014). A DMN reference is
   **resolved and validated at deploy time**: a pluggable `dmn.Resolver` (default:
   a `<data-dir>/dmn-models/` folder of temis-exported models; a temis git/service
-  source can replace it behind the interface) fetches the model XML and the
+  source — `dmn.ServiceResolver`, an HTTP model source selected by
+  `ATLAS_DMN_RESOLVER_URL` with an optional bearer token — replaces it behind the
+  interface) fetches the model XML and the
   embedded temis engine compiles it — the Modeler shows each reference as
   valid / invalid / unresolved, and a project preflight
   (`POST /api/v1/projects/{id}/validate`) gates on all references being valid.
@@ -238,9 +240,8 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   Modeler's per-project **Deploy** button drives it, and a deployed process's
   business rule tasks now **execute** the resolved decision in-process (see
   Milestone 1). A project is a design-time grouping layer only (below the HTTP
-  API, no engine impact). Next: a temis git/service resolver, input/output
-  variable mappings for business rule tasks (Milestone 1), and further artifact
-  types (forms, element templates, READMEs, nested folders).
+  API, no engine impact). Next: further artifact types (forms, element templates,
+  READMEs, nested folders).
 - 🔲 Later: a polished "workbench" experience on top.
 
 ## Milestone A — Modeler & authoring experience 🔲

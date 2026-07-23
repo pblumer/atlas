@@ -30,7 +30,9 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -40,6 +42,20 @@ import (
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/state"
 )
+
+// dmnResolverFromEnv picks the DMN model source. When ATLAS_DMN_RESOLVER_URL is
+// set, models are fetched from that temis model service (with an optional bearer
+// token from ATLAS_DMN_RESOLVER_TOKEN); otherwise the zero-config on-disk folder
+// dir is used. Both satisfy dmn.Resolver (ADR-0034/0014).
+func dmnResolverFromEnv(dir string) dmn.Resolver {
+	if base := strings.TrimSpace(os.Getenv("ATLAS_DMN_RESOLVER_URL")); base != "" {
+		return dmn.ServiceResolver{
+			BaseURL: base,
+			Token:   strings.TrimSpace(os.Getenv("ATLAS_DMN_RESOLVER_TOKEN")),
+		}
+	}
+	return dmn.DirResolver{Dir: dir}
+}
 
 //go:embed web
 var webFS embed.FS
@@ -121,10 +137,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string) (*Server, e
 	if err != nil {
 		return nil, err
 	}
-	// DMN reference models are resolved from <data-dir>/dmn-models, a folder of
-	// temis-exported models. The Resolver interface lets a temis git/service
-	// source replace this later without touching callers (ADR-0034).
-	resolver := dmn.DirResolver{Dir: filepath.Join(dataDir, "dmn-models")}
+	// DMN reference models are resolved either from a temis model service (when
+	// configured) or the zero-config <data-dir>/dmn-models folder. Both satisfy the
+	// Resolver interface, so the rest of the server is unaffected (ADR-0034/0014).
+	resolver := dmnResolverFromEnv(filepath.Join(dataDir, "dmn-models"))
 	s := &Server{
 		proc:         proc,
 		store:        store,
