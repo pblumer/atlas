@@ -694,8 +694,11 @@ async function viewInstances() {
         const running = s.running
           ? `<span class="pill ok"><span class="dot"></span>${s.running}</span>`
           : '<span class="muted">0</span>';
+        const collab = g.latest.collaborationKey
+          ? `<a class="replay-link" href="#/operations/c/${g.latest.collaborationKey}" title="Replay the message flow between pools">⇄ Replay</a>`
+          : "";
         return `<tr>
-          <td><a href="#/operations/p/${g.latest.key}"><b>${esc(label)}</b></a>${sub}</td>
+          <td><a href="#/operations/p/${g.latest.key}"><b>${esc(label)}</b></a>${collab}${sub}</td>
           <td>${versions}</td>
           <td>${running}</td>
           <td>${s.finished || '<span class="muted">0</span>'}</td>
@@ -742,6 +745,11 @@ async function viewLive(key) {
   await mod.mountLive(view, { api, toast, key });
 }
 
+async function viewCollaboration(key) {
+  const mod = await import("./editor.js");
+  await mod.mountCollaboration(view, { api, toast, key });
+}
+
 // ---------- Router ----------
 async function route() {
   // Any navigation closes the app switcher and tears down an editor/live view.
@@ -774,6 +782,8 @@ async function route() {
     if (path === "#/operations") return await viewInstances();
     const lm = path.match(/^#\/operations\/p\/(\d+)$/);
     if (lm) return await viewLive(Number(lm[1]));
+    const cm = path.match(/^#\/operations\/c\/(\d+)$/);
+    if (cm) return await viewCollaboration(Number(cm[1]));
     if (appId !== "console" && appId !== "modeler") return viewComingSoon(appId);
     // Unknown route → dashboard.
     location.hash = "#/console";

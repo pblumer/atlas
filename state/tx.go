@@ -330,6 +330,24 @@ func (t *Tx) RecordElementVisit(procDefKey, piKey uint64, elementId int32) error
 	return t.b.Merge(keyElementVisit(procDefKey, piKey, elementId), t.scratch, nil)
 }
 
+// --- Message-flow history ---
+//
+// Every delivered message flow (a correlation to a catch event, or a message
+// that instantiated a message-start process) is retained here so the Operations
+// collaboration view can replay which message crossed to which receiving element
+// and when — the message-flow analogue of the element-visit heatmap. Written
+// only from applyToState, from the event alone (the header's timestamp and
+// position plus the payload), so it rebuilds identically on replay (invariant I4,
+// ADR-0038). Each record has a unique key (position is monotonic), so this is a
+// plain Set, never overwritten and never deleted. Retention is unbounded for now,
+// as with the process-instance and element-visit history (ADR-0017, ADR-0022).
+
+// RecordMessageFlow retains one delivered message flow under its receiver
+// definition, keyed in time order. ts and pos come from the event header.
+func (t *Tx) RecordMessageFlow(ts int64, pos uint64, v *model.MessageFlowValue) error {
+	return t.b.Set(keyMessageFlow(v.ReceiverProcessDefKey, ts, pos), t.encodeValue(v), nil)
+}
+
 // ActiveChildren returns the active-child count for scope (0 if none). This read
 // folds the merged deltas, so it is used only where the current count is needed
 // (e.g. detecting a finished scope), not on every increment.

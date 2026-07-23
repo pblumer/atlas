@@ -81,6 +81,15 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 		case model.IntentSubscriptionCorrelated:
 			return tx.DeleteMessageSubscription(&v.subscription)
 		}
+
+	case model.VTMessageFlow:
+		if h.Intent == model.IntentMessagePublished {
+			// Retain the delivered message flow so the Operations collaboration view
+			// can replay it. The record carries everything (receiver, message, key);
+			// the timestamp and position come from this event's header, so replay
+			// rebuilds identical history — invariant I4, ADR-0038.
+			return tx.RecordMessageFlow(h.Timestamp, h.Position, &v.messageFlow)
+		}
 	}
 	return nil
 }

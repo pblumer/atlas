@@ -150,7 +150,8 @@ func handleTimerTriggered(c *ProcessingContext) {
 // StartVars); correlation is the same path a message throw event uses.
 func handleMessagePublished(c *ProcessingContext) {
 	pub := c.cmd.Value.subscription
-	correlateMessage(c, pub.MessageName, pub.CorrelationKey, c.cmd.StartVars)
+	// An API publish has no sending instance, so the recorded flow's sender is 0.
+	correlateMessage(c, pub.MessageName, pub.CorrelationKey, c.cmd.StartVars, 0)
 }
 
 // behavior resolves the behavior for a BPMN element type.
@@ -376,6 +377,8 @@ func (messageCatchEventBehavior) OnActivated(c *ProcessingContext, key uint64, e
 		ElementInstanceKey: key,
 		MessageName:        detail.MessageName,
 		CorrelationKey:     evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey),
+		ProcessDefKey:      ei.ProcessDefKey,
+		ElementId:          ei.ElementId,
 	})
 	// Stays Activated: no Completing until a message correlates.
 }
@@ -400,7 +403,7 @@ func (messageThrowEventBehavior) OnActivated(c *ProcessingContext, key uint64, e
 	// seeded with them (ADR-0035). Reading the payload here (command processing)
 	// keeps applyToState pure (I4).
 	payload := instanceVariables(c, ei.ProcessInstanceKey)
-	correlateMessage(c, detail.MessageName, evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey), payload)
+	correlateMessage(c, detail.MessageName, evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey), payload, ei.ProcessInstanceKey)
 	c.AppendElementCommand(key, model.IntentCompleting, *ei)
 }
 
@@ -430,7 +433,7 @@ func evalCorrelationKey(c *ProcessingContext, e *expr.Compiled, scope uint64) st
 // instance to complete. Matches are collected before any mutation so retiring a
 // subscription can't disturb the scan. A message that matches nothing is a no-op
 // — there is no buffering yet (ADR-0020).
-func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []model.VariableValue) {
+func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []model.VariableValue, senderPIKey uint64) {
 	type match struct {
 		elKey uint64
 		sub   model.MessageSubscriptionValue
@@ -443,6 +446,16 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 	for i := range matches {
 		m := matches[i]
 		c.AppendMessageSubscriptionEvent(m.elKey, model.IntentSubscriptionCorrelated, m.sub)
+		// Retain the delivery to the waiting catch event for the collaboration
+		// replay (ADR-0038), before the subscription's fields are needed elsewhere.
+		c.AppendMessageFlowEvent(model.MessageFlowValue{
+			SenderProcessInstanceKey:   senderPIKey,
+			ReceiverProcessInstanceKey: m.sub.ProcessInstanceKey,
+			ReceiverProcessDefKey:      m.sub.ProcessDefKey,
+			ReceiverElementId:          m.sub.ElementId,
+			MessageName:                name,
+			CorrelationKey:             correlationKey,
+		})
 		for j := range vars {
 			vv := vars[j]
 			vv.ScopeKey = m.sub.ProcessInstanceKey
@@ -458,8 +471,18 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 	// runs after the subscription scan so a single message can both correlate a
 	// waiting instance and start new ones, all recovered from the events the
 	// created instances emit.
-	for _, defKey := range c.p.messageStarts[name] {
-		c.AppendCreateInstanceCommand(defKey, vars)
+	for _, ref := range c.p.messageStarts[name] {
+		c.AppendCreateInstanceCommand(ref.defKey, vars)
+		// Retain the delivery into the message-start event too, so the replay shows
+		// the message that opened the receiving pool. The receiver instance does not
+		// exist yet (the create is a followup), so its key is left 0 (ADR-0038).
+		c.AppendMessageFlowEvent(model.MessageFlowValue{
+			SenderProcessInstanceKey: senderPIKey,
+			ReceiverProcessDefKey:    ref.defKey,
+			ReceiverElementId:        ref.elementId,
+			MessageName:              name,
+			CorrelationKey:           correlationKey,
+		})
 	}
 }
 

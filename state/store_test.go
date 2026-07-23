@@ -116,6 +116,55 @@ func TestElementVisitHistory(t *testing.T) {
 	}
 }
 
+// TestMessageFlowHistory records flows for two receiver definitions and checks
+// that MessageFlowHistory returns one definition's flows in timestamp order,
+// isolated from the other definition's, with the header timestamp and position
+// recovered from the key.
+func TestMessageFlowHistory(t *testing.T) {
+	s := openStore(t)
+	seller := model.NewKey(1, 2)
+	other := model.NewKey(1, 9)
+
+	// Written out of time order to prove the scan sorts them.
+	flows := []struct {
+		ts  int64
+		pos uint64
+		v   model.MessageFlowValue
+	}{
+		{ts: 300, pos: 30, v: model.MessageFlowValue{ReceiverProcessDefKey: seller, ReceiverElementId: 5, MessageName: "confirm", CorrelationKey: "o-1"}},
+		{ts: 100, pos: 10, v: model.MessageFlowValue{ReceiverProcessDefKey: seller, ReceiverElementId: 0, MessageName: "order", CorrelationKey: "o-1"}},
+		{ts: 200, pos: 20, v: model.MessageFlowValue{ReceiverProcessDefKey: other, ReceiverElementId: 1, MessageName: "order", CorrelationKey: "o-2"}},
+	}
+	commit(t, s, func(tx *state.Tx) error {
+		for i := range flows {
+			f := flows[i]
+			if err := tx.RecordMessageFlow(f.ts, f.pos, &f.v); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	type row struct {
+		ts   int64
+		pos  uint64
+		name string
+		el   int32
+	}
+	var got []row
+	if err := s.MessageFlowHistory(seller, func(ts int64, pos uint64, v *model.MessageFlowValue) error {
+		got = append(got, row{ts, pos, v.MessageName, v.ReceiverElementId})
+		return nil
+	}); err != nil {
+		t.Fatalf("MessageFlowHistory: %v", err)
+	}
+	// Seller's two flows only, oldest first.
+	want := []row{{100, 10, "order", 0}, {300, 30, "confirm", 5}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("seller flows = %v, want %v", got, want)
+	}
+}
+
 func TestTransactionSeesOwnWrites(t *testing.T) {
 	s := openStore(t)
 	key := model.NewKey(1, 5)
