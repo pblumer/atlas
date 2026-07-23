@@ -41,7 +41,7 @@ step is needed.
 
 ## The tools
 
-All eight tools map one-to-one onto an Atlas HTTP endpoint.
+All ten tools map one-to-one onto an Atlas HTTP endpoint.
 
 | Tool | Args | Returns |
 |------|------|---------|
@@ -52,6 +52,8 @@ All eight tools map one-to-one onto an Atlas HTTP endpoint.
 | `atlas_create_instance` | `key` (int) | starts an instance, runs until the engine goes idle, returns live `stats` |
 | `atlas_process_runtime` | `key` (int) | per-element token/visit counts for one definition |
 | `atlas_list_instances` | — | all instances: state (`active`/`completed`/`terminated`), tokens, variables |
+| `atlas_cancel_instance` | `key` (int) | terminates one running **instance**; returns `{instanceKey, state:"terminated", stats}` |
+| `atlas_delete_process` | `key` (int) | deletes one **definition** (engine + disk); returns `{"deleted":true,"key":N}` |
 | `atlas_stats` | — | engine-wide `activeProcessInstances`, `activeElementInstances` |
 
 ## The normal flow
@@ -90,6 +92,28 @@ Deploy a minimal process — start → service task → end:
 - `atlas_create_instance {key: 7}` → `{"definitionKey":7,"stats":{...}}`
 - `atlas_process_runtime {key: 7}` →
   `{"instances":1,"tokens":1,"elements":[{"elementId":"task","type":"ServiceTask","tokens":1,...}]}`
+
+## Deleting and cleaning up
+
+Two levels of deletion, and **order matters** — a definition will not delete
+while any of its instances still run:
+
+1. **`atlas_cancel_instance {key: <instanceKey>}`** — terminate a running
+   instance. Pass the *large* instance key from `atlas_list_instances`, not the
+   definition key. All tokens are discarded; the instance becomes `terminated`.
+2. **`atlas_delete_process {key: <definitionKey>}`** — remove a deployed
+   definition from the engine and disk. **Refused with a conflict error if the
+   definition still has running instances** (`cannot delete: N running
+   instance(s); cancel them first`). Cancel every active instance of that
+   definition, then delete.
+
+So to fully remove a definition and everything it spawned: `atlas_list_instances`
+→ `atlas_cancel_instance` each active instance of that definition →
+`atlas_delete_process`. This is exactly how you clean up a test model whose token
+parked on an unworked service task. Deletion follows "durable before visible"
+(ADR-0019/I2): the on-disk record is removed first, so an acknowledged deletion
+never reappears on restart. `completed`/`terminated` instances are historical and
+do not block deletion.
 
 ## Gotchas — read these before diagnosing "a hang"
 
