@@ -59,6 +59,15 @@ The control-flow basics most real models use.
   as a vertical slice. It currently feeds a decision static inputs and surfaces
   outputs via a sink; wiring real input/output variable mappings depends on the
   variable subsystem above.
+- 🚧 **Connectors** ([ADR-0036](docs/adr/0036-clio-connector.md)): a service task
+  bearing an `<atlas:clioConnector>` extension is a connector task that appends an
+  event to a **server-registered** clio event store through the job path (like the
+  DMN worker) — endpoint and credentials live in the server config, the model
+  refers to a connector by name. The `clio:write-events` slice (registry, client,
+  worker, recovery) landed; each write is idempotency-keyed by the job key so
+  at-least-once delivery is safe against clio's append-only log. Wiring the worker
+  into the server run loop, a `clio:query` operation, and a WAL→clio event mirror
+  are follow-ups.
 
 ## Milestone 2 — Events and timers 🚧
 
@@ -76,8 +85,15 @@ Making processes wait, react, and time out.
   publish, correlating against open subscriptions through one shared path and
   carrying an optional variable payload into the woken instance. Recovery-tested
   (an open subscription is restored from the log and correlates afterward).
-  Message buffering, message start/boundary events, and cross-partition
-  correlation still to come (ADR-0020).
+  Message buffering, message boundary events, and cross-partition correlation
+  still to come (ADR-0020).
+- ✅ **Message start events** (single-partition): a `<startEvent>` with a
+  `messageEventDefinition` is instantiated by a correlating message (throw or API
+  publish), seeded with the message payload, so a two-pool request/response runs
+  end to end. Matching is by message name; a throw event carries its instance's
+  variables as the payload, and the reserved FEEL identifier `processInstanceKey`
+  exposes an instance's own key so a reply can correlate back to the requester.
+  Recovery-tested. A start-event correlation key and buffering remain (ADR-0035).
 - 🔲 Signal events (broadcast)
 - 🔲 Error events and error propagation
 - 🔲 Boundary events: interrupting and non-interrupting

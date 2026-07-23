@@ -155,4 +155,10 @@ func TestStoreDecodeErrorPaths(t *testing.T) {
 	if err := s.VariablesOfScope(scope, func(*model.VariableValue) error { return nil }); err == nil {
 		t.Errorf("VariablesOfScope on corrupt value: err = nil, want error")
 	}
+	// Tx.VariablesOfScope surfaces the same decode error through the in-flight batch.
+	txn := s.NewTransaction()
+	if err := txn.VariablesOfScope(scope, func(*model.VariableValue) error { return nil }); err == nil {
+		t.Errorf("Tx.VariablesOfScope on corrupt value: err = nil, want error")
+	}
+	txn.Close()
 }

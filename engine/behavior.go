@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"strconv"
+
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
@@ -41,6 +43,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeServiceTask] = serviceTaskBehavior{}
 	p.behaviors[compiler.TypeScriptTask] = scriptTaskBehavior{}
 	p.behaviors[compiler.TypeBusinessRuleTask] = businessRuleTaskBehavior{}
+	p.behaviors[compiler.TypeConnectorTask] = connectorTaskBehavior{}
 	p.behaviors[compiler.TypeExclusiveGateway] = exclusiveGatewayBehavior{}
 	p.behaviors[compiler.TypeTimerCatchEvent] = timerCatchEventBehavior{}
 	p.behaviors[compiler.TypeMessageCatchEvent] = messageCatchEventBehavior{}
@@ -48,6 +51,10 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeTask] = passThroughBehavior{}
 	p.behaviors[compiler.TypeParallelGateway] = parallelGatewayBehavior{}
 	p.behaviors[compiler.TypeInclusiveGateway] = inclusiveGatewayBehavior{}
+	// A message start event is a plain entry point once instantiated: it flows
+	// straight on like a none start (ADR-0035). What makes it a start is the
+	// deploy-time subscription (see Deploy), not a distinct runtime behavior.
+	p.behaviors[compiler.TypeMessageStartEvent] = startEventBehavior{}
 }
 
 // --- command handlers ---
@@ -214,14 +221,29 @@ func takeInclusiveOutgoing(c *ProcessingContext, ei *model.ElementInstanceValue)
 	}
 }
 
+// builtinProcessInstanceKey is a reserved FEEL identifier that resolves to the
+// evaluating instance's own process-instance key, as a string so the full 64-bit
+// key survives exactly (a FEEL number is a float and would lose precision on
+// large keys). It lets a model correlate a reply back to the requesting instance
+// without a hand-authored business key (ADR-0035). A process variable of the same
+// name is shadowed by the built-in.
+const builtinProcessInstanceKey = "processInstanceKey"
+
 // bindInputs reads the named variables from a scope into a FEEL binding map for
 // evaluation. A name absent from the scope is simply left unbound (FEEL null).
+// The reserved name processInstanceKey binds to the scope's own key (the built-in
+// above); at every call site the scope is the process instance, so it is the
+// instance's key.
 func bindInputs(c *ProcessingContext, inputs []string, scope uint64) map[string]expr.Value {
 	if len(inputs) == 0 {
 		return nil
 	}
 	vars := make(map[string]expr.Value, len(inputs))
 	for _, name := range inputs {
+		if name == builtinProcessInstanceKey {
+			vars[name] = expr.FromStored(expr.KindString, false, strconv.FormatUint(scope, 10))
+			continue
+		}
 		if vv := c.GetVariable(scope, name); vv != nil {
 			vars[name] = expr.FromStored(toExprKind(vv.Kind), vv.Bool, vv.Text)
 		}
@@ -373,7 +395,12 @@ type messageThrowEventBehavior struct{}
 func (messageThrowEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.MessageThrow(cp.Node(ei.ElementId).Detail)
-	correlateMessage(c, detail.MessageName, evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey), nil)
+	// The throw carries the throwing instance's variables as the message payload,
+	// so a correlated catch — or a message-start instance the throw creates — is
+	// seeded with them (ADR-0035). Reading the payload here (command processing)
+	// keeps applyToState pure (I4).
+	payload := instanceVariables(c, ei.ProcessInstanceKey)
+	correlateMessage(c, detail.MessageName, evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey), payload)
 	c.AppendElementCommand(key, model.IntentCompleting, *ei)
 }
 
@@ -425,6 +452,28 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 			c.AppendElementCommand(m.elKey, model.IntentCompleting, *ei)
 		}
 	}
+	// A message also instantiates every deployed process with a matching message
+	// start event, seeded with the payload (ADR-0035). Matching is by name today;
+	// the message's correlation key is not evaluated for start events yet. This
+	// runs after the subscription scan so a single message can both correlate a
+	// waiting instance and start new ones, all recovered from the events the
+	// created instances emit.
+	for _, defKey := range c.p.messageStarts[name] {
+		c.AppendCreateInstanceCommand(defKey, vars)
+	}
+}
+
+// instanceVariables reads all of an instance's variables into a fresh slice, to
+// carry as a message payload. Unlike hot-path token movement this deliberately
+// allocates — a message payload is runtime data, not a per-command cost. Returns
+// nil if the instance has no variables.
+func instanceVariables(c *ProcessingContext, scope uint64) []model.VariableValue {
+	var vars []model.VariableValue
+	c.p.fail(c.tx.VariablesOfScope(scope, func(v *model.VariableValue) error {
+		vars = append(vars, *v)
+		return nil
+	}))
+	return vars
 }
 
 // exclusiveGatewayBehavior: a data-based XOR split. It takes exactly one outgoing
@@ -601,6 +650,33 @@ func (businessRuleTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei
 }
 
 func (businessRuleTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// connectorTaskBehavior: delegate to a server-registered connector (e.g. a clio
+// event store). The engine treats it exactly like a service task — create a job
+// on activation and wait — but the job carries the connector's reserved job type,
+// so the in-process connector worker (package clio) picks it up, performs the
+// outbound call off the hot path after fsync, and completes it. Keeping the call
+// on the worker side, not in a behavior, keeps the processor allocation-free (I1)
+// and the connector's network I/O out of applyToState (I4). See ADR-0036.
+type connectorTaskBehavior struct{}
+
+func (connectorTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.ConnectorTask(cp.Node(ei.ElementId).Detail)
+	jobKey := c.NewKey()
+	c.AppendJobEvent(jobKey, model.IntentJobCreated, model.JobValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		JobType:            detail.JobType,
+		Retries:            detail.Retries,
+	})
+	c.NotifyJobAvailable(detail.JobType)
+	// Stays Activated until the connector worker completes the job.
+}
+
+func (connectorTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	completeAndTakeFlows(c, key, ei)
 }
 

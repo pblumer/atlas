@@ -179,6 +179,22 @@ func (c *ProcessingContext) AppendElementCommand(key uint64, intent model.Intent
 	c.appendCommand(key, model.VTElementInstance, intent, inflightValue{element: v})
 }
 
+// AppendCreateInstanceCommand schedules creation of a new instance of defKey for
+// a later batch, seeded with vars (each re-scoped to the new instance when it is
+// created). A correlating message uses it to instantiate a message-start process
+// (ADR-0035). Deferring to a followup keeps instance creation on the same
+// command path as an API-submitted create, so its events — and thus recovery —
+// are identical however the create was triggered.
+func (c *ProcessingContext) AppendCreateInstanceCommand(defKey uint64, vars []model.VariableValue) {
+	c.p.followups = append(c.p.followups, Command{
+		ValueType: model.VTProcessInstance,
+		Intent:    model.IntentActivating,
+		Value:     inflightValue{process: model.ProcessInstanceValue{ProcessDefKey: defKey}},
+		StartVars: vars,
+		SourcePos: c.lastPos,
+	})
+}
+
 // NotifyJobAvailable registers a post-fsync notification that a job of the given
 // type is available (invariant I2: runs after the batch is durable).
 func (c *ProcessingContext) NotifyJobAvailable(jobType int32) {

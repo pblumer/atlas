@@ -12,6 +12,12 @@ import (
 // an external worker subscribes to a service task's job type.
 const DMNJobType = "io.atlas.dmn"
 
+// ClioWriteJobType is the reserved job type a clio "write-events" connector task
+// carries. The in-process clio connector worker subscribes to it to append the
+// event to the configured clio instance (ADR-0036), the same way the DMN worker
+// subscribes to DMNJobType.
+const ClioWriteJobType = "io.atlas.clio.write"
+
 // Builder constructs a CompiledProcess programmatically. It stands in for the
 // XML parse/resolve/linearize pipeline until that front end exists: callers add
 // nodes and flows, and Build linearizes them into the immutable form (assigning
@@ -27,8 +33,10 @@ type Builder struct {
 	scriptTasks       []ScriptTaskDetail
 	businessRuleTasks []BusinessRuleTaskDetail
 	timerCatches      []TimerCatchDetail
+	connectorTasks    []ConnectorTaskDetail
 	messageCatches    []MessageDetail
 	messageThrows     []MessageDetail
+	messageStarts     []MessageDetail
 	elementIds        []int32 // interned source BPMN id per node, -1 if unset
 
 	interner map[string]int32
@@ -82,6 +90,18 @@ func (b *Builder) SetElementBpmnId(nodeID int32, bpmnID string) {
 // AddStartEvent adds a none start event and returns its element id.
 func (b *Builder) AddStartEvent() int32 { return b.addNode(TypeStartEvent, -1) }
 
+// AddMessageStartEvent adds a message start event and returns its element id. It
+// is a process entry point like a none start event — at runtime it simply flows
+// straight on — but the engine also registers it at deploy time so a correlating
+// message (a throw event or an API publish of messageName) instantiates a fresh
+// process instance seeded with the message's payload (ADR-0035). correlationKey
+// is compiled for future use; message-start matching is by name today.
+func (b *Builder) AddMessageStartEvent(messageName string, correlationKey *expr.Compiled) int32 {
+	detail := int32(len(b.messageStarts))
+	b.messageStarts = append(b.messageStarts, MessageDetail{MessageName: messageName, CorrelationKey: correlationKey})
+	return b.addNode(TypeMessageStartEvent, detail)
+}
+
 // AddEndEvent adds a none end event and returns its element id.
 func (b *Builder) AddEndEvent() int32 { return b.addNode(TypeEndEvent, -1) }
 
@@ -126,6 +146,23 @@ func (b *Builder) AddBusinessRuleTask(decisionId string, inputs map[string]any, 
 		Retries:    retries,
 	})
 	return b.addNode(TypeBusinessRuleTask, detail), nil
+}
+
+// AddClioWriteTask adds a clio "write-events" connector task and returns its
+// element id. Like a service task it creates a job on activation and waits; the
+// job carries the reserved ClioWriteJobType so the in-process clio worker picks
+// it up, appends an event to the named connector's clio instance under subject
+// with the given event type, and completes the job (ADR-0036).
+func (b *Builder) AddClioWriteTask(connector, subject, eventType string, retries int32) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:   b.intern(ClioWriteJobType),
+		Connector: b.intern(connector),
+		Subject:   b.intern(subject),
+		EventType: b.intern(eventType),
+		Retries:   retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
 }
 
 // AddTask adds an undefined/manual task — one with no execution semantics — and
@@ -236,7 +273,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 
 	var startEvents []int32
 	for i := range b.nodes {
-		if b.nodes[i].Type == TypeStartEvent {
+		if isStartEvent(b.nodes[i].Type) {
 			startEvents = append(startEvents, b.nodes[i].ElementId)
 		}
 	}
@@ -252,8 +289,10 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		scriptTasks:       b.scriptTasks,
 		businessRuleTasks: b.businessRuleTasks,
 		timerCatches:      b.timerCatches,
+		connectorTasks:    b.connectorTasks,
 		messageCatches:    b.messageCatches,
 		messageThrows:     b.messageThrows,
+		messageStarts:     b.messageStarts,
 		startEvents:       startEvents,
 		elementIds:        b.elementIds,
 		strings:           b.strings,
@@ -267,9 +306,16 @@ func (b *Builder) validNode(id int32) bool {
 // hasStartEvent reports whether any start event has been added.
 func (b *Builder) hasStartEvent() bool {
 	for i := range b.nodes {
-		if b.nodes[i].Type == TypeStartEvent {
+		if isStartEvent(b.nodes[i].Type) {
 			return true
 		}
 	}
 	return false
+}
+
+// isStartEvent reports whether a node type is a process entry point. A message
+// start event is one too: a correlating message instantiates the process, and a
+// plain create then activates it like a none start (ADR-0035).
+func isStartEvent(t BpmnType) bool {
+	return t == TypeStartEvent || t == TypeMessageStartEvent
 }
