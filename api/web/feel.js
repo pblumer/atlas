@@ -479,8 +479,51 @@ export function attachFeelEditor(textarea, opts = {}) {
     textarea.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
+  // ---- live validation ----
+  // opts.validate(expr) -> Promise<{ok, error}> compiles the expression against
+  // the real engine (the server's FEEL compiler), so a syntax/type error shows
+  // in the field as you type instead of only at deploy. Debounced, and guarded
+  // by a sequence number so a slow response can't overwrite a newer edit.
+  const validate = typeof opts.validate === "function" ? opts.validate : null;
+  let statusEl = null;
+  let validateTimer = null;
+  let validateSeq = 0;
+  let destroyed = false;
+  if (validate) {
+    statusEl = document.createElement("div");
+    statusEl.className = "feel-status";
+    statusEl.setAttribute("role", "alert");
+    statusEl.hidden = true;
+    wrap.after(statusEl);
+  }
+  function showValid() {
+    wrap.classList.remove("invalid");
+    if (statusEl) { statusEl.hidden = true; statusEl.textContent = ""; }
+  }
+  function showInvalid(msg) {
+    wrap.classList.add("invalid");
+    if (statusEl) { statusEl.hidden = false; statusEl.textContent = msg; }
+  }
+  async function runValidate() {
+    if (!validate) return;
+    const src = textarea.value;
+    const seq = ++validateSeq;
+    if (src.trim() === "") { showValid(); return; } // empty field = no expression
+    let res;
+    try { res = await validate(src); }
+    catch { return; } // transient/network: don't flag a false error
+    if (destroyed || seq !== validateSeq) return; // superseded by a newer edit
+    if (res && res.ok === false) showInvalid(res.error || "invalid FEEL expression");
+    else showValid();
+  }
+  function scheduleValidate() {
+    if (!validate) return;
+    clearTimeout(validateTimer);
+    validateTimer = setTimeout(runValidate, 400);
+  }
+
   // ---- event wiring ----
-  const onInput = () => { renderHighlight(); openCompletion(false); };
+  const onInput = () => { renderHighlight(); openCompletion(false); scheduleValidate(); };
   const onScroll = () => { pre.scrollTop = textarea.scrollTop; pre.scrollLeft = textarea.scrollLeft; };
   const onBlur = () => { setTimeout(closePopup, 120); }; // allow click-to-accept
 
@@ -511,15 +554,19 @@ export function attachFeelEditor(textarea, opts = {}) {
   textarea.addEventListener("blur", onBlur);
 
   renderHighlight();
+  runValidate(); // flag a pre-existing invalid expression immediately
 
   return {
     destroy() {
+      destroyed = true;
+      clearTimeout(validateTimer);
       textarea.removeEventListener("input", onInput);
       textarea.removeEventListener("scroll", onScroll);
       textarea.removeEventListener("keydown", onKeydown);
       textarea.removeEventListener("blur", onBlur);
       textarea.classList.remove("feel-input");
       delete textarea.dataset.feelOn;
+      if (statusEl) statusEl.remove();
       wrap.parentNode.insertBefore(textarea, wrap);
       wrap.remove();
     },

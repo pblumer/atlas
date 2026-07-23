@@ -9,15 +9,21 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 )
 
 // maxXMLBytes caps a deployment body. BPMN models are small; this is a sanity
 // bound, not a tuning knob.
 const maxXMLBytes = 4 << 20 // 4 MiB
+
+// maxFeelBytes caps a FEEL validation body. Expressions are tiny; this is a
+// sanity bound.
+const maxFeelBytes = 64 << 10 // 64 KiB
 
 // deployedProcess is one process registered by a deployment. A collaboration
 // deploys several (one per executable pool); a plain model deploys one.
@@ -110,6 +116,43 @@ type cancelInstanceResp struct {
 // handleInfo reports product/version metadata for the UI shell.
 func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, infoResp{Product: "Atlas", Version: Version})
+}
+
+type validateFeelReq struct {
+	Expression string `json:"expression"`
+}
+
+type validateFeelResp struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+}
+
+// handleValidateFeel compiles a FEEL expression with the same engine deployment
+// uses, so the Modeler can flag syntax/type errors as they're typed instead of
+// only at deploy time. Unknown identifiers are allowed (they're process
+// variables, discovered via CompileAuto) — only genuine parse/type errors fail.
+//
+// It is a pure compile: no state is read or written, so it runs off the
+// single-writer loop (no s.do) and never touches the processor hot path — a
+// read-only edit-time check, consistent with "compile, don't interpret"
+// (ADR-0008).
+func (s *Server) handleValidateFeel(w http.ResponseWriter, r *http.Request) {
+	var req validateFeelReq
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxFeelBytes)).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+		return
+	}
+	// A blank expression is a no-op success: an empty field simply carries no
+	// condition/script, which the editor treats as unset rather than an error.
+	if strings.TrimSpace(req.Expression) == "" {
+		writeJSON(w, http.StatusOK, validateFeelResp{OK: true})
+		return
+	}
+	if _, err := expr.CompileAuto(req.Expression); err != nil {
+		writeJSON(w, http.StatusOK, validateFeelResp{OK: false, Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, validateFeelResp{OK: true})
 }
 
 // handleDeploy parses a BPMN XML body, compiles and deploys every executable

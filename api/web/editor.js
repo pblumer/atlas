@@ -166,7 +166,7 @@ export async function mountEditor(root, { api, toast, key, draftId }) {
     toast("could not open diagram: " + e.message, "err");
   }
 
-  const rerender = wireProperties(root, modeler);
+  const rerender = wireProperties(root, modeler, api);
   wireTabs(root, rerender);
   wireActions(root, modeler, api, toast);
 }
@@ -208,12 +208,13 @@ function collectFeelVariables(modeler) {
 }
 
 // enhanceFeel turns the FEEL <textarea> matched by `sel` into a syntax-highlighted
-// editor with completions, and drops a one-line hint beneath it. No-op if the
-// field isn't present for the current selection.
-function enhanceFeel(body, sel, vars) {
+// editor with completions, live validation, and a one-line hint beneath it.
+// No-op if the field isn't present for the current selection. `validate` is an
+// async expr→{ok,error} function (the server's FEEL compiler) or null.
+function enhanceFeel(body, sel, vars, validate) {
   const ta = body.querySelector(sel);
   if (!ta) return;
-  attachFeelEditor(ta, { variables: vars });
+  attachFeelEditor(ta, { variables: vars, validate });
   const hint = document.createElement("p");
   hint.className = "feel-hint";
   hint.innerHTML = "FEEL — <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions";
@@ -425,7 +426,7 @@ function wireStartVars(body, modeler) {
   });
 }
 
-function wireProperties(root, modeler) {
+function wireProperties(root, modeler, api) {
   const icon = root.querySelector("#p-icon");
   const typename = root.querySelector("#p-typename");
   const nameEl = root.querySelector("#p-name");
@@ -662,13 +663,15 @@ function wireProperties(root, modeler) {
     }
 
     // Upgrade every FEEL field in this panel into a code editor (highlighting +
-    // completion). The textareas keep their identity, so the change-to-save
-    // handlers wired above are untouched.
+    // completion + live validation). The textareas keep their identity, so the
+    // change-to-save handlers wired above are untouched. Validation compiles the
+    // expression against the same engine deploy uses (POST /feel/validate).
     if (tab === "implement") {
       const feelVars = collectFeelVariables(modeler);
-      enhanceFeel(body, "#f-expr", feelVars);
-      enhanceFeel(body, "#f-cond", feelVars);
-      enhanceFeel(body, "#f-corrkey", feelVars);
+      const validate = api ? (expression) => api("POST", "/api/v1/feel/validate", { expression }) : null;
+      enhanceFeel(body, "#f-expr", feelVars, validate);
+      enhanceFeel(body, "#f-cond", feelVars, validate);
+      enhanceFeel(body, "#f-corrkey", feelVars, validate);
     }
   }
 
