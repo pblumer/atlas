@@ -174,7 +174,9 @@ func (v *ProcessInstanceValue) decode(src []byte) error {
 	return nil
 }
 
-// VarKind tags the scalar subset of FEEL values Atlas persists for a variable.
+// VarKind tags the FEEL values Atlas persists for a variable: the scalars, plus
+// VarJSON for the structured values (objects and arrays) an author or a script
+// produces.
 type VarKind uint8
 
 const (
@@ -182,6 +184,11 @@ const (
 	VarBool                  // Bool is meaningful
 	VarNumber                // Text is the canonical decimal string
 	VarString                // Text is the string contents
+	// VarJSON is a structured value (object or array). Text is its canonical
+	// JSON encoding; it is re-parsed into a FEEL context/list when bound into an
+	// evaluation. Kept as text so the durable record format is unchanged — a new
+	// kind byte over the same length-prefixed Text (ADR-0009, ADR-0037).
+	VarJSON
 )
 
 // VariableValue is a process variable: a named value owned by a scope (the

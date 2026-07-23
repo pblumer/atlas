@@ -556,6 +556,65 @@ func TestScriptTaskRecovers(t *testing.T) {
 	}
 }
 
+// TestStructuredVariableRoundTripAndRecovers drives a structured (JSON) variable
+// through the whole cycle: a seeded object/array start variable is read member-wise
+// by a script task (FromStored on KindJSON), the script produces an object result
+// stored as VarJSON (Classify on the write path), and replaying the log rebuilds
+// the identical VarJSON — proving structured variables satisfy the recovery
+// property (invariants I4, I6; ADR-0037).
+func TestStructuredVariableRoundTripAndRecovers(t *testing.T) {
+	dir := t.TempDir()
+	// items is a seeded list; the script sums two members and wraps the total in
+	// an object, so both the read (list input) and write (object output) traverse
+	// the JSON bridge. FEEL lists are 1-indexed.
+	cp := scriptProcess(t, `{sum: items[1] + items[2]}`, "agg")
+	clock := &manualClock{}
+
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clock)
+	p1.Deploy(cp)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.CreateInstance(cp.Key, model.VariableValue{Name: "items", Kind: model.VarJSON, Text: "[10,32]"})
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	scope := model.NewKey(1, 1)
+	live := readVar(t, h1.store, scope, "agg")
+	if live == nil || live.Kind != model.VarJSON || live.Text != `{"sum":42}` {
+		t.Fatalf("live agg = %+v, want VarJSON {\"sum\":42}", live)
+	}
+	h1.close(t)
+
+	// Replay the same log into a fresh, empty store.
+	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open 2: %v", err)
+	}
+	store2, err := state.Open(filepath.Join(dir, "state2"))
+	if err != nil {
+		t.Fatalf("state.Open 2: %v", err)
+	}
+	defer func() {
+		if err := store2.Close(); err != nil {
+			t.Errorf("store2.Close: %v", err)
+		}
+		if err := log2.Close(); err != nil {
+			t.Errorf("log2.Close: %v", err)
+		}
+	}()
+	p2 := engine.New(1, log2, store2, clock)
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2 (replay): %v", err)
+	}
+	replayed := readVar(t, store2, scope, "agg")
+	if replayed == nil || replayed.Kind != live.Kind || replayed.Text != live.Text {
+		t.Fatalf("replayed agg = %+v, want %+v", replayed, live)
+	}
+}
+
 // TestRecoverAcrossRestart is the Milestone 0 goal: run until the instance waits
 // on its job, simulate a crash (close and reopen the log and store), recover
 // state by replaying the log, then complete the job and finish the instance.

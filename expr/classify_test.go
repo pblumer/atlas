@@ -31,9 +31,9 @@ func TestClassifyScalars(t *testing.T) {
 		{"bool-false", expr.Bool(false), expr.KindBool, false, ""},
 		{"number", expr.Number(42), expr.KindNumber, false, "42"},
 		{"string", expr.String("hi"), expr.KindString, false, "hi"},
-		// A list is non-scalar: it falls through to the default arm and is stored
-		// as its canonical FEEL text under KindString.
-		{"list", listVal, expr.KindString, false, listVal.String()},
+		// A list is structured: it is stored under KindJSON as canonical JSON, so
+		// it round-trips back into a FEEL list rather than a lossy string.
+		{"list", listVal, expr.KindJSON, false, "[1,2,3]"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			kind, b, text := expr.Classify(tc.v)
@@ -76,5 +76,32 @@ func TestBoolConstructor(t *testing.T) {
 func TestFromStoredUnparseableNumber(t *testing.T) {
 	if got := expr.FromStored(expr.KindNumber, false, "not-a-number").String(); got != "null" {
 		t.Errorf("FromStored(number,%q) = %q, want null", "not-a-number", got)
+	}
+}
+
+// TestClassifyTemporal covers the Classify default branch — a FEEL temporal (date,
+// time, duration) is not a list/context, so it falls through to the lossy string path.
+func TestClassifyTemporal(t *testing.T) {
+	c, err := expr.Compile(`date("2024-01-15")`)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	v, err := c.Eval(nil)
+	if err != nil {
+		t.Fatalf("Eval: %v", err)
+	}
+	kind, b, text := expr.Classify(v)
+	if kind != expr.KindString || b {
+		t.Errorf("kind = (%d,%v), want (KindString,false)", kind, b)
+	}
+	if text == "" {
+		t.Error("expected non-empty text for temporal")
+	}
+}
+
+func TestFromStoredUnknownKind(t *testing.T) {
+	got := expr.FromStored(99, false, "anything")
+	if got.String() != "null" {
+		t.Errorf("FromStored(99,...) = %q, want null", got.String())
 	}
 }

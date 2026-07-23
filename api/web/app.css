@@ -310,6 +310,50 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .feel-test-out.ok { color: var(--ok); }
 .feel-test-out.err { color: var(--danger); }
 
+/* ---------- JSON structure editor (json-editor.js) ---------- */
+.json-editor {
+  position: relative; border: 1px solid var(--border-strong); border-radius: 6px;
+  background: var(--surface); margin: 4px 0 0;
+}
+.json-editor:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.json-editor .json-input,
+.json-editor .json-highlight {
+  font: 12px/1.4 ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  padding: 8px 10px; margin: 0; border: 0; background: transparent; white-space: pre-wrap;
+  word-wrap: break-word; overflow-wrap: break-word;
+}
+.json-editor .json-input {
+  position: relative; z-index: 1; display: block; width: 100%; resize: vertical;
+  color: transparent; caret-color: var(--text); outline: none; -webkit-text-fill-color: transparent;
+}
+.json-editor .json-highlight {
+  position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 0;
+}
+.json-editor .json-highlight code { font: inherit; }
+.json-editor.invalid { border-color: var(--danger); }
+.json-editor.invalid:focus-within { border-color: var(--danger); box-shadow: 0 0 0 2px #fdecea; }
+.json-status { font-size: 11px; color: var(--danger); margin: 4px 0 0; white-space: pre-wrap; word-break: break-word; }
+
+/* Compact mode: one-line height, expands on focus. */
+.json-editor.compact .json-input { resize: none; min-height: 34px; height: 34px; transition: height 0.15s; }
+.json-editor.compact.expanded .json-input { height: auto; min-height: 80px; }
+
+/* Toolbar floats in the top-right corner. */
+.json-toolbar {
+  position: absolute; top: 4px; right: 4px; z-index: 2;
+  display: flex; gap: 2px;
+}
+.json-toolbar .icon-btn { width: 24px; height: 24px; font-size: 11px; opacity: 0.5; }
+.json-toolbar .icon-btn:hover { opacity: 1; }
+
+/* JSON token colours — a light palette consistent with the FEEL editor. */
+.jtok-key      { color: #953800; }
+.jtok-string   { color: #0a3069; }
+.jtok-number   { color: #0550ae; }
+.jtok-literal  { color: #0550ae; font-weight: 600; }
+.jtok-punct    { color: #57606a; }
+.jtok-error    { color: var(--danger); text-decoration: wavy underline; }
+
 /* ---------- Start-variable declaration editor (Process panel) ---------- */
 #sv-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
 .sv-row { display: flex; align-items: center; gap: 6px; }
@@ -319,6 +363,9 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .sv-req input { width: auto; }
 .sv-del { flex: 0 0 auto; width: 26px; height: 26px; font-size: 12px; }
 .sv-del:hover { color: var(--danger); background: #fdecea; }
+/* JSON-typed declaration rows stack vertically so the editor has room. */
+.sv-row-json { flex-wrap: wrap; }
+.sv-row-json .sv-json-default { flex: 1 1 100%; font: 12px/1.4 ui-monospace, monospace; padding: 6px 8px; resize: vertical; min-height: 48px; }
 /* Required marker shared by the declaration editor and the typed Deploy form. */
 .req-star { color: var(--danger); font-weight: 700; }
 

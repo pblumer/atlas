@@ -3,6 +3,7 @@
 // wiring are ours. Assets load lazily so non-editor pages stay light.
 
 import { attachFeelEditor } from "./feel.js";
+import { attachJSONEditor } from "./json-editor.js";
 
 const BPMN_CSS = [
   "vendor/bpmn/assets/diagram-js.css",
@@ -518,7 +519,7 @@ function isCollaborationRoot(modeler) {
 
 // The scalar types a declared start variable can take, matching what the server
 // accepts (parseStartVariables) and what the typed Deploy form coerces to.
-const START_VAR_TYPES = ["string", "number", "boolean"];
+const START_VAR_TYPES = ["string", "number", "boolean", "json"];
 
 // readStartVariables returns the start variables a process declares via its
 // atlas:StartForm extension element: [{name, type, default, required}]. Empty
@@ -565,14 +566,19 @@ function writeStartVariables(modeler, list) {
 }
 
 // startVarRowHTML renders one editable declaration row. Values are escaped for
-// the attributes; the type <select> marks the current option.
+// the attributes; the type <select> marks the current option. For json-typed
+// variables, the default field is a textarea (upgraded to a JSON editor after
+// the row is inserted into the DOM by wireStartVars).
 function startVarRowHTML(v) {
   const opts = START_VAR_TYPES
     .map((t) => `<option value="${t}"${t === v.type ? " selected" : ""}>${t}</option>`).join("");
-  return `<div class="sv-row">
-    <input type="text" class="sv-name" value="${esc(v.name)}" placeholder="amount" aria-label="Variable name"/>
+  const defaultField = v.type === "json"
+    ? `<textarea class="sv-default sv-json-default" rows="2" placeholder='{"key": "value"}' aria-label="Default value (JSON)">${esc(v.default)}</textarea>`
+    : `<input type="text" class="sv-default" value="${esc(v.default)}" placeholder="default" aria-label="Default value"/>`;
+  return `<div class="sv-row${v.type === "json" ? " sv-row-json" : ""}">
+    <input type="text" class="sv-name" value="${esc(v.name)}" placeholder="customer" aria-label="Variable name"/>
     <select class="sv-type" aria-label="Type">${opts}</select>
-    <input type="text" class="sv-default" value="${esc(v.default)}" placeholder="default" aria-label="Default value"/>
+    ${defaultField}
     <label class="sv-req" title="Required"><input type="checkbox" class="sv-required"${v.required ? " checked" : ""}/> req</label>
     <button type="button" class="sv-del icon-btn" title="Remove" aria-label="Remove variable">✕</button>
   </div>`;
@@ -588,6 +594,19 @@ function wireStartVars(body, modeler) {
   const addBtn = body.querySelector("#sv-add");
   if (!listEl || !addBtn) return;
 
+  const editors = new Map(); // row DOM node → attachJSONEditor handle
+
+  // attachEditors upgrades any json-typed default textareas to JSON editors.
+  const attachEditors = () => {
+    for (const row of listEl.querySelectorAll(".sv-row-json")) {
+      const ta = row.querySelector(".sv-json-default");
+      if (ta && !editors.has(row)) {
+        const handle = attachJSONEditor(ta, { compact: true, onChange: persist });
+        if (handle) editors.set(row, handle);
+      }
+    }
+  };
+
   const collect = () => [...listEl.querySelectorAll(".sv-row")].map((row) => ({
     name: row.querySelector(".sv-name").value,
     type: row.querySelector(".sv-type").value,
@@ -596,15 +615,41 @@ function wireStartVars(body, modeler) {
   }));
   const persist = () => { try { writeStartVariables(modeler, collect()); } catch { /* stale */ } };
 
-  listEl.addEventListener("change", persist);
+  listEl.addEventListener("change", (e) => {
+    // When the type dropdown changes to or from "json", rebuild the row so the
+    // default field switches between <input> and the JSON editor.
+    const sel = e.target.closest(".sv-type");
+    if (sel) {
+      const row = sel.closest(".sv-row");
+      const data = {
+        name: row.querySelector(".sv-name").value,
+        type: sel.value,
+        default: sel.value === "json" ? "" : row.querySelector(".sv-default").value,
+        required: row.querySelector(".sv-required").checked,
+      };
+      // Destroy any existing JSON editor for this row.
+      if (editors.has(row)) { editors.get(row).destroy(); editors.delete(row); }
+      row.outerHTML = startVarRowHTML(data);
+      attachEditors();
+    }
+    persist();
+  });
   listEl.addEventListener("click", (e) => {
     const del = e.target.closest(".sv-del");
-    if (del) { del.closest(".sv-row").remove(); persist(); }
+    if (del) {
+      const row = del.closest(".sv-row");
+      if (editors.has(row)) { editors.get(row).destroy(); editors.delete(row); }
+      row.remove();
+      persist();
+    }
   });
   addBtn.addEventListener("click", () => {
     listEl.insertAdjacentHTML("beforeend", startVarRowHTML({ name: "", type: "string", default: "", required: false }));
     listEl.querySelector(".sv-row:last-child .sv-name").focus();
   });
+
+  // Attach editors for any pre-existing json-typed rows.
+  attachEditors();
 }
 
 function wireProperties(root, modeler, api) {
@@ -907,10 +952,11 @@ function wireProperties(root, modeler, api) {
 
 // parseStartVariables turns a start-variables textarea value into an instance
 // request body, validating client-side so an obvious typo fails before a
-// round-trip. Empty input means no variables. The server accepts only scalar
-// values (parseStartVariables on the server side), so objects/arrays are
-// rejected here too. Throws Error(message) on invalid input. Shared by the
-// Modeler's Deploy & run and the Live view's Start instance.
+// round-trip. Empty input means no variables. Values can be scalars (number,
+// string, boolean, null) or structured (objects, arrays) — the server stores
+// objects/arrays as canonical JSON under VarJSON (ADR-0037). Throws
+// Error(message) on invalid input. Shared by the Modeler's Deploy & run and the
+// Live view's Start instance.
 export function parseStartVariables(raw) {
   const s = (raw || "").trim();
   if (!s) return {};
@@ -918,21 +964,16 @@ export function parseStartVariables(raw) {
   try { obj = JSON.parse(s); }
   catch (e) { throw new Error("not valid JSON: " + e.message); }
   if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
-    throw new Error('expected a JSON object, e.g. { "amount": 100 }');
-  }
-  for (const [name, v] of Object.entries(obj)) {
-    const t = typeof v;
-    if (v !== null && t !== "number" && t !== "string" && t !== "boolean") {
-      throw new Error(`variable "${name}": only scalar values (number, string, boolean, null)`);
-    }
+    throw new Error('expected a JSON object, e.g. { "amount": 100, "customer": { "name": "acme" } }');
   }
   return { variables: obj };
 }
 
 // typedDeployFieldHTML renders one typed input for a declared start variable,
 // prefilled with its default. A boolean is a true/false/— select; a number an
-// input[type=number]; a string a text input. Required fields carry data-required
-// so readTypedDeployBody can enforce them.
+// input[type=number]; a string a text input; a json a textarea upgraded to a
+// JSON editor after insertion. Required fields carry data-required so
+// readTypedDeployBody can enforce them.
 function typedDeployFieldHTML(v) {
   const req = v.required ? ' <span class="req-star" title="required">*</span>' : "";
   const dr = v.required ? ' data-required="1"' : "";
@@ -947,6 +988,10 @@ function typedDeployFieldHTML(v) {
     </select>`;
   } else if (v.type === "number") {
     input = `<input type="number" step="any" class="dv-field" data-name="${esc(v.name)}" data-type="number"${dr} value="${esc(v.default)}" placeholder="0"/>`;
+  } else if (v.type === "json") {
+    // A textarea, upgraded to a JSON editor by wireDeployJSONEditors() after
+    // the panel is inserted into the DOM.
+    input = `<textarea class="dv-field dv-json" data-name="${esc(v.name)}" data-type="json"${dr} rows="3" spellcheck="false" placeholder='{ "key": "value" }'>${esc(v.default)}</textarea>`;
   } else {
     input = `<input type="text" class="dv-field" data-name="${esc(v.name)}" data-type="string"${dr} value="${esc(v.default)}"/>`;
   }
@@ -960,8 +1005,8 @@ function typedDeployFieldHTML(v) {
 function startVarsFormHTML(declared) {
   if (!declared.length) {
     return `<label class="field">
-      <span>Start variables — optional. A JSON object of scalars (number, string, boolean, null) the instance starts with. Leave empty to start with none.</span>
-      <textarea class="sv-json" rows="3" spellcheck="false" placeholder='{ "amount": 100, "customer": "acme", "priority": true }'></textarea>
+      <span>Start variables — optional. A JSON object the instance starts with. Scalar and structured values (objects, arrays) are supported. Leave empty to start with none.</span>
+      <textarea class="sv-json" rows="3" spellcheck="false" placeholder='{ "amount": 100, "customer": { "name": "acme", "tags": ["a", "b"] } }'></textarea>
     </label>`;
   }
   return `<p class="muted" style="font-size:12px;margin:0 0 8px">Start variables for this run — declared on the process. Required are marked <span class="req-star">*</span>; leave an optional one blank to omit it.</p>`
@@ -978,14 +1023,14 @@ function readStartFormBody(bodyEl) {
 
 // readTypedDeployBody turns the typed Deploy form into an instance request body,
 // coercing each field to its declared type and enforcing required fields. Empty
-// optional fields are omitted. Throws Error(message) on a bad number or a missing
-// required value.
+// optional fields are omitted. Throws Error(message) on a bad number, invalid
+// JSON, or a missing required value.
 function readTypedDeployBody(bodyEl) {
   const vars = {};
   const missing = [];
   bodyEl.querySelectorAll(".dv-field").forEach((el) => {
     const { name, type } = el.dataset;
-    const raw = el.value;
+    const raw = el.value.trim();
     if (raw === "") { if (el.dataset.required === "1") missing.push(name); return; }
     if (type === "number") {
       const n = Number(raw);
@@ -993,12 +1038,28 @@ function readTypedDeployBody(bodyEl) {
       vars[name] = n;
     } else if (type === "boolean") {
       vars[name] = raw === "true";
+    } else if (type === "json") {
+      try {
+        vars[name] = JSON.parse(raw);
+      } catch (e) {
+        throw new Error(`"${name}": invalid JSON — ${e.message}`);
+      }
     } else {
       vars[name] = raw;
     }
   });
   if (missing.length) throw new Error(`required: ${missing.join(", ")}`);
   return Object.keys(vars).length ? { variables: vars } : {};
+}
+
+// wireDeployJSONEditors upgrades every json-typed textarea (.dv-json) and the
+// free-form start-variables textarea (.sv-json) in the given container to a
+// professional JSON editor. Called after startVarsFormHTML inserts the panel
+// HTML, so the DOM elements exist.
+function wireDeployJSONEditors(container) {
+  for (const ta of container.querySelectorAll(".dv-json, .sv-json")) {
+    attachJSONEditor(ta, { rows: 3 });
+  }
 }
 
 function wireActions(root, modeler, api, toast) {
@@ -1048,6 +1109,7 @@ function wireActions(root, modeler, api, toast) {
   const openDeploy = () => {
     const bo = rootProcess(modeler);
     dbody.innerHTML = startVarsFormHTML(bo ? readStartVariables(bo) : []);
+    wireDeployJSONEditors(dbody);
     dpanel.hidden = false;
     derr.textContent = "";
     const first = dbody.querySelector(".sv-json, .dv-field");
@@ -1223,9 +1285,17 @@ export async function mountLive(root, { api, toast, key }) {
       ).join("");
   }
 
+  // JSON variable values are shown with a collapsible preview (first 60 chars)
+  // instead of blowing out the chip; hover to see the full value.
   const varChips = (list) => !list || !list.length
     ? '<span class="muted">No variables.</span>'
-    : list.map((v) => `<span class="chip">${esc(v.name)}=${esc(v.value)}</span>`).join(" ");
+    : list.map((v) => {
+        if (v.kind === "json") {
+          const preview = v.value.length > 60 ? v.value.slice(0, 57) + "..." : v.value;
+          return `<span class="chip" title="${esc(v.value)}">${esc(v.name)}=<code>${esc(preview)}</code></span>`;
+        }
+        return `<span class="chip">${esc(v.name)}=${esc(v.value)}</span>`;
+      }).join(" ");
   // completedAt is unix nanoseconds; Date wants milliseconds.
   const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "";
 
@@ -1344,6 +1414,7 @@ export async function mountLive(root, { api, toast, key }) {
   const openPanel = () => {
     const bo = rootProcess(viewer);
     startBody.innerHTML = startVarsFormHTML(bo ? readStartVariables(bo) : []);
+    wireDeployJSONEditors(startBody);
     panel.hidden = false;
     errEl.textContent = "";
     const first = startBody.querySelector(".sv-json, .dv-field");

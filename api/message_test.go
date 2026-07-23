@@ -107,8 +107,8 @@ func TestPublishMessageRequiresName(t *testing.T) {
 	if code, _ := doReq(t, ts, http.MethodPost, "/api/v1/messages", `not json`, "application/json"); code != http.StatusBadRequest {
 		t.Fatalf("publish invalid json: status=%d, want 400", code)
 	}
-	// A non-scalar payload variable is rejected by parseStartVariables.
-	if code, _ := doReq(t, ts, http.MethodPost, "/api/v1/messages", `{"name":"go","variables":{"x":[1,2]}}`, "application/json"); code != http.StatusBadRequest {
-		t.Fatalf("publish with non-scalar variable: status=%d, want 400", code)
+	// A structured payload variable (object/array) is accepted — stored as JSON.
+	if code, _ := doReq(t, ts, http.MethodPost, "/api/v1/messages", `{"name":"go","variables":{"x":[1,2]}}`, "application/json"); code != http.StatusOK {
+		t.Fatalf("publish with structured variable: status=%d, want 200", code)
 	}
 }

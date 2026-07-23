@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	"github.com/pblumer/atlas/model"
@@ -42,6 +43,20 @@ func TestVarToAny(t *testing.T) {
 		if got := varToAny(&c.v); got != c.want {
 			t.Errorf("varToAny(%+v) = %#v, want %#v", c.v, got, c.want)
 		}
+	}
+}
+
+// TestVarToAnyJSON checks that a structured variable is re-parsed into a nested
+// object/array (with exact numbers) rather than left as a JSON-in-a-string blob,
+// and that unparseable stored JSON degrades to nil.
+func TestVarToAnyJSON(t *testing.T) {
+	got := varToAny(&model.VariableValue{Kind: model.VarJSON, Text: `{"id":7,"tags":["a","b"]}`})
+	want := map[string]any{"id": json.Number("7"), "tags": []any{"a", "b"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("varToAny(json) = %#v, want %#v", got, want)
+	}
+	if got := varToAny(&model.VariableValue{Kind: model.VarJSON, Text: "{bad"}); got != nil {
+		t.Errorf("varToAny(bad json) = %#v, want nil", got)
 	}
 }
 

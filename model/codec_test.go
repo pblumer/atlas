@@ -84,6 +84,17 @@ func TestRecordRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name:   "json variable",
+			vt:     VTVariable,
+			intent: IntentVariableCreated,
+			value: &VariableValue{
+				ScopeKey: NewKey(1, 5),
+				Name:     "customer",
+				Kind:     VarJSON,
+				Text:     `{"id":7,"name":"acme","tags":["a","b"]}`,
+			},
+		},
+		{
 			name:   "timer with infinite repetitions",
 			vt:     VTTimer,
 			intent: IntentTimerCreated,

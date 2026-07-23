@@ -100,7 +100,8 @@ func (c *Compiled) Eval(vars map[string]Value) (Value, error) {
 	return c.fn(c.env.NewScope(vars))
 }
 
-// ValueKind classifies a FEEL value into the scalar subset Atlas persists today.
+// ValueKind classifies a FEEL value into the subset Atlas persists: the scalars,
+// plus KindJSON for structured values (objects and lists).
 type ValueKind uint8
 
 const (
@@ -108,12 +109,16 @@ const (
 	KindBool
 	KindNumber
 	KindString
+	// KindJSON is a structured value (list or context). Its text is a canonical
+	// JSON encoding, re-parsed by FromStored into a FEEL list/context.
+	KindJSON
 )
 
 // Classify reduces a FEEL value to a storable (kind, bool, text) triple: text is
-// the number's canonical decimal string or the string's contents. Non-scalar
-// values (lists, contexts, temporals) are rendered to their canonical FEEL text
-// and stored as a string — lossy but stable — until Atlas models them natively.
+// the number's canonical decimal string or the string's contents. Lists and
+// contexts are stored under KindJSON as canonical JSON so they round-trip; other
+// non-scalars (temporals, ranges, functions) are rendered to their canonical FEEL
+// text and stored as a string — lossy but stable — until Atlas models them.
 func Classify(v Value) (ValueKind, bool, string) {
 	if value.IsNull(v) {
 		return KindNull, false, ""
@@ -125,14 +130,19 @@ func Classify(v Value) (ValueKind, bool, string) {
 		return KindNumber, false, v.String()
 	case value.KindString:
 		return KindString, false, v.String()
+	case value.KindList, value.KindContext:
+		if text, ok := ToJSON(v); ok {
+			return KindJSON, false, text
+		}
+		return KindString, false, v.String()
 	default:
 		return KindString, false, v.String()
 	}
 }
 
-// FromStored reconstructs a FEEL value from Atlas's stored scalar form — the
-// inverse of Classify — for binding variables into an evaluation. An unparseable
-// number becomes null.
+// FromStored reconstructs a FEEL value from Atlas's stored form — the inverse of
+// Classify — for binding variables into an evaluation. An unparseable number, or
+// unparseable stored JSON, becomes null.
 func FromStored(kind ValueKind, b bool, text string) Value {
 	switch kind {
 	case KindBool:
@@ -145,6 +155,12 @@ func FromStored(kind ValueKind, b bool, text string) Value {
 		return n
 	case KindString:
 		return value.Str(text)
+	case KindJSON:
+		v, err := ParseJSON(text)
+		if err != nil {
+			return value.Null
+		}
+		return v
 	default:
 		return value.Null
 	}

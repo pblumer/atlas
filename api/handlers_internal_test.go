@@ -8,7 +8,7 @@ import (
 
 // TestParseStartVariables covers every branch of parseStartVariables: the empty
 // and whitespace-only bodies, malformed JSON, an empty variables map, each
-// supported scalar kind, and an unsupported (non-scalar) value.
+// supported scalar kind, and structured object/array values stored as VarJSON.
 func TestParseStartVariables(t *testing.T) {
 	t.Run("empty body", func(t *testing.T) {
 		got, err := parseStartVariables(nil)
@@ -75,12 +75,34 @@ func TestParseStartVariables(t *testing.T) {
 		}
 	})
 
-	t.Run("unsupported non-scalar", func(t *testing.T) {
-		_, err := parseStartVariables([]byte(`{"variables": {"x": [1, 2, 3]}}`))
-		if err == nil {
-			t.Fatal("expected an error for a non-scalar value")
+	t.Run("array becomes json", func(t *testing.T) {
+		got, err := parseStartVariables([]byte(`{"variables": {"x": [1, 2, 3]}}`))
+		if err != nil || len(got) != 1 {
+			t.Fatalf("got (%+v, %v), want a single variable", got, err)
+		}
+		if got[0].Kind != model.VarJSON || got[0].Text != "[1,2,3]" {
+			t.Errorf("x = %+v, want VarJSON with canonical text [1,2,3]", got[0])
 		}
 	})
+
+	t.Run("object becomes canonical json", func(t *testing.T) {
+		// Keys given out of order must be stored sorted so the text is canonical
+		// (deterministic across replays).
+		got, err := parseStartVariables([]byte(`{"variables": {"c": {"b": 2, "a": 1}}}`))
+		if err != nil || len(got) != 1 {
+			t.Fatalf("got (%+v, %v), want a single variable", got, err)
+		}
+		if got[0].Kind != model.VarJSON || got[0].Text != `{"a":1,"b":2}` {
+			t.Errorf("c = %+v, want VarJSON with canonical text {\"a\":1,\"b\":2}", got[0])
+		}
+	})
+}
+
+func TestFeelBindingsUnsupportedType(t *testing.T) {
+	_, err := feelBindings(map[string]any{"x": complex(1, 2)})
+	if err == nil {
+		t.Fatal("expected error for unsupported type")
+	}
 }
 
 // TestToVariableView covers all four rendering branches, including the true and
@@ -96,6 +118,7 @@ func TestToVariableView(t *testing.T) {
 		{"bool false", model.VariableValue{Name: "b", Kind: model.VarBool, Bool: false}, "boolean", "false"},
 		{"number", model.VariableValue{Name: "n", Kind: model.VarNumber, Text: "42"}, "number", "42"},
 		{"string", model.VariableValue{Name: "s", Kind: model.VarString, Text: "hi"}, "string", "hi"},
+		{"json", model.VariableValue{Name: "c", Kind: model.VarJSON, Text: `{"a":1}`}, "json", `{"a":1}`},
 		{"null", model.VariableValue{Name: "z", Kind: model.VarNull}, "null", "null"},
 	}
 	for _, tc := range cases {
