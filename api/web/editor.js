@@ -256,18 +256,57 @@ function collectFeelVariables(modeler) {
 }
 
 // enhanceFeel turns the FEEL <textarea> matched by `sel` into a syntax-highlighted
-// editor with completions, live validation, and a one-line hint beneath it.
-// No-op if the field isn't present for the current selection. `validate` is an
-// async expr→{ok,error} function (the server's FEEL compiler) or null.
-function enhanceFeel(body, sel, vars, validate) {
+// editor with completions, live validation, a hint line, and a "Test" panel that
+// evaluates the expression against sample variables. No-op if the field isn't
+// present for the current selection. `validate` and `evaluate` are async server
+// calls (the FEEL compiler / evaluator) or null.
+function enhanceFeel(body, sel, vars, validate, evaluate) {
   const ta = body.querySelector(sel);
   if (!ta) return;
   attachFeelEditor(ta, { variables: vars, validate });
+  const wrap = ta.closest(".feel-editor");
+  if (!wrap) return;
+
   const hint = document.createElement("p");
   hint.className = "feel-hint";
   hint.innerHTML = "FEEL — <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions";
-  const wrap = ta.closest(".feel-editor");
-  if (wrap) wrap.after(hint);
+  if (evaluate) hint.innerHTML += ' &middot; <button type="button" class="linklike" data-feel-test>Test</button>';
+  wrap.after(hint);
+  if (!evaluate) return;
+
+  // The Test panel: sample variables (JSON) + Run, evaluating the current
+  // expression server-side and showing the typed result inline.
+  const panel = document.createElement("div");
+  panel.className = "feel-test";
+  panel.hidden = true;
+  panel.innerHTML = `
+    <textarea class="feel-test-vars" rows="2" spellcheck="false" placeholder='sample variables, e.g. { "amount": 100 }'></textarea>
+    <div class="feel-test-row">
+      <button type="button" class="btn neutral feel-test-run">Run</button>
+      <span class="feel-test-out" aria-live="polite"></span>
+    </div>`;
+  hint.after(panel);
+  const varsEl = panel.querySelector(".feel-test-vars");
+  const outEl = panel.querySelector(".feel-test-out");
+  const setOut = (cls, text) => { outEl.className = "feel-test-out" + (cls ? " " + cls : ""); outEl.textContent = text; };
+
+  hint.querySelector("[data-feel-test]").addEventListener("click", () => {
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) varsEl.focus();
+  });
+  panel.querySelector(".feel-test-run").addEventListener("click", async () => {
+    let variables;
+    try { variables = parseStartVariables(varsEl.value).variables || {}; }
+    catch (e) { setOut("err", e.message); return; }
+    setOut("", "…");
+    try {
+      const res = await evaluate(ta.value, variables);
+      if (res && res.ok) setOut("ok", `= ${res.result} (${res.kind})`);
+      else setOut("err", (res && res.error) || "could not evaluate");
+    } catch (e) {
+      setOut("err", e.message);
+    }
+  });
 }
 
 // findExt returns a business object's extension element of the given moddle type.
@@ -482,6 +521,18 @@ function wireProperties(root, modeler, api) {
   const modeling = modeler.get("modeling");
   const selection = modeler.get("selection");
 
+  // savePreservingPanel runs a field save whose resulting element.changed should
+  // NOT rebuild the whole properties panel. Editing a FEEL field saves on blur;
+  // rebuilding then would tear down the FEEL editor (losing caret/scroll) and the
+  // Test panel the user just opened — clicking into the sample-variables box would
+  // destroy it mid-interaction. Only this save's synchronous change is suppressed;
+  // genuinely external changes still refresh the panel.
+  let suppressRerender = false;
+  const savePreservingPanel = (fn) => {
+    suppressRerender = true;
+    try { fn(); } finally { suppressRerender = false; }
+  };
+
   function show(element) {
     if (!element) {
       // Nothing selected → show the process itself, so its id/name can be edited
@@ -634,13 +685,13 @@ function wireProperties(root, modeler, api) {
     }
     const fexpr = body.querySelector("#f-expr");
     const fresult = body.querySelector("#f-result");
-    const saveScript = () => {
+    const saveScript = () => savePreservingPanel(() => {
       const raw = (fexpr.value || "").trim();
       upsertExt(modeler, element, "zeebe:Script", {
         expression: raw === "" ? "" : (raw.startsWith("=") ? raw : "= " + raw),
         resultVariable: (fresult.value || "").trim(),
       });
-    };
+    });
     if (fexpr) fexpr.addEventListener("change", saveScript);
     if (fresult) fresult.addEventListener("change", saveScript);
 
@@ -667,20 +718,20 @@ function wireProperties(root, modeler, api) {
     const fmsgname = body.querySelector("#f-msgname");
     const fcorrkey = body.querySelector("#f-corrkey");
     if (fmsgname || fcorrkey) {
-      const saveMsg = () => {
+      const saveMsg = () => savePreservingPanel(() => {
         const med = messageDefOf(element.businessObject);
         if (!med) return;
         upsertMessage(modeler, element, med,
           (fmsgname && fmsgname.value || "").trim(),
           (fcorrkey && fcorrkey.value || "").trim());
-      };
+      });
       if (fmsgname) fmsgname.addEventListener("change", saveMsg);
       if (fcorrkey) fcorrkey.addEventListener("change", saveMsg);
     }
 
     const fcond = body.querySelector("#f-cond");
     if (fcond) {
-      fcond.addEventListener("change", () => {
+      fcond.addEventListener("change", () => savePreservingPanel(() => {
         const raw = (fcond.value || "").trim();
         const beo = element.businessObject;
         const prevCond = ((beo.conditionExpression && beo.conditionExpression.body) || "").replace(/^=\s*/, "").trim();
@@ -707,24 +758,27 @@ function wireProperties(root, modeler, api) {
           if (mirrors && curName !== plain) props.name = plain;
         }
         try { modeling.updateProperties(element, props); } catch { /* stale */ }
-      });
+      }));
     }
 
     // Upgrade every FEEL field in this panel into a code editor (highlighting +
-    // completion + live validation). The textareas keep their identity, so the
-    // change-to-save handlers wired above are untouched. Validation compiles the
-    // expression against the same engine deploy uses (POST /feel/validate).
+    // completion + live validation + a Test panel). The textareas keep their
+    // identity, so the change-to-save handlers wired above are untouched.
+    // Validation compiles the expression against the same engine deploy uses
+    // (POST /feel/validate); Test evaluates it (POST /feel/evaluate).
     if (tab === "implement") {
       const feelVars = collectFeelVariables(modeler);
       const validate = api ? (expression) => api("POST", "/api/v1/feel/validate", { expression }) : null;
-      enhanceFeel(body, "#f-expr", feelVars, validate);
-      enhanceFeel(body, "#f-cond", feelVars, validate);
-      enhanceFeel(body, "#f-corrkey", feelVars, validate);
+      const evaluate = api ? (expression, variables) => api("POST", "/api/v1/feel/evaluate", { expression, variables }) : null;
+      enhanceFeel(body, "#f-expr", feelVars, validate, evaluate);
+      enhanceFeel(body, "#f-cond", feelVars, validate, evaluate);
+      enhanceFeel(body, "#f-corrkey", feelVars, validate, evaluate);
     }
   }
 
   modeler.on("selection.changed", (e) => show((e.newSelection || [])[0]));
   modeler.on("element.changed", (e) => {
+    if (suppressRerender) return; // a FEEL-field self-save; keep the panel intact
     const sel = selection.get();
     if (sel[0] && e.element && sel[0].id === e.element.id) show(sel[0]);
   });
