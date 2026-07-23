@@ -61,6 +61,7 @@ type layoutProcess struct {
 	UserTasks    []layoutElem `xml:"userTask"`
 	ExclusiveGws []layoutElem `xml:"exclusiveGateway"`
 	ParallelGws  []layoutElem `xml:"parallelGateway"`
+	InclusiveGws []layoutElem `xml:"inclusiveGateway"`
 	Flows        []layoutFlow `xml:"sequenceFlow"`
 }
 
@@ -139,6 +140,7 @@ func collectNodes(p layoutProcess) []layoutNode {
 	add(p.UserTasks, kindTask)
 	add(p.ExclusiveGws, kindGateway)
 	add(p.ParallelGws, kindGateway)
+	add(p.InclusiveGws, kindGateway)
 	return nodes
 }
 
