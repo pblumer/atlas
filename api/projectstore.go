@@ -11,7 +11,7 @@ import (
 )
 
 // project is a named container that groups artifacts so related work lives
-// together in the Modeler (ADR-0033). It holds only organizational metadata:
+// together in the Modeler (ADR-0034). It holds only organizational metadata:
 // membership is a projectId tag carried on each artifact (a draft, in Phase 1),
 // not a list stored here, so a project and its artifacts stay loosely coupled and
 // deleting a project leaves its artifacts intact (they fall back to "Ungrouped").
@@ -46,7 +46,7 @@ func (p *projectStore) fileFor(id string) string {
 }
 
 // save writes a project durably (atomic write + directory fsync), overwriting any
-// existing project with the same id — the path a rename takes (I2 / ADR-0033).
+// existing project with the same id — the path a rename takes (I2 / ADR-0034).
 func (p *projectStore) save(rec project) error {
 	return atomicWriteJSON(p.dir, p.fileFor(rec.ID), rec)
 }
@@ -69,7 +69,7 @@ func (p *projectStore) get(id string) (project, bool, error) {
 
 // delete removes a project. A missing project is not an error (idempotent
 // cleanup). Artifacts tagged with the id are left untouched; they simply cease to
-// name an existing project and read as Ungrouped (ADR-0033).
+// name an existing project and read as Ungrouped (ADR-0034).
 func (p *projectStore) delete(id string) error {
 	if err := os.Remove(p.fileFor(id)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("projectstore: remove: %w", err)

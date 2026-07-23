@@ -26,8 +26,9 @@ const (
 	TypeTimerCatchEvent
 	TypeMessageCatchEvent
 	TypeMessageThrowEvent
-	TypeTask            // an undefined/manual task: no execution semantics, passes straight through
-	TypeParallelGateway // AND gateway: forks a token onto every outgoing flow, joins by waiting for all incoming
+	TypeTask             // an undefined/manual task: no execution semantics, passes straight through
+	TypeParallelGateway  // AND gateway: forks a token onto every outgoing flow, joins by waiting for all incoming
+	TypeInclusiveGateway // OR gateway: forks onto every flow whose condition holds, joins by waiting for all that could still arrive
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
 	numBpmnTypes = 16
@@ -60,6 +61,8 @@ func (t BpmnType) String() string {
 		return "Task"
 	case TypeParallelGateway:
 		return "ParallelGateway"
+	case TypeInclusiveGateway:
+		return "InclusiveGateway"
 	default:
 		return "Unspecified"
 	}
@@ -166,6 +169,34 @@ func (p *CompiledProcess) Flow(id int32) *CompiledFlow { return &p.flows[id] }
 func (p *CompiledProcess) Outgoing(id int32) []int32 {
 	n := &p.nodes[id]
 	return p.outgoingFlows[n.OutgoingStart : n.OutgoingStart+n.OutgoingCount]
+}
+
+// NodesReaching returns the set of node ids from which target is reachable by
+// following sequence flows — target's ancestors in the flow graph. An inclusive
+// join uses it to decide whether any live token upstream could still arrive
+// (if none can, and at least one has, it fires). Computed by a reverse walk from
+// target; target itself is not included unless a cycle leads back to it.
+func (p *CompiledProcess) NodesReaching(target int32) map[int32]bool {
+	preds := make([][]int32, len(p.nodes))
+	for i := range p.nodes {
+		for _, fid := range p.Outgoing(int32(i)) {
+			t := p.Flow(fid).Target
+			preds[t] = append(preds[t], int32(i))
+		}
+	}
+	seen := map[int32]bool{}
+	stack := []int32{target}
+	for len(stack) > 0 {
+		n := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		for _, pd := range preds[n] {
+			if !seen[pd] {
+				seen[pd] = true
+				stack = append(stack, pd)
+			}
+		}
+	}
+	return seen
 }
 
 // ServiceTask returns the detail at the given table index.

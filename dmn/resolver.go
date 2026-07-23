@@ -10,7 +10,7 @@ import (
 )
 
 // Resolver turns a DMN reference handle — the modelRef an Atlas project stores
-// (ADR-0033) — into the DMN model XML authored in temis. It is the seam between
+// (ADR-0034) — into the DMN model XML authored in temis. It is the seam between
 // "this project references decision X" and "here is X's model": a filesystem
 // folder of temis-exported models today, a temis git repo or service later.
 // Implementations must be safe for concurrent use.

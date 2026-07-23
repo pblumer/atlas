@@ -10,7 +10,7 @@ import (
 )
 
 // ValidationResult reports the outcome of resolving a DMN reference and checking
-// it against temis (ADR-0033 Phase 2). It is a pure preflight result: no engine
+// it against temis (ADR-0034 Phase 2). It is a pure preflight result: no engine
 // or registry state is mutated by producing it.
 type ValidationResult struct {
 	Resolved  bool     // the modelRef resolved to an actual model

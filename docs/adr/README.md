@@ -40,7 +40,8 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0030](0030-play-mode-simulation.md) | Play mode — ephemeral in-Modeler process simulation | Proposed |
 | [0031](0031-diagram-version-history.md) | Diagram version history in the Modeler | Proposed |
 | [0032](0032-modeler-ai-copilot.md) | In-Modeler AI copilot over the MCP/HTTP surface | Proposed |
-| [0033](0033-projects-and-artifacts.md) | Projects as containers for heterogeneous artifacts | Accepted |
+| [0033](0033-inclusive-gateway-join.md) | Inclusive gateway join synchronization | Accepted |
+| [0034](0034-projects-and-artifacts.md) | Projects as containers for heterogeneous artifacts | Accepted |
 
 ## Status values
 

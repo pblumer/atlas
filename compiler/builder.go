@@ -134,6 +134,13 @@ func (b *Builder) AddBusinessRuleTask(decisionId string, inputs map[string]any, 
 // tasks are given real implementations.
 func (b *Builder) AddTask() int32 { return b.addNode(TypeTask, -1) }
 
+// AddInclusiveGateway adds an inclusive (OR) gateway and returns its element id.
+// As a split it takes every outgoing flow whose condition holds (or the default
+// if none do); as a join it waits until every branch that could still deliver a
+// token has, then fires once. Conditions and the default flow are set the same
+// way as for an exclusive gateway.
+func (b *Builder) AddInclusiveGateway() int32 { return b.addNode(TypeInclusiveGateway, -1) }
+
 // AddParallelGateway adds a parallel (AND) gateway and returns its element id. It
 // forks a token onto every outgoing flow and joins by waiting until a token has
 // arrived on each of its incoming flows.

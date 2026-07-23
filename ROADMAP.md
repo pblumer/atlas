@@ -44,7 +44,12 @@ The control-flow basics most real models use.
   the join), so it replays deterministically and a half-arrived join survives a
   restart — recovery-tested. Cyclic joins and inclusive (OR) joins still to come
   (ADR-0024).
-- 🔲 Inclusive gateway
+- ✅ **Inclusive gateway** (OR): the split takes every outgoing flow whose FEEL
+  condition holds (or the default); the join waits until no token could still
+  arrive — no live token upstream and none in flight toward it — then fires once
+  for exactly the branches the split took. Correct for reconverging splits with
+  pass-through branches (no double fire), and recovery-tested. Cyclic inclusive
+  joins still to come (ADR-0033).
 - 🔲 Input/output variable mappings
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
 - 🔲 Conformance tests against a curated BPMN model set
@@ -180,7 +185,7 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   action in the Modeler persists work-in-progress (raw, uncompiled XML) to a
   durable draft store keyed by process id, so incomplete models survive and can be
   reopened — distinct from deploying, which compiles, versions, and runs.
-- 🚧 **Projects & artifacts** ([ADR-0033](docs/adr/0033-projects-and-artifacts.md)):
+- 🚧 **Projects & artifacts** ([ADR-0034](docs/adr/0034-projects-and-artifacts.md)):
   the Modeler groups work into named **projects** that hold **artifacts**.
   Phases 1–2 landed. Projects are a durable sidecar store
   (create/list/rename/delete); artifacts carry an optional `projectId`, and the

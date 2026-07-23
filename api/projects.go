@@ -22,7 +22,7 @@ type projectView struct {
 }
 
 // newID mints a random, URL-safe id for design-time artifacts (projects, DMN
-// references). These are organizational state, not engine facts (ADR-0033), so a
+// references). These are organizational state, not engine facts (ADR-0034), so a
 // server-generated random id is fine — it never enters the event log and is not
 // replayed.
 func newID() (string, error) {
@@ -178,7 +178,7 @@ func (s *Server) handleRenameProject(w http.ResponseWriter, r *http.Request) {
 
 // handleDeleteProject removes a project. It is idempotent (deleting an absent
 // project succeeds). Artifacts tagged with the id are intentionally left in
-// place; they read as Ungrouped once the project is gone (ADR-0033).
+// place; they read as Ungrouped once the project is gone (ADR-0034).
 func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var delErr error

@@ -81,12 +81,12 @@ type Server struct {
 	versions    map[string]int32 // bpmnProcessId → highest version deployed
 	deploys     *deployStore     // durable sidecar for deployments (ADR-0019)
 	drafts      *draftStore      // durable sidecar for saved-but-not-deployed diagrams
-	projects    *projectStore    // durable sidecar for projects grouping artifacts (ADR-0033)
-	dmnrefs     *dmnRefStore     // durable sidecar for DMN reference artifacts (ADR-0033)
+	projects    *projectStore    // durable sidecar for projects grouping artifacts (ADR-0034)
+	dmnrefs     *dmnRefStore     // durable sidecar for DMN reference artifacts (ADR-0034)
 
 	// dmnValidator resolves a DMN reference's temis model and compiles it, the
 	// deploy-time gate that turns a stored handle into a checked decision model
-	// (ADR-0033 Phase 2). It touches no engine or store state, so it runs off the
+	// (ADR-0034 Phase 2). It touches no engine or store state, so it runs off the
 	// run-loop goroutine.
 	dmnValidator *dmn.Validator
 }
@@ -129,7 +129,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string) (*Server, e
 		dmnrefs:     dmnrefs,
 		// DMN reference models are resolved from <data-dir>/dmn-models, a folder of
 		// temis-exported models. The Resolver interface lets a temis git/service
-		// source replace this later without touching callers (ADR-0033).
+		// source replace this later without touching callers (ADR-0034).
 		dmnValidator: dmn.NewValidator(dmn.DirResolver{Dir: filepath.Join(dataDir, "dmn-models")}),
 	}
 	if err := s.loadDeployments(); err != nil {

@@ -209,9 +209,9 @@ func TestParseErrors(t *testing.T) {
 				<sequenceFlow id="f2" sourceRef="t" targetRef="e"/></process></definitions>`,
 		},
 		{
-			name: "unsupported gateway",
+			name: "unsupported receive task",
 			xml: `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
-				<startEvent id="s"/><inclusiveGateway id="g"/></process></definitions>`,
+				<startEvent id="s"/><receiveTask id="g"/></process></definitions>`,
 		},
 		{
 			name: "malformed xml",
@@ -415,6 +415,87 @@ func TestParseParallelGateway(t *testing.T) {
 	join := cp.Flow(cp.Outgoing(cp.Flow(cp.Outgoing(fork)[0]).Target)[0]).Target
 	if cp.Node(join).Type != TypeParallelGateway || cp.Node(join).IncomingCount != 2 {
 		t.Errorf("join type=%v incoming=%d, want ParallelGateway and 2", cp.Node(join).Type, cp.Node(join).IncomingCount)
+	}
+}
+
+// TestNodesReaching checks the reverse-reachability an inclusive join relies on:
+// a node's ancestors (nodes from which it is reachable) — and nothing downstream.
+func TestNodesReaching(t *testing.T) {
+	b := NewBuilder(1, "reach", 1)
+	s := b.AddStartEvent()
+	g := b.AddInclusiveGateway()
+	a := b.AddTask()
+	bb := b.AddTask()
+	j := b.AddInclusiveGateway()
+	e := b.AddEndEvent()
+	b.Connect(s, g)
+	b.Connect(g, a)
+	b.Connect(g, bb)
+	b.Connect(a, j)
+	b.Connect(bb, j)
+	b.Connect(j, e)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	reach := cp.NodesReaching(j)
+	for _, anc := range []int32{s, g, a, bb} {
+		if !reach[anc] {
+			t.Errorf("NodesReaching(join) missing ancestor %d", anc)
+		}
+	}
+	if reach[e] {
+		t.Errorf("NodesReaching(join) includes the downstream end event %d", e)
+	}
+	if reach[j] {
+		t.Errorf("NodesReaching(join) includes the join itself (no cycle)")
+	}
+	// A start event has no ancestors.
+	if len(cp.NodesReaching(s)) != 0 {
+		t.Errorf("NodesReaching(start) = %v, want empty", cp.NodesReaching(s))
+	}
+}
+
+// TestParseInclusiveGateway parses an inclusive split with a default flow and
+// checks the node type, incoming count on the join, and default marking.
+func TestParseInclusiveGateway(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
+		<startEvent id="s"/>
+		<inclusiveGateway id="split" default="fdef"/>
+		<task id="a"/><task id="b"/>
+		<inclusiveGateway id="join"/>
+		<endEvent id="e"/>
+		<sequenceFlow id="f0" sourceRef="s" targetRef="split"/>
+		<sequenceFlow id="fa" sourceRef="split" targetRef="a"><conditionExpression>= x &gt; 0</conditionExpression></sequenceFlow>
+		<sequenceFlow id="fdef" sourceRef="split" targetRef="b"/>
+		<sequenceFlow id="f3" sourceRef="a" targetRef="join"/>
+		<sequenceFlow id="f4" sourceRef="b" targetRef="join"/>
+		<sequenceFlow id="f5" sourceRef="join" targetRef="e"/></process></definitions>`
+	cp, err := Parse(1, 1, strings.NewReader(xml))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	split := cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target
+	if cp.Node(split).Type != TypeInclusiveGateway {
+		t.Fatalf("node after start = %v, want InclusiveGateway", cp.Node(split).Type)
+	}
+	// The default flow (fdef) is marked; the conditional one (fa) is not.
+	var sawDefault, sawCond bool
+	for _, fid := range cp.Outgoing(split) {
+		f := cp.Flow(fid)
+		if f.Default {
+			sawDefault = true
+		}
+		if f.Condition != nil {
+			sawCond = true
+		}
+	}
+	if !sawDefault || !sawCond {
+		t.Errorf("split flows: default=%v cond=%v, want both true", sawDefault, sawCond)
+	}
+	join := cp.Flow(cp.Outgoing(cp.Flow(cp.Outgoing(split)[0]).Target)[0]).Target
+	if cp.Node(join).Type != TypeInclusiveGateway || cp.Node(join).IncomingCount != 2 {
+		t.Errorf("join type=%v incoming=%d, want InclusiveGateway and 2", cp.Node(join).Type, cp.Node(join).IncomingCount)
 	}
 }
 

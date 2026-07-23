@@ -873,7 +873,7 @@ type draftResp struct {
 // keyed by its process id, WITHOUT compiling it — so an incomplete or not-yet
 // executable model can still be saved and reopened. Re-saving the same process id
 // overwrites the previous draft rather than creating a version. An optional
-// ?projectId= query files the draft into that project (ADR-0033); it must name an
+// ?projectId= query files the draft into that project (ADR-0034); it must name an
 // existing project, else the save is rejected.
 func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
@@ -923,7 +923,7 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleListDrafts lists saved drafts, most recently saved first. An optional
-// ?projectId= query narrows the list to one project's artifacts (ADR-0033).
+// ?projectId= query narrows the list to one project's artifacts (ADR-0034).
 func (s *Server) handleListDrafts(w http.ResponseWriter, r *http.Request) {
 	filter := r.URL.Query().Get("projectId")
 	list := []draftResp{}
@@ -947,7 +947,7 @@ func (s *Server) handleListDrafts(w http.ResponseWriter, r *http.Request) {
 
 // handleMoveDraft reassigns a draft to a different project (or to Ungrouped when
 // projectId is empty), without touching its XML. Body: {"projectId": "..."}. A
-// non-empty projectId must name an existing project (ADR-0033).
+// non-empty projectId must name an existing project (ADR-0034).
 func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
