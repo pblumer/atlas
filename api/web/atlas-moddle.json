@@ -1,0 +1,33 @@
+{
+  "name": "Atlas",
+  "prefix": "atlas",
+  "uri": "http://atlas/schema/1.0",
+  "xml": {
+    "tagAlias": "lowerCase"
+  },
+  "associations": [],
+  "types": [
+    {
+      "name": "StartForm",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:Process"] },
+      "properties": [
+        {
+          "name": "variables",
+          "isMany": true,
+          "type": "StartVariable"
+        }
+      ]
+    },
+    {
+      "name": "StartVariable",
+      "superClass": ["Element"],
+      "properties": [
+        { "name": "name", "type": "String", "isAttr": true },
+        { "name": "type", "type": "String", "isAttr": true },
+        { "name": "default", "type": "String", "isAttr": true },
+        { "name": "required", "type": "Boolean", "isAttr": true }
+      ]
+    }
+  ]
+}

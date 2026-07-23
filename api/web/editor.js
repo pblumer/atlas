@@ -10,7 +10,7 @@ const BPMN_CSS = [
   "vendor/bpmn/assets/bpmn-font/css/bpmn-embedded.css",
 ];
 
-let bpmnReady; // memoized loader promise → { BpmnJS, zeebe }
+let bpmnReady; // memoized loader promise → { BpmnJS, moddle: { zeebe, atlas } }
 function loadBpmn() {
   if (bpmnReady) return bpmnReady;
   bpmnReady = new Promise((resolve, reject) => {
@@ -25,11 +25,17 @@ function loadBpmn() {
     s.onload = async () => {
       try {
         // The zeebe moddle lets bpmn-js read/write the zeebe extension elements
-        // Atlas executes (zeebe:script, zeebe:taskDefinition). See ADR-0013.
-        const zeebe = await (await fetch("vendor/bpmn/zeebe.json")).json();
-        resolve({ BpmnJS: window.BpmnJS, zeebe });
+        // Atlas executes (zeebe:script, zeebe:taskDefinition). See ADR-0013. The
+        // atlas moddle adds our own start-variable declaration (atlas:startForm),
+        // which is editor metadata the engine ignores (the compiler skips unknown
+        // extension elements) — it drives the typed Deploy & run form.
+        const [zeebe, atlas] = await Promise.all([
+          fetch("vendor/bpmn/zeebe.json").then((r) => r.json()),
+          fetch("atlas-moddle.json").then((r) => r.json()),
+        ]);
+        resolve({ BpmnJS: window.BpmnJS, moddle: { zeebe, atlas } });
       } catch (e) {
-        reject(new Error("failed to load the zeebe moddle: " + e.message));
+        reject(new Error("failed to load the moddle extensions: " + e.message));
       }
     };
     s.onerror = () => reject(new Error("failed to load the BPMN modeler assets"));
@@ -38,9 +44,10 @@ function loadBpmn() {
   return bpmnReady;
 }
 
-// newModeler/newViewer construct a bpmn-js instance with the zeebe moddle wired.
-function newModeler(BpmnJS, zeebe, container) {
-  return new BpmnJS({ container, moddleExtensions: { zeebe } });
+// newModeler/newViewer construct a bpmn-js instance with the moddle extensions
+// (zeebe + atlas) wired.
+function newModeler(BpmnJS, moddle, container) {
+  return new BpmnJS({ container, moddleExtensions: moddle });
 }
 
 // blankXML builds an empty diagram with a UNIQUE process id. The process id is
@@ -104,10 +111,7 @@ export async function mountEditor(root, { api, toast, key, draftId }) {
         <button class="btn" id="deploy">Deploy &amp; run</button>
       </div>
       <div class="start-panel" id="deploy-panel" hidden>
-        <label class="field">
-          <span>Start variables — optional. A JSON object of scalars (number, string, boolean, null) the instance starts with. Leave empty to start with none.</span>
-          <textarea id="deploy-vars" rows="3" spellcheck="false" placeholder='{ "amount": 100, "customer": "acme", "priority": true }'></textarea>
-        </label>
+        <div id="deploy-body"></div>
         <div class="row">
           <button class="btn" id="deploy-go">Deploy &amp; run</button>
           <button class="btn neutral" id="deploy-cancel">Cancel</button>
@@ -140,7 +144,7 @@ export async function mountEditor(root, { api, toast, key, draftId }) {
     return;
   }
 
-  const modeler = newModeler(lib.BpmnJS, lib.zeebe, root.querySelector("#canvas"));
+  const modeler = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
   current = modeler;
   window.__atlasModeler = modeler; // exposed for scripted/end-to-end testing
 
@@ -330,6 +334,97 @@ function isCollaborationRoot(modeler) {
   } catch { return false; }
 }
 
+// The scalar types a declared start variable can take, matching what the server
+// accepts (parseStartVariables) and what the typed Deploy form coerces to.
+const START_VAR_TYPES = ["string", "number", "boolean"];
+
+// readStartVariables returns the start variables a process declares via its
+// atlas:StartForm extension element: [{name, type, default, required}]. Empty
+// when none are declared.
+function readStartVariables(bo) {
+  const sf = findExt(bo, "atlas:StartForm");
+  return ((sf && sf.variables) || []).map((v) => ({
+    name: v.name || "",
+    type: START_VAR_TYPES.includes(v.type) ? v.type : "string",
+    default: v.default || "",
+    required: !!v.required,
+  }));
+}
+
+// writeStartVariables persists the declared start variables onto the process
+// through the modeling API (undo/redo; serializes on deploy). Rows without a
+// name are dropped; an empty result removes the atlas:StartForm entirely so a
+// cleared declaration leaves no dangling element.
+function writeStartVariables(modeler, list) {
+  const moddle = modeler.get("moddle");
+  const modeling = modeler.get("modeling");
+  const rootEl = modeler.get("canvas").getRootElement();
+  const bo = rootEl.businessObject;
+  let ext = bo.extensionElements;
+  if (!ext) { ext = moddle.create("bpmn:ExtensionElements", { values: [] }); ext.$parent = bo; }
+  let sf = (ext.values || []).find((v) => v.$type === "atlas:StartForm");
+  const clean = list.filter((v) => (v.name || "").trim() !== "");
+  if (clean.length === 0) {
+    if (sf) ext.values = (ext.values || []).filter((v) => v !== sf);
+  } else {
+    if (!sf) { sf = moddle.create("atlas:StartForm"); sf.$parent = ext; ext.values = [...(ext.values || []), sf]; }
+    sf.variables = clean.map((v) => {
+      const sv = moddle.create("atlas:StartVariable", {
+        name: v.name.trim(),
+        type: START_VAR_TYPES.includes(v.type) ? v.type : "string",
+      });
+      if ((v.default || "") !== "") sv.default = v.default;
+      if (v.required) sv.required = true;
+      sv.$parent = sf;
+      return sv;
+    });
+  }
+  modeling.updateProperties(rootEl, { extensionElements: ext });
+}
+
+// startVarRowHTML renders one editable declaration row. Values are escaped for
+// the attributes; the type <select> marks the current option.
+function startVarRowHTML(v) {
+  const opts = START_VAR_TYPES
+    .map((t) => `<option value="${t}"${t === v.type ? " selected" : ""}>${t}</option>`).join("");
+  return `<div class="sv-row">
+    <input type="text" class="sv-name" value="${esc(v.name)}" placeholder="amount" aria-label="Variable name"/>
+    <select class="sv-type" aria-label="Type">${opts}</select>
+    <input type="text" class="sv-default" value="${esc(v.default)}" placeholder="default" aria-label="Default value"/>
+    <label class="sv-req" title="Required"><input type="checkbox" class="sv-required"${v.required ? " checked" : ""}/> req</label>
+    <button type="button" class="sv-del icon-btn" title="Remove" aria-label="Remove variable">✕</button>
+  </div>`;
+}
+
+// wireStartVars renders and wires the process-level start-variable declaration
+// editor into #sv-list. Rows persist on change (blur), not on every keystroke,
+// so typing isn't interrupted; adding a row is DOM-only until it gets a name.
+// Editing the process root fires element.changed for the root, but with nothing
+// selected the panel isn't re-rendered, so in-progress rows survive a save.
+function wireStartVars(body, modeler) {
+  const listEl = body.querySelector("#sv-list");
+  const addBtn = body.querySelector("#sv-add");
+  if (!listEl || !addBtn) return;
+
+  const collect = () => [...listEl.querySelectorAll(".sv-row")].map((row) => ({
+    name: row.querySelector(".sv-name").value,
+    type: row.querySelector(".sv-type").value,
+    default: row.querySelector(".sv-default").value,
+    required: row.querySelector(".sv-required").checked,
+  }));
+  const persist = () => { try { writeStartVariables(modeler, collect()); } catch { /* stale */ } };
+
+  listEl.addEventListener("change", persist);
+  listEl.addEventListener("click", (e) => {
+    const del = e.target.closest(".sv-del");
+    if (del) { del.closest(".sv-row").remove(); persist(); }
+  });
+  addBtn.addEventListener("click", () => {
+    listEl.insertAdjacentHTML("beforeend", startVarRowHTML({ name: "", type: "string", default: "", required: false }));
+    listEl.querySelector(".sv-row:last-child .sv-name").focus();
+  });
+}
+
 function wireProperties(root, modeler) {
   const icon = root.querySelector("#p-icon");
   const typename = root.querySelector("#p-typename");
@@ -346,11 +441,23 @@ function wireProperties(root, modeler) {
       if (rootBo) {
         icon.textContent = "PR"; typename.textContent = "Process";
         nameEl.textContent = rootBo.name || rootBo.id || "(process)";
+        // The declaration editor is executable detail, so it lives on the
+        // Implement tab (like a task's script or a branch's condition).
+        let startVarsHTML = "";
+        if (activeTab(root) === "implement") {
+          const declared = readStartVariables(rootBo);
+          startVarsHTML = `
+            <h3>Start variables</h3>
+            <div id="sv-list">${declared.map(startVarRowHTML).join("")}</div>
+            <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px">+ Add variable</button>
+            <p class="muted" style="font-size:12px">Declared here, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks — instead of raw JSON. The engine ignores the declaration; it's authoring metadata.</p>`;
+        }
         body.innerHTML = `
           <h3>Process</h3>
           <label class="field"><span>Name</span><input type="text" id="f-pname" value="${esc(rootBo.name || "")}" placeholder="Order fulfillment"/></label>
           <label class="field"><span>Process ID</span><input type="text" id="f-pid" value="${esc(rootBo.id || "")}" placeholder="order-fulfillment"/></label>
-          <p class="muted" style="font-size:12px">The Process ID is the identity deployments and instances are grouped by. Renaming it and deploying creates a new process rather than a new version.</p>`;
+          <p class="muted" style="font-size:12px">The Process ID is the identity deployments and instances are grouped by. Renaming it and deploying creates a new process rather than a new version.</p>
+          ${startVarsHTML}`;
         const rootEl = modeler.get("canvas").getRootElement();
         body.querySelector("#f-pname").addEventListener("change", (e) => {
           try { modeling.updateProperties(rootEl, { name: e.target.value }); } catch { /* ignore */ }
@@ -359,6 +466,7 @@ function wireProperties(root, modeler) {
           const v = (e.target.value || "").trim();
           if (v) { try { modeling.updateProperties(rootEl, { id: v }); } catch { toast("invalid process id", "err"); } }
         });
+        wireStartVars(body, modeler);
         return;
       }
       // A collaboration root has no single process to rename; each pool
@@ -599,6 +707,68 @@ export function parseStartVariables(raw) {
   return { variables: obj };
 }
 
+// typedDeployFieldHTML renders one typed input for a declared start variable,
+// prefilled with its default. A boolean is a true/false/— select; a number an
+// input[type=number]; a string a text input. Required fields carry data-required
+// so readTypedDeployBody can enforce them.
+function typedDeployFieldHTML(v) {
+  const req = v.required ? ' <span class="req-star" title="required">*</span>' : "";
+  const dr = v.required ? ' data-required="1"' : "";
+  const cap = `<span>${esc(v.name)} <span class="muted">(${v.type})</span>${req}</span>`;
+  let input;
+  if (v.type === "boolean") {
+    const d = v.default;
+    input = `<select class="dv-field" data-name="${esc(v.name)}" data-type="boolean"${dr}>
+      <option value=""${d === "" ? " selected" : ""}>—</option>
+      <option value="true"${d === "true" ? " selected" : ""}>true</option>
+      <option value="false"${d === "false" ? " selected" : ""}>false</option>
+    </select>`;
+  } else if (v.type === "number") {
+    input = `<input type="number" step="any" class="dv-field" data-name="${esc(v.name)}" data-type="number"${dr} value="${esc(v.default)}" placeholder="0"/>`;
+  } else {
+    input = `<input type="text" class="dv-field" data-name="${esc(v.name)}" data-type="string"${dr} value="${esc(v.default)}"/>`;
+  }
+  return `<label class="field">${cap}${input}</label>`;
+}
+
+// deployFormHTML is the body of the Deploy & run panel: a typed form when the
+// process declares start variables, otherwise the free-form JSON textarea.
+function deployFormHTML(declared) {
+  if (!declared.length) {
+    return `<label class="field">
+      <span>Start variables — optional. A JSON object of scalars (number, string, boolean, null) the instance starts with. Leave empty to start with none.</span>
+      <textarea id="deploy-vars" rows="3" spellcheck="false" placeholder='{ "amount": 100, "customer": "acme", "priority": true }'></textarea>
+    </label>`;
+  }
+  return `<p class="muted" style="font-size:12px;margin:0 0 8px">Start variables for this run — declared on the process. Required are marked <span class="req-star">*</span>; leave an optional one blank to omit it.</p>`
+    + declared.map(typedDeployFieldHTML).join("");
+}
+
+// readTypedDeployBody turns the typed Deploy form into an instance request body,
+// coercing each field to its declared type and enforcing required fields. Empty
+// optional fields are omitted. Throws Error(message) on a bad number or a missing
+// required value.
+function readTypedDeployBody(bodyEl) {
+  const vars = {};
+  const missing = [];
+  bodyEl.querySelectorAll(".dv-field").forEach((el) => {
+    const { name, type } = el.dataset;
+    const raw = el.value;
+    if (raw === "") { if (el.dataset.required === "1") missing.push(name); return; }
+    if (type === "number") {
+      const n = Number(raw);
+      if (!Number.isFinite(n)) throw new Error(`"${name}" must be a number`);
+      vars[name] = n;
+    } else if (type === "boolean") {
+      vars[name] = raw === "true";
+    } else {
+      vars[name] = raw;
+    }
+  });
+  if (missing.length) throw new Error(`required: ${missing.join(", ")}`);
+  return Object.keys(vars).length ? { variables: vars } : {};
+}
+
 function wireActions(root, modeler, api, toast) {
   // Save persists the diagram as a draft (raw XML, no compile), keyed by process
   // id, so incomplete work survives and can be reopened from the Modeler home.
@@ -632,25 +802,35 @@ function wireActions(root, modeler, api, toast) {
   // Deploy & run opens a panel to (optionally) enter start variables, then
   // deploys the model and starts an instance seeded with them — the editor's
   // equivalent of the Live view's Start instance, so a process that needs input
-  // can be launched and tested without leaving the Modeler.
+  // can be launched and tested without leaving the Modeler. When the process
+  // declares start variables (Process panel → Start variables) the panel shows a
+  // typed form built from that declaration; otherwise a free-form JSON textarea.
   const deployBtn = root.querySelector("#deploy");
   const dpanel = root.querySelector("#deploy-panel");
-  const dvars = root.querySelector("#deploy-vars");
+  const dbody = root.querySelector("#deploy-body");
   const dgo = root.querySelector("#deploy-go");
   const derr = root.querySelector("#deploy-err");
   const closeDeploy = () => { dpanel.hidden = true; derr.textContent = ""; };
 
-  deployBtn.addEventListener("click", () => {
-    dpanel.hidden = !dpanel.hidden;
+  // Read the declaration fresh each open — it can change while the editor is up.
+  const openDeploy = () => {
+    const bo = rootProcess(modeler);
+    dbody.innerHTML = deployFormHTML(bo ? readStartVariables(bo) : []);
+    dpanel.hidden = false;
     derr.textContent = "";
-    if (!dpanel.hidden) dvars.focus();
-  });
+    const first = dbody.querySelector("#deploy-vars, .dv-field");
+    if (first) first.focus();
+  };
+
+  deployBtn.addEventListener("click", () => { dpanel.hidden ? openDeploy() : closeDeploy(); });
   root.querySelector("#deploy-cancel").addEventListener("click", closeDeploy);
 
   dgo.addEventListener("click", async () => {
     let body;
-    try { body = parseStartVariables(dvars.value); }
-    catch (e) { derr.textContent = e.message; return; }
+    try {
+      const jsonEl = dbody.querySelector("#deploy-vars");
+      body = jsonEl ? parseStartVariables(jsonEl.value) : readTypedDeployBody(dbody);
+    } catch (e) { derr.textContent = e.message; return; }
     dgo.disabled = true;
     derr.textContent = "";
     try {
@@ -668,7 +848,6 @@ function wireActions(root, modeler, api, toast) {
         toast(`Deployed ${dep.processId} v${dep.version} and started an instance${n ? ` with ${n} variable${n === 1 ? "" : "s"}` : ""}`, "ok");
       }
       closeDeploy();
-      dvars.value = "";
     } catch (e) {
       // The Atlas compiler rejects elements it can't execute yet — surface that
       // inline in the panel so the entered variables aren't lost.
@@ -768,7 +947,7 @@ export async function mountLive(root, { api, toast, key }) {
     return;
   }
 
-  const viewer = newModeler(lib.BpmnJS, lib.zeebe, root.querySelector("#canvas"));
+  const viewer = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
   current = viewer;
 
   try {
