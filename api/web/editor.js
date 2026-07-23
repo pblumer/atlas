@@ -103,6 +103,17 @@ export async function mountEditor(root, { api, toast, key, draftId }) {
         <button class="btn neutral" id="export">Export XML</button>
         <button class="btn" id="deploy">Deploy &amp; run</button>
       </div>
+      <div class="start-panel" id="deploy-panel" hidden>
+        <label class="field">
+          <span>Start variables — optional. A JSON object of scalars (number, string, boolean, null) the instance starts with. Leave empty to start with none.</span>
+          <textarea id="deploy-vars" rows="3" spellcheck="false" placeholder='{ "amount": 100, "customer": "acme", "priority": true }'></textarea>
+        </label>
+        <div class="row">
+          <button class="btn" id="deploy-go">Deploy &amp; run</button>
+          <button class="btn neutral" id="deploy-cancel">Cancel</button>
+          <span class="err" id="deploy-err"></span>
+        </div>
+      </div>
       <div class="editor-body">
         <div id="canvas"></div>
         <aside class="props" id="props">
@@ -564,6 +575,30 @@ function wireProperties(root, modeler) {
   return () => show(selection.get()[0]);
 }
 
+// parseStartVariables turns a start-variables textarea value into an instance
+// request body, validating client-side so an obvious typo fails before a
+// round-trip. Empty input means no variables. The server accepts only scalar
+// values (parseStartVariables on the server side), so objects/arrays are
+// rejected here too. Throws Error(message) on invalid input. Shared by the
+// Modeler's Deploy & run and the Live view's Start instance.
+export function parseStartVariables(raw) {
+  const s = (raw || "").trim();
+  if (!s) return {};
+  let obj;
+  try { obj = JSON.parse(s); }
+  catch (e) { throw new Error("not valid JSON: " + e.message); }
+  if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
+    throw new Error('expected a JSON object, e.g. { "amount": 100 }');
+  }
+  for (const [name, v] of Object.entries(obj)) {
+    const t = typeof v;
+    if (v !== null && t !== "number" && t !== "string" && t !== "boolean") {
+      throw new Error(`variable "${name}": only scalar values (number, string, boolean, null)`);
+    }
+  }
+  return { variables: obj };
+}
+
 function wireActions(root, modeler, api, toast) {
   // Save persists the diagram as a draft (raw XML, no compile), keyed by process
   // id, so incomplete work survives and can be reopened from the Modeler home.
@@ -594,9 +629,30 @@ function wireActions(root, modeler, api, toast) {
     } catch (e) { toast("export failed: " + e.message, "err"); }
   });
 
+  // Deploy & run opens a panel to (optionally) enter start variables, then
+  // deploys the model and starts an instance seeded with them — the editor's
+  // equivalent of the Live view's Start instance, so a process that needs input
+  // can be launched and tested without leaving the Modeler.
   const deployBtn = root.querySelector("#deploy");
-  deployBtn.addEventListener("click", async () => {
-    deployBtn.disabled = true;
+  const dpanel = root.querySelector("#deploy-panel");
+  const dvars = root.querySelector("#deploy-vars");
+  const dgo = root.querySelector("#deploy-go");
+  const derr = root.querySelector("#deploy-err");
+  const closeDeploy = () => { dpanel.hidden = true; derr.textContent = ""; };
+
+  deployBtn.addEventListener("click", () => {
+    dpanel.hidden = !dpanel.hidden;
+    derr.textContent = "";
+    if (!dpanel.hidden) dvars.focus();
+  });
+  root.querySelector("#deploy-cancel").addEventListener("click", closeDeploy);
+
+  dgo.addEventListener("click", async () => {
+    let body;
+    try { body = parseStartVariables(dvars.value); }
+    catch (e) { derr.textContent = e.message; return; }
+    dgo.disabled = true;
+    derr.textContent = "";
     try {
       const { xml } = await modeler.saveXML({ format: true });
       const dep = await api("POST", "/api/v1/deployments", xml, true);
@@ -604,16 +660,21 @@ function wireActions(root, modeler, api, toast) {
       if (all.length > 1) {
         // A collaboration deploys one definition per pool; which pool to start is
         // ambiguous, so just report what was deployed (start pools from Operations).
+        // Start variables don't apply here — there's no single instance to seed.
         toast(`Deployed ${all.length} pools: ${all.map((d) => d.processId).join(", ")}`, "ok");
       } else {
-        await api("POST", `/api/v1/processes/${dep.key}/instances`, {});
-        toast(`Deployed ${dep.processId} v${dep.version} and started an instance`, "ok");
+        await api("POST", `/api/v1/processes/${dep.key}/instances`, body);
+        const n = body.variables ? Object.keys(body.variables).length : 0;
+        toast(`Deployed ${dep.processId} v${dep.version} and started an instance${n ? ` with ${n} variable${n === 1 ? "" : "s"}` : ""}`, "ok");
       }
+      closeDeploy();
+      dvars.value = "";
     } catch (e) {
-      // The Atlas compiler rejects elements it can't execute yet — surface that.
-      toast("deploy failed: " + e.message, "err");
+      // The Atlas compiler rejects elements it can't execute yet — surface that
+      // inline in the panel so the entered variables aren't lost.
+      derr.textContent = e.message;
     } finally {
-      deployBtn.disabled = false;
+      dgo.disabled = false;
     }
   });
 }
@@ -877,30 +938,9 @@ export async function mountLive(root, { api, toast, key }) {
   });
   root.querySelector("#start-cancel").addEventListener("click", closePanel);
 
-  // Turn the textarea into a request body, validating client-side so an obvious
-  // typo fails here instead of after a round-trip. Empty means no variables. The
-  // server accepts only scalars (parseStartVariables), so reject objects/arrays.
-  function buildBody() {
-    const raw = varsEl.value.trim();
-    if (!raw) return {};
-    let obj;
-    try { obj = JSON.parse(raw); }
-    catch (e) { throw new Error("not valid JSON: " + e.message); }
-    if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
-      throw new Error('expected a JSON object, e.g. { "amount": 100 }');
-    }
-    for (const [name, v] of Object.entries(obj)) {
-      const t = typeof v;
-      if (v !== null && t !== "number" && t !== "string" && t !== "boolean") {
-        throw new Error(`variable "${name}": only scalar values (number, string, boolean, null)`);
-      }
-    }
-    return { variables: obj };
-  }
-
   goBtn.addEventListener("click", async () => {
     let body;
-    try { body = buildBody(); }
+    try { body = parseStartVariables(varsEl.value); }
     catch (e) { errEl.textContent = e.message; return; }
     goBtn.disabled = true;
     try {
