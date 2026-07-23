@@ -330,6 +330,38 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			return nil, err
 		}
 	}
+	// Boundary events are registered last: each attaches to a host activity by id,
+	// which must already be registered so attachedToRef resolves (ADR-0038). An
+	// absent or "true" cancelActivity is interrupting (BPMN default); "false" is
+	// non-interrupting.
+	for _, ev := range proc.BoundaryEvents {
+		host, ok := ids[ev.AttachedToRef]
+		if !ok {
+			return nil, fmt.Errorf("compiler: boundary event %q attaches to unknown activity %q", ev.Id, ev.AttachedToRef)
+		}
+		interrupting := ev.CancelActivity != "false"
+		switch {
+		case ev.Timer != nil:
+			text := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(ev.Timer.TimeDuration), "="))
+			nanos, err := parseISO8601Duration(text)
+			if err != nil {
+				return nil, fmt.Errorf("compiler: boundary event %q timer: %w", ev.Id, err)
+			}
+			if err := register(ev.Id, b.AddBoundaryTimerEvent(host, interrupting, nanos)); err != nil {
+				return nil, err
+			}
+		case ev.Message != nil:
+			name, keyExpr, err := resolveMessage(ev.Id, ev.Message.MessageRef)
+			if err != nil {
+				return nil, err
+			}
+			if err := register(ev.Id, b.AddBoundaryMessageEvent(host, interrupting, name, keyExpr)); err != nil {
+				return nil, err
+			}
+		default:
+			return nil, fmt.Errorf("compiler: boundary event %q: only timer and message boundary events are supported yet", ev.Id)
+		}
+	}
 
 	if !b.hasStartEvent() {
 		return nil, fmt.Errorf("compiler: process %q has no start event", proc.Id)
@@ -450,6 +482,7 @@ type xmlProcess struct {
 
 	IntermediateCatchEvents []xmlIntermediateCatchEvent `xml:"intermediateCatchEvent"`
 	IntermediateThrowEvents []xmlIntermediateThrowEvent `xml:"intermediateThrowEvent"`
+	BoundaryEvents          []xmlBoundaryEvent          `xml:"boundaryEvent"`
 
 	Flows []xmlSequenceFlow `xml:"sequenceFlow"`
 
@@ -502,6 +535,19 @@ type xmlIntermediateCatchEvent struct {
 type xmlIntermediateThrowEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
+}
+
+// A boundary event is attached to a host activity (AttachedToRef) and arms while
+// it runs. CancelActivity mirrors BPMN's attribute: absent or "true" is
+// interrupting (cancels the host on fire), "false" is non-interrupting. The timer
+// and message variants are executable; each definition is a pointer so an absent
+// one is detected as nil (ADR-0038).
+type xmlBoundaryEvent struct {
+	Id             string                     `xml:"id,attr"`
+	AttachedToRef  string                     `xml:"attachedToRef,attr"`
+	CancelActivity string                     `xml:"cancelActivity,attr"`
+	Timer          *xmlTimerEventDefinition   `xml:"timerEventDefinition"`
+	Message        *xmlMessageEventDefinition `xml:"messageEventDefinition"`
 }
 
 type xmlTimerEventDefinition struct {

@@ -28,9 +28,14 @@ type ElementInstanceValue struct {
 	ElementId          int32  // INDEX into the compiled graph, not a string
 	FlowScopeKey       uint64 // parent scope (subprocess instance), 0 = root
 	BpmnElementType    uint8  // for fast dispatch
+	// AttachedToKey links a boundary event's element instance to the host activity
+	// instance it is attached to (0 for every non-boundary element). It lets an
+	// interrupting boundary find and terminate its host, and a completing host find
+	// and disarm its boundary events (ADR-0038).
+	AttachedToKey uint64
 }
 
-const elementInstanceSize = 8 + 8 + 4 + 8 + 1
+const elementInstanceSize = 8 + 8 + 4 + 8 + 1 + 8
 
 func (*ElementInstanceValue) ValueType() ValueType { return VTElementInstance }
 
@@ -39,7 +44,8 @@ func (v *ElementInstanceValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.ElementId))
 	dst = binary.LittleEndian.AppendUint64(dst, v.FlowScopeKey)
-	return append(dst, v.BpmnElementType)
+	dst = append(dst, v.BpmnElementType)
+	return binary.LittleEndian.AppendUint64(dst, v.AttachedToKey)
 }
 
 func (v *ElementInstanceValue) decode(src []byte) error {
@@ -51,6 +57,7 @@ func (v *ElementInstanceValue) decode(src []byte) error {
 	v.ElementId = int32(binary.LittleEndian.Uint32(src[16:]))
 	v.FlowScopeKey = binary.LittleEndian.Uint64(src[20:])
 	v.BpmnElementType = src[28]
+	v.AttachedToKey = binary.LittleEndian.Uint64(src[29:])
 	return nil
 }
 

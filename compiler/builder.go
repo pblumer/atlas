@@ -56,6 +56,7 @@ type Builder struct {
 	timerCatches      []TimerCatchDetail
 	connectorTasks    []ConnectorTaskDetail
 	userTasks         []UserTaskDetail
+	boundaryEventDets []BoundaryEventDetail
 	messageCatches    []MessageDetail
 	messageThrows     []MessageDetail
 	messageStarts     []MessageDetail
@@ -207,6 +208,36 @@ func (b *Builder) AddUserTask(assignee, candidateGroups string, retries int32) i
 	return b.addNode(TypeUserTask, detail)
 }
 
+// AddBoundaryTimerEvent adds a timer boundary event attached to host, firing
+// after durationNanos. interrupting mirrors BPMN cancelActivity: true cancels the
+// host when it fires, false spawns a parallel token (ADR-0038). Returns its
+// element id.
+func (b *Builder) AddBoundaryTimerEvent(host int32, interrupting bool, durationNanos int64) int32 {
+	detail := int32(len(b.boundaryEventDets))
+	b.boundaryEventDets = append(b.boundaryEventDets, BoundaryEventDetail{
+		HostNode:      host,
+		Interrupting:  interrupting,
+		Kind:          BoundaryTimer,
+		DurationNanos: durationNanos,
+	})
+	return b.addNode(TypeBoundaryEvent, detail)
+}
+
+// AddBoundaryMessageEvent adds a message boundary event attached to host that
+// fires when a message named messageName correlates on key. interrupting mirrors
+// BPMN cancelActivity (ADR-0038). Returns its element id.
+func (b *Builder) AddBoundaryMessageEvent(host int32, interrupting bool, messageName string, correlationKey *expr.Compiled) int32 {
+	detail := int32(len(b.boundaryEventDets))
+	b.boundaryEventDets = append(b.boundaryEventDets, BoundaryEventDetail{
+		HostNode:       host,
+		Interrupting:   interrupting,
+		Kind:           BoundaryMessage,
+		MessageName:    messageName,
+		CorrelationKey: correlationKey,
+	})
+	return b.addNode(TypeBoundaryEvent, detail)
+}
+
 // AddTask adds an undefined/manual task — one with no execution semantics — and
 // returns its element id. It carries no detail and simply passes the token
 // straight through, so a model can be drafted and its routing tested before its
@@ -307,6 +338,23 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		n.OutgoingCount = int32(len(outgoing)) - n.OutgoingStart
 	}
 
+	// Group boundary-event node ids by their host activity into one shared array,
+	// mirroring the outgoing-flow grouping, so arming a host's boundary events is
+	// an allocation-free slice at runtime. Each boundary-event node's detail names
+	// the host it attaches to.
+	var boundary []int32
+	for i := range b.nodes {
+		n := &b.nodes[i]
+		n.BoundaryStart = int32(len(boundary))
+		for j := range b.nodes {
+			be := &b.nodes[j]
+			if be.Type == TypeBoundaryEvent && b.boundaryEventDets[be.Detail].HostNode == n.ElementId {
+				boundary = append(boundary, be.ElementId)
+			}
+		}
+		n.BoundaryCount = int32(len(boundary)) - n.BoundaryStart
+	}
+
 	// Count incoming flows per node, so a parallel join knows how many tokens to
 	// wait for.
 	for _, f := range b.flows {
@@ -327,12 +375,14 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		nodes:             b.nodes,
 		flows:             b.flows,
 		outgoingFlows:     outgoing,
+		boundaryEvents:    boundary,
 		serviceTasks:      b.serviceTasks,
 		scriptTasks:       b.scriptTasks,
 		businessRuleTasks: b.businessRuleTasks,
 		timerCatches:      b.timerCatches,
 		connectorTasks:    b.connectorTasks,
 		userTasks:         b.userTasks,
+		boundaryEventDets: b.boundaryEventDets,
 		messageCatches:    b.messageCatches,
 		messageThrows:     b.messageThrows,
 		messageStarts:     b.messageStarts,
