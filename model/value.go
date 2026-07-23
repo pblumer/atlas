@@ -63,7 +63,7 @@ func (v *ElementInstanceValue) decode(src []byte) error {
 
 // JobValue is service-task work waiting for an external worker. Variables are
 // referenced via the element/instance scope, not embedded here. Assignee is the
-// user-task assignee (ADR-0041): empty for a service-task job, and for a user
+// user-task assignee (ADR-0042): empty for a service-task job, and for a user
 // task it starts at the model's default and is rewritten by claim/unclaim. It is
 // the one variable-length field; for a service job it encodes as a 4-byte zero
 // length and decodes to "" with no allocation, keeping the hot path clean (I1).

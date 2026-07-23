@@ -119,7 +119,7 @@ const (
 	IntentJobCompleted
 	IntentJobFailed
 	IntentJobTimedOut
-	IntentJobAssigned // user-task assignee set/changed/cleared (claim/unclaim, ADR-0041)
+	IntentJobAssigned // user-task assignee set/changed/cleared (claim/unclaim, ADR-0042)
 
 	// Timer.
 	IntentTimerCreated

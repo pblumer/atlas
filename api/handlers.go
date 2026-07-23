@@ -1138,7 +1138,7 @@ func (s *Server) handleListTasks(w http.ResponseWriter, _ *http.Request) {
 						detail := cp.UserTask(n.Detail)
 						tr.Name = cp.Intern(detail.Name)
 						// The assignee is the job's runtime value (claim/unclaim
-						// rewrite it, ADR-0041); candidate groups stay the
+						// rewrite it, ADR-0042); candidate groups stay the
 						// compile-time attribute.
 						tr.Assignee = jv.Assignee
 						tr.CandidateGroups = cp.Intern(detail.CandidateGroups)
@@ -1193,7 +1193,7 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 
 // handleClaimTask assigns an open user task to a person (claim). The request
 // body is {"assignee": "..."}; a claim to an already-claimed task simply
-// reassigns it (last-writer-wins, ADR-0041). 400 on a missing/empty assignee,
+// reassigns it (last-writer-wins, ADR-0042). 400 on a missing/empty assignee,
 // 404 if the job doesn't exist or is already completed.
 func (s *Server) handleClaimTask(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -1211,7 +1211,7 @@ func (s *Server) handleClaimTask(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleUnclaimTask releases a user task (assignee cleared), making it available
-// again. 404 if the job doesn't exist or is already completed (ADR-0041).
+// again. 404 if the job doesn't exist or is already completed (ADR-0042).
 func (s *Server) handleUnclaimTask(w http.ResponseWriter, r *http.Request) {
 	s.assignTask(w, r, "")
 }

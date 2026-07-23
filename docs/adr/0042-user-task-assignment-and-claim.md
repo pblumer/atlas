@@ -1,4 +1,4 @@
-# ADR-0041: User-task runtime assignment and claim/unclaim
+# ADR-0042: User-task runtime assignment and claim/unclaim
 
 - **Status:** Accepted
 - **Date:** 2026-07-23

@@ -158,7 +158,7 @@ func (p *Processor) CompleteJob(jobKey uint64, outputs ...model.VariableValue) {
 // AssignJob enqueues a (re)assignment of a user task's assignee, identified by
 // its job key. A non-empty assignee is a claim; an empty one unclaims the task,
 // making it available again. The job stays open either way. Assigning a job that
-// no longer exists is a no-op. Call RunUntilIdle to process it (ADR-0041).
+// no longer exists is a no-op. Call RunUntilIdle to process it (ADR-0042).
 func (p *Processor) AssignJob(jobKey uint64, assignee string) {
 	p.queue = append(p.queue, Command{
 		Key:       jobKey,

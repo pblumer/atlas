@@ -164,7 +164,7 @@ func TestMessageSubscriptionDecodeErrors(t *testing.T) {
 }
 
 // TestJobDecodeErrors exercises the truncation guards in JobValue.decode: the
-// fixed prefix and the length-prefixed assignee (ADR-0041).
+// fixed prefix and the length-prefixed assignee (ADR-0042).
 func TestJobDecodeErrors(t *testing.T) {
 	full := AppendValue(nil, &JobValue{
 		ProcessInstanceKey: NewKey(1, 1),

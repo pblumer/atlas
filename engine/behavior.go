@@ -157,7 +157,7 @@ func handleJobCompleted(c *ProcessingContext) {
 
 // handleJobAssigned rewrites a job's user-task assignee (claim sets it, unclaim
 // clears it) and re-emits the job so the change is persisted through the one
-// applyToState (ADR-0041). Assigning a job that is gone — already completed or
+// applyToState (ADR-0042). Assigning a job that is gone — already completed or
 // never existed — is a no-op. The command carries only the new assignee; every
 // other job field is preserved from the stored job.
 func handleJobAssigned(c *ProcessingContext) {
@@ -831,7 +831,7 @@ func (userTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.
 		JobType:            detail.JobType,
 		Retries:            detail.Retries,
 		// Seed the runtime assignee with the model's default; claim/unclaim
-		// rewrites it through the job lifecycle (ADR-0041).
+		// rewrites it through the job lifecycle (ADR-0042).
 		Assignee: cp.Intern(detail.Assignee),
 	})
 	c.NotifyJobAvailable(detail.JobType)
