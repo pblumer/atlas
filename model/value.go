@@ -28,9 +28,14 @@ type ElementInstanceValue struct {
 	ElementId          int32  // INDEX into the compiled graph, not a string
 	FlowScopeKey       uint64 // parent scope (subprocess instance), 0 = root
 	BpmnElementType    uint8  // for fast dispatch
+	// AttachedToKey links a boundary event's element instance to the host activity
+	// instance it is attached to (0 for every non-boundary element). It lets an
+	// interrupting boundary find and terminate its host, and a completing host find
+	// and disarm its boundary events (ADR-0040).
+	AttachedToKey uint64
 }
 
-const elementInstanceSize = 8 + 8 + 4 + 8 + 1
+const elementInstanceSize = 8 + 8 + 4 + 8 + 1 + 8
 
 func (*ElementInstanceValue) ValueType() ValueType { return VTElementInstance }
 
@@ -39,7 +44,8 @@ func (v *ElementInstanceValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.ElementId))
 	dst = binary.LittleEndian.AppendUint64(dst, v.FlowScopeKey)
-	return append(dst, v.BpmnElementType)
+	dst = append(dst, v.BpmnElementType)
+	return binary.LittleEndian.AppendUint64(dst, v.AttachedToKey)
 }
 
 func (v *ElementInstanceValue) decode(src []byte) error {
@@ -51,12 +57,13 @@ func (v *ElementInstanceValue) decode(src []byte) error {
 	v.ElementId = int32(binary.LittleEndian.Uint32(src[16:]))
 	v.FlowScopeKey = binary.LittleEndian.Uint64(src[20:])
 	v.BpmnElementType = src[28]
+	v.AttachedToKey = binary.LittleEndian.Uint64(src[29:])
 	return nil
 }
 
 // JobValue is service-task work waiting for an external worker. Variables are
 // referenced via the element/instance scope, not embedded here. Assignee is the
-// user-task assignee (ADR-0038): empty for a service-task job, and for a user
+// user-task assignee (ADR-0041): empty for a service-task job, and for a user
 // task it starts at the model's default and is rewritten by claim/unclaim. It is
 // the one variable-length field; for a service job it encodes as a 4-byte zero
 // length and decodes to "" with no allocation, keeping the hot path clean (I1).
@@ -263,6 +270,12 @@ type MessageSubscriptionValue struct {
 	ElementInstanceKey uint64
 	MessageName        string
 	CorrelationKey     string // FEEL correlation key, evaluated at subscribe time
+	// ProcessDefKey and ElementId identify the waiting catch event on its diagram.
+	// They are carried so that when the subscription correlates, the retained
+	// message-flow history record can name the receiving element without a lookup
+	// (ADR-0038); they are set at subscribe time from the element instance.
+	ProcessDefKey uint64
+	ElementId     int32
 }
 
 func (*MessageSubscriptionValue) ValueType() ValueType { return VTMessageSubscription }
@@ -271,7 +284,9 @@ func (v *MessageSubscriptionValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
 	dst = binary.LittleEndian.AppendUint64(dst, v.ElementInstanceKey)
 	dst = appendString(dst, v.MessageName)
-	return appendString(dst, v.CorrelationKey)
+	dst = appendString(dst, v.CorrelationKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
+	return binary.LittleEndian.AppendUint32(dst, uint32(v.ElementId))
 }
 
 func (v *MessageSubscriptionValue) decode(src []byte) error {
@@ -281,6 +296,60 @@ func (v *MessageSubscriptionValue) decode(src []byte) error {
 	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src[0:])
 	v.ElementInstanceKey = binary.LittleEndian.Uint64(src[8:])
 	rest := src[16:]
+	name, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.MessageName = name
+	key, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.CorrelationKey = key
+	if len(rest) < 12 {
+		return ErrShortBuffer
+	}
+	v.ProcessDefKey = binary.LittleEndian.Uint64(rest[0:])
+	v.ElementId = int32(binary.LittleEndian.Uint32(rest[8:]))
+	return nil
+}
+
+// MessageFlowValue is one delivered message flow, retained as history so the
+// collaboration replay can show which message crossed to which receiving element
+// and when (ADR-0038). It is produced when a message correlates a catch event or
+// instantiates a message-start process. The receiving element identifies the
+// message-flow edge on the diagram; the sender/receiver instance keys tie the two
+// pools' instances together. ReceiverProcessInstanceKey is 0 when the message
+// created the receiver via a message start event (no instance existed yet).
+type MessageFlowValue struct {
+	SenderProcessInstanceKey   uint64
+	ReceiverProcessInstanceKey uint64
+	ReceiverProcessDefKey      uint64
+	ReceiverElementId          int32 // INDEX into the receiver definition's graph
+	MessageName                string
+	CorrelationKey             string
+}
+
+func (*MessageFlowValue) ValueType() ValueType { return VTMessageFlow }
+
+func (v *MessageFlowValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.SenderProcessInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ReceiverProcessInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ReceiverProcessDefKey)
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.ReceiverElementId))
+	dst = appendString(dst, v.MessageName)
+	return appendString(dst, v.CorrelationKey)
+}
+
+func (v *MessageFlowValue) decode(src []byte) error {
+	if len(src) < 28 {
+		return ErrShortBuffer
+	}
+	v.SenderProcessInstanceKey = binary.LittleEndian.Uint64(src[0:])
+	v.ReceiverProcessInstanceKey = binary.LittleEndian.Uint64(src[8:])
+	v.ReceiverProcessDefKey = binary.LittleEndian.Uint64(src[16:])
+	v.ReceiverElementId = int32(binary.LittleEndian.Uint32(src[24:]))
+	rest := src[28:]
 	name, rest, err := readString(rest)
 	if err != nil {
 		return err
@@ -330,6 +399,8 @@ func newValue(vt ValueType) Value {
 		return &VariableValue{}
 	case VTMessageSubscription:
 		return &MessageSubscriptionValue{}
+	case VTMessageFlow:
+		return &MessageFlowValue{}
 	default:
 		return nil
 	}

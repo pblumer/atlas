@@ -85,7 +85,7 @@ func TestUserTaskAssignmentRecovers(t *testing.T) {
 	}
 	jobKey := singleActivatableJob(t, h1.store, jobType)
 
-	// The job carries the model's default assignee at creation (ADR-0038).
+	// The job carries the model's default assignee at creation (ADR-0041).
 	if got := jobAssignee(t, h1.store, jobKey); got != "editor" {
 		t.Fatalf("default assignee = %q, want \"editor\"", got)
 	}

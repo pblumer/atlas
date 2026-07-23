@@ -57,9 +57,9 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 		case model.IntentJobCreated, model.IntentJobAssigned:
 			// Assigning re-puts the whole job with its new assignee; the
 			// activatable-index entry PutJob rewrites is idempotent, so the task
-			// stays open (ADR-0038).
+			// stays open (ADR-0041).
 			return tx.PutJob(h.Key, &v.job)
-		case model.IntentJobCompleted, model.IntentJobFailed:
+		case model.IntentJobCompleted, model.IntentJobFailed, model.IntentJobCanceled:
 			return tx.DeleteJob(h.Key, &v.job)
 		}
 
@@ -83,6 +83,15 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			return tx.PutMessageSubscription(&v.subscription)
 		case model.IntentSubscriptionCorrelated:
 			return tx.DeleteMessageSubscription(&v.subscription)
+		}
+
+	case model.VTMessageFlow:
+		if h.Intent == model.IntentMessagePublished {
+			// Retain the delivered message flow so the Operations collaboration view
+			// can replay it. The record carries everything (receiver, message, key);
+			// the timestamp and position come from this event's header, so replay
+			// rebuilds identical history — invariant I4, ADR-0038.
+			return tx.RecordMessageFlow(h.Timestamp, h.Position, &v.messageFlow)
 		}
 	}
 	return nil

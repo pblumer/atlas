@@ -116,6 +116,16 @@ func TestParseMessageStartEvent(t *testing.T) {
 	if starts[0].CorrelationKey == nil {
 		t.Error("message-start correlation key expr is nil, want compiled")
 	}
+
+	// MessageStartEvents pairs the message name with its element index, so the
+	// engine can index which element a starting message flows into (ADR-0038).
+	events := cp.MessageStartEvents()
+	if len(events) != 1 {
+		t.Fatalf("message start events = %d, want 1", len(events))
+	}
+	if events[0].MessageName != "request" || events[0].ElementId != start {
+		t.Errorf("message start event = %+v, want name=request element=%d", events[0], start)
+	}
 }
 
 // TestParseAllMessageStartPoolExecutable checks that a collaboration pool whose

@@ -57,6 +57,12 @@ const (
 	VTSignal
 	VTError             // error-event propagation
 	VTProcessDefinition // a deployed definition
+	// VTMessageFlow is a delivered message flow retained for history: one record
+	// per message that correlated to a catch event or instantiated a message-start
+	// process. Unlike VTMessageSubscription (an open wait, deleted on correlation)
+	// it is never deleted, so the Operations collaboration view can replay the
+	// exchange between pools after the fact (ADR-0038).
+	VTMessageFlow
 )
 
 func (t ValueType) String() string {
@@ -83,6 +89,8 @@ func (t ValueType) String() string {
 		return "Error"
 	case VTProcessDefinition:
 		return "ProcessDefinition"
+	case VTMessageFlow:
+		return "MessageFlow"
 	default:
 		return "ValueType(?)"
 	}
@@ -111,7 +119,7 @@ const (
 	IntentJobCompleted
 	IntentJobFailed
 	IntentJobTimedOut
-	IntentJobAssigned // user-task assignee set/changed/cleared (claim/unclaim, ADR-0038)
+	IntentJobAssigned // user-task assignee set/changed/cleared (claim/unclaim, ADR-0041)
 
 	// Timer.
 	IntentTimerCreated
@@ -129,6 +137,13 @@ const (
 	// Incident.
 	IntentIncidentCreated
 	IntentIncidentResolved
+
+	// IntentJobCanceled retires a job whose element was interrupted (e.g. by an
+	// interrupting boundary event) rather than completed by a worker. It applies
+	// like JobCompleted/JobFailed (the job is deleted), and is appended here rather
+	// than beside the other job intents so the existing intents keep their numeric
+	// values on the log.
+	IntentJobCanceled
 )
 
 func (i Intent) String() string {
@@ -155,6 +170,8 @@ func (i Intent) String() string {
 		return "JobCompleted"
 	case IntentJobFailed:
 		return "JobFailed"
+	case IntentJobCanceled:
+		return "JobCanceled"
 	case IntentJobTimedOut:
 		return "JobTimedOut"
 	case IntentJobAssigned:

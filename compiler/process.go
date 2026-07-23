@@ -32,9 +32,10 @@ const (
 	TypeMessageStartEvent // a start event that a correlating message instantiates (ADR-0035); at runtime it behaves like a none start (flows straight on)
 	TypeConnectorTask     // a service task that delegates to a server-registered connector via the job path (ADR-0036); like a service task it creates a job and waits
 	TypeUserTask          // a human task: parks a token, creates a job, waits for a person to complete it via the Tasks app (ADR-0028)
+	TypeBoundaryEvent     // a timer/message event attached to a host activity; arms while the host runs and, when it fires, interrupts the host or spawns a parallel token (ADR-0040)
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 17
+	numBpmnTypes = 18
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -72,6 +73,8 @@ func (t BpmnType) String() string {
 		return "ConnectorTask"
 	case TypeUserTask:
 		return "UserTask"
+	case TypeBoundaryEvent:
+		return "BoundaryEvent"
 	default:
 		return "Unspecified"
 	}
@@ -87,6 +90,8 @@ type CompiledNode struct {
 	IncomingCount int32 // number of sequence flows targeting this node (a parallel join waits for all)
 	FlowScope     int32 // ElementId of enclosing scope, -1 = process root
 	Detail        int32 // index into the matching detail table, -1 if none
+	BoundaryStart int32 // offset into boundaryEvents (the node ids of events attached to this activity)
+	BoundaryCount int32 // number of boundary events attached (0 for a non-host node)
 }
 
 // CompiledFlow is a sequence flow between two nodes. Condition is the compiled
@@ -114,18 +119,37 @@ type ScriptTaskDetail struct {
 	ResultVar string
 }
 
+// DecisionInputMapping is one explicit input to a DMN decision: the decision's
+// input name (Target) fed by a FEEL expression (Source) evaluated over the
+// process instance's variables at evaluation time. It is the variable-driven
+// replacement for a business rule task's static inputs (ADR-0014): the source
+// expression is compiled once at deploy time (invariant I5) and the DMN worker
+// evaluates it off the hot path against live variables, so a decision routes on
+// real instance data.
+type DecisionInputMapping struct {
+	Target string         // the decision input name this value binds to
+	Source *expr.Compiled // FEEL expression evaluated over instance variables
+}
+
 // BusinessRuleTaskDetail is the per-business-rule-task data a behavior needs at
 // runtime. A business rule task delegates to a DMN decision, evaluated off the
 // hot path by the temis engine (ADR-0014). Like a service task it runs as a job,
 // so it carries a JobType (a reserved DMN sentinel) the in-process DMN worker
-// subscribes to; DecisionId names the decision to evaluate, and Inputs is an
-// interned JSON object of the static input context to feed it (a stand-in until
-// the variable subsystem lands in Milestone 1).
+// subscribes to; DecisionId names the decision to evaluate.
+//
+// Its inputs come from two layers the worker merges: Inputs is an interned JSON
+// object of static constant inputs (a literal base), and InputMappings are the
+// variable-driven inputs — FEEL expressions evaluated over the instance's
+// variables, which override a static input of the same name. ResultVar, if set,
+// is the process variable the decision's result is written back into on job
+// completion (the output mapping); -1 if the task discards its result.
 type BusinessRuleTaskDetail struct {
-	JobType    int32 // interned reserved DMN job type → index
-	DecisionId int32 // interned DMN decision id → index
-	Inputs     int32 // interned JSON object of static inputs → index, -1 if none
-	Retries    int32
+	JobType       int32 // interned reserved DMN job type → index
+	DecisionId    int32 // interned DMN decision id → index
+	Inputs        int32 // interned JSON object of static inputs → index, -1 if none
+	ResultVar     int32 // interned result-variable name → index, -1 if none
+	Retries       int32
+	InputMappings []DecisionInputMapping // variable-driven inputs, evaluated off the hot path
 }
 
 // UserTaskDetail is the per-user-task data a behavior needs at runtime. A user
@@ -141,19 +165,28 @@ type UserTaskDetail struct {
 }
 
 // ConnectorTaskDetail is the per-connector-task data a behavior needs at runtime.
-// A connector task delegates to a server-registered connector (e.g. a clio event
-// store) evaluated off the hot path by a job worker (ADR-0036). Like a service
-// task it runs as a job, so it carries a JobType (a reserved connector sentinel)
-// the in-process connector worker subscribes to. Connector names the
-// server-registered connector to resolve at runtime; Subject and EventType are
-// the interned target coordinates the worker sends (a stand-in for full payload
-// mappings until the variable subsystem matures — the worker sends the instance's
-// variables as the event body).
+// A connector task delegates to a server-registered connector evaluated off the
+// hot path by a job worker (ADR-0036). Like a service task it runs as a job, so
+// it carries a JobType (a reserved connector sentinel) the in-process connector
+// worker subscribes to, and Connector names the server-registered connector to
+// resolve at runtime. The JobType also selects which connector kind this is, and
+// thus which of the kind-specific fields below are populated:
+//
+//   - clio "write-events" (JobType == ClioWriteJobType): Subject and EventType are
+//     the interned clio coordinates the appended event lands under.
+//   - HTTP REST (JobType == RestJobType): Method and Path are the interned request
+//     method (e.g. "POST") and the path appended to the connector's base endpoint.
+//
+// Unused fields for a given kind are -1 (Intern maps that back to ""). Both kinds
+// send the instance's variables as the request/event body — a stand-in for full
+// payload mappings until the variable subsystem matures.
 type ConnectorTaskDetail struct {
 	JobType   int32 // interned reserved connector job type → index
 	Connector int32 // interned connector name → index
-	Subject   int32 // interned target subject → index
-	EventType int32 // interned event type → index
+	Subject   int32 // interned clio target subject → index, -1 if not a clio task
+	EventType int32 // interned clio event type → index, -1 if not a clio task
+	Method    int32 // interned HTTP method → index, -1 if not a REST task
+	Path      int32 // interned HTTP path → index, -1 if not a REST task
 	Retries   int32
 }
 
@@ -174,6 +207,28 @@ type MessageDetail struct {
 	CorrelationKey *expr.Compiled
 }
 
+// BoundaryEventKind discriminates what a boundary event waits on.
+type BoundaryEventKind uint8
+
+const (
+	BoundaryTimer   BoundaryEventKind = iota // waits a fixed duration, then fires
+	BoundaryMessage                          // waits for a correlating message, then fires
+)
+
+// BoundaryEventDetail is the per-boundary-event data a behavior needs at runtime.
+// A boundary event is attached to a host activity (HostNode) and arms while the
+// host runs; when it fires it either interrupts the host (Interrupting) or spawns
+// a parallel token. The timer fields apply when Kind is BoundaryTimer, the message
+// fields when Kind is BoundaryMessage (ADR-0040).
+type BoundaryEventDetail struct {
+	HostNode       int32 // ElementId of the activity this event is attached to
+	Interrupting   bool  // true = cancel the host on fire (BPMN cancelActivity); false = run alongside
+	Kind           BoundaryEventKind
+	DurationNanos  int64          // BoundaryTimer: how long before it fires
+	MessageName    string         // BoundaryMessage: the message it subscribes to
+	CorrelationKey *expr.Compiled // BoundaryMessage: correlation-key expression (ADR-0020)
+}
+
 // CompiledProcess is the immutable result of compiling one process definition.
 // It is safe for concurrent reads without synchronization.
 type CompiledProcess struct {
@@ -185,12 +240,14 @@ type CompiledProcess struct {
 	flows []CompiledFlow
 
 	outgoingFlows     []int32 // shared topology: flow ids grouped by source node
+	boundaryEvents    []int32 // shared topology: boundary-event node ids grouped by host node
 	serviceTasks      []ServiceTaskDetail
 	scriptTasks       []ScriptTaskDetail
 	businessRuleTasks []BusinessRuleTaskDetail
 	timerCatches      []TimerCatchDetail
 	connectorTasks    []ConnectorTaskDetail
 	userTasks         []UserTaskDetail
+	boundaryEventDets []BoundaryEventDetail
 	messageCatches    []MessageDetail
 	messageThrows     []MessageDetail
 	messageStarts     []MessageDetail
@@ -210,6 +267,19 @@ func (p *CompiledProcess) Flow(id int32) *CompiledFlow { return &p.flows[id] }
 func (p *CompiledProcess) Outgoing(id int32) []int32 {
 	n := &p.nodes[id]
 	return p.outgoingFlows[n.OutgoingStart : n.OutgoingStart+n.OutgoingCount]
+}
+
+// BoundaryEvents returns the element ids of the boundary events attached to the
+// activity node id, as a slice into the shared topology array (no allocation).
+// Empty for a node with no attached boundary events.
+func (p *CompiledProcess) BoundaryEvents(id int32) []int32 {
+	n := &p.nodes[id]
+	return p.boundaryEvents[n.BoundaryStart : n.BoundaryStart+n.BoundaryCount]
+}
+
+// BoundaryEvent returns the boundary-event detail at the given table index.
+func (p *CompiledProcess) BoundaryEvent(detail int32) *BoundaryEventDetail {
+	return &p.boundaryEventDets[detail]
 }
 
 // NodesReaching returns the set of node ids from which target is reachable by
@@ -270,6 +340,31 @@ func (p *CompiledProcess) MessageStart(detail int32) *MessageDetail {
 // message can instantiate the process (ADR-0035). Empty for a process with no
 // message start event.
 func (p *CompiledProcess) MessageStarts() []MessageDetail { return p.messageStarts }
+
+// MessageStartEvent pairs a message-start event's message name with its element
+// index, so the engine can index which element a starting message flows into for
+// the collaboration replay (ADR-0038).
+type MessageStartEvent struct {
+	MessageName string
+	ElementId   int32
+}
+
+// MessageStartEvents returns each message-start event with its element index.
+// Computed by scanning the node table at deploy time (off the hot path); empty
+// for a process with no message start event.
+func (p *CompiledProcess) MessageStartEvents() []MessageStartEvent {
+	var out []MessageStartEvent
+	for id := range p.nodes {
+		n := &p.nodes[id]
+		if n.Type == TypeMessageStartEvent {
+			out = append(out, MessageStartEvent{
+				MessageName: p.messageStarts[n.Detail].MessageName,
+				ElementId:   int32(id),
+			})
+		}
+	}
+	return out
+}
 
 // ScriptTask returns the detail at the given table index.
 func (p *CompiledProcess) ScriptTask(detail int32) *ScriptTaskDetail {

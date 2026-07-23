@@ -46,6 +46,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeBusinessRuleTask] = businessRuleTaskBehavior{}
 	p.behaviors[compiler.TypeConnectorTask] = connectorTaskBehavior{}
 	p.behaviors[compiler.TypeUserTask] = userTaskBehavior{}
+	p.behaviors[compiler.TypeBoundaryEvent] = boundaryEventBehavior{}
 	p.behaviors[compiler.TypeExclusiveGateway] = exclusiveGatewayBehavior{}
 	p.behaviors[compiler.TypeTimerCatchEvent] = timerCatchEventBehavior{}
 	p.behaviors[compiler.TypeMessageCatchEvent] = messageCatchEventBehavior{}
@@ -108,27 +109,46 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 	c.AppendProcessInstanceEvent(piKey, model.IntentTerminated, *pi)
 }
 
-// handleElementActivating emits the Activated lifecycle event, then runs the
-// element-type behavior.
+// handleElementActivating emits the Activated lifecycle event, runs the
+// element-type behavior, then arms any boundary events attached to this element
+// (a no-op for a node with none).
 func handleElementActivating(c *ProcessingContext) {
 	ei := &c.cmd.Value.element
 	c.AppendElementEvent(c.cmd.Key, model.IntentActivated, *ei)
 	c.p.behavior(ei.BpmnElementType).OnActivated(c, c.cmd.Key, ei)
+	armBoundaryEvents(c, c.cmd.Key, ei)
 }
 
-// handleElementCompleting runs the element-type completion behavior.
+// handleElementCompleting runs the element-type completion behavior, then — if
+// this element hosts boundary events — disarms any still armed, now that it has
+// completed normally (their timers/subscriptions self-retire).
 func handleElementCompleting(c *ProcessingContext) {
 	ei := &c.cmd.Value.element
 	c.p.behavior(ei.BpmnElementType).OnCompleting(c, c.cmd.Key, ei)
+	if c.process(ei.ProcessDefKey).Node(ei.ElementId).BoundaryCount > 0 {
+		disarmBoundaryEvents(c, c.cmd.Key, ei.ProcessInstanceKey)
+	}
 }
 
-// handleJobCompleted retires the job and tells its element to complete.
+// handleJobCompleted retires the job, writes the worker's output variables into
+// the job's process instance scope, and tells its element to complete. The
+// outputs (carried on the completion command as StartVars) are written before the
+// element completes so a downstream condition can read them; the values are frozen
+// into VariableCreated events, so replay re-applies them rather than re-running
+// the worker (invariant I6). Writing here mirrors how instance creation seeds its
+// start variables — deterministic state mutation from already-decided data.
 func handleJobCompleted(c *ProcessingContext) {
 	job := c.GetJob(c.cmd.Key)
 	if job == nil {
 		return // already gone or never existed; nothing to do
 	}
 	c.AppendJobEvent(c.cmd.Key, model.IntentJobCompleted, *job)
+
+	for i := range c.cmd.StartVars {
+		v := c.cmd.StartVars[i]
+		v.ScopeKey = job.ProcessInstanceKey
+		c.AppendVariableEvent(model.IntentVariableCreated, v)
+	}
 
 	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
 		c.AppendElementCommand(job.ElementInstanceKey, model.IntentCompleting, *ei)
@@ -137,7 +157,7 @@ func handleJobCompleted(c *ProcessingContext) {
 
 // handleJobAssigned rewrites a job's user-task assignee (claim sets it, unclaim
 // clears it) and re-emits the job so the change is persisted through the one
-// applyToState (ADR-0038). Assigning a job that is gone — already completed or
+// applyToState (ADR-0041). Assigning a job that is gone — already completed or
 // never existed — is a no-op. The command carries only the new assignee; every
 // other job field is preserved from the stored job.
 func handleJobAssigned(c *ProcessingContext) {
@@ -166,7 +186,8 @@ func handleTimerTriggered(c *ProcessingContext) {
 // StartVars); correlation is the same path a message throw event uses.
 func handleMessagePublished(c *ProcessingContext) {
 	pub := c.cmd.Value.subscription
-	correlateMessage(c, pub.MessageName, pub.CorrelationKey, c.cmd.StartVars)
+	// An API publish has no sending instance, so the recorded flow's sender is 0.
+	correlateMessage(c, pub.MessageName, pub.CorrelationKey, c.cmd.StartVars, 0)
 }
 
 // behavior resolves the behavior for a BPMN element type.
@@ -195,6 +216,78 @@ func activateElement(c *ProcessingContext, ei *model.ElementInstanceValue, targe
 		FlowScopeKey:       ei.FlowScopeKey,
 		BpmnElementType:    uint8(target.Type),
 	})
+}
+
+// armBoundaryEvents activates a waiting element instance for each boundary event
+// attached to the host activity that just activated (ei/hostKey). Each armed
+// instance carries AttachedToKey = hostKey so it can later interrupt its host, and
+// its own OnActivated arms the timer/subscription it waits on. A no-op for a node
+// with no attached boundary events (ADR-0040).
+func armBoundaryEvents(c *ProcessingContext, hostKey uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	for _, beID := range cp.BoundaryEvents(ei.ElementId) {
+		c.AppendElementCommand(c.NewKey(), model.IntentActivating, model.ElementInstanceValue{
+			ProcessInstanceKey: ei.ProcessInstanceKey,
+			ProcessDefKey:      ei.ProcessDefKey,
+			ElementId:          beID,
+			FlowScopeKey:       ei.FlowScopeKey,
+			BpmnElementType:    uint8(compiler.TypeBoundaryEvent),
+			AttachedToKey:      hostKey,
+		})
+	}
+}
+
+// disarmBoundaryEvents terminates every still-armed boundary event instance
+// attached to hostKey, when the host completes normally. A Terminated event drops
+// the instance and decrements the scope's child count; the boundary's timer or
+// subscription is left to self-retire (it fires later, finds no element, and does
+// nothing) — the same pattern instance cancellation uses.
+func disarmBoundaryEvents(c *ProcessingContext, hostKey, procKey uint64) {
+	var boundaries []uint64
+	c.ForEachElementInstance(procKey, func(elKey uint64) {
+		if b := c.GetElementInstance(elKey); b != nil && b.AttachedToKey == hostKey {
+			boundaries = append(boundaries, elKey)
+		}
+	})
+	for _, bk := range boundaries {
+		if b := c.GetElementInstance(bk); b != nil {
+			c.AppendElementEvent(bk, model.IntentTerminated, *b)
+		}
+	}
+}
+
+// interruptHost terminates the host activity an interrupting boundary event fired
+// on: it cancels the host's job (if any), terminates the host element instance,
+// and terminates the host's other boundary siblings (their timers/subscriptions
+// self-retire). It is idempotent — if the host is already gone (it completed, or a
+// sibling boundary already interrupted it), it does nothing.
+func interruptHost(c *ProcessingContext, hostKey, selfKey uint64) {
+	host := c.GetElementInstance(hostKey)
+	if host == nil {
+		return
+	}
+	if jobKey, ok := c.JobOfElement(hostKey); ok {
+		if job := c.GetJob(jobKey); job != nil {
+			c.AppendJobEvent(jobKey, model.IntentJobCanceled, *job)
+		}
+	}
+	c.AppendElementEvent(hostKey, model.IntentTerminated, *host)
+	// Terminate the host's other boundary events (not this one — it completes and
+	// takes its outgoing flow).
+	var siblings []uint64
+	c.ForEachElementInstance(host.ProcessInstanceKey, func(elKey uint64) {
+		if elKey == selfKey {
+			return
+		}
+		if s := c.GetElementInstance(elKey); s != nil && s.AttachedToKey == hostKey {
+			siblings = append(siblings, elKey)
+		}
+	})
+	for _, sk := range siblings {
+		if s := c.GetElementInstance(sk); s != nil {
+			c.AppendElementEvent(sk, model.IntentTerminated, *s)
+		}
+	}
 }
 
 // takeOutgoingFlows activates a fresh element instance for each outgoing flow's
@@ -392,6 +485,8 @@ func (messageCatchEventBehavior) OnActivated(c *ProcessingContext, key uint64, e
 		ElementInstanceKey: key,
 		MessageName:        detail.MessageName,
 		CorrelationKey:     evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey),
+		ProcessDefKey:      ei.ProcessDefKey,
+		ElementId:          ei.ElementId,
 	})
 	// Stays Activated: no Completing until a message correlates.
 }
@@ -416,7 +511,7 @@ func (messageThrowEventBehavior) OnActivated(c *ProcessingContext, key uint64, e
 	// seeded with them (ADR-0035). Reading the payload here (command processing)
 	// keeps applyToState pure (I4).
 	payload := instanceVariables(c, ei.ProcessInstanceKey)
-	correlateMessage(c, detail.MessageName, evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey), payload)
+	correlateMessage(c, detail.MessageName, evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey), payload, ei.ProcessInstanceKey)
 	c.AppendElementCommand(key, model.IntentCompleting, *ei)
 }
 
@@ -446,7 +541,7 @@ func evalCorrelationKey(c *ProcessingContext, e *expr.Compiled, scope uint64) st
 // instance to complete. Matches are collected before any mutation so retiring a
 // subscription can't disturb the scan. A message that matches nothing is a no-op
 // — there is no buffering yet (ADR-0020).
-func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []model.VariableValue) {
+func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []model.VariableValue, senderPIKey uint64) {
 	type match struct {
 		elKey uint64
 		sub   model.MessageSubscriptionValue
@@ -459,6 +554,16 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 	for i := range matches {
 		m := matches[i]
 		c.AppendMessageSubscriptionEvent(m.elKey, model.IntentSubscriptionCorrelated, m.sub)
+		// Retain the delivery to the waiting catch event for the collaboration
+		// replay (ADR-0038), before the subscription's fields are needed elsewhere.
+		c.AppendMessageFlowEvent(model.MessageFlowValue{
+			SenderProcessInstanceKey:   senderPIKey,
+			ReceiverProcessInstanceKey: m.sub.ProcessInstanceKey,
+			ReceiverProcessDefKey:      m.sub.ProcessDefKey,
+			ReceiverElementId:          m.sub.ElementId,
+			MessageName:                name,
+			CorrelationKey:             correlationKey,
+		})
 		for j := range vars {
 			vv := vars[j]
 			vv.ScopeKey = m.sub.ProcessInstanceKey
@@ -474,8 +579,18 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 	// runs after the subscription scan so a single message can both correlate a
 	// waiting instance and start new ones, all recovered from the events the
 	// created instances emit.
-	for _, defKey := range c.p.messageStarts[name] {
-		c.AppendCreateInstanceCommand(defKey, vars)
+	for _, ref := range c.p.messageStarts[name] {
+		c.AppendCreateInstanceCommand(ref.defKey, vars)
+		// Retain the delivery into the message-start event too, so the replay shows
+		// the message that opened the receiving pool. The receiver instance does not
+		// exist yet (the create is a followup), so its key is left 0 (ADR-0038).
+		c.AppendMessageFlowEvent(model.MessageFlowValue{
+			SenderProcessInstanceKey: senderPIKey,
+			ReceiverProcessDefKey:    ref.defKey,
+			ReceiverElementId:        ref.elementId,
+			MessageName:              name,
+			CorrelationKey:           correlationKey,
+		})
 	}
 }
 
@@ -716,13 +831,62 @@ func (userTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.
 		JobType:            detail.JobType,
 		Retries:            detail.Retries,
 		// Seed the runtime assignee with the model's default; claim/unclaim
-		// rewrites it through the job lifecycle (ADR-0038).
+		// rewrites it through the job lifecycle (ADR-0041).
 		Assignee: cp.Intern(detail.Assignee),
 	})
 	c.NotifyJobAvailable(detail.JobType)
 }
 
 func (userTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// boundaryEventBehavior: a timer/message event attached to a host activity
+// (ADR-0040). On activation it arms its trigger — a timer keyed to itself (like an
+// intermediate timer catch) or a message subscription — and waits. When the
+// trigger fires, the existing timer/message path drives it to Completing:
+//   - interrupting: cancel the host (and its job and other boundary siblings),
+//     then take the boundary's outgoing flow;
+//   - non-interrupting: just take the outgoing flow, leaving the host running.
+//
+// A boundary instance that a sibling's interrupt already terminated is skipped
+// (its Completing command was queued before the sibling fired).
+type boundaryEventBehavior struct{}
+
+func (boundaryEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	d := cp.BoundaryEvent(cp.Node(ei.ElementId).Detail)
+	switch d.Kind {
+	case compiler.BoundaryTimer:
+		// Now() is read here (command processing) and frozen into the due date;
+		// applyToState never reads the clock (invariant I4).
+		c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
+			ProcessInstanceKey: ei.ProcessInstanceKey,
+			ElementInstanceKey: key,
+			TargetElementId:    ei.ElementId,
+			DueDate:            c.Now() + d.DurationNanos,
+		})
+	case compiler.BoundaryMessage:
+		c.AppendMessageSubscriptionEvent(key, model.IntentSubscriptionCreated, model.MessageSubscriptionValue{
+			ProcessInstanceKey: ei.ProcessInstanceKey,
+			ElementInstanceKey: key,
+			MessageName:        d.MessageName,
+			CorrelationKey:     evalCorrelationKey(c, d.CorrelationKey, ei.ProcessInstanceKey),
+		})
+	}
+	// Stays Activated: waits until the timer fires or the message correlates.
+}
+
+func (boundaryEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	// A sibling boundary's interrupt may have terminated this instance after its
+	// Completing command was queued; if so, there is nothing to fire.
+	if c.GetElementInstance(key) == nil {
+		return
+	}
+	d := c.process(ei.ProcessDefKey).BoundaryEvent(c.process(ei.ProcessDefKey).Node(ei.ElementId).Detail)
+	if d.Interrupting {
+		interruptHost(c, ei.AttachedToKey, key)
+	}
 	completeAndTakeFlows(c, key, ei)
 }
 

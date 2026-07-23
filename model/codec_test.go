@@ -178,7 +178,9 @@ func TestRecordRoundTrip(t *testing.T) {
 func TestAppendRecordIsAppendOnly(t *testing.T) {
 	// AppendRecord must extend the existing buffer, not overwrite a prefix.
 	prefix := []byte{0xDE, 0xAD}
-	r := Record{Header: sampleHeader(), Value: &JobValue{JobType: 1}}
+	// The value must match the header's ValueType (VTElementInstance); ReadRecord
+	// decodes the payload as whatever the header declares.
+	r := Record{Header: sampleHeader(), Value: &ElementInstanceValue{ElementId: 1}}
 	buf := AppendRecord(prefix, &r)
 	if buf[0] != 0xDE || buf[1] != 0xAD {
 		t.Fatalf("prefix was clobbered: % x", buf[:2])

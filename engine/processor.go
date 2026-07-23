@@ -36,13 +36,14 @@ type Processor struct {
 	handlers  map[uint16]func(*ProcessingContext)
 	behaviors [compiler.NumBpmnTypes]bpmnBehavior
 
-	// messageStarts indexes message start events by message name → the definition
-	// keys that a correlating message instantiates (ADR-0035). It is derived from
-	// the compiled definitions, rebuilt by Deploy on every start (the deploy store
-	// re-registers definitions on recovery), so it needs no durable state of its
-	// own — the instances it creates go through the normal event path and recover
-	// from the log.
-	messageStarts map[string][]uint64
+	// messageStarts indexes message start events by message name → the definitions
+	// a correlating message instantiates (ADR-0035), each with the element the
+	// message flows into so the collaboration replay can name the receiving edge
+	// (ADR-0038). It is derived from the compiled definitions, rebuilt by Deploy on
+	// every start (the deploy store re-registers definitions on recovery), so it
+	// needs no durable state of its own — the instances it creates go through the
+	// normal event path and recover from the log.
+	messageStarts map[string][]messageStartRef
 
 	jobNotifier func(jobType int32)
 
@@ -74,7 +75,7 @@ func New(partition uint16, log *wal.Log, store *state.Store, clock Clock) *Proce
 		clock:         clock,
 		keygen:        &keyGen{partition: partition},
 		processes:     map[uint64]*compiler.CompiledProcess{},
-		messageStarts: map[string][]uint64{},
+		messageStarts: map[string][]messageStartRef{},
 	}
 	p.registerHandlers()
 	p.registerBehaviors()
@@ -86,8 +87,9 @@ func New(partition uint16, log *wal.Log, store *state.Store, clock Clock) *Proce
 // (ADR-0035).
 func (p *Processor) Deploy(cp *compiler.CompiledProcess) {
 	p.processes[cp.Key] = cp
-	for _, ms := range cp.MessageStarts() {
-		p.messageStarts[ms.MessageName] = append(p.messageStarts[ms.MessageName], cp.Key)
+	for _, ms := range cp.MessageStartEvents() {
+		p.messageStarts[ms.MessageName] = append(p.messageStarts[ms.MessageName],
+			messageStartRef{defKey: cp.Key, elementId: ms.ElementId})
 	}
 }
 
@@ -97,23 +99,30 @@ func (p *Processor) Deploy(cp *compiler.CompiledProcess) {
 // resolve their definition by key on every batch).
 func (p *Processor) Undeploy(defKey uint64) {
 	if cp := p.processes[defKey]; cp != nil {
-		for _, ms := range cp.MessageStarts() {
-			p.messageStarts[ms.MessageName] = removeKey(p.messageStarts[ms.MessageName], defKey)
+		for _, ms := range cp.MessageStartEvents() {
+			p.messageStarts[ms.MessageName] = removeStartRef(p.messageStarts[ms.MessageName], defKey)
 		}
 	}
 	delete(p.processes, defKey)
 }
 
-// removeKey returns keys with the first occurrence of key removed. A name whose
-// last message-start definition is undeployed keeps an empty slice, which
+// messageStartRef points a starting message at the definition it instantiates
+// and the message-start element it flows into (for the collaboration replay).
+type messageStartRef struct {
+	defKey    uint64
+	elementId int32
+}
+
+// removeStartRef returns refs with the first entry for defKey removed. A name
+// whose last message-start definition is undeployed keeps an empty slice, which
 // correlates to nothing — harmless and rare, so it is not pruned from the map.
-func removeKey(keys []uint64, key uint64) []uint64 {
-	for i, k := range keys {
-		if k == key {
-			return append(keys[:i], keys[i+1:]...)
+func removeStartRef(refs []messageStartRef, defKey uint64) []messageStartRef {
+	for i, r := range refs {
+		if r.defKey == defKey {
+			return append(refs[:i], refs[i+1:]...)
 		}
 	}
-	return keys
+	return refs
 }
 
 // SetJobNotifier installs the hook the service-task behavior triggers (after
@@ -131,19 +140,25 @@ func (p *Processor) CreateInstance(defKey uint64, startVars ...model.VariableVal
 	})
 }
 
-// CompleteJob enqueues completion of a job by a worker.
-func (p *Processor) CompleteJob(jobKey uint64) {
+// CompleteJob enqueues completion of a job by a worker, optionally carrying the
+// output variables the worker produced (e.g. a business rule task's decision
+// result). The outputs are written into the job's process instance scope when the
+// completion is processed, before the element completes, so a downstream gateway
+// can route on them. They are frozen into VariableCreated events, so replay
+// re-applies them without re-running the worker (invariant I6).
+func (p *Processor) CompleteJob(jobKey uint64, outputs ...model.VariableValue) {
 	p.queue = append(p.queue, Command{
 		Key:       jobKey,
 		ValueType: model.VTJob,
 		Intent:    model.IntentJobCompleted,
+		StartVars: outputs,
 	})
 }
 
 // AssignJob enqueues a (re)assignment of a user task's assignee, identified by
 // its job key. A non-empty assignee is a claim; an empty one unclaims the task,
 // making it available again. The job stays open either way. Assigning a job that
-// no longer exists is a no-op. Call RunUntilIdle to process it (ADR-0038).
+// no longer exists is a no-op. Call RunUntilIdle to process it (ADR-0041).
 func (p *Processor) AssignJob(jobKey uint64, assignee string) {
 	p.queue = append(p.queue, Command{
 		Key:       jobKey,

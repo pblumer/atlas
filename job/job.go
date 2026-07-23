@@ -13,6 +13,7 @@ package job
 import (
 	"fmt"
 
+	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
 
@@ -25,34 +26,47 @@ type Job struct {
 	Retries            int32
 }
 
-// Handler does a job's work. Returning nil completes the job; returning an error
-// leaves it pending and surfaces the error (retry/incident handling is a later
-// milestone).
+// Handler does a job's work with no output. Returning nil completes the job;
+// returning an error leaves it pending and surfaces the error (retry/incident
+// handling is a later milestone).
 type Handler func(Job) error
 
+// OutputHandler does a job's work and returns the variables to write back into
+// the job's process instance on completion (nil for none) — e.g. a business rule
+// task's decision result. As for Handler, returning an error leaves the job
+// pending.
+type OutputHandler func(Job) ([]model.VariableValue, error)
+
 // Engine is the slice of the processor the runner drives: process queued
-// commands, and accept job completions.
+// commands, and accept job completions with their output variables.
 type Engine interface {
 	RunUntilIdle() error
-	CompleteJob(jobKey uint64)
+	CompleteJob(jobKey uint64, outputs ...model.VariableValue)
 }
 
 // Runner dispatches activatable jobs to registered handlers.
 type Runner struct {
 	store    *state.Store
 	engine   Engine
-	handlers map[int32]Handler
+	handlers map[int32]OutputHandler
 }
 
 // NewRunner creates a runner over a state store and the engine it feeds.
 func NewRunner(store *state.Store, engine Engine) *Runner {
-	return &Runner{store: store, engine: engine, handlers: map[int32]Handler{}}
+	return &Runner{store: store, engine: engine, handlers: map[int32]OutputHandler{}}
 }
 
-// Handle registers a worker for a job type. The type is the interned index the
-// compiler assigned (cross-process, globally consistent job-type interning is a
-// later concern).
-func (r *Runner) Handle(jobType int32, h Handler) { r.handlers[jobType] = h }
+// Handle registers an output-less worker for a job type. The type is the interned
+// index the compiler assigned (cross-process, globally consistent job-type
+// interning is a later concern).
+func (r *Runner) Handle(jobType int32, h Handler) {
+	r.handlers[jobType] = func(j Job) ([]model.VariableValue, error) { return nil, h(j) }
+}
+
+// HandleWithOutput registers a worker whose completion writes output variables
+// back into the instance (e.g. the DMN worker). Same dispatch as Handle; the only
+// difference is that its returned variables ride along on the CompleteJob command.
+func (r *Runner) HandleWithOutput(jobType int32, h OutputHandler) { r.handlers[jobType] = h }
 
 // PollOnce pulls every activatable job of a registered type, runs its handler,
 // and submits a completion command for each that succeeds. It returns how many
@@ -83,10 +97,11 @@ func (r *Runner) PollOnce() (int, error) {
 				ElementInstanceKey: jv.ElementInstanceKey,
 				Retries:            jv.Retries,
 			}
-			if err := h(job); err != nil {
+			outputs, err := h(job)
+			if err != nil {
 				return dispatched, fmt.Errorf("job %d (type %d): %w", k, jv.JobType, err)
 			}
-			r.engine.CompleteJob(k)
+			r.engine.CompleteJob(k, outputs...)
 			dispatched++
 		}
 	}

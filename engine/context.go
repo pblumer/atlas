@@ -46,6 +46,15 @@ func (c *ProcessingContext) GetJob(key uint64) *model.JobValue {
 	return v
 }
 
+// JobOfElement returns the key of the job held by an element instance and whether
+// it holds one, through the in-flight transaction. An interrupting boundary event
+// uses it to cancel the host activity's job when it terminates the host.
+func (c *ProcessingContext) JobOfElement(elKey uint64) (uint64, bool) {
+	jobKey, ok, err := c.tx.JobOfElement(elKey)
+	c.p.fail(err)
+	return jobKey, ok
+}
+
 // GetProcessInstance reads process-instance state through the in-flight transaction.
 func (c *ProcessingContext) GetProcessInstance(key uint64) *model.ProcessInstanceValue {
 	v, err := c.tx.GetProcessInstance(key)
@@ -172,6 +181,15 @@ func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.Var
 // event alone (invariant I4).
 func (c *ProcessingContext) AppendMessageSubscriptionEvent(key uint64, intent model.Intent, v model.MessageSubscriptionValue) {
 	c.appendEvent(key, model.VTMessageSubscription, intent, inflightValue{subscription: v})
+}
+
+// AppendMessageFlowEvent retains one delivered message flow as history for the
+// collaboration replay (ADR-0038). It is keyed by its receiving definition (the
+// state index leads with it); the event's header timestamp and position order it
+// on the replay timeline. Emitted once per correlated catch event and once per
+// message-start instantiation, so both kinds of cross-pool delivery are recorded.
+func (c *ProcessingContext) AppendMessageFlowEvent(v model.MessageFlowValue) {
+	c.appendEvent(v.ReceiverProcessDefKey, model.VTMessageFlow, model.IntentMessagePublished, inflightValue{messageFlow: v})
 }
 
 // AppendElementCommand schedules an element-instance command for a later batch.

@@ -1,6 +1,7 @@
 package state
 
 import (
+	"encoding/binary"
 	"errors"
 
 	"github.com/cockroachdb/pebble"
@@ -128,12 +129,36 @@ func (t *Tx) ElementInstancesOfProcess(procKey uint64, fn func(elKey uint64, v *
 
 // --- Job ---
 
-// PutJob writes the job and its activatable index entry.
+// PutJob writes the job, its activatable index entry, and the reverse
+// element→job entry (so an interrupting boundary event can find the host's job).
+// The three writes go to one in-memory batch; their errors are accumulated (first
+// non-nil wins) rather than checked one at a time, which keeps every write on the
+// same covered path.
 func (t *Tx) PutJob(key uint64, v *model.JobValue) error {
-	if err := t.b.Set(keyJob(key), t.encodeValue(v), nil); err != nil {
-		return err
+	err := t.b.Set(keyJob(key), t.encodeValue(v), nil)
+	if e := t.b.Set(keyJobActivatable(v.JobType, key), nil, nil); err == nil {
+		err = e
 	}
-	return t.b.Set(keyJobActivatable(v.JobType, key), nil, nil)
+	if e := t.b.Set(keyJobByElement(v.ElementInstanceKey), appendBE64(nil, key), nil); err == nil {
+		err = e
+	}
+	return err
+}
+
+// JobOfElement returns the key of the job held by the given element instance, or
+// ok=false if it holds none. Used to cancel a host activity's job when an
+// interrupting boundary event terminates it.
+func (t *Tx) JobOfElement(elKey uint64) (uint64, bool, error) {
+	raw, closer, err := t.b.Get(keyJobByElement(elKey))
+	if errors.Is(err, pebble.ErrNotFound) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	jobKey := binary.BigEndian.Uint64(raw)
+	closer.Close()
+	return jobKey, true, nil
 }
 
 // GetJobInto decodes the job into dst without allocating, reporting whether it
@@ -152,12 +177,18 @@ func (t *Tx) GetJob(key uint64) (*model.JobValue, error) {
 	return &v, nil
 }
 
-// DeleteJob removes the job and its activatable index entry.
+// DeleteJob removes the job, its activatable index entry, and the reverse
+// element→job entry. Errors are accumulated across the three batch deletes (first
+// non-nil wins), keeping every delete on the same covered path.
 func (t *Tx) DeleteJob(key uint64, v *model.JobValue) error {
-	if err := t.b.Delete(keyJob(key), nil); err != nil {
-		return err
+	err := t.b.Delete(keyJob(key), nil)
+	if e := t.b.Delete(keyJobActivatable(v.JobType, key), nil); err == nil {
+		err = e
 	}
-	return t.b.Delete(keyJobActivatable(v.JobType, key), nil)
+	if e := t.b.Delete(keyJobByElement(v.ElementInstanceKey), nil); err == nil {
+		err = e
+	}
+	return err
 }
 
 // --- Timer ---
@@ -328,6 +359,24 @@ func (t *Tx) mergeActiveChildren(scope uint64, delta int64) error {
 func (t *Tx) RecordElementVisit(procDefKey, piKey uint64, elementId int32) error {
 	t.scratch = appendCounter(t.scratch[:0], 1)
 	return t.b.Merge(keyElementVisit(procDefKey, piKey, elementId), t.scratch, nil)
+}
+
+// --- Message-flow history ---
+//
+// Every delivered message flow (a correlation to a catch event, or a message
+// that instantiated a message-start process) is retained here so the Operations
+// collaboration view can replay which message crossed to which receiving element
+// and when — the message-flow analogue of the element-visit heatmap. Written
+// only from applyToState, from the event alone (the header's timestamp and
+// position plus the payload), so it rebuilds identically on replay (invariant I4,
+// ADR-0038). Each record has a unique key (position is monotonic), so this is a
+// plain Set, never overwritten and never deleted. Retention is unbounded for now,
+// as with the process-instance and element-visit history (ADR-0017, ADR-0022).
+
+// RecordMessageFlow retains one delivered message flow under its receiver
+// definition, keyed in time order. ts and pos come from the event header.
+func (t *Tx) RecordMessageFlow(ts int64, pos uint64, v *model.MessageFlowValue) error {
+	return t.b.Set(keyMessageFlow(v.ReceiverProcessDefKey, ts, pos), t.encodeValue(v), nil)
 }
 
 // ActiveChildren returns the active-child count for scope (0 if none). This read

@@ -39,6 +39,11 @@ const UserTaskJobTypeIndex int32 = 1
 // subscribes to DMNJobType.
 const ClioWriteJobType = "io.atlas.clio.write"
 
+// RestJobType is the reserved job type an HTTP-REST connector task carries. The
+// in-process REST connector worker subscribes to it to call the configured REST
+// API (ADR-0036), the same way the clio worker subscribes to ClioWriteJobType.
+const RestJobType = "io.atlas.http.rest"
+
 // Builder constructs a CompiledProcess programmatically. It stands in for the
 // XML parse/resolve/linearize pipeline until that front end exists: callers add
 // nodes and flows, and Build linearizes them into the immutable form (assigning
@@ -56,6 +61,7 @@ type Builder struct {
 	timerCatches      []TimerCatchDetail
 	connectorTasks    []ConnectorTaskDetail
 	userTasks         []UserTaskDetail
+	boundaryEventDets []BoundaryEventDetail
 	messageCatches    []MessageDetail
 	messageThrows     []MessageDetail
 	messageStarts     []MessageDetail
@@ -153,14 +159,26 @@ func (b *Builder) AddScriptTask(e *expr.Compiled, resultVar string) int32 {
 }
 
 // AddBusinessRuleTask adds a business rule task that evaluates the named DMN
-// decision with the given static input context, and returns its element id. The
-// inputs map is JSON-encoded and interned at deploy time (never on the hot path,
-// invariant I5); a nil or empty map records no inputs. It returns an error if the
-// inputs cannot be encoded.
+// decision with the given static input context, and returns its element id. It is
+// the constant-input form of [Builder.AddBusinessRuleTaskMapped] (no variable
+// mappings, result discarded).
 func (b *Builder) AddBusinessRuleTask(decisionId string, inputs map[string]any, retries int32) (int32, error) {
+	return b.AddBusinessRuleTaskMapped(decisionId, "", inputs, nil, retries)
+}
+
+// AddBusinessRuleTaskMapped adds a business rule task that evaluates the named DMN
+// decision and returns its element id. Its input context is built from two layers
+// the DMN worker merges at evaluation time: staticInputs is a constant base
+// (JSON-encoded and interned at deploy time, never on the hot path — invariant
+// I5), and mappings are variable-driven inputs (FEEL expressions evaluated over
+// the instance's variables) that override a static input of the same name. If
+// resultVar is non-empty the decision's result is written back into that process
+// variable on job completion; an empty resultVar discards the result. It returns
+// an error if the static inputs cannot be encoded.
+func (b *Builder) AddBusinessRuleTaskMapped(decisionId, resultVar string, staticInputs map[string]any, mappings []DecisionInputMapping, retries int32) (int32, error) {
 	inputsIdx := int32(-1)
-	if len(inputs) > 0 {
-		encoded, err := json.Marshal(inputs)
+	if len(staticInputs) > 0 {
+		encoded, err := json.Marshal(staticInputs)
 		if err != nil {
 			return -1, fmt.Errorf("compiler: business rule task %q inputs: %w", decisionId, err)
 		}
@@ -168,10 +186,12 @@ func (b *Builder) AddBusinessRuleTask(decisionId string, inputs map[string]any, 
 	}
 	detail := int32(len(b.businessRuleTasks))
 	b.businessRuleTasks = append(b.businessRuleTasks, BusinessRuleTaskDetail{
-		JobType:    b.intern(DMNJobType),
-		DecisionId: b.intern(decisionId),
-		Inputs:     inputsIdx,
-		Retries:    retries,
+		JobType:       b.intern(DMNJobType),
+		DecisionId:    b.intern(decisionId),
+		Inputs:        inputsIdx,
+		ResultVar:     b.intern(resultVar),
+		Retries:       retries,
+		InputMappings: mappings,
 	})
 	return b.addNode(TypeBusinessRuleTask, detail), nil
 }
@@ -188,6 +208,28 @@ func (b *Builder) AddClioWriteTask(connector, subject, eventType string, retries
 		Connector: b.intern(connector),
 		Subject:   b.intern(subject),
 		EventType: b.intern(eventType),
+		Method:    -1, // not a REST task
+		Path:      -1,
+		Retries:   retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// AddRestConnectorTask adds an HTTP-REST connector task and returns its element
+// id. Like a service task it creates a job on activation and waits; the job
+// carries the reserved RestJobType so the in-process REST worker picks it up,
+// calls the named connector's REST API with the given method and path (resolved
+// against the connector's server-configured base endpoint), and completes the job
+// (ADR-0036). method is stored as given (the parser uppercases and validates it).
+func (b *Builder) AddRestConnectorTask(connector, method, path string, retries int32) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:   b.intern(RestJobType),
+		Connector: b.intern(connector),
+		Subject:   -1, // not a clio task
+		EventType: -1,
+		Method:    b.intern(method),
+		Path:      b.intern(path),
 		Retries:   retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
@@ -206,6 +248,36 @@ func (b *Builder) AddUserTask(name, assignee, candidateGroups string, retries in
 		Retries:         retries,
 	})
 	return b.addNode(TypeUserTask, detail)
+}
+
+// AddBoundaryTimerEvent adds a timer boundary event attached to host, firing
+// after durationNanos. interrupting mirrors BPMN cancelActivity: true cancels the
+// host when it fires, false spawns a parallel token (ADR-0040). Returns its
+// element id.
+func (b *Builder) AddBoundaryTimerEvent(host int32, interrupting bool, durationNanos int64) int32 {
+	detail := int32(len(b.boundaryEventDets))
+	b.boundaryEventDets = append(b.boundaryEventDets, BoundaryEventDetail{
+		HostNode:      host,
+		Interrupting:  interrupting,
+		Kind:          BoundaryTimer,
+		DurationNanos: durationNanos,
+	})
+	return b.addNode(TypeBoundaryEvent, detail)
+}
+
+// AddBoundaryMessageEvent adds a message boundary event attached to host that
+// fires when a message named messageName correlates on key. interrupting mirrors
+// BPMN cancelActivity (ADR-0040). Returns its element id.
+func (b *Builder) AddBoundaryMessageEvent(host int32, interrupting bool, messageName string, correlationKey *expr.Compiled) int32 {
+	detail := int32(len(b.boundaryEventDets))
+	b.boundaryEventDets = append(b.boundaryEventDets, BoundaryEventDetail{
+		HostNode:       host,
+		Interrupting:   interrupting,
+		Kind:           BoundaryMessage,
+		MessageName:    messageName,
+		CorrelationKey: correlationKey,
+	})
+	return b.addNode(TypeBoundaryEvent, detail)
 }
 
 // AddTask adds an undefined/manual task — one with no execution semantics — and
@@ -308,6 +380,23 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		n.OutgoingCount = int32(len(outgoing)) - n.OutgoingStart
 	}
 
+	// Group boundary-event node ids by their host activity into one shared array,
+	// mirroring the outgoing-flow grouping, so arming a host's boundary events is
+	// an allocation-free slice at runtime. Each boundary-event node's detail names
+	// the host it attaches to.
+	var boundary []int32
+	for i := range b.nodes {
+		n := &b.nodes[i]
+		n.BoundaryStart = int32(len(boundary))
+		for j := range b.nodes {
+			be := &b.nodes[j]
+			if be.Type == TypeBoundaryEvent && b.boundaryEventDets[be.Detail].HostNode == n.ElementId {
+				boundary = append(boundary, be.ElementId)
+			}
+		}
+		n.BoundaryCount = int32(len(boundary)) - n.BoundaryStart
+	}
+
 	// Count incoming flows per node, so a parallel join knows how many tokens to
 	// wait for.
 	for _, f := range b.flows {
@@ -328,12 +417,14 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		nodes:             b.nodes,
 		flows:             b.flows,
 		outgoingFlows:     outgoing,
+		boundaryEvents:    boundary,
 		serviceTasks:      b.serviceTasks,
 		scriptTasks:       b.scriptTasks,
 		businessRuleTasks: b.businessRuleTasks,
 		timerCatches:      b.timerCatches,
 		connectorTasks:    b.connectorTasks,
 		userTasks:         b.userTasks,
+		boundaryEventDets: b.boundaryEventDets,
 		messageCatches:    b.messageCatches,
 		messageThrows:     b.messageThrows,
 		messageStarts:     b.messageStarts,

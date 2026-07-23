@@ -48,7 +48,19 @@ func TestAppendValueRoundTrip(t *testing.T) {
 		{
 			name: "message subscription",
 			vt:   VTMessageSubscription,
-			v:    &MessageSubscriptionValue{ProcessInstanceKey: NewKey(1, 1), ElementInstanceKey: NewKey(1, 2), MessageName: "order", CorrelationKey: "42"},
+			v:    &MessageSubscriptionValue{ProcessInstanceKey: NewKey(1, 1), ElementInstanceKey: NewKey(1, 2), MessageName: "order", CorrelationKey: "42", ProcessDefKey: NewKey(1, 3), ElementId: 7},
+		},
+		{
+			name: "message flow",
+			vt:   VTMessageFlow,
+			v: &MessageFlowValue{
+				SenderProcessInstanceKey:   NewKey(1, 1),
+				ReceiverProcessInstanceKey: NewKey(2, 1),
+				ReceiverProcessDefKey:      NewKey(2, 9),
+				ReceiverElementId:          4,
+				MessageName:                "order",
+				CorrelationKey:             "42",
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -91,7 +103,7 @@ func TestDecodeValueNoPayloadType(t *testing.T) {
 // TestDecodeValueShortBuffer covers the decode error propagation for each
 // payload type on a truncated buffer.
 func TestDecodeValueShortBuffer(t *testing.T) {
-	for _, vt := range []ValueType{VTElementInstance, VTJob, VTTimer, VTProcessInstance, VTVariable, VTMessageSubscription} {
+	for _, vt := range []ValueType{VTElementInstance, VTJob, VTTimer, VTProcessInstance, VTVariable, VTMessageSubscription, VTMessageFlow} {
 		if _, err := DecodeValue(vt, nil); !errors.Is(err, ErrShortBuffer) {
 			t.Errorf("DecodeValue(%v, nil) err = %v, want ErrShortBuffer", vt, err)
 		}
@@ -136,9 +148,10 @@ func TestMessageSubscriptionDecodeErrors(t *testing.T) {
 		name string
 		src  []byte
 	}{
-		{"short prefix", full[:8]},               // less than the two 8-byte keys
-		{"truncated name", full[:18]},            // 16 prefix + partial name length/bytes
-		{"truncated correlation key", full[:21]}, // name consumed, key length prefix truncated
+		{"short prefix", full[:8]},                   // less than the two 8-byte keys
+		{"truncated name", full[:18]},                // 16 prefix + partial name length/bytes
+		{"truncated correlation key", full[:21]},     // name consumed, key length prefix truncated
+		{"truncated def/element trailer", full[:30]}, // name+key consumed, <12 trailing bytes
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -151,7 +164,7 @@ func TestMessageSubscriptionDecodeErrors(t *testing.T) {
 }
 
 // TestJobDecodeErrors exercises the truncation guards in JobValue.decode: the
-// fixed prefix and the length-prefixed assignee (ADR-0038).
+// fixed prefix and the length-prefixed assignee (ADR-0041).
 func TestJobDecodeErrors(t *testing.T) {
 	full := AppendValue(nil, &JobValue{
 		ProcessInstanceKey: NewKey(1, 1),
@@ -170,6 +183,35 @@ func TestJobDecodeErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var v JobValue
+			if err := v.decode(tt.src); !errors.Is(err, ErrShortBuffer) {
+				t.Errorf("decode(%d bytes) err = %v, want ErrShortBuffer", len(tt.src), err)
+			}
+		})
+	}
+}
+
+// TestMessageFlowDecodeErrors exercises the truncation guards in
+// MessageFlowValue.decode: the fixed prefix and each length-prefixed string.
+func TestMessageFlowDecodeErrors(t *testing.T) {
+	full := AppendValue(nil, &MessageFlowValue{
+		SenderProcessInstanceKey:   NewKey(1, 1),
+		ReceiverProcessInstanceKey: NewKey(2, 1),
+		ReceiverProcessDefKey:      NewKey(2, 9),
+		ReceiverElementId:          4,
+		MessageName:                "n",
+		CorrelationKey:             "k",
+	})
+	tests := []struct {
+		name string
+		src  []byte
+	}{
+		{"short prefix", full[:20]},              // less than the 28-byte fixed prefix
+		{"truncated name", full[:30]},            // 28 prefix + partial name length
+		{"truncated correlation key", full[:33]}, // name consumed, key length prefix truncated
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var v MessageFlowValue
 			if err := v.decode(tt.src); !errors.Is(err, ErrShortBuffer) {
 				t.Errorf("decode(%d bytes) err = %v, want ErrShortBuffer", len(tt.src), err)
 			}
@@ -216,6 +258,7 @@ func TestValueTypeMethods(t *testing.T) {
 		{(&ProcessInstanceValue{}), VTProcessInstance},
 		{(&VariableValue{}), VTVariable},
 		{(&MessageSubscriptionValue{}), VTMessageSubscription},
+		{(&MessageFlowValue{}), VTMessageFlow},
 	}
 	for _, c := range cases {
 		if got := c.v.ValueType(); got != c.want {
@@ -237,6 +280,7 @@ func TestStringersExhaustive(t *testing.T) {
 	valueTypes := []ValueType{
 		VTProcessInstance, VTElementInstance, VTJob, VTTimer, VTMessageSubscription,
 		VTMessage, VTVariable, VTIncident, VTSignal, VTError, VTProcessDefinition,
+		VTMessageFlow,
 	}
 	for _, vt := range valueTypes {
 		if s := vt.String(); s == "" || s == "ValueType(?)" {
@@ -251,7 +295,7 @@ func TestStringersExhaustive(t *testing.T) {
 		IntentJobTimedOut, IntentJobAssigned, IntentTimerCreated, IntentTimerTriggered,
 		IntentSubscriptionCreated, IntentSubscriptionCorrelated, IntentMessagePublished,
 		IntentVariableCreated, IntentVariableUpdated, IntentIncidentCreated,
-		IntentIncidentResolved,
+		IntentIncidentResolved, IntentJobCanceled,
 	}
 	for _, in := range intents {
 		if s := in.String(); s == "" || s == "Intent(?)" {
