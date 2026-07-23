@@ -22,6 +22,7 @@ func TestBpmnTypeString(t *testing.T) {
 		{TypeMessageCatchEvent, "MessageCatchEvent"},
 		{TypeMessageThrowEvent, "MessageThrowEvent"},
 		{TypeTask, "Task"},
+		{TypeParallelGateway, "ParallelGateway"},
 		{TypeUnspecified, "Unspecified"},
 		{BpmnType(200), "Unspecified"},
 	}

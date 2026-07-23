@@ -18,7 +18,7 @@ import (
 type draft struct {
 	ProcessID string `json:"processId"`
 	Name      string `json:"name"`
-	// ProjectID is the optional project this draft belongs to (ADR-0024). Empty
+	// ProjectID is the optional project this draft belongs to (ADR-0033). Empty
 	// (the value for every draft that predates projects) means "Ungrouped"; so
 	// does an id that no longer names an existing project.
 	ProjectID string `json:"projectId,omitempty"`

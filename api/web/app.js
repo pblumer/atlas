@@ -235,7 +235,7 @@ async function viewModelerHome() {
   const projectsSection = document.getElementById("projects-section");
 
   // renderProjects shows saved-but-not-deployed diagrams (drafts) organized into
-  // projects (ADR-0024). Each project is a card holding its artifacts; drafts
+  // projects (ADR-0033). Each project is a card holding its artifacts; drafts
   // that belong to no existing project fall into an "Ungrouped" bucket. A per-row
   // "Project" dropdown moves a draft between projects.
   const renderProjects = async () => {
@@ -290,7 +290,7 @@ async function viewModelerHome() {
     }).join("");
 
     // A DMN reference points at a temis-authored model — Atlas lists it but does
-    // not edit it (ADR-0024), so there is no "Open", just the temis handle and a
+    // not edit it (ADR-0033), so there is no "Open", just the temis handle and a
     // deploy-time Validate that resolves the model and compiles it.
     const refRows = (list) => list.map((r) => `<tr>
         <td><span class="chip">DMN</span> <b>${esc(r.name)}</b>
@@ -423,7 +423,7 @@ async function deleteProcess(processId, groups, reload) {
   await reload();
 }
 
-// ---------- Projects (ADR-0024) ----------
+// ---------- Projects (ADR-0033) ----------
 async function createProject(reload) {
   const name = window.prompt("Project name");
   if (name == null) return; // cancelled
@@ -467,7 +467,7 @@ async function moveDraft(processId, projectId, reload) {
 
 // createDmnRef adds a DMN reference — a pointer to a temis-authored decision
 // model — into a project. Atlas organizes and lists the reference; authoring
-// stays in temis (ADR-0024), so we capture only a name and the temis handle.
+// stays in temis (ADR-0033), so we capture only a name and the temis handle.
 async function createDmnRef(projectId, reload) {
   const name = window.prompt("Reference name (how it shows in Atlas)");
   if (name == null) return;

@@ -1,4 +1,4 @@
-# ADR-0024: Projects as containers for heterogeneous artifacts
+# ADR-0033: Projects as containers for heterogeneous artifacts
 
 - **Status:** Accepted
 - **Date:** 2026-07-23

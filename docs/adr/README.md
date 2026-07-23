@@ -31,7 +31,16 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0021](0021-diagram-drafts.md) | Diagram drafts, separate from deployments | Accepted |
 | [0022](0022-element-visit-history.md) | Retain a per-element token-visit history for the Operations overlay | Accepted |
 | [0023](0023-collaborations-and-pools.md) | Collaborations and pools as multi-process deployments | Accepted |
-| [0024](0024-projects-and-artifacts.md) | Projects as containers for heterogeneous artifacts | Accepted |
+| [0024](0024-parallel-gateway-join.md) | Parallel gateway join synchronization | Accepted |
+| [0025](0025-full-properties-panel.md) | Extend the hand-written properties panel instead of vendoring bpmn-js-properties-panel | Proposed |
+| [0026](0026-problems-panel-and-versioned-validation.md) | A Problems panel with validation targeted at an engine version | Proposed |
+| [0027](0027-element-templates.md) | Element templates for pre-configured, reusable elements | Proposed |
+| [0028](0028-forms-and-the-tasks-app.md) | User tasks, forms, and the Tasks app | Proposed |
+| [0029](0029-public-process-start-links.md) | Public process start via a published form link | Proposed |
+| [0030](0030-play-mode-simulation.md) | Play mode — ephemeral in-Modeler process simulation | Proposed |
+| [0031](0031-diagram-version-history.md) | Diagram version history in the Modeler | Proposed |
+| [0032](0032-modeler-ai-copilot.md) | In-Modeler AI copilot over the MCP/HTTP surface | Proposed |
+| [0033](0033-projects-and-artifacts.md) | Projects as containers for heterogeneous artifacts | Accepted |
 
 ## Status values
 

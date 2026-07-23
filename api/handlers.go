@@ -9,15 +9,21 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 )
 
 // maxXMLBytes caps a deployment body. BPMN models are small; this is a sanity
 // bound, not a tuning knob.
 const maxXMLBytes = 4 << 20 // 4 MiB
+
+// maxFeelBytes caps a FEEL validation body. Expressions are tiny; this is a
+// sanity bound.
+const maxFeelBytes = 64 << 10 // 64 KiB
 
 // deployedProcess is one process registered by a deployment. A collaboration
 // deploys several (one per executable pool); a plain model deploys one.
@@ -110,6 +116,136 @@ type cancelInstanceResp struct {
 // handleInfo reports product/version metadata for the UI shell.
 func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, infoResp{Product: "Atlas", Version: Version})
+}
+
+type validateFeelReq struct {
+	Expression string `json:"expression"`
+}
+
+type validateFeelResp struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+}
+
+// handleValidateFeel compiles a FEEL expression with the same engine deployment
+// uses, so the Modeler can flag syntax/type errors as they're typed instead of
+// only at deploy time. Unknown identifiers are allowed (they're process
+// variables, discovered via CompileAuto) — only genuine parse/type errors fail.
+//
+// It is a pure compile: no state is read or written, so it runs off the
+// single-writer loop (no s.do) and never touches the processor hot path — a
+// read-only edit-time check, consistent with "compile, don't interpret"
+// (ADR-0008).
+func (s *Server) handleValidateFeel(w http.ResponseWriter, r *http.Request) {
+	var req validateFeelReq
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxFeelBytes)).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+		return
+	}
+	// A blank expression is a no-op success: an empty field simply carries no
+	// condition/script, which the editor treats as unset rather than an error.
+	if strings.TrimSpace(req.Expression) == "" {
+		writeJSON(w, http.StatusOK, validateFeelResp{OK: true})
+		return
+	}
+	if _, err := expr.CompileAuto(req.Expression); err != nil {
+		writeJSON(w, http.StatusOK, validateFeelResp{OK: false, Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, validateFeelResp{OK: true})
+}
+
+type evalFeelReq struct {
+	Expression string         `json:"expression"`
+	Variables  map[string]any `json:"variables"`
+}
+
+type evalFeelResp struct {
+	OK     bool   `json:"ok"`
+	Result string `json:"result"`
+	Kind   string `json:"kind"`
+	Error  string `json:"error,omitempty"`
+}
+
+// handleEvaluateFeel compiles and evaluates a FEEL expression against sample
+// variables, so the Modeler's "Test expression" can show what an expression
+// produces before deploying. A FEEL type error (number + string, division by
+// zero, …) evaluates to null rather than erroring — reported faithfully as a
+// null result. Like validation, it's a pure compile+eval over a caller-supplied
+// scope: no engine state is read or written, so it runs off the single-writer
+// loop and never touches the processor hot path (ADR-0008).
+func (s *Server) handleEvaluateFeel(w http.ResponseWriter, r *http.Request) {
+	dec := json.NewDecoder(io.LimitReader(r.Body, maxFeelBytes))
+	dec.UseNumber() // keep numbers exact (json.Number) for FEEL's decimals
+	var req evalFeelReq
+	if err := dec.Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+		return
+	}
+	if strings.TrimSpace(req.Expression) == "" {
+		writeJSON(w, http.StatusOK, evalFeelResp{OK: false, Error: "empty expression"})
+		return
+	}
+	compiled, err := expr.CompileAuto(req.Expression)
+	if err != nil {
+		writeJSON(w, http.StatusOK, evalFeelResp{OK: false, Error: err.Error()})
+		return
+	}
+	bindings, err := feelBindings(req.Variables)
+	if err != nil {
+		writeJSON(w, http.StatusOK, evalFeelResp{OK: false, Error: err.Error()})
+		return
+	}
+	v, err := compiled.Eval(bindings)
+	if err != nil {
+		writeJSON(w, http.StatusOK, evalFeelResp{OK: false, Error: err.Error()})
+		return
+	}
+	kind, b, text := expr.Classify(v)
+	result := text
+	switch kind {
+	case expr.KindBool:
+		result = strconv.FormatBool(b)
+	case expr.KindNull:
+		result = "null"
+	}
+	writeJSON(w, http.StatusOK, evalFeelResp{OK: true, Result: result, Kind: feelKindName(kind)})
+}
+
+// feelBindings converts the JSON sample variables into FEEL values. Numbers keep
+// their exact text (json.Number) so decimals aren't mangled by float rounding.
+// Only scalars are accepted — the same contract as start variables.
+func feelBindings(in map[string]any) (map[string]expr.Value, error) {
+	out := make(map[string]expr.Value, len(in))
+	for name, raw := range in {
+		switch x := raw.(type) {
+		case nil:
+			out[name] = expr.Null
+		case bool:
+			out[name] = expr.Bool(x)
+		case string:
+			out[name] = expr.String(x)
+		case json.Number:
+			out[name] = expr.FromStored(expr.KindNumber, false, x.String())
+		default:
+			return nil, fmt.Errorf("variable %q: only scalar values (number, string, boolean, null)", name)
+		}
+	}
+	return out, nil
+}
+
+// feelKindName maps a classified value kind to the label the UI shows.
+func feelKindName(k expr.ValueKind) string {
+	switch k {
+	case expr.KindBool:
+		return "boolean"
+	case expr.KindNumber:
+		return "number"
+	case expr.KindString:
+		return "string"
+	default:
+		return "null"
+	}
 }
 
 // handleDeploy parses a BPMN XML body, compiles and deploys every executable
@@ -737,7 +873,7 @@ type draftResp struct {
 // keyed by its process id, WITHOUT compiling it — so an incomplete or not-yet
 // executable model can still be saved and reopened. Re-saving the same process id
 // overwrites the previous draft rather than creating a version. An optional
-// ?projectId= query files the draft into that project (ADR-0024); it must name an
+// ?projectId= query files the draft into that project (ADR-0033); it must name an
 // existing project, else the save is rejected.
 func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
@@ -787,7 +923,7 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleListDrafts lists saved drafts, most recently saved first. An optional
-// ?projectId= query narrows the list to one project's artifacts (ADR-0024).
+// ?projectId= query narrows the list to one project's artifacts (ADR-0033).
 func (s *Server) handleListDrafts(w http.ResponseWriter, r *http.Request) {
 	filter := r.URL.Query().Get("projectId")
 	list := []draftResp{}
@@ -811,7 +947,7 @@ func (s *Server) handleListDrafts(w http.ResponseWriter, r *http.Request) {
 
 // handleMoveDraft reassigns a draft to a different project (or to Ungrouped when
 // projectId is empty), without touching its XML. Body: {"projectId": "..."}. A
-// non-empty projectId must name an existing project (ADR-0024).
+// non-empty projectId must name an existing project (ADR-0033).
 func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))

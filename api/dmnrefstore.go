@@ -11,7 +11,7 @@ import (
 )
 
 // dmnRef is a DMN artifact: a *reference* to a decision model authored in temis,
-// not a copy of it (ADR-0024 Phase 2, ADR-0014). Atlas organizes and (later)
+// not a copy of it (ADR-0033 Phase 2, ADR-0014). Atlas organizes and (later)
 // deploys the reference; it does not author DMN — so this record holds only a
 // display name and the temis model handle to resolve, never DMN XML. Keeping DMN
 // authoring in temis is what preserves the "no DMN authoring surface" non-goal.
@@ -47,7 +47,7 @@ func (d *dmnRefStore) fileFor(id string) string {
 }
 
 // save writes a reference durably (atomic write + directory fsync), overwriting
-// any existing reference with the same id (I2 / ADR-0024).
+// any existing reference with the same id (I2 / ADR-0033).
 func (d *dmnRefStore) save(rec dmnRef) error {
 	return atomicWriteJSON(d.dir, d.fileFor(rec.ID), rec)
 }

@@ -22,7 +22,7 @@ func toDmnRefResp(r dmnRef) dmnRefResp {
 }
 
 // handleCreateDmnRef creates a DMN reference: a pointer to a temis-authored
-// decision model (ADR-0024 Phase 2). It stores only a display name and the temis
+// decision model (ADR-0033 Phase 2). It stores only a display name and the temis
 // model handle — never DMN XML — so Atlas organizes the reference without
 // becoming a DMN editor. An optional projectId files it into a project and, when
 // present, must name an existing one. Body: {"name","modelRef","projectId"?}.

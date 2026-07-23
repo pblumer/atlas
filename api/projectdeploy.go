@@ -22,7 +22,7 @@ type projectDeployResp struct {
 	References  []dmnRefValidationResp `json:"references"`
 }
 
-// handleDeployProject deploys a project as a bundle (ADR-0024): it first resolves
+// handleDeployProject deploys a project as a bundle (ADR-0033): it first resolves
 // and validates every DMN reference (the deploy-time gate), then deploys every
 // BPMN draft as a runnable definition. It is "validate all, then deploy all" — a
 // draft that does not compile or a reference that does not validate refuses the

@@ -27,7 +27,7 @@ type projectValidationResp struct {
 
 // handleValidateDmnRef resolves one DMN reference's temis model and validates it
 // — the deploy-time check that a stored handle names a real, compilable decision
-// model (ADR-0024 Phase 2). Resolution and compilation touch no engine or store
+// model (ADR-0033 Phase 2). Resolution and compilation touch no engine or store
 // state, so they run off the run-loop goroutine (only the record read is on it).
 func (s *Server) handleValidateDmnRef(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")

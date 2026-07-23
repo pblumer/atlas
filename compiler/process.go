@@ -26,7 +26,8 @@ const (
 	TypeTimerCatchEvent
 	TypeMessageCatchEvent
 	TypeMessageThrowEvent
-	TypeTask // an undefined/manual task: no execution semantics, passes straight through
+	TypeTask            // an undefined/manual task: no execution semantics, passes straight through
+	TypeParallelGateway // AND gateway: forks a token onto every outgoing flow, joins by waiting for all incoming
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
 	numBpmnTypes = 16
@@ -57,6 +58,8 @@ func (t BpmnType) String() string {
 		return "MessageThrowEvent"
 	case TypeTask:
 		return "Task"
+	case TypeParallelGateway:
+		return "ParallelGateway"
 	default:
 		return "Unspecified"
 	}
@@ -69,6 +72,7 @@ type CompiledNode struct {
 	Type          BpmnType
 	OutgoingStart int32 // offset into outgoingFlows
 	OutgoingCount int32
+	IncomingCount int32 // number of sequence flows targeting this node (a parallel join waits for all)
 	FlowScope     int32 // ElementId of enclosing scope, -1 = process root
 	Detail        int32 // index into the matching detail table, -1 if none
 }

@@ -97,6 +97,35 @@ func (t *Tx) DeleteElementInstance(key uint64, v *model.ElementInstanceValue) er
 	return t.b.Delete(keyElByProc(v.ProcessInstanceKey, key), nil)
 }
 
+// ElementInstancesOfProcess calls fn for every element instance of a process
+// instance visible in this transaction — committed rows plus this batch's own
+// writes — via the elByProc index. A parallel join uses it to count how many
+// tokens have arrived on its incoming flows, including one activated earlier in
+// the same batch (which a committed-only store scan would miss).
+func (t *Tx) ElementInstancesOfProcess(procKey uint64, fn func(elKey uint64, v *model.ElementInstanceValue) error) error {
+	prefix := elByProcPrefix(procKey)
+	iter, err := t.b.NewIter(&pebble.IterOptions{LowerBound: prefix, UpperBound: prefixEnd(prefix)})
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+	for iter.First(); iter.Valid(); iter.Next() {
+		elKey := trailingKey(iter.Key())
+		var v model.ElementInstanceValue
+		ok, err := t.GetElementInstanceInto(elKey, &v)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			continue
+		}
+		if err := fn(elKey, &v); err != nil {
+			return err
+		}
+	}
+	return iter.Error()
+}
+
 // --- Job ---
 
 // PutJob writes the job and its activatable index entry.
