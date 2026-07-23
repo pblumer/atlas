@@ -146,7 +146,7 @@ func (c *ProcessingContext) AppendElementCommand(key uint64, intent model.Intent
 // AppendCreateInstanceCommand schedules creation of a new instance of defKey for
 // a later batch, seeded with vars (each re-scoped to the new instance when it is
 // created). A correlating message uses it to instantiate a message-start process
-// (ADR-0025). Deferring to a followup keeps instance creation on the same
+// (ADR-0035). Deferring to a followup keeps instance creation on the same
 // command path as an API-submitted create, so its events — and thus recovery —
 // are identical however the create was triggered.
 func (c *ProcessingContext) AppendCreateInstanceCommand(defKey uint64, vars []model.VariableValue) {

@@ -192,7 +192,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		// A service task bearing an <atlas:clioConnector> extension is a connector
 		// task: it delegates to a server-registered clio connector via the job path
-		// (ADR-0026), not to an external service-task worker.
+		// (ADR-0036), not to an external service-task worker.
 		if c := st.Clio; c != nil {
 			if c.Connector == "" || c.Subject == "" || c.EventType == "" {
 				return nil, fmt.Errorf("compiler: clio connector task %q needs connector, subject, and eventType", st.Id)
@@ -452,7 +452,7 @@ type xmlExclusiveGateway struct {
 
 // A start event. A plain (none) start event is a manual entry point; one bearing
 // a messageEventDefinition is a message start event, instantiated by a
-// correlating message (ADR-0025). The definition is a pointer so an absent one
+// correlating message (ADR-0035). The definition is a pointer so an absent one
 // is detected as nil.
 type xmlStartEvent struct {
 	Id      string                     `xml:"id,attr"`
@@ -485,7 +485,7 @@ type xmlNode struct {
 type xmlServiceTask struct {
 	Id             string            `xml:"id,attr"`
 	TaskDefinition xmlTaskDefinition `xml:"extensionElements>taskDefinition"`
-	// Clio, when present, marks this service task a clio connector task (ADR-0026).
+	// Clio, when present, marks this service task a clio connector task (ADR-0036).
 	// The pointer is nil when the <atlas:clioConnector> extension is absent.
 	Clio *xmlClioConnector `xml:"extensionElements>clioConnector"`
 }

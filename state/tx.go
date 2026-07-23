@@ -266,7 +266,7 @@ func (t *Tx) GetVariable(scope uint64, name string) (*model.VariableValue, error
 // VariablesOfScope calls fn with every variable owned by scope, via a prefix scan
 // over the variable column family. It reads through the in-flight batch, so it
 // observes variables written earlier in the same batch. A message throw event
-// uses it to gather the payload it publishes (ADR-0025).
+// uses it to gather the payload it publishes (ADR-0035).
 func (t *Tx) VariablesOfScope(scope uint64, fn func(v *model.VariableValue) error) error {
 	prefix := variablePrefix(scope)
 	iter, err := t.b.NewIter(&pebble.IterOptions{LowerBound: prefix, UpperBound: prefixEnd(prefix)})

@@ -49,7 +49,7 @@ func singleActiveInstance(t *testing.T, s *state.Store) uint64 {
 
 // TestMessageStartInstantiates proves a message start event turns an incoming
 // message into a fresh process instance seeded with the message payload, and
-// that a message whose name matches no start event creates nothing (ADR-0025).
+// that a message whose name matches no start event creates nothing (ADR-0035).
 func TestMessageStartInstantiates(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -92,7 +92,7 @@ func TestMessageStartInstantiates(t *testing.T) {
 
 // TestMessageStartUndeployStopsInstantiation proves undeploying a message-start
 // definition drops its start subscription: a message that would have
-// instantiated it before now creates nothing (ADR-0025).
+// instantiated it before now creates nothing (ADR-0035).
 func TestMessageStartUndeployStopsInstantiation(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -162,7 +162,7 @@ func TestMessageStartInstanceRecovers(t *testing.T) {
 
 // TestProcessInstanceKeyBuiltin proves the reserved FEEL identifier
 // processInstanceKey resolves to the evaluating instance's own key, as a string
-// (so the full 64-bit key is exact), usable in any expression (ADR-0025).
+// (so the full 64-bit key is exact), usable in any expression (ADR-0035).
 func TestProcessInstanceKeyBuiltin(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)

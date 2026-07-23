@@ -54,7 +54,7 @@ The control-flow basics most real models use.
   as a vertical slice. It currently feeds a decision static inputs and surfaces
   outputs via a sink; wiring real input/output variable mappings depends on the
   variable subsystem above.
-- 🚧 **Connectors** ([ADR-0026](docs/adr/0026-clio-connector.md)): a service task
+- 🚧 **Connectors** ([ADR-0036](docs/adr/0026-clio-connector.md)): a service task
   bearing an `<atlas:clioConnector>` extension is a connector task that appends an
   event to a **server-registered** clio event store through the job path (like the
   DMN worker) — endpoint and credentials live in the server config, the model
@@ -88,7 +88,7 @@ Making processes wait, react, and time out.
   end to end. Matching is by message name; a throw event carries its instance's
   variables as the payload, and the reserved FEEL identifier `processInstanceKey`
   exposes an instance's own key so a reply can correlate back to the requester.
-  Recovery-tested. A start-event correlation key and buffering remain (ADR-0025).
+  Recovery-tested. A start-event correlation key and buffering remain (ADR-0035).
 - 🔲 Signal events (broadcast)
 - 🔲 Error events and error propagation
 - 🔲 Boundary events: interrupting and non-interrupting

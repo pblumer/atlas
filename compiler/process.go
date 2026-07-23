@@ -28,8 +28,8 @@ const (
 	TypeMessageThrowEvent
 	TypeTask              // an undefined/manual task: no execution semantics, passes straight through
 	TypeParallelGateway   // AND gateway: forks a token onto every outgoing flow, joins by waiting for all incoming
-	TypeMessageStartEvent // a start event that a correlating message instantiates (ADR-0025); at runtime it behaves like a none start (flows straight on)
-	TypeConnectorTask     // a service task that delegates to a server-registered connector via the job path (ADR-0026); like a service task it creates a job and waits
+	TypeMessageStartEvent // a start event that a correlating message instantiates (ADR-0035); at runtime it behaves like a none start (flows straight on)
+	TypeConnectorTask     // a service task that delegates to a server-registered connector via the job path (ADR-0036); like a service task it creates a job and waits
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
 	numBpmnTypes = 16
@@ -124,7 +124,7 @@ type BusinessRuleTaskDetail struct {
 
 // ConnectorTaskDetail is the per-connector-task data a behavior needs at runtime.
 // A connector task delegates to a server-registered connector (e.g. a clio event
-// store) evaluated off the hot path by a job worker (ADR-0026). Like a service
+// store) evaluated off the hot path by a job worker (ADR-0036). Like a service
 // task it runs as a job, so it carries a JobType (a reserved connector sentinel)
 // the in-process connector worker subscribes to. Connector names the
 // server-registered connector to resolve at runtime; Subject and EventType are
@@ -220,7 +220,7 @@ func (p *CompiledProcess) MessageStart(detail int32) *MessageDetail {
 
 // MessageStarts returns the definition's message-start-event details, one per
 // message start event. The engine indexes these at deploy time so a correlating
-// message can instantiate the process (ADR-0025). Empty for a process with no
+// message can instantiate the process (ADR-0035). Empty for a process with no
 // message start event.
 func (p *CompiledProcess) MessageStarts() []MessageDetail { return p.messageStarts }
 

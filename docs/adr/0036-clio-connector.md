@@ -1,4 +1,4 @@
-# ADR-0026: A clio connector — server-registered event-store integration
+# ADR-0036: A clio connector — server-registered event-store integration
 
 - **Status:** Accepted
 - **Date:** 2026-07-23

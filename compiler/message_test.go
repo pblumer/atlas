@@ -68,7 +68,7 @@ func TestParseMessageEvents(t *testing.T) {
 }
 
 // A process whose sole entry point is a message start event: a correlating
-// message instantiates it (ADR-0025). It references a top-level <message> the
+// message instantiates it (ADR-0035). It references a top-level <message> the
 // same way catch/throw events do.
 const messageStartBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"

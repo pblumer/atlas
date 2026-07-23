@@ -1,4 +1,4 @@
-# ADR-0025: Message start events and the processInstanceKey built-in
+# ADR-0035: Message start events and the processInstanceKey built-in
 
 - **Status:** Accepted
 - **Date:** 2026-07-23

@@ -14,7 +14,7 @@ const DMNJobType = "io.atlas.dmn"
 
 // ClioWriteJobType is the reserved job type a clio "write-events" connector task
 // carries. The in-process clio connector worker subscribes to it to append the
-// event to the configured clio instance (ADR-0026), the same way the DMN worker
+// event to the configured clio instance (ADR-0036), the same way the DMN worker
 // subscribes to DMNJobType.
 const ClioWriteJobType = "io.atlas.clio.write"
 
@@ -94,7 +94,7 @@ func (b *Builder) AddStartEvent() int32 { return b.addNode(TypeStartEvent, -1) }
 // is a process entry point like a none start event — at runtime it simply flows
 // straight on — but the engine also registers it at deploy time so a correlating
 // message (a throw event or an API publish of messageName) instantiates a fresh
-// process instance seeded with the message's payload (ADR-0025). correlationKey
+// process instance seeded with the message's payload (ADR-0035). correlationKey
 // is compiled for future use; message-start matching is by name today.
 func (b *Builder) AddMessageStartEvent(messageName string, correlationKey *expr.Compiled) int32 {
 	detail := int32(len(b.messageStarts))
@@ -152,7 +152,7 @@ func (b *Builder) AddBusinessRuleTask(decisionId string, inputs map[string]any, 
 // element id. Like a service task it creates a job on activation and waits; the
 // job carries the reserved ClioWriteJobType so the in-process clio worker picks
 // it up, appends an event to the named connector's clio instance under subject
-// with the given event type, and completes the job (ADR-0026).
+// with the given event type, and completes the job (ADR-0036).
 func (b *Builder) AddClioWriteTask(connector, subject, eventType string, retries int32) int32 {
 	detail := int32(len(b.connectorTasks))
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
@@ -308,7 +308,7 @@ func (b *Builder) hasStartEvent() bool {
 
 // isStartEvent reports whether a node type is a process entry point. A message
 // start event is one too: a correlating message instantiates the process, and a
-// plain create then activates it like a none start (ADR-0025).
+// plain create then activates it like a none start (ADR-0035).
 func isStartEvent(t BpmnType) bool {
 	return t == TypeStartEvent || t == TypeMessageStartEvent
 }

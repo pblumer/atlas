@@ -6,7 +6,7 @@ import (
 )
 
 // A service task bearing an <atlas:clioConnector> extension is a clio connector
-// task (ADR-0026): it delegates to a server-registered connector via the job
+// task (ADR-0036): it delegates to a server-registered connector via the job
 // path rather than to an external service-task worker.
 const clioConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"

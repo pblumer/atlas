@@ -51,7 +51,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeTask] = passThroughBehavior{}
 	p.behaviors[compiler.TypeParallelGateway] = parallelGatewayBehavior{}
 	// A message start event is a plain entry point once instantiated: it flows
-	// straight on like a none start (ADR-0025). What makes it a start is the
+	// straight on like a none start (ADR-0035). What makes it a start is the
 	// deploy-time subscription (see Deploy), not a distinct runtime behavior.
 	p.behaviors[compiler.TypeMessageStartEvent] = startEventBehavior{}
 }
@@ -187,7 +187,7 @@ func takeOutgoingFlows(c *ProcessingContext, ei *model.ElementInstanceValue) {
 // evaluating instance's own process-instance key, as a string so the full 64-bit
 // key survives exactly (a FEEL number is a float and would lose precision on
 // large keys). It lets a model correlate a reply back to the requesting instance
-// without a hand-authored business key (ADR-0025). A process variable of the same
+// without a hand-authored business key (ADR-0035). A process variable of the same
 // name is shadowed by the built-in.
 const builtinProcessInstanceKey = "processInstanceKey"
 
@@ -359,7 +359,7 @@ func (messageThrowEventBehavior) OnActivated(c *ProcessingContext, key uint64, e
 	detail := cp.MessageThrow(cp.Node(ei.ElementId).Detail)
 	// The throw carries the throwing instance's variables as the message payload,
 	// so a correlated catch — or a message-start instance the throw creates — is
-	// seeded with them (ADR-0025). Reading the payload here (command processing)
+	// seeded with them (ADR-0035). Reading the payload here (command processing)
 	// keeps applyToState pure (I4).
 	payload := instanceVariables(c, ei.ProcessInstanceKey)
 	correlateMessage(c, detail.MessageName, evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey), payload)
@@ -415,7 +415,7 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 		}
 	}
 	// A message also instantiates every deployed process with a matching message
-	// start event, seeded with the payload (ADR-0025). Matching is by name today;
+	// start event, seeded with the payload (ADR-0035). Matching is by name today;
 	// the message's correlation key is not evaluated for start events yet. This
 	// runs after the subscription scan so a single message can both correlate a
 	// waiting instance and start new ones, all recovered from the events the
@@ -589,7 +589,7 @@ func (businessRuleTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, e
 // so the in-process connector worker (package clio) picks it up, performs the
 // outbound call off the hot path after fsync, and completes it. Keeping the call
 // on the worker side, not in a behavior, keeps the processor allocation-free (I1)
-// and the connector's network I/O out of applyToState (I4). See ADR-0026.
+// and the connector's network I/O out of applyToState (I4). See ADR-0036.
 type connectorTaskBehavior struct{}
 
 func (connectorTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {

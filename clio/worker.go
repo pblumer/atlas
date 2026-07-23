@@ -23,7 +23,7 @@ type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 // the connector task's connector/subject/event-type from the compiled process,
 // resolves the connector's client from reg, and appends an event carrying the
 // instance's variables as its body — keyed by the job key so an at-least-once
-// retry de-duplicates (ADR-0026). Returning an error leaves the job pending,
+// retry de-duplicates (ADR-0036). Returning an error leaves the job pending,
 // exactly as for any worker; the runner completes it only on success.
 func Handler(store *state.Store, lookup ProcessLookup, reg *Registry) job.Handler {
 	return func(j job.Job) error {
@@ -60,7 +60,7 @@ func Handler(store *state.Store, lookup ProcessLookup, reg *Registry) job.Handle
 // instanceData reads the instance's variables into a JSON-ready map — the event
 // body a connector task sends. Until output mappings exist (Milestone 1) the
 // whole variable scope is the payload, exactly as a message throw publishes its
-// instance's variables (ADR-0025/0026).
+// instance's variables (ADR-0035/0036).
 func instanceData(store *state.Store, scope uint64) (map[string]any, error) {
 	data := map[string]any{}
 	err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {

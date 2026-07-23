@@ -1,6 +1,6 @@
 // Package clio integrates a clio event store as a server-registered Atlas
 // connector: a BPMN clio "write-events" connector task appends an event to a
-// configured clio instance through the job path (ADR-0026), mirroring how the
+// configured clio instance through the job path (ADR-0036), mirroring how the
 // dmn package delegates a decision to temis (ADR-0014). The integration inherits
 // the job protocol's durability and non-blocking properties (ADR-0007):
 //
@@ -14,7 +14,7 @@
 //     token onward.
 //   - The clio endpoint and credentials live in a server-side [Registry] keyed by
 //     connector name, so a model refers to a connector by name only and never
-//     carries a URL or secret (ADR-0026).
+//     carries a URL or secret (ADR-0036).
 //
 // Delivery is at-least-once (a crash between "clio accepted" and "job completed"
 // replays the write); every event carries the job key as an idempotency key so
@@ -48,7 +48,7 @@ type Client interface {
 
 // Registry resolves a connector name to the [Client] for its clio instance.
 // Connectors are registered at the server from configuration (endpoint plus
-// credentials), so a model refers to a connector by name only (ADR-0026). A
+// credentials), so a model refers to a connector by name only (ADR-0036). A
 // Registry is read-only once populated and safe for concurrent use by workers.
 type Registry struct {
 	clients map[string]Client

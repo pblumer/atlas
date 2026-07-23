@@ -37,7 +37,7 @@ type Processor struct {
 	behaviors [compiler.NumBpmnTypes]bpmnBehavior
 
 	// messageStarts indexes message start events by message name → the definition
-	// keys that a correlating message instantiates (ADR-0025). It is derived from
+	// keys that a correlating message instantiates (ADR-0035). It is derived from
 	// the compiled definitions, rebuilt by Deploy on every start (the deploy store
 	// re-registers definitions on recovery), so it needs no durable state of its
 	// own — the instances it creates go through the normal event path and recover
@@ -82,7 +82,7 @@ func New(partition uint16, log *wal.Log, store *state.Store, clock Clock) *Proce
 
 // Deploy registers an immutable compiled definition so instances can run it, and
 // indexes any message start events so a correlating message instantiates it
-// (ADR-0025).
+// (ADR-0035).
 func (p *Processor) Deploy(cp *compiler.CompiledProcess) {
 	p.processes[cp.Key] = cp
 	for _, ms := range cp.MessageStarts() {
