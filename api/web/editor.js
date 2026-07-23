@@ -810,6 +810,13 @@ function wireProperties(root, modeler, api) {
         } else {
           html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Message</b> throw event, then configure it here.</p>`;
         }
+      } else if (bo.$type === "bpmn:StartEvent") {
+        const msg = messageDefOf(bo);
+        if (msg) {
+          html += messageFieldsHTML(modeler, msg, "A message start event: publishing this message starts a new instance of this process, matched by message name (the correlation key is shared with the throwing event but is not yet evaluated for starts).");
+        } else {
+          html += `<p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Message</b> start event — a pool that a message opens — then pick its message here.</p>`;
+        }
       }
     } else if (isGatewayFlow && !isDefaultFlow) {
       // Design tab: point to where the executable rule lives.
@@ -1216,6 +1223,7 @@ export async function mountLive(root, { api, toast, key }) {
         <div style="flex:1"></div>
         <button class="btn" id="start">Start instance</button>
         <button class="btn ghost danger" id="cancel-inst" hidden>Cancel instance</button>
+        <a class="btn" id="collab-link" hidden>⇄ Collaboration replay</a>
         <button class="btn neutral" id="refresh">Refresh</button>
         <span class="pill ok" style="margin-left:8px"><span class="dot"></span><b id="inst-count">0</b>&nbsp;running</span>
         <span class="pill" style="margin-left:8px"><b id="token-count">0</b>&nbsp;tokens total</span>
@@ -1263,6 +1271,13 @@ export async function mountLive(root, { api, toast, key }) {
     const xml = await api("GET", `/api/v1/processes/${key}/xml`);
     await viewer.importXML(typeof xml === "string" ? xml : String(xml));
     viewer.get("canvas").zoom("fit-viewport");
+    // A pool of a collaboration can jump to the replay view, which shows every
+    // pool at once and plays the messages that crossed between them (ADR-0038).
+    if (isCollaborationRoot(viewer)) {
+      const cl = root.querySelector("#collab-link");
+      cl.href = `#/operations/c/${key}`;
+      cl.hidden = false;
+    }
   } catch (e) {
     root.querySelector("#canvas").innerHTML =
       `<div class="coming"><p>Could not render this model.</p>
@@ -1460,6 +1475,297 @@ export async function mountLive(root, { api, toast, key }) {
       goBtn.disabled = false;
     }
   });
+
+  await poll();
+  liveTimer = setInterval(poll, 1500);
+}
+
+// sleep resolves after ms milliseconds (the pause between replayed messages).
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// runDotAnimation moves an envelope dot along a message-flow edge's waypoints over
+// dur ms, in a dedicated SVG layer above the diagram (diagram coordinates, so it
+// tracks pan/zoom). cancelled() lets the caller abort mid-flight (navigation or a
+// superseding animation). Resolves when the dot reaches the target or is cancelled.
+function runDotAnimation(layer, waypoints, dur, cancelled) {
+  const NS = "http://www.w3.org/2000/svg";
+  const g = document.createElementNS(NS, "g");
+  const halo = document.createElementNS(NS, "circle");
+  halo.setAttribute("r", "11"); halo.setAttribute("class", "atlas-msg-halo");
+  const dot = document.createElementNS(NS, "circle");
+  dot.setAttribute("r", "6"); dot.setAttribute("class", "atlas-msg-dot");
+  g.appendChild(halo); g.appendChild(dot);
+  layer.appendChild(g);
+
+  const segs = [];
+  let total = 0;
+  for (let i = 1; i < waypoints.length; i++) {
+    const a = waypoints[i - 1], b = waypoints[i];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    segs.push({ a, b, len });
+    total += len;
+  }
+  return new Promise((resolve) => {
+    let start = null;
+    function frame(ts) {
+      if (start == null) start = ts;
+      const t = total ? Math.min(1, (ts - start) / dur) : 1;
+      let d = t * total, x = waypoints[0].x, y = waypoints[0].y;
+      for (const s of segs) {
+        if (d <= s.len || s === segs[segs.length - 1]) {
+          const k = s.len ? Math.min(1, d / s.len) : 1;
+          x = s.a.x + (s.b.x - s.a.x) * k;
+          y = s.a.y + (s.b.y - s.a.y) * k;
+          break;
+        }
+        d -= s.len;
+      }
+      g.setAttribute("transform", `translate(${x} ${y})`);
+      if (t < 1 && !cancelled()) {
+        requestAnimationFrame(frame);
+      } else {
+        g.remove();
+        resolve();
+      }
+    }
+    requestAnimationFrame(frame);
+  });
+}
+
+// mountCollaboration renders a whole collaboration read-only and replays the
+// messages that flowed between its pools (ADR-0038). The shared diagram shows
+// every pool at once; a merged token overlay (green live, gray visited) is polled
+// like the single-process live view, and a transport bar plays the message-flow
+// timeline — each delivery animates an envelope dot along its message-flow edge in
+// the order it actually happened, so a finished collaboration replays its exchange.
+export async function mountCollaboration(root, { api, toast, key }) {
+  cleanup();
+
+  root.innerHTML = `
+    <div class="editor live">
+      <div class="editor-bar">
+        <a class="btn neutral" href="#/operations">&larr; Instances</a>
+        <span class="crumbs" style="margin-left:8px">Replay &middot; <b id="collab-title">Collaboration</b></span>
+        <div style="flex:1"></div>
+        <button class="btn neutral" id="refresh">Refresh</button>
+        <span class="pill ok" style="margin-left:8px"><span class="dot"></span><b id="inst-count">0</b>&nbsp;running</span>
+        <span class="pill" style="margin-left:8px"><b id="flow-count">0</b>&nbsp;messages</span>
+      </div>
+      <div class="replay-bar">
+        <button class="btn play" id="play">&#9654; Play</button>
+        <button class="btn neutral" id="step-back" title="Previous message">&#9198;</button>
+        <button class="btn neutral" id="step-fwd" title="Next message">&#9197;</button>
+        <input type="range" id="scrub" min="0" max="0" value="0" step="1" aria-label="Message timeline"/>
+        <label class="bar-select"><span>Speed</span>
+          <select id="speed" class="speed">
+            <option value="1">1&times;</option>
+            <option value="2">2&times;</option>
+            <option value="0.5">0.5&times;</option>
+          </select></label>
+        <span class="clock" id="clock">no messages yet</span>
+      </div>
+      <div class="editor-body"><div id="canvas"></div></div>
+      <div class="flow-log" id="flow-log"></div>
+      <div class="problems">
+        <span class="legend-swatch live"></span> live token
+        <span class="legend-swatch history" style="margin-left:12px"></span> passed through
+        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--accent);margin:0 4px 0 12px;vertical-align:middle"></span> message flow
+        <span style="flex:1"></span>
+        <span class="muted">Live tokens poll every 1.5s</span>
+      </div>
+    </div>`;
+
+  let lib;
+  try {
+    lib = await loadBpmn();
+  } catch (e) {
+    root.querySelector("#canvas").innerHTML = `<div class="coming"><p>${esc(e.message)}</p></div>`;
+    return;
+  }
+
+  const viewer = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
+  current = viewer;
+
+  try {
+    const xml = await api("GET", `/api/v1/processes/${key}/xml`);
+    await viewer.importXML(typeof xml === "string" ? xml : String(xml));
+    viewer.get("canvas").zoom("fit-viewport");
+  } catch (e) {
+    root.querySelector("#canvas").innerHTML =
+      `<div class="coming"><p>Could not render this collaboration.</p>
+       <p class="muted">${esc(e.message)}</p></div>`;
+    return;
+  }
+
+  const canvas = viewer.get("canvas");
+  const registry = viewer.get("elementRegistry");
+  const layer = canvas.getLayer("atlas-replay", 900); // message dots ride above the diagram
+  const titleEl = root.querySelector("#collab-title");
+  const instEl = root.querySelector("#inst-count");
+  const flowCountEl = root.querySelector("#flow-count");
+  const clockEl = root.querySelector("#clock");
+  const scrub = root.querySelector("#scrub");
+  const playBtn = root.querySelector("#play");
+  const logEl = root.querySelector("#flow-log");
+  const speedSel = root.querySelector("#speed");
+
+  let flows = [];    // message-flow timeline, oldest first
+  let marked = [];   // token markers to clear on the next poll
+  let playing = false;
+  let playhead = 0;  // number of messages delivered so far (0..flows.length)
+  let animToken = 0; // bumped to supersede an in-flight animation
+
+  const speed = () => Number(speedSel.value) || 1;
+  const fmtClock = (ns) => (ns ? new Date(ns / 1e6).toLocaleTimeString() : "");
+
+  function receiverLabel(f) {
+    const el = registry.get(f.receiverElementId);
+    const bo = el && el.businessObject;
+    return (bo && (bo.name || bo.id)) || f.receiverElementId || "?";
+  }
+
+  function updateClock() {
+    if (!flows.length) { clockEl.textContent = "no messages yet"; return; }
+    const shown = Math.min(playhead, flows.length);
+    clockEl.textContent = `${shown} / ${flows.length}${shown ? ` · ${fmtClock(flows[shown - 1].at)}` : ""}`;
+  }
+
+  function highlightCurrent() {
+    logEl.querySelectorAll("tr[data-i]").forEach((tr) => {
+      const i = Number(tr.dataset.i);
+      tr.classList.toggle("done", i < playhead);
+      tr.classList.toggle("pending", i >= playhead);
+      tr.classList.toggle("cur", i === playhead - 1);
+    });
+    const cur = logEl.querySelector("tr.cur");
+    if (cur) cur.scrollIntoView({ block: "nearest" });
+  }
+
+  function setPlayhead(n) {
+    playhead = Math.max(0, Math.min(flows.length, n));
+    scrub.value = String(playhead);
+    updateClock();
+    highlightCurrent();
+  }
+
+  function renderLog() {
+    if (!flows.length) {
+      logEl.innerHTML = `<div class="fl-head">Messages</div>
+        <div class="empty">No messages have flowed between the pools yet. Start an instance from a
+        pool's live view, then come back to replay the exchange.</div>`;
+      return;
+    }
+    const rows = flows.map((f, i) => `
+      <tr data-i="${i}">
+        <td class="tnum">${fmtClock(f.at)}</td>
+        <td><span class="msg-name">${esc(f.messageName)}</span>${f.correlationKey
+          ? ` <span class="muted">· ${esc(f.correlationKey)}</span>` : ""}</td>
+        <td class="muted"><span class="arrow">&rarr;</span>${esc(receiverLabel(f))}</td>
+      </tr>`).join("");
+    logEl.innerHTML = `<div class="fl-head">Messages <span class="muted">· ${flows.length}</span></div>
+      <table><tbody>${rows}</tbody></table>`;
+    logEl.querySelectorAll("tr[data-i]").forEach((tr) => tr.addEventListener("click", () => {
+      const i = Number(tr.dataset.i);
+      pause();
+      setPlayhead(i + 1);
+      animateFlow(flows[i]);
+    }));
+    highlightCurrent();
+  }
+
+  // messageFlowTo finds the message-flow connection whose target is the receiving
+  // element, so a delivery can be animated along the edge the modeler drew.
+  function messageFlowTo(receiverId) {
+    let found = null;
+    registry.forEach((el) => {
+      if (found) return;
+      const bo = el.businessObject;
+      if (bo && bo.$type === "bpmn:MessageFlow" && bo.targetRef && bo.targetRef.id === receiverId) found = el;
+    });
+    return found;
+  }
+
+  // animateFlow plays one delivery: the receiving element pulses, and if the
+  // message-flow edge exists the envelope dot travels along it. Resolves when done.
+  function animateFlow(f) {
+    if (!f || current !== viewer) return Promise.resolve();
+    if (registry.get(f.receiverElementId)) {
+      canvas.addMarker(f.receiverElementId, "atlas-flow-hit");
+      setTimeout(() => { try { canvas.removeMarker(f.receiverElementId, "atlas-flow-hit"); } catch { /* gone */ } }, 700);
+    }
+    const conn = messageFlowTo(f.receiverElementId);
+    if (!conn || !conn.waypoints || conn.waypoints.length < 2) return Promise.resolve();
+    canvas.addMarker(conn.id, "atlas-flow-active");
+    const wps = conn.waypoints.map((w) => ({ x: w.x, y: w.y }));
+    const token = ++animToken;
+    return runDotAnimation(layer, wps, 900 / speed(), () => current !== viewer || token !== animToken)
+      .finally(() => { try { canvas.removeMarker(conn.id, "atlas-flow-active"); } catch { /* gone */ } });
+  }
+
+  function pause() { playing = false; playBtn.innerHTML = "&#9654; Play"; }
+
+  async function play() {
+    if (!flows.length) return;
+    if (playhead >= flows.length) setPlayhead(0); // wrap to replay from the start
+    playing = true;
+    playBtn.innerHTML = "&#9208; Pause";
+    while (playing && current === viewer && playhead < flows.length) {
+      const f = flows[playhead];
+      setPlayhead(playhead + 1);
+      await animateFlow(f);
+      if (!playing || current !== viewer) break;
+      // Pause between messages, scaled to the real gap (clamped) and the speed.
+      const gap = playhead < flows.length
+        ? Math.min(1200, Math.max(150, (flows[playhead].at - f.at) / 1e6))
+        : 0;
+      await sleep(gap / speed());
+    }
+    pause();
+  }
+
+  async function poll() {
+    let rt;
+    try { rt = await api("GET", `/api/v1/collaborations/${key}/runtime`); }
+    catch { return; } // transient; try again next tick
+    if (current !== viewer) return;
+    if (rt.pools && rt.pools.length) {
+      titleEl.textContent = rt.pools.map((p) => p.name || p.processId).join(" ⇄ ");
+    }
+    instEl.textContent = rt.instances;
+    // Merged token overlay across all pools: green where a token is now, gray where
+    // one has passed through — the same two-state heatmap the live view draws.
+    for (const [id, m] of marked) canvas.removeMarker(id, m);
+    marked = [];
+    for (const e of rt.elements || []) {
+      if (!registry.get(e.elementId)) continue;
+      const live = e.tokens > 0;
+      if (!live && !(e.visits > 0)) continue;
+      const marker = live ? "atlas-active" : "atlas-visited";
+      canvas.addMarker(e.elementId, marker);
+      marked.push([e.elementId, marker]);
+    }
+    // Rebuild the timeline only when the message set grows, so a poll never
+    // disturbs the operator's current scrub position mid-replay.
+    const next = rt.messageFlows || [];
+    if (next.length !== flows.length) {
+      const wasAtEnd = playhead >= flows.length;
+      flows = next;
+      flowCountEl.textContent = String(flows.length);
+      scrub.max = String(flows.length);
+      renderLog();
+      if (!playing && wasAtEnd) setPlayhead(flows.length); // follow new messages live
+      else { scrub.value = String(playhead); updateClock(); highlightCurrent(); }
+    }
+  }
+
+  playBtn.addEventListener("click", () => { playing ? pause() : play(); });
+  root.querySelector("#step-fwd").addEventListener("click", () => {
+    pause();
+    if (playhead < flows.length) { const f = flows[playhead]; setPlayhead(playhead + 1); animateFlow(f); }
+  });
+  root.querySelector("#step-back").addEventListener("click", () => { pause(); setPlayhead(playhead - 1); });
+  scrub.addEventListener("input", () => { pause(); setPlayhead(Number(scrub.value)); });
+  root.querySelector("#refresh").addEventListener("click", poll);
 
   await poll();
   liveTimer = setInterval(poll, 1500);

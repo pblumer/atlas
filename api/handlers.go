@@ -50,6 +50,66 @@ type processResp struct {
 	Name       string `json:"name"`
 	Version    int32  `json:"version"`
 	DeployedAt int64  `json:"deployedAt"`
+	// CollaborationKey groups a collaboration's pools: when non-zero, this process
+	// is a pool of a collaboration and the value is the stable key the Operations
+	// replay view is opened with (#/operations/c/{collaborationKey}). Zero for a
+	// standalone process (ADR-0038).
+	CollaborationKey uint64 `json:"collaborationKey,omitempty"`
+}
+
+// collaborationParticipants reports how many <participant> pools a model's
+// <collaboration> declares. Two or more marks the XML as a collaboration whose
+// pools deploy as sibling definitions sharing this XML (ADR-0023).
+func collaborationParticipants(body []byte) int {
+	var d struct {
+		Participants []struct{} `xml:"collaboration>participant"`
+	}
+	// A deployed body is well-formed XML; on the impossible parse error the zero
+	// value (no participants) is the right answer anyway.
+	_ = xml.Unmarshal(body, &d)
+	return len(d.Participants)
+}
+
+// poolSiblings returns the deployments that are pools of the same collaboration
+// as d — every deployment sharing d's identical BPMN body — keeping the highest
+// version of each pool (so a redeploy of the same collaboration shows its current
+// pools), in registration order. For a standalone process it returns just d.
+// Must be called on the run-loop goroutine.
+func (s *Server) poolSiblings(d *deployment) []*deployment {
+	if collaborationParticipants(d.xml) < 2 {
+		return []*deployment{d}
+	}
+	latest := map[string]*deployment{}
+	for _, key := range s.order {
+		sib := s.deployments[key]
+		if !bytes.Equal(sib.xml, d.xml) {
+			continue
+		}
+		if cur, ok := latest[sib.ProcessID]; !ok || sib.Version > cur.Version {
+			latest[sib.ProcessID] = sib
+		}
+	}
+	var out []*deployment
+	for _, key := range s.order {
+		sib := s.deployments[key]
+		if latest[sib.ProcessID] == sib {
+			out = append(out, sib)
+		}
+	}
+	return out
+}
+
+// collaborationKeyOf returns the stable group key for the collaboration d belongs
+// to, or 0 when d is a standalone process. poolSiblings lists pools in
+// registration order and keys are assigned monotonically, so the first pool
+// carries the smallest key — a stable group id. Must be called on the run-loop
+// goroutine.
+func (s *Server) collaborationKeyOf(d *deployment) uint64 {
+	pools := s.poolSiblings(d)
+	if len(pools) < 2 {
+		return 0
+	}
+	return pools[0].Key
 }
 
 // processIdentity extracts the first process element's id and name from BPMN XML.
@@ -84,6 +144,38 @@ type runtimeResp struct {
 	Instances int              `json:"instances"`
 	Tokens    int              `json:"tokens"`
 	Elements  []runtimeElement `json:"elements"`
+}
+
+// collabPool is one pool (participant) of a collaboration, as a deployed
+// definition the collaboration runtime aggregates.
+type collabPool struct {
+	Key       uint64 `json:"key"`
+	ProcessID string `json:"processId"`
+	Name      string `json:"name"`
+	Version   int32  `json:"version"`
+}
+
+// collabFlow is one delivered message flow on the replay timeline: which message
+// crossed to which receiving element, when, and between which instances. The
+// receiving element is the message-flow edge's target on the shared diagram.
+type collabFlow struct {
+	At                int64  `json:"at"` // unix nanoseconds
+	MessageName       string `json:"messageName"`
+	CorrelationKey    string `json:"correlationKey"`
+	ReceiverElementID string `json:"receiverElementId"`
+	SenderInstance    uint64 `json:"senderInstance,omitempty"`
+	ReceiverInstance  uint64 `json:"receiverInstance,omitempty"`
+}
+
+// collabRuntimeResp is the whole collaboration's runtime for the replay view:
+// its pools, the merged live/visited element overlay across every pool, and the
+// time-ordered message flows that crossed between them (ADR-0038).
+type collabRuntimeResp struct {
+	Pools        []collabPool     `json:"pools"`
+	Instances    int              `json:"instances"`
+	Tokens       int              `json:"tokens"`
+	Elements     []runtimeElement `json:"elements"`
+	MessageFlows []collabFlow     `json:"messageFlows"`
 }
 
 type instanceResp struct {
@@ -381,11 +473,12 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
 		for _, key := range s.order {
 			d := s.deployments[key]
 			list = append(list, processResp{
-				Key:        d.Key,
-				ProcessID:  d.ProcessID,
-				Name:       d.Name,
-				Version:    d.Version,
-				DeployedAt: d.DeployedAt,
+				Key:              d.Key,
+				ProcessID:        d.ProcessID,
+				Name:             d.Name,
+				Version:          d.Version,
+				DeployedAt:       d.DeployedAt,
+				CollaborationKey: s.collaborationKeyOf(d),
 			})
 		}
 	})
@@ -573,6 +666,133 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 	case scanErr != nil:
 		writeError(w, http.StatusInternalServerError, "read runtime: "+scanErr.Error())
 	default:
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+// handleCollaborationRuntime returns the runtime of a whole collaboration for the
+// replay view: its pools, the live-token/visited overlay merged across every pool
+// onto the shared diagram, and the message flows that crossed between them in the
+// order they occurred (the replay timeline, ADR-0038). The path key may be any
+// pool of the collaboration; the sibling pools are discovered from the shared XML.
+func (s *Server) handleCollaborationRuntime(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid definition key")
+		return
+	}
+	var (
+		found   bool
+		scanErr error
+		resp    = collabRuntimeResp{Pools: []collabPool{}, Elements: []runtimeElement{}, MessageFlows: []collabFlow{}}
+	)
+	// Flows are collected across pools then sorted into one timeline; ts leads,
+	// with the log position as a stable tiebreaker for same-nanosecond flows.
+	type tsFlow struct {
+		ts  int64
+		pos uint64
+		f   collabFlow
+	}
+	var flows []tsFlow
+	s.do(func() {
+		d, ok := s.deployments[key]
+		if !ok {
+			return
+		}
+		found = true
+		pools := s.poolSiblings(d)
+
+		// scan runs one store scan, keeping the first error so later scans on a
+		// broken store become no-ops instead of masking it.
+		scan := func(fn func() error) {
+			if scanErr == nil {
+				scanErr = fn()
+			}
+		}
+		byElement := map[string]*runtimeElement{}
+		var order []string
+		for _, pd := range pools {
+			pd := pd
+			resp.Pools = append(resp.Pools, collabPool{Key: pd.Key, ProcessID: pd.ProcessID, Name: pd.Name, Version: pd.Version})
+			// Resolve this pool's element indices against its own compiled process;
+			// the shared diagram's ids are globally unique, so pools merge cleanly.
+			get := func(elementId int32) *runtimeElement {
+				bid := pd.cp.ElementBpmnId(elementId)
+				if bid == "" {
+					return nil
+				}
+				e := byElement[bid]
+				if e == nil {
+					e = &runtimeElement{ElementID: bid, Type: pd.cp.Node(elementId).Type.String()}
+					byElement[bid] = e
+					order = append(order, bid)
+				}
+				return e
+			}
+			scan(func() error {
+				return s.store.ActiveElementInstances(func(_ uint64, v *model.ElementInstanceValue) error {
+					if v.ProcessDefKey != pd.Key {
+						return nil
+					}
+					if e := get(v.ElementId); e != nil {
+						e.Tokens++
+						resp.Tokens++
+					}
+					return nil
+				})
+			})
+			scan(func() error {
+				return s.store.ElementVisitHistory(pd.Key, 0, func(elementId int32, count int64) error {
+					if e := get(elementId); e != nil {
+						e.Visits += int(count)
+					}
+					return nil
+				})
+			})
+			scan(func() error {
+				return s.store.ActiveProcessInstances(func(_ uint64, v *model.ProcessInstanceValue) error {
+					if v.ProcessDefKey == pd.Key {
+						resp.Instances++
+					}
+					return nil
+				})
+			})
+			scan(func() error {
+				return s.store.MessageFlowHistory(pd.Key, func(ts int64, pos uint64, v *model.MessageFlowValue) error {
+					flows = append(flows, tsFlow{ts: ts, pos: pos, f: collabFlow{
+						At:                ts,
+						MessageName:       v.MessageName,
+						CorrelationKey:    v.CorrelationKey,
+						ReceiverElementID: pd.cp.ElementBpmnId(v.ReceiverElementId),
+						SenderInstance:    v.SenderProcessInstanceKey,
+						ReceiverInstance:  v.ReceiverProcessInstanceKey,
+					}})
+					return nil
+				})
+			})
+		}
+		if scanErr != nil {
+			return
+		}
+		for _, bid := range order {
+			resp.Elements = append(resp.Elements, *byElement[bid])
+		}
+	})
+	switch {
+	case !found:
+		writeError(w, http.StatusNotFound, "no deployment with that key")
+	case scanErr != nil:
+		writeError(w, http.StatusInternalServerError, "read collaboration runtime: "+scanErr.Error())
+	default:
+		sort.Slice(flows, func(i, j int) bool {
+			if flows[i].ts != flows[j].ts {
+				return flows[i].ts < flows[j].ts
+			}
+			return flows[i].pos < flows[j].pos
+		})
+		for _, tf := range flows {
+			resp.MessageFlows = append(resp.MessageFlows, tf.f)
+		}
 		writeJSON(w, http.StatusOK, resp)
 	}
 }
