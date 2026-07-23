@@ -23,6 +23,7 @@ const (
 	cfMessageSubscription    columnFamily = 0x0A // msgSub:<name>:<corrKey>:<elKey> → MessageSubscriptionValue
 	cfElementVisit           columnFamily = 0x0B // elVisit:<procDefKey>:<piKey>:<elementId> → int64 count
 	cfMessageFlow            columnFamily = 0x0C // msgFlow:<receiverDefKey>:<ts>:<pos> → MessageFlowValue
+	cfJobByElement           columnFamily = 0x0D // jobByEl:<elKey> → jobKey (reverse lookup for boundary cancel)
 )
 
 func appendBE64(dst []byte, v uint64) []byte { return binary.BigEndian.AppendUint64(dst, v) }
@@ -53,6 +54,13 @@ func keyJob(key uint64) []byte {
 
 func keyJobActivatable(jobType int32, key uint64) []byte {
 	return appendBE64(jobActivatablePrefix(jobType), key)
+}
+
+// keyJobByElement keys the reverse lookup from an element instance to its job, so
+// an interrupting boundary event can find and cancel the host activity's job. An
+// activity holds at most one job at a time, so the element key alone identifies it.
+func keyJobByElement(elKey uint64) []byte {
+	return appendBE64([]byte{byte(cfJobByElement)}, elKey)
 }
 
 func jobActivatablePrefix(jobType int32) []byte {

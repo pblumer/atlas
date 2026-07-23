@@ -110,7 +110,11 @@ Making processes wait, react, and time out.
   Recovery-tested. A start-event correlation key and buffering remain (ADR-0035).
 - 🔲 Signal events (broadcast)
 - 🔲 Error events and error propagation
-- 🔲 Boundary events: interrupting and non-interrupting
+- ✅ Boundary events: timer and message, interrupting and non-interrupting,
+  attached to waiting activities. An interrupting boundary cancels the host (and
+  its job) and routes out its flow; a non-interrupting one spawns a parallel
+  token. Recovery-tested (ADR-0040). Error/signal boundaries, cycle timers, and
+  boundaries on subprocesses remain.
 - 🔲 Receive tasks
 - 🔲 Incident model: raise/resolve, operator resume
 

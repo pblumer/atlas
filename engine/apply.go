@@ -56,7 +56,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 		switch h.Intent {
 		case model.IntentJobCreated:
 			return tx.PutJob(h.Key, &v.job)
-		case model.IntentJobCompleted, model.IntentJobFailed:
+		case model.IntentJobCompleted, model.IntentJobFailed, model.IntentJobCanceled:
 			return tx.DeleteJob(h.Key, &v.job)
 		}
 

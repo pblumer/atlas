@@ -136,6 +136,13 @@ const (
 	// Incident.
 	IntentIncidentCreated
 	IntentIncidentResolved
+
+	// IntentJobCanceled retires a job whose element was interrupted (e.g. by an
+	// interrupting boundary event) rather than completed by a worker. It applies
+	// like JobCompleted/JobFailed (the job is deleted), and is appended here rather
+	// than beside the other job intents so the existing intents keep their numeric
+	// values on the log.
+	IntentJobCanceled
 )
 
 func (i Intent) String() string {
@@ -162,6 +169,8 @@ func (i Intent) String() string {
 		return "JobCompleted"
 	case IntentJobFailed:
 		return "JobFailed"
+	case IntentJobCanceled:
+		return "JobCanceled"
 	case IntentJobTimedOut:
 		return "JobTimedOut"
 	case IntentTimerCreated:

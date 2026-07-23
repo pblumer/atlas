@@ -32,9 +32,10 @@ const (
 	TypeMessageStartEvent // a start event that a correlating message instantiates (ADR-0035); at runtime it behaves like a none start (flows straight on)
 	TypeConnectorTask     // a service task that delegates to a server-registered connector via the job path (ADR-0036); like a service task it creates a job and waits
 	TypeUserTask          // a human task: parks a token, creates a job, waits for a person to complete it via the Tasks app (ADR-0028)
+	TypeBoundaryEvent     // a timer/message event attached to a host activity; arms while the host runs and, when it fires, interrupts the host or spawns a parallel token (ADR-0040)
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 17
+	numBpmnTypes = 18
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -72,6 +73,8 @@ func (t BpmnType) String() string {
 		return "ConnectorTask"
 	case TypeUserTask:
 		return "UserTask"
+	case TypeBoundaryEvent:
+		return "BoundaryEvent"
 	default:
 		return "Unspecified"
 	}
@@ -87,6 +90,8 @@ type CompiledNode struct {
 	IncomingCount int32 // number of sequence flows targeting this node (a parallel join waits for all)
 	FlowScope     int32 // ElementId of enclosing scope, -1 = process root
 	Detail        int32 // index into the matching detail table, -1 if none
+	BoundaryStart int32 // offset into boundaryEvents (the node ids of events attached to this activity)
+	BoundaryCount int32 // number of boundary events attached (0 for a non-host node)
 }
 
 // CompiledFlow is a sequence flow between two nodes. Condition is the compiled
@@ -201,6 +206,28 @@ type MessageDetail struct {
 	CorrelationKey *expr.Compiled
 }
 
+// BoundaryEventKind discriminates what a boundary event waits on.
+type BoundaryEventKind uint8
+
+const (
+	BoundaryTimer   BoundaryEventKind = iota // waits a fixed duration, then fires
+	BoundaryMessage                          // waits for a correlating message, then fires
+)
+
+// BoundaryEventDetail is the per-boundary-event data a behavior needs at runtime.
+// A boundary event is attached to a host activity (HostNode) and arms while the
+// host runs; when it fires it either interrupts the host (Interrupting) or spawns
+// a parallel token. The timer fields apply when Kind is BoundaryTimer, the message
+// fields when Kind is BoundaryMessage (ADR-0040).
+type BoundaryEventDetail struct {
+	HostNode       int32 // ElementId of the activity this event is attached to
+	Interrupting   bool  // true = cancel the host on fire (BPMN cancelActivity); false = run alongside
+	Kind           BoundaryEventKind
+	DurationNanos  int64          // BoundaryTimer: how long before it fires
+	MessageName    string         // BoundaryMessage: the message it subscribes to
+	CorrelationKey *expr.Compiled // BoundaryMessage: correlation-key expression (ADR-0020)
+}
+
 // CompiledProcess is the immutable result of compiling one process definition.
 // It is safe for concurrent reads without synchronization.
 type CompiledProcess struct {
@@ -212,12 +239,14 @@ type CompiledProcess struct {
 	flows []CompiledFlow
 
 	outgoingFlows     []int32 // shared topology: flow ids grouped by source node
+	boundaryEvents    []int32 // shared topology: boundary-event node ids grouped by host node
 	serviceTasks      []ServiceTaskDetail
 	scriptTasks       []ScriptTaskDetail
 	businessRuleTasks []BusinessRuleTaskDetail
 	timerCatches      []TimerCatchDetail
 	connectorTasks    []ConnectorTaskDetail
 	userTasks         []UserTaskDetail
+	boundaryEventDets []BoundaryEventDetail
 	messageCatches    []MessageDetail
 	messageThrows     []MessageDetail
 	messageStarts     []MessageDetail
@@ -237,6 +266,19 @@ func (p *CompiledProcess) Flow(id int32) *CompiledFlow { return &p.flows[id] }
 func (p *CompiledProcess) Outgoing(id int32) []int32 {
 	n := &p.nodes[id]
 	return p.outgoingFlows[n.OutgoingStart : n.OutgoingStart+n.OutgoingCount]
+}
+
+// BoundaryEvents returns the element ids of the boundary events attached to the
+// activity node id, as a slice into the shared topology array (no allocation).
+// Empty for a node with no attached boundary events.
+func (p *CompiledProcess) BoundaryEvents(id int32) []int32 {
+	n := &p.nodes[id]
+	return p.boundaryEvents[n.BoundaryStart : n.BoundaryStart+n.BoundaryCount]
+}
+
+// BoundaryEvent returns the boundary-event detail at the given table index.
+func (p *CompiledProcess) BoundaryEvent(detail int32) *BoundaryEventDetail {
+	return &p.boundaryEventDets[detail]
 }
 
 // NodesReaching returns the set of node ids from which target is reachable by

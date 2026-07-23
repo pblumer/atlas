@@ -46,6 +46,15 @@ func (c *ProcessingContext) GetJob(key uint64) *model.JobValue {
 	return v
 }
 
+// JobOfElement returns the key of the job held by an element instance and whether
+// it holds one, through the in-flight transaction. An interrupting boundary event
+// uses it to cancel the host activity's job when it terminates the host.
+func (c *ProcessingContext) JobOfElement(elKey uint64) (uint64, bool) {
+	jobKey, ok, err := c.tx.JobOfElement(elKey)
+	c.p.fail(err)
+	return jobKey, ok
+}
+
 // GetProcessInstance reads process-instance state through the in-flight transaction.
 func (c *ProcessingContext) GetProcessInstance(key uint64) *model.ProcessInstanceValue {
 	v, err := c.tx.GetProcessInstance(key)

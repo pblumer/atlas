@@ -268,7 +268,7 @@ func TestStringersExhaustive(t *testing.T) {
 		IntentJobTimedOut, IntentTimerCreated, IntentTimerTriggered,
 		IntentSubscriptionCreated, IntentSubscriptionCorrelated, IntentMessagePublished,
 		IntentVariableCreated, IntentVariableUpdated, IntentIncidentCreated,
-		IntentIncidentResolved,
+		IntentIncidentResolved, IntentJobCanceled,
 	}
 	for _, in := range intents {
 		if s := in.String(); s == "" || s == "Intent(?)" {
