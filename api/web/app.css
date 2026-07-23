@@ -290,6 +290,18 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   font: 11px ui-monospace, monospace; background: var(--bg); border: 1px solid var(--border-strong);
   border-bottom-width: 2px; border-radius: 4px; padding: 0 4px;
 }
+/* An inline text button (e.g. the FEEL "Test" toggle) styled as a link. */
+.linklike { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; }
+.linklike:hover { text-decoration: underline; }
+
+/* "Test expression" panel: sample variables + Run + the evaluated result. */
+.feel-test { margin: 4px 0 0; }
+.feel-test-vars { font-size: 12px; }
+.feel-test-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.feel-test-run { padding: 4px 12px; font-size: 12px; }
+.feel-test-out { font: 12px/1.4 ui-monospace, monospace; word-break: break-word; }
+.feel-test-out.ok { color: var(--ok); }
+.feel-test-out.err { color: var(--danger); }
 
 /* ---------- Start-variable declaration editor (Process panel) ---------- */
 #sv-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }

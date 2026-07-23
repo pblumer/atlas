@@ -155,6 +155,99 @@ func (s *Server) handleValidateFeel(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, validateFeelResp{OK: true})
 }
 
+type evalFeelReq struct {
+	Expression string         `json:"expression"`
+	Variables  map[string]any `json:"variables"`
+}
+
+type evalFeelResp struct {
+	OK     bool   `json:"ok"`
+	Result string `json:"result"`
+	Kind   string `json:"kind"`
+	Error  string `json:"error,omitempty"`
+}
+
+// handleEvaluateFeel compiles and evaluates a FEEL expression against sample
+// variables, so the Modeler's "Test expression" can show what an expression
+// produces before deploying. A FEEL type error (number + string, division by
+// zero, …) evaluates to null rather than erroring — reported faithfully as a
+// null result. Like validation, it's a pure compile+eval over a caller-supplied
+// scope: no engine state is read or written, so it runs off the single-writer
+// loop and never touches the processor hot path (ADR-0008).
+func (s *Server) handleEvaluateFeel(w http.ResponseWriter, r *http.Request) {
+	dec := json.NewDecoder(io.LimitReader(r.Body, maxFeelBytes))
+	dec.UseNumber() // keep numbers exact (json.Number) for FEEL's decimals
+	var req evalFeelReq
+	if err := dec.Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+		return
+	}
+	if strings.TrimSpace(req.Expression) == "" {
+		writeJSON(w, http.StatusOK, evalFeelResp{OK: false, Error: "empty expression"})
+		return
+	}
+	compiled, err := expr.CompileAuto(req.Expression)
+	if err != nil {
+		writeJSON(w, http.StatusOK, evalFeelResp{OK: false, Error: err.Error()})
+		return
+	}
+	bindings, err := feelBindings(req.Variables)
+	if err != nil {
+		writeJSON(w, http.StatusOK, evalFeelResp{OK: false, Error: err.Error()})
+		return
+	}
+	v, err := compiled.Eval(bindings)
+	if err != nil {
+		writeJSON(w, http.StatusOK, evalFeelResp{OK: false, Error: err.Error()})
+		return
+	}
+	kind, b, text := expr.Classify(v)
+	result := text
+	switch kind {
+	case expr.KindBool:
+		result = strconv.FormatBool(b)
+	case expr.KindNull:
+		result = "null"
+	}
+	writeJSON(w, http.StatusOK, evalFeelResp{OK: true, Result: result, Kind: feelKindName(kind)})
+}
+
+// feelBindings converts the JSON sample variables into FEEL values. Numbers keep
+// their exact text (json.Number) so decimals aren't mangled by float rounding.
+// Only scalars are accepted — the same contract as start variables.
+func feelBindings(in map[string]any) (map[string]expr.Value, error) {
+	out := make(map[string]expr.Value, len(in))
+	for name, raw := range in {
+		switch x := raw.(type) {
+		case nil:
+			out[name] = expr.Null
+		case bool:
+			out[name] = expr.Bool(x)
+		case string:
+			out[name] = expr.String(x)
+		case json.Number:
+			out[name] = expr.FromStored(expr.KindNumber, false, x.String())
+		default:
+			return nil, fmt.Errorf("variable %q: only scalar values (number, string, boolean, null)", name)
+		}
+	}
+	return out, nil
+}
+
+// feelKindName maps a classified value kind to the label the UI shows.
+func feelKindName(k expr.ValueKind) string {
+	switch k {
+	case expr.KindBool:
+		return "boolean"
+	case expr.KindNumber:
+		return "number"
+	case expr.KindString:
+		return "string"
+	default:
+		return "null"
+	}
+}
+
 // handleDeploy parses a BPMN XML body, compiles and deploys every executable
 // process it contains — one for a plain model, several for a collaboration (one
 // per pool) — and returns the assigned key/id/version for each. Each pool's

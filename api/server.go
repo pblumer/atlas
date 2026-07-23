@@ -222,6 +222,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/v1/info", s.handleInfo)
 	mux.HandleFunc("POST /api/v1/feel/validate", s.handleValidateFeel)
+	mux.HandleFunc("POST /api/v1/feel/evaluate", s.handleEvaluateFeel)
 	mux.HandleFunc("POST /api/v1/deployments", s.handleDeploy)
 	mux.HandleFunc("GET /api/v1/processes", s.handleListProcesses)
 	mux.HandleFunc("POST /api/v1/drafts", s.handleSaveDraft)
