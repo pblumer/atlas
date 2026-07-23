@@ -731,17 +731,27 @@ function typedDeployFieldHTML(v) {
   return `<label class="field">${cap}${input}</label>`;
 }
 
-// deployFormHTML is the body of the Deploy & run panel: a typed form when the
-// process declares start variables, otherwise the free-form JSON textarea.
-function deployFormHTML(declared) {
+// startVarsFormHTML is the body of a start-variables panel — the editor's
+// Deploy & run and the Live view's Start instance both use it: a typed form when
+// the process declares start variables, otherwise a free-form JSON textarea.
+// readStartFormBody reads back whichever was rendered.
+function startVarsFormHTML(declared) {
   if (!declared.length) {
     return `<label class="field">
       <span>Start variables — optional. A JSON object of scalars (number, string, boolean, null) the instance starts with. Leave empty to start with none.</span>
-      <textarea id="deploy-vars" rows="3" spellcheck="false" placeholder='{ "amount": 100, "customer": "acme", "priority": true }'></textarea>
+      <textarea class="sv-json" rows="3" spellcheck="false" placeholder='{ "amount": 100, "customer": "acme", "priority": true }'></textarea>
     </label>`;
   }
   return `<p class="muted" style="font-size:12px;margin:0 0 8px">Start variables for this run — declared on the process. Required are marked <span class="req-star">*</span>; leave an optional one blank to omit it.</p>`
     + declared.map(typedDeployFieldHTML).join("");
+}
+
+// readStartFormBody turns a rendered start-variables panel into an instance
+// request body — parsing the JSON textarea, or coercing the typed fields when a
+// declaration produced them. Throws Error(message) on invalid input.
+function readStartFormBody(bodyEl) {
+  const json = bodyEl.querySelector(".sv-json");
+  return json ? parseStartVariables(json.value) : readTypedDeployBody(bodyEl);
 }
 
 // readTypedDeployBody turns the typed Deploy form into an instance request body,
@@ -815,10 +825,10 @@ function wireActions(root, modeler, api, toast) {
   // Read the declaration fresh each open — it can change while the editor is up.
   const openDeploy = () => {
     const bo = rootProcess(modeler);
-    dbody.innerHTML = deployFormHTML(bo ? readStartVariables(bo) : []);
+    dbody.innerHTML = startVarsFormHTML(bo ? readStartVariables(bo) : []);
     dpanel.hidden = false;
     derr.textContent = "";
-    const first = dbody.querySelector("#deploy-vars, .dv-field");
+    const first = dbody.querySelector(".sv-json, .dv-field");
     if (first) first.focus();
   };
 
@@ -828,8 +838,7 @@ function wireActions(root, modeler, api, toast) {
   dgo.addEventListener("click", async () => {
     let body;
     try {
-      const jsonEl = dbody.querySelector("#deploy-vars");
-      body = jsonEl ? parseStartVariables(jsonEl.value) : readTypedDeployBody(dbody);
+      body = readStartFormBody(dbody);
     } catch (e) { derr.textContent = e.message; return; }
     dgo.disabled = true;
     derr.textContent = "";
@@ -909,10 +918,7 @@ export async function mountLive(root, { api, toast, key }) {
         <span class="pill" style="margin-left:8px"><b id="token-count">0</b>&nbsp;tokens total</span>
       </div>
       <div class="start-panel" id="start-panel" hidden>
-        <label class="field">
-          <span>Start variables — a JSON object of scalars (number, string, boolean, null). Leave empty to start with none.</span>
-          <textarea id="start-vars" rows="4" spellcheck="false" placeholder='{ "amount": 100, "customer": "acme", "priority": true }'></textarea>
-        </label>
+        <div id="start-body"></div>
         <div class="row">
           <button class="btn" id="start-go">Start instance</button>
           <button class="btn neutral" id="start-cancel">Cancel</button>
@@ -1105,21 +1111,29 @@ export async function mountLive(root, { api, toast, key }) {
   // optionally seeded with start variables entered in the panel below the toolbar.
   const startBtn = root.querySelector("#start");
   const panel = root.querySelector("#start-panel");
-  const varsEl = root.querySelector("#start-vars");
+  const startBody = root.querySelector("#start-body");
   const goBtn = root.querySelector("#start-go");
   const errEl = root.querySelector("#start-err");
   const closePanel = () => { panel.hidden = true; errEl.textContent = ""; };
 
-  startBtn.addEventListener("click", () => {
-    panel.hidden = !panel.hidden;
+  // When the deployed model declares start variables (atlas:startForm), show the
+  // same typed form the Modeler's Deploy & run uses; otherwise a JSON textarea.
+  // The declaration is read from the rendered definition, fresh each open.
+  const openPanel = () => {
+    const bo = rootProcess(viewer);
+    startBody.innerHTML = startVarsFormHTML(bo ? readStartVariables(bo) : []);
+    panel.hidden = false;
     errEl.textContent = "";
-    if (!panel.hidden) varsEl.focus();
-  });
+    const first = startBody.querySelector(".sv-json, .dv-field");
+    if (first) first.focus();
+  };
+
+  startBtn.addEventListener("click", () => { panel.hidden ? openPanel() : closePanel(); });
   root.querySelector("#start-cancel").addEventListener("click", closePanel);
 
   goBtn.addEventListener("click", async () => {
     let body;
-    try { body = parseStartVariables(varsEl.value); }
+    try { body = readStartFormBody(startBody); }
     catch (e) { errEl.textContent = e.message; return; }
     goBtn.disabled = true;
     try {
@@ -1127,7 +1141,6 @@ export async function mountLive(root, { api, toast, key }) {
       const n = body.variables ? Object.keys(body.variables).length : 0;
       toast(n ? `Started a new instance with ${n} variable${n === 1 ? "" : "s"}` : "Started a new instance", "ok");
       closePanel();
-      varsEl.value = "";
       await poll();
     } catch (e) {
       errEl.textContent = e.message;
