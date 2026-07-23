@@ -173,6 +173,7 @@ func TestToolsListExposesAtlasTools(t *testing.T) {
 	for _, want := range []string{
 		"atlas_info", "atlas_deploy", "atlas_list_processes", "atlas_get_process_xml",
 		"atlas_process_runtime", "atlas_create_instance", "atlas_list_instances", "atlas_stats",
+		"atlas_cancel_instance", "atlas_delete_process",
 	} {
 		if !names[want] {
 			t.Fatalf("tools/list missing %q; got %v", want, names)

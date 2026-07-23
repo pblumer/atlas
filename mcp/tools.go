@@ -128,6 +128,44 @@ func defaultTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_cancel_instance",
+			Description: "Cancel (terminate) one running process instance by its instance key. All " +
+				"its tokens are discarded and the instance moves to the 'terminated' state. " +
+				"Use the large instance key from atlas_list_instances, not a definition key. " +
+				"Returns the instance key, its new state, and live engine stats.",
+			InputSchema: keyArg("The instance key (from atlas_list_instances) to cancel."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.del("/api/v1/instances/" + strconv.FormatUint(key, 10)))
+			},
+		},
+		{
+			Name: "atlas_delete_process",
+			Description: "Delete a deployed process definition by its key, removing it from the engine " +
+				"and from disk. Refused with a conflict error if the definition still has running " +
+				"instances — cancel them with atlas_cancel_instance first. Returns a confirmation.",
+			InputSchema: keyArg("The process definition key (from atlas_list_processes) to delete."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				body, err := c.del("/api/v1/processes/" + strconv.FormatUint(key, 10))
+				if err != nil {
+					return "", err
+				}
+				// The endpoint answers 204 No Content on success; give the model an
+				// explicit confirmation rather than an empty string.
+				if len(body) == 0 {
+					return `{"deleted":true,"key":` + strconv.FormatUint(key, 10) + `}`, nil
+				}
+				return string(body), nil
+			},
+		},
+		{
 			Name:        "atlas_stats",
 			Description: "Get live engine counts: active process instances and active element instances (tokens).",
 			InputSchema: noArgs(),

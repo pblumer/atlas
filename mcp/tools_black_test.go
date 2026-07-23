@@ -60,6 +60,72 @@ func TestGetProcessXMLStringKey(t *testing.T) {
 	}
 }
 
+// TestCancelAndDeleteViaTools exercises the delete/cancel lifecycle end to end:
+// deploy a definition, start an instance (whose token parks on the service task),
+// confirm the definition cannot be deleted while that instance runs, cancel the
+// instance, then delete the definition cleanly.
+func TestCancelAndDeleteViaTools(t *testing.T) {
+	ts := newAtlas(t)
+
+	// Deploy → definition key 1 on a fresh engine.
+	resps := run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN}))
+	if _, isErr := toolText(t, result(t, resps[0])); isErr {
+		t.Fatal("deploy failed")
+	}
+
+	// Start an instance; sampleBPMN parks a token on its service task, so the
+	// instance stays active and blocks deletion of the definition.
+	resps = run(t, ts, callTool(2, "atlas_create_instance", map[string]any{"key": 1}))
+	if _, isErr := toolText(t, result(t, resps[0])); isErr {
+		t.Fatal("create_instance failed")
+	}
+
+	// Deleting the definition now is refused: it still has a running instance.
+	resps = run(t, ts, callTool(3, "atlas_delete_process", map[string]any{"key": 1}))
+	text, isErr := toolText(t, result(t, resps[0]))
+	if !isErr || !strings.Contains(text, "running instance") {
+		t.Fatalf("delete with running instance = (%q, isErr=%v), want a conflict error", text, isErr)
+	}
+
+	// Find the live instance key.
+	resps = run(t, ts, callTool(4, "atlas_list_instances", map[string]any{}))
+	listText, isErr := toolText(t, result(t, resps[0]))
+	if isErr {
+		t.Fatal("list_instances failed")
+	}
+	var instances []struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal([]byte(listText), &instances); err != nil || len(instances) == 0 {
+		t.Fatalf("parse instances: err=%v, list=%q", err, listText)
+	}
+
+	// Cancel it → terminated.
+	resps = run(t, ts, callTool(5, "atlas_cancel_instance", map[string]any{"key": instances[0].Key}))
+	text, isErr = toolText(t, result(t, resps[0]))
+	if isErr || !strings.Contains(text, `"state":"terminated"`) {
+		t.Fatalf("cancel_instance = (%q, isErr=%v), want terminated", text, isErr)
+	}
+
+	// With no running instances, the definition deletes cleanly.
+	resps = run(t, ts, callTool(6, "atlas_delete_process", map[string]any{"key": 1}))
+	text, isErr = toolText(t, result(t, resps[0]))
+	if isErr || !strings.Contains(text, `"deleted":true`) {
+		t.Fatalf("delete_process = (%q, isErr=%v), want deleted:true", text, isErr)
+	}
+}
+
+// TestCancelMissingInstanceIsToolError cancels an instance key that does not
+// exist, surfacing the server's 404 as a tool error.
+func TestCancelMissingInstanceIsToolError(t *testing.T) {
+	ts := newAtlas(t)
+	resps := run(t, ts, callTool(1, "atlas_cancel_instance", map[string]any{"key": 999999}))
+	text, isErr := toolText(t, result(t, resps[0]))
+	if !isErr || !strings.Contains(text, "no active instance") {
+		t.Fatalf("cancel missing instance = (%q, isErr=%v), want a not-found tool error", text, isErr)
+	}
+}
+
 // TestBadKeyArgumentIsToolError sends an out-of-range key so the tool handler's
 // argUint returns an error, surfaced as a tool result with isError:true.
 func TestBadKeyArgumentIsToolError(t *testing.T) {
