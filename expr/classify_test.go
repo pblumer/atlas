@@ -31,9 +31,9 @@ func TestClassifyScalars(t *testing.T) {
 		{"bool-false", expr.Bool(false), expr.KindBool, false, ""},
 		{"number", expr.Number(42), expr.KindNumber, false, "42"},
 		{"string", expr.String("hi"), expr.KindString, false, "hi"},
-		// A list is non-scalar: it falls through to the default arm and is stored
-		// as its canonical FEEL text under KindString.
-		{"list", listVal, expr.KindString, false, listVal.String()},
+		// A list is structured: it is stored under KindJSON as canonical JSON, so
+		// it round-trips back into a FEEL list rather than a lossy string.
+		{"list", listVal, expr.KindJSON, false, "[1,2,3]"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			kind, b, text := expr.Classify(tc.v)

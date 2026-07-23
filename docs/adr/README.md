@@ -44,6 +44,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0034](0034-projects-and-artifacts.md) | Projects as containers for heterogeneous artifacts | Accepted |
 | [0035](0035-message-start-events.md) | Message start events and the processInstanceKey built-in | Accepted |
 | [0036](0036-clio-connector.md) | A clio connector — server-registered event-store integration | Accepted |
+| [0037](0037-structured-json-variables.md) | Structured JSON variables (objects and arrays) | Accepted |
 
 ## Status values
 

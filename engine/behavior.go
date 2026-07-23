@@ -606,6 +606,8 @@ func toVarKind(k expr.ValueKind) model.VarKind {
 		return model.VarNumber
 	case expr.KindString:
 		return model.VarString
+	case expr.KindJSON:
+		return model.VarJSON
 	default:
 		return model.VarNull
 	}
@@ -621,6 +623,8 @@ func toExprKind(k model.VarKind) expr.ValueKind {
 		return expr.KindNumber
 	case model.VarString:
 		return expr.KindString
+	case model.VarJSON:
+		return expr.KindJSON
 	default:
 		return expr.KindNull
 	}

@@ -114,23 +114,49 @@ func TestEvaluateFeel(t *testing.T) {
 	}
 }
 
-// TestEvaluateFeelRejectsNonScalarVariable rejects a variable that isn't a scalar.
-func TestEvaluateFeelRejectsNonScalarVariable(t *testing.T) {
+// TestEvaluateFeelStructuredVariable binds a structured variable (an object) and
+// reads one of its members through FEEL, proving objects/arrays are usable — not
+// rejected — as evaluation inputs (ADR-0037).
+func TestEvaluateFeelStructuredVariable(t *testing.T) {
 	ts := newTestServer(t)
 	code, body := doReq(t, ts, http.MethodPost, "/api/v1/feel/evaluate",
-		`{"expression":"x","variables":{"x":{"nested":1}}}`, "application/json")
+		`{"expression":"x.nested + 1","variables":{"x":{"nested":1}}}`, "application/json")
 	if code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", code, body)
 	}
 	var resp struct {
-		OK    bool   `json:"ok"`
-		Error string `json:"error"`
+		OK     bool   `json:"ok"`
+		Result string `json:"result"`
+		Kind   string `json:"kind"`
+		Error  string `json:"error"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if resp.OK || resp.Error == "" {
-		t.Fatalf("expected ok:false with an error, got ok=%v error=%q", resp.OK, resp.Error)
+	if !resp.OK || resp.Result != "2" || resp.Kind != "number" {
+		t.Fatalf("x.nested + 1 = ok=%v result=%q kind=%q err=%q, want 2/number", resp.OK, resp.Result, resp.Kind, resp.Error)
+	}
+}
+
+// TestEvaluateFeelReturnsJSON evaluates to a whole object and checks it renders as
+// canonical JSON under the "json" kind.
+func TestEvaluateFeelReturnsJSON(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/feel/evaluate",
+		`{"expression":"{b: 2, a: 1}"}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", code, body)
+	}
+	var resp struct {
+		OK     bool   `json:"ok"`
+		Result string `json:"result"`
+		Kind   string `json:"kind"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !resp.OK || resp.Kind != "json" || resp.Result != `{"a":1,"b":2}` {
+		t.Fatalf("got ok=%v kind=%q result=%q, want json/{\"a\":1,\"b\":2}", resp.OK, resp.Kind, resp.Result)
 	}
 }
 

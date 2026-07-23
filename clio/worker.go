@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/job"
@@ -75,7 +76,9 @@ func instanceData(store *state.Store, scope uint64) (map[string]any, error) {
 
 // varToAny maps a stored variable to its JSON-ready Go value. A number keeps its
 // exact canonical decimal text via json.Number rather than being routed through a
-// float, so large or high-precision numbers survive intact.
+// float, so large or high-precision numbers survive intact. A structured value
+// (VarJSON) is re-parsed from its stored JSON so the connector payload nests it
+// as a real object/array rather than a JSON-in-a-string blob.
 func varToAny(v *model.VariableValue) any {
 	switch v.Kind {
 	case model.VarBool:
@@ -84,6 +87,14 @@ func varToAny(v *model.VariableValue) any {
 		return json.Number(v.Text)
 	case model.VarString:
 		return v.Text
+	case model.VarJSON:
+		dec := json.NewDecoder(strings.NewReader(v.Text))
+		dec.UseNumber()
+		var out any
+		if err := dec.Decode(&out); err != nil {
+			return nil
+		}
+		return out
 	default:
 		return nil
 	}

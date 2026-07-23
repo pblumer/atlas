@@ -214,7 +214,8 @@ func (s *Server) handleEvaluateFeel(w http.ResponseWriter, r *http.Request) {
 
 // feelBindings converts the JSON sample variables into FEEL values. Numbers keep
 // their exact text (json.Number) so decimals aren't mangled by float rounding.
-// Only scalars are accepted — the same contract as start variables.
+// Objects and arrays bind as FEEL contexts and lists — the same contract as start
+// variables (ADR-0037).
 func feelBindings(in map[string]any) (map[string]expr.Value, error) {
 	out := make(map[string]expr.Value, len(in))
 	for name, raw := range in {
@@ -227,8 +228,10 @@ func feelBindings(in map[string]any) (map[string]expr.Value, error) {
 			out[name] = expr.String(x)
 		case json.Number:
 			out[name] = expr.FromStored(expr.KindNumber, false, x.String())
+		case map[string]any, []any:
+			out[name] = expr.FromJSON(x)
 		default:
-			return nil, fmt.Errorf("variable %q: only scalar values (number, string, boolean, null)", name)
+			return nil, fmt.Errorf("variable %q: unsupported value type %T", name, raw)
 		}
 	}
 	return out, nil
@@ -243,6 +246,8 @@ func feelKindName(k expr.ValueKind) string {
 		return "number"
 	case expr.KindString:
 		return "string"
+	case expr.KindJSON:
+		return "json"
 	default:
 		return "null"
 	}
@@ -621,9 +626,11 @@ func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// parseStartVariables reads {"variables": {name: scalar}} from a request body
-// into VariableValues. Only scalar JSON (number, string, boolean, null) is
-// supported; numbers keep their exact textual form for FEEL's decimal semantics.
+// parseStartVariables reads {"variables": {name: value}} from a request body
+// into VariableValues. Scalars (number, string, boolean, null) are stored
+// directly; numbers keep their exact textual form for FEEL's decimal semantics.
+// Objects and arrays are stored as canonical JSON under VarJSON, so they bind
+// back into FEEL as contexts and lists for property access (ADR-0037).
 func parseStartVariables(body []byte) ([]model.VariableValue, error) {
 	if len(bytes.TrimSpace(body)) == 0 {
 		return nil, nil
@@ -651,8 +658,14 @@ func parseStartVariables(body []byte) ([]model.VariableValue, error) {
 			vv.Kind, vv.Text = model.VarNumber, x.String()
 		case string:
 			vv.Kind, vv.Text = model.VarString, x
+		case map[string]any, []any:
+			text, ok := expr.ToJSON(expr.FromJSON(x))
+			if !ok {
+				return nil, fmt.Errorf("variable %q: value is not encodable as JSON", name)
+			}
+			vv.Kind, vv.Text = model.VarJSON, text
 		default:
-			return nil, fmt.Errorf("variable %q: only scalar values (number, string, boolean, null) are supported yet", name)
+			return nil, fmt.Errorf("variable %q: unsupported value type %T", name, raw)
 		}
 		out = append(out, vv)
 	}
@@ -680,6 +693,8 @@ func toVariableView(v *model.VariableValue) variableView {
 		out.Kind, out.Value = "number", v.Text
 	case model.VarString:
 		out.Kind, out.Value = "string", v.Text
+	case model.VarJSON:
+		out.Kind, out.Value = "json", v.Text
 	default:
 		out.Kind, out.Value = "null", "null"
 	}
