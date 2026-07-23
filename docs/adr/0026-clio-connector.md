@@ -1,8 +1,17 @@
 # ADR-0026: A clio connector — server-registered event-store integration
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-23
 - **Deciders:** Atlas engine team
+
+> **Implementation status.** Variant A (the connector task via the job path) is
+> implemented for the `clio:write-events` operation: a `<serviceTask>` bearing an
+> `<atlas:clioConnector connector subject eventType>` extension compiles to a
+> `TypeConnectorTask` carrying the reserved `io.atlas.clio.write` job type; the
+> `clio` package provides the connector `Registry`, a `Client` (with an HTTP
+> implementation) and the job `Handler`. The connector worker is not yet wired
+> into the HTTP server run loop (the DMN worker isn't either — same follow-up).
+> Variant B (the event mirror) and `clio:query` remain future work.
 
 ## Context and problem statement
 

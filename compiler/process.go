@@ -29,6 +29,7 @@ const (
 	TypeTask              // an undefined/manual task: no execution semantics, passes straight through
 	TypeParallelGateway   // AND gateway: forks a token onto every outgoing flow, joins by waiting for all incoming
 	TypeMessageStartEvent // a start event that a correlating message instantiates (ADR-0025); at runtime it behaves like a none start (flows straight on)
+	TypeConnectorTask     // a service task that delegates to a server-registered connector via the job path (ADR-0026); like a service task it creates a job and waits
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
 	numBpmnTypes = 16
@@ -63,6 +64,8 @@ func (t BpmnType) String() string {
 		return "ParallelGateway"
 	case TypeMessageStartEvent:
 		return "MessageStartEvent"
+	case TypeConnectorTask:
+		return "ConnectorTask"
 	default:
 		return "Unspecified"
 	}
@@ -119,6 +122,23 @@ type BusinessRuleTaskDetail struct {
 	Retries    int32
 }
 
+// ConnectorTaskDetail is the per-connector-task data a behavior needs at runtime.
+// A connector task delegates to a server-registered connector (e.g. a clio event
+// store) evaluated off the hot path by a job worker (ADR-0026). Like a service
+// task it runs as a job, so it carries a JobType (a reserved connector sentinel)
+// the in-process connector worker subscribes to. Connector names the
+// server-registered connector to resolve at runtime; Subject and EventType are
+// the interned target coordinates the worker sends (a stand-in for full payload
+// mappings until the variable subsystem matures — the worker sends the instance's
+// variables as the event body).
+type ConnectorTaskDetail struct {
+	JobType   int32 // interned reserved connector job type → index
+	Connector int32 // interned connector name → index
+	Subject   int32 // interned target subject → index
+	EventType int32 // interned event type → index
+	Retries   int32
+}
+
 // TimerCatchDetail is the per-timer-intermediate-catch-event data: how long the
 // event waits before continuing, as a fixed duration in nanoseconds (a literal
 // ISO-8601 duration today; FEEL duration expressions and date/cycle timers later).
@@ -151,6 +171,7 @@ type CompiledProcess struct {
 	scriptTasks       []ScriptTaskDetail
 	businessRuleTasks []BusinessRuleTaskDetail
 	timerCatches      []TimerCatchDetail
+	connectorTasks    []ConnectorTaskDetail
 	messageCatches    []MessageDetail
 	messageThrows     []MessageDetail
 	messageStarts     []MessageDetail
@@ -211,6 +232,11 @@ func (p *CompiledProcess) ScriptTask(detail int32) *ScriptTaskDetail {
 // BusinessRuleTask returns the detail at the given table index.
 func (p *CompiledProcess) BusinessRuleTask(detail int32) *BusinessRuleTaskDetail {
 	return &p.businessRuleTasks[detail]
+}
+
+// ConnectorTask returns the connector-task detail at the given table index.
+func (p *CompiledProcess) ConnectorTask(detail int32) *ConnectorTaskDetail {
+	return &p.connectorTasks[detail]
 }
 
 // StartEvents returns the process's entry-point element ids.

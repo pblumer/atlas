@@ -43,6 +43,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeServiceTask] = serviceTaskBehavior{}
 	p.behaviors[compiler.TypeScriptTask] = scriptTaskBehavior{}
 	p.behaviors[compiler.TypeBusinessRuleTask] = businessRuleTaskBehavior{}
+	p.behaviors[compiler.TypeConnectorTask] = connectorTaskBehavior{}
 	p.behaviors[compiler.TypeExclusiveGateway] = exclusiveGatewayBehavior{}
 	p.behaviors[compiler.TypeTimerCatchEvent] = timerCatchEventBehavior{}
 	p.behaviors[compiler.TypeMessageCatchEvent] = messageCatchEventBehavior{}
@@ -579,6 +580,33 @@ func (businessRuleTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei
 }
 
 func (businessRuleTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// connectorTaskBehavior: delegate to a server-registered connector (e.g. a clio
+// event store). The engine treats it exactly like a service task — create a job
+// on activation and wait — but the job carries the connector's reserved job type,
+// so the in-process connector worker (package clio) picks it up, performs the
+// outbound call off the hot path after fsync, and completes it. Keeping the call
+// on the worker side, not in a behavior, keeps the processor allocation-free (I1)
+// and the connector's network I/O out of applyToState (I4). See ADR-0026.
+type connectorTaskBehavior struct{}
+
+func (connectorTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.ConnectorTask(cp.Node(ei.ElementId).Detail)
+	jobKey := c.NewKey()
+	c.AppendJobEvent(jobKey, model.IntentJobCreated, model.JobValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		JobType:            detail.JobType,
+		Retries:            detail.Retries,
+	})
+	c.NotifyJobAvailable(detail.JobType)
+	// Stays Activated until the connector worker completes the job.
+}
+
+func (connectorTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	completeAndTakeFlows(c, key, ei)
 }
 

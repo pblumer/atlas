@@ -33,7 +33,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0023](0023-collaborations-and-pools.md) | Collaborations and pools as multi-process deployments | Accepted |
 | [0024](0024-parallel-gateway-join.md) | Parallel gateway join synchronization | Accepted |
 | [0025](0025-message-start-events.md) | Message start events and the processInstanceKey built-in | Accepted |
-| [0026](0026-clio-connector.md) | A clio connector — server-registered event-store integration | Proposed |
+| [0026](0026-clio-connector.md) | A clio connector — server-registered event-store integration | Accepted |
 
 ## Status values
 

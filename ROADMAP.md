@@ -54,6 +54,15 @@ The control-flow basics most real models use.
   as a vertical slice. It currently feeds a decision static inputs and surfaces
   outputs via a sink; wiring real input/output variable mappings depends on the
   variable subsystem above.
+- 🚧 **Connectors** ([ADR-0026](docs/adr/0026-clio-connector.md)): a service task
+  bearing an `<atlas:clioConnector>` extension is a connector task that appends an
+  event to a **server-registered** clio event store through the job path (like the
+  DMN worker) — endpoint and credentials live in the server config, the model
+  refers to a connector by name. The `clio:write-events` slice (registry, client,
+  worker, recovery) landed; each write is idempotency-keyed by the job key so
+  at-least-once delivery is safe against clio's append-only log. Wiring the worker
+  into the server run loop, a `clio:query` operation, and a WAL→clio event mirror
+  are follow-ups.
 
 ## Milestone 2 — Events and timers 🚧
 

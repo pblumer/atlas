@@ -12,6 +12,12 @@ import (
 // an external worker subscribes to a service task's job type.
 const DMNJobType = "io.atlas.dmn"
 
+// ClioWriteJobType is the reserved job type a clio "write-events" connector task
+// carries. The in-process clio connector worker subscribes to it to append the
+// event to the configured clio instance (ADR-0026), the same way the DMN worker
+// subscribes to DMNJobType.
+const ClioWriteJobType = "io.atlas.clio.write"
+
 // Builder constructs a CompiledProcess programmatically. It stands in for the
 // XML parse/resolve/linearize pipeline until that front end exists: callers add
 // nodes and flows, and Build linearizes them into the immutable form (assigning
@@ -27,6 +33,7 @@ type Builder struct {
 	scriptTasks       []ScriptTaskDetail
 	businessRuleTasks []BusinessRuleTaskDetail
 	timerCatches      []TimerCatchDetail
+	connectorTasks    []ConnectorTaskDetail
 	messageCatches    []MessageDetail
 	messageThrows     []MessageDetail
 	messageStarts     []MessageDetail
@@ -139,6 +146,23 @@ func (b *Builder) AddBusinessRuleTask(decisionId string, inputs map[string]any, 
 		Retries:    retries,
 	})
 	return b.addNode(TypeBusinessRuleTask, detail), nil
+}
+
+// AddClioWriteTask adds a clio "write-events" connector task and returns its
+// element id. Like a service task it creates a job on activation and waits; the
+// job carries the reserved ClioWriteJobType so the in-process clio worker picks
+// it up, appends an event to the named connector's clio instance under subject
+// with the given event type, and completes the job (ADR-0026).
+func (b *Builder) AddClioWriteTask(connector, subject, eventType string, retries int32) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:   b.intern(ClioWriteJobType),
+		Connector: b.intern(connector),
+		Subject:   b.intern(subject),
+		EventType: b.intern(eventType),
+		Retries:   retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
 }
 
 // AddTask adds an undefined/manual task — one with no execution semantics — and
@@ -258,6 +282,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		scriptTasks:       b.scriptTasks,
 		businessRuleTasks: b.businessRuleTasks,
 		timerCatches:      b.timerCatches,
+		connectorTasks:    b.connectorTasks,
 		messageCatches:    b.messageCatches,
 		messageThrows:     b.messageThrows,
 		messageStarts:     b.messageStarts,
