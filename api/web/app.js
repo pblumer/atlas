@@ -100,6 +100,11 @@ const CONNECTORS = [
     desc: "Durable event log with registered schemas and reduce specs, queried to project read-side state. Not wired into this build yet.",
     refs: "", status: "planned", statusLabel: "not configured",
   },
+  {
+    id: "http-rest", name: "HTTP REST", kind: "REST API",
+    desc: "Calls an external REST API from a service task off the processor loop, with server-registered endpoints and credentials. Not wired into this build yet.",
+    refs: "ADR-0036", status: "planned", statusLabel: "not configured",
+  },
 ];
 
 // ---------- Shell ----------
