@@ -11,7 +11,8 @@ import (
 )
 
 // projectView is the JSON shape of a project for the Modeler. Artifacts is the
-// number of artifacts (Phase 1: BPMN drafts) currently tagged with this project.
+// number of artifacts (BPMN drafts + DMN references) currently tagged with this
+// project.
 type projectView struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
@@ -20,10 +21,11 @@ type projectView struct {
 	Artifacts int    `json:"artifacts"`
 }
 
-// newProjectID mints a random, URL-safe project id. Projects are design-time
-// organizational state, not engine facts (ADR-0024), so a server-generated
-// random id is fine — it never enters the event log and is not replayed.
-func newProjectID() (string, error) {
+// newID mints a random, URL-safe id for design-time artifacts (projects, DMN
+// references). These are organizational state, not engine facts (ADR-0024), so a
+// server-generated random id is fine — it never enters the event log and is not
+// replayed.
+func newID() (string, error) {
 	var b [8]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", err
@@ -50,7 +52,7 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "project name is required")
 		return
 	}
-	id, err := newProjectID()
+	id, err := newID()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "generate id: "+err.Error())
 		return
@@ -80,10 +82,19 @@ func (s *Server) handleListProjects(w http.ResponseWriter, _ *http.Request) {
 		if drafts, loadErr = s.drafts.loadAll(); loadErr != nil {
 			return
 		}
+		var refs []dmnRef
+		if refs, loadErr = s.dmnrefs.loadAll(); loadErr != nil {
+			return
+		}
 		counts := map[string]int{}
 		for _, d := range drafts {
 			if d.ProjectID != "" {
 				counts[d.ProjectID]++
+			}
+		}
+		for _, r := range refs {
+			if r.ProjectID != "" {
+				counts[r.ProjectID]++
 			}
 		}
 		for _, p := range projs {
@@ -144,7 +155,7 @@ func (s *Server) handleRenameProject(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
-		n, e := s.countDraftsInProject(id)
+		n, e := s.countArtifactsInProject(id)
 		if e != nil {
 			countErr = e
 			return
@@ -179,9 +190,10 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// countDraftsInProject counts drafts tagged with a project id. It must be called
-// on the run-loop goroutine (inside do).
-func (s *Server) countDraftsInProject(id string) (int, error) {
+// countArtifactsInProject counts the artifacts (BPMN drafts + DMN references)
+// tagged with a project id. It must be called on the run-loop goroutine (inside
+// do).
+func (s *Server) countArtifactsInProject(id string) (int, error) {
 	drafts, err := s.drafts.loadAll()
 	if err != nil {
 		return 0, err
@@ -189,6 +201,15 @@ func (s *Server) countDraftsInProject(id string) (int, error) {
 	n := 0
 	for _, d := range drafts {
 		if d.ProjectID == id {
+			n++
+		}
+	}
+	refs, err := s.dmnrefs.loadAll()
+	if err != nil {
+		return 0, err
+	}
+	for _, r := range refs {
+		if r.ProjectID == id {
 			n++
 		}
 	}

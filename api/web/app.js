@@ -239,24 +239,30 @@ async function viewModelerHome() {
   // that belong to no existing project fall into an "Ungrouped" bucket. A per-row
   // "Project" dropdown moves a draft between projects.
   const renderProjects = async () => {
-    let projects = [], drafts = [];
+    let projects = [], drafts = [], refs = [];
     try {
-      [projects, drafts] = await Promise.all([
+      [projects, drafts, refs] = await Promise.all([
         api("GET", "/api/v1/projects"),
         api("GET", "/api/v1/drafts"),
+        api("GET", "/api/v1/dmnrefs"),
       ]);
     } catch (e) { projectsSection.innerHTML = `<p class="empty">${esc(e.message)}</p>`; return; }
 
-    // Bucket drafts by project; an empty or unknown projectId reads as Ungrouped.
+    // Bucket artifacts by project; an empty or unknown projectId reads as
+    // Ungrouped. BPMN drafts and DMN references share the same buckets.
     const known = new Set(projects.map((p) => p.id));
-    const byProject = new Map();
-    const ungrouped = [];
-    for (const d of drafts) {
-      if (d.projectId && known.has(d.projectId)) {
-        if (!byProject.has(d.projectId)) byProject.set(d.projectId, []);
-        byProject.get(d.projectId).push(d);
-      } else ungrouped.push(d);
-    }
+    const bucket = (items) => {
+      const byProject = new Map(), ungrouped = [];
+      for (const it of items) {
+        if (it.projectId && known.has(it.projectId)) {
+          if (!byProject.has(it.projectId)) byProject.set(it.projectId, []);
+          byProject.get(it.projectId).push(it);
+        } else ungrouped.push(it);
+      }
+      return { byProject, ungrouped };
+    };
+    const draftsB = bucket(drafts);
+    const refsB = bucket(refs);
 
     // The shared "move to…" options: Ungrouped plus every project, current selected.
     const moveOptions = (current) =>
@@ -264,34 +270,50 @@ async function viewModelerHome() {
         .concat(projects.map((p) =>
           `<option value="${esc(p.id)}"${p.id === current ? " selected" : ""}>${esc(p.name)}</option>`))
         .join("");
+    const moveSelect = (attr, id, current) =>
+      `<select ${attr}="${esc(id)}" title="Move to project"
+        style="width:auto; display:inline-block; padding:5px 8px; font-size:13px">${moveOptions(current || "")}</select>`;
 
     const draftRows = (list) => list.map((d) => {
       const label = d.name || d.processId;
       const sub = d.name ? `<div class="muted" style="font-size:12px">${esc(d.processId)}</div>` : "";
       const href = `#/modeler/draft/${encodeURIComponent(d.processId)}`;
       return `<tr>
-        <td><a href="${href}"><b>${esc(label)}</b></a>${sub}</td>
+        <td><span class="chip">BPMN</span> <a href="${href}"><b>${esc(label)}</b></a>${sub}</td>
         <td class="muted">${esc(fmtTime(d.savedAt))}</td>
         <td style="text-align:right; white-space:nowrap">
-          <select data-move="${esc(d.processId)}" title="Move to project"
-            style="width:auto; display:inline-block; padding:5px 8px; font-size:13px">${moveOptions(d.projectId || "")}</select>
+          ${moveSelect("data-move", d.processId, d.projectId)}
           <a class="btn ghost" href="${href}">Open</a>
           <button class="btn ghost danger" data-draftdel="${esc(d.processId)}">Delete</button>
         </td>
       </tr>`;
     }).join("");
 
-    const draftTable = (list) => `<table><tbody>${draftRows(list)}</tbody></table>`;
+    // A DMN reference points at a temis-authored model — Atlas lists it but does
+    // not edit it (ADR-0024), so there is no "Open", just the temis handle.
+    const refRows = (list) => list.map((r) => `<tr>
+        <td><span class="chip">DMN</span> <b>${esc(r.name)}</b>
+          <div class="muted" style="font-size:12px">temis model: ${esc(r.modelRef)}</div></td>
+        <td class="muted">reference</td>
+        <td style="text-align:right; white-space:nowrap">
+          ${moveSelect("data-moveref", r.id, r.projectId)}
+          <button class="btn ghost danger" data-refdel="${esc(r.id)}">Delete</button>
+        </td>
+      </tr>`).join("");
+
+    const artifactTable = (dl, rl) => `<table><tbody>${draftRows(dl)}${refRows(rl)}</tbody></table>`;
 
     const projectCard = (p) => {
-      const list = byProject.get(p.id) || [];
-      const body = list.length ? draftTable(list)
-        : `<p class="empty" style="margin:0; padding:16px">No artifacts yet — create a diagram and move it here.</p>`;
+      const dl = draftsB.byProject.get(p.id) || [];
+      const rl = refsB.byProject.get(p.id) || [];
+      const body = (dl.length || rl.length) ? artifactTable(dl, rl)
+        : `<p class="empty" style="margin:0; padding:16px">No artifacts yet — add a DMN reference, or create a diagram and move it here.</p>`;
       const n = p.artifacts;
       return `<div class="card" style="padding:0; margin-bottom:14px">
         <div class="between" style="padding:12px 14px; border-bottom:1px solid var(--border)">
           <div><b>${esc(p.name)}</b> <span class="muted" style="font-size:12px">· ${n} artifact${n === 1 ? "" : "s"}</span></div>
           <div class="row">
+            <button class="btn ghost" data-refadd="${esc(p.id)}">Add DMN reference</button>
             <button class="btn ghost" data-projrename="${esc(p.id)}" data-projname="${esc(p.name)}">Rename</button>
             <button class="btn ghost danger" data-projdel="${esc(p.id)}" data-projname="${esc(p.name)}">Delete</button>
           </div>
@@ -304,13 +326,13 @@ async function viewModelerHome() {
     if (projects.length) {
       html += `<h2 style="margin:6px 0 10px">Projects</h2>` + projects.map(projectCard).join("");
     }
-    if (ungrouped.length) {
-      html += `<h2 style="margin:${projects.length ? "18px" : "6px"} 0 10px">Ungrouped <span class="muted" style="font-size:13px">· drafts not in a project</span></h2>
-        <div class="card" style="padding:0">${draftTable(ungrouped)}</div>`;
+    if (draftsB.ungrouped.length || refsB.ungrouped.length) {
+      html += `<h2 style="margin:${projects.length ? "18px" : "6px"} 0 10px">Ungrouped <span class="muted" style="font-size:13px">· artifacts not in a project</span></h2>
+        <div class="card" style="padding:0">${artifactTable(draftsB.ungrouped, refsB.ungrouped)}</div>`;
     }
-    if (!projects.length && !ungrouped.length) {
-      html = `<div class="card empty">No projects or drafts yet. Create a <b>New project</b> to
-        organize your BPMN diagrams, or start a <a href="#/modeler/new">New diagram</a> and save it.</div>`;
+    if (!projects.length && !draftsB.ungrouped.length && !refsB.ungrouped.length) {
+      html = `<div class="card empty">No projects or artifacts yet. Create a <b>New project</b> to
+        organize your BPMN diagrams and DMN references, or start a <a href="#/modeler/new">New diagram</a> and save it.</div>`;
     }
     projectsSection.innerHTML = html;
 
@@ -320,8 +342,14 @@ async function viewModelerHome() {
       b.addEventListener("click", () => renameProject(b.dataset.projrename, b.dataset.projname, renderProjects));
     for (const b of projectsSection.querySelectorAll("button[data-projdel]"))
       b.addEventListener("click", () => deleteProject(b.dataset.projdel, b.dataset.projname, renderProjects));
+    for (const b of projectsSection.querySelectorAll("button[data-refadd]"))
+      b.addEventListener("click", () => createDmnRef(b.dataset.refadd, renderProjects));
+    for (const b of projectsSection.querySelectorAll("button[data-refdel]"))
+      b.addEventListener("click", () => deleteDmnRef(b.dataset.refdel, renderProjects));
     for (const s of projectsSection.querySelectorAll("select[data-move]"))
       s.addEventListener("change", () => moveDraft(s.dataset.move, s.value, renderProjects));
+    for (const s of projectsSection.querySelectorAll("select[data-moveref]"))
+      s.addEventListener("change", () => moveDmnRef(s.dataset.moveref, s.value, renderProjects));
   };
   document.getElementById("new-project").addEventListener("click", () => createProject(renderProjects));
 
@@ -424,6 +452,39 @@ async function moveDraft(processId, projectId, reload) {
   try {
     await api("PATCH", `/api/v1/drafts/${encodeURIComponent(processId)}`, { projectId });
   } catch (e) { toast("could not move draft: " + e.message, "err"); }
+  await reload();
+}
+
+// createDmnRef adds a DMN reference — a pointer to a temis-authored decision
+// model — into a project. Atlas organizes and lists the reference; authoring
+// stays in temis (ADR-0024), so we capture only a name and the temis handle.
+async function createDmnRef(projectId, reload) {
+  const name = window.prompt("Reference name (how it shows in Atlas)");
+  if (name == null) return;
+  const modelRef = window.prompt("temis model reference (the model’s name in the temis Modeler)");
+  if (modelRef == null) return;
+  if (!name.trim() || !modelRef.trim()) { toast("Name and temis model reference are required", "err"); return; }
+  try {
+    await api("POST", "/api/v1/dmnrefs", { name: name.trim(), modelRef: modelRef.trim(), projectId });
+    toast(`Added DMN reference "${name.trim()}"`, "ok");
+  } catch (e) { toast("could not add DMN reference: " + e.message, "err"); }
+  await reload();
+}
+
+// moveDmnRef reassigns a DMN reference to a project (or to Ungrouped when "").
+async function moveDmnRef(id, projectId, reload) {
+  try {
+    await api("PATCH", `/api/v1/dmnrefs/${encodeURIComponent(id)}`, { projectId });
+  } catch (e) { toast("could not move reference: " + e.message, "err"); }
+  await reload();
+}
+
+async function deleteDmnRef(id, reload) {
+  if (!window.confirm("Delete this DMN reference? The temis model itself is not affected.")) return;
+  try {
+    await api("DELETE", `/api/v1/dmnrefs/${encodeURIComponent(id)}`);
+    toast("Deleted DMN reference", "ok");
+  } catch (e) { toast("could not delete reference: " + e.message, "err"); }
   await reload();
 }
 

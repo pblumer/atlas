@@ -174,14 +174,19 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   durable draft store keyed by process id, so incomplete models survive and can be
   reopened — distinct from deploying, which compiles, versions, and runs.
 - 🚧 **Projects & artifacts** ([ADR-0024](docs/adr/0024-projects-and-artifacts.md)):
-  the Modeler groups work into named **projects** that hold **artifacts**. Phase 1
-  landed — projects are a durable sidecar store (create/list/rename/delete), a
-  draft carries an optional `projectId`, and the Modeler home lists projects with
-  their BPMN drafts plus an **Ungrouped** bucket, moving a draft between projects
-  from a per-row dropdown. A project is a design-time grouping layer only (below
-  the HTTP API, no engine impact). **DMN as a *reference* to a temis model**
-  (honoring the "no DMN authoring surface" non-goal) and further artifact types
-  (forms, element templates, READMEs, nested folders) are the next phases.
+  the Modeler groups work into named **projects** that hold **artifacts**.
+  Phases 1–2 landed. Projects are a durable sidecar store
+  (create/list/rename/delete); artifacts carry an optional `projectId`, and the
+  Modeler home lists each project's artifacts plus an **Ungrouped** bucket, moving
+  one between projects from a per-row dropdown. Two artifact types so far:
+  **BPMN drafts** (Phase 1) and **DMN references** — a DMN artifact is a *pointer*
+  to a temis-authored model (display name + temis handle), never DMN XML, so Atlas
+  organizes and (later) deploys the decision without becoming a DMN editor,
+  honoring the "no DMN authoring surface" non-goal (Phase 2, ADR-0014). A project
+  is a design-time grouping layer only (below the HTTP API, no engine impact).
+  Next: resolving/validating a DMN reference against temis at deploy time,
+  project bundle-deploy, and further artifact types (forms, element templates,
+  READMEs, nested folders).
 - 🔲 Later: a polished "workbench" experience on top.
 
 ---

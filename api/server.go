@@ -81,6 +81,7 @@ type Server struct {
 	deploys     *deployStore     // durable sidecar for deployments (ADR-0019)
 	drafts      *draftStore      // durable sidecar for saved-but-not-deployed diagrams
 	projects    *projectStore    // durable sidecar for projects grouping artifacts (ADR-0024)
+	dmnrefs     *dmnRefStore     // durable sidecar for DMN reference artifacts (ADR-0024)
 }
 
 // New builds a Server over an already-recovered processor and its store and
@@ -103,6 +104,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string) (*Server, e
 	if err != nil {
 		return nil, err
 	}
+	dmnrefs, err := newDmnRefStore(filepath.Join(dataDir, "dmnrefs"))
+	if err != nil {
+		return nil, err
+	}
 	s := &Server{
 		proc:        proc,
 		store:       store,
@@ -114,6 +119,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string) (*Server, e
 		deploys:     ds,
 		drafts:      drafts,
 		projects:    projects,
+		dmnrefs:     dmnrefs,
 	}
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
@@ -238,6 +244,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/projects", s.handleListProjects)
 	mux.HandleFunc("PATCH /api/v1/projects/{id}", s.handleRenameProject)
 	mux.HandleFunc("DELETE /api/v1/projects/{id}", s.handleDeleteProject)
+	mux.HandleFunc("POST /api/v1/dmnrefs", s.handleCreateDmnRef)
+	mux.HandleFunc("GET /api/v1/dmnrefs", s.handleListDmnRefs)
+	mux.HandleFunc("PATCH /api/v1/dmnrefs/{id}", s.handleMoveDmnRef)
+	mux.HandleFunc("DELETE /api/v1/dmnrefs/{id}", s.handleDeleteDmnRef)
 	mux.HandleFunc("GET /api/v1/processes/{key}/xml", s.handleProcessXML)
 	mux.HandleFunc("DELETE /api/v1/processes/{key}", s.handleDeleteProcess)
 	mux.HandleFunc("GET /api/v1/processes/{key}/runtime", s.handleProcessRuntime)
