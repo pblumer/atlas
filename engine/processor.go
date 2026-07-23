@@ -140,12 +140,18 @@ func (p *Processor) CreateInstance(defKey uint64, startVars ...model.VariableVal
 	})
 }
 
-// CompleteJob enqueues completion of a job by a worker.
-func (p *Processor) CompleteJob(jobKey uint64) {
+// CompleteJob enqueues completion of a job by a worker, optionally carrying the
+// output variables the worker produced (e.g. a business rule task's decision
+// result). The outputs are written into the job's process instance scope when the
+// completion is processed, before the element completes, so a downstream gateway
+// can route on them. They are frozen into VariableCreated events, so replay
+// re-applies them without re-running the worker (invariant I6).
+func (p *Processor) CompleteJob(jobKey uint64, outputs ...model.VariableValue) {
 	p.queue = append(p.queue, Command{
 		Key:       jobKey,
 		ValueType: model.VTJob,
 		Intent:    model.IntentJobCompleted,
+		StartVars: outputs,
 	})
 }
 

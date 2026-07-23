@@ -24,9 +24,10 @@ type Command struct {
 	// (0 for externally submitted commands), used to thread causality into the
 	// events the command produces.
 	SourcePos uint64
-	// StartVars carries the initial variables for a process-instance creation
-	// command. It is used only there (an external, non-hot-path intent), so a
-	// slice here does not affect the token-movement fast path.
+	// StartVars carries variables attached to a command: the initial variables for
+	// a process-instance creation command, or the output variables a worker
+	// produced for a job-completion command. Both are external, non-hot-path
+	// intents, so a slice here does not affect the token-movement fast path.
 	StartVars []model.VariableValue
 }
 

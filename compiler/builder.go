@@ -153,14 +153,26 @@ func (b *Builder) AddScriptTask(e *expr.Compiled, resultVar string) int32 {
 }
 
 // AddBusinessRuleTask adds a business rule task that evaluates the named DMN
-// decision with the given static input context, and returns its element id. The
-// inputs map is JSON-encoded and interned at deploy time (never on the hot path,
-// invariant I5); a nil or empty map records no inputs. It returns an error if the
-// inputs cannot be encoded.
+// decision with the given static input context, and returns its element id. It is
+// the constant-input form of [Builder.AddBusinessRuleTaskMapped] (no variable
+// mappings, result discarded).
 func (b *Builder) AddBusinessRuleTask(decisionId string, inputs map[string]any, retries int32) (int32, error) {
+	return b.AddBusinessRuleTaskMapped(decisionId, "", inputs, nil, retries)
+}
+
+// AddBusinessRuleTaskMapped adds a business rule task that evaluates the named DMN
+// decision and returns its element id. Its input context is built from two layers
+// the DMN worker merges at evaluation time: staticInputs is a constant base
+// (JSON-encoded and interned at deploy time, never on the hot path — invariant
+// I5), and mappings are variable-driven inputs (FEEL expressions evaluated over
+// the instance's variables) that override a static input of the same name. If
+// resultVar is non-empty the decision's result is written back into that process
+// variable on job completion; an empty resultVar discards the result. It returns
+// an error if the static inputs cannot be encoded.
+func (b *Builder) AddBusinessRuleTaskMapped(decisionId, resultVar string, staticInputs map[string]any, mappings []DecisionInputMapping, retries int32) (int32, error) {
 	inputsIdx := int32(-1)
-	if len(inputs) > 0 {
-		encoded, err := json.Marshal(inputs)
+	if len(staticInputs) > 0 {
+		encoded, err := json.Marshal(staticInputs)
 		if err != nil {
 			return -1, fmt.Errorf("compiler: business rule task %q inputs: %w", decisionId, err)
 		}
@@ -168,10 +180,12 @@ func (b *Builder) AddBusinessRuleTask(decisionId string, inputs map[string]any, 
 	}
 	detail := int32(len(b.businessRuleTasks))
 	b.businessRuleTasks = append(b.businessRuleTasks, BusinessRuleTaskDetail{
-		JobType:    b.intern(DMNJobType),
-		DecisionId: b.intern(decisionId),
-		Inputs:     inputsIdx,
-		Retries:    retries,
+		JobType:       b.intern(DMNJobType),
+		DecisionId:    b.intern(decisionId),
+		Inputs:        inputsIdx,
+		ResultVar:     b.intern(resultVar),
+		Retries:       retries,
+		InputMappings: mappings,
 	})
 	return b.addNode(TypeBusinessRuleTask, detail), nil
 }

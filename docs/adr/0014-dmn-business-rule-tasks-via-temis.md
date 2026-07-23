@@ -42,7 +42,7 @@ The integration deliberately mirrors the service-task/worker protocol (ADR-0007)
 3. **Evaluation:** an in-process worker (`dmn.Handler`, registered with the existing `job.Runner`) pulls those jobs off the processor goroutine, resolves the decision and inputs from the compiled process, evaluates through temis, and submits `CompleteJob`. Evaluation is a post-fsync side effect (I2), never part of `applyToState` (I4).
 4. **Completion:** the job completion drives the token onward through the normal completion path.
 
-Because the variable subsystem does not exist yet, a business rule task feeds its decision a **static input context** recorded at deploy time (JSON-encoded and interned), and its outputs are surfaced through a caller-supplied sink rather than written back as variables. This is the explicit seam that Milestone 1 will replace with input/output variable mappings.
+Because the variable subsystem did not exist yet, the original slice fed a business rule task's decision a **static input context** recorded at deploy time (JSON-encoded and interned), and surfaced its outputs through a caller-supplied sink rather than writing them back as variables. That was the explicit seam Milestone 1 would replace — now closed by [ADR-0039](0039-dmn-io-variable-mappings.md): a decision reads its inputs from process variables (io-mapping inputs evaluated over the instance) and writes its result back into the `resultVariable` process variable via an output-carrying job completion. Static inputs remain a constant base a mapping overrides.
 
 ### Consequences
 

@@ -121,13 +121,25 @@ func handleElementCompleting(c *ProcessingContext) {
 	c.p.behavior(ei.BpmnElementType).OnCompleting(c, c.cmd.Key, ei)
 }
 
-// handleJobCompleted retires the job and tells its element to complete.
+// handleJobCompleted retires the job, writes the worker's output variables into
+// the job's process instance scope, and tells its element to complete. The
+// outputs (carried on the completion command as StartVars) are written before the
+// element completes so a downstream condition can read them; the values are frozen
+// into VariableCreated events, so replay re-applies them rather than re-running
+// the worker (invariant I6). Writing here mirrors how instance creation seeds its
+// start variables — deterministic state mutation from already-decided data.
 func handleJobCompleted(c *ProcessingContext) {
 	job := c.GetJob(c.cmd.Key)
 	if job == nil {
 		return // already gone or never existed; nothing to do
 	}
 	c.AppendJobEvent(c.cmd.Key, model.IntentJobCompleted, *job)
+
+	for i := range c.cmd.StartVars {
+		v := c.cmd.StartVars[i]
+		v.ScopeKey = job.ProcessInstanceKey
+		c.AppendVariableEvent(model.IntentVariableCreated, v)
+	}
 
 	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
 		c.AppendElementCommand(job.ElementInstanceKey, model.IntentCompleting, *ei)

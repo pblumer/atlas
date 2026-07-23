@@ -63,10 +63,16 @@ The control-flow basics most real models use.
   so a deployed instance runs to completion instead of parking, and the model
   re-registers from its snapshot on restart. The DMN job type is pinned to a
   reserved global index so one worker serves every process without colliding with
-  service-task types. It still feeds a decision **static inputs** and surfaces
-  outputs via a sink; wiring real input/output variable mappings depends on the
-  variable subsystem above, and off-loop streaming evaluation is the Milestone-4
-  gRPC job-worker concern (the single binary drives jobs synchronously).
+  service-task types. **Input/output variable mappings are now wired**
+  ([ADR-0039](docs/adr/0039-dmn-io-variable-mappings.md)): a decision reads its
+  inputs from process variables via Zeebe io-mapping inputs
+  (`<zeebe:input source="=…" target="…">`, FEEL evaluated over the instance off the
+  hot path, overriding constant `<atlas:decisionInput>` values), and its result is
+  written back into the `resultVariable` process variable through an output-carrying
+  job completion — so a downstream gateway routes on the decision. Next: explicit
+  `<zeebe:output>` mappings, decimal precision across the temis boundary, and
+  off-loop streaming evaluation as the Milestone-4 gRPC job-worker concern (the
+  single binary drives jobs synchronously).
 - 🚧 **Connectors** ([ADR-0036](docs/adr/0036-clio-connector.md)): a service task
   bearing an `<atlas:clioConnector>` extension is a connector task that appends an
   event to a **server-registered** clio event store through the job path (like the
@@ -221,7 +227,9 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   "no DMN authoring surface" non-goal (Phase 2, ADR-0014). A DMN reference is
   **resolved and validated at deploy time**: a pluggable `dmn.Resolver` (default:
   a `<data-dir>/dmn-models/` folder of temis-exported models; a temis git/service
-  source can replace it behind the interface) fetches the model XML and the
+  source — `dmn.ServiceResolver`, an HTTP model source selected by
+  `ATLAS_DMN_RESOLVER_URL` with an optional bearer token — replaces it behind the
+  interface) fetches the model XML and the
   embedded temis engine compiles it — the Modeler shows each reference as
   valid / invalid / unresolved, and a project preflight
   (`POST /api/v1/projects/{id}/validate`) gates on all references being valid.
@@ -232,9 +240,8 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   Modeler's per-project **Deploy** button drives it, and a deployed process's
   business rule tasks now **execute** the resolved decision in-process (see
   Milestone 1). A project is a design-time grouping layer only (below the HTTP
-  API, no engine impact). Next: a temis git/service resolver, input/output
-  variable mappings for business rule tasks (Milestone 1), and further artifact
-  types (forms, element templates, READMEs, nested folders).
+  API, no engine impact). Next: further artifact types (forms, element templates,
+  READMEs, nested folders).
 - 🔲 Later: a polished "workbench" experience on top.
 
 ## Milestone A — Modeler & authoring experience 🔲
