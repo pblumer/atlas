@@ -250,6 +250,18 @@ function groupByProcess(procs) {
   return groups;
 }
 
+function sectionState(id) {
+  try { return localStorage.getItem("atlas.sec." + id) !== "0"; } catch { return true; }
+}
+function toggleSection(id, btn) {
+  const body = document.getElementById("sec-" + id);
+  if (!body) return;
+  const open = body.hidden;
+  body.hidden = !open;
+  btn.setAttribute("aria-expanded", String(open));
+  try { localStorage.setItem("atlas.sec." + id, open ? "1" : "0"); } catch { /* ignore */ }
+}
+
 async function viewModelerHome() {
   view.innerHTML = `
     <div class="between">
@@ -260,13 +272,16 @@ async function viewModelerHome() {
       </div>
     </div>
     <div id="projects-section"><p class="muted">Loading…</p></div>
-    <h2 style="margin:22px 0 10px">Deployed</h2>
+    <h2 style="margin:22px 0 10px"><button class="section-toggle" aria-expanded="${sectionState("deployed")}" data-section="deployed">Deployed</button></h2>
+    <div class="section-body" id="sec-deployed"${sectionState("deployed") ? "" : ' hidden'}>
     <div class="card" style="padding:0">
       <table>
         <thead><tr><th>Process</th><th>Latest</th><th>Deployed</th><th></th></tr></thead>
         <tbody id="rows"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
       </table>
-    </div>`;
+    </div></div>`;
+  for (const t of view.querySelectorAll(".section-toggle"))
+    t.addEventListener("click", () => toggleSection(t.dataset.section, t));
   const rows = document.getElementById("rows");
   const projectsSection = document.getElementById("projects-section");
 
@@ -364,17 +379,24 @@ async function viewModelerHome() {
 
     let html = "";
     if (projects.length) {
-      html += `<h2 style="margin:6px 0 10px">Projects</h2>` + projects.map(projectCard).join("");
+      const projOpen = sectionState("projects");
+      html += `<h2 style="margin:6px 0 10px"><button class="section-toggle" aria-expanded="${projOpen}" data-section="projects">Projects</button></h2>
+        <div class="section-body" id="sec-projects"${projOpen ? "" : " hidden"}>` + projects.map(projectCard).join("") + `</div>`;
     }
     if (draftsB.ungrouped.length || refsB.ungrouped.length) {
-      html += `<h2 style="margin:${projects.length ? "18px" : "6px"} 0 10px">Ungrouped <span class="muted" style="font-size:13px">· artifacts not in a project</span></h2>
-        <div class="card" style="padding:0">${artifactTable(draftsB.ungrouped, refsB.ungrouped)}</div>`;
+      const ugOpen = sectionState("ungrouped");
+      html += `<h2 style="margin:${projects.length ? "18px" : "6px"} 0 10px"><button class="section-toggle" aria-expanded="${ugOpen}" data-section="ungrouped">Ungrouped <span class="muted" style="font-size:13px">· artifacts not in a project</span></button></h2>
+        <div class="section-body" id="sec-ungrouped"${ugOpen ? "" : " hidden"}>
+        <div class="card" style="padding:0">${artifactTable(draftsB.ungrouped, refsB.ungrouped)}</div></div>`;
     }
     if (!projects.length && !draftsB.ungrouped.length && !refsB.ungrouped.length) {
       html = `<div class="card empty">No projects or artifacts yet. Create a <b>New project</b> to
         organize your BPMN diagrams and DMN references, or start a <a href="#/modeler/new">New diagram</a> and save it.</div>`;
     }
     projectsSection.innerHTML = html;
+
+    for (const t of projectsSection.querySelectorAll(".section-toggle"))
+      t.addEventListener("click", () => toggleSection(t.dataset.section, t));
 
     for (const b of projectsSection.querySelectorAll("button[data-draftdel]"))
       b.addEventListener("click", () => deleteDraft(b.dataset.draftdel, renderProjects));

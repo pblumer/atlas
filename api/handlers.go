@@ -907,13 +907,19 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	projectID := r.URL.Query().Get("projectId")
+	hasProjectParam := r.URL.Query().Has("projectId")
 	rec := draft{ProcessID: pid, Name: name, ProjectID: projectID, SavedAt: time.Now().Unix(), XML: string(body)}
 	var (
 		saveErr, projErr error
 		unknownProject   bool
 	)
 	s.do(func() {
-		if projectID != "" {
+		if !hasProjectParam {
+			existing, ok, e := s.drafts.get(pid)
+			if e == nil && ok {
+				rec.ProjectID = existing.ProjectID
+			}
+		} else if projectID != "" {
 			_, ok, e := s.projects.get(projectID)
 			if e != nil {
 				projErr = e
@@ -934,7 +940,7 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	case saveErr != nil:
 		writeError(w, http.StatusInternalServerError, "save draft: "+saveErr.Error())
 	default:
-		writeJSON(w, http.StatusOK, draftResp{ProcessID: pid, Name: name, ProjectID: projectID, SavedAt: rec.SavedAt})
+		writeJSON(w, http.StatusOK, draftResp{ProcessID: pid, Name: name, ProjectID: rec.ProjectID, SavedAt: rec.SavedAt})
 	}
 }
 

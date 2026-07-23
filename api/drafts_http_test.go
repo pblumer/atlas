@@ -92,6 +92,52 @@ func TestDraftSaveRejectsBadInput(t *testing.T) {
 	}
 }
 
+// TestDraftResavePreservesProject proves that re-saving a draft (as the editor
+// does) without an explicit projectId query parameter preserves the existing
+// project assignment — the bug that caused drafts to reset to Ungrouped.
+func TestDraftResavePreservesProject(t *testing.T) {
+	ts := newTestServer(t)
+
+	// Create a project.
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/projects", `{"name":"Sticky"}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("create project status=%d body=%s", code, body)
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &p); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+
+	// Save a draft into the project.
+	code, body = doReq(t, ts, http.MethodPost, "/api/v1/drafts?projectId="+p.ID, draftBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("save into project status=%d body=%s", code, body)
+	}
+	if !strings.Contains(string(body), `"projectId":"`+p.ID+`"`) {
+		t.Fatalf("initial save missing projectId: %s", body)
+	}
+
+	// Re-save the same draft WITHOUT a projectId parameter (what the editor does).
+	code, body = doReq(t, ts, http.MethodPost, "/api/v1/drafts", draftBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("re-save status=%d body=%s", code, body)
+	}
+	if !strings.Contains(string(body), `"projectId":"`+p.ID+`"`) {
+		t.Fatalf("project assignment lost after re-save: %s", body)
+	}
+
+	// Explicitly passing projectId="" (empty) should clear the assignment.
+	code, body = doReq(t, ts, http.MethodPost, "/api/v1/drafts?projectId=", draftBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("clear project status=%d body=%s", code, body)
+	}
+	if strings.Contains(string(body), `"projectId"`) {
+		t.Fatalf("projectId should be cleared: %s", body)
+	}
+}
+
 // TestDraftSurvivesRestart proves drafts are durable across a restart, the whole
 // point of saving.
 func TestDraftSurvivesRestart(t *testing.T) {

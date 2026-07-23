@@ -377,3 +377,16 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .start-panel label.field { margin: 0 0 8px; }
 .start-panel .row { align-items: center; gap: 8px; }
 .start-panel .err { font-size: 12px; color: var(--danger, #c0392b); }
+
+/* ---------- Collapsible sections ---------- */
+.section-toggle {
+  display: inline-flex; align-items: center; gap: 6px; background: none; border: none;
+  padding: 0; font: inherit; cursor: pointer; color: inherit;
+}
+.section-toggle::before {
+  content: ""; display: inline-block; width: 0; height: 0;
+  border-left: 5px solid var(--muted); border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  transition: transform 0.15s ease;
+}
+.section-toggle[aria-expanded="true"]::before { transform: rotate(90deg); }
+.section-body[hidden] { display: none !important; }
