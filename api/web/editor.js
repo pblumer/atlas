@@ -873,6 +873,32 @@ function wireProperties(root, modeler, api) {
         } else {
           html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Message</b> throw event, then configure it here.</p>`;
         }
+      } else if (bo.$type === "bpmn:BoundaryEvent") {
+        // A boundary event is attached to an activity and arms while it runs. Its
+        // cancelActivity attribute (interrupting by default) and its timer/message
+        // trigger are configured here; the trigger's fields reuse the same
+        // f-duration / message wiring as the intermediate catch event.
+        const timer = timerDefOf(bo);
+        const msg = messageDefOf(bo);
+        const interrupting = bo.cancelActivity !== false;
+        html += `<h3>Behaviour</h3>
+          <label class="field"><span>On trigger</span>
+            <select id="f-cancelactivity">
+              <option value="true" ${interrupting ? "selected" : ""}>Interrupting — cancel the activity</option>
+              <option value="false" ${interrupting ? "" : "selected"}>Non-interrupting — run alongside</option>
+            </select></label>
+          <p class="muted" style="font-size:12px">Interrupting cancels the attached activity (and its job) and routes the token out this event; non-interrupting spawns a parallel token and lets the activity continue.</p>`;
+        if (timer) {
+          const dur = (timer.timeDuration && timer.timeDuration.body) || "";
+          html += `<h3>Timer</h3>
+            <label class="field"><span>Duration (ISO&nbsp;8601)</span>
+              <input type="text" id="f-duration" value="${esc(dur)}" placeholder="PT30M"/></label>
+            <p class="muted" style="font-size:12px">e.g. PT30S, PT5M, PT1H. The event fires this long after the activity starts.</p>`;
+        } else if (msg) {
+          html += messageFieldsHTML(modeler, msg, "The event fires when this message is published with a matching correlation key.");
+        } else {
+          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b> or <b>Message</b> boundary event, then configure its trigger here.</p>`;
+        }
       } else if (bo.$type === "bpmn:StartEvent") {
         const msg = messageDefOf(bo);
         if (msg) {
@@ -973,6 +999,14 @@ function wireProperties(root, modeler, api) {
     };
     if (fassignee) fassignee.addEventListener("change", saveAssignment);
     if (fgroups) fgroups.addEventListener("change", saveAssignment);
+
+    const fcancel = body.querySelector("#f-cancelactivity");
+    if (fcancel) {
+      fcancel.addEventListener("change", () => {
+        // Flipping cancelActivity also flips bpmn-js's solid/dashed boundary marker.
+        try { modeling.updateProperties(element, { cancelActivity: fcancel.value === "true" }); } catch { /* stale */ }
+      });
+    }
 
     const fdur = body.querySelector("#f-duration");
     if (fdur) {
