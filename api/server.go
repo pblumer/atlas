@@ -37,6 +37,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/state"
 )
 
@@ -84,11 +85,16 @@ type Server struct {
 	projects    *projectStore    // durable sidecar for projects grouping artifacts (ADR-0034)
 	dmnrefs     *dmnRefStore     // durable sidecar for DMN reference artifacts (ADR-0034)
 
-	// dmnValidator resolves a DMN reference's temis model and compiles it, the
-	// deploy-time gate that turns a stored handle into a checked decision model
-	// (ADR-0034 Phase 2). It touches no engine or store state, so it runs off the
-	// run-loop goroutine.
+	// dmnResolver turns a DMN reference handle into model XML; dmnValidator wraps
+	// it with a temis compile for the deploy-time validation gate (ADR-0034).
+	dmnResolver  dmn.Resolver
 	dmnValidator *dmn.Validator
+
+	// dmnRegistry holds the compiled DMN model for each deployed process (keyed by
+	// def key); jobRunner drives the in-process DMN worker that evaluates business
+	// rule tasks (ADR-0014). Both are touched only on the run-loop goroutine.
+	dmnRegistry *dmn.Registry
+	jobRunner   *job.Runner
 }
 
 // New builds a Server over an already-recovered processor and its store and
@@ -115,23 +121,33 @@ func New(proc *engine.Processor, store *state.Store, dataDir string) (*Server, e
 	if err != nil {
 		return nil, err
 	}
+	// DMN reference models are resolved from <data-dir>/dmn-models, a folder of
+	// temis-exported models. The Resolver interface lets a temis git/service
+	// source replace this later without touching callers (ADR-0034).
+	resolver := dmn.DirResolver{Dir: filepath.Join(dataDir, "dmn-models")}
 	s := &Server{
-		proc:        proc,
-		store:       store,
-		tasks:       make(chan func()),
-		quit:        make(chan struct{}),
-		deployments: map[uint64]*deployment{},
-		nextKey:     1,
-		versions:    map[string]int32{},
-		deploys:     ds,
-		drafts:      drafts,
-		projects:    projects,
-		dmnrefs:     dmnrefs,
-		// DMN reference models are resolved from <data-dir>/dmn-models, a folder of
-		// temis-exported models. The Resolver interface lets a temis git/service
-		// source replace this later without touching callers (ADR-0034).
-		dmnValidator: dmn.NewValidator(dmn.DirResolver{Dir: filepath.Join(dataDir, "dmn-models")}),
+		proc:         proc,
+		store:        store,
+		tasks:        make(chan func()),
+		quit:         make(chan struct{}),
+		deployments:  map[uint64]*deployment{},
+		nextKey:      1,
+		versions:     map[string]int32{},
+		deploys:      ds,
+		drafts:       drafts,
+		projects:     projects,
+		dmnrefs:      dmnrefs,
+		dmnResolver:  resolver,
+		dmnValidator: dmn.NewValidator(resolver),
+		dmnRegistry:  dmn.NewRegistry(),
 	}
+	// The in-process DMN worker evaluates business rule tasks off no separate
+	// goroutine (the single-binary server drives jobs synchronously on the run
+	// loop). One handler serves every process: it resolves each job's decision and
+	// static inputs from the compiled process the job belongs to (ProcessLookup),
+	// so it registers once under the reserved DMN job type (compiler.DMNJobTypeIndex).
+	s.jobRunner = job.NewRunner(store, proc)
+	s.jobRunner.Handle(compiler.DMNJobTypeIndex, dmn.Handler(store, s.processLookup, s.dmnRegistry, nil))
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
 	}
@@ -139,6 +155,16 @@ func New(proc *engine.Processor, store *state.Store, dataDir string) (*Server, e
 	go s.loop()
 	go s.timerScheduler(time.Second)
 	return s, nil
+}
+
+// processLookup resolves a def key to its compiled process for the DMN worker. It
+// is called only while driving jobs on the run-loop goroutine, so reading the
+// deployment registry here needs no locking.
+func (s *Server) processLookup(defKey uint64) *compiler.CompiledProcess {
+	if d, ok := s.deployments[defKey]; ok {
+		return d.cp
+	}
+	return nil
 }
 
 // loadDeployments rebuilds the in-memory deployment registry and re-registers
@@ -162,6 +188,15 @@ func (s *Server) loadDeployments() error {
 		}
 		cp.Version = rec.Version
 		s.proc.Deploy(cp)
+		// Re-register the process's DMN model so its business rule tasks evaluate
+		// after a restart, exactly as they did when first deployed (ADR-0014). The
+		// model is snapshotted in the deployment record, so no temis reference has
+		// to be re-resolved here.
+		if rec.DMNXML != "" {
+			if err := s.dmnRegistry.Deploy(rec.Key, []byte(rec.DMNXML)); err != nil {
+				return fmt.Errorf("api: reload dmn model for def %d (%s): %w", rec.Key, rec.ProcessID, err)
+			}
+		}
 		s.deployments[rec.Key] = &deployment{
 			Key:        rec.Key,
 			ProcessID:  rec.ProcessID,
@@ -194,7 +229,14 @@ func (s *Server) timerScheduler(every time.Duration) {
 		case <-s.quit:
 			return
 		case <-t.C:
-			s.do(func() { _ = s.proc.TickTimers() })
+			// Fire due timers, then drive any jobs they unblocked (e.g. a timer
+			// leading into a business rule task) to completion.
+			s.do(func() {
+				if err := s.proc.TickTimers(); err != nil {
+					return
+				}
+				_ = s.jobRunner.Drive()
+			})
 		}
 	}
 }

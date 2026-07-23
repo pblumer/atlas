@@ -12,6 +12,16 @@ import (
 // an external worker subscribes to a service task's job type.
 const DMNJobType = "io.atlas.dmn"
 
+// DMNJobTypeIndex is the interned index DMNJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it first, so it is always 0. Job
+// type indices are otherwise per-process (interned in build order), which makes a
+// global int32-keyed job runner ambiguous across processes — index 3 could be a
+// service task's type in one process and something else in another. Pinning the
+// DMN type to a single global index lets one in-process DMN worker serve every
+// deployed process without colliding with any service-task type (which always
+// interns to >= 1). See ADR-0014.
+const DMNJobTypeIndex int32 = 0
+
 // Builder constructs a CompiledProcess programmatically. It stands in for the
 // XML parse/resolve/linearize pipeline until that front end exists: callers add
 // nodes and flows, and Build linearizes them into the immutable form (assigning
@@ -35,14 +45,19 @@ type Builder struct {
 	strings  []string
 }
 
-// NewBuilder starts a builder for the process definition identified by key.
+// NewBuilder starts a builder for the process definition identified by key. It
+// reserves the DMN job type as the first interned string so it always occupies
+// DMNJobTypeIndex (0), giving the in-process DMN worker a stable, collision-free
+// job type across every deployed process (see DMNJobTypeIndex).
 func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
-	return &Builder{
+	b := &Builder{
 		key:           key,
 		bpmnProcessId: bpmnProcessId,
 		version:       version,
 		interner:      map[string]int32{},
 	}
+	b.intern(DMNJobType) // reserve DMNJobTypeIndex == 0
+	return b
 }
 
 func (b *Builder) intern(s string) int32 {
