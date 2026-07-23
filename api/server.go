@@ -143,11 +143,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string) (*Server, e
 	}
 	// The in-process DMN worker evaluates business rule tasks off no separate
 	// goroutine (the single-binary server drives jobs synchronously on the run
-	// loop). One handler serves every process: it resolves each job's decision and
-	// static inputs from the compiled process the job belongs to (ProcessLookup),
-	// so it registers once under the reserved DMN job type (compiler.DMNJobTypeIndex).
+	// loop). One handler serves every process: it resolves each job's decision,
+	// inputs, and result variable from the compiled process the job belongs to
+	// (ProcessLookup), so it registers once under the reserved DMN job type
+	// (compiler.DMNJobTypeIndex). It registers via HandleWithOutput because a
+	// decision's result is written back into the instance as a process variable.
 	s.jobRunner = job.NewRunner(store, proc)
-	s.jobRunner.Handle(compiler.DMNJobTypeIndex, dmn.Handler(store, s.processLookup, s.dmnRegistry, nil))
+	s.jobRunner.HandleWithOutput(compiler.DMNJobTypeIndex, dmn.Handler(store, s.processLookup, s.dmnRegistry, nil))
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
 	}

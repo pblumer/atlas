@@ -7,6 +7,7 @@ import (
 
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/job"
+	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
 
@@ -14,8 +15,8 @@ import (
 // propagation can be exercised without a real processor fault.
 type errEngine struct{ err error }
 
-func (e errEngine) RunUntilIdle() error { return e.err }
-func (e errEngine) CompleteJob(uint64)  {}
+func (e errEngine) RunUntilIdle() error                        { return e.err }
+func (e errEngine) CompleteJob(uint64, ...model.VariableValue) {}
 
 // TestDriveSurfacesRunUntilIdleError covers Drive's first branch: an engine that
 // cannot make progress aborts the drive loop with its error.

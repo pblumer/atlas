@@ -111,18 +111,37 @@ type ScriptTaskDetail struct {
 	ResultVar string
 }
 
+// DecisionInputMapping is one explicit input to a DMN decision: the decision's
+// input name (Target) fed by a FEEL expression (Source) evaluated over the
+// process instance's variables at evaluation time. It is the variable-driven
+// replacement for a business rule task's static inputs (ADR-0014): the source
+// expression is compiled once at deploy time (invariant I5) and the DMN worker
+// evaluates it off the hot path against live variables, so a decision routes on
+// real instance data.
+type DecisionInputMapping struct {
+	Target string         // the decision input name this value binds to
+	Source *expr.Compiled // FEEL expression evaluated over instance variables
+}
+
 // BusinessRuleTaskDetail is the per-business-rule-task data a behavior needs at
 // runtime. A business rule task delegates to a DMN decision, evaluated off the
 // hot path by the temis engine (ADR-0014). Like a service task it runs as a job,
 // so it carries a JobType (a reserved DMN sentinel) the in-process DMN worker
-// subscribes to; DecisionId names the decision to evaluate, and Inputs is an
-// interned JSON object of the static input context to feed it (a stand-in until
-// the variable subsystem lands in Milestone 1).
+// subscribes to; DecisionId names the decision to evaluate.
+//
+// Its inputs come from two layers the worker merges: Inputs is an interned JSON
+// object of static constant inputs (a literal base), and InputMappings are the
+// variable-driven inputs — FEEL expressions evaluated over the instance's
+// variables, which override a static input of the same name. ResultVar, if set,
+// is the process variable the decision's result is written back into on job
+// completion (the output mapping); -1 if the task discards its result.
 type BusinessRuleTaskDetail struct {
-	JobType    int32 // interned reserved DMN job type → index
-	DecisionId int32 // interned DMN decision id → index
-	Inputs     int32 // interned JSON object of static inputs → index, -1 if none
-	Retries    int32
+	JobType       int32 // interned reserved DMN job type → index
+	DecisionId    int32 // interned DMN decision id → index
+	Inputs        int32 // interned JSON object of static inputs → index, -1 if none
+	ResultVar     int32 // interned result-variable name → index, -1 if none
+	Retries       int32
+	InputMappings []DecisionInputMapping // variable-driven inputs, evaluated off the hot path
 }
 
 // ConnectorTaskDetail is the per-connector-task data a behavior needs at runtime.

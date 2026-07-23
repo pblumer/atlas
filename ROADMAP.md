@@ -63,10 +63,16 @@ The control-flow basics most real models use.
   so a deployed instance runs to completion instead of parking, and the model
   re-registers from its snapshot on restart. The DMN job type is pinned to a
   reserved global index so one worker serves every process without colliding with
-  service-task types. It still feeds a decision **static inputs** and surfaces
-  outputs via a sink; wiring real input/output variable mappings depends on the
-  variable subsystem above, and off-loop streaming evaluation is the Milestone-4
-  gRPC job-worker concern (the single binary drives jobs synchronously).
+  service-task types. **Input/output variable mappings are now wired**
+  ([ADR-0038](docs/adr/0038-dmn-io-variable-mappings.md)): a decision reads its
+  inputs from process variables via Zeebe io-mapping inputs
+  (`<zeebe:input source="=…" target="…">`, FEEL evaluated over the instance off the
+  hot path, overriding constant `<atlas:decisionInput>` values), and its result is
+  written back into the `resultVariable` process variable through an output-carrying
+  job completion — so a downstream gateway routes on the decision. Next: explicit
+  `<zeebe:output>` mappings, decimal precision across the temis boundary, and
+  off-loop streaming evaluation as the Milestone-4 gRPC job-worker concern (the
+  single binary drives jobs synchronously).
 - 🚧 **Connectors** ([ADR-0036](docs/adr/0036-clio-connector.md)): a service task
   bearing an `<atlas:clioConnector>` extension is a connector task that appends an
   event to a **server-registered** clio event store through the job path (like the

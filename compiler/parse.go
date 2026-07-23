@@ -246,7 +246,11 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		if err != nil {
 			return nil, fmt.Errorf("compiler: business rule task %q: %w", brt.Id, err)
 		}
-		node, err := b.AddBusinessRuleTask(brt.CalledDecision.DecisionId, inputs, retries)
+		mappings, err := decisionInputMappings(brt.Id, brt.InputMappings)
+		if err != nil {
+			return nil, err
+		}
+		node, err := b.AddBusinessRuleTaskMapped(brt.CalledDecision.DecisionId, brt.CalledDecision.ResultVariable, inputs, mappings, retries)
 		if err != nil {
 			return nil, err
 		}
@@ -543,25 +547,44 @@ type xmlZeebeScript struct {
 }
 
 // A business rule task references a DMN decision via the Zeebe calledDecision
-// extension (<zeebe:calledDecision decisionId="..."/>). Static inputs — a
-// stand-in until process variables land — are given as Atlas decisionInput
-// extension elements (<atlas:decisionInput name="Season" value="Winter"/>);
-// each value is parsed as JSON when it parses, else kept as a string, so numbers
-// and booleans reach the decision with their FEEL types.
+// extension (<zeebe:calledDecision decisionId="..." resultVariable="..."/>). Its
+// input context comes from two layers merged at evaluation time:
+//
+//   - Variable-driven inputs — the real wiring — are Zeebe io-mapping inputs
+//     (<zeebe:ioMapping><zeebe:input source="=order.total" target="Amount"/>), a
+//     FEEL source evaluated over the instance's variables bound to a decision
+//     input name.
+//   - Static inputs are constant Atlas decisionInput elements
+//     (<atlas:decisionInput name="Season" value="Winter"/>); each value is parsed
+//     as JSON when it parses, else kept as a string, so numbers and booleans reach
+//     the decision with their FEEL types. They are a constant base a mapping of the
+//     same name overrides.
+//
+// The decision's result is written back into the resultVariable process variable.
 type xmlBusinessRuleTask struct {
-	Id             string             `xml:"id,attr"`
-	CalledDecision xmlCalledDecision  `xml:"extensionElements>calledDecision"`
-	Inputs         []xmlDecisionInput `xml:"extensionElements>decisionInput"`
+	Id             string               `xml:"id,attr"`
+	CalledDecision xmlCalledDecision    `xml:"extensionElements>calledDecision"`
+	Inputs         []xmlDecisionInput   `xml:"extensionElements>decisionInput"`
+	InputMappings  []xmlZeebeIOMapInput `xml:"extensionElements>ioMapping>input"`
 }
 
 type xmlCalledDecision struct {
-	DecisionId string `xml:"decisionId,attr"`
-	Retries    string `xml:"retries,attr"`
+	DecisionId     string `xml:"decisionId,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	Retries        string `xml:"retries,attr"`
 }
 
 type xmlDecisionInput struct {
 	Name  string `xml:"name,attr"`
 	Value string `xml:"value,attr"`
+}
+
+// xmlZeebeIOMapInput is a Zeebe io-mapping input: a FEEL source expression bound
+// to a target name. For a business rule task the target is the DMN decision input
+// name the source's value feeds.
+type xmlZeebeIOMapInput struct {
+	Source string `xml:"source,attr"`
+	Target string `xml:"target,attr"`
 }
 
 // decisionInputs turns parsed <decisionInput> elements into a name→value map,
@@ -586,6 +609,34 @@ func decisionInputs(in []xmlDecisionInput) (map[string]any, error) {
 		m[di.Name] = v
 	}
 	return m, nil
+}
+
+// decisionInputMappings compiles a business rule task's io-mapping inputs into
+// variable-driven decision inputs. Each source is a FEEL expression (compiled
+// once at deploy time, invariant I5) evaluated over the instance's variables at
+// evaluation time; target names the decision input it feeds. A leading '=' (the
+// Zeebe expression marker) is trimmed. An empty target or an uncompilable source
+// fails the deploy, exactly like a bad script-task expression.
+func decisionInputMappings(taskID string, in []xmlZeebeIOMapInput) ([]DecisionInputMapping, error) {
+	if len(in) == 0 {
+		return nil, nil
+	}
+	out := make([]DecisionInputMapping, 0, len(in))
+	for _, im := range in {
+		if im.Target == "" {
+			return nil, fmt.Errorf("compiler: business rule task %q has an input mapping with no target", taskID)
+		}
+		text := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(im.Source), "="))
+		if text == "" {
+			return nil, fmt.Errorf("compiler: business rule task %q input mapping for %q has no source expression", taskID, im.Target)
+		}
+		e, err := expr.CompileAuto(text)
+		if err != nil {
+			return nil, fmt.Errorf("compiler: business rule task %q input mapping for %q: %w", taskID, im.Target, err)
+		}
+		out = append(out, DecisionInputMapping{Target: im.Target, Source: e})
+	}
+	return out, nil
 }
 
 type xmlSequenceFlow struct {
