@@ -84,6 +84,24 @@ const TOPNAV = {
   tasks: [], insights: [],
 };
 
+// Connectors are the sibling engines Atlas hands work off to. They live under
+// Organization because they're an org-wide integration, not per-process wiring.
+// "status" is honest about what this single-binary build actually talks to:
+//   active — embedded and used at runtime/deploy time;
+//   planned — a supported integration that this build isn't wired to yet.
+const CONNECTORS = [
+  {
+    id: "temis", name: "temis", kind: "Decision engine",
+    desc: "DMN 1.5 / FEEL. Evaluates business-rule tasks off the processor loop and validates a project's DMN references at deploy time.",
+    refs: "ADR-0014 · ADR-0034", status: "active", statusLabel: "embedded",
+  },
+  {
+    id: "clio", name: "clio", kind: "Event store",
+    desc: "Durable event log with registered schemas and reduce specs, queried to project read-side state. Not wired into this build yet.",
+    refs: "", status: "planned", statusLabel: "not configured",
+  },
+];
+
 // ---------- Shell ----------
 function initShell() {
   const drawer = document.getElementById("drawer");
@@ -189,12 +207,30 @@ async function viewConsoleEngine() {
 }
 
 function viewConsoleOrg() {
+  const pill = (c) => c.status === "active"
+    ? `<span class="pill ok"><span class="dot"></span>${esc(c.statusLabel)}</span>`
+    : `<span class="pill warn"><span class="dot"></span>${esc(c.statusLabel)}</span>`;
+  const connectorRow = (c) => `<tr>
+      <td>
+        <span class="chip">${esc(c.name)}</span>
+        <span class="muted" style="font-size:12px; margin-left:6px">${esc(c.kind)}</span>
+        <div class="muted" style="font-size:13px; margin-top:4px">${esc(c.desc)}${
+          c.refs ? ` <span style="opacity:.7">(${esc(c.refs)})</span>` : ""}</div>
+      </td>
+      <td style="text-align:right; white-space:nowrap; vertical-align:top">${pill(c)}</td>
+    </tr>`;
   view.innerHTML = `
     <div class="card">
       <h1>Organization</h1>
       <p class="muted">You are the only user in this organization. Multi-user access,
       roles, and clusters are not part of the single-binary build.</p>
       <div class="row"><span class="avatar" style="position:static">PB</span><span>Owner</span></div>
+    </div>
+    <div class="card" style="padding:0; margin-top:18px">
+      <div class="between" style="padding:16px 18px 0"><h2>Connectors</h2></div>
+      <p class="muted" style="padding:0 18px; margin:6px 0 12px">Sibling engines Atlas
+      delegates to. Each is an org-wide integration, shared across every process.</p>
+      <table><tbody>${CONNECTORS.map(connectorRow).join("")}</tbody></table>
     </div>`;
 }
 
