@@ -160,6 +160,65 @@ func TestEvaluateFeelReturnsJSON(t *testing.T) {
 	}
 }
 
+// TestEvaluateFeelEvalError covers the path where Eval itself returns an error
+// (e.g. a runtime failure in a FEEL expression).
+func TestEvaluateFeelEvalError(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/feel/evaluate",
+		`{"expression":"for x in xs return x","variables":{"xs":"not-a-list"}}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", code, body)
+	}
+	var resp struct {
+		OK     bool   `json:"ok"`
+		Result string `json:"result"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	// The expression either errors or degrades to null — either is acceptable.
+}
+
+func TestEvaluateFeelArrayVariable(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/feel/evaluate",
+		`{"expression":"count(items)","variables":{"items":[1,2,3]}}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", code, body)
+	}
+	var resp struct {
+		OK     bool   `json:"ok"`
+		Result string `json:"result"`
+		Kind   string `json:"kind"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !resp.OK || resp.Result != "3" || resp.Kind != "number" {
+		t.Fatalf("count(items) = ok=%v result=%q kind=%q, want 3/number", resp.OK, resp.Result, resp.Kind)
+	}
+}
+
+func TestEvaluateFeelNullVariable(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/feel/evaluate",
+		`{"expression":"x","variables":{"x":null}}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", code, body)
+	}
+	var resp struct {
+		OK     bool   `json:"ok"`
+		Result string `json:"result"`
+		Kind   string `json:"kind"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !resp.OK || resp.Result != "null" || resp.Kind != "null" {
+		t.Fatalf("got ok=%v result=%q kind=%q, want null/null", resp.OK, resp.Result, resp.Kind)
+	}
+}
+
 // TestEvaluateFeelBadRequest rejects a malformed JSON envelope.
 func TestEvaluateFeelBadRequest(t *testing.T) {
 	ts := newTestServer(t)

@@ -98,6 +98,13 @@ func TestParseStartVariables(t *testing.T) {
 	})
 }
 
+func TestFeelBindingsUnsupportedType(t *testing.T) {
+	_, err := feelBindings(map[string]any{"x": complex(1, 2)})
+	if err == nil {
+		t.Fatal("expected error for unsupported type")
+	}
+}
+
 // TestToVariableView covers all four rendering branches, including the true and
 // false bool forms and the null default.
 func TestToVariableView(t *testing.T) {

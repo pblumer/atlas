@@ -17,6 +17,40 @@ func TestDeployEmptyBody(t *testing.T) {
 	}
 }
 
+func TestDeleteProcessBadKeyAndNotFound(t *testing.T) {
+	ts := newTestServer(t)
+	if code, _ := doReq(t, ts, http.MethodDelete, "/api/v1/processes/abc", "", ""); code != http.StatusBadRequest {
+		t.Fatalf("bad key status=%d, want 400", code)
+	}
+	if code, _ := doReq(t, ts, http.MethodDelete, "/api/v1/processes/999", "", ""); code != http.StatusNotFound {
+		t.Fatalf("missing key status=%d, want 404", code)
+	}
+}
+
+func TestCreateInstanceBadKey(t *testing.T) {
+	ts := newTestServer(t)
+	if code, _ := doReq(t, ts, http.MethodPost, "/api/v1/processes/abc/instances", "{}", "application/json"); code != http.StatusBadRequest {
+		t.Fatalf("bad key status=%d, want 400", code)
+	}
+	if code, _ := doReq(t, ts, http.MethodPost, "/api/v1/processes/999/instances", "{}", "application/json"); code != http.StatusNotFound {
+		t.Fatalf("missing key status=%d, want 404", code)
+	}
+}
+
+func TestPublishMessageBadJSON(t *testing.T) {
+	ts := newTestServer(t)
+	if code, _ := doReq(t, ts, http.MethodPost, "/api/v1/messages", "{not json}", "application/json"); code != http.StatusBadRequest {
+		t.Fatalf("bad json status=%d, want 400", code)
+	}
+}
+
+func TestCancelInstanceNotFound(t *testing.T) {
+	ts := newTestServer(t)
+	if code, _ := doReq(t, ts, http.MethodDelete, "/api/v1/instances/999", "", ""); code != http.StatusNotFound {
+		t.Fatalf("cancel missing instance status=%d, want 404", code)
+	}
+}
+
 // TestProcessXMLBadKey and not-found cover handleProcessXML's error exits.
 func TestProcessXMLErrors(t *testing.T) {
 	ts := newTestServer(t)
@@ -395,5 +429,37 @@ func TestCreateInstanceWithVariables(t *testing.T) {
 		if kinds[w.name] != w.kind || byName[w.name] != w.value {
 			t.Errorf("variable %q = (kind %q, value %q), want (%q, %q)", w.name, kinds[w.name], byName[w.name], w.kind, w.value)
 		}
+	}
+}
+
+func TestCreateInstanceWithJSONVariable(t *testing.T) {
+	ts := newTestServer(t)
+	if code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", sampleBPMN, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	vars := `{"variables": {"cfg": {"timeout": 30, "retries": 3}}}`
+	if code, body := doReq(t, ts, http.MethodPost, "/api/v1/processes/1/instances", vars, "application/json"); code != http.StatusOK {
+		t.Fatalf("create instance status=%d body=%s", code, body)
+	}
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/instances", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("instances status=%d body=%s", code, body)
+	}
+	var insts []struct {
+		Variables []struct {
+			Name  string `json:"name"`
+			Value string `json:"value"`
+			Kind  string `json:"kind"`
+		} `json:"variables"`
+	}
+	if err := json.Unmarshal(body, &insts); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	if len(insts) != 1 || len(insts[0].Variables) != 1 {
+		t.Fatalf("want 1 instance with 1 variable, got %d instances", len(insts))
+	}
+	v := insts[0].Variables[0]
+	if v.Name != "cfg" || v.Kind != "json" || v.Value != `{"retries":3,"timeout":30}` {
+		t.Errorf("variable cfg = (%q, %q, %q), want json/{\"retries\":3,\"timeout\":30}", v.Name, v.Kind, v.Value)
 	}
 }

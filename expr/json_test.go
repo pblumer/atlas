@@ -2,6 +2,7 @@ package expr_test
 
 import (
 	"encoding/json"
+	"math"
 	"strings"
 	"testing"
 
@@ -108,5 +109,70 @@ func TestFromJSON(t *testing.T) {
 func TestFromStoredBadJSON(t *testing.T) {
 	if got := expr.FromStored(expr.KindJSON, false, "{not json").String(); got != "null" {
 		t.Errorf("FromStored(json, bad) = %q, want null", got)
+	}
+}
+
+func TestFromJSONFloat64(t *testing.T) {
+	got := expr.FromJSON(float64(42.5))
+	k, _, txt := expr.Classify(got)
+	if k != expr.KindNumber || txt != "42.5" {
+		t.Errorf("FromJSON(float64) = (%d,%q), want (number,42.5)", k, txt)
+	}
+}
+
+func TestFromJSONBadNumber(t *testing.T) {
+	got := expr.FromJSON(json.Number("not-a-number"))
+	if got.String() != "null" {
+		t.Errorf("FromJSON(bad json.Number) = %q, want null", got.String())
+	}
+}
+
+func TestFromJSONBadFloat64(t *testing.T) {
+	got := expr.FromJSON(math.NaN())
+	if got.String() != "null" {
+		t.Errorf("FromJSON(NaN) = %q, want null", got.String())
+	}
+}
+
+func TestFromJSONUnknownType(t *testing.T) {
+	got := expr.FromJSON(struct{}{})
+	if got.String() != "null" {
+		t.Errorf("FromJSON(struct{}) = %q, want null", got.String())
+	}
+}
+
+func TestValueToGoTemporal(t *testing.T) {
+	c, err := expr.Compile(`date("2024-01-15")`)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	v, err := c.Eval(nil)
+	if err != nil {
+		t.Fatalf("Eval: %v", err)
+	}
+	text, ok := expr.ToJSON(v)
+	if !ok {
+		t.Fatalf("ToJSON returned false for temporal")
+	}
+	if text == "" {
+		t.Error("ToJSON returned empty for temporal")
+	}
+}
+
+func TestClassifyListContainingTemporal(t *testing.T) {
+	c, err := expr.Compile(`[date("2024-01-15"), 1]`)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	v, err := c.Eval(nil)
+	if err != nil {
+		t.Fatalf("Eval: %v", err)
+	}
+	k, _, text := expr.Classify(v)
+	if k != expr.KindJSON {
+		t.Fatalf("kind = %d, want KindJSON", k)
+	}
+	if text == "" {
+		t.Error("text is empty")
 	}
 }

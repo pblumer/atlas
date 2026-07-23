@@ -78,3 +78,30 @@ func TestFromStoredUnparseableNumber(t *testing.T) {
 		t.Errorf("FromStored(number,%q) = %q, want null", "not-a-number", got)
 	}
 }
+
+// TestClassifyTemporal covers the Classify default branch — a FEEL temporal (date,
+// time, duration) is not a list/context, so it falls through to the lossy string path.
+func TestClassifyTemporal(t *testing.T) {
+	c, err := expr.Compile(`date("2024-01-15")`)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	v, err := c.Eval(nil)
+	if err != nil {
+		t.Fatalf("Eval: %v", err)
+	}
+	kind, b, text := expr.Classify(v)
+	if kind != expr.KindString || b {
+		t.Errorf("kind = (%d,%v), want (KindString,false)", kind, b)
+	}
+	if text == "" {
+		t.Error("expected non-empty text for temporal")
+	}
+}
+
+func TestFromStoredUnknownKind(t *testing.T) {
+	got := expr.FromStored(99, false, "anything")
+	if got.String() != "null" {
+		t.Errorf("FromStored(99,...) = %q, want null", got.String())
+	}
+}
