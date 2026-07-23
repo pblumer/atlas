@@ -11,7 +11,7 @@ const userTaskBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/
                     xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
   <process id="approval" isExecutable="true">
     <startEvent id="start"/>
-    <userTask id="review">
+    <userTask id="review" name="Review order">
       <extensionElements>
         <zeebe:assignmentDefinition assignee="editor" candidateGroups="reviewers"/>
       </extensionElements>
@@ -50,6 +50,7 @@ func TestUserTaskListAndComplete(t *testing.T) {
 		ProcessInstanceKey uint64 `json:"processInstanceKey"`
 		ProcessID          string `json:"processId"`
 		ElementID          string `json:"elementId"`
+		Name               string `json:"name"`
 		Assignee           string `json:"assignee"`
 		CandidateGroups    string `json:"candidateGroups"`
 	}
@@ -66,6 +67,9 @@ func TestUserTaskListAndComplete(t *testing.T) {
 	}
 	if task.ElementID != "review" {
 		t.Errorf("elementId = %q, want \"review\"", task.ElementID)
+	}
+	if task.Name != "Review order" {
+		t.Errorf("name = %q, want \"Review order\"", task.Name)
 	}
 	if task.Assignee != "editor" {
 		t.Errorf("assignee = %q, want \"editor\"", task.Assignee)

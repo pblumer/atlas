@@ -135,6 +135,9 @@ function setChrome(appId, route) {
     a.classList.toggle("active", a.dataset.app === appId));
   const fullBleed = route.includes("/modeler/d/") || route.includes("/modeler/draft/") || route.endsWith("/new") || route.includes("/operations/p/");
   document.body.classList.toggle("editor-mode", fullBleed);
+  // The Tasks inbox is a wide three-pane layout, so it drops the centered
+  // max-width the default content column uses while keeping normal padding.
+  document.body.classList.toggle("tasks-mode", appId === "tasks");
 }
 
 // ---------- Views ----------
@@ -717,48 +720,170 @@ async function viewInstances() {
   await load();
 }
 
-// ---------- Tasks ----------
+// ---------- Tasks (Outlook-style inbox, ADR-0028) ----------
+
+// A task's display title: the user task's element name, falling back to its BPMN
+// id so a task authored without a name is still recognizable.
+const taskTitle = (t) => t.name || t.elementId || "User task";
+
+// The inbox folders. Each is a predicate over a task plus the current identity —
+// there is no auth yet (ADR-0028 leaves assignment/authorization open), so "me"
+// is a display-only identity the user types, and folder membership is derived
+// purely from the task's assignment metadata.
+const TASK_FOLDERS = [
+  { id: "all", label: "All tasks", match: () => true },
+  { id: "mine", label: "Assigned to me", match: (t, me) => !!me && t.assignee === me },
+  { id: "unassigned", label: "Unassigned", match: (t) => !t.assignee },
+  { id: "group", label: "Group tasks", match: (t) => !!t.candidateGroups },
+];
+
 async function viewTasks() {
+  const state = {
+    tasks: [],
+    folder: "all",
+    selected: null, // job key of the selected task
+    me: localStorage.getItem("atlas.tasks.me") || "",
+  };
+
   view.innerHTML = `
-    <div class="card" id="task-card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-        <h1 style="margin:0">Task inbox</h1>
-        <button class="btn ghost" id="task-refresh">Refresh</button>
-      </div>
-      <div id="task-list"><p class="muted">Loading&hellip;</p></div>
+    <div class="tasks">
+      <aside class="tasks-folders">
+        <label class="tasks-identity">
+          <span>You</span>
+          <input id="task-me" type="text" placeholder="e.g. editor" value="${esc(state.me)}" spellcheck="false" />
+        </label>
+        <nav id="task-folder-nav"></nav>
+      </aside>
+      <section class="tasks-list-pane">
+        <header class="tasks-list-head">
+          <h2 id="task-list-title">All tasks</h2>
+          <button class="btn ghost small" id="task-refresh">Refresh</button>
+        </header>
+        <ul class="tasks-list" id="task-list"><li class="tasks-empty muted">Loading&hellip;</li></ul>
+      </section>
+      <section class="tasks-detail" id="task-detail"></section>
     </div>`;
-  async function load() {
-    const list = document.getElementById("task-list");
-    try {
-      const res = await api("/api/v1/tasks");
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const tasks = await res.json();
-      if (!tasks.length) {
-        list.innerHTML = `<p class="muted">No open tasks.</p>`;
-        return;
-      }
-      list.innerHTML = `<table class="tbl">
-        <thead><tr><th>Process</th><th>Element</th><th>Assignee</th><th>Groups</th><th></th></tr></thead>
-        <tbody>${tasks.map((t) => `<tr data-key="${t.key}">
-          <td>${esc(t.processId)}</td>
-          <td>${esc(t.elementId)}</td>
-          <td>${esc(t.assignee || "—")}</td>
-          <td>${esc(t.candidateGroups || "—")}</td>
-          <td><button class="btn small task-complete" data-key="${t.key}">Complete</button></td>
-        </tr>`).join("")}</tbody></table>`;
-      list.querySelectorAll(".task-complete").forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          btn.disabled = true;
-          try {
-            const r = await api("/api/v1/tasks/" + btn.dataset.key + "/complete", { method: "POST" });
-            if (!r.ok) throw new Error("HTTP " + r.status);
-            toast("Task completed");
-            await load();
-          } catch (e) { toast("Complete failed: " + e.message, "err"); btn.disabled = false; }
-        });
+
+  const nav = document.getElementById("task-folder-nav");
+  const listEl = document.getElementById("task-list");
+  const detailEl = document.getElementById("task-detail");
+  const titleEl = document.getElementById("task-list-title");
+
+  const visible = () => {
+    const f = TASK_FOLDERS.find((x) => x.id === state.folder) || TASK_FOLDERS[0];
+    return state.tasks.filter((t) => f.match(t, state.me));
+  };
+
+  function renderFolders() {
+    nav.innerHTML = TASK_FOLDERS.map((f) => {
+      const n = state.tasks.filter((t) => f.match(t, state.me)).length;
+      const active = f.id === state.folder ? " active" : "";
+      return `<button class="tasks-folder${active}" data-folder="${f.id}">
+        <span>${esc(f.label)}</span><span class="tasks-count">${n}</span>
+      </button>`;
+    }).join("");
+    nav.querySelectorAll(".tasks-folder").forEach((b) => {
+      b.addEventListener("click", () => {
+        state.folder = b.dataset.folder;
+        state.selected = null;
+        renderAll();
       });
-    } catch (e) { list.innerHTML = `<p class="muted err">Failed to load tasks: ${esc(e.message)}</p>`; }
+    });
   }
+
+  function renderList() {
+    const items = visible();
+    const f = TASK_FOLDERS.find((x) => x.id === state.folder) || TASK_FOLDERS[0];
+    titleEl.textContent = f.label;
+    if (!items.length) {
+      listEl.innerHTML = `<li class="tasks-empty muted">No tasks in this folder.</li>`;
+      return;
+    }
+    listEl.innerHTML = items
+      .map((t) => {
+        const sel = t.key === state.selected ? " selected" : "";
+        const who = t.assignee ? esc(t.assignee) : t.candidateGroups ? esc(t.candidateGroups) : "Unassigned";
+        return `<li class="tasks-item${sel}" data-key="${t.key}">
+          <div class="tasks-item-top">
+            <span class="tasks-item-title">${esc(taskTitle(t))}</span>
+            <span class="chip">${esc(t.processId || "")}</span>
+          </div>
+          <div class="tasks-item-sub muted">${who}</div>
+        </li>`;
+      })
+      .join("");
+    listEl.querySelectorAll(".tasks-item").forEach((li) => {
+      li.addEventListener("click", () => {
+        state.selected = Number(li.dataset.key);
+        renderList();
+        renderDetail();
+      });
+    });
+  }
+
+  function renderDetail() {
+    const t = state.tasks.find((x) => x.key === state.selected);
+    if (!t) {
+      detailEl.innerHTML = `<div class="tasks-detail-empty muted">Select a task to see its details.</div>`;
+      return;
+    }
+    const row = (label, val) =>
+      `<div class="tasks-field"><span class="tasks-field-label muted">${label}</span><span>${val}</span></div>`;
+    detailEl.innerHTML = `
+      <header class="tasks-detail-head">
+        <h1>${esc(taskTitle(t))}</h1>
+        <button class="btn" id="task-complete">Complete task</button>
+      </header>
+      <div class="tasks-fields">
+        ${row("Process", esc(t.processId || "—"))}
+        ${row("Element", `<span class="chip">${esc(t.elementId || "—")}</span>`)}
+        ${row("Assignee", esc(t.assignee || "—"))}
+        ${row("Candidate groups", esc(t.candidateGroups || "—"))}
+        ${row("Instance", `<span class="chip">${t.processInstanceKey}</span>`)}
+        ${row("Task key", `<span class="chip">${t.key}</span>`)}
+      </div>
+      <div class="tasks-form-placeholder">
+        <p class="muted">This task has no form yet. Form rendering — a form-js schema
+        rendered here, whose data completes the task as process variables — arrives
+        with the forms slice (ADR-0028).</p>
+      </div>`;
+    document.getElementById("task-complete").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try {
+        await api("POST", "/api/v1/tasks/" + t.key + "/complete");
+        toast("Task completed");
+        state.selected = null;
+        await load();
+      } catch (err) {
+        toast("Complete failed: " + err.message, "err");
+        btn.disabled = false;
+      }
+    });
+  }
+
+  function renderAll() {
+    renderFolders();
+    renderList();
+    renderDetail();
+  }
+
+  async function load() {
+    try {
+      state.tasks = await api("GET", "/api/v1/tasks");
+      if (!state.tasks.some((t) => t.key === state.selected)) state.selected = null;
+      renderAll();
+    } catch (e) {
+      listEl.innerHTML = `<li class="tasks-empty err">Failed to load tasks: ${esc(e.message)}</li>`;
+    }
+  }
+
+  document.getElementById("task-me").addEventListener("input", (e) => {
+    state.me = e.target.value.trim();
+    localStorage.setItem("atlas.tasks.me", state.me);
+    renderFolders();
+    renderList();
+  });
   document.getElementById("task-refresh").addEventListener("click", load);
   await load();
 }

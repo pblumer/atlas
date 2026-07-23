@@ -887,6 +887,7 @@ type taskResp struct {
 	ProcessDefKey      uint64 `json:"processDefKey,omitempty"`
 	ProcessID          string `json:"processId,omitempty"`
 	ElementID          string `json:"elementId,omitempty"`
+	Name               string `json:"name,omitempty"`
 	Assignee           string `json:"assignee,omitempty"`
 	CandidateGroups    string `json:"candidateGroups,omitempty"`
 }
@@ -915,6 +916,7 @@ func (s *Server) handleListTasks(w http.ResponseWriter, _ *http.Request) {
 					tr.ElementID = cp.ElementBpmnId(ei.ElementId)
 					if n := cp.Node(ei.ElementId); n.Type == compiler.TypeUserTask {
 						detail := cp.UserTask(n.Detail)
+						tr.Name = cp.Intern(detail.Name)
 						tr.Assignee = cp.Intern(detail.Assignee)
 						tr.CandidateGroups = cp.Intern(detail.CandidateGroups)
 					}

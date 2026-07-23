@@ -45,6 +45,9 @@ func TestParseUserTask(t *testing.T) {
 	if cp.Intern(detail.JobType) != UserTaskJobType {
 		t.Errorf("job type = %q, want %q", cp.Intern(detail.JobType), UserTaskJobType)
 	}
+	if cp.Intern(detail.Name) != "Review tweet" {
+		t.Errorf("name = %q, want \"Review tweet\"", cp.Intern(detail.Name))
+	}
 	if cp.Intern(detail.Assignee) != "editor" {
 		t.Errorf("assignee = %q, want \"editor\"", cp.Intern(detail.Assignee))
 	}

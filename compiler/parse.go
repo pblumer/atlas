@@ -256,7 +256,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	}
 	for _, ut := range proc.UserTasks {
 		retries := int32(defaultRetries)
-		if err := register(ut.Id, b.AddUserTask(ut.Assignment.Assignee, ut.Assignment.CandidateGroups, retries)); err != nil {
+		if err := register(ut.Id, b.AddUserTask(ut.Name, ut.Assignment.Assignee, ut.Assignment.CandidateGroups, retries)); err != nil {
 			return nil, err
 		}
 	}
@@ -516,6 +516,7 @@ type xmlNode struct {
 // carries a zeebe:assignmentDefinition for assignee/candidateGroups.
 type xmlUserTask struct {
 	Id         string                  `xml:"id,attr"`
+	Name       string                  `xml:"name,attr"`
 	Assignment xmlAssignmentDefinition `xml:"extensionElements>assignmentDefinition"`
 }
 

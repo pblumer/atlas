@@ -196,10 +196,11 @@ func (b *Builder) AddClioWriteTask(connector, subject, eventType string, retries
 // AddUserTask adds a user task that parks a token and creates a job for a human
 // to complete via the Tasks app (ADR-0028). assignee and candidateGroups are
 // optional (empty strings are stored as -1). Returns its element id.
-func (b *Builder) AddUserTask(assignee, candidateGroups string, retries int32) int32 {
+func (b *Builder) AddUserTask(name, assignee, candidateGroups string, retries int32) int32 {
 	detail := int32(len(b.userTasks))
 	b.userTasks = append(b.userTasks, UserTaskDetail{
 		JobType:         b.intern(UserTaskJobType),
+		Name:            b.intern(name),
 		Assignee:        b.intern(assignee),
 		CandidateGroups: b.intern(candidateGroups),
 		Retries:         retries,

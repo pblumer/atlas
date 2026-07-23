@@ -14,7 +14,7 @@ func userTaskProcess(t testing.TB) (*compiler.CompiledProcess, int32) {
 	t.Helper()
 	b := compiler.NewBuilder(defKey, "approval", 1)
 	start := b.AddStartEvent()
-	task := b.AddUserTask("editor", "reviewers", 3)
+	task := b.AddUserTask("Review order", "editor", "reviewers", 3)
 	end := b.AddEndEvent()
 	b.Connect(start, task)
 	b.Connect(task, end)

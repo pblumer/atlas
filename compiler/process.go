@@ -135,6 +135,7 @@ type BusinessRuleTaskDetail struct {
 type UserTaskDetail struct {
 	JobType         int32
 	Retries         int32
+	Name            int32 // interned element name (the task's human title) → index, -1 if unset
 	Assignee        int32
 	CandidateGroups int32
 }
