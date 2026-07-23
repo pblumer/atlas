@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/state"
 )
@@ -80,6 +81,14 @@ type Server struct {
 	versions    map[string]int32 // bpmnProcessId → highest version deployed
 	deploys     *deployStore     // durable sidecar for deployments (ADR-0019)
 	drafts      *draftStore      // durable sidecar for saved-but-not-deployed diagrams
+	projects    *projectStore    // durable sidecar for projects grouping artifacts (ADR-0034)
+	dmnrefs     *dmnRefStore     // durable sidecar for DMN reference artifacts (ADR-0034)
+
+	// dmnValidator resolves a DMN reference's temis model and compiles it, the
+	// deploy-time gate that turns a stored handle into a checked decision model
+	// (ADR-0034 Phase 2). It touches no engine or store state, so it runs off the
+	// run-loop goroutine.
+	dmnValidator *dmn.Validator
 }
 
 // New builds a Server over an already-recovered processor and its store and
@@ -98,6 +107,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string) (*Server, e
 	if err != nil {
 		return nil, err
 	}
+	projects, err := newProjectStore(filepath.Join(dataDir, "projects"))
+	if err != nil {
+		return nil, err
+	}
+	dmnrefs, err := newDmnRefStore(filepath.Join(dataDir, "dmnrefs"))
+	if err != nil {
+		return nil, err
+	}
 	s := &Server{
 		proc:        proc,
 		store:       store,
@@ -108,6 +125,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string) (*Server, e
 		versions:    map[string]int32{},
 		deploys:     ds,
 		drafts:      drafts,
+		projects:    projects,
+		dmnrefs:     dmnrefs,
+		// DMN reference models are resolved from <data-dir>/dmn-models, a folder of
+		// temis-exported models. The Resolver interface lets a temis git/service
+		// source replace this later without touching callers (ADR-0034).
+		dmnValidator: dmn.NewValidator(dmn.DirResolver{Dir: filepath.Join(dataDir, "dmn-models")}),
 	}
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
@@ -228,7 +251,19 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/drafts", s.handleSaveDraft)
 	mux.HandleFunc("GET /api/v1/drafts", s.handleListDrafts)
 	mux.HandleFunc("GET /api/v1/drafts/{id}/xml", s.handleDraftXML)
+	mux.HandleFunc("PATCH /api/v1/drafts/{id}", s.handleMoveDraft)
 	mux.HandleFunc("DELETE /api/v1/drafts/{id}", s.handleDeleteDraft)
+	mux.HandleFunc("POST /api/v1/projects", s.handleCreateProject)
+	mux.HandleFunc("GET /api/v1/projects", s.handleListProjects)
+	mux.HandleFunc("PATCH /api/v1/projects/{id}", s.handleRenameProject)
+	mux.HandleFunc("DELETE /api/v1/projects/{id}", s.handleDeleteProject)
+	mux.HandleFunc("POST /api/v1/dmnrefs", s.handleCreateDmnRef)
+	mux.HandleFunc("GET /api/v1/dmnrefs", s.handleListDmnRefs)
+	mux.HandleFunc("PATCH /api/v1/dmnrefs/{id}", s.handleMoveDmnRef)
+	mux.HandleFunc("DELETE /api/v1/dmnrefs/{id}", s.handleDeleteDmnRef)
+	mux.HandleFunc("POST /api/v1/dmnrefs/{id}/validate", s.handleValidateDmnRef)
+	mux.HandleFunc("POST /api/v1/projects/{id}/validate", s.handleValidateProject)
+	mux.HandleFunc("POST /api/v1/projects/{id}/deploy", s.handleDeployProject)
 	mux.HandleFunc("GET /api/v1/processes/{key}/xml", s.handleProcessXML)
 	mux.HandleFunc("DELETE /api/v1/processes/{key}", s.handleDeleteProcess)
 	mux.HandleFunc("GET /api/v1/processes/{key}/runtime", s.handleProcessRuntime)

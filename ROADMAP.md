@@ -185,6 +185,32 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   action in the Modeler persists work-in-progress (raw, uncompiled XML) to a
   durable draft store keyed by process id, so incomplete models survive and can be
   reopened — distinct from deploying, which compiles, versions, and runs.
+- 🚧 **Projects & artifacts** ([ADR-0034](docs/adr/0034-projects-and-artifacts.md)):
+  the Modeler groups work into named **projects** that hold **artifacts**.
+  Phases 1–2 landed. Projects are a durable sidecar store
+  (create/list/rename/delete); artifacts carry an optional `projectId`, and the
+  Modeler home lists each project's artifacts plus an **Ungrouped** bucket, moving
+  one between projects from a per-row dropdown. Two artifact types so far:
+  **BPMN drafts** (Phase 1) and **DMN references** — a DMN artifact is a *pointer*
+  to a temis-authored model (display name + temis handle), never DMN XML, so Atlas
+  organizes and deploys the decision without becoming a DMN editor, honoring the
+  "no DMN authoring surface" non-goal (Phase 2, ADR-0014). A DMN reference is
+  **resolved and validated at deploy time**: a pluggable `dmn.Resolver` (default:
+  a `<data-dir>/dmn-models/` folder of temis-exported models; a temis git/service
+  source can replace it behind the interface) fetches the model XML and the
+  embedded temis engine compiles it — the Modeler shows each reference as
+  valid / invalid / unresolved, and a project preflight
+  (`POST /api/v1/projects/{id}/validate`) gates on all references being valid.
+  **Project bundle-deploy** (`POST /api/v1/projects/{id}/deploy`) ties it together:
+  it runs the DMN preflight and then deploys every BPMN draft as a runnable
+  definition, "validate all then deploy all" so a non-compiling draft or an
+  invalid reference refuses the whole bundle before anything is registered; the
+  Modeler's per-project **Deploy** button drives it. A project is a design-time
+  grouping layer only (below the HTTP API, no engine impact). Next: wiring the
+  validated DMN into the engine's runtime so business-rule tasks execute it (the
+  ADR-0014 follow-up — the server does not run DMN yet), a temis git/service
+  resolver, and further artifact types (forms, element templates, READMEs, nested
+  folders).
 - 🔲 Later: a polished "workbench" experience on top.
 
 ## Milestone A — Modeler & authoring experience 🔲
