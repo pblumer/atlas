@@ -71,8 +71,15 @@ Making processes wait, react, and time out.
   publish, correlating against open subscriptions through one shared path and
   carrying an optional variable payload into the woken instance. Recovery-tested
   (an open subscription is restored from the log and correlates afterward).
-  Message buffering, message start/boundary events, and cross-partition
-  correlation still to come (ADR-0020).
+  Message buffering, message boundary events, and cross-partition correlation
+  still to come (ADR-0020).
+- ✅ **Message start events** (single-partition): a `<startEvent>` with a
+  `messageEventDefinition` is instantiated by a correlating message (throw or API
+  publish), seeded with the message payload, so a two-pool request/response runs
+  end to end. Matching is by message name; a throw event carries its instance's
+  variables as the payload, and the reserved FEEL identifier `processInstanceKey`
+  exposes an instance's own key so a reply can correlate back to the requester.
+  Recovery-tested. A start-event correlation key and buffering remain (ADR-0025).
 - 🔲 Signal events (broadcast)
 - 🔲 Error events and error propagation
 - 🔲 Boundary events: interrupting and non-interrupting

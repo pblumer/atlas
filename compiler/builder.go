@@ -29,6 +29,7 @@ type Builder struct {
 	timerCatches      []TimerCatchDetail
 	messageCatches    []MessageDetail
 	messageThrows     []MessageDetail
+	messageStarts     []MessageDetail
 	elementIds        []int32 // interned source BPMN id per node, -1 if unset
 
 	interner map[string]int32
@@ -81,6 +82,18 @@ func (b *Builder) SetElementBpmnId(nodeID int32, bpmnID string) {
 
 // AddStartEvent adds a none start event and returns its element id.
 func (b *Builder) AddStartEvent() int32 { return b.addNode(TypeStartEvent, -1) }
+
+// AddMessageStartEvent adds a message start event and returns its element id. It
+// is a process entry point like a none start event — at runtime it simply flows
+// straight on — but the engine also registers it at deploy time so a correlating
+// message (a throw event or an API publish of messageName) instantiates a fresh
+// process instance seeded with the message's payload (ADR-0025). correlationKey
+// is compiled for future use; message-start matching is by name today.
+func (b *Builder) AddMessageStartEvent(messageName string, correlationKey *expr.Compiled) int32 {
+	detail := int32(len(b.messageStarts))
+	b.messageStarts = append(b.messageStarts, MessageDetail{MessageName: messageName, CorrelationKey: correlationKey})
+	return b.addNode(TypeMessageStartEvent, detail)
+}
 
 // AddEndEvent adds a none end event and returns its element id.
 func (b *Builder) AddEndEvent() int32 { return b.addNode(TypeEndEvent, -1) }
@@ -229,7 +242,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 
 	var startEvents []int32
 	for i := range b.nodes {
-		if b.nodes[i].Type == TypeStartEvent {
+		if isStartEvent(b.nodes[i].Type) {
 			startEvents = append(startEvents, b.nodes[i].ElementId)
 		}
 	}
@@ -247,6 +260,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		timerCatches:      b.timerCatches,
 		messageCatches:    b.messageCatches,
 		messageThrows:     b.messageThrows,
+		messageStarts:     b.messageStarts,
 		startEvents:       startEvents,
 		elementIds:        b.elementIds,
 		strings:           b.strings,
@@ -260,9 +274,16 @@ func (b *Builder) validNode(id int32) bool {
 // hasStartEvent reports whether any start event has been added.
 func (b *Builder) hasStartEvent() bool {
 	for i := range b.nodes {
-		if b.nodes[i].Type == TypeStartEvent {
+		if isStartEvent(b.nodes[i].Type) {
 			return true
 		}
 	}
 	return false
+}
+
+// isStartEvent reports whether a node type is a process entry point. A message
+// start event is one too: a correlating message instantiates the process, and a
+// plain create then activates it like a none start (ADR-0025).
+func isStartEvent(t BpmnType) bool {
+	return t == TypeStartEvent || t == TypeMessageStartEvent
 }

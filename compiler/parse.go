@@ -167,6 +167,16 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	}
 
 	for _, s := range proc.StartEvents {
+		if s.Message != nil {
+			name, keyExpr, err := resolveMessage(s.Id, s.Message.MessageRef)
+			if err != nil {
+				return nil, err
+			}
+			if err := register(s.Id, b.AddMessageStartEvent(name, keyExpr)); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		if err := register(s.Id, b.AddStartEvent()); err != nil {
 			return nil, err
 		}
@@ -398,7 +408,7 @@ type xmlMessageEventDefinition struct {
 type xmlProcess struct {
 	Id                string                `xml:"id,attr"`
 	Name              string                `xml:"name,attr"`
-	StartEvents       []xmlNode             `xml:"startEvent"`
+	StartEvents       []xmlStartEvent       `xml:"startEvent"`
 	EndEvents         []xmlNode             `xml:"endEvent"`
 	ServiceTasks      []xmlServiceTask      `xml:"serviceTask"`
 	ScriptTasks       []xmlScriptTask       `xml:"scriptTask"`
@@ -426,6 +436,16 @@ type xmlProcess struct {
 type xmlExclusiveGateway struct {
 	Id      string `xml:"id,attr"`
 	Default string `xml:"default,attr"`
+}
+
+// A start event. A plain (none) start event is a manual entry point; one bearing
+// a messageEventDefinition is a message start event, instantiated by a
+// correlating message (ADR-0025). The definition is a pointer so an absent one
+// is detected as nil.
+type xmlStartEvent struct {
+	Id      string                     `xml:"id,attr"`
+	Name    string                     `xml:"name,attr"`
+	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
 }
 
 // An intermediate catch event; the timer and message variants are executable.

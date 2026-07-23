@@ -26,8 +26,9 @@ const (
 	TypeTimerCatchEvent
 	TypeMessageCatchEvent
 	TypeMessageThrowEvent
-	TypeTask            // an undefined/manual task: no execution semantics, passes straight through
-	TypeParallelGateway // AND gateway: forks a token onto every outgoing flow, joins by waiting for all incoming
+	TypeTask              // an undefined/manual task: no execution semantics, passes straight through
+	TypeParallelGateway   // AND gateway: forks a token onto every outgoing flow, joins by waiting for all incoming
+	TypeMessageStartEvent // a start event that a correlating message instantiates (ADR-0025); at runtime it behaves like a none start (flows straight on)
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
 	numBpmnTypes = 16
@@ -60,6 +61,8 @@ func (t BpmnType) String() string {
 		return "Task"
 	case TypeParallelGateway:
 		return "ParallelGateway"
+	case TypeMessageStartEvent:
+		return "MessageStartEvent"
 	default:
 		return "Unspecified"
 	}
@@ -150,6 +153,7 @@ type CompiledProcess struct {
 	timerCatches      []TimerCatchDetail
 	messageCatches    []MessageDetail
 	messageThrows     []MessageDetail
+	messageStarts     []MessageDetail
 	startEvents       []int32
 	elementIds        []int32  // interned source BPMN id per node id (-1 if unset)
 	strings           []string // intern table (index → string), for debug/export
@@ -187,6 +191,17 @@ func (p *CompiledProcess) MessageCatch(detail int32) *MessageDetail {
 func (p *CompiledProcess) MessageThrow(detail int32) *MessageDetail {
 	return &p.messageThrows[detail]
 }
+
+// MessageStart returns the message-start detail at the given table index.
+func (p *CompiledProcess) MessageStart(detail int32) *MessageDetail {
+	return &p.messageStarts[detail]
+}
+
+// MessageStarts returns the definition's message-start-event details, one per
+// message start event. The engine indexes these at deploy time so a correlating
+// message can instantiate the process (ADR-0025). Empty for a process with no
+// message start event.
+func (p *CompiledProcess) MessageStarts() []MessageDetail { return p.messageStarts }
 
 // ScriptTask returns the detail at the given table index.
 func (p *CompiledProcess) ScriptTask(detail int32) *ScriptTaskDetail {

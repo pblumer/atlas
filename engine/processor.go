@@ -36,6 +36,14 @@ type Processor struct {
 	handlers  map[uint16]func(*ProcessingContext)
 	behaviors [compiler.NumBpmnTypes]bpmnBehavior
 
+	// messageStarts indexes message start events by message name → the definition
+	// keys that a correlating message instantiates (ADR-0025). It is derived from
+	// the compiled definitions, rebuilt by Deploy on every start (the deploy store
+	// re-registers definitions on recovery), so it needs no durable state of its
+	// own — the instances it creates go through the normal event path and recover
+	// from the log.
+	messageStarts map[string][]uint64
+
 	jobNotifier func(jobType int32)
 
 	queue        []Command
@@ -59,25 +67,53 @@ func New(partition uint16, log *wal.Log, store *state.Store, clock Clock) *Proce
 		clock = SystemClock{}
 	}
 	p := &Processor{
-		partition: partition,
-		log:       log,
-		store:     store,
-		clock:     clock,
-		keygen:    &keyGen{partition: partition},
-		processes: map[uint64]*compiler.CompiledProcess{},
+		partition:     partition,
+		log:           log,
+		store:         store,
+		clock:         clock,
+		keygen:        &keyGen{partition: partition},
+		processes:     map[uint64]*compiler.CompiledProcess{},
+		messageStarts: map[string][]uint64{},
 	}
 	p.registerHandlers()
 	p.registerBehaviors()
 	return p
 }
 
-// Deploy registers an immutable compiled definition so instances can run it.
-func (p *Processor) Deploy(cp *compiler.CompiledProcess) { p.processes[cp.Key] = cp }
+// Deploy registers an immutable compiled definition so instances can run it, and
+// indexes any message start events so a correlating message instantiates it
+// (ADR-0025).
+func (p *Processor) Deploy(cp *compiler.CompiledProcess) {
+	p.processes[cp.Key] = cp
+	for _, ms := range cp.MessageStarts() {
+		p.messageStarts[ms.MessageName] = append(p.messageStarts[ms.MessageName], cp.Key)
+	}
+}
 
-// Undeploy removes a definition so no new instances of it can be created. It is
-// the caller's responsibility not to undeploy a definition with running
-// instances (they resolve their definition by key on every batch).
-func (p *Processor) Undeploy(defKey uint64) { delete(p.processes, defKey) }
+// Undeploy removes a definition so no new instances of it can be created,
+// dropping its message-start index entries too. It is the caller's
+// responsibility not to undeploy a definition with running instances (they
+// resolve their definition by key on every batch).
+func (p *Processor) Undeploy(defKey uint64) {
+	if cp := p.processes[defKey]; cp != nil {
+		for _, ms := range cp.MessageStarts() {
+			p.messageStarts[ms.MessageName] = removeKey(p.messageStarts[ms.MessageName], defKey)
+		}
+	}
+	delete(p.processes, defKey)
+}
+
+// removeKey returns keys with the first occurrence of key removed. A name whose
+// last message-start definition is undeployed keeps an empty slice, which
+// correlates to nothing — harmless and rare, so it is not pruned from the map.
+func removeKey(keys []uint64, key uint64) []uint64 {
+	for i, k := range keys {
+		if k == key {
+			return append(keys[:i], keys[i+1:]...)
+		}
+	}
+	return keys
+}
 
 // SetJobNotifier installs the hook the service-task behavior triggers (after
 // fsync) when a job of a type becomes available.

@@ -199,6 +199,24 @@ func TestVariablePutGetAndScope(t *testing.T) {
 	if !reflect.DeepEqual(names, map[string]bool{"a": true, "b": true, "c": true}) {
 		t.Errorf("VariablesOfScope names = %v, want a,b,c", names)
 	}
+
+	// The in-flight (transaction) scan sees committed variables and one written
+	// but not yet committed in the same batch, and it stays within the scope.
+	txn := s.NewTransaction()
+	defer txn.Close()
+	if err := txn.PutVariable(&model.VariableValue{ScopeKey: scope, Name: "d", Kind: model.VarNumber, Text: "4"}); err != nil {
+		t.Fatalf("PutVariable (uncommitted): %v", err)
+	}
+	txNames := map[string]bool{}
+	if err := txn.VariablesOfScope(scope, func(v *model.VariableValue) error {
+		txNames[v.Name] = true
+		return nil
+	}); err != nil {
+		t.Fatalf("Tx.VariablesOfScope: %v", err)
+	}
+	if !reflect.DeepEqual(txNames, map[string]bool{"a": true, "b": true, "c": true, "d": true}) {
+		t.Errorf("Tx.VariablesOfScope names = %v, want a,b,c,d (incl. uncommitted)", txNames)
+	}
 }
 
 func TestActiveInstanceQueries(t *testing.T) {
