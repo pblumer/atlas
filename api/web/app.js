@@ -290,12 +290,14 @@ async function viewModelerHome() {
     }).join("");
 
     // A DMN reference points at a temis-authored model — Atlas lists it but does
-    // not edit it (ADR-0024), so there is no "Open", just the temis handle.
+    // not edit it (ADR-0024), so there is no "Open", just the temis handle and a
+    // deploy-time Validate that resolves the model and compiles it.
     const refRows = (list) => list.map((r) => `<tr>
         <td><span class="chip">DMN</span> <b>${esc(r.name)}</b>
           <div class="muted" style="font-size:12px">temis model: ${esc(r.modelRef)}</div></td>
-        <td class="muted">reference</td>
+        <td><span data-refstatus="${esc(r.id)}" class="muted" style="font-size:12px">not validated</span></td>
         <td style="text-align:right; white-space:nowrap">
+          <button class="btn ghost" data-refvalidate="${esc(r.id)}">Validate</button>
           ${moveSelect("data-moveref", r.id, r.projectId)}
           <button class="btn ghost danger" data-refdel="${esc(r.id)}">Delete</button>
         </td>
@@ -314,6 +316,7 @@ async function viewModelerHome() {
           <div><b>${esc(p.name)}</b> <span class="muted" style="font-size:12px">· ${n} artifact${n === 1 ? "" : "s"}</span></div>
           <div class="row">
             <button class="btn ghost" data-refadd="${esc(p.id)}">Add DMN reference</button>
+            ${rl.length ? `<button class="btn ghost" data-projvalidate="${esc(p.id)}">Validate DMN</button>` : ""}
             <button class="btn ghost" data-projrename="${esc(p.id)}" data-projname="${esc(p.name)}">Rename</button>
             <button class="btn ghost danger" data-projdel="${esc(p.id)}" data-projname="${esc(p.name)}">Delete</button>
           </div>
@@ -346,6 +349,10 @@ async function viewModelerHome() {
       b.addEventListener("click", () => createDmnRef(b.dataset.refadd, renderProjects));
     for (const b of projectsSection.querySelectorAll("button[data-refdel]"))
       b.addEventListener("click", () => deleteDmnRef(b.dataset.refdel, renderProjects));
+    for (const b of projectsSection.querySelectorAll("button[data-refvalidate]"))
+      b.addEventListener("click", () => validateDmnRef(b.dataset.refvalidate));
+    for (const b of projectsSection.querySelectorAll("button[data-projvalidate]"))
+      b.addEventListener("click", () => validateProject(b.dataset.projvalidate));
     for (const s of projectsSection.querySelectorAll("select[data-move]"))
       s.addEventListener("change", () => moveDraft(s.dataset.move, s.value, renderProjects));
     for (const s of projectsSection.querySelectorAll("select[data-moveref]"))
@@ -486,6 +493,51 @@ async function deleteDmnRef(id, reload) {
     toast("Deleted DMN reference", "ok");
   } catch (e) { toast("could not delete reference: " + e.message, "err"); }
   await reload();
+}
+
+// refStatusHTML renders a DMN reference's deploy-time validation outcome: valid
+// (with decision count), resolved-but-invalid, or unresolved.
+function refStatusHTML(res) {
+  if (res.valid) {
+    const n = (res.decisions || []).length;
+    return `<span class="pill ok"><span class="dot"></span>valid</span>${n ? ` <span class="muted" style="font-size:12px">· ${n} decision${n === 1 ? "" : "s"}</span>` : ""}`;
+  }
+  if (res.resolved) return `<span class="pill err"><span class="dot"></span>invalid</span>`;
+  return `<span class="pill warn"><span class="dot"></span>unresolved</span>`;
+}
+
+// applyRefStatus writes a validation result into a reference row's status cell.
+function applyRefStatus(id, res) {
+  const el = document.querySelector(`[data-refstatus="${id}"]`);
+  if (!el) return;
+  el.className = "";
+  el.style.fontSize = "12px";
+  el.innerHTML = refStatusHTML(res);
+  el.title = res.message || "";
+}
+
+// validateDmnRef resolves one reference's temis model and compiles it — the same
+// deploy-time gate the server runs — and shows the outcome inline.
+async function validateDmnRef(id) {
+  const el = document.querySelector(`[data-refstatus="${id}"]`);
+  if (el) { el.className = "muted"; el.textContent = "validating…"; }
+  try {
+    applyRefStatus(id, await api("POST", `/api/v1/dmnrefs/${encodeURIComponent(id)}/validate`));
+  } catch (e) {
+    if (el) { el.className = "muted"; el.textContent = "not validated"; }
+    toast("could not validate: " + e.message, "err");
+  }
+}
+
+// validateProject runs the project preflight — resolve + validate every DMN
+// reference — and reflects each result plus an overall verdict.
+async function validateProject(projectId) {
+  try {
+    const rep = await api("POST", `/api/v1/projects/${encodeURIComponent(projectId)}/validate`);
+    for (const r of rep.references) applyRefStatus(r.id, r);
+    toast(rep.ok ? "All DMN references are valid" : "Some DMN references are unresolved or invalid",
+      rep.ok ? "ok" : "err");
+  } catch (e) { toast("could not validate project: " + e.message, "err"); }
 }
 
 // summarizeInstances rolls the flat instance list up per process id, so the

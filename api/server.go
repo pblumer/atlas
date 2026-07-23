@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/state"
 )
@@ -82,6 +83,12 @@ type Server struct {
 	drafts      *draftStore      // durable sidecar for saved-but-not-deployed diagrams
 	projects    *projectStore    // durable sidecar for projects grouping artifacts (ADR-0024)
 	dmnrefs     *dmnRefStore     // durable sidecar for DMN reference artifacts (ADR-0024)
+
+	// dmnValidator resolves a DMN reference's temis model and compiles it, the
+	// deploy-time gate that turns a stored handle into a checked decision model
+	// (ADR-0024 Phase 2). It touches no engine or store state, so it runs off the
+	// run-loop goroutine.
+	dmnValidator *dmn.Validator
 }
 
 // New builds a Server over an already-recovered processor and its store and
@@ -120,6 +127,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string) (*Server, e
 		drafts:      drafts,
 		projects:    projects,
 		dmnrefs:     dmnrefs,
+		// DMN reference models are resolved from <data-dir>/dmn-models, a folder of
+		// temis-exported models. The Resolver interface lets a temis git/service
+		// source replace this later without touching callers (ADR-0024).
+		dmnValidator: dmn.NewValidator(dmn.DirResolver{Dir: filepath.Join(dataDir, "dmn-models")}),
 	}
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
@@ -248,6 +259,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/dmnrefs", s.handleListDmnRefs)
 	mux.HandleFunc("PATCH /api/v1/dmnrefs/{id}", s.handleMoveDmnRef)
 	mux.HandleFunc("DELETE /api/v1/dmnrefs/{id}", s.handleDeleteDmnRef)
+	mux.HandleFunc("POST /api/v1/dmnrefs/{id}/validate", s.handleValidateDmnRef)
+	mux.HandleFunc("POST /api/v1/projects/{id}/validate", s.handleValidateProject)
 	mux.HandleFunc("GET /api/v1/processes/{key}/xml", s.handleProcessXML)
 	mux.HandleFunc("DELETE /api/v1/processes/{key}", s.handleDeleteProcess)
 	mux.HandleFunc("GET /api/v1/processes/{key}/runtime", s.handleProcessRuntime)

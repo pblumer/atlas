@@ -181,12 +181,18 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   one between projects from a per-row dropdown. Two artifact types so far:
   **BPMN drafts** (Phase 1) and **DMN references** — a DMN artifact is a *pointer*
   to a temis-authored model (display name + temis handle), never DMN XML, so Atlas
-  organizes and (later) deploys the decision without becoming a DMN editor,
-  honoring the "no DMN authoring surface" non-goal (Phase 2, ADR-0014). A project
-  is a design-time grouping layer only (below the HTTP API, no engine impact).
-  Next: resolving/validating a DMN reference against temis at deploy time,
-  project bundle-deploy, and further artifact types (forms, element templates,
-  READMEs, nested folders).
+  organizes and deploys the decision without becoming a DMN editor, honoring the
+  "no DMN authoring surface" non-goal (Phase 2, ADR-0014). A DMN reference is
+  **resolved and validated at deploy time**: a pluggable `dmn.Resolver` (default:
+  a `<data-dir>/dmn-models/` folder of temis-exported models; a temis git/service
+  source can replace it behind the interface) fetches the model XML and the
+  embedded temis engine compiles it — the Modeler shows each reference as
+  valid / invalid / unresolved, and a project preflight
+  (`POST /api/v1/projects/{id}/validate`) gates on all references being valid. A
+  project is a design-time grouping layer only (below the HTTP API, no engine
+  impact). Next: a temis git/service resolver, project bundle-deploy that runs
+  this preflight and then deploys the BPMN + DMN together, and further artifact
+  types (forms, element templates, READMEs, nested folders).
 - 🔲 Later: a polished "workbench" experience on top.
 
 ---
