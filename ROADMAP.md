@@ -55,10 +55,18 @@ The control-flow basics most real models use.
 - 🔲 Conformance tests against a curated BPMN model set
 - 🚧 **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)
   engine, [ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)): the
-  element, its behavior, and off-hot-path evaluation through the job path landed
-  as a vertical slice. It currently feeds a decision static inputs and surfaces
+  element, its behavior, and evaluation through the job path landed as a vertical
+  slice. **The single-binary server now executes them end to end**: a project
+  bundle-deploy ([ADR-0034](docs/adr/0034-projects-and-artifacts.md)) resolves the
+  DMN reference, snapshots and registers the model with the deployed process, and
+  an in-process DMN worker evaluates the decision when a token reaches the task —
+  so a deployed instance runs to completion instead of parking, and the model
+  re-registers from its snapshot on restart. The DMN job type is pinned to a
+  reserved global index so one worker serves every process without colliding with
+  service-task types. It still feeds a decision **static inputs** and surfaces
   outputs via a sink; wiring real input/output variable mappings depends on the
-  variable subsystem above.
+  variable subsystem above, and off-loop streaming evaluation is the Milestone-4
+  gRPC job-worker concern (the single binary drives jobs synchronously).
 - 🚧 **Connectors** ([ADR-0036](docs/adr/0036-clio-connector.md)): a service task
   bearing an `<atlas:clioConnector>` extension is a connector task that appends an
   event to a **server-registered** clio event store through the job path (like the
@@ -221,12 +229,12 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   it runs the DMN preflight and then deploys every BPMN draft as a runnable
   definition, "validate all then deploy all" so a non-compiling draft or an
   invalid reference refuses the whole bundle before anything is registered; the
-  Modeler's per-project **Deploy** button drives it. A project is a design-time
-  grouping layer only (below the HTTP API, no engine impact). Next: wiring the
-  validated DMN into the engine's runtime so business-rule tasks execute it (the
-  ADR-0014 follow-up — the server does not run DMN yet), a temis git/service
-  resolver, and further artifact types (forms, element templates, READMEs, nested
-  folders).
+  Modeler's per-project **Deploy** button drives it, and a deployed process's
+  business rule tasks now **execute** the resolved decision in-process (see
+  Milestone 1). A project is a design-time grouping layer only (below the HTTP
+  API, no engine impact). Next: a temis git/service resolver, input/output
+  variable mappings for business rule tasks (Milestone 1), and further artifact
+  types (forms, element templates, READMEs, nested folders).
 - 🔲 Later: a polished "workbench" experience on top.
 
 ## Milestone A — Modeler & authoring experience 🔲

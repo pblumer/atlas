@@ -265,6 +265,26 @@ func (p *CompiledProcess) BusinessRuleTask(detail int32) *BusinessRuleTaskDetail
 	return &p.businessRuleTasks[detail]
 }
 
+// BusinessRuleDecisions returns the DMN decision ids this process's business rule
+// tasks reference, distinct and in node order — empty if it has none. The server
+// uses it at deploy time to pick and deploy the DMN model that provides those
+// decisions into the DMN registry, so the tasks can be evaluated (ADR-0014).
+func (p *CompiledProcess) BusinessRuleDecisions() []string {
+	var out []string
+	seen := map[string]bool{}
+	for i := range p.nodes {
+		if p.nodes[i].Type != TypeBusinessRuleTask {
+			continue
+		}
+		id := p.Intern(p.BusinessRuleTask(p.nodes[i].Detail).DecisionId)
+		if id != "" && !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
 // ConnectorTask returns the connector-task detail at the given table index.
 func (p *CompiledProcess) ConnectorTask(detail int32) *ConnectorTaskDetail {
 	return &p.connectorTasks[detail]

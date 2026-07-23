@@ -272,7 +272,10 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	)
 	s.do(func() {
 		var deployed []deployedProcess
-		deployed, compErr, persistErr = s.deployModel(body, time.Now().Unix())
+		// The direct deploy endpoint carries no DMN reference; a business rule task
+		// deployed this way has no decision model and would park. DMN execution is
+		// wired through project bundle-deploy, which resolves the reference (ADR-0034).
+		deployed, compErr, persistErr = s.deployModel(body, nil, time.Now().Unix())
 		if compErr != nil || persistErr != nil {
 			return
 		}
@@ -304,7 +307,13 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 //
 // A mid-model persist failure leaves earlier processes deployed (no rollback
 // yet) — an honest limitation until deployment is a first-class WAL event.
-func (s *Server) deployModel(body []byte, deployedAt int64) (deployed []deployedProcess, compErr, persistErr error) {
+//
+// dmnXML is the resolved DMN model this model's business rule tasks evaluate
+// against (nil when there are none). It is snapshotted into each process's
+// deployment record and registered in the DMN registry under the process key, so
+// the tasks run now and re-register on restart (ADR-0014/ADR-0034). The caller is
+// responsible for having validated it; a compile failure here is a server error.
+func (s *Server) deployModel(body, dmnXML []byte, deployedAt int64) (deployed []deployedProcess, compErr, persistErr error) {
 	deployables, err := compiler.ParseAll(s.nextKey, 1, bytes.NewReader(body))
 	if err != nil {
 		return nil, err, nil
@@ -329,12 +338,19 @@ func (s *Server) deployModel(body []byte, deployedAt int64) (deployed []deployed
 			Version:    version,
 			DeployedAt: deployedAt,
 			XML:        string(body),
+			DMNXML:     string(dmnXML),
 		}); err != nil {
 			return deployed, nil, err
 		}
 
 		s.versions[pid] = version
 		s.proc.Deploy(cp)
+		// Register the process's decisions so its business rule tasks can evaluate.
+		if dmnXML != nil {
+			if err := s.dmnRegistry.Deploy(key, dmnXML); err != nil {
+				return deployed, nil, fmt.Errorf("register dmn model for %s: %w", pid, err)
+			}
+		}
 		s.deployments[key] = &deployment{
 			Key:        key,
 			ProcessID:  pid,
@@ -587,7 +603,7 @@ func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		}
 		found = true
 		s.proc.CreateInstance(key, startVars...)
-		if err := s.proc.RunUntilIdle(); err != nil {
+		if err := s.jobRunner.Drive(); err != nil {
 			runErr = err
 			return
 		}
@@ -782,7 +798,7 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 	)
 	s.do(func() {
 		s.proc.PublishMessage(payload.Name, payload.CorrelationKey, vars...)
-		if err := s.proc.RunUntilIdle(); err != nil {
+		if err := s.jobRunner.Drive(); err != nil {
 			runErr = err
 			return
 		}
@@ -828,7 +844,7 @@ func (s *Server) handleCancelInstance(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.proc.CancelInstance(key)
-		if err := s.proc.RunUntilIdle(); err != nil {
+		if err := s.jobRunner.Drive(); err != nil {
 			runErr = err
 			return
 		}

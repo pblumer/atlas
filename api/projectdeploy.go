@@ -80,8 +80,11 @@ func (s *Server) handleDeployProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Phase 2 (off-loop): DMN preflight. Resolve + validate every reference; a
-	// single failure refuses the bundle without deploying anything.
+	// single failure refuses the bundle without deploying anything. For each valid
+	// reference, keep its model XML and the decisions it provides, so a draft's
+	// business rule tasks can be matched to a model below.
 	refReports := make([]dmnRefValidationResp, 0, len(refs))
+	var models []resolvedModel
 	invalidRefs := 0
 	for _, rec := range refs {
 		res, err := s.dmnValidator.Validate(r.Context(), rec.ModelRef)
@@ -91,6 +94,13 @@ func (s *Server) handleDeployProject(w http.ResponseWriter, r *http.Request) {
 		}
 		if !res.Valid {
 			invalidRefs++
+		} else {
+			xml, err := s.dmnResolver.Resolve(r.Context(), rec.ModelRef)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "resolve dmn model: "+err.Error())
+				return
+			}
+			models = append(models, resolvedModel{decisions: res.Decisions, xml: xml})
 		}
 		refReports = append(refReports, dmnRefValidationResp{
 			ID: rec.ID, Name: rec.Name, ModelRef: rec.ModelRef,
@@ -107,25 +117,46 @@ func (s *Server) handleDeployProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Phase 3 (on-loop): compile every draft first, then — only if all compile —
-	// deploy them, so a non-compilable draft refuses the bundle before any
-	// definition is registered.
+	// Phase 3-prep (off-loop): compile every draft and match it to the DMN model
+	// that provides its business rule tasks' decisions. A draft that does not
+	// compile, or references a decision no project model provides, refuses the
+	// whole bundle before anything is registered.
+	dmnForDraft := make([][]byte, len(drafts))
+	for i, d := range drafts {
+		deployables, err := compiler.ParseAll(1, 1, bytes.NewReader([]byte(d.XML)))
+		if err != nil {
+			writeJSON(w, http.StatusConflict, projectDeployResp{
+				ID: proj.ID, Name: proj.Name, Deployed: false,
+				Reason:      fmt.Sprintf("draft %q does not compile: %s", d.ProcessID, err.Error()),
+				Definitions: []deployedProcess{}, References: refReports,
+			})
+			return
+		}
+		needed := draftDecisions(deployables)
+		if len(needed) == 0 {
+			continue
+		}
+		xml, ok := matchModel(models, needed)
+		if !ok {
+			writeJSON(w, http.StatusConflict, projectDeployResp{
+				ID: proj.ID, Name: proj.Name, Deployed: false,
+				Reason:      fmt.Sprintf("draft %q references decision(s) %v not provided by any DMN reference in this project", d.ProcessID, needed),
+				Definitions: []deployedProcess{}, References: refReports,
+			})
+			return
+		}
+		dmnForDraft[i] = xml
+	}
+
+	// Phase 3 (on-loop): deploy each draft with its matched DMN model.
 	var (
-		compileFail string
-		compErr     error
-		persistErr  error
-		deployed    []deployedProcess
+		persistErr error
+		deployed   []deployedProcess
 	)
 	s.do(func() {
-		for _, d := range drafts {
-			if _, err := compiler.ParseAll(1, 1, bytes.NewReader([]byte(d.XML))); err != nil {
-				compileFail, compErr = d.ProcessID, err
-				return
-			}
-		}
 		deployedAt := time.Now().Unix()
-		for _, d := range drafts {
-			dps, _, pErr := s.deployModel([]byte(d.XML), deployedAt)
+		for i, d := range drafts {
+			dps, _, pErr := s.deployModel([]byte(d.XML), dmnForDraft[i], deployedAt)
 			if pErr != nil {
 				persistErr = pErr
 				return
@@ -133,22 +164,62 @@ func (s *Server) handleDeployProject(w http.ResponseWriter, r *http.Request) {
 			deployed = append(deployed, dps...)
 		}
 	})
-	switch {
-	case compErr != nil:
-		writeJSON(w, http.StatusConflict, projectDeployResp{
-			ID: proj.ID, Name: proj.Name, Deployed: false,
-			Reason:      fmt.Sprintf("draft %q does not compile: %s", compileFail, compErr.Error()),
-			Definitions: []deployedProcess{}, References: refReports,
-		})
-	case persistErr != nil:
+	if persistErr != nil {
 		writeError(w, http.StatusInternalServerError, "persist deployment: "+persistErr.Error())
-	default:
-		if deployed == nil {
-			deployed = []deployedProcess{}
-		}
-		writeJSON(w, http.StatusOK, projectDeployResp{
-			ID: proj.ID, Name: proj.Name, Deployed: true,
-			Definitions: deployed, References: refReports,
-		})
+		return
 	}
+	if deployed == nil {
+		deployed = []deployedProcess{}
+	}
+	writeJSON(w, http.StatusOK, projectDeployResp{
+		ID: proj.ID, Name: proj.Name, Deployed: true,
+		Definitions: deployed, References: refReports,
+	})
+}
+
+// resolvedModel is one project DMN reference resolved for the bundle: its model
+// XML and the decision names it provides.
+type resolvedModel struct {
+	decisions []string
+	xml       []byte
+}
+
+// draftDecisions is the distinct set of DMN decision ids referenced by every
+// process in one compiled draft.
+func draftDecisions(deployables []compiler.Deployable) []string {
+	seen := map[string]bool{}
+	var out []string
+	for i := range deployables {
+		for _, id := range deployables[i].Process.BusinessRuleDecisions() {
+			if !seen[id] {
+				seen[id] = true
+				out = append(out, id)
+			}
+		}
+	}
+	return out
+}
+
+// matchModel returns the XML of a model that provides every needed decision, or
+// ok=false if none does. A draft's decisions must all live in a single model
+// (the DMN registry holds one model per process) — spanning models is not
+// supported yet.
+func matchModel(models []resolvedModel, needed []string) ([]byte, bool) {
+	for _, m := range models {
+		have := make(map[string]bool, len(m.decisions))
+		for _, d := range m.decisions {
+			have[d] = true
+		}
+		covers := true
+		for _, n := range needed {
+			if !have[n] {
+				covers = false
+				break
+			}
+		}
+		if covers {
+			return m.xml, true
+		}
+	}
+	return nil, false
 }

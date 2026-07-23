@@ -20,6 +20,11 @@ type persistedDeployment struct {
 	Version    int32  `json:"version"`
 	DeployedAt int64  `json:"deployedAt"`
 	XML        string `json:"xml"`
+	// DMNXML is the resolved DMN model this process's business rule tasks evaluate
+	// against, snapshotted at deploy time so it is self-contained and re-registers
+	// on restart without re-resolving the temis reference (ADR-0034/ADR-0014).
+	// Empty when the process has no business rule tasks.
+	DMNXML string `json:"dmnXml,omitempty"`
 }
 
 // deployStore is a small durable store for deployments, backed by one JSON file
