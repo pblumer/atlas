@@ -260,6 +260,10 @@ function collectFeelVariables(modeler) {
     modeler.get("elementRegistry").forEach((el) => {
       const s = findExt(el.businessObject, "zeebe:Script");
       if (s && s.resultVariable) vars.add(s.resultVariable);
+      // A business rule task's decision result is a variable downstream elements
+      // can read, so offer it for completion just like a script result.
+      const cd = findExt(el.businessObject, "zeebe:CalledDecision");
+      if (cd && cd.resultVariable) vars.add(cd.resultVariable);
     });
   } catch { /* best-effort */ }
   return [...vars].sort();
@@ -344,6 +348,51 @@ function upsertExt(modeler, element, type, props) {
     ext.values = [...(ext.values || []), node];
   }
   Object.assign(node, props);
+  modeling.updateProperties(element, { extensionElements: ext });
+}
+
+// decisionInputRowHTML renders one editable business-rule-task input mapping: a
+// decision input name (target) fed by a FEEL source over the instance's variables.
+// The stored source is '=' prefixed (Zeebe convention); it is shown stripped.
+function decisionInputRowHTML(i, source, target) {
+  const src = (source || "").replace(/^=\s*/, "");
+  return `<div class="dmn-input-row" data-i="${i}" style="display:flex;gap:6px;margin-bottom:6px">
+    <input type="text" class="dmn-in-target" value="${esc(target || "")}" placeholder="Season" style="flex:0 0 34%" title="Decision input name"/>
+    <input type="text" class="dmn-in-source" value="${esc(src)}" placeholder="order.season" style="flex:1" title="FEEL source over the instance's variables"/>
+  </div>`;
+}
+
+// saveDecisionInputs rebuilds a business rule task's zeebe:ioMapping input list
+// from the panel rows. A row with no target is dropped (an incomplete row); each
+// kept source is stored as a '=' prefixed FEEL expression. An empty list removes
+// the ioMapping element entirely so the model stays clean.
+function saveDecisionInputs(modeler, element, rows) {
+  const moddle = modeler.get("moddle");
+  const modeling = modeler.get("modeling");
+  const bo = element.businessObject;
+  let ext = bo.extensionElements;
+  if (!ext) {
+    ext = moddle.create("bpmn:ExtensionElements", { values: [] });
+    ext.$parent = bo;
+  }
+  let io = (ext.values || []).find((v) => v.$type === "zeebe:IoMapping");
+  const params = rows
+    .filter((r) => r.target !== "")
+    .map((r) => moddle.create("zeebe:Input", {
+      source: r.source === "" ? "" : (r.source.startsWith("=") ? r.source : "= " + r.source),
+      target: r.target,
+    }));
+  if (params.length === 0) {
+    if (io) ext.values = (ext.values || []).filter((v) => v !== io);
+  } else {
+    if (!io) {
+      io = moddle.create("zeebe:IoMapping");
+      io.$parent = ext;
+      ext.values = [...(ext.values || []), io];
+    }
+    params.forEach((p) => (p.$parent = io));
+    io.inputParameters = params;
+  }
   modeling.updateProperties(element, { extensionElements: ext });
 }
 
@@ -756,6 +805,7 @@ function wireProperties(root, modeler, api) {
               <option value="bpmn:Task" ${t === "bpmn:Task" ? "selected" : ""}>Undefined task</option>
               <option value="bpmn:ScriptTask" ${t === "bpmn:ScriptTask" ? "selected" : ""}>Script task (FEEL)</option>
               <option value="bpmn:ServiceTask" ${t === "bpmn:ServiceTask" ? "selected" : ""}>Service task (job worker)</option>
+              <option value="bpmn:BusinessRuleTask" ${t === "bpmn:BusinessRuleTask" ? "selected" : ""}>Business rule task (DMN)</option>
             </select></label>`;
 
         if (t === "bpmn:ScriptTask") {
@@ -771,6 +821,19 @@ function wireProperties(root, modeler, api) {
           html += `<h3>Task definition</h3>
             <label class="field"><span>Job type</span>
               <input type="text" id="f-jobtype" value="${esc(d.type || "")}" placeholder="payment"/></label>`;
+        } else if (t === "bpmn:BusinessRuleTask") {
+          const cd = findExt(bo, "zeebe:CalledDecision") || {};
+          const io = findExt(bo, "zeebe:IoMapping");
+          const inputs = (io && io.inputParameters) || [];
+          html += `<h3>Called decision (DMN)</h3>
+            <label class="field"><span>Decision ID</span>
+              <input type="text" id="f-decisionid" value="${esc(cd.decisionId || "")}" placeholder="Dish"/></label>
+            <label class="field"><span>Result variable</span>
+              <input type="text" id="f-resultvar" value="${esc(cd.resultVariable || "")}" placeholder="dish"/></label>
+            <p class="muted" style="font-size:12px">The decision's result is written into this process variable, so a downstream gateway can route on it.</p>
+            <h3>Decision inputs</h3>
+            <p class="muted" style="font-size:12px">Each row feeds one decision input from a FEEL expression over the instance's variables. Leave a row's name blank to drop it.</p>
+            <div id="dmn-inputs">${inputs.map((p, i) => decisionInputRowHTML(i, p.source, p.target)).join("")}${decisionInputRowHTML(inputs.length, "", "")}</div>`;
         }
       } else if (isDefaultFlow) {
         html += `<h3>Condition (FEEL)</h3>
@@ -843,6 +906,46 @@ function wireProperties(root, modeler, api) {
       fjob.addEventListener("change", () => {
         upsertExt(modeler, element, "zeebe:TaskDefinition", { type: (fjob.value || "").trim() });
       });
+    }
+
+    const fdecision = body.querySelector("#f-decisionid");
+    const fresultvar = body.querySelector("#f-resultvar");
+    const saveDecision = () => savePreservingPanel(() => {
+      upsertExt(modeler, element, "zeebe:CalledDecision", {
+        decisionId: (fdecision.value || "").trim(),
+        resultVariable: (fresultvar.value || "").trim(),
+      });
+    });
+    if (fdecision) fdecision.addEventListener("change", saveDecision);
+    if (fresultvar) fresultvar.addEventListener("change", saveDecision);
+
+    const inputsWrap = body.querySelector("#dmn-inputs");
+    if (inputsWrap) {
+      const collect = () => [...inputsWrap.querySelectorAll(".dmn-input-row")].map((row) => ({
+        target: (row.querySelector(".dmn-in-target").value || "").trim(),
+        source: (row.querySelector(".dmn-in-source").value || "").trim(),
+      }));
+      const saveInputs = () => savePreservingPanel(() => saveDecisionInputs(modeler, element, collect()));
+      // wireRow saves on blur and grows the list in place — typing into the last
+      // row's target appends a fresh empty row without a full re-render, so input
+      // focus is never yanked mid-edit.
+      const wireRow = (row) => {
+        const target = row.querySelector(".dmn-in-target");
+        const source = row.querySelector(".dmn-in-source");
+        target.addEventListener("change", saveInputs);
+        source.addEventListener("change", saveInputs);
+        target.addEventListener("input", () => {
+          const rows = [...inputsWrap.querySelectorAll(".dmn-input-row")];
+          if (row === rows[rows.length - 1] && target.value.trim() !== "") {
+            const tmp = document.createElement("div");
+            tmp.innerHTML = decisionInputRowHTML(rows.length, "", "");
+            const newRow = tmp.firstElementChild;
+            inputsWrap.appendChild(newRow);
+            wireRow(newRow);
+          }
+        });
+      };
+      [...inputsWrap.querySelectorAll(".dmn-input-row")].forEach(wireRow);
     }
 
     const fdur = body.querySelector("#f-duration");
