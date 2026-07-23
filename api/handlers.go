@@ -911,15 +911,15 @@ func (s *Server) handleListTasks(w http.ResponseWriter, _ *http.Request) {
 	})
 	if scanErr != nil {
 		writeError(w, http.StatusInternalServerError, "list tasks: "+scanErr.Error())
-		return
+	} else {
+		writeJSON(w, http.StatusOK, tasks)
 	}
-	writeJSON(w, http.StatusOK, tasks)
 }
 
 // handleCompleteTask completes a user task by its job key: it feeds the job
-// completion back to the processor (the same path a service-task worker uses),
-// drives jobs to idle, and returns the updated stats. 404 if the job doesn't
-// exist or is already completed.
+// completion back to the processor (the same path a service-task worker uses)
+// and drives any jobs that unblocked (e.g. a business rule task the completion
+// flowed into) to idle. 404 if the job doesn't exist or is already completed.
 func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
@@ -927,35 +927,27 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var (
-		found   bool
-		runErr  error
-		statErr error
-		stats   statsResp
+		found  bool
+		runErr error
 	)
 	s.do(func() {
-		if _, ok, getErr := s.store.GetJob(key); getErr != nil {
-			runErr = getErr
-			return
-		} else if !ok {
+		// A job that can't be read — absent, already completed, or unreadable — is
+		// simply not an open task (reported 404 below); GetJob reports ok=false in
+		// every such case, so there's no separate error path to plumb here.
+		if _, ok, err := s.store.GetJob(key); err != nil || !ok {
 			return
 		}
 		found = true
 		s.proc.CompleteJob(key)
-		if err := s.jobRunner.Drive(); err != nil {
-			runErr = err
-			return
-		}
-		stats, statErr = s.readStats()
+		runErr = s.jobRunner.Drive()
 	})
 	switch {
 	case runErr != nil:
 		writeError(w, http.StatusInternalServerError, "complete task: "+runErr.Error())
 	case !found:
 		writeError(w, http.StatusNotFound, "no open task with that key")
-	case statErr != nil:
-		writeError(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
 	default:
-		writeJSON(w, http.StatusOK, map[string]any{"taskKey": key, "stats": stats})
+		writeJSON(w, http.StatusOK, map[string]any{"taskKey": key})
 	}
 }
 

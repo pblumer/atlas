@@ -99,3 +99,11 @@ func TestCompleteTaskNotFound(t *testing.T) {
 		t.Errorf("complete non-existent task: %d, want 404", code)
 	}
 }
+
+func TestCompleteTaskInvalidKey(t *testing.T) {
+	ts := newTestServer(t)
+	code, _ := doReq(t, ts, http.MethodPost, "/api/v1/tasks/not-a-number/complete", "", "")
+	if code != http.StatusBadRequest {
+		t.Errorf("complete task with non-numeric key: %d, want 400", code)
+	}
+}
