@@ -202,13 +202,6 @@ func TestParseErrors(t *testing.T) {
 				<startEvent id="s"/><endEvent id="s"/></process></definitions>`,
 		},
 		{
-			name: "unsupported user task",
-			xml: `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
-				<startEvent id="s"/><userTask id="t"/><endEvent id="e"/>
-				<sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
-				<sequenceFlow id="f2" sourceRef="t" targetRef="e"/></process></definitions>`,
-		},
-		{
 			name: "unsupported receive task",
 			xml: `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
 				<startEvent id="s"/><receiveTask id="g"/></process></definitions>`,
@@ -371,14 +364,14 @@ func TestParseTimerCatchEventErrors(t *testing.T) {
 // unsupported element (a user task) rather than a confusing "unknown targetRef".
 func TestParseUnsupportedElementMessage(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
-		<startEvent id="s"/><userTask id="Activity_1"/><endEvent id="e"/>
+		<startEvent id="s"/><sendTask id="Activity_1"/><endEvent id="e"/>
 		<sequenceFlow id="f1" sourceRef="s" targetRef="Activity_1"/>
 		<sequenceFlow id="f2" sourceRef="Activity_1" targetRef="e"/></process></definitions>`
 	_, err := Parse(1, 1, strings.NewReader(xml))
 	if err == nil {
-		t.Fatal("want error for a <userTask>")
+		t.Fatal("want error for a <sendTask>")
 	}
-	for _, want := range []string{"Activity_1", "userTask", "service"} {
+	for _, want := range []string{"Activity_1", "sendTask", "service"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q should mention %q", err.Error(), want)
 		}

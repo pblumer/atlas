@@ -756,6 +756,7 @@ function wireProperties(root, modeler, api) {
               <option value="bpmn:Task" ${t === "bpmn:Task" ? "selected" : ""}>Undefined task</option>
               <option value="bpmn:ScriptTask" ${t === "bpmn:ScriptTask" ? "selected" : ""}>Script task (FEEL)</option>
               <option value="bpmn:ServiceTask" ${t === "bpmn:ServiceTask" ? "selected" : ""}>Service task (job worker)</option>
+              <option value="bpmn:UserTask" ${t === "bpmn:UserTask" ? "selected" : ""}>User task</option>
             </select></label>`;
 
         if (t === "bpmn:ScriptTask") {
@@ -771,6 +772,13 @@ function wireProperties(root, modeler, api) {
           html += `<h3>Task definition</h3>
             <label class="field"><span>Job type</span>
               <input type="text" id="f-jobtype" value="${esc(d.type || "")}" placeholder="payment"/></label>`;
+        } else if (t === "bpmn:UserTask") {
+          const a = findExt(bo, "zeebe:AssignmentDefinition") || {};
+          html += `<h3>Assignment</h3>
+            <label class="field"><span>Assignee</span>
+              <input type="text" id="f-assignee" value="${esc(a.assignee || "")}" placeholder="editor"/></label>
+            <label class="field"><span>Candidate groups</span>
+              <input type="text" id="f-groups" value="${esc(a.candidateGroups || "")}" placeholder="reviewers"/></label>`;
         }
       } else if (isDefaultFlow) {
         html += `<h3>Condition (FEEL)</h3>
@@ -844,6 +852,17 @@ function wireProperties(root, modeler, api) {
         upsertExt(modeler, element, "zeebe:TaskDefinition", { type: (fjob.value || "").trim() });
       });
     }
+
+    const fassignee = body.querySelector("#f-assignee");
+    const fgroups = body.querySelector("#f-groups");
+    const saveAssignment = () => {
+      upsertExt(modeler, element, "zeebe:AssignmentDefinition", {
+        assignee: (fassignee.value || "").trim(),
+        candidateGroups: (fgroups.value || "").trim(),
+      });
+    };
+    if (fassignee) fassignee.addEventListener("change", saveAssignment);
+    if (fgroups) fgroups.addEventListener("change", saveAssignment);
 
     const fdur = body.querySelector("#f-duration");
     if (fdur) {
