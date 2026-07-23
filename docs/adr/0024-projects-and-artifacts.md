@@ -1,6 +1,6 @@
 # ADR-0024: Projects as containers for heterogeneous artifacts
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-23
 - **Deciders:** Atlas maintainers
 

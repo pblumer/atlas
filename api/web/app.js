@@ -218,9 +218,12 @@ async function viewModelerHome() {
   view.innerHTML = `
     <div class="between">
       <h1>Modeler</h1>
-      <a class="btn" href="#/modeler/new">New diagram</a>
+      <div class="row">
+        <button class="btn neutral" id="new-project">New project</button>
+        <a class="btn" href="#/modeler/new">New diagram</a>
+      </div>
     </div>
-    <div id="drafts-section"></div>
+    <div id="projects-section"><p class="muted">Loading…</p></div>
     <h2 style="margin:22px 0 10px">Deployed</h2>
     <div class="card" style="padding:0">
       <table>
@@ -229,38 +232,98 @@ async function viewModelerHome() {
       </table>
     </div>`;
   const rows = document.getElementById("rows");
-  const draftsSection = document.getElementById("drafts-section");
+  const projectsSection = document.getElementById("projects-section");
 
-  // renderDrafts shows saved-but-not-deployed diagrams — work in progress the
-  // operator can reopen. Hidden entirely when there are none.
-  const renderDrafts = async () => {
-    let drafts = [];
-    try { drafts = await api("GET", "/api/v1/drafts"); } catch { drafts = []; }
-    if (!drafts.length) { draftsSection.innerHTML = ""; return; }
-    draftsSection.innerHTML = `
-      <h2 style="margin:6px 0 10px">Drafts <span class="muted" style="font-size:13px">· saved, not deployed</span></h2>
-      <div class="card" style="padding:0">
-        <table>
-          <thead><tr><th>Process</th><th>Saved</th><th></th></tr></thead>
-          <tbody>${drafts.map((d) => {
-            const label = d.name || d.processId;
-            const sub = d.name ? `<div class="muted" style="font-size:12px">${esc(d.processId)}</div>` : "";
-            const href = `#/modeler/draft/${encodeURIComponent(d.processId)}`;
-            return `<tr>
-              <td><a href="${href}"><b>${esc(label)}</b></a>${sub}</td>
-              <td class="muted">${esc(fmtTime(d.savedAt))}</td>
-              <td style="text-align:right; white-space:nowrap">
-                <a class="btn ghost" href="${href}">Open</a>
-                <button class="btn ghost danger" data-draftdel="${esc(d.processId)}">Delete</button>
-              </td>
-            </tr>`;
-          }).join("")}</tbody>
-        </table>
-      </div>`;
-    for (const b of draftsSection.querySelectorAll("button[data-draftdel]")) {
-      b.addEventListener("click", () => deleteDraft(b.dataset.draftdel, renderDrafts));
+  // renderProjects shows saved-but-not-deployed diagrams (drafts) organized into
+  // projects (ADR-0024). Each project is a card holding its artifacts; drafts
+  // that belong to no existing project fall into an "Ungrouped" bucket. A per-row
+  // "Project" dropdown moves a draft between projects.
+  const renderProjects = async () => {
+    let projects = [], drafts = [];
+    try {
+      [projects, drafts] = await Promise.all([
+        api("GET", "/api/v1/projects"),
+        api("GET", "/api/v1/drafts"),
+      ]);
+    } catch (e) { projectsSection.innerHTML = `<p class="empty">${esc(e.message)}</p>`; return; }
+
+    // Bucket drafts by project; an empty or unknown projectId reads as Ungrouped.
+    const known = new Set(projects.map((p) => p.id));
+    const byProject = new Map();
+    const ungrouped = [];
+    for (const d of drafts) {
+      if (d.projectId && known.has(d.projectId)) {
+        if (!byProject.has(d.projectId)) byProject.set(d.projectId, []);
+        byProject.get(d.projectId).push(d);
+      } else ungrouped.push(d);
     }
+
+    // The shared "move to…" options: Ungrouped plus every project, current selected.
+    const moveOptions = (current) =>
+      [`<option value=""${!current ? " selected" : ""}>Ungrouped</option>`]
+        .concat(projects.map((p) =>
+          `<option value="${esc(p.id)}"${p.id === current ? " selected" : ""}>${esc(p.name)}</option>`))
+        .join("");
+
+    const draftRows = (list) => list.map((d) => {
+      const label = d.name || d.processId;
+      const sub = d.name ? `<div class="muted" style="font-size:12px">${esc(d.processId)}</div>` : "";
+      const href = `#/modeler/draft/${encodeURIComponent(d.processId)}`;
+      return `<tr>
+        <td><a href="${href}"><b>${esc(label)}</b></a>${sub}</td>
+        <td class="muted">${esc(fmtTime(d.savedAt))}</td>
+        <td style="text-align:right; white-space:nowrap">
+          <select data-move="${esc(d.processId)}" title="Move to project"
+            style="width:auto; display:inline-block; padding:5px 8px; font-size:13px">${moveOptions(d.projectId || "")}</select>
+          <a class="btn ghost" href="${href}">Open</a>
+          <button class="btn ghost danger" data-draftdel="${esc(d.processId)}">Delete</button>
+        </td>
+      </tr>`;
+    }).join("");
+
+    const draftTable = (list) => `<table><tbody>${draftRows(list)}</tbody></table>`;
+
+    const projectCard = (p) => {
+      const list = byProject.get(p.id) || [];
+      const body = list.length ? draftTable(list)
+        : `<p class="empty" style="margin:0; padding:16px">No artifacts yet — create a diagram and move it here.</p>`;
+      const n = p.artifacts;
+      return `<div class="card" style="padding:0; margin-bottom:14px">
+        <div class="between" style="padding:12px 14px; border-bottom:1px solid var(--border)">
+          <div><b>${esc(p.name)}</b> <span class="muted" style="font-size:12px">· ${n} artifact${n === 1 ? "" : "s"}</span></div>
+          <div class="row">
+            <button class="btn ghost" data-projrename="${esc(p.id)}" data-projname="${esc(p.name)}">Rename</button>
+            <button class="btn ghost danger" data-projdel="${esc(p.id)}" data-projname="${esc(p.name)}">Delete</button>
+          </div>
+        </div>
+        ${body}
+      </div>`;
+    };
+
+    let html = "";
+    if (projects.length) {
+      html += `<h2 style="margin:6px 0 10px">Projects</h2>` + projects.map(projectCard).join("");
+    }
+    if (ungrouped.length) {
+      html += `<h2 style="margin:${projects.length ? "18px" : "6px"} 0 10px">Ungrouped <span class="muted" style="font-size:13px">· drafts not in a project</span></h2>
+        <div class="card" style="padding:0">${draftTable(ungrouped)}</div>`;
+    }
+    if (!projects.length && !ungrouped.length) {
+      html = `<div class="card empty">No projects or drafts yet. Create a <b>New project</b> to
+        organize your BPMN diagrams, or start a <a href="#/modeler/new">New diagram</a> and save it.</div>`;
+    }
+    projectsSection.innerHTML = html;
+
+    for (const b of projectsSection.querySelectorAll("button[data-draftdel]"))
+      b.addEventListener("click", () => deleteDraft(b.dataset.draftdel, renderProjects));
+    for (const b of projectsSection.querySelectorAll("button[data-projrename]"))
+      b.addEventListener("click", () => renameProject(b.dataset.projrename, b.dataset.projname, renderProjects));
+    for (const b of projectsSection.querySelectorAll("button[data-projdel]"))
+      b.addEventListener("click", () => deleteProject(b.dataset.projdel, b.dataset.projname, renderProjects));
+    for (const s of projectsSection.querySelectorAll("select[data-move]"))
+      s.addEventListener("change", () => moveDraft(s.dataset.move, s.value, renderProjects));
   };
+  document.getElementById("new-project").addEventListener("click", () => createProject(renderProjects));
 
   const render = async () => {
     try {
@@ -293,7 +356,7 @@ async function viewModelerHome() {
       rows.innerHTML = `<tr><td colspan="4" class="empty">${esc(e.message)}</td></tr>`;
     }
   };
-  await Promise.all([renderDrafts(), render()]);
+  await Promise.all([renderProjects(), render()]);
 }
 
 async function deleteDraft(processId, reload) {
@@ -319,6 +382,48 @@ async function deleteProcess(processId, groups, reload) {
   }
   if (failed) toast(`Could not delete ${failed} version(s) — running instances?`, "err");
   else toast(`Deleted "${processId}"`, "ok");
+  await reload();
+}
+
+// ---------- Projects (ADR-0024) ----------
+async function createProject(reload) {
+  const name = window.prompt("Project name");
+  if (name == null) return; // cancelled
+  const trimmed = name.trim();
+  if (!trimmed) { toast("Project name is required", "err"); return; }
+  try {
+    await api("POST", "/api/v1/projects", { name: trimmed });
+    toast(`Created project "${trimmed}"`, "ok");
+  } catch (e) { toast("could not create project: " + e.message, "err"); }
+  await reload();
+}
+
+async function renameProject(id, current, reload) {
+  const name = window.prompt("Rename project", current);
+  if (name == null) return;
+  const trimmed = name.trim();
+  if (!trimmed) { toast("Project name is required", "err"); return; }
+  try {
+    await api("PATCH", `/api/v1/projects/${encodeURIComponent(id)}`, { name: trimmed });
+    toast("Renamed project", "ok");
+  } catch (e) { toast("could not rename project: " + e.message, "err"); }
+  await reload();
+}
+
+async function deleteProject(id, name, reload) {
+  if (!window.confirm(`Delete project "${name}"? Its diagrams are kept and become Ungrouped.`)) return;
+  try {
+    await api("DELETE", `/api/v1/projects/${encodeURIComponent(id)}`);
+    toast(`Deleted project "${name}"`, "ok");
+  } catch (e) { toast("could not delete project: " + e.message, "err"); }
+  await reload();
+}
+
+// moveDraft reassigns a draft to a project (or to Ungrouped when projectId is "").
+async function moveDraft(processId, projectId, reload) {
+  try {
+    await api("PATCH", `/api/v1/drafts/${encodeURIComponent(processId)}`, { projectId });
+  } catch (e) { toast("could not move draft: " + e.message, "err"); }
   await reload();
 }
 
