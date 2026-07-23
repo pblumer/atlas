@@ -240,12 +240,21 @@ function activeTab(root) {
 }
 
 // collectFeelVariables gathers names an author is likely to reference in a FEEL
-// expression, for the completion popup. Process variables aren't declared up
-// front, so the best static signal is the result variables written by script
-// tasks elsewhere in the diagram — a token that has run through one carries that
-// variable downstream. Best-effort: a failure just yields no variable hints.
+// expression, for the completion popup. Two static signals: the start variables
+// the process declares up front (atlas:StartForm), which are supplied when an
+// instance starts; and the result variables written by script tasks elsewhere in
+// the diagram — a token that has run through one carries that variable
+// downstream. Best-effort: a failure just yields no variable hints.
 function collectFeelVariables(modeler) {
   const vars = new Set();
+  try {
+    const rootBo = rootProcess(modeler);
+    if (rootBo) {
+      for (const v of readStartVariables(rootBo)) {
+        if (v.name) vars.add(v.name);
+      }
+    }
+  } catch { /* best-effort */ }
   try {
     modeler.get("elementRegistry").forEach((el) => {
       const s = findExt(el.businessObject, "zeebe:Script");
