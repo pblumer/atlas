@@ -237,6 +237,11 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			return nil, err
 		}
 	}
+	for _, g := range proc.ParallelGateways {
+		if err := register(g.Id, b.AddParallelGateway()); err != nil {
+			return nil, err
+		}
+	}
 	for _, ev := range proc.IntermediateCatchEvents {
 		switch {
 		case ev.Timer != nil:
@@ -305,13 +310,12 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	}{
 		{"userTask", proc.UserTasks},
 		{"sendTask", proc.SendTasks}, {"receiveTask", proc.ReceiveTasks},
-		{"parallelGateway", proc.ParallelGateways},
 		{"inclusiveGateway", proc.InclusiveGateways},
 	} {
 		if len(u.nodes) > 0 {
 			return nil, fmt.Errorf("compiler: element %q is a <%s>, which Atlas can't execute yet "+
 				"(supported: start/end events, tasks (undefined/manual pass-through, service, script, "+
-				"business rule), exclusive gateways, and timer/message intermediate events)", u.nodes[0].Id, u.label)
+				"business rule), exclusive and parallel gateways, and timer/message intermediate events)", u.nodes[0].Id, u.label)
 		}
 	}
 

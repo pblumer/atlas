@@ -120,6 +120,7 @@ export async function mountEditor(root, { api, toast, key, draftId }) {
       </div>
       <div class="editor-body">
         <div id="canvas"></div>
+        <div class="props-resizer" id="props-resizer" title="Drag to resize the properties panel"></div>
         <aside class="props" id="props">
           <div class="phead"><span class="ptype" id="p-icon">–</span>
             <div><div class="kv" id="p-typename">No selection</div><b id="p-name">—</b></div></div>
@@ -169,6 +170,53 @@ export async function mountEditor(root, { api, toast, key, draftId }) {
   const rerender = wireProperties(root, modeler, api);
   wireTabs(root, rerender);
   wireActions(root, modeler, api, toast);
+  wireResizer(root, modeler);
+}
+
+// wireResizer makes the properties panel width draggable, so authoring long FEEL
+// expressions and scripts has room. The chosen width is remembered across mounts
+// (localStorage), and the bpmn-js canvas is nudged to re-fit after a drag.
+function wireResizer(root, modeler) {
+  const resizer = root.querySelector("#props-resizer");
+  const props = root.querySelector("#props");
+  if (!resizer || !props) return;
+  const KEY = "atlas.propsWidth";
+  const clamp = (w) => Math.max(240, Math.min(900, w));
+
+  const saved = parseInt(localStorage.getItem(KEY) || "", 10);
+  if (saved) props.style.width = clamp(saved) + "px";
+
+  let startX = 0, startW = 0;
+  const onMove = (e) => {
+    // The panel is on the right, so dragging the divider left widens it.
+    props.style.width = clamp(startW - (e.clientX - startX)) + "px";
+  };
+  const onUp = () => {
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+    resizer.classList.remove("dragging");
+    document.body.style.userSelect = "";
+    localStorage.setItem(KEY, String(parseInt(props.style.width, 10) || 300));
+    // Let bpmn-js recompute its viewport for the canvas's new width.
+    try { modeler && modeler.get("canvas").resized(); } catch { /* ignore */ }
+    window.dispatchEvent(new Event("resize"));
+  };
+  resizer.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    startX = e.clientX;
+    startW = props.getBoundingClientRect().width;
+    resizer.classList.add("dragging");
+    document.body.style.userSelect = "none";
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  });
+  // Double-click the divider to reset to the default width.
+  resizer.addEventListener("dblclick", () => {
+    props.style.width = "300px";
+    localStorage.setItem(KEY, "300");
+    try { modeler && modeler.get("canvas").resized(); } catch { /* ignore */ }
+    window.dispatchEvent(new Event("resize"));
+  });
 }
 
 // wireTabs toggles the Design/Implement tabs. Design is the descriptive view
