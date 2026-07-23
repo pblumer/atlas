@@ -135,57 +135,10 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		persistErr error
 	)
 	s.do(func() {
-		deployables, err := compiler.ParseAll(s.nextKey, 1, bytes.NewReader(body))
-		if err != nil {
-			compErr = err
+		var deployed []deployedProcess
+		deployed, compErr, persistErr = s.deployModel(body, time.Now().Unix())
+		if compErr != nil || persistErr != nil {
 			return
-		}
-		deployedAt := time.Now().Unix()
-		deployed := make([]deployedProcess, 0, len(deployables))
-		for i := range deployables {
-			cp := deployables[i].Process
-			pid := cp.Intern(cp.BpmnProcessId)
-			version := s.versions[pid] + 1
-			cp.Version = version
-			key := cp.Key // ParseAll assigned s.nextKey+i in document order
-			// A pool's name labels its process; fall back to the process's own name.
-			name := deployables[i].PoolName
-			if name == "" {
-				name = deployables[i].ProcessName
-			}
-
-			// Durable before visible (I2, ADR-0019): persist before registering. A
-			// mid-collaboration failure leaves earlier pools deployed (no rollback
-			// yet) and returns 500 — an honest limitation until deployment is a
-			// first-class WAL event (ADR-0023).
-			if err := s.deploys.save(persistedDeployment{
-				Key:        key,
-				ProcessID:  pid,
-				Name:       name,
-				Version:    version,
-				DeployedAt: deployedAt,
-				XML:        string(body),
-			}); err != nil {
-				persistErr = err
-				return
-			}
-
-			s.versions[pid] = version
-			s.proc.Deploy(cp)
-			s.deployments[key] = &deployment{
-				Key:        key,
-				ProcessID:  pid,
-				Name:       name,
-				Version:    version,
-				DeployedAt: deployedAt,
-				xml:        body,
-				cp:         cp,
-			}
-			s.order = append(s.order, key)
-			if key >= s.nextKey {
-				s.nextKey = key + 1
-			}
-			deployed = append(deployed, deployedProcess{Key: key, ProcessID: pid, Name: name, Version: version})
 		}
 		resp = deployResp{
 			Key:         deployed[0].Key,
@@ -203,6 +156,65 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusOK, resp)
 	}
+}
+
+// deployModel compiles and registers every executable process in one BPMN model
+// — one for a plain model, several for a collaboration (one per pool) — persisting
+// each before registering it (durable before visible, I2 / ADR-0019). It returns
+// the deployed processes, or a compile error (a client error: the model is
+// invalid) or a persist error (a server error), the two failure modes the deploy
+// handlers distinguish. It MUST be called on the run-loop goroutine (inside do),
+// since it mutates the deployment registry and the processor.
+//
+// A mid-model persist failure leaves earlier processes deployed (no rollback
+// yet) — an honest limitation until deployment is a first-class WAL event.
+func (s *Server) deployModel(body []byte, deployedAt int64) (deployed []deployedProcess, compErr, persistErr error) {
+	deployables, err := compiler.ParseAll(s.nextKey, 1, bytes.NewReader(body))
+	if err != nil {
+		return nil, err, nil
+	}
+	deployed = make([]deployedProcess, 0, len(deployables))
+	for i := range deployables {
+		cp := deployables[i].Process
+		pid := cp.Intern(cp.BpmnProcessId)
+		version := s.versions[pid] + 1
+		cp.Version = version
+		key := cp.Key // ParseAll assigned s.nextKey+i in document order
+		// A pool's name labels its process; fall back to the process's own name.
+		name := deployables[i].PoolName
+		if name == "" {
+			name = deployables[i].ProcessName
+		}
+
+		if err := s.deploys.save(persistedDeployment{
+			Key:        key,
+			ProcessID:  pid,
+			Name:       name,
+			Version:    version,
+			DeployedAt: deployedAt,
+			XML:        string(body),
+		}); err != nil {
+			return deployed, nil, err
+		}
+
+		s.versions[pid] = version
+		s.proc.Deploy(cp)
+		s.deployments[key] = &deployment{
+			Key:        key,
+			ProcessID:  pid,
+			Name:       name,
+			Version:    version,
+			DeployedAt: deployedAt,
+			xml:        body,
+			cp:         cp,
+		}
+		s.order = append(s.order, key)
+		if key >= s.nextKey {
+			s.nextKey = key + 1
+		}
+		deployed = append(deployed, deployedProcess{Key: key, ProcessID: pid, Name: name, Version: version})
+	}
+	return deployed, nil, nil
 }
 
 // handleListProcesses lists deployed definitions in registration order.

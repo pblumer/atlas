@@ -315,6 +315,7 @@ async function viewModelerHome() {
         <div class="between" style="padding:12px 14px; border-bottom:1px solid var(--border)">
           <div><b>${esc(p.name)}</b> <span class="muted" style="font-size:12px">· ${n} artifact${n === 1 ? "" : "s"}</span></div>
           <div class="row">
+            <button class="btn" data-projdeploy="${esc(p.id)}">Deploy</button>
             <button class="btn ghost" data-refadd="${esc(p.id)}">Add DMN reference</button>
             ${rl.length ? `<button class="btn ghost" data-projvalidate="${esc(p.id)}">Validate DMN</button>` : ""}
             <button class="btn ghost" data-projrename="${esc(p.id)}" data-projname="${esc(p.name)}">Rename</button>
@@ -353,6 +354,8 @@ async function viewModelerHome() {
       b.addEventListener("click", () => validateDmnRef(b.dataset.refvalidate));
     for (const b of projectsSection.querySelectorAll("button[data-projvalidate]"))
       b.addEventListener("click", () => validateProject(b.dataset.projvalidate));
+    for (const b of projectsSection.querySelectorAll("button[data-projdeploy]"))
+      b.addEventListener("click", () => deployProject(b.dataset.projdeploy, () => Promise.all([renderProjects(), render()])));
     for (const s of projectsSection.querySelectorAll("select[data-move]"))
       s.addEventListener("change", () => moveDraft(s.dataset.move, s.value, renderProjects));
     for (const s of projectsSection.querySelectorAll("select[data-moveref]"))
@@ -538,6 +541,33 @@ async function validateProject(projectId) {
     toast(rep.ok ? "All DMN references are valid" : "Some DMN references are unresolved or invalid",
       rep.ok ? "ok" : "err");
   } catch (e) { toast("could not validate project: " + e.message, "err"); }
+}
+
+// deployProject deploys the whole project: the server validates its DMN
+// references (the deploy-time gate) and, only if all pass, deploys its BPMN
+// diagrams as runnable definitions. A refusal (409) carries the reason and the
+// per-reference results, which we surface without a reload; a success reloads so
+// the new definitions show under "Deployed". Uses a raw fetch so the refusal
+// body (which is not an {error} shape) is read instead of thrown away.
+async function deployProject(id, reload) {
+  if (!window.confirm("Deploy this project? Its DMN references are validated, then its BPMN diagrams are deployed as runnable definitions.")) return;
+  let rep;
+  try {
+    const res = await fetch(`/api/v1/projects/${encodeURIComponent(id)}/deploy`, { method: "POST" });
+    rep = await res.json();
+    if (res.ok && rep.deployed) {
+      const n = (rep.definitions || []).length;
+      toast(n ? `Deployed ${n} definition${n === 1 ? "" : "s"}` : "Nothing to deploy in this project", "ok");
+      await reload();
+      return;
+    }
+  } catch (e) {
+    toast("deploy failed: " + e.message, "err");
+    return;
+  }
+  // Refused (or a server error): show why and reflect any DMN results in place.
+  toast(rep.reason || rep.error || "Deploy refused", "err");
+  for (const r of rep.references || []) applyRefStatus(r.id, r);
 }
 
 // summarizeInstances rolls the flat instance list up per process id, so the

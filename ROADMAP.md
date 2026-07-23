@@ -188,11 +188,17 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   source can replace it behind the interface) fetches the model XML and the
   embedded temis engine compiles it — the Modeler shows each reference as
   valid / invalid / unresolved, and a project preflight
-  (`POST /api/v1/projects/{id}/validate`) gates on all references being valid. A
-  project is a design-time grouping layer only (below the HTTP API, no engine
-  impact). Next: a temis git/service resolver, project bundle-deploy that runs
-  this preflight and then deploys the BPMN + DMN together, and further artifact
-  types (forms, element templates, READMEs, nested folders).
+  (`POST /api/v1/projects/{id}/validate`) gates on all references being valid.
+  **Project bundle-deploy** (`POST /api/v1/projects/{id}/deploy`) ties it together:
+  it runs the DMN preflight and then deploys every BPMN draft as a runnable
+  definition, "validate all then deploy all" so a non-compiling draft or an
+  invalid reference refuses the whole bundle before anything is registered; the
+  Modeler's per-project **Deploy** button drives it. A project is a design-time
+  grouping layer only (below the HTTP API, no engine impact). Next: wiring the
+  validated DMN into the engine's runtime so business-rule tasks execute it (the
+  ADR-0014 follow-up — the server does not run DMN yet), a temis git/service
+  resolver, and further artifact types (forms, element templates, READMEs, nested
+  folders).
 - 🔲 Later: a polished "workbench" experience on top.
 
 ---
