@@ -1099,6 +1099,93 @@ func (s *Server) handleCancelInstance(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// --- user tasks (ADR-0028) ---
+
+type taskResp struct {
+	Key                uint64 `json:"key"`
+	ProcessInstanceKey uint64 `json:"processInstanceKey"`
+	ProcessDefKey      uint64 `json:"processDefKey,omitempty"`
+	ProcessID          string `json:"processId,omitempty"`
+	ElementID          string `json:"elementId,omitempty"`
+	Assignee           string `json:"assignee,omitempty"`
+	CandidateGroups    string `json:"candidateGroups,omitempty"`
+}
+
+// handleListTasks lists open user tasks — activatable jobs of the reserved
+// user-task type. Each entry carries the task's key, the instance it belongs to,
+// and the element's assignment metadata from the compiled process.
+func (s *Server) handleListTasks(w http.ResponseWriter, _ *http.Request) {
+	tasks := []taskResp{}
+	var scanErr error
+	s.do(func() {
+		scanErr = s.store.ActivatableJobs(compiler.UserTaskJobTypeIndex, func(jobKey uint64) error {
+			jv, ok, err := s.store.GetJob(jobKey)
+			if err != nil || !ok {
+				return err
+			}
+			tr := taskResp{
+				Key:                jobKey,
+				ProcessInstanceKey: jv.ProcessInstanceKey,
+			}
+			if ei, ok, err := s.store.GetElementInstance(jv.ElementInstanceKey); err == nil && ok {
+				tr.ProcessDefKey = ei.ProcessDefKey
+				if d, dok := s.deployments[ei.ProcessDefKey]; dok {
+					tr.ProcessID = d.ProcessID
+					cp := d.cp
+					tr.ElementID = cp.ElementBpmnId(ei.ElementId)
+					if n := cp.Node(ei.ElementId); n.Type == compiler.TypeUserTask {
+						detail := cp.UserTask(n.Detail)
+						tr.Assignee = cp.Intern(detail.Assignee)
+						tr.CandidateGroups = cp.Intern(detail.CandidateGroups)
+					}
+				}
+			}
+			tasks = append(tasks, tr)
+			return nil
+		})
+	})
+	if scanErr != nil {
+		writeError(w, http.StatusInternalServerError, "list tasks: "+scanErr.Error())
+	} else {
+		writeJSON(w, http.StatusOK, tasks)
+	}
+}
+
+// handleCompleteTask completes a user task by its job key: it feeds the job
+// completion back to the processor (the same path a service-task worker uses)
+// and drives any jobs that unblocked (e.g. a business rule task the completion
+// flowed into) to idle. 404 if the job doesn't exist or is already completed.
+func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid task key")
+		return
+	}
+	var (
+		found  bool
+		runErr error
+	)
+	s.do(func() {
+		// A job that can't be read — absent, already completed, or unreadable — is
+		// simply not an open task (reported 404 below); GetJob reports ok=false in
+		// every such case, so there's no separate error path to plumb here.
+		if _, ok, err := s.store.GetJob(key); err != nil || !ok {
+			return
+		}
+		found = true
+		s.proc.CompleteJob(key)
+		runErr = s.jobRunner.Drive()
+	})
+	switch {
+	case runErr != nil:
+		writeError(w, http.StatusInternalServerError, "complete task: "+runErr.Error())
+	case !found:
+		writeError(w, http.StatusNotFound, "no open task with that key")
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"taskKey": key})
+	}
+}
+
 // handleStats returns the live instance counts.
 func (s *Server) handleStats(w http.ResponseWriter, _ *http.Request) {
 	var (

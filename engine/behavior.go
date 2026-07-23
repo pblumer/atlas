@@ -44,6 +44,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeScriptTask] = scriptTaskBehavior{}
 	p.behaviors[compiler.TypeBusinessRuleTask] = businessRuleTaskBehavior{}
 	p.behaviors[compiler.TypeConnectorTask] = connectorTaskBehavior{}
+	p.behaviors[compiler.TypeUserTask] = userTaskBehavior{}
 	p.behaviors[compiler.TypeExclusiveGateway] = exclusiveGatewayBehavior{}
 	p.behaviors[compiler.TypeTimerCatchEvent] = timerCatchEventBehavior{}
 	p.behaviors[compiler.TypeMessageCatchEvent] = messageCatchEventBehavior{}
@@ -704,6 +705,29 @@ func (connectorTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *m
 }
 
 func (connectorTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// userTaskBehavior: a human task. On activation it creates a job (carrying the
+// reserved user-task job type) and waits — the "worker" is a person using the
+// Tasks app, not an external service (ADR-0028). Completing the job (via the
+// task API) drives the token onward, exactly like a service task.
+type userTaskBehavior struct{}
+
+func (userTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.UserTask(cp.Node(ei.ElementId).Detail)
+	jobKey := c.NewKey()
+	c.AppendJobEvent(jobKey, model.IntentJobCreated, model.JobValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		JobType:            detail.JobType,
+		Retries:            detail.Retries,
+	})
+	c.NotifyJobAvailable(detail.JobType)
+}
+
+func (userTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	completeAndTakeFlows(c, key, ei)
 }
 
