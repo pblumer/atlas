@@ -159,19 +159,28 @@ type UserTaskDetail struct {
 }
 
 // ConnectorTaskDetail is the per-connector-task data a behavior needs at runtime.
-// A connector task delegates to a server-registered connector (e.g. a clio event
-// store) evaluated off the hot path by a job worker (ADR-0036). Like a service
-// task it runs as a job, so it carries a JobType (a reserved connector sentinel)
-// the in-process connector worker subscribes to. Connector names the
-// server-registered connector to resolve at runtime; Subject and EventType are
-// the interned target coordinates the worker sends (a stand-in for full payload
-// mappings until the variable subsystem matures — the worker sends the instance's
-// variables as the event body).
+// A connector task delegates to a server-registered connector evaluated off the
+// hot path by a job worker (ADR-0036). Like a service task it runs as a job, so
+// it carries a JobType (a reserved connector sentinel) the in-process connector
+// worker subscribes to, and Connector names the server-registered connector to
+// resolve at runtime. The JobType also selects which connector kind this is, and
+// thus which of the kind-specific fields below are populated:
+//
+//   - clio "write-events" (JobType == ClioWriteJobType): Subject and EventType are
+//     the interned clio coordinates the appended event lands under.
+//   - HTTP REST (JobType == RestJobType): Method and Path are the interned request
+//     method (e.g. "POST") and the path appended to the connector's base endpoint.
+//
+// Unused fields for a given kind are -1 (Intern maps that back to ""). Both kinds
+// send the instance's variables as the request/event body — a stand-in for full
+// payload mappings until the variable subsystem matures.
 type ConnectorTaskDetail struct {
 	JobType   int32 // interned reserved connector job type → index
 	Connector int32 // interned connector name → index
-	Subject   int32 // interned target subject → index
-	EventType int32 // interned event type → index
+	Subject   int32 // interned clio target subject → index, -1 if not a clio task
+	EventType int32 // interned clio event type → index, -1 if not a clio task
+	Method    int32 // interned HTTP method → index, -1 if not a REST task
+	Path      int32 // interned HTTP path → index, -1 if not a REST task
 	Retries   int32
 }
 

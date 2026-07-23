@@ -5,13 +5,27 @@
 - **Deciders:** Atlas engine team
 
 > **Implementation status.** Variant A (the connector task via the job path) is
-> implemented for the `clio:write-events` operation: a `<serviceTask>` bearing an
-> `<atlas:clioConnector connector subject eventType>` extension compiles to a
-> `TypeConnectorTask` carrying the reserved `io.atlas.clio.write` job type; the
-> `clio` package provides the connector `Registry`, a `Client` (with an HTTP
-> implementation) and the job `Handler`. The connector worker is not yet wired
-> into the HTTP server run loop (the DMN worker isn't either — same follow-up).
-> Variant B (the event mirror) and `clio:query` remain future work.
+> implemented for two connector kinds that ride the same framework, discriminated
+> by the reserved job type a `TypeConnectorTask` carries:
+>
+> - **clio `write-events`** — a `<serviceTask>` bearing an
+>   `<atlas:clioConnector connector subject eventType>` extension carries the
+>   `io.atlas.clio.write` job type; the `clio` package provides the connector
+>   `Registry`, a `Client` (with an HTTP implementation) and the job `Handler`.
+> - **HTTP REST** — a `<serviceTask>` bearing an
+>   `<atlas:restConnector connector method path>` extension carries the
+>   `io.atlas.http.rest` job type; the `rest` package provides the same
+>   `Registry`/`Client`/`Handler` trio, calling a server-registered REST API and
+>   sending the instance's variables as the JSON request body (for methods that
+>   carry one). Like the clio worker, it surfaces its response through a result
+>   sink until output mappings land (Milestone 1).
+>
+> `ConnectorTaskDetail` carries a `Connector` name plus the kind-specific
+> coordinates (clio: subject/eventType; REST: method/path); the generic
+> `connectorTaskBehavior` only creates the job, so no engine change was needed for
+> the second kind. Neither connector worker is yet wired into the HTTP server run
+> loop (the DMN worker isn't either — same follow-up). Variant B (the event
+> mirror) and `clio:query` remain future work.
 
 ## Context and problem statement
 

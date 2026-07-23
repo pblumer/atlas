@@ -39,6 +39,11 @@ const UserTaskJobTypeIndex int32 = 1
 // subscribes to DMNJobType.
 const ClioWriteJobType = "io.atlas.clio.write"
 
+// RestJobType is the reserved job type an HTTP-REST connector task carries. The
+// in-process REST connector worker subscribes to it to call the configured REST
+// API (ADR-0036), the same way the clio worker subscribes to ClioWriteJobType.
+const RestJobType = "io.atlas.http.rest"
+
 // Builder constructs a CompiledProcess programmatically. It stands in for the
 // XML parse/resolve/linearize pipeline until that front end exists: callers add
 // nodes and flows, and Build linearizes them into the immutable form (assigning
@@ -202,6 +207,28 @@ func (b *Builder) AddClioWriteTask(connector, subject, eventType string, retries
 		Connector: b.intern(connector),
 		Subject:   b.intern(subject),
 		EventType: b.intern(eventType),
+		Method:    -1, // not a REST task
+		Path:      -1,
+		Retries:   retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// AddRestConnectorTask adds an HTTP-REST connector task and returns its element
+// id. Like a service task it creates a job on activation and waits; the job
+// carries the reserved RestJobType so the in-process REST worker picks it up,
+// calls the named connector's REST API with the given method and path (resolved
+// against the connector's server-configured base endpoint), and completes the job
+// (ADR-0036). method is stored as given (the parser uppercases and validates it).
+func (b *Builder) AddRestConnectorTask(connector, method, path string, retries int32) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:   b.intern(RestJobType),
+		Connector: b.intern(connector),
+		Subject:   -1, // not a clio task
+		EventType: -1,
+		Method:    b.intern(method),
+		Path:      b.intern(path),
 		Retries:   retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)

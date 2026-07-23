@@ -14,6 +14,25 @@ import (
 // defaultRetries is used when a service task's task definition omits retries.
 const defaultRetries = 3
 
+// restMethods is the set of HTTP methods a REST connector task may use. The set
+// is validated at deploy time (invariant I5) so the runtime worker never has to.
+var restMethods = map[string]bool{
+	"GET": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true, "HEAD": true,
+}
+
+// normalizeHTTPMethod upper-cases a REST connector's method (defaulting to GET
+// when omitted) and rejects anything outside restMethods.
+func normalizeHTTPMethod(m string) (string, error) {
+	if m == "" {
+		return "GET", nil
+	}
+	up := strings.ToUpper(strings.TrimSpace(m))
+	if !restMethods[up] {
+		return "", fmt.Errorf("unsupported HTTP method %q", m)
+	}
+	return up, nil
+}
+
 // Parse reads a BPMN 2.0 XML model and compiles the first <process> into an
 // immutable CompiledProcess keyed by key at the given version. It is the front
 // end to the linearizer (compiler.md stages 1–2 and 6): it parses the XML,
@@ -198,6 +217,22 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 				return nil, fmt.Errorf("compiler: clio connector task %q needs connector, subject, and eventType", st.Id)
 			}
 			if err := register(st.Id, b.AddClioWriteTask(c.Connector, c.Subject, c.EventType, retries)); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		// A service task bearing an <atlas:restConnector> extension is an HTTP-REST
+		// connector task: it delegates to a server-registered REST connector via the
+		// job path (ADR-0036), not to an external service-task worker.
+		if c := st.Rest; c != nil {
+			if c.Connector == "" || c.Path == "" {
+				return nil, fmt.Errorf("compiler: rest connector task %q needs connector and path", st.Id)
+			}
+			method, err := normalizeHTTPMethod(c.Method)
+			if err != nil {
+				return nil, fmt.Errorf("compiler: rest connector task %q: %w", st.Id, err)
+			}
+			if err := register(st.Id, b.AddRestConnectorTask(c.Connector, method, c.Path, retries)); err != nil {
 				return nil, err
 			}
 			continue
@@ -534,6 +569,10 @@ type xmlServiceTask struct {
 	// Clio, when present, marks this service task a clio connector task (ADR-0036).
 	// The pointer is nil when the <atlas:clioConnector> extension is absent.
 	Clio *xmlClioConnector `xml:"extensionElements>clioConnector"`
+	// Rest, when present, marks this service task an HTTP-REST connector task
+	// (ADR-0036). The pointer is nil when the <atlas:restConnector> extension is
+	// absent.
+	Rest *xmlRestConnector `xml:"extensionElements>restConnector"`
 }
 
 // A clio connector task's parameters, carried on a service task as an
@@ -545,6 +584,18 @@ type xmlClioConnector struct {
 	Connector string `xml:"connector,attr"`
 	Subject   string `xml:"subject,attr"`
 	EventType string `xml:"eventType,attr"`
+}
+
+// An HTTP-REST connector task's parameters, carried on a service task as an
+// <atlas:restConnector connector="..." method="..." path="..."/> extension
+// element. connector names a server-registered connector (its base endpoint and
+// credentials live in the server config, never in the model); method is the HTTP
+// method and path is appended to the connector's base endpoint to form the
+// request URL.
+type xmlRestConnector struct {
+	Connector string `xml:"connector,attr"`
+	Method    string `xml:"method,attr"`
+	Path      string `xml:"path,attr"`
 }
 
 type xmlTaskDefinition struct {
