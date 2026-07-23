@@ -829,10 +829,18 @@ async function viewTasks() {
     }
     const row = (label, val) =>
       `<div class="tasks-field"><span class="tasks-field-label muted">${label}</span><span>${val}</span></div>`;
+    // Claim toggles to unclaim once the task is mine; claiming needs an identity.
+    const mine = !!state.me && t.assignee === state.me;
+    const claimLabel = mine ? "Unclaim" : "Claim";
+    const claimHint = !state.me && !mine ? ` title="Set your identity (top left) to claim"` : "";
+    const claimDisabled = !state.me && !mine ? " disabled" : "";
     detailEl.innerHTML = `
       <header class="tasks-detail-head">
         <h1>${esc(taskTitle(t))}</h1>
-        <button class="btn" id="task-complete">Complete task</button>
+        <div class="tasks-detail-actions">
+          <button class="btn neutral" id="task-claim"${claimDisabled}${claimHint}>${claimLabel}</button>
+          <button class="btn" id="task-complete">Complete task</button>
+        </div>
       </header>
       <div class="tasks-fields">
         ${row("Process", esc(t.processId || "—"))}
@@ -857,6 +865,23 @@ async function viewTasks() {
         await load();
       } catch (err) {
         toast("Complete failed: " + err.message, "err");
+        btn.disabled = false;
+      }
+    });
+    document.getElementById("task-claim").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try {
+        if (mine) {
+          await api("POST", "/api/v1/tasks/" + t.key + "/unclaim");
+          toast("Task released");
+        } else {
+          await api("POST", "/api/v1/tasks/" + t.key + "/claim", { assignee: state.me });
+          toast("Task claimed");
+        }
+        await load(); // keeps the selection; the detail re-renders with the new assignee
+      } catch (err) {
+        toast("Claim failed: " + err.message, "err");
         btn.disabled = false;
       }
     });

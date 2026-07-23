@@ -495,6 +495,7 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .tasks-detail-empty { display: flex; align-items: center; justify-content: center; height: 100%; }
 .tasks-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .tasks-detail-head h1 { margin: 0; font-size: 20px; }
+.tasks-detail-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .tasks-fields { display: flex; flex-direction: column; gap: 10px; max-width: 520px; }
 .tasks-field { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 12px; }
 .tasks-field-label { font-size: 13px; }

@@ -55,13 +55,18 @@ func (v *ElementInstanceValue) decode(src []byte) error {
 }
 
 // JobValue is service-task work waiting for an external worker. Variables are
-// referenced via the element/instance scope, not embedded here.
+// referenced via the element/instance scope, not embedded here. Assignee is the
+// user-task assignee (ADR-0038): empty for a service-task job, and for a user
+// task it starts at the model's default and is rewritten by claim/unclaim. It is
+// the one variable-length field; for a service job it encodes as a 4-byte zero
+// length and decodes to "" with no allocation, keeping the hot path clean (I1).
 type JobValue struct {
 	ProcessInstanceKey uint64
 	ElementInstanceKey uint64
 	JobType            int32 // interned string → index
 	Retries            int32
 	Deadline           int64
+	Assignee           string
 }
 
 const jobSize = 8 + 8 + 4 + 4 + 8
@@ -73,7 +78,8 @@ func (v *JobValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.ElementInstanceKey)
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.JobType))
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.Retries))
-	return binary.LittleEndian.AppendUint64(dst, uint64(v.Deadline))
+	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.Deadline))
+	return appendString(dst, v.Assignee)
 }
 
 func (v *JobValue) decode(src []byte) error {
@@ -85,6 +91,11 @@ func (v *JobValue) decode(src []byte) error {
 	v.JobType = int32(binary.LittleEndian.Uint32(src[16:]))
 	v.Retries = int32(binary.LittleEndian.Uint32(src[20:]))
 	v.Deadline = int64(binary.LittleEndian.Uint64(src[24:]))
+	assignee, _, err := readString(src[jobSize:])
+	if err != nil {
+		return err
+	}
+	v.Assignee = assignee
 	return nil
 }
 

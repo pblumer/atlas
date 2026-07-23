@@ -150,6 +150,33 @@ func TestMessageSubscriptionDecodeErrors(t *testing.T) {
 	}
 }
 
+// TestJobDecodeErrors exercises the truncation guards in JobValue.decode: the
+// fixed prefix and the length-prefixed assignee (ADR-0038).
+func TestJobDecodeErrors(t *testing.T) {
+	full := AppendValue(nil, &JobValue{
+		ProcessInstanceKey: NewKey(1, 1),
+		ElementInstanceKey: NewKey(1, 2),
+		JobType:            1,
+		Retries:            3,
+		Assignee:           "alice",
+	})
+	tests := []struct {
+		name string
+		src  []byte
+	}{
+		{"short fixed prefix", full[:jobSize-1]},        // less than the fixed part
+		{"truncated assignee length", full[:jobSize+2]}, // fixed part present, assignee length prefix truncated
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var v JobValue
+			if err := v.decode(tt.src); !errors.Is(err, ErrShortBuffer) {
+				t.Errorf("decode(%d bytes) err = %v, want ErrShortBuffer", len(tt.src), err)
+			}
+		})
+	}
+}
+
 // TestProcessInstanceStateString covers ProcessInstanceState.String() for each
 // terminal state and the default (active / unknown) arm.
 func TestProcessInstanceStateString(t *testing.T) {
@@ -221,7 +248,7 @@ func TestStringersExhaustive(t *testing.T) {
 		IntentActivating, IntentActivated, IntentCompleting, IntentCompleted,
 		IntentTerminating, IntentTerminated, IntentSequenceFlowTaken,
 		IntentJobCreated, IntentJobActivated, IntentJobCompleted, IntentJobFailed,
-		IntentJobTimedOut, IntentTimerCreated, IntentTimerTriggered,
+		IntentJobTimedOut, IntentJobAssigned, IntentTimerCreated, IntentTimerTriggered,
 		IntentSubscriptionCreated, IntentSubscriptionCorrelated, IntentMessagePublished,
 		IntentVariableCreated, IntentVariableUpdated, IntentIncidentCreated,
 		IntentIncidentResolved,

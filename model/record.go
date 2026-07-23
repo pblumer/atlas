@@ -111,6 +111,7 @@ const (
 	IntentJobCompleted
 	IntentJobFailed
 	IntentJobTimedOut
+	IntentJobAssigned // user-task assignee set/changed/cleared (claim/unclaim, ADR-0038)
 
 	// Timer.
 	IntentTimerCreated
@@ -156,6 +157,8 @@ func (i Intent) String() string {
 		return "JobFailed"
 	case IntentJobTimedOut:
 		return "JobTimedOut"
+	case IntentJobAssigned:
+		return "JobAssigned"
 	case IntentTimerCreated:
 		return "TimerCreated"
 	case IntentTimerTriggered:

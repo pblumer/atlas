@@ -54,7 +54,10 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 
 	case model.VTJob:
 		switch h.Intent {
-		case model.IntentJobCreated:
+		case model.IntentJobCreated, model.IntentJobAssigned:
+			// Assigning re-puts the whole job with its new assignee; the
+			// activatable-index entry PutJob rewrites is idempotent, so the task
+			// stays open (ADR-0038).
 			return tx.PutJob(h.Key, &v.job)
 		case model.IntentJobCompleted, model.IntentJobFailed:
 			return tx.DeleteJob(h.Key, &v.job)
