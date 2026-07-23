@@ -51,6 +51,18 @@ func TestRecordRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name:   "job with assignee",
+			vt:     VTJob,
+			intent: IntentJobAssigned,
+			value: &JobValue{
+				ProcessInstanceKey: NewKey(1, 10),
+				ElementInstanceKey: NewKey(1, 11),
+				JobType:            1,
+				Retries:            3,
+				Assignee:           "alice",
+			},
+		},
+		{
 			name:   "number variable",
 			vt:     VTVariable,
 			intent: IntentVariableCreated,

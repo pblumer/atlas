@@ -334,6 +334,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/messages", s.handlePublishMessage)
 	mux.HandleFunc("GET /api/v1/tasks", s.handleListTasks)
 	mux.HandleFunc("POST /api/v1/tasks/{key}/complete", s.handleCompleteTask)
+	mux.HandleFunc("POST /api/v1/tasks/{key}/claim", s.handleClaimTask)
+	mux.HandleFunc("POST /api/v1/tasks/{key}/unclaim", s.handleUnclaimTask)
 	mux.HandleFunc("GET /api/v1/stats", s.handleStats)
 
 	// The embedded UI is the catch-all; the more specific API patterns above win

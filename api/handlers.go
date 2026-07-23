@@ -1107,6 +1107,7 @@ type taskResp struct {
 	ProcessDefKey      uint64 `json:"processDefKey,omitempty"`
 	ProcessID          string `json:"processId,omitempty"`
 	ElementID          string `json:"elementId,omitempty"`
+	Name               string `json:"name,omitempty"`
 	Assignee           string `json:"assignee,omitempty"`
 	CandidateGroups    string `json:"candidateGroups,omitempty"`
 }
@@ -1135,7 +1136,11 @@ func (s *Server) handleListTasks(w http.ResponseWriter, _ *http.Request) {
 					tr.ElementID = cp.ElementBpmnId(ei.ElementId)
 					if n := cp.Node(ei.ElementId); n.Type == compiler.TypeUserTask {
 						detail := cp.UserTask(n.Detail)
-						tr.Assignee = cp.Intern(detail.Assignee)
+						tr.Name = cp.Intern(detail.Name)
+						// The assignee is the job's runtime value (claim/unclaim
+						// rewrite it, ADR-0042); candidate groups stay the
+						// compile-time attribute.
+						tr.Assignee = jv.Assignee
 						tr.CandidateGroups = cp.Intern(detail.CandidateGroups)
 					}
 				}
@@ -1183,6 +1188,62 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "no open task with that key")
 	default:
 		writeJSON(w, http.StatusOK, map[string]any{"taskKey": key})
+	}
+}
+
+// handleClaimTask assigns an open user task to a person (claim). The request
+// body is {"assignee": "..."}; a claim to an already-claimed task simply
+// reassigns it (last-writer-wins, ADR-0042). 400 on a missing/empty assignee,
+// 404 if the job doesn't exist or is already completed.
+func (s *Server) handleClaimTask(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Assignee string `json:"assignee"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if strings.TrimSpace(body.Assignee) == "" {
+		writeError(w, http.StatusBadRequest, "assignee is required")
+		return
+	}
+	s.assignTask(w, r, strings.TrimSpace(body.Assignee))
+}
+
+// handleUnclaimTask releases a user task (assignee cleared), making it available
+// again. 404 if the job doesn't exist or is already completed (ADR-0042).
+func (s *Server) handleUnclaimTask(w http.ResponseWriter, r *http.Request) {
+	s.assignTask(w, r, "")
+}
+
+// assignTask drives an assignee change for a user task's job through the
+// processor (the same run-loop path completion uses) and reports the outcome. An
+// empty assignee unclaims. Shared by the claim and unclaim handlers.
+func (s *Server) assignTask(w http.ResponseWriter, r *http.Request, assignee string) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid task key")
+		return
+	}
+	var (
+		found  bool
+		runErr error
+	)
+	s.do(func() {
+		if _, ok, err := s.store.GetJob(key); err != nil || !ok {
+			return
+		}
+		found = true
+		s.proc.AssignJob(key, assignee)
+		runErr = s.jobRunner.Drive()
+	})
+	switch {
+	case runErr != nil:
+		writeError(w, http.StatusInternalServerError, "assign task: "+runErr.Error())
+	case !found:
+		writeError(w, http.StatusNotFound, "no open task with that key")
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"taskKey": key, "assignee": assignee})
 	}
 }
 

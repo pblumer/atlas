@@ -188,7 +188,7 @@ func TestBoundaryMessageInterrupts(t *testing.T) {
 
 	b := compiler.NewBuilder(defKey, "review", 1)
 	start := b.AddStartEvent()
-	host := b.AddUserTask("editor", "reviewers", 3)
+	host := b.AddUserTask("Review", "editor", "reviewers", 3)
 	cancel := b.AddBoundaryMessageEvent(host, true, "cancel", nil) // empty correlation key
 	done := b.AddEndEvent()
 	canceled := b.AddEndEvent()

@@ -49,6 +49,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0039](0039-dmn-io-variable-mappings.md) | Input/output variable mappings for business rule tasks | Accepted |
 | [0040](0040-boundary-events.md) | Boundary events — timer and message, interrupting and non-interrupting | Accepted |
 | [0041](0041-connector-management-and-secret-store.md) | Connector management and the secret store | Proposed |
+| [0042](0042-user-task-assignment-and-claim.md) | User-task runtime assignment and claim/unclaim | Accepted |
 
 ## Status values
 
