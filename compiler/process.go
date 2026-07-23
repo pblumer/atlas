@@ -289,6 +289,31 @@ func (p *CompiledProcess) MessageStart(detail int32) *MessageDetail {
 // message start event.
 func (p *CompiledProcess) MessageStarts() []MessageDetail { return p.messageStarts }
 
+// MessageStartEvent pairs a message-start event's message name with its element
+// index, so the engine can index which element a starting message flows into for
+// the collaboration replay (ADR-0038).
+type MessageStartEvent struct {
+	MessageName string
+	ElementId   int32
+}
+
+// MessageStartEvents returns each message-start event with its element index.
+// Computed by scanning the node table at deploy time (off the hot path); empty
+// for a process with no message start event.
+func (p *CompiledProcess) MessageStartEvents() []MessageStartEvent {
+	var out []MessageStartEvent
+	for id := range p.nodes {
+		n := &p.nodes[id]
+		if n.Type == TypeMessageStartEvent {
+			out = append(out, MessageStartEvent{
+				MessageName: p.messageStarts[n.Detail].MessageName,
+				ElementId:   int32(id),
+			})
+		}
+	}
+	return out
+}
+
 // ScriptTask returns the detail at the given table index.
 func (p *CompiledProcess) ScriptTask(detail int32) *ScriptTaskDetail {
 	return &p.scriptTasks[detail]

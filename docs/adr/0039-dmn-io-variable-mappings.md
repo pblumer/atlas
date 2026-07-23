@@ -1,4 +1,4 @@
-# ADR-0038: Input/output variable mappings for business rule tasks
+# ADR-0039: Input/output variable mappings for business rule tasks
 
 - **Status:** Accepted
 - **Date:** 2026-07-23

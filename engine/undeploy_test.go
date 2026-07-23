@@ -6,17 +6,18 @@ import (
 	"github.com/pblumer/atlas/compiler"
 )
 
-// TestRemoveKey covers the message-start index helper directly: it drops the
-// first matching key and returns the slice unchanged when the key is absent.
-func TestRemoveKey(t *testing.T) {
-	if got := removeKey([]uint64{1, 2, 3}, 2); len(got) != 2 || got[0] != 1 || got[1] != 3 {
-		t.Errorf("removeKey([1 2 3], 2) = %v, want [1 3]", got)
+// TestRemoveStartRef covers the message-start index helper directly: it drops the
+// first entry for a definition and returns the slice unchanged when it is absent.
+func TestRemoveStartRef(t *testing.T) {
+	refs := []messageStartRef{{defKey: 1, elementId: 0}, {defKey: 2, elementId: 1}, {defKey: 3, elementId: 2}}
+	if got := removeStartRef(refs, 2); len(got) != 2 || got[0].defKey != 1 || got[1].defKey != 3 {
+		t.Errorf("removeStartRef(refs, 2) = %v, want defKeys [1 3]", got)
 	}
-	if got := removeKey([]uint64{1, 2, 3}, 9); len(got) != 3 {
-		t.Errorf("removeKey([1 2 3], 9) = %v, want the slice unchanged", got)
+	if got := removeStartRef(refs, 9); len(got) != 3 {
+		t.Errorf("removeStartRef(refs, 9) = %v, want the slice unchanged", got)
 	}
-	if got := removeKey(nil, 1); got != nil {
-		t.Errorf("removeKey(nil, 1) = %v, want nil", got)
+	if got := removeStartRef(nil, 1); got != nil {
+		t.Errorf("removeStartRef(nil, 1) = %v, want nil", got)
 	}
 }
 

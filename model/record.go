@@ -57,6 +57,12 @@ const (
 	VTSignal
 	VTError             // error-event propagation
 	VTProcessDefinition // a deployed definition
+	// VTMessageFlow is a delivered message flow retained for history: one record
+	// per message that correlated to a catch event or instantiated a message-start
+	// process. Unlike VTMessageSubscription (an open wait, deleted on correlation)
+	// it is never deleted, so the Operations collaboration view can replay the
+	// exchange between pools after the fact (ADR-0038).
+	VTMessageFlow
 )
 
 func (t ValueType) String() string {
@@ -83,6 +89,8 @@ func (t ValueType) String() string {
 		return "Error"
 	case VTProcessDefinition:
 		return "ProcessDefinition"
+	case VTMessageFlow:
+		return "MessageFlow"
 	default:
 		return "ValueType(?)"
 	}

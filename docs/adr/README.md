@@ -45,7 +45,8 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0035](0035-message-start-events.md) | Message start events and the processInstanceKey built-in | Accepted |
 | [0036](0036-clio-connector.md) | A clio connector — server-registered event-store integration | Accepted |
 | [0037](0037-structured-json-variables.md) | Structured JSON variables (objects and arrays) | Accepted |
-| [0038](0038-dmn-io-variable-mappings.md) | Input/output variable mappings for business rule tasks | Accepted |
+| [0038](0038-collaboration-message-flow-replay.md) | Retain a message-flow history and replay a collaboration's messages | Accepted |
+| [0039](0039-dmn-io-variable-mappings.md) | Input/output variable mappings for business rule tasks | Accepted |
 
 ## Status values
 

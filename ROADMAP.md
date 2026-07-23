@@ -64,7 +64,7 @@ The control-flow basics most real models use.
   re-registers from its snapshot on restart. The DMN job type is pinned to a
   reserved global index so one worker serves every process without colliding with
   service-task types. **Input/output variable mappings are now wired**
-  ([ADR-0038](docs/adr/0038-dmn-io-variable-mappings.md)): a decision reads its
+  ([ADR-0039](docs/adr/0039-dmn-io-variable-mappings.md)): a decision reads its
   inputs from process variables via Zeebe io-mapping inputs
   (`<zeebe:input source="=…" target="…">`, FEEL evaluated over the instance off the
   hot path, overriding constant `<atlas:decisionInput>` values), and its result is
