@@ -802,6 +802,13 @@ function wireProperties(root, modeler, api) {
         } else {
           html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Message</b> throw event, then configure it here.</p>`;
         }
+      } else if (bo.$type === "bpmn:StartEvent") {
+        const msg = messageDefOf(bo);
+        if (msg) {
+          html += messageFieldsHTML(modeler, msg, "A message start event: publishing this message starts a new instance of this process, matched by message name (the correlation key is shared with the throwing event but is not yet evaluated for starts).");
+        } else {
+          html += `<p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Message</b> start event — a pool that a message opens — then pick its message here.</p>`;
+        }
       }
     } else if (isGatewayFlow && !isDefaultFlow) {
       // Design tab: point to where the executable rule lives.
