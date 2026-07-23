@@ -240,7 +240,10 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .tok-number   { color: #0550ae; }
 .tok-keyword  { color: #cf222e; }
 .tok-literal  { color: #0550ae; }
-.tok-builtin  { color: #8250df; }
+/* pointer-events:auto lets elementsFromPoint see the builtin span through the
+   textarea on top (the rest of the backdrop stays pointer-transparent), which is
+   how the signature tooltip hit-tests a hovered builtin. */
+.tok-builtin  { color: #8250df; pointer-events: auto; }
 .tok-variable { color: #953800; }
 .tok-punct    { color: #57606a; }
 
@@ -266,12 +269,39 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .feel-opt-label { flex: 0 0 auto; color: var(--text); }
 .feel-opt-detail { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; color: var(--muted); text-align: right; }
 
+/* Live-validation state: a red border while the expression doesn't compile, and
+   the compiler's message below the field. */
+.feel-editor.invalid { border-color: var(--danger); }
+.feel-editor.invalid:focus-within { border-color: var(--danger); box-shadow: 0 0 0 2px #fdecea; }
+.feel-status { font-size: 11px; color: var(--danger); margin: 4px 0 0; white-space: pre-wrap; word-break: break-word; }
+
+/* Signature tooltip shown when hovering a builtin function name. */
+.feel-tip {
+  position: absolute; z-index: 40; max-width: 240px;
+  background: #14161a; color: #fff; border-radius: 6px; padding: 6px 8px;
+  box-shadow: 0 6px 20px rgba(20,22,26,0.28); pointer-events: none;
+}
+.feel-tip-sig { font: 12px/1.4 ui-monospace, monospace; font-weight: 700; }
+.feel-tip-doc { margin-top: 3px; font-size: 11px; color: #cdd0d6; }
+
 /* A short hint under a FEEL field pointing at the completion shortcut. */
 .feel-hint { font-size: 11px; color: var(--muted); margin: 4px 0 0; }
 .feel-hint kbd {
   font: 11px ui-monospace, monospace; background: var(--bg); border: 1px solid var(--border-strong);
   border-bottom-width: 2px; border-radius: 4px; padding: 0 4px;
 }
+
+/* ---------- Start-variable declaration editor (Process panel) ---------- */
+#sv-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
+.sv-row { display: flex; align-items: center; gap: 6px; }
+.sv-row .sv-name, .sv-row .sv-default { flex: 2 1 0; min-width: 0; padding: 6px 8px; font-size: 12px; }
+.sv-row .sv-type { flex: 0 0 auto; width: auto; padding: 6px 6px; font-size: 12px; }
+.sv-req { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--muted); white-space: nowrap; flex: 0 0 auto; margin: 0; }
+.sv-req input { width: auto; }
+.sv-del { flex: 0 0 auto; width: 26px; height: 26px; font-size: 12px; }
+.sv-del:hover { color: var(--danger); background: #fdecea; }
+/* Required marker shared by the declaration editor and the typed Deploy form. */
+.req-star { color: var(--danger); font-weight: 700; }
 
 /* bpmn-js watermark must remain visible (license). Just ensure it isn't clipped. */
 .bjs-powered-by { z-index: 5; }
