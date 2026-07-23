@@ -221,6 +221,12 @@ export function highlight(src, variables) {
   for (const tok of tokenize(src)) {
     const text = escapeHTML(tok.value);
     if (tok.type === "ws") { html += text; continue; }
+    // A builtin carries its canonical name (multi-word names may span spaces) so
+    // a hover handler can look up its signature — see attachFeelEditor's tooltip.
+    if (tok.type === "builtin" && tok.name) {
+      html += `<span class="tok-builtin" data-fn="${escapeHTML(tok.name)}">${text}</span>`;
+      continue;
+    }
     let cls = tok.type;
     if (tok.type === "name" && vars.has(tok.value)) cls = "variable";
     html += `<span class="tok-${cls}">${text}</span>`;
@@ -522,8 +528,47 @@ export function attachFeelEditor(textarea, opts = {}) {
     validateTimer = setTimeout(runValidate, 400);
   }
 
+  // ---- builtin signature tooltips ----
+  // Hovering a builtin function name shows its signature and one-line doc. The
+  // highlighted spans sit *behind* the transparent textarea, so a plain :hover
+  // can't reach them; instead we hit-test with elementsFromPoint (which sees
+  // through the top textarea) and read the builtin's canonical name from the
+  // span's data-fn. The builtin spans opt back into hit-testing via
+  // pointer-events:auto (see app.css).
+  const tip = document.createElement("div");
+  tip.className = "feel-tip";
+  tip.hidden = true;
+  wrap.appendChild(tip);
+  let tipFn = null;
+  let hoverRaf = 0;
+
+  function hideTip() { tip.hidden = true; tipFn = null; }
+
+  function updateTip(x, y) {
+    const span = document.elementsFromPoint(x, y)
+      .find((el) => el.dataset && el.dataset.fn && el.classList.contains("tok-builtin"));
+    const b = span ? BUILTIN_BY_NAME.get(span.dataset.fn) : null;
+    if (!b) { hideTip(); return; }
+    if (span.dataset.fn !== tipFn) {
+      tip.innerHTML = `<div class="feel-tip-sig">${escapeHTML(b.sig)}</div><div class="feel-tip-doc">${escapeHTML(b.doc)}</div>`;
+      tipFn = span.dataset.fn;
+    }
+    const r = span.getBoundingClientRect();
+    const wr = wrap.getBoundingClientRect();
+    const maxLeft = Math.max(0, wrap.clientWidth - 244);
+    tip.style.left = Math.min(Math.max(0, r.left - wr.left), maxLeft) + "px";
+    tip.style.top = (r.bottom - wr.top + 4) + "px";
+    tip.hidden = false;
+  }
+
+  const onHover = (e) => {
+    if (hoverRaf) return; // coalesce mousemove bursts to one hit-test per frame
+    const x = e.clientX, y = e.clientY;
+    hoverRaf = requestAnimationFrame(() => { hoverRaf = 0; updateTip(x, y); });
+  };
+
   // ---- event wiring ----
-  const onInput = () => { renderHighlight(); openCompletion(false); scheduleValidate(); };
+  const onInput = () => { renderHighlight(); openCompletion(false); scheduleValidate(); hideTip(); };
   const onScroll = () => { pre.scrollTop = textarea.scrollTop; pre.scrollLeft = textarea.scrollLeft; };
   const onBlur = () => { setTimeout(closePopup, 120); }; // allow click-to-accept
 
@@ -552,6 +597,8 @@ export function attachFeelEditor(textarea, opts = {}) {
   textarea.addEventListener("scroll", onScroll);
   textarea.addEventListener("keydown", onKeydown);
   textarea.addEventListener("blur", onBlur);
+  textarea.addEventListener("mousemove", onHover);
+  textarea.addEventListener("mouseleave", hideTip);
 
   renderHighlight();
   runValidate(); // flag a pre-existing invalid expression immediately
@@ -560,10 +607,13 @@ export function attachFeelEditor(textarea, opts = {}) {
     destroy() {
       destroyed = true;
       clearTimeout(validateTimer);
+      if (hoverRaf) cancelAnimationFrame(hoverRaf);
       textarea.removeEventListener("input", onInput);
       textarea.removeEventListener("scroll", onScroll);
       textarea.removeEventListener("keydown", onKeydown);
       textarea.removeEventListener("blur", onBlur);
+      textarea.removeEventListener("mousemove", onHover);
+      textarea.removeEventListener("mouseleave", hideTip);
       textarea.classList.remove("feel-input");
       delete textarea.dataset.feelOn;
       if (statusEl) statusEl.remove();
