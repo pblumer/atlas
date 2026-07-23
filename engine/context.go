@@ -95,6 +95,42 @@ func (c *ProcessingContext) ElementInstancesOnNode(procKey uint64, elementId int
 	return keys
 }
 
+// TokenCanStillReach reports whether any live token could still arrive at nodeId:
+// an active element instance sitting on a node from which nodeId is reachable
+// (per reaches), or a token in flight as an element-activating command not yet
+// processed — the rest of this batch's queue plus followups generated so far —
+// targeting such a node or nodeId itself. Tokens already parked on nodeId are the
+// join's own arrivals and are excluded. An inclusive join fires only when this is
+// false. Considering in-flight commands is what keeps two pass-through branches
+// from each firing the join separately.
+func (c *ProcessingContext) TokenCanStillReach(procKey uint64, nodeId int32, reaches map[int32]bool) bool {
+	upstream := false
+	err := c.tx.ElementInstancesOfProcess(procKey, func(_ uint64, v *model.ElementInstanceValue) error {
+		if v.ElementId != nodeId && reaches[v.ElementId] {
+			upstream = true
+		}
+		return nil
+	})
+	c.p.fail(err)
+	if upstream {
+		return true
+	}
+	scan := func(cmds []Command) bool {
+		for i := range cmds {
+			cmd := &cmds[i]
+			if cmd.ValueType != model.VTElementInstance || cmd.Intent != model.IntentActivating {
+				continue
+			}
+			e := &cmd.Value.element
+			if e.ProcessInstanceKey == procKey && (e.ElementId == nodeId || reaches[e.ElementId]) {
+				return true
+			}
+		}
+		return false
+	}
+	return scan(c.p.queue[c.p.batchPos+1:]) || scan(c.p.followups)
+}
+
 // ActiveChildren returns the active-child count of a scope (e.g. to detect that
 // a process instance has finished).
 func (c *ProcessingContext) ActiveChildren(scope uint64) int32 {

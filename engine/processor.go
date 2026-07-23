@@ -49,6 +49,7 @@ type Processor struct {
 	queue        []Command
 	queueScratch []Command // double-buffers queue so advancing it never allocates
 	position     uint64    // highest log position assigned
+	batchPos     int       // index in queue of the command being processed (for in-transit-token checks)
 
 	// per-batch reused buffers
 	tx           *stateTx
@@ -228,6 +229,7 @@ func (p *Processor) processBatch() error {
 	// Phase 1: process commands (pure in-memory, no I/O).
 	n := 0
 	for n < len(p.queue) && n < maxBatchSize {
+		p.batchPos = n
 		p.processOne(p.queue[n])
 		n++
 		if p.fatalErr != nil {

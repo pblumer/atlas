@@ -218,9 +218,12 @@ async function viewModelerHome() {
   view.innerHTML = `
     <div class="between">
       <h1>Modeler</h1>
-      <a class="btn" href="#/modeler/new">New diagram</a>
+      <div class="row">
+        <button class="btn neutral" id="new-project">New project</button>
+        <a class="btn" href="#/modeler/new">New diagram</a>
+      </div>
     </div>
-    <div id="drafts-section"></div>
+    <div id="projects-section"><p class="muted">Loading…</p></div>
     <h2 style="margin:22px 0 10px">Deployed</h2>
     <div class="card" style="padding:0">
       <table>
@@ -229,38 +232,136 @@ async function viewModelerHome() {
       </table>
     </div>`;
   const rows = document.getElementById("rows");
-  const draftsSection = document.getElementById("drafts-section");
+  const projectsSection = document.getElementById("projects-section");
 
-  // renderDrafts shows saved-but-not-deployed diagrams — work in progress the
-  // operator can reopen. Hidden entirely when there are none.
-  const renderDrafts = async () => {
-    let drafts = [];
-    try { drafts = await api("GET", "/api/v1/drafts"); } catch { drafts = []; }
-    if (!drafts.length) { draftsSection.innerHTML = ""; return; }
-    draftsSection.innerHTML = `
-      <h2 style="margin:6px 0 10px">Drafts <span class="muted" style="font-size:13px">· saved, not deployed</span></h2>
-      <div class="card" style="padding:0">
-        <table>
-          <thead><tr><th>Process</th><th>Saved</th><th></th></tr></thead>
-          <tbody>${drafts.map((d) => {
-            const label = d.name || d.processId;
-            const sub = d.name ? `<div class="muted" style="font-size:12px">${esc(d.processId)}</div>` : "";
-            const href = `#/modeler/draft/${encodeURIComponent(d.processId)}`;
-            return `<tr>
-              <td><a href="${href}"><b>${esc(label)}</b></a>${sub}</td>
-              <td class="muted">${esc(fmtTime(d.savedAt))}</td>
-              <td style="text-align:right; white-space:nowrap">
-                <a class="btn ghost" href="${href}">Open</a>
-                <button class="btn ghost danger" data-draftdel="${esc(d.processId)}">Delete</button>
-              </td>
-            </tr>`;
-          }).join("")}</tbody>
-        </table>
+  // renderProjects shows saved-but-not-deployed diagrams (drafts) organized into
+  // projects (ADR-0034). Each project is a card holding its artifacts; drafts
+  // that belong to no existing project fall into an "Ungrouped" bucket. A per-row
+  // "Project" dropdown moves a draft between projects.
+  const renderProjects = async () => {
+    let projects = [], drafts = [], refs = [];
+    try {
+      [projects, drafts, refs] = await Promise.all([
+        api("GET", "/api/v1/projects"),
+        api("GET", "/api/v1/drafts"),
+        api("GET", "/api/v1/dmnrefs"),
+      ]);
+    } catch (e) { projectsSection.innerHTML = `<p class="empty">${esc(e.message)}</p>`; return; }
+
+    // Bucket artifacts by project; an empty or unknown projectId reads as
+    // Ungrouped. BPMN drafts and DMN references share the same buckets.
+    const known = new Set(projects.map((p) => p.id));
+    const bucket = (items) => {
+      const byProject = new Map(), ungrouped = [];
+      for (const it of items) {
+        if (it.projectId && known.has(it.projectId)) {
+          if (!byProject.has(it.projectId)) byProject.set(it.projectId, []);
+          byProject.get(it.projectId).push(it);
+        } else ungrouped.push(it);
+      }
+      return { byProject, ungrouped };
+    };
+    const draftsB = bucket(drafts);
+    const refsB = bucket(refs);
+
+    // The shared "move to…" options: Ungrouped plus every project, current selected.
+    const moveOptions = (current) =>
+      [`<option value=""${!current ? " selected" : ""}>Ungrouped</option>`]
+        .concat(projects.map((p) =>
+          `<option value="${esc(p.id)}"${p.id === current ? " selected" : ""}>${esc(p.name)}</option>`))
+        .join("");
+    const moveSelect = (attr, id, current) =>
+      `<select ${attr}="${esc(id)}" title="Move to project"
+        style="width:auto; display:inline-block; padding:5px 8px; font-size:13px">${moveOptions(current || "")}</select>`;
+
+    const draftRows = (list) => list.map((d) => {
+      const label = d.name || d.processId;
+      const sub = d.name ? `<div class="muted" style="font-size:12px">${esc(d.processId)}</div>` : "";
+      const href = `#/modeler/draft/${encodeURIComponent(d.processId)}`;
+      return `<tr>
+        <td><span class="chip">BPMN</span> <a href="${href}"><b>${esc(label)}</b></a>${sub}</td>
+        <td class="muted">${esc(fmtTime(d.savedAt))}</td>
+        <td style="text-align:right; white-space:nowrap">
+          ${moveSelect("data-move", d.processId, d.projectId)}
+          <a class="btn ghost" href="${href}">Open</a>
+          <button class="btn ghost danger" data-draftdel="${esc(d.processId)}">Delete</button>
+        </td>
+      </tr>`;
+    }).join("");
+
+    // A DMN reference points at a temis-authored model — Atlas lists it but does
+    // not edit it (ADR-0034), so there is no "Open", just the temis handle and a
+    // deploy-time Validate that resolves the model and compiles it.
+    const refRows = (list) => list.map((r) => `<tr>
+        <td><span class="chip">DMN</span> <b>${esc(r.name)}</b>
+          <div class="muted" style="font-size:12px">temis model: ${esc(r.modelRef)}</div></td>
+        <td><span data-refstatus="${esc(r.id)}" class="muted" style="font-size:12px">not validated</span></td>
+        <td style="text-align:right; white-space:nowrap">
+          <button class="btn ghost" data-refvalidate="${esc(r.id)}">Validate</button>
+          ${moveSelect("data-moveref", r.id, r.projectId)}
+          <button class="btn ghost danger" data-refdel="${esc(r.id)}">Delete</button>
+        </td>
+      </tr>`).join("");
+
+    const artifactTable = (dl, rl) => `<table><tbody>${draftRows(dl)}${refRows(rl)}</tbody></table>`;
+
+    const projectCard = (p) => {
+      const dl = draftsB.byProject.get(p.id) || [];
+      const rl = refsB.byProject.get(p.id) || [];
+      const body = (dl.length || rl.length) ? artifactTable(dl, rl)
+        : `<p class="empty" style="margin:0; padding:16px">No artifacts yet — add a DMN reference, or create a diagram and move it here.</p>`;
+      const n = p.artifacts;
+      return `<div class="card" style="padding:0; margin-bottom:14px">
+        <div class="between" style="padding:12px 14px; border-bottom:1px solid var(--border)">
+          <div><b>${esc(p.name)}</b> <span class="muted" style="font-size:12px">· ${n} artifact${n === 1 ? "" : "s"}</span></div>
+          <div class="row">
+            <button class="btn" data-projdeploy="${esc(p.id)}">Deploy</button>
+            <button class="btn ghost" data-refadd="${esc(p.id)}">Add DMN reference</button>
+            ${rl.length ? `<button class="btn ghost" data-projvalidate="${esc(p.id)}">Validate DMN</button>` : ""}
+            <button class="btn ghost" data-projrename="${esc(p.id)}" data-projname="${esc(p.name)}">Rename</button>
+            <button class="btn ghost danger" data-projdel="${esc(p.id)}" data-projname="${esc(p.name)}">Delete</button>
+          </div>
+        </div>
+        ${body}
       </div>`;
-    for (const b of draftsSection.querySelectorAll("button[data-draftdel]")) {
-      b.addEventListener("click", () => deleteDraft(b.dataset.draftdel, renderDrafts));
+    };
+
+    let html = "";
+    if (projects.length) {
+      html += `<h2 style="margin:6px 0 10px">Projects</h2>` + projects.map(projectCard).join("");
     }
+    if (draftsB.ungrouped.length || refsB.ungrouped.length) {
+      html += `<h2 style="margin:${projects.length ? "18px" : "6px"} 0 10px">Ungrouped <span class="muted" style="font-size:13px">· artifacts not in a project</span></h2>
+        <div class="card" style="padding:0">${artifactTable(draftsB.ungrouped, refsB.ungrouped)}</div>`;
+    }
+    if (!projects.length && !draftsB.ungrouped.length && !refsB.ungrouped.length) {
+      html = `<div class="card empty">No projects or artifacts yet. Create a <b>New project</b> to
+        organize your BPMN diagrams and DMN references, or start a <a href="#/modeler/new">New diagram</a> and save it.</div>`;
+    }
+    projectsSection.innerHTML = html;
+
+    for (const b of projectsSection.querySelectorAll("button[data-draftdel]"))
+      b.addEventListener("click", () => deleteDraft(b.dataset.draftdel, renderProjects));
+    for (const b of projectsSection.querySelectorAll("button[data-projrename]"))
+      b.addEventListener("click", () => renameProject(b.dataset.projrename, b.dataset.projname, renderProjects));
+    for (const b of projectsSection.querySelectorAll("button[data-projdel]"))
+      b.addEventListener("click", () => deleteProject(b.dataset.projdel, b.dataset.projname, renderProjects));
+    for (const b of projectsSection.querySelectorAll("button[data-refadd]"))
+      b.addEventListener("click", () => createDmnRef(b.dataset.refadd, renderProjects));
+    for (const b of projectsSection.querySelectorAll("button[data-refdel]"))
+      b.addEventListener("click", () => deleteDmnRef(b.dataset.refdel, renderProjects));
+    for (const b of projectsSection.querySelectorAll("button[data-refvalidate]"))
+      b.addEventListener("click", () => validateDmnRef(b.dataset.refvalidate));
+    for (const b of projectsSection.querySelectorAll("button[data-projvalidate]"))
+      b.addEventListener("click", () => validateProject(b.dataset.projvalidate));
+    for (const b of projectsSection.querySelectorAll("button[data-projdeploy]"))
+      b.addEventListener("click", () => deployProject(b.dataset.projdeploy, () => Promise.all([renderProjects(), render()])));
+    for (const s of projectsSection.querySelectorAll("select[data-move]"))
+      s.addEventListener("change", () => moveDraft(s.dataset.move, s.value, renderProjects));
+    for (const s of projectsSection.querySelectorAll("select[data-moveref]"))
+      s.addEventListener("change", () => moveDmnRef(s.dataset.moveref, s.value, renderProjects));
   };
+  document.getElementById("new-project").addEventListener("click", () => createProject(renderProjects));
 
   const render = async () => {
     try {
@@ -293,7 +394,7 @@ async function viewModelerHome() {
       rows.innerHTML = `<tr><td colspan="4" class="empty">${esc(e.message)}</td></tr>`;
     }
   };
-  await Promise.all([renderDrafts(), render()]);
+  await Promise.all([renderProjects(), render()]);
 }
 
 async function deleteDraft(processId, reload) {
@@ -320,6 +421,153 @@ async function deleteProcess(processId, groups, reload) {
   if (failed) toast(`Could not delete ${failed} version(s) — running instances?`, "err");
   else toast(`Deleted "${processId}"`, "ok");
   await reload();
+}
+
+// ---------- Projects (ADR-0034) ----------
+async function createProject(reload) {
+  const name = window.prompt("Project name");
+  if (name == null) return; // cancelled
+  const trimmed = name.trim();
+  if (!trimmed) { toast("Project name is required", "err"); return; }
+  try {
+    await api("POST", "/api/v1/projects", { name: trimmed });
+    toast(`Created project "${trimmed}"`, "ok");
+  } catch (e) { toast("could not create project: " + e.message, "err"); }
+  await reload();
+}
+
+async function renameProject(id, current, reload) {
+  const name = window.prompt("Rename project", current);
+  if (name == null) return;
+  const trimmed = name.trim();
+  if (!trimmed) { toast("Project name is required", "err"); return; }
+  try {
+    await api("PATCH", `/api/v1/projects/${encodeURIComponent(id)}`, { name: trimmed });
+    toast("Renamed project", "ok");
+  } catch (e) { toast("could not rename project: " + e.message, "err"); }
+  await reload();
+}
+
+async function deleteProject(id, name, reload) {
+  if (!window.confirm(`Delete project "${name}"? Its diagrams are kept and become Ungrouped.`)) return;
+  try {
+    await api("DELETE", `/api/v1/projects/${encodeURIComponent(id)}`);
+    toast(`Deleted project "${name}"`, "ok");
+  } catch (e) { toast("could not delete project: " + e.message, "err"); }
+  await reload();
+}
+
+// moveDraft reassigns a draft to a project (or to Ungrouped when projectId is "").
+async function moveDraft(processId, projectId, reload) {
+  try {
+    await api("PATCH", `/api/v1/drafts/${encodeURIComponent(processId)}`, { projectId });
+  } catch (e) { toast("could not move draft: " + e.message, "err"); }
+  await reload();
+}
+
+// createDmnRef adds a DMN reference — a pointer to a temis-authored decision
+// model — into a project. Atlas organizes and lists the reference; authoring
+// stays in temis (ADR-0034), so we capture only a name and the temis handle.
+async function createDmnRef(projectId, reload) {
+  const name = window.prompt("Reference name (how it shows in Atlas)");
+  if (name == null) return;
+  const modelRef = window.prompt("temis model reference (the model’s name in the temis Modeler)");
+  if (modelRef == null) return;
+  if (!name.trim() || !modelRef.trim()) { toast("Name and temis model reference are required", "err"); return; }
+  try {
+    await api("POST", "/api/v1/dmnrefs", { name: name.trim(), modelRef: modelRef.trim(), projectId });
+    toast(`Added DMN reference "${name.trim()}"`, "ok");
+  } catch (e) { toast("could not add DMN reference: " + e.message, "err"); }
+  await reload();
+}
+
+// moveDmnRef reassigns a DMN reference to a project (or to Ungrouped when "").
+async function moveDmnRef(id, projectId, reload) {
+  try {
+    await api("PATCH", `/api/v1/dmnrefs/${encodeURIComponent(id)}`, { projectId });
+  } catch (e) { toast("could not move reference: " + e.message, "err"); }
+  await reload();
+}
+
+async function deleteDmnRef(id, reload) {
+  if (!window.confirm("Delete this DMN reference? The temis model itself is not affected.")) return;
+  try {
+    await api("DELETE", `/api/v1/dmnrefs/${encodeURIComponent(id)}`);
+    toast("Deleted DMN reference", "ok");
+  } catch (e) { toast("could not delete reference: " + e.message, "err"); }
+  await reload();
+}
+
+// refStatusHTML renders a DMN reference's deploy-time validation outcome: valid
+// (with decision count), resolved-but-invalid, or unresolved.
+function refStatusHTML(res) {
+  if (res.valid) {
+    const n = (res.decisions || []).length;
+    return `<span class="pill ok"><span class="dot"></span>valid</span>${n ? ` <span class="muted" style="font-size:12px">· ${n} decision${n === 1 ? "" : "s"}</span>` : ""}`;
+  }
+  if (res.resolved) return `<span class="pill err"><span class="dot"></span>invalid</span>`;
+  return `<span class="pill warn"><span class="dot"></span>unresolved</span>`;
+}
+
+// applyRefStatus writes a validation result into a reference row's status cell.
+function applyRefStatus(id, res) {
+  const el = document.querySelector(`[data-refstatus="${id}"]`);
+  if (!el) return;
+  el.className = "";
+  el.style.fontSize = "12px";
+  el.innerHTML = refStatusHTML(res);
+  el.title = res.message || "";
+}
+
+// validateDmnRef resolves one reference's temis model and compiles it — the same
+// deploy-time gate the server runs — and shows the outcome inline.
+async function validateDmnRef(id) {
+  const el = document.querySelector(`[data-refstatus="${id}"]`);
+  if (el) { el.className = "muted"; el.textContent = "validating…"; }
+  try {
+    applyRefStatus(id, await api("POST", `/api/v1/dmnrefs/${encodeURIComponent(id)}/validate`));
+  } catch (e) {
+    if (el) { el.className = "muted"; el.textContent = "not validated"; }
+    toast("could not validate: " + e.message, "err");
+  }
+}
+
+// validateProject runs the project preflight — resolve + validate every DMN
+// reference — and reflects each result plus an overall verdict.
+async function validateProject(projectId) {
+  try {
+    const rep = await api("POST", `/api/v1/projects/${encodeURIComponent(projectId)}/validate`);
+    for (const r of rep.references) applyRefStatus(r.id, r);
+    toast(rep.ok ? "All DMN references are valid" : "Some DMN references are unresolved or invalid",
+      rep.ok ? "ok" : "err");
+  } catch (e) { toast("could not validate project: " + e.message, "err"); }
+}
+
+// deployProject deploys the whole project: the server validates its DMN
+// references (the deploy-time gate) and, only if all pass, deploys its BPMN
+// diagrams as runnable definitions. A refusal (409) carries the reason and the
+// per-reference results, which we surface without a reload; a success reloads so
+// the new definitions show under "Deployed". Uses a raw fetch so the refusal
+// body (which is not an {error} shape) is read instead of thrown away.
+async function deployProject(id, reload) {
+  if (!window.confirm("Deploy this project? Its DMN references are validated, then its BPMN diagrams are deployed as runnable definitions.")) return;
+  let rep;
+  try {
+    const res = await fetch(`/api/v1/projects/${encodeURIComponent(id)}/deploy`, { method: "POST" });
+    rep = await res.json();
+    if (res.ok && rep.deployed) {
+      const n = (rep.definitions || []).length;
+      toast(n ? `Deployed ${n} definition${n === 1 ? "" : "s"}` : "Nothing to deploy in this project", "ok");
+      await reload();
+      return;
+    }
+  } catch (e) {
+    toast("deploy failed: " + e.message, "err");
+    return;
+  }
+  // Refused (or a server error): show why and reflect any DMN results in place.
+  toast(rep.reason || rep.error || "Deploy refused", "err");
+  for (const r of rep.references || []) applyRefStatus(r.id, r);
 }
 
 // summarizeInstances rolls the flat instance list up per process id, so the

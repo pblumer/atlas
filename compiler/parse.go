@@ -264,6 +264,11 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			return nil, err
 		}
 	}
+	for _, g := range proc.InclusiveGateways {
+		if err := register(g.Id, b.AddInclusiveGateway()); err != nil {
+			return nil, err
+		}
+	}
 	for _, ev := range proc.IntermediateCatchEvents {
 		switch {
 		case ev.Timer != nil:
@@ -332,12 +337,11 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	}{
 		{"userTask", proc.UserTasks},
 		{"sendTask", proc.SendTasks}, {"receiveTask", proc.ReceiveTasks},
-		{"inclusiveGateway", proc.InclusiveGateways},
 	} {
 		if len(u.nodes) > 0 {
 			return nil, fmt.Errorf("compiler: element %q is a <%s>, which Atlas can't execute yet "+
 				"(supported: start/end events, tasks (undefined/manual pass-through, service, script, "+
-				"business rule), exclusive and parallel gateways, and timer/message intermediate events)", u.nodes[0].Id, u.label)
+				"business rule), exclusive/parallel/inclusive gateways, and timer/message intermediate events)", u.nodes[0].Id, u.label)
 		}
 	}
 
@@ -364,16 +368,28 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			b.SetFlowCondition(fid, ce)
 		}
 	}
-	// Mark each exclusive gateway's default flow.
-	for _, g := range proc.ExclusiveGateways {
-		if g.Default == "" {
-			continue
+	// Mark each exclusive/inclusive gateway's default flow (taken when no
+	// condition holds).
+	markDefault := func(kind, gid, def string) error {
+		if def == "" {
+			return nil
 		}
-		fid, ok := flowIdx[g.Default]
+		fid, ok := flowIdx[def]
 		if !ok {
-			return nil, fmt.Errorf("compiler: exclusive gateway %q default references unknown flow %q", g.Id, g.Default)
+			return fmt.Errorf("compiler: %s gateway %q default references unknown flow %q", kind, gid, def)
 		}
 		b.SetFlowDefault(fid)
+		return nil
+	}
+	for _, g := range proc.ExclusiveGateways {
+		if err := markDefault("exclusive", g.Id, g.Default); err != nil {
+			return nil, err
+		}
+	}
+	for _, g := range proc.InclusiveGateways {
+		if err := markDefault("inclusive", g.Id, g.Default); err != nil {
+			return nil, err
+		}
 	}
 
 	return b.Build()
@@ -432,15 +448,16 @@ type xmlProcess struct {
 
 	Flows []xmlSequenceFlow `xml:"sequenceFlow"`
 
+	Tasks             []xmlNode             `xml:"task"`
+	ManualTasks       []xmlNode             `xml:"manualTask"`
+	ParallelGateways  []xmlNode             `xml:"parallelGateway"`
+	InclusiveGateways []xmlInclusiveGateway `xml:"inclusiveGateway"`
+
 	// Captured only to give a clear "unsupported element" error (see Parse); none
 	// of these are executable yet.
-	Tasks             []xmlNode `xml:"task"`
-	UserTasks         []xmlNode `xml:"userTask"`
-	SendTasks         []xmlNode `xml:"sendTask"`
-	ReceiveTasks      []xmlNode `xml:"receiveTask"`
-	ManualTasks       []xmlNode `xml:"manualTask"`
-	ParallelGateways  []xmlNode `xml:"parallelGateway"`
-	InclusiveGateways []xmlNode `xml:"inclusiveGateway"`
+	UserTasks    []xmlNode `xml:"userTask"`
+	SendTasks    []xmlNode `xml:"sendTask"`
+	ReceiveTasks []xmlNode `xml:"receiveTask"`
 }
 
 // A data-based exclusive gateway; default names the flow taken when no outgoing
@@ -458,6 +475,13 @@ type xmlStartEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Name    string                     `xml:"name,attr"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
+}
+
+// A data-based inclusive gateway; default names the flow taken when no outgoing
+// condition matches.
+type xmlInclusiveGateway struct {
+	Id      string `xml:"id,attr"`
+	Default string `xml:"default,attr"`
 }
 
 // An intermediate catch event; the timer and message variants are executable.

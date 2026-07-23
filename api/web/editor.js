@@ -240,12 +240,21 @@ function activeTab(root) {
 }
 
 // collectFeelVariables gathers names an author is likely to reference in a FEEL
-// expression, for the completion popup. Process variables aren't declared up
-// front, so the best static signal is the result variables written by script
-// tasks elsewhere in the diagram — a token that has run through one carries that
-// variable downstream. Best-effort: a failure just yields no variable hints.
+// expression, for the completion popup. Two static signals: the start variables
+// the process declares up front (atlas:StartForm), which are supplied when an
+// instance starts; and the result variables written by script tasks elsewhere in
+// the diagram — a token that has run through one carries that variable
+// downstream. Best-effort: a failure just yields no variable hints.
 function collectFeelVariables(modeler) {
   const vars = new Set();
+  try {
+    const rootBo = rootProcess(modeler);
+    if (rootBo) {
+      for (const v of readStartVariables(rootBo)) {
+        if (v.name) vars.add(v.name);
+      }
+    }
+  } catch { /* best-effort */ }
   try {
     modeler.get("elementRegistry").forEach((el) => {
       const s = findExt(el.businessObject, "zeebe:Script");
@@ -256,18 +265,57 @@ function collectFeelVariables(modeler) {
 }
 
 // enhanceFeel turns the FEEL <textarea> matched by `sel` into a syntax-highlighted
-// editor with completions, live validation, and a one-line hint beneath it.
-// No-op if the field isn't present for the current selection. `validate` is an
-// async expr→{ok,error} function (the server's FEEL compiler) or null.
-function enhanceFeel(body, sel, vars, validate) {
+// editor with completions, live validation, a hint line, and a "Test" panel that
+// evaluates the expression against sample variables. No-op if the field isn't
+// present for the current selection. `validate` and `evaluate` are async server
+// calls (the FEEL compiler / evaluator) or null.
+function enhanceFeel(body, sel, vars, validate, evaluate) {
   const ta = body.querySelector(sel);
   if (!ta) return;
   attachFeelEditor(ta, { variables: vars, validate });
+  const wrap = ta.closest(".feel-editor");
+  if (!wrap) return;
+
   const hint = document.createElement("p");
   hint.className = "feel-hint";
   hint.innerHTML = "FEEL — <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions";
-  const wrap = ta.closest(".feel-editor");
-  if (wrap) wrap.after(hint);
+  if (evaluate) hint.innerHTML += ' &middot; <button type="button" class="linklike" data-feel-test>Test</button>';
+  wrap.after(hint);
+  if (!evaluate) return;
+
+  // The Test panel: sample variables (JSON) + Run, evaluating the current
+  // expression server-side and showing the typed result inline.
+  const panel = document.createElement("div");
+  panel.className = "feel-test";
+  panel.hidden = true;
+  panel.innerHTML = `
+    <textarea class="feel-test-vars" rows="2" spellcheck="false" placeholder='sample variables, e.g. { "amount": 100 }'></textarea>
+    <div class="feel-test-row">
+      <button type="button" class="btn neutral feel-test-run">Run</button>
+      <span class="feel-test-out" aria-live="polite"></span>
+    </div>`;
+  hint.after(panel);
+  const varsEl = panel.querySelector(".feel-test-vars");
+  const outEl = panel.querySelector(".feel-test-out");
+  const setOut = (cls, text) => { outEl.className = "feel-test-out" + (cls ? " " + cls : ""); outEl.textContent = text; };
+
+  hint.querySelector("[data-feel-test]").addEventListener("click", () => {
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) varsEl.focus();
+  });
+  panel.querySelector(".feel-test-run").addEventListener("click", async () => {
+    let variables;
+    try { variables = parseStartVariables(varsEl.value).variables || {}; }
+    catch (e) { setOut("err", e.message); return; }
+    setOut("", "…");
+    try {
+      const res = await evaluate(ta.value, variables);
+      if (res && res.ok) setOut("ok", `= ${res.result} (${res.kind})`);
+      else setOut("err", (res && res.error) || "could not evaluate");
+    } catch (e) {
+      setOut("err", e.message);
+    }
+  });
 }
 
 // findExt returns a business object's extension element of the given moddle type.
@@ -298,23 +346,66 @@ function upsertExt(modeler, element, type, props) {
   modeling.updateProperties(element, { extensionElements: ext });
 }
 
-// messageFieldsHTML renders the shared Message name + correlation-key inputs for
-// a message catch or throw event. med is the bpmn:MessageEventDefinition.
-function messageFieldsHTML(med, hint) {
-  const msg = med.messageRef;
-  const name = (msg && msg.name) || "";
-  let key = "";
-  const vals = msg && msg.extensionElements && msg.extensionElements.values;
-  if (vals) {
-    const sub = vals.find((v) => v.$type === "zeebe:Subscription");
-    if (sub && sub.correlationKey) key = sub.correlationKey.replace(/^=\s*/, "");
-  }
-  return `<h3>Message</h3>
+// messageFieldsHTML renders the message picker for a catch or throw event: a
+// dropdown of the model's shared messages (plus "new"), and — once one is chosen —
+// its name and correlation key, which are shared so every event using the message
+// stays in sync (that's what lets a throw and a catch correlate). med is the
+// bpmn:MessageEventDefinition.
+function messageFieldsHTML(modeler, med, hint) {
+  const current = med.messageRef;
+  const options = listMessages(modeler).map((m) =>
+    `<option value="${esc(m.id)}"${current && current.id === m.id ? " selected" : ""}>${esc(m.name || m.id)}</option>`
+  ).join("");
+  const fields = current ? `
     <label class="field"><span>Message name</span>
-      <input type="text" id="f-msgname" value="${esc(name)}" placeholder="payment-received"/></label>
+      <input type="text" id="f-msgname" value="${esc(current.name || "")}" placeholder="payment-received"/></label>
     <label class="field"><span>Correlation key (FEEL)</span>
-      <textarea id="f-corrkey" rows="1" placeholder="orderId">${esc(key)}</textarea></label>
+      <textarea id="f-corrkey" rows="1" placeholder="orderId">${esc(messageCorrelationKey(current))}</textarea></label>
+    <p class="muted" style="font-size:12px">Shared with every event that uses this message — a throw and a catch correlate when they use the same message and their keys evaluate equal.</p>` : "";
+  return `<h3>Message</h3>
+    <label class="field"><span>Message</span>
+      <select id="f-msgref">
+        <option value="">— none —</option>
+        ${options}
+        <option value="__new__">＋ New message…</option>
+      </select></label>
+    ${fields}
     <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
+// messagesManagerHTML lists the model's messages for central management (add,
+// rename, set correlation key, delete). Shown on the diagram/collaboration root.
+function messagesManagerHTML(modeler) {
+  const msgs = listMessages(modeler);
+  const rows = msgs.length
+    ? msgs.map((m) => `
+        <div class="msg-row" data-id="${esc(m.id)}">
+          <input class="msg-name" value="${esc(m.name || "")}" placeholder="message name"/>
+          <input class="msg-key" value="${esc(messageCorrelationKey(m))}" placeholder="correlationKey (FEEL)"/>
+          <button type="button" class="btn ghost danger msg-del" title="Delete message">✕</button>
+        </div>`).join("")
+    : `<p class="muted" style="font-size:12px;margin:0 0 8px">No messages yet — add one, then reference it from a message throw/catch event.</p>`;
+  return `<h3>Messages</h3>
+    <div class="msg-list">${rows}</div>
+    <button type="button" class="btn neutral" id="msg-add" style="margin-top:8px">＋ Add message</button>
+    <p class="muted" style="font-size:12px">A message links a <b>throw</b> event to the <b>catch</b> events waiting for it. They correlate when they share a message and their correlation keys evaluate equal.</p>`;
+}
+
+// wireMessagesManager binds the Messages management section's inputs and buttons.
+// rerenderRoot re-renders the root panel after add/delete so the list updates.
+function wireMessagesManager(body, modeler, rerenderRoot) {
+  const add = body.querySelector("#msg-add");
+  if (add) add.addEventListener("click", () => { createMessage(modeler, "message"); rerenderRoot(); });
+  body.querySelectorAll(".msg-row").forEach((row) => {
+    const id = row.dataset.id;
+    const msg = () => listMessages(modeler).find((m) => m.id === id);
+    const nameIn = row.querySelector(".msg-name");
+    const keyIn = row.querySelector(".msg-key");
+    if (nameIn) nameIn.addEventListener("change", () => { const m = msg(); if (m) m.name = nameIn.value.trim(); });
+    if (keyIn) keyIn.addEventListener("change", () => { const m = msg(); if (m) setMessageCorrelationKey(modeler, m, keyIn.value.trim()); });
+    const del = row.querySelector(".msg-del");
+    if (del) del.addEventListener("click", () => { deleteMessage(modeler, id); rerenderRoot(); });
+  });
 }
 
 const isActivity = (bo) => /Task$/.test((bo && bo.$type) || "");
@@ -336,33 +427,75 @@ function definitionsOf(modeler) {
   try { return modeler.get("canvas").getRootElement().businessObject.$parent; } catch { return null; }
 }
 
-// upsertMessage points a message event definition at a top-level bpmn:Message
-// with the given name and zeebe correlation key, creating the message (and its
-// zeebe:subscription) if needed. The messageRef change goes through the modeling
-// API (undo/redo); the message element is registered on the definitions so it
-// serializes on deploy. A leading '=' on the key is normalized to Zeebe form.
-function upsertMessage(modeler, element, med, name, correlationKey) {
-  const moddle = modeler.get("moddle");
-  const modeling = modeler.get("modeling");
-  let msg = med.messageRef;
-  if (!msg) {
-    msg = moddle.create("bpmn:Message");
-    msg.id = "Message_" + Math.random().toString(36).slice(2, 8);
-    const defs = definitionsOf(modeler);
-    if (defs) {
-      msg.$parent = defs;
-      defs.rootElements = [...(defs.rootElements || []), msg];
+// Messages are top-level <bpmn:message> declarations shared by reference: a throw
+// event and the catch events waiting for it must point at the SAME message (same
+// name and correlation key) to correlate. These helpers let the editor treat
+// messages as first-class, reusable definitions rather than per-event text.
+
+// listMessages returns every <bpmn:message> declared on the model's definitions.
+function listMessages(modeler) {
+  const defs = definitionsOf(modeler);
+  const out = [];
+  if (defs && defs.rootElements) {
+    for (const el of defs.rootElements) {
+      if (el.$type === "bpmn:Message") out.push(el);
     }
   }
-  msg.name = name;
+  return out;
+}
+
+// messageCorrelationKey reads a message's zeebe correlation-key expression,
+// stripped of the leading '=' the engine tolerates.
+function messageCorrelationKey(msg) {
+  const vals = msg && msg.extensionElements && msg.extensionElements.values;
+  const sub = vals && vals.find((v) => v.$type === "zeebe:Subscription");
+  return ((sub && sub.correlationKey) || "").replace(/^=\s*/, "");
+}
+
+// createMessage adds a fresh <bpmn:message> to the model and returns it.
+function createMessage(modeler, name) {
+  const moddle = modeler.get("moddle");
+  const msg = moddle.create("bpmn:Message");
+  msg.id = "Message_" + Math.random().toString(36).slice(2, 8);
+  msg.name = name || "";
+  const defs = definitionsOf(modeler);
+  if (defs) {
+    msg.$parent = defs;
+    defs.rootElements = [...(defs.rootElements || []), msg];
+  }
+  return msg;
+}
+
+// setMessageCorrelationKey sets a message's shared zeebe correlation-key
+// expression (normalizing the Zeebe '=' prefix); it applies to every event that
+// references the message.
+function setMessageCorrelationKey(modeler, msg, key) {
+  const moddle = modeler.get("moddle");
   let ext = msg.extensionElements;
-  if (!ext) { ext = moddle.create("bpmn:ExtensionElements", { values: [] }); ext.$parent = msg; }
+  if (!ext) { ext = moddle.create("bpmn:ExtensionElements", { values: [] }); ext.$parent = msg; msg.extensionElements = ext; }
   let sub = (ext.values || []).find((v) => v.$type === "zeebe:Subscription");
   if (!sub) { sub = moddle.create("zeebe:Subscription"); sub.$parent = ext; ext.values = [...(ext.values || []), sub]; }
-  const key = (correlationKey || "").trim();
-  sub.correlationKey = key === "" ? "" : (key.startsWith("=") ? key : "= " + key);
-  msg.extensionElements = ext;
-  modeling.updateModdleProperties(element, med, { messageRef: msg });
+  const k = (key || "").trim();
+  sub.correlationKey = k === "" ? "" : (k.startsWith("=") ? k : "= " + k);
+}
+
+// linkMessage points a message event definition at a message (undo/redo tracked).
+function linkMessage(modeler, element, med, msg) {
+  try { modeler.get("modeling").updateModdleProperties(element, med, { messageRef: msg || undefined }); } catch { /* stale */ }
+}
+
+// deleteMessage removes a message and clears any event still referencing it, so a
+// deleted message never leaves a dangling messageRef (which would fail to compile).
+function deleteMessage(modeler, msgId) {
+  const defs = definitionsOf(modeler);
+  if (defs && defs.rootElements) defs.rootElements = defs.rootElements.filter((e) => e.id !== msgId);
+  const modeling = modeler.get("modeling");
+  modeler.get("elementRegistry").getAll().forEach((el) => {
+    const med = messageDefOf(el.businessObject);
+    if (med && med.messageRef && med.messageRef.id === msgId) {
+      try { modeling.updateModdleProperties(el, med, { messageRef: undefined }); } catch { /* stale */ }
+    }
+  });
 }
 
 // rootProcess returns the diagram's process business object, or null if the root
@@ -482,6 +615,18 @@ function wireProperties(root, modeler, api) {
   const modeling = modeler.get("modeling");
   const selection = modeler.get("selection");
 
+  // savePreservingPanel runs a field save whose resulting element.changed should
+  // NOT rebuild the whole properties panel. Editing a FEEL field saves on blur;
+  // rebuilding then would tear down the FEEL editor (losing caret/scroll) and the
+  // Test panel the user just opened — clicking into the sample-variables box would
+  // destroy it mid-interaction. Only this save's synchronous change is suppressed;
+  // genuinely external changes still refresh the panel.
+  let suppressRerender = false;
+  const savePreservingPanel = (fn) => {
+    suppressRerender = true;
+    try { fn(); } finally { suppressRerender = false; }
+  };
+
   function show(element) {
     if (!element) {
       // Nothing selected → show the process itself, so its id/name can be edited
@@ -506,7 +651,8 @@ function wireProperties(root, modeler, api) {
           <label class="field"><span>Name</span><input type="text" id="f-pname" value="${esc(rootBo.name || "")}" placeholder="Order fulfillment"/></label>
           <label class="field"><span>Process ID</span><input type="text" id="f-pid" value="${esc(rootBo.id || "")}" placeholder="order-fulfillment"/></label>
           <p class="muted" style="font-size:12px">The Process ID is the identity deployments and instances are grouped by. Renaming it and deploying creates a new process rather than a new version.</p>
-          ${startVarsHTML}`;
+          ${startVarsHTML}
+          ${messagesManagerHTML(modeler)}`;
         const rootEl = modeler.get("canvas").getRootElement();
         body.querySelector("#f-pname").addEventListener("change", (e) => {
           try { modeling.updateProperties(rootEl, { name: e.target.value }); } catch { /* ignore */ }
@@ -516,6 +662,7 @@ function wireProperties(root, modeler, api) {
           if (v) { try { modeling.updateProperties(rootEl, { id: v }); } catch { toast("invalid process id", "err"); } }
         });
         wireStartVars(body, modeler);
+        wireMessagesManager(body, modeler, () => show(null));
         return;
       }
       // A collaboration root has no single process to rename; each pool
@@ -524,7 +671,9 @@ function wireProperties(root, modeler, api) {
         icon.textContent = "CO"; typename.textContent = "Collaboration"; nameEl.textContent = "(collaboration)";
         body.innerHTML = `
           <h3>Collaboration</h3>
-          <p class="muted" style="font-size:12px">This diagram has several <b>pools</b> — each deploys as its own process. Select a pool to rename it, or an element inside a pool to configure it. Pools talk to each other through <b>message events</b> (a catch/throw with a matching correlation key), which is what a message flow between them means at runtime.</p>`;
+          <p class="muted" style="font-size:12px">This diagram has several <b>pools</b> — each deploys as its own process. Select a pool to rename it, or an element inside a pool to configure it. Pools talk to each other through <b>message events</b>: a throw event in one pool and a catch event in another that reference the <b>same message</b> below.</p>
+          ${messagesManagerHTML(modeler)}`;
+        wireMessagesManager(body, modeler, () => show(null));
         return;
       }
       icon.textContent = "–"; typename.textContent = "No selection"; nameEl.textContent = "—";
@@ -597,14 +746,14 @@ function wireProperties(root, modeler, api) {
               <input type="text" id="f-duration" value="${esc(dur)}" placeholder="PT30S"/></label>
             <p class="muted" style="font-size:12px">e.g. PT30S (30s), PT5M, PT1H, P1DT2H. The event waits this long, then continues.</p>`;
         } else if (msg) {
-          html += messageFieldsHTML(msg, "The event waits until a message with this name and a matching correlation key is published.");
+          html += messageFieldsHTML(modeler, msg, "The event waits until this message is published with a matching correlation key.");
         } else {
           html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b> or <b>Message</b> intermediate catch event, then configure it here.</p>`;
         }
       } else if (bo.$type === "bpmn:IntermediateThrowEvent") {
         const msg = messageDefOf(bo);
         if (msg) {
-          html += messageFieldsHTML(msg, "On reaching this event the message is published; any instance waiting on the same name and correlation key continues.");
+          html += messageFieldsHTML(modeler, msg, "On reaching this event the message is published; any instance waiting on it with a matching correlation key continues.");
         } else {
           html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Message</b> throw event, then configure it here.</p>`;
         }
@@ -634,13 +783,13 @@ function wireProperties(root, modeler, api) {
     }
     const fexpr = body.querySelector("#f-expr");
     const fresult = body.querySelector("#f-result");
-    const saveScript = () => {
+    const saveScript = () => savePreservingPanel(() => {
       const raw = (fexpr.value || "").trim();
       upsertExt(modeler, element, "zeebe:Script", {
         expression: raw === "" ? "" : (raw.startsWith("=") ? raw : "= " + raw),
         resultVariable: (fresult.value || "").trim(),
       });
-    };
+    });
     if (fexpr) fexpr.addEventListener("change", saveScript);
     if (fresult) fresult.addEventListener("change", saveScript);
 
@@ -664,23 +813,42 @@ function wireProperties(root, modeler, api) {
       });
     }
 
-    const fmsgname = body.querySelector("#f-msgname");
-    const fcorrkey = body.querySelector("#f-corrkey");
-    if (fmsgname || fcorrkey) {
-      const saveMsg = () => {
+    const fmsgref = body.querySelector("#f-msgref");
+    if (fmsgref) {
+      fmsgref.addEventListener("change", () => {
         const med = messageDefOf(element.businessObject);
         if (!med) return;
-        upsertMessage(modeler, element, med,
-          (fmsgname && fmsgname.value || "").trim(),
-          (fcorrkey && fcorrkey.value || "").trim());
-      };
-      if (fmsgname) fmsgname.addEventListener("change", saveMsg);
-      if (fcorrkey) fcorrkey.addEventListener("change", saveMsg);
+        const v = fmsgref.value;
+        savePreservingPanel(() => {
+          if (v === "__new__") {
+            linkMessage(modeler, element, med, createMessage(modeler, ""));
+          } else if (v === "") {
+            linkMessage(modeler, element, med, null);
+          } else {
+            linkMessage(modeler, element, med, listMessages(modeler).find((m) => m.id === v));
+          }
+        });
+        show(element); // re-render so the name/key fields match the chosen message
+      });
+    }
+    const fmsgname = body.querySelector("#f-msgname");
+    if (fmsgname) {
+      fmsgname.addEventListener("change", () => {
+        const med = messageDefOf(element.businessObject);
+        if (med && med.messageRef) med.messageRef.name = (fmsgname.value || "").trim();
+      });
+    }
+    const fcorrkey = body.querySelector("#f-corrkey");
+    if (fcorrkey) {
+      fcorrkey.addEventListener("change", () => {
+        const med = messageDefOf(element.businessObject);
+        if (med && med.messageRef) setMessageCorrelationKey(modeler, med.messageRef, (fcorrkey.value || "").trim());
+      });
     }
 
     const fcond = body.querySelector("#f-cond");
     if (fcond) {
-      fcond.addEventListener("change", () => {
+      fcond.addEventListener("change", () => savePreservingPanel(() => {
         const raw = (fcond.value || "").trim();
         const beo = element.businessObject;
         const prevCond = ((beo.conditionExpression && beo.conditionExpression.body) || "").replace(/^=\s*/, "").trim();
@@ -707,24 +875,27 @@ function wireProperties(root, modeler, api) {
           if (mirrors && curName !== plain) props.name = plain;
         }
         try { modeling.updateProperties(element, props); } catch { /* stale */ }
-      });
+      }));
     }
 
     // Upgrade every FEEL field in this panel into a code editor (highlighting +
-    // completion + live validation). The textareas keep their identity, so the
-    // change-to-save handlers wired above are untouched. Validation compiles the
-    // expression against the same engine deploy uses (POST /feel/validate).
+    // completion + live validation + a Test panel). The textareas keep their
+    // identity, so the change-to-save handlers wired above are untouched.
+    // Validation compiles the expression against the same engine deploy uses
+    // (POST /feel/validate); Test evaluates it (POST /feel/evaluate).
     if (tab === "implement") {
       const feelVars = collectFeelVariables(modeler);
       const validate = api ? (expression) => api("POST", "/api/v1/feel/validate", { expression }) : null;
-      enhanceFeel(body, "#f-expr", feelVars, validate);
-      enhanceFeel(body, "#f-cond", feelVars, validate);
-      enhanceFeel(body, "#f-corrkey", feelVars, validate);
+      const evaluate = api ? (expression, variables) => api("POST", "/api/v1/feel/evaluate", { expression, variables }) : null;
+      enhanceFeel(body, "#f-expr", feelVars, validate, evaluate);
+      enhanceFeel(body, "#f-cond", feelVars, validate, evaluate);
+      enhanceFeel(body, "#f-corrkey", feelVars, validate, evaluate);
     }
   }
 
   modeler.on("selection.changed", (e) => show((e.newSelection || [])[0]));
   modeler.on("element.changed", (e) => {
+    if (suppressRerender) return; // a FEEL-field self-save; keep the panel intact
     const sel = selection.get();
     if (sel[0] && e.element && sel[0].id === e.element.id) show(sel[0]);
   });

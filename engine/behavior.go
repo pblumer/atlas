@@ -50,6 +50,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeMessageThrowEvent] = messageThrowEventBehavior{}
 	p.behaviors[compiler.TypeTask] = passThroughBehavior{}
 	p.behaviors[compiler.TypeParallelGateway] = parallelGatewayBehavior{}
+	p.behaviors[compiler.TypeInclusiveGateway] = inclusiveGatewayBehavior{}
 	// A message start event is a plain entry point once instantiated: it flows
 	// straight on like a none start (ADR-0035). What makes it a start is the
 	// deploy-time subscription (see Deploy), not a distinct runtime behavior.
@@ -166,20 +167,57 @@ func completeAndTakeFlows(c *ProcessingContext, key uint64, ei *model.ElementIns
 	takeOutgoingFlows(c, ei)
 }
 
+// activateElement schedules activation of a fresh element instance on targetId,
+// scoped like ei. It is the single "take a flow" primitive the flow-taking
+// behaviors share.
+func activateElement(c *ProcessingContext, ei *model.ElementInstanceValue, targetId int32) {
+	target := c.process(ei.ProcessDefKey).Node(targetId)
+	c.AppendElementCommand(c.NewKey(), model.IntentActivating, model.ElementInstanceValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ProcessDefKey:      ei.ProcessDefKey,
+		ElementId:          targetId,
+		FlowScopeKey:       ei.FlowScopeKey,
+		BpmnElementType:    uint8(target.Type),
+	})
+}
+
 // takeOutgoingFlows activates a fresh element instance for each outgoing flow's
 // target. (Sequence-flow-taken audit events are deferred; the lifecycle events
 // are enough to drive and recover state.)
 func takeOutgoingFlows(c *ProcessingContext, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	for _, flowID := range cp.Outgoing(ei.ElementId) {
-		target := cp.Node(cp.Flow(flowID).Target)
-		c.AppendElementCommand(c.NewKey(), model.IntentActivating, model.ElementInstanceValue{
-			ProcessInstanceKey: ei.ProcessInstanceKey,
-			ProcessDefKey:      ei.ProcessDefKey,
-			ElementId:          target.ElementId,
-			FlowScopeKey:       ei.FlowScopeKey,
-			BpmnElementType:    uint8(target.Type),
-		})
+		activateElement(c, ei, cp.Flow(flowID).Target)
+	}
+}
+
+// takeInclusiveOutgoing takes every outgoing flow whose FEEL condition holds (an
+// unconditional, non-default flow always holds), or the default flow if none do.
+// This is the inclusive (OR) split: unlike the exclusive gateway, it may take
+// more than one branch.
+func takeInclusiveOutgoing(c *ProcessingContext, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	took := false
+	defaultFlow := int32(-1)
+	for _, flowID := range cp.Outgoing(ei.ElementId) {
+		f := cp.Flow(flowID)
+		if f.Default {
+			defaultFlow = flowID
+			continue
+		}
+		if f.Condition == nil {
+			activateElement(c, ei, f.Target)
+			took = true
+			continue
+		}
+		v, err := f.Condition.Eval(bindInputs(c, f.Condition.Inputs(), ei.ProcessInstanceKey))
+		if err == nil && expr.IsTrue(v) {
+			activateElement(c, ei, f.Target)
+			took = true
+		}
+	}
+	if !took && defaultFlow >= 0 {
+		activateElement(c, ei, cp.Flow(defaultFlow).Target)
 	}
 }
 
@@ -502,6 +540,38 @@ func (parallelGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei 
 
 func (parallelGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	completeAndTakeFlows(c, key, ei)
+}
+
+// inclusiveGatewayBehavior: an OR gateway. As a split (one incoming) it fires at
+// once, taking every outgoing flow whose condition holds (or the default). As a
+// join (several incoming) it waits until no token could still arrive — no active
+// token upstream and none in flight toward it — then consumes every token parked
+// on it and fires the outgoing flow(s) once. That "no more can arrive" test is
+// what distinguishes it from a parallel join, which waits for a fixed count: an
+// inclusive join waits only for the branches the split actually took.
+type inclusiveGatewayBehavior struct{}
+
+func (inclusiveGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	if cp.Node(ei.ElementId).IncomingCount <= 1 {
+		c.AppendElementCommand(key, model.IntentCompleting, *ei) // split: fire now
+		return
+	}
+	// Join: park until nothing more can arrive at this gateway.
+	if c.TokenCanStillReach(ei.ProcessInstanceKey, ei.ElementId, cp.NodesReaching(ei.ElementId)) {
+		return
+	}
+	for _, k := range c.ElementInstancesOnNode(ei.ProcessInstanceKey, ei.ElementId) {
+		if a := c.GetElementInstance(k); a != nil {
+			c.AppendElementEvent(k, model.IntentCompleted, *a)
+		}
+	}
+	takeInclusiveOutgoing(c, ei)
+}
+
+func (inclusiveGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendElementEvent(key, model.IntentCompleted, *ei)
+	takeInclusiveOutgoing(c, ei)
 }
 
 // selectExclusiveFlow returns the outgoing flow an exclusive gateway takes: the

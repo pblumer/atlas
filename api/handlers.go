@@ -155,6 +155,99 @@ func (s *Server) handleValidateFeel(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, validateFeelResp{OK: true})
 }
 
+type evalFeelReq struct {
+	Expression string         `json:"expression"`
+	Variables  map[string]any `json:"variables"`
+}
+
+type evalFeelResp struct {
+	OK     bool   `json:"ok"`
+	Result string `json:"result"`
+	Kind   string `json:"kind"`
+	Error  string `json:"error,omitempty"`
+}
+
+// handleEvaluateFeel compiles and evaluates a FEEL expression against sample
+// variables, so the Modeler's "Test expression" can show what an expression
+// produces before deploying. A FEEL type error (number + string, division by
+// zero, …) evaluates to null rather than erroring — reported faithfully as a
+// null result. Like validation, it's a pure compile+eval over a caller-supplied
+// scope: no engine state is read or written, so it runs off the single-writer
+// loop and never touches the processor hot path (ADR-0008).
+func (s *Server) handleEvaluateFeel(w http.ResponseWriter, r *http.Request) {
+	dec := json.NewDecoder(io.LimitReader(r.Body, maxFeelBytes))
+	dec.UseNumber() // keep numbers exact (json.Number) for FEEL's decimals
+	var req evalFeelReq
+	if err := dec.Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+		return
+	}
+	if strings.TrimSpace(req.Expression) == "" {
+		writeJSON(w, http.StatusOK, evalFeelResp{OK: false, Error: "empty expression"})
+		return
+	}
+	compiled, err := expr.CompileAuto(req.Expression)
+	if err != nil {
+		writeJSON(w, http.StatusOK, evalFeelResp{OK: false, Error: err.Error()})
+		return
+	}
+	bindings, err := feelBindings(req.Variables)
+	if err != nil {
+		writeJSON(w, http.StatusOK, evalFeelResp{OK: false, Error: err.Error()})
+		return
+	}
+	v, err := compiled.Eval(bindings)
+	if err != nil {
+		writeJSON(w, http.StatusOK, evalFeelResp{OK: false, Error: err.Error()})
+		return
+	}
+	kind, b, text := expr.Classify(v)
+	result := text
+	switch kind {
+	case expr.KindBool:
+		result = strconv.FormatBool(b)
+	case expr.KindNull:
+		result = "null"
+	}
+	writeJSON(w, http.StatusOK, evalFeelResp{OK: true, Result: result, Kind: feelKindName(kind)})
+}
+
+// feelBindings converts the JSON sample variables into FEEL values. Numbers keep
+// their exact text (json.Number) so decimals aren't mangled by float rounding.
+// Only scalars are accepted — the same contract as start variables.
+func feelBindings(in map[string]any) (map[string]expr.Value, error) {
+	out := make(map[string]expr.Value, len(in))
+	for name, raw := range in {
+		switch x := raw.(type) {
+		case nil:
+			out[name] = expr.Null
+		case bool:
+			out[name] = expr.Bool(x)
+		case string:
+			out[name] = expr.String(x)
+		case json.Number:
+			out[name] = expr.FromStored(expr.KindNumber, false, x.String())
+		default:
+			return nil, fmt.Errorf("variable %q: only scalar values (number, string, boolean, null)", name)
+		}
+	}
+	return out, nil
+}
+
+// feelKindName maps a classified value kind to the label the UI shows.
+func feelKindName(k expr.ValueKind) string {
+	switch k {
+	case expr.KindBool:
+		return "boolean"
+	case expr.KindNumber:
+		return "number"
+	case expr.KindString:
+		return "string"
+	default:
+		return "null"
+	}
+}
+
 // handleDeploy parses a BPMN XML body, compiles and deploys every executable
 // process it contains — one for a plain model, several for a collaboration (one
 // per pool) — and returns the assigned key/id/version for each. Each pool's
@@ -178,57 +271,10 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		persistErr error
 	)
 	s.do(func() {
-		deployables, err := compiler.ParseAll(s.nextKey, 1, bytes.NewReader(body))
-		if err != nil {
-			compErr = err
+		var deployed []deployedProcess
+		deployed, compErr, persistErr = s.deployModel(body, time.Now().Unix())
+		if compErr != nil || persistErr != nil {
 			return
-		}
-		deployedAt := time.Now().Unix()
-		deployed := make([]deployedProcess, 0, len(deployables))
-		for i := range deployables {
-			cp := deployables[i].Process
-			pid := cp.Intern(cp.BpmnProcessId)
-			version := s.versions[pid] + 1
-			cp.Version = version
-			key := cp.Key // ParseAll assigned s.nextKey+i in document order
-			// A pool's name labels its process; fall back to the process's own name.
-			name := deployables[i].PoolName
-			if name == "" {
-				name = deployables[i].ProcessName
-			}
-
-			// Durable before visible (I2, ADR-0019): persist before registering. A
-			// mid-collaboration failure leaves earlier pools deployed (no rollback
-			// yet) and returns 500 — an honest limitation until deployment is a
-			// first-class WAL event (ADR-0023).
-			if err := s.deploys.save(persistedDeployment{
-				Key:        key,
-				ProcessID:  pid,
-				Name:       name,
-				Version:    version,
-				DeployedAt: deployedAt,
-				XML:        string(body),
-			}); err != nil {
-				persistErr = err
-				return
-			}
-
-			s.versions[pid] = version
-			s.proc.Deploy(cp)
-			s.deployments[key] = &deployment{
-				Key:        key,
-				ProcessID:  pid,
-				Name:       name,
-				Version:    version,
-				DeployedAt: deployedAt,
-				xml:        body,
-				cp:         cp,
-			}
-			s.order = append(s.order, key)
-			if key >= s.nextKey {
-				s.nextKey = key + 1
-			}
-			deployed = append(deployed, deployedProcess{Key: key, ProcessID: pid, Name: name, Version: version})
 		}
 		resp = deployResp{
 			Key:         deployed[0].Key,
@@ -246,6 +292,65 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusOK, resp)
 	}
+}
+
+// deployModel compiles and registers every executable process in one BPMN model
+// — one for a plain model, several for a collaboration (one per pool) — persisting
+// each before registering it (durable before visible, I2 / ADR-0019). It returns
+// the deployed processes, or a compile error (a client error: the model is
+// invalid) or a persist error (a server error), the two failure modes the deploy
+// handlers distinguish. It MUST be called on the run-loop goroutine (inside do),
+// since it mutates the deployment registry and the processor.
+//
+// A mid-model persist failure leaves earlier processes deployed (no rollback
+// yet) — an honest limitation until deployment is a first-class WAL event.
+func (s *Server) deployModel(body []byte, deployedAt int64) (deployed []deployedProcess, compErr, persistErr error) {
+	deployables, err := compiler.ParseAll(s.nextKey, 1, bytes.NewReader(body))
+	if err != nil {
+		return nil, err, nil
+	}
+	deployed = make([]deployedProcess, 0, len(deployables))
+	for i := range deployables {
+		cp := deployables[i].Process
+		pid := cp.Intern(cp.BpmnProcessId)
+		version := s.versions[pid] + 1
+		cp.Version = version
+		key := cp.Key // ParseAll assigned s.nextKey+i in document order
+		// A pool's name labels its process; fall back to the process's own name.
+		name := deployables[i].PoolName
+		if name == "" {
+			name = deployables[i].ProcessName
+		}
+
+		if err := s.deploys.save(persistedDeployment{
+			Key:        key,
+			ProcessID:  pid,
+			Name:       name,
+			Version:    version,
+			DeployedAt: deployedAt,
+			XML:        string(body),
+		}); err != nil {
+			return deployed, nil, err
+		}
+
+		s.versions[pid] = version
+		s.proc.Deploy(cp)
+		s.deployments[key] = &deployment{
+			Key:        key,
+			ProcessID:  pid,
+			Name:       name,
+			Version:    version,
+			DeployedAt: deployedAt,
+			xml:        body,
+			cp:         cp,
+		}
+		s.order = append(s.order, key)
+		if key >= s.nextKey {
+			s.nextKey = key + 1
+		}
+		deployed = append(deployed, deployedProcess{Key: key, ProcessID: pid, Name: name, Version: version})
+	}
+	return deployed, nil, nil
 }
 
 // handleListProcesses lists deployed definitions in registration order.
@@ -760,13 +865,16 @@ func (s *Server) handleStats(w http.ResponseWriter, _ *http.Request) {
 type draftResp struct {
 	ProcessID string `json:"processId"`
 	Name      string `json:"name"`
+	ProjectID string `json:"projectId,omitempty"`
 	SavedAt   int64  `json:"savedAt"`
 }
 
 // handleSaveDraft persists a diagram as a draft: the raw BPMN XML is stored as-is,
 // keyed by its process id, WITHOUT compiling it — so an incomplete or not-yet
 // executable model can still be saved and reopened. Re-saving the same process id
-// overwrites the previous draft rather than creating a version.
+// overwrites the previous draft rather than creating a version. An optional
+// ?projectId= query files the draft into that project (ADR-0034); it must name an
+// existing project, else the save is rejected.
 func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
@@ -782,25 +890,52 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "cannot save draft: no <process id> in the diagram")
 		return
 	}
-	rec := draft{ProcessID: pid, Name: name, SavedAt: time.Now().Unix(), XML: string(body)}
-	var saveErr error
-	s.do(func() { saveErr = s.drafts.save(rec) })
-	if saveErr != nil {
+	projectID := r.URL.Query().Get("projectId")
+	rec := draft{ProcessID: pid, Name: name, ProjectID: projectID, SavedAt: time.Now().Unix(), XML: string(body)}
+	var (
+		saveErr, projErr error
+		unknownProject   bool
+	)
+	s.do(func() {
+		if projectID != "" {
+			_, ok, e := s.projects.get(projectID)
+			if e != nil {
+				projErr = e
+				return
+			}
+			if !ok {
+				unknownProject = true
+				return
+			}
+		}
+		saveErr = s.drafts.save(rec)
+	})
+	switch {
+	case projErr != nil:
+		writeError(w, http.StatusInternalServerError, "read project: "+projErr.Error())
+	case unknownProject:
+		writeError(w, http.StatusBadRequest, "unknown project id")
+	case saveErr != nil:
 		writeError(w, http.StatusInternalServerError, "save draft: "+saveErr.Error())
-		return
+	default:
+		writeJSON(w, http.StatusOK, draftResp{ProcessID: pid, Name: name, ProjectID: projectID, SavedAt: rec.SavedAt})
 	}
-	writeJSON(w, http.StatusOK, draftResp{ProcessID: pid, Name: name, SavedAt: rec.SavedAt})
 }
 
-// handleListDrafts lists saved drafts, most recently saved first.
-func (s *Server) handleListDrafts(w http.ResponseWriter, _ *http.Request) {
+// handleListDrafts lists saved drafts, most recently saved first. An optional
+// ?projectId= query narrows the list to one project's artifacts (ADR-0034).
+func (s *Server) handleListDrafts(w http.ResponseWriter, r *http.Request) {
+	filter := r.URL.Query().Get("projectId")
 	list := []draftResp{}
 	var loadErr error
 	s.do(func() {
 		var recs []draft
 		recs, loadErr = s.drafts.loadAll()
 		for _, d := range recs {
-			list = append(list, draftResp{ProcessID: d.ProcessID, Name: d.Name, SavedAt: d.SavedAt})
+			if filter != "" && d.ProjectID != filter {
+				continue
+			}
+			list = append(list, draftResp{ProcessID: d.ProcessID, Name: d.Name, ProjectID: d.ProjectID, SavedAt: d.SavedAt})
 		}
 	})
 	if loadErr != nil {
@@ -808,6 +943,71 @@ func (s *Server) handleListDrafts(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, list)
+}
+
+// handleMoveDraft reassigns a draft to a different project (or to Ungrouped when
+// projectId is empty), without touching its XML. Body: {"projectId": "..."}. A
+// non-empty projectId must name an existing project (ADR-0034).
+func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	var payload struct {
+		ProjectID string `json:"projectId"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return
+	}
+	var (
+		found, unknownProject    bool
+		getErr, projErr, saveErr error
+		view                     draftResp
+	)
+	s.do(func() {
+		rec, ok, e := s.drafts.get(id)
+		if e != nil {
+			getErr = e
+			return
+		}
+		if !ok {
+			return
+		}
+		found = true
+		if payload.ProjectID != "" {
+			_, pok, pe := s.projects.get(payload.ProjectID)
+			if pe != nil {
+				projErr = pe
+				return
+			}
+			if !pok {
+				unknownProject = true
+				return
+			}
+		}
+		rec.ProjectID = payload.ProjectID
+		if saveErr = s.drafts.save(rec); saveErr != nil {
+			return
+		}
+		view = draftResp{ProcessID: rec.ProcessID, Name: rec.Name, ProjectID: rec.ProjectID, SavedAt: rec.SavedAt}
+	})
+	switch {
+	case getErr != nil:
+		writeError(w, http.StatusInternalServerError, "read draft: "+getErr.Error())
+	case !found:
+		writeError(w, http.StatusNotFound, "no draft with that process id")
+	case projErr != nil:
+		writeError(w, http.StatusInternalServerError, "read project: "+projErr.Error())
+	case unknownProject:
+		writeError(w, http.StatusBadRequest, "unknown project id")
+	case saveErr != nil:
+		writeError(w, http.StatusInternalServerError, "move draft: "+saveErr.Error())
+	default:
+		writeJSON(w, http.StatusOK, view)
+	}
 }
 
 // handleDraftXML returns a draft's raw BPMN XML so the editor can reopen it.

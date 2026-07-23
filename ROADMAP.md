@@ -44,7 +44,12 @@ The control-flow basics most real models use.
   the join), so it replays deterministically and a half-arrived join survives a
   restart — recovery-tested. Cyclic joins and inclusive (OR) joins still to come
   (ADR-0024).
-- 🔲 Inclusive gateway
+- ✅ **Inclusive gateway** (OR): the split takes every outgoing flow whose FEEL
+  condition holds (or the default); the join waits until no token could still
+  arrive — no live token upstream and none in flight toward it — then fires once
+  for exactly the branches the split took. Correct for reconverging splits with
+  pass-through branches (no double fire), and recovery-tested. Cyclic inclusive
+  joins still to come (ADR-0033).
 - 🔲 Input/output variable mappings
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
 - 🔲 Conformance tests against a curated BPMN model set
@@ -54,7 +59,7 @@ The control-flow basics most real models use.
   as a vertical slice. It currently feeds a decision static inputs and surfaces
   outputs via a sink; wiring real input/output variable mappings depends on the
   variable subsystem above.
-- 🚧 **Connectors** ([ADR-0036](docs/adr/0026-clio-connector.md)): a service task
+- 🚧 **Connectors** ([ADR-0036](docs/adr/0036-clio-connector.md)): a service task
   bearing an `<atlas:clioConnector>` extension is a connector task that appends an
   event to a **server-registered** clio event store through the job path (like the
   DMN worker) — endpoint and credentials live in the server config, the model
@@ -184,7 +189,9 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   Hand-written, no new dependency; the engine invariants stay behind the HTTP API.
   The `/mcp` endpoint is unauthenticated — front it with a reverse proxy before
   exposing it publicly.
-- 🔲 Full properties panel (would vendor a pre-bundled `bpmn-js-properties-panel`).
+- 🔲 Full properties panel — the hand-written Details panel grows group by group
+  ([ADR-0025](docs/adr/0025-full-properties-panel.md)) rather than vendoring the
+  ES-module-only `bpmn-js-properties-panel`. Enumerated in **Milestone A** below.
 - ✅ Durable deployments ([ADR-0019](docs/adr/0019-durable-deployments.md)): the
   server persists each deployment (XML + metadata) to an on-disk sidecar store and
   reloads it on startup, re-registering definitions with the processor — so
@@ -194,7 +201,102 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   action in the Modeler persists work-in-progress (raw, uncompiled XML) to a
   durable draft store keyed by process id, so incomplete models survive and can be
   reopened — distinct from deploying, which compiles, versions, and runs.
+- 🚧 **Projects & artifacts** ([ADR-0034](docs/adr/0034-projects-and-artifacts.md)):
+  the Modeler groups work into named **projects** that hold **artifacts**.
+  Phases 1–2 landed. Projects are a durable sidecar store
+  (create/list/rename/delete); artifacts carry an optional `projectId`, and the
+  Modeler home lists each project's artifacts plus an **Ungrouped** bucket, moving
+  one between projects from a per-row dropdown. Two artifact types so far:
+  **BPMN drafts** (Phase 1) and **DMN references** — a DMN artifact is a *pointer*
+  to a temis-authored model (display name + temis handle), never DMN XML, so Atlas
+  organizes and deploys the decision without becoming a DMN editor, honoring the
+  "no DMN authoring surface" non-goal (Phase 2, ADR-0014). A DMN reference is
+  **resolved and validated at deploy time**: a pluggable `dmn.Resolver` (default:
+  a `<data-dir>/dmn-models/` folder of temis-exported models; a temis git/service
+  source can replace it behind the interface) fetches the model XML and the
+  embedded temis engine compiles it — the Modeler shows each reference as
+  valid / invalid / unresolved, and a project preflight
+  (`POST /api/v1/projects/{id}/validate`) gates on all references being valid.
+  **Project bundle-deploy** (`POST /api/v1/projects/{id}/deploy`) ties it together:
+  it runs the DMN preflight and then deploys every BPMN draft as a runnable
+  definition, "validate all then deploy all" so a non-compiling draft or an
+  invalid reference refuses the whole bundle before anything is registered; the
+  Modeler's per-project **Deploy** button drives it. A project is a design-time
+  grouping layer only (below the HTTP API, no engine impact). Next: wiring the
+  validated DMN into the engine's runtime so business-rule tasks execute it (the
+  ADR-0014 follow-up — the server does not run DMN yet), a temis git/service
+  resolver, and further artifact types (forms, element templates, READMEs, nested
+  folders).
 - 🔲 Later: a polished "workbench" experience on top.
+
+## Milestone A — Modeler & authoring experience 🔲
+
+A parallel track alongside Milestone S: bring the Modeler's *authoring* surface up
+to what a real BPMN "Implement" workspace offers, captured feature-by-feature from
+a reference modeler and translated into Atlas decisions. Every item respects the
+buildless, self-contained UI rule ([ADR-0012](docs/adr/0012-web-ui-app-shell.md))
+and the compiler gate ([ADR-0013](docs/adr/0013-embed-bpmn-js-modeler.md)) — the
+panel only ever authors what the engine actually runs. The ADRs below are
+**Proposed** (feature intentions, not yet decided or built).
+
+**Properties panel** ([ADR-0025](docs/adr/0025-full-properties-panel.md)) — extend
+the hand-written Details panel one vertical slice at a time:
+- 🔲 General: element id, name.
+- 🔲 Documentation: `<bpmn:documentation>` as passthrough (compiler ignores it,
+  codec preserves it).
+- 🔲 Input/output variable mappings (`zeebe:ioMapping`) — depends on the
+  Milestone 1 variable subsystem.
+- 🔲 Execution listeners (`zeebe:executionListeners`) mapped to engine hooks.
+- 🔲 Extension properties (`zeebe:properties`) — generic name/value pairs, stored
+  and round-tripped even when Atlas assigns them no meaning.
+- 🔲 Example data — editor-only mock data used by Play mode, never by the runtime.
+
+**Validation & problems** ([ADR-0026](docs/adr/0026-problems-panel-and-versioned-validation.md)):
+- 🔲 A `POST /api/v1/validate` dry-run compile (no register, no version, no run)
+  returning structured problems (element ref, severity, rule, message).
+- 🔲 A Problems panel that calls it debounced on edit, links each problem to its
+  element, and shows a version selector ("check problems against Atlas <version>").
+
+**Element & connector templates** ([ADR-0027](docs/adr/0027-element-templates.md)):
+- 🔲 Adopt the bpmn.io element-templates JSON schema; a server-served catalog.
+- 🔲 "Template → Select" applies a template's bound properties through the
+  ADR-0025 write path, rendering only the template's declared fields.
+
+**Human tasks & forms** ([ADR-0028](docs/adr/0028-forms-and-the-tasks-app.md)):
+- 🔲 `<bpmn:userTask>` that parks a token and creates an activatable human task
+  via the existing job/task lifecycle (ADR-0007).
+- 🔲 Form model (adopt the bpmn.io form-js schema) + a server-side form store.
+- 🔲 The **Tasks** app (reserved in ADR-0012) as the human "worker": task inbox,
+  form rendering, submit-completes-task.
+- 🔲 Form binding + a **Test** tab that previews a form against example data.
+
+**Publication** ([ADR-0029](docs/adr/0029-public-process-start-links.md)):
+- 🔲 Opt-in, revocable public start links: a scoped, unauthenticated
+  `POST /public/forms/{token}/start` bound to one process + start form, reusing the
+  single-writer start path. Needs rate limiting / abuse mitigation before shipping.
+
+**Play mode** ([ADR-0030](docs/adr/0030-play-mode-simulation.md)):
+- 🔲 An ephemeral engine sandbox: the real compiler + processor over an in-memory,
+  non-durable partition seeded from the draft, external effects mocked, driven
+  from the Modeler and overlaid with the existing runtime overlay. No JS token
+  simulator — identical semantics to production by construction.
+
+**Version history** ([ADR-0031](docs/adr/0031-diagram-version-history.md)):
+- 🔲 A **Versions** control: explicit named checkpoints (immutable snapshots)
+  beside the overwrite-in-place draft (ADR-0021) — history without autosave spam,
+  distinct from deployment versions. Browse, label, restore.
+
+**In-Modeler AI copilot** ([ADR-0032](docs/adr/0032-modeler-ai-copilot.md)):
+- 🔲 Extend the MCP/HTTP surface (ADR-0016) with model-authoring tools (return
+  XML, validate candidate XML, accept generated XML into a draft).
+- 🔲 A copilot panel over a user-configured agent endpoint that drops generated
+  models into a reviewable draft — no LLM or provider SDK in the binary, every
+  result passes the compiler + Problems gate before deploy.
+
+**Canvas polish** (bpmn-js affordances; mostly no ADR needed, toolkit features):
+- 🔲 Minimap, align/distribute, element color/appearance.
+- 🔲 Element comments / annotations.
+- 🔲 Projects/folders to organize diagrams (draft/deployment listing grows a tree).
 
 ---
 
