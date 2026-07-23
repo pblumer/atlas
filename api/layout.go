@@ -45,6 +45,13 @@ type layoutDefs struct {
 type layoutCollab struct {
 	Id           string              `xml:"id,attr"`
 	Participants []layoutParticipant `xml:"participant"`
+	MessageFlows []layoutMessageFlow `xml:"messageFlow"`
+}
+
+type layoutMessageFlow struct {
+	Id        string `xml:"id,attr"`
+	SourceRef string `xml:"sourceRef,attr"`
+	TargetRef string `xml:"targetRef,attr"`
 }
 
 type layoutParticipant struct {
@@ -58,11 +65,18 @@ type layoutProcess struct {
 	EndEvents    []layoutElem `xml:"endEvent"`
 	Tasks        []layoutElem `xml:"task"`
 	ServiceTasks []layoutElem `xml:"serviceTask"`
+	ScriptTasks  []layoutElem `xml:"scriptTask"`
 	UserTasks    []layoutElem `xml:"userTask"`
+	ManualTasks  []layoutElem `xml:"manualTask"`
+	BizRuleTasks []layoutElem `xml:"businessRuleTask"`
 	ExclusiveGws []layoutElem `xml:"exclusiveGateway"`
 	ParallelGws  []layoutElem `xml:"parallelGateway"`
 	InclusiveGws []layoutElem `xml:"inclusiveGateway"`
-	Flows        []layoutFlow `xml:"sequenceFlow"`
+
+	IntermediateCatchEvents []layoutElem `xml:"intermediateCatchEvent"`
+	IntermediateThrowEvents []layoutElem `xml:"intermediateThrowEvent"`
+
+	Flows []layoutFlow `xml:"sequenceFlow"`
 }
 
 type layoutElem struct {
@@ -135,9 +149,14 @@ func collectNodes(p layoutProcess) []layoutNode {
 	}
 	add(p.StartEvents, kindEvent)
 	add(p.EndEvents, kindEvent)
+	add(p.IntermediateCatchEvents, kindEvent)
+	add(p.IntermediateThrowEvents, kindEvent)
 	add(p.Tasks, kindTask)
 	add(p.ServiceTasks, kindTask)
+	add(p.ScriptTasks, kindTask)
 	add(p.UserTasks, kindTask)
+	add(p.ManualTasks, kindTask)
+	add(p.BizRuleTasks, kindTask)
 	add(p.ExclusiveGws, kindGateway)
 	add(p.ParallelGws, kindGateway)
 	add(p.InclusiveGws, kindGateway)
@@ -175,6 +194,9 @@ func generateCollaborationDI(defs layoutDefs) (string, bool) {
 	var b strings.Builder
 	openPlane(&b, defs.Collaboration.Id)
 
+	// Collect all nodes across all pools for cross-pool message flow edges.
+	allIdx := map[string]layoutNode{}
+
 	poolTop := poolTop0
 	any := false
 	for _, part := range defs.Collaboration.Participants {
@@ -209,9 +231,30 @@ func generateCollaborationDI(defs layoutDefs) (string, bool) {
 
 		poolShape(&b, part.Id, poolLeft, poolTop, poolW, poolH)
 		renderShapesAndEdges(&b, nodes, idx, proc.Flows)
+		for _, n := range nodes {
+			allIdx[n.id] = n
+		}
 		poolTop += poolH + poolGap
 		any = true
 	}
+
+	// Message flow edges connect elements across pools.
+	for _, mf := range defs.Collaboration.MessageFlows {
+		src, sok := allIdx[mf.SourceRef]
+		tgt, tok := allIdx[mf.TargetRef]
+		if !sok || !tok || mf.Id == "" {
+			continue
+		}
+		x1 := src.x + src.kind.w/2
+		y1 := src.y + src.kind.h
+		x2 := tgt.x + tgt.kind.w/2
+		y2 := tgt.y
+		fmt.Fprintf(&b, "      <bpmndi:BPMNEdge id=\"%s\" bpmnElement=\"%s\">\n", attr(mf.Id+"_di"), attr(mf.Id))
+		fmt.Fprintf(&b, "        <omgdi:waypoint x=\"%d\" y=\"%d\"/>\n", x1, y1)
+		fmt.Fprintf(&b, "        <omgdi:waypoint x=\"%d\" y=\"%d\"/>\n", x2, y2)
+		b.WriteString("      </bpmndi:BPMNEdge>\n")
+	}
+
 	closePlane(&b)
 	if !any {
 		return "", false
