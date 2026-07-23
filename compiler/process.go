@@ -31,9 +31,10 @@ const (
 	TypeInclusiveGateway  // OR gateway: forks onto every flow whose condition holds, joins by waiting for all that could still arrive
 	TypeMessageStartEvent // a start event that a correlating message instantiates (ADR-0035); at runtime it behaves like a none start (flows straight on)
 	TypeConnectorTask     // a service task that delegates to a server-registered connector via the job path (ADR-0036); like a service task it creates a job and waits
+	TypeUserTask          // a human task: parks a token, creates a job, waits for a person to complete it via the Tasks app (ADR-0028)
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 16
+	numBpmnTypes = 17
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -69,6 +70,8 @@ func (t BpmnType) String() string {
 		return "MessageStartEvent"
 	case TypeConnectorTask:
 		return "ConnectorTask"
+	case TypeUserTask:
+		return "UserTask"
 	default:
 		return "Unspecified"
 	}
@@ -125,6 +128,17 @@ type BusinessRuleTaskDetail struct {
 	Retries    int32
 }
 
+// UserTaskDetail is the per-user-task data a behavior needs at runtime. A user
+// task parks a token and creates a job like a service task; the "worker" is a
+// person using the Tasks app (ADR-0028). Assignee and CandidateGroups are
+// interned strings from the zeebe:assignmentDefinition extension (-1 if unset).
+type UserTaskDetail struct {
+	JobType         int32
+	Retries         int32
+	Assignee        int32
+	CandidateGroups int32
+}
+
 // ConnectorTaskDetail is the per-connector-task data a behavior needs at runtime.
 // A connector task delegates to a server-registered connector (e.g. a clio event
 // store) evaluated off the hot path by a job worker (ADR-0036). Like a service
@@ -175,6 +189,7 @@ type CompiledProcess struct {
 	businessRuleTasks []BusinessRuleTaskDetail
 	timerCatches      []TimerCatchDetail
 	connectorTasks    []ConnectorTaskDetail
+	userTasks         []UserTaskDetail
 	messageCatches    []MessageDetail
 	messageThrows     []MessageDetail
 	messageStarts     []MessageDetail
@@ -283,6 +298,11 @@ func (p *CompiledProcess) BusinessRuleDecisions() []string {
 		}
 	}
 	return out
+}
+
+// UserTask returns the user-task detail at the given table index.
+func (p *CompiledProcess) UserTask(detail int32) *UserTaskDetail {
+	return &p.userTasks[detail]
 }
 
 // ConnectorTask returns the connector-task detail at the given table index.

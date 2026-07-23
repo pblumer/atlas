@@ -67,7 +67,7 @@ async function deployDemo() {
 const APPS = [
   { id: "console", name: "Console", route: "#/console", on: true },
   { id: "modeler", name: "Modeler", route: "#/modeler", on: true },
-  { id: "tasks", name: "Tasks", route: "#/tasks", on: false },
+  { id: "tasks", name: "Tasks", route: "#/tasks", on: true },
   { id: "operations", name: "Operations", route: "#/operations", on: true },
   { id: "insights", name: "Insights", route: "#/insights", on: false },
 ];
@@ -81,7 +81,7 @@ const TOPNAV = {
   ],
   modeler: [{ name: "Home", route: "#/modeler" }],
   operations: [{ name: "Instances", route: "#/operations" }],
-  tasks: [], insights: [],
+  tasks: [{ name: "Inbox", route: "#/tasks" }], insights: [],
 };
 
 // Connectors are the sibling engines Atlas hands work off to. They live under
@@ -717,6 +717,52 @@ async function viewInstances() {
   await load();
 }
 
+// ---------- Tasks ----------
+async function viewTasks() {
+  view.innerHTML = `
+    <div class="card" id="task-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <h1 style="margin:0">Task inbox</h1>
+        <button class="btn ghost" id="task-refresh">Refresh</button>
+      </div>
+      <div id="task-list"><p class="muted">Loading&hellip;</p></div>
+    </div>`;
+  async function load() {
+    const list = document.getElementById("task-list");
+    try {
+      const res = await api("/api/v1/tasks");
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const tasks = await res.json();
+      if (!tasks.length) {
+        list.innerHTML = `<p class="muted">No open tasks.</p>`;
+        return;
+      }
+      list.innerHTML = `<table class="tbl">
+        <thead><tr><th>Process</th><th>Element</th><th>Assignee</th><th>Groups</th><th></th></tr></thead>
+        <tbody>${tasks.map((t) => `<tr data-key="${t.key}">
+          <td>${esc(t.processId)}</td>
+          <td>${esc(t.elementId)}</td>
+          <td>${esc(t.assignee || "—")}</td>
+          <td>${esc(t.candidateGroups || "—")}</td>
+          <td><button class="btn small task-complete" data-key="${t.key}">Complete</button></td>
+        </tr>`).join("")}</tbody></table>`;
+      list.querySelectorAll(".task-complete").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          btn.disabled = true;
+          try {
+            const r = await api("/api/v1/tasks/" + btn.dataset.key + "/complete", { method: "POST" });
+            if (!r.ok) throw new Error("HTTP " + r.status);
+            toast("Task completed");
+            await load();
+          } catch (e) { toast("Complete failed: " + e.message, "err"); btn.disabled = false; }
+        });
+      });
+    } catch (e) { list.innerHTML = `<p class="muted err">Failed to load tasks: ${esc(e.message)}</p>`; }
+  }
+  document.getElementById("task-refresh").addEventListener("click", load);
+  await load();
+}
+
 function viewComingSoon(appId) {
   const name = (APPS.find((a) => a.id === appId) || {}).name || "This app";
   view.innerHTML = `
@@ -771,10 +817,11 @@ async function route() {
     if (dm) return await viewEditorDraft(decodeURIComponent(dm[1]));
     const m = path.match(/^#\/modeler\/d\/(\d+)$/);
     if (m) return await viewEditor(Number(m[1]));
+    if (path === "#/tasks") return await viewTasks();
     if (path === "#/operations") return await viewInstances();
     const lm = path.match(/^#\/operations\/p\/(\d+)$/);
     if (lm) return await viewLive(Number(lm[1]));
-    if (appId !== "console" && appId !== "modeler") return viewComingSoon(appId);
+    if (appId !== "console" && appId !== "modeler" && appId !== "tasks") return viewComingSoon(appId);
     // Unknown route → dashboard.
     location.hash = "#/console";
   } catch (e) {
