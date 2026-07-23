@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -13,6 +15,68 @@ import (
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
 )
+
+// brokenResolver is a DMN resolver that always fails with a non-not-found error,
+// to drive the resolve-error branch of bundle-deploy.
+type brokenResolver struct{}
+
+func (brokenResolver) Resolve(context.Context, string) ([]byte, error) {
+	return nil, errors.New("resolver down")
+}
+
+// TestProcessLookup covers the DMN worker's process resolver: a deployed key
+// resolves to its process, an unknown key to nil.
+func TestProcessLookup(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+	pid := x.mkProject("P")
+	x.saveDraft(pid, deployableBPMN)
+	code, b := x.do(http.MethodPost, "/api/v1/projects/"+pid+"/deploy", "")
+	if code != http.StatusOK {
+		t.Fatalf("deploy: %d %s", code, b)
+	}
+	var rep projectDeployResp
+	if err := json.Unmarshal(b, &rep); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	key := rep.Definitions[0].Key
+	if srv.processLookup(key) == nil {
+		t.Fatal("processLookup(deployed key) = nil, want the process")
+	}
+	if srv.processLookup(999999) != nil {
+		t.Fatal("processLookup(unknown key) != nil, want nil")
+	}
+}
+
+// TestDeployModelBadDMN covers deployModel's DMN-registration error branch: an
+// uncompilable DMN snapshot is a server error (the caller validates first, so
+// this is a defensive path reached here directly).
+func TestDeployModelBadDMN(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	var persistErr error
+	srv.do(func() {
+		_, _, persistErr = srv.deployModel([]byte(deployableBPMN), []byte("<not-dmn"), 123)
+	})
+	if persistErr == nil {
+		t.Fatal("deployModel with an uncompilable DMN snapshot: want an error")
+	}
+}
+
+// TestBundleDeployResolveError covers bundle-deploy's resolve-error branch: the
+// preflight validates a reference (its validator keeps a working resolver) but
+// resolving the model for deployment fails, so the deploy is a 500.
+func TestBundleDeployResolveError(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+	pid := x.mkProject("P")
+	x.saveDraft(pid, deployableBPMN)
+	x.addRef(pid, "Dish", "dish")
+
+	srv.dmnResolver = brokenResolver{} // validator still resolves; explicit resolve fails
+	if code, _ := x.do(http.MethodPost, "/api/v1/projects/"+pid+"/deploy", ""); code != http.StatusInternalServerError {
+		t.Fatalf("deploy with broken resolver = %d, want 500", code)
+	}
+}
 
 // dinnerBPMN is a Start → BusinessRuleTask(decision "Dish") → End process. Its
 // task feeds the decision a static Season input; the decision lives in the
