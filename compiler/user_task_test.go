@@ -13,6 +13,7 @@ const userTaskBPMN = `<?xml version="1.0" encoding="UTF-8"?>
     <bpmn:userTask id="review" name="Review tweet">
       <bpmn:extensionElements>
         <zeebe:assignmentDefinition assignee="editor" candidateGroups="reviewers"/>
+        <zeebe:formDefinition formId="tweet-review-form"/>
       </bpmn:extensionElements>
     </bpmn:userTask>
     <bpmn:endEvent id="end"/>
@@ -53,6 +54,9 @@ func TestParseUserTask(t *testing.T) {
 	}
 	if cp.Intern(detail.CandidateGroups) != "reviewers" {
 		t.Errorf("candidateGroups = %q, want \"reviewers\"", cp.Intern(detail.CandidateGroups))
+	}
+	if cp.Intern(detail.FormId) != "tweet-review-form" {
+		t.Errorf("formId = %q, want \"tweet-review-form\"", cp.Intern(detail.FormId))
 	}
 	if detail.Retries != defaultRetries {
 		t.Errorf("retries = %d, want default %d", detail.Retries, defaultRetries)

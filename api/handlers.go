@@ -1110,6 +1110,7 @@ type taskResp struct {
 	Name               string `json:"name,omitempty"`
 	Assignee           string `json:"assignee,omitempty"`
 	CandidateGroups    string `json:"candidateGroups,omitempty"`
+	FormID             string `json:"formId,omitempty"`
 }
 
 // handleListTasks lists open user tasks — activatable jobs of the reserved
@@ -1142,6 +1143,7 @@ func (s *Server) handleListTasks(w http.ResponseWriter, _ *http.Request) {
 						// compile-time attribute.
 						tr.Assignee = jv.Assignee
 						tr.CandidateGroups = cp.Intern(detail.CandidateGroups)
+						tr.FormID = cp.Intern(detail.FormId)
 					}
 				}
 			}
@@ -1166,6 +1168,20 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid task key")
 		return
 	}
+	// A completion may carry the submitted form's data as {"variables": {...}},
+	// written into the instance scope on completion exactly like a service-task
+	// worker's outputs (ADR-0028; the engine path landed with ADR-0039). An empty
+	// body completes with no variables.
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	vars, err := parseStartVariables(body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	var (
 		found  bool
 		runErr error
@@ -1178,7 +1194,7 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
-		s.proc.CompleteJob(key)
+		s.proc.CompleteJob(key, vars...)
 		runErr = s.jobRunner.Drive()
 	})
 	switch {

@@ -162,6 +162,7 @@ type UserTaskDetail struct {
 	Name            int32 // interned element name (the task's human title) → index, -1 if unset
 	Assignee        int32
 	CandidateGroups int32
+	FormId          int32 // interned form id bound via zeebe:formDefinition → index, -1 if unset (ADR-0028)
 }
 
 // ConnectorTaskDetail is the per-connector-task data a behavior needs at runtime.

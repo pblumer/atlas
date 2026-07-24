@@ -23,6 +23,92 @@ const userTaskBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/
   </process>
 </definitions>`
 
+// twoUserTaskBPMN parks on "review" then "approve", so completing the first with
+// a form payload leaves the instance active on the second — its variables are
+// then observable via GET /instances.
+const twoUserTaskBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="twostep" isExecutable="true">
+    <startEvent id="s"/>
+    <userTask id="review" name="Review"/>
+    <userTask id="approve" name="Approve"/>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="review"/>
+    <sequenceFlow id="f2" sourceRef="review" targetRef="approve"/>
+    <sequenceFlow id="f3" sourceRef="approve" targetRef="e"/>
+  </process>
+</definitions>`
+
+func TestCompleteTaskWithVariables(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", twoUserTaskBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy: status=%d body=%s", code, body)
+	}
+	var deploy struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &deploy); err != nil {
+		t.Fatalf("decode deploy: %v (%s)", err, body)
+	}
+	code, body = doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", deploy.Key), "{}", "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("create instance: status=%d body=%s", code, body)
+	}
+
+	// Complete the first task with a form payload.
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/tasks", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("list tasks: status=%d body=%s", code, body)
+	}
+	var tasks []struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &tasks); err != nil || len(tasks) != 1 {
+		t.Fatalf("expected 1 task, got %v (%s)", err, body)
+	}
+	payload := `{"variables":{"approved":true,"score":7,"note":"looks good"}}`
+	code, body = doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/tasks/%d/complete", tasks[0].Key), payload, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("complete with vars: status=%d body=%s", code, body)
+	}
+
+	// The instance is now parked on "approve"; its scope carries the form data.
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/instances", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("list instances: status=%d body=%s", code, body)
+	}
+	var instances []struct {
+		State     string `json:"state"`
+		Variables []struct {
+			Name  string `json:"name"`
+			Kind  string `json:"kind"`
+			Value string `json:"value"`
+		} `json:"variables"`
+	}
+	if err := json.Unmarshal(body, &instances); err != nil {
+		t.Fatalf("decode instances: %v (%s)", err, body)
+	}
+	got := map[string]string{}
+	for _, in := range instances {
+		if in.State != "active" {
+			continue
+		}
+		for _, v := range in.Variables {
+			got[v.Name] = v.Value
+		}
+	}
+	if got["approved"] != "true" {
+		t.Errorf("variable approved = %q, want \"true\"", got["approved"])
+	}
+	if got["score"] != "7" {
+		t.Errorf("variable score = %q, want \"7\"", got["score"])
+	}
+	if got["note"] != "looks good" {
+		t.Errorf("variable note = %q, want \"looks good\"", got["note"])
+	}
+}
+
 func TestUserTaskListAndComplete(t *testing.T) {
 	ts := newTestServer(t)
 
@@ -227,6 +313,16 @@ func TestClaimTaskValidation(t *testing.T) {
 	code, _ = doReq(t, ts, http.MethodPost, "/api/v1/tasks/not-a-number/claim", `{"assignee":"alice"}`, "application/json")
 	if code != http.StatusBadRequest {
 		t.Errorf("claim with non-numeric key: %d, want 400", code)
+	}
+}
+
+func TestCompleteTaskInvalidBody(t *testing.T) {
+	ts := newTestServer(t)
+	// A malformed variables payload is rejected before the task is even looked
+	// up, so the task key need not exist.
+	code, _ := doReq(t, ts, http.MethodPost, "/api/v1/tasks/1/complete", "not-json", "application/json")
+	if code != http.StatusBadRequest {
+		t.Errorf("complete with malformed body: %d, want 400", code)
 	}
 }
 

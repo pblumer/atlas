@@ -745,12 +745,32 @@ const TASK_FOLDERS = [
   { id: "group", label: "Group tasks", match: (t) => !!t.candidateGroups },
 ];
 
+// loadFormViewer lazily imports the vendored form-js viewer (ADR-0013 vendoring
+// pattern) and injects its stylesheet once, the first time a task with a form is
+// opened — so users who never open a form never pay for the 86 KB CSS or the
+// bundle. The promise is cached so repeated opens reuse the one import.
+let _formViewer = null;
+function loadFormViewer() {
+  if (!_formViewer) {
+    if (!document.getElementById("form-js-css")) {
+      const link = document.createElement("link");
+      link.id = "form-js-css";
+      link.rel = "stylesheet";
+      link.href = "vendor/form-js/form-js.css";
+      document.head.appendChild(link);
+    }
+    _formViewer = import("./vendor/form-js/form-viewer.js");
+  }
+  return _formViewer;
+}
+
 async function viewTasks() {
   const state = {
     tasks: [],
     folder: "all",
     selected: null, // job key of the selected task
     me: localStorage.getItem("atlas.tasks.me") || "",
+    mountedForm: null, // the live form-js viewer instance for the selected task, if any
   };
 
   view.innerHTML = `
@@ -829,7 +849,39 @@ async function viewTasks() {
     });
   }
 
+  // destroyForm tears down the live form-js instance (if any) before the detail
+  // pane is re-rendered or the selection changes, so no viewer leaks.
+  function destroyForm() {
+    if (state.mountedForm) {
+      try { state.mountedForm.destroy(); } catch { /* already gone */ }
+      state.mountedForm = null;
+    }
+  }
+
+  // mountForm loads the vendored form-js viewer and the task's bound form schema,
+  // then renders it into the detail pane. Guards against the selection changing
+  // while the (async) load is in flight.
+  async function mountForm(t) {
+    const host = document.getElementById("task-form");
+    if (!host) return;
+    try {
+      const [{ Form }, def] = await Promise.all([
+        loadFormViewer(),
+        api("GET", "/api/v1/forms/" + encodeURIComponent(t.formId)),
+      ]);
+      if (state.selected !== t.key) return; // selection moved on; drop this mount
+      host.innerHTML = "";
+      const form = new Form({ container: host });
+      await form.importSchema(def.schema);
+      if (state.selected !== t.key) { try { form.destroy(); } catch { /* noop */ } return; }
+      state.mountedForm = form;
+    } catch (err) {
+      host.innerHTML = `<p class="muted err">Failed to load form: ${esc(err.message)}</p>`;
+    }
+  }
+
   function renderDetail() {
+    destroyForm();
     const t = state.tasks.find((x) => x.key === state.selected);
     if (!t) {
       detailEl.innerHTML = `<div class="tasks-detail-empty muted">Select a task to see its details.</div>`;
@@ -842,6 +894,10 @@ async function viewTasks() {
     const claimLabel = mine ? "Unclaim" : "Claim";
     const claimHint = !state.me && !mine ? ` title="Set your identity (top left) to claim"` : "";
     const claimDisabled = !state.me && !mine ? " disabled" : "";
+    const formArea = t.formId
+      ? `<div class="tasks-form" id="task-form"><p class="muted">Loading form&hellip;</p></div>`
+      : `<div class="tasks-form-placeholder"><p class="muted">This task has no form; completing it
+         records no variables.</p></div>`;
     detailEl.innerHTML = `
       <header class="tasks-detail-head">
         <h1>${esc(taskTitle(t))}</h1>
@@ -858,16 +914,23 @@ async function viewTasks() {
         ${row("Instance", `<span class="chip">${t.processInstanceKey}</span>`)}
         ${row("Task key", `<span class="chip">${t.key}</span>`)}
       </div>
-      <div class="tasks-form-placeholder">
-        <p class="muted">This task has no form yet. Form rendering — a form-js schema
-        rendered here, whose data completes the task as process variables — arrives
-        with the forms slice (ADR-0028).</p>
-      </div>`;
+      ${formArea}`;
     document.getElementById("task-complete").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
+      // If a form is mounted, validate and collect its data as the task's
+      // variables; an invalid form blocks completion.
+      let payload;
+      if (state.mountedForm) {
+        const { data, errors } = state.mountedForm.submit();
+        if (errors && Object.keys(errors).length > 0) {
+          toast("Please fix the highlighted fields", "err");
+          return;
+        }
+        payload = { variables: data };
+      }
       btn.disabled = true;
       try {
-        await api("POST", "/api/v1/tasks/" + t.key + "/complete");
+        await api("POST", "/api/v1/tasks/" + t.key + "/complete", payload);
         toast("Task completed");
         state.selected = null;
         await load();
@@ -893,6 +956,7 @@ async function viewTasks() {
         btn.disabled = false;
       }
     });
+    if (t.formId) mountForm(t);
   }
 
   function renderAll() {

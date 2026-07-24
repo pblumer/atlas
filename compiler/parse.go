@@ -295,7 +295,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	}
 	for _, ut := range proc.UserTasks {
 		retries := int32(defaultRetries)
-		if err := register(ut.Id, b.AddUserTask(ut.Name, ut.Assignment.Assignee, ut.Assignment.CandidateGroups, retries)); err != nil {
+		if err := register(ut.Id, b.AddUserTask(ut.Name, ut.Assignment.Assignee, ut.Assignment.CandidateGroups, ut.Form.FormId, retries)); err != nil {
 			return nil, err
 		}
 	}
@@ -603,6 +603,14 @@ type xmlUserTask struct {
 	Id         string                  `xml:"id,attr"`
 	Name       string                  `xml:"name,attr"`
 	Assignment xmlAssignmentDefinition `xml:"extensionElements>assignmentDefinition"`
+	Form       xmlFormDefinition       `xml:"extensionElements>formDefinition"`
+}
+
+// xmlFormDefinition binds a form to a user task by id (ADR-0028). formId
+// references a form stored server-side (the form-js schema the Tasks app
+// renders); an empty formId means the task has no form.
+type xmlFormDefinition struct {
+	FormId string `xml:"formId,attr"`
 }
 
 type xmlAssignmentDefinition struct {
