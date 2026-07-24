@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -227,10 +228,28 @@ func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// principalFor resolves the request's session cookie to a Principal, or nil. It
-// reads only the session store (never the user store), so it is safe to call from
-// a handler goroutine.
+// InternalToken returns the internal service token used by the in-process MCP
+// adapter to authenticate its loopback calls (ADR-0049). It is empty unless auth
+// is enabled. It is never served over any endpoint; only the constructing process
+// reads it, to hand to its own MCP client.
+func (s *Server) InternalToken() string { return s.internalToken }
+
+// servicePrincipalName is the identity a valid internal token resolves to. It is
+// deliberately not an admin: the MCP adapter drives deploy/run/query, never user
+// administration, so a leaked token cannot manage accounts.
+const servicePrincipalName = "system:mcp"
+
+// principalFor resolves a request to a Principal, or nil. It first honors a valid
+// internal bearer token (the MCP adapter's service identity), then a session
+// cookie. It reads only the session store and the in-memory token (never the user
+// store), so it is safe to call from a handler goroutine.
 func (s *Server) principalFor(r *http.Request) *Principal {
+	if s.internalToken != "" {
+		if tok, ok := bearerToken(r); ok &&
+			subtle.ConstantTimeCompare([]byte(tok), []byte(s.internalToken)) == 1 {
+			return &Principal{Username: servicePrincipalName}
+		}
+	}
 	c, err := r.Cookie(sessionCookie)
 	if err != nil {
 		return nil
@@ -240,6 +259,17 @@ func (s *Server) principalFor(r *http.Request) *Principal {
 		return nil
 	}
 	return &Principal{UserID: sess.userID, Username: sess.username, Roles: sess.roles}
+}
+
+// bearerToken extracts the token from an "Authorization: Bearer <token>" header,
+// reporting ok=false when the header is absent or not a bearer credential.
+func bearerToken(r *http.Request) (string, bool) {
+	h := r.Header.Get("Authorization")
+	const prefix = "Bearer "
+	if len(h) <= len(prefix) || !strings.EqualFold(h[:len(prefix)], prefix) {
+		return "", false
+	}
+	return h[len(prefix):], true
 }
 
 // requiresAuth reports whether enforcement gates a path when auth is enabled.

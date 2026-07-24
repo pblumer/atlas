@@ -114,6 +114,12 @@ type Server struct {
 	// before Handler is mounted; read-only thereafter.
 	authEnabled bool
 
+	// internalToken is a random secret minted at startup when auth is enabled. A
+	// trusted in-process component (the MCP adapter) presents it as a bearer token
+	// so its loopback API calls authenticate without a login (ADR-0049). It
+	// resolves to a non-admin service principal. Empty when auth is off.
+	internalToken string
+
 	// dmnResolver turns a DMN reference handle into model XML; dmnValidator wraps
 	// it with a temis compile for the deploy-time validation gate (ADR-0034).
 	dmnResolver  dmn.Resolver
@@ -203,12 +209,19 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		opt(s)
 	}
 	// When enforcement is on, make sure a fresh instance has an admin to log in
-	// with (ADR-0044). This runs before the loop serves traffic, so touching the
-	// user store directly here respects the single-writer discipline.
+	// with (ADR-0044) and mint the internal service token the in-process MCP
+	// adapter uses to authenticate its loopback calls (ADR-0049). Both run before
+	// the loop serves traffic, so touching the user store directly here respects
+	// the single-writer discipline.
 	if s.authEnabled {
 		if err := s.bootstrapAdmin(time.Now().Unix()); err != nil {
 			return nil, err
 		}
+		token, err := randomHex(32)
+		if err != nil {
+			return nil, err
+		}
+		s.internalToken = token
 	}
 	// The in-process DMN worker evaluates business rule tasks off no separate
 	// goroutine (the single-binary server drives jobs synchronously on the run

@@ -147,9 +147,13 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool)
 	// it proxies to this server's own HTTP API over loopback rather than touching
 	// the engine, so the single-writer invariant is untouched.
 	//
-	// The endpoint is UNAUTHENTICATED. Put auth in front of it (reverse proxy)
-	// before exposing it publicly.
-	mcpSrv := mcp.NewServer(mcp.NewClient(loopbackURL(addr)))
+	// Under --auth the adapter authenticates its loopback calls with the server's
+	// internal service token (ADR-0049), so enabling auth no longer breaks MCP.
+	// The token is empty when auth is off, in which case WithBearer is a no-op.
+	//
+	// The /mcp transport itself is still UNAUTHENTICATED for external callers: put
+	// auth in front of it (reverse proxy) before exposing it publicly.
+	mcpSrv := mcp.NewServer(mcp.NewClient(loopbackURL(addr), mcp.WithBearer(srv.InternalToken())))
 	root := http.NewServeMux()
 	root.Handle("/mcp", mcpSrv)
 	root.Handle("/mcp/", mcpSrv)
