@@ -14,9 +14,11 @@ them so it loads buildless (ADR-0012), the same way bpmn-js is vendored
 form-js.css is dist/assets/form-js.css verbatim (no external url()/@import,
 so it is CSP-safe). License: see LICENSE (MIT-style; Camunda Services GmbH).
 
-form-editor.js — @bpmn-io/form-js-editor 1.24.0, bundled the same way:
-  echo "export { FormEditor } from '@bpmn-io/form-js-editor';" > entry-editor.js
-  esbuild entry-editor.js --bundle --format=esm --minify --outfile=form-editor.js
-form-editor.css concatenates, in order: form-js.css (viewer base, for the live
-preview), form-js-editor-base.css, form-js-editor.css, draggle.css (dragula
-drag-and-drop), properties-panel.css — all verbatim, all CSP-safe.
+form-playground.js — @bpmn-io/form-js-playground 1.24.0, bundled the same way:
+  echo "export { Playground } from '@bpmn-io/form-js-playground';" > entry.js
+  esbuild entry.js --bundle --format=esm --minify --outfile=form-playground.js
+The Playground is the split editor+preview+input+output surface (the reference
+modeler's form editor layout); it embeds the editor and viewer internally.
+form-playground.css concatenates form-js.css, form-js-editor-base.css,
+form-js-editor.css, draggle.css, properties-panel.css, and
+form-js-playground.css — all verbatim, all CSP-safe.
