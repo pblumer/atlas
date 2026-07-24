@@ -2187,6 +2187,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   let playing = false;
   let playhead = 0;  // number of steps walked so far (0..steps.length)
   let animToken = 0; // bumped to supersede an in-flight animation
+  const jsonCollapsed = new Set(); // JSON variable names the operator has collapsed (persists across scrubs)
 
   const speed = () => Number(speedSel.value) || 1;
   const fmtClock = (ns) => (ns ? new Date(ns / 1e6).toLocaleTimeString() : "");
@@ -2202,15 +2203,65 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     return bare ? bare.charAt(0).toUpperCase() + bare.slice(1).toLowerCase() : "";
   }
 
-  const varChips = (list) => !list || !list.length
-    ? '<span class="muted">No variables yet.</span>'
-    : list.map((v) => {
-        if (v.kind === "json") {
-          const preview = v.value.length > 60 ? v.value.slice(0, 57) + "..." : v.value;
-          return `<span class="chip" title="${esc(v.value)}">${esc(v.name)}=<code>${esc(preview)}</code></span>`;
-        }
-        return `<span class="chip">${esc(v.name)}=${esc(v.value)}</span>`;
-      }).join(" ");
+  // highlightJSON pretty-prints a canonical JSON string and wraps its tokens in
+  // colored spans (keys, strings, numbers, booleans, null) — a tiny, dependency-
+  // free syntax highlighter (ADR-0012 buildless UI). It escapes first, then spans.
+  function highlightJSON(text) {
+    let out;
+    try { out = JSON.stringify(JSON.parse(text), null, 2); }
+    catch { return esc(text); } // not valid JSON after all — show it verbatim
+    out = out.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return out.replace(
+      /("(?:\\.|[^"\\])*"\s*:?|\btrue\b|\bfalse\b|\bnull\b|-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?)/g,
+      (m) => {
+        let cls = "j-num";
+        if (m[0] === '"') cls = /:\s*$/.test(m) ? "j-key" : "j-str";
+        else if (m === "true" || m === "false") cls = "j-bool";
+        else if (m === "null") cls = "j-null";
+        return `<span class="${cls}">${m}</span>`;
+      });
+  }
+
+  // jsonSummary is the compact one-liner shown on a collapsed JSON card.
+  function jsonSummary(text) {
+    try {
+      const v = JSON.parse(text);
+      if (Array.isArray(v)) return `${v.length} item${v.length === 1 ? "" : "s"}`;
+      if (v && typeof v === "object") {
+        const n = Object.keys(v).length;
+        return `${n} field${n === 1 ? "" : "s"}`;
+      }
+      return String(v);
+    } catch { return ""; }
+  }
+
+  // renderVarsBody lays out one step's variables: scalars as a labeled field grid,
+  // JSON values as collapsible, syntax-highlighted cards — so a structured value
+  // reads clearly instead of as a truncated chip.
+  function renderVarsBody(list) {
+    if (!list || !list.length) return '<span class="muted">No variables yet at this step.</span>';
+    const scalars = list.filter((v) => v.kind !== "json");
+    const jsons = list.filter((v) => v.kind === "json");
+    let html = "";
+    if (scalars.length) {
+      html += `<div class="vgrid">${scalars.map((v) => {
+        const cls = v.kind === "boolean" ? "bool" : v.kind === "number" ? "num" : v.kind === "null" ? "null" : "str";
+        return `<div class="vfield"><div class="vf-head"><span class="vk">${esc(v.name)}</span><span class="vtag">${esc(v.kind)}</span></div>
+          <div class="vv ${cls}">${esc(v.value)}</div></div>`;
+      }).join("")}</div>`;
+    }
+    html += jsons.map((v) => {
+      const collapsed = jsonCollapsed.has(v.name);
+      return `<div class="vjson${collapsed ? " collapsed" : ""}">
+        <button class="vj-head" data-name="${esc(v.name)}" aria-expanded="${collapsed ? "false" : "true"}">
+          <span class="chev">&#9662;</span><span class="vk">${esc(v.name)}</span>
+          <span class="vtag">json</span><span class="vj-sum">${esc(jsonSummary(v.value))}</span>
+        </button>
+        <pre class="vj-body">${highlightJSON(v.value)}</pre>
+      </div>`;
+    }).join("");
+    return html;
+  }
 
   // renderVars shows the variable values as they stood when the token entered the
   // current step (the per-step snapshot the timeline carries, ADR-0048). At
@@ -2218,10 +2269,10 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   function renderVars() {
     const cur = playhead > 0 && playhead <= steps.length ? steps[playhead - 1] : null;
     const head = cur
-      ? `Variables · as of step ${playhead} (${esc(stepLabel(cur))})`
+      ? `Variables &middot; as of step ${playhead} (${esc(stepLabel(cur))})`
       : "Variables";
     varPanel.innerHTML = `<div class="vp-head">${head}</div>
-      <div>${varChips(cur ? cur.variables : [])}</div>`;
+      <div class="vars">${renderVarsBody(cur ? cur.variables : [])}</div>`;
   }
 
   function updateClock() {
@@ -2375,6 +2426,15 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   root.querySelector("#step-back").addEventListener("click", () => { pause(); setPlayhead(playhead - 1); });
   scrub.addEventListener("input", () => { pause(); setPlayhead(Number(scrub.value)); });
   root.querySelector("#refresh").addEventListener("click", poll);
+  // Expand/collapse a JSON variable card (delegated, so it survives re-renders).
+  varPanel.addEventListener("click", (e) => {
+    const head = e.target.closest(".vj-head");
+    if (!head) return;
+    const name = head.dataset.name;
+    if (jsonCollapsed.has(name)) jsonCollapsed.delete(name);
+    else jsonCollapsed.add(name);
+    renderVars();
+  });
 
   await poll();
   liveTimer = setInterval(poll, 1500);
