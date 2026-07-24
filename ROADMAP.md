@@ -69,10 +69,18 @@ The control-flow basics most real models use.
   (`<zeebe:input source="=…" target="…">`, FEEL evaluated over the instance off the
   hot path, overriding constant `<atlas:decisionInput>` values), and its result is
   written back into the `resultVariable` process variable through an output-carrying
-  job completion — so a downstream gateway routes on the decision. Next: explicit
-  `<zeebe:output>` mappings, decimal precision across the temis boundary, and
-  off-loop streaming evaluation as the Milestone-4 gRPC job-worker concern (the
-  single binary drives jobs synchronously).
+  job completion — so a downstream gateway routes on the decision. **A second
+  evaluation mode landed** ([ADR-0050](docs/adr/0050-temis-decision-connector.md)):
+  a business rule task marked `<atlas:temisConnector connector="…">` is a *central*
+  decision, evaluated by a remote temis service through the connector/job path
+  (ADR-0036/0041) instead of the embedded library — same authoring and I/O mappings,
+  only the evaluation locus differs, and a central decision needs no local model at
+  deploy. The `temis` connector trio (registry/client/worker) and the shared
+  `dmn.DecisionHandler` core landed with engine-path tests; wiring the connector
+  worker into the server run loop is the shared ADR-0041 follow-up (with clio/REST).
+  Next: explicit `<zeebe:output>` mappings, decimal precision across the temis
+  boundary, and off-loop streaming evaluation as the Milestone-4 gRPC job-worker
+  concern (the single binary drives jobs synchronously).
 - 🚧 **Connectors** ([ADR-0036](docs/adr/0036-clio-connector.md)): a service task
   bearing an `<atlas:clioConnector>` extension is a connector task that appends an
   event to a **server-registered** clio event store through the job path (like the

@@ -57,6 +57,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0047](0047-polyglot-script-tasks-via-job-workers.md) | Polyglot script tasks (PowerShell, …) via job workers | Proposed |
 | [0048](0048-per-step-variable-snapshots.md) | Per-step variable snapshots in the single-process replay | Accepted |
 | [0049](0049-internal-service-auth-for-mcp.md) | Internal service authentication for the in-process MCP adapter | Accepted |
+| [0050](0050-temis-decision-connector.md) | Central DMN decisions via a temis decision connector | Accepted |
 
 ## Status values
 

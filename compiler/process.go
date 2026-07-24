@@ -146,11 +146,18 @@ type DecisionInputMapping struct {
 // variables, which override a static input of the same name. ResultVar, if set,
 // is the process variable the decision's result is written back into on job
 // completion (the output mapping); -1 if the task discards its result.
+//
+// Connector selects the evaluation locus (ADR-0050): -1 (the default) means the
+// decision is evaluated locally by the embedded temis library (ADR-0014); a set
+// Connector is the interned name of a server-registered temis connector that
+// evaluates the decision centrally, and the task then carries the temis-connector
+// job type instead of the local DMN job type.
 type BusinessRuleTaskDetail struct {
-	JobType       int32 // interned reserved DMN job type → index
+	JobType       int32 // interned reserved job type (DMN local, or temis connector) → index
 	DecisionId    int32 // interned DMN decision id → index
 	Inputs        int32 // interned JSON object of static inputs → index, -1 if none
 	ResultVar     int32 // interned result-variable name → index, -1 if none
+	Connector     int32 // interned temis connector name → index, -1 = local (in-engine)
 	Retries       int32
 	InputMappings []DecisionInputMapping // variable-driven inputs, evaluated off the hot path
 }
@@ -418,7 +425,14 @@ func (p *CompiledProcess) BusinessRuleDecisions() []string {
 		if p.nodes[i].Type != TypeBusinessRuleTask {
 			continue
 		}
-		id := p.Intern(p.BusinessRuleTask(p.nodes[i].Detail).DecisionId)
+		detail := p.BusinessRuleTask(p.nodes[i].Detail)
+		// A connector-mode (central) decision is evaluated by a remote temis
+		// service, so it has no local model to resolve and snapshot at deploy time
+		// (ADR-0050). Only local decisions contribute to the deploy-time gate.
+		if detail.Connector >= 0 {
+			continue
+		}
+		id := p.Intern(detail.DecisionId)
 		if id != "" && !seen[id] {
 			seen[id] = true
 			out = append(out, id)
