@@ -93,7 +93,7 @@ func runServe(args []string) error {
 	addr := fs.String("addr", ":8080", "HTTP listen address")
 	dataDir := fs.String("data-dir", "atlas-data", "directory for the write-ahead log and state store")
 	shutdownTimeout := fs.Duration("shutdown-timeout", 10*time.Second, "grace period for in-flight requests on shutdown")
-	docs := fs.Bool("docs", false, "serve the OpenAPI spec (/api/v1/openapi.json) and the Scalar API explorer (/api/docs)")
+	docs := fs.Bool("docs", true, "serve the OpenAPI spec (/api/v1/openapi.json) and the Scalar API explorer (/api/docs); pass --docs=false to disable")
 	auth := fs.Bool("auth", false, "require login for the API and UI; seeds an admin from ATLAS_ADMIN_USERNAME/ATLAS_ADMIN_PASSWORD on first run")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -129,8 +129,8 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool)
 	}
 
 	var apiOpts []api.Option
-	if docs {
-		apiOpts = append(apiOpts, api.WithDocs())
+	if !docs {
+		apiOpts = append(apiOpts, api.WithoutDocs())
 	}
 	if auth {
 		apiOpts = append(apiOpts, api.WithAuth())

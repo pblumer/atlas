@@ -14,9 +14,9 @@ import (
 	"github.com/pblumer/atlas/wal"
 )
 
-// newDocsServer wires the same real engine stack as newTestServer but with the
-// API explorer enabled, so the gated routes are reachable.
-func newDocsServer(t *testing.T) *httptest.Server {
+// newNoDocsServer wires the same real engine stack as newTestServer but with the
+// API explorer disabled, so the --docs=false / WithoutDocs gate can be tested.
+func newNoDocsServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	dir := t.TempDir()
 	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
@@ -31,7 +31,7 @@ func newDocsServer(t *testing.T) *httptest.Server {
 	if err := proc.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	srv, err := api.New(proc, store, dir, api.WithDocs())
+	srv, err := api.New(proc, store, dir, api.WithoutDocs())
 	if err != nil {
 		t.Fatalf("api.New: %v", err)
 	}
@@ -45,22 +45,43 @@ func newDocsServer(t *testing.T) *httptest.Server {
 	return ts
 }
 
-// TestDocsDisabledByDefault: without WithDocs, neither the spec nor the explorer
-// is served — the catch-all file server 404s them (ADR-0043 gate).
-func TestDocsDisabledByDefault(t *testing.T) {
+// TestDocsEnabledByDefault: with no options the spec and explorer are served
+// (opt-out, ADR-0043), and /info advertises docs:true so the UI can link them.
+func TestDocsEnabledByDefault(t *testing.T) {
 	ts := newTestServer(t)
+	for _, path := range []string{"/api/v1/openapi.json", "/api/docs"} {
+		status, _ := doReq(t, ts, http.MethodGet, path, "", "")
+		if status != http.StatusOK {
+			t.Errorf("GET %s by default: status %d, want 200", path, status)
+		}
+	}
+	_, body := doReq(t, ts, http.MethodGet, "/api/v1/info", "", "")
+	if !strings.Contains(string(body), `"docs":true`) {
+		t.Errorf("/info does not advertise docs:true: %s", body)
+	}
+}
+
+// TestDocsDisabledWithFlag: WithoutDocs removes the spec and explorer (the
+// file-server catch-all 404s them) while the rest of the API keeps working, and
+// /info advertises docs:false.
+func TestDocsDisabledWithFlag(t *testing.T) {
+	ts := newNoDocsServer(t)
 	for _, path := range []string{"/api/v1/openapi.json", "/api/docs"} {
 		status, _ := doReq(t, ts, http.MethodGet, path, "", "")
 		if status != http.StatusNotFound {
 			t.Errorf("GET %s with docs off: status %d, want 404", path, status)
 		}
 	}
+	status, body := doReq(t, ts, http.MethodGet, "/api/v1/info", "", "")
+	if status != http.StatusOK || !strings.Contains(string(body), `"docs":false`) {
+		t.Errorf("/info with docs off: status %d body %s", status, body)
+	}
 }
 
 // TestOpenAPIServedWhenEnabled: the spec endpoint returns a valid OpenAPI 3.1
 // document describing the live surface, as JSON.
 func TestOpenAPIServedWhenEnabled(t *testing.T) {
-	ts := newDocsServer(t)
+	ts := newTestServer(t)
 	status, body := doReq(t, ts, http.MethodGet, "/api/v1/openapi.json", "", "")
 	if status != http.StatusOK {
 		t.Fatalf("GET /api/v1/openapi.json: status %d, want 200\n%s", status, body)
@@ -81,7 +102,7 @@ func TestOpenAPIServedWhenEnabled(t *testing.T) {
 // TestExplorerServedWhenEnabled: the explorer shell is HTML that loads the
 // vendored Scalar asset and points it at the same-origin spec.
 func TestExplorerServedWhenEnabled(t *testing.T) {
-	ts := newDocsServer(t)
+	ts := newTestServer(t)
 	for _, path := range []string{"/api/docs", "/api/docs/"} {
 		status, body := doReq(t, ts, http.MethodGet, path, "", "")
 		if status != http.StatusOK {
@@ -100,7 +121,7 @@ func TestExplorerServedWhenEnabled(t *testing.T) {
 // TestVendoredScalarAssetEmbedded: the standalone build is embedded and served,
 // so the explorer works offline (no CDN).
 func TestVendoredScalarAssetEmbedded(t *testing.T) {
-	ts := newDocsServer(t)
+	ts := newTestServer(t)
 	status, body := doReq(t, ts, http.MethodGet, "/vendor/scalar/standalone.js", "", "")
 	if status != http.StatusOK {
 		t.Fatalf("GET /vendor/scalar/standalone.js: status %d, want 200", status)
@@ -114,7 +135,7 @@ func TestVendoredScalarAssetEmbedded(t *testing.T) {
 // way the explorer's "Try it out" would (same-origin against /api/v1) hits the
 // real engine. Deploy then read stats through the documented surface.
 func TestExplorerCanReachLiveAPI(t *testing.T) {
-	ts := newDocsServer(t)
+	ts := newTestServer(t)
 	status, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", sampleBPMN, "application/xml")
 	if status != http.StatusOK {
 		t.Fatalf("deploy through documented surface: status %d\n%s", status, body)
