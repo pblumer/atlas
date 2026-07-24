@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="order-approval" isExecutable="true">
+    <startEvent id="start"/>
+    <userTask id="review" name="Review order">
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="reviewers"/>
+      </extensionElements>
+    </userTask>
+    <userTask id="approve" name="Approve order">
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="managers"/>
+      </extensionElements>
+    </userTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="review"/>
+    <sequenceFlow id="f2" sourceRef="review" targetRef="approve"/>
+    <sequenceFlow id="f3" sourceRef="approve" targetRef="end"/>
+  </process>
+</definitions>

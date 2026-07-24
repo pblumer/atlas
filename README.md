@@ -44,6 +44,7 @@ The three core pillars:
   - [Glossary](docs/architecture/glossary.md)
   - [Invariants](docs/architecture/invariants.md) — the rules the engine's correctness depends on
 - **[Architecture Decision Records](docs/adr/)** — *why* things are the way they are
+- **[Postman onboarding kit](postman/)** — import the collection + environment and drive the HTTP API (deploy, run instances, work user tasks) in five minutes
 - **[Roadmap](ROADMAP.md)** — where this is going
 - **[Contributing](CONTRIBUTING.md)** · **[Development](DEVELOPMENT.md)** · **[Security](SECURITY.md)**
 
