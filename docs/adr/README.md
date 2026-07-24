@@ -64,6 +64,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0054](0054-date-cycle-timers-for-catch-and-boundary.md) | Date and cycle timers for catch and boundary events | Proposed |
 | [0055](0055-feel-expression-timer-schedules.md) | FEEL-expression timer schedules for catch and boundary events | Proposed |
 | [0056](0056-feel-cycles-and-feel-start-timers.md) | FEEL cycles, and FEEL on timer start events | Proposed |
+| [0057](0057-first-class-feel-temporals.md) | First-class FEEL temporals for timer schedules | Proposed |
 
 ## Status values
 

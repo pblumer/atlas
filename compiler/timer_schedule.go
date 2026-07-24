@@ -58,6 +58,28 @@ func (s TimerSchedule) IsFeel() bool {
 	return s.Kind == TimerFeelDuration || s.Kind == TimerFeelDate || s.Kind == TimerFeelCycle
 }
 
+// ResolveFeelValue turns a FEEL expression's evaluated *value* into the concrete
+// schedule for the field (ADR-0057). It first reads a first-class FEEL temporal
+// exactly — a duration's nanoseconds for a FEEL duration schedule, a date-time's
+// instant for a FEEL date schedule — and only falls back to the canonical string
+// form (Classify → ResolveFeel) when the value is not a usable temporal (e.g. a
+// variable holding an ISO-8601 string, or any cycle). ok is false if neither path
+// yields a valid schedule. Only valid on a FEEL schedule.
+func (s TimerSchedule) ResolveFeelValue(v expr.Value) (TimerSchedule, bool) {
+	switch s.Kind {
+	case TimerFeelDuration:
+		if nanos, ok := expr.DurationNanos(v); ok {
+			return TimerSchedule{Kind: TimerDuration, BaseNanos: nanos}, true
+		}
+	case TimerFeelDate:
+		if inst, ok := expr.InstantNanos(v); ok {
+			return TimerSchedule{Kind: TimerDate, BaseNanos: inst}, true
+		}
+	}
+	_, _, text := expr.Classify(v)
+	return s.ResolveFeel(text)
+}
+
 // ResolveFeel turns the evaluated text of a FEEL timer expression into the concrete
 // schedule the literal parser would have produced for the same field — a duration,
 // date, or cycle — so downstream FirstDue/NextDue/Repetitions are identical to a

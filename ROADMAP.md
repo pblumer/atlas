@@ -111,12 +111,13 @@ Making processes wait, react, and time out.
 
 - ✅ Timer events + due-date index scanning: **intermediate timer catch events**
   (`<timeDuration>` or `<timeDate>`, literal **or a FEEL expression** over the
-  instance's variables — e.g. `=orderTimeout`) execute: the token waits, a
-  server-side scheduler fires due timers on the partition goroutine, and the event
-  continues. Recovery-tested (a pending timer is restored from the log and fires
-  afterward). A cycle on a plain catch is a compile error (a catch fires once).
-  An incident instead of firing immediately when a FEEL timer can't resolve is
-  still to come (ADR-0055/0056).
+  instance's variables — e.g. `=orderTimeout`, or FEEL date arithmetic like
+  `=deadline + duration("P2D")` read as an exact first-class temporal, ADR-0057)
+  execute: the token waits, a server-side scheduler fires due timers on the
+  partition goroutine, and the event continues. Recovery-tested (a pending timer
+  is restored from the log and fires afterward). A cycle on a plain catch is a
+  compile error (a catch fires once). An incident instead of firing immediately
+  when a FEEL timer can't resolve is still to come (ADR-0055/0056/0057).
 - ✅ **Timer start events** (duration, date, cycle, cron): a `<startEvent>` with a
   `<timerEventDefinition>` starts a fresh instance on its schedule —
   `<timeDuration>` (once, after a delay), `<timeDate>` (once, at an absolute
