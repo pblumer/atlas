@@ -194,6 +194,45 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Delete a DMN reference", tag: "DMN References", status: http.StatusNoContent}},
 		{"POST", "/api/v1/dmnrefs/{id}/validate", s.handleValidateDmnRef, apiOp{
 			summary: "Validate a DMN reference compiles", tag: "DMN References", resp: jsonBody("Validation result", tObject())}},
+
+		{"POST", "/api/v1/auth/login", s.handleLogin, apiOp{
+			summary: "Log in with a username and password", tag: "Auth",
+			req: jsonBody("Credentials", schemaObj(map[string]any{
+				"username": tString(), "password": tString(),
+			}, "username", "password")),
+			resp: jsonBody("Authenticated user", tObject())}},
+		{"POST", "/api/v1/auth/logout", s.handleLogout, apiOp{
+			summary: "Log out the current session", tag: "Auth", resp: jsonBody("Logout result", tObject())}},
+		{"GET", "/api/v1/auth/me", s.handleMe, apiOp{
+			summary: "Report auth status and the current user", tag: "Auth",
+			resp: jsonBody("Auth status", schemaObj(map[string]any{
+				"authEnabled": tBool(), "user": tObject(),
+			}))}},
+
+		{"GET", "/api/v1/users", s.handleListUsers, apiOp{
+			summary: "List user accounts", tag: "Users", resp: jsonBody("Users", tArray())}},
+		{"POST", "/api/v1/users", s.handleCreateUser, apiOp{
+			summary: "Create a user account", tag: "Users", status: http.StatusCreated,
+			req: jsonBody("New user", schemaObj(map[string]any{
+				"username": tString(), "email": tString(), "displayName": tString(),
+				"password": tString(), "roles": map[string]any{"type": "array", "items": tString()},
+			}, "username", "password")),
+			resp: jsonBody("Created user", tObject())}},
+		{"GET", "/api/v1/users/{id}", s.handleGetUser, apiOp{
+			summary: "Fetch a user account", tag: "Users", resp: jsonBody("User", tObject())}},
+		{"PATCH", "/api/v1/users/{id}", s.handlePatchUser, apiOp{
+			summary: "Update a user account", tag: "Users",
+			req: jsonBody("User changes", schemaObj(map[string]any{
+				"email": tString(), "displayName": tString(),
+				"roles": map[string]any{"type": "array", "items": tString()}, "disabled": tBool(),
+			})),
+			resp: jsonBody("Updated user", tObject())}},
+		{"POST", "/api/v1/users/{id}/password", s.handleSetUserPassword, apiOp{
+			summary: "Set a user's password", tag: "Users",
+			req:  jsonBody("New password", schemaObj(map[string]any{"password": tString()}, "password")),
+			resp: jsonBody("User id", tObject())}},
+		{"DELETE", "/api/v1/users/{id}", s.handleDeleteUser, apiOp{
+			summary: "Delete a user account", tag: "Users", status: http.StatusNoContent}},
 	}
 }
 
