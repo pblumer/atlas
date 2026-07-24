@@ -103,6 +103,8 @@ type CompiledNode struct {
 	BoundaryCount int32 // number of boundary events attached (0 for a non-host node)
 	DataOutStart  int32 // offset into dataOutAssocs (the data-output associations of this activity)
 	DataOutCount  int32 // number of data-output associations (0 for a node with none)
+	DataInStart   int32 // offset into dataInAssocs (the data-input associations of this activity)
+	DataInCount   int32 // number of data-input associations (0 for a node with none)
 }
 
 // CompiledFlow is a sequence flow between two nodes. Condition is the compiled
@@ -310,6 +312,20 @@ type DataOutputAssociation struct {
 	TargetState int32
 }
 
+// DataInputAssociation is one compiled <dataInputAssociation> on an activity: it
+// reads a data object into a process variable when the activity activates, so the
+// activity's FEEL can see it (ADR-0059). DataObject is the interned source
+// data-object name (resolved from the association's sourceRef); Variable is the
+// interned target process-variable name (its targetRef) the read value is written
+// into; Value is the optional <assignment><from> FEEL transform, evaluated over the
+// instance's variables plus the source object bound under its name — nil copies the
+// object's value verbatim.
+type DataInputAssociation struct {
+	DataObject int32 // interned source data-object name → index
+	Variable   int32 // interned target process-variable name → index
+	Value      *expr.Compiled
+}
+
 // CompiledProcess is the immutable result of compiling one process definition.
 // It is safe for concurrent reads without synchronization.
 type CompiledProcess struct {
@@ -336,6 +352,7 @@ type CompiledProcess struct {
 	timerStarts       []TimerStartDetail
 	dataObjects       []CompiledDataObject
 	dataOutAssocs     []DataOutputAssociation // shared: output associations grouped by activity node
+	dataInAssocs      []DataInputAssociation  // shared: input associations grouped by activity node
 	startEvents       []int32
 	startFormId       int32    // interned start-form id (ADR-0028), -1 if none
 	elementIds        []int32  // interned source BPMN id per node id (-1 if unset)
@@ -551,6 +568,15 @@ func (p *CompiledProcess) DataObjects() []CompiledDataObject { return p.dataObje
 func (p *CompiledProcess) DataOutputAssociations(id int32) []DataOutputAssociation {
 	n := &p.nodes[id]
 	return p.dataOutAssocs[n.DataOutStart : n.DataOutStart+n.DataOutCount]
+}
+
+// DataInputAssociations returns the data-input associations of activity node id, as
+// a slice into the shared array (no allocation). Empty for a node with none. The
+// engine evaluates them when the activity activates to read its data objects into
+// process variables (ADR-0059).
+func (p *CompiledProcess) DataInputAssociations(id int32) []DataInputAssociation {
+	n := &p.nodes[id]
+	return p.dataInAssocs[n.DataInStart : n.DataInStart+n.DataInCount]
 }
 
 // StartFormId returns the id of the form the UI shows before starting an

@@ -289,3 +289,149 @@ func TestDataOutputAssociationKeepsState(t *testing.T) {
 		t.Errorf("state = %q, want received (no target state keeps it)", got.State)
 	}
 }
+
+// TestDataInputAssociationReadsAndRecovers is the recovery property for data input
+// associations (ADR-0059): data flows both ways — an output association writes a
+// data object, a later activity's input association reads it (via a FEEL transform
+// binding the object under its name) into a variable, and that activity's own FEEL
+// uses it. Replaying the log rebuilds the same result; each read/write is frozen
+// into its event (invariants I4/I6).
+func TestDataInputAssociationReadsAndRecovers(t *testing.T) {
+	dir := t.TempDir()
+	b := compiler.NewBuilder(defKey, "inout", 1)
+	start := b.AddStartEvent()
+	write := b.AddTask()                                              // output: order = =amount
+	read := b.AddScriptTask(mustCompile(t, "orderIn * 10"), "result") // reads orderIn (set by input assoc)
+	end := b.AddEndEvent()
+	b.Connect(start, write)
+	b.Connect(write, read)
+	b.Connect(read, end)
+	b.AddDataObject("order", "", "received", false)
+	b.AddDataOutputAssociation(write, "order", mustCompile(t, "amount"), "approved")
+	b.AddDataInputAssociation(read, "order", "orderIn", mustCompile(t, "order")) // bind object → orderIn
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	clock := &manualClock{}
+
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clock)
+	p1.Deploy(cp)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.CreateInstance(cp.Key, model.VariableValue{Name: "amount", Kind: model.VarNumber, Text: "42"})
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	scope := model.NewKey(1, 1)
+	// orderIn was read from the data object; result = orderIn * 10.
+	if got := readVar(t, h1.store, scope, "orderIn"); got == nil || got.Text != "42" {
+		t.Fatalf("orderIn = %+v, want number 42 (read from data object)", got)
+	}
+	live := readVar(t, h1.store, scope, "result")
+	if live == nil || live.Text != "420" {
+		t.Fatalf("result = %+v, want 420 (orderIn*10)", live)
+	}
+	h1.close(t)
+
+	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open 2: %v", err)
+	}
+	store2, err := state.Open(filepath.Join(dir, "state2"))
+	if err != nil {
+		t.Fatalf("state.Open 2: %v", err)
+	}
+	defer func() {
+		if err := store2.Close(); err != nil {
+			t.Errorf("store2.Close: %v", err)
+		}
+		if err := log2.Close(); err != nil {
+			t.Errorf("log2.Close: %v", err)
+		}
+	}()
+	p2 := engine.New(1, log2, store2, clock)
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2 (replay): %v", err)
+	}
+	if replayed := readVar(t, store2, scope, "result"); replayed == nil || replayed.Text != live.Text {
+		t.Fatalf("replayed result = %+v, want %+v", replayed, live)
+	}
+}
+
+// TestDataInputAssociationCopiesValue covers the no-transform path: an input
+// association with no <assignment> copies the data object's value verbatim into the
+// target variable.
+func TestDataInputAssociationCopiesValue(t *testing.T) {
+	dir := t.TempDir()
+	b := compiler.NewBuilder(defKey, "incopy", 1)
+	start := b.AddStartEvent()
+	write := b.AddTask()
+	read := b.AddTask()
+	end := b.AddEndEvent()
+	b.Connect(start, write)
+	b.Connect(write, read)
+	b.Connect(read, end)
+	b.AddDataObject("order", "", "received", false)
+	b.AddDataOutputAssociation(write, "order", mustCompile(t, "amount"), "approved")
+	b.AddDataInputAssociation(read, "order", "orderCopy", nil) // copy verbatim
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	h := openHarness(t, dir)
+	defer h.close(t)
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key, model.VariableValue{Name: "amount", Kind: model.VarNumber, Text: "7"})
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if got := readVar(t, h.store, model.NewKey(1, 1), "orderCopy"); got == nil || got.Kind != model.VarNumber || got.Text != "7" {
+		t.Fatalf("orderCopy = %+v, want number 7 (copied from data object)", got)
+	}
+}
+
+// TestDataInputAssociationConstantTransform covers a transform that references
+// neither a variable nor the object (a constant), so the FEEL scope starts empty
+// (nil) before the source object is bound in — the object write still lands the
+// constant into the variable (ADR-0059).
+func TestDataInputAssociationConstantTransform(t *testing.T) {
+	dir := t.TempDir()
+	b := compiler.NewBuilder(defKey, "inconst", 1)
+	start := b.AddStartEvent()
+	write := b.AddTask()
+	read := b.AddTask()
+	end := b.AddEndEvent()
+	b.Connect(start, write)
+	b.Connect(write, read)
+	b.Connect(read, end)
+	b.AddDataObject("order", "", "received", false)
+	b.AddDataOutputAssociation(write, "order", mustCompile(t, "amount"), "approved")
+	b.AddDataInputAssociation(read, "order", "flag", mustCompile(t, "99")) // constant transform
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	h := openHarness(t, dir)
+	defer h.close(t)
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key, model.VariableValue{Name: "amount", Kind: model.VarNumber, Text: "1"})
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if got := readVar(t, h.store, model.NewKey(1, 1), "flag"); got == nil || got.Text != "99" {
+		t.Fatalf("flag = %+v, want number 99 (constant transform)", got)
+	}
+}

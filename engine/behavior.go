@@ -136,8 +136,54 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 func handleElementActivating(c *ProcessingContext) {
 	ei := &c.cmd.Value.element
 	c.AppendElementEvent(c.cmd.Key, model.IntentActivated, *ei)
+	// Read the activity's data-input associations into process variables before its
+	// behavior runs, so the activity's own FEEL (e.g. a script task's expression)
+	// sees them (ADR-0059).
+	applyDataInputAssociations(c, ei)
 	c.p.behavior(ei.BpmnElementType).OnActivated(c, c.cmd.Key, ei)
 	armBoundaryEvents(c, c.cmd.Key, ei)
+}
+
+// applyDataInputAssociations evaluates an activating activity's data-input
+// associations (ADR-0059): for each, it reads the source data object and writes a
+// value into the target process variable the activity reads. With an <assignment>
+// <from> transform, it evaluates the FEEL over the instance's variables plus the
+// source object bound under its name; with none, it copies the object's value
+// verbatim. The value is written as a VariableCreated event, so replay re-applies it
+// without re-reading the object or re-evaluating (invariants I4/I6).
+func applyDataInputAssociations(c *ProcessingContext, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	assocs := cp.DataInputAssociations(ei.ElementId)
+	for i := range assocs {
+		a := &assocs[i]
+		objName := cp.Intern(a.DataObject)
+		obj := c.GetDataObject(ei.ProcessInstanceKey, objName)
+
+		out := model.VariableValue{ScopeKey: ei.ProcessInstanceKey, Name: cp.Intern(a.Variable)}
+		switch {
+		case a.Value != nil:
+			// Bind the instance variables the transform reads plus the source object
+			// (under its own name) into the FEEL scope, then evaluate.
+			scope := bindInputs(c, a.Value.Inputs(), ei.ProcessInstanceKey)
+			if obj != nil {
+				if scope == nil {
+					scope = map[string]expr.Value{}
+				}
+				scope[objName] = expr.FromStored(toExprKind(obj.Kind), obj.Bool, obj.Text)
+			}
+			result, err := a.Value.Eval(scope)
+			if err != nil {
+				result = expr.Null
+			}
+			kind, b, text := expr.Classify(result)
+			out.Kind, out.Bool, out.Text = toVarKind(kind), b, text
+		case obj != nil:
+			// No transform: copy the object's value into the variable verbatim.
+			out.Kind, out.Bool, out.Text = obj.Kind, obj.Bool, obj.Text
+		}
+
+		c.AppendVariableEvent(model.IntentVariableCreated, out)
+	}
 }
 
 // handleElementCompleting runs the element-type completion behavior, then — if

@@ -97,6 +97,7 @@ type Builder struct {
 	timerStarts       []TimerStartDetail
 	dataObjects       []CompiledDataObject
 	dataOutAssocs     []pendingDataOut // data-output associations, grouped by node in Build
+	dataInAssocs      []pendingDataIn  // data-input associations, grouped by node in Build
 	elementIds        []int32          // interned source BPMN id per node, -1 if unset
 	startFormId       int32            // interned start-form id (ADR-0028), -1 if the process has none
 
@@ -407,6 +408,30 @@ type pendingDataOut struct {
 	assoc DataOutputAssociation
 }
 
+// pendingDataIn pairs a data-input association with the activity node it belongs
+// to, until Build groups them into the shared per-node array.
+type pendingDataIn struct {
+	node  int32
+	assoc DataInputAssociation
+}
+
+// AddDataInputAssociation attaches a data-input association to activity node: when
+// the activity activates, the engine reads the data object named dataObject (bound
+// into the FEEL scope under its name), evaluates value (a FEEL transform over the
+// instance's variables and that object, nil to copy the object's value verbatim),
+// and writes the result into the process variable named variable, which the activity
+// then reads (ADR-0059). Build groups a node's associations into a shared array.
+func (b *Builder) AddDataInputAssociation(node int32, dataObject, variable string, value *expr.Compiled) {
+	b.dataInAssocs = append(b.dataInAssocs, pendingDataIn{
+		node: node,
+		assoc: DataInputAssociation{
+			DataObject: b.intern(dataObject),
+			Variable:   b.intern(variable),
+			Value:      value,
+		},
+	})
+}
+
 // AddDataOutputAssociation attaches a data-output association to activity node: when
 // the activity completes, the engine evaluates value (a FEEL expression over the
 // instance's variables, nil for a state-only transition) and writes it into the data
@@ -577,6 +602,20 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		n.DataOutCount = int32(len(dataOut)) - n.DataOutStart
 	}
 
+	// Group data-input associations by their activity node, mirroring the output
+	// grouping (ADR-0059).
+	var dataIn []DataInputAssociation
+	for i := range b.nodes {
+		n := &b.nodes[i]
+		n.DataInStart = int32(len(dataIn))
+		for _, p := range b.dataInAssocs {
+			if p.node == n.ElementId {
+				dataIn = append(dataIn, p.assoc)
+			}
+		}
+		n.DataInCount = int32(len(dataIn)) - n.DataInStart
+	}
+
 	// Count incoming flows per node, so a parallel join knows how many tokens to
 	// wait for.
 	for _, f := range b.flows {
@@ -612,6 +651,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		timerStarts:       b.timerStarts,
 		dataObjects:       b.dataObjects,
 		dataOutAssocs:     dataOut,
+		dataInAssocs:      dataIn,
 		startEvents:       startEvents,
 		elementIds:        b.elementIds,
 		startFormId:       b.startFormId,
