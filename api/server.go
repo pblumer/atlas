@@ -41,6 +41,7 @@ import (
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/state"
+	"github.com/pblumer/atlas/temis"
 )
 
 // dmnResolverFromEnv picks the DMN model source. When ATLAS_DMN_RESOLVER_URL is
@@ -55,6 +56,55 @@ func dmnResolverFromEnv(dir string) dmn.Resolver {
 		}
 	}
 	return dmn.DirResolver{Dir: dir}
+}
+
+// temisRegistryFromEnv builds the temis decision-connector registry from the
+// environment, following ADR-0041's secret model: a model names a connector; its
+// endpoint and token live in the process environment, never in the model or the
+// event log. ATLAS_TEMIS_CONNECTORS is a comma-separated list of connector names;
+// for each name N, ATLAS_TEMIS_<N>_URL is its endpoint and ATLAS_TEMIS_<N>_TOKEN an
+// optional bearer token, where <N> is the name upper-cased with non-alphanumeric
+// runs collapsed to "_" (so "risk-service" → ATLAS_TEMIS_RISK_SERVICE_URL). A name
+// with no URL is skipped; a business rule task referencing an unregistered
+// connector simply parks (the worker returns an error) until it is configured.
+func temisRegistryFromEnv() *temis.Registry {
+	reg := temis.NewRegistry()
+	for _, name := range strings.Split(os.Getenv("ATLAS_TEMIS_CONNECTORS"), ",") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		key := connectorEnvKey(name)
+		url := strings.TrimSpace(os.Getenv("ATLAS_TEMIS_" + key + "_URL"))
+		if url == "" {
+			continue
+		}
+		reg.Register(name, temis.NewHTTPClient(temis.Connector{
+			Endpoint: url,
+			Token:    strings.TrimSpace(os.Getenv("ATLAS_TEMIS_" + key + "_TOKEN")),
+		}))
+	}
+	return reg
+}
+
+// connectorEnvKey normalizes a connector name into its environment-variable
+// fragment: upper-case, with each run of non-alphanumeric characters collapsed to
+// a single underscore and leading/trailing underscores trimmed.
+func connectorEnvKey(name string) string {
+	var b strings.Builder
+	pendingSep := false
+	for _, r := range strings.ToUpper(name) {
+		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			if pendingSep && b.Len() > 0 {
+				b.WriteByte('_')
+			}
+			pendingSep = false
+			b.WriteRune(r)
+		} else {
+			pendingSep = true
+		}
+	}
+	return b.String()
 }
 
 //go:embed web
@@ -132,6 +182,11 @@ type Server struct {
 	// rule tasks (ADR-0014). Both are touched only on the run-loop goroutine.
 	dmnRegistry *dmn.Registry
 	jobRunner   *job.Runner
+
+	// temisRegistry resolves a connector name to a temis service client for
+	// *central* business rule tasks (ADR-0050), built from the environment at
+	// startup (ADR-0041 secret model). Read only while driving jobs on the run loop.
+	temisRegistry *temis.Registry
 
 	// docsEnabled gates the OpenAPI spec and the Scalar API explorer. On by
 	// default (opt-out), consistent with the already-open web UI and MCP
@@ -242,6 +297,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// decision's result is written back into the instance as a process variable.
 	s.jobRunner = job.NewRunner(store, proc)
 	s.jobRunner.HandleWithOutput(compiler.DMNJobTypeIndex, dmn.Handler(store, s.processLookup, s.dmnRegistry, nil))
+	// A *central* business rule task delegates its decision to a remote temis
+	// service instead of the embedded library (ADR-0050). One connector worker
+	// serves every process under the reserved temis-connector job type; it resolves
+	// each job's connector name from the compiled process and calls the endpoint
+	// configured for that name in the environment (ADR-0041). A model whose
+	// connector is not configured simply parks until it is.
+	s.temisRegistry = temisRegistryFromEnv()
+	s.jobRunner.HandleWithOutput(compiler.TemisDecisionJobTypeIndex, temis.Handler(store, s.processLookup, s.temisRegistry, nil))
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
 	}

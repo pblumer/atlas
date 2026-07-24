@@ -90,8 +90,13 @@ The control-flow basics most real models use.
   (ADR-0036/0041) instead of the embedded library — same authoring and I/O mappings,
   only the evaluation locus differs, and a central decision needs no local model at
   deploy. The `temis` connector trio (registry/client/worker) and the shared
-  `dmn.DecisionHandler` core landed with engine-path tests; wiring the connector
-  worker into the server run loop is the shared ADR-0041 follow-up (with clio/REST).
+  `dmn.DecisionHandler` core landed, and **the connector worker is now wired into
+  the single-binary server run loop**: a central decision's connector endpoint and
+  token are resolved from the environment at startup (`ATLAS_TEMIS_CONNECTORS` +
+  `ATLAS_TEMIS_<NAME>_URL`/`_TOKEN`, the ADR-0041 secret-reference model), so a
+  deployed instance with an external decision runs to completion against the
+  configured temis service (server end-to-end tested). Wiring the clio/REST workers
+  the same way remains the shared ADR-0041 follow-up.
   Next: explicit `<zeebe:output>` mappings, decimal precision across the temis
   boundary, and off-loop streaming evaluation as the Milestone-4 gRPC job-worker
   concern (the single binary drives jobs synchronously).
