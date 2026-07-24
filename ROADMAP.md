@@ -110,11 +110,13 @@ The control-flow basics most real models use.
 Making processes wait, react, and time out.
 
 - ✅ Timer events + due-date index scanning: **intermediate timer catch events**
-  (`<timeDuration>` or `<timeDate>`) execute — the token waits, a server-side
-  scheduler fires due timers on the partition goroutine, and the event continues.
-  Recovery-tested (a pending timer is restored from the log and fires afterward).
-  A cycle on a plain catch is a compile error (a catch fires once). FEEL duration
-  expressions still to come (ADR-0054).
+  (`<timeDuration>` or `<timeDate>`, literal **or a FEEL expression** over the
+  instance's variables — e.g. `=orderTimeout`) execute: the token waits, a
+  server-side scheduler fires due timers on the partition goroutine, and the event
+  continues. Recovery-tested (a pending timer is restored from the log and fires
+  afterward). A cycle on a plain catch is a compile error (a catch fires once).
+  FEEL cycles, and an incident instead of firing immediately when a FEEL timer
+  can't resolve, still to come (ADR-0055).
 - ✅ **Timer start events** (duration, date, cycle, cron): a `<startEvent>` with a
   `<timerEventDefinition>` starts a fresh instance on its schedule —
   `<timeDuration>` (once, after a delay), `<timeDate>` (once, at an absolute
@@ -148,7 +150,8 @@ Making processes wait, react, and time out.
 - ✅ Boundary events: timer and message, interrupting and non-interrupting,
   attached to waiting activities. An interrupting boundary cancels the host (and
   its job) and routes out its flow; a non-interrupting one spawns a parallel
-  token. Timer boundaries take a `<timeDuration>`, a `<timeDate>`, or — on a
+  token. Timer boundaries take a `<timeDuration>`, a `<timeDate>` (each literal or
+  a FEEL expression over the instance's variables, ADR-0055), or — on a
   non-interrupting boundary — a `<timeCycle>` (interval or cron) that **recurs**,
   a repeating reminder that fires while the host runs (ADR-0054). Recovery-tested
   (ADR-0040, ADR-0054). Error/signal boundaries and boundaries on subprocesses
