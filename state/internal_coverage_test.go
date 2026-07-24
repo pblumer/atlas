@@ -103,6 +103,31 @@ func TestReadIntoDecodeError(t *testing.T) {
 	}
 }
 
+// TestProcessInstanceDecodeError covers ProcessInstance's decode-error branch for
+// both the active and the history family, by planting an undersized value under
+// each key.
+func TestProcessInstanceDecodeError(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+
+	if err := s.db.Set(keyProcessInstance(model.NewKey(1, 1)), []byte{0x01}, pebble.NoSync); err != nil {
+		t.Fatalf("Set active: %v", err)
+	}
+	if _, _, err := s.ProcessInstance(model.NewKey(1, 1)); err == nil {
+		t.Errorf("ProcessInstance on corrupt active value: err = nil, want error")
+	}
+	// A key present only in the history family exercises the second loop iteration.
+	if err := s.db.Set(keyProcessInstanceHistory(model.NewKey(1, 2)), []byte{0x01}, pebble.NoSync); err != nil {
+		t.Fatalf("Set history: %v", err)
+	}
+	if _, _, err := s.ProcessInstance(model.NewKey(1, 2)); err == nil {
+		t.Errorf("ProcessInstance on corrupt history value: err = nil, want error")
+	}
+}
+
 // TestStoreDecodeErrorPaths covers the decode-error branches in the store's
 // scanning/point queries by planting undersized values.
 func TestStoreDecodeErrorPaths(t *testing.T) {

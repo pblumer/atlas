@@ -129,6 +129,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Created instance", tObject())}},
 		{"GET", "/api/v1/instances", s.handleListInstances, apiOp{
 			summary: "List active and finished instances", tag: "Instances", resp: jsonBody("Instances", tArray())}},
+		{"GET", "/api/v1/instances/{key}/timeline", s.handleInstanceTimeline, apiOp{
+			summary: "Read a process instance's step-by-step replay timeline", tag: "Instances",
+			resp: jsonBody("Instance timeline", tObject())}},
 		{"DELETE", "/api/v1/instances/{key}", s.handleCancelInstance, apiOp{
 			summary: "Cancel a running instance", tag: "Instances", resp: jsonBody("Cancellation result", tObject())}},
 

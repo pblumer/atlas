@@ -24,6 +24,7 @@ const (
 	cfElementVisit           columnFamily = 0x0B // elVisit:<procDefKey>:<piKey>:<elementId> → int64 count
 	cfMessageFlow            columnFamily = 0x0C // msgFlow:<receiverDefKey>:<ts>:<pos> → MessageFlowValue
 	cfJobByElement           columnFamily = 0x0D // jobByEl:<elKey> → jobKey (reverse lookup for boundary cancel)
+	cfElementStep            columnFamily = 0x0E // elStep:<piKey>:<ts>:<pos> → int32 elementId
 )
 
 func appendBE64(dst []byte, v uint64) []byte { return binary.BigEndian.AppendUint64(dst, v) }
@@ -138,6 +139,36 @@ func timestampFromFlowKey(k []byte) int64 {
 
 // positionFromFlowKey extracts the trailing log position from a message-flow key.
 func positionFromFlowKey(k []byte) uint64 {
+	return binary.BigEndian.Uint64(k[len(k)-8:])
+}
+
+// keyElementStep keys one retained element-activation step of a single process
+// instance. The process-instance key leads, so every step of one instance is one
+// prefix scan; the event timestamp follows so the scan yields them in the order
+// they occurred (the step-by-step replay timeline), and the log position is the
+// trailing disambiguator so two steps in the same nanosecond keep distinct keys.
+// All big-endian / sign-flipped so lexicographic byte order matches numeric (and
+// thus time) order. Unlike the element-visit counter (ADR-0022) this is keyed by
+// instance, ordered in time, and never aggregated across instances (ADR-0046).
+func keyElementStep(piKey uint64, ts int64, pos uint64) []byte {
+	b := appendOrderedInt64(elementStepInstancePrefix(piKey), ts)
+	return appendBE64(b, pos)
+}
+
+// elementStepInstancePrefix scans every step recorded for one process instance,
+// in time order.
+func elementStepInstancePrefix(piKey uint64) []byte {
+	return appendBE64([]byte{byte(cfElementStep)}, piKey)
+}
+
+// timestampFromStepKey extracts the event timestamp from an element-step key,
+// inverting the sign-flip appendOrderedInt64 applied.
+func timestampFromStepKey(k []byte) int64 {
+	return int64(binary.BigEndian.Uint64(k[len(k)-16:]) ^ (1 << 63))
+}
+
+// positionFromStepKey extracts the trailing log position from an element-step key.
+func positionFromStepKey(k []byte) uint64 {
 	return binary.BigEndian.Uint64(k[len(k)-8:])
 }
 

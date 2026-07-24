@@ -53,6 +53,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0043](0043-openapi-spec-and-embedded-api-explorer.md) | An OpenAPI spec and an embedded API explorer for the HTTP API | Accepted |
 | [0044](0044-user-management-and-authentication-boundary.md) | User management and the opt-in authentication boundary | Accepted |
 | [0045](0045-user-task-assignment-bound-to-identity.md) | Binding user-task assignment to real identities | Accepted |
+| [0046](0046-single-process-step-replay.md) | Retain a per-instance element-step history and replay a single process step by step | Accepted |
 
 ## Status values
 

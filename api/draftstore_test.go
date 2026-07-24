@@ -15,6 +15,30 @@ func newDrafts(t *testing.T) *draftStore {
 	return ds
 }
 
+// TestDraftStoreLoadAllSkipsForeignFiles proves loadAll ignores a subdirectory
+// and a non-.json file in the drafts directory rather than failing — the parity
+// of formstore's and deploystore's stray-file tests, exercising the IsDir /
+// suffix skip branch.
+func TestDraftStoreLoadAllSkipsForeignFiles(t *testing.T) {
+	ds := newDrafts(t)
+	if err := ds.save(draft{ProcessID: "real", Name: "R", SavedAt: 1, XML: "<r/>"}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(ds.dir, "subdir"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(ds.dir, "notes.txt"), []byte("hi"), 0o644); err != nil {
+		t.Fatalf("write txt: %v", err)
+	}
+	got, err := ds.loadAll()
+	if err != nil {
+		t.Fatalf("loadAll: %v", err)
+	}
+	if len(got) != 1 || got[0].ProcessID != "real" {
+		t.Fatalf("loadAll = %+v, want only the real draft", got)
+	}
+}
+
 // TestDraftStoreRoundTripAndOrder saves drafts and reads them back most-recently
 // saved first, and proves get finds a specific one.
 func TestDraftStoreRoundTripAndOrder(t *testing.T) {
