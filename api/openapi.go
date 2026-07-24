@@ -177,6 +177,14 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Fetch a form definition", tag: "Forms", resp: jsonBody("Form", tObject())}},
 		{"DELETE", "/api/v1/forms/{id}", s.handleDeleteForm, apiOp{
 			summary: "Delete a form definition", tag: "Forms", resp: jsonBody("Deleted id", tObject())}},
+		{"POST", "/api/v1/public-links", s.handleCreatePublicLink, apiOp{
+			summary: "Publish a process: mint a public start link (ADR-0029)", tag: "Forms",
+			req:  jsonBody("Target", schemaObj(map[string]any{"processId": tString()}, "processId")),
+			resp: jsonBody("Public link", tObject())}},
+		{"GET", "/api/v1/public-links", s.handleListPublicLinks, apiOp{
+			summary: "List public start links", tag: "Forms", resp: jsonBody("Public links", tArray())}},
+		{"DELETE", "/api/v1/public-links/{token}", s.handleRevokePublicLink, apiOp{
+			summary: "Revoke a public start link", tag: "Forms", resp: jsonBody("Revoked token", tObject())}},
 
 		{"POST", "/api/v1/projects", s.handleCreateProject, apiOp{
 			summary: "Create a project", tag: "Projects", req: jsonBody("Project", tObject()), resp: jsonBody("Created project", tObject())}},

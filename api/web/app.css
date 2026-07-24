@@ -698,6 +698,18 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .tasks-form { margin-top: 22px; max-width: 640px; }
 .tasks-form .fjs-container { --color-background: var(--surface); }
 
+/* ---------- Public start link (ADR-0029) ---------- */
+.tasks-publish { margin-top: 26px; max-width: 640px; padding-top: 20px; border-top: 1px solid var(--border); }
+.tasks-publish .publish-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.tasks-publish .publish-hint { margin: 0 0 12px; max-width: 60ch; font-size: 13px; }
+.tasks-publish .chip.ok { color: var(--ok, #2d8a4e); border-color: #bfe3cb; background: #eaf7ef; }
+.tasks-publish .publish-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.tasks-publish .publish-url {
+  flex: 1 1 auto; min-width: 0; font: 13px/1.5 ui-monospace, monospace;
+  padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text);
+}
+
 /* ---------- Dropdown menu (Create new ▾, row ⋯ actions) ---------- */
 .dropdown { position: relative; display: inline-block; }
 .dropdown-menu {
