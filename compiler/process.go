@@ -235,11 +235,12 @@ type ScriptJobTaskDetail struct {
 	Retries   int32
 }
 
-// TimerCatchDetail is the per-timer-intermediate-catch-event data: how long the
-// event waits before continuing, as a fixed duration in nanoseconds (a literal
-// ISO-8601 duration today; FEEL duration expressions and date/cycle timers later).
+// TimerCatchDetail is the per-timer-intermediate-catch-event data: the compiled
+// schedule that decides when the waiting token continues. A catch fires once, so
+// only duration and date schedules reach here — a cycle is a compile error
+// (ADR-0054).
 type TimerCatchDetail struct {
-	DurationNanos int64
+	Schedule TimerSchedule
 }
 
 // TimerStartDetail is the per-timer-start-event data: the compiled schedule that
@@ -275,7 +276,7 @@ type BoundaryEventDetail struct {
 	HostNode       int32 // ElementId of the activity this event is attached to
 	Interrupting   bool  // true = cancel the host on fire (BPMN cancelActivity); false = run alongside
 	Kind           BoundaryEventKind
-	DurationNanos  int64          // BoundaryTimer: how long before it fires
+	Schedule       TimerSchedule  // BoundaryTimer: when it fires; a cycle (non-interrupting only) recurs (ADR-0054)
 	MessageName    string         // BoundaryMessage: the message it subscribes to
 	CorrelationKey *expr.Compiled // BoundaryMessage: correlation-key expression (ADR-0020)
 }

@@ -201,9 +201,60 @@ func handleTimerTriggered(c *ProcessingContext) {
 		fireStartTimer(c, timer)
 		return
 	}
-	if ei := c.GetElementInstance(timer.ElementInstanceKey); ei != nil {
-		c.AppendElementCommand(timer.ElementInstanceKey, model.IntentCompleting, *ei)
+	ei := c.GetElementInstance(timer.ElementInstanceKey)
+	if ei == nil {
+		return // element gone (cancelled/completed/host-interrupted): self-retire
 	}
+	if sched, ok := recurringBoundarySchedule(c, ei); ok {
+		fireRecurringBoundary(c, timer, ei, sched)
+		return
+	}
+	c.AppendElementCommand(timer.ElementInstanceKey, model.IntentCompleting, *ei)
+}
+
+// recurringBoundarySchedule reports whether ei is a non-interrupting boundary
+// timer whose schedule recurs, and returns that schedule (ADR-0054). Such a
+// boundary fires repeatedly rather than completing on the first fire.
+func recurringBoundarySchedule(c *ProcessingContext, ei *model.ElementInstanceValue) (compiler.TimerSchedule, bool) {
+	cp := c.process(ei.ProcessDefKey)
+	node := cp.Node(ei.ElementId)
+	if node.Type != compiler.TypeBoundaryEvent {
+		return compiler.TimerSchedule{}, false
+	}
+	d := cp.BoundaryEvent(node.Detail)
+	if d.Kind != compiler.BoundaryTimer || d.Interrupting || !d.Schedule.Repeats() {
+		return compiler.TimerSchedule{}, false
+	}
+	return d.Schedule, true
+}
+
+// fireRecurringBoundary spawns the boundary's outgoing (reminder) token without
+// completing the boundary element instance — it stays armed — then arms the next
+// occurrence, re-anchored to the clock and frozen into the event (I6), counting a
+// finite Rn cycle down. When the count runs out it stops arming; the idle boundary
+// is removed when its host completes (existing disarm). If its host is later
+// interrupted or completes, the last re-armed timer finds no instance and does
+// nothing (ADR-0054).
+func fireRecurringBoundary(c *ProcessingContext, timer model.TimerValue, ei *model.ElementInstanceValue, sched compiler.TimerSchedule) {
+	takeOutgoingFlows(c, ei)
+	if timer.Repetitions == 0 {
+		return // finite cycle exhausted: stop arming, leave the boundary idle
+	}
+	next, ok := sched.NextDue(c.Now())
+	if !ok {
+		return
+	}
+	reps := timer.Repetitions
+	if reps > 0 {
+		reps-- // count down a finite cycle; an infinite one (-1) stays -1
+	}
+	c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: timer.ElementInstanceKey,
+		TargetElementId:    ei.ElementId,
+		DueDate:            next,
+		Repetitions:        reps,
+	})
 }
 
 // fireStartTimer instantiates the definition a due start timer names — through the
@@ -552,13 +603,14 @@ func (timerCatchEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei 
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.TimerCatch(cp.Node(ei.ElementId).Detail)
 	// Now() is read here (command processing) and frozen into the event's due
-	// date; applyToState never reads the clock (invariant I4).
-	due := c.Now() + detail.DurationNanos
+	// date; applyToState never reads the clock (invariant I4). A catch schedule is
+	// a duration or date (a cycle is rejected at compile time), so FirstDue is the
+	// only due date (ADR-0054).
 	c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ElementInstanceKey: key,
 		TargetElementId:    ei.ElementId,
-		DueDate:            due,
+		DueDate:            detail.Schedule.FirstDue(c.Now()),
 	})
 	// Stays Activated: no Completing until the timer fires.
 }
@@ -1023,12 +1075,15 @@ func (boundaryEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *m
 	switch d.Kind {
 	case compiler.BoundaryTimer:
 		// Now() is read here (command processing) and frozen into the due date;
-		// applyToState never reads the clock (invariant I4).
+		// applyToState never reads the clock (invariant I4). A non-interrupting
+		// cycle boundary seeds Repetitions so a finite Rn cycle counts down as it
+		// recurs (ADR-0054); a one-shot leaves it 0.
 		c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
 			ProcessInstanceKey: ei.ProcessInstanceKey,
 			ElementInstanceKey: key,
 			TargetElementId:    ei.ElementId,
-			DueDate:            c.Now() + d.DurationNanos,
+			DueDate:            d.Schedule.FirstDue(c.Now()),
+			Repetitions:        d.Schedule.Repetitions,
 		})
 	case compiler.BoundaryMessage:
 		c.AppendMessageSubscriptionEvent(key, model.IntentSubscriptionCreated, model.MessageSubscriptionValue{

@@ -396,13 +396,14 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	for _, ev := range proc.IntermediateCatchEvents {
 		switch {
 		case ev.Timer != nil:
-			text := strings.TrimSpace(ev.Timer.TimeDuration)
-			text = strings.TrimSpace(strings.TrimPrefix(text, "=")) // tolerate a FEEL '=' prefix
-			nanos, err := parseISO8601Duration(text)
+			schedule, err := parseTimerSchedule(ev.Timer)
 			if err != nil {
 				return nil, fmt.Errorf("compiler: intermediate catch event %q timer: %w", ev.Id, err)
 			}
-			if err := register(ev.Id, b.AddTimerCatchEvent(nanos)); err != nil {
+			if schedule.Repeats() {
+				return nil, fmt.Errorf("compiler: intermediate catch event %q: timeCycle is not supported (a catch fires once); use timeDuration or timeDate", ev.Id)
+			}
+			if err := register(ev.Id, b.AddTimerCatchSchedule(schedule)); err != nil {
 				return nil, err
 			}
 		case ev.Message != nil:
@@ -472,12 +473,14 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		interrupting := ev.CancelActivity != "false"
 		switch {
 		case ev.Timer != nil:
-			text := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(ev.Timer.TimeDuration), "="))
-			nanos, err := parseISO8601Duration(text)
+			schedule, err := parseTimerSchedule(ev.Timer)
 			if err != nil {
 				return nil, fmt.Errorf("compiler: boundary event %q timer: %w", ev.Id, err)
 			}
-			if err := register(ev.Id, b.AddBoundaryTimerEvent(host, interrupting, nanos)); err != nil {
+			if schedule.Repeats() && interrupting {
+				return nil, fmt.Errorf("compiler: boundary event %q: an interrupting boundary timer does not support timeCycle (it fires once); use timeDuration or timeDate, or make the boundary non-interrupting", ev.Id)
+			}
+			if err := register(ev.Id, b.AddBoundaryTimerSchedule(host, interrupting, schedule)); err != nil {
 				return nil, err
 			}
 		case ev.Message != nil:

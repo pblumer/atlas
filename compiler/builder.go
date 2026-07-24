@@ -349,14 +349,21 @@ func (b *Builder) AddUserTask(name, assignee, candidateGroups, formId string, pr
 // AddBoundaryTimerEvent adds a timer boundary event attached to host, firing
 // after durationNanos. interrupting mirrors BPMN cancelActivity: true cancels the
 // host when it fires, false spawns a parallel token (ADR-0040). Returns its
-// element id.
+// element id. It is the duration convenience over AddBoundaryTimerSchedule.
 func (b *Builder) AddBoundaryTimerEvent(host int32, interrupting bool, durationNanos int64) int32 {
+	return b.AddBoundaryTimerSchedule(host, interrupting, TimerSchedule{Kind: TimerDuration, BaseNanos: durationNanos})
+}
+
+// AddBoundaryTimerSchedule adds a timer boundary event firing on the given
+// compiled schedule. A cycle schedule on a non-interrupting boundary recurs — a
+// repeating reminder (ADR-0054). Returns its element id.
+func (b *Builder) AddBoundaryTimerSchedule(host int32, interrupting bool, schedule TimerSchedule) int32 {
 	detail := int32(len(b.boundaryEventDets))
 	b.boundaryEventDets = append(b.boundaryEventDets, BoundaryEventDetail{
-		HostNode:      host,
-		Interrupting:  interrupting,
-		Kind:          BoundaryTimer,
-		DurationNanos: durationNanos,
+		HostNode:     host,
+		Interrupting: interrupting,
+		Kind:         BoundaryTimer,
+		Schedule:     schedule,
 	})
 	return b.addNode(TypeBoundaryEvent, detail)
 }
@@ -416,10 +423,18 @@ func (b *Builder) AddParallelGateway() int32 { return b.addNode(TypeParallelGate
 func (b *Builder) AddExclusiveGateway() int32 { return b.addNode(TypeExclusiveGateway, -1) }
 
 // AddTimerCatchEvent adds an intermediate timer catch event that waits the given
-// fixed duration (nanoseconds) before continuing, and returns its element id.
+// fixed duration (nanoseconds) before continuing, and returns its element id. It
+// is the duration convenience over AddTimerCatchSchedule.
 func (b *Builder) AddTimerCatchEvent(durationNanos int64) int32 {
+	return b.AddTimerCatchSchedule(TimerSchedule{Kind: TimerDuration, BaseNanos: durationNanos})
+}
+
+// AddTimerCatchSchedule adds an intermediate timer catch event that waits until
+// the given schedule's first due date, then continues. A catch fires once, so the
+// schedule is a duration or date, never a cycle (ADR-0054). Returns its element id.
+func (b *Builder) AddTimerCatchSchedule(schedule TimerSchedule) int32 {
 	detail := int32(len(b.timerCatches))
-	b.timerCatches = append(b.timerCatches, TimerCatchDetail{DurationNanos: durationNanos})
+	b.timerCatches = append(b.timerCatches, TimerCatchDetail{Schedule: schedule})
 	return b.addNode(TypeTimerCatchEvent, detail)
 }
 
@@ -447,7 +462,7 @@ func (b *Builder) AddMessageThrowEvent(messageName string, correlationKey *expr.
 // message with a correlation key produced by the given compiled FEEL expression
 // (evaluated over the ending instance's variables), then ends the instance.
 // It reuses the throw detail table, since a message end event throws exactly like
-// an intermediate throw event and only differs in its completion (ADR-0052).
+// an intermediate throw event and only differs in its completion (ADR-0054).
 // Returns its element id.
 func (b *Builder) AddMessageEndEvent(messageName string, correlationKey *expr.Compiled) int32 {
 	detail := int32(len(b.messageThrows))
