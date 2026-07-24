@@ -205,6 +205,20 @@ func elementVisits(t *testing.T, s *state.Store, defKey uint64) map[int32]int64 
 	return out
 }
 
+// elementSteps reads one instance's element-step timeline into the ordered slice
+// of element indices a token activated, oldest first (ADR-0044).
+func elementSteps(t *testing.T, s *state.Store, piKey uint64) []int32 {
+	t.Helper()
+	var out []int32
+	if err := s.ElementStepHistory(piKey, func(_ int64, _ uint64, elementId int32) error {
+		out = append(out, elementId)
+		return nil
+	}); err != nil {
+		t.Fatalf("ElementStepHistory: %v", err)
+	}
+	return out
+}
+
 func counts(t *testing.T, s *state.Store) (procInstances, elementInstances int) {
 	t.Helper()
 	pi, err := s.ActiveProcessInstanceCount()
@@ -822,5 +836,83 @@ func TestElementVisitHistoryRecovers(t *testing.T) {
 	// Rebuilt visit heatmap matches the live run exactly.
 	if replayed := elementVisits(t, store2, cp.Key); !reflect.DeepEqual(replayed, live) {
 		t.Fatalf("replayed visits = %v, want %v", replayed, live)
+	}
+}
+
+// TestElementStepHistoryRecovers is the recovery property for the single-process
+// step timeline (ADR-0044): every element a token activates is retained in
+// activation order under its instance, the trail survives the instance finishing,
+// and replaying the log rebuilds an identical, identically-ordered trail — each
+// step is derived only from the event (its header timestamp/position and the
+// activated element), never re-generated (invariant I4).
+func TestElementStepHistoryRecovers(t *testing.T) {
+	dir := t.TempDir()
+	// Build start → service task → end, capturing the element indices so the trail
+	// can be asserted in exact order.
+	b := compiler.NewBuilder(defKey, "stepped", 1)
+	start := b.AddStartEvent()
+	task := b.AddServiceTask(jobName, 3)
+	end := b.AddEndEvent()
+	b.Connect(start, task)
+	b.Connect(task, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ServiceTask(cp.Node(task).Detail).JobType
+	clock := &manualClock{}
+
+	// Live run all the way to completion.
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clock)
+	p1.Deploy(cp)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.CreateInstance(cp.Key)
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle 1: %v", err)
+	}
+	jobs := activatableJobs(t, h1.store, jobType)
+	p1.CompleteJob(jobs[0])
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle 2: %v", err)
+	}
+
+	// The instance has finished, yet its step trail records every element a token
+	// walked through, in activation order: start → task → end.
+	instKey := model.NewKey(1, 1)
+	live := elementSteps(t, h1.store, instKey)
+	if want := []int32{start, task, end}; !reflect.DeepEqual(live, want) {
+		t.Fatalf("live step trail = %v, want %v (start, task, end in order)", live, want)
+	}
+	h1.close(t)
+
+	// Replay the same log into a fresh, empty store.
+	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open 2: %v", err)
+	}
+	store2, err := state.Open(filepath.Join(dir, "state2"))
+	if err != nil {
+		t.Fatalf("state.Open 2: %v", err)
+	}
+	defer func() {
+		if err := store2.Close(); err != nil {
+			t.Errorf("store2.Close: %v", err)
+		}
+		if err := log2.Close(); err != nil {
+			t.Errorf("log2.Close: %v", err)
+		}
+	}()
+	p2 := engine.New(1, log2, store2, clock)
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2 (replay): %v", err)
+	}
+
+	// Rebuilt step trail matches the live run exactly, same elements in the same order.
+	if replayed := elementSteps(t, store2, instKey); !reflect.DeepEqual(replayed, live) {
+		t.Fatalf("replayed steps = %v, want %v", replayed, live)
 	}
 }

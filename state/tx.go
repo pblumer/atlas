@@ -379,6 +379,27 @@ func (t *Tx) RecordMessageFlow(ts int64, pos uint64, v *model.MessageFlowValue) 
 	return t.b.Set(keyMessageFlow(v.ReceiverProcessDefKey, ts, pos), t.encodeValue(v), nil)
 }
 
+// --- Element-step history ---
+//
+// Every element activation of a single process instance is retained here, keyed
+// in the order it happened, so the Operations view can replay one instance step
+// by step — the single-process analogue of the message-flow timeline (ADR-0038).
+// It complements the element-visit counter (ADR-0022): the counter answers "how
+// often" as an aggregate heatmap, this answers "in what order" per instance.
+// Written only from applyToState, from the event alone (the header's timestamp
+// and position plus the activated element), so it rebuilds identically on replay
+// (invariant I4, ADR-0044). Each record has a unique key (position is monotonic),
+// so this is a plain Set, never overwritten and never deleted. Retention is
+// unbounded for now, as with the other history families (ADR-0017, ADR-0022).
+
+// RecordElementStep retains one element activation of a process instance under
+// its instance key, keyed in time order. ts and pos come from the event header;
+// the value is the activated element's compiled-graph index.
+func (t *Tx) RecordElementStep(piKey uint64, ts int64, pos uint64, elementId int32) error {
+	t.scratch = appendBE32(t.scratch[:0], uint32(elementId))
+	return t.b.Set(keyElementStep(piKey, ts, pos), t.scratch, nil)
+}
+
 // ActiveChildren returns the active-child count for scope (0 if none). This read
 // folds the merged deltas, so it is used only where the current count is needed
 // (e.g. detecting a finished scope), not on every increment.

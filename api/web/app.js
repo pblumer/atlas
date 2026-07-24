@@ -1132,6 +1132,11 @@ async function viewCollaboration(key) {
   await mod.mountCollaboration(view, { api, toast, key });
 }
 
+async function viewInstanceReplay(key) {
+  const mod = await import("./editor.js");
+  await mod.mountInstanceReplay(view, { api, toast, key });
+}
+
 // ---------- Router ----------
 async function route() {
   // Any navigation closes the app switcher and tears down an editor/live view.
@@ -1179,6 +1184,10 @@ async function route() {
     if (lm) return await viewLive(Number(lm[1]));
     const cm = path.match(/^#\/operations\/c\/(\d+)$/);
     if (cm) return await viewCollaboration(Number(cm[1]));
+    // A single instance can be replayed step by step (…/i/{instanceKey}) — the
+    // token walks the diagram in activation order (ADR-0044).
+    const im = path.match(/^#\/operations\/i\/(\d+)$/);
+    if (im) return await viewInstanceReplay(Number(im[1]));
     if (appId !== "console" && appId !== "modeler" && appId !== "tasks") return viewComingSoon(appId);
     // Unknown route → dashboard.
     location.hash = "#/console";

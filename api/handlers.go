@@ -178,6 +178,28 @@ type collabRuntimeResp struct {
 	MessageFlows []collabFlow     `json:"messageFlows"`
 }
 
+// timelineStep is one element activation on a single instance's replay timeline:
+// which BPMN element a token entered, its type, and when (ADR-0044). Steps are
+// ordered oldest-first, so the Operations view can step through them.
+type timelineStep struct {
+	At        int64  `json:"at"` // unix nanoseconds
+	ElementID string `json:"elementId"`
+	Type      string `json:"type"`
+}
+
+// instanceTimelineResp is one process instance's step-by-step replay: its
+// definition, lifecycle state, and the ordered elements a token walked through
+// (ADR-0044). It powers the single-process replay transport, the analogue of the
+// collaboration message-flow timeline.
+type instanceTimelineResp struct {
+	InstanceKey   uint64         `json:"instanceKey"`
+	ProcessDefKey uint64         `json:"processDefKey"`
+	ProcessID     string         `json:"processId"`
+	Version       int32          `json:"version"`
+	State         string         `json:"state"`
+	Steps         []timelineStep `json:"steps"`
+}
+
 type instanceResp struct {
 	Key              uint64         `json:"key"`
 	ProcessDefKey    uint64         `json:"processDefKey"`
@@ -793,6 +815,72 @@ func (s *Server) handleCollaborationRuntime(w http.ResponseWriter, r *http.Reque
 		for _, tf := range flows {
 			resp.MessageFlows = append(resp.MessageFlows, tf.f)
 		}
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+// handleInstanceTimeline returns one process instance's step-by-step replay: the
+// ordered elements a token activated over the instance's life, each with its
+// diagram id, type, and event timestamp (ADR-0044). The instance is resolved
+// whether it is still running or already finished, and its element indices are
+// mapped to diagram ids via its definition's compiled process. This is the
+// single-process analogue of the collaboration message-flow timeline: the browser
+// steps the token through the elements in order.
+func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid instance key")
+		return
+	}
+	var (
+		foundInstance bool
+		foundDef      bool
+		scanErr       error
+		resp          = instanceTimelineResp{InstanceKey: key, Steps: []timelineStep{}}
+	)
+	s.do(func() {
+		pi, ok, err := s.store.ProcessInstance(key)
+		if err != nil {
+			scanErr = err
+			return
+		}
+		if !ok {
+			return
+		}
+		foundInstance = true
+		resp.ProcessDefKey = pi.ProcessDefKey
+		resp.State = pi.State.String()
+
+		d, ok := s.deployments[pi.ProcessDefKey]
+		if !ok {
+			// The instance outlived its deployment (definition deleted); its element
+			// indices can no longer be mapped to a diagram.
+			return
+		}
+		foundDef = true
+		resp.ProcessID = d.ProcessID
+		resp.Version = d.Version
+
+		scanErr = s.store.ElementStepHistory(key, func(ts int64, _ uint64, elementId int32) error {
+			// Every recorded step is a real activated node, so its diagram id is
+			// always present (unlike the shared runtime overlay's get, which guards
+			// synthetic elements).
+			resp.Steps = append(resp.Steps, timelineStep{
+				At:        ts,
+				ElementID: d.cp.ElementBpmnId(elementId),
+				Type:      d.cp.Node(elementId).Type.String(),
+			})
+			return nil
+		})
+	})
+	switch {
+	case scanErr != nil:
+		writeError(w, http.StatusInternalServerError, "read timeline: "+scanErr.Error())
+	case !foundInstance:
+		writeError(w, http.StatusNotFound, "no instance with that key")
+	case !foundDef:
+		writeError(w, http.StatusNotFound, "instance's definition is no longer deployed")
+	default:
 		writeJSON(w, http.StatusOK, resp)
 	}
 }
