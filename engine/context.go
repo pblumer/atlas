@@ -201,7 +201,7 @@ func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.Var
 // AppendDataObjectEvent records a data-object write (created or state-changed).
 // Like a variable it carries genuine runtime data (a name, a data state, and a
 // value), so it allocates for its strings — data objects are runtime data, not
-// hot-path token movement (ADR-0052). The event is keyed by the owning scope.
+// hot-path token movement (ADR-0053). The event is keyed by the owning scope.
 func (c *ProcessingContext) AppendDataObjectEvent(intent model.Intent, v model.DataObjectValue) {
 	c.appendEvent(v.ScopeKey, model.VTDataObject, intent, inflightValue{dataObject: v})
 }

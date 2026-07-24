@@ -91,7 +91,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			}
 			// Retain the change as an ordered, timestamped snapshot so the data
 			// object's state history and provenance rebuild on replay — the data
-			// analogue of the variable snapshot (ADR-0052, mirroring ADR-0048).
+			// analogue of the variable snapshot (ADR-0053, mirroring ADR-0048).
 			// Derived only from the event (header timestamp/position and the value),
 			// so replay rebuilds it identically (invariant I4).
 			return tx.RecordDataObjectSnapshot(h.Timestamp, h.Position, &v.dataObject)

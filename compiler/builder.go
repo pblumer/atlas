@@ -378,7 +378,7 @@ func (b *Builder) AddBoundaryMessageEvent(host int32, interrupting bool, message
 
 // AddDataObject declares a data object on the process: a typed, named datum with
 // an optional declared structure (itemType) and initial data state, seeded under
-// each instance's scope at creation (ADR-0052). It is not a flow node, so it
+// each instance's scope at creation (ADR-0053). It is not a flow node, so it
 // returns the index of the entry in the data-object table, not an element id.
 // Empty itemType or initialState intern to -1 (Intern maps that back to "").
 func (b *Builder) AddDataObject(name, itemType, initialState string, isCollection bool) int32 {
@@ -441,6 +441,18 @@ func (b *Builder) AddMessageThrowEvent(messageName string, correlationKey *expr.
 	detail := int32(len(b.messageThrows))
 	b.messageThrows = append(b.messageThrows, MessageDetail{MessageName: messageName, CorrelationKey: correlationKey})
 	return b.addNode(TypeMessageThrowEvent, detail)
+}
+
+// AddMessageEndEvent adds an end event that, on activation, publishes the named
+// message with a correlation key produced by the given compiled FEEL expression
+// (evaluated over the ending instance's variables), then ends the instance.
+// It reuses the throw detail table, since a message end event throws exactly like
+// an intermediate throw event and only differs in its completion (ADR-0052).
+// Returns its element id.
+func (b *Builder) AddMessageEndEvent(messageName string, correlationKey *expr.Compiled) int32 {
+	detail := int32(len(b.messageThrows))
+	b.messageThrows = append(b.messageThrows, MessageDetail{MessageName: messageName, CorrelationKey: correlationKey})
+	return b.addNode(TypeMessageEndEvent, detail)
 }
 
 // Connect adds a sequence flow from source to target and returns its flow id, so

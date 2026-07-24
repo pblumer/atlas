@@ -273,7 +273,7 @@ func (v *VariableValue) decode(src []byte) error {
 // (ADR-0037) — plus a State: the BPMN data state (e.g. "received", "approved").
 // Its encoding mirrors VariableValue with the extra State string between the name
 // and the kind byte; like a variable it carries genuine runtime data, so it is
-// length-prefixed rather than fixed-size (ADR-0052).
+// length-prefixed rather than fixed-size (ADR-0053).
 type DataObjectValue struct {
 	ScopeKey uint64 // owning scope (process instance key today)
 	Name     string

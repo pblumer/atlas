@@ -60,7 +60,7 @@ func dataObjectStates(t *testing.T, s *state.Store, scope uint64) []string {
 }
 
 // TestDataObjectSeededAndRecovers is the recovery property for data objects
-// (ADR-0052): creating an instance of a process that declares a data object seeds
+// (ADR-0053): creating an instance of a process that declares a data object seeds
 // that object under the instance scope with its declared initial data state, and
 // replaying the log into a fresh store rebuilds it identically — the value and
 // state come only from the event, never recomputed (invariants I4/I6).

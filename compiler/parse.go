@@ -444,6 +444,18 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 	}
 	for _, e := range proc.EndEvents {
+		// A message end event publishes its message then ends; a plain end event
+		// just ends (ADR-0052).
+		if e.Message != nil {
+			name, keyExpr, err := resolveMessage(e.Id, e.Message.MessageRef)
+			if err != nil {
+				return nil, err
+			}
+			if err := register(e.Id, b.AddMessageEndEvent(name, keyExpr)); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		if err := register(e.Id, b.AddEndEvent()); err != nil {
 			return nil, err
 		}
@@ -548,7 +560,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	}
 
 	// Data objects are not flow nodes (no token flows through them), so they are
-	// added as a separate collection, not registered as flow nodes (ADR-0052). A
+	// added as a separate collection, not registered as flow nodes (ADR-0053). A
 	// nameless data object falls back to its BPMN id so it stays addressable.
 	for _, d := range proc.DataObjects {
 		name := d.Name
@@ -603,7 +615,7 @@ type xmlProcess struct {
 	Id                string                `xml:"id,attr"`
 	Name              string                `xml:"name,attr"`
 	StartEvents       []xmlStartEvent       `xml:"startEvent"`
-	EndEvents         []xmlNode             `xml:"endEvent"`
+	EndEvents         []xmlEndEvent         `xml:"endEvent"`
 	ServiceTasks      []xmlServiceTask      `xml:"serviceTask"`
 	ScriptTasks       []xmlScriptTask       `xml:"scriptTask"`
 	BusinessRuleTasks []xmlBusinessRuleTask `xml:"businessRuleTask"`
@@ -633,7 +645,7 @@ type xmlProcess struct {
 // A BPMN data object. It is not a flow node — no token flows through it — so it
 // carries no sequence flows, only its identity (name, id), an optional collection
 // flag, an optional itemDefinition reference (its declared type), and an optional
-// <dataState> child naming its initial data state (ADR-0052). dataState is
+// <dataState> child naming its initial data state (ADR-0053). dataState is
 // spec-legal on any ItemAwareElement.
 type xmlDataObject struct {
 	Id             string       `xml:"id,attr"`
@@ -691,6 +703,14 @@ type xmlIntermediateCatchEvent struct {
 
 // An intermediate throw event; only the message variant is executable so far.
 type xmlIntermediateThrowEvent struct {
+	Id      string                     `xml:"id,attr"`
+	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
+}
+
+// An end event. A plain (none) end event just ends the instance; one bearing a
+// messageEventDefinition is a message end event, which publishes the message
+// then ends (ADR-0052). The definition is a pointer so an absent one is nil.
+type xmlEndEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
 }

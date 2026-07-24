@@ -51,7 +51,7 @@ The control-flow basics most real models use.
   pass-through branches (no double fire), and recovery-tested. Cyclic inclusive
   joins still to come (ADR-0033).
 - 🔲 Input/output variable mappings
-- 🚧 **Data objects** ([ADR-0052](docs/adr/0052-first-class-data-objects.md)):
+- 🚧 **Data objects** ([ADR-0053](docs/adr/0053-first-class-data-objects.md)):
   first-class, typed, event-sourced data — not the decoration most engines settle
   for. The foundational slice landed: a modeled `<dataObject>` (its name,
   `isCollection`, and optional `<dataState>`) compiles into the process, and at
@@ -128,12 +128,14 @@ Making processes wait, react, and time out.
   (ADR-0051).
 - ✅ **Message events + subscriptions + correlation** (single-partition):
   intermediate **message catch** events subscribe on a FEEL correlation key and
-  wait; intermediate **message throw** events and an HTTP `POST /api/v1/messages`
-  publish, correlating against open subscriptions through one shared path and
-  carrying an optional variable payload into the woken instance. Recovery-tested
-  (an open subscription is restored from the log and correlates afterward).
-  Message buffering, message boundary events, and cross-partition correlation
-  still to come (ADR-0020).
+  wait; intermediate **message throw** events, **message end** events, and an HTTP
+  `POST /api/v1/messages` publish, correlating against open subscriptions through
+  one shared path and carrying an optional variable payload into the woken
+  instance. Recovery-tested (an open subscription is restored from the log and
+  correlates afterward). Message buffering, message boundary events, and
+  cross-partition correlation still to come (ADR-0020). A **message end event**
+  publishes its message, then ends the instance — the send-and-stop counterpart of
+  the throw event (ADR-0052).
 - ✅ **Message start events** (single-partition): a `<startEvent>` with a
   `messageEventDefinition` is instantiated by a correlating message (throw or API
   publish), seeded with the message payload, so a two-pool request/response runs

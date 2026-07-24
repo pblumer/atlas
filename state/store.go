@@ -329,7 +329,7 @@ func (s *Store) VariablesOfScope(scope uint64, fn func(v *model.VariableValue) e
 // DataObjectsOfScope calls fn with every data object owned by the given scope,
 // via the data-object column family — the current value of each. Used to surface
 // an instance's data to operators and, later, to build a FEEL scope for data
-// associations (ADR-0052). Mirrors VariablesOfScope.
+// associations (ADR-0053). Mirrors VariablesOfScope.
 func (s *Store) DataObjectsOfScope(scope uint64, fn func(v *model.DataObjectValue) error) error {
 	return s.scanPrefix(dataObjectPrefix(scope), func(_, raw []byte) error {
 		v, err := model.DecodeValue(model.VTDataObject, raw)
@@ -342,7 +342,7 @@ func (s *Store) DataObjectsOfScope(scope uint64, fn func(v *model.DataObjectValu
 
 // DataObjectSnapshotHistory folds the retained data-object state changes of one
 // scope, calling fn with each change's event timestamp, log position, and the
-// object's new state in the order they occurred (ADR-0052). Because the key sorts
+// object's new state in the order they occurred (ADR-0053). Because the key sorts
 // by timestamp then position, a scope-wide scan yields a monotonic sequence a
 // caller folds by position — the event-sourced data-state timeline and the basis
 // for lineage. Mirrors VariableSnapshotHistory (ADR-0048).

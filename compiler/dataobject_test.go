@@ -9,7 +9,7 @@ import (
 
 // TestBuilderAddDataObject checks that data objects added programmatically land in
 // the compiled process's data-object table with their strings interned and
-// resolvable, and that they are not flow nodes (ADR-0052).
+// resolvable, and that they are not flow nodes (ADR-0053).
 func TestBuilderAddDataObject(t *testing.T) {
 	b := compiler.NewBuilder(1, "p", 1)
 	b.AddStartEvent()
@@ -53,7 +53,7 @@ func TestBuilderAddDataObject(t *testing.T) {
 
 // TestParseDataObject compiles a BPMN model carrying a <dataObject> with a
 // <dataState>, and checks the data object reaches the compiled process — proving
-// a modeled data object is no longer ignored (ADR-0052).
+// a modeled data object is no longer ignored (ADR-0053).
 func TestParseDataObject(t *testing.T) {
 	const model = `<?xml version="1.0"?>
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">

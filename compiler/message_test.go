@@ -67,6 +67,78 @@ func TestParseMessageEvents(t *testing.T) {
 	}
 }
 
+// A message end event: a plain end event carrying a messageEventDefinition. On
+// reaching it the instance publishes the message, then ends — the send-and-stop
+// counterpart of an intermediate throw event.
+const messageEndBPMN = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs">
+  <bpmn:message id="Msg_done" name="fulfilled">
+    <bpmn:extensionElements>
+      <zeebe:subscription correlationKey="= orderId"/>
+    </bpmn:extensionElements>
+  </bpmn:message>
+  <bpmn:process id="fulfil" isExecutable="true">
+    <bpmn:startEvent id="start"/>
+    <bpmn:endEvent id="end">
+      <bpmn:messageEventDefinition id="med" messageRef="Msg_done"/>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="end"/>
+  </bpmn:process>
+</bpmn:definitions>`
+
+func TestParseMessageEndEvent(t *testing.T) {
+	cp, err := Parse(1, 1, strings.NewReader(messageEndBPMN))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+
+	start := cp.StartEvents()[0]
+	end := cp.Flow(cp.Outgoing(start)[0]).Target
+	if cp.Node(end).Type != TypeMessageEndEvent {
+		t.Fatalf("node after start = %v, want MessageEndEvent", cp.Node(end).Type)
+	}
+	// A message end event reuses the throw detail table: name + correlation key.
+	md := cp.MessageThrow(cp.Node(end).Detail)
+	if md.MessageName != "fulfilled" {
+		t.Errorf("end message name = %q, want fulfilled", md.MessageName)
+	}
+	if md.CorrelationKey == nil {
+		t.Fatal("end correlation key expr is nil, want compiled")
+	}
+	if got := md.CorrelationKey.Inputs(); len(got) != 1 || got[0] != "orderId" {
+		t.Errorf("end key inputs = %v, want [orderId]", got)
+	}
+}
+
+// A plain end event (no messageEventDefinition) must stay a none end event.
+func TestParseNoneEndEventUnaffected(t *testing.T) {
+	cp, err := Parse(1, 1, strings.NewReader(messageBPMN)) // ends in a plain <endEvent id="end"/>
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	catch := cp.Flow(cp.Outgoing(cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target)[0]).Target
+	end := cp.Flow(cp.Outgoing(catch)[0]).Target
+	if cp.Node(end).Type != TypeEndEvent {
+		t.Fatalf("terminal node = %v, want a none EndEvent", cp.Node(end).Type)
+	}
+}
+
+// A message end event whose messageRef points at no declared message is a
+// compile error, exactly like the throw/catch cases.
+func TestParseMessageEndUnknownRef(t *testing.T) {
+	const bad = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <bpmn:process id="p">
+    <bpmn:startEvent id="s"/>
+    <bpmn:endEvent id="e"><bpmn:messageEventDefinition messageRef="Missing"/></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+	if _, err := Parse(1, 1, strings.NewReader(bad)); err == nil {
+		t.Fatal("Parse: want an error for a message end event with an unknown messageRef, got nil")
+	}
+}
+
 // A process whose sole entry point is a message start event: a correlating
 // message instantiates it (ADR-0035). It references a top-level <message> the
 // same way catch/throw events do.

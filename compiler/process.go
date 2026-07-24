@@ -35,9 +35,10 @@ const (
 	TypeBoundaryEvent     // a timer/message event attached to a host activity; arms while the host runs and, when it fires, interrupts the host or spawns a parallel token (ADR-0040)
 	TypeScriptJobTask     // a script task authored in a general-purpose language (PowerShell, …) that runs via the job path, not inline like a FEEL script task (ADR-0047); like a service task it creates a job and waits
 	TypeTimerStartEvent   // a start event that a due timer instantiates on a schedule (duration/date/cycle/cron, ADR-0051); at runtime it behaves like a none start (flows straight on)
+	TypeMessageEndEvent   // an end event that publishes a message, then ends the instance (ADR-0052); the send-and-stop counterpart of a message throw event, so it reuses the throw detail table
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 20
+	numBpmnTypes = 21
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -81,6 +82,8 @@ func (t BpmnType) String() string {
 		return "ScriptJobTask"
 	case TypeTimerStartEvent:
 		return "TimerStartEvent"
+	case TypeMessageEndEvent:
+		return "MessageEndEvent"
 	default:
 		return "Unspecified"
 	}
@@ -279,7 +282,7 @@ type BoundaryEventDetail struct {
 
 // CompiledDataObject is one BPMN data object declared by a process: a typed,
 // named datum with an optional declared structure and initial data state. Unlike
-// a CompiledNode it is not a flow node — no token flows through it (ADR-0052) — so
+// a CompiledNode it is not a flow node — no token flows through it (ADR-0053) — so
 // it lives in its own table, not the node array, and the engine seeds one under
 // each instance's scope at creation. All string fields are interned indices
 // (resolve with CompiledProcess.Intern); -1 means unset.
@@ -519,7 +522,7 @@ func (p *CompiledProcess) ConnectorTask(detail int32) *ConnectorTaskDetail {
 func (p *CompiledProcess) StartEvents() []int32 { return p.startEvents }
 
 // DataObjects returns the process's declared data objects — the typed, named
-// data seeded under each instance's scope at creation (ADR-0052). Empty for a
+// data seeded under each instance's scope at creation (ADR-0053). Empty for a
 // process that declares none. String fields are interned; resolve with Intern.
 func (p *CompiledProcess) DataObjects() []CompiledDataObject { return p.dataObjects }
 

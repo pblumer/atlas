@@ -64,6 +64,7 @@ func (p *Processor) registerBehaviors() {
 	// instance and it flows straight on (ADR-0051). What makes it a start is the
 	// deploy-time timer the arm handler creates, not a distinct runtime behavior.
 	p.behaviors[compiler.TypeTimerStartEvent] = startEventBehavior{}
+	p.behaviors[compiler.TypeMessageEndEvent] = messageEndEventBehavior{}
 }
 
 // --- command handlers ---
@@ -87,7 +88,7 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 	// Seed the process's declared data objects under the instance scope, each with
 	// its declared initial data state (value unset for now; data associations write
 	// values in a later slice). Like the start variables, this is deterministic
-	// state mutation from already-decided data, so it replays identically (ADR-0052).
+	// state mutation from already-decided data, so it replays identically (ADR-0053).
 	for _, d := range cp.DataObjects() {
 		c.AppendDataObjectEvent(model.IntentDataObjectCreated, model.DataObjectValue{
 			ScopeKey: piKey,
@@ -615,6 +616,31 @@ func (messageThrowEventBehavior) OnActivated(c *ProcessingContext, key uint64, e
 
 func (messageThrowEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	completeAndTakeFlows(c, key, ei)
+}
+
+// messageEndEventBehavior: an end event that publishes a message, then ends the
+// instance (ADR-0052). It is the send-and-stop union of a message throw event and
+// a none end event: OnActivated correlates exactly like a throw (reusing the
+// throw detail table), and OnCompleting ends the instance exactly like a none end
+// event rather than taking outgoing flows. Correlating on the command path keeps
+// applyToState pure (I4/I6), the same reasoning as the throw event.
+type messageEndEventBehavior struct{}
+
+func (messageEndEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.MessageThrow(cp.Node(ei.ElementId).Detail)
+	payload := instanceVariables(c, ei.ProcessInstanceKey)
+	correlateMessage(c, detail.MessageName, evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey), payload, ei.ProcessInstanceKey)
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (messageEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendElementEvent(key, model.IntentCompleted, *ei) // decrements scope's active children
+	if c.ActiveChildren(ei.FlowScopeKey) == 0 {
+		if pi := c.GetProcessInstance(ei.ProcessInstanceKey); pi != nil {
+			c.AppendProcessInstanceEvent(ei.ProcessInstanceKey, model.IntentCompleted, *pi)
+		}
+	}
 }
 
 // evalCorrelationKey evaluates a compiled correlation-key expression over a

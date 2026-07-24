@@ -66,7 +66,7 @@ const (
 	// VTDataObject is a BPMN data object: a typed, named, scope-owned datum with a
 	// declared lifecycle state. Unlike a plain variable it carries a data state
 	// (order [received] → [approved]) whose every transition is a durable event,
-	// so its state history and provenance rebuild from the log (ADR-0052).
+	// so its state history and provenance rebuild from the log (ADR-0053).
 	VTDataObject
 )
 
@@ -168,7 +168,7 @@ const (
 	IntentTimerStartArm
 
 	// DataObject. Appended after the existing intents so every prior intent keeps
-	// its numeric value on the log (ADR-0052). Created seeds a data object under a
+	// its numeric value on the log (ADR-0053). Created seeds a data object under a
 	// scope with its declared initial data state; StateChanged transitions the data
 	// state (and, later, the value) as an activity writes to it.
 	IntentDataObjectCreated
