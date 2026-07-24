@@ -260,6 +260,19 @@ type BoundaryEventDetail struct {
 	CorrelationKey *expr.Compiled // BoundaryMessage: correlation-key expression (ADR-0020)
 }
 
+// CompiledDataObject is one BPMN data object declared by a process: a typed,
+// named datum with an optional declared structure and initial data state. Unlike
+// a CompiledNode it is not a flow node — no token flows through it (ADR-0051) — so
+// it lives in its own table, not the node array, and the engine seeds one under
+// each instance's scope at creation. All string fields are interned indices
+// (resolve with CompiledProcess.Intern); -1 means unset.
+type CompiledDataObject struct {
+	Name         int32 // interned data-object name → index
+	ItemType     int32 // interned itemDefinition reference → index, -1 if untyped
+	InitialState int32 // interned initial data state → index, -1 if none
+	IsCollection bool
+}
+
 // CompiledProcess is the immutable result of compiling one process definition.
 // It is safe for concurrent reads without synchronization.
 type CompiledProcess struct {
@@ -283,6 +296,7 @@ type CompiledProcess struct {
 	messageCatches    []MessageDetail
 	messageThrows     []MessageDetail
 	messageStarts     []MessageDetail
+	dataObjects       []CompiledDataObject
 	startEvents       []int32
 	startFormId       int32    // interned start-form id (ADR-0028), -1 if none
 	elementIds        []int32  // interned source BPMN id per node id (-1 if unset)
@@ -453,6 +467,11 @@ func (p *CompiledProcess) ConnectorTask(detail int32) *ConnectorTaskDetail {
 
 // StartEvents returns the process's entry-point element ids.
 func (p *CompiledProcess) StartEvents() []int32 { return p.startEvents }
+
+// DataObjects returns the process's declared data objects — the typed, named
+// data seeded under each instance's scope at creation (ADR-0051). Empty for a
+// process that declares none. String fields are interned; resolve with Intern.
+func (p *CompiledProcess) DataObjects() []CompiledDataObject { return p.dataObjects }
 
 // StartFormId returns the id of the form the UI shows before starting an
 // instance, or "" if the process has no start form (ADR-0028). It is design-time

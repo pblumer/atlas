@@ -78,6 +78,20 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 	}
 
 	cp := c.process(defKey)
+
+	// Seed the process's declared data objects under the instance scope, each with
+	// its declared initial data state (value unset for now; data associations write
+	// values in a later slice). Like the start variables, this is deterministic
+	// state mutation from already-decided data, so it replays identically (ADR-0051).
+	for _, d := range cp.DataObjects() {
+		c.AppendDataObjectEvent(model.IntentDataObjectCreated, model.DataObjectValue{
+			ScopeKey: piKey,
+			Name:     cp.Intern(d.Name),
+			State:    cp.Intern(d.InitialState),
+			Kind:     model.VarNull,
+		})
+	}
+
 	for _, startID := range cp.StartEvents() {
 		node := cp.Node(startID)
 		c.AppendElementCommand(c.NewKey(), model.IntentActivating, model.ElementInstanceValue{

@@ -26,6 +26,8 @@ const (
 	cfJobByElement           columnFamily = 0x0D // jobByEl:<elKey> → jobKey (reverse lookup for boundary cancel)
 	cfElementStep            columnFamily = 0x0E // elStep:<piKey>:<ts>:<pos> → int32 elementId
 	cfVariableSnapshot       columnFamily = 0x0F // varSnap:<scopeKey>:<ts>:<pos> → VariableValue
+	cfDataObject             columnFamily = 0x10 // do:<scopeKey>:<name> → DataObjectValue
+	cfDataObjectSnapshot     columnFamily = 0x11 // doSnap:<scopeKey>:<ts>:<pos> → DataObjectValue
 )
 
 func appendBE64(dst []byte, v uint64) []byte { return binary.BigEndian.AppendUint64(dst, v) }
@@ -210,6 +212,44 @@ func variablePrefix(scope uint64) []byte {
 // variable-length component, so a scope's variables are one prefix scan.
 func keyVariable(scope uint64, name string) []byte {
 	return append(variablePrefix(scope), name...)
+}
+
+func dataObjectPrefix(scope uint64) []byte {
+	return appendBE64([]byte{byte(cfDataObject)}, scope)
+}
+
+// keyDataObject keys a data object by its scope and name, the same shape as a
+// variable key: the name is the trailing, variable-length component, so a scope's
+// data objects are one prefix scan (ADR-0051).
+func keyDataObject(scope uint64, name string) []byte {
+	return append(dataObjectPrefix(scope), name...)
+}
+
+// keyDataObjectSnapshot keys one retained data-object state change of a scope,
+// the same (scope, ts, pos) shape as the variable-snapshot key, so the data
+// object, variable, and element-step timelines fold together by log position for
+// step-by-step replay and lineage (ADR-0051, mirroring ADR-0048).
+func keyDataObjectSnapshot(scopeKey uint64, ts int64, pos uint64) []byte {
+	b := appendOrderedInt64(dataObjectSnapshotScopePrefix(scopeKey), ts)
+	return appendBE64(b, pos)
+}
+
+// dataObjectSnapshotScopePrefix scans every data-object state change recorded
+// under one scope, in change order.
+func dataObjectSnapshotScopePrefix(scopeKey uint64) []byte {
+	return appendBE64([]byte{byte(cfDataObjectSnapshot)}, scopeKey)
+}
+
+// timestampFromDataObjSnapKey extracts the event timestamp from a data-object
+// snapshot key, inverting the sign-flip appendOrderedInt64 applied.
+func timestampFromDataObjSnapKey(k []byte) int64 {
+	return int64(binary.BigEndian.Uint64(k[len(k)-16:]) ^ (1 << 63))
+}
+
+// positionFromDataObjSnapKey extracts the trailing log position from a
+// data-object snapshot key.
+func positionFromDataObjSnapKey(k []byte) uint64 {
+	return binary.BigEndian.Uint64(k[len(k)-8:])
 }
 
 // appendLenString appends a uint32 length prefix followed by s, so a

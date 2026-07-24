@@ -51,6 +51,20 @@ The control-flow basics most real models use.
   pass-through branches (no double fire), and recovery-tested. Cyclic inclusive
   joins still to come (ADR-0033).
 - 🔲 Input/output variable mappings
+- 🚧 **Data objects** ([ADR-0051](docs/adr/0051-first-class-data-objects.md)):
+  first-class, typed, event-sourced data — not the decoration most engines settle
+  for. The foundational slice landed: a modeled `<dataObject>` (its name,
+  `isCollection`, and optional `<dataState>`) compiles into the process, and at
+  instance creation each is seeded as a distinct `VTDataObject` entity bound to the
+  instance scope, carrying its declared initial **data-state**. Its value (a
+  `VarJSON`-capable payload, ADR-0037) and every state transition are durable
+  events written to a `cfDataObject` current-value family plus a `cfDataObjectSnapshot`
+  history family (the ADR-0048 two-write pattern), so the data-state history and
+  lineage rebuild identically on replay — recovery-tested. Next: data associations
+  (`<dataInput/OutputAssociation>`) as a compiled FEEL read/write contract, a
+  lineage view folding the `SourcePos` chain, the Modeler properties panel for
+  `DataObjectReference`, item-definition schema validation, and connector-backed
+  data stores.
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
 - 🔲 Conformance tests against a curated BPMN model set
 - 🚧 **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)

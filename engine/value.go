@@ -15,6 +15,7 @@ type inflightValue struct {
 	timer        model.TimerValue
 	subscription model.MessageSubscriptionValue
 	messageFlow  model.MessageFlowValue
+	dataObject   model.DataObjectValue
 }
 
 // asValue returns a model.Value pointing at the active field, for encoding. The
@@ -36,6 +37,8 @@ func (v *inflightValue) asValue(vt model.ValueType) model.Value {
 		return &v.subscription
 	case model.VTMessageFlow:
 		return &v.messageFlow
+	case model.VTDataObject:
+		return &v.dataObject
 	}
 	return nil
 }
@@ -80,6 +83,10 @@ func inflightFromRecord(rec model.Record) inflightValue {
 	case model.VTMessageFlow:
 		if v, ok := rec.Value.(*model.MessageFlowValue); ok {
 			iv.messageFlow = *v
+		}
+	case model.VTDataObject:
+		if v, ok := rec.Value.(*model.DataObjectValue); ok {
+			iv.dataObject = *v
 		}
 	}
 	return iv

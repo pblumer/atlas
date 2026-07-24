@@ -103,7 +103,7 @@ func TestDecodeValueNoPayloadType(t *testing.T) {
 // TestDecodeValueShortBuffer covers the decode error propagation for each
 // payload type on a truncated buffer.
 func TestDecodeValueShortBuffer(t *testing.T) {
-	for _, vt := range []ValueType{VTElementInstance, VTJob, VTTimer, VTProcessInstance, VTVariable, VTMessageSubscription, VTMessageFlow} {
+	for _, vt := range []ValueType{VTElementInstance, VTJob, VTTimer, VTProcessInstance, VTVariable, VTMessageSubscription, VTMessageFlow, VTDataObject} {
 		if _, err := DecodeValue(vt, nil); !errors.Is(err, ErrShortBuffer) {
 			t.Errorf("DecodeValue(%v, nil) err = %v, want ErrShortBuffer", vt, err)
 		}
@@ -259,6 +259,7 @@ func TestValueTypeMethods(t *testing.T) {
 		{(&VariableValue{}), VTVariable},
 		{(&MessageSubscriptionValue{}), VTMessageSubscription},
 		{(&MessageFlowValue{}), VTMessageFlow},
+		{(&DataObjectValue{}), VTDataObject},
 	}
 	for _, c := range cases {
 		if got := c.v.ValueType(); got != c.want {
@@ -280,7 +281,7 @@ func TestStringersExhaustive(t *testing.T) {
 	valueTypes := []ValueType{
 		VTProcessInstance, VTElementInstance, VTJob, VTTimer, VTMessageSubscription,
 		VTMessage, VTVariable, VTIncident, VTSignal, VTError, VTProcessDefinition,
-		VTMessageFlow,
+		VTMessageFlow, VTDataObject,
 	}
 	for _, vt := range valueTypes {
 		if s := vt.String(); s == "" || s == "ValueType(?)" {
@@ -296,6 +297,7 @@ func TestStringersExhaustive(t *testing.T) {
 		IntentSubscriptionCreated, IntentSubscriptionCorrelated, IntentMessagePublished,
 		IntentVariableCreated, IntentVariableUpdated, IntentIncidentCreated,
 		IntentIncidentResolved, IntentJobCanceled,
+		IntentDataObjectCreated, IntentDataObjectStateChanged,
 	}
 	for _, in := range intents {
 		if s := in.String(); s == "" || s == "Intent(?)" {

@@ -317,6 +317,34 @@ func (t *Tx) VariablesOfScope(scope uint64, fn func(v *model.VariableValue) erro
 	return iter.Error()
 }
 
+// --- DataObject ---
+
+// PutDataObject writes (upserts) a data object under its scope and name — the
+// current value, mirroring PutVariable. The live store keeps only the latest;
+// the whole state history lives in the snapshot family (ADR-0051).
+func (t *Tx) PutDataObject(v *model.DataObjectValue) error {
+	return t.b.Set(keyDataObject(v.ScopeKey, v.Name), t.encodeValue(v), nil)
+}
+
+// GetDataObject returns a scope's data object by name, or nil if absent.
+func (t *Tx) GetDataObject(scope uint64, name string) (*model.DataObjectValue, error) {
+	var v model.DataObjectValue
+	ok, err := t.readInto(keyDataObject(scope, name), &v)
+	if err != nil || !ok {
+		return nil, err
+	}
+	return &v, nil
+}
+
+// RecordDataObjectSnapshot retains one data-object state change under its scope,
+// keyed in change order. ts and pos come from the event header; the value is the
+// object's new state (name, data state, value). Written only from applyToState,
+// from the event alone, so it rebuilds identically on replay (invariant I4); a
+// plain Set on a unique (position-bearing) key, never overwritten (ADR-0051).
+func (t *Tx) RecordDataObjectSnapshot(ts int64, pos uint64, v *model.DataObjectValue) error {
+	return t.b.Set(keyDataObjectSnapshot(v.ScopeKey, ts, pos), t.encodeValue(v), nil)
+}
+
 // --- Active-children counter ---
 //
 // Each scope (a process instance or a subprocess instance) tracks how many

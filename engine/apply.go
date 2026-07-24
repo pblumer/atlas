@@ -83,6 +83,20 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			return tx.RecordVariableSnapshot(h.Timestamp, h.Position, &v.variable)
 		}
 
+	case model.VTDataObject:
+		switch h.Intent {
+		case model.IntentDataObjectCreated, model.IntentDataObjectStateChanged:
+			if err := tx.PutDataObject(&v.dataObject); err != nil {
+				return err
+			}
+			// Retain the change as an ordered, timestamped snapshot so the data
+			// object's state history and provenance rebuild on replay — the data
+			// analogue of the variable snapshot (ADR-0051, mirroring ADR-0048).
+			// Derived only from the event (header timestamp/position and the value),
+			// so replay rebuilds it identically (invariant I4).
+			return tx.RecordDataObjectSnapshot(h.Timestamp, h.Position, &v.dataObject)
+		}
+
 	case model.VTTimer:
 		switch h.Intent {
 		case model.IntentTimerCreated:
