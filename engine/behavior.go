@@ -213,8 +213,11 @@ func handleTimerTriggered(c *ProcessingContext) {
 }
 
 // recurringBoundarySchedule reports whether ei is a non-interrupting boundary
-// timer whose schedule recurs, and returns that schedule (ADR-0054). Such a
-// boundary fires repeatedly rather than completing on the first fire.
+// timer whose schedule recurs, and returns the concrete cycle to re-arm from
+// (ADR-0054). For a FEEL cycle the expression is re-evaluated here — on each
+// occurrence — against the instance's current variables (ADR-0056), so a data-
+// driven cadence can change as the process runs; ok is false if it can't resolve
+// (the boundary then stops recurring).
 func recurringBoundarySchedule(c *ProcessingContext, ei *model.ElementInstanceValue) (compiler.TimerSchedule, bool) {
 	cp := c.process(ei.ProcessDefKey)
 	node := cp.Node(ei.ElementId)
@@ -225,7 +228,7 @@ func recurringBoundarySchedule(c *ProcessingContext, ei *model.ElementInstanceVa
 	if d.Kind != compiler.BoundaryTimer || d.Interrupting || !d.Schedule.Repeats() {
 		return compiler.TimerSchedule{}, false
 	}
-	return d.Schedule, true
+	return resolveSchedule(c, d.Schedule, ei.ProcessInstanceKey)
 }
 
 // fireRecurringBoundary spawns the boundary's outgoing (reminder) token without
@@ -276,7 +279,13 @@ func fireStartTimer(c *ProcessingContext, timer model.TimerValue) {
 	if node.Type != compiler.TypeTimerStartEvent {
 		return
 	}
-	next, ok := cp.TimerStart(node.Detail).Schedule.NextDue(c.Now())
+	// A start-event FEEL schedule is constant (the compiler enforces it), so it
+	// resolves against an empty scope (ADR-0056).
+	sched, ok := resolveSchedule(c, cp.TimerStart(node.Detail).Schedule, 0)
+	if !ok {
+		return
+	}
+	next, ok := sched.NextDue(c.Now())
 	if !ok {
 		return
 	}
@@ -321,11 +330,17 @@ func handleTimerStartArm(c *ProcessingContext) {
 		if armed[s.ElementId] {
 			continue
 		}
+		// A start-event FEEL schedule is constant (compiler-enforced), so it
+		// resolves against an empty scope; an unresolvable one is not armed (ADR-0056).
+		sched, ok := resolveSchedule(c, s.Schedule, 0)
+		if !ok {
+			continue
+		}
 		c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
 			ProcessDefKey:   defKey,
 			TargetElementId: s.ElementId,
-			DueDate:         s.Schedule.FirstDue(now),
-			Repetitions:     s.Schedule.Repetitions,
+			DueDate:         sched.FirstDue(now),
+			Repetitions:     sched.Repetitions,
 		})
 	}
 }
@@ -493,26 +508,33 @@ const builtinProcessInstanceKey = "processInstanceKey"
 // The reserved name processInstanceKey binds to the scope's own key (the built-in
 // above); at every call site the scope is the process instance, so it is the
 // instance's key.
-// timerDue computes a timer's due date. For a fixed schedule it is FirstDue; for a
-// FEEL schedule (ADR-0055) it evaluates the expression against the instance's
-// variables (scope), reduces the result to text, and parses it as the field's
-// duration or date. An unresolvable FEEL expression — an eval error, a null, or
-// text that isn't a valid duration/date — resolves to now, so the timer fires
-// immediately rather than wedging the token (the placeholder until incidents are
-// modeled). The clock and variables are read here, at command time, and the result
-// is frozen into the TimerCreated event (invariants I4/I6).
-func timerDue(c *ProcessingContext, s compiler.TimerSchedule, scope uint64) int64 {
-	now := c.Now()
+// resolveSchedule returns the concrete schedule to compute a timer from: a fixed
+// schedule as-is, or a FEEL schedule (ADR-0055/0056) evaluated against scope and
+// reduced to the duration/date/cycle its text names. ok is false if a FEEL
+// expression can't be evaluated or its result isn't valid for the field. scope is
+// the instance whose variables the expression reads; it is 0 for a start-event
+// timer, whose FEEL must be constant (the compiler enforces this), so an empty
+// scope still resolves it. Variables and the clock are read at command time and
+// frozen into the event (invariants I4/I6).
+func resolveSchedule(c *ProcessingContext, s compiler.TimerSchedule, scope uint64) (compiler.TimerSchedule, bool) {
 	if !s.IsFeel() {
-		return s.FirstDue(now)
+		return s, true
 	}
 	v, err := s.Expr.Eval(bindInputs(c, s.Expr.Inputs(), scope))
 	if err != nil {
-		return now
+		return compiler.TimerSchedule{}, false
 	}
 	_, _, text := expr.Classify(v)
-	if due, ok := s.ResolveFeelDue(text, now); ok {
-		return due
+	return s.ResolveFeel(text)
+}
+
+// timerDue computes a one-shot timer's due date (catch/boundary). An unresolvable
+// FEEL schedule resolves to now, so the timer fires immediately rather than wedging
+// the token — the placeholder until incidents are modeled (ADR-0055).
+func timerDue(c *ProcessingContext, s compiler.TimerSchedule, scope uint64) int64 {
+	now := c.Now()
+	if r, ok := resolveSchedule(c, s, scope); ok {
+		return r.FirstDue(now)
 	}
 	return now
 }
@@ -1098,17 +1120,23 @@ func (boundaryEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *m
 	d := cp.BoundaryEvent(cp.Node(ei.ElementId).Detail)
 	switch d.Kind {
 	case compiler.BoundaryTimer:
-		// The due date is computed here (command processing) — reading the clock and,
-		// for a FEEL schedule, the instance's variables — and frozen into the event;
-		// applyToState never reads either (invariant I4/I6). A non-interrupting cycle
-		// boundary seeds Repetitions so a finite Rn cycle counts down as it recurs
-		// (ADR-0054); a one-shot (including a FEEL duration/date) leaves it 0.
+		// The schedule is resolved here (command processing) — reading the clock and,
+		// for a FEEL schedule, the instance's variables — and the due date and cycle
+		// count are frozen into the event; applyToState never reads either (I4/I6). A
+		// non-interrupting cycle boundary seeds Repetitions so a finite Rn cycle counts
+		// down as it recurs (ADR-0054); a one-shot leaves it 0. An unresolvable FEEL
+		// schedule fires immediately (due = now, no recurrence).
+		now := c.Now()
+		due, reps := now, int32(0)
+		if sched, ok := resolveSchedule(c, d.Schedule, ei.ProcessInstanceKey); ok {
+			due, reps = sched.FirstDue(now), sched.Repetitions
+		}
 		c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
 			ProcessInstanceKey: ei.ProcessInstanceKey,
 			ElementInstanceKey: key,
 			TargetElementId:    ei.ElementId,
-			DueDate:            timerDue(c, d.Schedule, ei.ProcessInstanceKey),
-			Repetitions:        d.Schedule.Repetitions,
+			DueDate:            due,
+			Repetitions:        reps,
 		})
 	case compiler.BoundaryMessage:
 		c.AppendMessageSubscriptionEvent(key, model.IntentSubscriptionCreated, model.MessageSubscriptionValue{
