@@ -195,7 +195,7 @@ async function viewConsoleDashboard() {
       the Modeler lets you design and deploy BPMN models in the browser.</p>
       <ol class="steps">
         <li><b>Model a process</b> — open the Modeler and draw a BPMN diagram, or import existing XML.</li>
-        <li><b>Deploy &amp; run</b> — deploy a model and start an instance straight from the editor.</li>
+        <li><b>Deploy</b> — make a model runnable straight from the editor, and optionally start an instance in one step with <b>Deploy &amp; run</b>.</li>
         <li><b>Watch it execute</b> — tokens move through the engine and land as durable events.</li>
       </ol>
       <div class="row">
