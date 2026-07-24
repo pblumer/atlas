@@ -178,7 +178,7 @@ func positionFromStepKey(k []byte) uint64 {
 // prefix scan; the event timestamp follows so the scan yields them in change
 // order, and the log position is the trailing disambiguator. Same shape as the
 // element-step key, so a single instance's step and variable timelines fold
-// together by position for step-by-step replay (ADR-0047).
+// together by position for step-by-step replay (ADR-0048).
 func keyVariableSnapshot(scopeKey uint64, ts int64, pos uint64) []byte {
 	b := appendOrderedInt64(variableSnapshotScopePrefix(scopeKey), ts)
 	return appendBE64(b, pos)

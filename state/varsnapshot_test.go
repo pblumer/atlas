@@ -11,7 +11,7 @@ import (
 // TestVariableSnapshotHistory records a variable-change trail for two instances
 // and checks that VariableSnapshotHistory returns one instance's changes in
 // (timestamp, position) order, isolated from the other's — the per-step variable
-// timeline the single-process replay folds (ADR-0047). Repeated writes to the same
+// timeline the single-process replay folds (ADR-0048). Repeated writes to the same
 // name are retained as distinct changes (the whole point: values evolve over time).
 func TestVariableSnapshotHistory(t *testing.T) {
 	s := openStore(t)

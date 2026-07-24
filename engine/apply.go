@@ -78,7 +78,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			}
 			// Retain the change as an ordered, timestamped snapshot so a single
 			// instance's replay can show the variable values as of each step
-			// (ADR-0047). Derived only from the event header (timestamp/position)
+			// (ADR-0048). Derived only from the event header (timestamp/position)
 			// and the variable value, so replay rebuilds it identically (I4).
 			return tx.RecordVariableSnapshot(h.Timestamp, h.Position, &v.variable)
 		}

@@ -184,7 +184,7 @@ type collabRuntimeResp struct {
 
 // timelineStep is one element activation on a single instance's replay timeline:
 // which BPMN element a token entered, its type, when, and the variable values as
-// they stood when the token entered it (ADR-0046, ADR-0047). Steps are ordered
+// they stood when the token entered it (ADR-0046, ADR-0048). Steps are ordered
 // oldest-first, so the Operations view can step through them and show the
 // variables at each point.
 type timelineStep struct {

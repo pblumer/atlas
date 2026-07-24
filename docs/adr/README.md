@@ -54,7 +54,8 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0044](0044-user-management-and-authentication-boundary.md) | User management and the opt-in authentication boundary | Accepted |
 | [0045](0045-user-task-assignment-bound-to-identity.md) | Binding user-task assignment to real identities | Accepted |
 | [0046](0046-single-process-step-replay.md) | Retain a per-instance element-step history and replay a single process step by step | Accepted |
-| [0047](0047-per-step-variable-snapshots.md) | Per-step variable snapshots in the single-process replay | Accepted |
+| [0047](0047-polyglot-script-tasks-via-job-workers.md) | Polyglot script tasks (PowerShell, …) via job workers | Proposed |
+| [0048](0048-per-step-variable-snapshots.md) | Per-step variable snapshots in the single-process replay | Accepted |
 
 ## Status values
 

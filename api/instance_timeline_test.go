@@ -204,7 +204,7 @@ func TestInstanceTimelineDefinitionDeleted(t *testing.T) {
 
 // TestInstanceTimelineVariableSnapshots runs a process that seeds a start variable
 // and writes another mid-way (a script task), then checks each step carries the
-// variable values as they stood when the token entered that element (ADR-0047):
+// variable values as they stood when the token entered that element (ADR-0048):
 // the seeded x is present from the start, and the script's greeting appears only
 // from the step after the script task ran, not at the script task itself.
 func TestInstanceTimelineVariableSnapshots(t *testing.T) {

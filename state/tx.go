@@ -405,7 +405,7 @@ func (t *Tx) RecordElementStep(piKey uint64, ts int64, pos uint64, elementId int
 // Every variable change of a process instance is retained here, keyed in change
 // order under the variable's scope, so the single-process replay can fold the
 // variable values as they stood at each step — the variable analogue of the
-// element-step timeline (ADR-0047). It complements the live variable store (which
+// element-step timeline (ADR-0048). It complements the live variable store (which
 // keeps only the current value): this keeps the whole history so scrubbing back
 // shows earlier values. Written only from applyToState, from the event alone (the
 // header's timestamp and position plus the changed variable), so it rebuilds

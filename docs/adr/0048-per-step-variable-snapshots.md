@@ -1,4 +1,4 @@
-# ADR-0047: Per-step variable snapshots in the single-process replay
+# ADR-0048: Per-step variable snapshots in the single-process replay
 
 - **Status:** Accepted
 - **Date:** 2026-07-24

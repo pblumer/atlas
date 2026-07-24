@@ -220,7 +220,7 @@ func elementSteps(t *testing.T, s *state.Store, piKey uint64) []int32 {
 }
 
 // variableSnapshots reads one instance's variable-change timeline into ordered
-// "name=text" pairs, oldest first (ADR-0047).
+// "name=text" pairs, oldest first (ADR-0048).
 func variableSnapshots(t *testing.T, s *state.Store, scopeKey uint64) []string {
 	t.Helper()
 	var out []string
@@ -932,7 +932,7 @@ func TestElementStepHistoryRecovers(t *testing.T) {
 }
 
 // TestVariableSnapshotHistoryRecovers is the recovery property for the per-step
-// variable timeline (ADR-0047): every variable change is retained in change order
+// variable timeline (ADR-0048): every variable change is retained in change order
 // under its instance — the seeded start variable and the script task's write —
 // and replaying the log rebuilds an identical, identically-ordered trail, each
 // change derived only from the event (its header timestamp/position and the

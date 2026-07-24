@@ -259,7 +259,7 @@ func (s *Store) ElementStepHistory(piKey uint64, fn func(ts int64, pos uint64, e
 
 // VariableSnapshotHistory folds the retained variable changes of one scope (a
 // process instance), calling fn with each change's event timestamp, log position,
-// and the variable's new state in the order they occurred (ADR-0047). Because the
+// and the variable's new state in the order they occurred (ADR-0048). Because the
 // key sorts by timestamp then position, a scope-wide scan yields a monotonic
 // sequence a caller folds by position to reconstruct the variables as of any step.
 func (s *Store) VariableSnapshotHistory(scopeKey uint64, fn func(ts int64, pos uint64, v *model.VariableValue) error) error {
