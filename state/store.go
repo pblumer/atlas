@@ -257,6 +257,17 @@ func (s *Store) ElementStepHistory(piKey uint64, fn func(ts int64, pos uint64, e
 	})
 }
 
+// ElementCompletionHistory folds the retained element completions of one process
+// instance, calling fn with each completion's event timestamp, log position, and
+// the completed element's compiled-graph index in order (ADR-0050). Merged by
+// position with ElementStepHistory (activations), it yields the token lifecycle
+// the concurrency-aware replay folds into a live-token set at each step.
+func (s *Store) ElementCompletionHistory(piKey uint64, fn func(ts int64, pos uint64, elementId int32) error) error {
+	return s.scanPrefix(elementCompletionInstancePrefix(piKey), func(k, raw []byte) error {
+		return fn(timestampFromStepKey(k), positionFromStepKey(k), int32(binary.BigEndian.Uint32(raw)))
+	})
+}
+
 // VariableSnapshotHistory folds the retained variable changes of one scope (a
 // process instance), calling fn with each change's event timestamp, log position,
 // and the variable's new state in the order they occurred (ADR-0048). Because the

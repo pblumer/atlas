@@ -70,6 +70,62 @@ func TestElementStepHistory(t *testing.T) {
 	}
 }
 
+// TestElementCompletionHistory records a completion trail for two instances and
+// checks that ElementCompletionHistory returns one instance's completions in
+// (timestamp, position) order, isolated from the other's — the second half of the
+// token lifecycle the concurrency-aware replay folds against activations (ADR-0050).
+func TestElementCompletionHistory(t *testing.T) {
+	s := openStore(t)
+	i1 := model.NewKey(1, 10)
+	i2 := model.NewKey(1, 11)
+
+	done := []struct {
+		pi        uint64
+		ts        int64
+		pos       uint64
+		elementId int32
+	}{
+		{i1, 300, 30, 2},
+		{i1, 100, 10, 0},
+		{i1, 200, 20, 1},
+		{i2, 150, 15, 0},
+	}
+	commit(t, s, func(tx *state.Tx) error {
+		for _, d := range done {
+			if err := tx.RecordElementCompletion(d.pi, d.ts, d.pos, d.elementId); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	type row struct {
+		ts  int64
+		pos uint64
+		el  int32
+	}
+	fold := func(pi uint64) []row {
+		var out []row
+		if err := s.ElementCompletionHistory(pi, func(ts int64, pos uint64, elementId int32) error {
+			out = append(out, row{ts, pos, elementId})
+			return nil
+		}); err != nil {
+			t.Fatalf("ElementCompletionHistory(%d): %v", pi, err)
+		}
+		return out
+	}
+
+	if got, want := fold(i1), []row{{100, 10, 0}, {200, 20, 1}, {300, 30, 2}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("instance-1 completions = %v, want %v", got, want)
+	}
+	if got, want := fold(i2), []row{{150, 15, 0}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("instance-2 completions = %v, want %v", got, want)
+	}
+	if got := fold(model.NewKey(1, 99)); len(got) != 0 {
+		t.Errorf("unknown instance completions = %v, want none", got)
+	}
+}
+
 // TestProcessInstanceResolvesActiveAndHistory checks the keyed lookup the replay
 // endpoint uses to find an instance's definition: it resolves a live instance
 // from the active family and a finished one from the history family, and reports

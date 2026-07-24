@@ -192,6 +192,12 @@ type timelineStep struct {
 	ElementID string         `json:"elementId"`
 	Type      string         `json:"type"`
 	Variables []variableView `json:"variables"`
+	// Tokens is the number of live tokens across the whole instance at this step;
+	// ActiveTokens lists the distinct diagram elements holding one (ADR-0050). A
+	// parallel fork raises the count and lists both branches; a parallel join folds
+	// it back to one, an exclusive merge passes each token through independently.
+	Tokens       int      `json:"tokens"`
+	ActiveTokens []string `json:"activeTokens"`
 }
 
 // instanceTimelineResp is one process instance's step-by-step replay: its
@@ -879,14 +885,25 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			pos  uint64
 			view variableView
 		}
+		type completion struct {
+			pos       uint64
+			elementID int32
+		}
 		var (
-			stepRows []stepRow
-			changes  []varChange
+			stepRows    []stepRow
+			changes     []varChange
+			completions []completion
 		)
 		scanErr = s.store.ElementStepHistory(key, func(ts int64, pos uint64, elementId int32) error {
 			stepRows = append(stepRows, stepRow{at: ts, pos: pos, elementID: elementId})
 			return nil
 		})
+		if scanErr == nil {
+			scanErr = s.store.ElementCompletionHistory(key, func(_ int64, pos uint64, elementId int32) error {
+				completions = append(completions, completion{pos: pos, elementID: elementId})
+				return nil
+			})
+		}
 		if scanErr == nil {
 			scanErr = s.store.VariableSnapshotHistory(key, func(_ int64, pos uint64, v *model.VariableValue) error {
 				changes = append(changes, varChange{pos: pos, view: toVariableView(v)})
@@ -896,35 +913,62 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		if scanErr != nil {
 			return
 		}
-		// Both histories are keyed by log position; sort by it so the fold walks
+		// All three histories are keyed by log position; sort by it so the fold walks
 		// them in true execution order regardless of clock monotonicity.
 		sort.Slice(stepRows, func(i, j int) bool { return stepRows[i].pos < stepRows[j].pos })
+		sort.Slice(completions, func(i, j int) bool { return completions[i].pos < completions[j].pos })
 		sort.Slice(changes, func(i, j int) bool { return changes[i].pos < changes[j].pos })
 
-		// Walk the steps in order, advancing through every variable change at or
-		// before each step's position, so a step carries the variables as they stood
-		// when the token entered that element. A change to a name overwrites the
-		// previous value for that name (variables are instance-scoped).
+		// Walk the activation steps in order. For each, advance the variable changes
+		// and element completions that happened at or before it: the variables give
+		// the values as the token entered the element; the completions, folded against
+		// the activations, give the live token set at that point — so a parallel fork
+		// shows two concurrent tokens and a join folds them back to one (ADR-0050).
 		running := map[string]variableView{}
-		ci := 0
+		live := map[int32]int{} // node index → live token count (an element can hold >1, e.g. a join mid-synchronization)
+		ci, di := 0, 0
 		for _, sr := range stepRows {
 			for ci < len(changes) && changes[ci].pos <= sr.pos {
 				running[changes[ci].view.Name] = changes[ci].view
 				ci++
 			}
+			// Completions strictly before this activation have already released their
+			// token; this activation then adds its own.
+			for di < len(completions) && completions[di].pos < sr.pos {
+				id := completions[di].elementID
+				if live[id]--; live[id] <= 0 {
+					delete(live, id)
+				}
+				di++
+			}
+			live[sr.elementID]++
+
 			vars := make([]variableView, 0, len(running))
 			for _, vv := range running {
 				vars = append(vars, vv)
 			}
 			sort.Slice(vars, func(i, j int) bool { return vars[i].Name < vars[j].Name })
+
+			// The live token set: distinct nodes holding a token (drawn on the diagram),
+			// plus the total token count across them.
+			tokens := 0
+			activeIDs := make([]string, 0, len(live))
+			for id, n := range live {
+				tokens += n
+				activeIDs = append(activeIDs, d.cp.ElementBpmnId(id))
+			}
+			sort.Strings(activeIDs)
+
 			// Every recorded step is a real activated node, so its diagram id is
 			// always present (unlike the shared runtime overlay's get, which guards
 			// synthetic elements).
 			resp.Steps = append(resp.Steps, timelineStep{
-				At:        sr.at,
-				ElementID: d.cp.ElementBpmnId(sr.elementID),
-				Type:      d.cp.Node(sr.elementID).Type.String(),
-				Variables: vars,
+				At:           sr.at,
+				ElementID:    d.cp.ElementBpmnId(sr.elementID),
+				Type:         d.cp.Node(sr.elementID).Type.String(),
+				Variables:    vars,
+				Tokens:       tokens,
+				ActiveTokens: activeIDs,
 			})
 		}
 	})

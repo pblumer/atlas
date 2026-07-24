@@ -400,6 +400,18 @@ func (t *Tx) RecordElementStep(piKey uint64, ts int64, pos uint64, elementId int
 	return t.b.Set(keyElementStep(piKey, ts, pos), t.scratch, nil)
 }
 
+// RecordElementCompletion retains one element completion of a process instance,
+// the counterpart of RecordElementStep. Together the activation and completion
+// trails let the replay reconstruct how many tokens sat on each element at any
+// point — so a fork shows concurrent tokens and a parallel join shows them
+// synchronize back to one (ADR-0050). ts and pos come from the event header; the
+// value is the completed element's compiled-graph index. Retention is unbounded
+// for now, as with the other history families.
+func (t *Tx) RecordElementCompletion(piKey uint64, ts int64, pos uint64, elementId int32) error {
+	t.scratch = appendBE32(t.scratch[:0], uint32(elementId))
+	return t.b.Set(keyElementCompletion(piKey, ts, pos), t.scratch, nil)
+}
+
 // --- Variable-snapshot history ---
 //
 // Every variable change of a process instance is retained here, keyed in change

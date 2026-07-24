@@ -219,6 +219,20 @@ func elementSteps(t *testing.T, s *state.Store, piKey uint64) []int32 {
 	return out
 }
 
+// elementCompletions reads one instance's element-completion timeline into a map
+// of element index → how many instances of that element completed (ADR-0050).
+func elementCompletions(t *testing.T, s *state.Store, piKey uint64) map[int32]int {
+	t.Helper()
+	out := map[int32]int{}
+	if err := s.ElementCompletionHistory(piKey, func(_ int64, _ uint64, elementId int32) error {
+		out[elementId]++
+		return nil
+	}); err != nil {
+		t.Fatalf("ElementCompletionHistory: %v", err)
+	}
+	return out
+}
+
 // variableSnapshots reads one instance's variable-change timeline into ordered
 // "name=text" pairs, oldest first (ADR-0048).
 func variableSnapshots(t *testing.T, s *state.Store, scopeKey uint64) []string {
@@ -990,5 +1004,87 @@ func TestVariableSnapshotHistoryRecovers(t *testing.T) {
 	// Rebuilt variable trail matches the live run exactly, same changes in order.
 	if replayed := variableSnapshots(t, store2, instKey); !reflect.DeepEqual(replayed, live) {
 		t.Fatalf("replayed variable trail = %v, want %v", replayed, live)
+	}
+}
+
+// TestElementCompletionHistoryRecovers is the recovery property for the element-
+// completion trail (ADR-0050): every element instance that completes is recorded,
+// a parallel join records both of its arrivals completing (so the token count
+// folds back to one), and replaying the log rebuilds an identical trail — each
+// completion derived only from the event, never re-generated (invariant I4).
+func TestElementCompletionHistoryRecovers(t *testing.T) {
+	dir := t.TempDir()
+	// start → parallel fork → scriptA & scriptB → parallel join → end. Script tasks
+	// auto-complete, so the whole fork/join runs to completion in one drain.
+	b := compiler.NewBuilder(defKey, "forkjoin", 1)
+	start := b.AddStartEvent()
+	fork := b.AddParallelGateway()
+	sa := b.AddScriptTask(mustCompile(t, `"a"`), "a")
+	sb := b.AddScriptTask(mustCompile(t, `"b"`), "b")
+	join := b.AddParallelGateway()
+	end := b.AddEndEvent()
+	b.Connect(start, fork)
+	b.Connect(fork, sa)
+	b.Connect(fork, sb)
+	b.Connect(sa, join)
+	b.Connect(sb, join)
+	b.Connect(join, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	clock := &manualClock{}
+
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clock)
+	p1.Deploy(cp)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.CreateInstance(cp.Key)
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle 1: %v", err)
+	}
+
+	instKey := model.NewKey(1, 1)
+	live := elementCompletions(t, h1.store, instKey)
+	// The parallel join completes both of its arrivals (2), every other element once,
+	// so the token count folds from two (both branches) back to one after the join.
+	if live[join] != 2 {
+		t.Fatalf("join completions = %d, want 2 (both branch arrivals): %v", live[join], live)
+	}
+	for _, el := range []int32{start, fork, sa, sb, end} {
+		if live[el] != 1 {
+			t.Fatalf("element %d completions = %d, want 1: %v", el, live[el], live)
+		}
+	}
+	h1.close(t)
+
+	// Replay the same log into a fresh, empty store.
+	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open 2: %v", err)
+	}
+	store2, err := state.Open(filepath.Join(dir, "state2"))
+	if err != nil {
+		t.Fatalf("state.Open 2: %v", err)
+	}
+	defer func() {
+		if err := store2.Close(); err != nil {
+			t.Errorf("store2.Close: %v", err)
+		}
+		if err := log2.Close(); err != nil {
+			t.Errorf("log2.Close: %v", err)
+		}
+	}()
+	p2 := engine.New(1, log2, store2, clock)
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2 (replay): %v", err)
+	}
+
+	// Rebuilt completion trail matches the live run exactly.
+	if replayed := elementCompletions(t, store2, instKey); !reflect.DeepEqual(replayed, live) {
+		t.Fatalf("replayed completions = %v, want %v", replayed, live)
 	}
 }

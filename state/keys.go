@@ -26,6 +26,7 @@ const (
 	cfJobByElement           columnFamily = 0x0D // jobByEl:<elKey> → jobKey (reverse lookup for boundary cancel)
 	cfElementStep            columnFamily = 0x0E // elStep:<piKey>:<ts>:<pos> → int32 elementId
 	cfVariableSnapshot       columnFamily = 0x0F // varSnap:<scopeKey>:<ts>:<pos> → VariableValue
+	cfElementCompletion      columnFamily = 0x10 // elDone:<piKey>:<ts>:<pos> → int32 elementId
 )
 
 func appendBE64(dst []byte, v uint64) []byte { return binary.BigEndian.AppendUint64(dst, v) }
@@ -171,6 +172,22 @@ func timestampFromStepKey(k []byte) int64 {
 // positionFromStepKey extracts the trailing log position from an element-step key.
 func positionFromStepKey(k []byte) uint64 {
 	return binary.BigEndian.Uint64(k[len(k)-8:])
+}
+
+// keyElementCompletion keys one retained element completion of a process instance,
+// with the same (piKey, ts, pos) shape as the element-step (activation) key, so
+// the two fold together by position into a token lifecycle for the concurrency-
+// aware replay (ADR-0050). The trailing (ts, pos) extraction is identical to the
+// step key's, so timestampFromStepKey/positionFromStepKey read it unchanged.
+func keyElementCompletion(piKey uint64, ts int64, pos uint64) []byte {
+	b := appendOrderedInt64(elementCompletionInstancePrefix(piKey), ts)
+	return appendBE64(b, pos)
+}
+
+// elementCompletionInstancePrefix scans every completion recorded for one process
+// instance, in time order.
+func elementCompletionInstancePrefix(piKey uint64) []byte {
+	return appendBE64([]byte{byte(cfElementCompletion)}, piKey)
 }
 
 // keyVariableSnapshot keys one retained variable change of a scope (a process

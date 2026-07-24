@@ -40,10 +40,12 @@ type timelineVar struct {
 }
 
 type timelineStep struct {
-	At        int64         `json:"at"`
-	ElementID string        `json:"elementId"`
-	Type      string        `json:"type"`
-	Variables []timelineVar `json:"variables"`
+	At           int64         `json:"at"`
+	ElementID    string        `json:"elementId"`
+	Type         string        `json:"type"`
+	Variables    []timelineVar `json:"variables"`
+	Tokens       int           `json:"tokens"`
+	ActiveTokens []string      `json:"activeTokens"`
 }
 
 type instanceTimeline struct {
@@ -261,6 +263,75 @@ func TestInstanceTimelineVariableSnapshots(t *testing.T) {
 	// At the next step, the script's greeting is visible alongside x.
 	if got := vars(2); got["x"] != "1" || got["greeting"] != "hi" {
 		t.Errorf("end-step vars = %v, want x=1 and greeting=hi", got)
+	}
+}
+
+// TestInstanceTimelineParallelTokens replays a fork/join instance and checks the
+// timeline reconstructs the live token set per step (ADR-0050): the parallel fork
+// puts two tokens on the diagram concurrently, and the parallel join folds them
+// back to one — so the peak token count is 2 and the final step holds a single
+// token at the end event.
+func TestInstanceTimelineParallelTokens(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", parallelBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+	if code, body := doReq(t, ts, http.MethodPost,
+		fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key), "", "application/json"); code != http.StatusOK {
+		t.Fatalf("start instance: status=%d body=%s", code, body)
+	}
+	instKey := onlyInstanceKey(t, ts)
+
+	code, body = doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/instances/%d/timeline", instKey), "", "")
+	if code != http.StatusOK {
+		t.Fatalf("timeline status=%d body=%s", code, body)
+	}
+	var tl instanceTimeline
+	if err := json.Unmarshal(body, &tl); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	if len(tl.Steps) == 0 {
+		t.Fatal("no steps")
+	}
+
+	// The peak concurrency is two tokens (both fork branches live at once).
+	peak, bothBranches := 0, false
+	for _, st := range tl.Steps {
+		if st.Tokens > peak {
+			peak = st.Tokens
+		}
+		// activeTokens lists the distinct nodes holding a token; tokens counts them
+		// (a join node can hold two at once), so tokens >= len and both are positive
+		// together.
+		if st.Tokens < len(st.ActiveTokens) || (st.Tokens > 0) != (len(st.ActiveTokens) > 0) {
+			t.Errorf("step %s: tokens=%d activeTokens=%v (inconsistent)", st.ElementID, st.Tokens, st.ActiveTokens)
+		}
+		has := map[string]bool{}
+		for _, e := range st.ActiveTokens {
+			has[e] = true
+		}
+		if has["a"] && has["b"] {
+			bothBranches = true
+		}
+	}
+	if peak != 2 {
+		t.Errorf("peak token count = %d, want 2 (the fork's two branches)", peak)
+	}
+	if !bothBranches {
+		t.Errorf("no step held both branches a and b concurrently: %+v", tl.Steps)
+	}
+	// The join folds back to one token: the final step (the end event) holds exactly one.
+	last := tl.Steps[len(tl.Steps)-1]
+	if last.ElementID != "e" || last.Tokens != 1 {
+		t.Errorf("final step = %s tokens=%d, want end event 'e' with 1 token (join synchronized)", last.ElementID, last.Tokens)
 	}
 }
 

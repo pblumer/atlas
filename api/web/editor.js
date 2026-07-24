@@ -2199,6 +2199,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
         <a class="btn neutral" id="rp-live" title="Open this instance's live view">Live view</a>
         <button class="btn neutral" id="refresh">Refresh</button>
         <span class="pill" id="rp-state" style="margin-left:8px">&mdash;</span>
+        <span class="pill ok" id="rp-tokens" style="margin-left:8px" title="Live tokens at this step (parallel branches raise this; a join folds them back)"><span class="dot"></span><b id="token-count">0</b>&nbsp;tokens</span>
         <span class="pill" style="margin-left:8px"><b id="step-count">0</b>&nbsp;steps</span>
       </div>
       <div class="replay-bar">
@@ -2266,6 +2267,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const titleEl = root.querySelector("#rp-title");
   const stateEl = root.querySelector("#rp-state");
   const stepCountEl = root.querySelector("#step-count");
+  const tokenEl = root.querySelector("#token-count");
   const clockEl = root.querySelector("#clock");
   const scrub = root.querySelector("#scrub");
   const playBtn = root.querySelector("#play");
@@ -2312,18 +2314,29 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     clockEl.textContent = `${shown} / ${steps.length}${shown ? ` · ${fmtClock(steps[shown - 1].at)}` : ""}`;
   }
 
-  // renderOverlay marks every element walked up to the playhead: the current one
-  // green (the token is "here"), the earlier ones gray (already walked).
+  // renderOverlay draws the token state at the playhead: every element that holds
+  // a live token now is green (so a parallel fork lights up both branches at once,
+  // and a join collapses them back to one), and elements a token has already left
+  // are gray. The live set comes from the step's reconstructed token positions
+  // (ADR-0050), not from a single "current" element, so concurrency shows honestly.
   function renderOverlay() {
     for (const [id, m] of marked) { try { canvas.removeMarker(id, m); } catch { /* gone */ } }
     marked = [];
+    const cur = playhead > 0 ? steps[playhead - 1] : null;
+    const active = new Set(cur ? cur.activeTokens || [] : []);
+    const mark = (id, cls) => {
+      if (!registry.get(id)) return;
+      canvas.addMarker(id, cls);
+      marked.push([id, cls]);
+    };
+    // Gray trail: every element walked up to here that is not currently holding a token.
     for (let i = 0; i < playhead; i++) {
-      const s = steps[i];
-      if (!registry.get(s.elementId)) continue;
-      const marker = i === playhead - 1 ? "atlas-active" : "atlas-visited";
-      canvas.addMarker(s.elementId, marker);
-      marked.push([s.elementId, marker]);
+      const id = steps[i].elementId;
+      if (!active.has(id)) mark(id, "atlas-visited");
     }
+    // Green: the live tokens right now.
+    active.forEach((id) => mark(id, "atlas-active"));
+    tokenEl.textContent = String(cur ? cur.tokens || 0 : 0);
   }
 
   function highlightCurrent() {

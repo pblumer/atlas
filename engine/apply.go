@@ -56,7 +56,15 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err := tx.DeleteElementInstance(h.Key, &v.element); err != nil {
 				return err
 			}
-			return tx.DecrementActiveChildren(v.element.FlowScopeKey)
+			if err := tx.DecrementActiveChildren(v.element.FlowScopeKey); err != nil {
+				return err
+			}
+			// Retain the completion as the counterpart of the activation step, so the
+			// replay can fold activations minus completions into the live token count
+			// at each point — a fork shows concurrent tokens, a parallel join folds
+			// them back to one (ADR-0050). Derived only from the event header
+			// (timestamp/position) and the element, so replay rebuilds it (I4).
+			return tx.RecordElementCompletion(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId)
 		}
 
 	case model.VTJob:
