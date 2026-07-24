@@ -149,6 +149,9 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
     container.innerHTML = `<p class="muted err" style="padding:20px">Could not open this form: ${esc(e.message)}</p>`;
     return;
   }
+  // Give the Playground's own areas the same collapse/resize affordances as the
+  // Validate pane. Deferred a tick so its DOM has finished rendering.
+  setTimeout(() => enhanceDesignLayout(container), 0);
 
   // Per-pane bookkeeping: `rev` is the schema revision each pane last loaded
   // (-1 = never), `built` guards one-time DOM setup.
@@ -192,6 +195,8 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
       if (stale && p.pg) {
         try { await p.pg.setSchema(schema); } catch { /* best-effort */ }
       }
+      // Re-assert the layout affordances in case setSchema rebuilt any chrome.
+      enhanceDesignLayout(container);
       p.rev = rev;
     } else if (tab === "validate") {
       if (!p.built) buildValidate();
@@ -439,4 +444,186 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
       if (panes.editor.editor) { try { panes.editor.editor.destroy(); } catch { /* ignore */ } }
     },
   };
+}
+
+// ---- Design pane layout enhancement ---------------------------------------
+// The Design tab hosts the form-js Playground, which renders its own 2x2 grid
+// of areas (Form Definition | Form Preview / Form Input | Form Output) flanked
+// by a Components palette and a properties panel. enhanceDesignLayout gives
+// those areas the same affordances as the Validate pane: each area collapses to
+// its header, the grid's column/row gutters are draggable, and the two side
+// columns are width-resizable. Choices persist across sessions (localStorage).
+//
+// It reaches into the Playground's rendered DOM (vendored/pinned, ADR-0013), so
+// it is written defensively: every lookup is guarded and it is idempotent, and
+// it re-applies cleanly if the Playground ever rebuilds its chrome.
+const DKEY = "atlas.form.design.";
+const COLLAPSED_H = "2.4em"; // track size for a fully-collapsed row/column
+
+function enhanceDesignLayout(container) {
+  if (!container) return;
+  const main = container.querySelector(".fjs-pgl-main");
+  const rootEl = container.querySelector(".fjs-pgl-root");
+  if (!main || !rootEl) return; // Playground not rendered yet
+  // Idempotent: if this exact element is already wired, nothing to do.
+  if (main.__fvWired && main.querySelector(".fv-grid-cresizer")) return;
+  main.__fvWired = true;
+
+  const sections = [...main.querySelectorAll(":scope > .fjs-pgl-section")];
+  if (sections.length < 4) return; // unexpected layout — leave the Playground as-is
+
+  const num = (k, d) => { const v = parseFloat(localStorage.getItem(DKEY + k)); return Number.isFinite(v) ? v : d; };
+  const state = {
+    colPct: Math.min(85, Math.max(15, num("colPct", 50))),
+    rowPct: Math.min(85, Math.max(15, num("rowPct", 70))),
+  };
+  let collapsed;
+  try { collapsed = JSON.parse(localStorage.getItem(DKEY + "collapsed") || "null"); } catch { collapsed = null; }
+  if (!Array.isArray(collapsed) || collapsed.length !== 4) collapsed = [false, false, false, false];
+
+  // Capture the side columns' natural widths BEFORE reflowing the grid — the
+  // palette has no explicit CSS width, so it would collapse the instant `main`
+  // starts flexing and any later measurement would read that squeezed value.
+  const palette = rootEl.querySelector(":scope > .fjs-pgl-palette-container");
+  const props = rootEl.querySelector(":scope > .fjs-pgl-properties-container");
+  // The palette is the layout's flex-remainder and hasn't settled to its real
+  // width yet, so a live measurement can read a collapsed value — fall back to
+  // the Playground's natural defaults (palette ~200px, properties 250px).
+  const sane = (el, def) => { const w = el ? Math.round(el.getBoundingClientRect().width) : 0; return w > 50 ? w : def; };
+  const paletteW0 = sane(palette, 200);
+  const propsW0 = sane(props, 250);
+
+  // Let the middle grid flex between fixed-width side columns so resizing the
+  // palette/properties reflows the layout (the Playground hard-codes its width).
+  main.style.position = "relative";
+  main.style.flex = "1 1 auto";
+  main.style.width = "auto";
+  main.style.minWidth = "0";
+
+  // --- Per-section collapse -------------------------------------------------
+  sections.forEach((sec, i) => {
+    if (collapsed[i]) sec.classList.add("fv-collapsed");
+    const header = sec.querySelector(":scope > .header");
+    if (!header || header.querySelector(".fv-sec-caret")) return;
+    const caret = document.createElement("span");
+    caret.className = "fv-sec-caret";
+    caret.textContent = "▾"; // ▾
+    header.insertBefore(caret, header.firstChild);
+    header.classList.add("fv-sec-head");
+    header.addEventListener("click", (e) => {
+      // Don't collapse when clicking the header's own controls (Download/Embed).
+      if (e.target !== caret && e.target.closest("button, a, input, select, .fjs-pgl-button, .header-items")) return;
+      sec.classList.toggle("fv-collapsed");
+      collapsed[i] = sec.classList.contains("fv-collapsed");
+      localStorage.setItem(DKEY + "collapsed", JSON.stringify(collapsed));
+      recompute();
+    });
+  });
+
+  // --- Grid gutter resizers (absolute-positioned over the grid) --------------
+  const cresizer = document.createElement("div");
+  cresizer.className = "fv-grid-cresizer";
+  cresizer.title = "Drag to resize columns";
+  const rresizer = document.createElement("div");
+  rresizer.className = "fv-grid-rresizer";
+  rresizer.title = "Drag to resize rows";
+  main.appendChild(cresizer);
+  main.appendChild(rresizer);
+
+  function recompute() {
+    const c = sections.map((s) => s.classList.contains("fv-collapsed"));
+    const leftCol = c[0] && c[2], rightCol = c[1] && c[3];
+    const topRow = c[0] && c[1], botRow = c[2] && c[3];
+    main.style.gridTemplateColumns = leftCol && !rightCol ? `${COLLAPSED_H} minmax(0,1fr)`
+      : !leftCol && rightCol ? `minmax(0,1fr) ${COLLAPSED_H}`
+      : `${state.colPct}% ${100 - state.colPct}%`;
+    main.style.gridTemplateRows = topRow && !botRow ? `${COLLAPSED_H} minmax(0,1fr)`
+      : !topRow && botRow ? `minmax(0,1fr) ${COLLAPSED_H}`
+      : `${state.rowPct}% ${100 - state.rowPct}%`;
+    cresizer.style.left = state.colPct + "%";
+    cresizer.style.display = leftCol || rightCol ? "none" : "";
+    rresizer.style.top = state.rowPct + "%";
+    rresizer.style.display = topRow || botRow ? "none" : "";
+  }
+
+  dragPct(cresizer, "x", main, (pct) => { state.colPct = pct; recompute(); },
+    () => localStorage.setItem(DKEY + "colPct", String(Math.round(state.colPct))));
+  dragPct(rresizer, "y", main, (pct) => { state.rowPct = pct; recompute(); },
+    () => localStorage.setItem(DKEY + "rowPct", String(Math.round(state.rowPct))));
+
+  // --- Side-column width resizers (palette left, properties right) ----------
+  if (palette && !palette.__fvWired) {
+    palette.__fvWired = true;
+    palette.style.flex = "0 0 auto";
+    palette.style.width = num("paletteW", paletteW0) + "px";
+    const r = document.createElement("div");
+    r.className = "fv-side-resizer";
+    rootEl.insertBefore(r, main);
+    dragWidth(r, palette, "left", () => localStorage.setItem(DKEY + "paletteW", String(parseInt(palette.style.width, 10) || 200)));
+  }
+  if (props && !props.__fvWired) {
+    props.__fvWired = true;
+    props.style.flex = "0 0 auto";
+    props.style.width = num("propsW", propsW0) + "px";
+    const r = document.createElement("div");
+    r.className = "fv-side-resizer";
+    rootEl.insertBefore(r, props);
+    dragWidth(r, props, "right", () => localStorage.setItem(DKEY + "propsW", String(parseInt(props.style.width, 10) || 250)));
+  }
+
+  recompute();
+}
+
+// dragPct wires a divider that reports its position within `area` as a clamped
+// percentage (axis "x" → horizontal, "y" → vertical) while dragging.
+function dragPct(divider, axis, area, onMove, onEnd) {
+  const move = (e) => {
+    const r = area.getBoundingClientRect();
+    const pct = axis === "x"
+      ? ((e.clientX - r.left) / r.width) * 100
+      : ((e.clientY - r.top) / r.height) * 100;
+    onMove(Math.min(85, Math.max(15, pct)));
+  };
+  const up = () => {
+    document.removeEventListener("pointermove", move);
+    document.removeEventListener("pointerup", up);
+    divider.classList.remove("dragging");
+    document.body.style.userSelect = "";
+    onEnd();
+  };
+  divider.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    divider.classList.add("dragging");
+    document.body.style.userSelect = "none";
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+  });
+}
+
+// dragWidth wires a divider that resizes `panel`'s width. side "left" means the
+// panel sits left of the divider (drag right widens); "right" is the mirror.
+function dragWidth(divider, panel, side, onEnd) {
+  const clamp = (w) => Math.max(120, Math.min(560, w));
+  let startX = 0, startW = 0;
+  const move = (e) => {
+    const dx = e.clientX - startX;
+    panel.style.width = clamp(side === "left" ? startW + dx : startW - dx) + "px";
+  };
+  const up = () => {
+    document.removeEventListener("pointermove", move);
+    document.removeEventListener("pointerup", up);
+    divider.classList.remove("dragging");
+    document.body.style.userSelect = "";
+    onEnd();
+  };
+  divider.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    startX = e.clientX;
+    startW = panel.getBoundingClientRect().width;
+    divider.classList.add("dragging");
+    document.body.style.userSelect = "none";
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+  });
+  divider.addEventListener("dblclick", () => { panel.style.width = ""; onEnd(); });
 }
