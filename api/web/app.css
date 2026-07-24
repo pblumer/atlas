@@ -551,5 +551,13 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   border-radius: var(--radius); background: var(--bg);
 }
 .tasks-form-placeholder p { margin: 0; max-width: 60ch; }
+/* Form editor (form-js editor, ADR-0028) */
+.form-editor-canvas { flex: 1; min-height: 0; overflow: hidden; }
+.form-name-input {
+  font: inherit; font-weight: 600; padding: 6px 10px;
+  border: 1px solid var(--border-strong); border-radius: 6px; min-width: 220px;
+  background: var(--surface); color: var(--text);
+}
+
 .tasks-form { margin-top: 22px; max-width: 640px; }
 .tasks-form .fjs-container { --color-background: var(--surface); }

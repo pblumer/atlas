@@ -351,6 +351,19 @@ function upsertExt(modeler, element, type, props) {
   modeling.updateProperties(element, { extensionElements: ext });
 }
 
+// removeExt drops an element's extension element of `type`, if present, through
+// the modeling API (undo/redo aware). Used to unlink a form (drop the whole
+// zeebe:FormDefinition rather than leave an empty formId behind).
+function removeExt(modeler, element, type) {
+  const modeling = modeler.get("modeling");
+  const ext = element.businessObject.extensionElements;
+  if (!ext || !ext.values) return;
+  const next = ext.values.filter((v) => v.$type !== type);
+  if (next.length === ext.values.length) return;
+  ext.values = next;
+  modeling.updateProperties(element, { extensionElements: ext });
+}
+
 // decisionInputRowHTML renders one editable business-rule-task input mapping: a
 // decision input name (target) fed by a FEEL source over the instance's variables.
 // The stored source is '=' prefixed (Zeebe convention); it is shown stripped.
@@ -837,7 +850,17 @@ function wireProperties(root, modeler, api) {
             <div id="dmn-inputs">${inputs.map((p, i) => decisionInputRowHTML(i, p.source, p.target)).join("")}${decisionInputRowHTML(inputs.length, "", "")}</div>`;
         } else if (t === "bpmn:UserTask") {
           const a = findExt(bo, "zeebe:AssignmentDefinition") || {};
-          html += `<h3>Assignment</h3>
+          const fd = findExt(bo, "zeebe:FormDefinition") || {};
+          const curForm = fd.formId || "";
+          html += `<h3>Form</h3>
+            <label class="field"><span>Linked form</span>
+              <select id="f-form">
+                <option value="">— none —</option>
+                ${curForm ? `<option value="${esc(curForm)}" selected>${esc(curForm)}</option>` : ""}
+              </select></label>
+            <p class="muted" style="font-size:12px">The form the Tasks app renders for this task, submitted as its variables.
+              <a href="#/modeler/form/new" target="_blank" rel="noopener">Create a new form</a>, then reopen this to link it.</p>
+            <h3>Assignment</h3>
             <label class="field"><span>Assignee</span>
               <input type="text" id="f-assignee" value="${esc(a.assignee || "")}" placeholder="editor"/></label>
             <label class="field"><span>Candidate groups</span>
@@ -999,6 +1022,32 @@ function wireProperties(root, modeler, api) {
     };
     if (fassignee) fassignee.addEventListener("change", saveAssignment);
     if (fgroups) fgroups.addEventListener("change", saveAssignment);
+
+    const fform = body.querySelector("#f-form");
+    if (fform) {
+      // Link/unlink writes (or drops) the zeebe:FormDefinition formId — the same
+      // extension the compiler reads to bind a form (ADR-0028).
+      fform.addEventListener("change", () => {
+        const id = fform.value;
+        if (id) upsertExt(modeler, element, "zeebe:FormDefinition", { formId: id });
+        else removeExt(modeler, element, "zeebe:FormDefinition");
+      });
+      // Populate the picker with the project's forms once loaded; keep the
+      // currently-linked one selected even if it is no longer in the list.
+      api("GET", "/api/v1/forms").then((forms) => {
+        if (!document.body.contains(fform)) return; // selection moved on
+        const cur = fform.value;
+        const opts = [`<option value="">— none —</option>`];
+        let sawCur = false;
+        for (const f of forms || []) {
+          const sel = f.id === cur ? " selected" : "";
+          if (f.id === cur) sawCur = true;
+          opts.push(`<option value="${esc(f.id)}"${sel}>${esc(f.name || f.id)}</option>`);
+        }
+        if (cur && !sawCur) opts.push(`<option value="${esc(cur)}" selected>${esc(cur)} (missing)</option>`);
+        fform.innerHTML = opts.join("");
+      }).catch(() => { /* leave the current single-option select as-is */ });
+    }
 
     const fcancel = body.querySelector("#f-cancelactivity");
     if (fcancel) {
