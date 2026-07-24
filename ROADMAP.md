@@ -272,8 +272,11 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   user as its identity, and an "Assign to…" picker is sourced from a non-admin
   `GET /api/v1/users/assignable`. Next: external identity (OIDC/SAML/LDAP) via the
   `Source`/`ExternalID` hooks, per-endpoint RBAC beyond `admin`, groups, durable
-  sessions, multi-tenancy, and audit logging. One honest limitation: the `/mcp`
-  adapter is not yet auth-aware, so under `--auth` front it separately (ADR-0016).
+  sessions, multi-tenancy, and audit logging. Under `--auth` the in-process **MCP
+  adapter authenticates its loopback calls** with an internal, non-admin service
+  token ([ADR-0049](docs/adr/0049-internal-service-auth-for-mcp.md)), so enabling
+  auth no longer breaks MCP; the external `/mcp` transport is still unauthenticated
+  and should be fronted by a reverse proxy (ADR-0016).
 - 🔲 Later: a polished "workbench" experience on top.
 
 ## Milestone A — Modeler & authoring experience 🔲

@@ -187,6 +187,84 @@ func TestWithAuthDisabledPassesThrough(t *testing.T) {
 	}
 }
 
+func TestBearerTokenParsing(t *testing.T) {
+	mk := func(h string) *http.Request {
+		r := httptest.NewRequest("GET", "/", nil)
+		if h != "" {
+			r.Header.Set("Authorization", h)
+		}
+		return r
+	}
+	if _, ok := bearerToken(mk("")); ok {
+		t.Fatal("empty header must not parse")
+	}
+	if _, ok := bearerToken(mk("Basic abc")); ok {
+		t.Fatal("non-bearer must not parse")
+	}
+	if _, ok := bearerToken(mk("Bearer ")); ok {
+		t.Fatal("empty token must not parse")
+	}
+	if tok, ok := bearerToken(mk("bearer xyz")); !ok || tok != "xyz" {
+		t.Fatalf("case-insensitive bearer: got %q, ok=%v", tok, ok)
+	}
+}
+
+func TestInternalTokenServicePrincipal(t *testing.T) {
+	s := &Server{authEnabled: true, internalToken: "sekret", sessions: newSessionStore(time.Hour)}
+	if s.InternalToken() != "sekret" {
+		t.Fatalf("InternalToken() = %q", s.InternalToken())
+	}
+
+	// A valid bearer resolves to a non-admin service principal.
+	req := httptest.NewRequest("GET", "/api/v1/tasks", nil)
+	req.Header.Set("Authorization", "Bearer sekret")
+	p := s.principalFor(req)
+	if p == nil || p.Username != servicePrincipalName {
+		t.Fatalf("service principal not resolved: %+v", p)
+	}
+	if p.hasRole(RoleAdmin) {
+		t.Fatalf("service principal must not be admin")
+	}
+
+	// A wrong token or none does not resolve.
+	bad := httptest.NewRequest("GET", "/api/v1/tasks", nil)
+	bad.Header.Set("Authorization", "Bearer nope")
+	if s.principalFor(bad) != nil {
+		t.Fatal("wrong token must not resolve")
+	}
+	if s.principalFor(httptest.NewRequest("GET", "/api/v1/tasks", nil)) != nil {
+		t.Fatal("no auth header must not resolve")
+	}
+
+	// The middleware admits a bearer-authenticated request to a gated route.
+	reached := false
+	h := s.withAuth(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		reached = true
+		if principalFrom(r.Context()) == nil {
+			t.Error("principal missing in context")
+		}
+	}))
+	rr := httptest.NewRequest("GET", "/api/v1/tasks", nil)
+	rr.Header.Set("Authorization", "Bearer sekret")
+	h.ServeHTTP(httptest.NewRecorder(), rr)
+	if !reached {
+		t.Fatal("bearer request was blocked")
+	}
+}
+
+func TestInternalTokenEmptyWithoutAuth(t *testing.T) {
+	s := &Server{}
+	if s.InternalToken() != "" {
+		t.Fatal("token must be empty when auth is off")
+	}
+	// With no internal token configured, a bearer header is ignored.
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer whatever")
+	if s.principalFor(req) != nil {
+		t.Fatal("no token configured → bearer must be ignored")
+	}
+}
+
 func TestRequireAdmin(t *testing.T) {
 	// Auth disabled: always allowed, nothing written.
 	open := &Server{authEnabled: false}
