@@ -252,6 +252,24 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   (element templates, READMEs, nested folders), and — later — **importing or
   backing up a whole project from/to a git repository** (a natural fit for the
   same `Resolver`/sidecar seam that already externalizes DMN models).
+- 🚧 **User management & the authentication boundary**
+  ([ADR-0044](docs/adr/0044-user-management-and-authentication-boundary.md)):
+  accounts are a durable sidecar store with an enterprise-ready `User` model — a
+  stable opaque id, a **role list** (RBAC-ready, only `admin` enforced today),
+  `Disabled` for deactivation, and `Source`/`ExternalID` hooks for external
+  identity providers. Passwords are bcrypt-hashed and never leave the server.
+  Enforcement is **opt-in** (`--auth` / `WithAuth()`, off by default, mirroring
+  `--docs`): with it on, `/api/v1` requires a session (opaque HttpOnly cookie),
+  managing users requires `admin`, and a fresh instance seeds an admin from
+  `ATLAS_ADMIN_USERNAME`/`ATLAS_ADMIN_PASSWORD` (a generated password is logged
+  once — no hardcoded credential). The Console's **Organization** page is now a
+  real user-management surface (create/edit/roles/deactivate/delete), with a login
+  gate and an account menu. A last-admin lockout guard prevents an instance from
+  locking every operator out. Next: external identity (OIDC/SAML/LDAP) via the
+  `Source`/`ExternalID` hooks, per-endpoint RBAC beyond `admin`, groups, durable
+  sessions, multi-tenancy, audit logging, and picking user-task assignees
+  (ADR-0042) from real users. One honest limitation: the `/mcp` adapter is not
+  yet auth-aware, so under `--auth` front it separately (ADR-0016).
 - 🔲 Later: a polished "workbench" experience on top.
 
 ## Milestone A — Modeler & authoring experience 🔲

@@ -51,6 +51,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0041](0041-connector-management-and-secret-store.md) | Connector management and the secret store | Proposed |
 | [0042](0042-user-task-assignment-and-claim.md) | User-task runtime assignment and claim/unclaim | Accepted |
 | [0043](0043-openapi-spec-and-embedded-api-explorer.md) | An OpenAPI spec and an embedded API explorer for the HTTP API | Accepted |
+| [0044](0044-user-management-and-authentication-boundary.md) | User management and the opt-in authentication boundary | Accepted |
 
 ## Status values
 

@@ -125,6 +125,20 @@ ol.steps li { margin: 6px 0; }
 .btn.ghost.danger:hover { background: #fdecea; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* Form fields (login + user management) */
+.field { display: block; margin: 10px 0; font-size: 13px; color: var(--muted); }
+.field input[type="text"],
+.field input[type="email"],
+.field input[type="password"],
+.field input:not([type]) {
+  display: block; width: 100%; box-sizing: border-box; margin-top: 5px;
+  padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 6px;
+  font: inherit; color: var(--text); background: var(--surface);
+}
+.field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.field.inline { display: flex; align-items: center; gap: 8px; color: var(--text); }
+.field.inline input { width: auto; margin: 0; }
+
 /* Stat tiles */
 .stats { display: flex; gap: 34px; flex-wrap: wrap; }
 .stat b { display: block; font-size: 30px; font-weight: 700; line-height: 1.1; }
