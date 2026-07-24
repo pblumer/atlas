@@ -33,6 +33,20 @@ const UserTaskJobType = "io.atlas.user-task"
 // a single global index, the same way the DMN worker uses DMNJobTypeIndex.
 const UserTaskJobTypeIndex int32 = 1
 
+// PwshJobType is the reserved job type a PowerShell script task carries. The
+// in-process PowerShell script worker subscribes to it to run the script off the
+// hot path and write its result back, the same way the DMN worker subscribes to
+// DMNJobType (ADR-0044). Each polyglot script language gets its own reserved job
+// type so a customer can deploy and secure only the worker(s) they need.
+const PwshJobType = "io.atlas.script.powershell"
+
+// PwshJobTypeIndex is the interned index PwshJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it third (after DMN and user
+// tasks), so it is always 2. This lets a single in-process PowerShell worker
+// subscribe by one global index across every deployed process, the same way the
+// DMN worker uses DMNJobTypeIndex (see ADR-0044).
+const PwshJobTypeIndex int32 = 2
+
 // ClioWriteJobType is the reserved job type a clio "write-events" connector task
 // carries. The in-process clio connector worker subscribes to it to append the
 // event to the configured clio instance (ADR-0036), the same way the DMN worker
@@ -57,6 +71,7 @@ type Builder struct {
 	flows             []CompiledFlow
 	serviceTasks      []ServiceTaskDetail
 	scriptTasks       []ScriptTaskDetail
+	scriptJobTasks    []ScriptJobTaskDetail
 	businessRuleTasks []BusinessRuleTaskDetail
 	timerCatches      []TimerCatchDetail
 	connectorTasks    []ConnectorTaskDetail
@@ -84,6 +99,7 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 	}
 	b.intern(DMNJobType)      // reserve DMNJobTypeIndex == 0
 	b.intern(UserTaskJobType) // reserve UserTaskJobTypeIndex == 1
+	b.intern(PwshJobType)     // reserve PwshJobTypeIndex == 2
 	return b
 }
 
@@ -156,6 +172,26 @@ func (b *Builder) AddScriptTask(e *expr.Compiled, resultVar string) int32 {
 	detail := int32(len(b.scriptTasks))
 	b.scriptTasks = append(b.scriptTasks, ScriptTaskDetail{Expr: e, ResultVar: resultVar})
 	return b.addNode(TypeScriptTask, detail)
+}
+
+// AddScriptJobTask adds a job-based script task authored in a general-purpose
+// language (ADR-0044) and returns its element id. Like a service task it creates
+// a job on activation and waits; the job carries jobType — a reserved per-language
+// sentinel (e.g. PwshJobType) the in-process script worker for that language picks
+// up, runs source through the interpreter, and completes the job, writing the
+// result into the resultVar process variable. The parser owns language validation
+// and the language→jobType mapping; the builder only interns what it is given, the
+// same way AddServiceTask and the connector adds do.
+func (b *Builder) AddScriptJobTask(jobType, language, source, resultVar string, retries int32) int32 {
+	detail := int32(len(b.scriptJobTasks))
+	b.scriptJobTasks = append(b.scriptJobTasks, ScriptJobTaskDetail{
+		JobType:   b.intern(jobType),
+		Language:  b.intern(language),
+		Source:    b.intern(source),
+		ResultVar: b.intern(resultVar),
+		Retries:   retries,
+	})
+	return b.addNode(TypeScriptJobTask, detail)
 }
 
 // AddBusinessRuleTask adds a business rule task that evaluates the named DMN
@@ -421,6 +457,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		boundaryEvents:    boundary,
 		serviceTasks:      b.serviceTasks,
 		scriptTasks:       b.scriptTasks,
+		scriptJobTasks:    b.scriptJobTasks,
 		businessRuleTasks: b.businessRuleTasks,
 		timerCatches:      b.timerCatches,
 		connectorTasks:    b.connectorTasks,

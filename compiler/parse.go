@@ -14,6 +14,15 @@ import (
 // defaultRetries is used when a service task's task definition omits retries.
 const defaultRetries = 3
 
+// scriptJobTypes maps a polyglot script task's language (lower-cased) to the
+// reserved job type its in-process worker subscribes to (ADR-0044). Adding a
+// language is one entry here plus its worker; the compiler, node type, and
+// recovery semantics are shared. The mapping is resolved at deploy time
+// (invariant I5) so the runtime never inspects the language.
+var scriptJobTypes = map[string]string{
+	"powershell": PwshJobType,
+}
+
 // restMethods is the set of HTTP methods a REST connector task may use. The set
 // is validated at deploy time (invariant I5) so the runtime worker never has to.
 var restMethods = map[string]bool{
@@ -245,6 +254,28 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 	}
 	for _, st := range proc.ScriptTasks {
+		// A script task bearing an <atlas:jobScript> extension is a polyglot script
+		// task: it runs in a general-purpose language via the job path (ADR-0044),
+		// not inline as FEEL. The language is validated and mapped to its reserved
+		// job type at deploy time (invariant I5), so the runtime worker never has to.
+		if js := st.JobScript; js != nil {
+			jobType, ok := scriptJobTypes[strings.ToLower(strings.TrimSpace(js.Language))]
+			if !ok {
+				return nil, fmt.Errorf("compiler: script task %q has unsupported script language %q", st.Id, js.Language)
+			}
+			source := strings.TrimSpace(js.Source)
+			if source == "" {
+				return nil, fmt.Errorf("compiler: script task %q has no script source", st.Id)
+			}
+			if js.ResultVariable == "" {
+				return nil, fmt.Errorf("compiler: script task %q has no result variable", st.Id)
+			}
+			node := b.AddScriptJobTask(jobType, strings.ToLower(strings.TrimSpace(js.Language)), source, js.ResultVariable, defaultRetries)
+			if err := register(st.Id, node); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		text := strings.TrimSpace(st.Script.Expression)
 		text = strings.TrimPrefix(text, "=") // Zeebe marks expressions with a leading '='
 		text = strings.TrimSpace(text)
@@ -659,15 +690,33 @@ type xmlTaskDefinition struct {
 }
 
 // Zeebe script tasks carry the FEEL expression and its result variable in a
-// <zeebe:script> extension element.
+// <zeebe:script> extension element. A script task authored in a general-purpose
+// language instead carries an <atlas:jobScript> extension (JobScript); the
+// distinct local name keeps it from colliding with <zeebe:script> in the XML
+// decoder, which matches by local name (ADR-0044).
 type xmlScriptTask struct {
 	Id     string         `xml:"id,attr"`
 	Script xmlZeebeScript `xml:"extensionElements>script"`
+	// JobScript, when present, marks this a polyglot job script (PowerShell, …),
+	// run via the job path rather than inline as FEEL. The pointer is nil when the
+	// <atlas:jobScript> extension is absent.
+	JobScript *xmlAtlasScript `xml:"extensionElements>jobScript"`
 }
 
 type xmlZeebeScript struct {
 	Expression     string `xml:"expression,attr"`
 	ResultVariable string `xml:"resultVariable,attr"`
+}
+
+// An <atlas:jobScript language="..." resultVariable="...">body</atlas:jobScript>
+// extension: a script task in a general-purpose language (ADR-0044). language
+// selects the interpreter/worker (and thus the reserved job type), resultVariable
+// is the process variable the script's result is written back into, and the
+// element text is the script source.
+type xmlAtlasScript struct {
+	Language       string `xml:"language,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	Source         string `xml:",chardata"`
 }
 
 // A business rule task references a DMN decision via the Zeebe calledDecision
