@@ -1304,6 +1304,11 @@ type taskResp struct {
 	Assignee           string `json:"assignee,omitempty"`
 	CandidateGroups    string `json:"candidateGroups,omitempty"`
 	FormID             string `json:"formId,omitempty"`
+	// Priority is the task's importance from the model (default 50); the inbox
+	// sorts by it. DueDate is the absolute due instant in Unix milliseconds, or 0
+	// when the task has no due date (ADR-0051).
+	Priority int32 `json:"priority"`
+	DueDate  int64 `json:"dueDate,omitempty"`
 }
 
 // handleListTasks lists open user tasks — activatable jobs of the reserved
@@ -1337,6 +1342,12 @@ func (s *Server) handleListTasks(w http.ResponseWriter, _ *http.Request) {
 						tr.Assignee = jv.Assignee
 						tr.CandidateGroups = cp.Intern(detail.CandidateGroups)
 						tr.FormID = cp.Intern(detail.FormId)
+						tr.Priority = detail.Priority
+						// The due date is frozen on the job as an absolute instant
+						// (nanoseconds); expose it as Unix ms for the browser.
+						if jv.Deadline != 0 {
+							tr.DueDate = jv.Deadline / int64(time.Millisecond)
+						}
 					}
 				}
 			}

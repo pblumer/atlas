@@ -855,12 +855,22 @@ type userTaskBehavior struct{}
 func (userTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.UserTask(cp.Node(ei.ElementId).Detail)
+	// A due date is authored as a duration relative to task creation, so the
+	// absolute due instant is computed here and frozen into the job-created event
+	// (ADR-0051). Now() is read at command processing and recorded, so recovery
+	// replays the identical deadline — exactly like a timer's due date. 0 means
+	// the task has no due date.
+	var deadline int64
+	if detail.DueDateNanos != 0 {
+		deadline = c.Now() + detail.DueDateNanos
+	}
 	jobKey := c.NewKey()
 	c.AppendJobEvent(jobKey, model.IntentJobCreated, model.JobValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ElementInstanceKey: key,
 		JobType:            detail.JobType,
 		Retries:            detail.Retries,
+		Deadline:           deadline,
 		// Seed the runtime assignee with the model's default; claim/unclaim
 		// rewrites it through the job lifecycle (ADR-0042).
 		Assignee: cp.Intern(detail.Assignee),

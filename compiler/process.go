@@ -173,6 +173,14 @@ type UserTaskDetail struct {
 	Assignee        int32
 	CandidateGroups int32
 	FormId          int32 // interned form id bound via zeebe:formDefinition → index, -1 if unset (ADR-0028)
+	// Priority is the task's static importance from zeebe:priorityDefinition
+	// (default 50, Camunda's convention); higher sorts first in the inbox.
+	Priority int32
+	// DueDateNanos is the ISO-8601 duration (from zeebe:taskSchedule dueDate),
+	// in nanoseconds, after which the task is due — relative to its creation, so
+	// the absolute due instant is frozen when the job is created (ADR-0051).
+	// 0 means the task has no due date.
+	DueDateNanos int64
 }
 
 // ConnectorTaskDetail is the per-connector-task data a behavior needs at runtime.

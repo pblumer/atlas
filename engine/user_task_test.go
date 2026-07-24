@@ -14,7 +14,7 @@ func userTaskProcess(t testing.TB) (*compiler.CompiledProcess, int32) {
 	t.Helper()
 	b := compiler.NewBuilder(defKey, "approval", 1)
 	start := b.AddStartEvent()
-	task := b.AddUserTask("Review order", "editor", "reviewers", "", 3)
+	task := b.AddUserTask("Review order", "editor", "reviewers", "", 50, 0, 3)
 	end := b.AddEndEvent()
 	b.Connect(start, task)
 	b.Connect(task, end)
@@ -24,6 +24,45 @@ func userTaskProcess(t testing.TB) (*compiler.CompiledProcess, int32) {
 	}
 	jobType := cp.UserTask(cp.Node(task).Detail).JobType
 	return cp, jobType
+}
+
+// TestUserTaskDueDate proves a due date authored as a duration is frozen into the
+// job as an absolute instant, computed from the command-time clock (ADR-0051).
+func TestUserTaskDueDate(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	const base = 1_000_000
+	const dueNanos = int64(2*24*3600) * int64(1e9) // P2D
+	b := compiler.NewBuilder(defKey, "approval", 1)
+	start := b.AddStartEvent()
+	task := b.AddUserTask("Review order", "editor", "reviewers", "", 50, dueNanos, 3)
+	end := b.AddEndEvent()
+	b.Connect(start, task)
+	b.Connect(task, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.UserTask(cp.Node(task).Detail).JobType
+
+	p := engine.New(1, h.log, h.store, &fixedClock{t: base})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	jobKey := singleActivatableJob(t, h.store, jobType)
+	jv, ok, err := h.store.GetJob(jobKey)
+	if err != nil || !ok {
+		t.Fatalf("GetJob: ok=%v err=%v", ok, err)
+	}
+	if jv.Deadline != base+dueNanos {
+		t.Errorf("deadline = %d, want %d (now+P2D, frozen at creation)", jv.Deadline, base+dueNanos)
+	}
 }
 
 func TestUserTaskJobLifecycle(t *testing.T) {

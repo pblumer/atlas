@@ -14,6 +14,10 @@ import (
 // defaultRetries is used when a service task's task definition omits retries.
 const defaultRetries = 3
 
+// defaultUserTaskPriority mirrors Camunda's default task priority (ADR-0051): a
+// user task with no zeebe:priorityDefinition sorts as if priority 50.
+const defaultUserTaskPriority = 50
+
 // scriptJobTypes maps a polyglot script task's language (lower-cased) to the
 // reserved job type its in-process worker subscribes to (ADR-0047). Adding a
 // language is one entry here plus its worker; the compiler, node type, and
@@ -343,7 +347,24 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	}
 	for _, ut := range proc.UserTasks {
 		retries := int32(defaultRetries)
-		if err := register(ut.Id, b.AddUserTask(ut.Name, ut.Assignment.Assignee, ut.Assignment.CandidateGroups, ut.Form.FormId, retries)); err != nil {
+		priority := int32(defaultUserTaskPriority)
+		if s := strings.TrimSpace(ut.Priority.Priority); s != "" {
+			p, err := strconv.ParseInt(s, 10, 32)
+			if err != nil {
+				return nil, fmt.Errorf("compiler: user task %q priority %q: %w", ut.Id, s, err)
+			}
+			priority = int32(p)
+		}
+		var dueDateNanos int64
+		if s := strings.TrimSpace(ut.Schedule.DueDate); s != "" {
+			s = strings.TrimSpace(strings.TrimPrefix(s, "=")) // tolerate a FEEL '=' prefix
+			nanos, err := parseISO8601Duration(s)
+			if err != nil {
+				return nil, fmt.Errorf("compiler: user task %q dueDate: %w", ut.Id, err)
+			}
+			dueDateNanos = nanos
+		}
+		if err := register(ut.Id, b.AddUserTask(ut.Name, ut.Assignment.Assignee, ut.Assignment.CandidateGroups, ut.Form.FormId, priority, dueDateNanos, retries)); err != nil {
 			return nil, err
 		}
 	}
@@ -656,6 +677,22 @@ type xmlUserTask struct {
 	Name       string                  `xml:"name,attr"`
 	Assignment xmlAssignmentDefinition `xml:"extensionElements>assignmentDefinition"`
 	Form       xmlFormDefinition       `xml:"extensionElements>formDefinition"`
+	Priority   xmlPriorityDefinition   `xml:"extensionElements>priorityDefinition"`
+	Schedule   xmlTaskSchedule         `xml:"extensionElements>taskSchedule"`
+}
+
+// xmlPriorityDefinition carries zeebe:priorityDefinition's static task priority
+// (ADR-0051). An empty value means the task uses the default priority.
+type xmlPriorityDefinition struct {
+	Priority string `xml:"priority,attr"`
+}
+
+// xmlTaskSchedule carries zeebe:taskSchedule. Atlas reads dueDate as an ISO-8601
+// duration relative to task creation (its timer convention, ADR-0040/0051);
+// followUpDate is not yet executable.
+type xmlTaskSchedule struct {
+	DueDate      string `xml:"dueDate,attr"`
+	FollowUpDate string `xml:"followUpDate,attr"`
 }
 
 // xmlFormDefinition binds a form to a user task by id (ADR-0028). formId
