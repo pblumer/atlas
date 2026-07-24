@@ -96,8 +96,9 @@ type Builder struct {
 	messageStarts     []MessageDetail
 	timerStarts       []TimerStartDetail
 	dataObjects       []CompiledDataObject
-	elementIds        []int32 // interned source BPMN id per node, -1 if unset
-	startFormId       int32   // interned start-form id (ADR-0028), -1 if the process has none
+	dataOutAssocs     []pendingDataOut // data-output associations, grouped by node in Build
+	elementIds        []int32          // interned source BPMN id per node, -1 if unset
+	startFormId       int32            // interned start-form id (ADR-0028), -1 if the process has none
 
 	interner map[string]int32
 	strings  []string
@@ -399,6 +400,30 @@ func (b *Builder) AddDataObject(name, itemType, initialState string, isCollectio
 	return idx
 }
 
+// pendingDataOut pairs a data-output association with the activity node it belongs
+// to, until Build groups them into the shared per-node array.
+type pendingDataOut struct {
+	node  int32
+	assoc DataOutputAssociation
+}
+
+// AddDataOutputAssociation attaches a data-output association to activity node: when
+// the activity completes, the engine evaluates value (a FEEL expression over the
+// instance's variables, nil for a state-only transition) and writes it into the data
+// object named dataObject, advancing that object's data state to targetState (empty
+// keeps the object's current state) — ADR-0058. Build groups a node's associations
+// into a shared array.
+func (b *Builder) AddDataOutputAssociation(node int32, dataObject string, value *expr.Compiled, targetState string) {
+	b.dataOutAssocs = append(b.dataOutAssocs, pendingDataOut{
+		node: node,
+		assoc: DataOutputAssociation{
+			DataObject:  b.intern(dataObject),
+			Value:       value,
+			TargetState: b.intern(targetState),
+		},
+	})
+}
+
 // AddTask adds an undefined/manual task — one with no execution semantics — and
 // returns its element id. It carries no detail and simply passes the token
 // straight through, so a model can be drafted and its routing tested before its
@@ -536,6 +561,22 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		n.BoundaryCount = int32(len(boundary)) - n.BoundaryStart
 	}
 
+	// Group data-output associations by their activity node into one shared array,
+	// mirroring the outgoing-flow and boundary-event grouping, so evaluating a
+	// completing activity's associations is an allocation-free slice at runtime
+	// (ADR-0058).
+	var dataOut []DataOutputAssociation
+	for i := range b.nodes {
+		n := &b.nodes[i]
+		n.DataOutStart = int32(len(dataOut))
+		for _, p := range b.dataOutAssocs {
+			if p.node == n.ElementId {
+				dataOut = append(dataOut, p.assoc)
+			}
+		}
+		n.DataOutCount = int32(len(dataOut)) - n.DataOutStart
+	}
+
 	// Count incoming flows per node, so a parallel join knows how many tokens to
 	// wait for.
 	for _, f := range b.flows {
@@ -570,6 +611,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		messageStarts:     b.messageStarts,
 		timerStarts:       b.timerStarts,
 		dataObjects:       b.dataObjects,
+		dataOutAssocs:     dataOut,
 		startEvents:       startEvents,
 		elementIds:        b.elementIds,
 		startFormId:       b.startFormId,

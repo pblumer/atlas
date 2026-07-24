@@ -206,6 +206,16 @@ func (c *ProcessingContext) AppendDataObjectEvent(intent model.Intent, v model.D
 	c.appendEvent(v.ScopeKey, model.VTDataObject, intent, inflightValue{dataObject: v})
 }
 
+// GetDataObject reads a scope's data object by name through the in-flight
+// transaction (sees writes from earlier in this batch). A data-output association
+// uses it to keep the object's current value or state when the write changes only
+// one of them (ADR-0058); nil if the object is absent.
+func (c *ProcessingContext) GetDataObject(scope uint64, name string) *model.DataObjectValue {
+	v, err := c.tx.GetDataObject(scope, name)
+	c.p.fail(err)
+	return v
+}
+
 // AppendMessageSubscriptionEvent records a message-subscription fact (created or
 // correlated). The key is the waiting element instance's key, and the value
 // carries the match pair, so applyToState can locate the index entry from the

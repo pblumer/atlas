@@ -7,6 +7,20 @@ import (
 	"github.com/pblumer/atlas/compiler"
 )
 
+// TestProcessId checks a compiled process reports the BPMN process id it was built
+// with — the identity a deployment uses to tell one process's versions apart.
+func TestProcessId(t *testing.T) {
+	b := compiler.NewBuilder(1, "order-process", 3)
+	b.AddStartEvent()
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if got := cp.ProcessId(); got != "order-process" {
+		t.Errorf("ProcessId() = %q, want order-process", got)
+	}
+}
+
 // TestBuilderAddDataObject checks that data objects added programmatically land in
 // the compiled process's data-object table with their strings interned and
 // resolvable, and that they are not flow nodes (ADR-0053).
@@ -112,5 +126,204 @@ func TestParseDataObjectDefaultsToId(t *testing.T) {
 	}
 	if got := cp.Intern(dos[0].InitialState); got != "" {
 		t.Errorf("initial state = %q, want empty", got)
+	}
+}
+
+// TestParseDataOutputAssociation compiles a task with a <dataOutputAssociation>
+// targeting a <dataObjectReference> that carries a [approved] data state, and
+// checks the association reaches the compiled node with the resolved data-object
+// name, the target state, and a compiled value expression (ADR-0058).
+func TestParseDataOutputAssociation(t *testing.T) {
+	const model = `<?xml version="1.0"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="p" isExecutable="true">
+    <dataObject id="DataObject_order" name="order"><dataState name="received"/></dataObject>
+    <dataObjectReference id="Ref_approved" dataObjectRef="DataObject_order"><dataState name="approved"/></dataObjectReference>
+    <startEvent id="Start"/>
+    <task id="Approve">
+      <dataOutputAssociation id="doa1">
+        <targetRef>Ref_approved</targetRef>
+        <assignment><from>=decision</from></assignment>
+      </dataOutputAssociation>
+    </task>
+    <endEvent id="End"/>
+    <sequenceFlow id="f1" sourceRef="Start" targetRef="Approve"/>
+    <sequenceFlow id="f2" sourceRef="Approve" targetRef="End"/>
+  </process>
+</definitions>`
+
+	cp, err := compiler.Parse(1, 1, strings.NewReader(model))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	// Find the Approve task node by its BPMN id.
+	var node int32 = -1
+	for id := int32(0); ; id++ {
+		if cp.ElementBpmnId(id) == "" && id > 10 {
+			break
+		}
+		if cp.ElementBpmnId(id) == "Approve" {
+			node = id
+			break
+		}
+	}
+	if node < 0 {
+		t.Fatal("Approve task node not found")
+	}
+	assocs := cp.DataOutputAssociations(node)
+	if len(assocs) != 1 {
+		t.Fatalf("associations = %d, want 1", len(assocs))
+	}
+	a := assocs[0]
+	if got := cp.Intern(a.DataObject); got != "order" {
+		t.Errorf("DataObject = %q, want order", got)
+	}
+	if got := cp.Intern(a.TargetState); got != "approved" {
+		t.Errorf("TargetState = %q, want approved", got)
+	}
+	if a.Value == nil {
+		t.Error("Value expr = nil, want compiled FEEL for =decision")
+	}
+}
+
+// TestParseDataOutputAssociationDirectTarget checks a targetRef that names a data
+// object directly (no reference) resolves to that object with no state change, and
+// that an association with no <assignment> is a state-only transition (nil value).
+func TestParseDataOutputAssociationDirectTarget(t *testing.T) {
+	const model = `<?xml version="1.0"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="p" isExecutable="true">
+    <dataObject id="DataObject_order" name="order"/>
+    <startEvent id="Start"/>
+    <task id="Touch"><dataOutputAssociation><targetRef>DataObject_order</targetRef></dataOutputAssociation></task>
+    <endEvent id="End"/>
+    <sequenceFlow id="f1" sourceRef="Start" targetRef="Touch"/>
+    <sequenceFlow id="f2" sourceRef="Touch" targetRef="End"/>
+  </process>
+</definitions>`
+
+	cp, err := compiler.Parse(1, 1, strings.NewReader(model))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	var node int32 = -1
+	for id := int32(0); id < 10; id++ {
+		if cp.ElementBpmnId(id) == "Touch" {
+			node = id
+			break
+		}
+	}
+	if node < 0 {
+		t.Fatal("Touch task node not found")
+	}
+	assocs := cp.DataOutputAssociations(node)
+	if len(assocs) != 1 {
+		t.Fatalf("associations = %d, want 1", len(assocs))
+	}
+	if got := cp.Intern(assocs[0].DataObject); got != "order" {
+		t.Errorf("DataObject = %q, want order", got)
+	}
+	if got := cp.Intern(assocs[0].TargetState); got != "" {
+		t.Errorf("TargetState = %q, want empty (direct target keeps state)", got)
+	}
+	if assocs[0].Value != nil {
+		t.Error("Value expr != nil, want nil (no assignment = state-only)")
+	}
+}
+
+// TestParseDataOutputAssociationUnknownTarget rejects a targetRef that names
+// neither a data object nor a reference — a modeling error caught at compile time.
+func TestParseDataOutputAssociationUnknownTarget(t *testing.T) {
+	const model = `<?xml version="1.0"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="p" isExecutable="true">
+    <dataObject id="DataObject_order" name="order"/>
+    <startEvent id="Start"/>
+    <task id="Bad"><dataOutputAssociation><targetRef>Nope</targetRef></dataOutputAssociation></task>
+    <endEvent id="End"/>
+    <sequenceFlow id="f1" sourceRef="Start" targetRef="Bad"/>
+    <sequenceFlow id="f2" sourceRef="Bad" targetRef="End"/>
+  </process>
+</definitions>`
+
+	if _, err := compiler.Parse(1, 1, strings.NewReader(model)); err == nil {
+		t.Fatal("Parse err = nil, want an error for unknown targetRef")
+	}
+}
+
+// TestParseDataOutputAssociationUnknownReferenceObject rejects a reference whose
+// dataObjectRef points at no declared data object.
+func TestParseDataOutputAssociationUnknownReferenceObject(t *testing.T) {
+	const model = `<?xml version="1.0"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="p" isExecutable="true">
+    <dataObjectReference id="Ref" dataObjectRef="DataObject_missing"><dataState name="x"/></dataObjectReference>
+    <startEvent id="Start"/>
+    <task id="Bad"><dataOutputAssociation><targetRef>Ref</targetRef></dataOutputAssociation></task>
+    <endEvent id="End"/>
+    <sequenceFlow id="f1" sourceRef="Start" targetRef="Bad"/>
+    <sequenceFlow id="f2" sourceRef="Bad" targetRef="End"/>
+  </process>
+</definitions>`
+
+	if _, err := compiler.Parse(1, 1, strings.NewReader(model)); err == nil {
+		t.Fatal("Parse err = nil, want an error for a reference with an unknown dataObjectRef")
+	}
+}
+
+// TestParseDataOutputAssociationBadExpr rejects an association whose assignment
+// carries a FEEL expression that does not compile.
+func TestParseDataOutputAssociationBadExpr(t *testing.T) {
+	const model = `<?xml version="1.0"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="p" isExecutable="true">
+    <dataObject id="DataObject_order" name="order"/>
+    <startEvent id="Start"/>
+    <task id="Bad">
+      <dataOutputAssociation>
+        <targetRef>DataObject_order</targetRef>
+        <assignment><from>=1 +</from></assignment>
+      </dataOutputAssociation>
+    </task>
+    <endEvent id="End"/>
+    <sequenceFlow id="f1" sourceRef="Start" targetRef="Bad"/>
+    <sequenceFlow id="f2" sourceRef="Bad" targetRef="End"/>
+  </process>
+</definitions>`
+
+	if _, err := compiler.Parse(1, 1, strings.NewReader(model)); err == nil {
+		t.Fatal("Parse err = nil, want an error for an invalid assignment expression")
+	}
+}
+
+// TestBuilderAddDataOutputAssociation checks the programmatic builder groups a
+// node's output associations into the shared array reachable via the accessor.
+func TestBuilderAddDataOutputAssociation(t *testing.T) {
+	b := compiler.NewBuilder(1, "p", 1)
+	start := b.AddStartEvent()
+	task := b.AddTask()
+	end := b.AddEndEvent()
+	b.Connect(start, task)
+	b.Connect(task, end)
+	b.AddDataObject("order", "", "received", false)
+	b.AddDataOutputAssociation(task, "order", nil, "approved")
+
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	assocs := cp.DataOutputAssociations(task)
+	if len(assocs) != 1 {
+		t.Fatalf("associations = %d, want 1", len(assocs))
+	}
+	if got := cp.Intern(assocs[0].DataObject); got != "order" {
+		t.Errorf("DataObject = %q, want order", got)
+	}
+	if got := cp.Intern(assocs[0].TargetState); got != "approved" {
+		t.Errorf("TargetState = %q, want approved", got)
+	}
+	// A node with no associations has an empty slice.
+	if got := cp.DataOutputAssociations(start); len(got) != 0 {
+		t.Errorf("start associations = %d, want 0", len(got))
 	}
 }
