@@ -1,6 +1,6 @@
 # ADR-0029: Public process start via a published form link
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-23
 - **Deciders:** Atlas maintainers
 

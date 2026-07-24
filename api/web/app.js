@@ -1425,7 +1425,7 @@ async function viewTasks() {
 
 // ---------- Start a process via its start form (ADR-0028) ----------
 async function viewStartProcess() {
-  const state = { procs: [], selected: null, form: null };
+  const state = { procs: [], selected: null, form: null, links: [] };
   view.innerHTML = `
     <div class="tasks" id="start-grid">
       <section class="tasks-list-pane">
@@ -1476,7 +1476,9 @@ async function viewStartProcess() {
         <div class="tasks-field"><span class="tasks-field-label muted">Process</span><span class="chip">${esc(p.processId)}</span></div>
         <div class="tasks-field"><span class="tasks-field-label muted">Version</span><span>${p.version}</span></div>
       </div>
-      <div class="tasks-form" id="start-form"><p class="muted">Loading form&hellip;</p></div>`;
+      <div class="tasks-form" id="start-form"><p class="muted">Loading form&hellip;</p></div>
+      <div class="tasks-publish" id="start-publish"></div>`;
+    renderPublish(p);
     detailEl.querySelector("#start-go").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
       let variables = {};
@@ -1493,6 +1495,56 @@ async function viewStartProcess() {
       } catch (err) { toast("Start failed: " + err.message, "err"); btn.disabled = false; }
     });
     mountStartForm(p);
+  }
+
+  // renderPublish draws the "Public link" section: an unauthenticated URL anyone
+  // can use to start this process via its form (ADR-0029). It offers publish,
+  // copy, and revoke, and re-renders itself after each change.
+  function renderPublish(p) {
+    const host = detailEl.querySelector("#start-publish");
+    if (!host) return;
+    const link = state.links.find((l) => l.processId === p.processId);
+    if (!link) {
+      host.innerHTML = `
+        <div class="publish-head"><span class="tasks-field-label muted">Public link</span></div>
+        <p class="muted publish-hint">No public link yet. Publish one to let anyone start this process from a form &mdash; no sign-in required.</p>
+        <button class="btn ghost small" id="publish-create">Publish public link</button>`;
+      host.querySelector("#publish-create").addEventListener("click", async (e) => {
+        e.currentTarget.disabled = true;
+        try {
+          const created = await api("POST", "/api/v1/public-links", { processId: p.processId });
+          state.links = state.links.filter((l) => l.processId !== p.processId).concat(created);
+          toast("Public link published");
+          renderPublish(p);
+        } catch (err) { toast("Publish failed: " + err.message, "err"); e.currentTarget.disabled = false; }
+      });
+      return;
+    }
+    const url = location.origin + link.url;
+    host.innerHTML = `
+      <div class="publish-head"><span class="tasks-field-label muted">Public link</span>
+        <span class="chip ok">Live</span></div>
+      <div class="publish-row">
+        <input class="publish-url" id="publish-url" type="text" readonly value="${esc(url)}" />
+        <button class="btn ghost small" id="publish-copy">Copy</button>
+        <a class="btn ghost small" href="${esc(link.url)}" target="_blank" rel="noopener">Open</a>
+      </div>
+      <button class="btn ghost small danger" id="publish-revoke">Revoke</button>`;
+    host.querySelector("#publish-url").addEventListener("focus", (e) => e.currentTarget.select());
+    host.querySelector("#publish-copy").addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(url); toast("Link copied"); }
+      catch { const el = host.querySelector("#publish-url"); el.focus(); el.select(); toast("Press Ctrl/Cmd+C to copy", "err"); }
+    });
+    host.querySelector("#publish-revoke").addEventListener("click", async (e) => {
+      if (!confirm("Revoke this public link? The URL will stop working immediately.")) return;
+      e.currentTarget.disabled = true;
+      try {
+        await api("DELETE", "/api/v1/public-links/" + encodeURIComponent(link.token));
+        state.links = state.links.filter((l) => l.token !== link.token);
+        toast("Public link revoked");
+        renderPublish(p);
+      } catch (err) { toast("Revoke failed: " + err.message, "err"); e.currentTarget.disabled = false; }
+    });
   }
 
   function renderList() {
@@ -1513,7 +1565,11 @@ async function viewStartProcess() {
 
   async function load() {
     try {
-      const all = await api("GET", "/api/v1/processes");
+      const [all, links] = await Promise.all([
+        api("GET", "/api/v1/processes"),
+        api("GET", "/api/v1/public-links").catch(() => []),
+      ]);
+      state.links = Array.isArray(links) ? links : [];
       // Only processes with a start form; keep the latest version per process id.
       const latest = new Map();
       for (const p of all) {

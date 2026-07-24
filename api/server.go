@@ -99,6 +99,8 @@ type Server struct {
 	deploys     *deployStore     // durable sidecar for deployments (ADR-0019)
 	drafts      *draftStore      // durable sidecar for saved-but-not-deployed diagrams
 	forms       *formStore       // durable sidecar for form definitions (ADR-0028)
+	publicLinks *publicLinkStore // durable sidecar for public start links (ADR-0029)
+	publicRate  *rateLimiter     // throttles the unauthenticated public endpoints
 	projects    *projectStore    // durable sidecar for projects grouping artifacts (ADR-0034)
 	dmnrefs     *dmnRefStore     // durable sidecar for DMN reference artifacts (ADR-0034)
 	users       *userStore       // durable sidecar for user accounts (ADR-0044)
@@ -169,6 +171,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	publicLinks, err := newPublicLinkStore(filepath.Join(dataDir, "public-links"))
+	if err != nil {
+		return nil, err
+	}
 	projects, err := newProjectStore(filepath.Join(dataDir, "projects"))
 	if err != nil {
 		return nil, err
@@ -186,16 +192,20 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// Resolver interface, so the rest of the server is unaffected (ADR-0034/0014).
 	resolver := dmnResolverFromEnv(filepath.Join(dataDir, "dmn-models"))
 	s := &Server{
-		proc:         proc,
-		store:        store,
-		tasks:        make(chan func()),
-		quit:         make(chan struct{}),
-		deployments:  map[uint64]*deployment{},
-		nextKey:      1,
-		versions:     map[string]int32{},
-		deploys:      ds,
-		drafts:       drafts,
-		forms:        forms,
+		proc:        proc,
+		store:       store,
+		tasks:       make(chan func()),
+		quit:        make(chan struct{}),
+		deployments: map[uint64]*deployment{},
+		nextKey:     1,
+		versions:    map[string]int32{},
+		deploys:     ds,
+		drafts:      drafts,
+		forms:       forms,
+		publicLinks: publicLinks,
+		// A public start link tolerates a modest burst then ~1 start/sec per IP;
+		// generous for a human intake form, throttling for a script (ADR-0029).
+		publicRate:   newRateLimiter(20, 1),
 		projects:     projects,
 		dmnrefs:      dmnrefs,
 		users:        users,
@@ -387,6 +397,13 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("GET /api/docs", s.handleDocs)
 		mux.HandleFunc("GET /api/docs/", s.handleDocs)
 	}
+
+	// Public, unauthenticated start links (ADR-0029). These live under /public/,
+	// outside the /api/v1 surface auth gates, and expose exactly one thing: the
+	// start form for one token. They are rate-limited in the handlers.
+	mux.HandleFunc("GET /public/forms/{token}", s.handlePublicFormPage)
+	mux.HandleFunc("GET /public/forms/{token}/schema", s.handlePublicFormSchema)
+	mux.HandleFunc("POST /public/forms/{token}/start", s.handlePublicFormStart)
 
 	// The embedded UI is the catch-all; the more specific API patterns above win
 	// under net/http's precedence rules.
