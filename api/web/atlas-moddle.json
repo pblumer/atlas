@@ -28,6 +28,16 @@
         { "name": "default", "type": "String", "isAttr": true },
         { "name": "required", "type": "Boolean", "isAttr": true }
       ]
+    },
+    {
+      "name": "JobScript",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ScriptTask"] },
+      "properties": [
+        { "name": "language", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "source", "type": "String", "isBody": true }
+      ]
     }
   ]
 }

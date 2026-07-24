@@ -261,6 +261,10 @@ function collectFeelVariables(modeler) {
     modeler.get("elementRegistry").forEach((el) => {
       const s = findExt(el.businessObject, "zeebe:Script");
       if (s && s.resultVariable) vars.add(s.resultVariable);
+      // A PowerShell (job) script task writes its result into a variable too, so
+      // offer it for completion just like a FEEL script result (ADR-0044).
+      const js = findExt(el.businessObject, "atlas:JobScript");
+      if (js && js.resultVariable) vars.add(js.resultVariable);
       // A business rule task's decision result is a variable downstream elements
       // can read, so offer it for completion just like a script result.
       const cd = findExt(el.businessObject, "zeebe:CalledDecision");
@@ -824,13 +828,32 @@ function wireProperties(root, modeler, api) {
             </select></label>`;
 
         if (t === "bpmn:ScriptTask") {
-          const s = findExt(bo, "zeebe:Script") || {};
-          const exprText = (s.expression || "").replace(/^=\s*/, "");
-          html += `<h3>Script (FEEL)</h3>
-            <label class="field"><span>Expression</span>
-              <textarea id="f-expr" rows="3" placeholder="amount * (1 + taxRate)">${esc(exprText)}</textarea></label>
-            <label class="field"><span>Result variable</span>
-              <input type="text" id="f-result" value="${esc(s.resultVariable || "")}" placeholder="gross"/></label>`;
+          // A script task is authored either in FEEL (evaluated inline by the
+          // engine, <zeebe:script>) or in a general-purpose language run by a job
+          // worker (<atlas:jobScript>, ADR-0044). The language selector switches
+          // which the task carries; both are still bpmn:ScriptTask.
+          const js = findExt(bo, "atlas:JobScript");
+          const lang = js ? (js.language || "powershell") : "feel";
+          html += `<h3>Script</h3>
+            <label class="field"><span>Language</span>
+              <select id="f-scriptlang">
+                <option value="feel" ${lang === "feel" ? "selected" : ""}>FEEL (built-in, runs in the engine)</option>
+                <option value="powershell" ${lang === "powershell" ? "selected" : ""}>PowerShell (job worker)</option>
+              </select></label>`;
+          if (lang === "feel") {
+            const s = findExt(bo, "zeebe:Script") || {};
+            const exprText = (s.expression || "").replace(/^=\s*/, "");
+            html += `<label class="field"><span>Expression (FEEL)</span>
+                <textarea id="f-expr" rows="3" placeholder="amount * (1 + taxRate)">${esc(exprText)}</textarea></label>
+              <label class="field"><span>Result variable</span>
+                <input type="text" id="f-result" value="${esc(s.resultVariable || "")}" placeholder="gross"/></label>`;
+          } else {
+            html += `<label class="field"><span>Script (PowerShell)</span>
+                <textarea id="f-psbody" rows="6" spellcheck="false" placeholder='Write-Output "Hallo $Vorname"'>${esc(js && js.source || "")}</textarea></label>
+              <label class="field"><span>Result variable</span>
+                <input type="text" id="f-psresult" value="${esc((js && js.resultVariable) || "")}" placeholder="Greeting"/></label>
+              <p class="muted" style="font-size:12px">Runs on a PowerShell job worker, off the engine's hot path. The instance's variables are available as <code>$name</code>; the script's output is written back into the result variable.</p>`;
+          }
         } else if (t === "bpmn:ServiceTask") {
           const d = findExt(bo, "zeebe:TaskDefinition") || {};
           html += `<h3>Task definition</h3>
@@ -954,6 +977,25 @@ function wireProperties(root, modeler, api) {
         } catch (err) { /* stale */ }
       });
     }
+    // Script language selector: switch a script task between FEEL (inline) and
+    // PowerShell (job worker) by swapping which extension it carries, then
+    // re-render so the right fields show. Neither language's fields are lost until
+    // the author edits — switching only removes the other extension.
+    const flang = body.querySelector("#f-scriptlang");
+    if (flang) {
+      flang.addEventListener("change", (e) => {
+        try {
+          if (e.target.value === "powershell") {
+            removeExt(modeler, element, "zeebe:Script");
+            upsertExt(modeler, element, "atlas:JobScript", { language: "powershell" });
+          } else {
+            removeExt(modeler, element, "atlas:JobScript");
+          }
+          show(element);
+        } catch { /* stale */ }
+      });
+    }
+
     const fexpr = body.querySelector("#f-expr");
     const fresult = body.querySelector("#f-result");
     const saveScript = () => savePreservingPanel(() => {
@@ -965,6 +1007,18 @@ function wireProperties(root, modeler, api) {
     });
     if (fexpr) fexpr.addEventListener("change", saveScript);
     if (fresult) fresult.addEventListener("change", saveScript);
+
+    const fpsbody = body.querySelector("#f-psbody");
+    const fpsresult = body.querySelector("#f-psresult");
+    const savePowerShell = () => savePreservingPanel(() => {
+      upsertExt(modeler, element, "atlas:JobScript", {
+        language: "powershell",
+        source: fpsbody.value || "",
+        resultVariable: (fpsresult.value || "").trim(),
+      });
+    });
+    if (fpsbody) fpsbody.addEventListener("change", savePowerShell);
+    if (fpsresult) fpsresult.addEventListener("change", savePowerShell);
 
     const fjob = body.querySelector("#f-jobtype");
     if (fjob) {

@@ -68,6 +68,40 @@ func TestParsePowerShellScriptTask(t *testing.T) {
 	}
 }
 
+// TestParseModelerJobScript locks the modeler round-trip: the exact XML the
+// Modeler writes — a namespace-prefixed <atlas:jobScript> whose script body is
+// element text and may contain XML-special characters — compiles to the job path.
+func TestParseModelerJobScript(t *testing.T) {
+	const modelerBPMN = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0">
+  <bpmn:process id="greeting" isExecutable="true">
+    <bpmn:startEvent id="s"/>
+    <bpmn:scriptTask id="greet">
+      <bpmn:extensionElements>
+        <atlas:jobScript language="powershell" resultVariable="Greeting">if ($a -lt $b) { "small" } else { "big" }</atlas:jobScript>
+      </bpmn:extensionElements>
+    </bpmn:scriptTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="greet"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="greet" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+	cp, err := Parse(1, 1, strings.NewReader(modelerBPMN))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	_, detail := scriptJobTaskDetail(t, cp)
+	if detail.JobType != PwshJobTypeIndex {
+		t.Errorf("job type = %d, want PwshJobTypeIndex", detail.JobType)
+	}
+	if got := cp.Intern(detail.Source); got != `if ($a -lt $b) { "small" } else { "big" }` {
+		t.Errorf("source = %q, want the script body with its < unescaped", got)
+	}
+	if got := cp.Intern(detail.ResultVar); got != "Greeting" {
+		t.Errorf("result var = %q, want Greeting", got)
+	}
+}
+
 // TestPwshJobTypeReserved proves the PowerShell job type occupies a fixed global
 // index (like DMNJobTypeIndex), so a single in-process worker can serve every
 // deployed process, and that the FEEL script task path is unaffected.
