@@ -45,6 +45,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeScriptTask] = scriptTaskBehavior{}
 	p.behaviors[compiler.TypeBusinessRuleTask] = businessRuleTaskBehavior{}
 	p.behaviors[compiler.TypeConnectorTask] = connectorTaskBehavior{}
+	p.behaviors[compiler.TypeScriptJobTask] = scriptJobTaskBehavior{}
 	p.behaviors[compiler.TypeUserTask] = userTaskBehavior{}
 	p.behaviors[compiler.TypeBoundaryEvent] = boundaryEventBehavior{}
 	p.behaviors[compiler.TypeExclusiveGateway] = exclusiveGatewayBehavior{}
@@ -812,6 +813,36 @@ func (connectorTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *m
 }
 
 func (connectorTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// scriptJobTaskBehavior: run a script authored in a general-purpose language
+// (PowerShell, …) off the hot path. Unlike the inline FEEL script task, whose
+// pure expression the engine evaluates on the processor goroutine, a job script
+// is arbitrary side-effecting code: the engine treats it exactly like a service
+// task — create a job on activation and wait — but the job carries the language's
+// reserved job type, so the in-process script worker picks it up, runs the
+// interpreter off the hot path after fsync, and completes the job with the
+// script's result. Keeping the interpreter on the worker side, not in a behavior,
+// keeps the processor allocation-free (I1) and the script's I/O out of
+// applyToState (I4). See ADR-0044.
+type scriptJobTaskBehavior struct{}
+
+func (scriptJobTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.ScriptJobTask(cp.Node(ei.ElementId).Detail)
+	jobKey := c.NewKey()
+	c.AppendJobEvent(jobKey, model.IntentJobCreated, model.JobValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		JobType:            detail.JobType,
+		Retries:            detail.Retries,
+	})
+	c.NotifyJobAvailable(detail.JobType)
+	// Stays Activated until the script worker completes the job.
+}
+
+func (scriptJobTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	completeAndTakeFlows(c, key, ei)
 }
 
