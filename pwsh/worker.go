@@ -1,5 +1,5 @@
 // Package pwsh is Atlas's in-process worker for PowerShell script tasks
-// (ADR-0044). A polyglot script task compiles to a job carrying the reserved
+// (ADR-0047). A polyglot script task compiles to a job carrying the reserved
 // PowerShell job type (compiler.PwshJobType); this worker subscribes to that type
 // via a [job.Runner], and for each job runs the script off the processor
 // goroutine — after fsync — through an [Exec], then writes the script's result

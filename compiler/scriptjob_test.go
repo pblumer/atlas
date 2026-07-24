@@ -9,7 +9,7 @@ import (
 // it carries an <atlas:jobScript> extension (a distinct local name from
 // <zeebe:script>, so the two never collide) naming the language, the result
 // variable, and the script body as element text. The compiler turns it into a
-// job-based task (ADR-0044), not an inline FEEL script.
+// job-based task (ADR-0047), not an inline FEEL script.
 const powershellScriptBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
   <process id="greeting" isExecutable="true">
     <startEvent id="s"/>

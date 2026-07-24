@@ -109,7 +109,7 @@ func lookupOf(cp *compiler.CompiledProcess) pwsh.ProcessLookup {
 // script task creates a job, the in-process pwsh worker runs the script with the
 // instance's variables as input, writes the result back as the task's result
 // variable, completes the job, and the instance finishes — proving Atlas drives a
-// polyglot script through the normal job path (ADR-0044).
+// polyglot script through the normal job path (ADR-0047).
 func TestScriptTaskRunsAndWritesResult(t *testing.T) {
 	store, log := openStore(t)
 	cp, jobType := scriptProcess(t, `"Hallo " + $Vorname`, "Greeting")

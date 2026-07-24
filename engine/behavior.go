@@ -825,7 +825,7 @@ func (connectorTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *
 // interpreter off the hot path after fsync, and completes the job with the
 // script's result. Keeping the interpreter on the worker side, not in a behavior,
 // keeps the processor allocation-free (I1) and the script's I/O out of
-// applyToState (I4). See ADR-0044.
+// applyToState (I4). See ADR-0047.
 type scriptJobTaskBehavior struct{}
 
 func (scriptJobTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {

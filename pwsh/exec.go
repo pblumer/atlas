@@ -17,7 +17,7 @@ const varsEnv = "ATLAS_VARS"
 // CmdExec runs script tasks by shelling out to a real PowerShell interpreter. It
 // is the production [Exec]; tests use a fake instead so they need no pwsh.
 //
-// Security posture (ADR-0044): the interpreter is invoked with -NoProfile and
+// Security posture (ADR-0047): the interpreter is invoked with -NoProfile and
 // -NonInteractive, the instance's variables are passed as JSON via the varsEnv
 // environment variable (not interpolated), and the process runs in the worker's
 // trust domain — never with the engine's credentials. Timeouts and resource

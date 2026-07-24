@@ -14,8 +14,9 @@ import (
 // 3.1 document served at /api/v1/openapi.json. Because registration and
 // description read one table, a served route cannot exist without a documented
 // one; TestOpenAPICoversEveryRoute asserts the two never drift. The document
-// feeds the vendored Scalar explorer at /api/docs (both gated behind
-// --docs), whose "Try it out" issues same-origin requests to this live engine.
+// feeds the vendored Scalar explorer at /api/docs (both served by default,
+// disabled with --docs=false), whose "Try it out" issues same-origin requests
+// to this live engine.
 
 // apiRoute is one HTTP route of the /api/v1 surface: an http.ServeMux pattern,
 // the handler bound to it, and the OpenAPI operation describing it.
@@ -128,6 +129,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Created instance", tObject())}},
 		{"GET", "/api/v1/instances", s.handleListInstances, apiOp{
 			summary: "List active and finished instances", tag: "Instances", resp: jsonBody("Instances", tArray())}},
+		{"GET", "/api/v1/instances/{key}/timeline", s.handleInstanceTimeline, apiOp{
+			summary: "Read a process instance's step-by-step replay timeline", tag: "Instances",
+			resp: jsonBody("Instance timeline", tObject())}},
 		{"DELETE", "/api/v1/instances/{key}", s.handleCancelInstance, apiOp{
 			summary: "Cancel a running instance", tag: "Instances", resp: jsonBody("Cancellation result", tObject())}},
 
@@ -145,8 +149,8 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  jsonBody("Completion variables", schemaObj(map[string]any{"variables": tObject()})),
 			resp: jsonBody("Task key", tObject())}},
 		{"POST", "/api/v1/tasks/{key}/claim", s.handleClaimTask, apiOp{
-			summary: "Claim a user task for an assignee", tag: "Tasks",
-			req:  jsonBody("Assignee", schemaObj(map[string]any{"assignee": tString()}, "assignee")),
+			summary: "Claim a user task (self, or assign a named user)", tag: "Tasks",
+			req:  jsonBody("Optional assignee (empty claims for the signed-in user)", schemaObj(map[string]any{"assignee": tString()})),
 			resp: jsonBody("Task and assignee", tObject())}},
 		{"POST", "/api/v1/tasks/{key}/unclaim", s.handleUnclaimTask, apiOp{
 			summary: "Release a user task's claim", tag: "Tasks", resp: jsonBody("Task key", tObject())}},
@@ -194,6 +198,47 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Delete a DMN reference", tag: "DMN References", status: http.StatusNoContent}},
 		{"POST", "/api/v1/dmnrefs/{id}/validate", s.handleValidateDmnRef, apiOp{
 			summary: "Validate a DMN reference compiles", tag: "DMN References", resp: jsonBody("Validation result", tObject())}},
+
+		{"POST", "/api/v1/auth/login", s.handleLogin, apiOp{
+			summary: "Log in with a username and password", tag: "Auth",
+			req: jsonBody("Credentials", schemaObj(map[string]any{
+				"username": tString(), "password": tString(),
+			}, "username", "password")),
+			resp: jsonBody("Authenticated user", tObject())}},
+		{"POST", "/api/v1/auth/logout", s.handleLogout, apiOp{
+			summary: "Log out the current session", tag: "Auth", resp: jsonBody("Logout result", tObject())}},
+		{"GET", "/api/v1/auth/me", s.handleMe, apiOp{
+			summary: "Report auth status and the current user", tag: "Auth",
+			resp: jsonBody("Auth status", schemaObj(map[string]any{
+				"authEnabled": tBool(), "user": tObject(),
+			}))}},
+
+		{"GET", "/api/v1/users", s.handleListUsers, apiOp{
+			summary: "List user accounts", tag: "Users", resp: jsonBody("Users", tArray())}},
+		{"GET", "/api/v1/users/assignable", s.handleListAssignableUsers, apiOp{
+			summary: "List users a task can be assigned to", tag: "Users", resp: jsonBody("Assignable users", tArray())}},
+		{"POST", "/api/v1/users", s.handleCreateUser, apiOp{
+			summary: "Create a user account", tag: "Users", status: http.StatusCreated,
+			req: jsonBody("New user", schemaObj(map[string]any{
+				"username": tString(), "email": tString(), "displayName": tString(),
+				"password": tString(), "roles": map[string]any{"type": "array", "items": tString()},
+			}, "username", "password")),
+			resp: jsonBody("Created user", tObject())}},
+		{"GET", "/api/v1/users/{id}", s.handleGetUser, apiOp{
+			summary: "Fetch a user account", tag: "Users", resp: jsonBody("User", tObject())}},
+		{"PATCH", "/api/v1/users/{id}", s.handlePatchUser, apiOp{
+			summary: "Update a user account", tag: "Users",
+			req: jsonBody("User changes", schemaObj(map[string]any{
+				"email": tString(), "displayName": tString(),
+				"roles": map[string]any{"type": "array", "items": tString()}, "disabled": tBool(),
+			})),
+			resp: jsonBody("Updated user", tObject())}},
+		{"POST", "/api/v1/users/{id}/password", s.handleSetUserPassword, apiOp{
+			summary: "Set a user's password", tag: "Users",
+			req:  jsonBody("New password", schemaObj(map[string]any{"password": tString()}, "password")),
+			resp: jsonBody("User id", tObject())}},
+		{"DELETE", "/api/v1/users/{id}", s.handleDeleteUser, apiOp{
+			summary: "Delete a user account", tag: "Users", status: http.StatusNoContent}},
 	}
 }
 

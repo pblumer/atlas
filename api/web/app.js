@@ -30,6 +30,93 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 
 const fmtTime = (unix) => unix ? new Date(unix * 1000).toLocaleString() : "—";
 
+// ---------- Auth ----------
+// AUTH mirrors GET /api/v1/auth/me: whether login is enforced and, if so, who is
+// signed in. It gates the whole app in route() and drives the account menu. When
+// enforcement is off (the default single-binary build) enabled is false and the
+// app behaves exactly as before.
+let AUTH = { enabled: false, user: null, loaded: false };
+
+async function loadAuth() {
+  try {
+    const m = await api("GET", "/api/v1/auth/me");
+    AUTH = { enabled: !!(m && m.authEnabled), user: (m && m.user) || null, loaded: true };
+  } catch {
+    // A 401 from /auth/me means enforcement is on and nobody is signed in.
+    AUTH = { enabled: true, user: null, loaded: true };
+  }
+}
+
+const initials = (name) => {
+  const s = String(name || "").trim();
+  if (!s) return "?";
+  const p = s.split(/\s+/);
+  return (p.length > 1 ? p[0][0] + p[1][0] : s.slice(0, 2)).toUpperCase();
+};
+
+// updateAccount reflects the signed-in user in the top-bar avatar and its menu.
+function updateAccount() {
+  const btn = document.querySelector(".topbar .avatar");
+  const menu = window.__acctMenu;
+  if (!btn) return;
+  if (AUTH.enabled && AUTH.user) {
+    const label = AUTH.user.displayName || AUTH.user.username;
+    btn.textContent = initials(label);
+    btn.title = label;
+    if (menu) menu.innerHTML =
+      `<div class="mlabel">Signed in as <b>${esc(AUTH.user.username)}</b></div>` +
+      `<button type="button" data-act="logout">Log out</button>`;
+  } else {
+    btn.textContent = "A";
+    btn.title = AUTH.enabled ? "Account" : "Single-user mode";
+    if (menu) menu.innerHTML = `<div class="mlabel">Single-user mode</div>`;
+  }
+}
+
+async function logout() {
+  try { await api("POST", "/api/v1/auth/logout"); } catch { /* already gone */ }
+  await loadAuth();
+  location.hash = "#/console";
+  route();
+}
+
+// viewLogin is the sign-in screen shown whenever enforcement is on and no session
+// is active. A successful login re-reads auth and drops the user on the Console.
+function viewLogin() {
+  view.innerHTML = `
+    <div class="card" style="max-width:380px; margin:8vh auto">
+      <h1>Sign in</h1>
+      <p class="muted">This Atlas instance requires you to sign in.</p>
+      <form id="login-form">
+        <label class="field">Username
+          <input name="username" autocomplete="username" autofocus required></label>
+        <label class="field">Password
+          <input name="password" type="password" autocomplete="current-password" required></label>
+        <div class="row" style="margin-top:6px"><button class="btn" type="submit">Sign in</button></div>
+        <p id="login-error" class="muted" hidden></p>
+      </form>
+    </div>`;
+  const f = document.getElementById("login-form");
+  f.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(f);
+    const err = document.getElementById("login-error");
+    err.hidden = true;
+    try {
+      await api("POST", "/api/v1/auth/login", {
+        username: fd.get("username"), password: fd.get("password"),
+      });
+      await loadAuth();
+      location.hash = "#/console";
+      route();
+    } catch {
+      err.textContent = "Invalid username or password.";
+      err.style.color = "var(--danger)";
+      err.hidden = false;
+    }
+  });
+}
+
 // ---------- Dropdown menus ----------
 // One delegated document click drives every dropdown: clicking a .dropdown-toggle
 // opens its menu (closing others); clicking anywhere else closes them all.
@@ -163,10 +250,43 @@ function initShell() {
   ).join("");
   nav.addEventListener("click", closeDrawer);
 
+  // Turn the static avatar into an account dropdown (reusing the delegated
+  // dropdown machinery): its menu shows who is signed in and offers Log out.
+  const acct = document.querySelector(".topbar .avatar");
+  if (acct && !acct.classList.contains("dropdown-toggle")) {
+    const wrap = document.createElement("div");
+    wrap.className = "dropdown";
+    acct.parentNode.insertBefore(wrap, acct);
+    acct.classList.add("dropdown-toggle");
+    wrap.appendChild(acct);
+    const menu = document.createElement("div");
+    menu.className = "dropdown-menu";
+    menu.hidden = true;
+    wrap.appendChild(menu);
+    window.__acctMenu = menu;
+    menu.addEventListener("click", (e) => {
+      if (e.target.closest("[data-act=logout]")) { closeAllMenus(); logout(); }
+    });
+  }
+
   api("GET", "/api/v1/info").then((i) => {
     document.querySelectorAll(".org").forEach((e) => { e.textContent = "Atlas Org"; });
     if (i && i.version) document.title = `Atlas ${i.version}`;
-  }).catch(() => {});
+    initHelpMenu(!!(i && i.docs));
+  }).catch(() => { initHelpMenu(false); });
+}
+
+// initHelpMenu fills the top-bar "?" dropdown. Its API Explorer entry opens the
+// Scalar explorer (/api/docs) in a new tab when the server was started with docs
+// enabled; otherwise it shows an inert hint about --docs=false, so the missing
+// link is self-explanatory rather than a dead button (ADR-0043). Open/close is
+// handled by the shared delegated .dropdown-toggle machinery above.
+function initHelpMenu(docsEnabled) {
+  const menu = document.getElementById("help-menu");
+  if (!menu) return;
+  menu.innerHTML = docsEnabled
+    ? `<a role="menuitem" href="/api/docs" target="_blank" rel="noopener">API Explorer <span class="ext" aria-hidden="true">↗</span></a>`
+    : `<span class="help-note">API Explorer is disabled<br><span class="muted">start the server without <code>--docs=false</code></span></span>`;
 }
 
 function setChrome(appId, route) {
@@ -254,7 +374,84 @@ async function viewConsoleEngine() {
   } catch (e) { toast(e.message, "err"); }
 }
 
-function viewConsoleOrg() {
+// userForm renders the create or edit form for a user. In edit mode the username
+// is immutable (it identifies existing sessions and references) and the password
+// has its own action, so neither appears here.
+function userForm(u) {
+  const isEdit = !!u;
+  const admin = isEdit && (u.roles || []).includes("admin");
+  return `<div class="card" style="margin:0 0 14px; background:var(--bg)">
+    <h3 style="margin:0 0 8px">${isEdit ? "Edit user" : "New user"}</h3>
+    <form class="user-form">
+      ${isEdit ? "" : `<label class="field">Username<input name="username" autocomplete="off" required></label>`}
+      <label class="field">Display name<input name="displayName" value="${isEdit ? esc(u.displayName || "") : ""}"></label>
+      <label class="field">Email<input name="email" type="email" value="${isEdit ? esc(u.email || "") : ""}"></label>
+      ${isEdit ? "" : `<label class="field">Password<input name="password" type="password" autocomplete="new-password" required></label>`}
+      <label class="field inline"><input type="checkbox" name="admin"${admin ? " checked" : ""}> Administrator</label>
+      ${isEdit ? `<label class="field inline"><input type="checkbox" name="disabled"${u.disabled ? " checked" : ""}> Disabled</label>` : ""}
+      <div class="row" style="margin-top:4px"><button class="btn" type="submit">${isEdit ? "Save changes" : "Create user"}</button></div>
+    </form></div>`;
+}
+
+// rolesFrom maps the admin checkbox to a stored role list. Every account keeps the
+// base "user" role; ticking Administrator adds "admin" on top.
+const rolesFrom = (fd) => fd.get("admin") ? ["admin", "user"] : ["user"];
+
+async function createUser(fd, reload) {
+  try {
+    await api("POST", "/api/v1/users", {
+      username: (fd.get("username") || "").trim(),
+      displayName: (fd.get("displayName") || "").trim(),
+      email: (fd.get("email") || "").trim(),
+      password: fd.get("password"),
+      roles: rolesFrom(fd),
+    });
+    toast("User created", "ok");
+    reload();
+  } catch (e) { toast("could not create user: " + e.message, "err"); }
+}
+
+async function saveUser(id, fd, reload) {
+  try {
+    await api("PATCH", `/api/v1/users/${encodeURIComponent(id)}`, {
+      displayName: (fd.get("displayName") || "").trim(),
+      email: (fd.get("email") || "").trim(),
+      roles: rolesFrom(fd),
+      disabled: !!fd.get("disabled"),
+    });
+    toast("User updated", "ok");
+    reload();
+  } catch (e) { toast("could not update user: " + e.message, "err"); }
+}
+
+async function resetUserPassword(u, reload) {
+  const pw = window.prompt(`New password for "${u.username}" (at least 8 characters)`);
+  if (pw == null) return;
+  try {
+    await api("POST", `/api/v1/users/${encodeURIComponent(u.id)}/password`, { password: pw });
+    toast("Password updated", "ok");
+  } catch (e) { toast("could not set password: " + e.message, "err"); }
+  reload();
+}
+
+async function toggleUserDisabled(u, reload) {
+  try {
+    await api("PATCH", `/api/v1/users/${encodeURIComponent(u.id)}`, { disabled: !u.disabled });
+    toast(u.disabled ? "User enabled" : "User disabled", "ok");
+  } catch (e) { toast("could not update user: " + e.message, "err"); }
+  reload();
+}
+
+async function deleteUser(u, reload) {
+  if (!window.confirm(`Delete user "${u.username}"? This cannot be undone.`)) return;
+  try {
+    await api("DELETE", `/api/v1/users/${encodeURIComponent(u.id)}`);
+    toast(`Deleted "${u.username}"`, "ok");
+  } catch (e) { toast("could not delete user: " + e.message, "err"); }
+  reload();
+}
+
+async function viewConsoleOrg() {
   const pill = (c) => c.status === "active"
     ? `<span class="pill ok"><span class="dot"></span>${esc(c.statusLabel)}</span>`
     : `<span class="pill warn"><span class="dot"></span>${esc(c.statusLabel)}</span>`;
@@ -267,19 +464,101 @@ function viewConsoleOrg() {
       </td>
       <td style="text-align:right; white-space:nowrap; vertical-align:top">${pill(c)}</td>
     </tr>`;
+
+  // Load the user roster. A 403 means a signed-in non-admin — show a notice
+  // rather than an error card.
+  let users = null;
+  let denied = false;
+  try {
+    users = await api("GET", "/api/v1/users");
+  } catch (e) {
+    denied = /admin/i.test(e.message);
+    if (!denied) throw e;
+  }
+
+  const me = AUTH.user;
+  const roleChips = (roles) => (roles || []).map((r) => `<span class="chip">${esc(r)}</span>`).join(" ");
+  const statusPill = (u) => u.disabled
+    ? `<span class="pill warn"><span class="dot"></span>disabled</span>`
+    : `<span class="pill ok"><span class="dot"></span>active</span>`;
+  const userRow = (u) => `<tr data-id="${esc(u.id)}">
+      <td><span class="chip">${esc(u.username)}</span>${
+        me && u.id === me.id ? ' <span class="muted" style="font-size:12px">(you)</span>' : ""}</td>
+      <td>${esc(u.displayName || "—")}${u.email ? `<div class="muted" style="font-size:12px">${esc(u.email)}</div>` : ""}</td>
+      <td>${roleChips(u.roles)}</td>
+      <td>${statusPill(u)}</td>
+      <td style="text-align:right; white-space:nowrap">
+        <button class="btn ghost" data-act="edit">Edit</button>
+        <button class="btn ghost" data-act="password">Password</button>
+        <button class="btn ghost" data-act="toggle">${u.disabled ? "Enable" : "Disable"}</button>
+        <button class="btn ghost danger" data-act="delete">Delete</button>
+      </td></tr>`;
+
+  const usersCard = denied
+    ? `<div class="card"><h2>Users</h2><p class="muted">Managing users requires the admin role.</p></div>`
+    : `<div class="card" style="padding:0">
+        <div class="between" style="padding:16px 18px 0">
+          <h2>Users</h2><button class="btn" id="new-user">New user</button>
+        </div>
+        <p class="muted" style="padding:0 18px; margin:6px 0 12px">${AUTH.enabled
+          ? "Login is enforced for this instance."
+          : "Login is <b>not</b> enforced — start the server with <code>--auth</code> to require these accounts."}
+          Roles are the hook for finer permissions later; today only <span class="chip">admin</span> is enforced (it gates this page).</p>
+        <div id="user-form-slot" style="padding:0 18px"></div>
+        <table>
+          <thead><tr><th>User</th><th>Name</th><th>Roles</th><th>Status</th><th></th></tr></thead>
+          <tbody id="user-rows">${(users || []).map(userRow).join("")
+            || `<tr><td colspan="5" class="muted" style="padding:14px 18px">No users yet.</td></tr>`}</tbody>
+        </table>
+      </div>`;
+
   view.innerHTML = `
     <div class="card">
       <h1>Organization</h1>
-      <p class="muted">You are the only user in this organization. Multi-user access,
-      roles, and clusters are not part of the single-binary build.</p>
-      <div class="row"><span class="avatar" style="position:static">PB</span><span>Owner</span></div>
+      <p class="muted">${AUTH.enabled
+        ? `Signed in as <b>${esc((me && me.username) || "")}</b>. This instance has multi-user access enabled.`
+        : "Single-user mode: the API and UI are open. Enable login with <code>--auth</code> to enforce the accounts below."}</p>
     </div>
+    ${usersCard}
     <div class="card" style="padding:0; margin-top:18px">
       <div class="between" style="padding:16px 18px 0"><h2>Connectors</h2></div>
       <p class="muted" style="padding:0 18px; margin:6px 0 12px">Sibling engines Atlas
       delegates to. Each is an org-wide integration, shared across every process.</p>
       <table><tbody>${CONNECTORS.map(connectorRow).join("")}</tbody></table>
     </div>`;
+
+  if (denied) return;
+  const reload = () => viewConsoleOrg();
+  const slot = document.getElementById("user-form-slot");
+  document.getElementById("new-user").addEventListener("click", () => {
+    if (slot.dataset.mode === "new") { slot.innerHTML = ""; slot.dataset.mode = ""; return; }
+    slot.dataset.mode = "new";
+    slot.innerHTML = userForm(null);
+    slot.querySelector(".user-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      createUser(new FormData(e.target), reload);
+    });
+  });
+  document.getElementById("user-rows").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+    const u = (users || []).find((x) => x.id === btn.closest("tr").dataset.id);
+    if (!u) return;
+    switch (btn.dataset.act) {
+      case "edit":
+        slot.dataset.mode = "edit";
+        slot.innerHTML = userForm(u);
+        slot.querySelector(".user-form").addEventListener("submit", (ev) => {
+          ev.preventDefault();
+          saveUser(u.id, new FormData(ev.target), reload);
+        });
+        slot.scrollIntoView({ block: "nearest" });
+        break;
+      case "password": resetUserPassword(u, reload); break;
+      case "toggle": toggleUserDisabled(u, reload); break;
+      case "delete": deleteUser(u, reload); break;
+    }
+  });
 }
 
 // groupByProcess collapses deployment versions into one entry per process id,
@@ -877,21 +1156,27 @@ function loadFormViewer() {
 }
 
 async function viewTasks() {
+  // With auth on, identity is the signed-in user (server-authoritative); with auth
+  // off it stays a typed, display-only identity (ADR-0045).
+  const authOn = AUTH.enabled;
   const state = {
     tasks: [],
     folder: "all",
     selected: null, // job key of the selected task
-    me: localStorage.getItem("atlas.tasks.me") || "",
+    me: authOn ? ((AUTH.user && AUTH.user.username) || "") : (localStorage.getItem("atlas.tasks.me") || ""),
+    assignable: [], // enabled users a task can be assigned to, for the picker
     mountedForm: null, // the live form-js viewer instance for the selected task, if any
   };
+
+  const identity = authOn
+    ? `<div class="tasks-identity"><span>You</span><div class="tasks-me">${esc(state.me) || "—"}</div></div>`
+    : `<label class="tasks-identity"><span>You</span>
+        <input id="task-me" type="text" placeholder="e.g. editor" value="${esc(state.me)}" spellcheck="false" /></label>`;
 
   view.innerHTML = `
     <div class="tasks">
       <aside class="tasks-folders">
-        <label class="tasks-identity">
-          <span>You</span>
-          <input id="task-me" type="text" placeholder="e.g. editor" value="${esc(state.me)}" spellcheck="false" />
-        </label>
+        ${identity}
         <nav id="task-folder-nav"></nav>
       </aside>
       <section class="tasks-list-pane">
@@ -1006,6 +1291,15 @@ async function viewTasks() {
     const claimLabel = mine ? "Unclaim" : "Claim";
     const claimHint = !state.me && !mine ? ` title="Set your identity (top left) to claim"` : "";
     const claimDisabled = !state.me && !mine ? " disabled" : "";
+    // Assign-to picker, sourced from real users (ADR-0045). Shown when accounts
+    // exist; selecting one assigns the task to that user.
+    const assignSelect = state.assignable.length
+      ? `<select class="tasks-assign" id="task-assign" title="Assign to a user">
+          <option value="">Assign to&hellip;</option>
+          ${state.assignable.map((u) =>
+            `<option value="${esc(u.username)}"${u.username === t.assignee ? " selected" : ""}>${esc(u.displayName || u.username)}</option>`).join("")}
+        </select>`
+      : "";
     const formArea = t.formId
       ? `<div class="tasks-form" id="task-form"><p class="muted">Loading form&hellip;</p></div>`
       : `<div class="tasks-form-placeholder"><p class="muted">This task has no form; completing it
@@ -1014,6 +1308,7 @@ async function viewTasks() {
       <header class="tasks-detail-head">
         <h1>${esc(taskTitle(t))}</h1>
         <div class="tasks-detail-actions">
+          ${assignSelect}
           <button class="btn neutral" id="task-claim"${claimDisabled}${claimHint}>${claimLabel}</button>
           <button class="btn" id="task-complete">Complete task</button>
         </div>
@@ -1059,7 +1354,9 @@ async function viewTasks() {
           await api("POST", "/api/v1/tasks/" + t.key + "/unclaim");
           toast("Task released");
         } else {
-          await api("POST", "/api/v1/tasks/" + t.key + "/claim", { assignee: state.me });
+          // With auth on the server claims for the signed-in user (empty body);
+          // with auth off we pass the typed identity.
+          await api("POST", "/api/v1/tasks/" + t.key + "/claim", authOn ? undefined : { assignee: state.me });
           toast("Task claimed");
         }
         await load(); // keeps the selection; the detail re-renders with the new assignee
@@ -1068,6 +1365,21 @@ async function viewTasks() {
         btn.disabled = false;
       }
     });
+    const assignEl = document.getElementById("task-assign");
+    if (assignEl) {
+      assignEl.addEventListener("change", async (e) => {
+        const username = e.target.value;
+        if (!username) return;
+        try {
+          await api("POST", "/api/v1/tasks/" + t.key + "/claim", { assignee: username });
+          toast("Assigned to " + username);
+          await load();
+        } catch (err) {
+          toast("Assign failed: " + err.message, "err");
+          e.target.value = t.assignee || "";
+        }
+      });
+    }
     if (t.formId) mountForm(t);
   }
 
@@ -1087,13 +1399,22 @@ async function viewTasks() {
     }
   }
 
-  document.getElementById("task-me").addEventListener("input", (e) => {
-    state.me = e.target.value.trim();
-    localStorage.setItem("atlas.tasks.me", state.me);
-    renderFolders();
-    renderList();
-  });
+  async function loadAssignable() {
+    try { state.assignable = await api("GET", "/api/v1/users/assignable"); }
+    catch { state.assignable = []; }
+  }
+
+  const meInput = document.getElementById("task-me");
+  if (meInput) {
+    meInput.addEventListener("input", (e) => {
+      state.me = e.target.value.trim();
+      localStorage.setItem("atlas.tasks.me", state.me);
+      renderFolders();
+      renderList();
+    });
+  }
   document.getElementById("task-refresh").addEventListener("click", load);
+  await loadAssignable();
   await load();
 }
 
@@ -1122,14 +1443,19 @@ async function viewFormEditor(formId, projectId) {
   await mod.mountFormEditor(view, { api, toast, formId, projectId });
 }
 
-async function viewLive(key) {
+async function viewLive(key, instance) {
   const mod = await import("./editor.js");
-  await mod.mountLive(view, { api, toast, key });
+  await mod.mountLive(view, { api, toast, key, instance });
 }
 
 async function viewCollaboration(key) {
   const mod = await import("./editor.js");
   await mod.mountCollaboration(view, { api, toast, key });
+}
+
+async function viewInstanceReplay(key) {
+  const mod = await import("./editor.js");
+  await mod.mountInstanceReplay(view, { api, toast, key });
 }
 
 // ---------- Router ----------
@@ -1148,13 +1474,24 @@ async function route() {
   else if (path.startsWith("#/operations")) appId = "operations";
   else if (path.startsWith("#/insights")) appId = "insights";
 
+  // Gate the whole app behind login when enforcement is on and no session is
+  // active. Auth off (the default) skips this entirely.
+  if (!AUTH.loaded) await loadAuth();
+  if (AUTH.enabled && !AUTH.user) {
+    document.getElementById("app-name").textContent = "Atlas";
+    document.getElementById("topnav").innerHTML = "";
+    updateAccount();
+    return viewLogin();
+  }
+
   setChrome(appId, path);
+  updateAccount();
   window.scrollTo(0, 0);
 
   try {
     if (path === "#/" || path === "#/console") return await viewConsoleDashboard();
     if (path === "#/console/engine") return await viewConsoleEngine();
-    if (path === "#/console/org") return viewConsoleOrg();
+    if (path === "#/console/org") return await viewConsoleOrg();
     if (path === "#/modeler") return await viewModelerHome();
     const pd = path.match(/^#\/modeler\/p\/(.+)$/);
     if (pd) return await viewProjectDetail(decodeURIComponent(pd[1]));
@@ -1170,10 +1507,19 @@ async function route() {
     if (m) return await viewEditor(Number(m[1]));
     if (path === "#/tasks") return await viewTasks();
     if (path === "#/operations") return await viewInstances();
+    // A specific instance can be deep-linked (…/i/{instanceKey}) — the Modeler's
+    // Deploy & run builds this so a roundtrip lands straight on the started
+    // instance. The plain form defaults the picker to "All instances".
+    const li = path.match(/^#\/operations\/p\/(\d+)\/i\/(\d+)$/);
+    if (li) return await viewLive(Number(li[1]), Number(li[2]));
     const lm = path.match(/^#\/operations\/p\/(\d+)$/);
     if (lm) return await viewLive(Number(lm[1]));
     const cm = path.match(/^#\/operations\/c\/(\d+)$/);
     if (cm) return await viewCollaboration(Number(cm[1]));
+    // A single instance can be replayed step by step (…/i/{instanceKey}) — the
+    // token walks the diagram in activation order (ADR-0046).
+    const im = path.match(/^#\/operations\/i\/(\d+)$/);
+    if (im) return await viewInstanceReplay(Number(im[1]));
     if (appId !== "console" && appId !== "modeler" && appId !== "tasks") return viewComingSoon(appId);
     // Unknown route → dashboard.
     location.hash = "#/console";
@@ -1184,4 +1530,4 @@ async function route() {
 
 initShell();
 window.addEventListener("hashchange", route);
-route();
+loadAuth().then(route);

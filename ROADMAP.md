@@ -252,6 +252,28 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   (element templates, READMEs, nested folders), and — later — **importing or
   backing up a whole project from/to a git repository** (a natural fit for the
   same `Resolver`/sidecar seam that already externalizes DMN models).
+- 🚧 **User management & the authentication boundary**
+  ([ADR-0044](docs/adr/0044-user-management-and-authentication-boundary.md)):
+  accounts are a durable sidecar store with an enterprise-ready `User` model — a
+  stable opaque id, a **role list** (RBAC-ready, only `admin` enforced today),
+  `Disabled` for deactivation, and `Source`/`ExternalID` hooks for external
+  identity providers. Passwords are bcrypt-hashed and never leave the server.
+  Enforcement is **opt-in** (`--auth` / `WithAuth()`, off by default, mirroring
+  `--docs`): with it on, `/api/v1` requires a session (opaque HttpOnly cookie),
+  managing users requires `admin`, and a fresh instance seeds an admin from
+  `ATLAS_ADMIN_USERNAME`/`ATLAS_ADMIN_PASSWORD` (a generated password is logged
+  once — no hardcoded credential). The Console's **Organization** page is now a
+  real user-management surface (create/edit/roles/deactivate/delete), with a login
+  gate and an account menu. A last-admin lockout guard prevents an instance from
+  locking every operator out. **User-task assignment is now bound to this
+  identity** ([ADR-0045](docs/adr/0045-user-task-assignment-bound-to-identity.md)):
+  claim is authoritative (an empty body claims for the signed-in user; a named
+  assignee must be a real, enabled account), the Tasks inbox uses the signed-in
+  user as its identity, and an "Assign to…" picker is sourced from a non-admin
+  `GET /api/v1/users/assignable`. Next: external identity (OIDC/SAML/LDAP) via the
+  `Source`/`ExternalID` hooks, per-endpoint RBAC beyond `admin`, groups, durable
+  sessions, multi-tenancy, and audit logging. One honest limitation: the `/mcp`
+  adapter is not yet auth-aware, so under `--auth` front it separately (ADR-0016).
 - 🔲 Later: a polished "workbench" experience on top.
 
 ## Milestone A — Modeler & authoring experience 🔲

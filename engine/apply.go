@@ -44,7 +44,14 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// Retain a token-visit count per element so the Operations overlay can
 			// show where tokens have flowed even after instances finish (ADR-0022).
 			// Derived only from the event payload, so replay rebuilds it (I4).
-			return tx.RecordElementVisit(v.element.ProcessDefKey, v.element.ProcessInstanceKey, v.element.ElementId)
+			if err := tx.RecordElementVisit(v.element.ProcessDefKey, v.element.ProcessInstanceKey, v.element.ElementId); err != nil {
+				return err
+			}
+			// Retain the same activation as an ordered, timestamped step so a single
+			// instance can be replayed step by step (ADR-0046). The order comes from
+			// the event header's timestamp and position, so replay rebuilds an
+			// identically-ordered trail (I4).
+			return tx.RecordElementStep(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId)
 		case model.IntentCompleted, model.IntentTerminated:
 			if err := tx.DeleteElementInstance(h.Key, &v.element); err != nil {
 				return err

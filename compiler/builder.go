@@ -36,7 +36,7 @@ const UserTaskJobTypeIndex int32 = 1
 // PwshJobType is the reserved job type a PowerShell script task carries. The
 // in-process PowerShell script worker subscribes to it to run the script off the
 // hot path and write its result back, the same way the DMN worker subscribes to
-// DMNJobType (ADR-0044). Each polyglot script language gets its own reserved job
+// DMNJobType (ADR-0047). Each polyglot script language gets its own reserved job
 // type so a customer can deploy and secure only the worker(s) they need.
 const PwshJobType = "io.atlas.script.powershell"
 
@@ -44,7 +44,7 @@ const PwshJobType = "io.atlas.script.powershell"
 // every compiled process: NewBuilder reserves it third (after DMN and user
 // tasks), so it is always 2. This lets a single in-process PowerShell worker
 // subscribe by one global index across every deployed process, the same way the
-// DMN worker uses DMNJobTypeIndex (see ADR-0044).
+// DMN worker uses DMNJobTypeIndex (see ADR-0047).
 const PwshJobTypeIndex int32 = 2
 
 // ClioWriteJobType is the reserved job type a clio "write-events" connector task
@@ -175,7 +175,7 @@ func (b *Builder) AddScriptTask(e *expr.Compiled, resultVar string) int32 {
 }
 
 // AddScriptJobTask adds a job-based script task authored in a general-purpose
-// language (ADR-0044) and returns its element id. Like a service task it creates
+// language (ADR-0047) and returns its element id. Like a service task it creates
 // a job on activation and waits; the job carries jobType — a reserved per-language
 // sentinel (e.g. PwshJobType) the in-process script worker for that language picks
 // up, runs source through the interpreter, and completes the job, writing the

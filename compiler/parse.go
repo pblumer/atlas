@@ -15,7 +15,7 @@ import (
 const defaultRetries = 3
 
 // scriptJobTypes maps a polyglot script task's language (lower-cased) to the
-// reserved job type its in-process worker subscribes to (ADR-0044). Adding a
+// reserved job type its in-process worker subscribes to (ADR-0047). Adding a
 // language is one entry here plus its worker; the compiler, node type, and
 // recovery semantics are shared. The mapping is resolved at deploy time
 // (invariant I5) so the runtime never inspects the language.
@@ -255,7 +255,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	}
 	for _, st := range proc.ScriptTasks {
 		// A script task bearing an <atlas:jobScript> extension is a polyglot script
-		// task: it runs in a general-purpose language via the job path (ADR-0044),
+		// task: it runs in a general-purpose language via the job path (ADR-0047),
 		// not inline as FEEL. The language is validated and mapped to its reserved
 		// job type at deploy time (invariant I5), so the runtime worker never has to.
 		if js := st.JobScript; js != nil {
@@ -693,7 +693,7 @@ type xmlTaskDefinition struct {
 // <zeebe:script> extension element. A script task authored in a general-purpose
 // language instead carries an <atlas:jobScript> extension (JobScript); the
 // distinct local name keeps it from colliding with <zeebe:script> in the XML
-// decoder, which matches by local name (ADR-0044).
+// decoder, which matches by local name (ADR-0047).
 type xmlScriptTask struct {
 	Id     string         `xml:"id,attr"`
 	Script xmlZeebeScript `xml:"extensionElements>script"`
@@ -709,7 +709,7 @@ type xmlZeebeScript struct {
 }
 
 // An <atlas:jobScript language="..." resultVariable="...">body</atlas:jobScript>
-// extension: a script task in a general-purpose language (ADR-0044). language
+// extension: a script task in a general-purpose language (ADR-0047). language
 // selects the interpreter/worker (and thus the reserved job type), resultVariable
 // is the process variable the script's result is written back into, and the
 // element text is the script source.

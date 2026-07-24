@@ -1,4 +1,4 @@
-# ADR-0044: Polyglot script tasks (PowerShell, …) via job workers
+# ADR-0047: Polyglot script tasks (PowerShell, …) via job workers
 
 - **Status:** Proposed
 - **Date:** 2026-07-24

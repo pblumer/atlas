@@ -109,13 +109,14 @@ runtime; the explorer works offline.
 **Exposure.** The explorer and the spec are part of the same unauthenticated
 surface as the rest of `/api/v1` and `/mcp`; they add no new privilege, but the
 try-it-out button makes the existing mutating surface (deploy, delete, cancel)
-one click away. Both `/api/docs` and `/api/v1/openapi.json` are therefore
-**gated behind a `--docs` flag and off by default**: an operator opts in
-explicitly, and the "put auth in front before exposing publicly" guidance from
-ADR-0016 applies unchanged. The vendored Scalar JS asset itself is served by the
-existing file server regardless of the flag — it is public library code that
-reveals nothing about the API — so only the interactive explorer shell and the
-machine-readable description of the surface are gated.
+one click away. They are **served by default (opt-out)**, consistent with the
+already-open web UI and `/mcp` endpoint: the same "put auth in front before
+exposing publicly" posture (ADR-0016) already governs the whole surface, so
+singling the explorer out for opt-in would be inconsistent and would mostly
+surprise operators with a 404. An operator who does not want the interactive
+surface disables both `/api/docs` and `/api/v1/openapi.json` with
+`atlas serve --docs=false` (`WithoutDocs`). `/api/v1/info` reports whether docs
+are on, and the web UI's Help ("?") menu links the explorer only when they are.
 
 ### Consequences
 
@@ -131,10 +132,11 @@ machine-readable description of the surface are gated.
   that maintenance mandatory, which is the point). Request/response schemas must
   be described in Go values by hand — richer than the current "no schema at all",
   but bounded and reviewable. The explorer widens how easily the unauthenticated
-  mutating surface is exercised, so it is gated off by default behind `--docs`
-  rather than always served like the read-mostly UI.
+  mutating surface is exercised; because it is on by default, operators who care
+  about exposure must actively pass `--docs=false` (or, as always, front the
+  whole surface with auth) rather than being protected by an off-by-default gate.
 - **Follow-ups / risks to watch:** If finer control is wanted later, the `--docs`
-  gate can grow an env-var equivalent or split spec-only from explorer-on. Keep
+  switch can grow an env-var equivalent or split spec-only from explorer-on. Keep
   the vendored renderer pinned and update it deliberately (ADR-0013 discipline).
   As Milestone 4 adds routes
   (durable deployment path, job-worker surface, queries), they land in the route

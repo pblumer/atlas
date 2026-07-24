@@ -15,6 +15,29 @@ func newDmnRefs(t *testing.T) *dmnRefStore {
 	return ds
 }
 
+// TestDmnRefStoreLoadAllSkipsForeignFiles proves loadAll ignores a subdirectory
+// and a non-.json file rather than failing — the parity of formstore's and
+// deploystore's stray-file tests, exercising the IsDir / suffix skip branch.
+func TestDmnRefStoreLoadAllSkipsForeignFiles(t *testing.T) {
+	ds := newDmnRefs(t)
+	if err := ds.save(dmnRef{ID: "real", Name: "R", ModelRef: "m", CreatedAt: 1}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(ds.dir, "subdir"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(ds.dir, "notes.txt"), []byte("hi"), 0o644); err != nil {
+		t.Fatalf("write txt: %v", err)
+	}
+	got, err := ds.loadAll()
+	if err != nil {
+		t.Fatalf("loadAll: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != "real" {
+		t.Fatalf("loadAll = %+v, want only the real ref", got)
+	}
+}
+
 // TestDmnRefStoreRoundTripAndOrder saves references out of order and reads them
 // back oldest-first, and proves get finds a specific one.
 func TestDmnRefStoreRoundTripAndOrder(t *testing.T) {

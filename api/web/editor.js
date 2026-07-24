@@ -113,7 +113,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId })
       </div>
       <div class="start-panel" id="deploy-panel" hidden>
         <div id="deploy-body"></div>
-        <div class="row">
+        <div class="row" id="deploy-actions">
           <button class="btn" id="deploy-run">Deploy &amp; run</button>
           <button class="btn neutral" id="deploy-only">Deploy only</button>
           <button class="btn neutral" id="deploy-cancel">Cancel</button>
@@ -262,7 +262,7 @@ function collectFeelVariables(modeler) {
       const s = findExt(el.businessObject, "zeebe:Script");
       if (s && s.resultVariable) vars.add(s.resultVariable);
       // A PowerShell (job) script task writes its result into a variable too, so
-      // offer it for completion just like a FEEL script result (ADR-0044).
+      // offer it for completion just like a FEEL script result (ADR-0047).
       const js = findExt(el.businessObject, "atlas:JobScript");
       if (js && js.resultVariable) vars.add(js.resultVariable);
       // A business rule task's decision result is a variable downstream elements
@@ -830,7 +830,7 @@ function wireProperties(root, modeler, api) {
         if (t === "bpmn:ScriptTask") {
           // A script task is authored either in FEEL (evaluated inline by the
           // engine, <zeebe:script>) or in a general-purpose language run by a job
-          // worker (<atlas:jobScript>, ADR-0044). The language selector switches
+          // worker (<atlas:jobScript>, ADR-0047). The language selector switches
           // which the task carries; both are still bpmn:ScriptTask.
           const js = findExt(bo, "atlas:JobScript");
           const lang = js ? (js.language || "powershell") : "feel";
@@ -1373,16 +1373,20 @@ function wireActions(root, modeler, api, toast, projectId) {
   const deployBtn = root.querySelector("#deploy");
   const dpanel = root.querySelector("#deploy-panel");
   const dbody = root.querySelector("#deploy-body");
+  const dactions = root.querySelector("#deploy-actions");
   const drun = root.querySelector("#deploy-run");
   const donly = root.querySelector("#deploy-only");
   const derr = root.querySelector("#deploy-err");
   const closeDeploy = () => { dpanel.hidden = true; derr.textContent = ""; };
 
   // Read the declaration fresh each open — it can change while the editor is up.
+  // Reopening after a success also restores the form and its Deploy buttons (the
+  // success view replaces them with a link back to Operations).
   const openDeploy = () => {
     const bo = rootProcess(modeler);
     dbody.innerHTML = startVarsFormHTML(bo ? readStartVariables(bo) : []);
     wireDeployJSONEditors(dbody);
+    dactions.hidden = false;
     dpanel.hidden = false;
     derr.textContent = "";
     const first = dbody.querySelector(".sv-json, .dv-field");
@@ -1391,6 +1395,40 @@ function wireActions(root, modeler, api, toast, projectId) {
 
   deployBtn.addEventListener("click", () => { dpanel.hidden ? openDeploy() : closeDeploy(); });
   root.querySelector("#deploy-cancel").addEventListener("click", closeDeploy);
+
+  // resolveInstanceLink returns the Operations deep-link for the instance a
+  // Deploy & run just started. A freshly deployed version has exactly one
+  // instance, found by its definition key; that key completes the roundtrip so the
+  // link lands directly on it. If it can't be resolved (a transient list failure),
+  // fall back to the process-level Operations view.
+  const resolveInstanceLink = async (defKey) => {
+    try {
+      const list = await api("GET", "/api/v1/instances");
+      const mine = list.filter((r) => r.processDefKey === defKey);
+      if (mine.length) {
+        const inst = mine.reduce((a, b) => (b.key > a.key ? b : a));
+        return `#/operations/p/${defKey}/i/${inst.key}`;
+      }
+    } catch { /* fall back to the process-level view */ }
+    return `#/operations/p/${defKey}`;
+  };
+
+  // showDeploySuccess replaces the panel form with a confirmation that carries a
+  // link into Operations — the deploy→run→observe roundtrip. `href` targets the
+  // started instance (Deploy & run) or the process (Deploy only / collaboration).
+  const showDeploySuccess = (message, href) => {
+    dactions.hidden = true;
+    derr.textContent = "";
+    dbody.innerHTML = `<div class="deploy-success">
+      <p class="deploy-success-msg">✓ ${esc(message)}</p>
+      <div class="row">
+        <a class="btn" href="${href}">Open in Operations →</a>
+        <button type="button" class="btn neutral" id="deploy-done">Close</button>
+      </div>
+    </div>`;
+    const done = dbody.querySelector("#deploy-done");
+    if (done) done.addEventListener("click", closeDeploy);
+  };
 
   // run === true also starts an instance; run === false deploys only. The start
   // form is read (and validated) only when running, so an unrelated JSON typo
@@ -1413,15 +1451,20 @@ function wireActions(root, modeler, api, toast, projectId) {
         // A collaboration deploys one definition per pool; which pool to start is
         // ambiguous, so just report what was deployed (start pools from Operations).
         // Start variables don't apply here — there's no single instance to seed.
-        toast(`Deployed ${all.length} pools: ${all.map((d) => d.processId).join(", ")}`, "ok");
+        const msg = `Deployed ${all.length} pools: ${all.map((d) => d.processId).join(", ")}`;
+        toast(msg, "ok");
+        showDeploySuccess(msg, "#/operations");
       } else if (run) {
         await api("POST", `/api/v1/processes/${dep.key}/instances`, body);
         const n = body.variables ? Object.keys(body.variables).length : 0;
-        toast(`Deployed ${dep.processId} v${dep.version} and started an instance${n ? ` with ${n} variable${n === 1 ? "" : "s"}` : ""}`, "ok");
+        const msg = `Deployed ${dep.processId} v${dep.version} and started an instance${n ? ` with ${n} variable${n === 1 ? "" : "s"}` : ""}`;
+        toast(msg, "ok");
+        showDeploySuccess(msg, await resolveInstanceLink(dep.key));
       } else {
-        toast(`Deployed ${dep.processId} v${dep.version}`, "ok");
+        const msg = `Deployed ${dep.processId} v${dep.version}`;
+        toast(msg, "ok");
+        showDeploySuccess(msg, `#/operations/p/${dep.key}`);
       }
-      closeDeploy();
     } catch (e) {
       // The Atlas compiler rejects elements it can't execute yet — surface that
       // inline in the panel so the entered variables aren't lost.
@@ -1447,7 +1490,7 @@ function wireActions(root, modeler, api, toast, projectId) {
 // definition is shown, and an instance picker either aggregates every instance's
 // tokens on the diagram or isolates a single one. The selected instance's
 // variables are listed below the diagram.
-export async function mountLive(root, { api, toast, key }) {
+export async function mountLive(root, { api, toast, key, instance }) {
   cleanup();
 
   // Resolve the process this definition version belongs to, and all its versions,
@@ -1480,8 +1523,10 @@ export async function mountLive(root, { api, toast, key }) {
         <label class="bar-select"><span>Instance</span>
           <select id="instance-sel"><option value="all">All instances</option></select></label>
         <div style="flex:1"></div>
+        <a class="btn neutral" id="edit-modeler" href="#/modeler/d/${key}" title="Open this definition in the Modeler">✎ Edit in Modeler</a>
         <button class="btn" id="start">Start instance</button>
         <button class="btn ghost danger" id="cancel-inst" hidden>Cancel instance</button>
+        <a class="btn" id="replay-inst" hidden title="Replay this instance step by step">&#9654; Replay</a>
         <a class="btn" id="collab-link" hidden>⇄ Collaboration replay</a>
         <button class="btn neutral" id="refresh">Refresh</button>
         <span class="pill ok" style="margin-left:8px"><span class="dot"></span><b id="inst-count">0</b>&nbsp;running</span>
@@ -1552,7 +1597,10 @@ export async function mountLive(root, { api, toast, key }) {
   const instSel = root.querySelector("#instance-sel");
   const varPanel = root.querySelector("#var-panel");
   let marked = [];
-  let selected = "all";     // "all" or an instance key (as a string)
+  // "all" or an instance key (as a string). A deep-linked instance (Deploy & run's
+  // roundtrip link, or a shared URL) preselects that one; refreshInstances falls
+  // back to "all" if it no longer exists.
+  let selected = instance != null ? String(instance) : "all";
   let instances = [];       // this version's instances, cached for the picker/variables
   let instSig = "";         // signature of the picker's current option set
 
@@ -1662,9 +1710,18 @@ export async function mountLive(root, { api, toast, key }) {
   // single, still-active instance is selected (there is nothing to cancel for
   // "All instances" or an already-finished one).
   const cancelBtn = root.querySelector("#cancel-inst");
+  const replayBtn = root.querySelector("#replay-inst");
   function updateCancelBtn() {
     const inst = instances.find((r) => String(r.key) === selected);
     cancelBtn.hidden = !(inst && inst.state === "active");
+    // Replay is offered for any single selected instance (active or finished): its
+    // step timeline drives a play/step/scrub walk through the diagram (ADR-0046).
+    if (inst) {
+      replayBtn.href = `#/operations/i/${inst.key}`;
+      replayBtn.hidden = false;
+    } else {
+      replayBtn.hidden = true;
+    }
   }
 
   // Selecting an instance isolates it on the diagram; re-poll right away so the
@@ -2021,6 +2078,272 @@ export async function mountCollaboration(root, { api, toast, key }) {
   root.querySelector("#step-fwd").addEventListener("click", () => {
     pause();
     if (playhead < flows.length) { const f = flows[playhead]; setPlayhead(playhead + 1); animateFlow(f); }
+  });
+  root.querySelector("#step-back").addEventListener("click", () => { pause(); setPlayhead(playhead - 1); });
+  scrub.addEventListener("input", () => { pause(); setPlayhead(Number(scrub.value)); });
+  root.querySelector("#refresh").addEventListener("click", poll);
+
+  await poll();
+  liveTimer = setInterval(poll, 1500);
+}
+
+// mountInstanceReplay renders one process instance read-only and replays it step
+// by step (ADR-0046): the instance's definition diagram with a transport bar that
+// walks the token through the elements in the order they activated. Each step
+// pulses the entered element and, when the two steps are joined by a sequence
+// flow, animates a token dot along that edge — the single-process analogue of the
+// collaboration message-flow replay. The timeline is polled so a still-running
+// instance keeps gaining steps live.
+export async function mountInstanceReplay(root, { api, toast, key }) {
+  cleanup();
+
+  root.innerHTML = `
+    <div class="editor live">
+      <div class="editor-bar">
+        <a class="btn neutral" href="#/operations">&larr; Instances</a>
+        <span class="crumbs" style="margin-left:8px">Replay &middot; <b id="rp-title">Instance ${esc(String(key))}</b></span>
+        <div style="flex:1"></div>
+        <a class="btn neutral" id="rp-live" title="Open this instance's live view">Live view</a>
+        <button class="btn neutral" id="refresh">Refresh</button>
+        <span class="pill" id="rp-state" style="margin-left:8px">&mdash;</span>
+        <span class="pill" style="margin-left:8px"><b id="step-count">0</b>&nbsp;steps</span>
+      </div>
+      <div class="replay-bar">
+        <button class="btn play" id="play">&#9654; Play</button>
+        <button class="btn neutral" id="step-back" title="Previous step">&#9198;</button>
+        <button class="btn neutral" id="step-fwd" title="Next step">&#9197;</button>
+        <input type="range" id="scrub" min="0" max="0" value="0" step="1" aria-label="Step timeline"/>
+        <label class="bar-select"><span>Speed</span>
+          <select id="speed" class="speed">
+            <option value="1">1&times;</option>
+            <option value="2">2&times;</option>
+            <option value="0.5">0.5&times;</option>
+          </select></label>
+        <span class="clock" id="clock">no steps yet</span>
+      </div>
+      <div class="editor-body"><div id="canvas"></div></div>
+      <div class="flow-log" id="step-log"></div>
+      <div class="problems">
+        <span class="legend-swatch live"></span> current step
+        <span class="legend-swatch history" style="margin-left:12px"></span> already walked
+        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--accent);margin:0 4px 0 12px;vertical-align:middle"></span> token move
+        <span style="flex:1"></span>
+        <span class="muted">Timeline polls every 1.5s</span>
+      </div>
+    </div>`;
+
+  let lib;
+  try {
+    lib = await loadBpmn();
+  } catch (e) {
+    root.querySelector("#canvas").innerHTML = `<div class="coming"><p>${esc(e.message)}</p></div>`;
+    return;
+  }
+
+  // The timeline resolves the instance's definition, which the diagram renders.
+  let tl;
+  try {
+    tl = await api("GET", `/api/v1/instances/${key}/timeline`);
+  } catch (e) {
+    root.querySelector("#canvas").innerHTML =
+      `<div class="coming"><p>Could not load this instance's replay.</p>
+       <p class="muted">${esc(e.message)}</p></div>`;
+    return;
+  }
+  root.querySelector("#rp-live").href = `#/operations/p/${tl.processDefKey}/i/${key}`;
+
+  const viewer = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
+  current = viewer;
+
+  try {
+    const xml = await api("GET", `/api/v1/processes/${tl.processDefKey}/xml`);
+    await viewer.importXML(typeof xml === "string" ? xml : String(xml));
+    viewer.get("canvas").zoom("fit-viewport");
+  } catch (e) {
+    root.querySelector("#canvas").innerHTML =
+      `<div class="coming"><p>Could not render this instance's diagram.</p>
+       <p class="muted">${esc(e.message)}</p></div>`;
+    return;
+  }
+
+  const canvas = viewer.get("canvas");
+  const registry = viewer.get("elementRegistry");
+  const layer = canvas.getLayer("atlas-replay", 900); // token dot rides above the diagram
+  const titleEl = root.querySelector("#rp-title");
+  const stateEl = root.querySelector("#rp-state");
+  const stepCountEl = root.querySelector("#step-count");
+  const clockEl = root.querySelector("#clock");
+  const scrub = root.querySelector("#scrub");
+  const playBtn = root.querySelector("#play");
+  const logEl = root.querySelector("#step-log");
+  const speedSel = root.querySelector("#speed");
+
+  let steps = [];    // element-activation timeline, oldest first
+  let marked = [];   // element markers to clear on the next render
+  let playing = false;
+  let playhead = 0;  // number of steps walked so far (0..steps.length)
+  let animToken = 0; // bumped to supersede an in-flight animation
+
+  const speed = () => Number(speedSel.value) || 1;
+  const fmtClock = (ns) => (ns ? new Date(ns / 1e6).toLocaleTimeString() : "");
+
+  function stepLabel(s) {
+    const el = registry.get(s.elementId);
+    const bo = el && el.businessObject;
+    return (bo && (bo.name || bo.id)) || s.elementId || "?";
+  }
+  // A short human label for a compiled node type ("bpmn:ServiceTask" → "Service task").
+  function typeLabel(t) {
+    const bare = String(t || "").replace(/^bpmn:/, "").replace(/([a-z])([A-Z])/g, "$1 $2");
+    return bare ? bare.charAt(0).toUpperCase() + bare.slice(1).toLowerCase() : "";
+  }
+
+  function updateClock() {
+    if (!steps.length) { clockEl.textContent = "no steps yet"; return; }
+    const shown = Math.min(playhead, steps.length);
+    clockEl.textContent = `${shown} / ${steps.length}${shown ? ` · ${fmtClock(steps[shown - 1].at)}` : ""}`;
+  }
+
+  // renderOverlay marks every element walked up to the playhead: the current one
+  // green (the token is "here"), the earlier ones gray (already walked).
+  function renderOverlay() {
+    for (const [id, m] of marked) { try { canvas.removeMarker(id, m); } catch { /* gone */ } }
+    marked = [];
+    for (let i = 0; i < playhead; i++) {
+      const s = steps[i];
+      if (!registry.get(s.elementId)) continue;
+      const marker = i === playhead - 1 ? "atlas-active" : "atlas-visited";
+      canvas.addMarker(s.elementId, marker);
+      marked.push([s.elementId, marker]);
+    }
+  }
+
+  function highlightCurrent() {
+    logEl.querySelectorAll("tr[data-i]").forEach((tr) => {
+      const i = Number(tr.dataset.i);
+      tr.classList.toggle("done", i < playhead);
+      tr.classList.toggle("pending", i >= playhead);
+      tr.classList.toggle("cur", i === playhead - 1);
+    });
+    const cur = logEl.querySelector("tr.cur");
+    if (cur) cur.scrollIntoView({ block: "nearest" });
+  }
+
+  function setPlayhead(n) {
+    playhead = Math.max(0, Math.min(steps.length, n));
+    scrub.value = String(playhead);
+    updateClock();
+    renderOverlay();
+    highlightCurrent();
+  }
+
+  function renderLog() {
+    if (!steps.length) {
+      logEl.innerHTML = `<div class="fl-head">Steps</div>
+        <div class="empty">No steps recorded for this instance yet.</div>`;
+      return;
+    }
+    const rows = steps.map((s, i) => `
+      <tr data-i="${i}">
+        <td class="tnum">${i + 1}</td>
+        <td class="tnum">${fmtClock(s.at)}</td>
+        <td><span class="msg-name">${esc(stepLabel(s))}</span></td>
+        <td class="muted">${esc(typeLabel(s.type))}</td>
+      </tr>`).join("");
+    logEl.innerHTML = `<div class="fl-head">Steps <span class="muted">· ${steps.length}</span></div>
+      <table><tbody>${rows}</tbody></table>`;
+    logEl.querySelectorAll("tr[data-i]").forEach((tr) => tr.addEventListener("click", () => {
+      const i = Number(tr.dataset.i);
+      pause();
+      setPlayhead(i + 1);
+      animateStep(i);
+    }));
+    highlightCurrent();
+  }
+
+  // sequenceFlowBetween finds the connection the modeler drew from srcId to tgtId,
+  // so a step can animate a token dot along the edge the token actually traversed.
+  function sequenceFlowBetween(srcId, tgtId) {
+    let found = null;
+    registry.forEach((el) => {
+      if (found) return;
+      const bo = el.businessObject;
+      if (bo && bo.sourceRef && bo.targetRef && bo.sourceRef.id === srcId && bo.targetRef.id === tgtId
+        && el.waypoints && el.waypoints.length >= 2) found = el;
+    });
+    return found;
+  }
+
+  // animateStep plays the walk INTO step i: the entered element pulses, and if a
+  // sequence flow joins it to the previous step the token dot travels the edge.
+  function animateStep(i) {
+    if (i < 0 || i >= steps.length || current !== viewer) return Promise.resolve();
+    const s = steps[i];
+    if (registry.get(s.elementId)) {
+      canvas.addMarker(s.elementId, "atlas-flow-hit");
+      setTimeout(() => { try { canvas.removeMarker(s.elementId, "atlas-flow-hit"); } catch { /* gone */ } }, 700);
+    }
+    if (i === 0) return Promise.resolve(); // the start event has no incoming walk
+    const conn = sequenceFlowBetween(steps[i - 1].elementId, s.elementId);
+    if (!conn) return Promise.resolve(); // a jump with no drawn edge (e.g. across a gateway)
+    canvas.addMarker(conn.id, "atlas-flow-active");
+    const wps = conn.waypoints.map((w) => ({ x: w.x, y: w.y }));
+    const token = ++animToken;
+    return runDotAnimation(layer, wps, 700 / speed(), () => current !== viewer || token !== animToken)
+      .finally(() => { try { canvas.removeMarker(conn.id, "atlas-flow-active"); } catch { /* gone */ } });
+  }
+
+  function pause() { playing = false; playBtn.innerHTML = "&#9654; Play"; }
+
+  async function play() {
+    if (!steps.length) return;
+    if (playhead >= steps.length) setPlayhead(0); // wrap to replay from the start
+    playing = true;
+    playBtn.innerHTML = "&#9208; Pause";
+    while (playing && current === viewer && playhead < steps.length) {
+      const i = playhead;
+      setPlayhead(playhead + 1);
+      await animateStep(i);
+      if (!playing || current !== viewer) break;
+      // Pause between steps, scaled to the real gap (clamped) and the speed.
+      const gap = playhead < steps.length
+        ? Math.min(1200, Math.max(150, (steps[playhead].at - steps[i].at) / 1e6))
+        : 0;
+      await sleep(gap / speed());
+    }
+    pause();
+  }
+
+  function applyStatePill(state) {
+    stateEl.textContent = state || "—";
+    stateEl.className = "pill" + (state === "active" ? " ok" : "");
+  }
+
+  async function poll() {
+    let next;
+    try { next = await api("GET", `/api/v1/instances/${key}/timeline`); }
+    catch { return; } // transient; try again next tick
+    if (current !== viewer) return;
+    if (next.processId) titleEl.textContent = `${next.processId} · instance ${key}`;
+    applyStatePill(next.state);
+    // Rebuild only when the step set grows, so a poll never disturbs the operator's
+    // current scrub position mid-replay.
+    const list = next.steps || [];
+    if (list.length !== steps.length) {
+      const wasAtEnd = playhead >= steps.length;
+      steps = list;
+      stepCountEl.textContent = String(steps.length);
+      scrub.max = String(steps.length);
+      renderLog();
+      if (!playing && wasAtEnd) setPlayhead(steps.length); // follow new steps live
+      else { scrub.value = String(playhead); updateClock(); renderOverlay(); highlightCurrent(); }
+    }
+  }
+
+  playBtn.addEventListener("click", () => { playing ? pause() : play(); });
+  root.querySelector("#step-fwd").addEventListener("click", () => {
+    pause();
+    if (playhead < steps.length) { const i = playhead; setPlayhead(playhead + 1); animateStep(i); }
   });
   root.querySelector("#step-back").addEventListener("click", () => { pause(); setPlayhead(playhead - 1); });
   scrub.addEventListener("input", () => { pause(); setPlayhead(Number(scrub.value)); });
