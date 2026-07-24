@@ -60,9 +60,17 @@ The control-flow basics most real models use.
   `VarJSON`-capable payload, ADR-0037) and every state transition are durable
   events written to a `cfDataObject` current-value family plus a `cfDataObjectSnapshot`
   history family (the ADR-0048 two-write pattern), so the data-state history and
-  lineage rebuild identically on replay — recovery-tested. Next: data associations
-  (`<dataInput/OutputAssociation>`) as a compiled FEEL read/write contract, a
-  lineage view folding the `SourcePos` chain, the Modeler properties panel for
+  lineage rebuild identically on replay — recovery-tested. Seeded objects are also
+  read over the HTTP API (`GET /api/v1/instances/{key}/data-objects`, name + state +
+  typed value). **Data output associations now write them**
+  ([ADR-0056](docs/adr/0056-data-output-associations.md)): a
+  `<dataOutputAssociation>` on an activity evaluates an `<assignment><from>` FEEL
+  expression over the instance's variables when the activity completes and emits a
+  `DataObjectStateChanged` — setting the object's value and advancing its data state
+  to the one on the target `<dataObjectReference>` (`received → approved`), so the
+  state history becomes a real trail; recovery-tested. Next: data **input**
+  associations (read a data object into an activity's FEEL scope), a lineage view
+  folding the `SourcePos` chain, the Modeler properties panel for
   `DataObjectReference`, item-definition schema validation, and connector-backed
   data stores.
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency

@@ -568,12 +568,85 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	// Data objects are not flow nodes (no token flows through them), so they are
 	// added as a separate collection, not registered as flow nodes (ADR-0053). A
 	// nameless data object falls back to its BPMN id so it stays addressable.
+	objName := make(map[string]string, len(proc.DataObjects)) // BPMN id → data-object name
 	for _, d := range proc.DataObjects {
 		name := d.Name
 		if name == "" {
 			name = d.Id
 		}
+		objName[d.Id] = name
 		b.AddDataObject(name, d.ItemSubjectRef, d.DataState.Name, d.IsCollection)
+	}
+
+	// Wire data-output associations now that every activity node is registered
+	// (ADR-0056). A dataObjectReference resolves to its data object plus the target
+	// data state; a targetRef may also name a data object directly (no state change).
+	refs := make(map[string]xmlDataObjectReference, len(proc.DataObjectReferences))
+	for _, ref := range proc.DataObjectReferences {
+		refs[ref.Id] = ref
+	}
+	// resolveDataTarget maps an association's targetRef to the data-object name it
+	// writes and the data state it moves the object into.
+	resolveDataTarget := func(ownerId, targetRef string) (name, state string, err error) {
+		if ref, ok := refs[targetRef]; ok {
+			name, ok := objName[ref.DataObjectRef]
+			if !ok {
+				return "", "", fmt.Errorf("compiler: data output association on %q references data object reference %q whose dataObjectRef %q is unknown", ownerId, targetRef, ref.DataObjectRef)
+			}
+			return name, ref.DataState.Name, nil
+		}
+		if name, ok := objName[targetRef]; ok {
+			return name, "", nil // targets the object directly; no state change
+		}
+		return "", "", fmt.Errorf("compiler: data output association on %q has unknown targetRef %q", ownerId, targetRef)
+	}
+	wireDataOut := func(ownerId string, assocs []xmlDataOutputAssociation) error {
+		for _, a := range assocs {
+			name, state, err := resolveDataTarget(ownerId, a.TargetRef)
+			if err != nil {
+				return err
+			}
+			var valExpr *expr.Compiled
+			if from := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(a.Assignment.From), "=")); from != "" {
+				ce, err := expr.CompileAuto(from)
+				if err != nil {
+					return fmt.Errorf("compiler: data output association on %q assignment: %w", ownerId, err)
+				}
+				valExpr = ce
+			}
+			b.AddDataOutputAssociation(ids[ownerId], name, valExpr, state)
+		}
+		return nil
+	}
+	for _, st := range proc.ServiceTasks {
+		if err := wireDataOut(st.Id, st.DataOut); err != nil {
+			return nil, err
+		}
+	}
+	for _, st := range proc.ScriptTasks {
+		if err := wireDataOut(st.Id, st.DataOut); err != nil {
+			return nil, err
+		}
+	}
+	for _, brt := range proc.BusinessRuleTasks {
+		if err := wireDataOut(brt.Id, brt.DataOut); err != nil {
+			return nil, err
+		}
+	}
+	for _, ut := range proc.UserTasks {
+		if err := wireDataOut(ut.Id, ut.DataOut); err != nil {
+			return nil, err
+		}
+	}
+	for _, t := range proc.Tasks {
+		if err := wireDataOut(t.Id, t.DataOut); err != nil {
+			return nil, err
+		}
+	}
+	for _, t := range proc.ManualTasks {
+		if err := wireDataOut(t.Id, t.DataOut); err != nil {
+			return nil, err
+		}
 	}
 
 	return b.Build()
@@ -645,7 +718,8 @@ type xmlProcess struct {
 	SendTasks    []xmlNode `xml:"sendTask"`
 	ReceiveTasks []xmlNode `xml:"receiveTask"`
 
-	DataObjects []xmlDataObject `xml:"dataObject"`
+	DataObjects          []xmlDataObject          `xml:"dataObject"`
+	DataObjectReferences []xmlDataObjectReference `xml:"dataObjectReference"`
 }
 
 // A BPMN data object. It is not a flow node — no token flows through it — so it
@@ -665,6 +739,32 @@ type xmlDataObject struct {
 // object or reference), carried by its name.
 type xmlDataState struct {
 	Name string `xml:"name,attr"`
+}
+
+// A BPMN data object reference: a pointer to a <dataObject> (dataObjectRef) that may
+// carry its own <dataState> — so the same object can appear on the canvas in several
+// states (order [received], order [approved]). A data-output association targets a
+// reference to say which object it writes and what state it moves it into (ADR-0056).
+type xmlDataObjectReference struct {
+	Id            string       `xml:"id,attr"`
+	DataObjectRef string       `xml:"dataObjectRef,attr"`
+	DataState     xmlDataState `xml:"dataState"`
+}
+
+// xmlDataOutputAssociation is a <dataOutputAssociation> on an activity: targetRef
+// names the data object (or a <dataObjectReference> to it) the activity writes, and
+// the optional <assignment><from> is a FEEL expression, evaluated over the instance's
+// variables at completion, that produces the written value (ADR-0056).
+type xmlDataOutputAssociation struct {
+	TargetRef  string        `xml:"targetRef"`
+	Assignment xmlAssignment `xml:"assignment"`
+}
+
+// xmlAssignment is a data association's <assignment>: a <from> value expression and a
+// <to> target. Atlas reads <from> as the FEEL value expression; the target is the
+// association's targetRef (the <to> is redundant with it and ignored).
+type xmlAssignment struct {
+	From string `xml:"from"`
 }
 
 // A data-based exclusive gateway; default names the flow taken when no outgoing
@@ -741,18 +841,20 @@ type xmlTimerEventDefinition struct {
 }
 
 type xmlNode struct {
-	Id string `xml:"id,attr"`
+	Id      string                     `xml:"id,attr"`
+	DataOut []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
 }
 
 // A user task parks a token for human completion (ADR-0028). It optionally
 // carries a zeebe:assignmentDefinition for assignee/candidateGroups.
 type xmlUserTask struct {
-	Id         string                  `xml:"id,attr"`
-	Name       string                  `xml:"name,attr"`
-	Assignment xmlAssignmentDefinition `xml:"extensionElements>assignmentDefinition"`
-	Form       xmlFormDefinition       `xml:"extensionElements>formDefinition"`
-	Priority   xmlPriorityDefinition   `xml:"extensionElements>priorityDefinition"`
-	Schedule   xmlTaskSchedule         `xml:"extensionElements>taskSchedule"`
+	Id         string                     `xml:"id,attr"`
+	Name       string                     `xml:"name,attr"`
+	Assignment xmlAssignmentDefinition    `xml:"extensionElements>assignmentDefinition"`
+	Form       xmlFormDefinition          `xml:"extensionElements>formDefinition"`
+	Priority   xmlPriorityDefinition      `xml:"extensionElements>priorityDefinition"`
+	Schedule   xmlTaskSchedule            `xml:"extensionElements>taskSchedule"`
+	DataOut    []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
 }
 
 // xmlPriorityDefinition carries zeebe:priorityDefinition's static task priority
@@ -790,7 +892,8 @@ type xmlServiceTask struct {
 	// Rest, when present, marks this service task an HTTP-REST connector task
 	// (ADR-0036). The pointer is nil when the <atlas:restConnector> extension is
 	// absent.
-	Rest *xmlRestConnector `xml:"extensionElements>restConnector"`
+	Rest    *xmlRestConnector          `xml:"extensionElements>restConnector"`
+	DataOut []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
 }
 
 // A clio connector task's parameters, carried on a service task as an
@@ -832,7 +935,8 @@ type xmlScriptTask struct {
 	// JobScript, when present, marks this a polyglot job script (PowerShell, …),
 	// run via the job path rather than inline as FEEL. The pointer is nil when the
 	// <atlas:jobScript> extension is absent.
-	JobScript *xmlAtlasScript `xml:"extensionElements>jobScript"`
+	JobScript *xmlAtlasScript            `xml:"extensionElements>jobScript"`
+	DataOut   []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
 }
 
 type xmlZeebeScript struct {
@@ -875,7 +979,8 @@ type xmlBusinessRuleTask struct {
 	// evaluated by a remote temis service rather than the embedded library
 	// (ADR-0050). The pointer is nil when the <atlas:temisConnector> extension is
 	// absent, i.e. the decision is evaluated locally.
-	TemisConnector *xmlTemisConnector `xml:"extensionElements>temisConnector"`
+	TemisConnector *xmlTemisConnector         `xml:"extensionElements>temisConnector"`
+	DataOut        []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
 }
 
 // xmlTemisConnector is the <atlas:temisConnector connector="..."/> extension that

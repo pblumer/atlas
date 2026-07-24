@@ -145,9 +145,56 @@ func handleElementActivating(c *ProcessingContext) {
 // completed normally (their timers/subscriptions self-retire).
 func handleElementCompleting(c *ProcessingContext) {
 	ei := &c.cmd.Value.element
+	// Write the activity's data-output associations before it completes, so a data
+	// object it produces is in state before any outgoing flow activates the next
+	// element (ADR-0056). Any element type may carry associations, so this is a
+	// single shared point rather than per-behavior logic.
+	applyDataOutputAssociations(c, ei)
 	c.p.behavior(ei.BpmnElementType).OnCompleting(c, c.cmd.Key, ei)
 	if c.process(ei.ProcessDefKey).Node(ei.ElementId).BoundaryCount > 0 {
 		disarmBoundaryEvents(c, c.cmd.Key, ei.ProcessInstanceKey)
+	}
+}
+
+// applyDataOutputAssociations evaluates a completing activity's data-output
+// associations (ADR-0056): for each, it computes the written value from the
+// association's FEEL expression over the instance's variables (a nil expression is
+// a state-only transition that keeps the object's current value), and emits a
+// DataObjectStateChanged event moving the object into the association's target data
+// state (an unset target keeps the object's current state). The value and state ride
+// in the event, so applyToState re-applies them on replay without re-evaluating
+// (invariants I4/I6) — exactly as a script task's result variable does.
+func applyDataOutputAssociations(c *ProcessingContext, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	assocs := cp.DataOutputAssociations(ei.ElementId)
+	for i := range assocs {
+		a := &assocs[i]
+		name := cp.Intern(a.DataObject)
+		cur := c.GetDataObject(ei.ProcessInstanceKey, name)
+
+		out := model.DataObjectValue{ScopeKey: ei.ProcessInstanceKey, Name: name}
+		switch {
+		case a.Value != nil:
+			result, err := a.Value.Eval(bindInputs(c, a.Value.Inputs(), ei.ProcessInstanceKey))
+			if err != nil {
+				// Incidents are not modeled yet; FEEL is null-propagating, so a failed
+				// evaluation writes null rather than halting the processor.
+				result = expr.Null
+			}
+			kind, b, text := expr.Classify(result)
+			out.Kind, out.Bool, out.Text = toVarKind(kind), b, text
+		case cur != nil:
+			// State-only transition: keep the object's current value.
+			out.Kind, out.Bool, out.Text = cur.Kind, cur.Bool, cur.Text
+		}
+
+		if a.TargetState >= 0 {
+			out.State = cp.Intern(a.TargetState)
+		} else if cur != nil {
+			out.State = cur.State // no target state: keep the current one
+		}
+
+		c.AppendDataObjectEvent(model.IntentDataObjectStateChanged, out)
 	}
 }
 
