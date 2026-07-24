@@ -1,5 +1,5 @@
 // BPMN editor view. Embeds the vendored bpmn-js modeler (ADR-0013): the canvas,
-// palette, and context pad come from bpmn-js; the Details panel and Deploy&run
+// palette, and context pad come from bpmn-js; the Details panel and Deploy
 // wiring are ours. Assets load lazily so non-editor pages stay light.
 
 import { attachFeelEditor } from "./feel.js";
@@ -109,12 +109,13 @@ export async function mountEditor(root, { api, toast, key, draftId }) {
         <div style="flex:1"></div>
         <button class="btn neutral" id="save">Save</button>
         <button class="btn neutral" id="export">Export XML</button>
-        <button class="btn" id="deploy">Deploy &amp; run</button>
+        <button class="btn" id="deploy">Deploy</button>
       </div>
       <div class="start-panel" id="deploy-panel" hidden>
         <div id="deploy-body"></div>
         <div class="row">
-          <button class="btn" id="deploy-go">Deploy &amp; run</button>
+          <button class="btn" id="deploy-run">Deploy &amp; run</button>
+          <button class="btn neutral" id="deploy-only">Deploy only</button>
           <button class="btn neutral" id="deploy-cancel">Cancel</button>
           <span class="err" id="deploy-err"></span>
         </div>
@@ -1304,16 +1305,19 @@ function wireActions(root, modeler, api, toast) {
     } catch (e) { toast("export failed: " + e.message, "err"); }
   });
 
-  // Deploy & run opens a panel to (optionally) enter start variables, then
-  // deploys the model and starts an instance seeded with them — the editor's
-  // equivalent of the Live view's Start instance, so a process that needs input
-  // can be launched and tested without leaving the Modeler. When the process
-  // declares start variables (Process panel → Start variables) the panel shows a
-  // typed form built from that declaration; otherwise a free-form JSON textarea.
+  // Deploy opens a panel that offers two actions: "Deploy only" makes the model
+  // runnable without touching the runtime, and "Deploy & run" additionally starts
+  // an instance seeded with the entered start variables — the editor's equivalent
+  // of the Live view's Start instance. A developer iterating on a model shouldn't
+  // be forced to spin up an instance every time they deploy, so the two are split.
+  // When the process declares start variables (Process panel → Start variables)
+  // the panel shows a typed form built from that declaration; otherwise a
+  // free-form JSON textarea. Start variables only apply to "Deploy & run".
   const deployBtn = root.querySelector("#deploy");
   const dpanel = root.querySelector("#deploy-panel");
   const dbody = root.querySelector("#deploy-body");
-  const dgo = root.querySelector("#deploy-go");
+  const drun = root.querySelector("#deploy-run");
+  const donly = root.querySelector("#deploy-only");
   const derr = root.querySelector("#deploy-err");
   const closeDeploy = () => { dpanel.hidden = true; derr.textContent = ""; };
 
@@ -1331,12 +1335,18 @@ function wireActions(root, modeler, api, toast) {
   deployBtn.addEventListener("click", () => { dpanel.hidden ? openDeploy() : closeDeploy(); });
   root.querySelector("#deploy-cancel").addEventListener("click", closeDeploy);
 
-  dgo.addEventListener("click", async () => {
-    let body;
-    try {
-      body = readStartFormBody(dbody);
-    } catch (e) { derr.textContent = e.message; return; }
-    dgo.disabled = true;
+  // run === true also starts an instance; run === false deploys only. The start
+  // form is read (and validated) only when running, so an unrelated JSON typo
+  // never blocks a plain deploy.
+  const doDeploy = async (run) => {
+    let body = {};
+    if (run) {
+      try {
+        body = readStartFormBody(dbody);
+      } catch (e) { derr.textContent = e.message; return; }
+    }
+    drun.disabled = true;
+    donly.disabled = true;
     derr.textContent = "";
     try {
       const { xml } = await modeler.saveXML({ format: true });
@@ -1347,10 +1357,12 @@ function wireActions(root, modeler, api, toast) {
         // ambiguous, so just report what was deployed (start pools from Operations).
         // Start variables don't apply here — there's no single instance to seed.
         toast(`Deployed ${all.length} pools: ${all.map((d) => d.processId).join(", ")}`, "ok");
-      } else {
+      } else if (run) {
         await api("POST", `/api/v1/processes/${dep.key}/instances`, body);
         const n = body.variables ? Object.keys(body.variables).length : 0;
         toast(`Deployed ${dep.processId} v${dep.version} and started an instance${n ? ` with ${n} variable${n === 1 ? "" : "s"}` : ""}`, "ok");
+      } else {
+        toast(`Deployed ${dep.processId} v${dep.version}`, "ok");
       }
       closeDeploy();
     } catch (e) {
@@ -1358,9 +1370,13 @@ function wireActions(root, modeler, api, toast) {
       // inline in the panel so the entered variables aren't lost.
       derr.textContent = e.message;
     } finally {
-      dgo.disabled = false;
+      drun.disabled = false;
+      donly.disabled = false;
     }
-  });
+  };
+
+  drun.addEventListener("click", () => doDeploy(true));
+  donly.addEventListener("click", () => doDeploy(false));
 }
 
 // mountLive renders a deployed process read-only and overlays runtime state,
