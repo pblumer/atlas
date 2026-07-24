@@ -208,6 +208,11 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		if err := register(s.Id, b.AddStartEvent()); err != nil {
 			return nil, err
 		}
+		// A none start event may carry a start form; the first one that does wins
+		// as the process's start form (ADR-0028).
+		if s.Form.FormId != "" {
+			b.SetStartFormId(s.Form.FormId)
+		}
 	}
 	for _, st := range proc.ServiceTasks {
 		retries := int32(defaultRetries)
@@ -584,6 +589,10 @@ type xmlStartEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Name    string                     `xml:"name,attr"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
+	// Form binds a start form to a none start event (ADR-0028): the form the UI
+	// shows before creating the instance, whose data becomes the start variables.
+	// The engine never sees it — it is pre-start UI metadata.
+	Form xmlFormDefinition `xml:"extensionElements>formDefinition"`
 }
 
 // A data-based inclusive gateway; default names the flow taken when no outgoing

@@ -208,7 +208,7 @@ const TOPNAV = {
   ],
   modeler: [{ name: "Home", route: "#/modeler" }],
   operations: [{ name: "Instances", route: "#/operations" }],
-  tasks: [{ name: "Inbox", route: "#/tasks" }], insights: [],
+  tasks: [{ name: "Inbox", route: "#/tasks" }, { name: "Start", route: "#/tasks/start" }], insights: [],
 };
 
 // Connectors are the sibling engines Atlas hands work off to. They live under
@@ -1423,6 +1423,116 @@ async function viewTasks() {
   await load();
 }
 
+// ---------- Start a process via its start form (ADR-0028) ----------
+async function viewStartProcess() {
+  const state = { procs: [], selected: null, form: null };
+  view.innerHTML = `
+    <div class="tasks" id="start-grid">
+      <section class="tasks-list-pane">
+        <header class="tasks-list-head"><h2>Start a process</h2>
+          <button class="btn ghost small" id="start-refresh">Refresh</button></header>
+        <ul class="tasks-list" id="start-list"><li class="tasks-empty muted">Loading&hellip;</li></ul>
+      </section>
+      <section class="tasks-detail" id="start-detail"></section>
+    </div>`;
+  const listEl = view.querySelector("#start-list");
+  const detailEl = view.querySelector("#start-detail");
+
+  function destroyForm() {
+    if (state.form) { try { state.form.destroy(); } catch { /* noop */ } state.form = null; }
+  }
+
+  async function mountStartForm(p) {
+    const host = detailEl.querySelector("#start-form");
+    if (!host) return;
+    try {
+      const [{ Form }, def] = await Promise.all([
+        loadFormViewer(),
+        api("GET", "/api/v1/forms/" + encodeURIComponent(p.startFormId)),
+      ]);
+      if (state.selected !== p.key) return;
+      host.innerHTML = "";
+      const form = new Form({ container: host });
+      await form.importSchema(def.schema, {});
+      state.form = form;
+    } catch (e) {
+      host.innerHTML = `<p class="muted err">Failed to load the start form: ${esc(e.message)}</p>`;
+    }
+  }
+
+  function renderDetail() {
+    destroyForm();
+    const p = state.procs.find((x) => x.key === state.selected);
+    if (!p) {
+      detailEl.innerHTML = `<div class="tasks-detail-empty muted">Select a process to start it via its form.</div>`;
+      return;
+    }
+    detailEl.innerHTML = `
+      <header class="tasks-detail-head">
+        <h1>${esc(p.name || p.processId)}</h1>
+        <button class="btn" id="start-go">Start process</button>
+      </header>
+      <div class="tasks-fields">
+        <div class="tasks-field"><span class="tasks-field-label muted">Process</span><span class="chip">${esc(p.processId)}</span></div>
+        <div class="tasks-field"><span class="tasks-field-label muted">Version</span><span>${p.version}</span></div>
+      </div>
+      <div class="tasks-form" id="start-form"><p class="muted">Loading form&hellip;</p></div>`;
+    detailEl.querySelector("#start-go").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      let variables = {};
+      if (state.form) {
+        const { data, errors } = state.form.submit();
+        if (errors && Object.keys(errors).length > 0) { toast("Please fix the highlighted fields", "err"); return; }
+        variables = data;
+      }
+      btn.disabled = true;
+      try {
+        await api("POST", `/api/v1/processes/${p.key}/instances`, { variables });
+        toast("Process started");
+        location.hash = "#/tasks"; // land in the inbox where its first task appears
+      } catch (err) { toast("Start failed: " + err.message, "err"); btn.disabled = false; }
+    });
+    mountStartForm(p);
+  }
+
+  function renderList() {
+    if (!state.procs.length) {
+      listEl.innerHTML = `<li class="tasks-empty muted">No process has a start form. Link one on a start event in the Modeler's Implement tab.</li>`;
+      return;
+    }
+    listEl.innerHTML = state.procs.map((p) => {
+      const sel = p.key === state.selected ? " selected" : "";
+      return `<li class="tasks-item${sel}" data-key="${p.key}">
+        <div class="tasks-item-top"><span class="tasks-item-title">${esc(p.name || p.processId)}</span>
+          <span class="chip">v${p.version}</span></div>
+        <div class="tasks-item-sub muted">${esc(p.processId)}</div></li>`;
+    }).join("");
+    listEl.querySelectorAll(".tasks-item").forEach((li) =>
+      li.addEventListener("click", () => { state.selected = Number(li.dataset.key); renderList(); renderDetail(); }));
+  }
+
+  async function load() {
+    try {
+      const all = await api("GET", "/api/v1/processes");
+      // Only processes with a start form; keep the latest version per process id.
+      const latest = new Map();
+      for (const p of all) {
+        if (!p.startFormId) continue;
+        const cur = latest.get(p.processId);
+        if (!cur || p.version > cur.version) latest.set(p.processId, p);
+      }
+      state.procs = [...latest.values()].sort((a, b) => (a.name || a.processId).localeCompare(b.name || b.processId));
+      if (!state.procs.some((p) => p.key === state.selected)) state.selected = null;
+      renderList();
+      renderDetail();
+    } catch (e) {
+      listEl.innerHTML = `<li class="tasks-empty err">Failed to load processes: ${esc(e.message)}</li>`;
+    }
+  }
+  view.querySelector("#start-refresh").addEventListener("click", load);
+  await load();
+}
+
 function viewComingSoon(appId) {
   const name = (APPS.find((a) => a.id === appId) || {}).name || "This app";
   view.innerHTML = `
@@ -1511,6 +1621,7 @@ async function route() {
     const m = path.match(/^#\/modeler\/d\/(\d+)$/);
     if (m) return await viewEditor(Number(m[1]));
     if (path === "#/tasks") return await viewTasks();
+    if (path === "#/tasks/start") return await viewStartProcess();
     if (path === "#/operations") return await viewInstances();
     // A specific instance can be deep-linked (…/i/{instanceKey}) — the Modeler's
     // Deploy & run builds this so a roundtrip lands straight on the started

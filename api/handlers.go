@@ -55,6 +55,10 @@ type processResp struct {
 	// replay view is opened with (#/operations/c/{collaborationKey}). Zero for a
 	// standalone process (ADR-0038).
 	CollaborationKey uint64 `json:"collaborationKey,omitempty"`
+	// StartFormID names the form the UI shows before starting an instance, empty
+	// when the process has no start form (ADR-0028). It lets the Tasks app offer a
+	// "start via form" flow whose submitted data becomes the start variables.
+	StartFormID string `json:"startFormId,omitempty"`
 }
 
 // collaborationParticipants reports how many <participant> pools a model's
@@ -508,6 +512,7 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
 				Version:          d.Version,
 				DeployedAt:       d.DeployedAt,
 				CollaborationKey: s.collaborationKeyOf(d),
+				StartFormID:      d.cp.StartFormId(),
 			})
 		}
 	})

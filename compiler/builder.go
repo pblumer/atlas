@@ -81,6 +81,7 @@ type Builder struct {
 	messageThrows     []MessageDetail
 	messageStarts     []MessageDetail
 	elementIds        []int32 // interned source BPMN id per node, -1 if unset
+	startFormId       int32   // interned start-form id (ADR-0028), -1 if the process has none
 
 	interner map[string]int32
 	strings  []string
@@ -95,6 +96,7 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 		key:           key,
 		bpmnProcessId: bpmnProcessId,
 		version:       version,
+		startFormId:   -1,
 		interner:      map[string]int32{},
 	}
 	b.intern(DMNJobType)      // reserve DMNJobTypeIndex == 0
@@ -139,6 +141,11 @@ func (b *Builder) SetElementBpmnId(nodeID int32, bpmnID string) {
 
 // AddStartEvent adds a none start event and returns its element id.
 func (b *Builder) AddStartEvent() int32 { return b.addNode(TypeStartEvent, -1) }
+
+// SetStartFormId records the process's start-form id — the form the UI shows
+// before creating an instance, whose data becomes the start variables (ADR-0028).
+// It is design-time metadata the engine ignores.
+func (b *Builder) SetStartFormId(id string) { b.startFormId = b.intern(id) }
 
 // AddMessageStartEvent adds a message start event and returns its element id. It
 // is a process entry point like a none start event — at runtime it simply flows
@@ -468,6 +475,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		messageStarts:     b.messageStarts,
 		startEvents:       startEvents,
 		elementIds:        b.elementIds,
+		startFormId:       b.startFormId,
 		strings:           b.strings,
 	}, nil
 }
