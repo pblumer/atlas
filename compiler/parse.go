@@ -321,7 +321,19 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		if err != nil {
 			return nil, err
 		}
-		node, err := b.AddBusinessRuleTaskMapped(brt.CalledDecision.DecisionId, brt.CalledDecision.ResultVariable, inputs, mappings, retries)
+		// A business rule task marked with <atlas:temisConnector> is a central
+		// decision: it delegates to the named server-registered temis connector
+		// instead of the embedded library (ADR-0050). Authoring is otherwise
+		// identical.
+		var node int32
+		if tc := brt.TemisConnector; tc != nil {
+			if tc.Connector == "" {
+				return nil, fmt.Errorf("compiler: business rule task %q has a temisConnector with no connector name", brt.Id)
+			}
+			node, err = b.AddTemisDecisionTask(tc.Connector, brt.CalledDecision.DecisionId, brt.CalledDecision.ResultVariable, inputs, mappings, retries)
+		} else {
+			node, err = b.AddBusinessRuleTaskMapped(brt.CalledDecision.DecisionId, brt.CalledDecision.ResultVariable, inputs, mappings, retries)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -748,6 +760,18 @@ type xmlBusinessRuleTask struct {
 	CalledDecision xmlCalledDecision    `xml:"extensionElements>calledDecision"`
 	Inputs         []xmlDecisionInput   `xml:"extensionElements>decisionInput"`
 	InputMappings  []xmlZeebeIOMapInput `xml:"extensionElements>ioMapping>input"`
+	// TemisConnector, when present, marks this a central (connector) decision
+	// evaluated by a remote temis service rather than the embedded library
+	// (ADR-0050). The pointer is nil when the <atlas:temisConnector> extension is
+	// absent, i.e. the decision is evaluated locally.
+	TemisConnector *xmlTemisConnector `xml:"extensionElements>temisConnector"`
+}
+
+// xmlTemisConnector is the <atlas:temisConnector connector="..."/> extension that
+// routes a business rule task to a server-registered temis connector for central
+// evaluation (ADR-0050).
+type xmlTemisConnector struct {
+	Connector string `xml:"connector,attr"`
 }
 
 type xmlCalledDecision struct {

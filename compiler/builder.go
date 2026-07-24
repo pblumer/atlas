@@ -58,6 +58,20 @@ const ClioWriteJobType = "io.atlas.clio.write"
 // API (ADR-0036), the same way the clio worker subscribes to ClioWriteJobType.
 const RestJobType = "io.atlas.http.rest"
 
+// TemisDecisionJobType is the reserved job type a *central* business rule task
+// carries — one whose decision is evaluated by a remote temis service rather than
+// the embedded temis library. The in-process temis decision connector worker
+// subscribes to it to evaluate the decision off the hot path and write the result
+// back (ADR-0050), the same way the local DMN worker subscribes to DMNJobType.
+const TemisDecisionJobType = "io.atlas.temis.decision"
+
+// TemisDecisionJobTypeIndex is the interned index TemisDecisionJobType is
+// guaranteed to occupy in every compiled process: NewBuilder reserves it fourth
+// (after DMN, user tasks, and PowerShell), so it is always 3. This lets a single
+// in-process temis connector worker subscribe by one global index across every
+// deployed process, the same way the DMN worker uses DMNJobTypeIndex (ADR-0050).
+const TemisDecisionJobTypeIndex int32 = 3
+
 // Builder constructs a CompiledProcess programmatically. It stands in for the
 // XML parse/resolve/linearize pipeline until that front end exists: callers add
 // nodes and flows, and Build linearizes them into the immutable form (assigning
@@ -99,9 +113,10 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 		startFormId:   -1,
 		interner:      map[string]int32{},
 	}
-	b.intern(DMNJobType)      // reserve DMNJobTypeIndex == 0
-	b.intern(UserTaskJobType) // reserve UserTaskJobTypeIndex == 1
-	b.intern(PwshJobType)     // reserve PwshJobTypeIndex == 2
+	b.intern(DMNJobType)           // reserve DMNJobTypeIndex == 0
+	b.intern(UserTaskJobType)      // reserve UserTaskJobTypeIndex == 1
+	b.intern(PwshJobType)          // reserve PwshJobTypeIndex == 2
+	b.intern(TemisDecisionJobType) // reserve TemisDecisionJobTypeIndex == 3
 	return b
 }
 
@@ -219,6 +234,24 @@ func (b *Builder) AddBusinessRuleTask(decisionId string, inputs map[string]any, 
 // variable on job completion; an empty resultVar discards the result. It returns
 // an error if the static inputs cannot be encoded.
 func (b *Builder) AddBusinessRuleTaskMapped(decisionId, resultVar string, staticInputs map[string]any, mappings []DecisionInputMapping, retries int32) (int32, error) {
+	return b.addBusinessRuleTask("", decisionId, resultVar, staticInputs, mappings, retries)
+}
+
+// AddTemisDecisionTask adds a *central* business rule task: one whose decision is
+// evaluated by the named server-registered temis connector rather than the
+// embedded temis library (ADR-0050). It returns its element id. Authoring is
+// otherwise identical to a local business rule task — same decision id, result
+// variable, static inputs, and variable mappings — the only difference is that the
+// task carries the temis-connector job type so the remote worker picks it up.
+func (b *Builder) AddTemisDecisionTask(connector, decisionId, resultVar string, staticInputs map[string]any, mappings []DecisionInputMapping, retries int32) (int32, error) {
+	return b.addBusinessRuleTask(connector, decisionId, resultVar, staticInputs, mappings, retries)
+}
+
+// addBusinessRuleTask is the shared constructor for local and central business
+// rule tasks. An empty connector selects local evaluation (the DMN job type,
+// ADR-0014); a named connector selects central evaluation (the temis-connector job
+// type, ADR-0050) and records the connector name.
+func (b *Builder) addBusinessRuleTask(connector, decisionId, resultVar string, staticInputs map[string]any, mappings []DecisionInputMapping, retries int32) (int32, error) {
 	inputsIdx := int32(-1)
 	if len(staticInputs) > 0 {
 		encoded, err := json.Marshal(staticInputs)
@@ -227,12 +260,17 @@ func (b *Builder) AddBusinessRuleTaskMapped(decisionId, resultVar string, static
 		}
 		inputsIdx = b.intern(string(encoded))
 	}
+	jobType := DMNJobType
+	if connector != "" {
+		jobType = TemisDecisionJobType
+	}
 	detail := int32(len(b.businessRuleTasks))
 	b.businessRuleTasks = append(b.businessRuleTasks, BusinessRuleTaskDetail{
-		JobType:       b.intern(DMNJobType),
+		JobType:       b.intern(jobType),
 		DecisionId:    b.intern(decisionId),
 		Inputs:        inputsIdx,
 		ResultVar:     b.intern(resultVar),
+		Connector:     b.intern(connector),
 		Retries:       retries,
 		InputMappings: mappings,
 	})
