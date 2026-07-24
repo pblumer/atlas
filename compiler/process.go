@@ -277,6 +277,7 @@ type CompiledProcess struct {
 	messageThrows     []MessageDetail
 	messageStarts     []MessageDetail
 	startEvents       []int32
+	startFormId       int32    // interned start-form id (ADR-0028), -1 if none
 	elementIds        []int32  // interned source BPMN id per node id (-1 if unset)
 	strings           []string // intern table (index → string), for debug/export
 }
@@ -438,6 +439,11 @@ func (p *CompiledProcess) ConnectorTask(detail int32) *ConnectorTaskDetail {
 
 // StartEvents returns the process's entry-point element ids.
 func (p *CompiledProcess) StartEvents() []int32 { return p.startEvents }
+
+// StartFormId returns the id of the form the UI shows before starting an
+// instance, or "" if the process has no start form (ADR-0028). It is design-time
+// metadata; the engine never reads it.
+func (p *CompiledProcess) StartFormId() string { return p.Intern(p.startFormId) }
 
 // Intern returns the string for an interned index, or "" if out of range.
 func (p *CompiledProcess) Intern(idx int32) string {

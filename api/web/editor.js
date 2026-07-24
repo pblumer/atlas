@@ -1031,7 +1031,17 @@ function wireProperties(root, modeler, api) {
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "A message start event: publishing this message starts a new instance of this process, matched by message name (the correlation key is shared with the throwing event but is not yet evaluated for starts).");
         } else {
-          html += `<p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Message</b> start event — a pool that a message opens — then pick its message here.</p>`;
+          const fd = findExt(bo, "zeebe:FormDefinition") || {};
+          const curForm = fd.formId || "";
+          html += `<h3>Start form</h3>
+            <label class="field"><span>Linked form</span>
+              <select id="f-form">
+                <option value="">— none —</option>
+                ${curForm ? `<option value="${esc(curForm)}" selected>${esc(curForm)}</option>` : ""}
+              </select></label>
+            <p class="muted" style="font-size:12px">Shown before the process starts — from the Tasks app's <b>Start</b> view — its data becomes the instance's start variables.
+              <a href="#/modeler/form/new" target="_blank" rel="noopener">Create a new form</a>, then reopen this to link it.</p>
+            <p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Message</b> start event instead.</p>`;
         }
       }
     } else if (isGatewayFlow && !isDefaultFlow) {

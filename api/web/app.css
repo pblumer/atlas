@@ -564,6 +564,8 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   overflow: hidden;
   min-height: calc(100vh - var(--topbar-h) - 44px);
 }
+/* The Start view is a two-pane (list | form) variant of the inbox layout. */
+#start-grid { grid-template-columns: 340px 1fr; }
 .tasks > * { background: var(--surface); }
 
 /* Folder rail */
