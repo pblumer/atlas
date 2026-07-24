@@ -33,9 +33,10 @@ const (
 	TypeConnectorTask     // a service task that delegates to a server-registered connector via the job path (ADR-0036); like a service task it creates a job and waits
 	TypeUserTask          // a human task: parks a token, creates a job, waits for a person to complete it via the Tasks app (ADR-0028)
 	TypeBoundaryEvent     // a timer/message event attached to a host activity; arms while the host runs and, when it fires, interrupts the host or spawns a parallel token (ADR-0040)
+	TypeScriptJobTask     // a script task authored in a general-purpose language (PowerShell, …) that runs via the job path, not inline like a FEEL script task (ADR-0047); like a service task it creates a job and waits
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 18
+	numBpmnTypes = 19
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -75,6 +76,8 @@ func (t BpmnType) String() string {
 		return "UserTask"
 	case TypeBoundaryEvent:
 		return "BoundaryEvent"
+	case TypeScriptJobTask:
+		return "ScriptJobTask"
 	default:
 		return "Unspecified"
 	}
@@ -191,6 +194,26 @@ type ConnectorTaskDetail struct {
 	Retries   int32
 }
 
+// ScriptJobTaskDetail is the per-script-job-task data a behavior needs at
+// runtime. Unlike the inline FEEL script task (ScriptTaskDetail), a job script is
+// authored in a general-purpose language (PowerShell first; Python/JavaScript
+// later) and runs off the hot path in a job worker, exactly as a business rule
+// task delegates to the DMN worker (ADR-0047). Like a service task it runs as a
+// job, so it carries a JobType — a reserved per-language sentinel (e.g.
+// PwshJobType) the in-process script worker subscribes to. Language is the
+// interned language name (which also selects the worker/interpreter), Source is
+// the interned script text (compiled/validated no further at deploy time — an
+// interpreter runs it, invariant I5 keeps only interning and validation off the
+// runtime path), and ResultVar is the process variable the script's result is
+// written back into on job completion.
+type ScriptJobTaskDetail struct {
+	JobType   int32 // interned reserved per-language script job type → index
+	Language  int32 // interned script language (e.g. "powershell") → index
+	Source    int32 // interned script source text → index
+	ResultVar int32 // interned result-variable name → index
+	Retries   int32
+}
+
 // TimerCatchDetail is the per-timer-intermediate-catch-event data: how long the
 // event waits before continuing, as a fixed duration in nanoseconds (a literal
 // ISO-8601 duration today; FEEL duration expressions and date/cycle timers later).
@@ -244,6 +267,7 @@ type CompiledProcess struct {
 	boundaryEvents    []int32 // shared topology: boundary-event node ids grouped by host node
 	serviceTasks      []ServiceTaskDetail
 	scriptTasks       []ScriptTaskDetail
+	scriptJobTasks    []ScriptJobTaskDetail
 	businessRuleTasks []BusinessRuleTaskDetail
 	timerCatches      []TimerCatchDetail
 	connectorTasks    []ConnectorTaskDetail
@@ -370,6 +394,11 @@ func (p *CompiledProcess) MessageStartEvents() []MessageStartEvent {
 // ScriptTask returns the detail at the given table index.
 func (p *CompiledProcess) ScriptTask(detail int32) *ScriptTaskDetail {
 	return &p.scriptTasks[detail]
+}
+
+// ScriptJobTask returns the script-job-task detail at the given table index.
+func (p *CompiledProcess) ScriptJobTask(detail int32) *ScriptJobTaskDetail {
+	return &p.scriptJobTasks[detail]
 }
 
 // BusinessRuleTask returns the detail at the given table index.

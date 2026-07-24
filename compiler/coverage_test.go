@@ -24,6 +24,7 @@ func TestBpmnTypeString(t *testing.T) {
 		{TypeTask, "Task"},
 		{TypeParallelGateway, "ParallelGateway"},
 		{TypeInclusiveGateway, "InclusiveGateway"},
+		{TypeScriptJobTask, "ScriptJobTask"},
 		{TypeUnspecified, "Unspecified"},
 		{BpmnType(200), "Unspecified"},
 	}
