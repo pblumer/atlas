@@ -559,6 +559,17 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 	}
 
+	// Data objects are not flow nodes (no token flows through them), so they are
+	// added as a separate collection, not registered as flow nodes (ADR-0053). A
+	// nameless data object falls back to its BPMN id so it stays addressable.
+	for _, d := range proc.DataObjects {
+		name := d.Name
+		if name == "" {
+			name = d.Id
+		}
+		b.AddDataObject(name, d.ItemSubjectRef, d.DataState.Name, d.IsCollection)
+	}
+
 	return b.Build()
 }
 
@@ -627,6 +638,27 @@ type xmlProcess struct {
 	// of these are executable yet.
 	SendTasks    []xmlNode `xml:"sendTask"`
 	ReceiveTasks []xmlNode `xml:"receiveTask"`
+
+	DataObjects []xmlDataObject `xml:"dataObject"`
+}
+
+// A BPMN data object. It is not a flow node — no token flows through it — so it
+// carries no sequence flows, only its identity (name, id), an optional collection
+// flag, an optional itemDefinition reference (its declared type), and an optional
+// <dataState> child naming its initial data state (ADR-0053). dataState is
+// spec-legal on any ItemAwareElement.
+type xmlDataObject struct {
+	Id             string       `xml:"id,attr"`
+	Name           string       `xml:"name,attr"`
+	IsCollection   bool         `xml:"isCollection,attr"`
+	ItemSubjectRef string       `xml:"itemSubjectRef,attr"`
+	DataState      xmlDataState `xml:"dataState"`
+}
+
+// xmlDataState is a BPMN data state (the [received]/[approved] label on a data
+// object or reference), carried by its name.
+type xmlDataState struct {
+	Name string `xml:"name,attr"`
 }
 
 // A data-based exclusive gateway; default names the flow taken when no outgoing

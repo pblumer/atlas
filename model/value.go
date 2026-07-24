@@ -267,6 +267,66 @@ func (v *VariableValue) decode(src []byte) error {
 	return nil
 }
 
+// DataObjectValue is a BPMN data object owned by a scope (the process instance
+// root today). It is variable-shaped — a name and a typed value reusing the same
+// VarKind machinery, so a data object can hold a structured VarJSON payload
+// (ADR-0037) — plus a State: the BPMN data state (e.g. "received", "approved").
+// Its encoding mirrors VariableValue with the extra State string between the name
+// and the kind byte; like a variable it carries genuine runtime data, so it is
+// length-prefixed rather than fixed-size (ADR-0053).
+type DataObjectValue struct {
+	ScopeKey uint64 // owning scope (process instance key today)
+	Name     string
+	State    string // BPMN data state; "" when the object declares none
+	Kind     VarKind
+	Bool     bool
+	Text     string // number canonical string, string contents, or canonical JSON; empty otherwise
+}
+
+func (*DataObjectValue) ValueType() ValueType { return VTDataObject }
+
+func (v *DataObjectValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ScopeKey)
+	dst = appendString(dst, v.Name)
+	dst = appendString(dst, v.State)
+	dst = append(dst, byte(v.Kind))
+	if v.Bool {
+		dst = append(dst, 1)
+	} else {
+		dst = append(dst, 0)
+	}
+	return appendString(dst, v.Text)
+}
+
+func (v *DataObjectValue) decode(src []byte) error {
+	if len(src) < 8 {
+		return ErrShortBuffer
+	}
+	v.ScopeKey = binary.LittleEndian.Uint64(src)
+	rest := src[8:]
+	name, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.Name = name
+	state, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.State = state
+	if len(rest) < 2 {
+		return ErrShortBuffer
+	}
+	v.Kind = VarKind(rest[0])
+	v.Bool = rest[1] != 0
+	text, _, err := readString(rest[2:])
+	if err != nil {
+		return err
+	}
+	v.Text = text
+	return nil
+}
+
 // MessageSubscriptionValue is an open subscription: an element instance (a
 // message intermediate catch event) waiting for a named message whose
 // correlation key matches. Like a variable it carries genuine runtime data (the
@@ -409,6 +469,8 @@ func newValue(vt ValueType) Value {
 		return &MessageSubscriptionValue{}
 	case VTMessageFlow:
 		return &MessageFlowValue{}
+	case VTDataObject:
+		return &DataObjectValue{}
 	default:
 		return nil
 	}

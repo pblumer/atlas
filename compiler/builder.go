@@ -95,6 +95,7 @@ type Builder struct {
 	messageThrows     []MessageDetail
 	messageStarts     []MessageDetail
 	timerStarts       []TimerStartDetail
+	dataObjects       []CompiledDataObject
 	elementIds        []int32 // interned source BPMN id per node, -1 if unset
 	startFormId       int32   // interned start-form id (ADR-0028), -1 if the process has none
 
@@ -375,6 +376,22 @@ func (b *Builder) AddBoundaryMessageEvent(host int32, interrupting bool, message
 	return b.addNode(TypeBoundaryEvent, detail)
 }
 
+// AddDataObject declares a data object on the process: a typed, named datum with
+// an optional declared structure (itemType) and initial data state, seeded under
+// each instance's scope at creation (ADR-0053). It is not a flow node, so it
+// returns the index of the entry in the data-object table, not an element id.
+// Empty itemType or initialState intern to -1 (Intern maps that back to "").
+func (b *Builder) AddDataObject(name, itemType, initialState string, isCollection bool) int32 {
+	idx := int32(len(b.dataObjects))
+	b.dataObjects = append(b.dataObjects, CompiledDataObject{
+		Name:         b.intern(name),
+		ItemType:     b.intern(itemType),
+		InitialState: b.intern(initialState),
+		IsCollection: isCollection,
+	})
+	return idx
+}
+
 // AddTask adds an undefined/manual task — one with no execution semantics — and
 // returns its element id. It carries no detail and simply passes the token
 // straight through, so a model can be drafted and its routing tested before its
@@ -537,6 +554,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		messageThrows:     b.messageThrows,
 		messageStarts:     b.messageStarts,
 		timerStarts:       b.timerStarts,
+		dataObjects:       b.dataObjects,
 		startEvents:       startEvents,
 		elementIds:        b.elementIds,
 		startFormId:       b.startFormId,

@@ -198,6 +198,14 @@ func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.Var
 	c.appendEvent(v.ScopeKey, model.VTVariable, intent, inflightValue{variable: v})
 }
 
+// AppendDataObjectEvent records a data-object write (created or state-changed).
+// Like a variable it carries genuine runtime data (a name, a data state, and a
+// value), so it allocates for its strings — data objects are runtime data, not
+// hot-path token movement (ADR-0053). The event is keyed by the owning scope.
+func (c *ProcessingContext) AppendDataObjectEvent(intent model.Intent, v model.DataObjectValue) {
+	c.appendEvent(v.ScopeKey, model.VTDataObject, intent, inflightValue{dataObject: v})
+}
+
 // AppendMessageSubscriptionEvent records a message-subscription fact (created or
 // correlated). The key is the waiting element instance's key, and the value
 // carries the match pair, so applyToState can locate the index entry from the

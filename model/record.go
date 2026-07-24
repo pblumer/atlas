@@ -63,6 +63,11 @@ const (
 	// it is never deleted, so the Operations collaboration view can replay the
 	// exchange between pools after the fact (ADR-0038).
 	VTMessageFlow
+	// VTDataObject is a BPMN data object: a typed, named, scope-owned datum with a
+	// declared lifecycle state. Unlike a plain variable it carries a data state
+	// (order [received] → [approved]) whose every transition is a durable event,
+	// so its state history and provenance rebuild from the log (ADR-0053).
+	VTDataObject
 )
 
 func (t ValueType) String() string {
@@ -91,6 +96,8 @@ func (t ValueType) String() string {
 		return "ProcessDefinition"
 	case VTMessageFlow:
 		return "MessageFlow"
+	case VTDataObject:
+		return "DataObject"
 	default:
 		return "ValueType(?)"
 	}
@@ -159,6 +166,13 @@ const (
 	// left armed (ADR-0051). Because commands are not replayed (invariant I6), its
 	// numeric value never reaches the log.
 	IntentTimerStartArm
+
+	// DataObject. Appended after the existing intents so every prior intent keeps
+	// its numeric value on the log (ADR-0053). Created seeds a data object under a
+	// scope with its declared initial data state; StateChanged transitions the data
+	// state (and, later, the value) as an activity writes to it.
+	IntentDataObjectCreated
+	IntentDataObjectStateChanged
 )
 
 func (i Intent) String() string {
@@ -213,6 +227,10 @@ func (i Intent) String() string {
 		return "IncidentCreated"
 	case IntentIncidentResolved:
 		return "IncidentResolved"
+	case IntentDataObjectCreated:
+		return "DataObjectCreated"
+	case IntentDataObjectStateChanged:
+		return "DataObjectStateChanged"
 	default:
 		return "Intent(?)"
 	}

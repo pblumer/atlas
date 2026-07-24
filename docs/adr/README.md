@@ -60,6 +60,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0050](0050-temis-decision-connector.md) | Central DMN decisions via a temis decision connector | Accepted |
 | [0051](0051-timer-start-events.md) | Timer start events (duration, date, cycle, cron) | Proposed |
 | [0052](0052-message-end-events.md) | Message end events | Accepted |
+| [0053](0053-first-class-data-objects.md) | First-class data objects — typed, event-sourced state, and lineage | Accepted |
 
 ## Status values
 

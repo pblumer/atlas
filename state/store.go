@@ -326,6 +326,36 @@ func (s *Store) VariablesOfScope(scope uint64, fn func(v *model.VariableValue) e
 	})
 }
 
+// DataObjectsOfScope calls fn with every data object owned by the given scope,
+// via the data-object column family — the current value of each. Used to surface
+// an instance's data to operators and, later, to build a FEEL scope for data
+// associations (ADR-0053). Mirrors VariablesOfScope.
+func (s *Store) DataObjectsOfScope(scope uint64, fn func(v *model.DataObjectValue) error) error {
+	return s.scanPrefix(dataObjectPrefix(scope), func(_, raw []byte) error {
+		v, err := model.DecodeValue(model.VTDataObject, raw)
+		if err != nil {
+			return err
+		}
+		return fn(v.(*model.DataObjectValue))
+	})
+}
+
+// DataObjectSnapshotHistory folds the retained data-object state changes of one
+// scope, calling fn with each change's event timestamp, log position, and the
+// object's new state in the order they occurred (ADR-0053). Because the key sorts
+// by timestamp then position, a scope-wide scan yields a monotonic sequence a
+// caller folds by position — the event-sourced data-state timeline and the basis
+// for lineage. Mirrors VariableSnapshotHistory (ADR-0048).
+func (s *Store) DataObjectSnapshotHistory(scopeKey uint64, fn func(ts int64, pos uint64, v *model.DataObjectValue) error) error {
+	return s.scanPrefix(dataObjectSnapshotScopePrefix(scopeKey), func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTDataObject, raw)
+		if err != nil {
+			return err
+		}
+		return fn(timestampFromDataObjSnapKey(k), positionFromDataObjSnapKey(k), v.(*model.DataObjectValue))
+	})
+}
+
 func (s *Store) countPrefix(prefix []byte) (int, error) {
 	count := 0
 	err := s.scanPrefix(prefix, func(_, _ []byte) error {
