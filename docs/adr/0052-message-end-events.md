@@ -1,4 +1,4 @@
-# ADR-0051: Message end events
+# ADR-0052: Message end events
 
 - **Status:** Accepted
 - **Date:** 2026-07-24

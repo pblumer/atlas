@@ -94,6 +94,7 @@ type Builder struct {
 	messageCatches    []MessageDetail
 	messageThrows     []MessageDetail
 	messageStarts     []MessageDetail
+	timerStarts       []TimerStartDetail
 	elementIds        []int32 // interned source BPMN id per node, -1 if unset
 	startFormId       int32   // interned start-form id (ADR-0028), -1 if the process has none
 
@@ -172,6 +173,16 @@ func (b *Builder) AddMessageStartEvent(messageName string, correlationKey *expr.
 	detail := int32(len(b.messageStarts))
 	b.messageStarts = append(b.messageStarts, MessageDetail{MessageName: messageName, CorrelationKey: correlationKey})
 	return b.addNode(TypeMessageStartEvent, detail)
+}
+
+// AddTimerStartEvent adds a timer start event and returns its element id. Like a
+// none start it is a process entry point that flows straight on once instantiated;
+// what makes it a start is the deploy-time timer the engine arms from its schedule,
+// which instantiates a fresh process instance each time it fires (ADR-0051).
+func (b *Builder) AddTimerStartEvent(schedule TimerSchedule) int32 {
+	detail := int32(len(b.timerStarts))
+	b.timerStarts = append(b.timerStarts, TimerStartDetail{Schedule: schedule})
+	return b.addNode(TypeTimerStartEvent, detail)
 }
 
 // AddEndEvent adds a none end event and returns its element id.
@@ -319,7 +330,7 @@ func (b *Builder) AddRestConnectorTask(connector, method, path string, retries i
 // AddUserTask adds a user task that parks a token and creates a job for a human
 // to complete via the Tasks app (ADR-0028). assignee and candidateGroups are
 // optional (empty strings are stored as -1). Returns its element id.
-func (b *Builder) AddUserTask(name, assignee, candidateGroups, formId string, retries int32) int32 {
+func (b *Builder) AddUserTask(name, assignee, candidateGroups, formId string, priority int32, dueDateNanos int64, retries int32) int32 {
 	detail := int32(len(b.userTasks))
 	b.userTasks = append(b.userTasks, UserTaskDetail{
 		JobType:         b.intern(UserTaskJobType),
@@ -327,6 +338,8 @@ func (b *Builder) AddUserTask(name, assignee, candidateGroups, formId string, re
 		Assignee:        b.intern(assignee),
 		CandidateGroups: b.intern(candidateGroups),
 		FormId:          b.intern(formId),
+		Priority:        priority,
+		DueDateNanos:    dueDateNanos,
 		Retries:         retries,
 	})
 	return b.addNode(TypeUserTask, detail)
@@ -417,7 +430,7 @@ func (b *Builder) AddMessageThrowEvent(messageName string, correlationKey *expr.
 // message with a correlation key produced by the given compiled FEEL expression
 // (evaluated over the ending instance's variables), then ends the instance.
 // It reuses the throw detail table, since a message end event throws exactly like
-// an intermediate throw event and only differs in its completion (ADR-0051).
+// an intermediate throw event and only differs in its completion (ADR-0052).
 // Returns its element id.
 func (b *Builder) AddMessageEndEvent(messageName string, correlationKey *expr.Compiled) int32 {
 	detail := int32(len(b.messageThrows))
@@ -523,6 +536,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		messageCatches:    b.messageCatches,
 		messageThrows:     b.messageThrows,
 		messageStarts:     b.messageStarts,
+		timerStarts:       b.timerStarts,
 		startEvents:       startEvents,
 		elementIds:        b.elementIds,
 		startFormId:       b.startFormId,
@@ -546,7 +560,8 @@ func (b *Builder) hasStartEvent() bool {
 
 // isStartEvent reports whether a node type is a process entry point. A message
 // start event is one too: a correlating message instantiates the process, and a
-// plain create then activates it like a none start (ADR-0035).
+// plain create then activates it like a none start (ADR-0035). A timer start
+// event likewise: a due timer instantiates it, and it then flows on (ADR-0051).
 func isStartEvent(t BpmnType) bool {
-	return t == TypeStartEvent || t == TypeMessageStartEvent
+	return t == TypeStartEvent || t == TypeMessageStartEvent || t == TypeTimerStartEvent
 }

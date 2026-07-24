@@ -88,6 +88,29 @@ func (c *ProcessingContext) ForEachElementInstance(procKey uint64, fn func(elKey
 	}
 }
 
+// ForEachStartTimer calls fn with the key and value of every armed start timer,
+// read from the committed timer index. Entries are collected before fn runs so fn
+// may emit timer events (arming/retiring) without disturbing the scan. Used only
+// when a definition is deployed (off the hot path), to arm and supersede start
+// timers (ADR-0051).
+func (c *ProcessingContext) ForEachStartTimer(fn func(key uint64, v model.TimerValue)) {
+	type entry struct {
+		key uint64
+		v   model.TimerValue
+	}
+	var entries []entry
+	if err := c.p.store.StartTimers(func(k uint64, v *model.TimerValue) error {
+		entries = append(entries, entry{key: k, v: *v})
+		return nil
+	}); err != nil {
+		c.p.fail(err)
+		return
+	}
+	for _, e := range entries {
+		fn(e.key, e.v)
+	}
+}
+
 // ElementInstancesOnNode returns the keys of every live element instance sitting
 // on the given BPMN node within a process instance, seen through the in-flight
 // transaction (so it includes one activated earlier in this batch). A parallel

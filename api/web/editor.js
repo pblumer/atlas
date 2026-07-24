@@ -685,11 +685,19 @@ function readStartVariables(bo) {
 // through the modeling API (undo/redo; serializes on deploy). Rows without a
 // name are dropped; an empty result removes the atlas:StartForm entirely so a
 // cleared declaration leaves no dangling element.
-function writeStartVariables(modeler, list) {
+//
+// By default it targets the diagram's root process. A collaboration pool has no
+// single root process — each pool executes its own — so a pool passes its shape
+// (targetEl, the participant) and the process it references (targetBo) to land
+// the declaration on that process. Referenced-object updates go through
+// updateModdleProperties; the root shape keeps updateProperties (unchanged).
+function writeStartVariables(modeler, list, targetEl, targetBo) {
   const moddle = modeler.get("moddle");
   const modeling = modeler.get("modeling");
+  const onRoot = !targetEl;
   const rootEl = modeler.get("canvas").getRootElement();
-  const bo = rootEl.businessObject;
+  if (onRoot) { targetEl = rootEl; targetBo = rootEl.businessObject; }
+  const bo = targetBo;
   let ext = bo.extensionElements;
   if (!ext) { ext = moddle.create("bpmn:ExtensionElements", { values: [] }); ext.$parent = bo; }
   let sf = (ext.values || []).find((v) => v.$type === "atlas:StartForm");
@@ -709,7 +717,8 @@ function writeStartVariables(modeler, list) {
       return sv;
     });
   }
-  modeling.updateProperties(rootEl, { extensionElements: ext });
+  if (onRoot) modeling.updateProperties(targetEl, { extensionElements: ext });
+  else modeling.updateModdleProperties(targetEl, bo, { extensionElements: ext });
 }
 
 // startVarRowHTML renders one editable declaration row. Values are escaped for
@@ -736,7 +745,17 @@ function startVarRowHTML(v) {
 // so typing isn't interrupted; adding a row is DOM-only until it gets a name.
 // Editing the process root fires element.changed for the root, but with nothing
 // selected the panel isn't re-rendered, so in-progress rows survive a save.
-function wireStartVars(body, modeler) {
+//
+// targetEl/targetBo are optional: omit them for the diagram's root process, or
+// pass a collaboration pool's (participant shape, referenced process) to declare
+// the variables on the process that pool executes instead.
+//
+// wrap optionally runs the persist under a rerender guard. The root editor shows
+// with nothing selected, so its self-save re-renders nothing; a pool editor is
+// shown for the *selected* participant, so its save would rebuild the panel and
+// tear down an in-progress JSON editor — the pool passes savePreservingPanel to
+// keep the panel intact, mirroring how FEEL fields self-save.
+function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn()) {
   const listEl = body.querySelector("#sv-list");
   const addBtn = body.querySelector("#sv-add");
   if (!listEl || !addBtn) return;
@@ -760,7 +779,7 @@ function wireStartVars(body, modeler) {
     default: row.querySelector(".sv-default").value,
     required: row.querySelector(".sv-required").checked,
   }));
-  const persist = () => { try { writeStartVariables(modeler, collect()); } catch { /* stale */ } };
+  const persist = () => wrap(() => { try { writeStartVariables(modeler, collect(), targetEl, targetBo); } catch { /* stale */ } });
 
   listEl.addEventListener("change", (e) => {
     // When the type dropdown changes to or from "json", rebuild the row so the
@@ -819,6 +838,77 @@ function wireProperties(root, modeler, api) {
     try { fn(); } finally { suppressRerender = false; }
   };
 
+  // addProcessToPool gives a black-box pool (a Participant with no processRef) the
+  // process it needs to hold elements and deploy. Rather than hand-wire the moddle
+  // (a processRef is a *reference*, so the process would also have to be added to
+  // definitions.rootElements, and the collapsed shape expanded), it delegates to
+  // bpmn-js's own expand: replacing the participant with an expanded one runs the
+  // factory that creates the process, registers it, and grows the band — the same
+  // path the palette uses for a fresh pool. The name is carried across by replace.
+  function addProcessToPool(element) {
+    try {
+      const replaced = modeler.get("bpmnReplace")
+        .replaceElement(element, { type: "bpmn:Participant", isExpanded: true });
+      selection.select(replaced);
+      show(replaced); // now an executable pool: elements can be dropped in
+    } catch { toast("could not add a process to this pool", "err"); }
+  }
+
+  // showPool renders the Details panel for a collaboration pool (Participant).
+  // The pool executes a process; this edits that process (its id — the deploy
+  // identity — its name, and its start variables), or offers to create one when
+  // the pool is an empty black box that can't yet hold elements.
+  function showPool(element, bo) {
+    icon.textContent = "PL"; typename.textContent = "Pool";
+    nameEl.textContent = bo.name || bo.id || "(pool)";
+    const proc = bo.processRef;
+    const poolFields = `
+      <h3>Pool</h3>
+      <label class="field"><span>Name</span><input type="text" id="f-poolname" value="${esc(bo.name || "")}" placeholder="Teilnehmer"/></label>
+      <label class="field"><span>Pool ID</span><input type="text" value="${esc(bo.id || "")}" readonly/></label>`;
+
+    if (!proc) {
+      body.innerHTML = `${poolFields}
+        <p class="muted" style="font-size:12px">A pool is a <b>participant</b> — it doesn't hold the flow itself, it <i>executes a process</i>. This pool has <b>no process</b>, so it can't contain elements or run.</p>
+        <h3>Process</h3>
+        <p class="muted" style="font-size:12px">Add the process that sits between the pool and its elements — the participant runs it, and the elements you draw live inside it.</p>
+        <button type="button" class="btn" id="f-addproc" style="margin-top:6px">+ Add a process</button>`;
+      body.querySelector("#f-poolname").addEventListener("change", (e) => {
+        try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
+      });
+      body.querySelector("#f-addproc").addEventListener("click", () => addProcessToPool(element));
+      return;
+    }
+
+    let startVarsHTML = "";
+    if (activeTab(root) === "implement") {
+      const declared = readStartVariables(proc);
+      startVarsHTML = `
+        <h3>Start variables</h3>
+        <div id="sv-list">${declared.map(startVarRowHTML).join("")}</div>
+        <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px">+ Add variable</button>
+        <p class="muted" style="font-size:12px">Declared on this pool's process, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks. The engine ignores the declaration; it's authoring metadata.</p>`;
+    }
+    body.innerHTML = `${poolFields}
+      <p class="muted" style="font-size:12px">The pool is a <b>participant</b> that executes the process below. The elements live in that process — the pool only labels who runs it.</p>
+      <h3>Process</h3>
+      <label class="field"><span>Process name</span><input type="text" id="f-procname" value="${esc(proc.name || "")}" placeholder="Order fulfillment"/></label>
+      <label class="field"><span>Process ID</span><input type="text" id="f-procid" value="${esc(proc.id || "")}" placeholder="order-fulfillment"/></label>
+      <p class="muted" style="font-size:12px">Each pool deploys as its own process; the <b>Process ID</b> is that deployment's identity — instances group by it, and renaming it deploys a new process rather than a new version.</p>
+      ${startVarsHTML}`;
+    body.querySelector("#f-poolname").addEventListener("change", (e) => {
+      try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
+    });
+    body.querySelector("#f-procname").addEventListener("change", (e) => {
+      try { modeling.updateModdleProperties(element, proc, { name: e.target.value }); } catch { /* stale */ }
+    });
+    body.querySelector("#f-procid").addEventListener("change", (e) => {
+      const v = (e.target.value || "").trim();
+      if (v) { try { modeling.updateModdleProperties(element, proc, { id: v }); } catch { toast("invalid process id", "err"); } }
+    });
+    if (activeTab(root) === "implement") wireStartVars(body, modeler, element, proc, savePreservingPanel);
+  }
+
   function show(element) {
     if (!element) {
       // Nothing selected → show the process itself, so its id/name can be edited
@@ -858,12 +948,12 @@ function wireProperties(root, modeler, api) {
         return;
       }
       // A collaboration root has no single process to rename; each pool
-      // (participant) is renamed by selecting it and editing its Name.
+      // (participant) executes its own process, configured by selecting the pool.
       if (isCollaborationRoot(modeler)) {
         icon.textContent = "CO"; typename.textContent = "Collaboration"; nameEl.textContent = "(collaboration)";
         body.innerHTML = `
           <h3>Collaboration</h3>
-          <p class="muted" style="font-size:12px">This diagram has several <b>pools</b> — each deploys as its own process. Select a pool to rename it, or an element inside a pool to configure it. Pools talk to each other through <b>message events</b>: a throw event in one pool and a catch event in another that reference the <b>same message</b> below.</p>
+          <p class="muted" style="font-size:12px">This diagram has several <b>pools</b>. A pool is a <b>participant</b> that <i>executes a process</i> — the process holds the flow, the pool just names who runs it, and each deploys as its own process. Select a pool to name it and configure the process it runs, or an element inside a pool to configure it. Pools talk to each other through <b>message events</b>: a throw event in one pool and a catch event in another that reference the <b>same message</b> below.</p>
           ${messagesManagerHTML(modeler)}`;
         wireMessagesManager(body, modeler, () => show(null));
         return;
@@ -877,6 +967,18 @@ function wireProperties(root, modeler, api) {
     icon.textContent = type.slice(0, 2).toUpperCase();
     typename.textContent = type;
     nameEl.textContent = bo.name || bo.id || "(unnamed)";
+
+    // A pool (Participant) is not itself executable — in BPMN it *executes* a
+    // process: participant → processRef → the flow elements. The pool's own name
+    // is only the band label; the process it references is the deploy identity
+    // and the only thing that can hold elements (a Participant with no processRef
+    // is a black box the engine can't run and the canvas can't drop into). So the
+    // panel edits the process behind the pool, and offers to create one when the
+    // pool has none — the "Prozess dazwischen" that takes the elements.
+    if (/:Participant$/.test(bo.$type || "")) {
+      showPool(element, bo);
+      return;
+    }
 
     const tab = activeTab(root);
     const isSeqFlow = /:SequenceFlow$/.test(bo.$type || "");
@@ -954,6 +1056,8 @@ function wireProperties(root, modeler, api) {
             <div id="dmn-inputs">${inputs.map((p, i) => decisionInputRowHTML(i, p.source, p.target)).join("")}${decisionInputRowHTML(inputs.length, "", "")}</div>`;
         } else if (t === "bpmn:UserTask") {
           const a = findExt(bo, "zeebe:AssignmentDefinition") || {};
+          const pr = findExt(bo, "zeebe:PriorityDefinition") || {};
+          const sch = findExt(bo, "zeebe:TaskSchedule") || {};
           const fd = findExt(bo, "zeebe:FormDefinition") || {};
           const curForm = fd.formId || "";
           html += `<h3>Form</h3>
@@ -968,7 +1072,14 @@ function wireProperties(root, modeler, api) {
             <label class="field"><span>Assignee</span>
               <input type="text" id="f-assignee" value="${esc(a.assignee || "")}" placeholder="editor"/></label>
             <label class="field"><span>Candidate groups</span>
-              <input type="text" id="f-groups" value="${esc(a.candidateGroups || "")}" placeholder="reviewers"/></label>`;
+              <input type="text" id="f-groups" value="${esc(a.candidateGroups || "")}" placeholder="reviewers"/></label>
+            <h3>Schedule</h3>
+            <label class="field"><span>Priority</span>
+              <input type="number" id="f-priority" min="0" max="100" value="${esc(pr.priority || "50")}" placeholder="50"/></label>
+            <label class="field"><span>Due in</span>
+              <input type="text" id="f-due" value="${esc(sch.dueDate || "")}" placeholder="P2D, PT4H, PT30M"/></label>
+            <p class="muted" style="font-size:12px">An ISO-8601 duration measured from when the task appears
+              (e.g. <b>P2D</b> = 2 days, <b>PT4H</b> = 4 hours). Leave blank for no due date. Priority 0–100; higher sorts first.</p>`;
         }
       } else if (isDefaultFlow) {
         html += `<h3>Condition (FEEL)</h3>
@@ -1174,6 +1285,26 @@ function wireProperties(root, modeler, api) {
     };
     if (fassignee) fassignee.addEventListener("change", saveAssignment);
     if (fgroups) fgroups.addEventListener("change", saveAssignment);
+
+    // Priority and due date (ADR-0051): zeebe:priorityDefinition is written only
+    // when it differs from the default 50; zeebe:taskSchedule is dropped when the
+    // due-date field is cleared, keeping the XML free of empty extensions.
+    const fpriority = body.querySelector("#f-priority");
+    const fdue = body.querySelector("#f-due");
+    if (fpriority) {
+      fpriority.addEventListener("change", () => {
+        const v = (fpriority.value || "").trim();
+        if (v === "" || v === "50") removeExt(modeler, element, "zeebe:PriorityDefinition");
+        else upsertExt(modeler, element, "zeebe:PriorityDefinition", { priority: v });
+      });
+    }
+    if (fdue) {
+      fdue.addEventListener("change", () => {
+        const v = (fdue.value || "").trim();
+        if (v) upsertExt(modeler, element, "zeebe:TaskSchedule", { dueDate: v });
+        else removeExt(modeler, element, "zeebe:TaskSchedule");
+      });
+    }
 
     const fform = body.querySelector("#f-form");
     if (fform) {

@@ -14,6 +14,10 @@ import (
 // defaultRetries is used when a service task's task definition omits retries.
 const defaultRetries = 3
 
+// defaultUserTaskPriority mirrors Camunda's default task priority (ADR-0051): a
+// user task with no zeebe:priorityDefinition sorts as if priority 50.
+const defaultUserTaskPriority = 50
+
 // scriptJobTypes maps a polyglot script task's language (lower-cased) to the
 // reserved job type its in-process worker subscribes to (ADR-0047). Adding a
 // language is one entry here plus its worker; the compiler, node type, and
@@ -205,6 +209,16 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			}
 			continue
 		}
+		if s.Timer != nil {
+			schedule, err := parseTimerSchedule(s.Timer)
+			if err != nil {
+				return nil, fmt.Errorf("compiler: start event %q timer: %w", s.Id, err)
+			}
+			if err := register(s.Id, b.AddTimerStartEvent(schedule)); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		if err := register(s.Id, b.AddStartEvent()); err != nil {
 			return nil, err
 		}
@@ -343,7 +357,24 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	}
 	for _, ut := range proc.UserTasks {
 		retries := int32(defaultRetries)
-		if err := register(ut.Id, b.AddUserTask(ut.Name, ut.Assignment.Assignee, ut.Assignment.CandidateGroups, ut.Form.FormId, retries)); err != nil {
+		priority := int32(defaultUserTaskPriority)
+		if s := strings.TrimSpace(ut.Priority.Priority); s != "" {
+			p, err := strconv.ParseInt(s, 10, 32)
+			if err != nil {
+				return nil, fmt.Errorf("compiler: user task %q priority %q: %w", ut.Id, s, err)
+			}
+			priority = int32(p)
+		}
+		var dueDateNanos int64
+		if s := strings.TrimSpace(ut.Schedule.DueDate); s != "" {
+			s = strings.TrimSpace(strings.TrimPrefix(s, "=")) // tolerate a FEEL '=' prefix
+			nanos, err := parseISO8601Duration(s)
+			if err != nil {
+				return nil, fmt.Errorf("compiler: user task %q dueDate: %w", ut.Id, err)
+			}
+			dueDateNanos = nanos
+		}
+		if err := register(ut.Id, b.AddUserTask(ut.Name, ut.Assignment.Assignee, ut.Assignment.CandidateGroups, ut.Form.FormId, priority, dueDateNanos, retries)); err != nil {
 			return nil, err
 		}
 	}
@@ -414,7 +445,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	}
 	for _, e := range proc.EndEvents {
 		// A message end event publishes its message then ends; a plain end event
-		// just ends (ADR-0051).
+		// just ends (ADR-0052).
 		if e.Message != nil {
 			name, keyExpr, err := resolveMessage(e.Id, e.Message.MessageRef)
 			if err != nil {
@@ -613,6 +644,10 @@ type xmlStartEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Name    string                     `xml:"name,attr"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
+	// Timer, when present, makes this a timer start event: the process starts a
+	// fresh instance on the schedule (duration/date/cycle/cron) the definition
+	// carries, armed at deploy time (ADR-0051). A pointer so an absent one is nil.
+	Timer *xmlTimerEventDefinition `xml:"timerEventDefinition"`
 	// Form binds a start form to a none start event (ADR-0028): the form the UI
 	// shows before creating the instance, whose data becomes the start variables.
 	// The engine never sees it — it is pre-start UI metadata.
@@ -642,7 +677,7 @@ type xmlIntermediateThrowEvent struct {
 
 // An end event. A plain (none) end event just ends the instance; one bearing a
 // messageEventDefinition is a message end event, which publishes the message
-// then ends (ADR-0051). The definition is a pointer so an absent one is nil.
+// then ends (ADR-0052). The definition is a pointer so an absent one is nil.
 type xmlEndEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
@@ -663,6 +698,8 @@ type xmlBoundaryEvent struct {
 
 type xmlTimerEventDefinition struct {
 	TimeDuration string `xml:"timeDuration"` // ISO-8601 duration, e.g. PT30S
+	TimeDate     string `xml:"timeDate"`     // ISO-8601 instant, e.g. 2026-08-01T09:00:00Z (ADR-0051)
+	TimeCycle    string `xml:"timeCycle"`    // ISO-8601 repeating interval (R3/PT1H) or cron ("0 * * * *") (ADR-0051)
 }
 
 type xmlNode struct {
@@ -676,6 +713,22 @@ type xmlUserTask struct {
 	Name       string                  `xml:"name,attr"`
 	Assignment xmlAssignmentDefinition `xml:"extensionElements>assignmentDefinition"`
 	Form       xmlFormDefinition       `xml:"extensionElements>formDefinition"`
+	Priority   xmlPriorityDefinition   `xml:"extensionElements>priorityDefinition"`
+	Schedule   xmlTaskSchedule         `xml:"extensionElements>taskSchedule"`
+}
+
+// xmlPriorityDefinition carries zeebe:priorityDefinition's static task priority
+// (ADR-0051). An empty value means the task uses the default priority.
+type xmlPriorityDefinition struct {
+	Priority string `xml:"priority,attr"`
+}
+
+// xmlTaskSchedule carries zeebe:taskSchedule. Atlas reads dueDate as an ISO-8601
+// duration relative to task creation (its timer convention, ADR-0040/0051);
+// followUpDate is not yet executable.
+type xmlTaskSchedule struct {
+	DueDate      string `xml:"dueDate,attr"`
+	FollowUpDate string `xml:"followUpDate,attr"`
 }
 
 // xmlFormDefinition binds a form to a user task by id (ADR-0028). formId

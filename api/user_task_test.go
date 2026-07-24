@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 const userTaskBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
@@ -15,6 +16,8 @@ const userTaskBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/
     <userTask id="review" name="Review order">
       <extensionElements>
         <zeebe:assignmentDefinition assignee="editor" candidateGroups="reviewers"/>
+        <zeebe:priorityDefinition priority="80"/>
+        <zeebe:taskSchedule dueDate="PT1H"/>
       </extensionElements>
     </userTask>
     <endEvent id="end"/>
@@ -140,6 +143,8 @@ func TestUserTaskListAndComplete(t *testing.T) {
 		Name               string `json:"name"`
 		Assignee           string `json:"assignee"`
 		CandidateGroups    string `json:"candidateGroups"`
+		Priority           int32  `json:"priority"`
+		DueDate            int64  `json:"dueDate"`
 	}
 	if err := json.Unmarshal(body, &tasks); err != nil {
 		t.Fatalf("decode tasks: %v (%s)", err, body)
@@ -149,6 +154,13 @@ func TestUserTaskListAndComplete(t *testing.T) {
 		t.Fatalf("tasks = %d, want 1", len(tasks))
 	}
 	task := tasks[0]
+	if task.Priority != 80 {
+		t.Errorf("priority = %d, want 80", task.Priority)
+	}
+	// The due date is now + PT1H, in the future, expressed in Unix milliseconds.
+	if nowMs := time.Now().UnixMilli(); task.DueDate <= nowMs || task.DueDate > nowMs+2*3600*1000 {
+		t.Errorf("dueDate = %d, want ~1h in the future (now %d)", task.DueDate, nowMs)
+	}
 	if task.ProcessID != "approval" {
 		t.Errorf("processId = %q, want \"approval\"", task.ProcessID)
 	}
