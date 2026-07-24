@@ -98,6 +98,7 @@ type Server struct {
 	versions    map[string]int32 // bpmnProcessId → highest version deployed
 	deploys     *deployStore     // durable sidecar for deployments (ADR-0019)
 	drafts      *draftStore      // durable sidecar for saved-but-not-deployed diagrams
+	forms       *formStore       // durable sidecar for form definitions (ADR-0028)
 	projects    *projectStore    // durable sidecar for projects grouping artifacts (ADR-0034)
 	dmnrefs     *dmnRefStore     // durable sidecar for DMN reference artifacts (ADR-0034)
 
@@ -129,6 +130,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string) (*Server, e
 	if err != nil {
 		return nil, err
 	}
+	forms, err := newFormStore(filepath.Join(dataDir, "forms"))
+	if err != nil {
+		return nil, err
+	}
 	projects, err := newProjectStore(filepath.Join(dataDir, "projects"))
 	if err != nil {
 		return nil, err
@@ -151,6 +156,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string) (*Server, e
 		versions:     map[string]int32{},
 		deploys:      ds,
 		drafts:       drafts,
+		forms:        forms,
 		projects:     projects,
 		dmnrefs:      dmnrefs,
 		dmnResolver:  resolver,
@@ -313,6 +319,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/drafts/{id}/xml", s.handleDraftXML)
 	mux.HandleFunc("PATCH /api/v1/drafts/{id}", s.handleMoveDraft)
 	mux.HandleFunc("DELETE /api/v1/drafts/{id}", s.handleDeleteDraft)
+	mux.HandleFunc("POST /api/v1/forms", s.handleSaveForm)
+	mux.HandleFunc("GET /api/v1/forms", s.handleListForms)
+	mux.HandleFunc("GET /api/v1/forms/{id}", s.handleGetForm)
+	mux.HandleFunc("DELETE /api/v1/forms/{id}", s.handleDeleteForm)
 	mux.HandleFunc("POST /api/v1/projects", s.handleCreateProject)
 	mux.HandleFunc("GET /api/v1/projects", s.handleListProjects)
 	mux.HandleFunc("PATCH /api/v1/projects/{id}", s.handleRenameProject)
