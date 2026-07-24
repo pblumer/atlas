@@ -27,6 +27,7 @@ import (
 	"github.com/pblumer/atlas/api"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/mcp"
+	"github.com/pblumer/atlas/pwsh"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
 )
@@ -95,13 +96,14 @@ func runServe(args []string) error {
 	shutdownTimeout := fs.Duration("shutdown-timeout", 10*time.Second, "grace period for in-flight requests on shutdown")
 	docs := fs.Bool("docs", true, "serve the OpenAPI spec (/api/v1/openapi.json) and the Scalar API explorer (/api/docs); pass --docs=false to disable")
 	auth := fs.Bool("auth", false, "require login for the API and UI; seeds an admin from ATLAS_ADMIN_USERNAME/ATLAS_ADMIN_PASSWORD on first run")
+	powershell := fs.Bool("powershell", false, "run PowerShell script tasks by shelling out to pwsh on this host; off by default because it executes arbitrary interpreter code")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth)
+	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *powershell)
 }
 
-func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool) error {
+func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, powershell bool) error {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return err
 	}
@@ -134,6 +136,9 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool)
 	}
 	if auth {
 		apiOpts = append(apiOpts, api.WithAuth())
+	}
+	if powershell {
+		apiOpts = append(apiOpts, api.WithPowerShellScripts(pwsh.NewCmdExec()))
 	}
 	srv, err := api.New(proc, store, dataDir, apiOpts...)
 	if err != nil {

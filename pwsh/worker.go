@@ -86,7 +86,7 @@ func Handler(store *state.Store, lookup ProcessLookup, exec Exec) job.OutputHand
 
 // instanceVars reads the instance's variables into a JSON-ready map — the inputs a
 // script sees. Until input mappings exist (Milestone 1) the whole variable scope
-// is the input set, matching the connector worker (ADR-0036/0044).
+// is the input set, matching the connector worker (ADR-0036/0047).
 func instanceVars(store *state.Store, scope uint64) (map[string]any, error) {
 	vars := map[string]any{}
 	err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {
