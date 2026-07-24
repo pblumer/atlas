@@ -94,6 +94,86 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 
 const shortType = (t) => (t || "").replace(/^bpmn:/, "");
 
+// --- Variable presentation (shared by the live and replay views) ---
+//
+// Operators inspect an instance's variables, which can be whole JSON structures.
+// These render them clearly: scalars as labeled, type-colored fields; JSON values
+// as collapsible, syntax-highlighted, pretty-printed cards.
+
+// highlightJSON pretty-prints a canonical JSON string and wraps its tokens in
+// colored spans (keys, strings, numbers, booleans, null) — a tiny, dependency-
+// free syntax highlighter (ADR-0012 buildless UI). It escapes first, then spans.
+function highlightJSON(text) {
+  let out;
+  try { out = JSON.stringify(JSON.parse(text), null, 2); }
+  catch { return esc(text); } // not valid JSON after all — show it verbatim
+  out = out.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return out.replace(
+    /("(?:\\.|[^"\\])*"\s*:?|\btrue\b|\bfalse\b|\bnull\b|-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?)/g,
+    (m) => {
+      let cls = "j-num";
+      if (m[0] === '"') cls = /:\s*$/.test(m) ? "j-key" : "j-str";
+      else if (m === "true" || m === "false") cls = "j-bool";
+      else if (m === "null") cls = "j-null";
+      return `<span class="${cls}">${m}</span>`;
+    });
+}
+
+// jsonSummary is the compact one-liner shown on a collapsed JSON card.
+function jsonSummary(text) {
+  try {
+    const v = JSON.parse(text);
+    if (Array.isArray(v)) return `${v.length} item${v.length === 1 ? "" : "s"}`;
+    if (v && typeof v === "object") {
+      const n = Object.keys(v).length;
+      return `${n} field${n === 1 ? "" : "s"}`;
+    }
+    return String(v);
+  } catch { return ""; }
+}
+
+// renderVarsBody lays out a variable list: scalars as a labeled field grid, JSON
+// values as collapsible, syntax-highlighted cards. collapsed is a Set of the JSON
+// variable names the operator has collapsed (persists across re-renders); the
+// caller wires a delegated click on `.vj-head` to toggle it and re-render.
+function renderVarsBody(list, collapsed) {
+  if (!list || !list.length) return '<span class="muted">No variables yet.</span>';
+  const scalars = list.filter((v) => v.kind !== "json");
+  const jsons = list.filter((v) => v.kind === "json");
+  let html = "";
+  if (scalars.length) {
+    html += `<div class="vgrid">${scalars.map((v) => {
+      const cls = v.kind === "boolean" ? "bool" : v.kind === "number" ? "num" : v.kind === "null" ? "null" : "str";
+      return `<div class="vfield"><div class="vf-head"><span class="vk">${esc(v.name)}</span><span class="vtag">${esc(v.kind)}</span></div>
+        <div class="vv ${cls}">${esc(v.value)}</div></div>`;
+    }).join("")}</div>`;
+  }
+  html += jsons.map((v) => {
+    const isCollapsed = collapsed.has(v.name);
+    return `<div class="vjson${isCollapsed ? " collapsed" : ""}">
+      <button class="vj-head" data-name="${esc(v.name)}" aria-expanded="${isCollapsed ? "false" : "true"}">
+        <span class="chev">&#9662;</span><span class="vk">${esc(v.name)}</span>
+        <span class="vtag">json</span><span class="vj-sum">${esc(jsonSummary(v.value))}</span>
+      </button>
+      <pre class="vj-body">${highlightJSON(v.value)}</pre>
+    </div>`;
+  }).join("");
+  return html;
+}
+
+// bindJsonCards wires the delegated expand/collapse click for JSON cards inside
+// panel, toggling names in collapsed and calling rerender. Attach once per view.
+function bindJsonCards(panel, collapsed, rerender) {
+  panel.addEventListener("click", (e) => {
+    const head = e.target.closest(".vj-head");
+    if (!head || !panel.contains(head)) return;
+    const name = head.dataset.name;
+    if (collapsed.has(name)) collapsed.delete(name);
+    else collapsed.add(name);
+    rerender();
+  });
+}
+
 export async function mountEditor(root, { api, toast, key, draftId, projectId }) {
   cleanup();
 
@@ -1597,6 +1677,8 @@ export async function mountLive(root, { api, toast, key, instance }) {
   const instSel = root.querySelector("#instance-sel");
   const varPanel = root.querySelector("#var-panel");
   let marked = [];
+  const jsonCollapsed = new Set(); // JSON variable names collapsed by the operator
+  let varsHTML = "";               // last rendered variables markup, to skip no-op rebuilds
   // "all" or an instance key (as a string). A deep-linked instance (Deploy & run's
   // roundtrip link, or a shared URL) preselects that one; refreshInstances falls
   // back to "all" if it no longer exists.
@@ -1640,16 +1722,18 @@ export async function mountLive(root, { api, toast, key, instance }) {
   // completedAt is unix nanoseconds; Date wants milliseconds.
   const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "";
 
-  // renderVariables shows the selected instance's variables, or — for "All
-  // instances" — a compact per-instance table, beneath the diagram.
+  // renderVariables shows the selected instance's variables with the shared
+  // polished renderer (scalars as fields, JSON as collapsible highlighted cards),
+  // or — for "All instances" — a compact per-instance overview table. It rebuilds
+  // only when the markup actually changes, so a 1.5s poll never resets an expanded
+  // JSON card's scroll or the operator's collapse choices.
   function renderVariables() {
+    let html;
     if (selected === "all") {
-      if (!instances.length) {
-        varPanel.innerHTML = `<div class="vp-head">Variables</div>
-          <p class="muted" style="margin:0">No instances yet — start one to see its variables here.</p>`;
-        return;
-      }
-      varPanel.innerHTML = `<div class="vp-head">Variables · all instances</div>
+      html = !instances.length
+        ? `<div class="vp-head">Variables</div>
+          <p class="muted" style="margin:0">No instances yet — start one to see its variables here.</p>`
+        : `<div class="vp-head">Variables · all instances</div>
         <table class="vp-table"><tbody>${instances.map((r) => `
           <tr><td><b>${r.key}</b></td>
             <td>${r.state === "active"
@@ -1657,19 +1741,25 @@ export async function mountLive(root, { api, toast, key, instance }) {
               : `<span class="pill">${esc(r.state)}</span>`}</td>
             <td>${varChips(r.variables)}</td>
             <td style="text-align:right"><a class="replay-link" href="#/operations/i/${r.key}" title="Replay this instance step by step">&#9654; Replay</a></td></tr>`).join("")}</tbody></table>`;
-      return;
+    } else {
+      const inst = instances.find((r) => String(r.key) === selected);
+      if (!inst) {
+        html = `<div class="vp-head">Variables</div>
+          <p class="muted" style="margin:0">Instance no longer available.</p>`;
+      } else {
+        const when = inst.state === "active" ? "" : fmtNano(inst.completedAt);
+        html = `<div class="vp-head">Variables · instance ${inst.key}
+            ${inst.state === "active"
+              ? '<span class="pill ok"><span class="dot"></span>active</span>'
+              : `<span class="pill">${esc(inst.state)}</span>${when ? ` <span class="muted">${esc(when)}</span>` : ""}`}
+            <a class="replay-link" href="#/operations/i/${inst.key}" title="Replay this instance step by step">&#9654; Replay</a>
+          </div>
+          <div class="vars">${renderVarsBody(inst.variables, jsonCollapsed)}</div>`;
+      }
     }
-    const inst = instances.find((r) => String(r.key) === selected);
-    if (!inst) { varPanel.innerHTML = `<div class="vp-head">Variables</div>
-      <p class="muted" style="margin:0">Instance no longer available.</p>`; return; }
-    const when = inst.state === "active" ? "" : fmtNano(inst.completedAt);
-    varPanel.innerHTML = `<div class="vp-head">Variables · instance ${inst.key}
-        ${inst.state === "active"
-          ? '<span class="pill ok"><span class="dot"></span>active</span>'
-          : `<span class="pill">${esc(inst.state)}</span>${when ? ` <span class="muted">${esc(when)}</span>` : ""}`}
-        <a class="replay-link" href="#/operations/i/${inst.key}" title="Replay this instance step by step">&#9654; Replay</a>
-      </div>
-      <div>${varChips(inst.variables)}</div>`;
+    if (html === varsHTML) return; // nothing changed — keep the DOM (and scroll) intact
+    varsHTML = html;
+    varPanel.innerHTML = html;
   }
 
   async function poll() {
@@ -1748,6 +1838,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
   });
 
   root.querySelector("#refresh").addEventListener("click", poll);
+  bindJsonCards(varPanel, jsonCollapsed, renderVariables);
 
   // Start a fresh instance of this already-deployed definition. The demo and the
   // Modeler's "Deploy & run" both couple starting to a deployment; this is the
@@ -2187,6 +2278,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   let playing = false;
   let playhead = 0;  // number of steps walked so far (0..steps.length)
   let animToken = 0; // bumped to supersede an in-flight animation
+  const jsonCollapsed = new Set(); // JSON variable names the operator has collapsed (persists across scrubs)
 
   const speed = () => Number(speedSel.value) || 1;
   const fmtClock = (ns) => (ns ? new Date(ns / 1e6).toLocaleTimeString() : "");
@@ -2202,26 +2294,16 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     return bare ? bare.charAt(0).toUpperCase() + bare.slice(1).toLowerCase() : "";
   }
 
-  const varChips = (list) => !list || !list.length
-    ? '<span class="muted">No variables yet.</span>'
-    : list.map((v) => {
-        if (v.kind === "json") {
-          const preview = v.value.length > 60 ? v.value.slice(0, 57) + "..." : v.value;
-          return `<span class="chip" title="${esc(v.value)}">${esc(v.name)}=<code>${esc(preview)}</code></span>`;
-        }
-        return `<span class="chip">${esc(v.name)}=${esc(v.value)}</span>`;
-      }).join(" ");
-
   // renderVars shows the variable values as they stood when the token entered the
-  // current step (the per-step snapshot the timeline carries, ADR-0048). At
-  // playhead 0 (before any step) it shows nothing yet.
+  // current step (the per-step snapshot the timeline carries, ADR-0048), using the
+  // shared polished renderer. At playhead 0 (before any step) it shows nothing yet.
   function renderVars() {
     const cur = playhead > 0 && playhead <= steps.length ? steps[playhead - 1] : null;
     const head = cur
-      ? `Variables · as of step ${playhead} (${esc(stepLabel(cur))})`
+      ? `Variables &middot; as of step ${playhead} (${esc(stepLabel(cur))})`
       : "Variables";
     varPanel.innerHTML = `<div class="vp-head">${head}</div>
-      <div>${varChips(cur ? cur.variables : [])}</div>`;
+      <div class="vars">${renderVarsBody(cur ? cur.variables : [], jsonCollapsed)}</div>`;
   }
 
   function updateClock() {
@@ -2375,6 +2457,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   root.querySelector("#step-back").addEventListener("click", () => { pause(); setPlayhead(playhead - 1); });
   scrub.addEventListener("input", () => { pause(); setPlayhead(Number(scrub.value)); });
   root.querySelector("#refresh").addEventListener("click", poll);
+  bindJsonCards(varPanel, jsonCollapsed, renderVars);
 
   await poll();
   liveTimer = setInterval(poll, 1500);
