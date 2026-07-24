@@ -214,8 +214,8 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			if err != nil {
 				return nil, fmt.Errorf("compiler: start event %q timer: %w", s.Id, err)
 			}
-			if schedule.IsFeel() {
-				return nil, fmt.Errorf("compiler: start event %q: a timer start event's schedule must be a literal — FEEL expressions need instance variables, which a start event has none of (ADR-0055)", s.Id)
+			if schedule.IsFeel() && len(schedule.Expr.Inputs()) > 0 {
+				return nil, fmt.Errorf("compiler: start event %q: a timer start event's FEEL schedule must be constant (reference no variables) — a start event has no instance to evaluate against (ADR-0056)", s.Id)
 			}
 			if err := register(s.Id, b.AddTimerStartEvent(schedule)); err != nil {
 				return nil, err
