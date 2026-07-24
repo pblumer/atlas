@@ -1129,6 +1129,61 @@ func (s *Server) handleInstanceVariables(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, out)
 }
 
+// dataObjectView renders a data object for the operator UI: its name, its BPMN
+// data state (the [received]/[approved] label), and its typed value. The value/kind
+// mirror a variable's; state is what a variable has not — the per-datum lifecycle
+// Atlas puts front and center (ADR-0053).
+type dataObjectView struct {
+	Name  string `json:"name"`
+	State string `json:"state"`
+	Value any    `json:"value"`
+	Kind  string `json:"kind"`
+}
+
+func toDataObjectView(v *model.DataObjectValue) dataObjectView {
+	out := dataObjectView{Name: v.Name, State: v.State}
+	switch v.Kind {
+	case model.VarBool:
+		out.Kind, out.Value = "boolean", v.Bool
+	case model.VarNumber:
+		out.Kind, out.Value = "number", json.Number(v.Text)
+	case model.VarString:
+		out.Kind, out.Value = "string", v.Text
+	case model.VarJSON:
+		out.Kind, out.Value = "json", json.RawMessage(v.Text)
+	default:
+		out.Kind, out.Value = "null", nil
+	}
+	return out
+}
+
+// handleInstanceDataObjects returns a process instance's data objects as a JSON
+// array, each carrying its name, data state, and typed value — so an operator sees
+// the data the process carries and what lifecycle state it is in (ADR-0053). The
+// objects come back in name order (the store scans the family by name). An instance
+// with no data objects (or an unknown key) yields an empty array, not a 404: like
+// the variables endpoint, it is a convenience read, not an existence check.
+func (s *Server) handleInstanceDataObjects(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid instance key")
+		return
+	}
+	out := []dataObjectView{}
+	var scanErr error
+	s.do(func() {
+		scanErr = s.store.DataObjectsOfScope(key, func(v *model.DataObjectValue) error {
+			out = append(out, toDataObjectView(v))
+			return nil
+		})
+	})
+	if scanErr != nil {
+		writeError(w, http.StatusInternalServerError, "read data objects: "+scanErr.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 // handleListInstances lists process instances — live ones (with their current
 // token count) followed by finished ones from the history index, most recently
 // completed first (ADR-0017). It is the operator "instances" view.

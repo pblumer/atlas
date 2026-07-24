@@ -1,6 +1,8 @@
 package api
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/pblumer/atlas/model"
@@ -126,6 +128,36 @@ func TestToVariableView(t *testing.T) {
 			got := toVariableView(&tc.in)
 			if got.Name != tc.in.Name || got.Kind != tc.wantKind || got.Value != tc.wantValue {
 				t.Fatalf("toVariableView(%+v) = %+v, want kind=%q value=%q", tc.in, got, tc.wantKind, tc.wantValue)
+			}
+		})
+	}
+}
+
+// TestToDataObjectView covers the value/kind mapping for every VarKind a data
+// object can carry, plus that the BPMN data state passes through unchanged. The
+// value is emitted as its native JSON type (bool, json.Number, string,
+// json.RawMessage, nil) exactly as a native variable would be (ADR-0053).
+func TestToDataObjectView(t *testing.T) {
+	cases := []struct {
+		name      string
+		in        model.DataObjectValue
+		wantKind  string
+		wantValue any
+	}{
+		{"bool", model.DataObjectValue{Name: "b", State: "on", Kind: model.VarBool, Bool: true}, "boolean", true},
+		{"number", model.DataObjectValue{Name: "n", Kind: model.VarNumber, Text: "42"}, "number", json.Number("42")},
+		{"string", model.DataObjectValue{Name: "s", State: "set", Kind: model.VarString, Text: "hi"}, "string", "hi"},
+		{"json", model.DataObjectValue{Name: "c", Kind: model.VarJSON, Text: `{"a":1}`}, "json", json.RawMessage(`{"a":1}`)},
+		{"null", model.DataObjectValue{Name: "z", State: "received", Kind: model.VarNull}, "null", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := toDataObjectView(&tc.in)
+			if got.Name != tc.in.Name || got.State != tc.in.State || got.Kind != tc.wantKind {
+				t.Fatalf("toDataObjectView(%+v) = %+v, want name=%q state=%q kind=%q", tc.in, got, tc.in.Name, tc.in.State, tc.wantKind)
+			}
+			if fmt.Sprintf("%v", got.Value) != fmt.Sprintf("%v", tc.wantValue) {
+				t.Fatalf("toDataObjectView(%+v).Value = %v (%T), want %v (%T)", tc.in, got.Value, got.Value, tc.wantValue, tc.wantValue)
 			}
 		})
 	}

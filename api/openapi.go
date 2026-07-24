@@ -132,6 +132,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/instances/{key}/variables", s.handleInstanceVariables, apiOp{
 			summary: "Read a process instance's variables as a typed JSON object", tag: "Instances",
 			resp: jsonBody("Instance variables", tObject())}},
+		{"GET", "/api/v1/instances/{key}/data-objects", s.handleInstanceDataObjects, apiOp{
+			summary: "Read a process instance's data objects — each with its name, data state, and typed value", tag: "Instances",
+			resp: jsonBody("Instance data objects", tArray())}},
 		{"GET", "/api/v1/instances/{key}/timeline", s.handleInstanceTimeline, apiOp{
 			summary: "Read a process instance's step-by-step replay timeline", tag: "Instances",
 			resp: jsonBody("Instance timeline", tObject())}},
