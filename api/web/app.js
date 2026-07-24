@@ -1156,21 +1156,27 @@ function loadFormViewer() {
 }
 
 async function viewTasks() {
+  // With auth on, identity is the signed-in user (server-authoritative); with auth
+  // off it stays a typed, display-only identity (ADR-0045).
+  const authOn = AUTH.enabled;
   const state = {
     tasks: [],
     folder: "all",
     selected: null, // job key of the selected task
-    me: localStorage.getItem("atlas.tasks.me") || "",
+    me: authOn ? ((AUTH.user && AUTH.user.username) || "") : (localStorage.getItem("atlas.tasks.me") || ""),
+    assignable: [], // enabled users a task can be assigned to, for the picker
     mountedForm: null, // the live form-js viewer instance for the selected task, if any
   };
+
+  const identity = authOn
+    ? `<div class="tasks-identity"><span>You</span><div class="tasks-me">${esc(state.me) || "—"}</div></div>`
+    : `<label class="tasks-identity"><span>You</span>
+        <input id="task-me" type="text" placeholder="e.g. editor" value="${esc(state.me)}" spellcheck="false" /></label>`;
 
   view.innerHTML = `
     <div class="tasks">
       <aside class="tasks-folders">
-        <label class="tasks-identity">
-          <span>You</span>
-          <input id="task-me" type="text" placeholder="e.g. editor" value="${esc(state.me)}" spellcheck="false" />
-        </label>
+        ${identity}
         <nav id="task-folder-nav"></nav>
       </aside>
       <section class="tasks-list-pane">
@@ -1285,6 +1291,15 @@ async function viewTasks() {
     const claimLabel = mine ? "Unclaim" : "Claim";
     const claimHint = !state.me && !mine ? ` title="Set your identity (top left) to claim"` : "";
     const claimDisabled = !state.me && !mine ? " disabled" : "";
+    // Assign-to picker, sourced from real users (ADR-0045). Shown when accounts
+    // exist; selecting one assigns the task to that user.
+    const assignSelect = state.assignable.length
+      ? `<select class="tasks-assign" id="task-assign" title="Assign to a user">
+          <option value="">Assign to&hellip;</option>
+          ${state.assignable.map((u) =>
+            `<option value="${esc(u.username)}"${u.username === t.assignee ? " selected" : ""}>${esc(u.displayName || u.username)}</option>`).join("")}
+        </select>`
+      : "";
     const formArea = t.formId
       ? `<div class="tasks-form" id="task-form"><p class="muted">Loading form&hellip;</p></div>`
       : `<div class="tasks-form-placeholder"><p class="muted">This task has no form; completing it
@@ -1293,6 +1308,7 @@ async function viewTasks() {
       <header class="tasks-detail-head">
         <h1>${esc(taskTitle(t))}</h1>
         <div class="tasks-detail-actions">
+          ${assignSelect}
           <button class="btn neutral" id="task-claim"${claimDisabled}${claimHint}>${claimLabel}</button>
           <button class="btn" id="task-complete">Complete task</button>
         </div>
@@ -1338,7 +1354,9 @@ async function viewTasks() {
           await api("POST", "/api/v1/tasks/" + t.key + "/unclaim");
           toast("Task released");
         } else {
-          await api("POST", "/api/v1/tasks/" + t.key + "/claim", { assignee: state.me });
+          // With auth on the server claims for the signed-in user (empty body);
+          // with auth off we pass the typed identity.
+          await api("POST", "/api/v1/tasks/" + t.key + "/claim", authOn ? undefined : { assignee: state.me });
           toast("Task claimed");
         }
         await load(); // keeps the selection; the detail re-renders with the new assignee
@@ -1347,6 +1365,21 @@ async function viewTasks() {
         btn.disabled = false;
       }
     });
+    const assignEl = document.getElementById("task-assign");
+    if (assignEl) {
+      assignEl.addEventListener("change", async (e) => {
+        const username = e.target.value;
+        if (!username) return;
+        try {
+          await api("POST", "/api/v1/tasks/" + t.key + "/claim", { assignee: username });
+          toast("Assigned to " + username);
+          await load();
+        } catch (err) {
+          toast("Assign failed: " + err.message, "err");
+          e.target.value = t.assignee || "";
+        }
+      });
+    }
     if (t.formId) mountForm(t);
   }
 
@@ -1366,13 +1399,22 @@ async function viewTasks() {
     }
   }
 
-  document.getElementById("task-me").addEventListener("input", (e) => {
-    state.me = e.target.value.trim();
-    localStorage.setItem("atlas.tasks.me", state.me);
-    renderFolders();
-    renderList();
-  });
+  async function loadAssignable() {
+    try { state.assignable = await api("GET", "/api/v1/users/assignable"); }
+    catch { state.assignable = []; }
+  }
+
+  const meInput = document.getElementById("task-me");
+  if (meInput) {
+    meInput.addEventListener("input", (e) => {
+      state.me = e.target.value.trim();
+      localStorage.setItem("atlas.tasks.me", state.me);
+      renderFolders();
+      renderList();
+    });
+  }
   document.getElementById("task-refresh").addEventListener("click", load);
+  await loadAssignable();
   await load();
 }
 

@@ -265,11 +265,15 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   once — no hardcoded credential). The Console's **Organization** page is now a
   real user-management surface (create/edit/roles/deactivate/delete), with a login
   gate and an account menu. A last-admin lockout guard prevents an instance from
-  locking every operator out. Next: external identity (OIDC/SAML/LDAP) via the
+  locking every operator out. **User-task assignment is now bound to this
+  identity** ([ADR-0045](docs/adr/0045-user-task-assignment-bound-to-identity.md)):
+  claim is authoritative (an empty body claims for the signed-in user; a named
+  assignee must be a real, enabled account), the Tasks inbox uses the signed-in
+  user as its identity, and an "Assign to…" picker is sourced from a non-admin
+  `GET /api/v1/users/assignable`. Next: external identity (OIDC/SAML/LDAP) via the
   `Source`/`ExternalID` hooks, per-endpoint RBAC beyond `admin`, groups, durable
-  sessions, multi-tenancy, audit logging, and picking user-task assignees
-  (ADR-0042) from real users. One honest limitation: the `/mcp` adapter is not
-  yet auth-aware, so under `--auth` front it separately (ADR-0016).
+  sessions, multi-tenancy, and audit logging. One honest limitation: the `/mcp`
+  adapter is not yet auth-aware, so under `--auth` front it separately (ADR-0016).
 - 🔲 Later: a polished "workbench" experience on top.
 
 ## Milestone A — Modeler & authoring experience 🔲

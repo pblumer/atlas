@@ -52,6 +52,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0042](0042-user-task-assignment-and-claim.md) | User-task runtime assignment and claim/unclaim | Accepted |
 | [0043](0043-openapi-spec-and-embedded-api-explorer.md) | An OpenAPI spec and an embedded API explorer for the HTTP API | Accepted |
 | [0044](0044-user-management-and-authentication-boundary.md) | User management and the opt-in authentication boundary | Accepted |
+| [0045](0045-user-task-assignment-bound-to-identity.md) | Binding user-task assignment to real identities | Accepted |
 
 ## Status values
 
