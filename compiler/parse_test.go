@@ -341,8 +341,8 @@ func TestParseTimerCatchEvent(t *testing.T) {
 	if cp.Node(node).Type != TypeTimerCatchEvent {
 		t.Fatalf("node type = %v, want TimerCatchEvent", cp.Node(node).Type)
 	}
-	if d := cp.TimerCatch(cp.Node(node).Detail); d.DurationNanos != 30e9 {
-		t.Errorf("duration = %d, want %d", d.DurationNanos, int64(30e9))
+	if d := cp.TimerCatch(cp.Node(node).Detail); d.Schedule.Kind != TimerDuration || d.Schedule.BaseNanos != 30e9 {
+		t.Errorf("schedule = %+v, want duration %d", d.Schedule, int64(30e9))
 	}
 }
 

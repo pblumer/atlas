@@ -51,6 +51,13 @@ func (s TimerSchedule) FirstDue(now int64) int64 {
 	}
 }
 
+// Repeats reports whether the schedule recurs (a cycle), as opposed to firing
+// once (a duration or date). A recurring non-interrupting boundary uses it to
+// decide whether to re-arm after each fire (ADR-0054).
+func (s TimerSchedule) Repeats() bool {
+	return s.Kind == TimerCycleInterval || s.Kind == TimerCycleCron
+}
+
 // NextDue returns the due date of the next firing after a timer fires at now, and
 // whether the timer recurs at all. A one-shot (duration/date) returns ok=false.
 // A finite cycle whose Repetitions has run out is handled by the caller via the

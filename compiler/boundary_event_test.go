@@ -48,8 +48,8 @@ func TestParseBoundaryTimerInterrupting(t *testing.T) {
 	if d.Kind != BoundaryTimer {
 		t.Errorf("Kind = %d, want BoundaryTimer", d.Kind)
 	}
-	if d.DurationNanos != 30*60*1e9 {
-		t.Errorf("DurationNanos = %d, want %d", d.DurationNanos, int64(30*60*1e9))
+	if d.Schedule.Kind != TimerDuration || d.Schedule.BaseNanos != 30*60*1e9 {
+		t.Errorf("schedule = %+v, want duration %d", d.Schedule, int64(30*60*1e9))
 	}
 	// The boundary event carries an outgoing flow like any node.
 	if out := cp.Outgoing(be.ElementId); len(out) != 1 {
