@@ -400,6 +400,26 @@ func (t *Tx) RecordElementStep(piKey uint64, ts int64, pos uint64, elementId int
 	return t.b.Set(keyElementStep(piKey, ts, pos), t.scratch, nil)
 }
 
+// --- Variable-snapshot history ---
+//
+// Every variable change of a process instance is retained here, keyed in change
+// order under the variable's scope, so the single-process replay can fold the
+// variable values as they stood at each step — the variable analogue of the
+// element-step timeline (ADR-0047). It complements the live variable store (which
+// keeps only the current value): this keeps the whole history so scrubbing back
+// shows earlier values. Written only from applyToState, from the event alone (the
+// header's timestamp and position plus the changed variable), so it rebuilds
+// identically on replay (invariant I4). Each record has a unique key (position is
+// monotonic), so this is a plain Set, never overwritten and never deleted.
+// Retention is unbounded for now, as with the other history families.
+
+// RecordVariableSnapshot retains one variable change under its scope, keyed in
+// change order. ts and pos come from the event header; the value is the variable's
+// new state (name, kind, value).
+func (t *Tx) RecordVariableSnapshot(ts int64, pos uint64, v *model.VariableValue) error {
+	return t.b.Set(keyVariableSnapshot(v.ScopeKey, ts, pos), t.encodeValue(v), nil)
+}
+
 // ActiveChildren returns the active-child count for scope (0 if none). This read
 // folds the merged deltas, so it is used only where the current count is needed
 // (e.g. detecting a finished scope), not on every increment.

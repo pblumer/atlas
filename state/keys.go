@@ -25,6 +25,7 @@ const (
 	cfMessageFlow            columnFamily = 0x0C // msgFlow:<receiverDefKey>:<ts>:<pos> → MessageFlowValue
 	cfJobByElement           columnFamily = 0x0D // jobByEl:<elKey> → jobKey (reverse lookup for boundary cancel)
 	cfElementStep            columnFamily = 0x0E // elStep:<piKey>:<ts>:<pos> → int32 elementId
+	cfVariableSnapshot       columnFamily = 0x0F // varSnap:<scopeKey>:<ts>:<pos> → VariableValue
 )
 
 func appendBE64(dst []byte, v uint64) []byte { return binary.BigEndian.AppendUint64(dst, v) }
@@ -169,6 +170,35 @@ func timestampFromStepKey(k []byte) int64 {
 
 // positionFromStepKey extracts the trailing log position from an element-step key.
 func positionFromStepKey(k []byte) uint64 {
+	return binary.BigEndian.Uint64(k[len(k)-8:])
+}
+
+// keyVariableSnapshot keys one retained variable change of a scope (a process
+// instance today). The scope key leads, so every change under one scope is one
+// prefix scan; the event timestamp follows so the scan yields them in change
+// order, and the log position is the trailing disambiguator. Same shape as the
+// element-step key, so a single instance's step and variable timelines fold
+// together by position for step-by-step replay (ADR-0047).
+func keyVariableSnapshot(scopeKey uint64, ts int64, pos uint64) []byte {
+	b := appendOrderedInt64(variableSnapshotScopePrefix(scopeKey), ts)
+	return appendBE64(b, pos)
+}
+
+// variableSnapshotScopePrefix scans every variable change recorded under one
+// scope, in change order.
+func variableSnapshotScopePrefix(scopeKey uint64) []byte {
+	return appendBE64([]byte{byte(cfVariableSnapshot)}, scopeKey)
+}
+
+// timestampFromVarSnapKey extracts the event timestamp from a variable-snapshot
+// key, inverting the sign-flip appendOrderedInt64 applied.
+func timestampFromVarSnapKey(k []byte) int64 {
+	return int64(binary.BigEndian.Uint64(k[len(k)-16:]) ^ (1 << 63))
+}
+
+// positionFromVarSnapKey extracts the trailing log position from a
+// variable-snapshot key.
+func positionFromVarSnapKey(k []byte) uint64 {
 	return binary.BigEndian.Uint64(k[len(k)-8:])
 }
 

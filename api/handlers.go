@@ -183,12 +183,15 @@ type collabRuntimeResp struct {
 }
 
 // timelineStep is one element activation on a single instance's replay timeline:
-// which BPMN element a token entered, its type, and when (ADR-0046). Steps are
-// ordered oldest-first, so the Operations view can step through them.
+// which BPMN element a token entered, its type, when, and the variable values as
+// they stood when the token entered it (ADR-0046, ADR-0047). Steps are ordered
+// oldest-first, so the Operations view can step through them and show the
+// variables at each point.
 type timelineStep struct {
-	At        int64  `json:"at"` // unix nanoseconds
-	ElementID string `json:"elementId"`
-	Type      string `json:"type"`
+	At        int64          `json:"at"` // unix nanoseconds
+	ElementID string         `json:"elementId"`
+	Type      string         `json:"type"`
+	Variables []variableView `json:"variables"`
 }
 
 // instanceTimelineResp is one process instance's step-by-step replay: its
@@ -865,17 +868,65 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		resp.ProcessID = d.ProcessID
 		resp.Version = d.Version
 
-		scanErr = s.store.ElementStepHistory(key, func(ts int64, _ uint64, elementId int32) error {
+		// Collect the element steps and the variable changes, each with its log
+		// position, then fold the variables into the steps below.
+		type stepRow struct {
+			at        int64
+			pos       uint64
+			elementID int32
+		}
+		type varChange struct {
+			pos  uint64
+			view variableView
+		}
+		var (
+			stepRows []stepRow
+			changes  []varChange
+		)
+		scanErr = s.store.ElementStepHistory(key, func(ts int64, pos uint64, elementId int32) error {
+			stepRows = append(stepRows, stepRow{at: ts, pos: pos, elementID: elementId})
+			return nil
+		})
+		if scanErr == nil {
+			scanErr = s.store.VariableSnapshotHistory(key, func(_ int64, pos uint64, v *model.VariableValue) error {
+				changes = append(changes, varChange{pos: pos, view: toVariableView(v)})
+				return nil
+			})
+		}
+		if scanErr != nil {
+			return
+		}
+		// Both histories are keyed by log position; sort by it so the fold walks
+		// them in true execution order regardless of clock monotonicity.
+		sort.Slice(stepRows, func(i, j int) bool { return stepRows[i].pos < stepRows[j].pos })
+		sort.Slice(changes, func(i, j int) bool { return changes[i].pos < changes[j].pos })
+
+		// Walk the steps in order, advancing through every variable change at or
+		// before each step's position, so a step carries the variables as they stood
+		// when the token entered that element. A change to a name overwrites the
+		// previous value for that name (variables are instance-scoped).
+		running := map[string]variableView{}
+		ci := 0
+		for _, sr := range stepRows {
+			for ci < len(changes) && changes[ci].pos <= sr.pos {
+				running[changes[ci].view.Name] = changes[ci].view
+				ci++
+			}
+			vars := make([]variableView, 0, len(running))
+			for _, vv := range running {
+				vars = append(vars, vv)
+			}
+			sort.Slice(vars, func(i, j int) bool { return vars[i].Name < vars[j].Name })
 			// Every recorded step is a real activated node, so its diagram id is
 			// always present (unlike the shared runtime overlay's get, which guards
 			// synthetic elements).
 			resp.Steps = append(resp.Steps, timelineStep{
-				At:        ts,
-				ElementID: d.cp.ElementBpmnId(elementId),
-				Type:      d.cp.Node(elementId).Type.String(),
+				At:        sr.at,
+				ElementID: d.cp.ElementBpmnId(sr.elementID),
+				Type:      d.cp.Node(sr.elementID).Type.String(),
+				Variables: vars,
 			})
-			return nil
-		})
+		}
 	})
 	switch {
 	case scanErr != nil:

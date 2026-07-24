@@ -18,10 +18,32 @@ const autoDoneBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/
   </process>
 </definitions>`
 
+// scriptVarBPMN writes a variable mid-process (a script task sets greeting="hi"),
+// so the per-step variable snapshots evolve across the timeline.
+const scriptVarBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="scripted" isExecutable="true">
+    <startEvent id="start"/>
+    <scriptTask id="script">
+      <extensionElements><zeebe:script expression="= &quot;hi&quot;" resultVariable="greeting"/></extensionElements>
+    </scriptTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="script"/>
+    <sequenceFlow id="f2" sourceRef="script" targetRef="end"/>
+  </process>
+</definitions>`
+
+type timelineVar struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+	Kind  string `json:"kind"`
+}
+
 type timelineStep struct {
-	At        int64  `json:"at"`
-	ElementID string `json:"elementId"`
-	Type      string `json:"type"`
+	At        int64         `json:"at"`
+	ElementID string        `json:"elementId"`
+	Type      string        `json:"type"`
+	Variables []timelineVar `json:"variables"`
 }
 
 type instanceTimeline struct {
@@ -177,6 +199,68 @@ func TestInstanceTimelineDefinitionDeleted(t *testing.T) {
 	}
 	if code, _ := doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/instances/%d/timeline", instKey), "", ""); code != http.StatusNotFound {
 		t.Errorf("timeline after definition delete = %d, want 404", code)
+	}
+}
+
+// TestInstanceTimelineVariableSnapshots runs a process that seeds a start variable
+// and writes another mid-way (a script task), then checks each step carries the
+// variable values as they stood when the token entered that element (ADR-0047):
+// the seeded x is present from the start, and the script's greeting appears only
+// from the step after the script task ran, not at the script task itself.
+func TestInstanceTimelineVariableSnapshots(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", scriptVarBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+	code, body = doReq(t, ts, http.MethodPost,
+		fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key), `{"variables":{"x":1}}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("start instance: status=%d body=%s", code, body)
+	}
+	instKey := onlyInstanceKey(t, ts)
+
+	code, body = doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/instances/%d/timeline", instKey), "", "")
+	if code != http.StatusOK {
+		t.Fatalf("timeline status=%d body=%s", code, body)
+	}
+	var tl instanceTimeline
+	if err := json.Unmarshal(body, &tl); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+
+	if len(tl.Steps) != 3 {
+		t.Fatalf("steps = %d (%+v), want 3 (start, script, end)", len(tl.Steps), tl.Steps)
+	}
+	// vars turns a step's variable snapshot into a name→value map.
+	vars := func(i int) map[string]string {
+		out := map[string]string{}
+		for _, v := range tl.Steps[i].Variables {
+			out[v.Name] = v.Value
+		}
+		return out
+	}
+	if tl.Steps[0].ElementID != "start" || tl.Steps[1].ElementID != "script" || tl.Steps[2].ElementID != "end" {
+		t.Fatalf("step order = %s,%s,%s, want start,script,end", tl.Steps[0].ElementID, tl.Steps[1].ElementID, tl.Steps[2].ElementID)
+	}
+	// The seeded x is present from the very first step.
+	if got := vars(0); got["x"] != "1" {
+		t.Errorf("start-step vars = %v, want x=1", got)
+	}
+	// At the script task itself, its output is not written yet.
+	if got := vars(1); got["x"] != "1" || len(got) != 1 {
+		t.Errorf("script-step vars = %v, want only x=1 (greeting not yet written)", got)
+	}
+	// At the next step, the script's greeting is visible alongside x.
+	if got := vars(2); got["x"] != "1" || got["greeting"] != "hi" {
+		t.Errorf("end-step vars = %v, want x=1 and greeting=hi", got)
 	}
 }
 
