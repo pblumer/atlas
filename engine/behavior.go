@@ -503,14 +503,9 @@ func takeInclusiveOutgoing(c *ProcessingContext, ei *model.ElementInstanceValue)
 // name is shadowed by the built-in.
 const builtinProcessInstanceKey = "processInstanceKey"
 
-// bindInputs reads the named variables from a scope into a FEEL binding map for
-// evaluation. A name absent from the scope is simply left unbound (FEEL null).
-// The reserved name processInstanceKey binds to the scope's own key (the built-in
-// above); at every call site the scope is the process instance, so it is the
-// instance's key.
 // resolveSchedule returns the concrete schedule to compute a timer from: a fixed
 // schedule as-is, or a FEEL schedule (ADR-0055/0056) evaluated against scope and
-// reduced to the duration/date/cycle its text names. ok is false if a FEEL
+// reduced to the duration/date/cycle it names. ok is false if a FEEL
 // expression can't be evaluated or its result isn't valid for the field. scope is
 // the instance whose variables the expression reads; it is 0 for a start-event
 // timer, whose FEEL must be constant (the compiler enforces this), so an empty
@@ -524,8 +519,10 @@ func resolveSchedule(c *ProcessingContext, s compiler.TimerSchedule, scope uint6
 	if err != nil {
 		return compiler.TimerSchedule{}, false
 	}
-	_, _, text := expr.Classify(v)
-	return s.ResolveFeel(text)
+	// Prefer a first-class FEEL temporal (exact nanoseconds/instant); fall back to
+	// the canonical string form for a variable holding an ISO string, or a cycle
+	// (ADR-0057).
+	return s.ResolveFeelValue(v)
 }
 
 // timerDue computes a one-shot timer's due date (catch/boundary). An unresolvable
@@ -539,6 +536,11 @@ func timerDue(c *ProcessingContext, s compiler.TimerSchedule, scope uint64) int6
 	return now
 }
 
+// bindInputs reads the named variables from a scope into a FEEL binding map for
+// evaluation. A name absent from the scope is simply left unbound (FEEL null). The
+// reserved name processInstanceKey binds to the scope's own key (the built-in
+// above); at every call site the scope is the process instance, so it is the
+// instance's key.
 func bindInputs(c *ProcessingContext, inputs []string, scope uint64) map[string]expr.Value {
 	if len(inputs) == 0 {
 		return nil

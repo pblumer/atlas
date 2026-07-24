@@ -34,6 +34,40 @@ func strVar(name, text string) model.VariableValue {
 	return model.VariableValue{Name: name, Kind: model.VarString, Text: text}
 }
 
+// TestCatchTimerFeelFirstClassDuration proves a catch timer whose FEEL expression
+// yields a first-class duration value (duration(...) over a variable) resolves to
+// the exact delay, not via a string round-trip (ADR-0057).
+func TestCatchTimerFeelFirstClassDuration(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	const dur = int64(45e9) // PT45S
+	cp := feelCatchProcess(t, 920, compiler.TimerFeelDuration, `duration(timeout)`)
+	clk := &fixedClock{t: 1_000}
+	p := engine.New(1, h.log, h.store, clk)
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key, strVar("timeout", "PT45S"))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	clk.t = 1_000 + dur - 1
+	if err := p.TickTimers(); err != nil {
+		t.Fatalf("TickTimers (before): %v", err)
+	}
+	if pi := activeProcs(t, h.store); pi != 1 {
+		t.Fatalf("before due: active=%d, want 1 (parked)", pi)
+	}
+	clk.t = 1_000 + dur + 1
+	if err := p.TickTimers(); err != nil {
+		t.Fatalf("TickTimers (after): %v", err)
+	}
+	if pi := activeProcs(t, h.store); pi != 0 {
+		t.Fatalf("after due: active=%d, want 0 (fired at the exact resolved delay)", pi)
+	}
+}
+
 // TestBoundaryTimerFeelCycle proves a non-interrupting boundary with a FEEL
 // <timeCycle> resolves the cadence from an instance variable and recurs the
 // resolved number of times (ADR-0056).

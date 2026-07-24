@@ -4,7 +4,52 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pblumer/atlas/expr"
 )
+
+// evalFeel compiles and evaluates a constant FEEL expression for a test.
+func evalFeel(t *testing.T, src string) expr.Value {
+	t.Helper()
+	c, err := expr.Compile(src)
+	if err != nil {
+		t.Fatalf("Compile(%q): %v", src, err)
+	}
+	v, err := c.Eval(nil)
+	if err != nil {
+		t.Fatalf("Eval(%q): %v", src, err)
+	}
+	return v
+}
+
+// TestResolveFeelValue proves ResolveFeelValue reads a first-class FEEL temporal
+// exactly and falls back to the string form otherwise (ADR-0057).
+func TestResolveFeelValue(t *testing.T) {
+	dur := TimerSchedule{Kind: TimerFeelDuration}
+	// First-class duration value.
+	if got, ok := dur.ResolveFeelValue(evalFeel(t, `duration("PT1H")`)); !ok || got.Kind != TimerDuration || got.BaseNanos != int64(time.Hour) {
+		t.Errorf("duration value resolve = %+v, %v; want TimerDuration of 1h", got, ok)
+	}
+	// String fallback (a variable holding an ISO string).
+	if got, ok := dur.ResolveFeelValue(expr.String("PT30S")); !ok || got.Kind != TimerDuration || got.BaseNanos != int64(30*time.Second) {
+		t.Errorf("duration string resolve = %+v, %v; want TimerDuration of 30s", got, ok)
+	}
+	// First-class date-time value.
+	date := TimerSchedule{Kind: TimerFeelDate}
+	inst, _ := time.Parse(time.RFC3339, "2026-08-01T09:00:00Z")
+	if got, ok := date.ResolveFeelValue(evalFeel(t, `date and time("2026-08-01T09:00:00Z")`)); !ok || got.Kind != TimerDate || got.BaseNanos != inst.UnixNano() {
+		t.Errorf("date value resolve = %+v, %v; want TimerDate at the instant", got, ok)
+	}
+	// A cycle has no first-class temporal — it goes through the string form.
+	cyc := TimerSchedule{Kind: TimerFeelCycle}
+	if got, ok := cyc.ResolveFeelValue(expr.String("R3/PT1H")); !ok || got.Kind != TimerCycleInterval {
+		t.Errorf("cycle string resolve = %+v, %v; want TimerCycleInterval", got, ok)
+	}
+	// Unresolvable: a number is neither a usable temporal nor a parseable string.
+	if _, ok := dur.ResolveFeelValue(expr.Number(5)); ok {
+		t.Error("a bare number should not resolve to a duration")
+	}
+}
 
 // TestResolveFeel covers turning a FEEL expression's evaluated text into the
 // concrete schedule for each FEEL field, including the unparseable and non-FEEL
