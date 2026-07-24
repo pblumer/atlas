@@ -249,7 +249,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId })
     toast("could not open diagram: " + e.message, "err");
   }
 
-  const rerender = wireProperties(root, modeler, api);
+  const rerender = wireProperties(root, modeler, api, projectId);
   wireTabs(root, rerender);
   wireActions(root, modeler, api, toast, projectId);
   wireResizer(root, modeler);
@@ -818,7 +818,7 @@ function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn()) {
   attachEditors();
 }
 
-function wireProperties(root, modeler, api) {
+function wireProperties(root, modeler, api, projectId) {
   const icon = root.querySelector("#p-icon");
   const typename = root.querySelector("#p-typename");
   const nameEl = root.querySelector("#p-name");
@@ -1043,14 +1043,27 @@ function wireProperties(root, modeler, api) {
               <input type="text" id="f-jobtype" value="${esc(d.type || "")}" placeholder="payment"/></label>`;
         } else if (t === "bpmn:BusinessRuleTask") {
           const cd = findExt(bo, "zeebe:CalledDecision") || {};
+          const tc = findExt(bo, "atlas:TemisConnector");
+          const mode = tc ? "connector" : "local";
           const io = findExt(bo, "zeebe:IoMapping");
           const inputs = (io && io.inputParameters) || [];
           html += `<h3>Called decision (DMN)</h3>
+            <label class="field"><span>Evaluation</span>
+              <select id="f-brt-mode">
+                <option value="local" ${mode === "local" ? "selected" : ""}>In-engine (embedded DMN)</option>
+                <option value="connector" ${mode === "connector" ? "selected" : ""}>External (temis connector)</option>
+              </select></label>`;
+          if (mode === "connector") {
+            html += `<label class="field"><span>Connector</span>
+              <input type="text" id="f-connector" value="${esc((tc && tc.connector) || "")}" placeholder="risk-service"/></label>`;
+          }
+          html += `<label class="field"><span>Decision</span>
+              <select id="f-decision-pick"><option value="">${cd.decisionId ? esc(cd.decisionId) + " (current)" : "— choose a decision —"}</option></select></label>
             <label class="field"><span>Decision ID</span>
               <input type="text" id="f-decisionid" value="${esc(cd.decisionId || "")}" placeholder="Dish"/></label>
             <label class="field"><span>Result variable</span>
               <input type="text" id="f-resultvar" value="${esc(cd.resultVariable || "")}" placeholder="dish"/></label>
-            <p class="muted" style="font-size:12px">The decision's result is written into this process variable, so a downstream gateway can route on it.</p>
+            <p class="muted" style="font-size:12px">Pick a decision to auto-fill its inputs and result variable. The result is written into this variable, so a downstream gateway can route on it.</p>
             <h3>Decision inputs</h3>
             <p class="muted" style="font-size:12px">Each row feeds one decision input from a FEEL expression over the instance's variables. Leave a row's name blank to drop it.</p>
             <div id="dmn-inputs">${inputs.map((p, i) => decisionInputRowHTML(i, p.source, p.target)).join("")}${decisionInputRowHTML(inputs.length, "", "")}</div>`;
@@ -1245,6 +1258,71 @@ function wireProperties(root, modeler, api) {
     });
     if (fdecision) fdecision.addEventListener("change", saveDecision);
     if (fresultvar) fresultvar.addEventListener("change", saveDecision);
+
+    // Evaluation mode: local (embedded DMN) vs a temis connector (central). The
+    // choice is the presence of the atlas:temisConnector extension the compiler
+    // reads (ADR-0050); flipping it re-renders so the connector field appears.
+    const fmode = body.querySelector("#f-brt-mode");
+    if (fmode) {
+      fmode.addEventListener("change", () => {
+        savePreservingPanel(() => {
+          if (fmode.value === "connector") {
+            const name = (body.querySelector("#f-connector")?.value || "").trim();
+            upsertExt(modeler, element, "atlas:TemisConnector", { connector: name });
+          } else {
+            removeExt(modeler, element, "atlas:TemisConnector");
+          }
+        });
+        show(element);
+      });
+    }
+    const fconnector = body.querySelector("#f-connector");
+    if (fconnector) {
+      fconnector.addEventListener("change", () => savePreservingPanel(() => {
+        upsertExt(modeler, element, "atlas:TemisConnector", { connector: (fconnector.value || "").trim() });
+      }));
+    }
+
+    // Decision picker: populate from the DMN references' decisions and, on pick,
+    // set the decision id + result variable and auto-fill the input mappings from
+    // the decision's declared inputs — so an author selects from a list instead of
+    // typing ids and parameters by hand (ADR-0050). A previously-set source for a
+    // given input target is preserved when re-picking.
+    const fpick = body.querySelector("#f-decision-pick");
+    if (fpick && api) {
+      const scope = projectId ? "?projectId=" + encodeURIComponent(projectId) : "";
+      api("GET", "/api/v1/decisions" + scope).then((decisions) => {
+        if (!document.body.contains(fpick)) return;
+        const cur = (fdecision?.value || "").trim();
+        const opts = [`<option value="">— choose a decision —</option>`];
+        for (const d of decisions || []) {
+          const label = d.model ? `${d.name} · ${d.model}` : d.name;
+          opts.push(`<option value="${esc(d.id)}"${d.id === cur ? " selected" : ""}>${esc(label)}</option>`);
+        }
+        fpick.innerHTML = opts.join("");
+        fpick._catalog = decisions || [];
+      }).catch(() => { /* leave the placeholder; manual entry still works */ });
+
+      fpick.addEventListener("change", () => {
+        const d = (fpick._catalog || []).find((x) => x.id === fpick.value);
+        if (!d) return;
+        // Preserve any custom source already mapped for a target.
+        const io = findExt(element.businessObject, "zeebe:IoMapping");
+        const prev = {};
+        for (const p of (io && io.inputParameters) || []) {
+          if (p.target) prev[p.target] = (p.source || "").replace(/^=\s*/, "");
+        }
+        savePreservingPanel(() => {
+          upsertExt(modeler, element, "zeebe:CalledDecision", {
+            decisionId: d.id,
+            resultVariable: (fresultvar.value || "").trim() || (d.output && d.output.name) || d.id,
+          });
+          const rows = (d.inputs || []).map((inp) => ({ target: inp.name, source: prev[inp.name] || inp.name }));
+          saveDecisionInputs(modeler, element, rows);
+        });
+        show(element); // reflect the filled id, result variable, and input rows
+      });
+    }
 
     const inputsWrap = body.querySelector("#dmn-inputs");
     if (inputsWrap) {

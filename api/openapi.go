@@ -212,6 +212,8 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Delete a DMN reference", tag: "DMN References", status: http.StatusNoContent}},
 		{"POST", "/api/v1/dmnrefs/{id}/validate", s.handleValidateDmnRef, apiOp{
 			summary: "Validate a DMN reference compiles", tag: "DMN References", resp: jsonBody("Validation result", tObject())}},
+		{"GET", "/api/v1/decisions", s.handleListDecisions, apiOp{
+			summary: "List DMN decisions (with inputs and outputs) available from DMN references", tag: "DMN References", resp: jsonBody("Decisions", tArray())}},
 
 		{"POST", "/api/v1/auth/login", s.handleLogin, apiOp{
 			summary: "Log in with a username and password", tag: "Auth",
