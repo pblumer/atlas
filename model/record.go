@@ -144,6 +144,21 @@ const (
 	// than beside the other job intents so the existing intents keep their numeric
 	// values on the log.
 	IntentJobCanceled
+
+	// IntentTimerCanceled retires a timer without firing it — used when a new
+	// version of a process supersedes a prior version's timer start event, so the
+	// old schedule stops (ADR-0051). It applies like TimerTriggered (the timer is
+	// deleted from the due-date index) but, unlike it, drives no side effect: no
+	// instance is created. Appended at the end so existing intents keep their log
+	// values.
+	IntentTimerCanceled
+
+	// IntentTimerStartArm is a command-only intent (never persisted as an event):
+	// it directs the processor to arm a freshly deployed definition's timer start
+	// events, creating their durable timers and retiring any that a prior version
+	// left armed (ADR-0051). Because commands are not replayed (invariant I6), its
+	// numeric value never reaches the log.
+	IntentTimerStartArm
 )
 
 func (i Intent) String() string {
@@ -180,6 +195,10 @@ func (i Intent) String() string {
 		return "TimerCreated"
 	case IntentTimerTriggered:
 		return "TimerTriggered"
+	case IntentTimerCanceled:
+		return "TimerCanceled"
+	case IntentTimerStartArm:
+		return "TimerStartArm"
 	case IntentSubscriptionCreated:
 		return "SubscriptionCreated"
 	case IntentSubscriptionCorrelated:

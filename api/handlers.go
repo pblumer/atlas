@@ -475,6 +475,15 @@ func (s *Server) deployModel(body, dmnXML []byte, deployedAt int64) (deployed []
 
 		s.versions[pid] = version
 		s.proc.Deploy(cp)
+		// Arm this fresh version's timer start events and supersede any the prior
+		// version left running, so the process starts on its schedule (ADR-0051).
+		// Only fresh deploys arm; loadDeployments (recovery) restores armed timers
+		// from the log instead. Skip it for a first-version process with no timer
+		// start events — the common case — so no timer scan runs; a re-version may
+		// need to supersede a prior version's schedule even if it has none itself.
+		if version > 1 || len(cp.TimerStartEvents()) > 0 {
+			s.proc.ArmStartTimers(cp.Key)
+		}
 		// Register the process's decisions so its business rule tasks can evaluate.
 		if dmnXML != nil {
 			if err := s.dmnRegistry.Deploy(key, dmnXML); err != nil {
@@ -495,6 +504,12 @@ func (s *Server) deployModel(body, dmnXML []byte, deployedAt int64) (deployed []
 			s.nextKey = key + 1
 		}
 		deployed = append(deployed, deployedProcess{Key: key, ProcessID: pid, Name: name, Version: version})
+	}
+	// Run the arm commands queued above (ADR-0051) so a timer start event's durable
+	// timer is created and fsynced as part of the deploy, before it is acknowledged.
+	// A no-op for a model with no timer start events.
+	if err := s.jobRunner.Drive(); err != nil {
+		return deployed, nil, err
 	}
 	return deployed, nil, nil
 }

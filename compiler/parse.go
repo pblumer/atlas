@@ -205,6 +205,16 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			}
 			continue
 		}
+		if s.Timer != nil {
+			schedule, err := parseTimerSchedule(s.Timer)
+			if err != nil {
+				return nil, fmt.Errorf("compiler: start event %q timer: %w", s.Id, err)
+			}
+			if err := register(s.Id, b.AddTimerStartEvent(schedule)); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		if err := register(s.Id, b.AddStartEvent()); err != nil {
 			return nil, err
 		}
@@ -601,6 +611,10 @@ type xmlStartEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Name    string                     `xml:"name,attr"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
+	// Timer, when present, makes this a timer start event: the process starts a
+	// fresh instance on the schedule (duration/date/cycle/cron) the definition
+	// carries, armed at deploy time (ADR-0051). A pointer so an absent one is nil.
+	Timer *xmlTimerEventDefinition `xml:"timerEventDefinition"`
 	// Form binds a start form to a none start event (ADR-0028): the form the UI
 	// shows before creating the instance, whose data becomes the start variables.
 	// The engine never sees it — it is pre-start UI metadata.
@@ -643,6 +657,8 @@ type xmlBoundaryEvent struct {
 
 type xmlTimerEventDefinition struct {
 	TimeDuration string `xml:"timeDuration"` // ISO-8601 duration, e.g. PT30S
+	TimeDate     string `xml:"timeDate"`     // ISO-8601 instant, e.g. 2026-08-01T09:00:00Z (ADR-0051)
+	TimeCycle    string `xml:"timeCycle"`    // ISO-8601 repeating interval (R3/PT1H) or cron ("0 * * * *") (ADR-0051)
 }
 
 type xmlNode struct {

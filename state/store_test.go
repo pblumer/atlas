@@ -293,6 +293,36 @@ func TestDueTimersRangeScan(t *testing.T) {
 	}
 }
 
+func TestStartTimersFiltersInstanceTimers(t *testing.T) {
+	s := openStore(t)
+	// Two start timers (no owning instance) and one instance-owned timer; only the
+	// start timers must be yielded (ADR-0051).
+	commit(t, s, func(tx *state.Tx) error {
+		if err := tx.PutTimer(model.NewKey(1, 1), &model.TimerValue{DueDate: 100, ProcessDefKey: model.NewKey(1, 50), TargetElementId: 3}); err != nil {
+			return err
+		}
+		if err := tx.PutTimer(model.NewKey(1, 2), &model.TimerValue{DueDate: 200, ProcessDefKey: model.NewKey(1, 51), TargetElementId: 4}); err != nil {
+			return err
+		}
+		// An instance-owned timer (catch/boundary): must be skipped.
+		return tx.PutTimer(model.NewKey(1, 3), &model.TimerValue{DueDate: 300, ProcessInstanceKey: model.NewKey(1, 9), ElementInstanceKey: model.NewKey(1, 10)})
+	})
+
+	defs := map[uint64]bool{}
+	if err := s.StartTimers(func(_ uint64, v *model.TimerValue) error {
+		if v.ProcessInstanceKey != 0 {
+			t.Errorf("StartTimers yielded an instance-owned timer: %+v", v)
+		}
+		defs[v.ProcessDefKey] = true
+		return nil
+	}); err != nil {
+		t.Fatalf("StartTimers: %v", err)
+	}
+	if len(defs) != 2 || !defs[model.NewKey(1, 50)] || !defs[model.NewKey(1, 51)] {
+		t.Errorf("start-timer def keys = %v, want the two start timers only", defs)
+	}
+}
+
 func TestDeleteTimerRemovesFromIndex(t *testing.T) {
 	s := openStore(t)
 	key := model.NewKey(1, 1)
