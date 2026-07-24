@@ -272,7 +272,21 @@ function initShell() {
   api("GET", "/api/v1/info").then((i) => {
     document.querySelectorAll(".org").forEach((e) => { e.textContent = "Atlas Org"; });
     if (i && i.version) document.title = `Atlas ${i.version}`;
-  }).catch(() => {});
+    initHelpMenu(!!(i && i.docs));
+  }).catch(() => { initHelpMenu(false); });
+}
+
+// initHelpMenu fills the top-bar "?" dropdown. Its API Explorer entry opens the
+// Scalar explorer (/api/docs) in a new tab when the server was started with docs
+// enabled; otherwise it shows an inert hint about --docs=false, so the missing
+// link is self-explanatory rather than a dead button (ADR-0043). Open/close is
+// handled by the shared delegated .dropdown-toggle machinery above.
+function initHelpMenu(docsEnabled) {
+  const menu = document.getElementById("help-menu");
+  if (!menu) return;
+  menu.innerHTML = docsEnabled
+    ? `<a role="menuitem" href="/api/docs" target="_blank" rel="noopener">API Explorer <span class="ext" aria-hidden="true">↗</span></a>`
+    : `<span class="help-note">API Explorer is disabled<br><span class="muted">start the server without <code>--docs=false</code></span></span>`;
 }
 
 function setChrome(appId, route) {

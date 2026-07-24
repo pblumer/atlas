@@ -14,8 +14,9 @@ import (
 // 3.1 document served at /api/v1/openapi.json. Because registration and
 // description read one table, a served route cannot exist without a documented
 // one; TestOpenAPICoversEveryRoute asserts the two never drift. The document
-// feeds the vendored Scalar explorer at /api/docs (both gated behind
-// --docs), whose "Try it out" issues same-origin requests to this live engine.
+// feeds the vendored Scalar explorer at /api/docs (both served by default,
+// disabled with --docs=false), whose "Try it out" issues same-origin requests
+// to this live engine.
 
 // apiRoute is one HTTP route of the /api/v1 surface: an http.ServeMux pattern,
 // the handler bound to it, and the OpenAPI operation describing it.

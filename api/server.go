@@ -125,10 +125,11 @@ type Server struct {
 	dmnRegistry *dmn.Registry
 	jobRunner   *job.Runner
 
-	// docsEnabled gates the OpenAPI spec and the Scalar API explorer. Off by
-	// default: the interactive, mutating surface and the machine-readable
-	// description of it are only served when an operator opts in with --docs
-	// (ADR-0043). Set once before Handler is mounted; read-only thereafter.
+	// docsEnabled gates the OpenAPI spec and the Scalar API explorer. On by
+	// default (opt-out), consistent with the already-open web UI and MCP
+	// endpoint; an operator who does not want the interactive surface disables
+	// it with --docs=false / WithoutDocs (ADR-0043). Set once before Handler is
+	// mounted; read-only thereafter.
 	docsEnabled bool
 }
 
@@ -136,11 +137,11 @@ type Server struct {
 // the run loop starts, so they set fields that are read-only afterwards.
 type Option func(*Server)
 
-// WithDocs enables the OpenAPI document at /api/v1/openapi.json and the Scalar
-// API explorer at /api/docs. Both are off unless this option is passed, because
-// the explorer's "Try it out" exercises the same unauthenticated, mutating
-// surface as the rest of the API (ADR-0043).
-func WithDocs() Option { return func(s *Server) { s.docsEnabled = true } }
+// WithoutDocs disables the OpenAPI document at /api/v1/openapi.json and the
+// Scalar API explorer at /api/docs, which are otherwise served by default. Pass
+// it when the interactive, mutating "Try it out" surface should not be exposed
+// (ADR-0043).
+func WithoutDocs() Option { return func(s *Server) { s.docsEnabled = false } }
 
 // New builds a Server over an already-recovered processor and its store and
 // starts the run-loop goroutine. dataDir is the base data directory; the durable
@@ -196,6 +197,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		dmnResolver:  resolver,
 		dmnValidator: dmn.NewValidator(resolver),
 		dmnRegistry:  dmn.NewRegistry(),
+		docsEnabled:  true, // opt-out: served unless WithoutDocs is passed (ADR-0043)
 	}
 	for _, opt := range opts {
 		opt(s)

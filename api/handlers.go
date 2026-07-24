@@ -131,6 +131,10 @@ func processIdentity(body []byte) (id, name string) {
 type infoResp struct {
 	Product string `json:"product"`
 	Version string `json:"version"`
+	// Docs reports whether the OpenAPI spec and the API explorer are served
+	// (the --docs gate, ADR-0043), so the web UI can show or hide its
+	// "API Explorer" entry without probing /api/docs.
+	Docs bool `json:"docs"`
 }
 
 type runtimeElement struct {
@@ -207,7 +211,7 @@ type cancelInstanceResp struct {
 
 // handleInfo reports product/version metadata for the UI shell.
 func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, infoResp{Product: "Atlas", Version: Version})
+	writeJSON(w, http.StatusOK, infoResp{Product: "Atlas", Version: Version, Docs: s.docsEnabled})
 }
 
 type validateFeelReq struct {
