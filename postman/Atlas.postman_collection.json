@@ -1,0 +1,1591 @@
+{
+  "info": {
+    "name": "Atlas \u2014 Workflow Engine API",
+    "description": "# Atlas \u2014 Workflow Engine API\n\nEverything you need to drive a running **Atlas** BPMN workflow engine from Postman: deploy models, run instances, inspect live runtime, work user-task inboxes, and correlate messages.\n\n## Prerequisites\n\nYou need a running server. From the repo root:\n\n```bash\ngo run ./cmd/atlas serve --addr :8080 --data-dir ./atlas-data\n```\n\nThe API is served under `/api/v1`, the web UI at `/`, and the MCP transport at `/mcp`. Health lives at `/healthz`.\n\n## Setup (30 seconds)\n\n1. **Import** this collection **and** the `Atlas (local)` environment (`Atlas.postman_environment.json`).\n2. **Select** the `Atlas (local)` environment (top-right in Postman).\n3. Confirm `baseUrl` points at your server (default `http://localhost:8080`).\n4. Open **\ud83d\ude80 Golden Path** and hit **Send** on each request top to bottom \u2014 or run the folder in the **Collection Runner**.\n\n## How the chaining works\n\nRequests capture ids into **collection variables** (`defKey`, `instanceKey`, `taskKey`, `projectId`, \u2026) in their *Tests* tab, so downstream requests like `{{defKey}}` resolve automatically. No copy-paste of keys between steps.\n\n## Authentication\n\nThe Atlas server is **unauthenticated** by design \u2014 it expects to sit behind a reverse proxy that adds auth. If yours does, add the header/token under the collection's **Authorization** tab and it applies to every request. Out of the box, no credentials are needed.\n\n## Conventions\n\n- **Deploy** bodies are raw **BPMN XML** (`Content-Type: application/xml`).\n- Everything else is **JSON**. Variables use `{\"variables\": {name: value}}`; scalars, objects, and arrays are all supported and bind into FEEL.\n- Keys are `uint64`, assigned by the engine and returned on deploy/list.\n",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "a71a5000-0000-4000-8000-atlas0000001"
+  },
+  "item": [
+    {
+      "name": "\ud83d\ude80 Golden Path (run top-to-bottom)",
+      "description": "The five-minute tour. Hit **Send** on each request in order \u2014 or select this folder in the **Collection Runner** and run it \u2014 and it walks the full workflow lifecycle end to end.\n\nEach step's *Tests* tab captures ids (`defKey`, `taskKey`) into collection variables, so the next step just works with no copy-paste.\n\n1. Deploy a BPMN model\n2. List processes (confirm it's registered)\n3. Start an instance\n4. List open user tasks (parks on *Review order*)\n5. Complete the task with form data\n6. List instances (see the variables land)\n7. Read engine stats",
+      "item": [
+        {
+          "name": "1 \u00b7 Deploy sample model",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/xml"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/deployments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deployments"
+              ]
+            },
+            "description": "Deploy the bundled `order-approval` model (raw BPMN 2.0 XML in the body). The response echoes the assigned definition **key**, `processId`, and `version`; a collaboration lists one entry per pool under `deployments`.\n\nCaptures `defKey` for the next steps.",
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<definitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n             xmlns:zeebe=\"http://camunda.org/schema/zeebe/1.0\">\n  <process id=\"order-approval\" isExecutable=\"true\">\n    <startEvent id=\"start\"/>\n    <userTask id=\"review\" name=\"Review order\">\n      <extensionElements>\n        <zeebe:assignmentDefinition candidateGroups=\"reviewers\"/>\n      </extensionElements>\n    </userTask>\n    <userTask id=\"approve\" name=\"Approve order\">\n      <extensionElements>\n        <zeebe:assignmentDefinition candidateGroups=\"managers\"/>\n      </extensionElements>\n    </userTask>\n    <endEvent id=\"end\"/>\n    <sequenceFlow id=\"f1\" sourceRef=\"start\" targetRef=\"review\"/>\n    <sequenceFlow id=\"f2\" sourceRef=\"review\" targetRef=\"approve\"/>\n    <sequenceFlow id=\"f3\" sourceRef=\"approve\" targetRef=\"end\"/>\n  </process>\n</definitions>\n",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('deployed (200)', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.collectionVariables.set('defKey', j.key);",
+                  "pm.collectionVariables.set('processId', j.processId);",
+                  "console.log('deployed def key =', j.key);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2 \u00b7 List processes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/processes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "processes"
+              ]
+            },
+            "description": "Every deployed definition in registration order. Your freshly deployed `order-approval` should appear with the `defKey` from step 1."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('list ok (200)', () => pm.response.to.have.status(200));",
+                  "pm.test('our process is listed', () => {",
+                  "  const key = pm.collectionVariables.get('defKey');",
+                  "  pm.expect(pm.response.json().map(p => String(p.key))).to.include(String(key));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3 \u00b7 Start an instance",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/processes/{{defKey}}/instances",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "processes",
+                "{{defKey}}",
+                "instances"
+              ]
+            },
+            "description": "Start one instance of the deployed definition, optionally seeded with start variables. The engine runs it to idle; `order-approval` parks on the first user task.\n\nBody: `{\"variables\": {...}}` (scalars, objects, and arrays are all accepted; numbers keep exact decimal form).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"variables\": {\n    \"orderId\": \"A-1001\",\n    \"amount\": 4200,\n    \"customer\": {\n      \"name\": \"ACME\",\n      \"tier\": \"gold\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('instance started (200)', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.expect(j.stats.activeProcessInstances, 'has an active instance').to.be.above(0);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4 \u00b7 List open user tasks",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks"
+              ]
+            },
+            "description": "Open user tasks (activatable user-task jobs) across all instances, with their assignment metadata (`assignee`, `candidateGroups`, `formId`).\n\nCaptures the first task's key as `taskKey`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('tasks listed (200)', () => pm.response.to.have.status(200));",
+                  "const tasks = pm.response.json();",
+                  "pm.test('at least one open task', () => pm.expect(tasks.length).to.be.above(0));",
+                  "if (tasks.length) {",
+                  "  pm.collectionVariables.set('taskKey', tasks[0].key);",
+                  "  console.log('open task key =', tasks[0].key, '(' + tasks[0].name + ')');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5 \u00b7 Complete the task",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks/{{taskKey}}/complete",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{taskKey}}",
+                "complete"
+              ]
+            },
+            "description": "Complete the captured user task, submitting form data as `{\"variables\": {...}}`. Those variables are written into the instance scope exactly like a service-task worker's outputs. The instance then advances to the next task (*Approve order*).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"variables\": {\n    \"approved\": true,\n    \"score\": 7,\n    \"note\": \"looks good\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('task completed (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6 \u00b7 List instances",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/instances",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "instances"
+              ]
+            },
+            "description": "Live instances (with their current token count) followed by finished ones, most-recently-completed first. Each row carries its variables \u2014 you'll see the `approved`/`score`/`note` values from step 5 plus the start variables from step 3."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('instances listed (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7 \u00b7 Engine stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "stats"
+              ]
+            },
+            "description": "Live engine counts: active process instances and active element instances (tokens). A quick liveness/throughput probe."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('stats ok (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Health & Info",
+      "description": "Liveness and metadata \u2014 no state changes.",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/healthz",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "healthz"
+              ]
+            },
+            "description": "Plain-text `ok` liveness probe. Returns 200 as soon as the server is accepting traffic."
+          },
+          "response": []
+        },
+        {
+          "name": "Server info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/info",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "info"
+              ]
+            },
+            "description": "Product name and version (`{\"product\":\"Atlas\",\"version\":...}`)."
+          },
+          "response": []
+        },
+        {
+          "name": "Engine stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "stats"
+              ]
+            },
+            "description": "Active process-instance and element-instance (token) counts."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "FEEL Playground",
+      "description": "Compile and evaluate FEEL expressions with the *same* engine deployment uses \u2014 handy for authoring gateway conditions and mappings before deploying. Pure compile/eval: no engine state is touched.",
+      "item": [
+        {
+          "name": "Validate expression",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/feel/validate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "feel",
+                "validate"
+              ]
+            },
+            "description": "Compile-only check. `{\"ok\":true}` on success, `{\"ok\":false,\"error\":...}` on a parse/type error. Unknown identifiers are allowed (they're process variables). An empty expression is a no-op success.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expression\": \"amount > 1000 and customer.tier = \\\"gold\\\"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Evaluate expression",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/feel/evaluate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "feel",
+                "evaluate"
+              ]
+            },
+            "description": "Compile **and** evaluate against sample variables. Returns `{\"ok\":true,\"result\":...,\"kind\":...}`. Objects/arrays bind as FEEL contexts/lists; numbers keep exact decimals. A FEEL type error evaluates to `null` rather than failing.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expression\": \"amount * 0.19\",\n  \"variables\": {\n    \"amount\": 4200\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Deployments & Processes",
+      "description": "Deploy BPMN models and inspect the resulting definitions. Deployments are durable (an on-disk sidecar) and survive a restart.",
+      "item": [
+        {
+          "name": "Deploy model",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/xml"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/deployments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deployments"
+              ]
+            },
+            "description": "Deploy raw BPMN 2.0 XML. Compiles and registers every executable process in the model \u2014 one for a plain model, one per pool for a collaboration. 400 if the model doesn't compile.",
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<definitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n             xmlns:zeebe=\"http://camunda.org/schema/zeebe/1.0\">\n  <process id=\"order-approval\" isExecutable=\"true\">\n    <startEvent id=\"start\"/>\n    <userTask id=\"review\" name=\"Review order\">\n      <extensionElements>\n        <zeebe:assignmentDefinition candidateGroups=\"reviewers\"/>\n      </extensionElements>\n    </userTask>\n    <userTask id=\"approve\" name=\"Approve order\">\n      <extensionElements>\n        <zeebe:assignmentDefinition candidateGroups=\"managers\"/>\n      </extensionElements>\n    </userTask>\n    <endEvent id=\"end\"/>\n    <sequenceFlow id=\"f1\" sourceRef=\"start\" targetRef=\"review\"/>\n    <sequenceFlow id=\"f2\" sourceRef=\"review\" targetRef=\"approve\"/>\n    <sequenceFlow id=\"f3\" sourceRef=\"approve\" targetRef=\"end\"/>\n  </process>\n</definitions>\n",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (pm.response.code === 200) pm.collectionVariables.set('defKey', j.key);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List processes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/processes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "processes"
+              ]
+            },
+            "description": "All deployed definitions in registration order, each with `key`, `processId`, `name`, `version`, `deployedAt`, and `collaborationKey` (non-zero for a collaboration pool)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get process XML",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/processes/{{defKey}}/xml",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "processes",
+                "{{defKey}}",
+                "xml"
+              ]
+            },
+            "description": "The original BPMN XML of a definition. If the model carried no diagram layout, a generated left-to-right layout is injected so it still renders. 404 for an unknown key."
+          },
+          "response": []
+        },
+        {
+          "name": "Process runtime",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/processes/{{defKey}}/runtime?",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "processes",
+                "{{defKey}}",
+                "runtime"
+              ],
+              "query": [
+                {
+                  "key": "instance",
+                  "value": "{{instanceKey}}",
+                  "description": "Narrow to one instance (optional)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Per-element live token counts and visit history for one definition \u2014 the data the live viewer overlays on the diagram. Optional `?instance=<key>` narrows to a single instance."
+          },
+          "response": []
+        },
+        {
+          "name": "Collaboration runtime",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/collaborations/{{defKey}}/runtime",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "collaborations",
+                "{{defKey}}",
+                "runtime"
+              ]
+            },
+            "description": "Whole-collaboration runtime for the replay view: pools, merged element overlay across pools, and the time-ordered message flows between them. The path key may be any pool of the collaboration."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete process",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/processes/{{defKey}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "processes",
+                "{{defKey}}"
+              ]
+            },
+            "description": "Remove one deployed definition (version). 409 if it still has running instances \u2014 cancel them first. 204 on success."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Instances",
+      "description": "Start, list, and cancel process instances.",
+      "item": [
+        {
+          "name": "Start instance",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/processes/{{defKey}}/instances",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "processes",
+                "{{defKey}}",
+                "instances"
+              ]
+            },
+            "description": "Start one instance, optionally seeded with `{\"variables\": {...}}`. Runs to idle and returns the resulting live counts. An empty body `{}` starts with no variables.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"variables\": {\n    \"orderId\": \"A-1001\",\n    \"amount\": 4200\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List instances",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/instances",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "instances"
+              ]
+            },
+            "description": "Live instances (with token counts) then finished ones (most-recently-completed first). Each row carries its variables."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const arr = pm.response.json();",
+                  "const active = (arr || []).find(i => i.state === 'active');",
+                  "if (active) pm.collectionVariables.set('instanceKey', active.key);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel instance",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/instances/{{instanceKey}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "instances",
+                "{{instanceKey}}"
+              ]
+            },
+            "description": "Terminate a running instance (e.g. one parked on a wait that will never complete). It moves to the finished list as `terminated`. 404 if no active instance has that key."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "User Tasks",
+      "description": "The human-task inbox: list open user tasks, claim/unclaim them, and complete them with form data.",
+      "item": [
+        {
+          "name": "List tasks",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks"
+              ]
+            },
+            "description": "Open user tasks across all instances, with `assignee`, `candidateGroups`, and `formId` metadata."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const t = pm.response.json();",
+                  "if (t && t.length) pm.collectionVariables.set('taskKey', t[0].key);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Claim task",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks/{{taskKey}}/claim",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{taskKey}}",
+                "claim"
+              ]
+            },
+            "description": "Assign an open task to a person. Body `{\"assignee\": \"...\"}`. Claiming an already-claimed task reassigns it (last-writer-wins). 400 on empty assignee, 404 if the task is gone/completed.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assignee\": \"patrick\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Unclaim task",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks/{{taskKey}}/unclaim",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{taskKey}}",
+                "unclaim"
+              ]
+            },
+            "description": "Release a task (clears the assignee), making it available again. 404 if the task is gone/completed."
+          },
+          "response": []
+        },
+        {
+          "name": "Complete task",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tasks/{{taskKey}}/complete",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{taskKey}}",
+                "complete"
+              ]
+            },
+            "description": "Complete a user task, optionally submitting form data as `{\"variables\": {...}}` written into the instance scope. An empty body completes with no variables. 404 if the task is gone/completed.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"variables\": {\n    \"approved\": true,\n    \"score\": 7,\n    \"note\": \"looks good\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Messages",
+      "description": "Correlate a message into waiting instances.",
+      "item": [
+        {
+          "name": "Publish message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ]
+            },
+            "description": "Publish a message by `name` + `correlationKey`, with optional `variables`. Correlates against open subscriptions and runs the engine to idle so any waiting instance advances. A message that matches nothing is accepted as a no-op (no buffering yet).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"order-approved\",\n  \"correlationKey\": \"A-1001\",\n  \"variables\": {\n    \"approver\": \"patrick\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Projects, Drafts, Forms & DMN (Modeler)",
+      "description": "Artifacts the browser Modeler manages: projects grouping work, saved-but-not-deployed diagrams (drafts), form definitions, and DMN references. Mostly used by the UI, exposed here for completeness and automation.",
+      "item": [
+        {
+          "name": "Create project",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects"
+              ]
+            },
+            "description": "Create a project (a named grouping for artifacts). Body `{\"name\": \"...\"}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Order handling\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (pm.response.code === 200 && j.id) pm.collectionVariables.set('projectId', j.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List projects",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects"
+              ]
+            },
+            "description": "All projects with their artifact counts."
+          },
+          "response": []
+        },
+        {
+          "name": "Rename project",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "{{projectId}}"
+              ]
+            },
+            "description": "Rename a project. Body `{\"name\": \"...\"}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Order handling v2\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Validate project",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectId}}/validate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "{{projectId}}",
+                "validate"
+              ]
+            },
+            "description": "Dry-run the project's deployable bundle: compiles each diagram and resolves its DMN references, reporting problems without deploying."
+          },
+          "response": []
+        },
+        {
+          "name": "Deploy project",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectId}}/deploy",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "{{projectId}}",
+                "deploy"
+              ]
+            },
+            "description": "Deploy the project's bundle: every diagram plus its resolved DMN models, so business rule tasks actually evaluate at runtime."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete project",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "{{projectId}}"
+              ]
+            },
+            "description": "Delete a project."
+          },
+          "response": []
+        },
+        {
+          "name": "Save draft",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/xml"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/drafts?",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts"
+              ],
+              "query": [
+                {
+                  "key": "projectId",
+                  "value": "{{projectId}}",
+                  "description": "File into this project (optional)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Persist a diagram as a draft (raw BPMN, stored as-is WITHOUT compiling), keyed by its `<process id>`. Re-saving the same id overwrites. Optional `?projectId=` files it into a project.",
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<definitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n             xmlns:zeebe=\"http://camunda.org/schema/zeebe/1.0\">\n  <process id=\"order-approval\" isExecutable=\"true\">\n    <startEvent id=\"start\"/>\n    <userTask id=\"review\" name=\"Review order\">\n      <extensionElements>\n        <zeebe:assignmentDefinition candidateGroups=\"reviewers\"/>\n      </extensionElements>\n    </userTask>\n    <userTask id=\"approve\" name=\"Approve order\">\n      <extensionElements>\n        <zeebe:assignmentDefinition candidateGroups=\"managers\"/>\n      </extensionElements>\n    </userTask>\n    <endEvent id=\"end\"/>\n    <sequenceFlow id=\"f1\" sourceRef=\"start\" targetRef=\"review\"/>\n    <sequenceFlow id=\"f2\" sourceRef=\"review\" targetRef=\"approve\"/>\n    <sequenceFlow id=\"f3\" sourceRef=\"approve\" targetRef=\"end\"/>\n  </process>\n</definitions>\n",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List drafts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/drafts?",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts"
+              ],
+              "query": [
+                {
+                  "key": "projectId",
+                  "value": "{{projectId}}",
+                  "description": "Filter by project (optional)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Saved drafts, most-recently-saved first. Optional `?projectId=` narrows to one project."
+          },
+          "response": []
+        },
+        {
+          "name": "Get draft XML",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/drafts/{{draftId}}/xml",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                "{{draftId}}",
+                "xml"
+              ]
+            },
+            "description": "A draft's raw BPMN XML, so the editor can reopen it. `draftId` is the `<process id>`."
+          },
+          "response": []
+        },
+        {
+          "name": "Move draft",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/drafts/{{draftId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                "{{draftId}}"
+              ]
+            },
+            "description": "Reassign a draft to another project (empty `projectId` = Ungrouped). Body `{\"projectId\": \"...\"}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": \"{{projectId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete draft",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/drafts/{{draftId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                "{{draftId}}"
+              ]
+            },
+            "description": "Remove a draft. Idempotent \u2014 deleting an absent draft still succeeds."
+          },
+          "response": []
+        },
+        {
+          "name": "Save form",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/forms",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "forms"
+              ]
+            },
+            "description": "Create/replace a form definition (form-js schema) bound to user tasks. Body `{\"id\",\"name\",\"projectId\",\"schema\": {...}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"review-form\",\n  \"name\": \"Review form\",\n  \"projectId\": \"{{projectId}}\",\n  \"schema\": {\n    \"type\": \"default\",\n    \"components\": [\n      {\n        \"type\": \"checkbox\",\n        \"key\": \"approved\",\n        \"label\": \"Approved\"\n      }\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List forms",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/forms",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "forms"
+              ]
+            },
+            "description": "All form definitions (metadata)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get form",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/forms/{{formId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "forms",
+                "{{formId}}"
+              ]
+            },
+            "description": "One form definition, including its schema."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete form",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/forms/{{formId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "forms",
+                "{{formId}}"
+              ]
+            },
+            "description": "Delete a form definition."
+          },
+          "response": []
+        },
+        {
+          "name": "Create DMN reference",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/dmnrefs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "dmnrefs"
+              ]
+            },
+            "description": "Register a reference to a DMN model (resolved from the temis model service or the local dmn-models folder). Body `{\"name\",\"modelRef\",\"projectId\"}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Risk decision\",\n  \"modelRef\": \"risk-model\",\n  \"projectId\": \"{{projectId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (pm.response.code === 200 && j.id) pm.collectionVariables.set('dmnRefId', j.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List DMN references",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/dmnrefs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "dmnrefs"
+              ]
+            },
+            "description": "All DMN reference artifacts."
+          },
+          "response": []
+        },
+        {
+          "name": "Validate DMN reference",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/dmnrefs/{{dmnRefId}}/validate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "dmnrefs",
+                "{{dmnRefId}}",
+                "validate"
+              ]
+            },
+            "description": "Resolve and temis-compile the referenced DMN model, reporting whether it's deployable."
+          },
+          "response": []
+        },
+        {
+          "name": "Move DMN reference",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/dmnrefs/{{dmnRefId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "dmnrefs",
+                "{{dmnRefId}}"
+              ]
+            },
+            "description": "Reassign a DMN reference to another project. Body `{\"projectId\": \"...\"}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": \"{{projectId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete DMN reference",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/dmnrefs/{{dmnRefId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "dmnrefs",
+                "{{dmnRefId}}"
+              ]
+            },
+            "description": "Delete a DMN reference artifact."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "MCP (AI agents)",
+      "description": "The same server also speaks the **Model Context Protocol** over Streamable HTTP at `/mcp`, so an AI agent (e.g. a claude.ai custom connector) can drive it with the `atlas_*` tools. These are JSON-RPC 2.0 calls \u2014 included so you can poke the transport from Postman.\n\n\u26a0\ufe0f The `/mcp` endpoint is UNAUTHENTICATED; put auth in front of it before exposing it publicly.",
+      "item": [
+        {
+          "name": "Initialize",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json, text/event-stream"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/mcp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp"
+              ]
+            },
+            "description": "JSON-RPC `initialize` handshake. Note the `Accept` header must allow both `application/json` and `text/event-stream`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"initialize\",\n  \"params\": {\n    \"protocolVersion\": \"2024-11-05\",\n    \"capabilities\": {},\n    \"clientInfo\": {\n      \"name\": \"postman\",\n      \"version\": \"1.0\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List tools",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json, text/event-stream"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/mcp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp"
+              ]
+            },
+            "description": "JSON-RPC `tools/list` \u2014 enumerate the `atlas_*` tools the adapter exposes.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 2,\n  \"method\": \"tools/list\",\n  \"params\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Call tool: atlas_stats",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json, text/event-stream"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/mcp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mcp"
+              ]
+            },
+            "description": "JSON-RPC `tools/call` invoking `atlas_stats` \u2014 the MCP equivalent of `GET /api/v1/stats`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 3,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"atlas_stats\",\n    \"arguments\": {}\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "defKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "instanceKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "taskKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "processId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "projectId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "draftId",
+      "value": "order-approval",
+      "type": "string"
+    },
+    {
+      "key": "formId",
+      "value": "review-form",
+      "type": "string"
+    },
+    {
+      "key": "dmnRefId",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
