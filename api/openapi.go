@@ -214,6 +214,8 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Validate a DMN reference compiles", tag: "DMN References", resp: jsonBody("Validation result", tObject())}},
 		{"GET", "/api/v1/decisions", s.handleListDecisions, apiOp{
 			summary: "List DMN decisions (with inputs and outputs) available from DMN references", tag: "DMN References", resp: jsonBody("Decisions", tArray())}},
+		{"GET", "/api/v1/dmnrefs/{id}/graph", s.handleDmnRefGraph, apiOp{
+			summary: "A DMN reference's decision requirements graph for the read-only viewer", tag: "DMN References", resp: jsonBody("Model graph", tObject())}},
 
 		{"POST", "/api/v1/auth/login", s.handleLogin, apiOp{
 			summary: "Log in with a username and password", tag: "Auth",

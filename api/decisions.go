@@ -70,3 +70,32 @@ func (s *Server) handleListDecisions(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, out)
 }
+
+// handleDmnRefGraph returns one DMN reference's decision requirements graph for the
+// read-only viewer: the reference record is read on the run loop, then the model is
+// resolved and compiled off it (like the validate endpoint). An unresolved or
+// invalid model is a normal 200 carrying a message and no nodes, so the viewer can
+// explain the state.
+func (s *Server) handleDmnRefGraph(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var (
+		rec    dmnRef
+		ok     bool
+		getErr error
+	)
+	s.do(func() { rec, ok, getErr = s.dmnrefs.get(id) })
+	switch {
+	case getErr != nil:
+		writeError(w, http.StatusInternalServerError, "read dmn reference: "+getErr.Error())
+		return
+	case !ok:
+		writeError(w, http.StatusNotFound, "no dmn reference with that id")
+		return
+	}
+	g, err := s.dmnValidator.Graph(r.Context(), rec.ModelRef)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "resolve dmn model: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, g)
+}

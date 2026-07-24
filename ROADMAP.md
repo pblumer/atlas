@@ -409,8 +409,12 @@ the hand-written Details panel one vertical slice at a time:
 - A standalone DMN authoring/product surface. Atlas *executes* the DMN decisions
   a model references, via business rule tasks that delegate to the embedded temis
   engine ([ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)); it does
-  not ship a DMN modeler or decision-management product of its own. (FEEL is also
-  used internally for expressions.)
+  not ship a DMN **modeler/editor** or decision-management product of its own —
+  decisions are authored in temis. (Atlas does offer a **read-only** view of a
+  referenced model's decision requirements graph, and a decision picker that
+  auto-reads inputs/outputs, so an author can *use* a decision without leaving the
+  Modeler; that is a look-and-use surface, not an authoring one.) FEEL is also used
+  internally for expressions.
 
 ## Guiding constraints
 
