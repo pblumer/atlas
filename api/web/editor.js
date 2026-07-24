@@ -1154,6 +1154,13 @@ function wireProperties(root, modeler, api) {
               <a href="#/modeler/form/new" target="_blank" rel="noopener">Create a new form</a>, then reopen this to link it.</p>
             <p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Message</b> start event instead.</p>`;
         }
+      } else if (bo.$type === "bpmn:EndEvent") {
+        const msg = messageDefOf(bo);
+        if (msg) {
+          html += messageFieldsHTML(modeler, msg, "On reaching this end event the message is published; any instance waiting on it with a matching correlation key continues. The instance then ends.");
+        } else {
+          html += `<p class="muted" style="font-size:12px">A plain end event ends the instance. Use the wrench icon on the element to make this a <b>Message</b> end event, which publishes a message as the instance ends.</p>`;
+        }
       }
     } else if (isGatewayFlow && !isDefaultFlow) {
       // Design tab: point to where the executable rule lives.
