@@ -1064,6 +1064,51 @@ func toVariableView(v *model.VariableValue) variableView {
 	return out
 }
 
+// nativeVar converts a stored variable into its native JSON value, so a form
+// (or any client) receives real types: a number as a number, an object/array as
+// itself, not stringified. The number and JSON canonical strings are emitted
+// verbatim via json.Number / json.RawMessage.
+func nativeVar(v *model.VariableValue) any {
+	switch v.Kind {
+	case model.VarBool:
+		return v.Bool
+	case model.VarNumber:
+		return json.Number(v.Text)
+	case model.VarString:
+		return v.Text
+	case model.VarJSON:
+		return json.RawMessage(v.Text)
+	default:
+		return nil // VarNull
+	}
+}
+
+// handleInstanceVariables returns a process instance's variables as a typed JSON
+// object ({"Name": "Patrick", ...}) — the shape the Tasks app feeds a bound form
+// so a field whose key matches a variable is prefilled (ADR-0028). An instance
+// with no variables (or an unknown key) yields an empty object, not a 404: the
+// endpoint is a convenience read, not an existence check.
+func (s *Server) handleInstanceVariables(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid instance key")
+		return
+	}
+	out := map[string]any{}
+	var scanErr error
+	s.do(func() {
+		scanErr = s.store.VariablesOfScope(key, func(v *model.VariableValue) error {
+			out[v.Name] = nativeVar(v)
+			return nil
+		})
+	})
+	if scanErr != nil {
+		writeError(w, http.StatusInternalServerError, "read variables: "+scanErr.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 // handleListInstances lists process instances — live ones (with their current
 // token count) followed by finished ones from the history index, most recently
 // completed first (ADR-0017). It is the operator "instances" view.

@@ -1256,21 +1256,25 @@ async function viewTasks() {
     }
   }
 
-  // mountForm loads the vendored form-js viewer and the task's bound form schema,
-  // then renders it into the detail pane. Guards against the selection changing
-  // while the (async) load is in flight.
+  // mountForm loads the vendored form-js viewer, the task's bound form schema,
+  // and the instance's current variables, then renders the form prefilled — a
+  // field whose key matches a variable shows its value (ADR-0028). Guards against
+  // the selection changing while the (async) load is in flight.
   async function mountForm(t) {
     const host = document.getElementById("task-form");
     if (!host) return;
     try {
-      const [{ Form }, def] = await Promise.all([
+      const [{ Form }, def, data] = await Promise.all([
         loadFormViewer(),
         api("GET", "/api/v1/forms/" + encodeURIComponent(t.formId)),
+        // Prefill from the instance's variables; a failed read just yields a
+        // blank form rather than blocking the task.
+        api("GET", "/api/v1/instances/" + t.processInstanceKey + "/variables").catch(() => ({})),
       ]);
       if (state.selected !== t.key) return; // selection moved on; drop this mount
       host.innerHTML = "";
       const form = new Form({ container: host });
-      await form.importSchema(def.schema);
+      await form.importSchema(def.schema, data || {});
       if (state.selected !== t.key) { try { form.destroy(); } catch { /* noop */ } return; }
       state.mountedForm = form;
     } catch (err) {
