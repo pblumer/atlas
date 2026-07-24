@@ -1601,7 +1601,8 @@ export async function mountLive(root, { api, toast, key, instance }) {
             <td>${r.state === "active"
               ? '<span class="pill ok"><span class="dot"></span>active</span>'
               : `<span class="pill">${esc(r.state)}</span>`}</td>
-            <td>${varChips(r.variables)}</td></tr>`).join("")}</tbody></table>`;
+            <td>${varChips(r.variables)}</td>
+            <td style="text-align:right"><a class="replay-link" href="#/operations/i/${r.key}" title="Replay this instance step by step">&#9654; Replay</a></td></tr>`).join("")}</tbody></table>`;
       return;
     }
     const inst = instances.find((r) => String(r.key) === selected);
@@ -1612,6 +1613,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
         ${inst.state === "active"
           ? '<span class="pill ok"><span class="dot"></span>active</span>'
           : `<span class="pill">${esc(inst.state)}</span>${when ? ` <span class="muted">${esc(when)}</span>` : ""}`}
+        <a class="replay-link" href="#/operations/i/${inst.key}" title="Replay this instance step by step">&#9654; Replay</a>
       </div>
       <div>${varChips(inst.variables)}</div>`;
   }

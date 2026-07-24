@@ -1056,8 +1056,9 @@ async function viewInstances() {
     </div>
     <p class="muted">One row per deployed process. Open a process to pick a version, then
     watch all of its instances at once (every token on the diagram) or select a single
-    instance to isolate it — with its variables shown below the diagram. Start the demo to
-    park a token on a waiting task.</p>
+    instance to isolate it — with its variables shown below the diagram. Each instance
+    listed under the diagram has a <b>&#9654; Replay</b> link to walk it step by step. Start
+    the demo to park a token on a waiting task.</p>
     <div class="card" style="padding:0">
       <table>
         <thead><tr><th>Process</th><th>Versions</th><th>Running</th><th>Finished</th><th>Last activity</th><th></th></tr></thead>
