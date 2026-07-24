@@ -413,6 +413,18 @@ func (b *Builder) AddMessageThrowEvent(messageName string, correlationKey *expr.
 	return b.addNode(TypeMessageThrowEvent, detail)
 }
 
+// AddMessageEndEvent adds an end event that, on activation, publishes the named
+// message with a correlation key produced by the given compiled FEEL expression
+// (evaluated over the ending instance's variables), then ends the instance.
+// It reuses the throw detail table, since a message end event throws exactly like
+// an intermediate throw event and only differs in its completion (ADR-0051).
+// Returns its element id.
+func (b *Builder) AddMessageEndEvent(messageName string, correlationKey *expr.Compiled) int32 {
+	detail := int32(len(b.messageThrows))
+	b.messageThrows = append(b.messageThrows, MessageDetail{MessageName: messageName, CorrelationKey: correlationKey})
+	return b.addNode(TypeMessageEndEvent, detail)
+}
+
 // Connect adds a sequence flow from source to target and returns its flow id, so
 // the caller can attach a condition or mark it the default.
 func (b *Builder) Connect(source, target int32) int32 {

@@ -59,6 +59,7 @@ func (p *Processor) registerBehaviors() {
 	// straight on like a none start (ADR-0035). What makes it a start is the
 	// deploy-time subscription (see Deploy), not a distinct runtime behavior.
 	p.behaviors[compiler.TypeMessageStartEvent] = startEventBehavior{}
+	p.behaviors[compiler.TypeMessageEndEvent] = messageEndEventBehavior{}
 }
 
 // --- command handlers ---
@@ -518,6 +519,31 @@ func (messageThrowEventBehavior) OnActivated(c *ProcessingContext, key uint64, e
 
 func (messageThrowEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	completeAndTakeFlows(c, key, ei)
+}
+
+// messageEndEventBehavior: an end event that publishes a message, then ends the
+// instance (ADR-0051). It is the send-and-stop union of a message throw event and
+// a none end event: OnActivated correlates exactly like a throw (reusing the
+// throw detail table), and OnCompleting ends the instance exactly like a none end
+// event rather than taking outgoing flows. Correlating on the command path keeps
+// applyToState pure (I4/I6), the same reasoning as the throw event.
+type messageEndEventBehavior struct{}
+
+func (messageEndEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.MessageThrow(cp.Node(ei.ElementId).Detail)
+	payload := instanceVariables(c, ei.ProcessInstanceKey)
+	correlateMessage(c, detail.MessageName, evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey), payload, ei.ProcessInstanceKey)
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (messageEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendElementEvent(key, model.IntentCompleted, *ei) // decrements scope's active children
+	if c.ActiveChildren(ei.FlowScopeKey) == 0 {
+		if pi := c.GetProcessInstance(ei.ProcessInstanceKey); pi != nil {
+			c.AppendProcessInstanceEvent(ei.ProcessInstanceKey, model.IntentCompleted, *pi)
+		}
+	}
 }
 
 // evalCorrelationKey evaluates a compiled correlation-key expression over a

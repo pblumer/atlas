@@ -25,6 +25,7 @@ func TestBpmnTypeString(t *testing.T) {
 		{TypeParallelGateway, "ParallelGateway"},
 		{TypeInclusiveGateway, "InclusiveGateway"},
 		{TypeScriptJobTask, "ScriptJobTask"},
+		{TypeMessageEndEvent, "MessageEndEvent"},
 		{TypeUnspecified, "Unspecified"},
 		{BpmnType(200), "Unspecified"},
 	}

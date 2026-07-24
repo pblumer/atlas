@@ -50,6 +50,109 @@ func throwerProcess(t testing.TB, key uint64) *compiler.CompiledProcess {
 	return cp
 }
 
+// throwerEndProcess: Start → messageEnd("order", key = orderId). The message end
+// event publishes the message, then the instance ends — no outgoing flow.
+func throwerEndProcess(t testing.TB, key uint64) *compiler.CompiledProcess {
+	t.Helper()
+	b := compiler.NewBuilder(key, "thrower-end", 1)
+	start := b.AddStartEvent()
+	end := b.AddMessageEndEvent("order", mustCompile(t, "orderId"))
+	b.Connect(start, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return cp
+}
+
+// TestMessageEndEventThrowsAndCompletes proves a message end event both sends and
+// stops: a parked catcher correlates on the message the end event publishes, and
+// the throwing instance itself completes at the end event (counts fall to 0/0,
+// which they would not if the throwing instance hung after publishing).
+func TestMessageEndEventThrowsAndCompletes(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	catcher := catcherProcess(t, 7)
+	throwerEnd := throwerEndProcess(t, 8)
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(catcher)
+	p.Deploy(throwerEnd)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+
+	// Catcher subscribes and parks at the catch event.
+	p.CreateInstance(catcher.Key, numVar("orderId", "42"))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (catcher): %v", err)
+	}
+	catcherKey := model.NewKey(1, 1)
+
+	// The message end event fires: it correlates the catcher and its own instance
+	// ends. Both instances finish.
+	p.CreateInstance(throwerEnd.Key, numVar("orderId", "42"))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (message end): %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after message end event: process=%d element=%d, want 0 and 0 (both instances completed)", pi, ei)
+	}
+	if got := readVar(t, h.store, catcherKey, "done"); got == nil || got.Text != "caught" {
+		t.Fatalf("catcher done = %+v, want \"caught\" (message end event correlated the catch)", got)
+	}
+}
+
+// TestMessageEndEventRecovers replays a completed message-end run into a fresh
+// store and asserts the terminal state (both instances gone) is rebuilt from the
+// log alone — the end event's completion is a persisted fact, not re-derived.
+func TestMessageEndEventRecovers(t *testing.T) {
+	dir := t.TempDir()
+	catcher := catcherProcess(t, 7)
+	throwerEnd := throwerEndProcess(t, 8)
+	clock := &manualClock{}
+
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clock)
+	p1.Deploy(catcher)
+	p1.Deploy(throwerEnd)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.CreateInstance(catcher.Key, numVar("orderId", "42"))
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (catcher): %v", err)
+	}
+	p1.CreateInstance(throwerEnd.Key, numVar("orderId", "42"))
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (message end): %v", err)
+	}
+	h1.close(t)
+
+	// Replay into a fresh, empty store: state after replay must equal state built live.
+	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open 2: %v", err)
+	}
+	store2, err := state.Open(filepath.Join(dir, "state2"))
+	if err != nil {
+		t.Fatalf("state.Open 2: %v", err)
+	}
+	defer func() { _ = store2.Close(); _ = log2.Close() }()
+	p2 := engine.New(1, log2, store2, clock)
+	p2.Deploy(catcher)
+	p2.Deploy(throwerEnd)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2 (replay): %v", err)
+	}
+	if pi, ei := counts(t, store2); pi != 0 || ei != 0 {
+		t.Fatalf("after replay: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+	if got := readVar(t, store2, model.NewKey(1, 1), "done"); got == nil || got.Text != "caught" {
+		t.Fatalf("after replay, catcher done = %+v, want \"caught\"", got)
+	}
+}
+
 // TestMessageThrowCatchCorrelation is the end-to-end rendezvous: one instance
 // waits at a message catch event; a second instance throws the message with a
 // matching correlation key, which wakes the first and both run to completion.

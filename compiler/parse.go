@@ -413,6 +413,18 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 	}
 	for _, e := range proc.EndEvents {
+		// A message end event publishes its message then ends; a plain end event
+		// just ends (ADR-0051).
+		if e.Message != nil {
+			name, keyExpr, err := resolveMessage(e.Id, e.Message.MessageRef)
+			if err != nil {
+				return nil, err
+			}
+			if err := register(e.Id, b.AddMessageEndEvent(name, keyExpr)); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		if err := register(e.Id, b.AddEndEvent()); err != nil {
 			return nil, err
 		}
@@ -561,7 +573,7 @@ type xmlProcess struct {
 	Id                string                `xml:"id,attr"`
 	Name              string                `xml:"name,attr"`
 	StartEvents       []xmlStartEvent       `xml:"startEvent"`
-	EndEvents         []xmlNode             `xml:"endEvent"`
+	EndEvents         []xmlEndEvent         `xml:"endEvent"`
 	ServiceTasks      []xmlServiceTask      `xml:"serviceTask"`
 	ScriptTasks       []xmlScriptTask       `xml:"scriptTask"`
 	BusinessRuleTasks []xmlBusinessRuleTask `xml:"businessRuleTask"`
@@ -624,6 +636,14 @@ type xmlIntermediateCatchEvent struct {
 
 // An intermediate throw event; only the message variant is executable so far.
 type xmlIntermediateThrowEvent struct {
+	Id      string                     `xml:"id,attr"`
+	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
+}
+
+// An end event. A plain (none) end event just ends the instance; one bearing a
+// messageEventDefinition is a message end event, which publishes the message
+// then ends (ADR-0051). The definition is a pointer so an absent one is nil.
+type xmlEndEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
 }

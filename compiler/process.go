@@ -34,9 +34,10 @@ const (
 	TypeUserTask          // a human task: parks a token, creates a job, waits for a person to complete it via the Tasks app (ADR-0028)
 	TypeBoundaryEvent     // a timer/message event attached to a host activity; arms while the host runs and, when it fires, interrupts the host or spawns a parallel token (ADR-0040)
 	TypeScriptJobTask     // a script task authored in a general-purpose language (PowerShell, …) that runs via the job path, not inline like a FEEL script task (ADR-0047); like a service task it creates a job and waits
+	TypeMessageEndEvent   // an end event that publishes a message, then ends the instance (ADR-0051); the send-and-stop counterpart of a message throw event, so it reuses the throw detail table
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 19
+	numBpmnTypes = 20
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -78,6 +79,8 @@ func (t BpmnType) String() string {
 		return "BoundaryEvent"
 	case TypeScriptJobTask:
 		return "ScriptJobTask"
+	case TypeMessageEndEvent:
+		return "MessageEndEvent"
 	default:
 		return "Unspecified"
 	}
