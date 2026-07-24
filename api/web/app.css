@@ -695,6 +695,34 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .fv-editor .json-editor { margin: 0; width: 100%; }
 .fv-editor .json-input { min-height: calc(100vh - 180px); }
 
+/* ----- Design pane: collapse/resize affordances layered onto the Playground's
+   own areas (form-editor.js enhanceDesignLayout). Same look as Validate. ----- */
+/* A section header doubles as its collapse toggle; the caret marks it. */
+#pane-design .fjs-pgl-section > .header.fv-sec-head { cursor: pointer; user-select: none; }
+#pane-design .fv-sec-caret {
+  display: inline-block; width: 1em; margin-right: 2px; color: var(--muted);
+  font-size: 0.8em; line-height: 1; transition: transform 0.15s; vertical-align: middle;
+}
+#pane-design .fjs-pgl-section.fv-collapsed .fv-sec-caret { transform: rotate(-90deg); }
+/* Collapsed: keep only the header, pinned to the top of its grid cell. */
+#pane-design .fjs-pgl-section.fv-collapsed { align-self: start; }
+#pane-design .fjs-pgl-section.fv-collapsed > :not(.header) { display: none; }
+/* Draggable gutters between the grid's columns and rows. */
+#pane-design .fv-grid-cresizer {
+  position: absolute; top: 0; bottom: 0; width: 9px; margin-left: -4px; z-index: 6; cursor: col-resize;
+}
+#pane-design .fv-grid-rresizer {
+  position: absolute; left: 0; right: 0; height: 9px; margin-top: -4px; z-index: 6; cursor: row-resize;
+}
+#pane-design .fv-grid-cresizer::before { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 3px; background: transparent; transition: background 0.12s; }
+#pane-design .fv-grid-rresizer::before { content: ""; position: absolute; left: 0; right: 0; top: 3px; height: 3px; background: transparent; transition: background 0.12s; }
+#pane-design .fv-grid-cresizer:hover::before, #pane-design .fv-grid-cresizer.dragging::before,
+#pane-design .fv-grid-rresizer:hover::before, #pane-design .fv-grid-rresizer.dragging::before { background: var(--accent); }
+/* Width dividers for the palette (left) and properties (right) columns. */
+#pane-design .fv-side-resizer { flex: 0 0 6px; align-self: stretch; position: relative; z-index: 6; cursor: col-resize; }
+#pane-design .fv-side-resizer::before { content: ""; position: absolute; top: 0; bottom: 0; left: 2px; width: 2px; background: var(--border); transition: background 0.12s; }
+#pane-design .fv-side-resizer:hover::before, #pane-design .fv-side-resizer.dragging::before { background: var(--accent); }
+
 .tasks-form { margin-top: 22px; max-width: 640px; }
 .tasks-form .fjs-container { --color-background: var(--surface); }
 
