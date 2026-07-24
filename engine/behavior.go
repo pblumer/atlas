@@ -493,6 +493,30 @@ const builtinProcessInstanceKey = "processInstanceKey"
 // The reserved name processInstanceKey binds to the scope's own key (the built-in
 // above); at every call site the scope is the process instance, so it is the
 // instance's key.
+// timerDue computes a timer's due date. For a fixed schedule it is FirstDue; for a
+// FEEL schedule (ADR-0055) it evaluates the expression against the instance's
+// variables (scope), reduces the result to text, and parses it as the field's
+// duration or date. An unresolvable FEEL expression — an eval error, a null, or
+// text that isn't a valid duration/date — resolves to now, so the timer fires
+// immediately rather than wedging the token (the placeholder until incidents are
+// modeled). The clock and variables are read here, at command time, and the result
+// is frozen into the TimerCreated event (invariants I4/I6).
+func timerDue(c *ProcessingContext, s compiler.TimerSchedule, scope uint64) int64 {
+	now := c.Now()
+	if !s.IsFeel() {
+		return s.FirstDue(now)
+	}
+	v, err := s.Expr.Eval(bindInputs(c, s.Expr.Inputs(), scope))
+	if err != nil {
+		return now
+	}
+	_, _, text := expr.Classify(v)
+	if due, ok := s.ResolveFeelDue(text, now); ok {
+		return due
+	}
+	return now
+}
+
 func bindInputs(c *ProcessingContext, inputs []string, scope uint64) map[string]expr.Value {
 	if len(inputs) == 0 {
 		return nil
@@ -602,15 +626,15 @@ type timerCatchEventBehavior struct{}
 func (timerCatchEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.TimerCatch(cp.Node(ei.ElementId).Detail)
-	// Now() is read here (command processing) and frozen into the event's due
-	// date; applyToState never reads the clock (invariant I4). A catch schedule is
-	// a duration or date (a cycle is rejected at compile time), so FirstDue is the
-	// only due date (ADR-0054).
+	// The due date is computed here (command processing) — reading the clock and,
+	// for a FEEL schedule, the instance's variables — and frozen into the event;
+	// applyToState never reads either (invariant I4/I6). A catch schedule is a
+	// duration or date (a cycle is rejected at compile time), so it fires once.
 	c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ElementInstanceKey: key,
 		TargetElementId:    ei.ElementId,
-		DueDate:            detail.Schedule.FirstDue(c.Now()),
+		DueDate:            timerDue(c, detail.Schedule, ei.ProcessInstanceKey),
 	})
 	// Stays Activated: no Completing until the timer fires.
 }
@@ -1074,15 +1098,16 @@ func (boundaryEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *m
 	d := cp.BoundaryEvent(cp.Node(ei.ElementId).Detail)
 	switch d.Kind {
 	case compiler.BoundaryTimer:
-		// Now() is read here (command processing) and frozen into the due date;
-		// applyToState never reads the clock (invariant I4). A non-interrupting
-		// cycle boundary seeds Repetitions so a finite Rn cycle counts down as it
-		// recurs (ADR-0054); a one-shot leaves it 0.
+		// The due date is computed here (command processing) — reading the clock and,
+		// for a FEEL schedule, the instance's variables — and frozen into the event;
+		// applyToState never reads either (invariant I4/I6). A non-interrupting cycle
+		// boundary seeds Repetitions so a finite Rn cycle counts down as it recurs
+		// (ADR-0054); a one-shot (including a FEEL duration/date) leaves it 0.
 		c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
 			ProcessInstanceKey: ei.ProcessInstanceKey,
 			ElementInstanceKey: key,
 			TargetElementId:    ei.ElementId,
-			DueDate:            d.Schedule.FirstDue(c.Now()),
+			DueDate:            timerDue(c, d.Schedule, ei.ProcessInstanceKey),
 			Repetitions:        d.Schedule.Repetitions,
 		})
 	case compiler.BoundaryMessage:
