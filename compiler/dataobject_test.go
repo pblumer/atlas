@@ -7,6 +7,20 @@ import (
 	"github.com/pblumer/atlas/compiler"
 )
 
+// TestProcessId checks a compiled process reports the BPMN process id it was built
+// with — the identity a deployment uses to tell one process's versions apart.
+func TestProcessId(t *testing.T) {
+	b := compiler.NewBuilder(1, "order-process", 3)
+	b.AddStartEvent()
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if got := cp.ProcessId(); got != "order-process" {
+		t.Errorf("ProcessId() = %q, want order-process", got)
+	}
+}
+
 // TestBuilderAddDataObject checks that data objects added programmatically land in
 // the compiled process's data-object table with their strings interned and
 // resolvable, and that they are not flow nodes (ADR-0053).
