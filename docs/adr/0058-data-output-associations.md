@@ -1,4 +1,4 @@
-# ADR-0056: Data output associations — write a value and transition a data object's state
+# ADR-0058: Data output associations — write a value and transition a data object's state
 
 - **Status:** Accepted
 - **Date:** 2026-07-24

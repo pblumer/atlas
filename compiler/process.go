@@ -298,7 +298,7 @@ type CompiledDataObject struct {
 
 // DataOutputAssociation is one compiled <dataOutputAssociation> on an activity: it
 // writes a value into a data object and advances that object's data state when the
-// activity completes (ADR-0056). DataObject is the interned target data-object
+// activity completes (ADR-0058). DataObject is the interned target data-object
 // name; Value is the FEEL expression (the association's <assignment><from>)
 // evaluated over the instance's variables to produce the written value, nil for a
 // state-only transition; TargetState is the interned data state the write moves the
@@ -547,7 +547,7 @@ func (p *CompiledProcess) DataObjects() []CompiledDataObject { return p.dataObje
 // DataOutputAssociations returns the data-output associations of activity node id,
 // as a slice into the shared array (no allocation). Empty for a node with none. The
 // engine evaluates them when the activity completes to write its data objects
-// (ADR-0056).
+// (ADR-0058).
 func (p *CompiledProcess) DataOutputAssociations(id int32) []DataOutputAssociation {
 	n := &p.nodes[id]
 	return p.dataOutAssocs[n.DataOutStart : n.DataOutStart+n.DataOutCount]

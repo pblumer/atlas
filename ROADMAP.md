@@ -63,7 +63,7 @@ The control-flow basics most real models use.
   lineage rebuild identically on replay — recovery-tested. Seeded objects are also
   read over the HTTP API (`GET /api/v1/instances/{key}/data-objects`, name + state +
   typed value). **Data output associations now write them**
-  ([ADR-0056](docs/adr/0056-data-output-associations.md)): a
+  ([ADR-0058](docs/adr/0058-data-output-associations.md)): a
   `<dataOutputAssociation>` on an activity evaluates an `<assignment><from>` FEEL
   expression over the instance's variables when the activity completes and emits a
   `DataObjectStateChanged` — setting the object's value and advancing its data state
@@ -119,23 +119,25 @@ Making processes wait, react, and time out.
 
 - ✅ Timer events + due-date index scanning: **intermediate timer catch events**
   (`<timeDuration>` or `<timeDate>`, literal **or a FEEL expression** over the
-  instance's variables — e.g. `=orderTimeout`) execute: the token waits, a
-  server-side scheduler fires due timers on the partition goroutine, and the event
-  continues. Recovery-tested (a pending timer is restored from the log and fires
-  afterward). A cycle on a plain catch is a compile error (a catch fires once).
-  FEEL cycles, and an incident instead of firing immediately when a FEEL timer
-  can't resolve, still to come (ADR-0055).
+  instance's variables — e.g. `=orderTimeout`, or FEEL date arithmetic like
+  `=deadline + duration("P2D")` read as an exact first-class temporal, ADR-0057)
+  execute: the token waits, a server-side scheduler fires due timers on the
+  partition goroutine, and the event continues. Recovery-tested (a pending timer
+  is restored from the log and fires afterward). A cycle on a plain catch is a
+  compile error (a catch fires once). An incident instead of firing immediately
+  when a FEEL timer can't resolve is still to come (ADR-0055/0056/0057).
 - ✅ **Timer start events** (duration, date, cycle, cron): a `<startEvent>` with a
   `<timerEventDefinition>` starts a fresh instance on its schedule —
   `<timeDuration>` (once, after a delay), `<timeDate>` (once, at an absolute
   instant), or `<timeCycle>` as an ISO-8601 repeating interval (`R3/PT1H`) or a
   5-field **cron** expression (`0 * * * *`, wall-clock-aligned "every full hour").
-  The schedule is armed as a durable timer at deploy, fired by the existing
-  scheduler through the same create-instance path an API create uses, and a cycle
-  re-arms its next occurrence. A new version supersedes the prior version's
-  schedule. Recovery-tested (an armed timer survives a restart and fires; a fired
-  date timer does not re-fire). FEEL-expression schedules remain a follow-up
-  (ADR-0051).
+  A schedule may also be a **constant FEEL** expression (ADR-0056; a start event
+  has no instance, so it may not read variables). The schedule is armed as a
+  durable timer at deploy, fired by the existing scheduler through the same
+  create-instance path an API create uses, and a cycle re-arms its next
+  occurrence. A new version supersedes the prior version's schedule. Recovery-
+  tested (an armed timer survives a restart and fires; a fired date timer does not
+  re-fire).
 - ✅ **Message events + subscriptions + correlation** (single-partition):
   intermediate **message catch** events subscribe on a FEEL correlation key and
   wait; intermediate **message throw** events, **message end** events, and an HTTP
@@ -158,10 +160,11 @@ Making processes wait, react, and time out.
 - ✅ Boundary events: timer and message, interrupting and non-interrupting,
   attached to waiting activities. An interrupting boundary cancels the host (and
   its job) and routes out its flow; a non-interrupting one spawns a parallel
-  token. Timer boundaries take a `<timeDuration>`, a `<timeDate>` (each literal or
-  a FEEL expression over the instance's variables, ADR-0055), or — on a
+  token. Timer boundaries take a `<timeDuration>`, a `<timeDate>`, or — on a
   non-interrupting boundary — a `<timeCycle>` (interval or cron) that **recurs**,
-  a repeating reminder that fires while the host runs (ADR-0054). Recovery-tested
+  a repeating reminder that fires while the host runs (ADR-0054); each field may be
+  a literal or a **FEEL expression** over the instance's variables, including a
+  FEEL cycle re-evaluated each occurrence (ADR-0055/0056). Recovery-tested
   (ADR-0040, ADR-0054). Error/signal boundaries and boundaries on subprocesses
   remain.
 - 🔲 Receive tasks

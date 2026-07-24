@@ -411,7 +411,7 @@ type pendingDataOut struct {
 // the activity completes, the engine evaluates value (a FEEL expression over the
 // instance's variables, nil for a state-only transition) and writes it into the data
 // object named dataObject, advancing that object's data state to targetState (empty
-// keeps the object's current state) — ADR-0056. Build groups a node's associations
+// keeps the object's current state) — ADR-0058. Build groups a node's associations
 // into a shared array.
 func (b *Builder) AddDataOutputAssociation(node int32, dataObject string, value *expr.Compiled, targetState string) {
 	b.dataOutAssocs = append(b.dataOutAssocs, pendingDataOut{
@@ -564,7 +564,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 	// Group data-output associations by their activity node into one shared array,
 	// mirroring the outgoing-flow and boundary-event grouping, so evaluating a
 	// completing activity's associations is an allocation-free slice at runtime
-	// (ADR-0056).
+	// (ADR-0058).
 	var dataOut []DataOutputAssociation
 	for i := range b.nodes {
 		n := &b.nodes[i]

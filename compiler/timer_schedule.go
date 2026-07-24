@@ -34,6 +34,10 @@ const (
 	// the timer is created; the result's text is parsed as an RFC3339 instant
 	// (ADR-0055).
 	TimerFeelDate
+	// TimerFeelCycle recurs, its cadence a FEEL expression (Expr) evaluated when the
+	// timer is armed and again on each re-arm; the result's text is parsed as a
+	// repeating interval or cron (ADR-0056). Boundary (non-interrupting) only.
+	TimerFeelCycle
 )
 
 // TimerSchedule is a compiled timer definition: enough to compute every due date
@@ -45,35 +49,65 @@ type TimerSchedule struct {
 	BaseNanos   int64          // Duration/CycleInterval: the interval in ns; Date: the absolute instant (unix ns)
 	Repetitions int32          // remaining fires after the first; -1 = infinite; 0 = fire once
 	Cron        cronSpec       // populated only for TimerCycleCron
-	Expr        *expr.Compiled // populated only for TimerFeelDuration/TimerFeelDate (ADR-0055)
+	Expr        *expr.Compiled // populated only for the TimerFeel* kinds (ADR-0055/0056)
 }
 
-// IsFeel reports whether the schedule's due date comes from a FEEL expression
-// evaluated at runtime (ADR-0055), rather than a value fixed at deploy time.
+// IsFeel reports whether the schedule comes from a FEEL expression evaluated at
+// runtime (ADR-0055/0056), rather than a value fixed at deploy time.
 func (s TimerSchedule) IsFeel() bool {
-	return s.Kind == TimerFeelDuration || s.Kind == TimerFeelDate
+	return s.Kind == TimerFeelDuration || s.Kind == TimerFeelDate || s.Kind == TimerFeelCycle
 }
 
-// ResolveFeelDue turns the evaluated text of a FEEL timer expression into a due
-// date, per the schedule's FEEL field: a duration adds to now, a date is absolute.
-// ok is false if the text is not a valid duration/date for that field (the caller
-// then treats the timer as unresolvable). Only valid on a FEEL schedule.
-func (s TimerSchedule) ResolveFeelDue(text string, now int64) (int64, bool) {
+// ResolveFeelValue turns a FEEL expression's evaluated *value* into the concrete
+// schedule for the field (ADR-0057). It first reads a first-class FEEL temporal
+// exactly — a duration's nanoseconds for a FEEL duration schedule, a date-time's
+// instant for a FEEL date schedule — and only falls back to the canonical string
+// form (Classify → ResolveFeel) when the value is not a usable temporal (e.g. a
+// variable holding an ISO-8601 string, or any cycle). ok is false if neither path
+// yields a valid schedule. Only valid on a FEEL schedule.
+func (s TimerSchedule) ResolveFeelValue(v expr.Value) (TimerSchedule, bool) {
 	switch s.Kind {
 	case TimerFeelDuration:
-		nanos, err := parseISO8601Duration(strings.TrimSpace(text))
-		if err != nil {
-			return 0, false
+		if nanos, ok := expr.DurationNanos(v); ok {
+			return TimerSchedule{Kind: TimerDuration, BaseNanos: nanos}, true
 		}
-		return now + nanos, true
 	case TimerFeelDate:
-		sched, err := parseTimeDate(strings.TrimSpace(text))
-		if err != nil {
-			return 0, false
+		if inst, ok := expr.InstantNanos(v); ok {
+			return TimerSchedule{Kind: TimerDate, BaseNanos: inst}, true
 		}
-		return sched.BaseNanos, true
+	}
+	_, _, text := expr.Classify(v)
+	return s.ResolveFeel(text)
+}
+
+// ResolveFeel turns the evaluated text of a FEEL timer expression into the concrete
+// schedule the literal parser would have produced for the same field — a duration,
+// date, or cycle — so downstream FirstDue/NextDue/Repetitions are identical to a
+// literal timer's (ADR-0056). ok is false if the text is not valid for the field
+// (the caller then treats the timer as unresolvable). Only valid on a FEEL schedule.
+func (s TimerSchedule) ResolveFeel(text string) (TimerSchedule, bool) {
+	text = strings.TrimSpace(text)
+	switch s.Kind {
+	case TimerFeelDuration:
+		nanos, err := parseISO8601Duration(text)
+		if err != nil {
+			return TimerSchedule{}, false
+		}
+		return TimerSchedule{Kind: TimerDuration, BaseNanos: nanos}, true
+	case TimerFeelDate:
+		sched, err := parseTimeDate(text)
+		if err != nil {
+			return TimerSchedule{}, false
+		}
+		return sched, true
+	case TimerFeelCycle:
+		sched, err := parseTimeCycle(text)
+		if err != nil {
+			return TimerSchedule{}, false
+		}
+		return sched, true
 	default:
-		return 0, false
+		return TimerSchedule{}, false
 	}
 }
 
@@ -95,7 +129,7 @@ func (s TimerSchedule) FirstDue(now int64) int64 {
 // once (a duration or date). A recurring non-interrupting boundary uses it to
 // decide whether to re-arm after each fire (ADR-0054).
 func (s TimerSchedule) Repeats() bool {
-	return s.Kind == TimerCycleInterval || s.Kind == TimerCycleCron
+	return s.Kind == TimerCycleInterval || s.Kind == TimerCycleCron || s.Kind == TimerFeelCycle
 }
 
 // NextDue returns the due date of the next firing after a timer fires at now, and
@@ -183,9 +217,9 @@ func parseDateField(s string) (TimerSchedule, error) {
 	return TimerSchedule{Kind: TimerFeelDate, Expr: e}, nil
 }
 
-// parseCycleField parses a <timeCycle>: a literal repeating interval or cron. FEEL
-// cycles are not supported yet (ADR-0055) — a '=' body that isn't a literal is a
-// clear error rather than a silent misparse.
+// parseCycleField parses a <timeCycle>: a literal repeating interval or cron, or —
+// when marked with '=' and not a literal — a FEEL expression that resolves to one
+// at runtime (ADR-0056).
 func parseCycleField(s string) (TimerSchedule, error) {
 	body, isFeel := splitFeel(s)
 	if sched, err := parseTimeCycle(body); err == nil {
@@ -193,7 +227,11 @@ func parseCycleField(s string) (TimerSchedule, error) {
 	} else if !isFeel {
 		return TimerSchedule{}, err
 	}
-	return TimerSchedule{}, fmt.Errorf("timeCycle does not support FEEL expressions yet; use a literal repeating interval (R3/PT1H) or cron (0 * * * *)")
+	e, err := expr.CompileAuto(body)
+	if err != nil {
+		return TimerSchedule{}, fmt.Errorf("timeCycle FEEL expression: %w", err)
+	}
+	return TimerSchedule{Kind: TimerFeelCycle, Expr: e}, nil
 }
 
 // parseTimeDate parses an ISO-8601 / RFC3339 instant into an absolute-date timer.

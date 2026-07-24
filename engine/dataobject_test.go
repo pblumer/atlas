@@ -131,7 +131,7 @@ func TestDataObjectSeededAndRecovers(t *testing.T) {
 // associationProcess builds Start → Task(writes =amount into order[approved]) → End
 // with a data object "order" seeded [received]. The plain task completes on
 // activation, so it runs to completion with no worker, exercising the data-output
-// association path (ADR-0056).
+// association path (ADR-0058).
 func associationProcess(t testing.TB) *compiler.CompiledProcess {
 	t.Helper()
 	b := compiler.NewBuilder(defKey, "assoc", 1)
@@ -150,7 +150,7 @@ func associationProcess(t testing.TB) *compiler.CompiledProcess {
 }
 
 // TestDataOutputAssociationWritesAndRecovers is the recovery property for data
-// output associations (ADR-0056): a task's association evaluates a FEEL expression
+// output associations (ADR-0058): a task's association evaluates a FEEL expression
 // over the instance's variables, writes the result into a data object, and advances
 // the object's data state; replaying the log rebuilds the same value and state — the
 // write is frozen into the event, never recomputed (invariants I4/I6).
@@ -255,7 +255,7 @@ func TestDataOutputAssociationStateOnly(t *testing.T) {
 
 // TestDataOutputAssociationKeepsState covers an association that writes a value but
 // names no target data state: the object's value changes while its current data
-// state is preserved (ADR-0056).
+// state is preserved (ADR-0058).
 func TestDataOutputAssociationKeepsState(t *testing.T) {
 	dir := t.TempDir()
 	b := compiler.NewBuilder(defKey, "assockeep", 1)

@@ -214,8 +214,8 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			if err != nil {
 				return nil, fmt.Errorf("compiler: start event %q timer: %w", s.Id, err)
 			}
-			if schedule.IsFeel() {
-				return nil, fmt.Errorf("compiler: start event %q: a timer start event's schedule must be a literal — FEEL expressions need instance variables, which a start event has none of (ADR-0055)", s.Id)
+			if schedule.IsFeel() && len(schedule.Expr.Inputs()) > 0 {
+				return nil, fmt.Errorf("compiler: start event %q: a timer start event's FEEL schedule must be constant (reference no variables) — a start event has no instance to evaluate against (ADR-0056)", s.Id)
 			}
 			if err := register(s.Id, b.AddTimerStartEvent(schedule)); err != nil {
 				return nil, err
@@ -579,7 +579,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	}
 
 	// Wire data-output associations now that every activity node is registered
-	// (ADR-0056). A dataObjectReference resolves to its data object plus the target
+	// (ADR-0058). A dataObjectReference resolves to its data object plus the target
 	// data state; a targetRef may also name a data object directly (no state change).
 	refs := make(map[string]xmlDataObjectReference, len(proc.DataObjectReferences))
 	for _, ref := range proc.DataObjectReferences {
@@ -744,7 +744,7 @@ type xmlDataState struct {
 // A BPMN data object reference: a pointer to a <dataObject> (dataObjectRef) that may
 // carry its own <dataState> — so the same object can appear on the canvas in several
 // states (order [received], order [approved]). A data-output association targets a
-// reference to say which object it writes and what state it moves it into (ADR-0056).
+// reference to say which object it writes and what state it moves it into (ADR-0058).
 type xmlDataObjectReference struct {
 	Id            string       `xml:"id,attr"`
 	DataObjectRef string       `xml:"dataObjectRef,attr"`
@@ -754,7 +754,7 @@ type xmlDataObjectReference struct {
 // xmlDataOutputAssociation is a <dataOutputAssociation> on an activity: targetRef
 // names the data object (or a <dataObjectReference> to it) the activity writes, and
 // the optional <assignment><from> is a FEEL expression, evaluated over the instance's
-// variables at completion, that produces the written value (ADR-0056).
+// variables at completion, that produces the written value (ADR-0058).
 type xmlDataOutputAssociation struct {
 	TargetRef  string        `xml:"targetRef"`
 	Assignment xmlAssignment `xml:"assignment"`

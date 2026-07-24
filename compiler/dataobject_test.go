@@ -118,7 +118,7 @@ func TestParseDataObjectDefaultsToId(t *testing.T) {
 // TestParseDataOutputAssociation compiles a task with a <dataOutputAssociation>
 // targeting a <dataObjectReference> that carries a [approved] data state, and
 // checks the association reaches the compiled node with the resolved data-object
-// name, the target state, and a compiled value expression (ADR-0056).
+// name, the target state, and a compiled value expression (ADR-0058).
 func TestParseDataOutputAssociation(t *testing.T) {
 	const model = `<?xml version="1.0"?>
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">

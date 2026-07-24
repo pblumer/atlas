@@ -174,6 +174,31 @@ func IsTrue(v Value) bool {
 	return ok && bool(b)
 }
 
+// DurationNanos returns the length in nanoseconds of a FEEL days-and-time duration
+// value (e.g. the result of duration("PT1H")), and whether v is one. A years-and-
+// months duration is calendar-dependent and not convertible to a fixed length, so
+// it reports false — matching the ISO-8601 duration subset Atlas accepts (ADR-0057).
+func DurationNanos(v Value) (int64, bool) {
+	if d, ok := v.(value.DaysTimeDuration); ok {
+		return int64(d.Duration()), true
+	}
+	return 0, false
+}
+
+// InstantNanos returns the unix-nanosecond instant of a FEEL date-time value, or a
+// date (resolved to midnight in its own zone), and whether v is one of those
+// (ADR-0057).
+func InstantNanos(v Value) (int64, bool) {
+	switch t := v.(type) {
+	case value.DateTime:
+		return t.Time().UnixNano(), true
+	case value.Date:
+		return t.Time().UnixNano(), true
+	default:
+		return 0, false
+	}
+}
+
 // Number returns a FEEL number value for an integer, for building bindings.
 func Number(i int64) Value { return value.NumberFromInt64(i) }
 
