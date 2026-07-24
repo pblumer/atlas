@@ -248,7 +248,7 @@ func (s *Store) MessageFlowHistory(receiverDefKey uint64, fn func(ts int64, pos 
 // ElementStepHistory folds the retained element-activation steps of one process
 // instance, calling fn with each step's event timestamp, log position, and the
 // activated element's compiled-graph index in the order they occurred (the
-// step-by-step replay timeline, ADR-0044). Because the key sorts by timestamp
+// step-by-step replay timeline, ADR-0046). Because the key sorts by timestamp
 // then position, an instance-wide scan yields a monotonic sequence. The caller
 // resolves the element index to a diagram id via the instance's compiled process.
 func (s *Store) ElementStepHistory(piKey uint64, fn func(ts int64, pos uint64, elementId int32) error) error {

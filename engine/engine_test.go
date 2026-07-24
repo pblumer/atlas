@@ -206,7 +206,7 @@ func elementVisits(t *testing.T, s *state.Store, defKey uint64) map[int32]int64 
 }
 
 // elementSteps reads one instance's element-step timeline into the ordered slice
-// of element indices a token activated, oldest first (ADR-0044).
+// of element indices a token activated, oldest first (ADR-0046).
 func elementSteps(t *testing.T, s *state.Store, piKey uint64) []int32 {
 	t.Helper()
 	var out []int32
@@ -840,7 +840,7 @@ func TestElementVisitHistoryRecovers(t *testing.T) {
 }
 
 // TestElementStepHistoryRecovers is the recovery property for the single-process
-// step timeline (ADR-0044): every element a token activates is retained in
+// step timeline (ADR-0046): every element a token activates is retained in
 // activation order under its instance, the trail survives the instance finishing,
 // and replaying the log rebuilds an identical, identically-ordered trail — each
 // step is derived only from the event (its header timestamp/position and the

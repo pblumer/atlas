@@ -54,7 +54,7 @@ func onlyInstanceKey(t *testing.T, ts *httptest.Server) uint64 {
 
 // TestInstanceTimelineActive starts a process that parks at its service task and
 // checks the step timeline reports the walked elements in order (start → task),
-// their diagram ids and types, and the instance's active state (ADR-0044).
+// their diagram ids and types, and the instance's active state (ADR-0046).
 func TestInstanceTimelineActive(t *testing.T) {
 	ts := newTestServer(t)
 

@@ -12,7 +12,7 @@ import (
 // checks that ElementStepHistory returns one instance's steps in (timestamp,
 // position) order, isolated from the other instance's. Steps written out of time
 // order must still scan back oldest-first — the single-process replay timeline
-// (ADR-0044).
+// (ADR-0046).
 func TestElementStepHistory(t *testing.T) {
 	s := openStore(t)
 	i1 := model.NewKey(1, 10)

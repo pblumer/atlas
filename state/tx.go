@@ -388,7 +388,7 @@ func (t *Tx) RecordMessageFlow(ts int64, pos uint64, v *model.MessageFlowValue) 
 // often" as an aggregate heatmap, this answers "in what order" per instance.
 // Written only from applyToState, from the event alone (the header's timestamp
 // and position plus the activated element), so it rebuilds identically on replay
-// (invariant I4, ADR-0044). Each record has a unique key (position is monotonic),
+// (invariant I4, ADR-0046). Each record has a unique key (position is monotonic),
 // so this is a plain Set, never overwritten and never deleted. Retention is
 // unbounded for now, as with the other history families (ADR-0017, ADR-0022).
 

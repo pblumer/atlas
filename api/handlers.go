@@ -131,6 +131,10 @@ func processIdentity(body []byte) (id, name string) {
 type infoResp struct {
 	Product string `json:"product"`
 	Version string `json:"version"`
+	// Docs reports whether the OpenAPI spec and the API explorer are served
+	// (the --docs gate, ADR-0043), so the web UI can show or hide its
+	// "API Explorer" entry without probing /api/docs.
+	Docs bool `json:"docs"`
 }
 
 type runtimeElement struct {
@@ -179,7 +183,7 @@ type collabRuntimeResp struct {
 }
 
 // timelineStep is one element activation on a single instance's replay timeline:
-// which BPMN element a token entered, its type, and when (ADR-0044). Steps are
+// which BPMN element a token entered, its type, and when (ADR-0046). Steps are
 // ordered oldest-first, so the Operations view can step through them.
 type timelineStep struct {
 	At        int64  `json:"at"` // unix nanoseconds
@@ -189,7 +193,7 @@ type timelineStep struct {
 
 // instanceTimelineResp is one process instance's step-by-step replay: its
 // definition, lifecycle state, and the ordered elements a token walked through
-// (ADR-0044). It powers the single-process replay transport, the analogue of the
+// (ADR-0046). It powers the single-process replay transport, the analogue of the
 // collaboration message-flow timeline.
 type instanceTimelineResp struct {
 	InstanceKey   uint64         `json:"instanceKey"`
@@ -229,7 +233,7 @@ type cancelInstanceResp struct {
 
 // handleInfo reports product/version metadata for the UI shell.
 func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, infoResp{Product: "Atlas", Version: Version})
+	writeJSON(w, http.StatusOK, infoResp{Product: "Atlas", Version: Version, Docs: s.docsEnabled})
 }
 
 type validateFeelReq struct {
@@ -821,7 +825,7 @@ func (s *Server) handleCollaborationRuntime(w http.ResponseWriter, r *http.Reque
 
 // handleInstanceTimeline returns one process instance's step-by-step replay: the
 // ordered elements a token activated over the instance's life, each with its
-// diagram id, type, and event timestamp (ADR-0044). The instance is resolved
+// diagram id, type, and event timestamp (ADR-0046). The instance is resolved
 // whether it is still running or already finished, and its element indices are
 // mapped to diagram ids via its definition's compiled process. This is the
 // single-process analogue of the collaboration message-flow timeline: the browser
@@ -1295,23 +1299,67 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleClaimTask assigns an open user task to a person (claim). The request
-// body is {"assignee": "..."}; a claim to an already-claimed task simply
-// reassigns it (last-writer-wins, ADR-0042). 400 on a missing/empty assignee,
+// handleClaimTask assigns an open user task to a person (claim), last-writer-wins
+// (ADR-0042). Once the server has identity (ADR-0044/0045) claim is authoritative:
+//
+//   - With auth enabled, an empty/omitted body claims the task for the signed-in
+//     user, and a named {"assignee": "..."} must be a real, enabled account
+//     (400 otherwise) — you cannot assign work to a username that doesn't exist.
+//   - With auth disabled (open single-user mode) there is no session identity, so
+//     the caller must still name the assignee, unvalidated, as before.
+//
 // 404 if the job doesn't exist or is already completed.
 func (s *Server) handleClaimTask(w http.ResponseWriter, r *http.Request) {
+	// The body is optional now: an empty body (io.EOF) means "claim for me"
+	// (auth on); a malformed non-empty body is still a 400.
 	var body struct {
 		Assignee string `json:"assignee"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if strings.TrimSpace(body.Assignee) == "" {
+	assignee := strings.TrimSpace(body.Assignee)
+
+	if s.authEnabled {
+		p := principalFrom(r.Context())
+		if p == nil {
+			writeError(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+		if assignee == "" {
+			assignee = p.Username
+		} else {
+			// A named assignee must resolve to a real, enabled user; normalize to
+			// the account's stored username (canonical case).
+			var (
+				canonical string
+				known     bool
+				vErr      error
+			)
+			s.do(func() {
+				u, ok, e := s.users.byUsername(assignee)
+				vErr = e
+				known = ok && !u.Disabled
+				if ok {
+					canonical = u.Username
+				}
+			})
+			if vErr != nil {
+				writeError(w, http.StatusInternalServerError, "claim: "+vErr.Error())
+				return
+			}
+			if !known {
+				writeError(w, http.StatusBadRequest, "unknown or disabled user")
+				return
+			}
+			assignee = canonical
+		}
+	} else if assignee == "" {
 		writeError(w, http.StatusBadRequest, "assignee is required")
 		return
 	}
-	s.assignTask(w, r, strings.TrimSpace(body.Assignee))
+	s.assignTask(w, r, assignee)
 }
 
 // handleUnclaimTask releases a user task (assignee cleared), making it available

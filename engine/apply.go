@@ -48,7 +48,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 				return err
 			}
 			// Retain the same activation as an ordered, timestamped step so a single
-			// instance can be replayed step by step (ADR-0044). The order comes from
+			// instance can be replayed step by step (ADR-0046). The order comes from
 			// the event header's timestamp and position, so replay rebuilds an
 			// identically-ordered trail (I4).
 			return tx.RecordElementStep(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId)

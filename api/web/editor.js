@@ -1661,7 +1661,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
     const inst = instances.find((r) => String(r.key) === selected);
     cancelBtn.hidden = !(inst && inst.state === "active");
     // Replay is offered for any single selected instance (active or finished): its
-    // step timeline drives a play/step/scrub walk through the diagram (ADR-0044).
+    // step timeline drives a play/step/scrub walk through the diagram (ADR-0046).
     if (inst) {
       replayBtn.href = `#/operations/i/${inst.key}`;
       replayBtn.hidden = false;
@@ -2034,7 +2034,7 @@ export async function mountCollaboration(root, { api, toast, key }) {
 }
 
 // mountInstanceReplay renders one process instance read-only and replays it step
-// by step (ADR-0044): the instance's definition diagram with a transport bar that
+// by step (ADR-0046): the instance's definition diagram with a transport bar that
 // walks the token through the elements in the order they activated. Each step
 // pulses the entered element and, when the two steps are joined by a sequence
 // flow, animates a token dot along that edge — the single-process analogue of the

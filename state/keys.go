@@ -149,7 +149,7 @@ func positionFromFlowKey(k []byte) uint64 {
 // trailing disambiguator so two steps in the same nanosecond keep distinct keys.
 // All big-endian / sign-flipped so lexicographic byte order matches numeric (and
 // thus time) order. Unlike the element-visit counter (ADR-0022) this is keyed by
-// instance, ordered in time, and never aggregated across instances (ADR-0044).
+// instance, ordered in time, and never aggregated across instances (ADR-0046).
 func keyElementStep(piKey uint64, ts int64, pos uint64) []byte {
 	b := appendOrderedInt64(elementStepInstancePrefix(piKey), ts)
 	return appendBE64(b, pos)

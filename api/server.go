@@ -101,6 +101,18 @@ type Server struct {
 	forms       *formStore       // durable sidecar for form definitions (ADR-0028)
 	projects    *projectStore    // durable sidecar for projects grouping artifacts (ADR-0034)
 	dmnrefs     *dmnRefStore     // durable sidecar for DMN reference artifacts (ADR-0034)
+	users       *userStore       // durable sidecar for user accounts (ADR-0044)
+
+	// sessions holds live login sessions in memory. Unlike the sidecar stores it
+	// is touched from concurrent handler goroutines, so it guards itself with a
+	// mutex; it is not engine state and does not persist (ADR-0044).
+	sessions *sessionStore
+
+	// authEnabled gates authentication enforcement. Off by default: the server
+	// stays fully open (single-user) until an operator opts in with WithAuth,
+	// mirroring how docsEnabled gates the API explorer (ADR-0044/0043). Set once
+	// before Handler is mounted; read-only thereafter.
+	authEnabled bool
 
 	// dmnResolver turns a DMN reference handle into model XML; dmnValidator wraps
 	// it with a temis compile for the deploy-time validation gate (ADR-0034).
@@ -113,10 +125,11 @@ type Server struct {
 	dmnRegistry *dmn.Registry
 	jobRunner   *job.Runner
 
-	// docsEnabled gates the OpenAPI spec and the Scalar API explorer. Off by
-	// default: the interactive, mutating surface and the machine-readable
-	// description of it are only served when an operator opts in with --docs
-	// (ADR-0043). Set once before Handler is mounted; read-only thereafter.
+	// docsEnabled gates the OpenAPI spec and the Scalar API explorer. On by
+	// default (opt-out), consistent with the already-open web UI and MCP
+	// endpoint; an operator who does not want the interactive surface disables
+	// it with --docs=false / WithoutDocs (ADR-0043). Set once before Handler is
+	// mounted; read-only thereafter.
 	docsEnabled bool
 }
 
@@ -124,11 +137,11 @@ type Server struct {
 // the run loop starts, so they set fields that are read-only afterwards.
 type Option func(*Server)
 
-// WithDocs enables the OpenAPI document at /api/v1/openapi.json and the Scalar
-// API explorer at /api/docs. Both are off unless this option is passed, because
-// the explorer's "Try it out" exercises the same unauthenticated, mutating
-// surface as the rest of the API (ADR-0043).
-func WithDocs() Option { return func(s *Server) { s.docsEnabled = true } }
+// WithoutDocs disables the OpenAPI document at /api/v1/openapi.json and the
+// Scalar API explorer at /api/docs, which are otherwise served by default. Pass
+// it when the interactive, mutating "Try it out" surface should not be exposed
+// (ADR-0043).
+func WithoutDocs() Option { return func(s *Server) { s.docsEnabled = false } }
 
 // New builds a Server over an already-recovered processor and its store and
 // starts the run-loop goroutine. dataDir is the base data directory; the durable
@@ -158,6 +171,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	users, err := newUserStore(filepath.Join(dataDir, "users"))
+	if err != nil {
+		return nil, err
+	}
 	// DMN reference models are resolved either from a temis model service (when
 	// configured) or the zero-config <data-dir>/dmn-models folder. Both satisfy the
 	// Resolver interface, so the rest of the server is unaffected (ADR-0034/0014).
@@ -175,12 +192,23 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		forms:        forms,
 		projects:     projects,
 		dmnrefs:      dmnrefs,
+		users:        users,
+		sessions:     newSessionStore(defaultSessionTTL),
 		dmnResolver:  resolver,
 		dmnValidator: dmn.NewValidator(resolver),
 		dmnRegistry:  dmn.NewRegistry(),
+		docsEnabled:  true, // opt-out: served unless WithoutDocs is passed (ADR-0043)
 	}
 	for _, opt := range opts {
 		opt(s)
+	}
+	// When enforcement is on, make sure a fresh instance has an admin to log in
+	// with (ADR-0044). This runs before the loop serves traffic, so touching the
+	// user store directly here respects the single-writer discipline.
+	if s.authEnabled {
+		if err := s.bootstrapAdmin(time.Now().Unix()); err != nil {
+			return nil, err
+		}
 	}
 	// The in-process DMN worker evaluates business rule tasks off no separate
 	// goroutine (the single-binary server drives jobs synchronously on the run
@@ -356,7 +384,10 @@ func (s *Server) Handler() http.Handler {
 	}
 	mux.Handle("/", http.FileServerFS(sub))
 
-	return mux
+	// Resolve a Principal for every request and, when enforcement is on, gate the
+	// mutating /api/v1 surface behind a valid session (ADR-0044). With auth off
+	// (the default) this is a transparent pass-through.
+	return s.withAuth(mux)
 }
 
 // readStats reads the live instance counts. It must be called on the run-loop

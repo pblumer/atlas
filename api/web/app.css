@@ -125,6 +125,20 @@ ol.steps li { margin: 6px 0; }
 .btn.ghost.danger:hover { background: #fdecea; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* Form fields (login + user management) */
+.field { display: block; margin: 10px 0; font-size: 13px; color: var(--muted); }
+.field input[type="text"],
+.field input[type="email"],
+.field input[type="password"],
+.field input:not([type]) {
+  display: block; width: 100%; box-sizing: border-box; margin-top: 5px;
+  padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 6px;
+  font: inherit; color: var(--text); background: var(--surface);
+}
+.field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.field.inline { display: flex; align-items: center; gap: 8px; color: var(--text); }
+.field.inline input { width: auto; margin: 0; }
+
 /* Stat tiles */
 .stats { display: flex; gap: 34px; flex-wrap: wrap; }
 .stat b { display: block; font-size: 30px; font-weight: 700; line-height: 1.1; }
@@ -511,6 +525,11 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   font: inherit; padding: 6px 8px; border: 1px solid var(--border-strong);
   border-radius: 6px; background: var(--surface); color: var(--text);
 }
+.tasks-me { font: inherit; font-weight: 600; color: var(--text); padding: 2px 0; }
+.tasks-assign {
+  font: inherit; padding: 8px 10px; border: 1px solid var(--border-strong);
+  border-radius: 6px; background: var(--surface); color: var(--text); cursor: pointer;
+}
 .tasks-folders nav { display: flex; flex-direction: column; gap: 2px; }
 .tasks-folder {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -589,6 +608,11 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 }
 .dropdown-menu .mi-icon { width: 16px; color: var(--muted); flex: 0 0 16px; text-align: center; }
 .btn.dropdown-toggle::after { content: "▾"; margin-left: 7px; font-size: 11px; opacity: .8; }
+/* Help ("?") menu: the API Explorer link's trailing ↗ and the disabled hint. */
+.dropdown-menu a .ext { margin-left: auto; color: var(--muted); font-size: 12px; }
+.dropdown-menu .help-note { padding: 8px 10px; font-size: 13px; color: var(--text); white-space: normal; }
+.dropdown-menu .help-note .muted { color: var(--muted); }
+.dropdown-menu .help-note code { font-size: 12px; background: var(--bg); padding: 0 4px; border-radius: 4px; }
 .icon-btn {
   background: none; border: 1px solid transparent; border-radius: 6px; cursor: pointer;
   color: var(--muted); font-size: 18px; line-height: 1; padding: 4px 8px;

@@ -1,4 +1,4 @@
-# ADR-0044: Single-process step-by-step replay
+# ADR-0046: Single-process step-by-step replay
 
 - **Status:** Accepted
 - **Date:** 2026-07-24
