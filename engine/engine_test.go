@@ -219,6 +219,20 @@ func elementSteps(t *testing.T, s *state.Store, piKey uint64) []int32 {
 	return out
 }
 
+// variableSnapshots reads one instance's variable-change timeline into ordered
+// "name=text" pairs, oldest first (ADR-0048).
+func variableSnapshots(t *testing.T, s *state.Store, scopeKey uint64) []string {
+	t.Helper()
+	var out []string
+	if err := s.VariableSnapshotHistory(scopeKey, func(_ int64, _ uint64, v *model.VariableValue) error {
+		out = append(out, v.Name+"="+v.Text)
+		return nil
+	}); err != nil {
+		t.Fatalf("VariableSnapshotHistory: %v", err)
+	}
+	return out
+}
+
 func counts(t *testing.T, s *state.Store) (procInstances, elementInstances int) {
 	t.Helper()
 	pi, err := s.ActiveProcessInstanceCount()
@@ -914,5 +928,67 @@ func TestElementStepHistoryRecovers(t *testing.T) {
 	// Rebuilt step trail matches the live run exactly, same elements in the same order.
 	if replayed := elementSteps(t, store2, instKey); !reflect.DeepEqual(replayed, live) {
 		t.Fatalf("replayed steps = %v, want %v", replayed, live)
+	}
+}
+
+// TestVariableSnapshotHistoryRecovers is the recovery property for the per-step
+// variable timeline (ADR-0048): every variable change is retained in change order
+// under its instance — the seeded start variable and the script task's write —
+// and replaying the log rebuilds an identical, identically-ordered trail, each
+// change derived only from the event (its header timestamp/position and the
+// variable value), never re-generated (invariant I4).
+func TestVariableSnapshotHistoryRecovers(t *testing.T) {
+	dir := t.TempDir()
+	// start → scriptTask("hi" → greeting) → end, seeded with x=1 at creation.
+	cp := scriptProcess(t, `"hi"`, "greeting")
+	clock := &manualClock{}
+
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clock)
+	p1.Deploy(cp)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.CreateInstance(cp.Key, model.VariableValue{Name: "x", Kind: model.VarNumber, Text: "1"})
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle 1: %v", err)
+	}
+
+	// The instance has finished; its variable trail records both changes in order:
+	// the seeded x=1 (written before the start event runs) then the script's
+	// greeting=hi (written when the script task ran).
+	instKey := model.NewKey(1, 1)
+	live := variableSnapshots(t, h1.store, instKey)
+	if want := []string{"x=1", "greeting=hi"}; !reflect.DeepEqual(live, want) {
+		t.Fatalf("live variable trail = %v, want %v", live, want)
+	}
+	h1.close(t)
+
+	// Replay the same log into a fresh, empty store.
+	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open 2: %v", err)
+	}
+	store2, err := state.Open(filepath.Join(dir, "state2"))
+	if err != nil {
+		t.Fatalf("state.Open 2: %v", err)
+	}
+	defer func() {
+		if err := store2.Close(); err != nil {
+			t.Errorf("store2.Close: %v", err)
+		}
+		if err := log2.Close(); err != nil {
+			t.Errorf("log2.Close: %v", err)
+		}
+	}()
+	p2 := engine.New(1, log2, store2, clock)
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2 (replay): %v", err)
+	}
+
+	// Rebuilt variable trail matches the live run exactly, same changes in order.
+	if replayed := variableSnapshots(t, store2, instKey); !reflect.DeepEqual(replayed, live) {
+		t.Fatalf("replayed variable trail = %v, want %v", replayed, live)
 	}
 }

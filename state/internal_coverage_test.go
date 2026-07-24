@@ -185,5 +185,13 @@ func TestStoreDecodeErrorPaths(t *testing.T) {
 	if err := txn.VariablesOfScope(scope, func(*model.VariableValue) error { return nil }); err == nil {
 		t.Errorf("Tx.VariablesOfScope on corrupt value: err = nil, want error")
 	}
+
+	// VariableSnapshotHistory decode error: a too-short value under a snapshot key.
+	if err := s.db.Set(keyVariableSnapshot(model.NewKey(1, 6), 1, 1), []byte{0x01}, pebble.NoSync); err != nil {
+		t.Fatalf("Set var snapshot: %v", err)
+	}
+	if err := s.VariableSnapshotHistory(model.NewKey(1, 6), func(int64, uint64, *model.VariableValue) error { return nil }); err == nil {
+		t.Errorf("VariableSnapshotHistory on corrupt value: err = nil, want error")
+	}
 	txn.Close()
 }

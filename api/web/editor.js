@@ -1655,7 +1655,8 @@ export async function mountLive(root, { api, toast, key, instance }) {
             <td>${r.state === "active"
               ? '<span class="pill ok"><span class="dot"></span>active</span>'
               : `<span class="pill">${esc(r.state)}</span>`}</td>
-            <td>${varChips(r.variables)}</td></tr>`).join("")}</tbody></table>`;
+            <td>${varChips(r.variables)}</td>
+            <td style="text-align:right"><a class="replay-link" href="#/operations/i/${r.key}" title="Replay this instance step by step">&#9654; Replay</a></td></tr>`).join("")}</tbody></table>`;
       return;
     }
     const inst = instances.find((r) => String(r.key) === selected);
@@ -1666,6 +1667,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
         ${inst.state === "active"
           ? '<span class="pill ok"><span class="dot"></span>active</span>'
           : `<span class="pill">${esc(inst.state)}</span>${when ? ` <span class="muted">${esc(when)}</span>` : ""}`}
+        <a class="replay-link" href="#/operations/i/${inst.key}" title="Replay this instance step by step">&#9654; Replay</a>
       </div>
       <div>${varChips(inst.variables)}</div>`;
   }
@@ -2122,6 +2124,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
         <span class="clock" id="clock">no steps yet</span>
       </div>
       <div class="editor-body"><div id="canvas"></div></div>
+      <div class="var-panel" id="rp-vars"></div>
       <div class="flow-log" id="step-log"></div>
       <div class="problems">
         <span class="legend-swatch live"></span> current step
@@ -2176,6 +2179,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const scrub = root.querySelector("#scrub");
   const playBtn = root.querySelector("#play");
   const logEl = root.querySelector("#step-log");
+  const varPanel = root.querySelector("#rp-vars");
   const speedSel = root.querySelector("#speed");
 
   let steps = [];    // element-activation timeline, oldest first
@@ -2196,6 +2200,28 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   function typeLabel(t) {
     const bare = String(t || "").replace(/^bpmn:/, "").replace(/([a-z])([A-Z])/g, "$1 $2");
     return bare ? bare.charAt(0).toUpperCase() + bare.slice(1).toLowerCase() : "";
+  }
+
+  const varChips = (list) => !list || !list.length
+    ? '<span class="muted">No variables yet.</span>'
+    : list.map((v) => {
+        if (v.kind === "json") {
+          const preview = v.value.length > 60 ? v.value.slice(0, 57) + "..." : v.value;
+          return `<span class="chip" title="${esc(v.value)}">${esc(v.name)}=<code>${esc(preview)}</code></span>`;
+        }
+        return `<span class="chip">${esc(v.name)}=${esc(v.value)}</span>`;
+      }).join(" ");
+
+  // renderVars shows the variable values as they stood when the token entered the
+  // current step (the per-step snapshot the timeline carries, ADR-0048). At
+  // playhead 0 (before any step) it shows nothing yet.
+  function renderVars() {
+    const cur = playhead > 0 && playhead <= steps.length ? steps[playhead - 1] : null;
+    const head = cur
+      ? `Variables · as of step ${playhead} (${esc(stepLabel(cur))})`
+      : "Variables";
+    varPanel.innerHTML = `<div class="vp-head">${head}</div>
+      <div>${varChips(cur ? cur.variables : [])}</div>`;
   }
 
   function updateClock() {
@@ -2235,6 +2261,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     updateClock();
     renderOverlay();
     highlightCurrent();
+    renderVars();
   }
 
   function renderLog() {
@@ -2336,7 +2363,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       scrub.max = String(steps.length);
       renderLog();
       if (!playing && wasAtEnd) setPlayhead(steps.length); // follow new steps live
-      else { scrub.value = String(playhead); updateClock(); renderOverlay(); highlightCurrent(); }
+      else { scrub.value = String(playhead); updateClock(); renderOverlay(); highlightCurrent(); renderVars(); }
     }
   }
 
