@@ -138,7 +138,7 @@ function setChrome(appId, route) {
   ).join("");
   document.querySelectorAll("#drawer-apps a").forEach((a) =>
     a.classList.toggle("active", a.dataset.app === appId));
-  const fullBleed = route.includes("/modeler/d/") || route.includes("/modeler/draft/") || route.endsWith("/new") || route.includes("/operations/p/");
+  const fullBleed = route.includes("/modeler/d/") || route.includes("/modeler/draft/") || route.includes("/modeler/form/") || route.endsWith("/new") || route.includes("/operations/p/");
   document.body.classList.toggle("editor-mode", fullBleed);
   // The Tasks inbox is a wide three-pane layout, so it drops the centered
   // max-width the default content column uses while keeping normal padding.
@@ -276,6 +276,7 @@ async function viewModelerHome() {
       <h1>Modeler</h1>
       <div class="row">
         <button class="btn neutral" id="new-project">New project</button>
+        <a class="btn neutral" href="#/modeler/form/new">New form</a>
         <a class="btn" href="#/modeler/new">New diagram</a>
       </div>
     </div>
@@ -298,12 +299,13 @@ async function viewModelerHome() {
   // that belong to no existing project fall into an "Ungrouped" bucket. A per-row
   // "Project" dropdown moves a draft between projects.
   const renderProjects = async () => {
-    let projects = [], drafts = [], refs = [];
+    let projects = [], drafts = [], refs = [], forms = [];
     try {
-      [projects, drafts, refs] = await Promise.all([
+      [projects, drafts, refs, forms] = await Promise.all([
         api("GET", "/api/v1/projects"),
         api("GET", "/api/v1/drafts"),
         api("GET", "/api/v1/dmnrefs"),
+        api("GET", "/api/v1/forms"),
       ]);
     } catch (e) { projectsSection.innerHTML = `<p class="empty">${esc(e.message)}</p>`; return; }
 
@@ -322,6 +324,7 @@ async function viewModelerHome() {
     };
     const draftsB = bucket(drafts);
     const refsB = bucket(refs);
+    const formsB = bucket(forms);
 
     // The shared "move to…" options: Ungrouped plus every project, current selected.
     const moveOptions = (current) =>
@@ -362,19 +365,37 @@ async function viewModelerHome() {
         </td>
       </tr>`).join("");
 
-    const artifactTable = (dl, rl) => `<table><tbody>${draftRows(dl)}${refRows(rl)}</tbody></table>`;
+    // A form is a form-js schema Atlas both stores and edits (ADR-0028). Unlike a
+    // DMN reference it opens in the built-in form editor; a user task binds it by
+    // id via the properties panel.
+    const formRows = (list) => list.map((f) => {
+      const href = `#/modeler/form/e/${encodeURIComponent(f.id)}`;
+      return `<tr>
+        <td><span class="chip">FORM</span> <a href="${href}"><b>${esc(f.name || f.id)}</b></a>
+          <div class="muted" style="font-size:12px">${esc(f.id)}</div></td>
+        <td class="muted">${esc(fmtTime(f.savedAt))}</td>
+        <td style="text-align:right; white-space:nowrap">
+          <a class="btn ghost" href="${href}">Open</a>
+          <button class="btn ghost danger" data-formdel="${esc(f.id)}">Delete</button>
+        </td>
+      </tr>`;
+    }).join("");
+
+    const artifactTable = (dl, rl, fl) => `<table><tbody>${draftRows(dl)}${refRows(rl)}${formRows(fl || [])}</tbody></table>`;
 
     const projectCard = (p) => {
       const dl = draftsB.byProject.get(p.id) || [];
       const rl = refsB.byProject.get(p.id) || [];
-      const body = (dl.length || rl.length) ? artifactTable(dl, rl)
-        : `<p class="empty" style="margin:0; padding:16px">No artifacts yet — add a DMN reference, or create a diagram and move it here.</p>`;
-      const n = p.artifacts;
+      const fl = formsB.byProject.get(p.id) || [];
+      const body = (dl.length || rl.length || fl.length) ? artifactTable(dl, rl, fl)
+        : `<p class="empty" style="margin:0; padding:16px">No artifacts yet — add a DMN reference or a form, or create a diagram and move it here.</p>`;
+      const n = dl.length + rl.length + fl.length;
       return `<div class="card" style="padding:0; margin-bottom:14px">
         <div class="between" style="padding:12px 14px; border-bottom:1px solid var(--border)">
           <div><b>${esc(p.name)}</b> <span class="muted" style="font-size:12px">· ${n} artifact${n === 1 ? "" : "s"}</span></div>
           <div class="row">
             <button class="btn" data-projdeploy="${esc(p.id)}">Deploy</button>
+            <a class="btn ghost" href="#/modeler/form/new/p/${encodeURIComponent(p.id)}">New form</a>
             <button class="btn ghost" data-refadd="${esc(p.id)}">Add DMN reference</button>
             ${rl.length ? `<button class="btn ghost" data-projvalidate="${esc(p.id)}">Validate DMN</button>` : ""}
             <button class="btn ghost" data-projrename="${esc(p.id)}" data-projname="${esc(p.name)}">Rename</button>
@@ -391,13 +412,13 @@ async function viewModelerHome() {
       html += `<h2 style="margin:6px 0 10px"><button class="section-toggle" aria-expanded="${projOpen}" data-section="projects">Projects</button></h2>
         <div class="section-body" id="sec-projects"${projOpen ? "" : " hidden"}>` + projects.map(projectCard).join("") + `</div>`;
     }
-    if (draftsB.ungrouped.length || refsB.ungrouped.length) {
+    if (draftsB.ungrouped.length || refsB.ungrouped.length || formsB.ungrouped.length) {
       const ugOpen = sectionState("ungrouped");
       html += `<h2 style="margin:${projects.length ? "18px" : "6px"} 0 10px"><button class="section-toggle" aria-expanded="${ugOpen}" data-section="ungrouped">Ungrouped <span class="muted" style="font-size:13px">· artifacts not in a project</span></button></h2>
         <div class="section-body" id="sec-ungrouped"${ugOpen ? "" : " hidden"}>
-        <div class="card" style="padding:0">${artifactTable(draftsB.ungrouped, refsB.ungrouped)}</div></div>`;
+        <div class="card" style="padding:0">${artifactTable(draftsB.ungrouped, refsB.ungrouped, formsB.ungrouped)}</div></div>`;
     }
-    if (!projects.length && !draftsB.ungrouped.length && !refsB.ungrouped.length) {
+    if (!projects.length && !draftsB.ungrouped.length && !refsB.ungrouped.length && !formsB.ungrouped.length) {
       html = `<div class="card empty">No projects or artifacts yet. Create a <b>New project</b> to
         organize your BPMN diagrams and DMN references, or start a <a href="#/modeler/new">New diagram</a> and save it.</div>`;
     }
@@ -416,6 +437,8 @@ async function viewModelerHome() {
       b.addEventListener("click", () => createDmnRef(b.dataset.refadd, renderProjects));
     for (const b of projectsSection.querySelectorAll("button[data-refdel]"))
       b.addEventListener("click", () => deleteDmnRef(b.dataset.refdel, renderProjects));
+    for (const b of projectsSection.querySelectorAll("button[data-formdel]"))
+      b.addEventListener("click", () => deleteForm(b.dataset.formdel, renderProjects));
     for (const b of projectsSection.querySelectorAll("button[data-refvalidate]"))
       b.addEventListener("click", () => validateDmnRef(b.dataset.refvalidate));
     for (const b of projectsSection.querySelectorAll("button[data-projvalidate]"))
@@ -561,6 +584,15 @@ async function deleteDmnRef(id, reload) {
     await api("DELETE", `/api/v1/dmnrefs/${encodeURIComponent(id)}`);
     toast("Deleted DMN reference", "ok");
   } catch (e) { toast("could not delete reference: " + e.message, "err"); }
+  await reload();
+}
+
+async function deleteForm(id, reload) {
+  if (!window.confirm("Delete this form? A user task still bound to it will show no form until it is re-linked.")) return;
+  try {
+    await api("DELETE", `/api/v1/forms/${encodeURIComponent(id)}`);
+    toast("Deleted form", "ok");
+  } catch (e) { toast("could not delete form: " + e.message, "err"); }
   await reload();
 }
 
@@ -1005,6 +1037,11 @@ async function viewEditorDraft(id) {
   await mod.mountEditor(view, { api, toast, draftId: id });
 }
 
+async function viewFormEditor(formId, projectId) {
+  const mod = await import("./form-editor.js");
+  await mod.mountFormEditor(view, { api, toast, formId, projectId });
+}
+
 async function viewLive(key) {
   const mod = await import("./editor.js");
   await mod.mountLive(view, { api, toast, key });
@@ -1040,6 +1077,10 @@ async function route() {
     if (path === "#/console/org") return viewConsoleOrg();
     if (path === "#/modeler") return await viewModelerHome();
     if (path === "#/modeler/new") return await viewEditor(null);
+    const fnew = path.match(/^#\/modeler\/form\/new(?:\/p\/(.+))?$/);
+    if (fnew) return await viewFormEditor(null, fnew[1] ? decodeURIComponent(fnew[1]) : "");
+    const fe = path.match(/^#\/modeler\/form\/e\/(.+)$/);
+    if (fe) return await viewFormEditor(decodeURIComponent(fe[1]));
     const dm = path.match(/^#\/modeler\/draft\/(.+)$/);
     if (dm) return await viewEditorDraft(decodeURIComponent(dm[1]));
     const m = path.match(/^#\/modeler\/d\/(\d+)$/);
