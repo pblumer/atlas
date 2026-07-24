@@ -50,7 +50,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0040](0040-boundary-events.md) | Boundary events — timer and message, interrupting and non-interrupting | Accepted |
 | [0041](0041-connector-management-and-secret-store.md) | Connector management and the secret store | Proposed |
 | [0042](0042-user-task-assignment-and-claim.md) | User-task runtime assignment and claim/unclaim | Accepted |
-| [0043](0043-openapi-spec-and-embedded-api-explorer.md) | An OpenAPI spec and an embedded API explorer for the HTTP API | Proposed |
+| [0043](0043-openapi-spec-and-embedded-api-explorer.md) | An OpenAPI spec and an embedded API explorer for the HTTP API | Accepted |
 
 ## Status values
 

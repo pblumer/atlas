@@ -112,7 +112,23 @@ type Server struct {
 	// rule tasks (ADR-0014). Both are touched only on the run-loop goroutine.
 	dmnRegistry *dmn.Registry
 	jobRunner   *job.Runner
+
+	// docsEnabled gates the OpenAPI spec and the Scalar API explorer. Off by
+	// default: the interactive, mutating surface and the machine-readable
+	// description of it are only served when an operator opts in with --docs
+	// (ADR-0043). Set once before Handler is mounted; read-only thereafter.
+	docsEnabled bool
 }
+
+// Option configures a Server at construction. Options are applied in New before
+// the run loop starts, so they set fields that are read-only afterwards.
+type Option func(*Server)
+
+// WithDocs enables the OpenAPI document at /api/v1/openapi.json and the Scalar
+// API explorer at /api/docs. Both are off unless this option is passed, because
+// the explorer's "Try it out" exercises the same unauthenticated, mutating
+// surface as the rest of the API (ADR-0043).
+func WithDocs() Option { return func(s *Server) { s.docsEnabled = true } }
 
 // New builds a Server over an already-recovered processor and its store and
 // starts the run-loop goroutine. dataDir is the base data directory; the durable
@@ -121,7 +137,7 @@ type Server struct {
 // re-registering them with the processor so recovered instances resolve their
 // definition and the UI can render diagrams again. The caller retains ownership
 // of proc and store (Close here stops only the loop, not the engine).
-func New(proc *engine.Processor, store *state.Store, dataDir string) (*Server, error) {
+func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Option) (*Server, error) {
 	ds, err := newDeployStore(filepath.Join(dataDir, "deployments"))
 	if err != nil {
 		return nil, err
@@ -162,6 +178,9 @@ func New(proc *engine.Processor, store *state.Store, dataDir string) (*Server, e
 		dmnResolver:  resolver,
 		dmnValidator: dmn.NewValidator(resolver),
 		dmnRegistry:  dmn.NewRegistry(),
+	}
+	for _, opt := range opts {
+		opt(s)
 	}
 	// The in-process DMN worker evaluates business rule tasks off no separate
 	// goroutine (the single-binary server drives jobs synchronously on the run
@@ -299,8 +318,10 @@ func (s *Server) Close() {
 	s.wg.Wait()
 }
 
-// Handler returns the HTTP handler: JSON API under /api/v1, /healthz, and the
-// embedded web UI at the root.
+// Handler returns the HTTP handler: JSON API under /api/v1, /healthz, the
+// embedded web UI at the root, and — when docs are enabled (WithDocs) — the
+// OpenAPI document at /api/v1/openapi.json and the Scalar API explorer at
+// /api/docs.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
@@ -309,44 +330,22 @@ func (s *Server) Handler() http.Handler {
 		_, _ = w.Write([]byte("ok\n"))
 	})
 
-	mux.HandleFunc("GET /api/v1/info", s.handleInfo)
-	mux.HandleFunc("POST /api/v1/feel/validate", s.handleValidateFeel)
-	mux.HandleFunc("POST /api/v1/feel/evaluate", s.handleEvaluateFeel)
-	mux.HandleFunc("POST /api/v1/deployments", s.handleDeploy)
-	mux.HandleFunc("GET /api/v1/processes", s.handleListProcesses)
-	mux.HandleFunc("POST /api/v1/drafts", s.handleSaveDraft)
-	mux.HandleFunc("GET /api/v1/drafts", s.handleListDrafts)
-	mux.HandleFunc("GET /api/v1/drafts/{id}/xml", s.handleDraftXML)
-	mux.HandleFunc("PATCH /api/v1/drafts/{id}", s.handleMoveDraft)
-	mux.HandleFunc("DELETE /api/v1/drafts/{id}", s.handleDeleteDraft)
-	mux.HandleFunc("POST /api/v1/forms", s.handleSaveForm)
-	mux.HandleFunc("GET /api/v1/forms", s.handleListForms)
-	mux.HandleFunc("GET /api/v1/forms/{id}", s.handleGetForm)
-	mux.HandleFunc("DELETE /api/v1/forms/{id}", s.handleDeleteForm)
-	mux.HandleFunc("POST /api/v1/projects", s.handleCreateProject)
-	mux.HandleFunc("GET /api/v1/projects", s.handleListProjects)
-	mux.HandleFunc("PATCH /api/v1/projects/{id}", s.handleRenameProject)
-	mux.HandleFunc("DELETE /api/v1/projects/{id}", s.handleDeleteProject)
-	mux.HandleFunc("POST /api/v1/dmnrefs", s.handleCreateDmnRef)
-	mux.HandleFunc("GET /api/v1/dmnrefs", s.handleListDmnRefs)
-	mux.HandleFunc("PATCH /api/v1/dmnrefs/{id}", s.handleMoveDmnRef)
-	mux.HandleFunc("DELETE /api/v1/dmnrefs/{id}", s.handleDeleteDmnRef)
-	mux.HandleFunc("POST /api/v1/dmnrefs/{id}/validate", s.handleValidateDmnRef)
-	mux.HandleFunc("POST /api/v1/projects/{id}/validate", s.handleValidateProject)
-	mux.HandleFunc("POST /api/v1/projects/{id}/deploy", s.handleDeployProject)
-	mux.HandleFunc("GET /api/v1/processes/{key}/xml", s.handleProcessXML)
-	mux.HandleFunc("DELETE /api/v1/processes/{key}", s.handleDeleteProcess)
-	mux.HandleFunc("GET /api/v1/processes/{key}/runtime", s.handleProcessRuntime)
-	mux.HandleFunc("GET /api/v1/collaborations/{key}/runtime", s.handleCollaborationRuntime)
-	mux.HandleFunc("POST /api/v1/processes/{key}/instances", s.handleCreateInstance)
-	mux.HandleFunc("GET /api/v1/instances", s.handleListInstances)
-	mux.HandleFunc("DELETE /api/v1/instances/{key}", s.handleCancelInstance)
-	mux.HandleFunc("POST /api/v1/messages", s.handlePublishMessage)
-	mux.HandleFunc("GET /api/v1/tasks", s.handleListTasks)
-	mux.HandleFunc("POST /api/v1/tasks/{key}/complete", s.handleCompleteTask)
-	mux.HandleFunc("POST /api/v1/tasks/{key}/claim", s.handleClaimTask)
-	mux.HandleFunc("POST /api/v1/tasks/{key}/unclaim", s.handleUnclaimTask)
-	mux.HandleFunc("GET /api/v1/stats", s.handleStats)
+	// Every /api/v1 route is registered from the single-source-of-truth route
+	// table, the same list openapiDoc describes, so the served surface and its
+	// OpenAPI spec cannot drift (ADR-0043).
+	for _, r := range s.apiRoutes() {
+		mux.HandleFunc(r.method+" "+r.pattern, r.handler)
+	}
+
+	// The OpenAPI document and the Scalar API explorer are gated behind --docs:
+	// the explorer's "Try it out" exercises the same unauthenticated, mutating
+	// surface as the API, so an operator opts in explicitly (ADR-0043). The
+	// vendored Scalar asset is served by the file server below at /vendor/scalar/.
+	if s.docsEnabled {
+		mux.HandleFunc("GET /api/v1/openapi.json", s.handleOpenAPI)
+		mux.HandleFunc("GET /api/docs", s.handleDocs)
+		mux.HandleFunc("GET /api/docs/", s.handleDocs)
+	}
 
 	// The embedded UI is the catch-all; the more specific API patterns above win
 	// under net/http's precedence rules.

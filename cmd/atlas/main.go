@@ -93,13 +93,14 @@ func runServe(args []string) error {
 	addr := fs.String("addr", ":8080", "HTTP listen address")
 	dataDir := fs.String("data-dir", "atlas-data", "directory for the write-ahead log and state store")
 	shutdownTimeout := fs.Duration("shutdown-timeout", 10*time.Second, "grace period for in-flight requests on shutdown")
+	docs := fs.Bool("docs", false, "serve the OpenAPI spec (/api/v1/openapi.json) and the Scalar API explorer (/api/docs)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	return serve(*addr, *dataDir, *shutdownTimeout)
+	return serve(*addr, *dataDir, *shutdownTimeout, *docs)
 }
 
-func serve(addr, dataDir string, shutdownTimeout time.Duration) error {
+func serve(addr, dataDir string, shutdownTimeout time.Duration, docs bool) error {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return err
 	}
@@ -126,7 +127,11 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration) error {
 		return err
 	}
 
-	srv, err := api.New(proc, store, dataDir)
+	var apiOpts []api.Option
+	if docs {
+		apiOpts = append(apiOpts, api.WithDocs())
+	}
+	srv, err := api.New(proc, store, dataDir, apiOpts...)
 	if err != nil {
 		return err
 	}
@@ -156,6 +161,9 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration) error {
 	go func() {
 		base := loopbackURL(addr)
 		log.Printf("listening on %s (UI at %s/, MCP at %s/mcp)", addr, base, base)
+		if docs {
+			log.Printf("API explorer at %s/api/docs (OpenAPI at %s/api/v1/openapi.json)", base, base)
+		}
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 			return

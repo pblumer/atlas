@@ -1,6 +1,6 @@
 # ADR-0043: An OpenAPI spec and an embedded API explorer for the HTTP API
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-24
 - **Deciders:** Atlas maintainers
 
@@ -96,22 +96,26 @@ equal so drift fails CI rather than shipping.
 **Explorer.** A single, vendored, self-contained API-doc renderer is served at
 `/api/docs`, alongside the existing `/` UI and `/mcp` endpoint, and points at
 `/api/v1/openapi.json`. It runs same-origin, so "try it out" issues real
-requests to the live engine with no CORS configuration. We prefer a
-**single-file renderer** (e.g. Scalar or RapiDoc — one vendored JS/HTML asset,
-no build) over the multi-file `swagger-ui-dist` bundle, because a single pinned
-file matches the buildless posture most cleanly; the classic Swagger UI bundle
-remains an acceptable fallback if its exact look is wanted, vendored the same way
-as the bpmn-js assets. Either way it is a pinned asset under
-`api/web/vendor/…` with its license, and nothing is fetched at runtime.
+requests to the live engine with no CORS configuration. The chosen renderer is
+**Scalar** (`@scalar/api-reference`, the `standalone.js` browser build): a
+single self-contained JS asset that exposes
+`window.Scalar.createApiReference(el, { url })`, with no build step and no
+runtime chunk loading. A single pinned file matches the buildless posture most
+cleanly — over the multi-file `swagger-ui-dist` bundle — while still giving the
+requested Swagger-style "try it out". It is a pinned asset under
+`api/web/vendor/scalar/` with its MIT license, and nothing is fetched at
+runtime; the explorer works offline.
 
 **Exposure.** The explorer and the spec are part of the same unauthenticated
 surface as the rest of `/api/v1` and `/mcp`; they add no new privilege, but the
 try-it-out button makes the existing mutating surface (deploy, delete, cancel)
-one click away. They are served by default in the single-binary dev experience,
-consistent with the already-open UI, and the "put auth in front before exposing
-publicly" guidance from ADR-0016 applies unchanged and is restated at the route.
-A future flag to gate `/api/docs` (and `/api/v1/openapi.json`) off is a small,
-additive follow-up if operators want it, not a prerequisite.
+one click away. Both `/api/docs` and `/api/v1/openapi.json` are therefore
+**gated behind a `--docs` flag and off by default**: an operator opts in
+explicitly, and the "put auth in front before exposing publicly" guidance from
+ADR-0016 applies unchanged. The vendored Scalar JS asset itself is served by the
+existing file server regardless of the flag — it is public library code that
+reveals nothing about the API — so only the interactive explorer shell and the
+machine-readable description of the surface are gated.
 
 ### Consequences
 
@@ -127,11 +131,12 @@ additive follow-up if operators want it, not a prerequisite.
   that maintenance mandatory, which is the point). Request/response schemas must
   be described in Go values by hand — richer than the current "no schema at all",
   but bounded and reviewable. The explorer widens how easily the unauthenticated
-  mutating surface is exercised; we accept this as equivalent to the already-open
-  UI and document it rather than gating it now.
-- **Follow-ups / risks to watch:** Add the optional `--docs`/env gate if/when the
-  surface is exposed beyond localhost. Keep the vendored renderer pinned and
-  update it deliberately (ADR-0013 discipline). As Milestone 4 adds routes
+  mutating surface is exercised, so it is gated off by default behind `--docs`
+  rather than always served like the read-mostly UI.
+- **Follow-ups / risks to watch:** If finer control is wanted later, the `--docs`
+  gate can grow an env-var equivalent or split spec-only from explorer-on. Keep
+  the vendored renderer pinned and update it deliberately (ADR-0013 discipline).
+  As Milestone 4 adds routes
   (durable deployment path, job-worker surface, queries), they land in the route
   table and appear in the spec automatically; the MCP tool set (ADR-0016) and the
   OpenAPI spec should be reviewed together so the two descriptions of the surface
