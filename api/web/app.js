@@ -30,6 +30,46 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 
 const fmtTime = (unix) => unix ? new Date(unix * 1000).toLocaleString() : "—";
 
+// ---------- Dropdown menus ----------
+// One delegated document click drives every dropdown: clicking a .dropdown-toggle
+// opens its menu (closing others); clicking anywhere else closes them all.
+function closeAllMenus() {
+  for (const m of document.querySelectorAll(".dropdown-menu:not([hidden])")) m.hidden = true;
+}
+document.addEventListener("click", (e) => {
+  const toggle = e.target.closest(".dropdown-toggle");
+  if (toggle) {
+    e.preventDefault(); e.stopPropagation();
+    const menu = toggle.nextElementSibling, wasOpen = menu && !menu.hidden;
+    closeAllMenus();
+    if (menu) menu.hidden = wasOpen;
+    return;
+  }
+  closeAllMenus();
+});
+
+// dropdown renders a trigger button + its menu. items entries are:
+//   { label, icon?, href? } — a link; or { label, icon?, act, data?, danger? } — a
+//   JS action dispatched by onMenuAction; or { sep:true } | { header:"…" }.
+function dropdown(label, triggerClass, items) {
+  const body = items.map((it) => {
+    if (it.sep) return `<div class="sep"></div>`;
+    if (it.header) return `<div class="mlabel">${esc(it.header)}</div>`;
+    const icon = `<span class="mi-icon">${it.icon || ""}</span>`;
+    if (it.href) return `<a href="${it.href}">${icon}${esc(it.label)}</a>`;
+    const data = it.data ? Object.entries(it.data).map(([k, v]) => `data-${k}="${esc(v)}"`).join(" ") : "";
+    return `<button type="button" data-act="${esc(it.act)}" ${data}${it.danger ? ' class="danger"' : ""}>${icon}${esc(it.label)}</button>`;
+  }).join("");
+  return `<div class="dropdown"><button type="button" class="${triggerClass} dropdown-toggle">${esc(label)}</button>` +
+    `<div class="dropdown-menu" hidden>${body}</div></div>`;
+}
+
+// onMenuAction dispatches menu-item clicks in container to fn(act, buttonEl).
+function onMenuAction(container, fn) {
+  for (const b of container.querySelectorAll(".dropdown-menu button[data-act]"))
+    b.addEventListener("click", () => fn(b.dataset.act, b));
+}
+
 // A ready-to-run demo process. Its "Review order" service task creates a job
 // that no worker completes, so a token parks there and the instance stays active
 // — giving the Operations views (and the live token total) something to show
@@ -138,7 +178,7 @@ function setChrome(appId, route) {
   ).join("");
   document.querySelectorAll("#drawer-apps a").forEach((a) =>
     a.classList.toggle("active", a.dataset.app === appId));
-  const fullBleed = route.includes("/modeler/d/") || route.includes("/modeler/draft/") || route.includes("/modeler/form/") || route.endsWith("/new") || route.includes("/operations/p/");
+  const fullBleed = route.includes("/modeler/d/") || route.includes("/modeler/draft/") || route.includes("/modeler/form/") || route.includes("/modeler/new") || route.includes("/operations/p/");
   document.body.classList.toggle("editor-mode", fullBleed);
   // The Tasks inbox is a wide three-pane layout, so it drops the centered
   // max-width the default content column uses while keeping normal padding.
@@ -270,17 +310,28 @@ function toggleSection(id, btn) {
   try { localStorage.setItem("atlas.sec." + id, open ? "1" : "0"); } catch { /* ignore */ }
 }
 
+// viewModelerHome is the project landscape: a clean table of projects (each a
+// container of artifacts, ADR-0034) plus a collapsible list of deployed
+// definitions. Artifact editing happens inside a project (viewProjectDetail),
+// which keeps this overview tidy. "Create new" is a single dropdown.
 async function viewModelerHome() {
   view.innerHTML = `
     <div class="between">
       <h1>Modeler</h1>
-      <div class="row">
-        <button class="btn neutral" id="new-project">New project</button>
-        <a class="btn neutral" href="#/modeler/form/new">New form</a>
-        <a class="btn" href="#/modeler/new">New diagram</a>
-      </div>
+      ${dropdown("Create new", "btn", [
+        { label: "New project", icon: "📁", act: "new-project" },
+        { sep: true },
+        { header: "Blank resources" },
+        { label: "BPMN diagram", icon: "⚙", href: "#/modeler/new" },
+        { label: "Form", icon: "▤", href: "#/modeler/form/new" },
+      ])}
     </div>
-    <div id="projects-section"><p class="muted">Loading…</p></div>
+    <div class="card" style="padding:0; margin-top:14px">
+      <table>
+        <thead><tr><th>Name</th><th>Artifacts</th><th>Last changed</th><th></th></tr></thead>
+        <tbody id="proj-rows"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
     <h2 style="margin:22px 0 10px"><button class="section-toggle" aria-expanded="${sectionState("deployed")}" data-section="deployed">Deployed</button></h2>
     <div class="section-body" id="sec-deployed"${sectionState("deployed") ? "" : ' hidden'}>
     <div class="card" style="padding:0">
@@ -292,12 +343,8 @@ async function viewModelerHome() {
   for (const t of view.querySelectorAll(".section-toggle"))
     t.addEventListener("click", () => toggleSection(t.dataset.section, t));
   const rows = document.getElementById("rows");
-  const projectsSection = document.getElementById("projects-section");
+  const projRows = document.getElementById("proj-rows");
 
-  // renderProjects shows saved-but-not-deployed diagrams (drafts) organized into
-  // projects (ADR-0034). Each project is a card holding its artifacts; drafts
-  // that belong to no existing project fall into an "Ungrouped" bucket. A per-row
-  // "Project" dropdown moves a draft between projects.
   const renderProjects = async () => {
     let projects = [], drafts = [], refs = [], forms = [];
     try {
@@ -307,150 +354,42 @@ async function viewModelerHome() {
         api("GET", "/api/v1/dmnrefs"),
         api("GET", "/api/v1/forms"),
       ]);
-    } catch (e) { projectsSection.innerHTML = `<p class="empty">${esc(e.message)}</p>`; return; }
+    } catch (e) { projRows.innerHTML = `<tr><td colspan="4" class="empty">${esc(e.message)}</td></tr>`; return; }
 
-    // Bucket artifacts by project; an empty or unknown projectId reads as
-    // Ungrouped. BPMN drafts and DMN references share the same buckets.
     const known = new Set(projects.map((p) => p.id));
-    const bucket = (items) => {
-      const byProject = new Map(), ungrouped = [];
-      for (const it of items) {
-        if (it.projectId && known.has(it.projectId)) {
-          if (!byProject.has(it.projectId)) byProject.set(it.projectId, []);
-          byProject.get(it.projectId).push(it);
-        } else ungrouped.push(it);
-      }
-      return { byProject, ungrouped };
-    };
-    const draftsB = bucket(drafts);
-    const refsB = bucket(refs);
-    const formsB = bucket(forms);
+    const all = [...drafts, ...refs, ...forms];
+    const countIn = (pid) => all.filter((a) => (a.projectId || "") === pid).length;
+    const ungrouped = all.filter((a) => !a.projectId || !known.has(a.projectId));
 
-    // The shared "move to…" options: Ungrouped plus every project, current selected.
-    const moveOptions = (current) =>
-      [`<option value=""${!current ? " selected" : ""}>Ungrouped</option>`]
-        .concat(projects.map((p) =>
-          `<option value="${esc(p.id)}"${p.id === current ? " selected" : ""}>${esc(p.name)}</option>`))
-        .join("");
-    const moveSelect = (attr, id, current) =>
-      `<select ${attr}="${esc(id)}" title="Move to project"
-        style="width:auto; display:inline-block; padding:5px 8px; font-size:13px">${moveOptions(current || "")}</select>`;
-
-    const draftRows = (list) => list.map((d) => {
-      const label = d.name || d.processId;
-      const sub = d.name ? `<div class="muted" style="font-size:12px">${esc(d.processId)}</div>` : "";
-      const href = `#/modeler/draft/${encodeURIComponent(d.processId)}`;
+    const projectRow = (p) => {
+      const n = countIn(p.id);
+      const href = `#/modeler/p/${encodeURIComponent(p.id)}`;
       return `<tr>
-        <td><span class="chip">BPMN</span> <a href="${href}"><b>${esc(label)}</b></a>${sub}</td>
-        <td class="muted">${esc(fmtTime(d.savedAt))}</td>
-        <td style="text-align:right; white-space:nowrap">
-          ${moveSelect("data-move", d.processId, d.projectId)}
-          <a class="btn ghost" href="${href}">Open</a>
-          <button class="btn ghost danger" data-draftdel="${esc(d.processId)}">Delete</button>
-        </td>
+        <td><div class="artifact-name"><span class="mi-icon">📁</span><a href="${href}"><b>${esc(p.name)}</b></a></div></td>
+        <td class="muted">${n}</td>
+        <td class="muted">${esc(fmtTime(p.updatedAt))}</td>
+        <td class="row-actions">${dropdown("⋯", "icon-btn", [
+          { label: "Open", icon: "→", href },
+          { label: "Rename", icon: "✎", act: "rename", data: { id: p.id, name: p.name } },
+          { sep: true },
+          { label: "Delete", icon: "🗑", act: "del", data: { id: p.id, name: p.name }, danger: true },
+        ])}</td>
       </tr>`;
-    }).join("");
-
-    // A DMN reference points at a temis-authored model — Atlas lists it but does
-    // not edit it (ADR-0034), so there is no "Open", just the temis handle and a
-    // deploy-time Validate that resolves the model and compiles it.
-    const refRows = (list) => list.map((r) => `<tr>
-        <td><span class="chip">DMN</span> <b>${esc(r.name)}</b>
-          <div class="muted" style="font-size:12px">temis model: ${esc(r.modelRef)}</div></td>
-        <td><span data-refstatus="${esc(r.id)}" class="muted" style="font-size:12px">not validated</span></td>
-        <td style="text-align:right; white-space:nowrap">
-          <button class="btn ghost" data-refvalidate="${esc(r.id)}">Validate</button>
-          ${moveSelect("data-moveref", r.id, r.projectId)}
-          <button class="btn ghost danger" data-refdel="${esc(r.id)}">Delete</button>
-        </td>
-      </tr>`).join("");
-
-    // A form is a form-js schema Atlas both stores and edits (ADR-0028). Unlike a
-    // DMN reference it opens in the built-in form editor; a user task binds it by
-    // id via the properties panel.
-    const formRows = (list) => list.map((f) => {
-      const href = `#/modeler/form/e/${encodeURIComponent(f.id)}`;
-      return `<tr>
-        <td><span class="chip">FORM</span> <a href="${href}"><b>${esc(f.name || f.id)}</b></a>
-          <div class="muted" style="font-size:12px">${esc(f.id)}</div></td>
-        <td class="muted">${esc(fmtTime(f.savedAt))}</td>
-        <td style="text-align:right; white-space:nowrap">
-          <a class="btn ghost" href="${href}">Open</a>
-          <button class="btn ghost danger" data-formdel="${esc(f.id)}">Delete</button>
-        </td>
-      </tr>`;
-    }).join("");
-
-    const artifactTable = (dl, rl, fl) => `<table><tbody>${draftRows(dl)}${refRows(rl)}${formRows(fl || [])}</tbody></table>`;
-
-    const projectCard = (p) => {
-      const dl = draftsB.byProject.get(p.id) || [];
-      const rl = refsB.byProject.get(p.id) || [];
-      const fl = formsB.byProject.get(p.id) || [];
-      const body = (dl.length || rl.length || fl.length) ? artifactTable(dl, rl, fl)
-        : `<p class="empty" style="margin:0; padding:16px">No artifacts yet — add a DMN reference or a form, or create a diagram and move it here.</p>`;
-      const n = dl.length + rl.length + fl.length;
-      return `<div class="card" style="padding:0; margin-bottom:14px">
-        <div class="between" style="padding:12px 14px; border-bottom:1px solid var(--border)">
-          <div><b>${esc(p.name)}</b> <span class="muted" style="font-size:12px">· ${n} artifact${n === 1 ? "" : "s"}</span></div>
-          <div class="row">
-            <button class="btn" data-projdeploy="${esc(p.id)}">Deploy</button>
-            <a class="btn ghost" href="#/modeler/form/new/p/${encodeURIComponent(p.id)}">New form</a>
-            <button class="btn ghost" data-refadd="${esc(p.id)}">Add DMN reference</button>
-            ${rl.length ? `<button class="btn ghost" data-projvalidate="${esc(p.id)}">Validate DMN</button>` : ""}
-            <button class="btn ghost" data-projrename="${esc(p.id)}" data-projname="${esc(p.name)}">Rename</button>
-            <button class="btn ghost danger" data-projdel="${esc(p.id)}" data-projname="${esc(p.name)}">Delete</button>
-          </div>
-        </div>
-        ${body}
-      </div>`;
     };
+    const ungroupedRow = ungrouped.length ? `<tr>
+        <td><div class="artifact-name"><span class="mi-icon">🗂</span><a href="#/modeler/p/ungrouped">Ungrouped</a>
+          <span class="muted" style="font-size:12px">· not in a project</span></div></td>
+        <td class="muted">${ungrouped.length}</td><td class="muted">—</td><td></td>
+      </tr>` : "";
 
-    let html = "";
-    if (projects.length) {
-      const projOpen = sectionState("projects");
-      html += `<h2 style="margin:6px 0 10px"><button class="section-toggle" aria-expanded="${projOpen}" data-section="projects">Projects</button></h2>
-        <div class="section-body" id="sec-projects"${projOpen ? "" : " hidden"}>` + projects.map(projectCard).join("") + `</div>`;
-    }
-    if (draftsB.ungrouped.length || refsB.ungrouped.length || formsB.ungrouped.length) {
-      const ugOpen = sectionState("ungrouped");
-      html += `<h2 style="margin:${projects.length ? "18px" : "6px"} 0 10px"><button class="section-toggle" aria-expanded="${ugOpen}" data-section="ungrouped">Ungrouped <span class="muted" style="font-size:13px">· artifacts not in a project</span></button></h2>
-        <div class="section-body" id="sec-ungrouped"${ugOpen ? "" : " hidden"}>
-        <div class="card" style="padding:0">${artifactTable(draftsB.ungrouped, refsB.ungrouped, formsB.ungrouped)}</div></div>`;
-    }
-    if (!projects.length && !draftsB.ungrouped.length && !refsB.ungrouped.length && !formsB.ungrouped.length) {
-      html = `<div class="card empty">No projects or artifacts yet. Create a <b>New project</b> to
-        organize your BPMN diagrams and DMN references, or start a <a href="#/modeler/new">New diagram</a> and save it.</div>`;
-    }
-    projectsSection.innerHTML = html;
-
-    for (const t of projectsSection.querySelectorAll(".section-toggle"))
-      t.addEventListener("click", () => toggleSection(t.dataset.section, t));
-
-    for (const b of projectsSection.querySelectorAll("button[data-draftdel]"))
-      b.addEventListener("click", () => deleteDraft(b.dataset.draftdel, renderProjects));
-    for (const b of projectsSection.querySelectorAll("button[data-projrename]"))
-      b.addEventListener("click", () => renameProject(b.dataset.projrename, b.dataset.projname, renderProjects));
-    for (const b of projectsSection.querySelectorAll("button[data-projdel]"))
-      b.addEventListener("click", () => deleteProject(b.dataset.projdel, b.dataset.projname, renderProjects));
-    for (const b of projectsSection.querySelectorAll("button[data-refadd]"))
-      b.addEventListener("click", () => createDmnRef(b.dataset.refadd, renderProjects));
-    for (const b of projectsSection.querySelectorAll("button[data-refdel]"))
-      b.addEventListener("click", () => deleteDmnRef(b.dataset.refdel, renderProjects));
-    for (const b of projectsSection.querySelectorAll("button[data-formdel]"))
-      b.addEventListener("click", () => deleteForm(b.dataset.formdel, renderProjects));
-    for (const b of projectsSection.querySelectorAll("button[data-refvalidate]"))
-      b.addEventListener("click", () => validateDmnRef(b.dataset.refvalidate));
-    for (const b of projectsSection.querySelectorAll("button[data-projvalidate]"))
-      b.addEventListener("click", () => validateProject(b.dataset.projvalidate));
-    for (const b of projectsSection.querySelectorAll("button[data-projdeploy]"))
-      b.addEventListener("click", () => deployProject(b.dataset.projdeploy, () => Promise.all([renderProjects(), render()])));
-    for (const s of projectsSection.querySelectorAll("select[data-move]"))
-      s.addEventListener("change", () => moveDraft(s.dataset.move, s.value, renderProjects));
-    for (const s of projectsSection.querySelectorAll("select[data-moveref]"))
-      s.addEventListener("change", () => moveDmnRef(s.dataset.moveref, s.value, renderProjects));
+    projRows.innerHTML = (projects.map(projectRow).join("") + ungroupedRow) ||
+      `<tr><td colspan="4" class="empty">No projects yet. Use <b>Create new</b> to add one.</td></tr>`;
+    onMenuAction(projRows, (act, b) => {
+      if (act === "rename") renameProject(b.dataset.id, b.dataset.name, renderProjects);
+      if (act === "del") deleteProject(b.dataset.id, b.dataset.name, renderProjects);
+    });
   };
-  document.getElementById("new-project").addEventListener("click", () => createProject(renderProjects));
+  onMenuAction(view, (act) => { if (act === "new-project") createProject(renderProjects); });
 
   const render = async () => {
     try {
@@ -484,6 +423,147 @@ async function viewModelerHome() {
     }
   };
   await Promise.all([renderProjects(), render()]);
+}
+
+// viewProjectDetail is one project's workspace: a single unified table of its
+// artifacts (BPMN drafts, DMN references, forms) with a "Create new" dropdown and
+// per-row action menus, plus Deploy and project-level actions. id === "ungrouped"
+// shows artifacts that belong to no project (read-only container: no deploy or
+// project actions). This is the tidy, Camunda-style per-project view (ADR-0034).
+async function viewProjectDetail(id) {
+  const ungrouped = id === "ungrouped";
+  view.innerHTML = `<div id="pd"><p class="muted">Loading…</p></div>`;
+  const root = document.getElementById("pd");
+
+  const render = async () => {
+    let projects = [], drafts = [], refs = [], forms = [];
+    try {
+      [projects, drafts, refs, forms] = await Promise.all([
+        api("GET", "/api/v1/projects"),
+        api("GET", "/api/v1/drafts"),
+        api("GET", "/api/v1/dmnrefs"),
+        api("GET", "/api/v1/forms"),
+      ]);
+    } catch (e) { root.innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
+
+    const known = new Set(projects.map((p) => p.id));
+    const proj = ungrouped ? { id: "ungrouped", name: "Ungrouped" } : projects.find((p) => p.id === id);
+    if (!proj) {
+      root.innerHTML = `<div class="card empty">This project no longer exists. <a href="#/modeler">Back to Modeler</a></div>`;
+      return;
+    }
+    const mine = (a) => ungrouped ? (!a.projectId || !known.has(a.projectId)) : a.projectId === id;
+    const dl = drafts.filter(mine), rl = refs.filter(mine), fl = forms.filter(mine);
+
+    // "Move to" items for a row's action menu: Ungrouped plus every project, with
+    // the current one marked. Forms have no move endpoint, so only drafts/refs get it.
+    const moveItems = (currentPid, act, key) => [
+      { header: "Move to" },
+      { label: "Ungrouped", icon: currentPid ? "" : "•", act, data: { pid: "", key } },
+      ...projects.map((p) => ({ label: p.name, icon: p.id === currentPid ? "•" : "", act, data: { pid: p.id, key } })),
+    ];
+
+    const nameCell = (chip, title, sub, href) => {
+      const link = href ? `<a href="${href}"><b>${esc(title)}</b></a>` : `<b>${esc(title)}</b>`;
+      return `<td><div class="artifact-name"><span class="chip">${chip}</span>${link}</div>` +
+        `<div class="muted" style="font-size:12px; padding-left:26px">${sub}</div></td>`;
+    };
+
+    const draftRow = (d) => {
+      const href = `#/modeler/draft/${encodeURIComponent(d.processId)}`;
+      return `<tr data-name="${esc((d.name || d.processId).toLowerCase())}">
+        ${nameCell("BPMN", d.name || d.processId, esc(d.processId), href)}
+        <td class="muted">Diagram</td>
+        <td class="muted">${esc(fmtTime(d.savedAt))}</td>
+        <td class="row-actions">${dropdown("⋯", "icon-btn", [
+          { label: "Open", icon: "→", href },
+          ...moveItems(d.projectId, "movedraft", d.processId),
+          { sep: true },
+          { label: "Delete", icon: "🗑", act: "deldraft", data: { key: d.processId }, danger: true },
+        ])}</td></tr>`;
+    };
+    const refRow = (r) => `<tr data-name="${esc(r.name.toLowerCase())}">
+        ${nameCell("DMN", r.name, `temis model: ${esc(r.modelRef)} · <span data-refstatus="${esc(r.id)}">not validated</span>`, "")}
+        <td class="muted">Decision ref</td>
+        <td class="muted">${esc(fmtTime(r.createdAt))}</td>
+        <td class="row-actions">${dropdown("⋯", "icon-btn", [
+          { label: "Validate", icon: "✔", act: "valref", data: { id: r.id } },
+          ...moveItems(r.projectId, "moveref", r.id),
+          { sep: true },
+          { label: "Delete", icon: "🗑", act: "delref", data: { id: r.id }, danger: true },
+        ])}</td></tr>`;
+    const formRow = (f) => {
+      const href = `#/modeler/form/e/${encodeURIComponent(f.id)}`;
+      return `<tr data-name="${esc((f.name || f.id).toLowerCase())}">
+        ${nameCell("FORM", f.name || f.id, esc(f.id), href)}
+        <td class="muted">Form</td>
+        <td class="muted">${esc(fmtTime(f.savedAt))}</td>
+        <td class="row-actions">${dropdown("⋯", "icon-btn", [
+          { label: "Open", icon: "→", href },
+          { sep: true },
+          { label: "Delete", icon: "🗑", act: "delform", data: { id: f.id }, danger: true },
+        ])}</td></tr>`;
+    };
+
+    const bodyRows = dl.map(draftRow).join("") + rl.map(refRow).join("") + fl.map(formRow).join("");
+    const newDiagramHref = ungrouped ? "#/modeler/new" : `#/modeler/new/p/${encodeURIComponent(id)}`;
+    const newFormHref = ungrouped ? "#/modeler/form/new" : `#/modeler/form/new/p/${encodeURIComponent(id)}`;
+    const createItems = [
+      { header: "Blank resources" },
+      { label: "BPMN diagram", icon: "⚙", href: newDiagramHref },
+      { label: "DMN reference", icon: "▦", act: "newref" },
+      { label: "Form", icon: "▤", href: newFormHref },
+    ];
+
+    root.innerHTML = `
+      <div class="crumb"><a href="#/modeler">Home</a> › ${esc(proj.name)}</div>
+      <div class="between">
+        <h1>${esc(proj.name)}</h1>
+        <div class="row">
+          ${ungrouped ? "" : `<button class="btn" id="pd-deploy">Deploy</button>`}
+          ${dropdown("Create new", "btn neutral", createItems)}
+          ${ungrouped ? "" : dropdown("⋯", "icon-btn", [
+            ...(rl.length ? [{ label: "Validate DMN", icon: "✔", act: "valproj" }] : []),
+            { label: "Rename project", icon: "✎", act: "renproj" },
+            { sep: true },
+            { label: "Delete project", icon: "🗑", act: "delproj", danger: true },
+          ])}
+        </div>
+      </div>
+      <input class="filter-input" id="pd-filter" placeholder="Filter artifacts…" autocomplete="off">
+      <div class="card" style="padding:0">
+        <table>
+          <thead><tr><th>Name</th><th>Type</th><th>Last changed</th><th></th></tr></thead>
+          <tbody id="pd-rows">${bodyRows ||
+            `<tr><td colspan="4" class="empty">No artifacts yet — use <b>Create new</b> to add one.</td></tr>`}</tbody>
+        </table>
+      </div>`;
+
+    const filter = document.getElementById("pd-filter");
+    filter.addEventListener("input", () => {
+      const q = filter.value.trim().toLowerCase();
+      for (const tr of root.querySelectorAll("#pd-rows tr[data-name]"))
+        tr.hidden = q !== "" && !tr.dataset.name.includes(q);
+    });
+
+    onMenuAction(root, (act, b) => {
+      switch (act) {
+        case "newref": createDmnRef(ungrouped ? "" : id, render); break;
+        case "renproj": renameProject(id, proj.name, render); break;
+        case "delproj": deleteProject(id, proj.name, () => { location.hash = "#/modeler"; }); break;
+        case "valproj": validateProject(id); break;
+        case "valref": validateDmnRef(b.dataset.id); break;
+        case "deldraft": deleteDraft(b.dataset.key, render); break;
+        case "delref": deleteDmnRef(b.dataset.id, render); break;
+        case "delform": deleteForm(b.dataset.id, render); break;
+        case "movedraft": moveDraft(b.dataset.key, b.dataset.pid, render); break;
+        case "moveref": moveDmnRef(b.dataset.key, b.dataset.pid, render); break;
+      }
+    });
+    const deployBtn = document.getElementById("pd-deploy");
+    if (deployBtn) deployBtn.addEventListener("click", () => deployProject(id, render));
+  };
+  await render();
 }
 
 async function deleteDraft(processId, reload) {
@@ -1027,9 +1107,9 @@ function viewComingSoon(appId) {
     </div>`;
 }
 
-async function viewEditor(key) {
+async function viewEditor(key, projectId) {
   const mod = await import("./editor.js");
-  await mod.mountEditor(view, { api, toast, key });
+  await mod.mountEditor(view, { api, toast, key, projectId });
 }
 
 async function viewEditorDraft(id) {
@@ -1076,7 +1156,10 @@ async function route() {
     if (path === "#/console/engine") return await viewConsoleEngine();
     if (path === "#/console/org") return viewConsoleOrg();
     if (path === "#/modeler") return await viewModelerHome();
-    if (path === "#/modeler/new") return await viewEditor(null);
+    const pd = path.match(/^#\/modeler\/p\/(.+)$/);
+    if (pd) return await viewProjectDetail(decodeURIComponent(pd[1]));
+    const dnew = path.match(/^#\/modeler\/new(?:\/p\/(.+))?$/);
+    if (dnew) return await viewEditor(null, dnew[1] ? decodeURIComponent(dnew[1]) : "");
     const fnew = path.match(/^#\/modeler\/form\/new(?:\/p\/(.+))?$/);
     if (fnew) return await viewFormEditor(null, fnew[1] ? decodeURIComponent(fnew[1]) : "");
     const fe = path.match(/^#\/modeler\/form\/e\/(.+)$/);

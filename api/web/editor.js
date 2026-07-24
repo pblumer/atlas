@@ -94,7 +94,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 
 const shortType = (t) => (t || "").replace(/^bpmn:/, "");
 
-export async function mountEditor(root, { api, toast, key, draftId }) {
+export async function mountEditor(root, { api, toast, key, draftId, projectId }) {
   cleanup();
 
   const crumb = draftId != null ? "Draft" : key == null ? "New diagram" : "Deployment " + key;
@@ -170,7 +170,7 @@ export async function mountEditor(root, { api, toast, key, draftId }) {
 
   const rerender = wireProperties(root, modeler, api);
   wireTabs(root, rerender);
-  wireActions(root, modeler, api, toast);
+  wireActions(root, modeler, api, toast, projectId);
   wireResizer(root, modeler);
 }
 
@@ -1274,15 +1274,18 @@ function wireDeployJSONEditors(container) {
   }
 }
 
-function wireActions(root, modeler, api, toast) {
+function wireActions(root, modeler, api, toast, projectId) {
   // Save persists the diagram as a draft (raw XML, no compile), keyed by process
-  // id, so incomplete work survives and can be reopened from the Modeler home.
+  // id, so incomplete work survives and can be reopened from the Modeler home. A
+  // projectId (set when the editor was opened from a project's "Create new") files
+  // the draft into that project (ADR-0034).
   const saveBtn = root.querySelector("#save");
   saveBtn.addEventListener("click", async () => {
     saveBtn.disabled = true;
     try {
       const { xml } = await modeler.saveXML({ format: true });
-      const d = await api("POST", "/api/v1/drafts", xml, true);
+      const path = "/api/v1/drafts" + (projectId ? "?projectId=" + encodeURIComponent(projectId) : "");
+      const d = await api("POST", path, xml, true);
       root.querySelector(".crumbs").textContent = d.name || d.processId || "Draft";
       toast(`Saved draft “${d.name || d.processId}”`, "ok");
     } catch (e) {

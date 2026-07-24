@@ -244,8 +244,14 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   Modeler's per-project **Deploy** button drives it, and a deployed process's
   business rule tasks now **execute** the resolved decision in-process (see
   Milestone 1). A project is a design-time grouping layer only (below the HTTP
-  API, no engine impact). Next: further artifact types (forms, element templates,
-  READMEs, nested folders).
+  API, no engine impact). The Modeler presents this as a **two-level view**: a
+  clean project landscape (one row per project + an *Ungrouped* bucket) and a
+  per-project detail page with a single unified artifact table, a **Create new ▾**
+  dropdown (BPMN diagram / DMN reference / Form, filing new artifacts into the
+  project), a filter, and per-row action menus. Next: further artifact types
+  (element templates, READMEs, nested folders), and — later — **importing or
+  backing up a whole project from/to a git repository** (a natural fit for the
+  same `Resolver`/sidecar seam that already externalizes DMN models).
 - 🔲 Later: a polished "workbench" experience on top.
 
 ## Milestone A — Modeler & authoring experience 🔲
