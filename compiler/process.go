@@ -34,9 +34,10 @@ const (
 	TypeUserTask          // a human task: parks a token, creates a job, waits for a person to complete it via the Tasks app (ADR-0028)
 	TypeBoundaryEvent     // a timer/message event attached to a host activity; arms while the host runs and, when it fires, interrupts the host or spawns a parallel token (ADR-0040)
 	TypeScriptJobTask     // a script task authored in a general-purpose language (PowerShell, …) that runs via the job path, not inline like a FEEL script task (ADR-0047); like a service task it creates a job and waits
+	TypeTimerStartEvent   // a start event that a due timer instantiates on a schedule (duration/date/cycle/cron, ADR-0051); at runtime it behaves like a none start (flows straight on)
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 19
+	numBpmnTypes = 20
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -78,6 +79,8 @@ func (t BpmnType) String() string {
 		return "BoundaryEvent"
 	case TypeScriptJobTask:
 		return "ScriptJobTask"
+	case TypeTimerStartEvent:
+		return "TimerStartEvent"
 	default:
 		return "Unspecified"
 	}
@@ -236,6 +239,12 @@ type TimerCatchDetail struct {
 	DurationNanos int64
 }
 
+// TimerStartDetail is the per-timer-start-event data: the compiled schedule that
+// the engine arms at deploy time and consults to compute each due date (ADR-0051).
+type TimerStartDetail struct {
+	Schedule TimerSchedule
+}
+
 // MessageDetail is the per-message-event data a behavior needs at runtime,
 // shared by the message intermediate catch and throw events. MessageName is the
 // message's name (a subscription matches on it); CorrelationKey is the FEEL
@@ -291,6 +300,7 @@ type CompiledProcess struct {
 	messageCatches    []MessageDetail
 	messageThrows     []MessageDetail
 	messageStarts     []MessageDetail
+	timerStarts       []TimerStartDetail
 	startEvents       []int32
 	startFormId       int32    // interned start-form id (ADR-0028), -1 if none
 	elementIds        []int32  // interned source BPMN id per node id (-1 if unset)
@@ -406,6 +416,38 @@ func (p *CompiledProcess) MessageStartEvents() []MessageStartEvent {
 	}
 	return out
 }
+
+// TimerStart returns the timer-start detail at the given table index.
+func (p *CompiledProcess) TimerStart(detail int32) *TimerStartDetail { return &p.timerStarts[detail] }
+
+// TimerStartEvent pairs a timer-start event's compiled schedule with its element
+// index, so the engine can arm the right timer for the right node (ADR-0051).
+type TimerStartEvent struct {
+	Schedule  TimerSchedule
+	ElementId int32
+}
+
+// TimerStartEvents returns each timer-start event with its element index and
+// compiled schedule. Computed by scanning the node table at deploy time (off the
+// hot path); empty for a process with no timer start event.
+func (p *CompiledProcess) TimerStartEvents() []TimerStartEvent {
+	var out []TimerStartEvent
+	for id := range p.nodes {
+		n := &p.nodes[id]
+		if n.Type == TypeTimerStartEvent {
+			out = append(out, TimerStartEvent{
+				Schedule:  p.timerStarts[n.Detail].Schedule,
+				ElementId: int32(id),
+			})
+		}
+	}
+	return out
+}
+
+// ProcessId returns the source BPMN process id (the <process id="…">), used to
+// tell one process's versions apart from another's when superseding start timers
+// (ADR-0051).
+func (p *CompiledProcess) ProcessId() string { return p.Intern(p.BpmnProcessId) }
 
 // ScriptTask returns the detail at the given table index.
 func (p *CompiledProcess) ScriptTask(detail int32) *ScriptTaskDetail {

@@ -99,8 +99,19 @@ Making processes wait, react, and time out.
   with an ISO-8601 **duration** (e.g. PT30S) execute — the token waits, a
   server-side scheduler fires due timers on the partition goroutine, and the
   event continues. Recovery-tested (a pending timer is restored from the log and
-  fires afterward). Date/cycle timers, boundary timers, and FEEL duration
-  expressions still to come.
+  fires afterward). Date/cycle timers and FEEL duration expressions for *catch and
+  boundary* timers still to come (start events already have them — see below).
+- ✅ **Timer start events** (duration, date, cycle, cron): a `<startEvent>` with a
+  `<timerEventDefinition>` starts a fresh instance on its schedule —
+  `<timeDuration>` (once, after a delay), `<timeDate>` (once, at an absolute
+  instant), or `<timeCycle>` as an ISO-8601 repeating interval (`R3/PT1H`) or a
+  5-field **cron** expression (`0 * * * *`, wall-clock-aligned "every full hour").
+  The schedule is armed as a durable timer at deploy, fired by the existing
+  scheduler through the same create-instance path an API create uses, and a cycle
+  re-arms its next occurrence. A new version supersedes the prior version's
+  schedule. Recovery-tested (an armed timer survives a restart and fires; a fired
+  date timer does not re-fire). FEEL-expression schedules remain a follow-up
+  (ADR-0051).
 - ✅ **Message events + subscriptions + correlation** (single-partition):
   intermediate **message catch** events subscribe on a FEEL correlation key and
   wait; intermediate **message throw** events and an HTTP `POST /api/v1/messages`

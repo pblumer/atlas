@@ -87,7 +87,10 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 		switch h.Intent {
 		case model.IntentTimerCreated:
 			return tx.PutTimer(h.Key, &v.timer)
-		case model.IntentTimerTriggered:
+		case model.IntentTimerTriggered, model.IntentTimerCanceled:
+			// Both remove the timer from the due-date index; they differ only in the
+			// side effect the command handler runs (a trigger may fire; a cancel does
+			// not), which lives outside applyToState (ADR-0051).
 			return tx.DeleteTimer(h.Key, &v.timer)
 		}
 

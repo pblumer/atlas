@@ -113,10 +113,16 @@ type TimerValue struct {
 	ElementInstanceKey uint64
 	TargetElementId    int32
 	DueDate            int64
-	Repetitions        int32 // -1 = infinite (timer cycle)
+	Repetitions        int32 // remaining fires after this one; -1 = infinite (timer cycle), 0 = fire once
+	// ProcessDefKey names the definition a *start* timer instantiates when it
+	// fires (ADR-0051). It is 0 for an instance-owned timer (catch/boundary),
+	// which is identified instead by ProcessInstanceKey/ElementInstanceKey. A
+	// start timer is precisely one with ProcessInstanceKey == 0 and
+	// ProcessDefKey != 0; TargetElementId then names its timer-start element.
+	ProcessDefKey uint64
 }
 
-const timerSize = 8 + 8 + 4 + 8 + 4
+const timerSize = 8 + 8 + 4 + 8 + 4 + 8
 
 func (*TimerValue) ValueType() ValueType { return VTTimer }
 
@@ -125,7 +131,8 @@ func (v *TimerValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.ElementInstanceKey)
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.TargetElementId))
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.DueDate))
-	return binary.LittleEndian.AppendUint32(dst, uint32(v.Repetitions))
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.Repetitions))
+	return binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
 }
 
 func (v *TimerValue) decode(src []byte) error {
@@ -137,6 +144,7 @@ func (v *TimerValue) decode(src []byte) error {
 	v.TargetElementId = int32(binary.LittleEndian.Uint32(src[16:]))
 	v.DueDate = int64(binary.LittleEndian.Uint64(src[20:]))
 	v.Repetitions = int32(binary.LittleEndian.Uint32(src[28:]))
+	v.ProcessDefKey = binary.LittleEndian.Uint64(src[32:])
 	return nil
 }
 

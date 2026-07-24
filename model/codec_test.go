@@ -119,6 +119,19 @@ func TestRecordRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name:   "start timer carries a process definition key",
+			vt:     VTTimer,
+			intent: IntentTimerCreated,
+			value: &TimerValue{
+				// A start timer has no owning instance/element; it names the
+				// definition it instantiates on fire (ADR-0051).
+				TargetElementId: 3,
+				DueDate:         1_700_000_456,
+				Repetitions:     0,
+				ProcessDefKey:   NewKey(1, 7),
+			},
+		},
+		{
 			name:   "active process instance",
 			vt:     VTProcessInstance,
 			intent: IntentActivated,
