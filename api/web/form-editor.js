@@ -1,22 +1,23 @@
-// Form editor view. Embeds the vendored form-js editor (ADR-0028): the palette,
-// drag-and-drop canvas, preview, and properties panel come from
-// @bpmn-io/form-js-editor; the toolbar and Save wiring are ours. Assets load
+// Form editor view. Embeds the vendored form-js Playground (ADR-0028): the
+// reference modeler's split surface — Form Definition (editor) beside Form
+// Preview (live viewer), with Form Input (sample data) and Form Output (the
+// live result) below. Only the toolbar and Save wiring are ours. Assets load
 // lazily so non-editor pages stay light, mirroring the BPMN editor (editor.js).
 
-const FORM_CSS = "vendor/form-js/form-editor.css";
+const FORM_CSS = "vendor/form-js/form-playground.css";
 
-let editorReady; // memoized loader promise → { FormEditor }
-function loadFormEditor() {
-  if (!editorReady) {
+let playgroundReady; // memoized loader promise → { Playground }
+function loadPlayground() {
+  if (!playgroundReady) {
     if (!document.querySelector(`link[href="${FORM_CSS}"]`)) {
       const l = document.createElement("link");
       l.rel = "stylesheet";
       l.href = FORM_CSS;
       document.head.appendChild(l);
     }
-    editorReady = import("./vendor/form-js/form-editor.js");
+    playgroundReady = import("./vendor/form-js/form-playground.js");
   }
-  return editorReady;
+  return playgroundReady;
 }
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
@@ -31,7 +32,7 @@ function newFormId() {
   return "form-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
-let current; // active form-js editor instance, destroyed on remount/leave
+let current; // active Playground instance, destroyed on remount/leave
 
 export function cleanup() {
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
@@ -57,14 +58,14 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
         <button class="btn" id="form-save">Save</button>
       </div>
       <div class="editor-body">
-        <div id="form-canvas" class="form-editor-canvas"><p class="muted" style="padding:20px">Loading form editor&hellip;</p></div>
+        <div id="form-playground" class="form-playground"><p class="muted" style="padding:20px">Loading form editor&hellip;</p></div>
       </div>
     </div>`;
 
   const nameInput = root.querySelector("#form-name");
   const idChip = root.querySelector("#form-id-chip");
   const statusEl = root.querySelector("#form-status");
-  const canvas = root.querySelector("#form-canvas");
+  const container = root.querySelector("#form-playground");
 
   // Resolve the form's identity and initial schema.
   let id = formId;
@@ -79,7 +80,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
       project = def.projectId || "";
       if (def.schema && typeof def.schema === "object") schema = def.schema;
     } catch (e) {
-      canvas.innerHTML = `<p class="muted err" style="padding:20px">Failed to load form: ${esc(e.message)}</p>`;
+      container.innerHTML = `<p class="muted err" style="padding:20px">Failed to load form: ${esc(e.message)}</p>`;
       return;
     }
   } else {
@@ -88,21 +89,22 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
   nameInput.value = name;
   idChip.textContent = id;
 
-  let FormEditor;
+  let Playground;
   try {
-    ({ FormEditor } = await loadFormEditor());
+    ({ Playground } = await loadPlayground());
   } catch (e) {
-    canvas.innerHTML = `<p class="muted err" style="padding:20px">Failed to load the form editor: ${esc(e.message)}</p>`;
+    container.innerHTML = `<p class="muted err" style="padding:20px">Failed to load the form editor: ${esc(e.message)}</p>`;
     return;
   }
 
-  canvas.innerHTML = "";
-  const editor = new FormEditor({ container: canvas });
-  current = editor;
+  container.innerHTML = "";
   try {
-    await editor.importSchema(schema);
+    // The Playground renders its own split layout (definition, preview, input,
+    // output) into the container. `data` seeds the Form Input panel.
+    current = new Playground({ container, schema, data: {} });
   } catch (e) {
-    toast("Could not open this form: " + e.message, "err");
+    container.innerHTML = `<p class="muted err" style="padding:20px">Could not open this form: ${esc(e.message)}</p>`;
+    return;
   }
 
   async function save() {
@@ -113,7 +115,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
       const body = {
         id,
         name: nameInput.value.trim() || id,
-        schema: editor.saveSchema(),
+        schema: current.getSchema(),
         projectId: project,
       };
       await api("POST", "/api/v1/forms", body);
