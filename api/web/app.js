@@ -1122,9 +1122,9 @@ async function viewFormEditor(formId, projectId) {
   await mod.mountFormEditor(view, { api, toast, formId, projectId });
 }
 
-async function viewLive(key) {
+async function viewLive(key, instance) {
   const mod = await import("./editor.js");
-  await mod.mountLive(view, { api, toast, key });
+  await mod.mountLive(view, { api, toast, key, instance });
 }
 
 async function viewCollaboration(key) {
@@ -1170,6 +1170,11 @@ async function route() {
     if (m) return await viewEditor(Number(m[1]));
     if (path === "#/tasks") return await viewTasks();
     if (path === "#/operations") return await viewInstances();
+    // A specific instance can be deep-linked (…/i/{instanceKey}) — the Modeler's
+    // Deploy & run builds this so a roundtrip lands straight on the started
+    // instance. The plain form defaults the picker to "All instances".
+    const li = path.match(/^#\/operations\/p\/(\d+)\/i\/(\d+)$/);
+    if (li) return await viewLive(Number(li[1]), Number(li[2]));
     const lm = path.match(/^#\/operations\/p\/(\d+)$/);
     if (lm) return await viewLive(Number(lm[1]));
     const cm = path.match(/^#\/operations\/c\/(\d+)$/);

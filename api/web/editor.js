@@ -113,7 +113,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId })
       </div>
       <div class="start-panel" id="deploy-panel" hidden>
         <div id="deploy-body"></div>
-        <div class="row">
+        <div class="row" id="deploy-actions">
           <button class="btn" id="deploy-run">Deploy &amp; run</button>
           <button class="btn neutral" id="deploy-only">Deploy only</button>
           <button class="btn neutral" id="deploy-cancel">Cancel</button>
@@ -1319,16 +1319,20 @@ function wireActions(root, modeler, api, toast, projectId) {
   const deployBtn = root.querySelector("#deploy");
   const dpanel = root.querySelector("#deploy-panel");
   const dbody = root.querySelector("#deploy-body");
+  const dactions = root.querySelector("#deploy-actions");
   const drun = root.querySelector("#deploy-run");
   const donly = root.querySelector("#deploy-only");
   const derr = root.querySelector("#deploy-err");
   const closeDeploy = () => { dpanel.hidden = true; derr.textContent = ""; };
 
   // Read the declaration fresh each open — it can change while the editor is up.
+  // Reopening after a success also restores the form and its Deploy buttons (the
+  // success view replaces them with a link back to Operations).
   const openDeploy = () => {
     const bo = rootProcess(modeler);
     dbody.innerHTML = startVarsFormHTML(bo ? readStartVariables(bo) : []);
     wireDeployJSONEditors(dbody);
+    dactions.hidden = false;
     dpanel.hidden = false;
     derr.textContent = "";
     const first = dbody.querySelector(".sv-json, .dv-field");
@@ -1337,6 +1341,40 @@ function wireActions(root, modeler, api, toast, projectId) {
 
   deployBtn.addEventListener("click", () => { dpanel.hidden ? openDeploy() : closeDeploy(); });
   root.querySelector("#deploy-cancel").addEventListener("click", closeDeploy);
+
+  // resolveInstanceLink returns the Operations deep-link for the instance a
+  // Deploy & run just started. A freshly deployed version has exactly one
+  // instance, found by its definition key; that key completes the roundtrip so the
+  // link lands directly on it. If it can't be resolved (a transient list failure),
+  // fall back to the process-level Operations view.
+  const resolveInstanceLink = async (defKey) => {
+    try {
+      const list = await api("GET", "/api/v1/instances");
+      const mine = list.filter((r) => r.processDefKey === defKey);
+      if (mine.length) {
+        const inst = mine.reduce((a, b) => (b.key > a.key ? b : a));
+        return `#/operations/p/${defKey}/i/${inst.key}`;
+      }
+    } catch { /* fall back to the process-level view */ }
+    return `#/operations/p/${defKey}`;
+  };
+
+  // showDeploySuccess replaces the panel form with a confirmation that carries a
+  // link into Operations — the deploy→run→observe roundtrip. `href` targets the
+  // started instance (Deploy & run) or the process (Deploy only / collaboration).
+  const showDeploySuccess = (message, href) => {
+    dactions.hidden = true;
+    derr.textContent = "";
+    dbody.innerHTML = `<div class="deploy-success">
+      <p class="deploy-success-msg">✓ ${esc(message)}</p>
+      <div class="row">
+        <a class="btn" href="${href}">Open in Operations →</a>
+        <button type="button" class="btn neutral" id="deploy-done">Close</button>
+      </div>
+    </div>`;
+    const done = dbody.querySelector("#deploy-done");
+    if (done) done.addEventListener("click", closeDeploy);
+  };
 
   // run === true also starts an instance; run === false deploys only. The start
   // form is read (and validated) only when running, so an unrelated JSON typo
@@ -1359,15 +1397,20 @@ function wireActions(root, modeler, api, toast, projectId) {
         // A collaboration deploys one definition per pool; which pool to start is
         // ambiguous, so just report what was deployed (start pools from Operations).
         // Start variables don't apply here — there's no single instance to seed.
-        toast(`Deployed ${all.length} pools: ${all.map((d) => d.processId).join(", ")}`, "ok");
+        const msg = `Deployed ${all.length} pools: ${all.map((d) => d.processId).join(", ")}`;
+        toast(msg, "ok");
+        showDeploySuccess(msg, "#/operations");
       } else if (run) {
         await api("POST", `/api/v1/processes/${dep.key}/instances`, body);
         const n = body.variables ? Object.keys(body.variables).length : 0;
-        toast(`Deployed ${dep.processId} v${dep.version} and started an instance${n ? ` with ${n} variable${n === 1 ? "" : "s"}` : ""}`, "ok");
+        const msg = `Deployed ${dep.processId} v${dep.version} and started an instance${n ? ` with ${n} variable${n === 1 ? "" : "s"}` : ""}`;
+        toast(msg, "ok");
+        showDeploySuccess(msg, await resolveInstanceLink(dep.key));
       } else {
-        toast(`Deployed ${dep.processId} v${dep.version}`, "ok");
+        const msg = `Deployed ${dep.processId} v${dep.version}`;
+        toast(msg, "ok");
+        showDeploySuccess(msg, `#/operations/p/${dep.key}`);
       }
-      closeDeploy();
     } catch (e) {
       // The Atlas compiler rejects elements it can't execute yet — surface that
       // inline in the panel so the entered variables aren't lost.
@@ -1393,7 +1436,7 @@ function wireActions(root, modeler, api, toast, projectId) {
 // definition is shown, and an instance picker either aggregates every instance's
 // tokens on the diagram or isolates a single one. The selected instance's
 // variables are listed below the diagram.
-export async function mountLive(root, { api, toast, key }) {
+export async function mountLive(root, { api, toast, key, instance }) {
   cleanup();
 
   // Resolve the process this definition version belongs to, and all its versions,
@@ -1426,6 +1469,7 @@ export async function mountLive(root, { api, toast, key }) {
         <label class="bar-select"><span>Instance</span>
           <select id="instance-sel"><option value="all">All instances</option></select></label>
         <div style="flex:1"></div>
+        <a class="btn neutral" id="edit-modeler" href="#/modeler/d/${key}" title="Open this definition in the Modeler">✎ Edit in Modeler</a>
         <button class="btn" id="start">Start instance</button>
         <button class="btn ghost danger" id="cancel-inst" hidden>Cancel instance</button>
         <a class="btn" id="collab-link" hidden>⇄ Collaboration replay</a>
@@ -1498,7 +1542,10 @@ export async function mountLive(root, { api, toast, key }) {
   const instSel = root.querySelector("#instance-sel");
   const varPanel = root.querySelector("#var-panel");
   let marked = [];
-  let selected = "all";     // "all" or an instance key (as a string)
+  // "all" or an instance key (as a string). A deep-linked instance (Deploy & run's
+  // roundtrip link, or a shared URL) preselects that one; refreshInstances falls
+  // back to "all" if it no longer exists.
+  let selected = instance != null ? String(instance) : "all";
   let instances = [];       // this version's instances, cached for the picker/variables
   let instSig = "";         // signature of the picker's current option set
 

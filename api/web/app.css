@@ -425,6 +425,11 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .start-panel .row { align-items: center; gap: 8px; }
 .start-panel .err { font-size: 12px; color: var(--danger, #c0392b); }
 
+/* The Deploy & run confirmation: a success line plus the link that completes the
+   deploy→run→observe roundtrip into Operations. */
+.deploy-success .deploy-success-msg { margin: 0 0 10px; font-weight: 600; color: var(--ok); }
+.deploy-success .row { align-items: center; gap: 8px; }
+
 /* ---------- Collaboration replay ---------- */
 /* A message travelling along a message-flow edge: an envelope dot with a soft
    halo, drawn in a dedicated SVG layer above the diagram (ADR-0038). */
