@@ -14,6 +14,8 @@ const userTaskBPMN = `<?xml version="1.0" encoding="UTF-8"?>
       <bpmn:extensionElements>
         <zeebe:assignmentDefinition assignee="editor" candidateGroups="reviewers"/>
         <zeebe:formDefinition formId="tweet-review-form"/>
+        <zeebe:priorityDefinition priority="70"/>
+        <zeebe:taskSchedule dueDate="P2D"/>
       </bpmn:extensionElements>
     </bpmn:userTask>
     <bpmn:endEvent id="end"/>
@@ -61,6 +63,12 @@ func TestParseUserTask(t *testing.T) {
 	if detail.Retries != defaultRetries {
 		t.Errorf("retries = %d, want default %d", detail.Retries, defaultRetries)
 	}
+	if detail.Priority != 70 {
+		t.Errorf("priority = %d, want 70", detail.Priority)
+	}
+	if detail.DueDateNanos != int64(2*24*3600)*int64(1e9) {
+		t.Errorf("dueDateNanos = %d, want %d (P2D)", detail.DueDateNanos, int64(2*24*3600)*int64(1e9))
+	}
 
 	out = cp.Outgoing(task)
 	if len(out) != 1 || cp.Node(cp.Flow(out[0]).Target).Type != TypeEndEvent {
@@ -90,5 +98,33 @@ func TestParseUserTaskNoAssignment(t *testing.T) {
 	}
 	if detail.CandidateGroups != -1 {
 		t.Errorf("candidateGroups = %d, want -1 (unset)", detail.CandidateGroups)
+	}
+	if detail.Priority != defaultUserTaskPriority {
+		t.Errorf("priority = %d, want default %d", detail.Priority, defaultUserTaskPriority)
+	}
+	if detail.DueDateNanos != 0 {
+		t.Errorf("dueDateNanos = %d, want 0 (unset)", detail.DueDateNanos)
+	}
+}
+
+// TestParseUserTaskBadSchedule rejects a malformed priority or due-date duration
+// at compile time rather than deferring the failure to runtime.
+func TestParseUserTaskBadSchedule(t *testing.T) {
+	for _, bad := range []string{
+		`<zeebe:priorityDefinition priority="high"/>`,
+		`<zeebe:taskSchedule dueDate="3 days"/>`,
+	} {
+		xml := `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="p">
+    <startEvent id="s"/>
+    <userTask id="t"><extensionElements>` + bad + `</extensionElements></userTask>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </process>
+</definitions>`
+		if _, err := Parse(1, 1, strings.NewReader(xml)); err == nil {
+			t.Errorf("Parse(%s): want an error, got nil", bad)
+		}
 	}
 }

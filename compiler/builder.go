@@ -319,7 +319,7 @@ func (b *Builder) AddRestConnectorTask(connector, method, path string, retries i
 // AddUserTask adds a user task that parks a token and creates a job for a human
 // to complete via the Tasks app (ADR-0028). assignee and candidateGroups are
 // optional (empty strings are stored as -1). Returns its element id.
-func (b *Builder) AddUserTask(name, assignee, candidateGroups, formId string, retries int32) int32 {
+func (b *Builder) AddUserTask(name, assignee, candidateGroups, formId string, priority int32, dueDateNanos int64, retries int32) int32 {
 	detail := int32(len(b.userTasks))
 	b.userTasks = append(b.userTasks, UserTaskDetail{
 		JobType:         b.intern(UserTaskJobType),
@@ -327,6 +327,8 @@ func (b *Builder) AddUserTask(name, assignee, candidateGroups, formId string, re
 		Assignee:        b.intern(assignee),
 		CandidateGroups: b.intern(candidateGroups),
 		FormId:          b.intern(formId),
+		Priority:        priority,
+		DueDateNanos:    dueDateNanos,
 		Retries:         retries,
 	})
 	return b.addNode(TypeUserTask, detail)

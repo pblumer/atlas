@@ -954,6 +954,8 @@ function wireProperties(root, modeler, api) {
             <div id="dmn-inputs">${inputs.map((p, i) => decisionInputRowHTML(i, p.source, p.target)).join("")}${decisionInputRowHTML(inputs.length, "", "")}</div>`;
         } else if (t === "bpmn:UserTask") {
           const a = findExt(bo, "zeebe:AssignmentDefinition") || {};
+          const pr = findExt(bo, "zeebe:PriorityDefinition") || {};
+          const sch = findExt(bo, "zeebe:TaskSchedule") || {};
           const fd = findExt(bo, "zeebe:FormDefinition") || {};
           const curForm = fd.formId || "";
           html += `<h3>Form</h3>
@@ -968,7 +970,14 @@ function wireProperties(root, modeler, api) {
             <label class="field"><span>Assignee</span>
               <input type="text" id="f-assignee" value="${esc(a.assignee || "")}" placeholder="editor"/></label>
             <label class="field"><span>Candidate groups</span>
-              <input type="text" id="f-groups" value="${esc(a.candidateGroups || "")}" placeholder="reviewers"/></label>`;
+              <input type="text" id="f-groups" value="${esc(a.candidateGroups || "")}" placeholder="reviewers"/></label>
+            <h3>Schedule</h3>
+            <label class="field"><span>Priority</span>
+              <input type="number" id="f-priority" min="0" max="100" value="${esc(pr.priority || "50")}" placeholder="50"/></label>
+            <label class="field"><span>Due in</span>
+              <input type="text" id="f-due" value="${esc(sch.dueDate || "")}" placeholder="P2D, PT4H, PT30M"/></label>
+            <p class="muted" style="font-size:12px">An ISO-8601 duration measured from when the task appears
+              (e.g. <b>P2D</b> = 2 days, <b>PT4H</b> = 4 hours). Leave blank for no due date. Priority 0–100; higher sorts first.</p>`;
         }
       } else if (isDefaultFlow) {
         html += `<h3>Condition (FEEL)</h3>
@@ -1167,6 +1176,26 @@ function wireProperties(root, modeler, api) {
     };
     if (fassignee) fassignee.addEventListener("change", saveAssignment);
     if (fgroups) fgroups.addEventListener("change", saveAssignment);
+
+    // Priority and due date (ADR-0051): zeebe:priorityDefinition is written only
+    // when it differs from the default 50; zeebe:taskSchedule is dropped when the
+    // due-date field is cleared, keeping the XML free of empty extensions.
+    const fpriority = body.querySelector("#f-priority");
+    const fdue = body.querySelector("#f-due");
+    if (fpriority) {
+      fpriority.addEventListener("change", () => {
+        const v = (fpriority.value || "").trim();
+        if (v === "" || v === "50") removeExt(modeler, element, "zeebe:PriorityDefinition");
+        else upsertExt(modeler, element, "zeebe:PriorityDefinition", { priority: v });
+      });
+    }
+    if (fdue) {
+      fdue.addEventListener("change", () => {
+        const v = (fdue.value || "").trim();
+        if (v) upsertExt(modeler, element, "zeebe:TaskSchedule", { dueDate: v });
+        else removeExt(modeler, element, "zeebe:TaskSchedule");
+      });
+    }
 
     const fform = body.querySelector("#f-form");
     if (fform) {

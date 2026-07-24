@@ -1126,6 +1126,39 @@ async function viewInstances() {
 // id so a task authored without a name is still recognizable.
 const taskTitle = (t) => t.name || t.elementId || "User task";
 
+// taskPriority defaults an absent/zero priority to 50 (the model default), so
+// sorting and display are stable regardless of what the API omits.
+const taskPriority = (t) => (t.priority && t.priority > 0 ? t.priority : 50);
+
+// taskOrder sorts the inbox like a real task list: tasks with a due date come
+// first, earliest due first (an overdue task floats to the very top); then higher
+// priority; then, as a stable tiebreak, older tasks (smaller key) first.
+function taskOrder(a, b) {
+  const da = a.dueDate || 0, db = b.dueDate || 0;
+  if (!!da !== !!db) return da ? -1 : 1; // a due task before an undated one
+  if (da && db && da !== db) return da - db; // sooner due first
+  const pa = taskPriority(a), pb = taskPriority(b);
+  if (pa !== pb) return pb - pa; // higher priority first
+  return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
+}
+
+// dueInfo turns a task's Unix-ms due date into a short relative label and an
+// overdue flag, or null when the task has no due date.
+function dueInfo(t) {
+  if (!t.dueDate) return null;
+  const ms = t.dueDate - Date.now();
+  const overdue = ms < 0;
+  const mins = Math.round(Math.abs(ms) / 60000);
+  let rel;
+  if (mins < 1) rel = overdue ? "just now" : "in <1 min";
+  else if (mins < 60) rel = `${mins} min`;
+  else if (mins < 60 * 24) rel = `${Math.round(mins / 60)} h`;
+  else rel = `${Math.round(mins / (60 * 24))} d`;
+  const label = overdue ? `Overdue by ${rel}` : `Due in ${rel}`;
+  const abs = new Date(t.dueDate).toLocaleString();
+  return { overdue, label, rel, abs };
+}
+
 // The inbox folders. Each is a predicate over a task plus the current identity —
 // there is no auth yet (ADR-0028 leaves assignment/authorization open), so "me"
 // is a display-only identity the user types, and folder membership is derived
@@ -1229,12 +1262,15 @@ async function viewTasks() {
       .map((t) => {
         const sel = t.key === state.selected ? " selected" : "";
         const who = t.assignee ? esc(t.assignee) : t.candidateGroups ? esc(t.candidateGroups) : "Unassigned";
+        const hi = taskPriority(t) >= 70 ? `<span class="prio-dot" title="High priority (${taskPriority(t)})"></span>` : "";
+        const d = dueInfo(t);
+        const due = d ? `<span class="due-badge${d.overdue ? " overdue" : ""}" title="${esc(d.abs)}">${esc(d.overdue ? "Overdue" : "Due " + d.rel)}</span>` : "";
         return `<li class="tasks-item${sel}" data-key="${t.key}">
           <div class="tasks-item-top">
-            <span class="tasks-item-title">${esc(taskTitle(t))}</span>
+            <span class="tasks-item-title">${hi}${esc(taskTitle(t))}</span>
             <span class="chip">${esc(t.processId || "")}</span>
           </div>
-          <div class="tasks-item-sub muted">${who}</div>
+          <div class="tasks-item-sub muted"><span>${who}</span>${due}</div>
         </li>`;
       })
       .join("");
@@ -1323,6 +1359,8 @@ async function viewTasks() {
         ${row("Element", `<span class="chip">${esc(t.elementId || "—")}</span>`)}
         ${row("Assignee", esc(t.assignee || "—"))}
         ${row("Candidate groups", esc(t.candidateGroups || "—"))}
+        ${row("Priority", `${taskPriority(t)}${taskPriority(t) >= 70 ? ' <span class="prio-dot" title="High priority"></span>' : ""}`)}
+        ${row("Due", (() => { const d = dueInfo(t); return d ? `<span class="${d.overdue ? "due-text overdue" : "due-text"}" title="${esc(d.abs)}">${esc(d.label)} · ${esc(d.abs)}</span>` : "—"; })())}
         ${row("Instance", `<span class="chip">${t.processInstanceKey}</span>`)}
         ${row("Task key", `<span class="chip">${t.key}</span>`)}
       </div>
@@ -1397,6 +1435,7 @@ async function viewTasks() {
   async function load() {
     try {
       state.tasks = await api("GET", "/api/v1/tasks");
+      state.tasks.sort(taskOrder);
       if (!state.tasks.some((t) => t.key === state.selected)) state.selected = null;
       renderAll();
     } catch (e) {

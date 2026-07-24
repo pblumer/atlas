@@ -607,8 +607,14 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .tasks-item.selected { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
 .tasks-item-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .tasks-item-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tasks-item-sub { font-size: 12px; margin-top: 3px; }
+.tasks-item-sub { font-size: 12px; margin-top: 3px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .tasks-empty { padding: 16px 14px; }
+
+/* Priority & due date (ADR-0051) */
+.prio-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #b26b00; margin-right: 6px; vertical-align: middle; flex: 0 0 auto; }
+.due-badge { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); color: var(--muted); white-space: nowrap; flex: 0 0 auto; }
+.due-badge.overdue { background: #fdecea; border-color: #f3c9c3; color: var(--danger); font-weight: 600; }
+.due-text.overdue { color: var(--danger); font-weight: 600; }
 .tasks-empty.err { color: var(--danger); }
 
 /* Detail pane */
