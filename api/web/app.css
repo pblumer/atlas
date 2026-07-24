@@ -584,6 +584,67 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   background: var(--surface); color: var(--text);
 }
 
+/* Three-tab form editor: Design / Validate / Editor share one body; only the
+   active pane is shown. Each pane fills the body via flex. */
+.fv-body { position: relative; }
+.fv-pane { flex: 1; min-width: 0; min-height: 0; display: none; }
+.fv-pane.active { display: flex; }
+
+/* ----- Validate pane: a vertical stack of collapsible, resizable panels ----- */
+.fv-validate { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.fv-panel { display: flex; flex-direction: column; min-height: 0; background: var(--surface); overflow: hidden; }
+.fv-preview { flex: 1 1 auto; }              /* absorbs spare height */
+.fv-input, .fv-output { flex: 0 0 auto; height: 160px; }
+.fv-panel.collapsed { flex: 0 0 auto !important; height: auto !important; }
+.fv-panel.collapsed .fv-panel-body { display: none; }
+.fv-panel-body { flex: 1; min-height: 0; overflow: auto; }
+.fv-preview .fv-panel-body { padding: 16px; }
+.fv-form { max-width: 720px; }
+
+/* Panel header: a click target that collapses the panel (chevron rotates). */
+.fv-head {
+  display: flex; align-items: center; gap: 8px; flex: 0 0 auto;
+  padding: 7px 12px; border-bottom: 1px solid var(--border); background: var(--bg);
+  cursor: pointer; user-select: none;
+}
+.fv-editor > .fv-head { cursor: default; }
+.fv-head .fv-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+.fv-head .fv-hint { font-size: 12px; }
+.fv-head .fv-hint.ok { color: var(--ok); }
+.fv-head .fv-hint.err { color: var(--danger); }
+.fv-caret {
+  background: none; border: none; cursor: pointer; color: var(--muted);
+  font-size: 11px; line-height: 1; padding: 2px; transition: transform 0.15s;
+}
+.fv-panel.collapsed .fv-caret { transform: rotate(-90deg); }
+.fv-head .fv-act { padding: 4px 10px; font-size: 12px; }
+
+/* Draggable dividers between the stacked panels (mirror .props-resizer). */
+.fv-hresizer { flex: 0 0 6px; cursor: row-resize; background: transparent; position: relative; z-index: 2; }
+.fv-hresizer::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 2px; height: 2px;
+  background: var(--border); transition: background 0.12s;
+}
+.fv-hresizer:hover::before, .fv-hresizer.dragging::before { background: var(--accent); }
+
+/* The Input textarea is upgraded in place by attachJSONEditor (json-editor.js),
+   which wraps it in .json-editor; make that wrapper fill the panel body. */
+.fv-input .fv-panel-body { padding: 8px 10px; }
+.fv-input .json-editor { margin: 0; width: 100%; }
+.fv-input .json-input { min-height: 90px; }
+.fv-output-pre {
+  margin: 0; padding: 12px; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap; word-break: break-word; color: var(--text);
+}
+.fv-out-label { text-transform: uppercase; letter-spacing: 0.03em; font-size: 11px; }
+.fv-out-label.err { color: var(--danger); }
+
+/* ----- Editor pane: raw schema in the JSON code editor ----- */
+.fv-editor { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.fv-editor-body { flex: 1; min-height: 0; overflow: auto; padding: 12px 14px; }
+.fv-editor .json-editor { margin: 0; width: 100%; }
+.fv-editor .json-input { min-height: calc(100vh - 180px); }
+
 .tasks-form { margin-top: 22px; max-width: 640px; }
 .tasks-form .fjs-container { --color-background: var(--surface); }
 
