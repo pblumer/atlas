@@ -162,6 +162,22 @@ func reachableUpstream(start string, requires map[string][]string) map[string]bo
 	return seen
 }
 
+// ValidateXML compiles a DMN model already in hand (not resolved by a handle) and
+// reports whether it is valid, with its name and decisions — the check the upload
+// path runs before storing a model. Resolved is always true (the bytes are
+// present), and no infrastructure failure is possible, so it returns no error.
+func (v *Validator) ValidateXML(ctx context.Context, xml []byte) ValidationResult {
+	defs, diags, err := v.engine.Compile(ctx, xml)
+	if err != nil {
+		return ValidationResult{Resolved: true, Message: err.Error()}
+	}
+	if diags.HasErrors() {
+		return ValidationResult{Resolved: true, Message: formatDiagnostics(diags)}
+	}
+	idx := defs.Index()
+	return ValidationResult{Resolved: true, Valid: true, ModelName: defs.ModelName(), Decisions: idx.Decisions}
+}
+
 // formatDiagnostics renders the error-severity diagnostics into one line for the
 // UI. Diagnostic messages are human-readable but not a stable API (temis warns
 // against parsing them), so this is display-only.

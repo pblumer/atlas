@@ -794,7 +794,7 @@ async function viewProjectDetail(id) {
     const createItems = [
       { header: "Blank resources" },
       { label: "BPMN diagram", icon: "⚙", href: newDiagramHref },
-      { label: "DMN reference", icon: "▦", act: "newref" },
+      { label: "DMN model (upload .dmn)", icon: "▦", act: "newref" },
       { label: "Form", icon: "▤", href: newFormHref },
     ];
 
@@ -917,19 +917,61 @@ async function moveDraft(processId, projectId, reload) {
   await reload();
 }
 
-// createDmnRef adds a DMN reference — a pointer to a temis-authored decision
-// model — into a project. Atlas organizes and lists the reference; authoring
-// stays in temis (ADR-0034), so we capture only a name and the temis handle.
+// pickFile opens the OS file dialog and resolves with the chosen File, or null if
+// the dialog is cancelled. There is no reliable cross-browser "cancel" event, so a
+// window-focus fallback resolves null shortly after the dialog closes with no
+// selection.
+function pickFile(accept) {
+  return new Promise((resolve) => {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    if (accept) inp.accept = accept;
+    inp.style.display = "none";
+    let done = false;
+    const finish = (f) => {
+      if (done) return;
+      done = true;
+      window.removeEventListener("focus", onFocus, true);
+      inp.remove();
+      resolve(f);
+    };
+    const onFocus = () => setTimeout(() => finish(inp.files && inp.files[0] ? inp.files[0] : null), 300);
+    inp.addEventListener("change", () => finish(inp.files && inp.files[0] ? inp.files[0] : null), { once: true });
+    window.addEventListener("focus", onFocus, true);
+    document.body.appendChild(inp);
+    inp.click();
+  });
+}
+
+// createDmnRef adds a DMN model to a project by uploading a .dmn file: the model is
+// validated and stored in the local model folder, and a reference to it is created
+// (ADR-0034/0050). Authoring still lives in temis — this is just "pick the model
+// you exported and use it". When models come from a remote temis service (nothing
+// local to upload to), it falls back to referencing the model by its handle there.
 async function createDmnRef(projectId, reload) {
-  const name = window.prompt("Reference name (how it shows in Atlas)");
-  if (name == null) return;
-  const modelRef = window.prompt("temis model reference (the model’s name in the temis Modeler)");
-  if (modelRef == null) return;
-  if (!name.trim() || !modelRef.trim()) { toast("Name and temis model reference are required", "err"); return; }
+  const file = await pickFile(".dmn,.xml,application/xml,text/xml");
+  if (!file) return;
+  let up;
   try {
-    await api("POST", "/api/v1/dmnrefs", { name: name.trim(), modelRef: modelRef.trim(), projectId });
-    toast(`Added DMN reference "${name.trim()}"`, "ok");
-  } catch (e) { toast("could not add DMN reference: " + e.message, "err"); }
+    const xml = await file.text();
+    up = await api("POST", "/api/v1/dmn-models?name=" + encodeURIComponent(file.name), xml, true);
+  } catch (e) {
+    const modelRef = window.prompt("Couldn't upload the file (models may be served by a remote temis service).\nReference an existing temis model by name instead:");
+    if (!modelRef || !modelRef.trim()) { toast("DMN model not added: " + e.message, "err"); return; }
+    const refName = (window.prompt("Reference name (how it shows in Atlas)", modelRef.trim()) || modelRef).trim();
+    try {
+      await api("POST", "/api/v1/dmnrefs", { name: refName, modelRef: modelRef.trim(), projectId });
+      toast(`Added DMN reference "${refName}"`, "ok");
+      await reload();
+    } catch (e2) { toast("could not add DMN reference: " + e2.message, "err"); }
+    return;
+  }
+  const name = (up.modelName || file.name.replace(/\.(dmn|xml)$/i, "") || "Decision").trim();
+  const n = (up.decisions || []).length;
+  try {
+    await api("POST", "/api/v1/dmnrefs", { name, modelRef: up.modelRef, projectId });
+    toast(`Added DMN model "${name}" — ${n} decision${n === 1 ? "" : "s"}`, "ok");
+  } catch (e) { toast("could not add DMN reference: " + e.message, "err"); return; }
   await reload();
 }
 
