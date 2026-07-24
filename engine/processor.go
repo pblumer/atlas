@@ -129,6 +129,22 @@ func removeStartRef(refs []messageStartRef, defKey uint64) []messageStartRef {
 // fsync) when a job of a type becomes available.
 func (p *Processor) SetJobNotifier(fn func(jobType int32)) { p.jobNotifier = fn }
 
+// ArmStartTimers enqueues arming of a freshly deployed definition's timer start
+// events: the handler creates their durable timers and retires any that a prior
+// version of the same process left armed, so only the latest version's schedule
+// is active (ADR-0051). Call it once per *fresh* deploy (not on recovery — the
+// restored TimerCreated events already hold the armed timers), then RunUntilIdle
+// (or Drive) to process it. It scans the armed start timers, so callers skip it
+// for a first-version process with no timer start events (nothing to arm or
+// supersede); a re-version still calls it so a removed schedule is retired.
+func (p *Processor) ArmStartTimers(defKey uint64) {
+	p.queue = append(p.queue, Command{
+		Key:       defKey,
+		ValueType: model.VTTimer,
+		Intent:    model.IntentTimerStartArm,
+	})
+}
+
 // CreateInstance enqueues creation of a new instance of the given definition,
 // optionally seeded with initial variables. Call RunUntilIdle to process it.
 func (p *Processor) CreateInstance(defKey uint64, startVars ...model.VariableValue) {

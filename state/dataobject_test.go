@@ -11,7 +11,7 @@ import (
 // TestDataObjectPutGetScan round-trips data objects through the current-value
 // family: a scope's objects are one prefix scan, isolated from another scope's,
 // and a repeated Put upserts in place (the live value is the latest). Mirrors the
-// variable store, plus the data-state the value carries (ADR-0051).
+// variable store, plus the data-state the value carries (ADR-0052).
 func TestDataObjectPutGetScan(t *testing.T) {
 	s := openStore(t)
 	i1 := model.NewKey(1, 10)
@@ -64,7 +64,7 @@ func TestDataObjectPutGetScan(t *testing.T) {
 // TestDataObjectSnapshotHistory records a data-object state trail and checks the
 // history scan returns one scope's changes in (timestamp, position) order,
 // isolated from another scope's — the event-sourced data-state timeline that makes
-// data provenance replayable (ADR-0051, mirroring ADR-0048).
+// data provenance replayable (ADR-0052, mirroring ADR-0048).
 func TestDataObjectSnapshotHistory(t *testing.T) {
 	s := openStore(t)
 	i1 := model.NewKey(1, 20)

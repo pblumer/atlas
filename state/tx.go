@@ -321,7 +321,7 @@ func (t *Tx) VariablesOfScope(scope uint64, fn func(v *model.VariableValue) erro
 
 // PutDataObject writes (upserts) a data object under its scope and name — the
 // current value, mirroring PutVariable. The live store keeps only the latest;
-// the whole state history lives in the snapshot family (ADR-0051).
+// the whole state history lives in the snapshot family (ADR-0052).
 func (t *Tx) PutDataObject(v *model.DataObjectValue) error {
 	return t.b.Set(keyDataObject(v.ScopeKey, v.Name), t.encodeValue(v), nil)
 }
@@ -340,7 +340,7 @@ func (t *Tx) GetDataObject(scope uint64, name string) (*model.DataObjectValue, e
 // keyed in change order. ts and pos come from the event header; the value is the
 // object's new state (name, data state, value). Written only from applyToState,
 // from the event alone, so it rebuilds identically on replay (invariant I4); a
-// plain Set on a unique (position-bearing) key, never overwritten (ADR-0051).
+// plain Set on a unique (position-bearing) key, never overwritten (ADR-0052).
 func (t *Tx) RecordDataObjectSnapshot(ts int64, pos uint64, v *model.DataObjectValue) error {
 	return t.b.Set(keyDataObjectSnapshot(v.ScopeKey, ts, pos), t.encodeValue(v), nil)
 }

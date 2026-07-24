@@ -1,4 +1,4 @@
-# ADR-0051: First-class data objects — typed, event-sourced state, and lineage
+# ADR-0052: First-class data objects — typed, event-sourced state, and lineage
 
 - **Status:** Accepted
 - **Date:** 2026-07-24

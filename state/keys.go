@@ -220,7 +220,7 @@ func dataObjectPrefix(scope uint64) []byte {
 
 // keyDataObject keys a data object by its scope and name, the same shape as a
 // variable key: the name is the trailing, variable-length component, so a scope's
-// data objects are one prefix scan (ADR-0051).
+// data objects are one prefix scan (ADR-0052).
 func keyDataObject(scope uint64, name string) []byte {
 	return append(dataObjectPrefix(scope), name...)
 }
@@ -228,7 +228,7 @@ func keyDataObject(scope uint64, name string) []byte {
 // keyDataObjectSnapshot keys one retained data-object state change of a scope,
 // the same (scope, ts, pos) shape as the variable-snapshot key, so the data
 // object, variable, and element-step timelines fold together by log position for
-// step-by-step replay and lineage (ADR-0051, mirroring ADR-0048).
+// step-by-step replay and lineage (ADR-0052, mirroring ADR-0048).
 func keyDataObjectSnapshot(scopeKey uint64, ts int64, pos uint64) []byte {
 	b := appendOrderedInt64(dataObjectSnapshotScopePrefix(scopeKey), ts)
 	return appendBE64(b, pos)

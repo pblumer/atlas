@@ -88,6 +88,29 @@ func (c *ProcessingContext) ForEachElementInstance(procKey uint64, fn func(elKey
 	}
 }
 
+// ForEachStartTimer calls fn with the key and value of every armed start timer,
+// read from the committed timer index. Entries are collected before fn runs so fn
+// may emit timer events (arming/retiring) without disturbing the scan. Used only
+// when a definition is deployed (off the hot path), to arm and supersede start
+// timers (ADR-0051).
+func (c *ProcessingContext) ForEachStartTimer(fn func(key uint64, v model.TimerValue)) {
+	type entry struct {
+		key uint64
+		v   model.TimerValue
+	}
+	var entries []entry
+	if err := c.p.store.StartTimers(func(k uint64, v *model.TimerValue) error {
+		entries = append(entries, entry{key: k, v: *v})
+		return nil
+	}); err != nil {
+		c.p.fail(err)
+		return
+	}
+	for _, e := range entries {
+		fn(e.key, e.v)
+	}
+}
+
 // ElementInstancesOnNode returns the keys of every live element instance sitting
 // on the given BPMN node within a process instance, seen through the in-flight
 // transaction (so it includes one activated earlier in this batch). A parallel
@@ -178,7 +201,7 @@ func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.Var
 // AppendDataObjectEvent records a data-object write (created or state-changed).
 // Like a variable it carries genuine runtime data (a name, a data state, and a
 // value), so it allocates for its strings — data objects are runtime data, not
-// hot-path token movement (ADR-0051). The event is keyed by the owning scope.
+// hot-path token movement (ADR-0052). The event is keyed by the owning scope.
 func (c *ProcessingContext) AppendDataObjectEvent(intent model.Intent, v model.DataObjectValue) {
 	c.appendEvent(v.ScopeKey, model.VTDataObject, intent, inflightValue{dataObject: v})
 }

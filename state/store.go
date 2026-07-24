@@ -130,6 +130,25 @@ func (s *Store) DueTimers(now int64, fn func(timerKey uint64, v *model.TimerValu
 	})
 }
 
+// StartTimers calls fn for every armed start timer — one whose owning process
+// instance key is zero, so it instantiates a definition on fire rather than
+// continuing a waiting element (ADR-0051). It is a full scan of the timer family,
+// used only when a definition is (re)deployed (off the hot path), so arming can be
+// idempotent and can supersede a prior version's schedule.
+func (s *Store) StartTimers(fn func(timerKey uint64, v *model.TimerValue) error) error {
+	return s.scanPrefix([]byte{byte(cfTimer)}, func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTTimer, raw)
+		if err != nil {
+			return err
+		}
+		tv := v.(*model.TimerValue)
+		if tv.ProcessInstanceKey != 0 {
+			return nil // an instance-owned timer (catch/boundary), not a start timer
+		}
+		return fn(trailingKey(k), tv)
+	})
+}
+
 // GetJob returns the committed job for key, reporting whether it was present.
 // Unlike Tx.GetJob it reads outside a transaction, for queries such as a worker
 // runner pulling activatable jobs.
@@ -310,7 +329,7 @@ func (s *Store) VariablesOfScope(scope uint64, fn func(v *model.VariableValue) e
 // DataObjectsOfScope calls fn with every data object owned by the given scope,
 // via the data-object column family — the current value of each. Used to surface
 // an instance's data to operators and, later, to build a FEEL scope for data
-// associations (ADR-0051). Mirrors VariablesOfScope.
+// associations (ADR-0052). Mirrors VariablesOfScope.
 func (s *Store) DataObjectsOfScope(scope uint64, fn func(v *model.DataObjectValue) error) error {
 	return s.scanPrefix(dataObjectPrefix(scope), func(_, raw []byte) error {
 		v, err := model.DecodeValue(model.VTDataObject, raw)
@@ -323,7 +342,7 @@ func (s *Store) DataObjectsOfScope(scope uint64, fn func(v *model.DataObjectValu
 
 // DataObjectSnapshotHistory folds the retained data-object state changes of one
 // scope, calling fn with each change's event timestamp, log position, and the
-// object's new state in the order they occurred (ADR-0051). Because the key sorts
+// object's new state in the order they occurred (ADR-0052). Because the key sorts
 // by timestamp then position, a scope-wide scan yields a monotonic sequence a
 // caller folds by position — the event-sourced data-state timeline and the basis
 // for lineage. Mirrors VariableSnapshotHistory (ADR-0048).

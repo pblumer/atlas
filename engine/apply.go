@@ -91,7 +91,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			}
 			// Retain the change as an ordered, timestamped snapshot so the data
 			// object's state history and provenance rebuild on replay — the data
-			// analogue of the variable snapshot (ADR-0051, mirroring ADR-0048).
+			// analogue of the variable snapshot (ADR-0052, mirroring ADR-0048).
 			// Derived only from the event (header timestamp/position and the value),
 			// so replay rebuilds it identically (invariant I4).
 			return tx.RecordDataObjectSnapshot(h.Timestamp, h.Position, &v.dataObject)
@@ -101,7 +101,10 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 		switch h.Intent {
 		case model.IntentTimerCreated:
 			return tx.PutTimer(h.Key, &v.timer)
-		case model.IntentTimerTriggered:
+		case model.IntentTimerTriggered, model.IntentTimerCanceled:
+			// Both remove the timer from the due-date index; they differ only in the
+			// side effect the command handler runs (a trigger may fire; a cancel does
+			// not), which lives outside applyToState (ADR-0051).
 			return tx.DeleteTimer(h.Key, &v.timer)
 		}
 

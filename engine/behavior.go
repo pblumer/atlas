@@ -34,6 +34,7 @@ func (p *Processor) registerHandlers() {
 		handlerKey(model.VTJob, model.IntentJobCompleted):            handleJobCompleted,
 		handlerKey(model.VTJob, model.IntentJobAssigned):             handleJobAssigned,
 		handlerKey(model.VTTimer, model.IntentTimerTriggered):        handleTimerTriggered,
+		handlerKey(model.VTTimer, model.IntentTimerStartArm):         handleTimerStartArm,
 		handlerKey(model.VTMessage, model.IntentMessagePublished):    handleMessagePublished,
 	}
 }
@@ -59,6 +60,10 @@ func (p *Processor) registerBehaviors() {
 	// straight on like a none start (ADR-0035). What makes it a start is the
 	// deploy-time subscription (see Deploy), not a distinct runtime behavior.
 	p.behaviors[compiler.TypeMessageStartEvent] = startEventBehavior{}
+	// A timer start event is the same once instantiated: a due timer creates the
+	// instance and it flows straight on (ADR-0051). What makes it a start is the
+	// deploy-time timer the arm handler creates, not a distinct runtime behavior.
+	p.behaviors[compiler.TypeTimerStartEvent] = startEventBehavior{}
 }
 
 // --- command handlers ---
@@ -82,7 +87,7 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 	// Seed the process's declared data objects under the instance scope, each with
 	// its declared initial data state (value unset for now; data associations write
 	// values in a later slice). Like the start variables, this is deterministic
-	// state mutation from already-decided data, so it replays identically (ADR-0051).
+	// state mutation from already-decided data, so it replays identically (ADR-0052).
 	for _, d := range cp.DataObjects() {
 		c.AppendDataObjectEvent(model.IntentDataObjectCreated, model.DataObjectValue{
 			ScopeKey: piKey,
@@ -184,14 +189,92 @@ func handleJobAssigned(c *ProcessingContext) {
 	c.AppendJobEvent(c.cmd.Key, model.IntentJobAssigned, *job)
 }
 
-// handleTimerTriggered fires a due timer: it retires the timer and tells its
-// waiting element instance to complete. The command carries the timer value
-// (supplied by TriggerDueTimers), so no extra read is needed.
+// handleTimerTriggered fires a due timer. The command carries the timer value
+// (supplied by TriggerDueTimers), so no extra read is needed. A start timer (no
+// owning instance, ADR-0051) instantiates its definition and, if it recurs, arms
+// its next occurrence; an instance timer tells its waiting element to complete.
 func handleTimerTriggered(c *ProcessingContext) {
 	timer := c.cmd.Value.timer
 	c.AppendTimerEvent(c.cmd.Key, model.IntentTimerTriggered, timer)
+	if timer.ProcessInstanceKey == 0 {
+		fireStartTimer(c, timer)
+		return
+	}
 	if ei := c.GetElementInstance(timer.ElementInstanceKey); ei != nil {
 		c.AppendElementCommand(timer.ElementInstanceKey, model.IntentCompleting, *ei)
+	}
+}
+
+// fireStartTimer instantiates the definition a due start timer names — through the
+// same create-instance command an API create uses, so the instance's events and
+// recovery are identical (ADR-0035) — then, if the timer recurs, arms its next
+// occurrence with a due date re-anchored to the current clock (so a long outage
+// does not replay a backlog) and frozen into the arming event (I6). A timer whose
+// definition was undeployed or superseded finds no compiled process and stops.
+func fireStartTimer(c *ProcessingContext, timer model.TimerValue) {
+	cp := c.process(timer.ProcessDefKey)
+	if cp == nil {
+		return
+	}
+	c.AppendCreateInstanceCommand(timer.ProcessDefKey, nil)
+	if timer.Repetitions == 0 {
+		return // one-shot (duration/date) or a finite cycle that has run out
+	}
+	node := cp.Node(timer.TargetElementId)
+	if node.Type != compiler.TypeTimerStartEvent {
+		return
+	}
+	next, ok := cp.TimerStart(node.Detail).Schedule.NextDue(c.Now())
+	if !ok {
+		return
+	}
+	reps := timer.Repetitions
+	if reps > 0 {
+		reps-- // count down a finite cycle; an infinite one (-1) stays -1
+	}
+	c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
+		ProcessDefKey:   timer.ProcessDefKey,
+		TargetElementId: timer.TargetElementId,
+		DueDate:         next,
+		Repetitions:     reps,
+	})
+}
+
+// handleTimerStartArm arms a freshly deployed definition's timer start events and
+// retires any that a prior version of the same process left armed, so only the
+// latest version's schedule is active (ADR-0051). It runs once per fresh deploy,
+// never on recovery — commands are not replayed (I6), and the restored
+// TimerCreated events already hold the armed timers. The command carries the new
+// definition key in cmd.Key.
+func handleTimerStartArm(c *ProcessingContext) {
+	defKey := c.cmd.Key
+	cp := c.process(defKey)
+	if cp == nil {
+		return
+	}
+	// Retire a prior version's start timers for the same process id, and note which
+	// of this definition's elements are already armed (idempotency if arm repeats).
+	armed := map[int32]bool{}
+	c.ForEachStartTimer(func(key uint64, v model.TimerValue) {
+		if v.ProcessDefKey == defKey {
+			armed[v.TargetElementId] = true
+			return
+		}
+		if other := c.process(v.ProcessDefKey); other != nil && other.ProcessId() == cp.ProcessId() {
+			c.AppendTimerEvent(key, model.IntentTimerCanceled, v)
+		}
+	})
+	now := c.Now()
+	for _, s := range cp.TimerStartEvents() {
+		if armed[s.ElementId] {
+			continue
+		}
+		c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
+			ProcessDefKey:   defKey,
+			TargetElementId: s.ElementId,
+			DueDate:         s.Schedule.FirstDue(now),
+			Repetitions:     s.Schedule.Repetitions,
+		})
 	}
 }
 
@@ -869,12 +952,22 @@ type userTaskBehavior struct{}
 func (userTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.UserTask(cp.Node(ei.ElementId).Detail)
+	// A due date is authored as a duration relative to task creation, so the
+	// absolute due instant is computed here and frozen into the job-created event
+	// (ADR-0051). Now() is read at command processing and recorded, so recovery
+	// replays the identical deadline — exactly like a timer's due date. 0 means
+	// the task has no due date.
+	var deadline int64
+	if detail.DueDateNanos != 0 {
+		deadline = c.Now() + detail.DueDateNanos
+	}
 	jobKey := c.NewKey()
 	c.AppendJobEvent(jobKey, model.IntentJobCreated, model.JobValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ElementInstanceKey: key,
 		JobType:            detail.JobType,
 		Retries:            detail.Retries,
+		Deadline:           deadline,
 		// Seed the runtime assignee with the model's default; claim/unclaim
 		// rewrites it through the job lifecycle (ADR-0042).
 		Assignee: cp.Intern(detail.Assignee),
