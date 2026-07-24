@@ -1211,23 +1211,67 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleClaimTask assigns an open user task to a person (claim). The request
-// body is {"assignee": "..."}; a claim to an already-claimed task simply
-// reassigns it (last-writer-wins, ADR-0042). 400 on a missing/empty assignee,
+// handleClaimTask assigns an open user task to a person (claim), last-writer-wins
+// (ADR-0042). Once the server has identity (ADR-0044/0045) claim is authoritative:
+//
+//   - With auth enabled, an empty/omitted body claims the task for the signed-in
+//     user, and a named {"assignee": "..."} must be a real, enabled account
+//     (400 otherwise) — you cannot assign work to a username that doesn't exist.
+//   - With auth disabled (open single-user mode) there is no session identity, so
+//     the caller must still name the assignee, unvalidated, as before.
+//
 // 404 if the job doesn't exist or is already completed.
 func (s *Server) handleClaimTask(w http.ResponseWriter, r *http.Request) {
+	// The body is optional now: an empty body (io.EOF) means "claim for me"
+	// (auth on); a malformed non-empty body is still a 400.
 	var body struct {
 		Assignee string `json:"assignee"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if strings.TrimSpace(body.Assignee) == "" {
+	assignee := strings.TrimSpace(body.Assignee)
+
+	if s.authEnabled {
+		p := principalFrom(r.Context())
+		if p == nil {
+			writeError(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+		if assignee == "" {
+			assignee = p.Username
+		} else {
+			// A named assignee must resolve to a real, enabled user; normalize to
+			// the account's stored username (canonical case).
+			var (
+				canonical string
+				known     bool
+				vErr      error
+			)
+			s.do(func() {
+				u, ok, e := s.users.byUsername(assignee)
+				vErr = e
+				known = ok && !u.Disabled
+				if ok {
+					canonical = u.Username
+				}
+			})
+			if vErr != nil {
+				writeError(w, http.StatusInternalServerError, "claim: "+vErr.Error())
+				return
+			}
+			if !known {
+				writeError(w, http.StatusBadRequest, "unknown or disabled user")
+				return
+			}
+			assignee = canonical
+		}
+	} else if assignee == "" {
 		writeError(w, http.StatusBadRequest, "assignee is required")
 		return
 	}
-	s.assignTask(w, r, strings.TrimSpace(body.Assignee))
+	s.assignTask(w, r, assignee)
 }
 
 // handleUnclaimTask releases a user task (assignee cleared), making it available

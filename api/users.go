@@ -168,6 +168,35 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, list)
 }
 
+// handleListAssignableUsers returns the accounts a task can be assigned to — a
+// minimal projection (username + display name) of every enabled user. Unlike the
+// admin-gated management list, it is available to any authenticated caller (and
+// open when auth is off): assigning work is an everyday Tasks action, not user
+// administration (ADR-0045).
+func (s *Server) handleListAssignableUsers(w http.ResponseWriter, _ *http.Request) {
+	type assignable struct {
+		Username    string `json:"username"`
+		DisplayName string `json:"displayName,omitempty"`
+	}
+	list := []assignable{}
+	var loadErr error
+	s.do(func() {
+		var recs []User
+		recs, loadErr = s.users.loadAll()
+		for _, u := range recs {
+			if u.Disabled {
+				continue
+			}
+			list = append(list, assignable{Username: u.Username, DisplayName: u.DisplayName})
+		}
+	})
+	if loadErr != nil {
+		writeError(w, http.StatusInternalServerError, "list assignable users: "+loadErr.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
 // handleCreateUser creates a local user. Body:
 // {"username","email","displayName","password","roles":[...]}. Username is
 // required and unique (case-insensitive); email, if given, is unique too; the

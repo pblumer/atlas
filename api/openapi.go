@@ -146,8 +146,8 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  jsonBody("Completion variables", schemaObj(map[string]any{"variables": tObject()})),
 			resp: jsonBody("Task key", tObject())}},
 		{"POST", "/api/v1/tasks/{key}/claim", s.handleClaimTask, apiOp{
-			summary: "Claim a user task for an assignee", tag: "Tasks",
-			req:  jsonBody("Assignee", schemaObj(map[string]any{"assignee": tString()}, "assignee")),
+			summary: "Claim a user task (self, or assign a named user)", tag: "Tasks",
+			req:  jsonBody("Optional assignee (empty claims for the signed-in user)", schemaObj(map[string]any{"assignee": tString()})),
 			resp: jsonBody("Task and assignee", tObject())}},
 		{"POST", "/api/v1/tasks/{key}/unclaim", s.handleUnclaimTask, apiOp{
 			summary: "Release a user task's claim", tag: "Tasks", resp: jsonBody("Task key", tObject())}},
@@ -212,6 +212,8 @@ func (s *Server) apiRoutes() []apiRoute {
 
 		{"GET", "/api/v1/users", s.handleListUsers, apiOp{
 			summary: "List user accounts", tag: "Users", resp: jsonBody("Users", tArray())}},
+		{"GET", "/api/v1/users/assignable", s.handleListAssignableUsers, apiOp{
+			summary: "List users a task can be assigned to", tag: "Users", resp: jsonBody("Assignable users", tArray())}},
 		{"POST", "/api/v1/users", s.handleCreateUser, apiOp{
 			summary: "Create a user account", tag: "Users", status: http.StatusCreated,
 			req: jsonBody("New user", schemaObj(map[string]any{
