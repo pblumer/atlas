@@ -195,9 +195,14 @@ Making processes wait, react, and time out.
   re-activates the job with fresh retries (raise / resolve / resume). Keyed by
   element instance, so cancelling an instance clears its incidents. Recovery-
   tested; exposed over HTTP (`POST /jobs/{key}/fail`, `GET /incidents`,
-  `POST /incidents/{key}/resolve`) (ADR-0061).
-  Expression/timer-driven incidents (the ADR-0055/0056/0057 fail-open cases),
-  retry backoff, and an operator UI still to come.
+  `POST /incidents/{key}/resolve`) (ADR-0061). **Timer FEEL failures now raise
+  incidents too** ([ADR-0062](docs/adr/0062-timer-feel-failure-incidents.md)): a
+  catch or boundary timer whose FEEL schedule can't be evaluated parks its token
+  and raises a job-less incident (the failing field in its message) instead of
+  firing immediately; resolving re-arms the timer against the instance's current
+  variables (re-raising if it still fails). Recovery-tested. Recurring-boundary
+  re-arm failures, start-event timer FEEL, retry backoff, and an operator UI still
+  to come.
 
 ## Milestone 3 — Structure 🔲
 
