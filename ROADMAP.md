@@ -185,7 +185,15 @@ Making processes wait, react, and time out.
   (ADR-0040, ADR-0054). Error/signal boundaries and boundaries on subprocesses
   remain.
 - 🔲 Receive tasks
-- 🔲 Incident model: raise/resolve, operator resume
+- 🚧 **Incident model**: a job whose retries a worker exhausts raises a durable
+  **incident** on its element instead of hanging or retrying forever; the token
+  parks off the activatable index until an operator resolves the incident, which
+  re-activates the job with fresh retries (raise / resolve / resume). Keyed by
+  element instance, so cancelling an instance clears its incidents. Recovery-
+  tested; exposed over HTTP (`POST /jobs/{key}/fail`, `GET /incidents`,
+  `POST /incidents/{key}/resolve`) (ADR-0061).
+  Expression/timer-driven incidents (the ADR-0055/0056/0057 fail-open cases),
+  retry backoff, and an operator UI still to come.
 
 ## Milestone 3 — Structure 🔲
 

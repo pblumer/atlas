@@ -238,6 +238,24 @@ type cancelInstanceResp struct {
 	Stats       statsResp `json:"stats"`
 }
 
+type failJobReq struct {
+	Retries int32  `json:"retries"`
+	Message string `json:"message"`
+}
+
+type resolveIncidentReq struct {
+	Retries int32 `json:"retries"`
+}
+
+type incidentView struct {
+	ElementInstanceKey uint64 `json:"elementInstanceKey"`
+	ProcessInstanceKey uint64 `json:"processInstanceKey"`
+	JobKey             uint64 `json:"jobKey"`
+	ElementId          int32  `json:"elementId"`
+	RaisedAt           int64  `json:"raisedAt"`
+	Message            string `json:"message"`
+}
+
 // handleInfo reports product/version metadata for the UI shell.
 func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, infoResp{Product: "Atlas", Version: Version, Docs: s.docsEnabled})
@@ -1436,6 +1454,108 @@ func (s *Server) handleListTasks(w http.ResponseWriter, _ *http.Request) {
 // completion back to the processor (the same path a service-task worker uses)
 // and drives any jobs that unblocked (e.g. a business rule task the completion
 // flowed into) to idle. 404 if the job doesn't exist or is already completed.
+// handleFailJob applies a worker's failure report for a job (ADR-0061): the body
+// carries the remaining retries and a message. With retries > 0 the job is retried;
+// with none an incident is raised on its element. 404 if the job doesn't exist.
+func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid job key")
+		return
+	}
+	var req failJobReq
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	var (
+		found  bool
+		runErr error
+	)
+	s.do(func() {
+		if _, ok, err := s.store.GetJob(key); err != nil || !ok {
+			return
+		}
+		found = true
+		s.proc.FailJob(key, req.Retries, req.Message)
+		runErr = s.jobRunner.Drive()
+	})
+	switch {
+	case runErr != nil:
+		writeError(w, http.StatusInternalServerError, "fail job: "+runErr.Error())
+	case !found:
+		writeError(w, http.StatusNotFound, "no job with that key")
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"jobKey": key})
+	}
+}
+
+// handleResolveIncident resolves the incident on an element instance and resumes
+// its job (ADR-0061): the body's retries (default 1) is how many attempts the
+// re-activated job gets. 404 if there is no incident on that element.
+func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid element instance key")
+		return
+	}
+	var req resolveIncidentReq
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	retries := req.Retries
+	if retries < 1 {
+		retries = 1
+	}
+	var (
+		found  bool
+		jobKey uint64
+		runErr error
+	)
+	s.do(func() {
+		inc, err := s.store.GetIncident(key)
+		if err != nil || inc == nil {
+			return
+		}
+		found = true
+		jobKey = inc.JobKey
+		s.proc.ResolveIncident(key, retries)
+		runErr = s.jobRunner.Drive()
+	})
+	switch {
+	case runErr != nil:
+		writeError(w, http.StatusInternalServerError, "resolve incident: "+runErr.Error())
+	case !found:
+		writeError(w, http.StatusNotFound, "no incident on that element instance")
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"elementInstanceKey": key, "jobKey": jobKey, "retries": retries})
+	}
+}
+
+// handleListIncidents lists the unresolved incidents — the operator "what's stuck"
+// view (ADR-0061).
+func (s *Server) handleListIncidents(w http.ResponseWriter, _ *http.Request) {
+	list := []incidentView{}
+	var scanErr error
+	s.do(func() {
+		scanErr = s.store.Incidents(func(elKey uint64, v *model.IncidentValue) error {
+			list = append(list, incidentView{
+				ElementInstanceKey: elKey,
+				ProcessInstanceKey: v.ProcessInstanceKey,
+				JobKey:             v.JobKey,
+				ElementId:          v.ElementId,
+				RaisedAt:           v.RaisedAt,
+				Message:            v.Message,
+			})
+			return nil
+		})
+	})
+	if scanErr != nil {
+		writeError(w, http.StatusInternalServerError, "list incidents: "+scanErr.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"incidents": list})
+}
+
 func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {

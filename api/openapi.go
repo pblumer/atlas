@@ -148,6 +148,19 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "name")),
 			resp: jsonBody("Publish result", tObject())}},
 
+		{"POST", "/api/v1/jobs/{key}/fail", s.handleFailJob, apiOp{
+			summary: "Fail a job, carrying remaining retries (0 raises an incident)", tag: "Incidents",
+			req: jsonBody("Retries left and a failure message", schemaObj(map[string]any{
+				"retries": tInteger(), "message": tString(),
+			})),
+			resp: jsonBody("Job key and stats", tObject())}},
+		{"GET", "/api/v1/incidents", s.handleListIncidents, apiOp{
+			summary: "List unresolved incidents", tag: "Incidents", resp: jsonBody("Incidents", tArray())}},
+		{"POST", "/api/v1/incidents/{key}/resolve", s.handleResolveIncident, apiOp{
+			summary: "Resolve the incident on an element instance and retry its job", tag: "Incidents",
+			req:  jsonBody("Retries to grant the resumed job (default 1)", schemaObj(map[string]any{"retries": tInteger()})),
+			resp: jsonBody("Element instance key and stats", tObject())}},
+
 		{"GET", "/api/v1/tasks", s.handleListTasks, apiOp{
 			summary: "List active user tasks", tag: "Tasks", resp: jsonBody("Tasks", tArray())}},
 		{"POST", "/api/v1/tasks/{key}/complete", s.handleCompleteTask, apiOp{

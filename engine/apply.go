@@ -53,6 +53,12 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// identically-ordered trail (I4).
 			return tx.RecordElementStep(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId)
 		case model.IntentCompleted, model.IntentTerminated:
+			// Terminating an element clears any incident it carried (a stuck job's,
+			// ADR-0061); the delete is idempotent, so it is a no-op for the common
+			// element with none.
+			if err := tx.DeleteIncident(h.Key); err != nil {
+				return err
+			}
 			if err := tx.DeleteElementInstance(h.Key, &v.element); err != nil {
 				return err
 			}
@@ -61,13 +67,22 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 
 	case model.VTJob:
 		switch h.Intent {
-		case model.IntentJobCreated, model.IntentJobAssigned:
-			// Assigning re-puts the whole job with its new assignee; the
-			// activatable-index entry PutJob rewrites is idempotent, so the task
-			// stays open (ADR-0042).
+		case model.IntentJobCreated, model.IntentJobAssigned, model.IntentJobFailed:
+			// Assigning re-puts the job with its new assignee; failing re-puts it with
+			// its new (decremented, worker-reported) retry count. PutJob's activatable-
+			// index write is idempotent and keyed on Retries > 0, so a still-retryable
+			// job stays open while an exhausted one parks off the index (ADR-0042/0061).
 			return tx.PutJob(h.Key, &v.job)
-		case model.IntentJobCompleted, model.IntentJobFailed, model.IntentJobCanceled:
+		case model.IntentJobCompleted, model.IntentJobCanceled:
 			return tx.DeleteJob(h.Key, &v.job)
+		}
+
+	case model.VTIncident:
+		switch h.Intent {
+		case model.IntentIncidentCreated:
+			return tx.PutIncident(&v.incident)
+		case model.IntentIncidentResolved:
+			return tx.DeleteIncident(v.incident.ElementInstanceKey)
 		}
 
 	case model.VTVariable:

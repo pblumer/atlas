@@ -171,6 +171,37 @@ func (p *Processor) CompleteJob(jobKey uint64, outputs ...model.VariableValue) {
 	})
 }
 
+// FailJob enqueues a worker's failure report for a job (ADR-0061), carrying the
+// retries the worker leaves it and a failure message. With retries > 0 the job is
+// retried (back on the activatable index); with retries <= 0 an incident is raised
+// on the job's element and the token parks there. Failing a job that no longer
+// exists is a no-op. Call RunUntilIdle (or Drive) to process it.
+func (p *Processor) FailJob(jobKey uint64, retries int32, message string) {
+	p.queue = append(p.queue, Command{
+		Key:       jobKey,
+		ValueType: model.VTJob,
+		Intent:    model.IntentJobFailed,
+		Value: inflightValue{
+			job:      model.JobValue{Retries: retries},
+			incident: model.IncidentValue{Message: message},
+		},
+	})
+}
+
+// ResolveIncident enqueues an operator's resolution of the incident attached to
+// elementKey (ADR-0061): the incident is cleared and its job re-created with
+// retries (>= 1), returning it to the activatable index so a worker retries it.
+// Resolving an incident that no longer exists is a no-op. Call RunUntilIdle (or
+// Drive) to process it.
+func (p *Processor) ResolveIncident(elementKey uint64, retries int32) {
+	p.queue = append(p.queue, Command{
+		Key:       elementKey,
+		ValueType: model.VTIncident,
+		Intent:    model.IntentIncidentResolved,
+		Value:     inflightValue{job: model.JobValue{Retries: retries}},
+	})
+}
+
 // AssignJob enqueues a (re)assignment of a user task's assignee, identified by
 // its job key. A non-empty assignee is a claim; an empty one unclaims the task,
 // making it available again. The job stays open either way. Assigning a job that

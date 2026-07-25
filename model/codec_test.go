@@ -132,6 +132,19 @@ func TestRecordRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name:   "incident carries its job and message",
+			vt:     VTIncident,
+			intent: IntentIncidentCreated,
+			value: &IncidentValue{
+				ProcessInstanceKey: NewKey(1, 5),
+				ElementInstanceKey: NewKey(1, 6),
+				JobKey:             NewKey(1, 7),
+				ElementId:          4,
+				RaisedAt:           1_700_000_999,
+				Message:            "worker: connection refused",
+			},
+		},
+		{
 			name:   "active process instance",
 			vt:     VTProcessInstance,
 			intent: IntentActivated,

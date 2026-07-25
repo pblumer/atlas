@@ -34,7 +34,9 @@ func (p *Processor) registerHandlers() {
 		handlerKey(model.VTElementInstance, model.IntentActivating):  handleElementActivating,
 		handlerKey(model.VTElementInstance, model.IntentCompleting):  handleElementCompleting,
 		handlerKey(model.VTJob, model.IntentJobCompleted):            handleJobCompleted,
+		handlerKey(model.VTJob, model.IntentJobFailed):               handleJobFailed,
 		handlerKey(model.VTJob, model.IntentJobAssigned):             handleJobAssigned,
+		handlerKey(model.VTIncident, model.IntentIncidentResolved):   handleIncidentResolved,
 		handlerKey(model.VTTimer, model.IntentTimerTriggered):        handleTimerTriggered,
 		handlerKey(model.VTTimer, model.IntentTimerStartArm):         handleTimerStartArm,
 		handlerKey(model.VTMessage, model.IntentMessagePublished):    handleMessagePublished,
@@ -327,6 +329,57 @@ func handleJobCompleted(c *ProcessingContext) {
 	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
 		c.AppendElementCommand(job.ElementInstanceKey, model.IntentCompleting, *ei)
 	}
+}
+
+// handleJobFailed applies a worker's failure report for a job (ADR-0061). The
+// command carries the remaining retry count (in the job payload) and a failure
+// message (in the incident payload). The job's retries are set to that count and
+// the job is re-emitted: with retries left it returns to the activatable index for
+// another attempt; with none it parks off the index and an incident is raised on
+// its element instance, holding the token there until an operator resolves it.
+// Failing a job that is gone (already completed or canceled) is a no-op.
+func handleJobFailed(c *ProcessingContext) {
+	job := c.GetJob(c.cmd.Key)
+	if job == nil {
+		return
+	}
+	job.Retries = c.cmd.Value.job.Retries
+	c.AppendJobEvent(c.cmd.Key, model.IntentJobFailed, *job)
+	if job.Retries <= 0 {
+		var elementId int32
+		if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
+			elementId = ei.ElementId
+		}
+		c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+			ProcessInstanceKey: job.ProcessInstanceKey,
+			ElementInstanceKey: job.ElementInstanceKey,
+			JobKey:             c.cmd.Key,
+			ElementId:          elementId,
+			RaisedAt:           c.Now(),
+			Message:            c.cmd.Value.incident.Message,
+		})
+	}
+}
+
+// handleIncidentResolved clears an incident and resumes the work it blocked
+// (ADR-0061). The command is keyed by the incident's element instance and carries
+// a positive retry count: the incident is deleted and its job re-created with that
+// many retries, so the job returns to the activatable index and a worker retries it
+// — the same path a fresh job takes. If the cause is unfixed the job fails again
+// and a new incident is raised. Resolving an incident that is gone is a no-op.
+func handleIncidentResolved(c *ProcessingContext) {
+	inc := c.GetIncident(c.cmd.Key)
+	if inc == nil {
+		return
+	}
+	c.AppendIncidentEvent(model.IntentIncidentResolved, *inc)
+	job := c.GetJob(inc.JobKey)
+	if job == nil {
+		return // the job vanished (e.g. its instance was canceled); nothing to resume
+	}
+	job.Retries = c.cmd.Value.job.Retries
+	c.AppendJobEvent(inc.JobKey, model.IntentJobCreated, *job)
+	c.NotifyJobAvailable(job.JobType)
 }
 
 // handleJobAssigned rewrites a job's user-task assignee (claim sets it, unclaim

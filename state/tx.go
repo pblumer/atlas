@@ -131,18 +131,53 @@ func (t *Tx) ElementInstancesOfProcess(procKey uint64, fn func(elKey uint64, v *
 
 // PutJob writes the job, its activatable index entry, and the reverse
 // element→job entry (so an interrupting boundary event can find the host's job).
-// The three writes go to one in-memory batch; their errors are accumulated (first
+// The writes go to one in-memory batch; their errors are accumulated (first
 // non-nil wins) rather than checked one at a time, which keeps every write on the
 // same covered path.
+//
+// A job is on the activatable index iff it has retries left (Retries > 0): a job
+// whose retries are exhausted stays stored — an incident points at it — but is
+// never handed to a worker until an operator resolves the incident and restores a
+// positive retry count (ADR-0061).
 func (t *Tx) PutJob(key uint64, v *model.JobValue) error {
 	err := t.b.Set(keyJob(key), t.encodeValue(v), nil)
-	if e := t.b.Set(keyJobActivatable(v.JobType, key), nil, nil); err == nil {
-		err = e
+	if v.Retries > 0 {
+		if e := t.b.Set(keyJobActivatable(v.JobType, key), nil, nil); err == nil {
+			err = e
+		}
+	} else {
+		if e := t.b.Delete(keyJobActivatable(v.JobType, key), nil); err == nil {
+			err = e
+		}
 	}
 	if e := t.b.Set(keyJobByElement(v.ElementInstanceKey), appendBE64(nil, key), nil); err == nil {
 		err = e
 	}
 	return err
+}
+
+// --- Incident ---
+
+// PutIncident writes an incident, keyed by the element instance it is attached to.
+func (t *Tx) PutIncident(v *model.IncidentValue) error {
+	return t.b.Set(keyIncident(v.ElementInstanceKey), t.encodeValue(v), nil)
+}
+
+// DeleteIncident removes the incident attached to an element instance. Deleting
+// one that is absent is a harmless no-op — how terminating an element clears any
+// incident it carried without first reading it (ADR-0061).
+func (t *Tx) DeleteIncident(elKey uint64) error {
+	return t.b.Delete(keyIncident(elKey), nil)
+}
+
+// GetIncident returns the incident attached to an element instance, or nil.
+func (t *Tx) GetIncident(elKey uint64) (*model.IncidentValue, error) {
+	var v model.IncidentValue
+	ok, err := t.readInto(keyIncident(elKey), &v)
+	if err != nil || !ok {
+		return nil, err
+	}
+	return &v, nil
 }
 
 // JobOfElement returns the key of the job held by the given element instance, or
