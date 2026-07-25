@@ -761,16 +761,20 @@ async function viewProjectDetail(id) {
           { label: "Delete", icon: "🗑", act: "deldraft", data: { key: d.processId }, danger: true },
         ])}</td></tr>`;
     };
-    const refRow = (r) => `<tr data-name="${esc(r.name.toLowerCase())}">
-        ${nameCell("DMN", r.name, `temis model: ${esc(r.modelRef)} · <span data-refstatus="${esc(r.id)}">not validated</span>`, "")}
+    const refRow = (r) => {
+      const href = `#/modeler/dmn/${encodeURIComponent(r.id)}`;
+      return `<tr data-name="${esc(r.name.toLowerCase())}">
+        ${nameCell("DMN", r.name, `temis model: ${esc(r.modelRef)} · <span data-refstatus="${esc(r.id)}">not validated</span>`, href)}
         <td class="muted">Decision ref</td>
         <td class="muted">${esc(fmtTime(r.createdAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", [
+          { label: "View", icon: "▦", href },
           { label: "Validate", icon: "✔", act: "valref", data: { id: r.id } },
           ...moveItems(r.projectId, "moveref", r.id),
           { sep: true },
           { label: "Delete", icon: "🗑", act: "delref", data: { id: r.id }, danger: true },
         ])}</td></tr>`;
+    };
     const formRow = (f) => {
       const href = `#/modeler/form/e/${encodeURIComponent(f.id)}`;
       return `<tr data-name="${esc((f.name || f.id).toLowerCase())}">
@@ -790,7 +794,7 @@ async function viewProjectDetail(id) {
     const createItems = [
       { header: "Blank resources" },
       { label: "BPMN diagram", icon: "⚙", href: newDiagramHref },
-      { label: "DMN reference", icon: "▦", act: "newref" },
+      { label: "DMN model (upload .dmn)", icon: "▦", act: "newref" },
       { label: "Form", icon: "▤", href: newFormHref },
     ];
 
@@ -913,19 +917,61 @@ async function moveDraft(processId, projectId, reload) {
   await reload();
 }
 
-// createDmnRef adds a DMN reference — a pointer to a temis-authored decision
-// model — into a project. Atlas organizes and lists the reference; authoring
-// stays in temis (ADR-0034), so we capture only a name and the temis handle.
+// pickFile opens the OS file dialog and resolves with the chosen File, or null if
+// the dialog is cancelled. There is no reliable cross-browser "cancel" event, so a
+// window-focus fallback resolves null shortly after the dialog closes with no
+// selection.
+function pickFile(accept) {
+  return new Promise((resolve) => {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    if (accept) inp.accept = accept;
+    inp.style.display = "none";
+    let done = false;
+    const finish = (f) => {
+      if (done) return;
+      done = true;
+      window.removeEventListener("focus", onFocus, true);
+      inp.remove();
+      resolve(f);
+    };
+    const onFocus = () => setTimeout(() => finish(inp.files && inp.files[0] ? inp.files[0] : null), 300);
+    inp.addEventListener("change", () => finish(inp.files && inp.files[0] ? inp.files[0] : null), { once: true });
+    window.addEventListener("focus", onFocus, true);
+    document.body.appendChild(inp);
+    inp.click();
+  });
+}
+
+// createDmnRef adds a DMN model to a project by uploading a .dmn file: the model is
+// validated and stored in the local model folder, and a reference to it is created
+// (ADR-0034/0050). Authoring still lives in temis — this is just "pick the model
+// you exported and use it". When models come from a remote temis service (nothing
+// local to upload to), it falls back to referencing the model by its handle there.
 async function createDmnRef(projectId, reload) {
-  const name = window.prompt("Reference name (how it shows in Atlas)");
-  if (name == null) return;
-  const modelRef = window.prompt("temis model reference (the model’s name in the temis Modeler)");
-  if (modelRef == null) return;
-  if (!name.trim() || !modelRef.trim()) { toast("Name and temis model reference are required", "err"); return; }
+  const file = await pickFile(".dmn,.xml,application/xml,text/xml");
+  if (!file) return;
+  let up;
   try {
-    await api("POST", "/api/v1/dmnrefs", { name: name.trim(), modelRef: modelRef.trim(), projectId });
-    toast(`Added DMN reference "${name.trim()}"`, "ok");
-  } catch (e) { toast("could not add DMN reference: " + e.message, "err"); }
+    const xml = await file.text();
+    up = await api("POST", "/api/v1/dmn-models?name=" + encodeURIComponent(file.name), xml, true);
+  } catch (e) {
+    const modelRef = window.prompt("Couldn't upload the file (models may be served by a remote temis service).\nReference an existing temis model by name instead:");
+    if (!modelRef || !modelRef.trim()) { toast("DMN model not added: " + e.message, "err"); return; }
+    const refName = (window.prompt("Reference name (how it shows in Atlas)", modelRef.trim()) || modelRef).trim();
+    try {
+      await api("POST", "/api/v1/dmnrefs", { name: refName, modelRef: modelRef.trim(), projectId });
+      toast(`Added DMN reference "${refName}"`, "ok");
+      await reload();
+    } catch (e2) { toast("could not add DMN reference: " + e2.message, "err"); }
+    return;
+  }
+  const name = (up.modelName || file.name.replace(/\.(dmn|xml)$/i, "") || "Decision").trim();
+  const n = (up.decisions || []).length;
+  try {
+    await api("POST", "/api/v1/dmnrefs", { name, modelRef: up.modelRef, projectId });
+    toast(`Added DMN model "${name}" — ${n} decision${n === 1 ? "" : "s"}`, "ok");
+  } catch (e) { toast("could not add DMN reference: " + e.message, "err"); return; }
   await reload();
 }
 
@@ -1669,6 +1715,114 @@ async function viewInstanceReplay(key) {
 }
 
 // ---------- Router ----------
+// viewDmnViewer renders a referenced DMN model read-only: its decision
+// requirements graph (decisions, input data, and the requirements between them).
+// Atlas deliberately ships no DMN *editor* (that is temis, ADR-0014); this is a
+// look, not an edit surface, from the graph the embedded engine already exposes.
+async function viewDmnViewer(refId) {
+  view.innerHTML = `<div class="card"><p class="muted">Loading decision model…</p></div>`;
+  let g;
+  try {
+    g = await api("GET", `/api/v1/dmnrefs/${encodeURIComponent(refId)}/graph`);
+  } catch (e) {
+    view.innerHTML = `<div class="card empty"><h1>Could not load model</h1><p class="muted">${esc(e.message)}</p></div>`;
+    return;
+  }
+  const title = g.modelName || "DMN model";
+  const back = `<a href="#/modeler">← Modeler</a>`;
+  if (!g.valid) {
+    view.innerHTML = `<div class="card">${back}<h1>${esc(title)}</h1>
+      <p class="muted">${g.resolved ? "This model has errors and can't be shown:" : "This reference doesn't resolve to a temis model."}</p>
+      <pre class="muted" style="white-space:pre-wrap">${esc(g.message || "unavailable")}</pre></div>`;
+    return;
+  }
+  view.innerHTML = `<div class="card">${back}
+    <h1>${esc(title)} <span class="muted" style="font-size:14px;font-weight:normal">· read-only DMN view</span></h1>
+    <div id="dmn-canvas" style="overflow:auto;border:1px solid #e5e7eb;border-radius:10px;background:#fafafa;padding:8px">${renderDrgSvg(g)}</div>
+    <p class="muted" style="font-size:12px">Decisions are authored in temis; Atlas shows the model this reference points at. Use it in a business rule task via the Modeler's decision picker.</p></div>`;
+}
+
+// borderPoint returns the point on a box's border (centre cx,cy, size w×h) in the
+// direction of (tx,ty), so a requirement arrow lands on the box edge, not its
+// centre.
+function borderPoint(cx, cy, w, h, tx, ty) {
+  const dx = tx - cx, dy = ty - cy;
+  if (dx === 0 && dy === 0) return [cx, cy];
+  const sx = dx !== 0 ? (w / 2) / Math.abs(dx) : Infinity;
+  const sy = dy !== 0 ? (h / 2) / Math.abs(dy) : Infinity;
+  const s = Math.min(sx, sy);
+  return [cx + dx * s, cy + dy * s];
+}
+
+// renderDrgSvg draws a model's decision requirements graph as an SVG. It uses the
+// authored DMNDI bounds when the model has a diagram; otherwise it lays the graph
+// out in layers (input data at the bottom, decisions stacked above by requirement
+// depth). Read-only: no interaction, just a faithful picture.
+function renderDrgSvg(g) {
+  const NW = 168, NH = 64, GAPX = 36, GAPY = 60, PAD = 24;
+  const hasDI = (g.nodes || []).some((n) => n.width > 0);
+  let placed;
+  if (hasDI) {
+    placed = g.nodes.map((n) => ({ n, x: n.x || 0, y: n.y || 0, w: n.width || NW, h: n.height || NH }));
+  } else {
+    const reqs = {};
+    (g.edges || []).forEach((e) => { (reqs[e.target] = reqs[e.target] || []).push(e.source); });
+    const level = {};
+    const lvl = (id, seen) => {
+      if (level[id] != null) return level[id];
+      if (seen.has(id)) return 0;
+      seen.add(id);
+      const rs = reqs[id] || [];
+      return (level[id] = rs.length ? 1 + Math.max(...rs.map((r) => lvl(r, seen))) : 0);
+    };
+    g.nodes.forEach((n) => lvl(n.id, new Set()));
+    const maxL = Math.max(0, ...Object.values(level));
+    const byLevel = {};
+    g.nodes.forEach((n) => { (byLevel[level[n.id]] = byLevel[level[n.id]] || []).push(n); });
+    placed = [];
+    for (let L = 0; L <= maxL; L++) {
+      (byLevel[L] || []).forEach((n, i) =>
+        placed.push({ n, x: PAD + i * (NW + GAPX), y: PAD + (maxL - L) * (NH + GAPY), w: NW, h: NH }));
+    }
+  }
+  if (!placed.length) return `<p class="muted" style="padding:16px">This model has no decisions to show.</p>`;
+  const pos = {};
+  placed.forEach((p) => { pos[p.n.id] = p; });
+
+  const edges = (g.edges || []).map((e) => {
+    const a = pos[e.source], b = pos[e.target];
+    if (!a || !b) return "";
+    const ax = a.x + a.w / 2, ay = a.y + a.h / 2, bx = b.x + b.w / 2, by = b.y + b.h / 2;
+    const [x1, y1] = borderPoint(ax, ay, a.w, a.h, bx, by);
+    const [x2, y2] = borderPoint(bx, by, b.w, b.h, ax, ay);
+    const dash = e.type === "knowledgeRequirement" ? ` stroke-dasharray="5 4"` : "";
+    return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#94a3b8" stroke-width="1.5"${dash} marker-end="url(#drg-arrow)"/>`;
+  }).join("");
+
+  const nodes = placed.map(({ n, x, y, w, h }) => {
+    const input = n.type === "inputData";
+    const bkm = n.type === "businessKnowledgeModel";
+    const fill = input ? "#eff6ff" : bkm ? "#f5f3ff" : "#ffffff";
+    const stroke = input ? "#3b82f6" : bkm ? "#8b5cf6" : "#111827";
+    const rx = input ? h / 2 : 10;
+    const sub = input ? (n.dataType || "input data") : bkm ? "knowledge model" : (n.hasTable ? "decision table" : "decision");
+    return `<g>
+      <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>
+      <text x="${x + w / 2}" y="${y + h / 2 - 3}" text-anchor="middle" font-size="13" font-weight="600" fill="#111827">${esc(n.name || n.id)}</text>
+      <text x="${x + w / 2}" y="${y + h / 2 + 14}" text-anchor="middle" font-size="10.5" fill="#6b7280">${esc(sub)}</text>
+    </g>`;
+  }).join("");
+
+  const minX = Math.min(...placed.map((p) => p.x)) - PAD;
+  const minY = Math.min(...placed.map((p) => p.y)) - PAD;
+  const W = Math.max(...placed.map((p) => p.x + p.w)) + PAD - minX;
+  const H = Math.max(...placed.map((p) => p.y + p.h)) + PAD - minY;
+  return `<svg viewBox="${minX.toFixed(0)} ${minY.toFixed(0)} ${W.toFixed(0)} ${H.toFixed(0)}" width="${W.toFixed(0)}" height="${H.toFixed(0)}" style="max-width:100%;height:auto;display:block;font-family:system-ui,-apple-system,sans-serif">
+    <defs><marker id="drg-arrow" markerWidth="10" markerHeight="8" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 z" fill="#94a3b8"/></marker></defs>
+    ${edges}${nodes}</svg>`;
+}
+
 async function route() {
   // Any navigation closes the app switcher and tears down an editor/live view.
   document.getElementById("drawer").hidden = true;
@@ -1713,6 +1867,8 @@ async function route() {
     if (fe) return await viewFormEditor(decodeURIComponent(fe[1]));
     const dm = path.match(/^#\/modeler\/draft\/(.+)$/);
     if (dm) return await viewEditorDraft(decodeURIComponent(dm[1]));
+    const dv = path.match(/^#\/modeler\/dmn\/(.+)$/);
+    if (dv) return await viewDmnViewer(decodeURIComponent(dv[1]));
     const m = path.match(/^#\/modeler\/d\/(\d+)$/);
     if (m) return await viewEditor(Number(m[1]));
     if (path === "#/tasks") return await viewTasks();

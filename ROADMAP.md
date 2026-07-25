@@ -110,8 +110,13 @@ The control-flow basics most real models use.
   (ADR-0036/0041) instead of the embedded library — same authoring and I/O mappings,
   only the evaluation locus differs, and a central decision needs no local model at
   deploy. The `temis` connector trio (registry/client/worker) and the shared
-  `dmn.DecisionHandler` core landed with engine-path tests; wiring the connector
-  worker into the server run loop is the shared ADR-0041 follow-up (with clio/REST).
+  `dmn.DecisionHandler` core landed, and **the connector worker is now wired into
+  the single-binary server run loop**: a central decision's connector endpoint and
+  token are resolved from the environment at startup (`ATLAS_TEMIS_CONNECTORS` +
+  `ATLAS_TEMIS_<NAME>_URL`/`_TOKEN`, the ADR-0041 secret-reference model), so a
+  deployed instance with an external decision runs to completion against the
+  configured temis service (server end-to-end tested). Wiring the clio/REST workers
+  the same way remains the shared ADR-0041 follow-up.
   Next: explicit `<zeebe:output>` mappings, decimal precision across the temis
   boundary, and off-loop streaming evaluation as the Milestone-4 gRPC job-worker
   concern (the single binary drives jobs synchronously).
@@ -424,8 +429,12 @@ the hand-written Details panel one vertical slice at a time:
 - A standalone DMN authoring/product surface. Atlas *executes* the DMN decisions
   a model references, via business rule tasks that delegate to the embedded temis
   engine ([ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)); it does
-  not ship a DMN modeler or decision-management product of its own. (FEEL is also
-  used internally for expressions.)
+  not ship a DMN **modeler/editor** or decision-management product of its own —
+  decisions are authored in temis. (Atlas does offer a **read-only** view of a
+  referenced model's decision requirements graph, and a decision picker that
+  auto-reads inputs/outputs, so an author can *use* a decision without leaving the
+  Modeler; that is a look-and-use surface, not an authoring one.) FEEL is also used
+  internally for expressions.
 
 ## Guiding constraints
 
