@@ -614,7 +614,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 				}
 				valExpr = ce
 			}
-			b.AddDataOutputAssociation(ids[ownerId], name, valExpr, state)
+			b.AddDataOutputAssociation(ids[ownerId], name, valExpr, state, strings.TrimSpace(a.Assignment.To))
 		}
 		return nil
 	}
@@ -658,8 +658,16 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			if err != nil {
 				return fmt.Errorf("compiler: data input association on %q source: %w", ownerId, err)
 			}
-			if a.TargetRef == "" {
-				return fmt.Errorf("compiler: data input association on %q has no targetRef (target variable)", ownerId)
+			// The target variable is the assignment's <to> (a free string the Modeler
+			// writes — a drawn association's own <targetRef> is a generated data-input
+			// property id, not a variable name). A hand-authored <targetRef> is the
+			// fallback when no <to> is given.
+			variable := strings.TrimSpace(a.Assignment.To)
+			if variable == "" {
+				variable = strings.TrimSpace(a.TargetRef)
+			}
+			if variable == "" {
+				return fmt.Errorf("compiler: data input association on %q has no target variable (set the assignment's <to>)", ownerId)
 			}
 			var valExpr *expr.Compiled
 			if from := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(a.Assignment.From), "=")); from != "" {
@@ -669,7 +677,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 				}
 				valExpr = ce
 			}
-			b.AddDataInputAssociation(ids[ownerId], name, a.TargetRef, valExpr)
+			b.AddDataInputAssociation(ids[ownerId], name, variable, valExpr)
 		}
 		return nil
 	}
@@ -816,10 +824,13 @@ type xmlDataOutputAssociation struct {
 }
 
 // xmlAssignment is a data association's <assignment>: a <from> value expression and a
-// <to> target. Atlas reads <from> as the FEEL value expression; the target is the
-// association's targetRef (the <to> is redundant with it and ignored).
+// <to> target. Atlas reads <from> as the FEEL value expression. On an output
+// association <to> is an optional member path within the target data object (e.g.
+// "name") — set, the write updates only that member (ADR-0060); empty, it writes the
+// whole value. On an input association <to> is unused (its target is targetRef).
 type xmlAssignment struct {
 	From string `xml:"from"`
+	To   string `xml:"to"`
 }
 
 // xmlDataInputAssociation is a <dataInputAssociation> on an activity: sourceRef

@@ -141,7 +141,7 @@ func associationProcess(t testing.TB) *compiler.CompiledProcess {
 	b.Connect(start, task)
 	b.Connect(task, end)
 	b.AddDataObject("order", "", "received", false)
-	b.AddDataOutputAssociation(task, "order", mustCompile(t, "amount"), "approved")
+	b.AddDataOutputAssociation(task, "order", mustCompile(t, "amount"), "approved", "")
 	cp, err := b.Build()
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -227,7 +227,7 @@ func TestDataOutputAssociationStateOnly(t *testing.T) {
 	b.Connect(start, task)
 	b.Connect(task, end)
 	b.AddDataObject("order", "", "received", false)
-	b.AddDataOutputAssociation(task, "order", nil, "validated") // state-only, no value
+	b.AddDataOutputAssociation(task, "order", nil, "validated", "") // state-only, no value
 	cp, err := b.Build()
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -265,7 +265,7 @@ func TestDataOutputAssociationKeepsState(t *testing.T) {
 	b.Connect(start, task)
 	b.Connect(task, end)
 	b.AddDataObject("order", "", "received", false)
-	b.AddDataOutputAssociation(task, "order", mustCompile(t, "amount"), "") // value, no target state
+	b.AddDataOutputAssociation(task, "order", mustCompile(t, "amount"), "", "") // value, no target state
 	cp, err := b.Build()
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -307,7 +307,7 @@ func TestDataInputAssociationReadsAndRecovers(t *testing.T) {
 	b.Connect(write, read)
 	b.Connect(read, end)
 	b.AddDataObject("order", "", "received", false)
-	b.AddDataOutputAssociation(write, "order", mustCompile(t, "amount"), "approved")
+	b.AddDataOutputAssociation(write, "order", mustCompile(t, "amount"), "approved", "")
 	b.AddDataInputAssociation(read, "order", "orderIn", mustCompile(t, "order")) // bind object → orderIn
 	cp, err := b.Build()
 	if err != nil {
@@ -377,7 +377,7 @@ func TestDataInputAssociationCopiesValue(t *testing.T) {
 	b.Connect(write, read)
 	b.Connect(read, end)
 	b.AddDataObject("order", "", "received", false)
-	b.AddDataOutputAssociation(write, "order", mustCompile(t, "amount"), "approved")
+	b.AddDataOutputAssociation(write, "order", mustCompile(t, "amount"), "approved", "")
 	b.AddDataInputAssociation(read, "order", "orderCopy", nil) // copy verbatim
 	cp, err := b.Build()
 	if err != nil {
@@ -414,7 +414,7 @@ func TestDataInputAssociationConstantTransform(t *testing.T) {
 	b.Connect(write, read)
 	b.Connect(read, end)
 	b.AddDataObject("order", "", "received", false)
-	b.AddDataOutputAssociation(write, "order", mustCompile(t, "amount"), "approved")
+	b.AddDataOutputAssociation(write, "order", mustCompile(t, "amount"), "approved", "")
 	b.AddDataInputAssociation(read, "order", "flag", mustCompile(t, "99")) // constant transform
 	cp, err := b.Build()
 	if err != nil {
@@ -433,5 +433,124 @@ func TestDataInputAssociationConstantTransform(t *testing.T) {
 	}
 	if got := readVar(t, h.store, model.NewKey(1, 1), "flag"); got == nil || got.Text != "99" {
 		t.Fatalf("flag = %+v, want number 99 (constant transform)", got)
+	}
+}
+
+// TestDataOutputAssociationFieldWritesAndRecovers is the recovery property for
+// field-level writes (ADR-0060): two activities each set one member of the same
+// structured data object; the object accrues both fields (creating it on the first
+// write), and replaying the log rebuilds the merged canonical JSON identically.
+func TestDataOutputAssociationFieldWritesAndRecovers(t *testing.T) {
+	dir := t.TempDir()
+	b := compiler.NewBuilder(defKey, "fields", 1)
+	start := b.AddStartEvent()
+	setName := b.AddTask()
+	setAmount := b.AddTask()
+	end := b.AddEndEvent()
+	b.Connect(start, setName)
+	b.Connect(setName, setAmount)
+	b.Connect(setAmount, end)
+	b.AddDataObject("order", "", "received", false)
+	// Each association writes ONE member of order, keeping the rest.
+	b.AddDataOutputAssociation(setName, "order", mustCompile(t, "customerName"), "", "name")
+	b.AddDataOutputAssociation(setAmount, "order", mustCompile(t, "amt"), "approved", "amount")
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	clock := &manualClock{}
+
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clock)
+	p1.Deploy(cp)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.CreateInstance(cp.Key,
+		model.VariableValue{Name: "customerName", Kind: model.VarString, Text: "Acme"},
+		model.VariableValue{Name: "amt", Kind: model.VarNumber, Text: "42"})
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	scope := model.NewKey(1, 1)
+	live := readDataObject(t, h1.store, scope, "order")
+	if live == nil {
+		t.Fatal("data object 'order' missing after run")
+	}
+	// Both fields accrued into one structured object (canonical: keys sorted).
+	if live.Kind != model.VarJSON || live.Text != `{"amount":42,"name":"Acme"}` {
+		t.Fatalf("order = kind %v text %q, want VarJSON {\"amount\":42,\"name\":\"Acme\"}", live.Kind, live.Text)
+	}
+	if live.State != "approved" {
+		t.Errorf("state = %q, want approved (second write advanced it)", live.State)
+	}
+	h1.close(t)
+
+	// Replay into a fresh store.
+	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open 2: %v", err)
+	}
+	store2, err := state.Open(filepath.Join(dir, "state2"))
+	if err != nil {
+		t.Fatalf("state.Open 2: %v", err)
+	}
+	defer func() {
+		if err := store2.Close(); err != nil {
+			t.Errorf("store2.Close: %v", err)
+		}
+		if err := log2.Close(); err != nil {
+			t.Errorf("log2.Close: %v", err)
+		}
+	}()
+	p2 := engine.New(1, log2, store2, clock)
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2 (replay): %v", err)
+	}
+	replayed := readDataObject(t, store2, scope, "order")
+	if replayed == nil || replayed.Kind != live.Kind || replayed.Text != live.Text {
+		t.Fatalf("replayed = %+v, want %+v", replayed, live)
+	}
+}
+
+// TestDataOutputAssociationNestedAndOverwrite covers two field-write edge paths
+// (ADR-0060): a nested member path creates the intermediate object, and a field
+// write onto a value that is currently a scalar (not an object) starts from a fresh
+// object rather than corrupting it.
+func TestDataOutputAssociationNestedAndOverwrite(t *testing.T) {
+	dir := t.TempDir()
+	b := compiler.NewBuilder(defKey, "nested", 1)
+	start := b.AddStartEvent()
+	scalarWrite := b.AddTask() // order = 5 (whole-object scalar)
+	nestedWrite := b.AddTask() // order.customer.name = "Acme" (nested field on a scalar)
+	end := b.AddEndEvent()
+	b.Connect(start, scalarWrite)
+	b.Connect(scalarWrite, nestedWrite)
+	b.Connect(nestedWrite, end)
+	b.AddDataObject("order", "", "", false)
+	b.AddDataOutputAssociation(scalarWrite, "order", mustCompile(t, "5"), "", "")                   // whole value = scalar 5
+	b.AddDataOutputAssociation(nestedWrite, "order", mustCompile(t, `"Acme"`), "", "customer.name") // nested field
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	h := openHarness(t, dir)
+	defer h.close(t)
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	got := readDataObject(t, h.store, model.NewKey(1, 1), "order")
+	// The scalar 5 is discarded (a field write onto a non-object starts fresh); the
+	// nested path created the intermediate object.
+	if got == nil || got.Kind != model.VarJSON || got.Text != `{"customer":{"name":"Acme"}}` {
+		t.Fatalf("order = %+v, want VarJSON {\"customer\":{\"name\":\"Acme\"}}", got)
 	}
 }

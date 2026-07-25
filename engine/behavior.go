@@ -1,7 +1,9 @@
 package engine
 
 import (
+	"encoding/json"
 	"strconv"
+	"strings"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/expr"
@@ -227,8 +229,27 @@ func applyDataOutputAssociations(c *ProcessingContext, ei *model.ElementInstance
 				// evaluation writes null rather than halting the processor.
 				result = expr.Null
 			}
-			kind, b, text := expr.Classify(result)
-			out.Kind, out.Bool, out.Text = toVarKind(kind), b, text
+			if a.TargetPath >= 0 {
+				// Write only one member of the (structured) object, keeping the rest
+				// (ADR-0060): read the current JSON, set the member to the result, and
+				// write the merged canonical value back.
+				leaf, ok := expr.ToJSON(result)
+				if !ok {
+					leaf = "null"
+				}
+				current := ""
+				if cur != nil && cur.Kind == model.VarJSON {
+					current = cur.Text
+				}
+				if merged, err := setJSONMember(current, cp.Intern(a.TargetPath), leaf); err == nil {
+					out.Kind, out.Text = model.VarJSON, merged
+				} else if cur != nil {
+					out.Kind, out.Bool, out.Text = cur.Kind, cur.Bool, cur.Text
+				}
+			} else {
+				kind, b, text := expr.Classify(result)
+				out.Kind, out.Bool, out.Text = toVarKind(kind), b, text
+			}
 		case cur != nil:
 			// State-only transition: keep the object's current value.
 			out.Kind, out.Bool, out.Text = cur.Kind, cur.Bool, cur.Text
@@ -242,6 +263,45 @@ func applyDataOutputAssociations(c *ProcessingContext, ei *model.ElementInstance
 
 		c.AppendDataObjectEvent(model.IntentDataObjectStateChanged, out)
 	}
+}
+
+// setJSONMember returns the canonical JSON of the object `current` with the dotted
+// member `path` set to the pre-encoded canonical JSON `leaf`, creating intermediate
+// objects as needed (ADR-0060). A `current` that is empty or not a JSON object
+// starts from an empty object — so writing a member into an unset data object creates
+// it. Numbers are decoded as json.Number so decimals stay exact, and the result
+// marshals with sorted keys, matching the canonical form (ADR-0037).
+func setJSONMember(current, path, leaf string) (string, error) {
+	root := map[string]any{}
+	if strings.TrimSpace(current) != "" {
+		dec := json.NewDecoder(strings.NewReader(current))
+		dec.UseNumber()
+		var v any
+		if dec.Decode(&v) == nil {
+			if m, ok := v.(map[string]any); ok {
+				root = m
+			}
+		}
+	}
+	parts := strings.Split(path, ".")
+	m := root
+	for i, p := range parts {
+		if i == len(parts)-1 {
+			m[p] = json.RawMessage(leaf)
+			break
+		}
+		child, ok := m[p].(map[string]any)
+		if !ok {
+			child = map[string]any{}
+			m[p] = child
+		}
+		m = child
+	}
+	b, err := json.Marshal(root)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 // handleJobCompleted retires the job, writes the worker's output variables into

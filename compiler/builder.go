@@ -436,15 +436,17 @@ func (b *Builder) AddDataInputAssociation(node int32, dataObject, variable strin
 // the activity completes, the engine evaluates value (a FEEL expression over the
 // instance's variables, nil for a state-only transition) and writes it into the data
 // object named dataObject, advancing that object's data state to targetState (empty
-// keeps the object's current state) — ADR-0058. Build groups a node's associations
-// into a shared array.
-func (b *Builder) AddDataOutputAssociation(node int32, dataObject string, value *expr.Compiled, targetState string) {
+// keeps the object's current state) — ADR-0058. A non-empty targetPath writes only
+// that member of a structured object, keeping the rest (ADR-0060). Build groups a
+// node's associations into a shared array.
+func (b *Builder) AddDataOutputAssociation(node int32, dataObject string, value *expr.Compiled, targetState, targetPath string) {
 	b.dataOutAssocs = append(b.dataOutAssocs, pendingDataOut{
 		node: node,
 		assoc: DataOutputAssociation{
 			DataObject:  b.intern(dataObject),
 			Value:       value,
 			TargetState: b.intern(targetState),
+			TargetPath:  b.intern(targetPath),
 		},
 	})
 }

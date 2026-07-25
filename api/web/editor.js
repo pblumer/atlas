@@ -691,6 +691,43 @@ function readStartVariables(bo) {
 // (targetEl, the participant) and the process it references (targetBo) to land
 // the declaration on that process. Referenced-object updates go through
 // updateModdleProperties; the root shape keeps updateProperties (unchanged).
+// dataRefName resolves a data association's source/target reference (a data object
+// reference, which bpmn-js may hand back as a one-element list) to its display name:
+// the reference's name, else the underlying data object's name, else its id.
+function dataRefName(ref) {
+  const r = Array.isArray(ref) ? ref[0] : ref;
+  if (!r) return "?";
+  return r.name || (r.dataObjectRef && r.dataObjectRef.name) || r.id || "?";
+}
+
+// setAssignment writes a data association's single <assignment> from its two FEEL
+// bodies — <from> (the value/transform) and <to> (an output member path or an input
+// target variable). Empty bodies clear the assignment, so a stateless association
+// carries no dangling element (ADR-0058/0059/0060).
+function setAssignment(modeler, element, bo, fromBody, toBody) {
+  const modeling = modeler.get("modeling");
+  const moddle = modeler.get("moddle");
+  try {
+    if (!fromBody && !toBody) {
+      modeling.updateModdleProperties(element, bo, { assignment: [] });
+      return;
+    }
+    const asg = moddle.create("bpmn:Assignment", {});
+    asg.$parent = bo;
+    if (fromBody) {
+      const f = moddle.create("bpmn:FormalExpression", { body: fromBody });
+      f.$parent = asg;
+      asg.from = f;
+    }
+    if (toBody) {
+      const t = moddle.create("bpmn:FormalExpression", { body: toBody });
+      t.$parent = asg;
+      asg.to = t;
+    }
+    modeling.updateModdleProperties(element, bo, { assignment: [asg] });
+  } catch { /* stale */ }
+}
+
 function writeStartVariables(modeler, list, targetEl, targetBo) {
   const moddle = modeler.get("moddle");
   const modeling = modeler.get("modeling");
@@ -964,7 +1001,17 @@ function wireProperties(root, modeler, api) {
     }
     const bo = element.businessObject || {};
     const type = shortType(element.type);
-    icon.textContent = type.slice(0, 2).toUpperCase();
+    // The generic two-letter badge is the type's first two letters, but every data
+    // element starts "Da" (DataObject, DataStore, DataInput/OutputAssociation) and
+    // would collide on "DA" — badge them by what they are so they read at a glance:
+    // data object → DO, data store → DS, output/input association → OA/IA (ADR-0053).
+    const badges = {
+      "bpmn:DataObjectReference": "DO",
+      "bpmn:DataStoreReference": "DS",
+      "bpmn:DataOutputAssociation": "OA",
+      "bpmn:DataInputAssociation": "IA",
+    };
+    icon.textContent = badges[bo.$type] || type.slice(0, 2).toUpperCase();
     typename.textContent = type;
     nameEl.textContent = bo.name || bo.id || "(unnamed)";
 
@@ -995,6 +1042,41 @@ function wireProperties(root, modeler, api) {
       <h3>General</h3>
       <label class="field"><span>${isSeqFlow ? "Label" : "Name"}</span><input type="text" id="f-name" value="${esc(bo.name || "")}"${isSeqFlow ? ' placeholder="Großauftrag"' : ""}/></label>
       <label class="field"><span>ID</span><input type="text" value="${esc(bo.id || "")}" readonly/></label>`;
+
+    // A data object is the data a process carries — first-class in Atlas, not just
+    // decoration (ADR-0053). Its name is the engine's variable-like identity and its
+    // data state is the [received]/[approved] label an activity advances. Shown on
+    // both tabs since data is descriptive and executable at once.
+    if (bo.$type === "bpmn:DataObjectReference") {
+      const stateName = (bo.dataState && bo.dataState.name) || "";
+      const collection = !!(bo.dataObjectRef && bo.dataObjectRef.isCollection);
+      html += `<h3>Data object</h3>
+        <label class="field"><span>Data state</span>
+          <input type="text" id="f-datastate" value="${esc(stateName)}" placeholder="received"/></label>
+        <label class="field checkbox"><input type="checkbox" id="f-collection" ${collection ? "checked" : ""}/> <span>Collection (a list of items)</span></label>
+        <p class="muted" style="font-size:12px">A data object carries a value <i>and</i> a <b>data state</b> — <code>order [received]</code> → <code>[approved]</code>. The state set here is where the object starts each instance; a <b>data output association</b> (an arrow from an activity to this object) advances it and writes its value, a <b>data input association</b> reads it back, and the full state history is recorded per instance and survives restart. The <b>Name</b> is how the engine identifies it.</p>`;
+    }
+
+    // A data association is the arrow between an activity and a data object — it is
+    // what makes data flow (ADR-0058/0059/0060). Its <assignment> carries the FEEL:
+    // <from> is the value/transform, <to> is an output member path or an input target
+    // variable. Shown on both tabs since it is the executable data contract.
+    if (bo.$type === "bpmn:DataOutputAssociation" || bo.$type === "bpmn:DataInputAssociation") {
+      const asg = (bo.assignment && bo.assignment[0]) || {};
+      const fromBody = (asg.from && asg.from.body) || "";
+      const toBody = (asg.to && asg.to.body) || "";
+      if (bo.$type === "bpmn:DataOutputAssociation") {
+        html += `<h3>Writes data object</h3>
+          <label class="field"><span>FEEL value</span><input type="text" id="f-assoc-from" value="${esc(fromBody)}" placeholder="=amount * 1.19"/></label>
+          <label class="field"><span>Target member <span class="muted">(optional)</span></span><input type="text" id="f-assoc-to" value="${esc(toBody)}" placeholder="name"/></label>
+          <p class="muted" style="font-size:12px">When the activity completes it writes <b>${esc(dataRefName(bo.targetRef))}</b>: the <b>FEEL value</b> (over the instance's variables) becomes the object's value, and its data state advances to the one on the target reference. Leave <b>Target member</b> empty to write the whole object; set it (e.g. <code>name</code>) to update just that field of a structured object and keep the rest.</p>`;
+      } else {
+        html += `<h3>Reads data object</h3>
+          <label class="field"><span>Target variable</span><input type="text" id="f-assoc-to" value="${esc(toBody)}" placeholder="order"/></label>
+          <label class="field"><span>Transform <span class="muted">(optional)</span></span><input type="text" id="f-assoc-from" value="${esc(fromBody)}" placeholder="=order.amount"/></label>
+          <p class="muted" style="font-size:12px">At activation this reads <b>${esc(dataRefName(bo.sourceRef))}</b> into the <b>Target variable</b>, so the activity's FEEL can use it. Leave <b>Transform</b> empty to copy the object's value; set it (the object is available under its name) to compute the value written into the variable.</p>`;
+      }
+    }
 
     if (tab === "implement") {
       if (isActivity(bo)) {
@@ -1172,8 +1254,48 @@ function wireProperties(root, modeler, api) {
     body.innerHTML = html;
 
     body.querySelector("#f-name").addEventListener("change", (e) => {
-      try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
+      try {
+        modeling.updateProperties(element, { name: e.target.value });
+        // A data object's engine identity is the underlying <dataObject> name, not
+        // the reference's — so setting the reference's name here also names the
+        // object it points at, keeping the modeled name and the runtime one in sync
+        // (ADR-0053).
+        if (bo.$type === "bpmn:DataObjectReference" && bo.dataObjectRef) {
+          modeling.updateModdleProperties(element, bo.dataObjectRef, { name: e.target.value });
+        }
+      } catch { /* stale */ }
     });
+
+    const fdatastate = body.querySelector("#f-datastate");
+    if (fdatastate) {
+      fdatastate.addEventListener("change", (e) => {
+        const v = (e.target.value || "").trim();
+        try {
+          let ds;
+          if (v) {
+            ds = modeler.get("moddle").create("bpmn:DataState", { name: v });
+            ds.$parent = bo;
+          }
+          // Setting dataState to undefined clears the [state] label.
+          modeling.updateModdleProperties(element, bo, { dataState: ds || undefined });
+        } catch { /* stale */ }
+      });
+    }
+    const fcollection = body.querySelector("#f-collection");
+    if (fcollection && bo.dataObjectRef) {
+      fcollection.addEventListener("change", (e) => {
+        try { modeling.updateModdleProperties(element, bo.dataObjectRef, { isCollection: !!e.target.checked }); } catch { /* stale */ }
+      });
+    }
+    const assocFrom = body.querySelector("#f-assoc-from");
+    const assocTo = body.querySelector("#f-assoc-to");
+    if (assocFrom || assocTo) {
+      const applyAssoc = () => setAssignment(modeler, element, bo,
+        assocFrom ? assocFrom.value.trim() : "",
+        assocTo ? assocTo.value.trim() : "");
+      if (assocFrom) assocFrom.addEventListener("change", applyAssoc);
+      if (assocTo) assocTo.addEventListener("change", applyAssoc);
+    }
 
     const tasktype = body.querySelector("#f-tasktype");
     if (tasktype) {
@@ -1434,6 +1556,20 @@ function wireProperties(root, modeler, api) {
   }
 
   modeler.on("selection.changed", (e) => show((e.newSelection || [])[0]));
+
+  // When an input association is freshly drawn (data object → activity), default its
+  // target variable to the source object's name, so it compiles and reads the object
+  // into a like-named variable without hand-editing (ADR-0059). Deferred so the
+  // create command settles first. Output associations need no default: a bare one is
+  // a valid state-only transition.
+  modeler.on("commandStack.connection.create.postExecuted", (e) => {
+    const conn = e.context && e.context.connection;
+    const bo = conn && conn.businessObject;
+    if (!bo || bo.$type !== "bpmn:DataInputAssociation") return;
+    if (bo.assignment && bo.assignment.length) return; // already configured
+    const objName = dataRefName(bo.sourceRef);
+    if (objName && objName !== "?") setTimeout(() => setAssignment(modeler, conn, bo, "", objName), 0);
+  });
   modeler.on("element.changed", (e) => {
     if (suppressRerender) return; // a FEEL-field self-save; keep the panel intact
     const sel = selection.get();

@@ -74,9 +74,17 @@ The control-flow basics most real models use.
   object (bound into the FEEL scope under its name), optionally transforms it with
   an `<assignment><from>` expression, and writes the result into a process variable
   the activity then reads — so an `order` one step wrote flows into the next step's
-  FEEL; recovery-tested. Data now flows both ways. Next: a lineage view folding the
-  `SourcePos` chain, the Modeler properties panel for `DataObjectReference`,
-  item-definition schema validation, and connector-backed data stores.
+  FEEL; recovery-tested. Data now flows both ways. **Field-level writes**
+  ([ADR-0060](docs/adr/0060-field-level-data-object-writes.md)) let an output
+  association target one member of a structured object via its `<assignment><to>`
+  (e.g. `name`): the engine reads the object's current JSON, sets that member, and
+  writes the merged canonical value back — so a record accrues field by field across
+  steps, and writing a member into an unset object creates it. The **Modeler** now
+  authors all of this (ADR-0053): a `DataObjectReference` panel (name, data state,
+  collection) and an association panel (the FEEL value, the target member/variable),
+  with input associations defaulting their target on draw. Next: a lineage view
+  folding the `SourcePos` chain, item-definition schema validation, list-index path
+  targets, and connector-backed data stores.
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
 - 🔲 Conformance tests against a curated BPMN model set
 - 🚧 **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)
