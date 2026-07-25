@@ -413,6 +413,30 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve the DMN model this diagram's business rule tasks need and bundle it,
+	// so a decision authored in Atlas deploys together with its process instead of
+	// model-less (which would create DMN jobs that can never evaluate and then fail
+	// every future deploy). The reference records are read on the loop; resolving and
+	// compiling the models — I/O + CPU — runs off it, like the project deploy.
+	var (
+		refs    []dmnRef
+		loadErr error
+	)
+	s.do(func() { refs, loadErr = s.dmnrefs.loadAll() })
+	if loadErr != nil {
+		writeError(w, http.StatusInternalServerError, "list dmn references: "+loadErr.Error())
+		return
+	}
+	dmnXML, refuse, dmnErr := s.dmnForDeployBody(r.Context(), body, refs)
+	if dmnErr != nil {
+		writeError(w, http.StatusInternalServerError, "resolve dmn model: "+dmnErr.Error())
+		return
+	}
+	if refuse != "" {
+		writeError(w, http.StatusConflict, refuse)
+		return
+	}
+
 	var (
 		resp       deployResp
 		compErr    error
@@ -420,10 +444,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	)
 	s.do(func() {
 		var deployed []deployedProcess
-		// The direct deploy endpoint carries no DMN reference; a business rule task
-		// deployed this way has no decision model and would park. DMN execution is
-		// wired through project bundle-deploy, which resolves the reference (ADR-0034).
-		deployed, compErr, persistErr = s.deployModel(body, nil, time.Now().Unix())
+		deployed, compErr, persistErr = s.deployModel(body, dmnXML, time.Now().Unix())
 		if compErr != nil || persistErr != nil {
 			return
 		}

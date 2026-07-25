@@ -917,3 +917,51 @@ tr[hidden] { display: none; }
 .dmn-canvas { flex: 1; min-height: 0; position: relative; overflow: hidden; background: var(--surface); }
 .dmn-canvas .dmn-decision-table-container { height: 100%; overflow: auto; }
 .dmn-hint { padding: 8px 14px; border-top: 1px solid var(--border); font-size: 12px; }
+
+/* Collapsible property groups (Camunda-style tidy panel). A generic groupify
+   turns each <h3> section in the properties panel into a header that toggles its
+   fields, with a chevron and a filled dot when the group carries content. */
+.pgroup { border-top: 1px solid var(--border); }
+.pgroup:first-child { border-top: none; }
+.pgroup-head {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  background: none; border: none; cursor: pointer; text-align: left;
+  padding: 12px 2px 12px 0; color: var(--text);
+  font-size: 13px; font-weight: 600; letter-spacing: .01em;
+}
+.pgroup-head:hover { color: var(--accent); }
+.pgroup-chevron {
+  color: var(--muted); font-size: 10px; width: 12px; display: inline-block;
+  transition: transform .12s ease; transform: rotate(0deg);
+}
+.pgroup:not(.collapsed) .pgroup-chevron { transform: rotate(90deg); }
+.pgroup-title { flex: 1; }
+.pgroup-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; }
+.pgroup-body { padding: 0 0 12px 0; }
+.pgroup.collapsed .pgroup-body { display: none; }
+.pgroup .pgroup-body > h3 { display: none; } /* a nested legacy header, if any */
+
+/* Docked Variables panel (Camunda-style) — a modeling aid listing the variables
+   the diagram writes and which element writes each. Toggled from the toolbar. */
+.vars-panel {
+  width: 300px; flex: none; display: flex; flex-direction: column;
+  border-left: 1px solid var(--border); background: var(--surface); overflow: hidden;
+}
+.vars-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 14px; border-bottom: 1px solid var(--border); font-size: 14px;
+}
+.vars-filter {
+  margin: 10px 12px 8px; padding: 7px 10px; border: 1px solid var(--border);
+  border-radius: 6px; font: inherit; color: var(--text); background: var(--bg);
+}
+.vars-filter:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+.vars-list { overflow: auto; padding: 0 6px 12px; }
+.var-row { padding: 8px; border-radius: 6px; }
+.var-row:hover { background: var(--bg); }
+.var-name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; font-weight: 600; color: var(--text); }
+.var-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.var-origin { color: var(--accent); cursor: pointer; }
+.var-origin:hover { text-decoration: underline; }
+.vars-empty { padding: 14px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+#vars-toggle.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
