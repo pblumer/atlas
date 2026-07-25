@@ -476,6 +476,40 @@ async function viewConsoleOrg() {
     if (!denied) throw e;
   }
 
+  // Managed connector instances (ADR-0041): operator-configured integrations,
+  // secret references only. Today the runtime wires the temis decision connector.
+  let connectors = [];
+  try { connectors = (await api("GET", "/api/v1/connectors")) || []; } catch { /* leave empty */ }
+  const managedRow = (c) => `<tr data-id="${esc(c.id)}">
+      <td><span class="chip">${esc(c.name)}</span>
+        <span class="muted" style="font-size:12px; margin-left:6px">${esc(c.kind)}</span>
+        <div class="muted" style="font-size:12px; margin-top:3px">${esc(c.endpoint)}${
+          c.credentialsRef ? ` · token: <code>${esc(c.credentialsRef)}</code>` : " · no token"}</div></td>
+      <td>${c.enabled
+        ? '<span class="pill ok"><span class="dot"></span>enabled</span>'
+        : '<span class="pill warn"><span class="dot"></span>disabled</span>'}</td>
+      <td style="text-align:right; white-space:nowrap">
+        <button class="btn ghost" data-cact="edit">Edit</button>
+        <button class="btn ghost" data-cact="toggle">${c.enabled ? "Disable" : "Enable"}</button>
+        <button class="btn ghost danger" data-cact="delete">Delete</button>
+      </td></tr>`;
+  const managedCard = `
+    <div class="card" style="padding:0; margin-top:18px">
+      <div class="between" style="padding:16px 18px 0">
+        <h2>Configured connectors</h2><button class="btn" id="new-connector">New connector</button>
+      </div>
+      <p class="muted" style="padding:0 18px; margin:6px 0 12px">Managed temis decision
+      connectors a business rule task references by name (ADR-0041/0050). The endpoint is
+      stored; the token is a <b>reference</b> resolved from
+      <code>ATLAS_CONNECTOR_&lt;REF&gt;_TOKEN</code> at runtime — never stored here.</p>
+      <div id="connector-form-slot" style="padding:0 18px"></div>
+      <table>
+        <thead><tr><th>Connector</th><th>Status</th><th></th></tr></thead>
+        <tbody id="connector-rows">${connectors.map(managedRow).join("")
+          || `<tr><td colspan="3" class="muted" style="padding:14px 18px">None configured. Business rule tasks marked <i>External (temis connector)</i> resolve by name to these.</td></tr>`}</tbody>
+      </table>
+    </div>`;
+
   const me = AUTH.user;
   const roleChips = (roles) => (roles || []).map((r) => `<span class="chip">${esc(r)}</span>`).join(" ");
   const statusPill = (u) => u.disabled
@@ -525,7 +559,12 @@ async function viewConsoleOrg() {
       <p class="muted" style="padding:0 18px; margin:6px 0 12px">Sibling engines Atlas
       delegates to. Each is an org-wide integration, shared across every process.</p>
       <table><tbody>${CONNECTORS.map(connectorRow).join("")}</tbody></table>
-    </div>`;
+    </div>
+    ${managedCard}`;
+
+  // Connector management is wired before the (admin-gated) user handlers so it
+  // works even when the user roster is denied to a non-admin.
+  wireConnectorManagement(connectors);
 
   if (denied) return;
   const reload = () => viewConsoleOrg();
@@ -973,6 +1012,66 @@ async function createDmnRef(projectId, reload) {
     toast(`Added DMN model "${name}" — ${n} decision${n === 1 ? "" : "s"}`, "ok");
   } catch (e) { toast("could not add DMN reference: " + e.message, "err"); return; }
   await reload();
+}
+
+// wireConnectorManagement wires the Organization page's managed-connector section:
+// a "New connector" inline form and per-row Edit / Enable-Disable / Delete. Each
+// change hits the connector API, which rebuilds the runtime registry, then the page
+// re-renders. Only a token *reference* is ever entered — never a secret value
+// (ADR-0041).
+function wireConnectorManagement(connectors) {
+  const reload = () => viewConsoleOrg();
+  const slot = document.getElementById("connector-form-slot");
+  const newBtn = document.getElementById("new-connector");
+  if (newBtn && slot) {
+    newBtn.addEventListener("click", () => {
+      if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
+      slot.dataset.open = "1";
+      slot.innerHTML = `<form class="connector-form" style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr auto;align-items:end;margin:4px 0 14px">
+        <label class="field" style="margin:0"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
+        <label class="field" style="margin:0"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
+        <label class="field" style="margin:0"><span>Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
+        <button class="btn" type="submit">Add</button></form>`;
+      slot.querySelector("form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const f = new FormData(e.target);
+        try {
+          await api("POST", "/api/v1/connectors", {
+            name: (f.get("name") || "").trim(),
+            endpoint: (f.get("endpoint") || "").trim(),
+            credentialsRef: (f.get("credentialsRef") || "").trim(),
+          });
+          toast("Connector added", "ok");
+          reload();
+        } catch (err) { toast("Could not add connector: " + err.message, "err"); }
+      });
+    });
+  }
+  const rows = document.getElementById("connector-rows");
+  if (rows) {
+    rows.addEventListener("click", async (e) => {
+      const btn = e.target.closest("button[data-cact]");
+      if (!btn) return;
+      const id = btn.closest("tr").dataset.id;
+      const c = (connectors || []).find((x) => x.id === id);
+      if (!c) return;
+      try {
+        if (btn.dataset.cact === "toggle") {
+          await api("PATCH", "/api/v1/connectors/" + encodeURIComponent(id), { enabled: !c.enabled });
+        } else if (btn.dataset.cact === "edit") {
+          const endpoint = window.prompt("Endpoint URL", c.endpoint);
+          if (endpoint == null) return;
+          const credentialsRef = window.prompt("Token reference (resolved from ATLAS_CONNECTOR_<REF>_TOKEN; blank for none)", c.credentialsRef || "");
+          if (credentialsRef == null) return;
+          await api("PATCH", "/api/v1/connectors/" + encodeURIComponent(id), { endpoint: endpoint.trim(), credentialsRef: credentialsRef.trim() });
+        } else if (btn.dataset.cact === "delete") {
+          if (!window.confirm(`Delete connector "${c.name}"?`)) return;
+          await api("DELETE", "/api/v1/connectors/" + encodeURIComponent(id));
+        }
+        reload();
+      } catch (err) { toast("Connector update failed: " + err.message, "err"); }
+    });
+  }
 }
 
 // moveDmnRef reassigns a DMN reference to a project (or to Ungrouped when "").

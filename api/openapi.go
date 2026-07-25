@@ -232,6 +232,15 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"POST", "/api/v1/dmn-models", s.handleUploadDmnModel, apiOp{
 			summary: "Upload a DMN model file into the local model store and return its reference handle", tag: "DMN References", req: jsonBody("DMN XML", tObject()), resp: jsonBody("Stored model", tObject())}},
 
+		{"GET", "/api/v1/connectors", s.handleListConnectors, apiOp{
+			summary: "List managed connector instances", tag: "Connectors", resp: jsonBody("Connectors", tArray())}},
+		{"POST", "/api/v1/connectors", s.handleCreateConnector, apiOp{
+			summary: "Create a managed connector instance", tag: "Connectors", req: jsonBody("Connector", tObject()), resp: jsonBody("Created connector", tObject())}},
+		{"PATCH", "/api/v1/connectors/{id}", s.handleUpdateConnector, apiOp{
+			summary: "Update a managed connector instance", tag: "Connectors", req: jsonBody("Connector update", tObject()), resp: jsonBody("Updated connector", tObject())}},
+		{"DELETE", "/api/v1/connectors/{id}", s.handleDeleteConnector, apiOp{
+			summary: "Delete a managed connector instance", tag: "Connectors", status: http.StatusNoContent}},
+
 		{"POST", "/api/v1/auth/login", s.handleLogin, apiOp{
 			summary: "Log in with a username and password", tag: "Auth",
 			req: jsonBody("Credentials", schemaObj(map[string]any{

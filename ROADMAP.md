@@ -111,12 +111,16 @@ The control-flow basics most real models use.
   only the evaluation locus differs, and a central decision needs no local model at
   deploy. The `temis` connector trio (registry/client/worker) and the shared
   `dmn.DecisionHandler` core landed, and **the connector worker is now wired into
-  the single-binary server run loop**: a central decision's connector endpoint and
-  token are resolved from the environment at startup (`ATLAS_TEMIS_CONNECTORS` +
-  `ATLAS_TEMIS_<NAME>_URL`/`_TOKEN`, the ADR-0041 secret-reference model), so a
-  deployed instance with an external decision runs to completion against the
-  configured temis service (server end-to-end tested). Wiring the clio/REST workers
-  the same way remains the shared ADR-0041 follow-up.
+  the single-binary server run loop**, and **connectors are now operator-managed in
+  the Console** ([ADR-0041](docs/adr/0041-connector-management-and-secret-store.md)):
+  durable connector instances (`{name, endpoint, credentialsRef, enabled}`) live in
+  a sidecar store with CRUD on Organization → Connectors, the endpoint token is a
+  reference resolved from `ATLAS_CONNECTOR_<REF>_TOKEN` at runtime (never stored),
+  and a change rebuilds the live registry — so a central decision runs against the
+  configured temis service without a restart (server end-to-end tested). Environment
+  config (`ATLAS_TEMIS_CONNECTORS` + `ATLAS_TEMIS_<NAME>_URL`/`_TOKEN`) still works
+  as the base. Wiring the clio/REST workers the same way, health probes, and
+  external vendor workers remain ADR-0041 follow-ups.
   Next: explicit `<zeebe:output>` mappings, decimal precision across the temis
   boundary, and off-loop streaming evaluation as the Milestone-4 gRPC job-worker
   concern (the single binary drives jobs synchronously).
