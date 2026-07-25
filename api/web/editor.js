@@ -563,6 +563,45 @@ function timerDefOf(bo) {
   return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:TimerEventDefinition") || null;
 }
 
+// The three schedule kinds a TimerEventDefinition can carry, mapped to the
+// bpmn element each writes and how the panel labels it. A start event accepts
+// all three; a catch or interrupting boundary fires once, so they omit the
+// recurring cycle (ADR-0051/0054). Iteration order (duration, date, cycle) is
+// the detection precedence in timerScheduleOf.
+const TIMER_KINDS = {
+  duration: { prop: "timeDuration", label: "Duration", placeholder: "PT30M" },
+  date: { prop: "timeDate", label: "Date & time", placeholder: "2026-08-01T09:00:00Z" },
+  cycle: { prop: "timeCycle", label: "Cycle", placeholder: "R/PT1H  ·  0 * * * *" },
+};
+
+// timerScheduleOf reports which kind a timer currently holds and its expression
+// text. It keys off which sub-element exists (not its body), so a just-switched,
+// still-empty kind survives a re-render. Defaults to duration for a bare timer.
+function timerScheduleOf(timer) {
+  for (const [kind, meta] of Object.entries(TIMER_KINDS)) {
+    if (timer && timer[meta.prop]) return { kind, body: timer[meta.prop].body || "" };
+  }
+  return { kind: "duration", body: "" };
+}
+
+// timerFieldsHTML renders the Type picker (restricted to the kinds valid in this
+// context) and the schedule-expression input, followed by a context note.
+function timerFieldsHTML(timer, kinds, note) {
+  const detected = timerScheduleOf(timer);
+  const kind = kinds.includes(detected.kind) ? detected.kind : kinds[0];
+  const meta = TIMER_KINDS[kind];
+  const body = (timer && timer[meta.prop] && timer[meta.prop].body) || "";
+  const opts = kinds
+    .map((k) => `<option value="${k}" ${k === kind ? "selected" : ""}>${TIMER_KINDS[k].label}</option>`)
+    .join("");
+  return `<h3>Timer</h3>
+    <label class="field"><span>Type</span>
+      <select id="f-timerkind">${opts}</select></label>
+    <label class="field"><span>${meta.label}</span>
+      <input type="text" id="f-timerval" value="${esc(body)}" placeholder="${esc(meta.placeholder)}"/></label>
+    <p class="muted" style="font-size:12px">${note}</p>`;
+}
+
 // messageDefOf returns an event's bpmn:MessageEventDefinition, or null.
 function messageDefOf(bo) {
   return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:MessageEventDefinition") || null;
@@ -1227,11 +1266,9 @@ function wireProperties(root, modeler, api, projectId) {
         const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
         if (timer) {
-          const dur = (timer.timeDuration && timer.timeDuration.body) || "";
-          html += `<h3>Timer</h3>
-            <label class="field"><span>Duration (ISO&nbsp;8601)</span>
-              <input type="text" id="f-duration" value="${esc(dur)}" placeholder="PT30S"/></label>
-            <p class="muted" style="font-size:12px">e.g. PT30S (30s), PT5M, PT1H, P1DT2H. The event waits this long, then continues.</p>`;
+          html += timerFieldsHTML(timer, ["duration", "date"], `The event waits, then continues (ADR-0054).
+            <b>Duration</b> waits that long (<b>PT30S</b>, <b>PT5M</b>, <b>P1DT2H</b>); <b>Date &amp; time</b> waits until that instant.
+            A catch fires once, so it has no cycle. A FEEL expression is allowed in either.`);
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "The event waits until this message is published with a matching correlation key.");
         } else {
@@ -1248,7 +1285,7 @@ function wireProperties(root, modeler, api, projectId) {
         // A boundary event is attached to an activity and arms while it runs. Its
         // cancelActivity attribute (interrupting by default) and its timer/message
         // trigger are configured here; the trigger's fields reuse the same
-        // f-duration / message wiring as the intermediate catch event.
+        // timer / message wiring as the intermediate catch event.
         const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
         const interrupting = bo.cancelActivity !== false;
@@ -1260,19 +1297,27 @@ function wireProperties(root, modeler, api, projectId) {
             </select></label>
           <p class="muted" style="font-size:12px">Interrupting cancels the attached activity (and its job) and routes the token out this event; non-interrupting spawns a parallel token and lets the activity continue.</p>`;
         if (timer) {
-          const dur = (timer.timeDuration && timer.timeDuration.body) || "";
-          html += `<h3>Timer</h3>
-            <label class="field"><span>Duration (ISO&nbsp;8601)</span>
-              <input type="text" id="f-duration" value="${esc(dur)}" placeholder="PT30M"/></label>
-            <p class="muted" style="font-size:12px">e.g. PT30S, PT5M, PT1H. The event fires this long after the activity starts.</p>`;
+          const kinds = interrupting ? ["duration", "date"] : ["duration", "date", "cycle"];
+          const cycleNote = interrupting
+            ? "An interrupting boundary fires once, so it has no cycle."
+            : "A non-interrupting boundary may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R/PT1H</b>) or cron (<b>0 * * * *</b>) — firing a fresh token each time.";
+          html += timerFieldsHTML(timer, kinds, `The event fires relative to the activity (ADR-0054).
+            <b>Duration</b> fires that long after it starts (<b>PT30S</b>, <b>PT5M</b>); <b>Date &amp; time</b> at a fixed instant.
+            ${cycleNote} A FEEL expression is allowed in any type.`);
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "The event fires when this message is published with a matching correlation key.");
         } else {
           html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b> or <b>Message</b> boundary event, then configure its trigger here.</p>`;
         }
       } else if (bo.$type === "bpmn:StartEvent") {
+        const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
-        if (msg) {
+        if (timer) {
+          html += timerFieldsHTML(timer, ["duration", "date", "cycle"], `A timer start event fires on this schedule with no incoming token (ADR-0051).
+            <b>Duration</b> and <b>Date &amp; time</b> fire once — that long after deploy, or at that instant;
+            <b>Cycle</b> recurs, either an ISO-8601 repeating interval (<b>R/PT1H</b>, <b>R3/P1D</b>) or a cron expression (<b>0 * * * *</b>).
+            A FEEL expression is allowed in any type.`);
+        } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "A message start event: publishing this message starts a new instance of this process, matched by message name (the correlation key is shared with the throwing event but is not yet evaluated for starts).");
         } else {
           const fd = findExt(bo, "zeebe:FormDefinition") || {};
@@ -1285,7 +1330,7 @@ function wireProperties(root, modeler, api, projectId) {
               </select></label>
             <p class="muted" style="font-size:12px">Shown before the process starts — from the Tasks app's <b>Start</b> view — its data becomes the instance's start variables.
               <a href="#/modeler/form/new" target="_blank" rel="noopener">Create a new form</a>, then reopen this to link it.</p>
-            <p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Message</b> start event instead.</p>`;
+            <p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Timer</b> or <b>Message</b> start event instead.</p>`;
         }
       } else if (bo.$type === "bpmn:EndEvent") {
         const msg = messageDefOf(bo);
@@ -1603,17 +1648,44 @@ function wireProperties(root, modeler, api, projectId) {
       });
     }
 
-    const fdur = body.querySelector("#f-duration");
-    if (fdur) {
-      fdur.addEventListener("change", () => {
-        const timer = timerDefOf(element.businessObject);
-        if (!timer) return;
-        const moddle = modeler.get("moddle");
-        let td = timer.timeDuration;
-        if (!td) { td = moddle.create("bpmn:FormalExpression"); td.$parent = timer; }
-        td.body = (fdur.value || "").trim();
-        modeling.updateModdleProperties(element, timer, { timeDuration: td });
-      });
+    const ftimerkind = body.querySelector("#f-timerkind");
+    const ftimerval = body.querySelector("#f-timerval");
+    if (ftimerkind || ftimerval) {
+      const moddle = modeler.get("moddle");
+      // ensureExpr returns the FormalExpression sub-element for a kind, creating
+      // an empty one parented to the timer when it does not yet exist.
+      const ensureExpr = (timer, prop) => {
+        let e = timer[prop];
+        if (!e) { e = moddle.create("bpmn:FormalExpression"); e.$parent = timer; }
+        return e;
+      };
+      if (ftimerkind) {
+        // Switching type moves the schedule to a different sub-element: the chosen
+        // kind's element is (re)created and the other two are dropped, so exactly
+        // one of timeDuration/timeDate/timeCycle is ever set (the compiler rejects
+        // more than one). Re-render so the value field's label and placeholder match.
+        ftimerkind.addEventListener("change", () => {
+          const timer = timerDefOf(element.businessObject);
+          if (!timer) return;
+          const props = {};
+          for (const [k, meta] of Object.entries(TIMER_KINDS)) {
+            props[meta.prop] = k === ftimerkind.value ? ensureExpr(timer, meta.prop) : undefined;
+          }
+          modeling.updateModdleProperties(element, timer, props);
+          show(element);
+        });
+      }
+      if (ftimerval) {
+        ftimerval.addEventListener("change", () => {
+          const timer = timerDefOf(element.businessObject);
+          if (!timer) return;
+          const kind = (ftimerkind && ftimerkind.value) || timerScheduleOf(timer).kind;
+          const prop = TIMER_KINDS[kind].prop;
+          const e = ensureExpr(timer, prop);
+          e.body = (ftimerval.value || "").trim();
+          modeling.updateModdleProperties(element, timer, { [prop]: e });
+        });
+      }
     }
 
     const fmsgref = body.querySelector("#f-msgref");
