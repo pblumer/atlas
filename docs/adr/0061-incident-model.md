@@ -4,6 +4,15 @@
 - **Date:** 2026-07-24
 - **Deciders:** Atlas engine team
 
+> **Implementation note.** The in-process job runner now routes a worker handler's
+> failure into this model: instead of surfacing a hard error that aborts the whole
+> drive (and every deploy or completion that drives jobs — one un-runnable job, e.g.
+> a business rule task whose decision model isn't deployed, used to fail every
+> future deploy), it calls `FailJob(retries-1, message)`, which retries while
+> retries remain and then raises an incident that parks the token. So a single
+> failing job can no longer poison the run loop; it becomes a visible, resolvable
+> incident. Job leases with timeout/backoff remain a later milestone.
+
 ## Context and problem statement
 
 Atlas has no way to represent a *stuck* instance. When work can't proceed — a job a

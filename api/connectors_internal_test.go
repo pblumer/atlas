@@ -95,45 +95,57 @@ func TestManagedConnectorExecutesDecision(t *testing.T) {
 	_ = json.Unmarshal(b, &rep)
 	key := rep.Definitions[0].Key
 
-	// runInstance creates an instance and returns (httpCode, activeElementInstances).
-	// A central decision whose connector isn't configured makes the run fail (the
-	// worker errors), so the create 500s; a configured one completes with 0 active.
-	runInstance := func() (int, int) {
-		code, cb := x.do(http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", key), "{}")
-		var ci struct {
-			Stats struct {
-				ActiveElementInstances int `json:"activeElementInstances"`
-			} `json:"stats"`
+	// runInstance creates an instance (always 200 now — an un-runnable decision no
+	// longer fails the create). incidents counts the raised incidents: a central
+	// decision whose connector isn't configured fails its job, which (ADR-0061)
+	// parks the token at the business rule task with an incident; a configured
+	// connector executes the decision so the instance completes with no new one.
+	runInstance := func() {
+		if code, cb := x.do(http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", key), "{}"); code != http.StatusOK {
+			t.Fatalf("create instance: %d %s", code, cb)
 		}
-		_ = json.Unmarshal(cb, &ci)
-		return code, ci.Stats.ActiveElementInstances
+	}
+	incidents := func() int {
+		_, b := x.do(http.MethodGet, "/api/v1/incidents", "")
+		var r struct {
+			Incidents []json.RawMessage `json:"incidents"`
+		}
+		_ = json.Unmarshal(b, &r)
+		return len(r.Incidents)
 	}
 
-	// No connector yet → the decision can't run.
-	if code, _ := runInstance(); code == http.StatusOK {
-		t.Fatalf("before configuring the connector: create = %d, want a failure (decision can't run)", code)
+	// No connector yet → the decision can't run, so a new instance raises an incident.
+	runInstance()
+	if incidents() == 0 {
+		t.Fatal("before configuring the connector: want an incident (decision can't run)")
 	}
 
-	// Configure the "risk" connector in the Console → a new instance now executes.
+	// Configure the "risk" connector in the Console → a new instance now executes:
+	// temis is called and no additional incident is raised.
 	code, cb := x.do(http.MethodPost, "/api/v1/connectors", `{"name":"risk","endpoint":"`+ts.URL+`"}`)
 	if code != http.StatusOK {
 		t.Fatalf("create connector: %d %s", code, cb)
 	}
-	if code, ei := runInstance(); code != http.StatusOK || ei != 0 {
-		t.Fatalf("after configuring the connector: create=%d active=%d, want 200 and 0 (executed)", code, ei)
+	before := incidents()
+	callsBefore := atomic.LoadInt32(&calls)
+	runInstance()
+	if atomic.LoadInt32(&calls) == callsBefore {
+		t.Fatal("after configuring the connector: temis service was never called")
 	}
-	if atomic.LoadInt32(&calls) == 0 {
-		t.Fatal("temis service was never called")
+	if incidents() != before {
+		t.Fatalf("after configuring the connector: incidents changed %d→%d, want the decision to execute", before, incidents())
 	}
 
-	// Disable it → a new instance can't run again.
+	// Disable it → a new instance can't run again, raising another incident.
 	var created connector
 	_ = json.Unmarshal(cb, &created)
 	if code, ub := x.do(http.MethodPatch, "/api/v1/connectors/"+created.ID, `{"enabled":false}`); code != http.StatusOK {
 		t.Fatalf("disable connector: %d %s", code, ub)
 	}
-	if code, _ := runInstance(); code == http.StatusOK {
-		t.Fatalf("after disabling the connector: create = %d, want a failure (decision can't run)", code)
+	before = incidents()
+	runInstance()
+	if incidents() == before {
+		t.Fatal("after disabling the connector: want a new incident (decision can't run)")
 	}
 
 	// The list shows the (disabled) instance and never a secret.
