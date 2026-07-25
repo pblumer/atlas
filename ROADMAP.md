@@ -68,11 +68,15 @@ The control-flow basics most real models use.
   expression over the instance's variables when the activity completes and emits a
   `DataObjectStateChanged` — setting the object's value and advancing its data state
   to the one on the target `<dataObjectReference>` (`received → approved`), so the
-  state history becomes a real trail; recovery-tested. Next: data **input**
-  associations (read a data object into an activity's FEEL scope), a lineage view
-  folding the `SourcePos` chain, the Modeler properties panel for
-  `DataObjectReference`, item-definition schema validation, and connector-backed
-  data stores.
+  state history becomes a real trail; recovery-tested. **Data input associations
+  read them back** ([ADR-0059](docs/adr/0059-data-input-associations.md)): a
+  `<dataInputAssociation>` on an activity, at activation, reads a source data
+  object (bound into the FEEL scope under its name), optionally transforms it with
+  an `<assignment><from>` expression, and writes the result into a process variable
+  the activity then reads — so an `order` one step wrote flows into the next step's
+  FEEL; recovery-tested. Data now flows both ways. Next: a lineage view folding the
+  `SourcePos` chain, the Modeler properties panel for `DataObjectReference`,
+  item-definition schema validation, and connector-backed data stores.
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
 - 🔲 Conformance tests against a curated BPMN model set
 - 🚧 **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)

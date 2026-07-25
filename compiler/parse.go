@@ -649,6 +649,61 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 	}
 
+	// Wire data-input associations: a sourceRef names the data object read (resolved
+	// like an output target, its state ignored on a read); a targetRef is the process
+	// variable the read value is written into (ADR-0059).
+	wireDataIn := func(ownerId string, assocs []xmlDataInputAssociation) error {
+		for _, a := range assocs {
+			name, _, err := resolveDataTarget(ownerId, a.SourceRef)
+			if err != nil {
+				return fmt.Errorf("compiler: data input association on %q source: %w", ownerId, err)
+			}
+			if a.TargetRef == "" {
+				return fmt.Errorf("compiler: data input association on %q has no targetRef (target variable)", ownerId)
+			}
+			var valExpr *expr.Compiled
+			if from := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(a.Assignment.From), "=")); from != "" {
+				ce, err := expr.CompileAuto(from)
+				if err != nil {
+					return fmt.Errorf("compiler: data input association on %q assignment: %w", ownerId, err)
+				}
+				valExpr = ce
+			}
+			b.AddDataInputAssociation(ids[ownerId], name, a.TargetRef, valExpr)
+		}
+		return nil
+	}
+	for _, st := range proc.ServiceTasks {
+		if err := wireDataIn(st.Id, st.DataIn); err != nil {
+			return nil, err
+		}
+	}
+	for _, st := range proc.ScriptTasks {
+		if err := wireDataIn(st.Id, st.DataIn); err != nil {
+			return nil, err
+		}
+	}
+	for _, brt := range proc.BusinessRuleTasks {
+		if err := wireDataIn(brt.Id, brt.DataIn); err != nil {
+			return nil, err
+		}
+	}
+	for _, ut := range proc.UserTasks {
+		if err := wireDataIn(ut.Id, ut.DataIn); err != nil {
+			return nil, err
+		}
+	}
+	for _, t := range proc.Tasks {
+		if err := wireDataIn(t.Id, t.DataIn); err != nil {
+			return nil, err
+		}
+	}
+	for _, t := range proc.ManualTasks {
+		if err := wireDataIn(t.Id, t.DataIn); err != nil {
+			return nil, err
+		}
+	}
+
 	return b.Build()
 }
 
@@ -767,6 +822,17 @@ type xmlAssignment struct {
 	From string `xml:"from"`
 }
 
+// xmlDataInputAssociation is a <dataInputAssociation> on an activity: sourceRef
+// names the data object (or a <dataObjectReference> to it) the activity reads,
+// targetRef is the process-variable name the read value is written into, and the
+// optional <assignment><from> is a FEEL transform evaluated over the instance's
+// variables plus the source object bound under its name (ADR-0059).
+type xmlDataInputAssociation struct {
+	SourceRef  string        `xml:"sourceRef"`
+	TargetRef  string        `xml:"targetRef"`
+	Assignment xmlAssignment `xml:"assignment"`
+}
+
 // A data-based exclusive gateway; default names the flow taken when no outgoing
 // condition matches.
 type xmlExclusiveGateway struct {
@@ -843,6 +909,7 @@ type xmlTimerEventDefinition struct {
 type xmlNode struct {
 	Id      string                     `xml:"id,attr"`
 	DataOut []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
+	DataIn  []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
 
 // A user task parks a token for human completion (ADR-0028). It optionally
@@ -855,6 +922,7 @@ type xmlUserTask struct {
 	Priority   xmlPriorityDefinition      `xml:"extensionElements>priorityDefinition"`
 	Schedule   xmlTaskSchedule            `xml:"extensionElements>taskSchedule"`
 	DataOut    []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
+	DataIn     []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
 
 // xmlPriorityDefinition carries zeebe:priorityDefinition's static task priority
@@ -894,6 +962,7 @@ type xmlServiceTask struct {
 	// absent.
 	Rest    *xmlRestConnector          `xml:"extensionElements>restConnector"`
 	DataOut []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
+	DataIn  []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
 
 // A clio connector task's parameters, carried on a service task as an
@@ -937,6 +1006,7 @@ type xmlScriptTask struct {
 	// <atlas:jobScript> extension is absent.
 	JobScript *xmlAtlasScript            `xml:"extensionElements>jobScript"`
 	DataOut   []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
+	DataIn    []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
 
 type xmlZeebeScript struct {
@@ -981,6 +1051,7 @@ type xmlBusinessRuleTask struct {
 	// absent, i.e. the decision is evaluated locally.
 	TemisConnector *xmlTemisConnector         `xml:"extensionElements>temisConnector"`
 	DataOut        []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
+	DataIn         []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
 
 // xmlTemisConnector is the <atlas:temisConnector connector="..."/> extension that

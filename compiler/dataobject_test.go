@@ -296,6 +296,117 @@ func TestParseDataOutputAssociationBadExpr(t *testing.T) {
 	}
 }
 
+// TestParseDataInputAssociation compiles a script task with a
+// <dataInputAssociation> reading a data object into a variable via an assignment,
+// and checks the association reaches the compiled node with the resolved source
+// data-object name, the target variable, and a compiled transform (ADR-0059).
+func TestParseDataInputAssociation(t *testing.T) {
+	const model = `<?xml version="1.0"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="p" isExecutable="true">
+    <dataObject id="DataObject_order" name="order"/>
+    <startEvent id="Start"/>
+    <task id="Read">
+      <dataInputAssociation>
+        <sourceRef>DataObject_order</sourceRef>
+        <targetRef>orderAmount</targetRef>
+        <assignment><from>=order.amount</from></assignment>
+      </dataInputAssociation>
+    </task>
+    <endEvent id="End"/>
+    <sequenceFlow id="f1" sourceRef="Start" targetRef="Read"/>
+    <sequenceFlow id="f2" sourceRef="Read" targetRef="End"/>
+  </process>
+</definitions>`
+
+	cp, err := compiler.Parse(1, 1, strings.NewReader(model))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	var node int32 = -1
+	for id := int32(0); id < 10; id++ {
+		if cp.ElementBpmnId(id) == "Read" {
+			node = id
+			break
+		}
+	}
+	if node < 0 {
+		t.Fatal("Read task node not found")
+	}
+	assocs := cp.DataInputAssociations(node)
+	if len(assocs) != 1 {
+		t.Fatalf("input associations = %d, want 1", len(assocs))
+	}
+	if got := cp.Intern(assocs[0].DataObject); got != "order" {
+		t.Errorf("DataObject = %q, want order", got)
+	}
+	if got := cp.Intern(assocs[0].Variable); got != "orderAmount" {
+		t.Errorf("Variable = %q, want orderAmount", got)
+	}
+	if assocs[0].Value == nil {
+		t.Error("Value expr = nil, want compiled FEEL for =order.amount")
+	}
+}
+
+// TestParseDataInputAssociationErrors rejects an input association with an unknown
+// source data object and one with no targetRef.
+func TestParseDataInputAssociationErrors(t *testing.T) {
+	cases := map[string]string{
+		"unknown source": `<dataInputAssociation><sourceRef>Nope</sourceRef><targetRef>v</targetRef></dataInputAssociation>`,
+		"no targetRef":   `<dataInputAssociation><sourceRef>DataObject_order</sourceRef></dataInputAssociation>`,
+		"bad expr":       `<dataInputAssociation><sourceRef>DataObject_order</sourceRef><targetRef>v</targetRef><assignment><from>=1 +</from></assignment></dataInputAssociation>`,
+	}
+	for name, assoc := range cases {
+		t.Run(name, func(t *testing.T) {
+			model := `<?xml version="1.0"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="p" isExecutable="true">
+    <dataObject id="DataObject_order" name="order"/>
+    <startEvent id="Start"/>
+    <task id="Read">` + assoc + `</task>
+    <endEvent id="End"/>
+    <sequenceFlow id="f1" sourceRef="Start" targetRef="Read"/>
+    <sequenceFlow id="f2" sourceRef="Read" targetRef="End"/>
+  </process>
+</definitions>`
+			if _, err := compiler.Parse(1, 1, strings.NewReader(model)); err == nil {
+				t.Fatalf("Parse err = nil, want an error (%s)", name)
+			}
+		})
+	}
+}
+
+// TestBuilderAddDataInputAssociation checks the programmatic builder groups a
+// node's input associations into the shared array reachable via the accessor.
+func TestBuilderAddDataInputAssociation(t *testing.T) {
+	b := compiler.NewBuilder(1, "p", 1)
+	start := b.AddStartEvent()
+	task := b.AddTask()
+	end := b.AddEndEvent()
+	b.Connect(start, task)
+	b.Connect(task, end)
+	b.AddDataObject("order", "", "", false)
+	b.AddDataInputAssociation(task, "order", "orderVar", nil)
+
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	assocs := cp.DataInputAssociations(task)
+	if len(assocs) != 1 {
+		t.Fatalf("input associations = %d, want 1", len(assocs))
+	}
+	if got := cp.Intern(assocs[0].DataObject); got != "order" {
+		t.Errorf("DataObject = %q, want order", got)
+	}
+	if got := cp.Intern(assocs[0].Variable); got != "orderVar" {
+		t.Errorf("Variable = %q, want orderVar", got)
+	}
+	if got := cp.DataInputAssociations(start); len(got) != 0 {
+		t.Errorf("start input associations = %d, want 0", len(got))
+	}
+}
+
 // TestBuilderAddDataOutputAssociation checks the programmatic builder groups a
 // node's output associations into the shared array reachable via the accessor.
 func TestBuilderAddDataOutputAssociation(t *testing.T) {
