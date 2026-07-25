@@ -60,6 +60,18 @@ func (r *Registry) Client(name string) (Client, bool) {
 	return c, ok
 }
 
+// Replace swaps the whole set of registered connectors at once, so a server can
+// rebuild the registry from managed configuration after a change (ADR-0041). The
+// caller must serialize Replace with the workers that read the registry — the
+// Atlas server does both on its run-loop goroutine — so no lock is needed. A nil
+// map clears the registry.
+func (r *Registry) Replace(clients map[string]Client) {
+	if clients == nil {
+		clients = map[string]Client{}
+	}
+	r.clients = clients
+}
+
 // Connector is the server-side configuration of one temis connector: the base
 // endpoint of the temis instance and an optional bearer token for it. Per
 // ADR-0041 the token is the output of a secret resolver, not a value typed into a

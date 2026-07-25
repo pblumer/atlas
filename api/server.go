@@ -58,32 +58,14 @@ func dmnResolverFromEnv(dir string) dmn.Resolver {
 	return dmn.DirResolver{Dir: dir}
 }
 
-// temisRegistryFromEnv builds the temis decision-connector registry from the
-// environment, following ADR-0041's secret model: a model names a connector; its
-// endpoint and token live in the process environment, never in the model or the
-// event log. ATLAS_TEMIS_CONNECTORS is a comma-separated list of connector names;
-// for each name N, ATLAS_TEMIS_<N>_URL is its endpoint and ATLAS_TEMIS_<N>_TOKEN an
-// optional bearer token, where <N> is the name upper-cased with non-alphanumeric
-// runs collapsed to "_" (so "risk-service" → ATLAS_TEMIS_RISK_SERVICE_URL). A name
-// with no URL is skipped; a business rule task referencing an unregistered
-// connector simply parks (the worker returns an error) until it is configured.
+// temisRegistryFromEnv builds a temis decision-connector registry from the
+// environment alone (the pre-managed mechanism, ADR-0041's env secret model):
+// ATLAS_TEMIS_CONNECTORS lists names, and per name N, ATLAS_TEMIS_<N>_URL /
+// ATLAS_TEMIS_<N>_TOKEN configure it. Managed connector instances are layered on
+// top of this by [Server.buildTemisClients]; this helper is the env-only base.
 func temisRegistryFromEnv() *temis.Registry {
 	reg := temis.NewRegistry()
-	for _, name := range strings.Split(os.Getenv("ATLAS_TEMIS_CONNECTORS"), ",") {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			continue
-		}
-		key := connectorEnvKey(name)
-		url := strings.TrimSpace(os.Getenv("ATLAS_TEMIS_" + key + "_URL"))
-		if url == "" {
-			continue
-		}
-		reg.Register(name, temis.NewHTTPClient(temis.Connector{
-			Endpoint: url,
-			Token:    strings.TrimSpace(os.Getenv("ATLAS_TEMIS_" + key + "_TOKEN")),
-		}))
-	}
+	reg.Replace(envTemisClients())
 	return reg
 }
 
@@ -153,6 +135,7 @@ type Server struct {
 	publicRate  *rateLimiter     // throttles the unauthenticated public endpoints
 	projects    *projectStore    // durable sidecar for projects grouping artifacts (ADR-0034)
 	dmnrefs     *dmnRefStore     // durable sidecar for DMN reference artifacts (ADR-0034)
+	connectors  *connectorStore  // durable sidecar for managed connector instances (ADR-0041)
 	users       *userStore       // durable sidecar for user accounts (ADR-0044)
 
 	// sessions holds live login sessions in memory. Unlike the sidecar stores it
@@ -242,6 +225,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	connectors, err := newConnectorStore(filepath.Join(dataDir, "connectors"))
+	if err != nil {
+		return nil, err
+	}
 	// DMN reference models are resolved either from a temis model service (when
 	// configured) or the zero-config <data-dir>/dmn-models folder. Both satisfy the
 	// Resolver interface, so the rest of the server is unaffected (ADR-0034/0014).
@@ -263,6 +250,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		publicRate:   newRateLimiter(20, 1),
 		projects:     projects,
 		dmnrefs:      dmnrefs,
+		connectors:   connectors,
 		users:        users,
 		sessions:     newSessionStore(defaultSessionTTL),
 		dmnResolver:  resolver,
@@ -301,9 +289,16 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// service instead of the embedded library (ADR-0050). One connector worker
 	// serves every process under the reserved temis-connector job type; it resolves
 	// each job's connector name from the compiled process and calls the endpoint
-	// configured for that name in the environment (ADR-0041). A model whose
-	// connector is not configured simply parks until it is.
-	s.temisRegistry = temisRegistryFromEnv()
+	// configured for that connector. Connectors come from the environment plus
+	// operator-managed instances in the Console (ADR-0041); the registry is built
+	// here (before the loop serves traffic) and rebuilt on every connector change.
+	// A model whose connector is not configured simply parks until it is.
+	s.temisRegistry = temis.NewRegistry()
+	clients, err := s.buildTemisClients()
+	if err != nil {
+		return nil, err
+	}
+	s.temisRegistry.Replace(clients)
 	s.jobRunner.HandleWithOutput(compiler.TemisDecisionJobTypeIndex, temis.Handler(store, s.processLookup, s.temisRegistry, nil))
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
