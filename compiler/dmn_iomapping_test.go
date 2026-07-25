@@ -119,3 +119,35 @@ func TestParseRejectsBadInputMapping(t *testing.T) {
 		t.Fatal("Parse with an uncompilable input-mapping source: got nil error, want an error")
 	}
 }
+
+// TestBusinessRuleTaskBinding proves the compiler reads zeebe:calledDecision
+// bindingType onto the detail (ADR-0063): "deployment" pins, anything else
+// (including the default) is latest.
+func TestBusinessRuleTaskBinding(t *testing.T) {
+	brtBinding := func(bindingAttr string) DecisionBinding {
+		bpmn := `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+		  <process id="p" isExecutable="true"><startEvent id="s"/>
+		  <businessRuleTask id="d"><extensionElements><calledDecision decisionId="Dish"` + bindingAttr + `/></extensionElements></businessRuleTask>
+		  <endEvent id="e"/><sequenceFlow id="f1" sourceRef="s" targetRef="d"/><sequenceFlow id="f2" sourceRef="d" targetRef="e"/></process></definitions>`
+		cp, err := Parse(1, 1, strings.NewReader(bpmn))
+		if err != nil {
+			t.Fatalf("Parse(%q): %v", bindingAttr, err)
+		}
+		for i := 0; i < len(cp.nodes); i++ {
+			if cp.nodes[i].Type == TypeBusinessRuleTask {
+				return cp.BusinessRuleTask(cp.nodes[i].Detail).Binding
+			}
+		}
+		t.Fatal("no business rule task compiled")
+		return BindingLatest
+	}
+	if b := brtBinding(``); b != BindingLatest {
+		t.Errorf("default binding = %d, want BindingLatest", b)
+	}
+	if b := brtBinding(` bindingType="latest"`); b != BindingLatest {
+		t.Errorf("latest binding = %d, want BindingLatest", b)
+	}
+	if b := brtBinding(` bindingType="deployment"`); b != BindingDeployment {
+		t.Errorf("deployment binding = %d, want BindingDeployment", b)
+	}
+}

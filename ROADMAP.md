@@ -130,6 +130,12 @@ The control-flow basics most real models use.
   empty-dropdown round trip (author elsewhere → export → upload → pick) is gone. This
   reverses ADR-0014's "no DMN authoring" non-goal for the decision-table case;
   authoring the FEEL/logic and model versioning still live in temis.
+  **Decision binding landed** ([ADR-0063](docs/adr/0063-dmn-decision-binding.md)):
+  a business rule task's `zeebe:calledDecision` now honors `bindingType` — `latest`
+  (the default, Camunda-style) evaluates the newest deployed version of the
+  decision, `deployment` pins to the version snapshotted with the process — surfaced
+  as a "Binding" dropdown on the task. `versionTag` (pin to a numbered version) is
+  the next step, once models are stored with version history.
   Next: explicit `<zeebe:output>` mappings, decimal precision across the temis
   boundary, and off-loop streaming evaluation as the Milestone-4 gRPC job-worker
   concern (the single binary drives jobs synchronously).
