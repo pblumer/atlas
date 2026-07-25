@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -198,6 +199,50 @@ func draftDecisions(deployables []compiler.Deployable) []string {
 		}
 	}
 	return out
+}
+
+// dmnForDeployBody resolves the DMN model a single (non-project) deploy's business
+// rule tasks need, so a local decision is bundled with the process instead of
+// deployed model-less. A model-less business-rule deploy is the trap that started
+// this: its tasks create DMN jobs that can never evaluate, and because every deploy
+// drives all pending jobs, one such job then fails every future deploy. It mirrors
+// the project deploy's matching but over all DMN references passed in.
+//
+// Returns (xml, "", nil) when a stored model provides every needed local decision;
+// (nil, "", nil) when the body needs none (no business rule tasks, or only central
+// connector decisions, which carry no local model); (nil, reason, nil) when no
+// single model provides them, so the caller refuses (409) instead of deploying a
+// process that can never run; or (nil, "", err) on an infrastructure failure. It
+// resolves and compiles models (I/O + CPU), so it runs OFF the run loop; the
+// reference records are read on the loop and passed in.
+func (s *Server) dmnForDeployBody(ctx context.Context, body []byte, refs []dmnRef) ([]byte, string, error) {
+	deployables, err := compiler.ParseAll(1, 1, bytes.NewReader(body))
+	if err != nil {
+		return nil, "", nil // a compile error is surfaced (as a 400) by the deploy itself
+	}
+	needed := draftDecisions(deployables)
+	if len(needed) == 0 {
+		return nil, "", nil
+	}
+	var models []resolvedModel
+	for _, rec := range refs {
+		res, err := s.dmnValidator.Validate(ctx, rec.ModelRef)
+		if err != nil {
+			return nil, "", err
+		}
+		if !res.Valid {
+			continue
+		}
+		xml, err := s.dmnResolver.Resolve(ctx, rec.ModelRef)
+		if err != nil {
+			return nil, "", err
+		}
+		models = append(models, resolvedModel{decisions: res.Decisions, xml: xml})
+	}
+	if xml, ok := matchModel(models, needed); ok {
+		return xml, "", nil
+	}
+	return nil, fmt.Sprintf("this diagram's business rule task(s) reference decision(s) %v that no DMN model provides — create the decision (or add its reference) in Atlas, then deploy", needed), nil
 }
 
 // matchModel returns the XML of a model that provides every needed decision, or
