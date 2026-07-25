@@ -254,8 +254,8 @@ func TestRestConnectorUnregistered(t *testing.T) {
 	runner.Handle(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rest.NewRegistry(), nil))
 
 	p.CreateInstance(cp.Key)
-	if err := runner.Drive(); err == nil {
-		t.Fatal("Drive with an unregistered connector: err = nil, want error")
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("Drive with an unregistered connector: %v, want nil (failure routed to an incident)", err)
 	}
 	if pi := mustActiveProcs(t, store); pi != 1 {
 		t.Fatalf("after failed Drive: active=%d, want 1 (job still pending)", pi)
@@ -278,8 +278,8 @@ func TestRestConnectorNoCompiledProcess(t *testing.T) {
 	runner.Handle(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, reg, nil))
 
 	p.CreateInstance(cp.Key)
-	if err := runner.Drive(); err == nil {
-		t.Fatal("Drive with an unresolvable definition: err = nil, want error")
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("Drive with an unresolvable definition: %v, want nil (failure routed to an incident)", err)
 	}
 }
 
@@ -309,8 +309,8 @@ func TestRestConnectorClientError(t *testing.T) {
 	runner.Handle(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg, nil))
 
 	p.CreateInstance(cp.Key)
-	if err := runner.Drive(); err == nil {
-		t.Fatal("Drive when the client errors: err = nil, want error")
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("Drive when the client errors: %v, want nil (failure routed to an incident)", err)
 	}
 	if pi := mustActiveProcs(t, store); pi != 1 {
 		t.Fatalf("after failed Drive: active=%d, want 1 (job still pending)", pi)

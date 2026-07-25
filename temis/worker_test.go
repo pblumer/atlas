@@ -152,10 +152,10 @@ func TestTemisConnectorUnregistered(t *testing.T) {
 	runner.HandleWithOutput(jobType, temis.Handler(store, lookup, temis.NewRegistry(), nil)) // empty registry
 
 	p.CreateInstance(cp.Key, model.VariableValue{Name: "amount", Kind: model.VarNumber, Text: "150"})
-	if err := runner.Drive(); err == nil {
-		t.Fatal("Drive with an unregistered connector: got nil error, want an error")
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("Drive with an unregistered connector: %v, want nil (failure routed to an incident, ADR-0061)", err)
 	}
-	// The token is still parked on the business rule task (job pending).
+	// The token is still parked on the business rule task, now with an incident.
 	ei, err := store.ActiveElementInstanceCount()
 	if err != nil {
 		t.Fatalf("ActiveElementInstanceCount: %v", err)
