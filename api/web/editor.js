@@ -251,6 +251,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId })
           <button data-tab="implement">Implement</button>
         </div>
         <div style="flex:1"></div>
+        <button class="btn neutral" id="vars-toggle" title="Show the variables this diagram writes">Variables</button>
         <button class="btn neutral" id="save">Save</button>
         <button class="btn neutral" id="export">Export XML</button>
         <button class="btn" id="deploy">Deploy</button>
@@ -266,6 +267,12 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId })
       </div>
       <div class="editor-body">
         <div id="canvas"></div>
+        <aside class="vars-panel" id="vars-panel" hidden>
+          <div class="vars-head"><b>Variables</b>
+            <button class="icon-btn" id="vars-close" title="Close" aria-label="Close">✕</button></div>
+          <input class="vars-filter" id="vars-filter" placeholder="Filter by name or origin…"/>
+          <div class="vars-list" id="vars-list"></div>
+        </aside>
         <div class="props-resizer" id="props-resizer" title="Drag to resize the properties panel"></div>
         <aside class="props" id="props">
           <div class="phead"><span class="ptype" id="p-icon">–</span>
@@ -316,6 +323,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId })
   const rerender = wireProperties(root, modeler, api, projectId, toast);
   wireTabs(root, rerender);
   wireActions(root, modeler, api, toast, projectId);
+  wireEditorVars(root, modeler);
   wireResizer(root, modeler);
 }
 
@@ -487,6 +495,101 @@ function collectFeelVariables(modeler) {
     });
   } catch { /* best-effort */ }
   return [...vars].sort();
+}
+
+// collectDiagramVariables statically analyses the diagram for the variables it
+// writes and where — the data behind the Variables panel (like Camunda's). Each
+// entry is { name, origin, originId, source }: the variable name, the element that
+// writes it (name/id and the id to select it), and how (start variable, script
+// result, decision result, output mapping). De-duplicated by name, sorted.
+function collectDiagramVariables(modeler) {
+  const out = [];
+  const seen = new Set();
+  const push = (name, origin, originId, source) => {
+    name = (name || "").trim();
+    if (!name || seen.has(name)) return;
+    seen.add(name);
+    out.push({ name, origin, originId, source });
+  };
+  try {
+    const rootBo = rootProcess(modeler);
+    if (rootBo) {
+      for (const v of readStartVariables(rootBo)) {
+        push(v.name, "Start", "", "start variable" + (v.type ? " · " + v.type : ""));
+      }
+    }
+  } catch { /* best-effort */ }
+  try {
+    modeler.get("elementRegistry").forEach((el) => {
+      const bo = el.businessObject;
+      if (!bo) return;
+      const label = bo.name || bo.id;
+      const s = findExt(bo, "zeebe:Script");
+      if (s && s.resultVariable) push(s.resultVariable, label, bo.id, "FEEL script");
+      const js = findExt(bo, "atlas:JobScript");
+      if (js && js.resultVariable) push(js.resultVariable, label, bo.id, (js.language || "job") + " script");
+      const cd = findExt(bo, "zeebe:CalledDecision");
+      if (cd && cd.resultVariable) push(cd.resultVariable, label, bo.id, "decision result");
+      const io = findExt(bo, "zeebe:IoMapping");
+      for (const p of (io && io.outputParameters) || []) push(p.target, label, bo.id, "output mapping");
+    });
+  } catch { /* best-effort */ }
+  return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// wireEditorVars drives the design-time Variables panel: a toolbar toggle opens it,
+// it lists the diagram's variables (origin is click-to-select), a filter narrows
+// the list, and it refreshes as the diagram changes while open — a modeling aid
+// that answers "what variables exist here and who writes them" without running
+// anything. (The live view has its own runtime-variables panel, wireVarsPanel.)
+function wireEditorVars(root, modeler) {
+  const panel = root.querySelector("#vars-panel");
+  const toggle = root.querySelector("#vars-toggle");
+  const closeBtn = root.querySelector("#vars-close");
+  const filter = root.querySelector("#vars-filter");
+  const list = root.querySelector("#vars-list");
+  if (!panel || !toggle || !list) return;
+
+  const render = () => {
+    if (panel.hidden) return;
+    const q = (filter.value || "").trim().toLowerCase();
+    const vars = collectDiagramVariables(modeler).filter((v) =>
+      !q || v.name.toLowerCase().includes(q) || (v.origin || "").toLowerCase().includes(q));
+    if (!vars.length) {
+      list.innerHTML = `<p class="vars-empty">${q ? "No matching variables." :
+        "No variables yet. They appear as you add start variables, script or decision result variables, and output mappings."}</p>`;
+      return;
+    }
+    list.innerHTML = vars.map((v) => `<div class="var-row">
+      <div class="var-name">${esc(v.name)}</div>
+      <div class="var-meta">${esc(v.source)}${v.originId
+        ? ` · written by <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`
+        : ` · ${esc(v.origin)}`}</div></div>`).join("");
+  };
+
+  toggle.addEventListener("click", () => {
+    panel.hidden = !panel.hidden;
+    toggle.classList.toggle("active", !panel.hidden);
+    render();
+  });
+  if (closeBtn) closeBtn.addEventListener("click", () => {
+    panel.hidden = true;
+    toggle.classList.remove("active");
+  });
+  filter.addEventListener("input", render);
+  list.addEventListener("click", (e) => {
+    const o = e.target.closest(".var-origin");
+    if (!o) return;
+    const el = modeler.get("elementRegistry").get(o.dataset.el);
+    if (el) {
+      try { modeler.get("selection").select(el); } catch { /* stale */ }
+      try { modeler.get("canvas").scrollToElement(el); } catch { /* older bpmn-js */ }
+    }
+  });
+  // Keep the open panel current as the diagram is edited.
+  modeler.on("element.changed", render);
+  modeler.on("elements.changed", render);
+  modeler.on("import.done", render);
 }
 
 // enhanceFeel turns the FEEL <textarea> matched by `sel` into a syntax-highlighted
@@ -1055,6 +1158,54 @@ function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn()) {
   attachEditors();
 }
 
+// groupifyPanel turns each <h3> section of the properties panel into a collapsible
+// group (Camunda-style): the heading becomes a toggle with a chevron and a filled
+// dot when the group has content, and everything up to the next <h3> becomes its
+// collapsible body. It works on the already-rendered panel, so every element type's
+// markup is grouped by one function instead of each branch knowing about grouping.
+// Nodes are moved as whole subtrees, so field listeners and rich editors survive.
+function groupifyPanel(body, collapsed) {
+  const heads = [...body.children].filter((n) => n.tagName === "H3");
+  if (!heads.length) return;
+  for (const h3 of heads) {
+    const title = h3.textContent.trim();
+    const group = document.createElement("div");
+    group.className = "pgroup" + (collapsed.has(title) ? " collapsed" : "");
+    const bodyWrap = document.createElement("div");
+    bodyWrap.className = "pgroup-body";
+    let n = h3.nextSibling;
+    while (n && !(n.nodeType === 1 && n.tagName === "H3")) {
+      const next = n.nextSibling;
+      bodyWrap.appendChild(n);
+      n = next;
+    }
+    const fields = [...bodyWrap.querySelectorAll("input, textarea, select")];
+    const hasVal = fields.some((el) =>
+      el.tagName === "SELECT" ? el.selectedIndex > 0
+        : (el.type !== "button" && el.type !== "submit" && (el.value || "").trim() !== ""));
+    const hasRows = !!bodyWrap.querySelector(".dmn-input-row, .sv-row, .msg-row, tr, li");
+    const head = document.createElement("button");
+    head.type = "button";
+    head.className = "pgroup-head";
+    head.innerHTML = `<span class="pgroup-chevron">▸</span><span class="pgroup-title"></span>`;
+    head.querySelector(".pgroup-title").textContent = title;
+    if (hasVal || hasRows) {
+      const dot = document.createElement("span");
+      dot.className = "pgroup-dot";
+      dot.title = "has content";
+      head.appendChild(dot);
+    }
+    head.addEventListener("click", () => {
+      const isCol = group.classList.toggle("collapsed");
+      if (isCol) collapsed.add(title); else collapsed.delete(title);
+    });
+    body.insertBefore(group, h3);
+    group.appendChild(head);
+    group.appendChild(bodyWrap);
+    body.removeChild(h3);
+  }
+}
+
 function wireProperties(root, modeler, api, projectId, toast) {
   const icon = root.querySelector("#p-icon");
   const typename = root.querySelector("#p-typename");
@@ -1062,6 +1213,19 @@ function wireProperties(root, modeler, api, projectId, toast) {
   const body = root.querySelector("#p-body");
   const modeling = modeler.get("modeling");
   const selection = modeler.get("selection");
+
+  // Tidy the panel Camunda-style: every <h3> section becomes a collapsible group
+  // with a chevron and a filled dot when it carries content. groupifyPanel runs
+  // after each (re-)render via a MutationObserver, so no per-element branch has to
+  // know about grouping; collapse state persists across renders in `collapsed`.
+  const collapsed = new Set();
+  let groupifying = false;
+  const panelObserver = new MutationObserver(() => {
+    if (groupifying) return;
+    groupifying = true;
+    try { groupifyPanel(body, collapsed); } finally { groupifying = false; }
+  });
+  panelObserver.observe(body, { childList: true });
 
   // savePreservingPanel runs a field save whose resulting element.changed should
   // NOT rebuild the whole properties panel. Editing a FEEL field saves on blur;
