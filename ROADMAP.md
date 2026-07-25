@@ -196,7 +196,7 @@ Making processes wait, react, and time out.
   element instance, so cancelling an instance clears its incidents. Recovery-
   tested; exposed over HTTP (`POST /jobs/{key}/fail`, `GET /incidents`,
   `POST /incidents/{key}/resolve`) (ADR-0061). **Timer FEEL failures now raise
-  incidents too** ([ADR-0062](docs/adr/0062-timer-feel-failure-incidents.md)): a
+  incidents too** ([ADR-0063](docs/adr/0063-timer-feel-failure-incidents.md)): a
   catch or boundary timer whose FEEL schedule can't be evaluated parks its token
   and raises a job-less incident (the failing field in its message) instead of
   firing immediately; resolving re-arms the timer against the instance's current

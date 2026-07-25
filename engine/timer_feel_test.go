@@ -231,7 +231,7 @@ func TestCatchTimerFeelDate(t *testing.T) {
 // TestCatchTimerFeelUnresolvableRaisesIncident proves a FEEL catch timer whose
 // expression can't resolve to a valid due date (here, a missing variable → null)
 // parks its token and raises a job-less incident instead of firing immediately —
-// so a broken schedule is visible and resolvable, not silently wrong (ADR-0062).
+// so a broken schedule is visible and resolvable, not silently wrong (ADR-0063).
 func TestCatchTimerFeelUnresolvableRaisesIncident(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -270,7 +270,7 @@ func TestCatchTimerFeelUnresolvableRaisesIncident(t *testing.T) {
 
 // TestBoundaryTimerFeelUnresolvableRaisesIncident proves an unresolvable FEEL
 // boundary timer parks and raises an incident rather than firing immediately —
-// which would have wrongly cancelled the host activity (ADR-0062).
+// which would have wrongly cancelled the host activity (ADR-0063).
 func TestBoundaryTimerFeelUnresolvableRaisesIncident(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -320,7 +320,7 @@ func TestBoundaryTimerFeelUnresolvableRaisesIncident(t *testing.T) {
 // TestResolveTimerIncidentReRaisesWhenStillBroken proves resolving a timer
 // incident genuinely re-arms — re-evaluating the schedule — rather than blindly
 // clearing it: with the variable still missing, a fresh incident is raised
-// (ADR-0062).
+// (ADR-0063).
 func TestResolveTimerIncidentReRaisesWhenStillBroken(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -362,7 +362,7 @@ func TestResolveTimerIncidentReRaisesWhenStillBroken(t *testing.T) {
 
 // TestResolveTimerIncidentRearmsWhenFixed proves the payoff: once the variable a
 // FEEL timer needs is present, resolving the incident re-arms the timer, which
-// then fires normally and the instance completes (ADR-0062). A parallel branch
+// then fires normally and the instance completes (ADR-0063). A parallel branch
 // supplies the variable after the timer branch has already parked on its incident.
 func TestResolveTimerIncidentRearmsWhenFixed(t *testing.T) {
 	h := openHarness(t, t.TempDir())
@@ -437,7 +437,7 @@ func TestResolveTimerIncidentRearmsWhenFixed(t *testing.T) {
 // TestResolveBoundaryTimerIncidentReRaises proves the resolve/re-arm loop covers
 // boundary timers too (not just catch): resolving a still-broken boundary incident
 // re-arms the boundary and raises a fresh incident, leaving the host untouched
-// (ADR-0062).
+// (ADR-0063).
 func TestResolveBoundaryTimerIncidentReRaises(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -497,7 +497,7 @@ func TestResolveBoundaryTimerIncidentReRaises(t *testing.T) {
 
 // TestCatchTimerFeelDateIncidentNamesField proves the incident message names the
 // field that failed to resolve — here a FEEL <timeDate> — so an operator sees what
-// kind of schedule broke (ADR-0062).
+// kind of schedule broke (ADR-0063).
 func TestCatchTimerFeelDateIncidentNamesField(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -525,7 +525,7 @@ func TestCatchTimerFeelDateIncidentNamesField(t *testing.T) {
 
 // TestTimerIncidentRecovers proves a raised timer incident survives a restart:
 // replaying the log restores the incident and the parked, timer-less element
-// (ADR-0062, invariant I4).
+// (ADR-0063, invariant I4).
 func TestTimerIncidentRecovers(t *testing.T) {
 	dir := t.TempDir()
 	cp := feelCatchProcess(t, 907, compiler.TimerFeelDuration, "timeout")

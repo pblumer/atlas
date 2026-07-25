@@ -1,4 +1,4 @@
-# ADR-0062: Timer FEEL-failure incidents — park and raise instead of firing immediately
+# ADR-0063: Timer FEEL-failure incidents — park and raise instead of firing immediately
 
 - **Status:** Proposed
 - **Date:** 2026-07-25
