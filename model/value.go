@@ -451,6 +451,50 @@ func readString(src []byte) (string, []byte, error) {
 	return string(src[:n]), src[n:], nil
 }
 
+// IncidentValue is a durable fault attached to the element instance where progress
+// stalled — today, a job whose retries were exhausted (ADR-0058). It is keyed by
+// ElementInstanceKey (one activity holds at most one job, so at most one incident)
+// and points at the job, so resolving the incident can re-activate it. Message is
+// the worker-reported failure reason; it is genuine runtime data, so the value is
+// length-prefixed rather than fixed-size.
+type IncidentValue struct {
+	ProcessInstanceKey uint64
+	ElementInstanceKey uint64
+	JobKey             uint64
+	ElementId          int32 // the compiled-graph element the token is stuck on (maps to a BPMN element id for the operator)
+	RaisedAt           int64 // unix nanoseconds the incident was raised; read at command time and frozen into the event (I6)
+	Message            string
+}
+
+func (*IncidentValue) ValueType() ValueType { return VTIncident }
+
+func (v *IncidentValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ElementInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.JobKey)
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.ElementId))
+	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.RaisedAt))
+	return appendString(dst, v.Message)
+}
+
+func (v *IncidentValue) decode(src []byte) error {
+	const incidentFixed = 8 + 8 + 8 + 4 + 8
+	if len(src) < incidentFixed {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src[0:])
+	v.ElementInstanceKey = binary.LittleEndian.Uint64(src[8:])
+	v.JobKey = binary.LittleEndian.Uint64(src[16:])
+	v.ElementId = int32(binary.LittleEndian.Uint32(src[24:]))
+	v.RaisedAt = int64(binary.LittleEndian.Uint64(src[28:]))
+	msg, _, err := readString(src[incidentFixed:])
+	if err != nil {
+		return err
+	}
+	v.Message = msg
+	return nil
+}
+
 // newValue returns a zero payload for the value types that have one. Value
 // types without a payload yet return nil; their records carry only a header.
 func newValue(vt ValueType) Value {
@@ -471,6 +515,8 @@ func newValue(vt ValueType) Value {
 		return &MessageFlowValue{}
 	case VTDataObject:
 		return &DataObjectValue{}
+	case VTIncident:
+		return &IncidentValue{}
 	default:
 		return nil
 	}

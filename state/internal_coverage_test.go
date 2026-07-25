@@ -103,6 +103,27 @@ func TestReadIntoDecodeError(t *testing.T) {
 	}
 }
 
+// TestIncidentDecodeError covers the decode-error branch of both incident reads —
+// the point GetIncident and the Incidents scan — by planting an undersized value
+// under an incident key (ADR-0058).
+func TestIncidentDecodeError(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+	elKey := model.NewKey(1, 1)
+	if err := s.db.Set(keyIncident(elKey), []byte{0x01}, pebble.NoSync); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if _, err := s.GetIncident(elKey); err == nil {
+		t.Error("GetIncident on corrupt value: err = nil, want error")
+	}
+	if err := s.Incidents(func(uint64, *model.IncidentValue) error { return nil }); err == nil {
+		t.Error("Incidents scan over corrupt value: err = nil, want error")
+	}
+}
+
 // TestProcessInstanceDecodeError covers ProcessInstance's decode-error branch for
 // both the active and the history family, by planting an undersized value under
 // each key.

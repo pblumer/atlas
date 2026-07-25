@@ -164,6 +164,21 @@ func (s *Store) GetJob(key uint64) (*model.JobValue, bool, error) {
 	return v.(*model.JobValue), true, nil
 }
 
+// GetIncident returns the committed incident on an element instance, or nil if
+// there is none. It reads outside a transaction, for the resolve endpoint's
+// existence check (ADR-0058).
+func (s *Store) GetIncident(elKey uint64) (*model.IncidentValue, error) {
+	raw, ok, err := getCopy(s.db, keyIncident(elKey))
+	if err != nil || !ok {
+		return nil, err
+	}
+	v, err := model.DecodeValue(model.VTIncident, raw)
+	if err != nil {
+		return nil, err
+	}
+	return v.(*model.IncidentValue), nil
+}
+
 // GetElementInstance returns the committed element instance for key, reporting
 // whether it was present. Like GetJob it reads outside a transaction, for
 // consumers such as the in-process DMN worker resolving the decision an
@@ -209,6 +224,18 @@ func (s *Store) CompletedProcessInstances(fn func(key uint64, v *model.ProcessIn
 			return err
 		}
 		return fn(trailingKey(k), v.(*model.ProcessInstanceValue))
+	})
+}
+
+// Incidents calls fn with the element-instance key and value of every unresolved
+// incident — the operator "list incidents" access pattern (ADR-0058).
+func (s *Store) Incidents(fn func(elementKey uint64, v *model.IncidentValue) error) error {
+	return s.scanPrefix([]byte{byte(cfIncident)}, func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTIncident, raw)
+		if err != nil {
+			return err
+		}
+		return fn(trailingKey(k), v.(*model.IncidentValue))
 	})
 }
 

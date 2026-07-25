@@ -297,7 +297,7 @@ func TestScanCallbackErrorPropagates(t *testing.T) {
 		if err := tx.PutElementInstance(model.NewKey(1, 2), &model.ElementInstanceValue{ProcessInstanceKey: model.NewKey(1, 1)}); err != nil {
 			return err
 		}
-		if err := tx.PutJob(model.NewKey(1, 3), &model.JobValue{JobType: 1}); err != nil {
+		if err := tx.PutJob(model.NewKey(1, 3), &model.JobValue{JobType: 1, Retries: 1}); err != nil {
 			return err
 		}
 		if err := tx.PutTimer(model.NewKey(1, 4), &model.TimerValue{DueDate: 1}); err != nil {

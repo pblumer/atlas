@@ -28,6 +28,7 @@ const (
 	cfVariableSnapshot       columnFamily = 0x0F // varSnap:<scopeKey>:<ts>:<pos> → VariableValue
 	cfDataObject             columnFamily = 0x10 // do:<scopeKey>:<name> → DataObjectValue
 	cfDataObjectSnapshot     columnFamily = 0x11 // doSnap:<scopeKey>:<ts>:<pos> → DataObjectValue
+	cfIncident               columnFamily = 0x12 // incident:<elKey> → IncidentValue (ADR-0058)
 )
 
 func appendBE64(dst []byte, v uint64) []byte { return binary.BigEndian.AppendUint64(dst, v) }
@@ -46,6 +47,12 @@ func keyElementInstance(key uint64) []byte {
 
 func keyElByProc(procKey, elKey uint64) []byte {
 	return appendBE64(elByProcPrefix(procKey), elKey)
+}
+
+// keyIncident keys an incident by the element instance it is attached to — one
+// activity holds at most one job, so at most one incident (ADR-0058).
+func keyIncident(elKey uint64) []byte {
+	return appendBE64([]byte{byte(cfIncident)}, elKey)
 }
 
 func elByProcPrefix(procKey uint64) []byte {

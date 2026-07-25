@@ -103,10 +103,20 @@ func TestDecodeValueNoPayloadType(t *testing.T) {
 // TestDecodeValueShortBuffer covers the decode error propagation for each
 // payload type on a truncated buffer.
 func TestDecodeValueShortBuffer(t *testing.T) {
-	for _, vt := range []ValueType{VTElementInstance, VTJob, VTTimer, VTProcessInstance, VTVariable, VTMessageSubscription, VTMessageFlow, VTDataObject} {
+	for _, vt := range []ValueType{VTElementInstance, VTJob, VTTimer, VTProcessInstance, VTVariable, VTMessageSubscription, VTMessageFlow, VTDataObject, VTIncident} {
 		if _, err := DecodeValue(vt, nil); !errors.Is(err, ErrShortBuffer) {
 			t.Errorf("DecodeValue(%v, nil) err = %v, want ErrShortBuffer", vt, err)
 		}
+	}
+}
+
+// TestIncidentDecodeError covers IncidentValue.decode's message-truncation guard:
+// past the fixed 24-byte prefix, a missing message length prefix is a short buffer.
+func TestIncidentDecodeError(t *testing.T) {
+	full := AppendValue(nil, &IncidentValue{ProcessInstanceKey: NewKey(1, 1), ElementInstanceKey: NewKey(1, 2), JobKey: NewKey(1, 3), ElementId: 4, RaisedAt: 5, Message: "x"})
+	var v IncidentValue
+	if err := v.decode(full[:36]); !errors.Is(err, ErrShortBuffer) {
+		t.Errorf("decode(truncated message) err = %v, want ErrShortBuffer", err)
 	}
 }
 

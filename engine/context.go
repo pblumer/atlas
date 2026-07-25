@@ -55,6 +55,14 @@ func (c *ProcessingContext) JobOfElement(elKey uint64) (uint64, bool) {
 	return jobKey, ok
 }
 
+// GetIncident reads the incident attached to an element instance through the
+// in-flight transaction, or nil if there is none (ADR-0058).
+func (c *ProcessingContext) GetIncident(elKey uint64) *model.IncidentValue {
+	v, err := c.tx.GetIncident(elKey)
+	c.p.fail(err)
+	return v
+}
+
 // GetProcessInstance reads process-instance state through the in-flight transaction.
 func (c *ProcessingContext) GetProcessInstance(key uint64) *model.ProcessInstanceValue {
 	v, err := c.tx.GetProcessInstance(key)
@@ -184,6 +192,14 @@ func (c *ProcessingContext) AppendElementEvent(key uint64, intent model.Intent, 
 // AppendJobEvent records a job lifecycle fact.
 func (c *ProcessingContext) AppendJobEvent(key uint64, intent model.Intent, v model.JobValue) {
 	c.appendEvent(key, model.VTJob, intent, inflightValue{job: v})
+}
+
+// AppendIncidentEvent records an incident lifecycle fact (created or resolved).
+// The key is the element instance the incident is attached to, and the value
+// carries that key too, so applyToState can locate the index entry from the event
+// alone on either intent (ADR-0058).
+func (c *ProcessingContext) AppendIncidentEvent(intent model.Intent, v model.IncidentValue) {
+	c.appendEvent(v.ElementInstanceKey, model.VTIncident, intent, inflightValue{incident: v})
 }
 
 // AppendTimerEvent records a timer lifecycle fact (created or triggered).

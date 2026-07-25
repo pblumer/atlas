@@ -224,14 +224,14 @@ func TestActivatableJobsIndex(t *testing.T) {
 	jobB := model.NewKey(1, 2)
 
 	commit(t, s, func(tx *state.Tx) error {
-		if err := tx.PutJob(jobA, &model.JobValue{JobType: jobType}); err != nil {
+		if err := tx.PutJob(jobA, &model.JobValue{JobType: jobType, Retries: 1}); err != nil {
 			return err
 		}
-		if err := tx.PutJob(jobB, &model.JobValue{JobType: jobType}); err != nil {
+		if err := tx.PutJob(jobB, &model.JobValue{JobType: jobType, Retries: 1}); err != nil {
 			return err
 		}
 		// Different type — must not appear in the jobType==42 scan.
-		return tx.PutJob(model.NewKey(1, 3), &model.JobValue{JobType: 7})
+		return tx.PutJob(model.NewKey(1, 3), &model.JobValue{JobType: 7, Retries: 1})
 	})
 
 	collect := func() map[uint64]bool {
@@ -246,7 +246,7 @@ func TestActivatableJobsIndex(t *testing.T) {
 	}
 
 	// Completing a job removes it from the activatable index.
-	commit(t, s, func(tx *state.Tx) error { return tx.DeleteJob(jobA, &model.JobValue{JobType: jobType}) })
+	commit(t, s, func(tx *state.Tx) error { return tx.DeleteJob(jobA, &model.JobValue{JobType: jobType, Retries: 1}) })
 	if got := collect(); !reflect.DeepEqual(got, map[uint64]bool{jobB: true}) {
 		t.Errorf("after delete = %v, want {%d}", got, jobB)
 	}
@@ -290,6 +290,61 @@ func TestDueTimersRangeScan(t *testing.T) {
 	wantKeys := []uint64{model.NewKey(1, 2), model.NewKey(1, 3), model.NewKey(1, 1)}
 	if !reflect.DeepEqual(gotKeys, wantKeys) {
 		t.Errorf("timer keys = %v, want %v", gotKeys, wantKeys)
+	}
+}
+
+func TestIncidentStore(t *testing.T) {
+	s := openStore(t)
+	elA, elB := model.NewKey(1, 10), model.NewKey(1, 20)
+	incA := &model.IncidentValue{ProcessInstanceKey: model.NewKey(1, 1), ElementInstanceKey: elA, JobKey: model.NewKey(1, 11), Message: "boom"}
+	incB := &model.IncidentValue{ProcessInstanceKey: model.NewKey(1, 2), ElementInstanceKey: elB, JobKey: model.NewKey(1, 21), Message: "kaboom"}
+
+	commit(t, s, func(tx *state.Tx) error {
+		if err := tx.PutIncident(incA); err != nil {
+			return err
+		}
+		return tx.PutIncident(incB)
+	})
+
+	// Tx.GetIncident: present round-trips, absent is nil.
+	commit(t, s, func(tx *state.Tx) error {
+		got, err := tx.GetIncident(elA)
+		if err != nil {
+			return err
+		}
+		if got == nil || got.JobKey != incA.JobKey || got.Message != "boom" {
+			t.Errorf("Tx.GetIncident(elA) = %+v, want incA", got)
+		}
+		if missing, err := tx.GetIncident(model.NewKey(1, 99)); err != nil || missing != nil {
+			t.Errorf("Tx.GetIncident(absent) = %+v, %v; want nil, nil", missing, err)
+		}
+		return nil
+	})
+
+	// Store scan.
+	got := map[uint64]model.IncidentValue{}
+	if err := s.Incidents(func(k uint64, v *model.IncidentValue) error { got[k] = *v; return nil }); err != nil {
+		t.Fatalf("Incidents: %v", err)
+	}
+	if len(got) != 2 || got[elA].Message != "boom" || got[elB].JobKey != incB.JobKey {
+		t.Fatalf("Incidents scan = %+v, want elA and elB", got)
+	}
+
+	// Store.GetIncident present + absent.
+	if v, err := s.GetIncident(elB); err != nil || v == nil || v.Message != "kaboom" {
+		t.Fatalf("Store.GetIncident(elB) = %+v, %v", v, err)
+	}
+	if v, err := s.GetIncident(model.NewKey(1, 99)); err != nil || v != nil {
+		t.Fatalf("Store.GetIncident(absent) = %+v, %v; want nil, nil", v, err)
+	}
+
+	// Delete one; the other remains.
+	commit(t, s, func(tx *state.Tx) error { return tx.DeleteIncident(elA) })
+	if v, err := s.GetIncident(elA); err != nil || v != nil {
+		t.Fatalf("deleted incident still present: %+v", v)
+	}
+	if v, err := s.GetIncident(elB); err != nil || v == nil {
+		t.Fatalf("surviving incident missing: %+v, %v", v, err)
 	}
 }
 
