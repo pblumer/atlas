@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -373,6 +374,12 @@ func handleIncidentResolved(c *ProcessingContext) {
 		return
 	}
 	c.AppendIncidentEvent(model.IntentIncidentResolved, *inc)
+	if inc.JobKey == 0 {
+		// A timer incident carries no job (ADR-0064): re-arm the parked catch/boundary
+		// element instead of re-creating one.
+		rearmTimerElement(c, inc.ElementInstanceKey)
+		return
+	}
 	job := c.GetJob(inc.JobKey)
 	if job == nil {
 		return // the job vanished (e.g. its instance was canceled); nothing to resume
@@ -380,6 +387,32 @@ func handleIncidentResolved(c *ProcessingContext) {
 	job.Retries = c.cmd.Value.job.Retries
 	c.AppendJobEvent(inc.JobKey, model.IntentJobCreated, *job)
 	c.NotifyJobAvailable(job.JobType)
+}
+
+// rearmTimerElement re-runs the timer arm for a parked catch/boundary element
+// whose FEEL schedule failed and raised an incident (ADR-0064). Re-evaluated
+// against the instance's current variables, the schedule either resolves — a
+// timer is created and the token waits normally — or fails again, raising a fresh
+// incident (resolve is a genuine retry, not a blind clear). A vanished element
+// (its instance was canceled) is a harmless no-op.
+func rearmTimerElement(c *ProcessingContext, elKey uint64) {
+	ei := c.GetElementInstance(elKey)
+	if ei == nil {
+		return
+	}
+	cp := c.process(ei.ProcessDefKey)
+	if cp == nil {
+		return
+	}
+	node := cp.Node(ei.ElementId)
+	switch node.Type {
+	case compiler.TypeTimerCatchEvent:
+		armOneShotTimer(c, elKey, ei, cp.TimerCatch(node.Detail).Schedule)
+	case compiler.TypeBoundaryEvent:
+		if d := cp.BoundaryEvent(node.Detail); d.Kind == compiler.BoundaryTimer {
+			armOneShotTimer(c, elKey, ei, d.Schedule)
+		}
+	}
 }
 
 // handleJobAssigned rewrites a job's user-task assignee (claim sets it, unclaim
@@ -718,28 +751,71 @@ const builtinProcessInstanceKey = "processInstanceKey"
 // scope still resolves it. Variables and the clock are read at command time and
 // frozen into the event (invariants I4/I6).
 func resolveSchedule(c *ProcessingContext, s compiler.TimerSchedule, scope uint64) (compiler.TimerSchedule, bool) {
+	r, err := resolveScheduleErr(c, s, scope)
+	return r, err == nil
+}
+
+// resolveScheduleErr is resolveSchedule but reports *why* a FEEL schedule could
+// not be resolved — an evaluation error, or a result that isn't a usable temporal
+// for the field — so a catch/boundary arm can put the reason in an incident's
+// message (ADR-0064). A non-FEEL schedule always resolves.
+func resolveScheduleErr(c *ProcessingContext, s compiler.TimerSchedule, scope uint64) (compiler.TimerSchedule, error) {
 	if !s.IsFeel() {
-		return s, true
+		return s, nil
 	}
 	v, err := s.Expr.Eval(bindInputs(c, s.Expr.Inputs(), scope))
 	if err != nil {
-		return compiler.TimerSchedule{}, false
+		return compiler.TimerSchedule{}, err
 	}
 	// Prefer a first-class FEEL temporal (exact nanoseconds/instant); fall back to
 	// the canonical string form for a variable holding an ISO string, or a cycle
 	// (ADR-0057).
-	return s.ResolveFeelValue(v)
+	r, ok := s.ResolveFeelValue(v)
+	if !ok {
+		return compiler.TimerSchedule{}, errors.New("result is not a valid " + feelKindName(s.Kind))
+	}
+	return r, nil
 }
 
-// timerDue computes a one-shot timer's due date (catch/boundary). An unresolvable
-// FEEL schedule resolves to now, so the timer fires immediately rather than wedging
-// the token — the placeholder until incidents are modeled (ADR-0055).
-func timerDue(c *ProcessingContext, s compiler.TimerSchedule, scope uint64) int64 {
-	now := c.Now()
-	if r, ok := resolveSchedule(c, s, scope); ok {
-		return r.FirstDue(now)
+// feelKindName names a FEEL schedule's field for an incident message.
+func feelKindName(k compiler.TimerScheduleKind) string {
+	switch k {
+	case compiler.TimerFeelDate:
+		return "date"
+	case compiler.TimerFeelCycle:
+		return "cycle"
+	default:
+		return "duration"
 	}
-	return now
+}
+
+// armOneShotTimer resolves a catch/boundary timer's schedule and appends its
+// TimerCreated event. If the schedule is a FEEL expression that can't be
+// evaluated, it raises an incident on the element instead of firing the timer
+// immediately, so the token parks visibly and an operator can fix the data and
+// resolve it (ADR-0064). Either way the element stays Activated; only a created
+// timer will ever fire it. The clock and variables are read here (command time)
+// and frozen into the event (I4/I6).
+func armOneShotTimer(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue, s compiler.TimerSchedule) {
+	sched, err := resolveScheduleErr(c, s, ei.ProcessInstanceKey)
+	if err != nil {
+		c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+			ProcessInstanceKey: ei.ProcessInstanceKey,
+			ElementInstanceKey: key,
+			ElementId:          ei.ElementId,
+			RaisedAt:           c.Now(),
+			Message:            "timer schedule: " + err.Error(),
+		})
+		return
+	}
+	now := c.Now()
+	c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		TargetElementId:    ei.ElementId,
+		DueDate:            sched.FirstDue(now),
+		Repetitions:        sched.Repetitions,
+	})
 }
 
 // bindInputs reads the named variables from a scope into a FEEL binding map for
@@ -856,17 +932,12 @@ type timerCatchEventBehavior struct{}
 func (timerCatchEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.TimerCatch(cp.Node(ei.ElementId).Detail)
-	// The due date is computed here (command processing) — reading the clock and,
-	// for a FEEL schedule, the instance's variables — and frozen into the event;
-	// applyToState never reads either (invariant I4/I6). A catch schedule is a
-	// duration or date (a cycle is rejected at compile time), so it fires once.
-	c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
-		ProcessInstanceKey: ei.ProcessInstanceKey,
-		ElementInstanceKey: key,
-		TargetElementId:    ei.ElementId,
-		DueDate:            timerDue(c, detail.Schedule, ei.ProcessInstanceKey),
-	})
-	// Stays Activated: no Completing until the timer fires.
+	// A catch schedule is a duration or date (a cycle is rejected at compile time),
+	// so it fires once. armOneShotTimer computes the due date here (command
+	// processing) and freezes it into the event (I4/I6), or — for an unresolvable
+	// FEEL schedule — raises an incident and parks (ADR-0064).
+	armOneShotTimer(c, key, ei, detail.Schedule)
+	// Stays Activated: no Completing until the timer fires (or the incident resolves).
 }
 
 func (timerCatchEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
@@ -1332,20 +1403,9 @@ func (boundaryEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *m
 		// for a FEEL schedule, the instance's variables — and the due date and cycle
 		// count are frozen into the event; applyToState never reads either (I4/I6). A
 		// non-interrupting cycle boundary seeds Repetitions so a finite Rn cycle counts
-		// down as it recurs (ADR-0054); a one-shot leaves it 0. An unresolvable FEEL
-		// schedule fires immediately (due = now, no recurrence).
-		now := c.Now()
-		due, reps := now, int32(0)
-		if sched, ok := resolveSchedule(c, d.Schedule, ei.ProcessInstanceKey); ok {
-			due, reps = sched.FirstDue(now), sched.Repetitions
-		}
-		c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
-			ProcessInstanceKey: ei.ProcessInstanceKey,
-			ElementInstanceKey: key,
-			TargetElementId:    ei.ElementId,
-			DueDate:            due,
-			Repetitions:        reps,
-		})
+		// down as it recurs (ADR-0054). An unresolvable FEEL schedule raises an
+		// incident and parks instead of firing immediately (ADR-0064).
+		armOneShotTimer(c, key, ei, d.Schedule)
 	case compiler.BoundaryMessage:
 		c.AppendMessageSubscriptionEvent(key, model.IntentSubscriptionCreated, model.MessageSubscriptionValue{
 			ProcessInstanceKey: ei.ProcessInstanceKey,

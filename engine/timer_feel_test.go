@@ -1,6 +1,8 @@
 package engine_test
 
 import (
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -8,6 +10,8 @@ import (
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
+	"github.com/pblumer/atlas/state"
+	"github.com/pblumer/atlas/wal"
 )
 
 // feelCatchProcess builds Start → catch(FEEL schedule over feelSrc) → End.
@@ -224,10 +228,11 @@ func TestCatchTimerFeelDate(t *testing.T) {
 	}
 }
 
-// TestCatchTimerFeelUnresolvableFiresNow proves a FEEL timer whose expression
-// can't resolve to a valid due date (here, a missing variable → null) fires
-// immediately rather than wedging the token (ADR-0055).
-func TestCatchTimerFeelUnresolvableFiresNow(t *testing.T) {
+// TestCatchTimerFeelUnresolvableRaisesIncident proves a FEEL catch timer whose
+// expression can't resolve to a valid due date (here, a missing variable → null)
+// parks its token and raises a job-less incident instead of firing immediately —
+// so a broken schedule is visible and resolvable, not silently wrong (ADR-0064).
+func TestCatchTimerFeelUnresolvableRaisesIncident(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
 	cp := feelCatchProcess(t, 902, compiler.TimerFeelDuration, "timeout")
@@ -241,12 +246,325 @@ func TestCatchTimerFeelUnresolvableFiresNow(t *testing.T) {
 	if err := p.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle: %v", err)
 	}
-	// The timer's due date was frozen to the creation clock, so it is already due.
+
+	inc := incidents(t, h.store)
+	if len(inc) != 1 {
+		t.Fatalf("unresolvable FEEL catch raised %d incidents, want 1", len(inc))
+	}
+	for _, v := range inc {
+		if v.JobKey != 0 {
+			t.Errorf("timer incident JobKey=%d, want 0 (a timer incident has no job)", v.JobKey)
+		}
+		if v.Message == "" || v.RaisedAt == 0 {
+			t.Errorf("incident = %+v, want a non-empty message and a frozen raised-at", v)
+		}
+	}
+	// No timer was created, so ticking fires nothing — the token stays parked.
+	if err := p.TickTimers(); err != nil {
+		t.Fatalf("TickTimers: %v", err)
+	}
+	if pi := activeProcs(t, h.store); pi != 1 {
+		t.Fatalf("after tick: active=%d, want 1 (parked on the incident, not fired)", pi)
+	}
+}
+
+// TestBoundaryTimerFeelUnresolvableRaisesIncident proves an unresolvable FEEL
+// boundary timer parks and raises an incident rather than firing immediately —
+// which would have wrongly cancelled the host activity (ADR-0064).
+func TestBoundaryTimerFeelUnresolvableRaisesIncident(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	e, err := expr.CompileAuto("timeout")
+	if err != nil {
+		t.Fatalf("CompileAuto: %v", err)
+	}
+	b := compiler.NewBuilder(904, "feelboundaryinc", 1)
+	start := b.AddStartEvent()
+	host := b.AddServiceTask("work", 3)
+	bnd := b.AddBoundaryTimerSchedule(host, true, compiler.TimerSchedule{Kind: compiler.TimerFeelDuration, Expr: e})
+	done := b.AddEndEvent()
+	esc := b.AddEndEvent()
+	b.Connect(start, host)
+	b.Connect(host, done)
+	b.Connect(bnd, esc)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ServiceTask(cp.Node(host).Detail).JobType
+
+	clk := &fixedClock{t: 1_000}
+	p := engine.New(1, h.log, h.store, clk)
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key) // no "timeout" → the boundary can't arm
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	if n := len(incidents(t, h.store)); n != 1 {
+		t.Fatalf("unresolvable FEEL boundary raised %d incidents, want 1", n)
+	}
+	// The host was NOT cancelled: its job is still activatable and both element
+	// instances (host + boundary) remain parked.
+	if jobGone(t, h.store, jobType) {
+		t.Error("host job was cancelled — the boundary fired immediately instead of parking on an incident")
+	}
+	if pi, ei := counts(t, h.store); pi != 1 || ei != 2 {
+		t.Fatalf("parked: process=%d element=%d, want 1 and 2 (host + boundary)", pi, ei)
+	}
+}
+
+// TestResolveTimerIncidentReRaisesWhenStillBroken proves resolving a timer
+// incident genuinely re-arms — re-evaluating the schedule — rather than blindly
+// clearing it: with the variable still missing, a fresh incident is raised
+// (ADR-0064).
+func TestResolveTimerIncidentReRaisesWhenStillBroken(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	cp := feelCatchProcess(t, 905, compiler.TimerFeelDuration, "timeout")
+	clk := &fixedClock{t: 1_000}
+	p := engine.New(1, h.log, h.store, clk)
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key) // still no "timeout"
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	var elKey uint64
+	for k := range incidents(t, h.store) {
+		elKey = k
+	}
+
+	clk.t = 2_000 // a later clock so a re-raised incident is distinguishable
+	p.ResolveIncident(elKey, 1)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (resolve): %v", err)
+	}
+
+	inc := incidents(t, h.store)
+	if len(inc) != 1 {
+		t.Fatalf("after resolving a still-broken timer: %d incidents, want 1 (re-raised)", len(inc))
+	}
+	for _, v := range inc {
+		if v.RaisedAt != 2_000 {
+			t.Errorf("re-raised incident RaisedAt=%d, want 2000 (a fresh raise from the re-arm)", v.RaisedAt)
+		}
+	}
+	if pi := activeProcs(t, h.store); pi != 1 {
+		t.Fatalf("still parked after resolve: active=%d, want 1", pi)
+	}
+}
+
+// TestResolveTimerIncidentRearmsWhenFixed proves the payoff: once the variable a
+// FEEL timer needs is present, resolving the incident re-arms the timer, which
+// then fires normally and the instance completes (ADR-0064). A parallel branch
+// supplies the variable after the timer branch has already parked on its incident.
+func TestResolveTimerIncidentRearmsWhenFixed(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	const dur = int64(30e9)
+	e, err := expr.CompileAuto("deadline")
+	if err != nil {
+		t.Fatalf("CompileAuto: %v", err)
+	}
+	b := compiler.NewBuilder(906, "feelrearm", 1)
+	start := b.AddStartEvent()
+	split := b.AddParallelGateway()
+	wait := b.AddTimerCatchSchedule(compiler.TimerSchedule{Kind: compiler.TimerFeelDuration, Expr: e})
+	waitEnd := b.AddEndEvent()
+	setter := b.AddServiceTask("setup", 3) // its output supplies "deadline"
+	setEnd := b.AddEndEvent()
+	b.Connect(start, split)
+	b.Connect(split, wait)
+	b.Connect(wait, waitEnd)
+	b.Connect(split, setter)
+	b.Connect(setter, setEnd)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ServiceTask(cp.Node(setter).Detail).JobType
+
+	clk := &fixedClock{t: 1_000}
+	p := engine.New(1, h.log, h.store, clk)
+	p.SetJobNotifier(func(int32) {})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key) // no "deadline" yet → the catch parks on an incident
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	var elKey uint64
+	for k := range incidents(t, h.store) {
+		elKey = k
+	}
+	if elKey == 0 {
+		t.Fatal("expected a timer incident on the catch branch")
+	}
+
+	// The parallel branch's job now supplies the variable the timer needs.
+	p.CompleteJob(singleActivatableJob(t, h.store, jobType), strVar("deadline", "PT30S"))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (setter): %v", err)
+	}
+
+	// Resolving re-arms the catch against the now-present variable — no re-raise.
+	p.ResolveIncident(elKey, 1)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (resolve): %v", err)
+	}
+	if n := len(incidents(t, h.store)); n != 0 {
+		t.Fatalf("after fixing and resolving: %d incidents remain, want 0", n)
+	}
+
+	// The re-armed timer fires at the resolved delay and the instance completes.
+	clk.t = 2_000 + dur + 1
 	if err := p.TickTimers(); err != nil {
 		t.Fatalf("TickTimers: %v", err)
 	}
 	if pi := activeProcs(t, h.store); pi != 0 {
-		t.Fatalf("unresolvable FEEL timer: active=%d, want 0 (fires immediately)", pi)
+		t.Fatalf("after the re-armed timer fires: active=%d, want 0 (completed)", pi)
+	}
+}
+
+// TestResolveBoundaryTimerIncidentReRaises proves the resolve/re-arm loop covers
+// boundary timers too (not just catch): resolving a still-broken boundary incident
+// re-arms the boundary and raises a fresh incident, leaving the host untouched
+// (ADR-0064).
+func TestResolveBoundaryTimerIncidentReRaises(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	e, err := expr.CompileAuto("timeout")
+	if err != nil {
+		t.Fatalf("CompileAuto: %v", err)
+	}
+	b := compiler.NewBuilder(909, "feelboundaryrearm", 1)
+	start := b.AddStartEvent()
+	host := b.AddServiceTask("work", 3)
+	bnd := b.AddBoundaryTimerSchedule(host, true, compiler.TimerSchedule{Kind: compiler.TimerFeelDuration, Expr: e})
+	done := b.AddEndEvent()
+	esc := b.AddEndEvent()
+	b.Connect(start, host)
+	b.Connect(host, done)
+	b.Connect(bnd, esc)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ServiceTask(cp.Node(host).Detail).JobType
+
+	clk := &fixedClock{t: 1_000}
+	p := engine.New(1, h.log, h.store, clk)
+	p.SetJobNotifier(func(int32) {})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key) // no "timeout"
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	var elKey uint64
+	for k := range incidents(t, h.store) {
+		elKey = k
+	}
+
+	clk.t = 2_000
+	p.ResolveIncident(elKey, 1)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (resolve): %v", err)
+	}
+	inc := incidents(t, h.store)
+	if len(inc) != 1 {
+		t.Fatalf("after resolving a still-broken boundary: %d incidents, want 1 (re-raised)", len(inc))
+	}
+	for _, v := range inc {
+		if v.RaisedAt != 2_000 {
+			t.Errorf("re-raised boundary incident RaisedAt=%d, want 2000", v.RaisedAt)
+		}
+	}
+	if jobGone(t, h.store, jobType) {
+		t.Error("host job vanished across a boundary incident resolve")
+	}
+}
+
+// TestCatchTimerFeelDateIncidentNamesField proves the incident message names the
+// field that failed to resolve — here a FEEL <timeDate> — so an operator sees what
+// kind of schedule broke (ADR-0064).
+func TestCatchTimerFeelDateIncidentNamesField(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	cp := feelCatchProcess(t, 908, compiler.TimerFeelDate, "deadline")
+	clk := &fixedClock{t: 1_000}
+	p := engine.New(1, h.log, h.store, clk)
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key) // no "deadline"
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	inc := incidents(t, h.store)
+	if len(inc) != 1 {
+		t.Fatalf("unresolvable FEEL date catch raised %d incidents, want 1", len(inc))
+	}
+	for _, v := range inc {
+		if !strings.Contains(v.Message, "date") {
+			t.Errorf("incident message = %q, want it to name the failing field (date)", v.Message)
+		}
+	}
+}
+
+// TestTimerIncidentRecovers proves a raised timer incident survives a restart:
+// replaying the log restores the incident and the parked, timer-less element
+// (ADR-0064, invariant I4).
+func TestTimerIncidentRecovers(t *testing.T) {
+	dir := t.TempDir()
+	cp := feelCatchProcess(t, 907, compiler.TimerFeelDuration, "timeout")
+
+	h1 := openHarness(t, dir)
+	clk := &fixedClock{t: 1_000}
+	p1 := engine.New(1, h1.log, h1.store, clk)
+	p1.Deploy(cp)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.CreateInstance(cp.Key) // no "timeout" → an incident is raised on the catch
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if len(incidents(t, h1.store)) != 1 {
+		t.Fatal("expected one timer incident before restart")
+	}
+	h1.close(t)
+
+	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open 2: %v", err)
+	}
+	store2, err := state.Open(filepath.Join(dir, "state2"))
+	if err != nil {
+		t.Fatalf("state.Open 2: %v", err)
+	}
+	defer func() { _ = store2.Close(); _ = log2.Close() }()
+	p2 := engine.New(1, log2, store2, clk)
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2 (replay): %v", err)
+	}
+	if n := len(incidents(t, store2)); n != 1 {
+		t.Fatalf("after replay: %d incidents, want 1 (restored)", n)
+	}
+	if pi := activeProcs(t, store2); pi != 1 {
+		t.Fatalf("after replay: active=%d, want 1 (parked, no timer)", pi)
 	}
 }
 
