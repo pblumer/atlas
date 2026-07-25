@@ -63,6 +63,121 @@ func (v *Validator) Validate(ctx context.Context, modelRef string) (ValidationRe
 	}, nil
 }
 
+// DecisionField is one input or output of a decision, for authoring tooling: a
+// name and its declared FEEL type (empty when the model declares none).
+type DecisionField struct {
+	Name string `json:"name"`
+	Type string `json:"type,omitempty"`
+}
+
+// DecisionInfo is a decision's self-description for the Modeler's decision picker
+// (ADR-0050): the id to reference it by, its display name, the input data it
+// consumes (so a business rule task's input mappings can be auto-filled), and its
+// output (the process variable a result naturally lands in).
+type DecisionInfo struct {
+	ID     string          `json:"id"`
+	Name   string          `json:"name"`
+	Inputs []DecisionField `json:"inputs"`
+	Output DecisionField   `json:"output"`
+}
+
+// Describe resolves modelRef, compiles it, and returns its model name and the
+// self-description of each evaluable decision (inputs + output). Like Validate it
+// returns a non-nil error only for an infrastructure failure; an unresolved handle
+// or an invalid model yields an empty result (a best-effort catalog entry), not an
+// error, so one broken reference does not blank the whole picker.
+func (v *Validator) Describe(ctx context.Context, modelRef string) (string, []DecisionInfo, error) {
+	xml, err := v.resolver.Resolve(ctx, modelRef)
+	if errors.Is(err, ErrNotFound) {
+		return "", nil, nil
+	}
+	if err != nil {
+		return "", nil, err
+	}
+	defs, diags, err := v.engine.Compile(ctx, xml)
+	if err != nil || diags.HasErrors() {
+		return "", nil, nil
+	}
+	return defs.ModelName(), describeDecisions(defs), nil
+}
+
+// describeDecisions turns a compiled model's decision requirements graph into a
+// per-decision I/O description. A decision's inputs are the input data it consumes
+// transitively (through any sub-decisions it depends on), in the model's node
+// order for a stable picker; its output is its result variable and declared type.
+// Only named decisions with executable logic are listed — the same set Index
+// exposes, so the picker and the deploy gate agree.
+func describeDecisions(defs *tdmn.Definitions) []DecisionInfo {
+	g := defs.Graph()
+	// requires: a requiring node id → the ids it directly requires. A DRG
+	// information-requirement edge points from the required (upstream) element to
+	// the one that requires it.
+	requires := map[string][]string{}
+	for _, e := range g.Edges {
+		if e.Type == "informationRequirement" {
+			requires[e.Target] = append(requires[e.Target], e.Source)
+		}
+	}
+	var out []DecisionInfo
+	for _, n := range g.Nodes {
+		if n.Type != "decision" || n.Name == "" || !n.HasLogic {
+			continue
+		}
+		feeding := reachableUpstream(n.ID, requires)
+		var inputs []DecisionField
+		for _, m := range g.Nodes { // model order → stable UI
+			if m.Type == "inputData" && feeding[m.ID] {
+				inputs = append(inputs, DecisionField{Name: m.Name, Type: m.DataType})
+			}
+		}
+		outName := n.VarName
+		if outName == "" {
+			outName = n.Name
+		}
+		out = append(out, DecisionInfo{
+			ID:     n.Name, // temis Decision() resolves by name; matches Index().Decisions
+			Name:   n.Name,
+			Inputs: inputs,
+			Output: DecisionField{Name: outName, Type: n.DataType},
+		})
+	}
+	return out
+}
+
+// reachableUpstream returns the set of node ids reachable from start by following
+// requirement edges upstream, so a decision's inputs include the input data
+// feeding the sub-decisions it depends on.
+func reachableUpstream(start string, requires map[string][]string) map[string]bool {
+	seen := map[string]bool{}
+	stack := append([]string(nil), requires[start]...)
+	for len(stack) > 0 {
+		id := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		stack = append(stack, requires[id]...)
+	}
+	return seen
+}
+
+// ValidateXML compiles a DMN model already in hand (not resolved by a handle) and
+// reports whether it is valid, with its name and decisions — the check the upload
+// path runs before storing a model. Resolved is always true (the bytes are
+// present), and no infrastructure failure is possible, so it returns no error.
+func (v *Validator) ValidateXML(ctx context.Context, xml []byte) ValidationResult {
+	defs, diags, err := v.engine.Compile(ctx, xml)
+	if err != nil {
+		return ValidationResult{Resolved: true, Message: err.Error()}
+	}
+	if diags.HasErrors() {
+		return ValidationResult{Resolved: true, Message: formatDiagnostics(diags)}
+	}
+	idx := defs.Index()
+	return ValidationResult{Resolved: true, Valid: true, ModelName: defs.ModelName(), Decisions: idx.Decisions}
+}
+
 // formatDiagnostics renders the error-severity diagnostics into one line for the
 // UI. Diagnostic messages are human-readable but not a stable API (temis warns
 // against parsing them), so this is display-only.

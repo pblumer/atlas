@@ -56,7 +56,7 @@ func (c *ProcessingContext) JobOfElement(elKey uint64) (uint64, bool) {
 }
 
 // GetIncident reads the incident attached to an element instance through the
-// in-flight transaction, or nil if there is none (ADR-0058).
+// in-flight transaction, or nil if there is none (ADR-0061).
 func (c *ProcessingContext) GetIncident(elKey uint64) *model.IncidentValue {
 	v, err := c.tx.GetIncident(elKey)
 	c.p.fail(err)
@@ -197,7 +197,7 @@ func (c *ProcessingContext) AppendJobEvent(key uint64, intent model.Intent, v mo
 // AppendIncidentEvent records an incident lifecycle fact (created or resolved).
 // The key is the element instance the incident is attached to, and the value
 // carries that key too, so applyToState can locate the index entry from the event
-// alone on either intent (ADR-0058).
+// alone on either intent (ADR-0061).
 func (c *ProcessingContext) AppendIncidentEvent(intent model.Intent, v model.IncidentValue) {
 	c.appendEvent(v.ElementInstanceKey, model.VTIncident, intent, inflightValue{incident: v})
 }
@@ -220,6 +220,16 @@ func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.Var
 // hot-path token movement (ADR-0053). The event is keyed by the owning scope.
 func (c *ProcessingContext) AppendDataObjectEvent(intent model.Intent, v model.DataObjectValue) {
 	c.appendEvent(v.ScopeKey, model.VTDataObject, intent, inflightValue{dataObject: v})
+}
+
+// GetDataObject reads a scope's data object by name through the in-flight
+// transaction (sees writes from earlier in this batch). A data-output association
+// uses it to keep the object's current value or state when the write changes only
+// one of them (ADR-0058); nil if the object is absent.
+func (c *ProcessingContext) GetDataObject(scope uint64, name string) *model.DataObjectValue {
+	v, err := c.tx.GetDataObject(scope, name)
+	c.p.fail(err)
+	return v
 }
 
 // AppendMessageSubscriptionEvent records a message-subscription fact (created or

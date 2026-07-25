@@ -54,7 +54,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			return tx.RecordElementStep(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId)
 		case model.IntentCompleted, model.IntentTerminated:
 			// Terminating an element clears any incident it carried (a stuck job's,
-			// ADR-0058); the delete is idempotent, so it is a no-op for the common
+			// ADR-0061); the delete is idempotent, so it is a no-op for the common
 			// element with none.
 			if err := tx.DeleteIncident(h.Key); err != nil {
 				return err
@@ -71,7 +71,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// Assigning re-puts the job with its new assignee; failing re-puts it with
 			// its new (decremented, worker-reported) retry count. PutJob's activatable-
 			// index write is idempotent and keyed on Retries > 0, so a still-retryable
-			// job stays open while an exhausted one parks off the index (ADR-0042/0058).
+			// job stays open while an exhausted one parks off the index (ADR-0042/0061).
 			return tx.PutJob(h.Key, &v.job)
 		case model.IntentJobCompleted, model.IntentJobCanceled:
 			return tx.DeleteJob(h.Key, &v.job)

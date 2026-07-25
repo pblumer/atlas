@@ -105,7 +105,7 @@ func TestReadIntoDecodeError(t *testing.T) {
 
 // TestIncidentDecodeError covers the decode-error branch of both incident reads —
 // the point GetIncident and the Incidents scan — by planting an undersized value
-// under an incident key (ADR-0058).
+// under an incident key (ADR-0061).
 func TestIncidentDecodeError(t *testing.T) {
 	s, err := Open(t.TempDir())
 	if err != nil {

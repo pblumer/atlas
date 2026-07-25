@@ -568,12 +568,160 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	// Data objects are not flow nodes (no token flows through them), so they are
 	// added as a separate collection, not registered as flow nodes (ADR-0053). A
 	// nameless data object falls back to its BPMN id so it stays addressable.
+	//
+	// A data object's identity is its name: several <dataObjectReference>s (and even
+	// several <dataObject> elements) sharing a name are *views* of one logical object
+	// — the BPMN way to place it near several activities without long arrows. So every
+	// id resolves through objName for association wiring, but the object is seeded only
+	// once per name (the first occurrence wins its item type / initial state), so the
+	// engine sees one object, not several.
+	objName := make(map[string]string, len(proc.DataObjects)) // BPMN id → data-object name
+	seededObj := make(map[string]bool, len(proc.DataObjects))
 	for _, d := range proc.DataObjects {
 		name := d.Name
 		if name == "" {
 			name = d.Id
 		}
+		objName[d.Id] = name
+		if seededObj[name] {
+			continue // already have a logical object of this name; this is another view
+		}
+		seededObj[name] = true
 		b.AddDataObject(name, d.ItemSubjectRef, d.DataState.Name, d.IsCollection)
+	}
+
+	// Wire data-output associations now that every activity node is registered
+	// (ADR-0058). A dataObjectReference resolves to its data object plus the target
+	// data state; a targetRef may also name a data object directly (no state change).
+	refs := make(map[string]xmlDataObjectReference, len(proc.DataObjectReferences))
+	for _, ref := range proc.DataObjectReferences {
+		refs[ref.Id] = ref
+	}
+	// resolveDataTarget maps an association's targetRef to the data-object name it
+	// writes and the data state it moves the object into.
+	resolveDataTarget := func(ownerId, targetRef string) (name, state string, err error) {
+		if ref, ok := refs[targetRef]; ok {
+			name, ok := objName[ref.DataObjectRef]
+			if !ok {
+				return "", "", fmt.Errorf("compiler: data output association on %q references data object reference %q whose dataObjectRef %q is unknown", ownerId, targetRef, ref.DataObjectRef)
+			}
+			return name, ref.DataState.Name, nil
+		}
+		if name, ok := objName[targetRef]; ok {
+			return name, "", nil // targets the object directly; no state change
+		}
+		return "", "", fmt.Errorf("compiler: data output association on %q has unknown targetRef %q", ownerId, targetRef)
+	}
+	wireDataOut := func(ownerId string, assocs []xmlDataOutputAssociation) error {
+		for _, a := range assocs {
+			name, state, err := resolveDataTarget(ownerId, a.TargetRef)
+			if err != nil {
+				return err
+			}
+			var valExpr *expr.Compiled
+			if from := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(a.Assignment.From), "=")); from != "" {
+				ce, err := expr.CompileAuto(from)
+				if err != nil {
+					return fmt.Errorf("compiler: data output association on %q assignment: %w", ownerId, err)
+				}
+				valExpr = ce
+			}
+			b.AddDataOutputAssociation(ids[ownerId], name, valExpr, state, strings.TrimSpace(a.Assignment.To))
+		}
+		return nil
+	}
+	for _, st := range proc.ServiceTasks {
+		if err := wireDataOut(st.Id, st.DataOut); err != nil {
+			return nil, err
+		}
+	}
+	for _, st := range proc.ScriptTasks {
+		if err := wireDataOut(st.Id, st.DataOut); err != nil {
+			return nil, err
+		}
+	}
+	for _, brt := range proc.BusinessRuleTasks {
+		if err := wireDataOut(brt.Id, brt.DataOut); err != nil {
+			return nil, err
+		}
+	}
+	for _, ut := range proc.UserTasks {
+		if err := wireDataOut(ut.Id, ut.DataOut); err != nil {
+			return nil, err
+		}
+	}
+	for _, t := range proc.Tasks {
+		if err := wireDataOut(t.Id, t.DataOut); err != nil {
+			return nil, err
+		}
+	}
+	for _, t := range proc.ManualTasks {
+		if err := wireDataOut(t.Id, t.DataOut); err != nil {
+			return nil, err
+		}
+	}
+
+	// Wire data-input associations: a sourceRef names the data object read (resolved
+	// like an output target, its state ignored on a read); a targetRef is the process
+	// variable the read value is written into (ADR-0059).
+	wireDataIn := func(ownerId string, assocs []xmlDataInputAssociation) error {
+		for _, a := range assocs {
+			name, _, err := resolveDataTarget(ownerId, a.SourceRef)
+			if err != nil {
+				return fmt.Errorf("compiler: data input association on %q source: %w", ownerId, err)
+			}
+			// The target variable is the assignment's <to> (a free string the Modeler
+			// writes — a drawn association's own <targetRef> is a generated data-input
+			// property id, not a variable name). A hand-authored <targetRef> is the
+			// fallback when no <to> is given.
+			variable := strings.TrimSpace(a.Assignment.To)
+			if variable == "" {
+				variable = strings.TrimSpace(a.TargetRef)
+			}
+			if variable == "" {
+				return fmt.Errorf("compiler: data input association on %q has no target variable (set the assignment's <to>)", ownerId)
+			}
+			var valExpr *expr.Compiled
+			if from := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(a.Assignment.From), "=")); from != "" {
+				ce, err := expr.CompileAuto(from)
+				if err != nil {
+					return fmt.Errorf("compiler: data input association on %q assignment: %w", ownerId, err)
+				}
+				valExpr = ce
+			}
+			b.AddDataInputAssociation(ids[ownerId], name, variable, valExpr)
+		}
+		return nil
+	}
+	for _, st := range proc.ServiceTasks {
+		if err := wireDataIn(st.Id, st.DataIn); err != nil {
+			return nil, err
+		}
+	}
+	for _, st := range proc.ScriptTasks {
+		if err := wireDataIn(st.Id, st.DataIn); err != nil {
+			return nil, err
+		}
+	}
+	for _, brt := range proc.BusinessRuleTasks {
+		if err := wireDataIn(brt.Id, brt.DataIn); err != nil {
+			return nil, err
+		}
+	}
+	for _, ut := range proc.UserTasks {
+		if err := wireDataIn(ut.Id, ut.DataIn); err != nil {
+			return nil, err
+		}
+	}
+	for _, t := range proc.Tasks {
+		if err := wireDataIn(t.Id, t.DataIn); err != nil {
+			return nil, err
+		}
+	}
+	for _, t := range proc.ManualTasks {
+		if err := wireDataIn(t.Id, t.DataIn); err != nil {
+			return nil, err
+		}
 	}
 
 	return b.Build()
@@ -645,7 +793,8 @@ type xmlProcess struct {
 	SendTasks    []xmlNode `xml:"sendTask"`
 	ReceiveTasks []xmlNode `xml:"receiveTask"`
 
-	DataObjects []xmlDataObject `xml:"dataObject"`
+	DataObjects          []xmlDataObject          `xml:"dataObject"`
+	DataObjectReferences []xmlDataObjectReference `xml:"dataObjectReference"`
 }
 
 // A BPMN data object. It is not a flow node — no token flows through it — so it
@@ -665,6 +814,46 @@ type xmlDataObject struct {
 // object or reference), carried by its name.
 type xmlDataState struct {
 	Name string `xml:"name,attr"`
+}
+
+// A BPMN data object reference: a pointer to a <dataObject> (dataObjectRef) that may
+// carry its own <dataState> — so the same object can appear on the canvas in several
+// states (order [received], order [approved]). A data-output association targets a
+// reference to say which object it writes and what state it moves it into (ADR-0058).
+type xmlDataObjectReference struct {
+	Id            string       `xml:"id,attr"`
+	DataObjectRef string       `xml:"dataObjectRef,attr"`
+	DataState     xmlDataState `xml:"dataState"`
+}
+
+// xmlDataOutputAssociation is a <dataOutputAssociation> on an activity: targetRef
+// names the data object (or a <dataObjectReference> to it) the activity writes, and
+// the optional <assignment><from> is a FEEL expression, evaluated over the instance's
+// variables at completion, that produces the written value (ADR-0058).
+type xmlDataOutputAssociation struct {
+	TargetRef  string        `xml:"targetRef"`
+	Assignment xmlAssignment `xml:"assignment"`
+}
+
+// xmlAssignment is a data association's <assignment>: a <from> value expression and a
+// <to> target. Atlas reads <from> as the FEEL value expression. On an output
+// association <to> is an optional member path within the target data object (e.g.
+// "name") — set, the write updates only that member (ADR-0060); empty, it writes the
+// whole value. On an input association <to> is unused (its target is targetRef).
+type xmlAssignment struct {
+	From string `xml:"from"`
+	To   string `xml:"to"`
+}
+
+// xmlDataInputAssociation is a <dataInputAssociation> on an activity: sourceRef
+// names the data object (or a <dataObjectReference> to it) the activity reads,
+// targetRef is the process-variable name the read value is written into, and the
+// optional <assignment><from> is a FEEL transform evaluated over the instance's
+// variables plus the source object bound under its name (ADR-0059).
+type xmlDataInputAssociation struct {
+	SourceRef  string        `xml:"sourceRef"`
+	TargetRef  string        `xml:"targetRef"`
+	Assignment xmlAssignment `xml:"assignment"`
 }
 
 // A data-based exclusive gateway; default names the flow taken when no outgoing
@@ -741,18 +930,22 @@ type xmlTimerEventDefinition struct {
 }
 
 type xmlNode struct {
-	Id string `xml:"id,attr"`
+	Id      string                     `xml:"id,attr"`
+	DataOut []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
+	DataIn  []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
 
 // A user task parks a token for human completion (ADR-0028). It optionally
 // carries a zeebe:assignmentDefinition for assignee/candidateGroups.
 type xmlUserTask struct {
-	Id         string                  `xml:"id,attr"`
-	Name       string                  `xml:"name,attr"`
-	Assignment xmlAssignmentDefinition `xml:"extensionElements>assignmentDefinition"`
-	Form       xmlFormDefinition       `xml:"extensionElements>formDefinition"`
-	Priority   xmlPriorityDefinition   `xml:"extensionElements>priorityDefinition"`
-	Schedule   xmlTaskSchedule         `xml:"extensionElements>taskSchedule"`
+	Id         string                     `xml:"id,attr"`
+	Name       string                     `xml:"name,attr"`
+	Assignment xmlAssignmentDefinition    `xml:"extensionElements>assignmentDefinition"`
+	Form       xmlFormDefinition          `xml:"extensionElements>formDefinition"`
+	Priority   xmlPriorityDefinition      `xml:"extensionElements>priorityDefinition"`
+	Schedule   xmlTaskSchedule            `xml:"extensionElements>taskSchedule"`
+	DataOut    []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
+	DataIn     []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
 
 // xmlPriorityDefinition carries zeebe:priorityDefinition's static task priority
@@ -790,7 +983,9 @@ type xmlServiceTask struct {
 	// Rest, when present, marks this service task an HTTP-REST connector task
 	// (ADR-0036). The pointer is nil when the <atlas:restConnector> extension is
 	// absent.
-	Rest *xmlRestConnector `xml:"extensionElements>restConnector"`
+	Rest    *xmlRestConnector          `xml:"extensionElements>restConnector"`
+	DataOut []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
+	DataIn  []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
 
 // A clio connector task's parameters, carried on a service task as an
@@ -832,7 +1027,9 @@ type xmlScriptTask struct {
 	// JobScript, when present, marks this a polyglot job script (PowerShell, …),
 	// run via the job path rather than inline as FEEL. The pointer is nil when the
 	// <atlas:jobScript> extension is absent.
-	JobScript *xmlAtlasScript `xml:"extensionElements>jobScript"`
+	JobScript *xmlAtlasScript            `xml:"extensionElements>jobScript"`
+	DataOut   []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
+	DataIn    []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
 
 type xmlZeebeScript struct {
@@ -875,7 +1072,9 @@ type xmlBusinessRuleTask struct {
 	// evaluated by a remote temis service rather than the embedded library
 	// (ADR-0050). The pointer is nil when the <atlas:temisConnector> extension is
 	// absent, i.e. the decision is evaluated locally.
-	TemisConnector *xmlTemisConnector `xml:"extensionElements>temisConnector"`
+	TemisConnector *xmlTemisConnector         `xml:"extensionElements>temisConnector"`
+	DataOut        []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
+	DataIn         []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
 
 // xmlTemisConnector is the <atlas:temisConnector connector="..."/> extension that

@@ -1,4 +1,4 @@
-# ADR-0058: Incident model — job-failure incidents, raise, resolve, resume
+# ADR-0061: Incident model — job-failure incidents, raise, resolve, resume
 
 - **Status:** Proposed
 - **Date:** 2026-07-24

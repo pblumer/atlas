@@ -452,7 +452,7 @@ func readString(src []byte) (string, []byte, error) {
 }
 
 // IncidentValue is a durable fault attached to the element instance where progress
-// stalled — today, a job whose retries were exhausted (ADR-0058). It is keyed by
+// stalled — today, a job whose retries were exhausted (ADR-0061). It is keyed by
 // ElementInstanceKey (one activity holds at most one job, so at most one incident)
 // and points at the job, so resolving the incident can re-activate it. Message is
 // the worker-reported failure reason; it is genuine runtime data, so the value is

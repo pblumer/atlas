@@ -60,11 +60,31 @@ The control-flow basics most real models use.
   `VarJSON`-capable payload, ADR-0037) and every state transition are durable
   events written to a `cfDataObject` current-value family plus a `cfDataObjectSnapshot`
   history family (the ADR-0048 two-write pattern), so the data-state history and
-  lineage rebuild identically on replay — recovery-tested. Next: data associations
-  (`<dataInput/OutputAssociation>`) as a compiled FEEL read/write contract, a
-  lineage view folding the `SourcePos` chain, the Modeler properties panel for
-  `DataObjectReference`, item-definition schema validation, and connector-backed
-  data stores.
+  lineage rebuild identically on replay — recovery-tested. Seeded objects are also
+  read over the HTTP API (`GET /api/v1/instances/{key}/data-objects`, name + state +
+  typed value). **Data output associations now write them**
+  ([ADR-0058](docs/adr/0058-data-output-associations.md)): a
+  `<dataOutputAssociation>` on an activity evaluates an `<assignment><from>` FEEL
+  expression over the instance's variables when the activity completes and emits a
+  `DataObjectStateChanged` — setting the object's value and advancing its data state
+  to the one on the target `<dataObjectReference>` (`received → approved`), so the
+  state history becomes a real trail; recovery-tested. **Data input associations
+  read them back** ([ADR-0059](docs/adr/0059-data-input-associations.md)): a
+  `<dataInputAssociation>` on an activity, at activation, reads a source data
+  object (bound into the FEEL scope under its name), optionally transforms it with
+  an `<assignment><from>` expression, and writes the result into a process variable
+  the activity then reads — so an `order` one step wrote flows into the next step's
+  FEEL; recovery-tested. Data now flows both ways. **Field-level writes**
+  ([ADR-0060](docs/adr/0060-field-level-data-object-writes.md)) let an output
+  association target one member of a structured object via its `<assignment><to>`
+  (e.g. `name`): the engine reads the object's current JSON, sets that member, and
+  writes the merged canonical value back — so a record accrues field by field across
+  steps, and writing a member into an unset object creates it. The **Modeler** now
+  authors all of this (ADR-0053): a `DataObjectReference` panel (name, data state,
+  collection) and an association panel (the FEEL value, the target member/variable),
+  with input associations defaulting their target on draw. Next: a lineage view
+  folding the `SourcePos` chain, item-definition schema validation, list-index path
+  targets, and connector-backed data stores.
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
 - 🔲 Conformance tests against a curated BPMN model set
 - 🚧 **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)
@@ -90,8 +110,13 @@ The control-flow basics most real models use.
   (ADR-0036/0041) instead of the embedded library — same authoring and I/O mappings,
   only the evaluation locus differs, and a central decision needs no local model at
   deploy. The `temis` connector trio (registry/client/worker) and the shared
-  `dmn.DecisionHandler` core landed with engine-path tests; wiring the connector
-  worker into the server run loop is the shared ADR-0041 follow-up (with clio/REST).
+  `dmn.DecisionHandler` core landed, and **the connector worker is now wired into
+  the single-binary server run loop**: a central decision's connector endpoint and
+  token are resolved from the environment at startup (`ATLAS_TEMIS_CONNECTORS` +
+  `ATLAS_TEMIS_<NAME>_URL`/`_TOKEN`, the ADR-0041 secret-reference model), so a
+  deployed instance with an external decision runs to completion against the
+  configured temis service (server end-to-end tested). Wiring the clio/REST workers
+  the same way remains the shared ADR-0041 follow-up.
   Next: explicit `<zeebe:output>` mappings, decimal precision across the temis
   boundary, and off-loop streaming evaluation as the Milestone-4 gRPC job-worker
   concern (the single binary drives jobs synchronously).
@@ -166,7 +191,7 @@ Making processes wait, react, and time out.
   re-activates the job with fresh retries (raise / resolve / resume). Keyed by
   element instance, so cancelling an instance clears its incidents. Recovery-
   tested; exposed over HTTP (`POST /jobs/{key}/fail`, `GET /incidents`,
-  `POST /incidents/{key}/resolve`) and counted in `/stats` (ADR-0058).
+  `POST /incidents/{key}/resolve`) (ADR-0061).
   Expression/timer-driven incidents (the ADR-0055/0056/0057 fail-open cases),
   retry backoff, and an operator UI still to come.
 
@@ -412,8 +437,12 @@ the hand-written Details panel one vertical slice at a time:
 - A standalone DMN authoring/product surface. Atlas *executes* the DMN decisions
   a model references, via business rule tasks that delegate to the embedded temis
   engine ([ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)); it does
-  not ship a DMN modeler or decision-management product of its own. (FEEL is also
-  used internally for expressions.)
+  not ship a DMN **modeler/editor** or decision-management product of its own —
+  decisions are authored in temis. (Atlas does offer a **read-only** view of a
+  referenced model's decision requirements graph, and a decision picker that
+  auto-reads inputs/outputs, so an author can *use* a decision without leaving the
+  Modeler; that is a look-and-use surface, not an authoring one.) FEEL is also used
+  internally for expressions.
 
 ## Guiding constraints
 

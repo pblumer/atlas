@@ -166,7 +166,7 @@ func (s *Store) GetJob(key uint64) (*model.JobValue, bool, error) {
 
 // GetIncident returns the committed incident on an element instance, or nil if
 // there is none. It reads outside a transaction, for the resolve endpoint's
-// existence check (ADR-0058).
+// existence check (ADR-0061).
 func (s *Store) GetIncident(elKey uint64) (*model.IncidentValue, error) {
 	raw, ok, err := getCopy(s.db, keyIncident(elKey))
 	if err != nil || !ok {
@@ -228,7 +228,7 @@ func (s *Store) CompletedProcessInstances(fn func(key uint64, v *model.ProcessIn
 }
 
 // Incidents calls fn with the element-instance key and value of every unresolved
-// incident — the operator "list incidents" access pattern (ADR-0058).
+// incident — the operator "list incidents" access pattern (ADR-0061).
 func (s *Store) Incidents(fn func(elementKey uint64, v *model.IncidentValue) error) error {
 	return s.scanPrefix([]byte{byte(cfIncident)}, func(k, raw []byte) error {
 		v, err := model.DecodeValue(model.VTIncident, raw)

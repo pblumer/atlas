@@ -65,7 +65,10 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0055](0055-feel-expression-timer-schedules.md) | FEEL-expression timer schedules for catch and boundary events | Proposed |
 | [0056](0056-feel-cycles-and-feel-start-timers.md) | FEEL cycles, and FEEL on timer start events | Proposed |
 | [0057](0057-first-class-feel-temporals.md) | First-class FEEL temporals for timer schedules | Proposed |
-| [0058](0058-incident-model.md) | Incident model — job-failure incidents, raise, resolve, resume | Proposed |
+| [0058](0058-data-output-associations.md) | Data output associations — write a value and transition a data object's state | Accepted |
+| [0059](0059-data-input-associations.md) | Data input associations — read a data object into an activity | Accepted |
+| [0060](0060-field-level-data-object-writes.md) | Field-level data object writes — set one member of a structured object | Accepted |
+| [0061](0061-incident-model.md) | Incident model — job-failure incidents, raise, resolve, resume | Proposed |
 
 ## Status values
 

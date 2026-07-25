@@ -138,7 +138,7 @@ func (t *Tx) ElementInstancesOfProcess(procKey uint64, fn func(elKey uint64, v *
 // A job is on the activatable index iff it has retries left (Retries > 0): a job
 // whose retries are exhausted stays stored — an incident points at it — but is
 // never handed to a worker until an operator resolves the incident and restores a
-// positive retry count (ADR-0058).
+// positive retry count (ADR-0061).
 func (t *Tx) PutJob(key uint64, v *model.JobValue) error {
 	err := t.b.Set(keyJob(key), t.encodeValue(v), nil)
 	if v.Retries > 0 {
@@ -165,7 +165,7 @@ func (t *Tx) PutIncident(v *model.IncidentValue) error {
 
 // DeleteIncident removes the incident attached to an element instance. Deleting
 // one that is absent is a harmless no-op — how terminating an element clears any
-// incident it carried without first reading it (ADR-0058).
+// incident it carried without first reading it (ADR-0061).
 func (t *Tx) DeleteIncident(elKey uint64) error {
 	return t.b.Delete(keyIncident(elKey), nil)
 }

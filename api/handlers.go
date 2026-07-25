@@ -1454,7 +1454,7 @@ func (s *Server) handleListTasks(w http.ResponseWriter, _ *http.Request) {
 // completion back to the processor (the same path a service-task worker uses)
 // and drives any jobs that unblocked (e.g. a business rule task the completion
 // flowed into) to idle. 404 if the job doesn't exist or is already completed.
-// handleFailJob applies a worker's failure report for a job (ADR-0058): the body
+// handleFailJob applies a worker's failure report for a job (ADR-0061): the body
 // carries the remaining retries and a message. With retries > 0 the job is retried;
 // with none an incident is raised on its element. 404 if the job doesn't exist.
 func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
@@ -1490,7 +1490,7 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleResolveIncident resolves the incident on an element instance and resumes
-// its job (ADR-0058): the body's retries (default 1) is how many attempts the
+// its job (ADR-0061): the body's retries (default 1) is how many attempts the
 // re-activated job gets. 404 if there is no incident on that element.
 func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
@@ -1532,7 +1532,7 @@ func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleListIncidents lists the unresolved incidents — the operator "what's stuck"
-// view (ADR-0058).
+// view (ADR-0061).
 func (s *Server) handleListIncidents(w http.ResponseWriter, _ *http.Request) {
 	list := []incidentView{}
 	var scanErr error

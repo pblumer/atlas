@@ -40,7 +40,7 @@ func startedJob(t *testing.T, h *harness) (*engine.Processor, uint64, int32) {
 }
 
 // TestJobFailWithRetriesRetries proves failing a job with retries left puts it
-// back on the activatable index and raises no incident (ADR-0058).
+// back on the activatable index and raises no incident (ADR-0061).
 func TestJobFailWithRetriesRetries(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -60,7 +60,7 @@ func TestJobFailWithRetriesRetries(t *testing.T) {
 
 // TestJobFailExhaustedRaisesIncident proves failing a job with no retries left
 // parks it off the activatable index and raises an incident on its element,
-// leaving the token in place (ADR-0058).
+// leaving the token in place (ADR-0061).
 func TestJobFailExhaustedRaisesIncident(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -89,7 +89,7 @@ func TestJobFailExhaustedRaisesIncident(t *testing.T) {
 }
 
 // TestResolveIncidentResumes proves resolving an incident clears it, re-activates
-// the job, and a worker can then complete it and finish the instance (ADR-0058).
+// the job, and a worker can then complete it and finish the instance (ADR-0061).
 func TestResolveIncidentResumes(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -127,7 +127,7 @@ func TestResolveIncidentResumes(t *testing.T) {
 
 // TestIncidentRecovers proves a raised incident survives a restart: replaying the
 // log into a fresh store restores the incident and the parked (non-activatable)
-// job (ADR-0058, invariant I4).
+// job (ADR-0061, invariant I4).
 func TestIncidentRecovers(t *testing.T) {
 	dir := t.TempDir()
 	cp, jobType := linearProcess(t)
@@ -173,7 +173,7 @@ func TestIncidentRecovers(t *testing.T) {
 }
 
 // TestFailAndResolveNoOpWhenAbsent proves failing a job that doesn't exist and
-// resolving an incident that doesn't exist are both harmless no-ops (ADR-0058).
+// resolving an incident that doesn't exist are both harmless no-ops (ADR-0061).
 func TestFailAndResolveNoOpWhenAbsent(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -192,8 +192,44 @@ func TestFailAndResolveNoOpWhenAbsent(t *testing.T) {
 	}
 }
 
+// TestResolveIncidentWhoseJobVanished proves resolving an incident whose job has
+// since disappeared (e.g. the job was removed by another path while the incident
+// lingered) still clears the incident and resurrects no phantom job (ADR-0061).
+func TestResolveIncidentWhoseJobVanished(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+
+	// Plant an incident pointing at a job key that has no job behind it.
+	elKey := model.NewKey(1, 7)
+	tx := h.store.NewTransaction()
+	if err := tx.PutIncident(&model.IncidentValue{
+		ProcessInstanceKey: model.NewKey(1, 1),
+		ElementInstanceKey: elKey,
+		JobKey:             model.NewKey(1, 99), // no such job
+		Message:            "stale",
+	}); err != nil {
+		t.Fatalf("PutIncident: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+	tx.Close()
+
+	p.ResolveIncident(elKey, 3)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if n := len(incidents(t, h.store)); n != 0 {
+		t.Fatalf("after resolving a job-less incident: %d incidents remain, want 0 (cleared)", n)
+	}
+}
+
 // TestCancelInstanceClearsIncident proves canceling an instance removes the
-// incident its element carried, leaving no orphan (ADR-0058).
+// incident its element carried, leaving no orphan (ADR-0061).
 func TestCancelInstanceClearsIncident(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)

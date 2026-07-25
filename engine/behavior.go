@@ -1,7 +1,9 @@
 package engine
 
 import (
+	"encoding/json"
 	"strconv"
+	"strings"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/expr"
@@ -138,8 +140,54 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 func handleElementActivating(c *ProcessingContext) {
 	ei := &c.cmd.Value.element
 	c.AppendElementEvent(c.cmd.Key, model.IntentActivated, *ei)
+	// Read the activity's data-input associations into process variables before its
+	// behavior runs, so the activity's own FEEL (e.g. a script task's expression)
+	// sees them (ADR-0059).
+	applyDataInputAssociations(c, ei)
 	c.p.behavior(ei.BpmnElementType).OnActivated(c, c.cmd.Key, ei)
 	armBoundaryEvents(c, c.cmd.Key, ei)
+}
+
+// applyDataInputAssociations evaluates an activating activity's data-input
+// associations (ADR-0059): for each, it reads the source data object and writes a
+// value into the target process variable the activity reads. With an <assignment>
+// <from> transform, it evaluates the FEEL over the instance's variables plus the
+// source object bound under its name; with none, it copies the object's value
+// verbatim. The value is written as a VariableCreated event, so replay re-applies it
+// without re-reading the object or re-evaluating (invariants I4/I6).
+func applyDataInputAssociations(c *ProcessingContext, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	assocs := cp.DataInputAssociations(ei.ElementId)
+	for i := range assocs {
+		a := &assocs[i]
+		objName := cp.Intern(a.DataObject)
+		obj := c.GetDataObject(ei.ProcessInstanceKey, objName)
+
+		out := model.VariableValue{ScopeKey: ei.ProcessInstanceKey, Name: cp.Intern(a.Variable)}
+		switch {
+		case a.Value != nil:
+			// Bind the instance variables the transform reads plus the source object
+			// (under its own name) into the FEEL scope, then evaluate.
+			scope := bindInputs(c, a.Value.Inputs(), ei.ProcessInstanceKey)
+			if obj != nil {
+				if scope == nil {
+					scope = map[string]expr.Value{}
+				}
+				scope[objName] = expr.FromStored(toExprKind(obj.Kind), obj.Bool, obj.Text)
+			}
+			result, err := a.Value.Eval(scope)
+			if err != nil {
+				result = expr.Null
+			}
+			kind, b, text := expr.Classify(result)
+			out.Kind, out.Bool, out.Text = toVarKind(kind), b, text
+		case obj != nil:
+			// No transform: copy the object's value into the variable verbatim.
+			out.Kind, out.Bool, out.Text = obj.Kind, obj.Bool, obj.Text
+		}
+
+		c.AppendVariableEvent(model.IntentVariableCreated, out)
+	}
 }
 
 // handleElementCompleting runs the element-type completion behavior, then — if
@@ -147,10 +195,115 @@ func handleElementActivating(c *ProcessingContext) {
 // completed normally (their timers/subscriptions self-retire).
 func handleElementCompleting(c *ProcessingContext) {
 	ei := &c.cmd.Value.element
+	// Write the activity's data-output associations before it completes, so a data
+	// object it produces is in state before any outgoing flow activates the next
+	// element (ADR-0058). Any element type may carry associations, so this is a
+	// single shared point rather than per-behavior logic.
+	applyDataOutputAssociations(c, ei)
 	c.p.behavior(ei.BpmnElementType).OnCompleting(c, c.cmd.Key, ei)
 	if c.process(ei.ProcessDefKey).Node(ei.ElementId).BoundaryCount > 0 {
 		disarmBoundaryEvents(c, c.cmd.Key, ei.ProcessInstanceKey)
 	}
+}
+
+// applyDataOutputAssociations evaluates a completing activity's data-output
+// associations (ADR-0058): for each, it computes the written value from the
+// association's FEEL expression over the instance's variables (a nil expression is
+// a state-only transition that keeps the object's current value), and emits a
+// DataObjectStateChanged event moving the object into the association's target data
+// state (an unset target keeps the object's current state). The value and state ride
+// in the event, so applyToState re-applies them on replay without re-evaluating
+// (invariants I4/I6) — exactly as a script task's result variable does.
+func applyDataOutputAssociations(c *ProcessingContext, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	assocs := cp.DataOutputAssociations(ei.ElementId)
+	for i := range assocs {
+		a := &assocs[i]
+		name := cp.Intern(a.DataObject)
+		cur := c.GetDataObject(ei.ProcessInstanceKey, name)
+
+		out := model.DataObjectValue{ScopeKey: ei.ProcessInstanceKey, Name: name}
+		switch {
+		case a.Value != nil:
+			result, err := a.Value.Eval(bindInputs(c, a.Value.Inputs(), ei.ProcessInstanceKey))
+			if err != nil {
+				// Incidents are not modeled yet; FEEL is null-propagating, so a failed
+				// evaluation writes null rather than halting the processor.
+				result = expr.Null
+			}
+			if a.TargetPath >= 0 {
+				// Write only one member of the (structured) object, keeping the rest
+				// (ADR-0060): read the current JSON, set the member to the result, and
+				// write the merged canonical value back.
+				leaf, ok := expr.ToJSON(result)
+				if !ok {
+					leaf = "null"
+				}
+				current := ""
+				if cur != nil && cur.Kind == model.VarJSON {
+					current = cur.Text
+				}
+				if merged, err := setJSONMember(current, cp.Intern(a.TargetPath), leaf); err == nil {
+					out.Kind, out.Text = model.VarJSON, merged
+				} else if cur != nil {
+					out.Kind, out.Bool, out.Text = cur.Kind, cur.Bool, cur.Text
+				}
+			} else {
+				kind, b, text := expr.Classify(result)
+				out.Kind, out.Bool, out.Text = toVarKind(kind), b, text
+			}
+		case cur != nil:
+			// State-only transition: keep the object's current value.
+			out.Kind, out.Bool, out.Text = cur.Kind, cur.Bool, cur.Text
+		}
+
+		if a.TargetState >= 0 {
+			out.State = cp.Intern(a.TargetState)
+		} else if cur != nil {
+			out.State = cur.State // no target state: keep the current one
+		}
+
+		c.AppendDataObjectEvent(model.IntentDataObjectStateChanged, out)
+	}
+}
+
+// setJSONMember returns the canonical JSON of the object `current` with the dotted
+// member `path` set to the pre-encoded canonical JSON `leaf`, creating intermediate
+// objects as needed (ADR-0060). A `current` that is empty or not a JSON object
+// starts from an empty object — so writing a member into an unset data object creates
+// it. Numbers are decoded as json.Number so decimals stay exact, and the result
+// marshals with sorted keys, matching the canonical form (ADR-0037).
+func setJSONMember(current, path, leaf string) (string, error) {
+	root := map[string]any{}
+	if strings.TrimSpace(current) != "" {
+		dec := json.NewDecoder(strings.NewReader(current))
+		dec.UseNumber()
+		var v any
+		if dec.Decode(&v) == nil {
+			if m, ok := v.(map[string]any); ok {
+				root = m
+			}
+		}
+	}
+	parts := strings.Split(path, ".")
+	m := root
+	for i, p := range parts {
+		if i == len(parts)-1 {
+			m[p] = json.RawMessage(leaf)
+			break
+		}
+		child, ok := m[p].(map[string]any)
+		if !ok {
+			child = map[string]any{}
+			m[p] = child
+		}
+		m = child
+	}
+	b, err := json.Marshal(root)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 // handleJobCompleted retires the job, writes the worker's output variables into
@@ -178,7 +331,7 @@ func handleJobCompleted(c *ProcessingContext) {
 	}
 }
 
-// handleJobFailed applies a worker's failure report for a job (ADR-0058). The
+// handleJobFailed applies a worker's failure report for a job (ADR-0061). The
 // command carries the remaining retry count (in the job payload) and a failure
 // message (in the incident payload). The job's retries are set to that count and
 // the job is re-emitted: with retries left it returns to the activatable index for
@@ -209,7 +362,7 @@ func handleJobFailed(c *ProcessingContext) {
 }
 
 // handleIncidentResolved clears an incident and resumes the work it blocked
-// (ADR-0058). The command is keyed by the incident's element instance and carries
+// (ADR-0061). The command is keyed by the incident's element instance and carries
 // a positive retry count: the incident is deleted and its job re-created with that
 // many retries, so the job returns to the activatable index and a worker retries it
 // — the same path a fresh job takes. If the cause is unfixed the job fails again

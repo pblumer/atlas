@@ -101,6 +101,10 @@ type CompiledNode struct {
 	Detail        int32 // index into the matching detail table, -1 if none
 	BoundaryStart int32 // offset into boundaryEvents (the node ids of events attached to this activity)
 	BoundaryCount int32 // number of boundary events attached (0 for a non-host node)
+	DataOutStart  int32 // offset into dataOutAssocs (the data-output associations of this activity)
+	DataOutCount  int32 // number of data-output associations (0 for a node with none)
+	DataInStart   int32 // offset into dataInAssocs (the data-input associations of this activity)
+	DataInCount   int32 // number of data-input associations (0 for a node with none)
 }
 
 // CompiledFlow is a sequence flow between two nodes. Condition is the compiled
@@ -294,6 +298,39 @@ type CompiledDataObject struct {
 	IsCollection bool
 }
 
+// DataOutputAssociation is one compiled <dataOutputAssociation> on an activity: it
+// writes a value into a data object and advances that object's data state when the
+// activity completes (ADR-0058). DataObject is the interned target data-object
+// name; Value is the FEEL expression (the association's <assignment><from>)
+// evaluated over the instance's variables to produce the written value, nil for a
+// state-only transition; TargetState is the interned data state the write moves the
+// object into (from the target <dataObjectReference>'s <dataState>), -1 to keep the
+// object's current state.
+type DataOutputAssociation struct {
+	DataObject  int32 // interned target data-object name → index
+	Value       *expr.Compiled
+	TargetState int32
+	// TargetPath is the interned member path (the association's <assignment><to>,
+	// e.g. "name" or "customer.name") the write sets within a structured data
+	// object, -1 to write the whole value (ADR-0060). A path write reads the object's
+	// current JSON, sets that member, and writes the merged value back.
+	TargetPath int32
+}
+
+// DataInputAssociation is one compiled <dataInputAssociation> on an activity: it
+// reads a data object into a process variable when the activity activates, so the
+// activity's FEEL can see it (ADR-0059). DataObject is the interned source
+// data-object name (resolved from the association's sourceRef); Variable is the
+// interned target process-variable name (its targetRef) the read value is written
+// into; Value is the optional <assignment><from> FEEL transform, evaluated over the
+// instance's variables plus the source object bound under its name — nil copies the
+// object's value verbatim.
+type DataInputAssociation struct {
+	DataObject int32 // interned source data-object name → index
+	Variable   int32 // interned target process-variable name → index
+	Value      *expr.Compiled
+}
+
 // CompiledProcess is the immutable result of compiling one process definition.
 // It is safe for concurrent reads without synchronization.
 type CompiledProcess struct {
@@ -319,6 +356,8 @@ type CompiledProcess struct {
 	messageStarts     []MessageDetail
 	timerStarts       []TimerStartDetail
 	dataObjects       []CompiledDataObject
+	dataOutAssocs     []DataOutputAssociation // shared: output associations grouped by activity node
+	dataInAssocs      []DataInputAssociation  // shared: input associations grouped by activity node
 	startEvents       []int32
 	startFormId       int32    // interned start-form id (ADR-0028), -1 if none
 	elementIds        []int32  // interned source BPMN id per node id (-1 if unset)
@@ -526,6 +565,24 @@ func (p *CompiledProcess) StartEvents() []int32 { return p.startEvents }
 // data seeded under each instance's scope at creation (ADR-0053). Empty for a
 // process that declares none. String fields are interned; resolve with Intern.
 func (p *CompiledProcess) DataObjects() []CompiledDataObject { return p.dataObjects }
+
+// DataOutputAssociations returns the data-output associations of activity node id,
+// as a slice into the shared array (no allocation). Empty for a node with none. The
+// engine evaluates them when the activity completes to write its data objects
+// (ADR-0058).
+func (p *CompiledProcess) DataOutputAssociations(id int32) []DataOutputAssociation {
+	n := &p.nodes[id]
+	return p.dataOutAssocs[n.DataOutStart : n.DataOutStart+n.DataOutCount]
+}
+
+// DataInputAssociations returns the data-input associations of activity node id, as
+// a slice into the shared array (no allocation). Empty for a node with none. The
+// engine evaluates them when the activity activates to read its data objects into
+// process variables (ADR-0059).
+func (p *CompiledProcess) DataInputAssociations(id int32) []DataInputAssociation {
+	n := &p.nodes[id]
+	return p.dataInAssocs[n.DataInStart : n.DataInStart+n.DataInCount]
+}
 
 // StartFormId returns the id of the form the UI shows before starting an
 // instance, or "" if the process has no start form (ADR-0028). It is design-time

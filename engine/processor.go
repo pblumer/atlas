@@ -171,7 +171,7 @@ func (p *Processor) CompleteJob(jobKey uint64, outputs ...model.VariableValue) {
 	})
 }
 
-// FailJob enqueues a worker's failure report for a job (ADR-0058), carrying the
+// FailJob enqueues a worker's failure report for a job (ADR-0061), carrying the
 // retries the worker leaves it and a failure message. With retries > 0 the job is
 // retried (back on the activatable index); with retries <= 0 an incident is raised
 // on the job's element and the token parks there. Failing a job that no longer
@@ -189,7 +189,7 @@ func (p *Processor) FailJob(jobKey uint64, retries int32, message string) {
 }
 
 // ResolveIncident enqueues an operator's resolution of the incident attached to
-// elementKey (ADR-0058): the incident is cleared and its job re-created with
+// elementKey (ADR-0061): the incident is cleared and its job re-created with
 // retries (>= 1), returning it to the activatable index so a worker retries it.
 // Resolving an incident that no longer exists is a no-op. Call RunUntilIdle (or
 // Drive) to process it.
