@@ -406,6 +406,16 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 }
 /* History badge: a token that has flowed through but is no longer here. */
 .token-badge.history { background: var(--muted); }
+/* "Open task" badge on a user-task element that has a waiting job: a one-click jump
+   from the diagram to that task's form in the Tasks app. */
+.task-open {
+  display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;
+  background: var(--accent, #2563eb); color: #fff; border-radius: 999px;
+  height: 20px; padding: 0 9px; text-decoration: none;
+  font: 700 11px/20px system-ui, sans-serif;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3); cursor: pointer;
+}
+.task-open:hover { filter: brightness(1.08); }
 .legend-swatch {
   display: inline-block; width: 22px; height: 0;
   border-top: 2.5px solid var(--ok); vertical-align: middle; margin-right: 4px;
@@ -416,14 +426,98 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .bar-select > span { font-size: 12px; color: var(--muted); }
 .bar-select select { width: auto; min-width: 96px; max-width: 240px; padding: 5px 8px; font-size: 13px; }
 
-/* Variables panel beneath the live diagram. */
+/* Variables panel. In the replay view it sits beneath the diagram (a wide strip);
+   in the Live view it is a collapsible, resizable side panel (.side) mirroring the
+   Modeler's properties, so operators can read and copy long values with room. */
 .var-panel {
   border-top: 1px solid var(--border); background: var(--surface);
   padding: 12px 16px; max-height: 30vh; overflow: auto; flex: 0 0 auto;
 }
+/* Side variant (Live view): a right-hand column, full editor-body height, its width
+   draggable via #var-resizer. */
+.var-panel.side {
+  border-top: 0; border-left: 1px solid var(--border);
+  width: 340px; max-height: none; height: 100%;
+  padding: 0 0 12px; flex: 0 0 auto;
+}
+.var-panel.side .vp-head {
+  position: sticky; top: 0; z-index: 1; margin: 0; padding: 12px 14px 10px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+}
+.var-panel.side .vp-tasks, .var-panel.side .vars { padding: 12px 14px 0; }
+.var-panel.side > p.muted { padding: 12px 14px; margin: 0; }
+.var-panel.side .vp-table { width: auto; margin: 4px 14px 0; }
+.var-panel.side .vp-insts { padding: 12px 14px; }
+/* In a narrow side column chips wrap their text instead of forcing a scroll. */
+.var-panel.side .vp-inst-vars .chip { white-space: normal; word-break: break-word; }
+
+/* "All instances" overview as stacked cards (fits the narrow side column, where a
+   wide table would overflow). */
+.var-panel .vp-insts { display: flex; flex-direction: column; gap: 8px; }
+.var-panel .vp-inst {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg); padding: 8px 10px;
+}
+.var-panel .vp-inst-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.var-panel .vp-inst-head > b { font: 600 12px/1.4 ui-monospace, monospace; }
+.var-panel .vp-inst-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.var-panel .vp-inst-vars { margin-top: 6px; }
+.var-panel .vp-inst-vars:empty { display: none; }
+/* Collapsed: the panel and its divider fold away, leaving the diagram full-width.
+   The toolbar toggle (#vars-toggle) reflects state via aria-pressed. */
+.editor.live.vars-collapsed .var-panel.side,
+.editor.live.vars-collapsed #var-resizer { display: none; }
+#vars-toggle[aria-pressed="false"] { color: var(--muted); }
 .var-panel .vp-head {
   font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em;
-  color: var(--muted); margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+  color: var(--muted); margin-bottom: 8px; display: flex; align-items: center;
+  gap: 8px; flex-wrap: wrap;
+}
+.var-panel .vp-title { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.var-panel .vp-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+.var-panel .vp-actions .replay-link { text-transform: none; letter-spacing: 0; }
+
+/* Copy buttons: one per scalar field, per JSON card, and a "Copy all" in the head.
+   A brief green check confirms the write (the ::after swaps in on .copied). */
+.var-panel .vcopy {
+  display: inline-grid; place-items: center; flex: 0 0 auto;
+  width: 22px; height: 22px; padding: 0; border: 1px solid var(--border);
+  border-radius: 5px; background: var(--surface); color: var(--muted);
+  cursor: pointer; transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.var-panel .vcopy:hover { color: var(--text); border-color: var(--border-strong); background: var(--bg); }
+.var-panel .vcopy.copied { color: var(--ok, #2d8a4e); border-color: #bfe3cb; background: #eaf7ef; }
+.var-panel .vcopy.copied svg { display: none; }
+.var-panel .vcopy.copied::after { content: "\2713"; font: 700 12px/1 system-ui, sans-serif; }
+.var-panel .vcopy-all {
+  width: auto; height: auto; padding: 3px 9px; font-size: 11px;
+  display: inline-flex; gap: 4px;
+}
+.var-panel .vcopy-all svg { display: none; }
+
+/* Waiting-task links: jump from a running instance to its user task's form. */
+.var-panel .vp-tasks {
+  display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px;
+}
+.var-panel .vp-tasks-head {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted);
+}
+.var-panel .task-link {
+  display: flex; align-items: center; gap: 8px; text-decoration: none;
+  padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg); color: var(--text); font-size: 13px;
+}
+.var-panel .task-link:hover { border-color: var(--accent, var(--border-strong)); background: var(--accent-soft); }
+.var-panel .task-link .task-link-name { font-weight: 600; word-break: break-word; }
+.var-panel .task-link .task-link-tag {
+  font: 600 9px/1.6 system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 0 5px; border-radius: 4px; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--border);
+}
+.var-panel .task-link .task-link-go { margin-left: auto; color: var(--accent, var(--muted)); font-weight: 600; white-space: nowrap; }
+.var-panel .task-link.inline {
+  display: inline-flex; padding: 2px 7px; font-size: 12px; gap: 4px;
+  margin-right: 6px; vertical-align: middle;
 }
 .var-panel .vp-table { width: 100%; }
 .var-panel .vp-table td { padding: 6px 10px 6px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
@@ -440,7 +534,9 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   border: 1px solid var(--border); border-radius: var(--radius);
   background: var(--bg); padding: 7px 10px 8px; min-width: 0;
 }
-.var-panel .vf-head { display: flex; align-items: baseline; gap: 6px; }
+.var-panel .vf-head { display: flex; align-items: center; gap: 6px; }
+.var-panel .vf-head .vcopy { margin-left: auto; width: 20px; height: 20px; opacity: 0; }
+.var-panel .vfield:hover .vf-head .vcopy, .var-panel .vf-head .vcopy:focus-visible { opacity: 1; }
 .var-panel .vk { font: 600 12px/1.4 ui-monospace, monospace; color: var(--muted); word-break: break-word; }
 .var-panel .vtag {
   font: 600 9px/1.6 system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.05em;
@@ -457,14 +553,21 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   border: 1px solid var(--border); border-radius: var(--radius);
   overflow: hidden; background: var(--surface);
 }
+/* The card header is a row: an expand/collapse toggle button that fills the width,
+   plus a copy button. (The toggle can't wrap the copy — nested buttons are invalid.) */
 .var-panel .vj-head {
-  display: flex; align-items: center; gap: 8px; width: 100%;
-  padding: 7px 10px; background: var(--bg); border: 0; cursor: pointer;
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 7px 4px 0; background: var(--bg); border-bottom: 1px solid transparent;
+}
+.var-panel .vjson:not(.collapsed) .vj-head { border-bottom-color: var(--border); }
+.var-panel .vj-toggle {
+  display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0;
+  padding: 3px 10px; background: none; border: 0; cursor: pointer;
   font: inherit; text-align: left; color: var(--text);
 }
 .var-panel .vj-head:hover { background: var(--accent-soft); }
-.var-panel .vj-head .chev { color: var(--muted); font-size: 11px; transition: transform 0.12s ease; }
-.var-panel .vjson.collapsed .vj-head .chev { transform: rotate(-90deg); }
+.var-panel .vj-toggle .chev { color: var(--muted); font-size: 11px; transition: transform 0.12s ease; }
+.var-panel .vjson.collapsed .vj-toggle .chev { transform: rotate(-90deg); }
 .var-panel .vj-sum { margin-left: auto; color: var(--muted); font-size: 12px; }
 .var-panel .vj-body {
   margin: 0; padding: 10px 12px; border-top: 1px solid var(--border);

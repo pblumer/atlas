@@ -144,28 +144,91 @@ function renderVarsBody(list, collapsed) {
   if (scalars.length) {
     html += `<div class="vgrid">${scalars.map((v) => {
       const cls = v.kind === "boolean" ? "bool" : v.kind === "number" ? "num" : v.kind === "null" ? "null" : "str";
-      return `<div class="vfield"><div class="vf-head"><span class="vk">${esc(v.name)}</span><span class="vtag">${esc(v.kind)}</span></div>
+      return `<div class="vfield"><div class="vf-head"><span class="vk">${esc(v.name)}</span><span class="vtag">${esc(v.kind)}</span>${copyBtn(v.value, "Copy value")}</div>
         <div class="vv ${cls}">${esc(v.value)}</div></div>`;
     }).join("")}</div>`;
   }
   html += jsons.map((v) => {
     const isCollapsed = collapsed.has(v.name);
     return `<div class="vjson${isCollapsed ? " collapsed" : ""}">
-      <button class="vj-head" data-name="${esc(v.name)}" aria-expanded="${isCollapsed ? "false" : "true"}">
-        <span class="chev">&#9662;</span><span class="vk">${esc(v.name)}</span>
-        <span class="vtag">json</span><span class="vj-sum">${esc(jsonSummary(v.value))}</span>
-      </button>
+      <div class="vj-head">
+        <button class="vj-toggle" data-name="${esc(v.name)}" aria-expanded="${isCollapsed ? "false" : "true"}">
+          <span class="chev">&#9662;</span><span class="vk">${esc(v.name)}</span>
+          <span class="vtag">json</span><span class="vj-sum">${esc(jsonSummary(v.value))}</span>
+        </button>
+        ${copyBtn(prettyJSON(v.value), "Copy JSON")}
+      </div>
       <pre class="vj-body">${highlightJSON(v.value)}</pre>
     </div>`;
   }).join("");
   return html;
 }
 
+// copyBtn renders a small clipboard button carrying the raw text to copy in a data
+// attribute; a delegated handler (bindVarCopy) does the actual write. Operators
+// live in these values, so every scalar, every JSON blob and the whole set are
+// one click from the clipboard.
+function copyBtn(text, title) {
+  return `<button class="vcopy" type="button" title="${esc(title)}" aria-label="${esc(title)}" data-copy="${esc(text)}">
+    <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M5.5 1.5h6a1 1 0 0 1 1 1v8" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="3.5" y="4.5" width="8" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+  </button>`;
+}
+
+// prettyJSON canonicalizes a JSON variable's stored string to pretty-printed form
+// for copying (falling back to the raw text if it isn't valid JSON), so what lands
+// on the clipboard matches what the operator sees in the card.
+function prettyJSON(text) {
+  try { return JSON.stringify(JSON.parse(text), null, 2); }
+  catch { return String(text); }
+}
+
+// copyText writes text to the clipboard, falling back to a hidden textarea +
+// execCommand where the async Clipboard API isn't available (older browsers, or
+// insecure origins). Returns a promise that resolves once the copy is attempted.
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch { /* fall through to the legacy path */ }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch { return false; }
+}
+
+// bindVarCopy wires the delegated click on `.vcopy` buttons inside panel: it copies
+// the button's data-copy payload and flashes a brief "Copied" state on the button.
+// Attach once per view; survives the panel's inner re-renders.
+function bindVarCopy(panel, toast) {
+  panel.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".vcopy");
+    if (!btn || !panel.contains(btn)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const ok = await copyText(btn.dataset.copy || "");
+    if (ok) {
+      btn.classList.add("copied");
+      setTimeout(() => btn.classList.remove("copied"), 900);
+    } else if (toast) {
+      toast("Copy failed", "err");
+    }
+  });
+}
+
 // bindJsonCards wires the delegated expand/collapse click for JSON cards inside
 // panel, toggling names in collapsed and calling rerender. Attach once per view.
 function bindJsonCards(panel, collapsed, rerender) {
   panel.addEventListener("click", (e) => {
-    const head = e.target.closest(".vj-head");
+    const head = e.target.closest(".vj-toggle");
     if (!head || !panel.contains(head)) return;
     const name = head.dataset.name;
     if (collapsed.has(name)) collapsed.delete(name);
@@ -299,6 +362,77 @@ function wireResizer(root, modeler) {
     try { modeler && modeler.get("canvas").resized(); } catch { /* ignore */ }
     window.dispatchEvent(new Event("resize"));
   });
+}
+
+// wireVarsPanel makes the Live view's variables panel a first-class side panel like
+// the Modeler's properties: a toolbar toggle collapses it out of the way (operators
+// who want the diagram full-width), and a draggable divider widens it for reading
+// long JSON. Both choices persist across mounts (localStorage), and the bpmn-js
+// canvas is nudged to re-fit whenever the panel's footprint changes.
+function wireVarsPanel(root, viewer) {
+  const editor = root.querySelector(".editor.live");
+  const panel = root.querySelector("#var-panel");
+  const resizer = root.querySelector("#var-resizer");
+  const toggle = root.querySelector("#vars-toggle");
+  if (!editor || !panel) return;
+  const WKEY = "atlas.varsWidth";
+  const CKEY = "atlas.varsCollapsed";
+  const clamp = (w) => Math.max(240, Math.min(900, w));
+
+  const savedW = parseInt(localStorage.getItem(WKEY) || "", 10);
+  if (savedW) panel.style.width = clamp(savedW) + "px";
+
+  // Let bpmn-js recompute its viewport for the canvas's new width.
+  const nudge = () => {
+    try { viewer && viewer.get("canvas").resized(); } catch { /* ignore */ }
+    window.dispatchEvent(new Event("resize"));
+  };
+
+  const applyCollapsed = (collapsed) => {
+    editor.classList.toggle("vars-collapsed", collapsed);
+    if (toggle) toggle.setAttribute("aria-pressed", collapsed ? "false" : "true");
+    nudge();
+  };
+  applyCollapsed(localStorage.getItem(CKEY) === "1");
+
+  if (toggle) {
+    toggle.addEventListener("click", () => {
+      const collapsed = !editor.classList.contains("vars-collapsed");
+      localStorage.setItem(CKEY, collapsed ? "1" : "0");
+      applyCollapsed(collapsed);
+    });
+  }
+
+  if (resizer) {
+    let startX = 0, startW = 0;
+    const onMove = (e) => {
+      // The panel is on the right, so dragging the divider left widens it.
+      panel.style.width = clamp(startW - (e.clientX - startX)) + "px";
+    };
+    const onUp = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      resizer.classList.remove("dragging");
+      document.body.style.userSelect = "";
+      localStorage.setItem(WKEY, String(parseInt(panel.style.width, 10) || 320));
+      nudge();
+    };
+    resizer.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      startX = e.clientX;
+      startW = panel.getBoundingClientRect().width;
+      resizer.classList.add("dragging");
+      document.body.style.userSelect = "none";
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+    });
+    // Double-click the divider to reset to the default width.
+    resizer.addEventListener("dblclick", () => {
+      panel.style.width = "320px";
+      localStorage.setItem(WKEY, "320");
+      nudge();
+    });
+  }
 }
 
 // wireTabs toggles the Design/Implement tabs. Design is the descriptive view
@@ -2106,6 +2240,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
         <a class="btn" id="replay-inst" hidden title="Replay this instance step by step">&#9654; Replay</a>
         <a class="btn" id="collab-link" hidden>⇄ Collaboration replay</a>
         <button class="btn neutral" id="refresh">Refresh</button>
+        <button class="btn neutral" id="vars-toggle" aria-pressed="true" title="Show or hide the variables panel">Variables</button>
         <span class="pill ok" style="margin-left:8px"><span class="dot"></span><b id="inst-count">0</b>&nbsp;running</span>
         <span class="pill" style="margin-left:8px"><b id="token-count">0</b>&nbsp;tokens total</span>
       </div>
@@ -2119,8 +2254,9 @@ export async function mountLive(root, { api, toast, key, instance }) {
       </div>
       <div class="editor-body">
         <div id="canvas"></div>
+        <div class="props-resizer" id="var-resizer" title="Drag to resize the variables panel"></div>
+        <aside class="var-panel side" id="var-panel"></aside>
       </div>
-      <div class="var-panel" id="var-panel"></div>
       <div class="problems">
         <span class="legend-swatch live"></span> live token
         <span class="legend-swatch history" style="margin-left:12px"></span> passed through
@@ -2182,6 +2318,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
   let selected = instance != null ? String(instance) : "all";
   let instances = [];       // this version's instances, cached for the picker/variables
   let instSig = "";         // signature of the picker's current option set
+  let liveTasks = [];       // open user-task jobs for this version, refreshed each poll
 
   // refreshInstances pulls this version's instances and, only when the set of
   // instances (or their state) actually changed, rebuilds the picker — so the
@@ -2219,6 +2356,46 @@ export async function mountLive(root, { api, toast, key, instance }) {
   // completedAt is unix nanoseconds; Date wants milliseconds.
   const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "";
 
+  // tasksFor returns the open user-task jobs waiting in the given instance, newest
+  // first — the "jump to the form" targets for a running instance.
+  const tasksFor = (instanceKey) =>
+    liveTasks.filter((t) => String(t.processInstanceKey) === String(instanceKey))
+      .sort((a, b) => b.key - a.key);
+
+  // renderTaskLinks lists a running instance's active user tasks as one-click links
+  // into the Tasks app, landing straight on the task's form (ADR-0028) — so an
+  // operator goes from "the token is on this user task" to "work it" without
+  // hunting through the inbox.
+  function renderTaskLinks(list) {
+    if (!list || !list.length) return "";
+    return `<div class="vp-tasks">
+      <div class="vp-tasks-head">Waiting on ${list.length === 1 ? "a user task" : list.length + " user tasks"}</div>
+      ${list.map((t) => `
+        <a class="task-link" href="#/tasks/t/${t.key}" title="Open this task's form in the Tasks app">
+          <span class="task-link-ic" aria-hidden="true">&#128203;</span>
+          <span class="task-link-name">${esc(t.name || t.elementId || ("Task " + t.key))}</span>
+          ${t.formId ? '<span class="task-link-tag">form</span>' : ""}
+          <span class="task-link-go">Open &#8599;</span>
+        </a>`).join("")}
+    </div>`;
+  }
+
+  // copyAllBtn copies every variable of an instance as one JSON object ({name:
+  // value}, JSON-typed values parsed back to structures) — the whole payload in one
+  // click, the shape an operator pastes into a ticket or a re-run.
+  function copyAllBtn(list) {
+    if (!list || !list.length) return "";
+    const obj = {};
+    for (const v of list) {
+      if (v.kind === "json") { try { obj[v.name] = JSON.parse(v.value); continue; } catch { /* keep raw */ } }
+      if (v.kind === "number") { const n = Number(v.value); obj[v.name] = Number.isNaN(n) ? v.value : n; }
+      else if (v.kind === "boolean") obj[v.name] = v.value === "true";
+      else if (v.kind === "null") obj[v.name] = null;
+      else obj[v.name] = v.value;
+    }
+    return `<button class="btn ghost small vcopy-all vcopy" type="button" title="Copy all variables as JSON" data-copy="${esc(JSON.stringify(obj, null, 2))}">Copy all</button>`;
+  }
+
   // renderVariables shows the selected instance's variables with the shared
   // polished renderer (scalars as fields, JSON as collapsible highlighted cards),
   // or — for "All instances" — a compact per-instance overview table. It rebuilds
@@ -2228,29 +2405,39 @@ export async function mountLive(root, { api, toast, key, instance }) {
     let html;
     if (selected === "all") {
       html = !instances.length
-        ? `<div class="vp-head">Variables</div>
+        ? `<div class="vp-head"><span class="vp-title">Variables</span></div>
           <p class="muted" style="margin:0">No instances yet — start one to see its variables here.</p>`
-        : `<div class="vp-head">Variables · all instances</div>
-        <table class="vp-table"><tbody>${instances.map((r) => `
-          <tr><td><b>${r.key}</b></td>
-            <td>${r.state === "active"
-              ? '<span class="pill ok"><span class="dot"></span>active</span>'
-              : `<span class="pill">${esc(r.state)}</span>`}</td>
-            <td>${varChips(r.variables)}</td>
-            <td style="text-align:right"><a class="replay-link" href="#/operations/i/${r.key}" title="Replay this instance step by step">&#9654; Replay</a></td></tr>`).join("")}</tbody></table>`;
+        : `<div class="vp-head"><span class="vp-title">Variables · all instances (${instances.length})</span></div>
+        <div class="vp-insts">${instances.map((r) => {
+          const ts = tasksFor(r.key);
+          return `<div class="vp-inst">
+            <div class="vp-inst-head">
+              <b title="Select this instance">${r.key}</b>
+              ${r.state === "active"
+                ? '<span class="pill ok"><span class="dot"></span>active</span>'
+                : `<span class="pill">${esc(r.state)}</span>`}
+              <span class="vp-inst-actions">${ts.length
+                ? `<a class="task-link inline" href="#/tasks/t/${ts[0].key}" title="Open the waiting task's form">&#128203; Task&#8599;</a>`
+                : ""}<a class="replay-link" href="#/operations/i/${r.key}" title="Replay this instance step by step">&#9654; Replay</a></span>
+            </div>
+            <div class="vp-inst-vars">${varChips(r.variables)}</div>
+          </div>`;
+        }).join("")}</div>`;
     } else {
       const inst = instances.find((r) => String(r.key) === selected);
       if (!inst) {
-        html = `<div class="vp-head">Variables</div>
+        html = `<div class="vp-head"><span class="vp-title">Variables</span></div>
           <p class="muted" style="margin:0">Instance no longer available.</p>`;
       } else {
         const when = inst.state === "active" ? "" : fmtNano(inst.completedAt);
-        html = `<div class="vp-head">Variables · instance ${inst.key}
-            ${inst.state === "active"
-              ? '<span class="pill ok"><span class="dot"></span>active</span>'
-              : `<span class="pill">${esc(inst.state)}</span>${when ? ` <span class="muted">${esc(when)}</span>` : ""}`}
-            <a class="replay-link" href="#/operations/i/${inst.key}" title="Replay this instance step by step">&#9654; Replay</a>
+        html = `<div class="vp-head">
+            <span class="vp-title">Variables · instance ${inst.key}
+              ${inst.state === "active"
+                ? '<span class="pill ok"><span class="dot"></span>active</span>'
+                : `<span class="pill">${esc(inst.state)}</span>${when ? ` <span class="muted">${esc(when)}</span>` : ""}`}</span>
+            <span class="vp-actions">${copyAllBtn(inst.variables)}<a class="replay-link" href="#/operations/i/${inst.key}" title="Replay this instance step by step">&#9654; Replay</a></span>
           </div>
+          ${renderTaskLinks(tasksFor(inst.key))}
           <div class="vars">${renderVarsBody(inst.variables, jsonCollapsed)}</div>`;
       }
     }
@@ -2261,6 +2448,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
 
   async function poll() {
     await refreshInstances();
+    await refreshTasks();
     updateCancelBtn();
     const q = selected === "all" ? "" : `?instance=${encodeURIComponent(selected)}`;
     let rt;
@@ -2270,6 +2458,19 @@ export async function mountLive(root, { api, toast, key, instance }) {
     overlays.clear();
     for (const [id, marker] of marked) canvas.removeMarker(id, marker);
     marked = [];
+    // The tasks in scope: a single instance's own, or (for "All instances") every
+    // waiting task of this version. Grouped by element so a user-task element in
+    // the diagram can be linked straight to its form.
+    const scopeTasks = selected === "all"
+      ? liveTasks.slice()
+      : tasksFor(selected);
+    const tasksByElement = new Map();
+    for (const t of scopeTasks) {
+      if (!t.elementId) continue;
+      const arr = tasksByElement.get(t.elementId) || [];
+      arr.push(t);
+      tasksByElement.set(t.elementId, arr);
+    }
     // Each element is drawn in one of two states: green if it holds a live token
     // right now, gray if tokens have only passed through it (history). Together
     // they show the flow distribution even once every instance has finished — a
@@ -2289,10 +2490,32 @@ export async function mountLive(root, { api, toast, key, instance }) {
         position: { bottom: 4, right: 4 },
         html: `<div class="token-badge${live ? "" : " history"}" title="${title}">${count}</div>`,
       });
+      // A user-task element with a waiting job gets a clickable "Open" badge that
+      // jumps to its form. One waiting task → straight to it; several (only under
+      // "All instances") → the inbox, where the operator picks.
+      const ets = tasksByElement.get(e.elementId);
+      if (ets && ets.length) {
+        const href = ets.length === 1 ? `#/tasks/t/${ets[0].key}` : "#/tasks";
+        const label = ets.length === 1 ? "Open task" : `${ets.length} tasks`;
+        overlays.add(e.elementId, "open-task", {
+          position: { top: 4, right: 4 },
+          html: `<a class="task-open" href="${href}" title="Open the waiting user task's form">&#128203; ${label}</a>`,
+        });
+      }
     }
     countEl.textContent = rt.instances;
     tokenEl.textContent = rt.tokens;
     renderVariables();
+  }
+
+  // refreshTasks pulls the open user-task jobs and keeps those for this deployed
+  // version. Best-effort: a transient failure leaves the previous set so the links
+  // and diagram badges don't flicker.
+  async function refreshTasks() {
+    let all;
+    try { all = await api("GET", "/api/v1/tasks"); }
+    catch { return; }
+    liveTasks = all.filter((t) => t.processDefKey === key);
   }
 
   // The Cancel button targets the selected instance; it is shown only when a
@@ -2336,6 +2559,8 @@ export async function mountLive(root, { api, toast, key, instance }) {
 
   root.querySelector("#refresh").addEventListener("click", poll);
   bindJsonCards(varPanel, jsonCollapsed, renderVariables);
+  bindVarCopy(varPanel, toast);
+  wireVarsPanel(root, viewer);
 
   // Start a fresh instance of this already-deployed definition. The demo and the
   // Modeler's "Deploy & run" both couple starting to a deployment; this is the
@@ -2955,6 +3180,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   scrub.addEventListener("input", () => { pause(); setPlayhead(Number(scrub.value)); });
   root.querySelector("#refresh").addEventListener("click", poll);
   bindJsonCards(varPanel, jsonCollapsed, renderVars);
+  bindVarCopy(varPanel, toast);
 
   await poll();
   liveTimer = setInterval(poll, 1500);
