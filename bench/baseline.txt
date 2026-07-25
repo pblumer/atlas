@@ -1,0 +1,121 @@
+# Atlas performance suite
+# commit:    d07d032
+# go:        go1.26.0 linux/amd64
+# os/arch:   linux/amd64
+# cpus:      4 (GOMAXPROCS default)
+# count:     5   benchtime: 500ms
+# tmpdir:    /tmp
+# medium:    ext2/ext3
+
+goos: linux
+goarch: amd64
+pkg: github.com/pblumer/atlas/bench
+cpu: Intel(R) Xeon(R) Processor @ 2.80GHz
+BenchmarkThroughput/linear-4         	    6493	     92538 ns/op	    4091 B/op	      89 allocs/op
+BenchmarkThroughput/linear-4         	    7180	     95367 ns/op	    3959 B/op	      90 allocs/op
+BenchmarkThroughput/linear-4         	    6262	     93347 ns/op	    4146 B/op	      89 allocs/op
+BenchmarkThroughput/linear-4         	    7192	    125232 ns/op	    3958 B/op	      90 allocs/op
+BenchmarkThroughput/linear-4         	    6375	     95413 ns/op	    3863 B/op	      89 allocs/op
+BenchmarkThroughput/exclusive-4      	    5283	    111448 ns/op	    4948 B/op	     112 allocs/op
+BenchmarkThroughput/exclusive-4      	    6026	    127400 ns/op	    5096 B/op	     120 allocs/op
+BenchmarkThroughput/exclusive-4      	    6036	    114921 ns/op	    5111 B/op	     122 allocs/op
+BenchmarkThroughput/exclusive-4      	    5126	    118818 ns/op	    5362 B/op	     113 allocs/op
+BenchmarkThroughput/exclusive-4      	    6084	    103853 ns/op	    5094 B/op	     121 allocs/op
+BenchmarkThroughput/parallel-4       	    3472	    179099 ns/op	    9232 B/op	     177 allocs/op
+BenchmarkThroughput/parallel-4       	    3601	    169404 ns/op	    8635 B/op	     176 allocs/op
+BenchmarkThroughput/parallel-4       	    3406	    208585 ns/op	    9273 B/op	     175 allocs/op
+BenchmarkThroughput/parallel-4       	    3063	    181576 ns/op	    9880 B/op	     178 allocs/op
+BenchmarkThroughput/parallel-4       	    2805	    262265 ns/op	   10393 B/op	     180 allocs/op
+BenchmarkThroughput/script-4         	    2348	    281885 ns/op	    6532 B/op	      75 allocs/op
+BenchmarkThroughput/script-4         	    8272	     87035 ns/op	    3267 B/op	      77 allocs/op
+BenchmarkThroughput/script-4         	    7648	     89283 ns/op	    3346 B/op	      76 allocs/op
+BenchmarkThroughput/script-4         	    7723	     82009 ns/op	    3338 B/op	      76 allocs/op
+BenchmarkThroughput/script-4         	    7770	     84471 ns/op	    3106 B/op	      76 allocs/op
+BenchmarkThroughput/mixed-4          	    2365	    243186 ns/op	   13010 B/op	     224 allocs/op
+BenchmarkThroughput/mixed-4          	    2955	    239691 ns/op	   11644 B/op	     218 allocs/op
+BenchmarkThroughput/mixed-4          	    2691	    238312 ns/op	   12104 B/op	     219 allocs/op
+BenchmarkThroughput/mixed-4          	    2596	    232293 ns/op	   12348 B/op	     220 allocs/op
+BenchmarkThroughput/mixed-4          	    2427	    270887 ns/op	   12162 B/op	     223 allocs/op
+BenchmarkLatency/linear-4            	      88	   7978469 ns/op	    3937 B/op	     118 allocs/op
+BenchmarkLatency/linear-4            	      87	   7925693 ns/op	    3950 B/op	     118 allocs/op
+BenchmarkLatency/linear-4            	      69	   7474538 ns/op	    4192 B/op	     118 allocs/op
+BenchmarkLatency/linear-4            	      69	   7552008 ns/op	    3972 B/op	     118 allocs/op
+BenchmarkLatency/linear-4            	      76	   7268597 ns/op	    3722 B/op	     118 allocs/op
+BenchmarkLatency/exclusive-4         	      72	   9097861 ns/op	    4594 B/op	     132 allocs/op
+BenchmarkLatency/exclusive-4         	      52	  10410279 ns/op	    4812 B/op	     132 allocs/op
+BenchmarkLatency/exclusive-4         	      87	   8153549 ns/op	    5354 B/op	     132 allocs/op
+BenchmarkLatency/exclusive-4         	      70	   8285924 ns/op	    4566 B/op	     132 allocs/op
+BenchmarkLatency/exclusive-4         	      91	   9369215 ns/op	    5315 B/op	     132 allocs/op
+BenchmarkLatency/parallel-4          	      69	   9516588 ns/op	    7184 B/op	     191 allocs/op
+BenchmarkLatency/parallel-4          	      66	  10640006 ns/op	    7693 B/op	     192 allocs/op
+BenchmarkLatency/parallel-4          	      75	   8542738 ns/op	    8345 B/op	     192 allocs/op
+BenchmarkLatency/parallel-4          	      80	   8728658 ns/op	    7792 B/op	     192 allocs/op
+BenchmarkLatency/parallel-4          	      68	  10053077 ns/op	    7664 B/op	     192 allocs/op
+BenchmarkLatency/script-4            	     100	   6389208 ns/op	    2948 B/op	      93 allocs/op
+BenchmarkLatency/script-4            	     100	   5924879 ns/op	    3026 B/op	      93 allocs/op
+BenchmarkLatency/script-4            	      98	   5361203 ns/op	    2980 B/op	      93 allocs/op
+BenchmarkLatency/script-4            	     100	   6296620 ns/op	    3026 B/op	      93 allocs/op
+BenchmarkLatency/script-4            	     100	   5769236 ns/op	    2998 B/op	      93 allocs/op
+BenchmarkLatency/mixed-4             	      52	  10381734 ns/op	   10040 B/op	     241 allocs/op
+BenchmarkLatency/mixed-4             	      60	   9444983 ns/op	   10538 B/op	     241 allocs/op
+BenchmarkLatency/mixed-4             	      57	   9527766 ns/op	   10734 B/op	     241 allocs/op
+BenchmarkLatency/mixed-4             	      78	   9708005 ns/op	    9561 B/op	     241 allocs/op
+BenchmarkLatency/mixed-4             	      72	   9364707 ns/op	    9391 B/op	     240 allocs/op
+BenchmarkRecovery/linear-4           	       9	  59282464 ns/op	 8200120 B/op	   80510 allocs/op
+BenchmarkRecovery/linear-4           	      12	  52068758 ns/op	 7541868 B/op	   80515 allocs/op
+BenchmarkRecovery/linear-4           	      12	  50420003 ns/op	 8957117 B/op	   80521 allocs/op
+BenchmarkRecovery/linear-4           	      10	  52541860 ns/op	 8645404 B/op	   80519 allocs/op
+BenchmarkRecovery/linear-4           	      10	  54120906 ns/op	 9600895 B/op	   80525 allocs/op
+BenchmarkRecovery/exclusive-4        	       6	  86317566 ns/op	11671492 B/op	  111731 allocs/op
+BenchmarkRecovery/exclusive-4        	       7	  79015750 ns/op	11467162 B/op	  111744 allocs/op
+BenchmarkRecovery/exclusive-4        	       7	  79317002 ns/op	12939661 B/op	  111753 allocs/op
+BenchmarkRecovery/exclusive-4        	       7	  82304780 ns/op	13480164 B/op	  111762 allocs/op
+BenchmarkRecovery/exclusive-4        	       7	  76245675 ns/op	12814104 B/op	  111757 allocs/op
+BenchmarkRecovery/parallel-4         	       5	 106800681 ns/op	19177060 B/op	  156786 allocs/op
+BenchmarkRecovery/parallel-4         	       5	 100993901 ns/op	14435574 B/op	  156716 allocs/op
+BenchmarkRecovery/parallel-4         	       6	  97549866 ns/op	16369980 B/op	  156767 allocs/op
+BenchmarkRecovery/parallel-4         	       6	 107710839 ns/op	19248176 B/op	  156777 allocs/op
+BenchmarkRecovery/parallel-4         	       5	 100288486 ns/op	15120884 B/op	  156742 allocs/op
+BenchmarkRecovery/script-4           	      13	  47021705 ns/op	 6837924 B/op	   72502 allocs/op
+BenchmarkRecovery/script-4           	      13	  45990767 ns/op	 7617665 B/op	   72511 allocs/op
+BenchmarkRecovery/script-4           	      12	  52748844 ns/op	 9000138 B/op	   72523 allocs/op
+BenchmarkRecovery/script-4           	      10	  53233626 ns/op	 8078216 B/op	   72512 allocs/op
+BenchmarkRecovery/script-4           	      13	  49698826 ns/op	 7973641 B/op	   72515 allocs/op
+BenchmarkRecovery/mixed-4            	       4	 128638798 ns/op	18104434 B/op	  197769 allocs/op
+BenchmarkRecovery/mixed-4            	       4	 136242587 ns/op	23038242 B/op	  197807 allocs/op
+BenchmarkRecovery/mixed-4            	       4	 133839277 ns/op	18097650 B/op	  197757 allocs/op
+BenchmarkRecovery/mixed-4            	       4	 128580752 ns/op	20333132 B/op	  197787 allocs/op
+BenchmarkRecovery/mixed-4            	       4	 125289184 ns/op	20689314 B/op	  197791 allocs/op
+PASS
+ok  	github.com/pblumer/atlas/bench	78.555s
+goos: linux
+goarch: amd64
+pkg: github.com/pblumer/atlas/bench/e2e
+cpu: Intel(R) Xeon(R) Processor @ 2.80GHz
+BenchmarkE2ECreateInstance/linear-4         	     159	   4033646 ns/op	   23247 B/op	     224 allocs/op
+BenchmarkE2ECreateInstance/linear-4         	     174	   3915457 ns/op	   23341 B/op	     224 allocs/op
+BenchmarkE2ECreateInstance/linear-4         	     166	   3719260 ns/op	   23211 B/op	     224 allocs/op
+BenchmarkE2ECreateInstance/linear-4         	     169	   3579546 ns/op	   23185 B/op	     224 allocs/op
+BenchmarkE2ECreateInstance/linear-4         	     171	   3511689 ns/op	   23309 B/op	     224 allocs/op
+BenchmarkE2ECreateInstance/exclusive-4      	      84	   8256420 ns/op	   29837 B/op	     324 allocs/op
+BenchmarkE2ECreateInstance/exclusive-4      	      82	   7709613 ns/op	   29896 B/op	     324 allocs/op
+BenchmarkE2ECreateInstance/exclusive-4      	      88	   8709774 ns/op	   29795 B/op	     324 allocs/op
+BenchmarkE2ECreateInstance/exclusive-4      	      63	   8388731 ns/op	   29866 B/op	     324 allocs/op
+BenchmarkE2ECreateInstance/exclusive-4      	      80	   8009822 ns/op	   29782 B/op	     325 allocs/op
+BenchmarkE2ECreateInstance/parallel-4       	      69	   8658263 ns/op	   31762 B/op	     371 allocs/op
+BenchmarkE2ECreateInstance/parallel-4       	      62	   9508511 ns/op	   32189 B/op	     372 allocs/op
+BenchmarkE2ECreateInstance/parallel-4       	      74	   9088036 ns/op	   32007 B/op	     371 allocs/op
+BenchmarkE2ECreateInstance/parallel-4       	      67	   8552372 ns/op	   31916 B/op	     371 allocs/op
+BenchmarkE2ECreateInstance/parallel-4       	      69	   8260115 ns/op	   31766 B/op	     371 allocs/op
+BenchmarkE2ECreateInstance/script-4         	      88	   6470571 ns/op	   26937 B/op	     272 allocs/op
+BenchmarkE2ECreateInstance/script-4         	     100	   6198815 ns/op	   24855 B/op	     271 allocs/op
+BenchmarkE2ECreateInstance/script-4         	     100	   5989795 ns/op	   26567 B/op	     272 allocs/op
+BenchmarkE2ECreateInstance/script-4         	     100	   6303161 ns/op	   26340 B/op	     271 allocs/op
+BenchmarkE2ECreateInstance/script-4         	     100	   5966052 ns/op	   26556 B/op	     272 allocs/op
+BenchmarkE2ECreateInstance/mixed-4          	      61	   9638714 ns/op	   35232 B/op	     433 allocs/op
+BenchmarkE2ECreateInstance/mixed-4          	      70	   9995831 ns/op	   34465 B/op	     433 allocs/op
+BenchmarkE2ECreateInstance/mixed-4          	      64	  10064092 ns/op	   34895 B/op	     433 allocs/op
+BenchmarkE2ECreateInstance/mixed-4          	      58	  10440900 ns/op	   35094 B/op	     433 allocs/op
+BenchmarkE2ECreateInstance/mixed-4          	      52	   9896759 ns/op	   35468 B/op	     433 allocs/op
+PASS
+ok  	github.com/pblumer/atlas/bench/e2e	19.276s

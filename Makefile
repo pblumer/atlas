@@ -1,7 +1,7 @@
 # Atlas — developer command entry point.
 # Agents and CI: prefer these targets so the canonical commands live in one place.
 
-.PHONY: all build test race vet fmt fmt-check lint check cover tidy clean run server
+.PHONY: all build test race vet fmt fmt-check lint check cover tidy clean run server bench
 
 all: check
 
@@ -41,6 +41,12 @@ lint:
 # threshold via THRESHOLD, e.g. make cover THRESHOLD=90.
 cover:
 	./scripts/check-coverage.sh $(THRESHOLD)
+
+# Run the performance suite (bench/) and print Go benchmark output for benchstat.
+# Reports the storage medium it fsyncs to; see bench/README.md. Override sample
+# count and benchtime via COUNT and BENCHTIME, e.g. make bench COUNT=10.
+bench:
+	./scripts/bench.sh $(COUNT) $(BENCHTIME)
 
 # The full gate. A change is "done" when this passes.
 check: build vet fmt-check race cover
