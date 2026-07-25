@@ -375,7 +375,7 @@ func handleIncidentResolved(c *ProcessingContext) {
 	}
 	c.AppendIncidentEvent(model.IntentIncidentResolved, *inc)
 	if inc.JobKey == 0 {
-		// A timer incident carries no job (ADR-0063): re-arm the parked catch/boundary
+		// A timer incident carries no job (ADR-0064): re-arm the parked catch/boundary
 		// element instead of re-creating one.
 		rearmTimerElement(c, inc.ElementInstanceKey)
 		return
@@ -390,7 +390,7 @@ func handleIncidentResolved(c *ProcessingContext) {
 }
 
 // rearmTimerElement re-runs the timer arm for a parked catch/boundary element
-// whose FEEL schedule failed and raised an incident (ADR-0063). Re-evaluated
+// whose FEEL schedule failed and raised an incident (ADR-0064). Re-evaluated
 // against the instance's current variables, the schedule either resolves — a
 // timer is created and the token waits normally — or fails again, raising a fresh
 // incident (resolve is a genuine retry, not a blind clear). A vanished element
@@ -758,7 +758,7 @@ func resolveSchedule(c *ProcessingContext, s compiler.TimerSchedule, scope uint6
 // resolveScheduleErr is resolveSchedule but reports *why* a FEEL schedule could
 // not be resolved — an evaluation error, or a result that isn't a usable temporal
 // for the field — so a catch/boundary arm can put the reason in an incident's
-// message (ADR-0063). A non-FEEL schedule always resolves.
+// message (ADR-0064). A non-FEEL schedule always resolves.
 func resolveScheduleErr(c *ProcessingContext, s compiler.TimerSchedule, scope uint64) (compiler.TimerSchedule, error) {
 	if !s.IsFeel() {
 		return s, nil
@@ -793,7 +793,7 @@ func feelKindName(k compiler.TimerScheduleKind) string {
 // TimerCreated event. If the schedule is a FEEL expression that can't be
 // evaluated, it raises an incident on the element instead of firing the timer
 // immediately, so the token parks visibly and an operator can fix the data and
-// resolve it (ADR-0063). Either way the element stays Activated; only a created
+// resolve it (ADR-0064). Either way the element stays Activated; only a created
 // timer will ever fire it. The clock and variables are read here (command time)
 // and frozen into the event (I4/I6).
 func armOneShotTimer(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue, s compiler.TimerSchedule) {
@@ -935,7 +935,7 @@ func (timerCatchEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei 
 	// A catch schedule is a duration or date (a cycle is rejected at compile time),
 	// so it fires once. armOneShotTimer computes the due date here (command
 	// processing) and freezes it into the event (I4/I6), or — for an unresolvable
-	// FEEL schedule — raises an incident and parks (ADR-0063).
+	// FEEL schedule — raises an incident and parks (ADR-0064).
 	armOneShotTimer(c, key, ei, detail.Schedule)
 	// Stays Activated: no Completing until the timer fires (or the incident resolves).
 }
@@ -1404,7 +1404,7 @@ func (boundaryEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *m
 		// count are frozen into the event; applyToState never reads either (I4/I6). A
 		// non-interrupting cycle boundary seeds Repetitions so a finite Rn cycle counts
 		// down as it recurs (ADR-0054). An unresolvable FEEL schedule raises an
-		// incident and parks instead of firing immediately (ADR-0063).
+		// incident and parks instead of firing immediately (ADR-0064).
 		armOneShotTimer(c, key, ei, d.Schedule)
 	case compiler.BoundaryMessage:
 		c.AppendMessageSubscriptionEvent(key, model.IntentSubscriptionCreated, model.MessageSubscriptionValue{
