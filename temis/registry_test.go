@@ -24,6 +24,27 @@ func TestRegistry(t *testing.T) {
 	}
 }
 
+// TestRegistryReplace covers swapping the whole connector set at once (ADR-0041):
+// a fresh map replaces the previous registrations, and a nil map clears them.
+func TestRegistryReplace(t *testing.T) {
+	reg := temis.NewRegistry()
+	reg.Register("old", temis.NewHTTPClient(temis.Connector{Endpoint: "http://old"}))
+
+	next := temis.NewHTTPClient(temis.Connector{Endpoint: "http://new"})
+	reg.Replace(map[string]temis.Client{"new": next})
+	if _, ok := reg.Client("old"); ok {
+		t.Error("after Replace: old connector still registered, want it swapped out")
+	}
+	if got, ok := reg.Client("new"); !ok || got != next {
+		t.Error("after Replace: new connector not registered")
+	}
+
+	reg.Replace(nil) // nil clears
+	if _, ok := reg.Client("new"); ok {
+		t.Error("after Replace(nil): registry not cleared")
+	}
+}
+
 // TestHTTPClientEvaluates proves the request shape (decision id + inputs + bearer
 // token) and that the {"outputs":…} envelope is decoded back.
 func TestHTTPClientEvaluates(t *testing.T) {

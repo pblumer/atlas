@@ -1334,14 +1334,16 @@ function loadFormViewer() {
   return _formViewer;
 }
 
-async function viewTasks() {
+async function viewTasks(preselectKey) {
   // With auth on, identity is the signed-in user (server-authoritative); with auth
   // off it stays a typed, display-only identity (ADR-0045).
   const authOn = AUTH.enabled;
   const state = {
     tasks: [],
+    // A deep link (…/tasks/t/{jobKey}, e.g. from the Operations live view) lands on
+    // the "All tasks" folder so the linked task is always in view, and preselects it.
     folder: "all",
-    selected: null, // job key of the selected task
+    selected: preselectKey != null ? preselectKey : null, // job key of the selected task
     me: authOn ? ((AUTH.user && AUTH.user.username) || "") : (localStorage.getItem("atlas.tasks.me") || ""),
     assignable: [], // enabled users a task can be assigned to, for the picker
     mountedForm: null, // the live form-js viewer instance for the selected task, if any
@@ -1972,6 +1974,11 @@ async function route() {
     if (m) return await viewEditor(Number(m[1]));
     if (path === "#/tasks") return await viewTasks();
     if (path === "#/tasks/start") return await viewStartProcess();
+    // A single task can be deep-linked (…/t/{jobKey}) — the Operations live view
+    // links a running instance's active user task straight to its form here, so an
+    // operator jumps from "where is the token" to "work the task" in one click.
+    const tk = path.match(/^#\/tasks\/t\/(\d+)$/);
+    if (tk) return await viewTasks(Number(tk[1]));
     if (path === "#/operations") return await viewInstances();
     // A specific instance can be deep-linked (…/i/{instanceKey}) — the Modeler's
     // Deploy & run builds this so a roundtrip lands straight on the started

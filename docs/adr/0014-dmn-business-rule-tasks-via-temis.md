@@ -4,6 +4,12 @@
 - **Date:** 2026-07-22
 - **Deciders:** Core team
 
+> **Superseded in part by [ADR-0062](0062-embedded-dmn-editor.md).** This ADR's
+> non-goal — "Atlas is not a DMN authoring surface" — was deliberately reversed for
+> the decision-table case: Atlas now embeds a DMN editor (dmn-js) so a decision can
+> be authored in place. The *execution* model decided here (resolve + compile at
+> deploy, evaluate off the run loop) is unchanged.
+
 ## Context and problem statement
 
 BPMN models route on business rules. The standard way to express those rules is a **business rule task** that delegates to a DMN decision (a decision table or FEEL logic) rather than hard-coding the branching in the process. Atlas needs to execute business rule tasks, which means it needs a DMN engine.

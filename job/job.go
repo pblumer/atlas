@@ -5,14 +5,14 @@
 // This is the in-process form. Workers register a Handler per job type; the
 // Runner pulls activatable jobs of those types from the state store, runs the
 // handler, and submits CompleteJob back through the processor — the processor
-// never blocks on the handler. The gRPC streaming transport, job leases with
-// timeout/retry, and incident escalation on failure are later milestones; here a
-// handler that returns an error simply surfaces it (the job stays pending).
+// never blocks on the handler. A handler that returns an error is routed into the
+// incident model (ADR-0061): the job is failed (retried while retries remain, then
+// an incident parks its token) rather than aborting the whole Drive, so one
+// failing job cannot poison the run loop. The gRPC streaming transport and job
+// leases with timeout/backoff are later milestones.
 package job
 
 import (
-	"fmt"
-
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
@@ -27,21 +27,23 @@ type Job struct {
 }
 
 // Handler does a job's work with no output. Returning nil completes the job;
-// returning an error leaves it pending and surfaces the error (retry/incident
-// handling is a later milestone).
+// returning an error fails it (retry while retries remain, then an incident,
+// ADR-0061).
 type Handler func(Job) error
 
 // OutputHandler does a job's work and returns the variables to write back into
 // the job's process instance on completion (nil for none) — e.g. a business rule
-// task's decision result. As for Handler, returning an error leaves the job
-// pending.
+// task's decision result. As for Handler, returning an error fails the job
+// (retry, then an incident).
 type OutputHandler func(Job) ([]model.VariableValue, error)
 
 // Engine is the slice of the processor the runner drives: process queued
-// commands, and accept job completions with their output variables.
+// commands, accept job completions with their output variables, and accept job
+// failures (which retry or raise an incident, ADR-0061).
 type Engine interface {
 	RunUntilIdle() error
 	CompleteJob(jobKey uint64, outputs ...model.VariableValue)
+	FailJob(jobKey uint64, retries int32, message string)
 }
 
 // Runner dispatches activatable jobs to registered handlers.
@@ -99,7 +101,18 @@ func (r *Runner) PollOnce() (int, error) {
 			}
 			outputs, err := h(job)
 			if err != nil {
-				return dispatched, fmt.Errorf("job %d (type %d): %w", k, jv.JobType, err)
+				// A worker that can't complete its job must not abort the whole
+				// Drive — otherwise one failing job (e.g. a business rule task whose
+				// decision model isn't deployed) poisons the run loop and fails every
+				// future deploy or completion that drives jobs. Route the failure into
+				// the incident model instead (ADR-0061): FailJob retries the job while
+				// retries remain, then raises an incident that parks the token. Count
+				// it as progress so Drive loops to apply the FailJob command; when the
+				// job parks (or completes on a retry) it drops off the activatable
+				// index and Drive terminates.
+				r.engine.FailJob(job.Key, job.Retries-1, err.Error())
+				dispatched++
+				continue
 			}
 			r.engine.CompleteJob(k, outputs...)
 			dispatched++

@@ -69,6 +69,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0059](0059-data-input-associations.md) | Data input associations — read a data object into an activity | Accepted |
 | [0060](0060-field-level-data-object-writes.md) | Field-level data object writes — set one member of a structured object | Accepted |
 | [0061](0061-incident-model.md) | Incident model — job-failure incidents, raise, resolve, resume | Proposed |
+| [0062](0062-embedded-dmn-editor.md) | An embedded DMN editor (dmn-js) — author a decision in place, adopt its inputs/output | Accepted |
 | [0063](0063-timer-feel-failure-incidents.md) | Timer FEEL-failure incidents — park and raise instead of firing immediately | Proposed |
 
 ## Status values
