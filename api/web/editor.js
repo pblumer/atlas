@@ -700,6 +700,32 @@ function dataRefName(ref) {
   return r.name || (r.dataObjectRef && r.dataObjectRef.name) || r.id || "?";
 }
 
+// processOf returns the bpmn:Process business object that contains element — its
+// nearest Process ancestor, falling back to the diagram's single root process (for a
+// collaboration a data object lives in the pool's process, reached via the parent).
+function processOf(modeler, element) {
+  let bo = element && element.businessObject;
+  while (bo) {
+    if (/:Process$/.test(bo.$type || "")) return bo;
+    bo = bo.$parent;
+  }
+  return rootProcess(modeler);
+}
+
+// dataObjectNames lists a process's data objects distinct by name (a nameless one
+// falls back to its id), each with a representative id to point a reference at. Used
+// by the "Points to" selector so several references can share one logical object.
+function dataObjectNames(procBo) {
+  const out = [];
+  if (!procBo) return out;
+  for (const o of procBo.flowElements || []) {
+    if (o.$type !== "bpmn:DataObject") continue;
+    const name = o.name || o.id;
+    if (!out.some((e) => e.name === name)) out.push({ name, id: o.id });
+  }
+  return out;
+}
+
 // setAssignment writes a data association's single <assignment> from its two FEEL
 // bodies — <from> (the value/transform) and <to> (an output member path or an input
 // target variable). Empty bodies clear the assignment, so a stateless association
@@ -1050,10 +1076,22 @@ function wireProperties(root, modeler, api, projectId) {
     if (bo.$type === "bpmn:DataObjectReference") {
       const stateName = (bo.dataState && bo.dataState.name) || "";
       const collection = !!(bo.dataObjectRef && bo.dataObjectRef.isCollection);
+      // The other data objects in this process, so a reference can be pointed at an
+      // existing one — showing the same object in several places (one logical object,
+      // no long arrows). Distinct by name: duplicates are folded at compile time.
+      const names = dataObjectNames(processOf(modeler, element));
+      const curName = (bo.dataObjectRef && (bo.dataObjectRef.name || bo.dataObjectRef.id)) || "";
+      let pointsTo = "";
+      if (names.length > 1) {
+        pointsTo = `<label class="field"><span>Points to</span>
+          <select id="f-pointsto">${names.map((n) => `<option value="${esc(n.id)}" ${n.name === curName ? "selected" : ""}>${esc(n.name)}</option>`).join("")}</select></label>
+          <p class="muted" style="font-size:12px">Point this box at an existing data object to show <b>the same object in several places</b> — one logical object, so you can put it next to each activity without long arrows across the diagram.</p>`;
+      }
       html += `<h3>Data object</h3>
         <label class="field"><span>Data state</span>
           <input type="text" id="f-datastate" value="${esc(stateName)}" placeholder="received"/></label>
         <label class="field checkbox"><input type="checkbox" id="f-collection" ${collection ? "checked" : ""}/> <span>Collection (a list of items)</span></label>
+        ${pointsTo}
         <p class="muted" style="font-size:12px">A data object carries a value <i>and</i> a <b>data state</b> — <code>order [received]</code> → <code>[approved]</code>. The state set here is where the object starts each instance; a <b>data output association</b> (an arrow from an activity to this object) advances it and writes its value, a <b>data input association</b> reads it back, and the full state history is recorded per instance and survives restart. The <b>Name</b> is how the engine identifies it.</p>`;
     }
 
@@ -1298,6 +1336,31 @@ function wireProperties(root, modeler, api, projectId) {
     if (fcollection && bo.dataObjectRef) {
       fcollection.addEventListener("change", (e) => {
         try { modeling.updateModdleProperties(element, bo.dataObjectRef, { isCollection: !!e.target.checked }); } catch { /* stale */ }
+      });
+    }
+    const fpointsto = body.querySelector("#f-pointsto");
+    if (fpointsto) {
+      fpointsto.addEventListener("change", (e) => {
+        try {
+          const procBo = processOf(modeler, element);
+          const objs = procBo ? (procBo.flowElements || []).filter((x) => x.$type === "bpmn:DataObject") : [];
+          const target = objs.find((o) => o.id === e.target.value);
+          if (!target) return;
+          const old = bo.dataObjectRef;
+          // Point this reference at the chosen object, and relabel the box to match so
+          // the canvas and the engine identity agree.
+          modeling.updateModdleProperties(element, bo, { dataObjectRef: target });
+          if (target.name) modeling.updateProperties(element, { name: target.name });
+          // Remove the reference's former object if nothing else points at it, so a
+          // freshly-dropped duplicate does not linger as a phantom object.
+          if (old && old !== target && procBo) {
+            const stillUsed = (procBo.flowElements || []).some((x) => x.$type === "bpmn:DataObjectReference" && x.dataObjectRef === old);
+            if (!stillUsed) {
+              modeling.updateModdleProperties(element, procBo, { flowElements: (procBo.flowElements || []).filter((x) => x !== old) });
+            }
+          }
+          show(element);
+        } catch { /* stale */ }
       });
     }
     const assocFrom = body.querySelector("#f-assoc-from");

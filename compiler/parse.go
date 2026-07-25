@@ -568,13 +568,25 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	// Data objects are not flow nodes (no token flows through them), so they are
 	// added as a separate collection, not registered as flow nodes (ADR-0053). A
 	// nameless data object falls back to its BPMN id so it stays addressable.
+	//
+	// A data object's identity is its name: several <dataObjectReference>s (and even
+	// several <dataObject> elements) sharing a name are *views* of one logical object
+	// — the BPMN way to place it near several activities without long arrows. So every
+	// id resolves through objName for association wiring, but the object is seeded only
+	// once per name (the first occurrence wins its item type / initial state), so the
+	// engine sees one object, not several.
 	objName := make(map[string]string, len(proc.DataObjects)) // BPMN id → data-object name
+	seededObj := make(map[string]bool, len(proc.DataObjects))
 	for _, d := range proc.DataObjects {
 		name := d.Name
 		if name == "" {
 			name = d.Id
 		}
 		objName[d.Id] = name
+		if seededObj[name] {
+			continue // already have a logical object of this name; this is another view
+		}
+		seededObj[name] = true
 		b.AddDataObject(name, d.ItemSubjectRef, d.DataState.Name, d.IsCollection)
 	}
 

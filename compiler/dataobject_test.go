@@ -100,6 +100,57 @@ func TestParseDataObject(t *testing.T) {
 	}
 }
 
+// TestParseDataObjectMultipleReferencesOneObject checks that several
+// <dataObjectReference>s pointing at one <dataObject> (the BPMN way to show a data
+// object next to several activities) seed a single logical object, and that
+// associations through any reference resolve to it (ADR-0053). Also covers a
+// second, duplicate-named <dataObject> being folded into the same one.
+func TestParseDataObjectMultipleReferencesOneObject(t *testing.T) {
+	const model = `<?xml version="1.0"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="p" isExecutable="true">
+    <dataObject id="DO1" name="order"/>
+    <dataObject id="DO_dup" name="order"/>
+    <dataObjectReference id="Ref_A" dataObjectRef="DO1"/>
+    <dataObjectReference id="Ref_C" dataObjectRef="DO_dup"/>
+    <startEvent id="s"/>
+    <task id="A"><dataOutputAssociation><targetRef>Ref_A</targetRef><assignment><from>=n</from><to>name</to></assignment></dataOutputAssociation></task>
+    <task id="C"><dataInputAssociation><sourceRef>Ref_C</sourceRef><assignment><to>ord</to></assignment></dataInputAssociation></task>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="A"/>
+    <sequenceFlow id="f2" sourceRef="A" targetRef="C"/>
+    <sequenceFlow id="f3" sourceRef="C" targetRef="e"/>
+  </process>
+</definitions>`
+
+	cp, err := compiler.Parse(1, 1, strings.NewReader(model))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	// One logical object, despite two <dataObject> elements and two references.
+	if dos := cp.DataObjects(); len(dos) != 1 || cp.Intern(dos[0].Name) != "order" {
+		t.Fatalf("DataObjects = %d, want one named order (%v)", len(dos), dos)
+	}
+	find := func(id string) int32 {
+		for i := int32(0); i < 20; i++ {
+			if cp.ElementBpmnId(i) == id {
+				return i
+			}
+		}
+		return -1
+	}
+	// The output association through Ref_A and the input association through Ref_C
+	// both resolve to the same object "order".
+	out := cp.DataOutputAssociations(find("A"))
+	if len(out) != 1 || cp.Intern(out[0].DataObject) != "order" {
+		t.Errorf("task A output object = %v, want order", out)
+	}
+	in := cp.DataInputAssociations(find("C"))
+	if len(in) != 1 || cp.Intern(in[0].DataObject) != "order" {
+		t.Errorf("task C input object = %v, want order", in)
+	}
+}
+
 // TestParseDataObjectDefaultsToId checks a nameless data object falls back to its
 // BPMN id so it stays addressable, and that an absent <dataState> interns to none.
 func TestParseDataObjectDefaultsToId(t *testing.T) {
