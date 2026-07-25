@@ -1001,10 +1001,16 @@ function wireProperties(root, modeler, api) {
     }
     const bo = element.businessObject || {};
     const type = shortType(element.type);
-    // The generic two-letter badge is the type's first two letters, but a data
-    // object and a data store both start "Da" — badge them by what they are (a
-    // data object → DO, a data store → DS) so they read at a glance (ADR-0053).
-    const badges = { "bpmn:DataObjectReference": "DO", "bpmn:DataStoreReference": "DS" };
+    // The generic two-letter badge is the type's first two letters, but every data
+    // element starts "Da" (DataObject, DataStore, DataInput/OutputAssociation) and
+    // would collide on "DA" — badge them by what they are so they read at a glance:
+    // data object → DO, data store → DS, output/input association → OA/IA (ADR-0053).
+    const badges = {
+      "bpmn:DataObjectReference": "DO",
+      "bpmn:DataStoreReference": "DS",
+      "bpmn:DataOutputAssociation": "OA",
+      "bpmn:DataInputAssociation": "IA",
+    };
     icon.textContent = badges[bo.$type] || type.slice(0, 2).toUpperCase();
     typename.textContent = type;
     nameEl.textContent = bo.name || bo.id || "(unnamed)";
