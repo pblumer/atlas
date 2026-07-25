@@ -2534,6 +2534,8 @@ export async function mountLive(root, { api, toast, key, instance }) {
   let marked = [];
   const jsonCollapsed = new Set(); // JSON variable names collapsed by the operator
   let varsHTML = "";               // last rendered variables markup, to skip no-op rebuilds
+  let decisions = [];              // the selected instance's DMN decision evaluations (ADR-0064)
+  let focusEl = null;              // a business rule task the operator is inspecting, or null
   // "all" or an instance key (as a string). A deep-linked instance (Deploy & run's
   // roundtrip link, or a shared URL) preselects that one; refreshInstances falls
   // back to "all" if it no longer exists.
@@ -2618,12 +2620,124 @@ export async function mountLive(root, { api, toast, key, instance }) {
     return `<button class="btn ghost small vcopy-all vcopy" type="button" title="Copy all variables as JSON" data-copy="${esc(JSON.stringify(obj, null, 2))}">Copy all</button>`;
   }
 
+  // isBusinessRuleTask reports whether a diagram element is a DMN business rule
+  // task — the only element for which a decision can be inspected.
+  const isBusinessRuleTask = (elementId) => {
+    const el = registry.get(elementId);
+    return !!(el && el.businessObject && el.businessObject.$type === "bpmn:BusinessRuleTask");
+  };
+
+  // decisionLabel names a business rule task for the panel header: its diagram
+  // label if it has one, else its id.
+  const decisionLabel = (elementId) => {
+    const el = registry.get(elementId);
+    const bo = el && el.businessObject;
+    return (bo && (bo.name || bo.id)) || elementId;
+  };
+
+  // fmtVal renders a decision input/output value compactly: strings bare, objects
+  // and arrays as JSON, null as the FEEL null marker.
+  const fmtVal = (v) => {
+    if (v === null || v === undefined) return "null";
+    if (typeof v === "object") return JSON.stringify(v);
+    return String(v);
+  };
+
+  // objRows renders a JSON object as a two-column key/value list — the decision's
+  // inputs or outputs at a glance.
+  function objRows(obj) {
+    const keys = obj && typeof obj === "object" ? Object.keys(obj) : [];
+    if (!keys.length) return '<span class="muted">none</span>';
+    return `<div class="dec-kv">${keys.map((k) =>
+      `<div class="dec-kv-row"><span class="dec-k">${esc(k)}</span><span class="dec-v"><code>${esc(fmtVal(obj[k]))}</code></span></div>`
+    ).join("")}</div>`;
+  }
+
+  // renderTrace turns the temis trace tree into the "how it was decided" view: for
+  // each decision table, the values its inputs evaluated to and every rule with the
+  // matched ones highlighted, showing each cell's unary test and whether it held,
+  // plus the outputs the matching rule produced (ADR-0064). A decision with no table
+  // (a literal expression) has no trace, so this renders nothing.
+  function renderTrace(trace) {
+    if (!trace || !Array.isArray(trace.tables) || !trace.tables.length) {
+      return '<div class="dec-sect"><div class="dec-sect-h">How it was decided</div><p class="muted" style="margin:0">No decision-table trace (literal expression or remote decision).</p></div>';
+    }
+    const tables = trace.tables.map((tb) => {
+      const inputs = (tb.inputs || []).map((i) =>
+        `<span class="chip" title="${esc(i.expression)}">${esc(i.expression)} = <code>${esc(fmtVal(i.value))}</code></span>`
+      ).join(" ");
+      const rules = (tb.rules || []).map((r) => {
+        const conds = (r.conditions || []).map((c) =>
+          `<span class="dec-cond ${c.matched ? "ok" : "no"}" title="${esc(c.input)}">${esc(c.entry)}</span>`
+        ).join(" ");
+        const outs = r.matched && r.outputs && r.outputs.length
+          ? `<span class="dec-out">→ ${esc(r.outputs.map(fmtVal).join(", "))}</span>` : "";
+        return `<div class="dec-rule ${r.matched ? "matched" : ""}">
+          <span class="dec-rule-ix">#${r.index + 1}</span>
+          <span class="dec-rule-conds">${conds || '<span class="muted">—</span>'}</span>
+          ${outs}
+        </div>`;
+      }).join("");
+      return `<div class="dec-table">
+        <div class="dec-table-h">Hit policy <b>${esc(tb.hitPolicy || "U")}</b>${tb.aggregation ? " · " + esc(tb.aggregation) : ""}</div>
+        <div class="dec-inputs">${inputs || '<span class="muted">no inputs</span>'}</div>
+        <div class="dec-rules">${rules}</div>
+      </div>`;
+    }).join("");
+    return `<div class="dec-sect"><div class="dec-sect-h">How it was decided</div>${tables}</div>`;
+  }
+
+  // renderOneDecision renders a single evaluation: the decision id, the inputs it
+  // saw, the outputs it produced, and the trace explaining the outcome.
+  function renderOneDecision(d) {
+    let inputs = {}, outputs = {}, trace = null;
+    try { inputs = JSON.parse(d.inputs || "{}"); } catch { /* leave empty */ }
+    try { outputs = JSON.parse(d.outputs || "{}"); } catch { /* leave empty */ }
+    if (d.trace) { try { trace = JSON.parse(d.trace); } catch { /* no trace */ } }
+    const when = d.at ? new Date(d.at / 1e6).toLocaleString() : "";
+    return `<div class="dec-card">
+      <div class="dec-card-h"><b>${esc(d.decisionId)}</b>${when ? ` <span class="muted">${esc(when)}</span>` : ""}</div>
+      <div class="dec-sect"><div class="dec-sect-h">Inputs</div>${objRows(inputs)}</div>
+      <div class="dec-sect"><div class="dec-sect-h">Outputs</div>${objRows(outputs)}</div>
+      ${renderTrace(trace)}
+    </div>`;
+  }
+
+  // renderDecisionDetail is the inspection panel for a clicked business rule task:
+  // every evaluation the selected instance made at that task, newest last, with its
+  // inputs, outputs, and trace — the "look up after the fact how the decision was
+  // made" surface (ADR-0064). It needs a single instance selected, since decisions
+  // are per-instance history.
+  function renderDecisionDetail(elementId) {
+    const head = `<div class="vp-head">
+      <span class="vp-title">Decision · ${esc(decisionLabel(elementId))}</span>
+      <span class="vp-actions"><button class="btn ghost small dec-back" type="button" title="Back to variables">&larr; Variables</button></span>
+    </div>`;
+    if (selected === "all") {
+      return head + `<p class="muted" style="margin:0">Select a single instance (top-left) to see how its decision was made.</p>`;
+    }
+    const matches = decisions.filter((d) => d.elementId === elementId);
+    if (!matches.length) {
+      return head + `<p class="muted" style="margin:0">This instance has not evaluated this decision yet. Its inputs, outputs, and the rules that fired will appear here once a token reaches the task.</p>`;
+    }
+    return head + matches.map(renderOneDecision).join("");
+  }
+
   // renderVariables shows the selected instance's variables with the shared
   // polished renderer (scalars as fields, JSON as collapsible highlighted cards),
-  // or — for "All instances" — a compact per-instance overview table. It rebuilds
-  // only when the markup actually changes, so a 1.5s poll never resets an expanded
-  // JSON card's scroll or the operator's collapse choices.
+  // or — for "All instances" — a compact per-instance overview table. When the
+  // operator is inspecting a business rule task, it shows that decision's evaluation
+  // instead (ADR-0064). It rebuilds only when the markup actually changes, so a 1.5s
+  // poll never resets an expanded JSON card's scroll or the operator's collapse
+  // choices.
   function renderVariables() {
+    if (focusEl && isBusinessRuleTask(focusEl)) {
+      const decHTML = renderDecisionDetail(focusEl);
+      if (decHTML === varsHTML) return;
+      varsHTML = decHTML;
+      varPanel.innerHTML = decHTML;
+      return;
+    }
     let html;
     if (selected === "all") {
       html = !instances.length
@@ -2671,6 +2785,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
   async function poll() {
     await refreshInstances();
     await refreshTasks();
+    await refreshDecisions();
     updateCancelBtn();
     const q = selected === "all" ? "" : `?instance=${encodeURIComponent(selected)}`;
     let rt;
@@ -2693,6 +2808,9 @@ export async function mountLive(root, { api, toast, key, instance }) {
       arr.push(t);
       tasksByElement.set(t.elementId, arr);
     }
+    // The business rule tasks the selected instance has already decided — each gets
+    // a clickable badge that opens its decision inspection (ADR-0064).
+    const decidedEls = new Set(decisions.map((d) => d.elementId));
     // Each element is drawn in one of two states: green if it holds a live token
     // right now, gray if tokens have only passed through it (history). Together
     // they show the flow distribution even once every instance has finished — a
@@ -2724,6 +2842,13 @@ export async function mountLive(root, { api, toast, key, instance }) {
           html: `<a class="task-open" href="${href}" title="Open the waiting user task's form">&#128203; ${label}</a>`,
         });
       }
+      // A decided business rule task offers a decision-inspection badge.
+      if (decidedEls.has(e.elementId)) {
+        overlays.add(e.elementId, "decision", {
+          position: { top: 4, left: 4 },
+          html: `<button class="decision-badge${focusEl === e.elementId ? " on" : ""}" data-el="${esc(e.elementId)}" title="Inspect this decision — inputs, outputs, and how it was decided">&#9878; decision</button>`,
+        });
+      }
     }
     countEl.textContent = rt.instances;
     tokenEl.textContent = rt.tokens;
@@ -2738,6 +2863,17 @@ export async function mountLive(root, { api, toast, key, instance }) {
     try { all = await api("GET", "/api/v1/tasks"); }
     catch { return; }
     liveTasks = all.filter((t) => t.processDefKey === key);
+  }
+
+  // refreshDecisions pulls the selected instance's DMN decision evaluations so the
+  // diagram can badge decided business rule tasks and the inspection panel can show
+  // how each decision was made (ADR-0064). Only a single selected instance has a
+  // decision history to fetch; "All instances" clears it. Best-effort, like the
+  // other polled reads.
+  async function refreshDecisions() {
+    if (selected === "all") { decisions = []; return; }
+    try { decisions = await api("GET", `/api/v1/instances/${selected}/decisions`); }
+    catch { /* transient; keep the previous set */ }
   }
 
   // The Cancel button targets the selected instance; it is shown only when a
@@ -2783,6 +2919,37 @@ export async function mountLive(root, { api, toast, key, instance }) {
   bindJsonCards(varPanel, jsonCollapsed, renderVariables);
   bindVarCopy(varPanel, toast);
   wireVarsPanel(root, viewer);
+
+  // Inspecting a decision (ADR-0064): clicking a business rule task on the diagram
+  // opens how its decision was made in the side panel (toggle off by clicking it
+  // again); clicking any other element leaves the inspection. The ⚖ badge on a
+  // decided task is the discoverable affordance for the same thing.
+  viewer.on("element.click", ({ element }) => {
+    if (element && element.businessObject && element.businessObject.$type === "bpmn:BusinessRuleTask") {
+      focusEl = focusEl === element.id ? null : element.id;
+      renderVariables();
+      poll();
+    } else if (focusEl) {
+      focusEl = null;
+      renderVariables();
+    }
+  });
+  // The ⚖ badge (a diagram overlay) and the panel's "← Variables" button are HTML,
+  // so they're wired by delegation on the view root.
+  root.addEventListener("click", (ev) => {
+    const badge = ev.target.closest(".decision-badge");
+    if (badge) {
+      ev.preventDefault();
+      focusEl = badge.dataset.el;
+      renderVariables();
+      poll();
+      return;
+    }
+    if (ev.target.closest(".dec-back")) {
+      focusEl = null;
+      renderVariables();
+    }
+  });
 
   // Start a fresh instance of this already-deployed definition. The demo and the
   // Modeler's "Deploy & run" both couple starting to a deployment; this is the

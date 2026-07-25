@@ -107,7 +107,7 @@ func TestBusinessRuleTaskEvaluatesDMN(t *testing.T) {
 		}
 		return nil
 	}
-	runner.HandleWithOutput(jobType, dmn.Handler(store, lookup, reg, func(r dmn.Result) { got = append(got, r) }))
+	runner.HandleCompleting(jobType, dmn.Handler(store, lookup, reg, func(r dmn.Result) { got = append(got, r) }))
 
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {
@@ -170,7 +170,7 @@ func TestBusinessRuleTaskDeploymentBinding(t *testing.T) {
 	}
 	var got []dmn.Result
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, dmn.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg, func(r dmn.Result) { got = append(got, r) }))
+	runner.HandleCompleting(jobType, dmn.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg, func(r dmn.Result) { got = append(got, r) }))
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)
@@ -247,7 +247,7 @@ func TestBusinessRuleTaskRecoversAcrossRestart(t *testing.T) {
 	// The recovered job evaluates and drives the instance to completion.
 	var got []dmn.Result
 	runner := job.NewRunner(store2, p2)
-	runner.HandleWithOutput(jobType, dmn.Handler(store2, lookup, reg, func(r dmn.Result) { got = append(got, r) }))
+	runner.HandleCompleting(jobType, dmn.Handler(store2, lookup, reg, func(r dmn.Result) { got = append(got, r) }))
 	if err := runner.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)
 	}

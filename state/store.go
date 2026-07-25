@@ -318,6 +318,24 @@ func (s *Store) VariableSnapshotHistory(scopeKey uint64, fn func(ts int64, pos u
 	})
 }
 
+// DecisionEvaluationHistory folds the retained DMN decision evaluations of one
+// scope (a process instance), calling fn with each evaluation's event timestamp,
+// log position, and its frozen record (decision id, inputs, outputs, trace) in the
+// order they occurred (ADR-0064). Because the key sorts by timestamp then position,
+// a scope-wide scan yields a monotonic sequence — the same ordering as the variable
+// and element-step timelines, so a business rule task's decision reasoning lines up
+// with the step at which it ran. Used to surface how a decision was made to
+// operators, both live and after the instance has finished.
+func (s *Store) DecisionEvaluationHistory(scopeKey uint64, fn func(ts int64, pos uint64, v *model.DecisionEvaluationValue) error) error {
+	return s.scanPrefix(decisionEvaluationScopePrefix(scopeKey), func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTDecisionEvaluation, raw)
+		if err != nil {
+			return err
+		}
+		return fn(timestampFromDecisionEvalKey(k), positionFromDecisionEvalKey(k), v.(*model.DecisionEvaluationValue))
+	})
+}
+
 // ProcessInstance returns the process instance for key and whether it was found,
 // looking first in the active family and then in the terminal-history family
 // (ADR-0017). It lets a query resolve an instance's definition whether it is

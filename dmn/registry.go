@@ -25,6 +25,7 @@ package dmn
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	tdmn "github.com/pblumer/temis/dmn"
@@ -80,9 +81,20 @@ func (r *Registry) Deploy(defKey uint64, dmnXML []byte) error {
 // the runtime hot spot of the integration, but it runs on a worker, off the
 // processor goroutine.
 func (r *Registry) Evaluate(ctx context.Context, defKey uint64, decisionId string, in map[string]any) (map[string]any, error) {
+	out, _, err := r.EvaluateTraced(ctx, defKey, decisionId, in)
+	return out, err
+}
+
+// EvaluateTraced is Evaluate plus the temis trace explaining how the decision was
+// made — which tables ran, which rules matched, and why (ADR-0064). The trace is
+// canonical JSON (temis's [tdmn.Trace] tree) or nil for a decision with no table
+// logic (a literal expression). The DMN worker uses it to retain a debuggable
+// record of the evaluation. Tracing runs off the processor goroutine, so its extra
+// allocation is not on any hot path (temis's WithTrace, ADR-0013/WP-51).
+func (r *Registry) EvaluateTraced(ctx context.Context, defKey uint64, decisionId string, in map[string]any) (map[string]any, []byte, error) {
 	defs, ok := r.definitions[defKey]
 	if !ok {
-		return nil, fmt.Errorf("dmn: no model deployed for def %d", defKey)
+		return nil, nil, fmt.Errorf("dmn: no model deployed for def %d", defKey)
 	}
 	return evalDecision(ctx, defs, decisionId, in, fmt.Sprintf("def %d", defKey))
 }
@@ -91,23 +103,41 @@ func (r *Registry) Evaluate(ctx context.Context, defKey uint64, decisionId strin
 // provides it (ADR-0063), for a latest-bound business rule task. It is otherwise
 // identical to Evaluate; only the model selection differs.
 func (r *Registry) EvaluateLatest(ctx context.Context, decisionId string, in map[string]any) (map[string]any, error) {
+	out, _, err := r.EvaluateLatestTraced(ctx, decisionId, in)
+	return out, err
+}
+
+// EvaluateLatestTraced is EvaluateLatest plus the temis trace (see EvaluateTraced).
+func (r *Registry) EvaluateLatestTraced(ctx context.Context, decisionId string, in map[string]any) (map[string]any, []byte, error) {
 	defs, ok := r.latest[decisionId]
 	if !ok {
-		return nil, fmt.Errorf("dmn: no model deployed providing decision %q", decisionId)
+		return nil, nil, fmt.Errorf("dmn: no model deployed providing decision %q", decisionId)
 	}
 	return evalDecision(ctx, defs, decisionId, in, "the latest deployed model")
 }
 
-// evalDecision evaluates one decision from an already-compiled model. `where`
-// names the model in errors ("def 7" or "the latest deployed model").
-func evalDecision(ctx context.Context, defs *tdmn.Definitions, decisionId string, in map[string]any, where string) (map[string]any, error) {
+// evalDecision evaluates one decision from an already-compiled model, requesting
+// the temis trace so the worker can retain how the decision was made (ADR-0064).
+// `where` names the model in errors ("def 7" or "the latest deployed model"). The
+// returned trace bytes are the JSON image of the temis trace tree, or nil when the
+// decision produced none (a literal-expression decision has no tables to trace).
+func evalDecision(ctx context.Context, defs *tdmn.Definitions, decisionId string, in map[string]any, where string) (map[string]any, []byte, error) {
 	dec, err := defs.Decision(decisionId)
 	if err != nil {
-		return nil, fmt.Errorf("dmn: decision %q in %s: %w", decisionId, where, err)
+		return nil, nil, fmt.Errorf("dmn: decision %q in %s: %w", decisionId, where, err)
 	}
-	res, err := dec.Evaluate(ctx, tdmn.Input(in))
+	res, err := dec.Evaluate(ctx, tdmn.Input(in), tdmn.WithTrace())
 	if err != nil {
-		return nil, fmt.Errorf("dmn: evaluate %q in %s: %w", decisionId, where, err)
+		return nil, nil, fmt.Errorf("dmn: evaluate %q in %s: %w", decisionId, where, err)
 	}
-	return res.Outputs, nil
+	var trace []byte
+	if res.Trace != nil {
+		// The trace tree carries JSON tags as its wire contract (temis dmn/trace.go);
+		// a marshal failure would only mean an unexpected value shape, so degrade to no
+		// trace rather than failing the evaluation the token depends on.
+		if b, err := json.Marshal(res.Trace); err == nil {
+			trace = b
+		}
+	}
+	return res.Outputs, trace, nil
 }

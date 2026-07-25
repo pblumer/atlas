@@ -281,10 +281,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// loop). One handler serves every process: it resolves each job's decision,
 	// inputs, and result variable from the compiled process the job belongs to
 	// (ProcessLookup), so it registers once under the reserved DMN job type
-	// (compiler.DMNJobTypeIndex). It registers via HandleWithOutput because a
-	// decision's result is written back into the instance as a process variable.
+	// (compiler.DMNJobTypeIndex). It registers via HandleCompleting because a
+	// decision's completion both writes its result back as a process variable and
+	// retains the evaluation (inputs, outputs, trace) for debugging (ADR-0064).
 	s.jobRunner = job.NewRunner(store, proc)
-	s.jobRunner.HandleWithOutput(compiler.DMNJobTypeIndex, dmn.Handler(store, s.processLookup, s.dmnRegistry, nil))
+	s.jobRunner.HandleCompleting(compiler.DMNJobTypeIndex, dmn.Handler(store, s.processLookup, s.dmnRegistry, nil))
 	// A *central* business rule task delegates its decision to a remote temis
 	// service instead of the embedded library (ADR-0050). One connector worker
 	// serves every process under the reserved temis-connector job type; it resolves
@@ -299,7 +300,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		return nil, err
 	}
 	s.temisRegistry.Replace(clients)
-	s.jobRunner.HandleWithOutput(compiler.TemisDecisionJobTypeIndex, temis.Handler(store, s.processLookup, s.temisRegistry, nil))
+	s.jobRunner.HandleCompleting(compiler.TemisDecisionJobTypeIndex, temis.Handler(store, s.processLookup, s.temisRegistry, nil))
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
 	}

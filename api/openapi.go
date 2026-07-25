@@ -138,6 +138,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/instances/{key}/timeline", s.handleInstanceTimeline, apiOp{
 			summary: "Read a process instance's step-by-step replay timeline", tag: "Instances",
 			resp: jsonBody("Instance timeline", tObject())}},
+		{"GET", "/api/v1/instances/{key}/decisions", s.handleInstanceDecisions, apiOp{
+			summary: "Read the DMN decision evaluations a process instance made — each with its inputs, outputs, and trace", tag: "Instances",
+			resp: jsonBody("Decision evaluations", tArray())}},
 		{"DELETE", "/api/v1/instances/{key}", s.handleCancelInstance, apiOp{
 			summary: "Cancel a running instance", tag: "Instances", resp: jsonBody("Cancellation result", tObject())}},
 

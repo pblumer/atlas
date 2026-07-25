@@ -15,13 +15,16 @@ import (
 
 // Result is one evaluated business rule task's outcome, delivered to the optional
 // sink a [Handler] is built with. The decision's outputs are written back into the
-// instance as process variables (see Handler); the sink is an additional
-// observation seam for tests and diagnostics, not the primary output path.
+// instance as process variables (see Handler), and the full evaluation (inputs,
+// outputs, trace) is retained as a durable debugging record (ADR-0064); the sink is
+// an additional observation seam for tests and diagnostics, not the primary path.
 type Result struct {
 	ElementInstanceKey uint64
 	ProcessDefKey      uint64
 	DecisionId         string
+	Inputs             map[string]any
 	Outputs            map[string]any
+	Trace              []byte // temis trace JSON explaining the evaluation; nil if none
 }
 
 // ProcessLookup resolves a process-definition key to its compiled process. The
@@ -34,11 +37,21 @@ type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 // string, so the full 64-bit value survives) into a decision.
 const builtinProcessInstanceKey = "processInstanceKey"
 
+// Evaluation is what running a decision yields: its named outputs and, when the
+// engine can produce one, the temis trace explaining how it got there — which
+// tables ran and which rules fired (ADR-0064). Trace is canonical JSON or nil when
+// no trace is available (a literal-expression decision, or a remote decision whose
+// connector returns none).
+type Evaluation struct {
+	Outputs map[string]any
+	Trace   []byte
+}
+
 // Evaluator evaluates a decision by id against an input context and returns its
-// named outputs. It is the seam between a business rule task's I/O semantics and
-// the engine that runs the decision: the local embedded temis library and a remote
-// temis connector each provide one (ADR-0050).
-type Evaluator func(ctx context.Context, decisionId string, inputs map[string]any) (map[string]any, error)
+// outputs and (when available) trace. It is the seam between a business rule task's
+// I/O semantics and the engine that runs the decision: the local embedded temis
+// library and a remote temis connector each provide one (ADR-0050).
+type Evaluator func(ctx context.Context, decisionId string, inputs map[string]any) (Evaluation, error)
 
 // Bind resolves the [Evaluator] for a business rule task on a compiled process —
 // the decision engine bound to it. A returned error (e.g. an unregistered
@@ -61,67 +74,104 @@ type Bind func(cp *compiler.CompiledProcess, detail *compiler.BusinessRuleTaskDe
 //     route on it.
 //
 // Evaluation is a post-durability side effect off the processor goroutine
-// (invariant I2/I4). Returning an error leaves the job pending. sink, if non-nil,
-// additionally observes each result. [Handler] (local) and the temis connector
-// worker (central, ADR-0050) are both built on it.
-func DecisionHandler(store *state.Store, lookup ProcessLookup, bind Bind, sink func(Result)) job.OutputHandler {
-	return func(j job.Job) ([]model.VariableValue, error) {
+// (invariant I2/I4). Returning an error leaves the job pending. Alongside the
+// output variables, the completion carries a durable decision-evaluation record —
+// the inputs, outputs, and trace — so an operator can inspect how the decision was
+// made live and after the fact (ADR-0064). sink, if non-nil, additionally observes
+// each result. [Handler] (local) and the temis connector worker (central, ADR-0050)
+// are both built on it.
+func DecisionHandler(store *state.Store, lookup ProcessLookup, bind Bind, sink func(Result)) job.CompletingHandler {
+	return func(j job.Job) (job.Completion, error) {
 		ei, ok, err := store.GetElementInstance(j.ElementInstanceKey)
 		if err != nil {
-			return nil, err
+			return job.Completion{}, err
 		}
 		if !ok {
-			return nil, nil // element instance gone (e.g. already completed); nothing to do
+			return job.Completion{}, nil // element instance gone (e.g. already completed); nothing to do
 		}
 		cp := lookup(ei.ProcessDefKey)
 		if cp == nil {
-			return nil, fmt.Errorf("dmn: no compiled process for def %d", ei.ProcessDefKey)
+			return job.Completion{}, fmt.Errorf("dmn: no compiled process for def %d", ei.ProcessDefKey)
 		}
 		detail := cp.BusinessRuleTask(cp.Node(ei.ElementId).Detail)
 		decisionId := cp.Intern(detail.DecisionId)
 
 		evaluate, err := bind(cp, detail)
 		if err != nil {
-			return nil, err
+			return job.Completion{}, err
 		}
 		inputs, err := buildInputs(store, ei.ProcessInstanceKey, cp.Intern(detail.Inputs), detail.InputMappings)
 		if err != nil {
-			return nil, fmt.Errorf("dmn: build inputs for element %d: %w", j.ElementInstanceKey, err)
+			return job.Completion{}, fmt.Errorf("dmn: build inputs for element %d: %w", j.ElementInstanceKey, err)
 		}
-		outputs, err := evaluate(context.Background(), decisionId, inputs)
+		eval, err := evaluate(context.Background(), decisionId, inputs)
 		if err != nil {
-			return nil, err
+			return job.Completion{}, err
 		}
 		if sink != nil {
 			sink(Result{
 				ElementInstanceKey: j.ElementInstanceKey,
 				ProcessDefKey:      cp.Key,
 				DecisionId:         decisionId,
-				Outputs:            outputs,
+				Inputs:             inputs,
+				Outputs:            eval.Outputs,
+				Trace:              eval.Trace,
 			})
 		}
-		if resultVar := cp.Intern(detail.ResultVar); resultVar != "" {
-			return []model.VariableValue{outputVariable(resultVar, outputs)}, nil
+		// Retain how the decision was made as a durable record on completion (ADR-0064).
+		// ProcessInstanceKey/ElementInstanceKey are re-stamped from the authoritative
+		// job when the completion folds, so they need not be set here.
+		decision := &model.DecisionEvaluationValue{
+			ProcessInstanceKey: ei.ProcessInstanceKey,
+			ElementInstanceKey: j.ElementInstanceKey,
+			ProcessDefKey:      cp.Key,
+			ElementId:          ei.ElementId,
+			DecisionId:         decisionId,
+			InputsJSON:         jsonObject(inputs),
+			OutputsJSON:        jsonObject(eval.Outputs),
+			TraceJSON:          string(eval.Trace),
 		}
-		return nil, nil
+		var outputs []model.VariableValue
+		if resultVar := cp.Intern(detail.ResultVar); resultVar != "" {
+			outputs = []model.VariableValue{outputVariable(resultVar, eval.Outputs)}
+		}
+		return job.Completion{Outputs: outputs, Decision: decision}, nil
 	}
+}
+
+// jsonObject renders a decision's input or output context as canonical JSON for a
+// durable evaluation record. An empty context is recorded as "{}" (an object with
+// no members) rather than JSON null, so the debugging view always shows an object;
+// a marshal failure degrades the same way rather than failing the completion.
+func jsonObject(m map[string]any) string {
+	if len(m) == 0 {
+		return "{}"
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
 }
 
 // Handler builds the in-process, local DMN worker: a [DecisionHandler] whose
 // Evaluator is the embedded temis library, evaluating each decision against the
 // model deployed under the process's own key (ADR-0014). Register it with a
-// [job.Runner] via HandleWithOutput for the reserved DMN job type
+// [job.Runner] via HandleCompleting for the reserved DMN job type
 // ([compiler.DMNJobTypeIndex]). sink, if non-nil, observes each result.
-func Handler(store *state.Store, lookup ProcessLookup, reg *Registry, sink func(Result)) job.OutputHandler {
+func Handler(store *state.Store, lookup ProcessLookup, reg *Registry, sink func(Result)) job.CompletingHandler {
 	return DecisionHandler(store, lookup, func(cp *compiler.CompiledProcess, detail *compiler.BusinessRuleTaskDetail) (Evaluator, error) {
 		// The task's binding selects which deployed model version to evaluate
 		// (ADR-0063): deployment pins to this process's own snapshot; latest (the
-		// default) tracks the newest deployed version of the decision.
-		return func(ctx context.Context, decisionId string, inputs map[string]any) (map[string]any, error) {
+		// default) tracks the newest deployed version of the decision. Both request
+		// the trace so the evaluation is retained with its explanation (ADR-0064).
+		return func(ctx context.Context, decisionId string, inputs map[string]any) (Evaluation, error) {
 			if detail.Binding == compiler.BindingDeployment {
-				return reg.Evaluate(ctx, cp.Key, decisionId, inputs)
+				out, trace, err := reg.EvaluateTraced(ctx, cp.Key, decisionId, inputs)
+				return Evaluation{Outputs: out, Trace: trace}, err
 			}
-			return reg.EvaluateLatest(ctx, decisionId, inputs)
+			out, trace, err := reg.EvaluateLatestTraced(ctx, decisionId, inputs)
+			return Evaluation{Outputs: out, Trace: trace}, err
 		}, nil
 	}, sink)
 }

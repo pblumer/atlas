@@ -171,6 +171,21 @@ func (p *Processor) CompleteJob(jobKey uint64, outputs ...model.VariableValue) {
 	})
 }
 
+// CompleteJobWithDecision completes a business rule task's job like CompleteJob,
+// additionally carrying the DMN decision evaluation the worker produced (ADR-0064):
+// its inputs, outputs, and trace, frozen into a history event when the completion
+// is folded so an operator can later inspect how the decision was made. decision
+// may be nil, in which case this behaves exactly like CompleteJob.
+func (p *Processor) CompleteJobWithDecision(jobKey uint64, decision *model.DecisionEvaluationValue, outputs ...model.VariableValue) {
+	p.queue = append(p.queue, Command{
+		Key:       jobKey,
+		ValueType: model.VTJob,
+		Intent:    model.IntentJobCompleted,
+		StartVars: outputs,
+		Decision:  decision,
+	})
+}
+
 // FailJob enqueues a worker's failure report for a job (ADR-0061), carrying the
 // retries the worker leaves it and a failure message. With retries > 0 the job is
 // retried (back on the activatable index); with retries <= 0 an incident is raised

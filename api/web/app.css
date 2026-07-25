@@ -416,6 +416,41 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   box-shadow: 0 1px 4px rgba(0,0,0,0.3); cursor: pointer;
 }
 .task-open:hover { filter: brightness(1.08); }
+/* "Decision" badge on a business rule task that has been evaluated: opens the
+   decision-inspection panel (inputs, outputs, and how it was decided; ADR-0064). */
+.decision-badge {
+  display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;
+  background: #6b3fd4; color: #fff; border: none; border-radius: 999px;
+  height: 20px; padding: 0 9px; cursor: pointer;
+  font: 700 11px/20px system-ui, sans-serif;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+.decision-badge:hover { filter: brightness(1.1); }
+.decision-badge.on { outline: 2px solid #fff; box-shadow: 0 0 0 2px #6b3fd4; }
+
+/* Decision-inspection panel: one card per evaluation, with sections for inputs,
+   outputs, and the decision-table trace. Rendered in the variables side panel. */
+.dec-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; margin: 0 0 10px; background: var(--surface); }
+.dec-card-h { font-size: 14px; margin-bottom: 6px; }
+.dec-card-h .muted { font-weight: 400; font-size: 12px; }
+.dec-sect { margin-top: 10px; }
+.dec-sect-h { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 5px; }
+.dec-kv { display: flex; flex-direction: column; gap: 3px; }
+.dec-kv-row { display: flex; gap: 8px; align-items: baseline; }
+.dec-kv .dec-k { min-width: 90px; color: var(--muted); font-size: 12px; }
+.dec-kv .dec-v code { font: 12px/1.5 ui-monospace, monospace; word-break: break-word; }
+.dec-table { border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-bottom: 8px; }
+.dec-table-h { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.dec-inputs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.dec-rules { display: flex; flex-direction: column; gap: 3px; }
+.dec-rule { display: flex; align-items: baseline; gap: 8px; padding: 3px 6px; border-radius: 5px; opacity: 0.55; }
+.dec-rule.matched { opacity: 1; background: #eef7f0; border: 1px solid #cfe8d6; }
+.dec-rule-ix { font: 700 11px/1.4 ui-monospace, monospace; color: var(--muted); min-width: 26px; }
+.dec-rule-conds { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; }
+.dec-cond { font: 12px/1.5 ui-monospace, monospace; padding: 0 5px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); }
+.dec-cond.ok { border-color: #cfe8d6; background: #eef7f0; color: var(--ok); }
+.dec-cond.no { color: var(--muted); }
+.dec-out { font: 700 12px/1.5 system-ui, sans-serif; color: var(--ok); white-space: nowrap; }
 .legend-swatch {
   display: inline-block; width: 22px; height: 0;
   border-top: 2.5px solid var(--ok); vertical-align: middle; margin-right: 4px;

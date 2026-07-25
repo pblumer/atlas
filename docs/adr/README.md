@@ -71,6 +71,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0061](0061-incident-model.md) | Incident model — job-failure incidents, raise, resolve, resume | Proposed |
 | [0062](0062-embedded-dmn-editor.md) | An embedded DMN editor (dmn-js) — author a decision in place, adopt its inputs/output | Accepted |
 | [0063](0063-dmn-decision-binding.md) | DMN decision binding — latest vs deployment on a business rule task | Accepted |
+| [0064](0064-decision-evaluation-records.md) | Durable decision-evaluation records — capture a decision's inputs, outputs, and trace for debugging | Accepted |
 
 ## Status values
 

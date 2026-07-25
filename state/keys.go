@@ -29,6 +29,7 @@ const (
 	cfDataObject             columnFamily = 0x10 // do:<scopeKey>:<name> → DataObjectValue
 	cfDataObjectSnapshot     columnFamily = 0x11 // doSnap:<scopeKey>:<ts>:<pos> → DataObjectValue
 	cfIncident               columnFamily = 0x12 // incident:<elKey> → IncidentValue (ADR-0061)
+	cfDecisionEvaluation     columnFamily = 0x13 // decEval:<scopeKey>:<ts>:<pos> → DecisionEvaluationValue (ADR-0064)
 )
 
 func appendBE64(dst []byte, v uint64) []byte { return binary.BigEndian.AppendUint64(dst, v) }
@@ -256,6 +257,34 @@ func timestampFromDataObjSnapKey(k []byte) int64 {
 // positionFromDataObjSnapKey extracts the trailing log position from a
 // data-object snapshot key.
 func positionFromDataObjSnapKey(k []byte) uint64 {
+	return binary.BigEndian.Uint64(k[len(k)-8:])
+}
+
+// keyDecisionEvaluation keys one retained DMN decision evaluation of a scope (a
+// process instance), the same (scope, ts, pos) shape as the variable-snapshot key
+// so a business rule task's evaluations fold into the same instance timeline by
+// log position (ADR-0064, mirroring ADR-0048). Append-only: one record per
+// evaluation, never overwritten.
+func keyDecisionEvaluation(scopeKey uint64, ts int64, pos uint64) []byte {
+	b := appendOrderedInt64(decisionEvaluationScopePrefix(scopeKey), ts)
+	return appendBE64(b, pos)
+}
+
+// decisionEvaluationScopePrefix scans every decision evaluation recorded under
+// one scope, in evaluation order.
+func decisionEvaluationScopePrefix(scopeKey uint64) []byte {
+	return appendBE64([]byte{byte(cfDecisionEvaluation)}, scopeKey)
+}
+
+// timestampFromDecisionEvalKey extracts the event timestamp from a
+// decision-evaluation key, inverting the sign-flip appendOrderedInt64 applied.
+func timestampFromDecisionEvalKey(k []byte) int64 {
+	return int64(binary.BigEndian.Uint64(k[len(k)-16:]) ^ (1 << 63))
+}
+
+// positionFromDecisionEvalKey extracts the trailing log position from a
+// decision-evaluation key.
+func positionFromDecisionEvalKey(k []byte) uint64 {
 	return binary.BigEndian.Uint64(k[len(k)-8:])
 }
 
