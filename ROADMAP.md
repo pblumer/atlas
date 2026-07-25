@@ -121,6 +121,15 @@ The control-flow basics most real models use.
   config (`ATLAS_TEMIS_CONNECTORS` + `ATLAS_TEMIS_<NAME>_URL`/`_TOKEN`) still works
   as the base. Wiring the clio/REST workers the same way, health probes, and
   external vendor workers remain ADR-0041 follow-ups.
+  **A decision can now be authored in Atlas** ([ADR-0062](docs/adr/0062-embedded-dmn-editor.md)):
+  the business rule task panel has "＋ Neue Decision" / "Bearbeiten" buttons that open
+  an embedded **dmn-js** editor (vendored, same family as the bpmn-js modeler) — a
+  DRD + decision-table authoring surface. On save the model is stored (new reference,
+  or overwritten in place when editing) and the decision's inputs and output are
+  adopted into the task automatically through the existing picker path, so the
+  empty-dropdown round trip (author elsewhere → export → upload → pick) is gone. This
+  reverses ADR-0014's "no DMN authoring" non-goal for the decision-table case;
+  authoring the FEEL/logic and model versioning still live in temis.
   Next: explicit `<zeebe:output>` mappings, decimal precision across the temis
   boundary, and off-loop streaming evaluation as the Milestone-4 gRPC job-worker
   concern (the single binary drives jobs synchronously).

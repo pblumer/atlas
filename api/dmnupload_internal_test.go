@@ -189,6 +189,108 @@ func TestUploadDmnModelStoreError(t *testing.T) {
 	}
 }
 
+// TestUploadDmnModelOverwrite covers the editor's save path: ?handle= overwrites an
+// existing model in place, keeping the same handle (no suffix) and replacing the
+// stored bytes — so a reference the handle points at stays valid after an edit.
+func TestUploadDmnModelOverwrite(t *testing.T) {
+	_, do := uploadHarness(t)
+	// The harness pre-seeds dmn-models/dish.dmn. Overwrite it with a different model.
+	code, b := do(http.MethodPost, "/api/v1/dmn-models?handle=dish", minimalDMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("overwrite upload: %d %s", code, b)
+	}
+	var up struct {
+		ModelRef  string   `json:"modelRef"`
+		Decisions []string `json:"decisions"`
+	}
+	_ = json.Unmarshal(b, &up)
+	if up.ModelRef != "dish" {
+		t.Fatalf("overwrite modelRef = %q, want the same handle \"dish\"", up.ModelRef)
+	}
+	// The stored bytes are now the new model: its XML is served back and its decision
+	// ("D" from minimalDMN) replaced the old "Dish".
+	xc, xb := do(http.MethodGet, "/api/v1/dmn-models/dish/xml", "", "")
+	if xc != http.StatusOK || !strings.Contains(string(xb), `name="###"`) {
+		t.Fatalf("served xml after overwrite = %d %s, want the new model", xc, xb)
+	}
+}
+
+// TestDmnModelXML covers the raw-model endpoint the embedded editor loads for
+// editing: an existing handle returns its XML; an unknown handle is a 404.
+func TestDmnModelXML(t *testing.T) {
+	_, do := uploadHarness(t)
+	code, b := do(http.MethodGet, "/api/v1/dmn-models/dish/xml", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("get dish xml: %d %s", code, b)
+	}
+	if ct := http.DetectContentType(b); !strings.Contains(string(b), "<definitions") {
+		t.Fatalf("xml body = %q (ct %s), want a DMN document", b, ct)
+	}
+	if code, _ := do(http.MethodGet, "/api/v1/dmn-models/nope/xml", "", ""); code != http.StatusNotFound {
+		t.Fatalf("get unknown handle = %d, want 404", code)
+	}
+}
+
+// TestDmnModelXMLResolveError covers the endpoint's infrastructure-failure branch:
+// a resolver that errors (not ErrNotFound) is a 500, not a 404.
+func TestDmnModelXMLResolveError(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	srv.dmnResolver = dmn.ServiceResolver{BaseURL: "http://127.0.0.1:0"} // the connect attempt fails
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/dmn-models/x/xml", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("resolve failure = %d, want 500", rec.Code)
+	}
+}
+
+// TestWriteModelInPlace covers the in-place writer directly: a successful overwrite,
+// a create-dir failure, and a rename failure (target path is a directory).
+func TestWriteModelInPlace(t *testing.T) {
+	dir := t.TempDir()
+	if err := writeModelInPlace(dir, "h", []byte("<a/>")); err != nil {
+		t.Fatalf("first write: %v", err)
+	}
+	if err := writeModelInPlace(dir, "h", []byte("<b/>")); err != nil {
+		t.Fatalf("overwrite: %v", err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "h.dmn")); string(got) != "<b/>" {
+		t.Fatalf("stored = %q, want <b/>", got)
+	}
+	// MkdirAll fails when a file sits where a path component must be a directory.
+	f := filepath.Join(t.TempDir(), "afile")
+	_ = os.WriteFile(f, []byte("x"), 0o644)
+	if err := writeModelInPlace(filepath.Join(f, "sub"), "h", []byte("d")); err == nil {
+		t.Error("writeModelInPlace under a file: want error")
+	}
+	// Rename fails when the final path is an existing directory.
+	d2 := t.TempDir()
+	if err := os.Mkdir(filepath.Join(d2, "g.dmn"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeModelInPlace(d2, "g", []byte("d")); err == nil {
+		t.Error("writeModelInPlace onto a directory: want error")
+	}
+}
+
+// TestUploadDmnModelOverwriteStoreError covers the ?handle= overwrite path's
+// store-failure branch: a valid model whose target folder cannot be created is a
+// 500, just like the create path.
+func TestUploadDmnModelOverwriteStoreError(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	f := filepath.Join(t.TempDir(), "afile")
+	if err := os.WriteFile(f, []byte("x"), 0o644); err != nil {
+		t.Fatalf("seed file: %v", err)
+	}
+	srv.dmnResolver = dmn.DirResolver{Dir: filepath.Join(f, "models")} // a file sits at f
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/dmn-models?handle=dish", strings.NewReader(validDMNModel))
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("overwrite to an unwritable store = %d, want 500", rec.Code)
+	}
+}
+
 // TestUploadDmnModelBodyError covers the read-body failure path.
 func TestUploadDmnModelBodyError(t *testing.T) {
 	srv, _ := newValidateServer(t)

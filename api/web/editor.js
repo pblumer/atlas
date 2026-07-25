@@ -4,6 +4,7 @@
 
 import { attachFeelEditor } from "./feel.js";
 import { attachJSONEditor } from "./json-editor.js";
+import { openDmnEditor } from "./dmn-editor.js";
 
 const BPMN_CSS = [
   "vendor/bpmn/assets/diagram-js.css",
@@ -249,7 +250,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId })
     toast("could not open diagram: " + e.message, "err");
   }
 
-  const rerender = wireProperties(root, modeler, api, projectId);
+  const rerender = wireProperties(root, modeler, api, projectId, toast);
   wireTabs(root, rerender);
   wireActions(root, modeler, api, toast, projectId);
   wireResizer(root, modeler);
@@ -881,7 +882,7 @@ function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn()) {
   attachEditors();
 }
 
-function wireProperties(root, modeler, api, projectId) {
+function wireProperties(root, modeler, api, projectId, toast) {
   const icon = root.querySelector("#p-icon");
   const typename = root.querySelector("#p-typename");
   const nameEl = root.querySelector("#p-name");
@@ -1179,6 +1180,10 @@ function wireProperties(root, modeler, api, projectId) {
           }
           html += `<label class="field"><span>Decision</span>
               <select id="f-decision-pick"><option value="">${cd.decisionId ? esc(cd.decisionId) + " (current)" : "— choose a decision —"}</option></select></label>
+            <div style="display:flex; gap:8px; margin:-4px 0 6px">
+              <button type="button" class="btn ghost" id="f-dmn-new">＋ Neue Decision</button>
+              <button type="button" class="btn ghost" id="f-dmn-edit"${cd.decisionId ? "" : " disabled"}>Bearbeiten</button>
+            </div>
             <label class="field"><span>Decision ID</span>
               <input type="text" id="f-decisionid" value="${esc(cd.decisionId || "")}" placeholder="Dish"/></label>
             <label class="field"><span>Result variable</span>
@@ -1488,10 +1493,12 @@ function wireProperties(root, modeler, api, projectId) {
         fpick._catalog = decisions || [];
       }).catch(() => { /* leave the placeholder; manual entry still works */ });
 
-      fpick.addEventListener("change", () => {
-        const d = (fpick._catalog || []).find((x) => x.id === fpick.value);
-        if (!d) return;
-        // Preserve any custom source already mapped for a target.
+      // applyPick sets the decision id + result variable and auto-fills the input
+      // mappings from a catalog decision's declared inputs, preserving any custom
+      // source already mapped for a target. Shared by the picker's change handler
+      // and by the "author a decision" flow, so a decision created in the embedded
+      // editor is adopted exactly as if it had been picked from the list.
+      const applyPick = (d) => {
         const io = findExt(element.businessObject, "zeebe:IoMapping");
         const prev = {};
         for (const p of (io && io.inputParameters) || []) {
@@ -1506,7 +1513,43 @@ function wireProperties(root, modeler, api, projectId) {
           saveDecisionInputs(modeler, element, rows);
         });
         show(element); // reflect the filled id, result variable, and input rows
+      };
+      fpick.addEventListener("change", () => {
+        const d = (fpick._catalog || []).find((x) => x.id === fpick.value);
+        if (d) applyPick(d);
       });
+
+      // Author-a-decision: the embedded dmn-js editor (ADR-0051). "＋ Neue Decision"
+      // creates a model + reference and adopts it; "Bearbeiten" opens the current
+      // decision's local model in place. After authoring, the catalog is re-fetched
+      // and the authored decision is adopted (id + inputs + result), so inputs and
+      // output flow in automatically — no separate upload step.
+      const adoptAuthored = async (result) => {
+        if (!result) return;
+        const scope = projectId ? "?projectId=" + encodeURIComponent(projectId) : "";
+        let decisions = [];
+        try { decisions = (await api("GET", "/api/v1/decisions" + scope)) || []; } catch { /* keep panel */ }
+        const d = decisions.find((x) => x.id === result.name) ||
+          decisions.find((x) => x.modelRef === result.modelRef);
+        if (d) applyPick(d); else show(element);
+      };
+      const fnew = body.querySelector("#f-dmn-new");
+      if (fnew) {
+        fnew.addEventListener("click", async () => {
+          adoptAuthored(await openDmnEditor({ api, toast, projectId }));
+        });
+      }
+      const fedit = body.querySelector("#f-dmn-edit");
+      if (fedit) {
+        fedit.addEventListener("click", async () => {
+          const cur = (fpick._catalog || []).find((x) => x.id === (fdecision?.value || "").trim());
+          if (!cur || !cur.modelRef) {
+            toast && toast("Diese Decision hat kein lokal editierbares Modell.", "err");
+            return;
+          }
+          adoptAuthored(await openDmnEditor({ api, toast, projectId, modelRef: cur.modelRef }));
+        });
+      }
     }
 
     const inputsWrap = body.querySelector("#dmn-inputs");

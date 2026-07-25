@@ -229,6 +229,8 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "List DMN decisions (with inputs and outputs) available from DMN references", tag: "DMN References", resp: jsonBody("Decisions", tArray())}},
 		{"GET", "/api/v1/dmnrefs/{id}/graph", s.handleDmnRefGraph, apiOp{
 			summary: "A DMN reference's decision requirements graph for the read-only viewer", tag: "DMN References", resp: jsonBody("Model graph", tObject())}},
+		{"GET", "/api/v1/dmn-models/{ref}/xml", s.handleDmnModelXML, apiOp{
+			summary: "The raw DMN model XML for a model handle, for the embedded DMN editor", tag: "DMN References", resp: jsonBody("DMN XML", tObject())}},
 		{"POST", "/api/v1/dmn-models", s.handleUploadDmnModel, apiOp{
 			summary: "Upload a DMN model file into the local model store and return its reference handle", tag: "DMN References", req: jsonBody("DMN XML", tObject()), resp: jsonBody("Stored model", tObject())}},
 

@@ -45,17 +45,31 @@ func (s *Server) handleUploadDmnModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	handle := sanitizeHandle(r.URL.Query().Get("name"))
-	if handle == "" {
-		handle = sanitizeHandle(res.ModelName)
-	}
-	if handle == "" {
-		handle = "model"
-	}
-	final, err := writeUniqueModel(dir, handle, body)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "store model: "+err.Error())
-		return
+	// ?handle= overwrites an existing model in place — the save path of the
+	// embedded editor, which edits a model a reference already points at and must
+	// keep that same handle so the reference (and any picker selection) stays valid.
+	// Absent it, a new upload derives a fresh, collision-free handle from ?name=.
+	var final string
+	if want := sanitizeHandle(r.URL.Query().Get("handle")); want != "" {
+		if err := writeModelInPlace(dir, want, body); err != nil {
+			writeError(w, http.StatusInternalServerError, "store model: "+err.Error())
+			return
+		}
+		final = want
+	} else {
+		handle := sanitizeHandle(r.URL.Query().Get("name"))
+		if handle == "" {
+			handle = sanitizeHandle(res.ModelName)
+		}
+		if handle == "" {
+			handle = "model"
+		}
+		f, err := writeUniqueModel(dir, handle, body)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "store model: "+err.Error())
+			return
+		}
+		final = f
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"modelRef":  final,
@@ -114,6 +128,26 @@ func writeUniqueModel(dir, base string, data []byte) (string, error) {
 		return "", err
 	}
 	return h, nil
+}
+
+// writeModelInPlace overwrites <dir>/<handle>.dmn atomically (temp file + rename),
+// so an editor save that replaces an existing model can never leave a torn file a
+// later resolve would fail to compile. The handle is already traversal-safe
+// (sanitizeHandle), so it names a single file inside dir.
+func writeModelInPlace(dir, handle string, data []byte) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	final := filepath.Join(dir, handle+".dmn")
+	tmp := final + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, final); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 // fileExists reports whether a path already names a file (or anything).

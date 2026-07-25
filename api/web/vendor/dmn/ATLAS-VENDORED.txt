@@ -1,0 +1,1 @@
+dmn-js@17.10.0 vendored from the npm tarball (registry.npmjs.org). Pre-built UMD bundle (window.DmnJS) + assets; see LICENSE (bpmn.io / MIT). Do not edit by hand.
