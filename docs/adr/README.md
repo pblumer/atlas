@@ -67,6 +67,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0057](0057-first-class-feel-temporals.md) | First-class FEEL temporals for timer schedules | Proposed |
 | [0058](0058-data-output-associations.md) | Data output associations — write a value and transition a data object's state | Accepted |
 | [0059](0059-data-input-associations.md) | Data input associations — read a data object into an activity | Accepted |
+| [0060](0060-field-level-data-object-writes.md) | Field-level data object writes — set one member of a structured object | Accepted |
 
 ## Status values
 

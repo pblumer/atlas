@@ -310,6 +310,11 @@ type DataOutputAssociation struct {
 	DataObject  int32 // interned target data-object name → index
 	Value       *expr.Compiled
 	TargetState int32
+	// TargetPath is the interned member path (the association's <assignment><to>,
+	// e.g. "name" or "customer.name") the write sets within a structured data
+	// object, -1 to write the whole value (ADR-0060). A path write reads the object's
+	// current JSON, sets that member, and writes the merged value back.
+	TargetPath int32
 }
 
 // DataInputAssociation is one compiled <dataInputAssociation> on an activity: it

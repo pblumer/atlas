@@ -186,6 +186,52 @@ func TestParseDataOutputAssociation(t *testing.T) {
 	}
 }
 
+// TestParseDataOutputAssociationTargetPath checks the assignment's <to> member path
+// is captured, so a write can target a single field of a structured object (ADR-0060).
+func TestParseDataOutputAssociationTargetPath(t *testing.T) {
+	const model = `<?xml version="1.0"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="p" isExecutable="true">
+    <dataObject id="DataObject_order" name="order"/>
+    <startEvent id="Start"/>
+    <task id="SetName">
+      <dataOutputAssociation>
+        <targetRef>DataObject_order</targetRef>
+        <assignment><from>=customerName</from><to>name</to></assignment>
+      </dataOutputAssociation>
+    </task>
+    <endEvent id="End"/>
+    <sequenceFlow id="f1" sourceRef="Start" targetRef="SetName"/>
+    <sequenceFlow id="f2" sourceRef="SetName" targetRef="End"/>
+  </process>
+</definitions>`
+
+	cp, err := compiler.Parse(1, 1, strings.NewReader(model))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	var node int32 = -1
+	for id := int32(0); id < 10; id++ {
+		if cp.ElementBpmnId(id) == "SetName" {
+			node = id
+			break
+		}
+	}
+	if node < 0 {
+		t.Fatal("SetName task node not found")
+	}
+	assocs := cp.DataOutputAssociations(node)
+	if len(assocs) != 1 {
+		t.Fatalf("associations = %d, want 1", len(assocs))
+	}
+	if got := cp.Intern(assocs[0].TargetPath); got != "name" {
+		t.Errorf("TargetPath = %q, want name", got)
+	}
+	if assocs[0].Value == nil {
+		t.Error("Value expr = nil, want compiled FEEL for =customerName")
+	}
+}
+
 // TestParseDataOutputAssociationDirectTarget checks a targetRef that names a data
 // object directly (no reference) resolves to that object with no state change, and
 // that an association with no <assignment> is a state-only transition (nil value).
@@ -348,8 +394,53 @@ func TestParseDataInputAssociation(t *testing.T) {
 	}
 }
 
+// TestParseDataInputAssociationToVariable checks the target variable is taken from
+// the assignment's <to> (the Modeler-authored form), which takes precedence over a
+// generated <targetRef> (ADR-0059).
+func TestParseDataInputAssociationToVariable(t *testing.T) {
+	const model = `<?xml version="1.0"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="p" isExecutable="true">
+    <dataObject id="DataObject_order" name="order"/>
+    <startEvent id="Start"/>
+    <task id="Read">
+      <dataInputAssociation>
+        <sourceRef>DataObject_order</sourceRef>
+        <targetRef>Property_generated</targetRef>
+        <assignment><from>=order.amount</from><to>orderAmount</to></assignment>
+      </dataInputAssociation>
+    </task>
+    <endEvent id="End"/>
+    <sequenceFlow id="f1" sourceRef="Start" targetRef="Read"/>
+    <sequenceFlow id="f2" sourceRef="Read" targetRef="End"/>
+  </process>
+</definitions>`
+
+	cp, err := compiler.Parse(1, 1, strings.NewReader(model))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	var node int32 = -1
+	for id := int32(0); id < 10; id++ {
+		if cp.ElementBpmnId(id) == "Read" {
+			node = id
+			break
+		}
+	}
+	assocs := cp.DataInputAssociations(node)
+	if len(assocs) != 1 {
+		t.Fatalf("input associations = %d, want 1", len(assocs))
+	}
+	if got := cp.Intern(assocs[0].Variable); got != "orderAmount" {
+		t.Errorf("Variable = %q, want orderAmount (from <to>, not the generated targetRef)", got)
+	}
+	if assocs[0].Value == nil {
+		t.Error("Value expr = nil, want compiled FEEL for =order.amount")
+	}
+}
+
 // TestParseDataInputAssociationErrors rejects an input association with an unknown
-// source data object and one with no targetRef.
+// source data object and one with no target variable.
 func TestParseDataInputAssociationErrors(t *testing.T) {
 	cases := map[string]string{
 		"unknown source": `<dataInputAssociation><sourceRef>Nope</sourceRef><targetRef>v</targetRef></dataInputAssociation>`,
@@ -417,7 +508,7 @@ func TestBuilderAddDataOutputAssociation(t *testing.T) {
 	b.Connect(start, task)
 	b.Connect(task, end)
 	b.AddDataObject("order", "", "received", false)
-	b.AddDataOutputAssociation(task, "order", nil, "approved")
+	b.AddDataOutputAssociation(task, "order", nil, "approved", "")
 
 	cp, err := b.Build()
 	if err != nil {
