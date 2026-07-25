@@ -128,6 +128,58 @@ func TestBusinessRuleTaskEvaluatesDMN(t *testing.T) {
 	}
 }
 
+// TestBusinessRuleTaskDeploymentBinding drives a deployment-bound business rule
+// task through the worker (ADR-0063): it evaluates against the model registered
+// under its own process key, not the latest pointer — the branch a latest-bound
+// task (the default) does not take.
+func TestBusinessRuleTaskDeploymentBinding(t *testing.T) {
+	dir := t.TempDir()
+	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open: %v", err)
+	}
+	store, err := state.Open(filepath.Join(dir, "state"))
+	if err != nil {
+		t.Fatalf("state.Open: %v", err)
+	}
+	t.Cleanup(func() { store.Close(); log.Close() })
+
+	b := compiler.NewBuilder(dishDefKey, "dinner", 1)
+	start := b.AddStartEvent()
+	rule, err := b.AddBusinessRuleTaskMapped("Dish", "dish", map[string]any{"Season": "Winter"}, nil, 3, compiler.BindingDeployment)
+	if err != nil {
+		t.Fatalf("AddBusinessRuleTaskMapped: %v", err)
+	}
+	end := b.AddEndEvent()
+	b.Connect(start, rule)
+	b.Connect(rule, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.BusinessRuleTask(cp.Node(rule).Detail).JobType
+
+	reg := dmn.NewRegistry()
+	if err := reg.Deploy(cp.Key, []byte(dishModel)); err != nil {
+		t.Fatalf("Deploy: %v", err)
+	}
+	p := engine.New(1, log, store, &fixedClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	var got []dmn.Result
+	runner := job.NewRunner(store, p)
+	runner.HandleWithOutput(jobType, dmn.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg, func(r dmn.Result) { got = append(got, r) }))
+	p.CreateInstance(cp.Key)
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	if len(got) != 1 || got[0].Outputs["Dish"] != "Roastbeef" {
+		t.Fatalf("deployment-bound result = %+v, want one Roastbeef", got)
+	}
+}
+
 // TestBusinessRuleTaskRecoversAcrossRestart runs to the waiting DMN job,
 // simulates a crash (reopen the log and store), recovers state by replaying the
 // log, then lets the worker evaluate the decision and finish the instance —
@@ -220,6 +272,48 @@ func TestRegistryEvaluatesDirectly(t *testing.T) {
 	}
 	if out["Dish"] != "Salad" {
 		t.Errorf("Dish = %#v, want Salad", out["Dish"])
+	}
+}
+
+// dishModelV2 is a second version of the "Dish" decision (Winter → Steak instead
+// of Roastbeef), for exercising latest-vs-deployment binding.
+const dishModelV2 = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs" name="dish" namespace="http://atlas/dmn">
+  <inputData id="id_season" name="Season"/>
+  <decision id="Dish" name="Dish">
+    <informationRequirement><requiredInput href="#id_season"/></informationRequirement>
+    <decisionTable id="dt" hitPolicy="UNIQUE">
+      <input id="in1" label="Season"><inputExpression id="ie1" typeRef="string"><text>Season</text></inputExpression></input>
+      <output id="out1" label="Dish" name="Dish" typeRef="string"/>
+      <rule id="r1"><inputEntry id="e1"><text>"Winter"</text></inputEntry><outputEntry id="o1"><text>"Steak"</text></outputEntry></rule>
+    </decisionTable>
+  </decision>
+</definitions>`
+
+// TestRegistryLatestVsDeployment covers decision binding (ADR-0063): after two
+// versions of a decision are deployed, a deployment-bound evaluation (by def key)
+// sees its own snapshot, while EvaluateLatest sees the newest deployed version.
+func TestRegistryLatestVsDeployment(t *testing.T) {
+	reg := dmn.NewRegistry()
+	if err := reg.Deploy(1, []byte(dishModel)); err != nil { // v1: Winter → Roastbeef
+		t.Fatalf("Deploy v1: %v", err)
+	}
+	if err := reg.Deploy(2, []byte(dishModelV2)); err != nil { // v2: Winter → Steak
+		t.Fatalf("Deploy v2: %v", err)
+	}
+	winter := map[string]any{"Season": "Winter"}
+
+	// deployment binding: def 1 keeps its own snapshot.
+	if out, err := reg.Evaluate(context.Background(), 1, "Dish", winter); err != nil || out["Dish"] != "Roastbeef" {
+		t.Fatalf("Evaluate(def 1) = %v, %v, want Roastbeef (its snapshot)", out, err)
+	}
+	// latest binding: the newest deployed version wins.
+	if out, err := reg.EvaluateLatest(context.Background(), "Dish", winter); err != nil || out["Dish"] != "Steak" {
+		t.Fatalf("EvaluateLatest = %v, %v, want Steak (newest)", out, err)
+	}
+	// An unknown decision has no latest model.
+	if _, err := reg.EvaluateLatest(context.Background(), "Nope", nil); err == nil {
+		t.Fatal("EvaluateLatest of unknown decision: got nil error, want an error")
 	}
 }
 
