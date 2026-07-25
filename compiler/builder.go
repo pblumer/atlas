@@ -235,7 +235,7 @@ func (b *Builder) AddScriptJobTask(jobType, language, source, resultVar string, 
 // the constant-input form of [Builder.AddBusinessRuleTaskMapped] (no variable
 // mappings, result discarded).
 func (b *Builder) AddBusinessRuleTask(decisionId string, inputs map[string]any, retries int32) (int32, error) {
-	return b.AddBusinessRuleTaskMapped(decisionId, "", inputs, nil, retries)
+	return b.AddBusinessRuleTaskMapped(decisionId, "", inputs, nil, retries, BindingLatest)
 }
 
 // AddBusinessRuleTaskMapped adds a business rule task that evaluates the named DMN
@@ -247,8 +247,8 @@ func (b *Builder) AddBusinessRuleTask(decisionId string, inputs map[string]any, 
 // resultVar is non-empty the decision's result is written back into that process
 // variable on job completion; an empty resultVar discards the result. It returns
 // an error if the static inputs cannot be encoded.
-func (b *Builder) AddBusinessRuleTaskMapped(decisionId, resultVar string, staticInputs map[string]any, mappings []DecisionInputMapping, retries int32) (int32, error) {
-	return b.addBusinessRuleTask("", decisionId, resultVar, staticInputs, mappings, retries)
+func (b *Builder) AddBusinessRuleTaskMapped(decisionId, resultVar string, staticInputs map[string]any, mappings []DecisionInputMapping, retries int32, binding DecisionBinding) (int32, error) {
+	return b.addBusinessRuleTask("", decisionId, resultVar, staticInputs, mappings, retries, binding)
 }
 
 // AddTemisDecisionTask adds a *central* business rule task: one whose decision is
@@ -258,14 +258,16 @@ func (b *Builder) AddBusinessRuleTaskMapped(decisionId, resultVar string, static
 // variable, static inputs, and variable mappings — the only difference is that the
 // task carries the temis-connector job type so the remote worker picks it up.
 func (b *Builder) AddTemisDecisionTask(connector, decisionId, resultVar string, staticInputs map[string]any, mappings []DecisionInputMapping, retries int32) (int32, error) {
-	return b.addBusinessRuleTask(connector, decisionId, resultVar, staticInputs, mappings, retries)
+	// A central decision resolves through its connector, not a local snapshot, so
+	// binding does not apply (BindingLatest is a harmless placeholder).
+	return b.addBusinessRuleTask(connector, decisionId, resultVar, staticInputs, mappings, retries, BindingLatest)
 }
 
 // addBusinessRuleTask is the shared constructor for local and central business
 // rule tasks. An empty connector selects local evaluation (the DMN job type,
 // ADR-0014); a named connector selects central evaluation (the temis-connector job
 // type, ADR-0050) and records the connector name.
-func (b *Builder) addBusinessRuleTask(connector, decisionId, resultVar string, staticInputs map[string]any, mappings []DecisionInputMapping, retries int32) (int32, error) {
+func (b *Builder) addBusinessRuleTask(connector, decisionId, resultVar string, staticInputs map[string]any, mappings []DecisionInputMapping, retries int32, binding DecisionBinding) (int32, error) {
 	inputsIdx := int32(-1)
 	if len(staticInputs) > 0 {
 		encoded, err := json.Marshal(staticInputs)
@@ -286,6 +288,7 @@ func (b *Builder) addBusinessRuleTask(connector, decisionId, resultVar string, s
 		ResultVar:     b.intern(resultVar),
 		Connector:     b.intern(connector),
 		Retries:       retries,
+		Binding:       binding,
 		InputMappings: mappings,
 	})
 	return b.addNode(TypeBusinessRuleTask, detail), nil

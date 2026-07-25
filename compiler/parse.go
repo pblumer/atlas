@@ -349,7 +349,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			}
 			node, err = b.AddTemisDecisionTask(tc.Connector, brt.CalledDecision.DecisionId, brt.CalledDecision.ResultVariable, inputs, mappings, retries)
 		} else {
-			node, err = b.AddBusinessRuleTaskMapped(brt.CalledDecision.DecisionId, brt.CalledDecision.ResultVariable, inputs, mappings, retries)
+			node, err = b.AddBusinessRuleTaskMapped(brt.CalledDecision.DecisionId, brt.CalledDecision.ResultVariable, inputs, mappings, retries, decisionBinding(brt.CalledDecision.BindingType))
 		}
 		if err != nil {
 			return nil, err
@@ -1088,6 +1088,18 @@ type xmlCalledDecision struct {
 	DecisionId     string `xml:"decisionId,attr"`
 	ResultVariable string `xml:"resultVariable,attr"`
 	Retries        string `xml:"retries,attr"`
+	BindingType    string `xml:"bindingType,attr"`
+}
+
+// decisionBinding maps a zeebe:calledDecision bindingType to a compiled binding
+// (ADR-0063). "deployment" pins to the process's own snapshot; anything else —
+// including the empty default and the not-yet-supported "versionTag" — resolves to
+// the latest deployed version, Camunda's default.
+func decisionBinding(bindingType string) DecisionBinding {
+	if bindingType == "deployment" {
+		return BindingDeployment
+	}
+	return BindingLatest
 }
 
 type xmlDecisionInput struct {

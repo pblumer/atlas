@@ -113,9 +113,15 @@ func DecisionHandler(store *state.Store, lookup ProcessLookup, bind Bind, sink f
 // [job.Runner] via HandleWithOutput for the reserved DMN job type
 // ([compiler.DMNJobTypeIndex]). sink, if non-nil, observes each result.
 func Handler(store *state.Store, lookup ProcessLookup, reg *Registry, sink func(Result)) job.OutputHandler {
-	return DecisionHandler(store, lookup, func(cp *compiler.CompiledProcess, _ *compiler.BusinessRuleTaskDetail) (Evaluator, error) {
+	return DecisionHandler(store, lookup, func(cp *compiler.CompiledProcess, detail *compiler.BusinessRuleTaskDetail) (Evaluator, error) {
+		// The task's binding selects which deployed model version to evaluate
+		// (ADR-0063): deployment pins to this process's own snapshot; latest (the
+		// default) tracks the newest deployed version of the decision.
 		return func(ctx context.Context, decisionId string, inputs map[string]any) (map[string]any, error) {
-			return reg.Evaluate(ctx, cp.Key, decisionId, inputs)
+			if detail.Binding == compiler.BindingDeployment {
+				return reg.Evaluate(ctx, cp.Key, decisionId, inputs)
+			}
+			return reg.EvaluateLatest(ctx, decisionId, inputs)
 		}, nil
 	}, sink)
 }

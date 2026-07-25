@@ -32,7 +32,7 @@ func routingProcess(t *testing.T) (*compiler.CompiledProcess, int32) {
 		t.Fatalf("compile source: %v", err)
 	}
 	rule, err := b.AddBusinessRuleTaskMapped("Dish", "dish", nil,
-		[]compiler.DecisionInputMapping{{Target: "Season", Source: seasonSrc}}, 3)
+		[]compiler.DecisionInputMapping{{Target: "Season", Source: seasonSrc}}, 3, compiler.BindingLatest)
 	if err != nil {
 		t.Fatalf("AddBusinessRuleTaskMapped: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestBusinessRuleTaskMergesStaticAndMappedInputs(t *testing.T) {
 	}
 	rule, err := b.AddBusinessRuleTaskMapped("Dish", "dish",
 		map[string]any{"Guests": 8}, // static base the decision ignores
-		[]compiler.DecisionInputMapping{{Target: "Season", Source: seasonSrc}}, 3)
+		[]compiler.DecisionInputMapping{{Target: "Season", Source: seasonSrc}}, 3, compiler.BindingLatest)
 	if err != nil {
 		t.Fatalf("AddBusinessRuleTaskMapped: %v", err)
 	}

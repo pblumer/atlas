@@ -169,8 +169,24 @@ type BusinessRuleTaskDetail struct {
 	ResultVar     int32 // interned result-variable name → index, -1 if none
 	Connector     int32 // interned temis connector name → index, -1 = local (in-engine)
 	Retries       int32
+	Binding       DecisionBinding        // how the decision model is resolved (ADR-0063)
 	InputMappings []DecisionInputMapping // variable-driven inputs, evaluated off the hot path
 }
+
+// DecisionBinding selects which DMN model version a local business rule task
+// evaluates against (ADR-0063). It mirrors Camunda's zeebe:calledDecision
+// bindingType. It applies only to local decisions; a central (connector) decision
+// resolves through its connector, so Binding is ignored when Connector is set.
+type DecisionBinding int32
+
+const (
+	// BindingLatest evaluates the newest deployed version of the decision (the
+	// default, matching Camunda). It is zero so an unset binding means "latest".
+	BindingLatest DecisionBinding = iota
+	// BindingDeployment evaluates the decision snapshotted with this process's own
+	// deployment (the ADR-0014 behavior): pinned and reproducible.
+	BindingDeployment
+)
 
 // UserTaskDetail is the per-user-task data a behavior needs at runtime. A user
 // task parks a token and creates a job like a service task; the "worker" is a

@@ -1515,6 +1515,13 @@ function wireProperties(root, modeler, api, projectId, toast) {
             html += `<label class="field"><span>Connector</span>
               <input type="text" id="f-connector" value="${esc((tc && tc.connector) || "")}" placeholder="risk-service"/></label>`;
           }
+          const binding = cd.bindingType === "deployment" ? "deployment" : "latest";
+          const bindingField = mode === "local" ? `
+            <label class="field"><span>Binding</span>
+              <select id="f-brt-binding">
+                <option value="latest" ${binding === "latest" ? "selected" : ""}>Latest — newest deployed version</option>
+                <option value="deployment" ${binding === "deployment" ? "selected" : ""}>Deployment — pinned to this deploy</option>
+              </select></label>` : "";
           html += `<label class="field"><span>Decision</span>
               <select id="f-decision-pick"><option value="">${cd.decisionId ? esc(cd.decisionId) + " (current)" : "— choose a decision —"}</option></select></label>
             <div style="display:flex; gap:8px; margin:-4px 0 6px">
@@ -1524,8 +1531,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
             <label class="field"><span>Decision ID</span>
               <input type="text" id="f-decisionid" value="${esc(cd.decisionId || "")}" placeholder="Dish"/></label>
             <label class="field"><span>Result variable</span>
-              <input type="text" id="f-resultvar" value="${esc(cd.resultVariable || "")}" placeholder="dish"/></label>
-            <p class="muted" style="font-size:12px">Pick a decision to auto-fill its inputs and result variable. The result is written into this variable, so a downstream gateway can route on it.</p>
+              <input type="text" id="f-resultvar" value="${esc(cd.resultVariable || "")}" placeholder="dish"/></label>${bindingField}
+            <p class="muted" style="font-size:12px">Pick a decision to auto-fill its inputs and result variable. <b>Latest</b> evaluates the newest deployed version; <b>Deployment</b> pins to the version deployed with this process.</p>
             <h3>Decision inputs</h3>
             <p class="muted" style="font-size:12px">Each row feeds one decision input from a FEEL expression over the instance's variables. Leave a row's name blank to drop it.</p>
             <div id="dmn-inputs">${inputs.map((p, i) => decisionInputRowHTML(i, p.source, p.target)).join("")}${decisionInputRowHTML(inputs.length, "", "")}</div>`;
@@ -1783,14 +1790,21 @@ function wireProperties(root, modeler, api, projectId, toast) {
 
     const fdecision = body.querySelector("#f-decisionid");
     const fresultvar = body.querySelector("#f-resultvar");
+    const fbinding = body.querySelector("#f-brt-binding");
+    // currentBinding preserves the decision binding (ADR-0063) across every save of
+    // the called decision, so editing the id/result variable never drops it.
+    const currentBinding = () => (fbinding && fbinding.value === "deployment") ? "deployment" : "latest";
+    const calledDecisionProps = () => ({
+      decisionId: (fdecision.value || "").trim(),
+      resultVariable: (fresultvar.value || "").trim(),
+      bindingType: currentBinding(),
+    });
     const saveDecision = () => savePreservingPanel(() => {
-      upsertExt(modeler, element, "zeebe:CalledDecision", {
-        decisionId: (fdecision.value || "").trim(),
-        resultVariable: (fresultvar.value || "").trim(),
-      });
+      upsertExt(modeler, element, "zeebe:CalledDecision", calledDecisionProps());
     });
     if (fdecision) fdecision.addEventListener("change", saveDecision);
     if (fresultvar) fresultvar.addEventListener("change", saveDecision);
+    if (fbinding) fbinding.addEventListener("change", saveDecision);
 
     // Evaluation mode: local (embedded DMN) vs a temis connector (central). The
     // choice is the presence of the atlas:temisConnector extension the compiler
@@ -1851,6 +1865,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
           upsertExt(modeler, element, "zeebe:CalledDecision", {
             decisionId: d.id,
             resultVariable: (fresultvar.value || "").trim() || (d.output && d.output.name) || d.id,
+            bindingType: currentBinding(),
           });
           const rows = (d.inputs || []).map((inp) => ({ target: inp.name, source: prev[inp.name] || inp.name }));
           saveDecisionInputs(modeler, element, rows);
