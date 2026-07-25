@@ -996,6 +996,20 @@ function wireProperties(root, modeler, api) {
       <label class="field"><span>${isSeqFlow ? "Label" : "Name"}</span><input type="text" id="f-name" value="${esc(bo.name || "")}"${isSeqFlow ? ' placeholder="Großauftrag"' : ""}/></label>
       <label class="field"><span>ID</span><input type="text" value="${esc(bo.id || "")}" readonly/></label>`;
 
+    // A data object is the data a process carries — first-class in Atlas, not just
+    // decoration (ADR-0053). Its name is the engine's variable-like identity and its
+    // data state is the [received]/[approved] label an activity advances. Shown on
+    // both tabs since data is descriptive and executable at once.
+    if (bo.$type === "bpmn:DataObjectReference") {
+      const stateName = (bo.dataState && bo.dataState.name) || "";
+      const collection = !!(bo.dataObjectRef && bo.dataObjectRef.isCollection);
+      html += `<h3>Data object</h3>
+        <label class="field"><span>Data state</span>
+          <input type="text" id="f-datastate" value="${esc(stateName)}" placeholder="received"/></label>
+        <label class="field checkbox"><input type="checkbox" id="f-collection" ${collection ? "checked" : ""}/> <span>Collection (a list of items)</span></label>
+        <p class="muted" style="font-size:12px">A data object carries a value <i>and</i> a <b>data state</b> — <code>order [received]</code> → <code>[approved]</code>. The state set here is where the object starts each instance; a <b>data output association</b> (an arrow from an activity to this object) advances it and writes its value, a <b>data input association</b> reads it back, and the full state history is recorded per instance and survives restart. The <b>Name</b> is how the engine identifies it.</p>`;
+    }
+
     if (tab === "implement") {
       if (isActivity(bo)) {
         const t = bo.$type;
@@ -1172,8 +1186,39 @@ function wireProperties(root, modeler, api) {
     body.innerHTML = html;
 
     body.querySelector("#f-name").addEventListener("change", (e) => {
-      try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
+      try {
+        modeling.updateProperties(element, { name: e.target.value });
+        // A data object's engine identity is the underlying <dataObject> name, not
+        // the reference's — so setting the reference's name here also names the
+        // object it points at, keeping the modeled name and the runtime one in sync
+        // (ADR-0053).
+        if (bo.$type === "bpmn:DataObjectReference" && bo.dataObjectRef) {
+          modeling.updateModdleProperties(element, bo.dataObjectRef, { name: e.target.value });
+        }
+      } catch { /* stale */ }
     });
+
+    const fdatastate = body.querySelector("#f-datastate");
+    if (fdatastate) {
+      fdatastate.addEventListener("change", (e) => {
+        const v = (e.target.value || "").trim();
+        try {
+          let ds;
+          if (v) {
+            ds = modeler.get("moddle").create("bpmn:DataState", { name: v });
+            ds.$parent = bo;
+          }
+          // Setting dataState to undefined clears the [state] label.
+          modeling.updateModdleProperties(element, bo, { dataState: ds || undefined });
+        } catch { /* stale */ }
+      });
+    }
+    const fcollection = body.querySelector("#f-collection");
+    if (fcollection && bo.dataObjectRef) {
+      fcollection.addEventListener("change", (e) => {
+        try { modeling.updateModdleProperties(element, bo.dataObjectRef, { isCollection: !!e.target.checked }); } catch { /* stale */ }
+      });
+    }
 
     const tasktype = body.querySelector("#f-tasktype");
     if (tasktype) {
