@@ -387,3 +387,16 @@ func TestServesVendoredModeler(t *testing.T) {
 		t.Fatalf("zeebe moddle status=%d body=%.60s", code, body)
 	}
 }
+
+// TestServesVendoredDmnModeler confirms the embedded dmn-js asset and its stylesheet
+// are served, so the in-app DMN editor is self-contained (ADR-0062).
+func TestServesVendoredDmnModeler(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodGet, "/vendor/dmn/dmn-modeler.js", "", "")
+	if code != http.StatusOK || len(body) < 500_000 {
+		t.Fatalf("dmn modeler asset status=%d size=%d, want 200 and a sizable bundle", code, len(body))
+	}
+	if code, _ := doReq(t, ts, http.MethodGet, "/vendor/dmn/assets/dmn-js-decision-table.css", "", ""); code != http.StatusOK {
+		t.Fatalf("dmn decision-table stylesheet status=%d, want 200", code)
+	}
+}

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/pblumer/atlas/dmn"
@@ -98,4 +99,24 @@ func (s *Server) handleDmnRefGraph(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, g)
+}
+
+// handleDmnModelXML returns the raw DMN model XML for a model handle (modelRef), so
+// the embedded DMN editor can open an existing decision for editing (ADR-0062).
+// Resolving the model bytes is concurrent-safe I/O that touches no engine state, so
+// it runs off the run loop. An unresolved handle is a 404, not a 500, so a dangling
+// reference reads as "model missing" rather than an infrastructure failure.
+func (s *Server) handleDmnModelXML(w http.ResponseWriter, r *http.Request) {
+	ref := r.PathValue("ref")
+	xml, err := s.dmnResolver.Resolve(r.Context(), ref)
+	if err != nil {
+		if errors.Is(err, dmn.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "no DMN model matches the handle: "+ref)
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "resolve dmn model: "+err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	_, _ = w.Write(xml)
 }
