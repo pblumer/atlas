@@ -964,7 +964,11 @@ function wireProperties(root, modeler, api) {
     }
     const bo = element.businessObject || {};
     const type = shortType(element.type);
-    icon.textContent = type.slice(0, 2).toUpperCase();
+    // The generic two-letter badge is the type's first two letters, but a data
+    // object and a data store both start "Da" — badge them by what they are (a
+    // data object → DO, a data store → DS) so they read at a glance (ADR-0053).
+    const badges = { "bpmn:DataObjectReference": "DO", "bpmn:DataStoreReference": "DS" };
+    icon.textContent = badges[bo.$type] || type.slice(0, 2).toUpperCase();
     typename.textContent = type;
     nameEl.textContent = bo.name || bo.id || "(unnamed)";
 
