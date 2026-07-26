@@ -463,6 +463,18 @@ func (t *Tx) RecordElementStep(piKey uint64, ts int64, pos uint64, elementId int
 	return t.b.Set(keyElementStep(piKey, ts, pos), t.scratch, nil)
 }
 
+// RecordElementReplay retains an activation or consumption with its durable
+// token lineage. It is derived only from the lifecycle event by applyToState.
+func (t *Tx) RecordElementReplay(piKey uint64, ts int64, pos uint64, elementID int32, elementKey, tokenID, parentTokenID uint64, sourceFlowID int32, action byte) error {
+	t.scratch = appendBE32(t.scratch[:0], uint32(elementID))
+	t.scratch = appendBE64(t.scratch, elementKey)
+	t.scratch = appendBE64(t.scratch, tokenID)
+	t.scratch = appendBE64(t.scratch, parentTokenID)
+	t.scratch = appendBE32(t.scratch, uint32(sourceFlowID))
+	t.scratch = append(t.scratch, action)
+	return t.b.Set(keyElementReplay(piKey, ts, pos), t.scratch, nil)
+}
+
 // --- Variable-snapshot history ---
 //
 // Every variable change of a process instance is retained here, keyed in change

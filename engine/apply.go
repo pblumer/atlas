@@ -51,8 +51,14 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// instance can be replayed step by step (ADR-0046). The order comes from
 			// the event header's timestamp and position, so replay rebuilds an
 			// identically-ordered trail (I4).
-			return tx.RecordElementStep(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId)
+			if err := tx.RecordElementStep(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId); err != nil {
+				return err
+			}
+			return tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, 1)
 		case model.IntentCompleted, model.IntentTerminated:
+			if err := tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, 2); err != nil {
+				return err
+			}
 			// Terminating an element clears any incident it carried (a stuck job's,
 			// ADR-0061); the delete is idempotent, so it is a no-op for the common
 			// element with none.

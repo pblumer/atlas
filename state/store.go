@@ -303,6 +303,27 @@ func (s *Store) ElementStepHistory(piKey uint64, fn func(ts int64, pos uint64, e
 	})
 }
 
+// ElementReplayValue is one durable causal token-lifecycle fact.
+type ElementReplayValue struct {
+	ElementID, SourceFlowID                    int32
+	ElementInstanceKey, TokenID, ParentTokenID uint64
+	Action                                     byte
+}
+
+// ElementReplayHistory scans causal token lifecycle facts in deterministic order.
+func (s *Store) ElementReplayHistory(piKey uint64, fn func(ts int64, pos uint64, v ElementReplayValue) error) error {
+	return s.scanPrefix(elementReplayInstancePrefix(piKey), func(k, raw []byte) error {
+		if len(raw) != 33 {
+			return fmt.Errorf("state: corrupt element replay value (%d bytes)", len(raw))
+		}
+		return fn(timestampFromStepKey(k), positionFromStepKey(k), ElementReplayValue{
+			ElementID: int32(binary.BigEndian.Uint32(raw)), ElementInstanceKey: binary.BigEndian.Uint64(raw[4:]),
+			TokenID: binary.BigEndian.Uint64(raw[12:]), ParentTokenID: binary.BigEndian.Uint64(raw[20:]),
+			SourceFlowID: int32(binary.BigEndian.Uint32(raw[28:])), Action: raw[32],
+		})
+	})
+}
+
 // VariableSnapshotHistory folds the retained variable changes of one scope (a
 // process instance), calling fn with each change's event timestamp, log position,
 // and the variable's new state in the order they occurred (ADR-0048). Because the

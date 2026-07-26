@@ -119,6 +119,12 @@ ElementInstance(COMPLETING)
 
 Gateways are simply behaviors with custom `takeOutgoingFlows` logic: an exclusive gateway evaluates conditions and takes *one* flow; a parallel gateway takes *all* and, at the join, relies on a counter in the scope state.
 
+For operator replay, every element instance also carries a durable logical token
+lineage and the sequence flow that activated it. `applyToState` retains activation
+and consumption facts, and the timeline API folds them by log position into
+multi-token frames. This exposes logical BPMN parallelism without changing the
+processor's deterministic sequential execution; see [ADR-0065](adr/0065-multi-token-process-replay.md).
+
 ## Data model
 
 Three distinct concepts that are often conflated:

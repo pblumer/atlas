@@ -3143,13 +3143,13 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
         <a class="btn neutral" id="rp-live" title="Open this instance's live view">Live view</a>
         <button class="btn neutral" id="refresh">Refresh</button>
         <span class="pill" id="rp-state" style="margin-left:8px">&mdash;</span>
-        <span class="pill" style="margin-left:8px"><b id="step-count">0</b>&nbsp;steps</span>
+        <span class="pill" style="margin-left:8px"><b id="step-count">0</b>&nbsp;frames</span>
       </div>
       <div class="replay-bar">
         <button class="btn play" id="play">&#9654; Play</button>
         <button class="btn neutral" id="step-back" title="Previous step">&#9198;</button>
         <button class="btn neutral" id="step-fwd" title="Next step">&#9197;</button>
-        <input type="range" id="scrub" min="0" max="0" value="0" step="1" aria-label="Step timeline"/>
+        <input type="range" id="scrub" min="0" max="0" value="0" step="1" aria-label="Replay frames"/>
         <label class="bar-select"><span>Speed</span>
           <select id="speed" class="speed">
             <option value="1">1&times;</option>
@@ -3159,6 +3159,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
         <span class="clock" id="clock">no steps yet</span>
       </div>
       <div class="editor-body"><div id="canvas"></div></div>
+      <div class="token-legend" id="token-legend" aria-label="Active replay tokens"></div>
       <div class="var-panel" id="rp-vars"></div>
       <div class="flow-log" id="step-log"></div>
       <div class="problems">
@@ -3217,14 +3218,17 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const varPanel = root.querySelector("#rp-vars");
   const speedSel = root.querySelector("#speed");
 
-  let steps = [];    // element-activation timeline, oldest first
+  let steps = [];    // element-activation audit timeline, oldest first
+  let frames = [];   // complete logical token states, oldest first
   let marked = [];   // element markers to clear on the next render
   let playing = false;
-  let playhead = 0;  // number of steps walked so far (0..steps.length)
+  let playhead = 0;  // number of frames walked so far (0..frames.length)
   let animToken = 0; // bumped to supersede an in-flight animation
   const jsonCollapsed = new Set(); // JSON variable names the operator has collapsed (persists across scrubs)
 
   const speed = () => Number(speedSel.value) || 1;
+  const tokenColors = ["#0072b2", "#d55e00", "#009e73", "#cc79a7", "#e69f00", "#56b4e9"];
+  const tokenColor = (id) => tokenColors[Number(BigInt(String(id || 0)) % BigInt(tokenColors.length))];
   const fmtClock = (ns) => (ns ? new Date(ns / 1e6).toLocaleTimeString() : "");
 
   function stepLabel(s) {
@@ -3242,7 +3246,8 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // current step (the per-step snapshot the timeline carries, ADR-0048), using the
   // shared polished renderer. At playhead 0 (before any step) it shows nothing yet.
   function renderVars() {
-    const cur = playhead > 0 && playhead <= steps.length ? steps[playhead - 1] : null;
+    const pos = playhead > 0 && playhead <= frames.length ? frames[playhead - 1].position : 0;
+    const cur = [...steps].reverse().find((s) => s.position <= pos) || null;
     const head = cur
       ? `Variables &middot; as of step ${playhead} (${esc(stepLabel(cur))})`
       : "Variables";
@@ -3251,9 +3256,9 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   }
 
   function updateClock() {
-    if (!steps.length) { clockEl.textContent = "no steps yet"; return; }
-    const shown = Math.min(playhead, steps.length);
-    clockEl.textContent = `${shown} / ${steps.length}${shown ? ` · ${fmtClock(steps[shown - 1].at)}` : ""}`;
+    if (!frames.length) { clockEl.textContent = "no frames yet"; return; }
+    const shown = Math.min(playhead, frames.length);
+    clockEl.textContent = `${shown} / ${frames.length}${shown ? ` · ${fmtClock(frames[shown - 1].at)}` : ""}`;
   }
 
   // renderOverlay marks every element walked up to the playhead: the current one
@@ -3261,13 +3266,25 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   function renderOverlay() {
     for (const [id, m] of marked) { try { canvas.removeMarker(id, m); } catch { /* gone */ } }
     marked = [];
-    for (let i = 0; i < playhead; i++) {
-      const s = steps[i];
+    const frame = playhead ? frames[playhead - 1] : null;
+    const position = frame ? frame.position : 0;
+    for (const s of steps.filter((item) => item.position <= position)) {
       if (!registry.get(s.elementId)) continue;
-      const marker = i === playhead - 1 ? "atlas-active" : "atlas-visited";
+      const marker = "atlas-visited";
       canvas.addMarker(s.elementId, marker);
       marked.push([s.elementId, marker]);
     }
+    for (const token of (frame ? frame.tokens : [])) {
+      if (!registry.get(token.elementId)) continue;
+      const marker = token.state === "waiting" ? "atlas-token-waiting" : "atlas-active";
+      canvas.addMarker(token.elementId, marker);
+      marked.push([token.elementId, marker]);
+    }
+    const legend = root.querySelector("#token-legend");
+    legend.innerHTML = (frame && frame.tokens.length) ? frame.tokens.map((token) =>
+      `<span class="token-chip"><i style="--token-color:${tokenColor(token.tokenId)}">#</i>` +
+      `Token ${esc(String(token.tokenId))} — ${esc(stepLabel(token))}${token.state === "waiting" ? " (waiting at join)" : ""}</span>`).join("")
+      : `<span class="muted">No active tokens in this frame</span>`;
   }
 
   function highlightCurrent() {
@@ -3282,7 +3299,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   }
 
   function setPlayhead(n) {
-    playhead = Math.max(0, Math.min(steps.length, n));
+    playhead = Math.max(0, Math.min(frames.length, n));
     scrub.value = String(playhead);
     updateClock();
     renderOverlay();
@@ -3300,15 +3317,19 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       <tr data-i="${i}">
         <td class="tnum">${i + 1}</td>
         <td class="tnum">${fmtClock(s.at)}</td>
+        <td class="tnum">${s.tokenId ? `Token ${esc(String(s.tokenId))}` : "—"}</td>
         <td><span class="msg-name">${esc(stepLabel(s))}</span></td>
         <td class="muted">${esc(typeLabel(s.type))}</td>
+        <td class="muted">${esc(s.action || "activate")}${s.relation ? ` · ${esc(s.relation)}` : ""}</td>
+        <td class="tnum">${s.elementInstanceKey ? esc(String(s.elementInstanceKey)) : "—"}</td>
       </tr>`).join("");
-    logEl.innerHTML = `<div class="fl-head">Steps <span class="muted">· ${steps.length}</span></div>
-      <table><tbody>${rows}</tbody></table>`;
+    logEl.innerHTML = `<div class="fl-head">Engine activations <span class="muted">· ${steps.length} events</span></div>
+      <table><thead><tr><th>#</th><th>At</th><th>Token</th><th>Element</th><th>Type</th><th>Action</th><th>Element instance</th></tr></thead><tbody>${rows}</tbody></table>`;
     logEl.querySelectorAll("tr[data-i]").forEach((tr) => tr.addEventListener("click", () => {
       const i = Number(tr.dataset.i);
       pause();
-      setPlayhead(i + 1);
+      const frame = frames.findIndex((f) => f.position >= steps[i].position);
+      setPlayhead(frame < 0 ? frames.length : frame + 1);
       animateStep(i);
     }));
     highlightCurrent();
@@ -3349,18 +3370,18 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   function pause() { playing = false; playBtn.innerHTML = "&#9654; Play"; }
 
   async function play() {
-    if (!steps.length) return;
-    if (playhead >= steps.length) setPlayhead(0); // wrap to replay from the start
+    if (!frames.length) return;
+    if (playhead >= frames.length) setPlayhead(0); // wrap to replay from the start
     playing = true;
     playBtn.innerHTML = "&#9208; Pause";
-    while (playing && current === viewer && playhead < steps.length) {
+    while (playing && current === viewer && playhead < frames.length) {
       const i = playhead;
       setPlayhead(playhead + 1);
-      await animateStep(i);
+      await sleep(120 / speed());
       if (!playing || current !== viewer) break;
       // Pause between steps, scaled to the real gap (clamped) and the speed.
-      const gap = playhead < steps.length
-        ? Math.min(1200, Math.max(150, (steps[playhead].at - steps[i].at) / 1e6))
+      const gap = playhead < frames.length
+        ? Math.min(1200, Math.max(150, (frames[playhead].at - frames[i].at) / 1e6))
         : 0;
       await sleep(gap / speed());
     }
@@ -3381,14 +3402,14 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     applyStatePill(next.state);
     // Rebuild only when the step set grows, so a poll never disturbs the operator's
     // current scrub position mid-replay.
-    const list = next.steps || [];
-    if (list.length !== steps.length) {
-      const wasAtEnd = playhead >= steps.length;
-      steps = list;
-      stepCountEl.textContent = String(steps.length);
-      scrub.max = String(steps.length);
+    const list = next.steps || [], nextFrames = next.frames || [];
+    if (list.length !== steps.length || nextFrames.length !== frames.length) {
+      const wasAtEnd = playhead >= frames.length;
+      steps = list; frames = nextFrames;
+      stepCountEl.textContent = String(frames.length);
+      scrub.max = String(frames.length);
       renderLog();
-      if (!playing && wasAtEnd) setPlayhead(steps.length); // follow new steps live
+      if (!playing && wasAtEnd) setPlayhead(frames.length); // follow new frames live
       else { scrub.value = String(playhead); updateClock(); renderOverlay(); highlightCurrent(); renderVars(); }
     }
   }
@@ -3396,7 +3417,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   playBtn.addEventListener("click", () => { playing ? pause() : play(); });
   root.querySelector("#step-fwd").addEventListener("click", () => {
     pause();
-    if (playhead < steps.length) { const i = playhead; setPlayhead(playhead + 1); animateStep(i); }
+    if (playhead < frames.length) setPlayhead(playhead + 1);
   });
   root.querySelector("#step-back").addEventListener("click", () => { pause(); setPlayhead(playhead - 1); });
   scrub.addEventListener("input", () => { pause(); setPlayhead(Number(scrub.value)); });

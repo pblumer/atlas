@@ -25,6 +25,7 @@ const (
 	cfMessageFlow            columnFamily = 0x0C // msgFlow:<receiverDefKey>:<ts>:<pos> → MessageFlowValue
 	cfJobByElement           columnFamily = 0x0D // jobByEl:<elKey> → jobKey (reverse lookup for boundary cancel)
 	cfElementStep            columnFamily = 0x0E // elStep:<piKey>:<ts>:<pos> → int32 elementId
+	cfElementReplay          columnFamily = 0x13 // elReplay:<piKey>:<ts>:<pos> → causal lifecycle value
 	cfVariableSnapshot       columnFamily = 0x0F // varSnap:<scopeKey>:<ts>:<pos> → VariableValue
 	cfDataObject             columnFamily = 0x10 // do:<scopeKey>:<name> → DataObjectValue
 	cfDataObjectSnapshot     columnFamily = 0x11 // doSnap:<scopeKey>:<ts>:<pos> → DataObjectValue
@@ -169,6 +170,16 @@ func keyElementStep(piKey uint64, ts int64, pos uint64) []byte {
 // in time order.
 func elementStepInstancePrefix(piKey uint64) []byte {
 	return appendBE64([]byte{byte(cfElementStep)}, piKey)
+}
+
+func keyElementReplay(piKey uint64, ts int64, pos uint64) []byte {
+	k := appendBE64([]byte{byte(cfElementReplay)}, piKey)
+	k = appendOrderedInt64(k, ts)
+	return appendBE64(k, pos)
+}
+
+func elementReplayInstancePrefix(piKey uint64) []byte {
+	return appendBE64([]byte{byte(cfElementReplay)}, piKey)
 }
 
 // timestampFromStepKey extracts the event timestamp from an element-step key,
