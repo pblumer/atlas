@@ -72,6 +72,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0062](0062-embedded-dmn-editor.md) | An embedded DMN editor (dmn-js) — author a decision in place, adopt its inputs/output | Accepted |
 | [0063](0063-dmn-decision-binding.md) | DMN decision binding — latest vs deployment on a business rule task | Accepted |
 | [0064](0064-timer-feel-failure-incidents.md) | Timer FEEL-failure incidents — park and raise instead of firing immediately | Proposed |
+| [0065](0065-multi-token-process-replay.md) | Multi-token process replay and causal token lineage | Accepted |
 
 ## Status values
 

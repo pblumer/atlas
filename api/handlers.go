@@ -15,6 +15,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
+	"github.com/pblumer/atlas/state"
 )
 
 // maxXMLBytes caps a deployment body. BPMN models are small; this is a sanity
@@ -192,10 +193,29 @@ type collabRuntimeResp struct {
 // oldest-first, so the Operations view can step through them and show the
 // variables at each point.
 type timelineStep struct {
-	At        int64          `json:"at"` // unix nanoseconds
-	ElementID string         `json:"elementId"`
-	Type      string         `json:"type"`
-	Variables []variableView `json:"variables"`
+	At                 int64          `json:"at"` // unix nanoseconds
+	ElementID          string         `json:"elementId"`
+	Type               string         `json:"type"`
+	Variables          []variableView `json:"variables"`
+	Position           uint64         `json:"position"`
+	TokenID            uint64         `json:"tokenId,omitempty"`
+	ElementInstanceKey uint64         `json:"elementInstanceKey,omitempty"`
+	SourceFlowID       string         `json:"sourceFlowId,omitempty"`
+	Action             string         `json:"action,omitempty"`
+	Relation           string         `json:"relation,omitempty"`
+}
+
+type timelineToken struct {
+	TokenID            uint64 `json:"tokenId"`
+	ElementID          string `json:"elementId"`
+	ElementInstanceKey uint64 `json:"elementInstanceKey"`
+	State              string `json:"state"`
+}
+
+type timelineFrame struct {
+	Position uint64          `json:"position"`
+	At       int64           `json:"at"`
+	Tokens   []timelineToken `json:"tokens"`
 }
 
 // instanceTimelineResp is one process instance's step-by-step replay: its
@@ -203,12 +223,13 @@ type timelineStep struct {
 // (ADR-0046). It powers the single-process replay transport, the analogue of the
 // collaboration message-flow timeline.
 type instanceTimelineResp struct {
-	InstanceKey   uint64         `json:"instanceKey"`
-	ProcessDefKey uint64         `json:"processDefKey"`
-	ProcessID     string         `json:"processId"`
-	Version       int32          `json:"version"`
-	State         string         `json:"state"`
-	Steps         []timelineStep `json:"steps"`
+	InstanceKey   uint64          `json:"instanceKey"`
+	ProcessDefKey uint64          `json:"processDefKey"`
+	ProcessID     string          `json:"processId"`
+	Version       int32           `json:"version"`
+	State         string          `json:"state"`
+	Steps         []timelineStep  `json:"steps"`
+	Frames        []timelineFrame `json:"frames"`
 }
 
 type instanceResp struct {
@@ -902,7 +923,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		foundInstance bool
 		foundDef      bool
 		scanErr       error
-		resp          = instanceTimelineResp{InstanceKey: key, Steps: []timelineStep{}}
+		resp          = instanceTimelineResp{InstanceKey: key, Steps: []timelineStep{}, Frames: []timelineFrame{}}
 	)
 	s.do(func() {
 		pi, ok, err := s.store.ProcessInstance(key)
@@ -942,10 +963,22 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			stepRows []stepRow
 			changes  []varChange
 		)
+		type replayRow struct {
+			at  int64
+			pos uint64
+			v   state.ElementReplayValue
+		}
+		var replayRows []replayRow
 		scanErr = s.store.ElementStepHistory(key, func(ts int64, pos uint64, elementId int32) error {
 			stepRows = append(stepRows, stepRow{at: ts, pos: pos, elementID: elementId})
 			return nil
 		})
+		if scanErr == nil {
+			scanErr = s.store.ElementReplayHistory(key, func(ts int64, pos uint64, v state.ElementReplayValue) error {
+				replayRows = append(replayRows, replayRow{ts, pos, v})
+				return nil
+			})
+		}
 		if scanErr == nil {
 			scanErr = s.store.VariableSnapshotHistory(key, func(_ int64, pos uint64, v *model.VariableValue) error {
 				changes = append(changes, varChange{pos: pos, view: toVariableView(v)})
@@ -959,6 +992,30 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		// them in true execution order regardless of clock monotonicity.
 		sort.Slice(stepRows, func(i, j int) bool { return stepRows[i].pos < stepRows[j].pos })
 		sort.Slice(changes, func(i, j int) bool { return changes[i].pos < changes[j].pos })
+		sort.Slice(replayRows, func(i, j int) bool { return replayRows[i].pos < replayRows[j].pos })
+
+		active := map[uint64]timelineToken{}
+		activations := map[uint64]state.ElementReplayValue{}
+		for _, rr := range replayRows {
+			v := rr.v
+			if v.Action == 1 {
+				activations[rr.pos] = v
+				node := d.cp.Node(v.ElementID)
+				stateName := "active"
+				if node.Type == compiler.TypeParallelGateway && node.IncomingCount > 1 {
+					stateName = "waiting"
+				}
+				active[v.ElementInstanceKey] = timelineToken{TokenID: v.TokenID, ElementID: d.cp.ElementBpmnId(v.ElementID), ElementInstanceKey: v.ElementInstanceKey, State: stateName}
+			} else {
+				delete(active, v.ElementInstanceKey)
+			}
+			tokens := make([]timelineToken, 0, len(active))
+			for _, token := range active {
+				tokens = append(tokens, token)
+			}
+			sort.Slice(tokens, func(i, j int) bool { return tokens[i].TokenID < tokens[j].TokenID })
+			resp.Frames = append(resp.Frames, timelineFrame{Position: rr.pos, At: rr.at, Tokens: tokens})
+		}
 
 		// Walk the steps in order, advancing through every variable change at or
 		// before each step's position, so a step carries the variables as they stood
@@ -979,12 +1036,27 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			// Every recorded step is a real activated node, so its diagram id is
 			// always present (unlike the shared runtime overlay's get, which guards
 			// synthetic elements).
-			resp.Steps = append(resp.Steps, timelineStep{
+			step := timelineStep{
 				At:        sr.at,
+				Position:  sr.pos,
 				ElementID: d.cp.ElementBpmnId(sr.elementID),
 				Type:      d.cp.Node(sr.elementID).Type.String(),
 				Variables: vars,
-			})
+				Action:    "activate",
+			}
+			if rv, ok := activations[sr.pos]; ok {
+				step.TokenID, step.ElementInstanceKey = rv.TokenID, rv.ElementInstanceKey
+				if rv.SourceFlowID >= 0 {
+					step.SourceFlowID = d.cp.Intern(d.cp.Flow(rv.SourceFlowID).Id)
+				}
+				if rv.ParentTokenID != 0 {
+					step.Relation = "fork"
+				}
+				if n := d.cp.Node(rv.ElementID); n.Type == compiler.TypeParallelGateway && n.IncomingCount > 1 {
+					step.Relation = "join-arrival"
+				}
+			}
+			resp.Steps = append(resp.Steps, step)
 		}
 	})
 	switch {

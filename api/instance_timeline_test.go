@@ -47,11 +47,86 @@ type timelineStep struct {
 }
 
 type instanceTimeline struct {
-	InstanceKey   uint64         `json:"instanceKey"`
-	ProcessDefKey uint64         `json:"processDefKey"`
-	ProcessID     string         `json:"processId"`
-	State         string         `json:"state"`
-	Steps         []timelineStep `json:"steps"`
+	InstanceKey   uint64          `json:"instanceKey"`
+	ProcessDefKey uint64          `json:"processDefKey"`
+	ProcessID     string          `json:"processId"`
+	State         string          `json:"state"`
+	Steps         []timelineStep  `json:"steps"`
+	Frames        []timelineFrame `json:"frames"`
+}
+
+type timelineToken struct {
+	TokenID   uint64 `json:"tokenId"`
+	ElementID string `json:"elementId"`
+	State     string `json:"state"`
+}
+
+type timelineFrame struct {
+	Position uint64          `json:"position"`
+	Tokens   []timelineToken `json:"tokens"`
+}
+
+const parallelReplayBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="parallel-replay" isExecutable="true">
+    <startEvent id="start"/><parallelGateway id="fork"/>
+    <scriptTask id="way1"><extensionElements><zeebe:script expression="= 1" resultVariable="one"/></extensionElements></scriptTask>
+    <scriptTask id="way2"><extensionElements><zeebe:script expression="= 2" resultVariable="two"/></extensionElements></scriptTask>
+    <parallelGateway id="join"/><endEvent id="end"/>
+    <sequenceFlow id="to_fork" sourceRef="start" targetRef="fork"/>
+    <sequenceFlow id="to_way1" sourceRef="fork" targetRef="way1"/>
+    <sequenceFlow id="to_way2" sourceRef="fork" targetRef="way2"/>
+    <sequenceFlow id="way1_join" sourceRef="way1" targetRef="join"/>
+    <sequenceFlow id="way2_join" sourceRef="way2" targetRef="join"/>
+    <sequenceFlow id="to_end" sourceRef="join" targetRef="end"/>
+  </process>
+</definitions>`
+
+func TestInstanceTimelineParallelTokenFrames(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", parallelReplayBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatal(err)
+	}
+	if code, body = doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key), "", "application/json"); code != http.StatusOK {
+		t.Fatalf("start status=%d body=%s", code, body)
+	}
+	key := onlyInstanceKey(t, ts)
+	code, body = doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/instances/%d/timeline", key), "", "")
+	if code != http.StatusOK {
+		t.Fatalf("timeline status=%d body=%s", code, body)
+	}
+	var tl instanceTimeline
+	if err := json.Unmarshal(body, &tl); err != nil {
+		t.Fatal(err)
+	}
+	foundParallel, foundWaiting, foundEnd := false, false, false
+	for _, frame := range tl.Frames {
+		ways := map[string]uint64{}
+		for _, tok := range frame.Tokens {
+			if tok.ElementID == "way1" || tok.ElementID == "way2" {
+				ways[tok.ElementID] = tok.TokenID
+			}
+			if tok.ElementID == "join" && tok.State == "waiting" {
+				foundWaiting = true
+			}
+		}
+		if len(ways) == 2 && ways["way1"] != ways["way2"] {
+			foundParallel = true
+		}
+		if len(frame.Tokens) == 1 && frame.Tokens[0].ElementID == "end" {
+			foundEnd = true
+		}
+	}
+	if !foundParallel || !foundWaiting || !foundEnd {
+		t.Fatalf("frames do not show fork/join semantics: parallel=%v waiting=%v end=%v frames=%+v", foundParallel, foundWaiting, foundEnd, tl.Frames)
+	}
 }
 
 // onlyInstanceKey lists instances and returns the key of the single one the test

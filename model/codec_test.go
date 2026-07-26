@@ -36,6 +36,9 @@ func TestRecordRoundTrip(t *testing.T) {
 				ElementId:          17,
 				FlowScopeKey:       NewKey(3, 3),
 				BpmnElementType:    5,
+				TokenID:            NewKey(3, 4),
+				ParentTokenID:      NewKey(3, 5),
+				SourceFlowId:       9,
 			},
 		},
 		{

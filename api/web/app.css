@@ -623,6 +623,10 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .replay-bar input[type="range"] { flex: 1; accent-color: var(--accent); }
 .replay-bar .clock { font: 12px ui-monospace, monospace; color: var(--muted); min-width: 150px; text-align: right; }
 .replay-bar .speed { width: auto; min-width: 64px; padding: 5px 8px; font-size: 13px; }
+.token-legend { display:flex; flex-wrap:wrap; gap:8px; padding:8px 12px; border-top:1px solid var(--line); }
+.token-chip { display:inline-flex; align-items:center; gap:6px; font-size:12px; }
+.token-chip i { display:inline-grid; place-items:center; width:20px; height:20px; border:3px solid var(--token-color); border-radius:50%; font-style:normal; font-weight:800; }
+.atlas-token-waiting .djs-visual > :first-child { stroke:#d55e00 !important; stroke-width:5px !important; stroke-dasharray:6 4; }
 
 /* Message-flow log beneath the diagram: one row per delivery, the current step
    highlighted as the playhead crosses it. */

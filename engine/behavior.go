@@ -105,12 +105,15 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 
 	for _, startID := range cp.StartEvents() {
 		node := cp.Node(startID)
-		c.AppendElementCommand(c.NewKey(), model.IntentActivating, model.ElementInstanceValue{
+		key := c.NewKey()
+		c.AppendElementCommand(key, model.IntentActivating, model.ElementInstanceValue{
 			ProcessInstanceKey: piKey,
 			ProcessDefKey:      defKey,
 			ElementId:          startID,
 			FlowScopeKey:       piKey, // root elements are scoped by the instance
 			BpmnElementType:    uint8(node.Type),
+			TokenID:            key,
+			SourceFlowId:       -1,
 		})
 	}
 }
@@ -611,14 +614,23 @@ func completeAndTakeFlows(c *ProcessingContext, key uint64, ei *model.ElementIns
 // activateElement schedules activation of a fresh element instance on targetId,
 // scoped like ei. It is the single "take a flow" primitive the flow-taking
 // behaviors share.
-func activateElement(c *ProcessingContext, ei *model.ElementInstanceValue, targetId int32) {
+func activateElement(c *ProcessingContext, ei *model.ElementInstanceValue, flowID int32, fork bool) {
+	targetId := c.process(ei.ProcessDefKey).Flow(flowID).Target
 	target := c.process(ei.ProcessDefKey).Node(targetId)
-	c.AppendElementCommand(c.NewKey(), model.IntentActivating, model.ElementInstanceValue{
+	key := c.NewKey()
+	tokenID, parentID := ei.TokenID, uint64(0)
+	if tokenID == 0 || fork {
+		parentID, tokenID = ei.TokenID, key
+	}
+	c.AppendElementCommand(key, model.IntentActivating, model.ElementInstanceValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ProcessDefKey:      ei.ProcessDefKey,
 		ElementId:          targetId,
 		FlowScopeKey:       ei.FlowScopeKey,
 		BpmnElementType:    uint8(target.Type),
+		TokenID:            tokenID,
+		ParentTokenID:      parentID,
+		SourceFlowId:       flowID,
 	})
 }
 
@@ -699,8 +711,9 @@ func interruptHost(c *ProcessingContext, hostKey, selfKey uint64) {
 // are enough to drive and recover state.)
 func takeOutgoingFlows(c *ProcessingContext, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
-	for _, flowID := range cp.Outgoing(ei.ElementId) {
-		activateElement(c, ei, cp.Flow(flowID).Target)
+	flows := cp.Outgoing(ei.ElementId)
+	for _, flowID := range flows {
+		activateElement(c, ei, flowID, len(flows) > 1)
 	}
 }
 
@@ -719,18 +732,18 @@ func takeInclusiveOutgoing(c *ProcessingContext, ei *model.ElementInstanceValue)
 			continue
 		}
 		if f.Condition == nil {
-			activateElement(c, ei, f.Target)
+			activateElement(c, ei, flowID, true)
 			took = true
 			continue
 		}
 		v, err := f.Condition.Eval(bindInputs(c, f.Condition.Inputs(), ei.ProcessInstanceKey))
 		if err == nil && expr.IsTrue(v) {
-			activateElement(c, ei, f.Target)
+			activateElement(c, ei, flowID, true)
 			took = true
 		}
 	}
 	if !took && defaultFlow >= 0 {
-		activateElement(c, ei, cp.Flow(defaultFlow).Target)
+		activateElement(c, ei, defaultFlow, false)
 	}
 }
 
@@ -1137,6 +1150,8 @@ func (exclusiveGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, e
 		ElementId:          target.ElementId,
 		FlowScopeKey:       ei.FlowScopeKey,
 		BpmnElementType:    uint8(target.Type),
+		TokenID:            ei.TokenID,
+		SourceFlowId:       flowID,
 	})
 }
 
@@ -1167,7 +1182,10 @@ func (parallelGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei 
 			c.AppendElementEvent(k, model.IntentCompleted, *a)
 		}
 	}
-	takeOutgoingFlows(c, ei)
+	continuation := *ei
+	continuation.ParentTokenID = ei.TokenID
+	continuation.TokenID = 0
+	takeOutgoingFlows(c, &continuation)
 }
 
 func (parallelGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
