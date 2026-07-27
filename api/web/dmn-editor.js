@@ -19,9 +19,10 @@ const DMN_CSS = [
   "vendor/dmn/assets/dmn-js-decision-table-controls.css",
   "vendor/dmn/assets/dmn-js-literal-expression.css",
   "vendor/dmn/assets/dmn-font/css/dmn.css",
+  "vendor/dmn/assets/properties-panel.css",
 ];
 
-let dmnReady; // memoized loader promise → window.DmnJS (the dmn-js Modeler)
+let dmnReady; // memoized loader promise → window.AtlasDmn (Modeler + properties panel)
 function loadDmn() {
   if (dmnReady) return dmnReady;
   dmnReady = new Promise((resolve, reject) => {
@@ -34,7 +35,9 @@ function loadDmn() {
     }
     const s = document.createElement("script");
     s.src = "vendor/dmn/dmn-modeler.js";
-    s.onload = () => (window.DmnJS ? resolve(window.DmnJS) : reject(new Error("dmn-js did not expose DmnJS")));
+    // The bundle exposes the Modeler *and* the properties-panel modules together
+    // (they must share one dmn-js instance) under window.AtlasDmn.
+    s.onload = () => (window.AtlasDmn ? resolve(window.AtlasDmn) : reject(new Error("dmn bundle did not expose AtlasDmn")));
     s.onerror = () => reject(new Error("failed to load the DMN modeler assets"));
     document.head.appendChild(s);
   });
@@ -109,6 +112,59 @@ function viewLabel(v) {
   return name;
 }
 
+// keepCaretOnRewrite works around an upstream dmn-js bug (17.x). The DRD "definition
+// properties" widget (the editable model name/id at the top-left of the DRG view)
+// rewrites its contenteditable's textContent on *every* committed model change —
+// including while you are typing into it. Reassigning textContent collapses the
+// caret to offset 0, so each debounced keystroke lands at the start and the text
+// comes out reversed ("dec" → "ced"). We patch the node's textContent setter so a
+// rewrite performed while the node has focus preserves the caret's character
+// offset instead of dropping it to 0. Idempotent per node (nodes are recreated on
+// view switches, so this runs again for each fresh one).
+function keepCaretOnRewrite(el) {
+  if (el.__caretPatched) return;
+  el.__caretPatched = true;
+  const desc = Object.getOwnPropertyDescriptor(Node.prototype, "textContent");
+  Object.defineProperty(el, "textContent", {
+    configurable: true,
+    get() { return desc.get.call(this); },
+    set(v) {
+      if (document.activeElement !== this) { desc.set.call(this, v); return; }
+      const offset = caretOffset(this);
+      desc.set.call(this, v);
+      restoreCaret(this, offset);
+    },
+  });
+}
+
+// caretOffset returns the caret's position as a character offset within el (a
+// plain-text contenteditable), or null when el holds no selection.
+function caretOffset(el) {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !el.contains(sel.anchorNode)) return null;
+  const r = sel.getRangeAt(0).cloneRange();
+  const pre = document.createRange();
+  pre.selectNodeContents(el);
+  pre.setEnd(r.endContainer, r.endOffset);
+  return pre.toString().length;
+}
+
+// restoreCaret places the caret at character offset within el (clamped to its
+// text length), so a programmatic textContent rewrite doesn't move it.
+function restoreCaret(el, offset) {
+  if (offset == null) return;
+  const text = el.firstChild;
+  const len = (el.textContent || "").length;
+  const pos = Math.min(offset, len);
+  const r = document.createRange();
+  if (text && text.nodeType === 3) r.setStart(text, pos);
+  else r.setStart(el, 0);
+  r.collapse(true);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+
 // openDmnEditor mounts the dmn-js modeler in a modal overlay and resolves with the
 // stored model once the author saves, or null if they cancel. When `modelRef` is
 // given the existing model is loaded and overwritten in place on save (editing);
@@ -128,7 +184,10 @@ export async function openDmnEditor({ api, toast, projectId, modelRef }) {
         <button class="btn ghost" data-act="cancel">Abbrechen</button>
         <button class="btn" data-act="save">Speichern &amp; übernehmen</button>
       </div>
-      <div class="dmn-canvas"></div>
+      <div class="dmn-body">
+        <div class="dmn-canvas"></div>
+        <div class="dmn-props"></div>
+      </div>
       <div class="dmn-hint muted">Modelliere die Entscheidungstabelle. <b>Input Data</b>-Knoten
         werden zu den Decision-Inputs; die Output-Spalte wird zur Result-Variable — beide werden
         beim Speichern automatisch in den Business-Rule-Task übernommen.</div>
@@ -137,13 +196,22 @@ export async function openDmnEditor({ api, toast, projectId, modelRef }) {
 
   const canvas = overlay.querySelector(".dmn-canvas");
   const viewsBar = overlay.querySelector(".dmn-views");
+  const propsPanel = overlay.querySelector(".dmn-props");
 
   let modeler;
   let done;
+  // The definition-properties name/id fields are created (and recreated on view
+  // switches) by dmn-js inside the canvas; patch each one as it appears so the
+  // caret survives dmn-js's textContent rewrites (see keepCaretOnRewrite).
+  const patchCaretFields = () =>
+    canvas.querySelectorAll(".dmn-definitions-name, .dmn-definitions-id").forEach(keepCaretOnRewrite);
+  const caretObserver = new MutationObserver(patchCaretFields);
+  caretObserver.observe(canvas, { childList: true, subtree: true });
   const finish = (result) => {
     if (done) return;
     done = true;
     document.removeEventListener("keydown", onKey);
+    caretObserver.disconnect();
     try { modeler && modeler.destroy(); } catch { /* already gone */ }
     overlay.remove();
     resolve(result);
@@ -154,11 +222,29 @@ export async function openDmnEditor({ api, toast, projectId, modelRef }) {
   document.addEventListener("keydown", onKey);
 
   try {
-    const DmnJS = await loadDmn();
-    modeler = new DmnJS({ container: canvas });
+    const AtlasDmn = await loadDmn();
+    // The properties panel is a DRG-view feature (it edits the decision/input-data
+    // elements of the requirements graph): Name, ID, Version tag, Documentation and
+    // the output Variable — the same panel Camunda's Modeler shows. It lives on the
+    // `drd` editor and renders into propsPanel. The camunda moddle extension makes
+    // the versionTag (and other camunda:* attributes) readable and writable; temis
+    // ignores that namespace, so a saved model still compiles.
+    modeler = new AtlasDmn.DmnJS({
+      container: canvas,
+      drd: {
+        propertiesPanel: { parent: propsPanel },
+        additionalModules: [
+          AtlasDmn.DmnPropertiesPanelModule,
+          AtlasDmn.DmnPropertiesProviderModule,
+          AtlasDmn.CamundaPropertiesProviderModule,
+        ],
+      },
+      moddleExtensions: { camunda: AtlasDmn.CamundaModdleDescriptor },
+    });
 
     // The view switcher lets the author move between the DRG overview and each
-    // decision's table without hunting for a double-click.
+    // decision's table without hunting for a double-click. The properties panel
+    // only applies to the DRG view, so its column is shown only there.
     const renderViews = () => {
       const views = modeler.getViews();
       const active = modeler.getActiveView();
@@ -170,6 +256,7 @@ export async function openDmnEditor({ api, toast, projectId, modelRef }) {
         b.addEventListener("click", () => modeler.open(v).catch(() => {}));
         viewsBar.appendChild(b);
       }
+      propsPanel.hidden = !(active && active.type === "drd");
     };
     modeler.on("views.changed", renderViews);
 
@@ -182,6 +269,7 @@ export async function openDmnEditor({ api, toast, projectId, modelRef }) {
     }
     await modeler.importXML(xml);
     renderViews();
+    patchCaretFields();
 
     overlay.querySelector('[data-act="cancel"]').addEventListener("click", () => finish(null));
     const saveBtn = overlay.querySelector('[data-act="save"]');
