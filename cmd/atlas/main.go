@@ -96,7 +96,7 @@ func runServe(args []string) error {
 	shutdownTimeout := fs.Duration("shutdown-timeout", 10*time.Second, "grace period for in-flight requests on shutdown")
 	docs := fs.Bool("docs", true, "serve the OpenAPI spec (/api/v1/openapi.json) and the Scalar API explorer (/api/docs); pass --docs=false to disable")
 	auth := fs.Bool("auth", false, "require login for the API and UI; seeds an admin from ATLAS_ADMIN_USERNAME/ATLAS_ADMIN_PASSWORD on first run")
-	powershell := fs.Bool("powershell", false, "run PowerShell script tasks by shelling out to pwsh on this host; off by default because it executes arbitrary interpreter code")
+	powershell := fs.Bool("powershell", true, "run PowerShell script tasks by shelling out to pwsh on this host; on by default, pass --powershell=false to disable (it executes arbitrary interpreter code, so disable it where that trust boundary is not acceptable)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

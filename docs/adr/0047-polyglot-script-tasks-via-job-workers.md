@@ -169,7 +169,13 @@ exactly as the FEEL task's result is frozen rather than re-evaluated.
   the engine host, which is acceptable for a controlled environment but is **not**
   the recommended production isolation posture — that is the external worker. The
   result-variable mapping leans on the variable subsystem the DMN/connector tasks
-  already use.
+  already use. **Enablement is opt-out at the CLI**: `atlas serve` runs the
+  PowerShell worker by default and `--powershell=false` disables it (the `api`
+  library stays explicit — `WithPowerShellScripts` — so an embedder never executes
+  interpreter code unasked). This was an operator decision to favour convenience
+  over a locked-down default; it widens the default blast radius, so a deployment
+  that does not want interpreter execution must pass `--powershell=false` (or run a
+  host without `pwsh`, where tasks park with a startup warning).
 - **Follow-ups / risks to watch:** **security is the headline risk** — run the
   interpreter under least privilege (dedicated OS user/container), enforce
   per-job timeouts and resource limits, invoke with `-NoProfile -NonInteractive`
