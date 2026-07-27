@@ -200,7 +200,7 @@ type timelineStep struct {
 	Position           uint64         `json:"position"`
 	TokenID            uint64         `json:"tokenId,omitempty"`
 	ElementInstanceKey uint64         `json:"elementInstanceKey,omitempty"`
-	SourceFlowID       string         `json:"sourceFlowId,omitempty"`
+	SourceElementID    string         `json:"sourceElementId,omitempty"`
 	Action             string         `json:"action,omitempty"`
 	Relation           string         `json:"relation,omitempty"`
 }
@@ -1085,8 +1085,12 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			}
 			if rv, ok := activations[sr.pos]; ok {
 				step.TokenID, step.ElementInstanceKey = rv.TokenID, rv.ElementInstanceKey
+				// The activation's incoming flow identifies the element the token came
+				// from (the flow's source node). The frontend animates the token dot
+				// along that real edge — for a fork branch the predecessor is the
+				// gateway, not the previous row in the linear step list.
 				if rv.SourceFlowID >= 0 {
-					step.SourceFlowID = d.cp.Intern(d.cp.Flow(rv.SourceFlowID).Id)
+					step.SourceElementID = d.cp.ElementBpmnId(d.cp.Flow(rv.SourceFlowID).Source)
 				}
 				if rv.ParentTokenID != 0 {
 					step.Relation = "fork"

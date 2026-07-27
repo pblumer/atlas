@@ -124,6 +124,32 @@ func TestParallelReplayFramesAreClean(t *testing.T) {
 	}
 }
 
+// TestParallelReplaySourceElement checks each activation reports the element the
+// token actually came from (its incoming flow's source), so the replay animates a
+// fork branch from the gateway — not from its sibling branch, the previous row in
+// the linear step list.
+func TestParallelReplaySourceElement(t *testing.T) {
+	tl := fetchParallelTimeline(t)
+	want := map[string]string{"fork": "start", "way1": "fork", "way2": "fork", "end": "join"}
+	got := map[string]string{}
+	joinSources := map[string]bool{}
+	for _, s := range tl.Steps {
+		if s.ElementID == "join" {
+			joinSources[s.SourceElementID] = true // both way1 and way2 feed the join
+			continue
+		}
+		got[s.ElementID] = s.SourceElementID
+	}
+	for el, src := range want {
+		if got[el] != src {
+			t.Errorf("step %q source = %q, want %q", el, got[el], src)
+		}
+	}
+	if !joinSources["way1"] || !joinSources["way2"] {
+		t.Errorf("join arrivals came from %v, want both way1 and way2", joinSources)
+	}
+}
+
 // TestParallelReplayFramesDeterministic re-reads the same instance's timeline and
 // checks the folded frames are byte-identical, since replay must be deterministic.
 func TestParallelReplayFramesDeterministic(t *testing.T) {

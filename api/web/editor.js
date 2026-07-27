@@ -3374,7 +3374,8 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
 
   const canvas = viewer.get("canvas");
   const registry = viewer.get("elementRegistry");
-  const layer = canvas.getLayer("atlas-replay", 900); // token dot rides above the diagram
+  const layer = canvas.getLayer("atlas-replay", 900); // moving token dot rides above the diagram
+  const dotLayer = canvas.getLayer("atlas-tokens", 899); // static per-frame token dots
   const titleEl = root.querySelector("#rp-title");
   const stateEl = root.querySelector("#rp-state");
   const stepCountEl = root.querySelector("#step-count");
@@ -3428,30 +3429,58 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     clockEl.textContent = `${shown} / ${frames.length}${shown ? ` · ${fmtClock(frames[shown - 1].at)}` : ""}`;
   }
 
-  // renderOverlay marks every element walked up to the playhead: the current one
-  // green (the token is "here"), the earlier ones gray (already walked).
+  // renderOverlay paints the current frame: every element a live token sits on is
+  // highlighted (green, or orange while waiting at a join) and carries a colored
+  // token dot; elements only walked earlier are grayed. An element that holds a
+  // token now must NOT also be grayed — the two markers have equal CSS weight, so
+  // whichever is defined last would win and hide the live token. So the visited
+  // pass skips any element in the current token set, and the token dots make even
+  // two concurrent branches unmistakable.
   function renderOverlay() {
     for (const [id, m] of marked) { try { canvas.removeMarker(id, m); } catch { /* gone */ } }
     marked = [];
+    while (dotLayer.firstChild) dotLayer.removeChild(dotLayer.firstChild);
     const frame = playhead ? frames[playhead - 1] : null;
     const position = frame ? frame.position : 0;
+    const tokens = frame ? frame.tokens : [];
+    const liveOn = new Set(tokens.map((t) => t.elementId));
     for (const s of steps.filter((item) => item.position <= position)) {
-      if (!registry.get(s.elementId)) continue;
-      const marker = "atlas-visited";
-      canvas.addMarker(s.elementId, marker);
-      marked.push([s.elementId, marker]);
+      if (liveOn.has(s.elementId) || !registry.get(s.elementId)) continue;
+      canvas.addMarker(s.elementId, "atlas-visited");
+      marked.push([s.elementId, "atlas-visited"]);
     }
-    for (const token of (frame ? frame.tokens : [])) {
-      if (!registry.get(token.elementId)) continue;
+    // Count tokens per element so several tokens on one node (both arrivals at a
+    // join) fan out instead of stacking into one dot.
+    const perEl = {};
+    for (const token of tokens) {
+      const el = registry.get(token.elementId);
+      if (!el) continue;
       const marker = token.state === "waiting" ? "atlas-token-waiting" : "atlas-active";
       canvas.addMarker(token.elementId, marker);
       marked.push([token.elementId, marker]);
+      const n = perEl[token.elementId] = (perEl[token.elementId] || 0) + 1;
+      drawTokenDot(el, tokenColor(token.tokenId), n - 1);
     }
     const legend = root.querySelector("#token-legend");
-    legend.innerHTML = (frame && frame.tokens.length) ? frame.tokens.map((token) =>
+    legend.innerHTML = tokens.length ? tokens.map((token) =>
       `<span class="token-chip"><i style="--token-color:${tokenColor(token.tokenId)}">#</i>` +
       `Token ${esc(String(token.tokenId))} — ${esc(stepLabel(token))}${token.state === "waiting" ? " (waiting at join)" : ""}</span>`).join("")
       : `<span class="muted">No active tokens in this frame</span>`;
+  }
+
+  // drawTokenDot places a filled token marker at the top-left of an element (index
+  // offsets stacked tokens so concurrent ones on the same node stay distinct). The
+  // dot lives on the replay layer, so it tracks pan/zoom like the moving dot.
+  function drawTokenDot(el, color, index) {
+    const NS = "http://www.w3.org/2000/svg";
+    const g = document.createElementNS(NS, "g");
+    g.setAttribute("transform", `translate(${el.x + 6 + index * 16} ${el.y + 6})`);
+    const halo = document.createElementNS(NS, "circle");
+    halo.setAttribute("r", "9"); halo.setAttribute("fill", "#fff"); halo.setAttribute("stroke", color); halo.setAttribute("stroke-width", "2");
+    const dot = document.createElementNS(NS, "circle");
+    dot.setAttribute("r", "6"); dot.setAttribute("fill", color);
+    g.appendChild(halo); g.appendChild(dot);
+    dotLayer.appendChild(g);
   }
 
   function highlightCurrent() {
@@ -3524,8 +3553,13 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       canvas.addMarker(s.elementId, "atlas-flow-hit");
       setTimeout(() => { try { canvas.removeMarker(s.elementId, "atlas-flow-hit"); } catch { /* gone */ } }, 700);
     }
-    if (i === 0) return Promise.resolve(); // the start event has no incoming walk
-    const conn = sequenceFlowBetween(steps[i - 1].elementId, s.elementId);
+    // Animate along the edge the token actually traversed: the activation carries
+    // the element it came from (its incoming flow's source). Falling back to the
+    // previous row would draw a fork branch from its sibling (way1 → way2) instead
+    // of from the gateway.
+    const from = s.sourceElementId || (i > 0 ? steps[i - 1].elementId : null);
+    if (!from) return Promise.resolve(); // the start event has no incoming walk
+    const conn = sequenceFlowBetween(from, s.elementId);
     if (!conn) return Promise.resolve(); // a jump with no drawn edge (e.g. across a gateway)
     canvas.addMarker(conn.id, "atlas-flow-active");
     const wps = conn.waypoints.map((w) => ({ x: w.x, y: w.y }));
