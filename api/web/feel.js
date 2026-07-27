@@ -1,21 +1,18 @@
-// A small, buildless FEEL editing surface for the Modeler's expression fields.
+// The FEEL language for the Modeler's expression fields, plugged into the shared
+// buildless code editor (code-editor.js).
 //
 // The Implement tab exposes several FEEL fields (a script task's expression, a
-// gateway branch's condition, a message correlation key). Plain <textarea>s make
-// those fields feel like note-taking, not programming. This module turns them
-// into a lightweight code editor — syntax colouring plus context-aware
-// completion — without a framework, a bundler, or a CDN, honouring the buildless
-// self-contained rules of ADR-0012/ADR-0013.
+// gateway branch's condition, a message correlation key, and — via the fx toggle —
+// any expression-capable field). Plain <textarea>s make those feel like note-taking,
+// not programming. This module supplies FEEL's syntax colouring and context-aware
+// completion; code-editor.js supplies the editing surface. Both honour the buildless,
+// self-contained rules of ADR-0012/ADR-0013 — no framework, bundler, or CDN.
 //
-// The technique is deliberately dependency-free: a transparent <textarea> sits
-// over a highlighted <pre> that mirrors its text and scroll. The textarea is the
-// single source of truth for the value, so the editor's existing change-to-save
-// wiring keeps working unchanged — attachFeelEditor enhances the element in
-// place, it does not replace it.
-//
-// The pure pieces (tokenize, highlight, completionsFor) carry no DOM state so
-// they can be reasoned about — and, should a JS test runner ever land, tested —
-// on their own.
+// The pure pieces (tokenize, highlight, completionsFor, replaceStart) carry no DOM
+// state so they can be reasoned about — and, should a JS test runner ever land,
+// tested — on their own.
+
+import { attachCodeEditor } from "./code-editor.js";
 
 // ---------- Language ----------
 
@@ -120,7 +117,9 @@ const isWordChar = (ch) => ch !== undefined && /[A-Za-z0-9_]/.test(ch);
 // tokenize splits a FEEL expression into a flat list of { type, value } spans
 // covering the whole input (whitespace included), so joining the values
 // reproduces the source exactly. Types: comment, string, number, keyword,
-// literal, builtin, name, punct, ws.
+// literal, builtin, name, punct, ws. A builtin span carries its canonical `name`
+// (multi-word names may span spaces) and tip:true so the editor shows its
+// signature on hover.
 export function tokenize(src) {
   const out = [];
   const n = src.length;
@@ -188,8 +187,9 @@ export function tokenize(src) {
         // key so callers can look up the builtin's signature.
         const canonical = bm[0].replace(/ +/g, " ");
         push("builtin", bm[0]);
-        // Attach the canonical name for downstream tooling via a side channel.
+        // Attach the canonical name and opt into hover tooltips.
         out[out.length - 1].name = canonical;
+        out[out.length - 1].tip = true;
         i = i + bm[0].length;
         continue;
       }
@@ -212,17 +212,16 @@ export function tokenize(src) {
 
 const escapeHTML = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
-// highlight renders a FEEL expression as an HTML string of <span> tokens for the
-// backdrop <pre>. `variables` (a Set of known names) get their own colour so a
-// referenced process variable stands out from an unbound identifier.
+// highlight renders a FEEL expression as an HTML string of <span> tokens. Kept as a
+// pure export (the editor renders via code-editor.js's shared highlighter now, but
+// this remains the standalone, testable reference). `variables` (a Set of known
+// names) get their own colour so a referenced process variable stands out.
 export function highlight(src, variables) {
   const vars = variables instanceof Set ? variables : new Set(variables || []);
   let html = "";
   for (const tok of tokenize(src)) {
     const text = escapeHTML(tok.value);
     if (tok.type === "ws") { html += text; continue; }
-    // A builtin carries its canonical name (multi-word names may span spaces) so
-    // a hover handler can look up its signature — see attachFeelEditor's tooltip.
     if (tok.type === "builtin" && tok.name) {
       html += `<span class="tok-builtin" data-fn="${escapeHTML(tok.name)}">${text}</span>`;
       continue;
@@ -245,8 +244,12 @@ export function completionsFor(prefix, variables) {
   const p = (prefix || "").toLowerCase();
   const items = [];
 
-  for (const name of variables || []) {
-    items.push({ label: name, kind: "variable", insert: name, detail: "variable" });
+  for (const v of variables || []) {
+    // A variable is either a bare name or { name, detail } where detail is its
+    // origin label (start / script result / output mapping / task-local).
+    const name = typeof v === "string" ? v : v.name;
+    const detail = typeof v === "string" ? "variable" : (v.detail || "variable");
+    if (name) items.push({ label: name, kind: "variable", insert: name, detail });
   }
   for (const b of FEEL_BUILTINS) {
     items.push({ label: b.name, kind: "function", insert: b.name, detail: b.sig, doc: b.doc });
@@ -280,12 +283,10 @@ export function completionsFor(prefix, variables) {
   return scored.map((s) => s.it);
 }
 
-// ---------- Widget ----------
-
 // The identifier word immediately before the caret, used as the completion
 // prefix. Only a single word (no spaces) — enough to surface `string length`
 // from typing `string`, without the ambiguity of consuming trailing words.
-function prefixBefore(text) {
+export function prefixBefore(text) {
   const m = /[A-Za-z_][A-Za-z0-9_]*$/.exec(text);
   return m ? m[0] : "";
 }
@@ -310,319 +311,43 @@ export function replaceStart(before, label) {
   return before.length;
 }
 
-const KIND_LABEL = { variable: "var", function: "fn", keyword: "kw", literal: "lit" };
+// ---------- Language module ----------
 
-// attachFeelEditor upgrades an existing <textarea> into a FEEL editor in place.
-// It returns a handle with:
-//   destroy()          — remove the editor chrome, leaving the bare textarea.
-//   setVariables(list) — update the set of known variables for colour/completion.
-// opts.variables is the initial list of in-scope variable names.
+// feel is the language module code-editor.js consumes: pure tokenize / completions
+// / prefix / replaceStart / tooltip. It adapts the functions above to the module
+// shape (function-kind completions insert call parentheses; multi-word builtins use
+// the label-aware replaceStart).
+export const feel = {
+  tokenize,
+  prefix(before) {
+    const t = prefixBefore(before);
+    return { text: t, start: before.length - t.length };
+  },
+  completions(prefix, ctx) {
+    return completionsFor(prefix, ctx.variables).map((it) =>
+      it.kind === "function" ? { ...it, call: true } : it);
+  },
+  replaceStart(before, item) { return replaceStart(before, item.label); },
+  tooltip(name) {
+    const b = BUILTIN_BY_NAME.get(name);
+    return b ? { sig: b.sig, doc: b.doc } : null;
+  },
+};
+
+// ---------- Widget ----------
+
+// attachFeelEditor upgrades an existing <textarea> into a FEEL editor in place by
+// delegating to the shared code editor with the FEEL language module. It returns
+// the code-editor handle (destroy / setVariables / setMarkers / focusLine).
+//   opts.variables is the initial list of in-scope variable names.
+//   opts.validate(expr) -> Promise<{ok, error}> compiles against the real engine.
+// FEEL expressions are short, so the field wraps and shows no line-number gutter.
 export function attachFeelEditor(textarea, opts = {}) {
-  if (!textarea || textarea.dataset.feelOn === "1") return null;
-  textarea.dataset.feelOn = "1";
-
-  let variables = new Set(opts.variables || []);
-
-  // Build the chrome around the textarea: a wrapper, a highlight backdrop, a
-  // hidden mirror used to locate the caret, and a completion popup.
-  const wrap = document.createElement("div");
-  wrap.className = "feel-editor";
-  textarea.parentNode.insertBefore(wrap, textarea);
-
-  const pre = document.createElement("pre");
-  pre.className = "feel-highlight";
-  pre.setAttribute("aria-hidden", "true");
-  const code = document.createElement("code");
-  pre.appendChild(code);
-
-  const mirror = document.createElement("div");
-  mirror.className = "feel-highlight feel-mirror";
-  mirror.setAttribute("aria-hidden", "true");
-
-  const pop = document.createElement("div");
-  pop.className = "feel-pop";
-  pop.setAttribute("role", "listbox");
-  pop.hidden = true;
-
-  wrap.appendChild(pre);
-  wrap.appendChild(mirror);
-  wrap.appendChild(textarea);
-  wrap.appendChild(pop);
-  textarea.classList.add("feel-input");
-  textarea.setAttribute("spellcheck", "false");
-  textarea.setAttribute("autocapitalize", "off");
-  textarea.setAttribute("autocomplete", "off");
-
-  let items = [];   // current completion items
-  let active = -1;  // highlighted item index, or -1
-
-  function renderHighlight() {
-    // A trailing newline is not rendered by <pre> unless followed by content;
-    // append a zero-width space so the last line's height is preserved and the
-    // caret stays aligned.
-    code.innerHTML = highlight(textarea.value, variables) + "\u200b";
-    pre.scrollTop = textarea.scrollTop;
-    pre.scrollLeft = textarea.scrollLeft;
-  }
-
-  // caretRect returns the caret's {top,left} within the wrapper, so the popup can
-  // be anchored just below it. The mirror shares the textarea's box metrics (same
-  // CSS class + copied width), so measuring a marker in it matches the textarea.
-  function caretRect() {
-    mirror.style.width = textarea.clientWidth + "px";
-    const before = textarea.value.slice(0, textarea.selectionStart);
-    mirror.textContent = before;
-    const marker = document.createElement("span");
-    marker.textContent = "\u200b";
-    mirror.appendChild(marker);
-    const top = marker.offsetTop - textarea.scrollTop;
-    const left = marker.offsetLeft - textarea.scrollLeft;
-    const lh = marker.offsetHeight || 18;
-    mirror.textContent = "";
-    return { top, left, lineHeight: lh };
-  }
-
-  function closePopup() {
-    pop.hidden = true;
-    pop.innerHTML = "";
-    items = [];
-    active = -1;
-  }
-
-  function renderPopup() {
-    if (!items.length) { closePopup(); return; }
-    pop.innerHTML = items
-      .map((it, idx) => `
-        <div class="feel-opt${idx === active ? " active" : ""}" role="option" data-idx="${idx}"
-             aria-selected="${idx === active}">
-          <span class="feel-opt-kind k-${it.kind}">${KIND_LABEL[it.kind] || ""}</span>
-          <span class="feel-opt-label">${escapeHTML(it.label)}</span>
-          <span class="feel-opt-detail">${escapeHTML(it.detail || "")}</span>
-        </div>`)
-      .join("");
-    const r = caretRect();
-    // Keep the popup inside the wrapper horizontally.
-    const maxLeft = Math.max(0, wrap.clientWidth - 220);
-    pop.style.left = Math.min(r.left, maxLeft) + "px";
-    pop.style.top = r.top + r.lineHeight + 2 + "px";
-    pop.hidden = false;
-  }
-
-  function openCompletion(explicit) {
-    const prefix = prefixBefore(textarea.value.slice(0, textarea.selectionStart));
-    if (!explicit && prefix === "") { closePopup(); return; }
-    items = completionsFor(prefix, [...variables]).slice(0, 40);
-    active = items.length ? 0 : -1;
-    renderPopup();
-  }
-
-  function accept(idx) {
-    const it = items[idx];
-    if (!it) return;
-    const caret = textarea.selectionStart;
-    const before = textarea.value.slice(0, caret);
-    const start = replaceStart(before, it.label);
-    let text = it.insert;
-    let caretDelta = text.length; // caret lands after the inserted text by default
-    if (it.kind === "function") {
-      // Insert the call parentheses and drop the caret between them, ready for
-      // arguments. `now()`/`today()` take none, so sit just inside — harmless.
-      text = it.insert + "()";
-      caretDelta = it.insert.length + 1;
-    }
-    textarea.setRangeText(text, start, caret, "end");
-    const pos = start + caretDelta;
-    textarea.setSelectionRange(pos, pos);
-    closePopup();
-    renderHighlight();
-    textarea.focus();
-    // The value changed programmatically; let listeners (and the highlight) know.
-    textarea.dispatchEvent(new Event("input", { bubbles: true }));
-  }
-
-  function moveActive(delta) {
-    if (!items.length) return;
-    active = (active + delta + items.length) % items.length;
-    for (const el of pop.querySelectorAll(".feel-opt")) {
-      const on = Number(el.dataset.idx) === active;
-      el.classList.toggle("active", on);
-      el.setAttribute("aria-selected", on ? "true" : "false");
-      if (on) el.scrollIntoView({ block: "nearest" });
-    }
-  }
-
-  // Auto-close brackets and quotes, and let typing the matching closer skip over
-  // an auto-inserted one — the small conveniences that make a field feel like an
-  // editor. Returns true when it has handled the key.
-  const OPENERS = { "(": ")", "[": "]", "{": "}", '"': '"' };
-  const CLOSERS = new Set([")", "]", "}", '"']);
-  function handleBracket(e) {
-    if (e.ctrlKey || e.metaKey || e.altKey) return false;
-    const { selectionStart: s, selectionEnd: eSel, value } = textarea;
-    // Skip over an auto-inserted closer when the user types it explicitly. This
-    // must come first: a quote is both an opener and a closer, so typing the
-    // closing quote of an auto-closed pair should step over it, not open a new
-    // pair. (Only with an empty selection — a selection means "wrap this".)
-    if (s === eSel && CLOSERS.has(e.key) && value[s] === e.key) {
-      e.preventDefault();
-      textarea.setSelectionRange(s + 1, s + 1);
-      return true;
-    }
-    if (OPENERS[e.key]) {
-      e.preventDefault();
-      const sel = value.slice(s, eSel);
-      textarea.setRangeText(e.key + sel + OPENERS[e.key], s, eSel, "end");
-      const pos = s + 1 + sel.length;
-      textarea.setSelectionRange(sel ? s + 1 : pos, sel ? eSel + 1 : pos);
-      afterEdit();
-      return true;
-    }
-    return false;
-  }
-
-  function afterEdit() {
-    renderHighlight();
-    textarea.dispatchEvent(new Event("input", { bubbles: true }));
-  }
-
-  // ---- live validation ----
-  // opts.validate(expr) -> Promise<{ok, error}> compiles the expression against
-  // the real engine (the server's FEEL compiler), so a syntax/type error shows
-  // in the field as you type instead of only at deploy. Debounced, and guarded
-  // by a sequence number so a slow response can't overwrite a newer edit.
-  const validate = typeof opts.validate === "function" ? opts.validate : null;
-  let statusEl = null;
-  let validateTimer = null;
-  let validateSeq = 0;
-  let destroyed = false;
-  if (validate) {
-    statusEl = document.createElement("div");
-    statusEl.className = "feel-status";
-    statusEl.setAttribute("role", "alert");
-    statusEl.hidden = true;
-    wrap.after(statusEl);
-  }
-  function showValid() {
-    wrap.classList.remove("invalid");
-    if (statusEl) { statusEl.hidden = true; statusEl.textContent = ""; }
-  }
-  function showInvalid(msg) {
-    wrap.classList.add("invalid");
-    if (statusEl) { statusEl.hidden = false; statusEl.textContent = msg; }
-  }
-  async function runValidate() {
-    if (!validate) return;
-    const src = textarea.value;
-    const seq = ++validateSeq;
-    if (src.trim() === "") { showValid(); return; } // empty field = no expression
-    let res;
-    try { res = await validate(src); }
-    catch { return; } // transient/network: don't flag a false error
-    if (destroyed || seq !== validateSeq) return; // superseded by a newer edit
-    if (res && res.ok === false) showInvalid(res.error || "invalid FEEL expression");
-    else showValid();
-  }
-  function scheduleValidate() {
-    if (!validate) return;
-    clearTimeout(validateTimer);
-    validateTimer = setTimeout(runValidate, 400);
-  }
-
-  // ---- builtin signature tooltips ----
-  // Hovering a builtin function name shows its signature and one-line doc. The
-  // highlighted spans sit *behind* the transparent textarea, so a plain :hover
-  // can't reach them; instead we hit-test with elementsFromPoint (which sees
-  // through the top textarea) and read the builtin's canonical name from the
-  // span's data-fn. The builtin spans opt back into hit-testing via
-  // pointer-events:auto (see app.css).
-  const tip = document.createElement("div");
-  tip.className = "feel-tip";
-  tip.hidden = true;
-  wrap.appendChild(tip);
-  let tipFn = null;
-  let hoverRaf = 0;
-
-  function hideTip() { tip.hidden = true; tipFn = null; }
-
-  function updateTip(x, y) {
-    const span = document.elementsFromPoint(x, y)
-      .find((el) => el.dataset && el.dataset.fn && el.classList.contains("tok-builtin"));
-    const b = span ? BUILTIN_BY_NAME.get(span.dataset.fn) : null;
-    if (!b) { hideTip(); return; }
-    if (span.dataset.fn !== tipFn) {
-      tip.innerHTML = `<div class="feel-tip-sig">${escapeHTML(b.sig)}</div><div class="feel-tip-doc">${escapeHTML(b.doc)}</div>`;
-      tipFn = span.dataset.fn;
-    }
-    const r = span.getBoundingClientRect();
-    const wr = wrap.getBoundingClientRect();
-    const maxLeft = Math.max(0, wrap.clientWidth - 244);
-    tip.style.left = Math.min(Math.max(0, r.left - wr.left), maxLeft) + "px";
-    tip.style.top = (r.bottom - wr.top + 4) + "px";
-    tip.hidden = false;
-  }
-
-  const onHover = (e) => {
-    if (hoverRaf) return; // coalesce mousemove bursts to one hit-test per frame
-    const x = e.clientX, y = e.clientY;
-    hoverRaf = requestAnimationFrame(() => { hoverRaf = 0; updateTip(x, y); });
-  };
-
-  // ---- event wiring ----
-  const onInput = () => { renderHighlight(); openCompletion(false); scheduleValidate(); hideTip(); };
-  const onScroll = () => { pre.scrollTop = textarea.scrollTop; pre.scrollLeft = textarea.scrollLeft; };
-  const onBlur = () => { setTimeout(closePopup, 120); }; // allow click-to-accept
-
-  function onKeydown(e) {
-    if (!pop.hidden) {
-      if (e.key === "ArrowDown") { e.preventDefault(); moveActive(1); return; }
-      if (e.key === "ArrowUp") { e.preventDefault(); moveActive(-1); return; }
-      if (e.key === "Enter" || e.key === "Tab") {
-        if (active >= 0) { e.preventDefault(); accept(active); return; }
-      }
-      if (e.key === "Escape") { e.preventDefault(); closePopup(); return; }
-    }
-    // Ctrl/Cmd-Space explicitly requests completion (even with no prefix).
-    if ((e.ctrlKey || e.metaKey) && e.key === " ") { e.preventDefault(); openCompletion(true); return; }
-    if (handleBracket(e)) return;
-  }
-
-  // Clicking a completion accepts it. mousedown (not click) so it fires before
-  // the textarea's blur closes the popup.
-  pop.addEventListener("mousedown", (e) => {
-    const opt = e.target.closest(".feel-opt");
-    if (opt) { e.preventDefault(); accept(Number(opt.dataset.idx)); }
+  return attachCodeEditor(textarea, {
+    lang: feel,
+    variables: opts.variables,
+    validate: opts.validate,
+    wrap: true,
+    gutter: false,
   });
-
-  textarea.addEventListener("input", onInput);
-  textarea.addEventListener("scroll", onScroll);
-  textarea.addEventListener("keydown", onKeydown);
-  textarea.addEventListener("blur", onBlur);
-  textarea.addEventListener("mousemove", onHover);
-  textarea.addEventListener("mouseleave", hideTip);
-
-  renderHighlight();
-  runValidate(); // flag a pre-existing invalid expression immediately
-
-  return {
-    destroy() {
-      destroyed = true;
-      clearTimeout(validateTimer);
-      if (hoverRaf) cancelAnimationFrame(hoverRaf);
-      textarea.removeEventListener("input", onInput);
-      textarea.removeEventListener("scroll", onScroll);
-      textarea.removeEventListener("keydown", onKeydown);
-      textarea.removeEventListener("blur", onBlur);
-      textarea.removeEventListener("mousemove", onHover);
-      textarea.removeEventListener("mouseleave", hideTip);
-      textarea.classList.remove("feel-input");
-      delete textarea.dataset.feelOn;
-      if (statusEl) statusEl.remove();
-      wrap.parentNode.insertBefore(textarea, wrap);
-      wrap.remove();
-    },
-    setVariables(list) {
-      variables = new Set(list || []);
-      renderHighlight();
-    },
-  };
 }

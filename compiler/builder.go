@@ -125,6 +125,8 @@ type Builder struct {
 	dataObjects       []CompiledDataObject
 	dataOutAssocs     []pendingDataOut // data-output associations, grouped by node in Build
 	dataInAssocs      []pendingDataIn  // data-input associations, grouped by node in Build
+	ioInputs          []pendingIO      // zeebe:ioMapping inputs, grouped by node in Build
+	ioOutputs         []pendingIO      // zeebe:ioMapping outputs, grouped by node in Build
 	elementIds        []int32          // interned source BPMN id per node, -1 if unset
 	startFormId       int32            // interned start-form id (ADR-0028), -1 if the process has none
 
@@ -337,32 +339,73 @@ func (b *Builder) AddClioWriteTask(connector, subject, eventType string, retries
 		Subject:   b.intern(subject),
 		EventType: b.intern(eventType),
 		Method:    -1, // not a REST task
-		Url:       -1,
 		ResultVar: -1,
+		Url:       RestExpr{}, // REST-only fields stay empty for a clio task
+		Auth:      -1,
 		Retries:   retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }
 
+// RestAuth is a REST connector task's authentication config. Type is "", "basic",
+// "bearer", or "apiKey". Username (basic) and ApiKeyName (the apiKey header name)
+// are model data. SecretRef names a server-side secret (ADR-0041) — the basic
+// password, bearer token, or api-key value — resolved at runtime; the secret value
+// itself is never authored in the model or stored here.
+type RestAuth struct {
+	Type       string `json:"type,omitempty"`
+	Username   string `json:"username,omitempty"`
+	ApiKeyName string `json:"apiKeyName,omitempty"`
+	SecretRef  string `json:"secretRef,omitempty"`
+}
+
+// RestConfig is the deploy-time configuration of an HTTP-REST connector task
+// (ADR-0067). Method and ResultVar are interned; Url, Headers, and Query carry
+// literal-or-FEEL values (the parser compiles the FEEL ones); Auth references a
+// server-side secret.
+type RestConfig struct {
+	Method    string
+	Url       RestExpr
+	ResultVar string
+	Headers   []RestKV
+	Query     []RestKV
+	Auth      RestAuth
+	Retries   int32
+}
+
 // AddRestConnectorTask adds an HTTP-REST connector task and returns its element
 // id. Like a service task it creates a job on activation and waits; the job
 // carries the reserved RestJobType so the in-process REST worker picks it up,
-// calls the model-authored url with the given method, writes the JSON response
-// into resultVar (empty = discard the response), and completes the job
-// (ADR-0067). method is stored as given (the parser uppercases and validates it).
-func (b *Builder) AddRestConnectorTask(method, url, resultVar string, retries int32) int32 {
+// evaluates any FEEL url/header/query values over the instance's variables, calls
+// the endpoint with the given method, writes the JSON response into ResultVar
+// (empty = discard the response), and completes the job (ADR-0067). Method is
+// stored as given (the parser uppercases and validates it).
+func (b *Builder) AddRestConnectorTask(cfg RestConfig) int32 {
 	detail := int32(len(b.connectorTasks))
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
 		JobType:   b.intern(RestJobType),
 		Connector: -1, // REST carries its endpoint in the model, not a registry name
 		Subject:   -1, // not a clio task
 		EventType: -1,
-		Method:    b.intern(method),
-		Url:       b.intern(url),
-		ResultVar: b.intern(resultVar),
-		Retries:   retries,
+		Method:    b.intern(cfg.Method),
+		ResultVar: b.intern(cfg.ResultVar),
+		Url:       cfg.Url,
+		Headers:   cfg.Headers,
+		Query:     cfg.Query,
+		Auth:      b.internAuth(cfg.Auth),
+		Retries:   cfg.Retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
+}
+
+// internAuth interns a REST auth config as a canonical JSON object, returning -1
+// when there is no authentication (empty type).
+func (b *Builder) internAuth(a RestAuth) int32 {
+	if a.Type == "" {
+		return -1
+	}
+	raw, _ := json.Marshal(a) // a fixed struct of strings always marshals
+	return b.intern(string(raw))
 }
 
 // AddUserTask adds a user task that parks a token and creates a job for a human
@@ -483,6 +526,39 @@ func (b *Builder) AddDataOutputAssociation(node int32, dataObject string, value 
 			TargetState: b.intern(targetState),
 			TargetPath:  b.intern(targetPath),
 		},
+	})
+}
+
+// pendingIO pairs a zeebe:ioMapping entry (input or output) with the activity node
+// it belongs to, until Build groups the two directions into their shared per-node
+// arrays.
+type pendingIO struct {
+	node    int32
+	mapping IOMapping
+}
+
+// AddInputMapping attaches a zeebe:ioMapping input to activity node: when the
+// activity activates, the engine evaluates source (a FEEL expression over the scope
+// chain from the activity's flow scope) and writes the result into the activity-local
+// variable named target, which the activity then sees (ADR-0068). Build groups a
+// node's input mappings into a shared array. The parser owns validation; the builder
+// only interns the target, mirroring the data-association adds.
+func (b *Builder) AddInputMapping(node int32, target string, source *expr.Compiled) {
+	b.ioInputs = append(b.ioInputs, pendingIO{
+		node:    node,
+		mapping: IOMapping{Target: b.intern(target), Source: source},
+	})
+}
+
+// AddOutputMapping attaches a zeebe:ioMapping output to activity node: when the
+// activity completes, the engine evaluates source (a FEEL expression over the
+// activity-local scope) and promotes the result into the parent (flow) scope under
+// the variable named target (ADR-0068). Build groups a node's output mappings into a
+// shared array.
+func (b *Builder) AddOutputMapping(node int32, target string, source *expr.Compiled) {
+	b.ioOutputs = append(b.ioOutputs, pendingIO{
+		node:    node,
+		mapping: IOMapping{Target: b.intern(target), Source: source},
 	})
 }
 
@@ -653,6 +729,32 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		n.DataInCount = int32(len(dataIn)) - n.DataInStart
 	}
 
+	// Group zeebe:ioMapping input and output mappings by their activity node into
+	// two shared arrays, mirroring the data-association grouping, so evaluating an
+	// activity's mappings is an allocation-free slice at runtime (ADR-0068).
+	var ioIn []IOMapping
+	for i := range b.nodes {
+		n := &b.nodes[i]
+		n.IOInStart = int32(len(ioIn))
+		for _, p := range b.ioInputs {
+			if p.node == n.ElementId {
+				ioIn = append(ioIn, p.mapping)
+			}
+		}
+		n.IOInCount = int32(len(ioIn)) - n.IOInStart
+	}
+	var ioOut []IOMapping
+	for i := range b.nodes {
+		n := &b.nodes[i]
+		n.IOOutStart = int32(len(ioOut))
+		for _, p := range b.ioOutputs {
+			if p.node == n.ElementId {
+				ioOut = append(ioOut, p.mapping)
+			}
+		}
+		n.IOOutCount = int32(len(ioOut)) - n.IOOutStart
+	}
+
 	// Count incoming flows per node, so a parallel join knows how many tokens to
 	// wait for.
 	for _, f := range b.flows {
@@ -689,6 +791,8 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		dataObjects:       b.dataObjects,
 		dataOutAssocs:     dataOut,
 		dataInAssocs:      dataIn,
+		ioInputs:          ioIn,
+		ioOutputs:         ioOut,
 		startEvents:       startEvents,
 		elementIds:        b.elementIds,
 		startFormId:       b.startFormId,

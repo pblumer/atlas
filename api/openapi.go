@@ -87,6 +87,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Instance counts", schemaObj(map[string]any{
 				"activeProcessInstances": tInteger(), "activeElementInstances": tInteger(),
 			}))}},
+		{"GET", "/api/v1/logs", s.handleLogs, apiOp{
+			summary: "Recent server log lines (admin-only when auth is on)", tag: "System",
+			resp: jsonBody("Recent log lines, oldest first", schemaObj(map[string]any{
+				"lines": tArray(),
+			}))}},
 
 		{"POST", "/api/v1/feel/validate", s.handleValidateFeel, apiOp{
 			summary: "Validate a FEEL expression compiles", tag: "FEEL",
@@ -101,6 +106,14 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "expression")),
 			resp: jsonBody("Evaluation result", schemaObj(map[string]any{
 				"ok": tBool(), "result": tObject(), "kind": tString(), "error": tString(),
+			}))}},
+		{"POST", "/api/v1/scripts/run", s.handleRunScript, apiOp{
+			summary: "Run a script task against sample variables (admin-only when auth is on)", tag: "Scripts",
+			req: jsonBody("Language, source, and sample variables", schemaObj(map[string]any{
+				"language": tString(), "source": tString(), "variables": tObject(),
+			}, "language", "source")),
+			resp: jsonBody("Run result", schemaObj(map[string]any{
+				"ok": tBool(), "result": tObject(), "error": tString(),
 			}))}},
 
 		{"POST", "/api/v1/deployments", s.handleDeploy, apiOp{
@@ -245,6 +258,13 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Update a managed connector instance", tag: "Connectors", req: jsonBody("Connector update", tObject()), resp: jsonBody("Updated connector", tObject())}},
 		{"DELETE", "/api/v1/connectors/{id}", s.handleDeleteConnector, apiOp{
 			summary: "Delete a managed connector instance", tag: "Connectors", status: http.StatusNoContent}},
+
+		{"GET", "/api/v1/secrets", s.handleListSecrets, apiOp{
+			summary: "List secret names and metadata in the encrypted vault (never values)", tag: "Secrets", resp: jsonBody("Secrets", tArray())}},
+		{"PUT", "/api/v1/secrets/{name}", s.handleSetSecret, apiOp{
+			summary: "Store or overwrite a secret value in the encrypted vault", tag: "Secrets", req: jsonBody("Secret value", schemaObj(map[string]any{"value": tString()}, "value")), resp: jsonBody("Secret metadata", tObject())}},
+		{"DELETE", "/api/v1/secrets/{name}", s.handleDeleteSecret, apiOp{
+			summary: "Delete a secret from the encrypted vault", tag: "Secrets", status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/auth/login", s.handleLogin, apiOp{
 			summary: "Log in with a username and password", tag: "Auth",

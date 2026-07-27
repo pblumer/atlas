@@ -138,6 +138,7 @@ type Server struct {
 	projects    *projectStore    // durable sidecar for projects grouping artifacts (ADR-0034)
 	dmnrefs     *dmnRefStore     // durable sidecar for DMN reference artifacts (ADR-0034)
 	connectors  *connectorStore  // durable sidecar for managed connector instances (ADR-0041)
+	vault       *secretVault     // engine-internal encrypted secret store, nil when unconfigured (ADR-0069)
 	users       *userStore       // durable sidecar for user accounts (ADR-0044)
 
 	// sessions holds live login sessions in memory. Unlike the sidecar stores it
@@ -185,11 +186,22 @@ type Server struct {
 	// it with --docs=false / WithoutDocs (ADR-0043). Set once before Handler is
 	// mounted; read-only thereafter.
 	docsEnabled bool
+
+	// logs is the recent-process-log tail exposed at GET /api/v1/logs, so an
+	// operator can read server logs from the web UI without shell access. Nil when
+	// the command did not wire a buffer (WithLogBuffer), in which case the endpoint
+	// reports no lines. Set once at construction; read-only thereafter.
+	logs *LogBuffer
 }
 
 // Option configures a Server at construction. Options are applied in New before
 // the run loop starts, so they set fields that are read-only afterwards.
 type Option func(*Server)
+
+// WithLogBuffer wires the server's recent-log tail, exposed at GET /api/v1/logs,
+// so an operator can read server logs from the web UI. The command builds the
+// buffer, tees the standard logger into it, and passes it here.
+func WithLogBuffer(b *LogBuffer) Option { return func(s *Server) { s.logs = b } }
 
 // WithoutDocs disables the OpenAPI document at /api/v1/openapi.json and the
 // Scalar API explorer at /api/docs, which are otherwise served by default. Pass
@@ -253,6 +265,19 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	// The encrypted secret vault (ADR-0069) is opt-in: it exists only when a master
+	// key is provisioned in the environment. With no key it stays nil, and secret
+	// resolution falls back to the environment references (ADR-0041 A2), the default.
+	vaultKey, vaultOn, err := vaultKeyFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	var vault *secretVault
+	if vaultOn {
+		if vault, err = newSecretVault(filepath.Join(dataDir, "vault"), vaultKey); err != nil {
+			return nil, err
+		}
+	}
 	// DMN reference models are resolved either from a temis model service (when
 	// configured) or the zero-config <data-dir>/dmn-models folder. Both satisfy the
 	// Resolver interface, so the rest of the server is unaffected (ADR-0034/0014).
@@ -275,6 +300,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		projects:     projects,
 		dmnrefs:      dmnrefs,
 		connectors:   connectors,
+		vault:        vault,
 		users:        users,
 		sessions:     newSessionStore(defaultSessionTTL),
 		dmnResolver:  resolver,
@@ -335,12 +361,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.jobRunner.HandleCompleting(compiler.TemisDecisionJobTypeIndex, temis.Handler(store, s.processLookup, s.temisRegistry, nil))
 	// An HTTP-REST connector task calls a model-authored endpoint (ADR-0067). One
 	// worker serves every process under the reserved REST job type; it resolves each
-	// job's method/url/result-variable from the compiled process, calls the API off
-	// the run loop and after fsync, and writes the JSON response into the task's
-	// result variable. The endpoint lives in the model, so nothing needs configuring
-	// here; authentication (a type plus a server-registered credential reference) is
-	// a follow-up.
-	s.jobRunner.HandleWithOutput(compiler.RestJobTypeIndex, rest.Handler(store, s.processLookup, rest.NewHTTPClient()))
+	// job's method/url/headers/query/result-variable from the compiled process, calls
+	// the API off the run loop and after fsync, and writes the JSON response into the
+	// task's result variable. The endpoint and headers live in the model; a request's
+	// authentication secret is a *reference* the worker resolves at call time from the
+	// environment (resolveConnectorSecret, ADR-0041), so a token never lives in a model.
+	s.jobRunner.HandleWithOutput(compiler.RestJobTypeIndex, rest.Handler(store, s.processLookup, rest.NewHTTPClient(), resolveConnectorSecret))
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
 	}

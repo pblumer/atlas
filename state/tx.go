@@ -319,6 +319,13 @@ func (t *Tx) PutVariable(v *model.VariableValue) error {
 	return t.b.Set(keyVariable(v.ScopeKey, v.Name), t.encodeValue(v), nil)
 }
 
+// DeleteVariable removes a variable from its scope by name. It is idempotent —
+// deleting an absent variable is a no-op — and is used to drop an activity-local
+// variable scope when the activity completes (ADR-0068).
+func (t *Tx) DeleteVariable(scope uint64, name string) error {
+	return t.b.Delete(keyVariable(scope, name), nil)
+}
+
 // GetVariable returns a scope's variable by name, or nil if absent.
 func (t *Tx) GetVariable(scope uint64, name string) (*model.VariableValue, error) {
 	var v model.VariableValue

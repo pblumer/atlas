@@ -48,6 +48,83 @@ func normalizeHTTPMethod(m string) (string, error) {
 	return up, nil
 }
 
+// httpKVMap turns a REST connector's header or query-parameter child elements into
+// a {name:value} map, trimming names and skipping rows with an empty name (an
+// incomplete row the author hasn't filled in). A duplicated name is an error, so a
+// silent last-wins collision can't hide a modeling mistake. kind names the field
+// for the error message ("header" / "query parameter").
+func httpKVList(taskID, kind string, kvs []xmlHTTPKV) ([]RestKV, error) {
+	if len(kvs) == 0 {
+		return nil, nil
+	}
+	out := make([]RestKV, 0, len(kvs))
+	seen := make(map[string]bool, len(kvs))
+	for _, kv := range kvs {
+		name := strings.TrimSpace(kv.Name)
+		if name == "" {
+			continue
+		}
+		if seen[name] {
+			return nil, fmt.Errorf("compiler: rest connector task %q has a duplicate %s %q", taskID, kind, name)
+		}
+		seen[name] = true
+		val, err := restValue(taskID, kind+" "+name, kv.Value)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, RestKV{Name: name, Val: val})
+	}
+	return out, nil
+}
+
+// restValue turns a model field value into a literal or a compiled FEEL expression
+// (the Camunda-style fx toggle, ADR-0067): a value with a leading '=' is a FEEL
+// expression compiled once at deploy time (invariant I5) and evaluated over the
+// instance's variables at call time; otherwise it is a literal used verbatim. what
+// names the field for error messages.
+func restValue(taskID, what, raw string) (RestExpr, error) {
+	trimmed := strings.TrimSpace(raw)
+	if !strings.HasPrefix(trimmed, "=") {
+		return RestExpr{Literal: raw}, nil
+	}
+	text := strings.TrimSpace(trimmed[1:])
+	if text == "" {
+		return RestExpr{}, fmt.Errorf("compiler: rest connector task %q has an empty FEEL expression for %s", taskID, what)
+	}
+	e, err := expr.CompileAuto(text)
+	if err != nil {
+		return RestExpr{}, fmt.Errorf("compiler: rest connector task %q: %s: %w", taskID, what, err)
+	}
+	return RestExpr{Expr: e}, nil
+}
+
+// restAuth reads a REST connector's authentication config from its extension.
+// authType selects the scheme; an unknown scheme is rejected, and a scheme that
+// needs a secret reference must name one (secrets live server-side, ADR-0041, so
+// the model always references rather than carries them).
+func restAuth(taskID string, c *xmlRestConnector) (RestAuth, error) {
+	t := strings.ToLower(strings.TrimSpace(c.AuthType))
+	switch t {
+	case "", "none":
+		return RestAuth{}, nil
+	case "basic", "bearer", "apikey":
+		if strings.TrimSpace(c.AuthSecret) == "" {
+			return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses %s auth but names no secret reference", taskID, t)
+		}
+		if t == "apikey" && strings.TrimSpace(c.AuthApiKeyName) == "" {
+			return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses apiKey auth but names no header", taskID)
+		}
+		return RestAuth{
+			Type:       t,
+			Username:   strings.TrimSpace(c.AuthUsername),
+			ApiKeyName: strings.TrimSpace(c.AuthApiKeyName),
+			SecretRef:  strings.TrimSpace(c.AuthSecret),
+		}, nil
+	default:
+		return RestAuth{}, fmt.Errorf("compiler: rest connector task %q has an unsupported auth type %q", taskID, c.AuthType)
+	}
+}
+
 // Parse reads a BPMN 2.0 XML model and compiles the first <process> into an
 // immutable CompiledProcess keyed by key at the given version. It is the front
 // end to the linearizer (compiler.md stages 1–2 and 6): it parses the XML,
@@ -266,7 +343,32 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			if err != nil {
 				return nil, fmt.Errorf("compiler: rest connector task %q: %w", st.Id, err)
 			}
-			if err := register(st.Id, b.AddRestConnectorTask(method, strings.TrimSpace(c.Url), strings.TrimSpace(c.ResultVariable), retries)); err != nil {
+			url, err := restValue(st.Id, "url", c.Url)
+			if err != nil {
+				return nil, err
+			}
+			headers, err := httpKVList(st.Id, "header", c.Headers)
+			if err != nil {
+				return nil, err
+			}
+			query, err := httpKVList(st.Id, "query parameter", c.QueryParams)
+			if err != nil {
+				return nil, err
+			}
+			auth, err := restAuth(st.Id, c)
+			if err != nil {
+				return nil, err
+			}
+			id := b.AddRestConnectorTask(RestConfig{
+				Method:    method,
+				Url:       url,
+				ResultVar: strings.TrimSpace(c.ResultVariable),
+				Headers:   headers,
+				Query:     query,
+				Auth:      auth,
+				Retries:   retries,
+			})
+			if err := register(st.Id, id); err != nil {
 				return nil, err
 			}
 			continue
@@ -727,6 +829,62 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 	}
 
+	// Wire generic zeebe:ioMapping input/output mappings (ADR-0068). Each source is a
+	// FEEL expression compiled once at deploy time (invariant I5); an empty target or
+	// an uncompilable source fails the deploy, exactly like a bad script-task
+	// expression. The compiler only records them here; the engine applies them.
+	compileSource := func(ownerId, dir, target, source string) (*expr.Compiled, error) {
+		text := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(source), "="))
+		if text == "" {
+			return nil, fmt.Errorf("compiler: task %q ioMapping %s for %q has no source expression", ownerId, dir, target)
+		}
+		e, err := expr.CompileAuto(text)
+		if err != nil {
+			return nil, fmt.Errorf("compiler: task %q ioMapping %s for %q: %w", ownerId, dir, target, err)
+		}
+		return e, nil
+	}
+	wireIO := func(ownerId string, iom xmlZeebeIOMapping) error {
+		for _, in := range iom.Inputs {
+			target := strings.TrimSpace(in.Target)
+			if target == "" {
+				return fmt.Errorf("compiler: task %q has an ioMapping input with no target", ownerId)
+			}
+			e, err := compileSource(ownerId, "input", target, in.Source)
+			if err != nil {
+				return err
+			}
+			b.AddInputMapping(ids[ownerId], target, e)
+		}
+		for _, out := range iom.Outputs {
+			target := strings.TrimSpace(out.Target)
+			if target == "" {
+				return fmt.Errorf("compiler: task %q has an ioMapping output with no target", ownerId)
+			}
+			e, err := compileSource(ownerId, "output", target, out.Source)
+			if err != nil {
+				return err
+			}
+			b.AddOutputMapping(ids[ownerId], target, e)
+		}
+		return nil
+	}
+	for _, st := range proc.ServiceTasks {
+		if err := wireIO(st.Id, st.IOMapping); err != nil {
+			return nil, err
+		}
+	}
+	for _, st := range proc.ScriptTasks {
+		if err := wireIO(st.Id, st.IOMapping); err != nil {
+			return nil, err
+		}
+	}
+	for _, ut := range proc.UserTasks {
+		if err := wireIO(ut.Id, ut.IOMapping); err != nil {
+			return nil, err
+		}
+	}
+
 	return b.Build()
 }
 
@@ -947,6 +1105,7 @@ type xmlUserTask struct {
 	Form       xmlFormDefinition          `xml:"extensionElements>formDefinition"`
 	Priority   xmlPriorityDefinition      `xml:"extensionElements>priorityDefinition"`
 	Schedule   xmlTaskSchedule            `xml:"extensionElements>taskSchedule"`
+	IOMapping  xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
 	DataOut    []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
 	DataIn     []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
@@ -986,9 +1145,10 @@ type xmlServiceTask struct {
 	// Rest, when present, marks this service task an HTTP-REST connector task
 	// (ADR-0067). The pointer is nil when the <atlas:restConnector> extension is
 	// absent.
-	Rest    *xmlRestConnector          `xml:"extensionElements>restConnector"`
-	DataOut []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
-	DataIn  []xmlDataInputAssociation  `xml:"dataInputAssociation"`
+	Rest      *xmlRestConnector          `xml:"extensionElements>restConnector"`
+	IOMapping xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
+	DataOut   []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
+	DataIn    []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
 
 // A clio connector task's parameters, carried on a service task as an
@@ -1003,14 +1163,30 @@ type xmlClioConnector struct {
 }
 
 // An HTTP-REST connector task's parameters, carried on a service task as an
-// <atlas:restConnector method="..." url="..." resultVariable="..."/> extension
-// element (ADR-0067). method is the HTTP method; url is the full request URL,
-// authored in the model (credentials are never authored here); resultVariable, if
-// set, is the process variable the JSON response is written back into.
+// <atlas:restConnector> extension element (ADR-0067). method is the HTTP method;
+// url is the full request URL, authored in the model; resultVariable, if set, is
+// the process variable the JSON response is written back into. Header and
+// QueryParam child elements add request headers and query parameters. The auth*
+// attributes describe authentication: authType is "basic"/"bearer"/"apiKey";
+// authUsername (basic) and authApiKeyName (the apiKey header name) are model data;
+// authSecret names a server-side secret (ADR-0041) — never the secret value.
 type xmlRestConnector struct {
-	Method         string `xml:"method,attr"`
-	Url            string `xml:"url,attr"`
-	ResultVariable string `xml:"resultVariable,attr"`
+	Method         string      `xml:"method,attr"`
+	Url            string      `xml:"url,attr"`
+	ResultVariable string      `xml:"resultVariable,attr"`
+	AuthType       string      `xml:"authType,attr"`
+	AuthUsername   string      `xml:"authUsername,attr"`
+	AuthApiKeyName string      `xml:"authApiKeyName,attr"`
+	AuthSecret     string      `xml:"authSecret,attr"`
+	Headers        []xmlHTTPKV `xml:"httpHeader"`
+	QueryParams    []xmlHTTPKV `xml:"queryParam"`
+}
+
+// xmlHTTPKV is one name/value pair in a REST connector's headers or query
+// parameters (an <atlas:httpHeader> or <atlas:queryParam> child element).
+type xmlHTTPKV struct {
+	Name  string `xml:"name,attr"`
+	Value string `xml:"value,attr"`
 }
 
 type xmlTaskDefinition struct {
@@ -1030,6 +1206,7 @@ type xmlScriptTask struct {
 	// run via the job path rather than inline as FEEL. The pointer is nil when the
 	// <atlas:jobScript> extension is absent.
 	JobScript *xmlAtlasScript            `xml:"extensionElements>jobScript"`
+	IOMapping xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
 	DataOut   []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
 	DataIn    []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
@@ -1111,10 +1288,29 @@ type xmlDecisionInput struct {
 
 // xmlZeebeIOMapInput is a Zeebe io-mapping input: a FEEL source expression bound
 // to a target name. For a business rule task the target is the DMN decision input
-// name the source's value feeds.
+// name the source's value feeds; for the generic activity ioMapping (ADR-0068) it
+// is the activity-local variable the source's value is written to.
 type xmlZeebeIOMapInput struct {
 	Source string `xml:"source,attr"`
 	Target string `xml:"target,attr"`
+}
+
+// xmlZeebeIOMapOutput is a Zeebe io-mapping output: a FEEL source expression
+// (evaluated over the activity-local scope) promoted into the parent scope under
+// target (ADR-0068). It has the same shape as an input; the two are kept distinct
+// so the direction reads clearly in the task structs and helpers.
+type xmlZeebeIOMapOutput struct {
+	Source string `xml:"source,attr"`
+	Target string `xml:"target,attr"`
+}
+
+// xmlZeebeIOMapping is a generic <zeebe:ioMapping> on an activity: input mappings
+// applied on activation and output mappings applied on completion (ADR-0068). It is
+// distinct from a business rule task's ioMapping inputs, which have decision-input
+// semantics; here both directions are plain variable mappings.
+type xmlZeebeIOMapping struct {
+	Inputs  []xmlZeebeIOMapInput  `xml:"input"`
+	Outputs []xmlZeebeIOMapOutput `xml:"output"`
 }
 
 // decisionInputs turns parsed <decisionInput> elements into a name→value map,

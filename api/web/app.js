@@ -204,6 +204,7 @@ const TOPNAV = {
   console: [
     { name: "Dashboard", route: "#/console" },
     { name: "Engine", route: "#/console/engine" },
+    { name: "Logs", route: "#/console/logs" },
     { name: "Organization", route: "#/console/org" },
   ],
   modeler: [{ name: "Home", route: "#/modeler" }],
@@ -229,8 +230,8 @@ const CONNECTORS = [
   },
   {
     id: "http-rest", name: "HTTP REST", kind: "REST API",
-    desc: "Calls a model-authored REST endpoint from a service task off the processor loop, writing the JSON response into a result variable. Authored via the REST Outbound Connector service-task type.",
-    refs: "ADR-0036 · ADR-0067", status: "active", statusLabel: "embedded",
+    desc: "Calls a model-authored REST endpoint from a service task off the processor loop — method, URL, headers, query parameters, and basic/bearer/apiKey auth (secrets resolved server-side) — writing the JSON response into a result variable. Authored via the REST Outbound Connector service-task type.",
+    refs: "ADR-0036 · ADR-0041 · ADR-0067", status: "active", statusLabel: "embedded",
   },
 ];
 
@@ -363,15 +364,77 @@ async function viewConsoleEngine() {
         <div class="stat"><b>1</b><span>partition</span></div>
       </div>
     </div>`;
+  view.innerHTML += `
+    <div class="card" id="build-card" style="margin-top:14px">
+      <h2>Build</h2>
+      <p class="muted">Which commit this running server was built from — check it against the merged code to confirm the deployed binary is up to date.</p>
+      <div id="build-info" class="muted">loading…</div>
+    </div>`;
   try {
-    const [procs, stats] = await Promise.all([
+    const [procs, stats, info] = await Promise.all([
       api("GET", "/api/v1/processes"),
       api("GET", "/api/v1/stats"),
+      api("GET", "/api/v1/info"),
     ]);
     document.getElementById("e-pi").textContent = stats.activeProcessInstances;
     document.getElementById("e-ei").textContent = stats.activeElementInstances;
     document.getElementById("e-dep").textContent = procs.length;
+    document.getElementById("build-info").innerHTML = buildInfoHTML(info);
   } catch (e) { toast(e.message, "err"); }
+}
+
+// buildInfoHTML renders the version/VCS metadata from GET /api/v1/info: the version
+// string, the git commit (short) with a dirty marker, the build time, and the Go
+// toolchain. A missing revision means the binary was built outside a git checkout.
+function buildInfoHTML(i) {
+  i = i || {};
+  const rev = i.revision ? i.revision.slice(0, 12) + (i.modified ? " (modified)" : "") : "unknown (built outside a git checkout)";
+  const rows = [
+    ["Version", esc(i.version || "—")],
+    ["Commit", esc(rev)],
+    ["Built", esc(i.buildTime || "—")],
+    ["Go", esc(i.go || "—")],
+  ];
+  return `<table class="kv-table">${rows.map(([k, v]) =>
+    `<tr><td style="padding:2px 16px 2px 0; color:var(--muted)">${k}</td><td style="font-family:ui-monospace,monospace">${v}</td></tr>`).join("")}</table>`;
+}
+
+// viewConsoleLogs shows the recent server-log tail (GET /api/v1/logs) so an
+// operator can diagnose from the browser without shell access — e.g. to read the
+// script-worker startup lines. It auto-refreshes; the interval is cleared on route
+// change via __atlasCleanup.
+async function viewConsoleLogs() {
+  view.innerHTML = `
+    <div class="card">
+      <div class="between">
+        <h1>Server logs</h1>
+        <div class="row" style="gap:12px; align-items:center">
+          <label class="field inline" style="margin:0"><input type="checkbox" id="log-follow" checked> Auto-refresh</label>
+          <button class="btn neutral" id="log-refresh">Refresh</button>
+        </div>
+      </div>
+      <p class="muted">The most recent server log lines (an in-memory tail). Look here for the
+      script-worker startup lines, e.g. <code>powershell script worker enabled (pwsh found on PATH)</code>
+      or a <code>WARNING: … not found on PATH</code>. With authentication enabled this is admin-only.</p>
+      <pre id="log-out" style="max-height:62vh; overflow:auto; background:var(--bg); padding:12px; border-radius:8px; font-size:12px; line-height:1.5; white-space:pre-wrap; margin:0">loading…</pre>
+    </div>`;
+  const out = document.getElementById("log-out");
+  const follow = document.getElementById("log-follow");
+  const load = async () => {
+    try {
+      const r = await api("GET", "/api/v1/logs");
+      const lines = (r && r.lines) || [];
+      const atBottom = out.scrollHeight - out.scrollTop - out.clientHeight < 40;
+      out.textContent = lines.length ? lines.join("\n") : "(no log lines captured yet)";
+      if (atBottom) out.scrollTop = out.scrollHeight;
+    } catch (e) {
+      out.textContent = "Failed to load logs: " + (e && e.message || e);
+    }
+  };
+  await load();
+  document.getElementById("log-refresh").addEventListener("click", load);
+  const timer = setInterval(() => { if (follow.checked) load(); }, 2000);
+  window.__atlasCleanup = () => clearInterval(timer);
 }
 
 // userForm renders the create or edit form for a user. In edit mode the username
@@ -510,6 +573,46 @@ async function viewConsoleOrg() {
       </table>
     </div>`;
 
+  // Encrypted secret vault (ADR-0069): credentials a connector's token reference
+  // resolves to, sealed at rest. Every op is admin-gated and the vault may be
+  // unconfigured (no master key), so distinguish those states from a populated list.
+  let secrets = [];
+  let secretsState = "ok"; // "ok" | "denied" | "unconfigured"
+  try {
+    secrets = (await api("GET", "/api/v1/secrets")) || [];
+  } catch (e) {
+    secretsState = /admin/i.test(e.message) ? "denied" : "unconfigured";
+  }
+  const secretRow = (c) => `<tr data-name="${esc(c.name)}">
+      <td><span class="chip">${esc(c.name)}</span>
+        <div class="muted" style="font-size:12px; margin-top:3px">key <code>${esc(c.keyId)}</code> · updated ${esc(fmtTime(c.updatedAt))}</div></td>
+      <td style="text-align:right; white-space:nowrap">
+        <button class="btn ghost" data-sact="set">Set value</button>
+        <button class="btn ghost danger" data-sact="delete">Delete</button>
+      </td></tr>`;
+  const secretsCard = secretsState === "denied"
+    ? `<div class="card" style="margin-top:18px"><h2>Secrets</h2><p class="muted">Managing secrets requires the admin role.</p></div>`
+    : secretsState === "unconfigured"
+    ? `<div class="card" style="margin-top:18px"><h2>Secrets</h2><p class="muted">The encrypted
+        secret vault is not configured. Start the server with <code>ATLAS_VAULT_KEY</code> (a
+        32-byte key, base64 or hex) or <code>ATLAS_VAULT_KEY_FILE</code> to store connector
+        credentials here, encrypted at rest (ADR-0069).</p></div>`
+    : `<div class="card" style="padding:0; margin-top:18px">
+        <div class="between" style="padding:16px 18px 0">
+          <h2>Secrets</h2><button class="btn" id="new-secret">New secret</button>
+        </div>
+        <p class="muted" style="padding:0 18px; margin:6px 0 12px">Credentials a connector's
+        <b>token reference</b> resolves to, sealed at rest with AES-256-GCM (ADR-0069). The value
+        is <b>never</b> shown after it is set — only its name and metadata. A reference resolves
+        from the vault first, then <code>ATLAS_CONNECTOR_&lt;REF&gt;_TOKEN</code>.</p>
+        <div id="secret-form-slot" style="padding:0 18px"></div>
+        <table>
+          <thead><tr><th>Secret</th><th></th></tr></thead>
+          <tbody id="secret-rows">${secrets.map(secretRow).join("")
+            || `<tr><td colspan="2" class="muted" style="padding:14px 18px">None stored. Add one, then point a connector's token reference at its name.</td></tr>`}</tbody>
+        </table>
+      </div>`;
+
   const me = AUTH.user;
   const roleChips = (roles) => (roles || []).map((r) => `<span class="chip">${esc(r)}</span>`).join(" ");
   const statusPill = (u) => u.disabled
@@ -560,11 +663,13 @@ async function viewConsoleOrg() {
       delegates to. Each is an org-wide integration, shared across every process.</p>
       <table><tbody>${CONNECTORS.map(connectorRow).join("")}</tbody></table>
     </div>
-    ${managedCard}`;
+    ${managedCard}
+    ${secretsCard}`;
 
   // Connector management is wired before the (admin-gated) user handlers so it
   // works even when the user roster is denied to a non-admin.
   wireConnectorManagement(connectors);
+  wireSecretsManagement(secrets, secretsState);
 
   if (denied) return;
   const reload = () => viewConsoleOrg();
@@ -1070,6 +1175,59 @@ function wireConnectorManagement(connectors) {
         }
         reload();
       } catch (err) { toast("Connector update failed: " + err.message, "err"); }
+    });
+  }
+}
+
+// wireSecretsManagement binds the encrypted-vault panel (ADR-0069): a "New secret"
+// upsert form, per-row "Set value" (rotate) and "Delete". Secrets are keyed by name,
+// have no enable/disable, and are write-only — the value is never read back, so a set
+// is an idempotent PUT and the UI only ever sends values, never displays them. When
+// the vault is denied (non-admin) or unconfigured there is nothing to wire.
+function wireSecretsManagement(secrets, state) {
+  if (state !== "ok") return;
+  const reload = () => viewConsoleOrg();
+  const put = (name, value) => api("PUT", "/api/v1/secrets/" + encodeURIComponent(name), { value });
+  const slot = document.getElementById("secret-form-slot");
+  const newBtn = document.getElementById("new-secret");
+  if (newBtn && slot) {
+    newBtn.addEventListener("click", () => {
+      if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
+      slot.dataset.open = "1";
+      slot.innerHTML = `<form class="secret-form" style="display:grid;gap:8px;grid-template-columns:1fr 1fr auto;align-items:end;margin:4px 0 14px">
+        <label class="field" style="margin:0"><span>Name</span><input name="name" placeholder="risk_token" required/></label>
+        <label class="field" style="margin:0"><span>Value</span><input name="value" type="password" placeholder="••••••••" required/></label>
+        <button class="btn" type="submit">Save</button></form>`;
+      slot.querySelector("form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const f = new FormData(e.target);
+        try {
+          await put((f.get("name") || "").trim(), f.get("value") || "");
+          toast("Secret saved", "ok");
+          reload();
+        } catch (err) { toast("Could not save secret: " + err.message, "err"); }
+      });
+    });
+  }
+  const rows = document.getElementById("secret-rows");
+  if (rows) {
+    rows.addEventListener("click", async (e) => {
+      const btn = e.target.closest("button[data-sact]");
+      if (!btn) return;
+      const name = btn.closest("tr").dataset.name;
+      if (!name) return;
+      try {
+        if (btn.dataset.sact === "set") {
+          const value = window.prompt(`New value for "${name}" (stored encrypted; the old value is replaced)`);
+          if (value == null || value === "") return;
+          await put(name, value);
+          toast("Secret updated", "ok");
+        } else if (btn.dataset.sact === "delete") {
+          if (!window.confirm(`Delete secret "${name}"? A connector referencing it will resolve to no token.`)) return;
+          await api("DELETE", "/api/v1/secrets/" + encodeURIComponent(name));
+        }
+        reload();
+      } catch (err) { toast("Secret update failed: " + err.message, "err"); }
     });
   }
 }
@@ -1785,14 +1943,37 @@ function viewComingSoon(appId) {
     </div>`;
 }
 
+// resolveProject looks up a project's display name so the editor can render a
+// breadcrumb link back to it. Returns {id, name} or null when the id is empty
+// or unknown (a new/ungrouped artifact, or a best-effort lookup that failed —
+// in which case the editor just falls back to a Home-only trail).
+async function resolveProject(projectId) {
+  if (!projectId) return null;
+  try {
+    const projects = await api("GET", "/api/v1/projects");
+    const p = projects.find((x) => x.id === projectId);
+    return p ? { id: p.id, name: p.name } : null;
+  } catch { return null; }
+}
+
 async function viewEditor(key, projectId) {
   const mod = await import("./editor.js");
-  await mod.mountEditor(view, { api, toast, key, projectId });
+  const project = await resolveProject(projectId);
+  await mod.mountEditor(view, { api, toast, key, projectId, project });
 }
 
 async function viewEditorDraft(id) {
   const mod = await import("./editor.js");
-  await mod.mountEditor(view, { api, toast, draftId: id });
+  // An existing draft carries its own projectId; resolve it so the editor can
+  // offer a "back to project" breadcrumb (the route alone doesn't name it).
+  let projectId = "";
+  try {
+    const drafts = await api("GET", "/api/v1/drafts");
+    const d = drafts.find((x) => x.processId === id);
+    projectId = (d && d.projectId) || "";
+  } catch { /* best-effort: fall back to a Home-only crumb */ }
+  const project = await resolveProject(projectId);
+  await mod.mountEditor(view, { api, toast, draftId: id, projectId, project });
 }
 
 async function viewFormEditor(formId, projectId) {
@@ -1956,6 +2137,7 @@ async function route() {
   try {
     if (path === "#/" || path === "#/console") return await viewConsoleDashboard();
     if (path === "#/console/engine") return await viewConsoleEngine();
+    if (path === "#/console/logs") return await viewConsoleLogs();
     if (path === "#/console/org") return await viewConsoleOrg();
     if (path === "#/modeler") return await viewModelerHome();
     const pd = path.match(/^#\/modeler\/p\/(.+)$/);

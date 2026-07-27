@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 )
 
@@ -207,5 +209,218 @@ func TestHTTPClientBuildError(t *testing.T) {
 	c := NewHTTPClient()
 	if _, err := c.Do(context.Background(), Request{Method: "BAD METHOD", URL: "http://example.invalid/x"}); err == nil {
 		t.Fatal("Do with an invalid method: err = nil, want error")
+	}
+}
+
+// TestWithQuery merges connector query parameters with any already in the URL and
+// encodes deterministically; an empty map leaves the URL untouched.
+func TestWithQuery(t *testing.T) {
+	if got, err := withQuery("https://x/y?a=1", nil); err != nil || got != "https://x/y?a=1" {
+		t.Errorf("withQuery(no params) = %q,%v, want the URL unchanged", got, err)
+	}
+	got, err := withQuery("https://x/y?a=1", map[string]string{"b": "2", "c": "3"})
+	if err != nil {
+		t.Fatalf("withQuery: %v", err)
+	}
+	if got != "https://x/y?a=1&b=2&c=3" {
+		t.Errorf("withQuery = %q, want a=1&b=2&c=3 (sorted, merged)", got)
+	}
+	if _, err := withQuery("://bad", map[string]string{"b": "2"}); err == nil {
+		t.Error("withQuery on an unparseable URL: err = nil, want error")
+	}
+}
+
+// TestHTTPClientHeadersAndQuery checks the client sends model headers and query,
+// and that a model header overrides the default Accept.
+func TestHTTPClientHeadersAndQuery(t *testing.T) {
+	var gotAccept, gotCustom, gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAccept = r.Header.Get("Accept")
+		gotCustom = r.Header.Get("X-Custom")
+		gotQuery = r.URL.Query().Get("page")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	c := NewHTTPClient()
+	_, err := c.Do(context.Background(), Request{
+		Method:  "GET",
+		URL:     srv.URL + "/todos",
+		Headers: map[string]string{"X-Custom": "hi", "Accept": "text/plain"},
+		Query:   map[string]string{"page": "2"},
+	})
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if gotCustom != "hi" {
+		t.Errorf("X-Custom = %q, want hi", gotCustom)
+	}
+	if gotAccept != "text/plain" {
+		t.Errorf("Accept = %q, want the model override text/plain", gotAccept)
+	}
+	if gotQuery != "2" {
+		t.Errorf("query page = %q, want 2", gotQuery)
+	}
+}
+
+// TestResolveValue covers literal pass-through, FEEL string/number coercion over
+// variables, and null-propagation (an absent variable yields the empty string).
+func TestResolveValue(t *testing.T) {
+	vars := map[string]model.VariableValue{
+		"customerId": {Name: "customerId", Kind: model.VarString, Text: "c-7"},
+		"qty":        {Name: "qty", Kind: model.VarNumber, Text: "42"},
+	}
+	// Literal: returned verbatim, no evaluation.
+	if got := resolveValue(compiler.RestExpr{Literal: "https://x/y"}, 1, vars); got != "https://x/y" {
+		t.Errorf("literal = %q, want the literal", got)
+	}
+	// FEEL string concatenation over a variable.
+	e, err := expr.CompileAuto(`"https://api/" + customerId`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	if got := resolveValue(compiler.RestExpr{Expr: e}, 1, vars); got != "https://api/c-7" {
+		t.Errorf("feel string = %q, want https://api/c-7", got)
+	}
+	// A FEEL number coerces to its decimal string form.
+	en, _ := expr.CompileAuto(`qty`)
+	if got := resolveValue(compiler.RestExpr{Expr: en}, 1, vars); got != "42" {
+		t.Errorf("feel number = %q, want 42", got)
+	}
+	// An absent variable evaluates to FEEL null → empty string (null-propagating).
+	em, _ := expr.CompileAuto(`missing`)
+	if got := resolveValue(compiler.RestExpr{Expr: em}, 1, vars); got != "" {
+		t.Errorf("feel null = %q, want empty", got)
+	}
+}
+
+// TestResolveKVs evaluates a list of named values (literal and FEEL) into a map.
+func TestResolveKVs(t *testing.T) {
+	if m := resolveKVs(nil, 1, nil); m != nil {
+		t.Errorf("resolveKVs(nil) = %v, want nil", m)
+	}
+	e, _ := expr.CompileAuto(`"1"`)
+	m := resolveKVs([]compiler.RestKV{
+		{Name: "X", Val: compiler.RestExpr{Literal: "lit"}},
+		{Name: "page", Val: compiler.RestExpr{Expr: e}},
+	}, 1, nil)
+	if m["X"] != "lit" || m["page"] != "1" {
+		t.Errorf("resolveKVs = %v, want {X:lit, page:1}", m)
+	}
+}
+
+// TestBindVars binds the processInstanceKey builtin and scope variables of every
+// kind (exercising toExprKind), and leaves an unknown name unbound.
+func TestBindVars(t *testing.T) {
+	vars := map[string]model.VariableValue{
+		"s": {Name: "s", Kind: model.VarString, Text: "x"},
+		"n": {Name: "n", Kind: model.VarNumber, Text: "1"},
+		"b": {Name: "b", Kind: model.VarBool, Bool: true},
+		"j": {Name: "j", Kind: model.VarJSON, Text: `{"a":1}`},
+		"z": {Name: "z", Kind: model.VarNull},
+	}
+	m := bindVars(7, vars, []string{builtinProcessInstanceKey, "s", "n", "b", "j", "z", "missing"})
+	if len(m) != 6 { // the builtin + five present vars; "missing" left unbound
+		t.Fatalf("bound %d names, want 6 (missing left unbound)", len(m))
+	}
+	if bindVars(1, vars, nil) != nil {
+		t.Error("bindVars(no names) should be nil")
+	}
+}
+
+// TestToExprKind covers the stored-kind → expr-kind mapping directly.
+func TestToExprKind(t *testing.T) {
+	cases := map[model.VarKind]expr.ValueKind{
+		model.VarBool:   expr.KindBool,
+		model.VarNumber: expr.KindNumber,
+		model.VarString: expr.KindString,
+		model.VarJSON:   expr.KindJSON,
+		model.VarNull:   expr.KindNull,
+	}
+	for k, want := range cases {
+		if got := toExprKind(k); got != want {
+			t.Errorf("toExprKind(%v) = %v, want %v", k, got, want)
+		}
+	}
+}
+
+func TestAuthHeader(t *testing.T) {
+	if n, v := authHeader(compilerAuth("bearer", "", ""), "tok"); n != "Authorization" || v != "Bearer tok" {
+		t.Errorf("bearer = %q,%q", n, v)
+	}
+	if n, v := authHeader(compilerAuth("basic", "u", ""), "p"); n != "Authorization" || v != "Basic dTpw" {
+		t.Errorf("basic = %q,%q, want base64(u:p)=dTpw", n, v)
+	}
+	if n, v := authHeader(compilerAuth("apikey", "", "X-Key"), "k"); n != "X-Key" || v != "k" {
+		t.Errorf("apikey = %q,%q", n, v)
+	}
+	if n, _ := authHeader(compilerAuth("nope", "", ""), "x"); n != "" {
+		t.Errorf("unknown scheme name = %q, want empty", n)
+	}
+}
+
+func TestApplyAuth(t *testing.T) {
+	// No auth encoded → no change, nil map stays nil.
+	if h, err := applyAuth(nil, "", noResolver); err != nil || h != nil {
+		t.Errorf("applyAuth(none) = %v,%v, want nil,nil", h, err)
+	}
+	// Bad JSON → error.
+	if _, err := applyAuth(nil, "{bad", noResolver); err == nil {
+		t.Error("applyAuth(bad json): err = nil, want error")
+	}
+	// Empty type → no-op.
+	if h, err := applyAuth(nil, `{"type":""}`, noResolver); err != nil || h != nil {
+		t.Errorf("applyAuth(empty type) = %v,%v, want nil,nil", h, err)
+	}
+	// Missing secret → error.
+	if _, err := applyAuth(nil, `{"type":"bearer","secretRef":"X"}`, noResolver); err == nil {
+		t.Error("applyAuth(missing secret): err = nil, want error")
+	}
+	// Resolves and allocates a header map even when none was passed.
+	h, err := applyAuth(nil, `{"type":"bearer","secretRef":"X"}`, func(string) string { return "tok" })
+	if err != nil || h["Authorization"] != "Bearer tok" {
+		t.Errorf("applyAuth(bearer) = %v,%v, want Authorization header", h, err)
+	}
+	// An explicit model header of the same name is not clobbered.
+	h2, err := applyAuth(map[string]string{"Authorization": "keep"}, `{"type":"bearer","secretRef":"X"}`, func(string) string { return "tok" })
+	if err != nil || h2["Authorization"] != "keep" {
+		t.Errorf("applyAuth over an existing header = %v, want it preserved", h2)
+	}
+}
+
+func noResolver(string) string { return "" }
+
+// compilerAuth is a small ctor to keep the auth-header cases readable.
+func compilerAuth(typ, user, apiKeyName string) compiler.RestAuth {
+	return compiler.RestAuth{Type: typ, Username: user, ApiKeyName: apiKeyName}
+}
+
+// TestHTTPClientQueryError covers Do's query-append failure branch: an unparseable
+// URL with query parameters errors before any call.
+func TestHTTPClientQueryError(t *testing.T) {
+	c := NewHTTPClient()
+	if _, err := c.Do(context.Background(), Request{Method: "GET", URL: "://bad", Query: map[string]string{"a": "1"}}); err == nil {
+		t.Fatal("Do with an unparseable URL + query: err = nil, want error")
+	}
+}
+
+// TestHTTPClientModelContentType covers the branch where a model header sets
+// Content-Type on a body request, so the default is not applied.
+func TestHTTPClientModelContentType(t *testing.T) {
+	var gotCT string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotCT = r.Header.Get("Content-Type")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	c := NewHTTPClient()
+	if _, err := c.Do(context.Background(), Request{
+		Method: "POST", URL: srv.URL + "/x",
+		Headers: map[string]string{"Content-Type": "application/vnd.custom+json"},
+		Body:    map[string]any{"a": 1},
+	}); err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if gotCT != "application/vnd.custom+json" {
+		t.Errorf("Content-Type = %q, want the model override", gotCT)
 	}
 }

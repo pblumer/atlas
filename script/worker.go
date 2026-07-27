@@ -71,7 +71,7 @@ func Handler(store *state.Store, lookup ProcessLookup, exec Exec) job.OutputHand
 			return nil, fmt.Errorf("script: no compiled process for def %d", ei.ProcessDefKey)
 		}
 		detail := cp.ScriptJobTask(cp.Node(ei.ElementId).Detail)
-		input, err := instanceVars(store, ei.ProcessInstanceKey)
+		input, err := scopeVars(store, j.ElementInstanceKey)
 		if err != nil {
 			return nil, fmt.Errorf("script: read variables for element %d: %w", j.ElementInstanceKey, err)
 		}
@@ -86,17 +86,38 @@ func Handler(store *state.Store, lookup ProcessLookup, exec Exec) job.OutputHand
 	}
 }
 
-// instanceVars reads the instance's variables into a JSON-ready map — the inputs a
-// script sees. Until input mappings exist (Milestone 1) the whole variable scope
-// is the input set, matching the connector worker (ADR-0036/0047).
-func instanceVars(store *state.Store, scope uint64) (map[string]any, error) {
+// maxScopeDepth bounds the scope-chain walk, a defensive guard against a cyclic or
+// corrupt FlowScopeKey chain. Real nesting (activity-local scopes over the process
+// scope) is far shallower. It mirrors the engine's own guard (engine/scope.go).
+const maxScopeDepth = 64
+
+// scopeVars reads the variables a script sees into a JSON-ready map, resolving up
+// the element instance's scope chain: its activity-local scope first (any
+// input-mapped locals), then the enclosing scope(s) up to the process scope, with
+// the nearest scope winning on a name clash (ADR-0068). A script task with no input
+// mappings has an empty local scope, so this degenerates to reading the process
+// scope, exactly as before. The chain is walked via each scope's element instance's
+// FlowScopeKey; the process-instance root has no element instance, which ends it.
+func scopeVars(store *state.Store, elementInstanceKey uint64) (map[string]any, error) {
 	vars := map[string]any{}
-	err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {
-		vars[v.Name] = varToAny(v)
-		return nil
-	})
-	if err != nil {
-		return nil, err
+	scope := elementInstanceKey
+	for depth := 0; depth <= maxScopeDepth; depth++ {
+		if err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {
+			if _, seen := vars[v.Name]; !seen { // a nearer scope already bound this name; it wins
+				vars[v.Name] = varToAny(v)
+			}
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+		ei, ok, err := store.GetElementInstance(scope)
+		if err != nil {
+			return nil, err
+		}
+		if !ok || ei.FlowScopeKey == 0 || ei.FlowScopeKey == scope {
+			break // reached the process-instance root (no element instance) or a chain end
+		}
+		scope = ei.FlowScopeKey
 	}
 	return vars, nil
 }

@@ -3,6 +3,8 @@
 // wiring are ours. Assets load lazily so non-editor pages stay light.
 
 import { attachFeelEditor } from "./feel.js";
+import { attachCodeEditor } from "./code-editor.js";
+import { moduleFor } from "./powershell.js";
 import { attachJSONEditor } from "./json-editor.js";
 import { openDmnEditor } from "./dmn-editor.js";
 
@@ -11,22 +13,28 @@ import { openDmnEditor } from "./dmn-editor.js";
 // key is the language stored in <atlas:jobScript language="...">. `short` labels
 // the script field, `placeholder` seeds an empty editor, and `hint` documents that
 // language's input/result contract (PowerShell uses its output stream; Python and
-// JavaScript assign to a variable named `result`).
+// JavaScript assign to a variable named `result`). `icon` is a self-contained SVG
+// glyph shown on the task shape in the Implement view so the executable language is
+// legible at a glance — a plain bpmn:ScriptTask looks identical whatever language
+// it runs (see makeImplementBadges).
 const JOB_LANGS = {
   powershell: {
     label: "PowerShell (job worker)", short: "PowerShell",
     placeholder: 'Write-Output "Hallo $Vorname"',
     hint: `Runs on a PowerShell job worker, off the engine's hot path. The instance's variables are available as <code>$name</code>; the script's <b>output</b> is written back into the result variable.`,
+    icon: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="0.5" y="0.5" width="15" height="15" rx="3" fill="#2c6db5"/><path d="M4 4.3 8 8 4 11.7" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 11.5h3.4" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>`,
   },
   python: {
     label: "Python (job worker)", short: "Python",
     placeholder: 'result = f"Hallo {Vorname}"',
     hint: `Runs on a Python job worker, off the engine's hot path. The instance's variables are available as <code>name</code>; assign your output to a variable named <code>result</code>.`,
+    icon: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M7.7 1.4c-2 0-3.4.4-3.4 1.9v1.6h3.5v.4H3.2C1.7 5.3 1 6.3 1 8.3s.7 3 2.2 3h1.1V9.4c0-1.5 1.2-2.7 2.7-2.7h3c1.2 0 2-.9 2-2.1V3.3C13.9 2 13 1.4 7.7 1.4zM5.9 2.5c.4 0 .7.3.7.7s-.3.7-.7.7-.7-.3-.7-.7.3-.7.7-.7z" fill="#3c78aa"/><path d="M8.3 14.6c2 0 3.4-.4 3.4-1.9v-1.6H8.2v-.4h4.6c1.5 0 2.2-1 2.2-3s-.7-3-2.2-3h-1.1v1.9c0 1.5-1.2 2.7-2.7 2.7h-3c-1.2 0-2 .9-2 2.1v2.2C2.1 14 3 14.6 8.3 14.6zm1.8-1.1c-.4 0-.7-.3-.7-.7s.3-.7.7-.7.7.3.7.7-.3.7-.7.7z" fill="#f6c945"/></svg>`,
   },
   javascript: {
     label: "JavaScript (job worker)", short: "JavaScript",
     placeholder: 'const result = "Hallo " + Vorname',
     hint: `Runs on a Node.js job worker, off the engine's hot path. The instance's variables are available as <code>name</code>; assign your output to a variable named <code>result</code>.`,
+    icon: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#f0db4f"/><text x="8.5" y="12" text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="8" font-weight="700" fill="#323330">JS</text></svg>`,
   },
 };
 
@@ -262,14 +270,31 @@ function bindJsonCards(panel, collapsed, rerender) {
   });
 }
 
-export async function mountEditor(root, { api, toast, key, draftId, projectId }) {
+// editorCrumbs renders the editor's breadcrumb trail. It always offers a way
+// back to the Modeler home, and — when the artifact belongs to a project — a
+// link straight back to that project's workspace, so authoring an artifact
+// isn't a one-way trip into the canvas (ADR-0034). `project` is {id, name} or
+// null/undefined (a new/ungrouped diagram or a deployment, which has no
+// project scope). The current segment is filled in with the diagram name once
+// the model loads; see #crumb-current.
+function editorCrumbs(project, current) {
+  const sep = `<span class="crumb-sep" aria-hidden="true">›</span>`;
+  const proj = project
+    ? `${sep}<a href="#/modeler/p/${encodeURIComponent(project.id)}">${esc(project.name)}</a>`
+    : "";
+  return `<nav class="crumbs" aria-label="Breadcrumb">` +
+    `<a href="#/modeler">Home</a>${proj}${sep}` +
+    `<span class="crumb-current">${esc(current)}</span></nav>`;
+}
+
+export async function mountEditor(root, { api, toast, key, draftId, projectId, project }) {
   cleanup();
 
   const crumb = draftId != null ? "Draft" : key == null ? "New diagram" : "Deployment " + key;
   root.innerHTML = `
     <div class="editor">
       <div class="editor-bar">
-        <span class="crumbs">${crumb}</span>
+        ${editorCrumbs(project, crumb)}
         <div class="etabs">
           <button data-tab="design" class="active">Design</button>
           <button data-tab="implement">Implement</button>
@@ -339,13 +364,15 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId })
     }
     modeler.get("canvas").zoom("fit-viewport");
     const pbo = rootProcess(modeler);
-    if (pbo) root.querySelector(".crumbs").textContent = pbo.name || pbo.id || "Diagram";
+    if (pbo) root.querySelector(".crumb-current").textContent = pbo.name || pbo.id || "Diagram";
   } catch (e) {
     toast("could not open diagram: " + e.message, "err");
   }
 
   const rerender = wireProperties(root, modeler, api, projectId, toast);
-  wireTabs(root, rerender);
+  const refreshBadges = makeImplementBadges(root, modeler);
+  refreshBadges(); // reflect the initial tab for the diagram just imported
+  wireTabs(root, () => { rerender(); refreshBadges(); });
   wireActions(root, modeler, api, toast, projectId);
   wireEditorVars(root, modeler);
   wireResizer(root, modeler);
@@ -488,37 +515,114 @@ function activeTab(root) {
   return (b && b.dataset.tab) || "design";
 }
 
-// collectFeelVariables gathers names an author is likely to reference in a FEEL
-// expression, for the completion popup. Two static signals: the start variables
-// the process declares up front (atlas:StartForm), which are supplied when an
-// instance starts; and the result variables written by script tasks elsewhere in
-// the diagram — a token that has run through one carries that variable
-// downstream. Best-effort: a failure just yields no variable hints.
-function collectFeelVariables(modeler) {
-  const vars = new Set();
+// implMarker resolves an element's *implementation type* to the icon shown in the
+// Implement / runtime views, or null when the element carries no such type (so the
+// generic BPMN marker shows instead). Two task families have one: a job-script task
+// resolves to its language (a FEEL script task runs in the engine — none); a service
+// task to its connector kind (the plain job worker has none — the gear bpmn-js draws
+// IS the service-task symbol). `label` is the tooltip; `icon` is a self-contained SVG.
+function implMarker(bo) {
+  if (!bo) return null;
+  if (bo.$type === "bpmn:ScriptTask") {
+    const js = findExt(bo, "atlas:JobScript");
+    if (!js) return null; // FEEL script task — runs in the engine, no worker language
+    const meta = JOB_LANGS[js.language] || JOB_LANGS.powershell;
+    return { label: meta.label, icon: meta.icon };
+  }
+  if (bo.$type === "bpmn:ServiceTask") {
+    const kind = serviceTaskKind(bo);
+    if (!kind.glyph) return null; // plain job worker — the default gear is its symbol
+    return { label: kind.name, icon: kind.glyph };
+  }
+  return null;
+}
+
+// drawImplBadges marks every element that has an implementation type (see implMarker)
+// with that type's icon, so a task's *executable* nature — PowerShell vs Python, a
+// REST connector vs a plain job worker — reads at a glance. A plain bpmn:ScriptTask or
+// bpmn:ServiceTask looks identical whatever it runs; this restores the distinction.
+// Each badge is a bpmn-js overlay (like Operate's execution-count badges), so it tracks
+// the shape through pan/zoom and is torn down with the modeler. Returns the overlay ids
+// it added, for callers that reap their own badges (the Modeler removes them on tab
+// switch; the live views let overlays.clear() reap them). Shared by the Modeler's
+// Implement view and the read-only runtime views (live/collaboration/replay), where the
+// type a token is running through is just as relevant as at authoring time.
+function drawImplBadges(modeler) {
+  const ids = [];
+  let overlays, registry;
+  try { overlays = modeler.get("overlays"); registry = modeler.get("elementRegistry"); }
+  catch { return ids; } // modeler torn down mid-flight
+  registry.forEach((el) => {
+    const m = implMarker(el.businessObject);
+    if (!m) return;
+    try {
+      // Sit the badge over the shape's own top-left type marker (the generic script
+      // scroll or service-task gear bpmn-js draws), so the type icon reads as *the*
+      // element marker rather than a floating label. The opaque disc covers the marker
+      // beneath it; in the Design view (no badge) that generic marker shows through,
+      // which is the intended level-of-detail split.
+      ids.push(overlays.add(el.id, "impl-badge", {
+        position: { top: 2, left: 2 },
+        html: `<span class="impl-badge" title="${esc(m.label)}">${m.icon}</span>`,
+      }));
+    } catch { /* shape without graphics (e.g. mid-import) — skip */ }
+  });
+  return ids;
+}
+
+// makeImplementBadges gates drawImplBadges on the Modeler's Implement tab: the Design
+// view is deliberately descriptive (control flow and BPMN symbols only), but on the
+// Implement tab the difference between a PowerShell and a Python task, or a REST
+// connector and a plain worker, is exactly what the author is working with. Returns a
+// refresh function the tab toggle and diagram-change events call; it is a no-op off the
+// Implement tab, where it clears any badges the author left behind.
+function makeImplementBadges(root, modeler) {
+  let ids = []; // overlay ids currently on the canvas, so we can remove ours only
+
+  const clear = () => {
+    let overlays;
+    try { overlays = modeler.get("overlays"); } catch { ids = []; return; }
+    for (const id of ids) { try { overlays.remove(id); } catch { /* gone */ } }
+    ids = [];
+  };
+
+  const refresh = () => {
+    clear();
+    if (activeTab(root) !== "implement") return;
+    ids = drawImplBadges(modeler);
+  };
+
+  // Keep badges in step with edits (language switched, task added/removed) while the
+  // Implement tab is showing; refresh() short-circuits when another tab is active.
+  modeler.on("element.changed", refresh);
+  modeler.on("elements.changed", refresh);
+  modeler.on("import.done", refresh);
+  return refresh;
+}
+
+// variablesForCompletion returns the variables to offer in an element's expression
+// and script fields, each tagged with where it comes from so the completion popup
+// can show its origin. Process-scope variables (start variables, script/decision
+// results, and output mappings) come from collectDiagramVariables — the same static
+// analysis behind the Variables panel, so completion and that panel stay in step.
+// The selected element's own input-mapping targets are then added as activity-local
+// "task" variables (ADR-0068); a local shadows a like-named process variable.
+// Best-effort: a failure just yields fewer hints.
+function variablesForCompletion(modeler, element) {
+  const byName = new Map();
   try {
-    const rootBo = rootProcess(modeler);
-    if (rootBo) {
-      for (const v of readStartVariables(rootBo)) {
-        if (v.name) vars.add(v.name);
-      }
+    for (const v of collectDiagramVariables(modeler)) {
+      if (v.name && !byName.has(v.name)) byName.set(v.name, { name: v.name, detail: v.source || "variable" });
     }
   } catch { /* best-effort */ }
   try {
-    modeler.get("elementRegistry").forEach((el) => {
-      const s = findExt(el.businessObject, "zeebe:Script");
-      if (s && s.resultVariable) vars.add(s.resultVariable);
-      // A PowerShell (job) script task writes its result into a variable too, so
-      // offer it for completion just like a FEEL script result (ADR-0047).
-      const js = findExt(el.businessObject, "atlas:JobScript");
-      if (js && js.resultVariable) vars.add(js.resultVariable);
-      // A business rule task's decision result is a variable downstream elements
-      // can read, so offer it for completion just like a script result.
-      const cd = findExt(el.businessObject, "zeebe:CalledDecision");
-      if (cd && cd.resultVariable) vars.add(cd.resultVariable);
-    });
+    const io = element && findExt(element.businessObject, "zeebe:IoMapping");
+    for (const p of (io && io.inputParameters) || []) {
+      const name = (p.target || "").trim();
+      if (name) byName.set(name, { name, detail: "task variable · local" });
+    }
   } catch { /* best-effort */ }
-  return [...vars].sort();
+  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 // collectDiagramVariables statically analyses the diagram for the variables it
@@ -625,7 +729,7 @@ function enhanceFeel(body, sel, vars, validate, evaluate) {
   const ta = body.querySelector(sel);
   if (!ta) return;
   attachFeelEditor(ta, { variables: vars, validate });
-  const wrap = ta.closest(".feel-editor");
+  const wrap = ta.closest(".code-editor");
   if (!wrap) return;
 
   const hint = document.createElement("p");
@@ -668,6 +772,164 @@ function enhanceFeel(body, sel, vars, validate, evaluate) {
       setOut("err", e.message);
     }
   });
+}
+
+// prettyResult renders a script's decoded result for the Run panel; undefined (an
+// omitted/null result) shows as null.
+function prettyResult(v) {
+  if (v === undefined) return "null";
+  try { return JSON.stringify(v, null, 2); } catch { return String(v); }
+}
+
+// cleanScriptError strips the Go handler's "script: run <lang>: exit status N:"
+// wrapper so the panel shows the interpreter's own error, not our plumbing.
+function cleanScriptError(s) {
+  return String(s || "").replace(/^script: run \w+: (?:exit status \d+: )?/, "").trim();
+}
+
+// firstLine is the first non-blank line of a message, capped — used as an error
+// marker's hover text.
+function firstLine(s) {
+  return (String(s).split("\n").find((l) => l.trim()) || "error").trim().slice(0, 140);
+}
+
+// scriptErrorLine best-effort parses the 1-based source line an interpreter error
+// points at, so the editor can mark it. PowerShell emits either the concise
+// "Line |\n  N |" view or the classic "At line:N"; Python a "line N" traceback; a
+// JS error a "<anonymous>:N:col". Line numbers are relative to the author's source
+// because each bootstrap runs it as a fresh block (see script/exec.go). Returns 0
+// when no line can be found.
+function scriptErrorLine(language, msg) {
+  if (language === "powershell") {
+    let m = /At line:(\d+)/.exec(msg);
+    if (m) return Number(m[1]);
+    m = /\bLine \|\s*[\r\n]+\s*(\d+)\s*\|/.exec(msg);
+    if (m) return Number(m[1]);
+  }
+  if (language === "javascript") {
+    const m = /:(\d+)(?::\d+)?\b/.exec(msg);
+    if (m) return Number(m[1]);
+  }
+  const g = /\bline (\d+)/i.exec(msg);
+  return g ? Number(g[1]) : 0;
+}
+
+// enhanceScript upgrades the polyglot script field (#f-psbody — PowerShell, Python
+// or JavaScript, ADR-0047) into the shared code editor: syntax highlighting,
+// completion over the in-scope process variables ($name) and the $env: keys the
+// script references, a line-number gutter, and a Run panel that executes the script
+// through the real interpreter (POST /scripts/run), shows its result/error stream
+// and runtime, and maps a runtime error back to a marker on the offending line.
+// No-op if the field isn't present for the current selection.
+function enhanceScript(body, modeler, api, variables) {
+  const ta = body.querySelector("#f-psbody");
+  if (!ta) return;
+  const flang = body.querySelector("#f-scriptlang");
+  const language = (flang && flang.value) || "powershell";
+  const editor = attachCodeEditor(ta, { lang: moduleFor(language), variables: variables || [], gutter: true, wrap: false });
+
+  const shortcut = language === "powershell"
+    ? "<code>$name</code> / <code>$env:</code> &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent"
+    : "instance variables by name &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent";
+  const hint = document.createElement("p");
+  hint.className = "feel-hint";
+  hint.innerHTML = shortcut;
+  if (editor && editor.el) editor.el.after(hint);
+
+  const runBtn = body.querySelector(".ps-run");
+  if (!runBtn || !api) return;
+  const runVars = body.querySelector(".ps-run-vars");
+  const runOut = body.querySelector(".ps-run-out");
+  const detail = body.querySelector(".ps-run-detail");
+  const setOut = (cls, text) => { runOut.className = "feel-test-out ps-run-out" + (cls ? " " + cls : ""); runOut.textContent = text; };
+  const setDetail = (cls, text) => {
+    if (!detail) return;
+    detail.hidden = !text;
+    detail.className = "ps-run-detail" + (cls ? " " + cls : "");
+    detail.textContent = text || "";
+  };
+
+  runBtn.addEventListener("click", async () => {
+    if (editor) editor.setMarkers([]);
+    let variables = {};
+    const raw = (runVars.value || "").trim();
+    if (raw) {
+      try { variables = JSON.parse(raw); }
+      catch { setOut("err", "Sample variables must be valid JSON."); setDetail("", ""); return; }
+    }
+    setOut("", "Running…"); setDetail("", "");
+    const t0 = performance.now();
+    try {
+      const r = await api("POST", "/api/v1/scripts/run", { language, source: ta.value || "", variables });
+      const ms = Math.round(performance.now() - t0);
+      if (r && r.ok) {
+        setOut("ok", `✓ ${ms} ms`);
+        setDetail("ok", "→ " + prettyResult(r.result));
+      } else {
+        setOut("err", `✗ ${ms} ms`);
+        const msg = cleanScriptError((r && r.error) || "run failed");
+        setDetail("err", msg);
+        const line = scriptErrorLine(language, msg);
+        if (line && editor) { editor.setMarkers([{ line, message: firstLine(msg) }]); editor.focusLine(line); }
+      }
+    } catch (e) {
+      setOut("err", "✗");
+      setDetail("err", (e && e.message) || String(e));
+    }
+  });
+}
+
+// attachExpressionToggle adds a Camunda-style fx switch to a value field that may
+// hold either a literal string or a FEEL expression. Zeebe stores an expression
+// with a leading '=' (that's exactly what the compiler keys on), so the field
+// element stays the single value holder the save wiring already reads — toggling
+// only changes the editing surface and whether the value carries the '=' prefix.
+// In expression mode the field becomes a FEEL code editor; the mode is inferred
+// from the current value on load. No-op if the field isn't present. Exported so it
+// can be reused by any value-or-expression field (and driven by a UI smoke test).
+export function attachExpressionToggle(el, opts = {}) {
+  if (!el || el.dataset.fxOn === "1") return;
+  el.dataset.fxOn = "1";
+  const field = el.closest(".field");
+  const span = field && field.querySelector("span");
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "fx-toggle";
+  btn.textContent = "fx";
+  btn.title = "Toggle between a literal value and a FEEL expression (=)";
+  // Prefer the field label (a labelled row); fall back to sitting inline before the
+  // input for fields without a .field/span wrapper (e.g. a map value cell).
+  if (span) span.appendChild(btn);
+  else el.insertAdjacentElement("beforebegin", btn);
+
+  let feelHandle = null;
+  const isExpr = () => el.value.trimStart().startsWith("=");
+
+  function render() {
+    const expr = isExpr();
+    btn.classList.toggle("active", expr);
+    btn.setAttribute("aria-pressed", expr ? "true" : "false");
+    if (expr && !feelHandle) {
+      feelHandle = attachFeelEditor(el, { variables: opts.variables, validate: opts.validate });
+    } else if (!expr && feelHandle) {
+      feelHandle.destroy();
+      feelHandle = null;
+    } else if (expr && feelHandle) {
+      feelHandle.setVariables(opts.variables || []);
+    }
+  }
+
+  btn.addEventListener("click", () => {
+    // Flip the value between its literal and '=' expression forms; the FEEL editor
+    // attaches/detaches in render(), and the change event lets the save wiring
+    // persist the new value verbatim.
+    el.value = isExpr() ? el.value.replace(/^\s*=\s*/, "") : "=" + (el.value ? " " + el.value : "");
+    render();
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    if (feelHandle) el.focus();
+  });
+
+  render();
 }
 
 // findExt returns a business object's extension element of the given moddle type.
@@ -725,10 +987,31 @@ const SERVICE_TASK_KINDS = [
   },
   {
     id: "rest", name: "REST Outbound Connector", desc: "Invoke a REST API", icon: "R",
+    // glyph is the canvas type marker shown in the Implement/runtime views (drawImplBadges),
+    // the connector's counterpart to a script task's language icon. The plain job worker
+    // has none — the gear bpmn-js already draws IS the service-task symbol. A globe reads
+    // "HTTP/web API" at a glance.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#12a594"/><circle cx="8" cy="8" r="4.7" fill="none" stroke="#fff" stroke-width="1.1"/><ellipse cx="8" cy="8" rx="2.3" ry="4.7" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.3 8h9.4M8 3.3v9.4" stroke="#fff" stroke-width="1.1"/></svg>`,
     ext: "atlas:RestConnector",
     fields: [
+      { group: "HTTP endpoint" },
       { key: "method", label: "Method", type: "select", options: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] },
-      { key: "url", label: "URL", placeholder: "https://api.example.com/customers" },
+      { key: "url", label: "URL", placeholder: "https://api.example.com/customers", fx: true },
+      { key: "headers", label: "Headers", type: "map", childType: "atlas:HttpHeader", fx: true, hint: "Sent with the request. A value may be a FEEL expression (fx)." },
+      { key: "queryParameters", label: "Query parameters", type: "map", childType: "atlas:QueryParam", fx: true, hint: "Appended to the request URL. A value may be a FEEL expression (fx)." },
+      { group: "Authentication" },
+      {
+        key: "authType", label: "Type", type: "select", reRender: true,
+        options: [{ v: "", l: "None" }, { v: "basic", l: "Basic" }, { v: "bearer", l: "Bearer token" }, { v: "apiKey", l: "API key" }],
+      },
+      { key: "authUsername", label: "Username", showIf: (v) => v.authType === "basic" },
+      { key: "authApiKeyName", label: "API key header name", placeholder: "X-API-Key", showIf: (v) => v.authType === "apiKey" },
+      {
+        key: "authSecret", label: "Secret reference", placeholder: "MY_TOKEN",
+        showIf: (v) => v.authType === "basic" || v.authType === "bearer" || v.authType === "apiKey",
+        hint: "The credential lives on the server as ATLAS_CONNECTOR_<REF>_TOKEN; the model stores only this reference, never the secret value.",
+      },
+      { group: "Output" },
       { key: "resultVariable", label: "Result variable", placeholder: "response", hint: "The JSON response is written into this process variable (leave empty to discard it)." },
     ],
   },
@@ -744,28 +1027,63 @@ function serviceTaskKind(bo) {
   return SERVICE_TASK_KINDS[0];
 }
 
+// selectOption normalizes a select option to {v,l} (a bare string is both value and
+// label).
+function selectOption(o) {
+  return typeof o === "string" ? { v: o, l: o } : o;
+}
+
+// stMapRowHTML renders one key/value row of a map field (a header or query param).
+// The value is a 1-row textarea so the fx toggle can upgrade it to a FEEL editor in
+// place (a plain input can't host the code editor).
+function stMapRowHTML(fieldKey, name, value) {
+  return `<div class="st-map-row" data-field="${esc(fieldKey)}" style="display:flex;gap:6px;margin-bottom:6px;align-items:start">
+    <input type="text" class="st-map-name" value="${esc(name || "")}" placeholder="name" style="flex:0 0 40%"/>
+    <textarea class="st-map-value" rows="1" spellcheck="false" placeholder="value" style="flex:1;resize:none">${esc(value || "")}</textarea>
+    <button type="button" class="st-map-del" title="Remove" style="flex:0 0 auto">✕</button>
+  </div>`;
+}
+
 // serviceTaskKindHTML renders the searchable kind picker plus the current kind's
 // fields, both from SERVICE_TASK_KINDS. The picker approximates the reference
-// tooling's template chooser within the buildless panel (ADR-0067/0012).
+// tooling's template chooser within the buildless panel (ADR-0067/0012); the field
+// form is generic over text/select/map fields, section groups, and showIf
+// visibility so a new connector kind needs no bespoke panel code.
 function serviceTaskKindHTML(bo) {
   const cur = serviceTaskKind(bo);
   const ext = findExt(bo, cur.ext) || {};
   const rows = SERVICE_TASK_KINDS.map((k) => `
     <div class="stkind-row" data-kind="${k.id}" data-match="${esc((k.name + " " + k.desc).toLowerCase())}"
          style="display:flex;gap:8px;align-items:center;padding:8px;border:1px solid #d7d7d7;border-radius:6px;margin-bottom:6px;cursor:pointer;${k.id === cur.id ? "background:#eef2ff;border-color:#9aa8ff" : ""}">
-      <span style="flex:0 0 22px;height:22px;line-height:22px;text-align:center;border:1px solid #bbb;border-radius:50%;font-size:12px">${esc(k.icon)}</span>
+      <span class="stkind-icon">${k.glyph || esc(k.icon)}</span>
       <span style="line-height:1.25"><b>${esc(k.name)}</b><br><span class="muted" style="font-size:12px">${esc(k.desc)}</span></span>
     </div>`).join("");
   let fields = "";
   for (const f of cur.fields) {
-    const val = ext[f.key] || "";
-    if (f.type === "select") {
-      const chosen = val || f.options[0];
-      const opts = f.options.map((o) => `<option value="${esc(o)}" ${o === chosen ? "selected" : ""}>${esc(o)}</option>`).join("");
+    if (f.group) { fields += `<h3>${esc(f.group)}</h3>`; continue; }
+    if (f.showIf && !f.showIf(ext)) continue;
+    if (f.type === "map") {
+      const list = Array.isArray(ext[f.key]) ? ext[f.key] : [];
+      const rowsHTML = list.map((kv) => stMapRowHTML(f.key, kv.name, kv.value)).join("");
+      fields += `<div class="field"><span>${esc(f.label)}</span>
+        <div class="st-map" data-field="${esc(f.key)}" data-childtype="${esc(f.childType)}">
+          <div class="st-map-rows">${rowsHTML}</div>
+          <button type="button" class="st-map-add" style="margin-top:2px">+ Add</button>
+        </div></div>`;
+    } else if (f.type === "select") {
+      const chosen = ext[f.key] || "";
+      const opts = f.options.map((o) => {
+        const { v, l } = selectOption(o);
+        return `<option value="${esc(v)}" ${v === chosen ? "selected" : ""}>${esc(l)}</option>`;
+      }).join("");
       fields += `<label class="field"><span>${esc(f.label)}</span><select id="f-st-${f.key}">${opts}</select></label>`;
+    } else if (f.fx) {
+      // A 1-row textarea so the fx toggle can host the FEEL editor in place.
+      fields += `<label class="field"><span>${esc(f.label)}</span>
+        <textarea id="f-st-${f.key}" rows="1" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
     } else {
       fields += `<label class="field"><span>${esc(f.label)}</span>
-        <input type="text" id="f-st-${f.key}" value="${esc(val)}" placeholder="${esc(f.placeholder || "")}"/></label>`;
+        <input type="text" id="f-st-${f.key}" value="${esc(ext[f.key] || "")}" placeholder="${esc(f.placeholder || "")}"/></label>`;
     }
     if (f.hint) fields += `<p class="muted" style="font-size:12px">${esc(f.hint)}</p>`;
   }
@@ -785,7 +1103,10 @@ function applyServiceTaskKind(modeler, element, kindId) {
   }
   const defaults = {};
   for (const f of kind.fields) {
-    if (f.type === "select" && f.options && f.options.length) defaults[f.key] = f.options[0];
+    if (f.type === "select" && f.options && f.options.length) {
+      const v = selectOption(f.options[0]).v;
+      if (v) defaults[f.key] = v;
+    }
   }
   upsertExt(modeler, element, kind.ext, defaults);
 }
@@ -831,6 +1152,76 @@ function saveDecisionInputs(modeler, element, rows) {
     }
     params.forEach((p) => (p.$parent = io));
     io.inputParameters = params;
+  }
+  modeling.updateProperties(element, { extensionElements: ext });
+}
+
+// ioMapRowHTML renders one editable generic I/O mapping row (ADR-0068): a target
+// variable name fed by a FEEL source. kind is "in" (an input, source over the
+// enclosing scope → a local variable) or "out" (an output, source over the local
+// scope → a variable promoted to the parent). The stored source is '=' prefixed
+// (Zeebe convention); it is shown stripped.
+function ioMapRowHTML(kind, i, source, target) {
+  const src = (source || "").replace(/^=\s*/, "");
+  const ph = kind === "in"
+    ? { t: "amount", s: "order.total", tt: "Local variable the activity sees", st: "FEEL over the enclosing scope" }
+    : { t: "orderStatus", s: "result.status", tt: "Variable promoted to the process scope", st: "FEEL over the activity's local scope" };
+  return `<div class="io-map-row" data-kind="${kind}" data-i="${i}" style="display:flex;gap:6px;margin-bottom:6px">
+    <input type="text" class="io-target" value="${esc(target || "")}" placeholder="${ph.t}" style="flex:0 0 34%" title="${ph.tt}"/>
+    <input type="text" class="io-source" value="${esc(src)}" placeholder="${ph.s}" style="flex:1" title="${ph.st}"/>
+  </div>`;
+}
+
+// ioMappingsHTML renders the generic zeebe:ioMapping editor — input and output
+// mapping lists — for a job-backed activity (service, script, user task; ADR-0068).
+// Each list carries a trailing empty row that grows the list as it is filled. It is
+// distinct from a business rule task's ioMapping inputs (decision inputs), which
+// have their own editor.
+function ioMappingsHTML(bo) {
+  const io = findExt(bo, "zeebe:IoMapping");
+  const ins = (io && io.inputParameters) || [];
+  const outs = (io && io.outputParameters) || [];
+  return `<h3>Input mappings</h3>
+    <p class="muted" style="font-size:12px">Each row computes a variable the activity sees (its <b>local scope</b>) from a FEEL <b>source</b> over the enclosing variables. Locals shadow inherited values and are dropped when the activity completes. Leave a row's target blank to drop it.</p>
+    <div id="io-inputs">${ins.map((p, i) => ioMapRowHTML("in", i, p.source, p.target)).join("")}${ioMapRowHTML("in", ins.length, "", "")}</div>
+    <h3>Output mappings</h3>
+    <p class="muted" style="font-size:12px">Each row promotes a value to the <b>process scope</b> from a FEEL <b>source</b> over the activity's local scope (e.g. its result). With no output mapping the task's result merges into the process scope as-is.</p>
+    <div id="io-outputs">${outs.map((p, i) => ioMapRowHTML("out", i, p.source, p.target)).join("")}${ioMapRowHTML("out", outs.length, "", "")}</div>`;
+}
+
+// saveIOMappings rebuilds a task's generic zeebe:ioMapping from the panel rows: the
+// input rows become inputParameters, the output rows outputParameters. A row with no
+// target is dropped; each kept source is stored '=' prefixed. When both lists are
+// empty the ioMapping element is removed so the model stays clean (ADR-0068).
+function saveIOMappings(modeler, element, inRows, outRows) {
+  const moddle = modeler.get("moddle");
+  const modeling = modeler.get("modeling");
+  const bo = element.businessObject;
+  let ext = bo.extensionElements;
+  if (!ext) {
+    ext = moddle.create("bpmn:ExtensionElements", { values: [] });
+    ext.$parent = bo;
+  }
+  let io = (ext.values || []).find((v) => v.$type === "zeebe:IoMapping");
+  const mk = (type, rows) => rows
+    .filter((r) => r.target !== "")
+    .map((r) => moddle.create(type, {
+      source: r.source === "" ? "" : (r.source.startsWith("=") ? r.source : "= " + r.source),
+      target: r.target,
+    }));
+  const ins = mk("zeebe:Input", inRows);
+  const outs = mk("zeebe:Output", outRows);
+  if (ins.length === 0 && outs.length === 0) {
+    if (io) ext.values = (ext.values || []).filter((v) => v !== io);
+  } else {
+    if (!io) {
+      io = moddle.create("zeebe:IoMapping");
+      io.$parent = ext;
+      ext.values = [...(ext.values || []), io];
+    }
+    [...ins, ...outs].forEach((p) => (p.$parent = io));
+    io.inputParameters = ins;
+    io.outputParameters = outs;
   }
   modeling.updateProperties(element, { extensionElements: ext });
 }
@@ -1596,7 +1987,17 @@ function wireProperties(root, modeler, api, projectId, toast) {
                 <textarea id="f-psbody" rows="6" spellcheck="false" placeholder='${meta.placeholder}'>${esc(js && js.source || "")}</textarea></label>
               <label class="field"><span>Result variable</span>
                 <input type="text" id="f-psresult" value="${esc((js && js.resultVariable) || "")}" placeholder="Greeting"/></label>
-              <p class="muted" style="font-size:12px">${meta.hint}</p>`;
+              <p class="muted" style="font-size:12px">${meta.hint}</p>
+              <div class="feel-test" data-run-lang="${lang}">
+                <label class="field"><span>Test — sample variables (JSON)</span>
+                  <textarea class="ps-run-vars" rows="2" spellcheck="false" placeholder='{ "Vorname": "Anna" }'></textarea></label>
+                <div class="feel-test-row">
+                  <button type="button" class="btn neutral ps-run">Run</button>
+                  <span class="feel-test-out ps-run-out" aria-live="polite"></span>
+                </div>
+                <pre class="ps-run-detail" hidden></pre>
+                <p class="muted" style="font-size:12px">Runs the script through the real interpreter with these variables — no deploy needed. The language's worker must be enabled on the server.</p>
+              </div>`;
           }
         } else if (t === "bpmn:ServiceTask") {
           html += serviceTaskKindHTML(bo);
@@ -1653,16 +2054,22 @@ function wireProperties(root, modeler, api, projectId, toast) {
               <a href="#/modeler/form/new" target="_blank" rel="noopener">Create a new form</a>, then reopen this to link it.</p>
             <h3>Assignment</h3>
             <label class="field"><span>Assignee</span>
-              <input type="text" id="f-assignee" value="${esc(a.assignee || "")}" placeholder="editor"/></label>
+              <textarea id="f-assignee" rows="1" spellcheck="false" placeholder="editor">${esc(a.assignee || "")}</textarea></label>
             <label class="field"><span>Candidate groups</span>
-              <input type="text" id="f-groups" value="${esc(a.candidateGroups || "")}" placeholder="reviewers"/></label>
+              <textarea id="f-groups" rows="1" spellcheck="false" placeholder="reviewers">${esc(a.candidateGroups || "")}</textarea></label>
             <h3>Schedule</h3>
             <label class="field"><span>Priority</span>
               <input type="number" id="f-priority" min="0" max="100" value="${esc(pr.priority || "50")}" placeholder="50"/></label>
             <label class="field"><span>Due in</span>
-              <input type="text" id="f-due" value="${esc(sch.dueDate || "")}" placeholder="P2D, PT4H, PT30M"/></label>
+              <textarea id="f-due" rows="1" spellcheck="false" placeholder="P2D, PT4H, PT30M">${esc(sch.dueDate || "")}</textarea></label>
             <p class="muted" style="font-size:12px">An ISO-8601 duration measured from when the task appears
               (e.g. <b>P2D</b> = 2 days, <b>PT4H</b> = 4 hours). Leave blank for no due date. Priority 0–100; higher sorts first.</p>`;
+        }
+        // Generic zeebe:ioMapping input/output editor for job-backed activities
+        // (ADR-0068). A business rule task's ioMapping inputs are decision inputs
+        // with their own editor above, so it is excluded here.
+        if (t === "bpmn:ServiceTask" || t === "bpmn:ScriptTask" || t === "bpmn:UserTask") {
+          html += ioMappingsHTML(bo);
         }
       } else if (isDefaultFlow) {
         html += `<h3>Condition (FEEL)</h3>
@@ -1885,6 +2292,10 @@ function wireProperties(root, modeler, api, projectId, toast) {
     if (fpsbody) fpsbody.addEventListener("change", saveJobScript);
     if (fpsresult) fpsresult.addEventListener("change", saveJobScript);
 
+    // The script field is upgraded to the shared code editor (highlighting,
+    // completion, gutter, error markers) and its Run panel wired in the Implement
+    // tab's enhancement pass below — see enhanceScript.
+
     // Service-task connector kind: a searchable picker over SERVICE_TASK_KINDS
     // (ADR-0067). Filtering narrows the list; clicking a row switches the kind
     // (swapping which extension the task carries) and re-renders so that kind's
@@ -1910,17 +2321,67 @@ function wireProperties(root, modeler, api, projectId, toast) {
       });
     }
     const stKind = serviceTaskKind(bo);
+    const stModdle = modeler.get("moddle");
+    // readMapField rebuilds a map field's moddle children (headers/query params)
+    // from its rows, keeping only rows with a name (an unnamed row is incomplete).
+    const readMapField = (f) => {
+      const out = [];
+      body.querySelectorAll(`.st-map-row[data-field="${f.key}"]`).forEach((r) => {
+        const name = (r.querySelector(".st-map-name").value || "").trim();
+        if (!name) return;
+        out.push(stModdle.create(f.childType, { name, value: r.querySelector(".st-map-value").value || "" }));
+      });
+      return out;
+    };
     const saveKindFields = () => savePreservingPanel(() => {
       const props = {};
       for (const f of stKind.fields) {
+        if (f.group) continue;
+        if (f.type === "map") { props[f.key] = readMapField(f); continue; }
+        // A showIf-hidden field isn't rendered; leave its stored value untouched.
         const el = body.querySelector("#f-st-" + f.key);
         if (el) props[f.key] = (el.value || "").trim();
       }
       upsertExt(modeler, element, stKind.ext, props);
     });
     for (const f of stKind.fields) {
+      if (f.group || f.type === "map") continue;
       const el = body.querySelector("#f-st-" + f.key);
-      if (el) el.addEventListener("change", saveKindFields);
+      if (!el) continue;
+      el.addEventListener("change", () => {
+        saveKindFields();
+        if (f.reRender) show(element); // e.g. auth type: reveal the scheme's fields
+      });
+    }
+    // Value-or-expression (fx) support: an fx field can hold a literal or a FEEL
+    // expression (stored '=' prefixed, exactly what the compiler keys on). The
+    // toggle swaps the editing surface; the value the save wiring reads is the same
+    // field element, so no save/load change is needed.
+    const stFeelVars = variablesForCompletion(modeler, element);
+    const stValidate = api ? (expression) => api("POST", "/api/v1/feel/validate", { expression }) : null;
+    const stAttachFx = (el) => { if (el) attachExpressionToggle(el, { variables: stFeelVars, validate: stValidate }); };
+    if (stKind.fields.some((f) => f.key === "url" && f.fx)) stAttachFx(body.querySelector("#f-st-url"));
+
+    // Map editors: a name/value row list with add/remove. Edits and removals save;
+    // adding inserts an empty row (it saves once the author types a name). When the
+    // map is fx-capable, each value cell carries the fx toggle.
+    for (const f of stKind.fields) {
+      if (f.type !== "map") continue;
+      const cont = body.querySelector(`.st-map[data-field="${f.key}"]`);
+      if (!cont) continue;
+      if (f.fx) cont.querySelectorAll(".st-map-value").forEach(stAttachFx);
+      cont.addEventListener("change", saveKindFields);
+      cont.addEventListener("click", (e) => {
+        if (e.target.closest(".st-map-add")) {
+          e.preventDefault();
+          cont.querySelector(".st-map-rows").insertAdjacentHTML("beforeend", stMapRowHTML(f.key, "", ""));
+          if (f.fx) stAttachFx(cont.querySelector(".st-map-row:last-child .st-map-value"));
+        } else if (e.target.closest(".st-map-del")) {
+          e.preventDefault();
+          e.target.closest(".st-map-row").remove();
+          saveKindFields();
+        }
+      });
     }
 
     const fdecision = body.querySelector("#f-decisionid");
@@ -2072,6 +2533,42 @@ function wireProperties(root, modeler, api, projectId, toast) {
         });
       };
       [...inputsWrap.querySelectorAll(".dmn-input-row")].forEach(wireRow);
+    }
+
+    // Generic zeebe:ioMapping input/output editor (ADR-0068). Two lists that save on
+    // blur and grow in place, mirroring the decision-input rows above.
+    const ioInWrap = body.querySelector("#io-inputs");
+    const ioOutWrap = body.querySelector("#io-outputs");
+    if (ioInWrap || ioOutWrap) {
+      const collect = (wrap) => wrap
+        ? [...wrap.querySelectorAll(".io-map-row")].map((row) => ({
+            target: (row.querySelector(".io-target").value || "").trim(),
+            source: (row.querySelector(".io-source").value || "").trim(),
+          }))
+        : [];
+      const saveIO = () => savePreservingPanel(() => saveIOMappings(modeler, element, collect(ioInWrap), collect(ioOutWrap)));
+      const wireIOList = (wrap, kind) => {
+        if (!wrap) return;
+        const wireRow = (row) => {
+          const target = row.querySelector(".io-target");
+          const source = row.querySelector(".io-source");
+          target.addEventListener("change", saveIO);
+          source.addEventListener("change", saveIO);
+          target.addEventListener("input", () => {
+            const rows = [...wrap.querySelectorAll(".io-map-row")];
+            if (row === rows[rows.length - 1] && target.value.trim() !== "") {
+              const tmp = document.createElement("div");
+              tmp.innerHTML = ioMapRowHTML(kind, rows.length, "", "");
+              const newRow = tmp.firstElementChild;
+              wrap.appendChild(newRow);
+              wireRow(newRow);
+            }
+          });
+        };
+        [...wrap.querySelectorAll(".io-map-row")].forEach(wireRow);
+      };
+      wireIOList(ioInWrap, "in");
+      wireIOList(ioOutWrap, "out");
     }
 
     const fassignee = body.querySelector("#f-assignee");
@@ -2250,12 +2747,18 @@ function wireProperties(root, modeler, api, projectId, toast) {
     // Validation compiles the expression against the same engine deploy uses
     // (POST /feel/validate); Test evaluates it (POST /feel/evaluate).
     if (tab === "implement") {
-      const feelVars = collectFeelVariables(modeler);
+      const feelVars = variablesForCompletion(modeler, element);
       const validate = api ? (expression) => api("POST", "/api/v1/feel/validate", { expression }) : null;
       const evaluate = api ? (expression, variables) => api("POST", "/api/v1/feel/evaluate", { expression, variables }) : null;
       enhanceFeel(body, "#f-expr", feelVars, validate, evaluate);
       enhanceFeel(body, "#f-cond", feelVars, validate, evaluate);
       enhanceFeel(body, "#f-corrkey", feelVars, validate, evaluate);
+      enhanceScript(body, modeler, api, feelVars);
+      // Value-or-expression fields carry a Camunda-style fx toggle: switch them to
+      // a FEEL editor and the value is stored '=' prefixed (Zeebe's expression form).
+      for (const sel of ["#f-assignee", "#f-groups", "#f-due"]) {
+        attachExpressionToggle(body.querySelector(sel), { variables: feelVars, validate });
+      }
     }
   }
 
@@ -2409,7 +2912,7 @@ function wireActions(root, modeler, api, toast, projectId) {
       const { xml } = await modeler.saveXML({ format: true });
       const path = "/api/v1/drafts" + (projectId ? "?projectId=" + encodeURIComponent(projectId) : "");
       const d = await api("POST", path, xml, true);
-      root.querySelector(".crumbs").textContent = d.name || d.processId || "Draft";
+      root.querySelector(".crumb-current").textContent = d.name || d.processId || "Draft";
       toast(`Saved draft “${d.name || d.processId}”`, "ok");
     } catch (e) {
       toast("save failed: " + e.message, "err");
@@ -2662,6 +3165,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
   const canvas = viewer.get("canvas");
   const overlays = viewer.get("overlays");
   const registry = viewer.get("elementRegistry");
+  drawImplBadges(viewer); // show type icons at once, before the first poll lands
   const countEl = root.querySelector("#inst-count");
   const tokenEl = root.querySelector("#token-count");
   const instSel = root.querySelector("#instance-sel");
@@ -2928,6 +3432,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
     catch (e) { return; } // transient; try again next tick
     if (current !== viewer) return; // navigated away mid-flight
     overlays.clear();
+    drawImplBadges(viewer); // type icons are static; overlays.clear() reaped them
     for (const [id, marker] of marked) canvas.removeMarker(id, marker);
     marked = [];
     // The tasks in scope: a single instance's own, or (for "All instances") every
@@ -3254,6 +3759,7 @@ export async function mountCollaboration(root, { api, toast, key }) {
 
   const canvas = viewer.get("canvas");
   const registry = viewer.get("elementRegistry");
+  drawImplBadges(viewer); // static type icons; this view never clears overlays
   const layer = canvas.getLayer("atlas-replay", 900); // message dots ride above the diagram
   const titleEl = root.querySelector("#collab-title");
   const instEl = root.querySelector("#inst-count");
@@ -3523,6 +4029,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const canvas = viewer.get("canvas");
   const registry = viewer.get("elementRegistry");
   const overlays = viewer.get("overlays");
+  drawImplBadges(viewer); // static type icons; only the count badges are re-drawn
   const eventBus = viewer.get("eventBus");
   const layer = canvas.getLayer("atlas-replay", 900); // moving token dot rides above the diagram
   const dotLayer = canvas.getLayer("atlas-tokens", 899); // static per-frame token dots
