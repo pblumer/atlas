@@ -865,6 +865,56 @@ function enhanceScript(body, modeler, api) {
   });
 }
 
+// attachExpressionToggle adds a Camunda-style fx switch to a value field that may
+// hold either a literal string or a FEEL expression. Zeebe stores an expression
+// with a leading '=' (that's exactly what the compiler keys on), so the field
+// element stays the single value holder the save wiring already reads — toggling
+// only changes the editing surface and whether the value carries the '=' prefix.
+// In expression mode the field becomes a FEEL code editor; the mode is inferred
+// from the current value on load. No-op if the field isn't present. Exported so it
+// can be reused by any value-or-expression field (and driven by a UI smoke test).
+export function attachExpressionToggle(el, opts = {}) {
+  if (!el || el.dataset.fxOn === "1") return;
+  el.dataset.fxOn = "1";
+  const field = el.closest(".field");
+  const span = field && field.querySelector("span");
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "fx-toggle";
+  btn.textContent = "fx";
+  btn.title = "Toggle between a literal value and a FEEL expression (=)";
+  if (span) span.appendChild(btn);
+
+  let feelHandle = null;
+  const isExpr = () => el.value.trimStart().startsWith("=");
+
+  function render() {
+    const expr = isExpr();
+    btn.classList.toggle("active", expr);
+    btn.setAttribute("aria-pressed", expr ? "true" : "false");
+    if (expr && !feelHandle) {
+      feelHandle = attachFeelEditor(el, { variables: opts.variables, validate: opts.validate });
+    } else if (!expr && feelHandle) {
+      feelHandle.destroy();
+      feelHandle = null;
+    } else if (expr && feelHandle) {
+      feelHandle.setVariables(opts.variables || []);
+    }
+  }
+
+  btn.addEventListener("click", () => {
+    // Flip the value between its literal and '=' expression forms; the FEEL editor
+    // attaches/detaches in render(), and the change event lets the save wiring
+    // persist the new value verbatim.
+    el.value = isExpr() ? el.value.replace(/^\s*=\s*/, "") : "=" + (el.value ? " " + el.value : "");
+    render();
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    if (feelHandle) el.focus();
+  });
+
+  render();
+}
+
 // findExt returns a business object's extension element of the given moddle type.
 function findExt(bo, type) {
   const ext = bo && bo.extensionElements;
@@ -1928,14 +1978,14 @@ function wireProperties(root, modeler, api, projectId, toast) {
               <a href="#/modeler/form/new" target="_blank" rel="noopener">Create a new form</a>, then reopen this to link it.</p>
             <h3>Assignment</h3>
             <label class="field"><span>Assignee</span>
-              <input type="text" id="f-assignee" value="${esc(a.assignee || "")}" placeholder="editor"/></label>
+              <textarea id="f-assignee" rows="1" spellcheck="false" placeholder="editor">${esc(a.assignee || "")}</textarea></label>
             <label class="field"><span>Candidate groups</span>
-              <input type="text" id="f-groups" value="${esc(a.candidateGroups || "")}" placeholder="reviewers"/></label>
+              <textarea id="f-groups" rows="1" spellcheck="false" placeholder="reviewers">${esc(a.candidateGroups || "")}</textarea></label>
             <h3>Schedule</h3>
             <label class="field"><span>Priority</span>
               <input type="number" id="f-priority" min="0" max="100" value="${esc(pr.priority || "50")}" placeholder="50"/></label>
             <label class="field"><span>Due in</span>
-              <input type="text" id="f-due" value="${esc(sch.dueDate || "")}" placeholder="P2D, PT4H, PT30M"/></label>
+              <textarea id="f-due" rows="1" spellcheck="false" placeholder="P2D, PT4H, PT30M">${esc(sch.dueDate || "")}</textarea></label>
             <p class="muted" style="font-size:12px">An ISO-8601 duration measured from when the task appears
               (e.g. <b>P2D</b> = 2 days, <b>PT4H</b> = 4 hours). Leave blank for no due date. Priority 0–100; higher sorts first.</p>`;
         }
@@ -2578,6 +2628,11 @@ function wireProperties(root, modeler, api, projectId, toast) {
       enhanceFeel(body, "#f-cond", feelVars, validate, evaluate);
       enhanceFeel(body, "#f-corrkey", feelVars, validate, evaluate);
       enhanceScript(body, modeler, api);
+      // Value-or-expression fields carry a Camunda-style fx toggle: switch them to
+      // a FEEL editor and the value is stored '=' prefixed (Zeebe's expression form).
+      for (const sel of ["#f-assignee", "#f-groups", "#f-due"]) {
+        attachExpressionToggle(body.querySelector(sel), { variables: feelVars, validate });
+      }
     }
   }
 

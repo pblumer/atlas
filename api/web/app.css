@@ -357,6 +357,17 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .linklike { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; }
 .linklike:hover { text-decoration: underline; }
 
+/* Camunda-style fx switch on a value-or-expression field (attachExpressionToggle):
+   a small pill in the field label, highlighted when the field holds a FEEL
+   expression. */
+.fx-toggle {
+  float: right; margin: -1px 0 0 6px; padding: 1px 6px; cursor: pointer;
+  font: italic 700 11px/1.5 ui-monospace, monospace; color: var(--muted);
+  background: none; border: 1px solid var(--border-strong); border-radius: 4px;
+}
+.fx-toggle:hover { border-color: var(--accent); color: var(--accent); }
+.fx-toggle.active { color: #fff; background: var(--accent); border-color: var(--accent); }
+
 /* "Test expression" panel: sample variables + Run + the evaluated result. */
 .feel-test { margin: 4px 0 0; }
 .feel-test-vars { font-size: 12px; }
