@@ -77,6 +77,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0067](0067-service-task-connector-catalog.md) | A service-task connector catalog, and REST with a model-authored endpoint | Accepted |
 | [0068](0068-task-io-variable-mappings.md) | Task input/output variable mappings with activity-local scopes | Proposed |
 | [0069](0069-engine-internal-encrypted-secret-vault.md) | An engine-internal encrypted secret vault (ADR-0041 option A3) | Accepted |
+| [0070](0070-vault-on-by-default-with-generated-key.md) | The secret vault is on by default, with a generated key | Accepted |
 
 ## Status values
 

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
@@ -319,6 +320,91 @@ func TestSecretHandlersCRUD(t *testing.T) {
 	}
 }
 
+// TestVaultOnByDefault proves the opt-out default (ADR-0070): with no operator key
+// the server still builds a vault and generates its key file at 0600.
+func TestVaultOnByDefault(t *testing.T) {
+	t.Setenv(vaultKeyEnv, "")
+	t.Setenv(vaultKeyFileEnv, "")
+	srv, dir := newValidateServer(t)
+	if srv.vault == nil {
+		t.Fatal("vault should be on by default (opt-out, ADR-0070)")
+	}
+	info, err := os.Stat(filepath.Join(dir, "vault.key"))
+	if err != nil {
+		t.Fatalf("stat key file: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Errorf("key file mode = %o, want 600", perm)
+	}
+	if _, err := srv.vault.Set("k", "v"); err != nil {
+		t.Errorf("generated key should work: Set: %v", err)
+	}
+}
+
+// TestLoadOrCreateKeyFile covers the generated → reuse → corrupt progression of the
+// default key source.
+func TestLoadOrCreateKeyFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sub", "vault.key")
+	k1, src1, err := loadOrCreateKeyFile(path)
+	if err != nil || src1 != "generated" || len(k1) != 32 {
+		t.Fatalf("first call: key=%d src=%q err=%v, want 32-byte generated", len(k1), src1, err)
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("key file: mode=%v err=%v, want 0600", info.Mode().Perm(), err)
+	}
+	k2, src2, err := loadOrCreateKeyFile(path)
+	if err != nil || src2 != "file" || !bytes.Equal(k1, k2) {
+		t.Fatalf("second call: src=%q equal=%v err=%v, want reuse of the same key", src2, bytes.Equal(k1, k2), err)
+	}
+	if err := os.WriteFile(path, []byte("not-a-valid-key"), 0o600); err != nil {
+		t.Fatalf("corrupt: %v", err)
+	}
+	if _, _, err := loadOrCreateKeyFile(path); err == nil {
+		t.Error("corrupt key file: want an error")
+	}
+}
+
+// TestLoadOrCreateKeyFileErrors covers the read-error and mkdir-error branches of the
+// default key source.
+func TestLoadOrCreateKeyFileErrors(t *testing.T) {
+	// A directory at the key path yields a non-NotExist read error.
+	if _, _, err := loadOrCreateKeyFile(t.TempDir()); err == nil {
+		t.Error("key path is a directory: want a read error")
+	}
+	// A parent path component that is a file makes MkdirAll fail.
+	f := filepath.Join(t.TempDir(), "afile")
+	if err := os.WriteFile(f, []byte("x"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if _, _, err := loadOrCreateKeyFile(filepath.Join(f, "sub", "vault.key")); err == nil {
+		t.Error("key dir under a file: want a mkdir error")
+	}
+}
+
+// TestResolveVaultKeyEnvPrecedence proves an operator key wins and, crucially, is not
+// persisted to the key file (ADR-0069/0070).
+func TestResolveVaultKeyEnvPrecedence(t *testing.T) {
+	t.Setenv(vaultKeyEnv, hex.EncodeToString(testVaultKey(t)))
+	path := filepath.Join(t.TempDir(), "vault.key")
+	key, source, err := resolveVaultKey(path)
+	if err != nil || source != "env" || len(key) != 32 {
+		t.Fatalf("resolveVaultKey = (%d bytes, %q, %v), want a 32-byte env key", len(key), source, err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Error("an operator key must not create the generated key file")
+	}
+}
+
+// TestResolveVaultKeyInvalidEnv proves a set-but-invalid operator key fails loudly
+// rather than silently generating one.
+func TestResolveVaultKeyInvalidEnv(t *testing.T) {
+	t.Setenv(vaultKeyEnv, "too-short-to-be-a-key")
+	if _, _, err := resolveVaultKey(filepath.Join(t.TempDir(), "vault.key")); err == nil {
+		t.Error("invalid operator key: want a startup error")
+	}
+}
+
 // TestResolveConnectorSecretVaultOverEnv proves the vault takes precedence over an
 // environment reference, and that a vault miss falls back to the environment.
 func TestResolveConnectorSecretVaultOverEnv(t *testing.T) {
@@ -339,14 +425,14 @@ func TestResolveConnectorSecretVaultOverEnv(t *testing.T) {
 	}
 }
 
-// TestSecretHandlersVaultDisabled proves that with no master key configured the CRUD
-// endpoints report 503 rather than doing anything.
+// TestSecretHandlersVaultDisabled proves that with the vault disabled (WithoutVault)
+// the CRUD endpoints report 503 rather than doing anything.
 func TestSecretHandlersVaultDisabled(t *testing.T) {
 	t.Setenv(vaultKeyEnv, "")
 	t.Setenv(vaultKeyFileEnv, "")
-	srv, _ := newValidateServer(t)
+	srv, _ := newValidateServer(t, WithoutVault())
 	if srv.vault != nil {
-		t.Skip("vault unexpectedly configured from the ambient environment")
+		t.Fatal("vault should be nil when disabled with WithoutVault")
 	}
 	h := srv.Handler()
 	check := func(method, path, body string) int {
