@@ -538,9 +538,14 @@ function drawLangBadges(modeler) {
     if (!js) return; // a FEEL script task runs in the engine — no worker language
     const meta = JOB_LANGS[js.language] || JOB_LANGS.powershell;
     try {
+      // Sit the badge over the shape's own top-left type marker (the generic script
+      // scroll bpmn-js draws), so the language icon reads as *the* element marker —
+      // like a connector task's corner glyph — rather than a floating label. The
+      // opaque disc covers the scroll beneath it; in the Design view (no badge) that
+      // generic marker shows through, which is the intended level-of-detail split.
       ids.push(overlays.add(el.id, "lang-badge", {
-        position: { top: -10, left: -10 },
-        html: `<span class="lang-badge" title="${esc(meta.label)}">${meta.icon}<span class="lb-text">${esc(meta.short)}</span></span>`,
+        position: { top: 2, left: 2 },
+        html: `<span class="lang-badge" title="${esc(meta.label)}">${meta.icon}</span>`,
       }));
     } catch { /* shape without graphics (e.g. mid-import) — skip */ }
   });
