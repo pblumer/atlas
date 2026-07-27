@@ -97,13 +97,14 @@ func runServe(args []string) error {
 	docs := fs.Bool("docs", true, "serve the OpenAPI spec (/api/v1/openapi.json) and the Scalar API explorer (/api/docs); pass --docs=false to disable")
 	auth := fs.Bool("auth", false, "require login for the API and UI; seeds an admin from ATLAS_ADMIN_USERNAME/ATLAS_ADMIN_PASSWORD on first run")
 	powershell := fs.Bool("powershell", true, "run PowerShell script tasks by shelling out to pwsh on this host; on by default, pass --powershell=false to disable (it executes arbitrary interpreter code, so disable it where that trust boundary is not acceptable)")
+	powershellTimeout := fs.Duration("powershell-timeout", 30*time.Second, "wall-clock limit for a single PowerShell script; a script that overruns is killed and its job left pending")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *powershell)
+	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *powershell, *powershellTimeout)
 }
 
-func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, powershell bool) error {
+func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, powershell bool, powershellTimeout time.Duration) error {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return err
 	}
@@ -139,6 +140,7 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, powe
 	}
 	if powershell {
 		px := pwsh.NewCmdExec()
+		px.Timeout = powershellTimeout
 		if err := px.Check(); err != nil {
 			log.Printf("WARNING: --powershell is enabled but pwsh was not found on PATH (%v); PowerShell script tasks will park until pwsh is installed", err)
 		} else {

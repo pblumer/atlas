@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/job"
@@ -227,6 +228,38 @@ func TestCheck(t *testing.T) {
 	// A binary that exists on PATH resolves cleanly (sh is present on the test host).
 	if err := (&CmdExec{Bin: "sh"}).Check(); err != nil {
 		t.Errorf("Check for sh = %v, want nil", err)
+	}
+}
+
+// TestTimeoutDefault: the zero value bounds a script with the default timeout, and
+// an explicit Timeout overrides it.
+func TestTimeoutDefault(t *testing.T) {
+	if got := (&CmdExec{}).timeout(); got != defaultTimeout {
+		t.Errorf("default timeout = %s, want %s", got, defaultTimeout)
+	}
+	if got := (&CmdExec{Timeout: 5 * time.Second}).timeout(); got != 5*time.Second {
+		t.Errorf("timeout = %s, want 5s", got)
+	}
+}
+
+// TestRunTimesOut: a script that outruns the timeout is killed and surfaces a
+// clear timeout error (which leaves the job pending), rather than blocking the
+// worker forever. The fake runner honours ctx just as os/exec's CommandContext
+// does — it blocks until the deadline fires.
+func TestRunTimesOut(t *testing.T) {
+	e := &CmdExec{
+		Timeout: 20 * time.Millisecond,
+		run: func(ctx context.Context, _ string, _, _ []string) ([]byte, error) {
+			<-ctx.Done() // CommandContext kills the process and returns when ctx is done
+			return nil, ctx.Err()
+		},
+	}
+	_, err := e.Run(context.Background(), "Start-Sleep 60", nil)
+	if err == nil {
+		t.Fatal("Run of a slow script succeeded, want a timeout error")
+	}
+	if !strings.Contains(err.Error(), "timed out") {
+		t.Errorf("error = %v, want it to mention the timeout", err)
 	}
 }
 
