@@ -1156,37 +1156,91 @@ function saveDecisionInputs(modeler, element, rows) {
   modeling.updateProperties(element, { extensionElements: ext });
 }
 
-// ioMapRowHTML renders one editable generic I/O mapping row (ADR-0068): a target
-// variable name fed by a FEEL source. kind is "in" (an input, source over the
-// enclosing scope → a local variable) or "out" (an output, source over the local
-// scope → a variable promoted to the parent). The stored source is '=' prefixed
-// (Zeebe convention); it is shown stripped.
-function ioMapRowHTML(kind, i, source, target) {
+// ioMapDefaultName mints an auto-generated variable name for a freshly added
+// mapping, matching the modeler convention (InputVariable_xxxxxxx /
+// OutputVariable_xxxxxxx) so an added mapping is complete — and thus saved — before
+// the author has typed anything, exactly like Camunda's panel.
+function ioMapDefaultName(kind) {
+  const stem = kind === "in" ? "InputVariable_" : "OutputVariable_";
+  return stem + Math.random().toString(36).slice(2, 9);
+}
+
+// ioMapTitle is the collapsed-card label for a mapping: its target variable name,
+// or a placeholder while the name is still blank.
+function ioMapTitle(kind, target) {
+  const t = (target || "").trim();
+  return t || (kind === "in" ? "Input mapping" : "Output mapping");
+}
+
+// ioTrashIcon is the small trash glyph used to delete a mapping card (styled red by
+// .io-map-del). currentColor lets the CSS own the colour.
+const ioTrashIcon = `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 2.2h4M2.6 4.2h10.8M4.4 4.2l.5 8.4a1 1 0 0 0 1 .95h4.2a1 1 0 0 0 1-.95l.5-8.4M6.6 6.8v4.4M9.4 6.8v4.4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+// ioMapCardHTML renders one mapping as a collapsible card (ADR-0068, Camunda-style):
+// a header showing the target variable name (with a delete button), and a body with
+// the target-name field and the FEEL "assignment value". kind is "in" (source over
+// the enclosing scope → a local variable) or "out" (source over the local scope → a
+// variable promoted to the parent). The stored source is '=' prefixed (Zeebe
+// convention); it is shown stripped and re-prefixed on save.
+function ioMapCardHTML(kind, i, source, target) {
   const src = (source || "").replace(/^=\s*/, "");
-  const ph = kind === "in"
-    ? { t: "amount", s: "order.total", tt: "Local variable the activity sees", st: "FEEL over the enclosing scope" }
-    : { t: "orderStatus", s: "result.status", tt: "Variable promoted to the process scope", st: "FEEL over the activity's local scope" };
-  return `<div class="io-map-row" data-kind="${kind}" data-i="${i}" style="display:flex;gap:6px;margin-bottom:6px">
-    <input type="text" class="io-target" value="${esc(target || "")}" placeholder="${ph.t}" style="flex:0 0 34%" title="${ph.tt}"/>
-    <input type="text" class="io-source" value="${esc(src)}" placeholder="${ph.s}" style="flex:1" title="${ph.st}"/>
+  const nameLabel = kind === "in" ? "Local variable name" : "Process variable name";
+  const cfg = kind === "in"
+    ? { np: "amount", sp: "order.total", nt: "Local variable the activity sees", st: "FEEL over the enclosing scope" }
+    : { np: "orderStatus", sp: "result.status", nt: "Variable promoted to the process scope", st: "FEEL over the activity's local scope" };
+  return `<div class="io-map" data-kind="${kind}" data-i="${i}">
+    <div class="io-map-head">
+      <span class="io-map-chevron" aria-hidden="true">▾</span>
+      <span class="io-map-title">${esc(ioMapTitle(kind, target))}</span>
+      <button type="button" class="io-map-del" title="Delete mapping" aria-label="Delete mapping">${ioTrashIcon}</button>
+    </div>
+    <div class="io-map-body">
+      <label class="field"><span>${nameLabel}</span>
+        <input type="text" class="io-target" value="${esc(target || "")}" placeholder="${cfg.np}" title="${cfg.nt}"/></label>
+      <label class="field"><span>Variable assignment value <i class="io-fx" title="This value is a FEEL expression">fx</i></span>
+        <div class="io-assign">
+          <span class="io-eq" aria-hidden="true">=</span>
+          <input type="text" class="io-source" value="${esc(src)}" placeholder="${cfg.sp}" spellcheck="false" title="${cfg.st}"/>
+        </div></label>
+    </div>
   </div>`;
 }
 
-// ioMappingsHTML renders the generic zeebe:ioMapping editor — input and output
-// mapping lists — for a job-backed activity (service, script, user task; ADR-0068).
-// Each list carries a trailing empty row that grows the list as it is filled. It is
+// mappingGroupHTML renders one direction's mapping list as a collapsible group with
+// an add button, a count badge, and a collapse chevron (Camunda-style). The group is
+// flagged data-standalone-group so groupifyPanel leaves it intact rather than folding
+// it into the preceding <h3> section. kind is "in" or "out".
+function mappingGroupHTML(kind, params) {
+  const meta = kind === "in"
+    ? { title: "Input mapping", wrap: "io-inputs",
+        hint: "Each mapping computes a variable the activity sees (its <b>local scope</b>) from a FEEL expression over the enclosing variables. Locals shadow inherited values and are dropped when the activity completes." }
+    : { title: "Output mapping", wrap: "io-outputs",
+        hint: "Each mapping promotes a value to the <b>process scope</b> from a FEEL expression over the activity's local scope (e.g. its result). With no output mapping the task's result merges into the process scope as-is." };
+  const cards = params.map((p, i) => ioMapCardHTML(kind, i, p.source, p.target)).join("");
+  return `<div class="io-group" data-kind="${kind}" data-standalone-group="1">
+    <div class="io-group-head">
+      <span class="io-group-title">${meta.title}</span>
+      <button type="button" class="io-group-add" title="Add mapping" aria-label="Add mapping">＋</button>
+      <span class="io-group-count" title="Mappings">${params.length}</span>
+      <span class="io-group-chevron" aria-hidden="true">▾</span>
+    </div>
+    <div class="io-group-body">
+      <div class="io-map-list" id="${meta.wrap}">${cards}</div>
+      <p class="muted io-group-hint">${meta.hint}</p>
+    </div>
+  </div>`;
+}
+
+// ioMappingsHTML renders the generic zeebe:ioMapping editor — an input and an output
+// mapping group — for a job-backed activity (service, script, user task; ADR-0068).
+// Each group adds mappings via its add button and grows/shrinks in place. It is
 // distinct from a business rule task's ioMapping inputs (decision inputs), which
 // have their own editor.
 function ioMappingsHTML(bo) {
   const io = findExt(bo, "zeebe:IoMapping");
   const ins = (io && io.inputParameters) || [];
   const outs = (io && io.outputParameters) || [];
-  return `<h3>Input mappings</h3>
-    <p class="muted" style="font-size:12px">Each row computes a variable the activity sees (its <b>local scope</b>) from a FEEL <b>source</b> over the enclosing variables. Locals shadow inherited values and are dropped when the activity completes. Leave a row's target blank to drop it.</p>
-    <div id="io-inputs">${ins.map((p, i) => ioMapRowHTML("in", i, p.source, p.target)).join("")}${ioMapRowHTML("in", ins.length, "", "")}</div>
-    <h3>Output mappings</h3>
-    <p class="muted" style="font-size:12px">Each row promotes a value to the <b>process scope</b> from a FEEL <b>source</b> over the activity's local scope (e.g. its result). With no output mapping the task's result merges into the process scope as-is.</p>
-    <div id="io-outputs">${outs.map((p, i) => ioMapRowHTML("out", i, p.source, p.target)).join("")}${ioMapRowHTML("out", outs.length, "", "")}</div>`;
+  return mappingGroupHTML("in", ins) + mappingGroupHTML("out", outs);
 }
 
 // saveIOMappings rebuilds a task's generic zeebe:ioMapping from the panel rows: the
@@ -1661,6 +1715,10 @@ function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn()) {
 function groupifyPanel(body, collapsed) {
   const heads = [...body.children].filter((n) => n.tagName === "H3");
   if (!heads.length) return;
+  // A section absorbs everything up to the next <h3>, but a standalone group (e.g.
+  // the I/O mapping list groups, which render their own header) must stay a
+  // top-level sibling rather than being folded into the preceding section's body.
+  const isStop = (n) => n.nodeType === 1 && (n.tagName === "H3" || n.dataset.standaloneGroup === "1");
   for (const h3 of heads) {
     const title = h3.textContent.trim();
     const group = document.createElement("div");
@@ -1668,7 +1726,7 @@ function groupifyPanel(body, collapsed) {
     const bodyWrap = document.createElement("div");
     bodyWrap.className = "pgroup-body";
     let n = h3.nextSibling;
-    while (n && !(n.nodeType === 1 && n.tagName === "H3")) {
+    while (n && !isStop(n)) {
       const next = n.nextSibling;
       bodyWrap.appendChild(n);
       n = next;
@@ -2535,40 +2593,75 @@ function wireProperties(root, modeler, api, projectId, toast) {
       [...inputsWrap.querySelectorAll(".dmn-input-row")].forEach(wireRow);
     }
 
-    // Generic zeebe:ioMapping input/output editor (ADR-0068). Two lists that save on
-    // blur and grow in place, mirroring the decision-input rows above.
-    const ioInWrap = body.querySelector("#io-inputs");
-    const ioOutWrap = body.querySelector("#io-outputs");
-    if (ioInWrap || ioOutWrap) {
+    // Generic zeebe:ioMapping input/output editor (ADR-0068), Camunda-style: one
+    // collapsible list group per direction, each mapping a collapsible card. Cards
+    // save on blur; the add button appends an auto-named card and the trash button
+    // removes one. Both groups share one save that re-collects both lists.
+    const ioGroups = [...body.querySelectorAll(".io-group")];
+    if (ioGroups.length) {
+      const ioInWrap = body.querySelector("#io-inputs");
+      const ioOutWrap = body.querySelector("#io-outputs");
       const collect = (wrap) => wrap
-        ? [...wrap.querySelectorAll(".io-map-row")].map((row) => ({
-            target: (row.querySelector(".io-target").value || "").trim(),
-            source: (row.querySelector(".io-source").value || "").trim(),
+        ? [...wrap.querySelectorAll(".io-map")].map((card) => ({
+            target: (card.querySelector(".io-target").value || "").trim(),
+            source: (card.querySelector(".io-source").value || "").trim(),
           }))
         : [];
       const saveIO = () => savePreservingPanel(() => saveIOMappings(modeler, element, collect(ioInWrap), collect(ioOutWrap)));
-      const wireIOList = (wrap, kind) => {
-        if (!wrap) return;
-        const wireRow = (row) => {
-          const target = row.querySelector(".io-target");
-          const source = row.querySelector(".io-source");
-          target.addEventListener("change", saveIO);
-          source.addEventListener("change", saveIO);
-          target.addEventListener("input", () => {
-            const rows = [...wrap.querySelectorAll(".io-map-row")];
-            if (row === rows[rows.length - 1] && target.value.trim() !== "") {
-              const tmp = document.createElement("div");
-              tmp.innerHTML = ioMapRowHTML(kind, rows.length, "", "");
-              const newRow = tmp.firstElementChild;
-              wrap.appendChild(newRow);
-              wireRow(newRow);
-            }
-          });
-        };
-        [...wrap.querySelectorAll(".io-map-row")].forEach(wireRow);
+      // updateCount keeps a group's badge in step with its card total.
+      const updateCount = (group) => {
+        const badge = group.querySelector(".io-group-count");
+        if (badge) badge.textContent = String(group.querySelectorAll(".io-map").length);
       };
-      wireIOList(ioInWrap, "in");
-      wireIOList(ioOutWrap, "out");
+      // wireCard binds one mapping card: the header toggles the card open/closed
+      // (except the delete button), the name field retitles the card live and saves
+      // on blur, the value saves on blur, and delete removes the card and saves.
+      const wireCard = (card, group) => {
+        const kind = card.dataset.kind;
+        const target = card.querySelector(".io-target");
+        const source = card.querySelector(".io-source");
+        const titleEl = card.querySelector(".io-map-title");
+        card.querySelector(".io-map-head").addEventListener("click", (e) => {
+          if (e.target.closest(".io-map-del")) return;
+          card.classList.toggle("collapsed");
+        });
+        target.addEventListener("input", () => { titleEl.textContent = ioMapTitle(kind, target.value); });
+        target.addEventListener("change", saveIO);
+        source.addEventListener("change", saveIO);
+        card.querySelector(".io-map-del").addEventListener("click", (e) => {
+          e.stopPropagation();
+          card.remove();
+          updateCount(group);
+          saveIO();
+        });
+      };
+      for (const group of ioGroups) {
+        const kind = group.dataset.kind;
+        const wrap = group.querySelector(".io-map-list");
+        [...wrap.querySelectorAll(".io-map")].forEach((card) => wireCard(card, group));
+        // Section collapse: clicking the head toggles it, but not via the add button.
+        group.querySelector(".io-group-head").addEventListener("click", (e) => {
+          if (e.target.closest(".io-group-add")) return;
+          group.classList.toggle("collapsed");
+        });
+        // Add an auto-named, expanded card (Camunda-style) and focus its name so the
+        // author can rename it immediately; save so it persists even if left as-is.
+        group.querySelector(".io-group-add").addEventListener("click", (e) => {
+          e.stopPropagation();
+          group.classList.remove("collapsed");
+          const idx = wrap.querySelectorAll(".io-map").length;
+          const tmp = document.createElement("div");
+          tmp.innerHTML = ioMapCardHTML(kind, idx, "", ioMapDefaultName(kind));
+          const card = tmp.firstElementChild;
+          wrap.appendChild(card);
+          wireCard(card, group);
+          updateCount(group);
+          saveIO();
+          const name = card.querySelector(".io-target");
+          name.focus();
+          name.select();
+        });
+      }
     }
 
     const fassignee = body.querySelector("#f-assignee");
