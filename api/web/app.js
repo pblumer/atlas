@@ -912,6 +912,7 @@ async function viewProjectDetail(id) {
         <td class="muted">Decision ref</td>
         <td class="muted">${esc(fmtTime(r.createdAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", [
+          { label: "Bearbeiten", icon: "✎", act: "editref", data: { id: r.id, ref: r.modelRef, pid: r.projectId || "", name: r.name } },
           { label: "View", icon: "▦", href },
           { label: "Validate", icon: "✔", act: "valref", data: { id: r.id } },
           ...moveItems(r.projectId, "moveref", r.id),
@@ -980,6 +981,7 @@ async function viewProjectDetail(id) {
         case "delproj": deleteProject(id, proj.name, () => { location.hash = "#/modeler"; }); break;
         case "valproj": validateProject(id); break;
         case "valref": validateDmnRef(b.dataset.id); break;
+        case "editref": editDmnRef({ id: b.dataset.id, modelRef: b.dataset.ref, projectId: b.dataset.pid, name: b.dataset.name }, render); break;
         case "deldraft": deleteDraft(b.dataset.key, render); break;
         case "delref": deleteDmnRef(b.dataset.id, render); break;
         case "delform": deleteForm(b.dataset.id, render); break;
@@ -1230,6 +1232,33 @@ function wireSecretsManagement(secrets, state) {
       } catch (err) { toast("Secret update failed: " + err.message, "err"); }
     });
   }
+}
+
+// editDmnRef opens the embedded DMN editor (ADR-0062) on a reference's model and,
+// on save, keeps the Project Explorer in sync. Editing overwrites the model in
+// place under the same handle, so the reference (and any business-rule-task
+// selection) stays valid; only the display name can drift, so a rename in the
+// editor is mirrored onto the reference here. The editor module is imported lazily
+// — same discipline as the BPMN editor — so the Modeler home stays light. When the
+// model can't be edited locally (a remote temis service, or a dangling handle) the
+// editor surfaces the failure itself and resolves to null, leaving the row as-is.
+async function editDmnRef(ref, reload) {
+  if (!ref.modelRef) {
+    toast("Diese DMN-Referenz hat kein lokal editierbares Modell.", "err");
+    return;
+  }
+  const { openDmnEditor } = await import("./dmn-editor.js");
+  const result = await openDmnEditor({ api, toast, projectId: ref.projectId || "", modelRef: ref.modelRef });
+  if (!result) return; // cancelled or failed (the editor already reported why)
+  // Editing keeps the handle; mirror a decision rename onto the reference so the
+  // Explorer label doesn't go stale.
+  const newName = (result.name || "").trim();
+  if (newName && newName !== ref.name) {
+    try {
+      await api("PATCH", `/api/v1/dmnrefs/${encodeURIComponent(ref.id)}`, { name: newName });
+    } catch (e) { toast("Modell gespeichert, Umbenennen fehlgeschlagen: " + e.message, "err"); }
+  }
+  await reload();
 }
 
 // moveDmnRef reassigns a DMN reference to a project (or to Ungrouped when "").
@@ -1997,31 +2026,55 @@ async function viewInstanceReplay(key) {
 }
 
 // ---------- Router ----------
-// viewDmnViewer renders a referenced DMN model read-only: its decision
-// requirements graph (decisions, input data, and the requirements between them).
-// Atlas deliberately ships no DMN *editor* (that is temis, ADR-0014); this is a
-// look, not an edit surface, from the graph the embedded engine already exposes.
+// viewDmnViewer renders a referenced DMN model: its decision requirements graph
+// (decisions, input data, and the requirements between them) drawn read-only from
+// the graph the embedded engine exposes, with a Bearbeiten button that opens the
+// embedded dmn-js editor (ADR-0062) on the same model. The SVG itself is a
+// picture, not an edit surface — editing happens in the modeler overlay, and on
+// save the view re-renders from the updated model.
 async function viewDmnViewer(refId) {
   view.innerHTML = `<div class="card"><p class="muted">Loading decision model…</p></div>`;
-  let g;
+  let g, ref = null;
   try {
-    g = await api("GET", `/api/v1/dmnrefs/${encodeURIComponent(refId)}/graph`);
+    // The graph carries no model handle, so the reference is fetched alongside it
+    // to know which model the Bearbeiten button should open.
+    const [graph, refs] = await Promise.all([
+      api("GET", `/api/v1/dmnrefs/${encodeURIComponent(refId)}/graph`),
+      api("GET", "/api/v1/dmnrefs").catch(() => []),
+    ]);
+    g = graph;
+    ref = (refs || []).find((r) => r.id === refId) || null;
   } catch (e) {
     view.innerHTML = `<div class="card empty"><h1>Could not load model</h1><p class="muted">${esc(e.message)}</p></div>`;
     return;
   }
-  const title = g.modelName || "DMN model";
+  const title = g.modelName || (ref && ref.name) || "DMN model";
   const back = `<a href="#/modeler">← Modeler</a>`;
+  const editBtn = ref && ref.modelRef
+    ? `<button class="btn" id="dmn-edit">Bearbeiten</button>` : "";
+  // Re-render from the updated model once the editor closes on a save.
+  const wireEdit = () => {
+    const b = document.getElementById("dmn-edit");
+    if (b) b.addEventListener("click", async () => {
+      await editDmnRef({ id: ref.id, modelRef: ref.modelRef, projectId: ref.projectId || "", name: ref.name }, () => viewDmnViewer(refId));
+    });
+  };
   if (!g.valid) {
-    view.innerHTML = `<div class="card">${back}<h1>${esc(title)}</h1>
+    view.innerHTML = `<div class="card">${back}
+      <div class="between"><h1>${esc(title)}</h1><div class="row">${editBtn}</div></div>
       <p class="muted">${g.resolved ? "This model has errors and can't be shown:" : "This reference doesn't resolve to a temis model."}</p>
       <pre class="muted" style="white-space:pre-wrap">${esc(g.message || "unavailable")}</pre></div>`;
+    wireEdit();
     return;
   }
   view.innerHTML = `<div class="card">${back}
-    <h1>${esc(title)} <span class="muted" style="font-size:14px;font-weight:normal">· read-only DMN view</span></h1>
+    <div class="between">
+      <h1>${esc(title)} <span class="muted" style="font-size:14px;font-weight:normal">· DMN view</span></h1>
+      <div class="row">${editBtn}</div>
+    </div>
     <div id="dmn-canvas" style="overflow:auto;border:1px solid #e5e7eb;border-radius:10px;background:#fafafa;padding:8px">${renderDrgSvg(g)}</div>
-    <p class="muted" style="font-size:12px">Decisions are authored in temis; Atlas shows the model this reference points at. Use it in a business rule task via the Modeler's decision picker.</p></div>`;
+    <p class="muted" style="font-size:12px">Diese Entscheidung kann direkt in Atlas bearbeitet (<b>Bearbeiten</b>) oder in einem Business-Rule-Task über den Decision-Picker des Modelers verwendet werden.</p></div>`;
+  wireEdit();
 }
 
 // borderPoint returns the point on a box's border (centre cx,cy, size w×h) in the

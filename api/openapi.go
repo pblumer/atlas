@@ -235,8 +235,8 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Create a DMN reference artifact", tag: "DMN References", req: jsonBody("DMN reference", tObject()), resp: jsonBody("Created reference", tObject())}},
 		{"GET", "/api/v1/dmnrefs", s.handleListDmnRefs, apiOp{
 			summary: "List DMN reference artifacts", tag: "DMN References", resp: jsonBody("References", tArray())}},
-		{"PATCH", "/api/v1/dmnrefs/{id}", s.handleMoveDmnRef, apiOp{
-			summary: "Move a DMN reference to a project", tag: "DMN References", req: jsonBody("Move", tObject()), resp: jsonBody("Updated reference", tObject())}},
+		{"PATCH", "/api/v1/dmnrefs/{id}", s.handleUpdateDmnRef, apiOp{
+			summary: "Update a DMN reference: move it to a project and/or rename it", tag: "DMN References", req: jsonBody("Update", tObject()), resp: jsonBody("Updated reference", tObject())}},
 		{"DELETE", "/api/v1/dmnrefs/{id}", s.handleDeleteDmnRef, apiOp{
 			summary: "Delete a DMN reference", tag: "DMN References", status: http.StatusNoContent}},
 		{"POST", "/api/v1/dmnrefs/{id}/validate", s.handleValidateDmnRef, apiOp{
