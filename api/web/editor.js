@@ -600,37 +600,29 @@ function makeImplementBadges(root, modeler) {
   return refresh;
 }
 
-// collectFeelVariables gathers names an author is likely to reference in a FEEL
-// expression, for the completion popup. Two static signals: the start variables
-// the process declares up front (atlas:StartForm), which are supplied when an
-// instance starts; and the result variables written by script tasks elsewhere in
-// the diagram — a token that has run through one carries that variable
-// downstream. Best-effort: a failure just yields no variable hints.
-function collectFeelVariables(modeler) {
-  const vars = new Set();
+// variablesForCompletion returns the variables to offer in an element's expression
+// and script fields, each tagged with where it comes from so the completion popup
+// can show its origin. Process-scope variables (start variables, script/decision
+// results, and output mappings) come from collectDiagramVariables — the same static
+// analysis behind the Variables panel, so completion and that panel stay in step.
+// The selected element's own input-mapping targets are then added as activity-local
+// "task" variables (ADR-0068); a local shadows a like-named process variable.
+// Best-effort: a failure just yields fewer hints.
+function variablesForCompletion(modeler, element) {
+  const byName = new Map();
   try {
-    const rootBo = rootProcess(modeler);
-    if (rootBo) {
-      for (const v of readStartVariables(rootBo)) {
-        if (v.name) vars.add(v.name);
-      }
+    for (const v of collectDiagramVariables(modeler)) {
+      if (v.name && !byName.has(v.name)) byName.set(v.name, { name: v.name, detail: v.source || "variable" });
     }
   } catch { /* best-effort */ }
   try {
-    modeler.get("elementRegistry").forEach((el) => {
-      const s = findExt(el.businessObject, "zeebe:Script");
-      if (s && s.resultVariable) vars.add(s.resultVariable);
-      // A PowerShell (job) script task writes its result into a variable too, so
-      // offer it for completion just like a FEEL script result (ADR-0047).
-      const js = findExt(el.businessObject, "atlas:JobScript");
-      if (js && js.resultVariable) vars.add(js.resultVariable);
-      // A business rule task's decision result is a variable downstream elements
-      // can read, so offer it for completion just like a script result.
-      const cd = findExt(el.businessObject, "zeebe:CalledDecision");
-      if (cd && cd.resultVariable) vars.add(cd.resultVariable);
-    });
+    const io = element && findExt(element.businessObject, "zeebe:IoMapping");
+    for (const p of (io && io.inputParameters) || []) {
+      const name = (p.target || "").trim();
+      if (name) byName.set(name, { name, detail: "task variable · local" });
+    }
   } catch { /* best-effort */ }
-  return [...vars].sort();
+  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 // collectDiagramVariables statically analyses the diagram for the variables it
@@ -829,13 +821,12 @@ function scriptErrorLine(language, msg) {
 // through the real interpreter (POST /scripts/run), shows its result/error stream
 // and runtime, and maps a runtime error back to a marker on the offending line.
 // No-op if the field isn't present for the current selection.
-function enhanceScript(body, modeler, api) {
+function enhanceScript(body, modeler, api, variables) {
   const ta = body.querySelector("#f-psbody");
   if (!ta) return;
   const flang = body.querySelector("#f-scriptlang");
   const language = (flang && flang.value) || "powershell";
-  const vars = collectFeelVariables(modeler);
-  const editor = attachCodeEditor(ta, { lang: moduleFor(language), variables: vars, gutter: true, wrap: false });
+  const editor = attachCodeEditor(ta, { lang: moduleFor(language), variables: variables || [], gutter: true, wrap: false });
 
   const shortcut = language === "powershell"
     ? "<code>$name</code> / <code>$env:</code> &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent"
@@ -2735,13 +2726,13 @@ function wireProperties(root, modeler, api, projectId, toast) {
     // Validation compiles the expression against the same engine deploy uses
     // (POST /feel/validate); Test evaluates it (POST /feel/evaluate).
     if (tab === "implement") {
-      const feelVars = collectFeelVariables(modeler);
+      const feelVars = variablesForCompletion(modeler, element);
       const validate = api ? (expression) => api("POST", "/api/v1/feel/validate", { expression }) : null;
       const evaluate = api ? (expression, variables) => api("POST", "/api/v1/feel/evaluate", { expression, variables }) : null;
       enhanceFeel(body, "#f-expr", feelVars, validate, evaluate);
       enhanceFeel(body, "#f-cond", feelVars, validate, evaluate);
       enhanceFeel(body, "#f-corrkey", feelVars, validate, evaluate);
-      enhanceScript(body, modeler, api);
+      enhanceScript(body, modeler, api, feelVars);
       // Value-or-expression fields carry a Camunda-style fx toggle: switch them to
       // a FEEL editor and the value is stored '=' prefixed (Zeebe's expression form).
       for (const sel of ["#f-assignee", "#f-groups", "#f-due"]) {
