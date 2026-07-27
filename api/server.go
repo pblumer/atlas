@@ -40,6 +40,7 @@ import (
 	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/job"
+	"github.com/pblumer/atlas/rest"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/temis"
 )
@@ -301,6 +302,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	}
 	s.temisRegistry.Replace(clients)
 	s.jobRunner.HandleCompleting(compiler.TemisDecisionJobTypeIndex, temis.Handler(store, s.processLookup, s.temisRegistry, nil))
+	// An HTTP-REST connector task calls a model-authored endpoint (ADR-0067). One
+	// worker serves every process under the reserved REST job type; it resolves each
+	// job's method/url/result-variable from the compiled process, calls the API off
+	// the run loop and after fsync, and writes the JSON response into the task's
+	// result variable. The endpoint lives in the model, so nothing needs configuring
+	// here; authentication (a type plus a server-registered credential reference) is
+	// a follow-up.
+	s.jobRunner.HandleWithOutput(compiler.RestJobTypeIndex, rest.Handler(store, s.processLookup, rest.NewHTTPClient()))
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
 	}

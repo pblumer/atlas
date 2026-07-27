@@ -253,17 +253,18 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			continue
 		}
 		// A service task bearing an <atlas:restConnector> extension is an HTTP-REST
-		// connector task: it delegates to a server-registered REST connector via the
-		// job path (ADR-0036), not to an external service-task worker.
+		// connector task: it calls the model-authored URL via the job path
+		// (ADR-0067), not an external service-task worker. The URL lives in the model
+		// (unlike clio's registry-only endpoint); credentials never do.
 		if c := st.Rest; c != nil {
-			if c.Connector == "" || c.Path == "" {
-				return nil, fmt.Errorf("compiler: rest connector task %q needs connector and path", st.Id)
+			if strings.TrimSpace(c.Url) == "" {
+				return nil, fmt.Errorf("compiler: rest connector task %q needs a url", st.Id)
 			}
 			method, err := normalizeHTTPMethod(c.Method)
 			if err != nil {
 				return nil, fmt.Errorf("compiler: rest connector task %q: %w", st.Id, err)
 			}
-			if err := register(st.Id, b.AddRestConnectorTask(c.Connector, method, c.Path, retries)); err != nil {
+			if err := register(st.Id, b.AddRestConnectorTask(method, strings.TrimSpace(c.Url), strings.TrimSpace(c.ResultVariable), retries)); err != nil {
 				return nil, err
 			}
 			continue
@@ -981,7 +982,7 @@ type xmlServiceTask struct {
 	// The pointer is nil when the <atlas:clioConnector> extension is absent.
 	Clio *xmlClioConnector `xml:"extensionElements>clioConnector"`
 	// Rest, when present, marks this service task an HTTP-REST connector task
-	// (ADR-0036). The pointer is nil when the <atlas:restConnector> extension is
+	// (ADR-0067). The pointer is nil when the <atlas:restConnector> extension is
 	// absent.
 	Rest    *xmlRestConnector          `xml:"extensionElements>restConnector"`
 	DataOut []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
@@ -1000,15 +1001,14 @@ type xmlClioConnector struct {
 }
 
 // An HTTP-REST connector task's parameters, carried on a service task as an
-// <atlas:restConnector connector="..." method="..." path="..."/> extension
-// element. connector names a server-registered connector (its base endpoint and
-// credentials live in the server config, never in the model); method is the HTTP
-// method and path is appended to the connector's base endpoint to form the
-// request URL.
+// <atlas:restConnector method="..." url="..." resultVariable="..."/> extension
+// element (ADR-0067). method is the HTTP method; url is the full request URL,
+// authored in the model (credentials are never authored here); resultVariable, if
+// set, is the process variable the JSON response is written back into.
 type xmlRestConnector struct {
-	Connector string `xml:"connector,attr"`
-	Method    string `xml:"method,attr"`
-	Path      string `xml:"path,attr"`
+	Method         string `xml:"method,attr"`
+	Url            string `xml:"url,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
 }
 
 type xmlTaskDefinition struct {
