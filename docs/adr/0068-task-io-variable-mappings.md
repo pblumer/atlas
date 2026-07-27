@@ -4,9 +4,17 @@
 - **Date:** 2026-07-27
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Not implemented. This ADR decides the shape; the
+> **Implementation status.** Partially implemented. This ADR decides the shape; the
 > work is phased (scope-chain variable resolution → compiler parse → engine
-> apply → UI), each phase test-first with a recovery test.
+> apply → UI), each phase test-first with a recovery test. Delivered: scope-chain
+> resolution (`engine.ProcessingContext.ResolveVariable`), compiler parsing of
+> generic `zeebe:ioMapping` input/output (`compiler.IOMapping`, per-node
+> `IOInputs`/`IOOutputs`), and the engine apply — input mappings write an
+> activity-local scope on activation, output mappings promote to the parent scope on
+> completion, and the local scope is dropped via `VariableDeleted` events; the inline
+> script task and the polyglot script worker read their inputs up the scope chain.
+> Remaining: the properties-panel I/O-mapping editor (UI), and extending the worker
+> scope-chain read to the other job workers (DMN, REST, clio).
 
 ## Context and problem statement
 

@@ -54,6 +54,38 @@ func TestResolveInChain(t *testing.T) {
 	}
 }
 
+// TestBindInputsChainBuiltin checks bindInputsChain resolves the processInstanceKey
+// built-in to the owning instance's key from any start scope: an activity-local
+// scope resolves via its element instance's ProcessInstanceKey, and the process-
+// instance root scope (no element instance) resolves to itself (ADR-0068).
+func TestBindInputsChainBuiltin(t *testing.T) {
+	s := openStore(t)
+	p := &Processor{store: s, clock: &wbClock{}}
+	tx := s.NewTransaction()
+
+	const root uint64 = 1000
+	const local uint64 = 2000
+	if err := tx.PutElementInstance(local, &model.ElementInstanceValue{ProcessInstanceKey: root, FlowScopeKey: root}); err != nil {
+		t.Fatalf("PutElementInstance: %v", err)
+	}
+	c := &ProcessingContext{p: p, tx: tx}
+
+	// From the local scope, the built-in is the owning process-instance key.
+	got := bindInputsChain(c, []string{builtinProcessInstanceKey}, local)
+	if v, ok := got[builtinProcessInstanceKey]; !ok || v.String() != "1000" {
+		t.Errorf("builtin from local = %q (ok=%v), want 1000", v.String(), ok)
+	}
+	// From the root scope (no element instance), the built-in is that scope itself.
+	got = bindInputsChain(c, []string{builtinProcessInstanceKey}, root)
+	if v, ok := got[builtinProcessInstanceKey]; !ok || v.String() != "1000" {
+		t.Errorf("builtin from root = %q (ok=%v), want 1000", v.String(), ok)
+	}
+	// No inputs returns a nil map (the allocation-free fast path).
+	if got := bindInputsChain(c, nil, local); got != nil {
+		t.Errorf("bindInputsChain(nil) = %v, want nil", got)
+	}
+}
+
 // TestResolveVariableChain wires the walk to live element/variable state through a
 // transaction: a local scope inherits from the root, and a local variable shadows
 // an inherited one of the same name.

@@ -7,6 +7,7 @@ import (
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/script"
@@ -148,6 +149,62 @@ func TestScriptTaskRunsAndWritesResult(t *testing.T) {
 	}
 	if pi, ei := active(t, store); pi != 0 || ei != 0 {
 		t.Fatalf("after Drive: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+}
+
+// TestScriptTaskSeesInputMappedLocal proves the worker reads its activity-local
+// scope: an input mapping computes a local from an inherited variable, and the
+// script sees both the local and the inherited value; on completion the local is
+// dropped, so only the result reaches the process scope (ADR-0068).
+func TestScriptTaskSeesInputMappedLocal(t *testing.T) {
+	store, log := openStore(t)
+
+	b := compiler.NewBuilder(scriptDefKey, "greeting", 1)
+	start := b.AddStartEvent()
+	sj := b.AddScriptJobTask(compiler.PwshJobType, "powershell", `$local`, "out", 3)
+	src, err := expr.CompileAuto(`name + "!"`)
+	if err != nil {
+		t.Fatalf("CompileAuto: %v", err)
+	}
+	b.AddInputMapping(sj, "local", src)
+	end := b.AddEndEvent()
+	b.Connect(start, sj)
+	b.Connect(sj, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ScriptJobTask(cp.Node(sj).Detail).JobType
+
+	p := engine.New(1, log, store, &fixedClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	fx := &fakeExec{result: "done"}
+	runner := job.NewRunner(store, p)
+	runner.HandleWithOutput(jobType, script.Handler(store, lookupOf(cp), fx))
+
+	p.CreateInstance(cp.Key, model.VariableValue{Name: "name", Kind: model.VarString, Text: "Anna"})
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+
+	// The worker saw the input-mapped local shadowing/adding to the inherited scope.
+	if fx.gotInput["local"] != "Anna!" {
+		t.Errorf("input local = %#v, want \"Anna!\" (input-mapped)", fx.gotInput["local"])
+	}
+	if fx.gotInput["name"] != "Anna" {
+		t.Errorf("input name = %#v, want \"Anna\" (inherited from the process scope)", fx.gotInput["name"])
+	}
+
+	// The result reached the process scope; the local was dropped, never promoted.
+	root := model.NewKey(1, 1)
+	if got := readVar(t, store, root, "out"); got == nil || got.Text != "done" {
+		t.Fatalf("out = %+v, want \"done\"", got)
+	}
+	if got := readVar(t, store, root, "local"); got != nil {
+		t.Errorf("local = %+v at the process scope, want nil (dropped activity-local)", got)
 	}
 }
 

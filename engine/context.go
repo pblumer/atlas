@@ -78,6 +78,25 @@ func (c *ProcessingContext) GetVariable(scope uint64, name string) *model.Variab
 	return v
 }
 
+// VariablesOfScope calls fn with each variable owned by scope, read through the
+// in-flight transaction (so it sees this batch's writes). Values are collected
+// into a fresh slice before fn runs, so fn may emit variable events (e.g. deleting
+// the scope's locals) without disturbing the underlying scan. Used to drop an
+// activity-local scope on completion (ADR-0068).
+func (c *ProcessingContext) VariablesOfScope(scope uint64, fn func(v model.VariableValue)) {
+	var vars []model.VariableValue
+	if err := c.tx.VariablesOfScope(scope, func(v *model.VariableValue) error {
+		vars = append(vars, *v)
+		return nil
+	}); err != nil {
+		c.p.fail(err)
+		return
+	}
+	for i := range vars {
+		fn(vars[i])
+	}
+}
+
 // ForEachElementInstance calls fn with the key of every element instance
 // belonging to a process instance, via the committed elByProc index. Keys are
 // collected before fn runs so fn may mutate element-instance state (e.g. emit
