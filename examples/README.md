@@ -7,6 +7,7 @@ against a live Atlas server (`0.1.0-dev`).
 | File | What it is |
 |------|-----------|
 | [`order-fulfillment.bpmn`](order-fulfillment.bpmn) | A self-completing order-fulfillment process that exercises inline scripts and all three gateway kinds, and drives itself to an end event with **no external workers attached**. |
+| [`entra-create-account.bpmn`](entra-create-account.bpmn) | A PowerShell `jobScript` task that creates an EntraID account — the *worker-backed* counterpart: its token parks on the script job until a PowerShell script worker runs it. |
 
 > Looking for a model that parks on human tasks so you can watch the task
 > lifecycle? See [`../postman/order-approval.bpmn`](../postman/order-approval.bpmn)
