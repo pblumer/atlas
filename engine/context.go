@@ -222,6 +222,17 @@ func (c *ProcessingContext) AppendDataObjectEvent(intent model.Intent, v model.D
 	c.appendEvent(v.ScopeKey, model.VTDataObject, intent, inflightValue{dataObject: v})
 }
 
+// AppendDecisionEvaluationEvent records how a business rule task's decision was
+// made — its inputs, outputs, and trace — as append-only history (ADR-0066). The
+// worker evaluated the decision off the processor goroutine and froze the result
+// onto the completion command; this event carries genuine runtime data (JSON
+// payloads), so it allocates for its strings, not hot-path token movement. It is
+// keyed by the owning process instance, so a scope-wide scan yields every decision
+// an instance evaluated in order.
+func (c *ProcessingContext) AppendDecisionEvaluationEvent(v model.DecisionEvaluationValue) {
+	c.appendEvent(v.ProcessInstanceKey, model.VTDecisionEvaluation, model.IntentDecisionEvaluated, inflightValue{decisionEval: v})
+}
+
 // GetDataObject reads a scope's data object by name through the in-flight
 // transaction (sees writes from earlier in this batch). A data-output association
 // uses it to keep the object's current value or state when the write changes only

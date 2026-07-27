@@ -339,6 +339,75 @@ func (v *DataObjectValue) decode(src []byte) error {
 	return nil
 }
 
+// DecisionEvaluationValue is one business rule task's DMN decision evaluation,
+// retained for debugging (ADR-0066). It freezes what the worker computed off the
+// processor goroutine: the input context the decision was given, the outputs it
+// produced, and the temis trace explaining which rules fired. The three payloads
+// are canonical JSON text (InputsJSON and OutputsJSON are objects; TraceJSON is the
+// temis trace tree, or "" when the evaluator produced none — e.g. a literal-
+// expression decision or a remote decision whose connector returned no trace).
+//
+// It is keyed under its owning ProcessInstanceKey as append-only history — one
+// record per evaluation, never overwritten — so an operator can inspect after the
+// fact exactly how a decision was made. ElementInstanceKey, ProcessDefKey and
+// ElementId locate the business rule task on its instance and diagram. Like a
+// variable it carries genuine runtime data, so its encoding is length-prefixed.
+type DecisionEvaluationValue struct {
+	ProcessInstanceKey uint64 // owning instance (the scope this record is keyed under)
+	ElementInstanceKey uint64 // the business rule task instance that evaluated
+	ProcessDefKey      uint64 // the process definition, to map ElementId onto the diagram
+	ElementId          int32  // interned diagram node id of the business rule task
+	DecisionId         string // the evaluated DMN decision id
+	InputsJSON         string // canonical JSON object: the decision's input context
+	OutputsJSON        string // canonical JSON object: the decision's outputs (name → value)
+	TraceJSON          string // temis trace JSON (which rules fired); "" when none
+}
+
+func (*DecisionEvaluationValue) ValueType() ValueType { return VTDecisionEvaluation }
+
+func (v *DecisionEvaluationValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ElementInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.ElementId))
+	dst = appendString(dst, v.DecisionId)
+	dst = appendString(dst, v.InputsJSON)
+	dst = appendString(dst, v.OutputsJSON)
+	return appendString(dst, v.TraceJSON)
+}
+
+func (v *DecisionEvaluationValue) decode(src []byte) error {
+	if len(src) < 28 {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src)
+	v.ElementInstanceKey = binary.LittleEndian.Uint64(src[8:])
+	v.ProcessDefKey = binary.LittleEndian.Uint64(src[16:])
+	v.ElementId = int32(binary.LittleEndian.Uint32(src[24:]))
+	rest := src[28:]
+	decisionId, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.DecisionId = decisionId
+	inputs, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.InputsJSON = inputs
+	outputs, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.OutputsJSON = outputs
+	trace, _, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.TraceJSON = trace
+	return nil
+}
+
 // MessageSubscriptionValue is an open subscription: an element instance (a
 // message intermediate catch event) waiting for a named message whose
 // correlation key matches. Like a variable it carries genuine runtime data (the
@@ -529,6 +598,8 @@ func newValue(vt ValueType) Value {
 		return &DataObjectValue{}
 	case VTIncident:
 		return &IncidentValue{}
+	case VTDecisionEvaluation:
+		return &DecisionEvaluationValue{}
 	default:
 		return nil
 	}

@@ -1295,6 +1295,73 @@ func (s *Server) handleInstanceDataObjects(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, out)
 }
 
+// decisionEvaluationView renders one DMN decision evaluation for the operator UI
+// (ADR-0066): when it ran, which business rule task on the diagram made it, which
+// decision it evaluated, and — the point of the record — the input context it saw,
+// the outputs it produced, and the temis trace explaining which rules fired. The
+// three payloads are already canonical JSON in the store, so they pass through as
+// raw JSON rather than being re-encoded. Trace is omitted when the decision produced
+// none (a literal-expression decision, or a remote decision returning no trace).
+type decisionEvaluationView struct {
+	At         int64           `json:"at"`
+	ElementID  string          `json:"elementId"`
+	DecisionID string          `json:"decisionId"`
+	Inputs     json.RawMessage `json:"inputs"`
+	Outputs    json.RawMessage `json:"outputs"`
+	Trace      json.RawMessage `json:"trace,omitempty"`
+}
+
+// rawJSONOr returns s as raw JSON, or fallback when s is empty — so a view field
+// declared as JSON never carries an invalid empty document.
+func rawJSONOr(s, fallback string) json.RawMessage {
+	if s == "" {
+		return json.RawMessage(fallback)
+	}
+	return json.RawMessage(s)
+}
+
+// handleInstanceDecisions returns the DMN decision evaluations a process instance
+// made, in evaluation order, each with its inputs, outputs, and trace (ADR-0066).
+// It is the "look up after the fact how a decision was made" surface: because the
+// evaluations are durable history, it works while the instance runs and after it
+// has finished. An instance that evaluated no decisions (or an unknown key) yields
+// an empty array, not a 404 — like the variables and data-objects endpoints, it is
+// a convenience read, not an existence check. The element id is mapped to its BPMN
+// diagram id via the instance's compiled process; if the definition has since been
+// deleted, the id is left empty (the diagram can no longer be resolved).
+func (s *Server) handleInstanceDecisions(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid instance key")
+		return
+	}
+	out := []decisionEvaluationView{}
+	var scanErr error
+	s.do(func() {
+		scanErr = s.store.DecisionEvaluationHistory(key, func(ts int64, _ uint64, v *model.DecisionEvaluationValue) error {
+			view := decisionEvaluationView{
+				At:         ts,
+				DecisionID: v.DecisionId,
+				Inputs:     rawJSONOr(v.InputsJSON, "{}"),
+				Outputs:    rawJSONOr(v.OutputsJSON, "{}"),
+			}
+			if v.TraceJSON != "" {
+				view.Trace = json.RawMessage(v.TraceJSON)
+			}
+			if d, ok := s.deployments[v.ProcessDefKey]; ok {
+				view.ElementID = d.cp.ElementBpmnId(v.ElementId)
+			}
+			out = append(out, view)
+			return nil
+		})
+	})
+	if scanErr != nil {
+		writeError(w, http.StatusInternalServerError, "read decisions: "+scanErr.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 // handleListInstances lists process instances — live ones (with their current
 // token count) followed by finished ones from the history index, most recently
 // completed first (ADR-0017). It is the operator "instances" view.

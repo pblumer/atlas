@@ -37,12 +37,29 @@ type Handler func(Job) error
 // (retry, then an incident).
 type OutputHandler func(Job) ([]model.VariableValue, error)
 
+// Completion is everything a worker hands back when a job succeeds: the output
+// variables to write into the instance and, for a business rule task, the decision
+// evaluation to retain for debugging (ADR-0066). Decision is nil for workers that
+// do not produce one.
+type Completion struct {
+	Outputs  []model.VariableValue
+	Decision *model.DecisionEvaluationValue
+}
+
+// CompletingHandler does a job's work and returns its full Completion — outputs
+// plus any decision evaluation. It is the widest handler shape; Handler and
+// OutputHandler are the output-less and decision-less special cases. Returning an
+// error fails the job (retry, then an incident) exactly as for the others.
+type CompletingHandler func(Job) (Completion, error)
+
 // Engine is the slice of the processor the runner drives: process queued
-// commands, accept job completions with their output variables, and accept job
-// failures (which retry or raise an incident, ADR-0061).
+// commands, accept job completions with their output variables and (for a decision)
+// the evaluation to retain, and accept job failures (which retry or raise an
+// incident, ADR-0061).
 type Engine interface {
 	RunUntilIdle() error
 	CompleteJob(jobKey uint64, outputs ...model.VariableValue)
+	CompleteJobWithDecision(jobKey uint64, decision *model.DecisionEvaluationValue, outputs ...model.VariableValue)
 	FailJob(jobKey uint64, retries int32, message string)
 }
 
@@ -50,25 +67,36 @@ type Engine interface {
 type Runner struct {
 	store    *state.Store
 	engine   Engine
-	handlers map[int32]OutputHandler
+	handlers map[int32]CompletingHandler
 }
 
 // NewRunner creates a runner over a state store and the engine it feeds.
 func NewRunner(store *state.Store, engine Engine) *Runner {
-	return &Runner{store: store, engine: engine, handlers: map[int32]OutputHandler{}}
+	return &Runner{store: store, engine: engine, handlers: map[int32]CompletingHandler{}}
 }
 
 // Handle registers an output-less worker for a job type. The type is the interned
 // index the compiler assigned (cross-process, globally consistent job-type
 // interning is a later concern).
 func (r *Runner) Handle(jobType int32, h Handler) {
-	r.handlers[jobType] = func(j Job) ([]model.VariableValue, error) { return nil, h(j) }
+	r.handlers[jobType] = func(j Job) (Completion, error) { return Completion{}, h(j) }
 }
 
 // HandleWithOutput registers a worker whose completion writes output variables
-// back into the instance (e.g. the DMN worker). Same dispatch as Handle; the only
-// difference is that its returned variables ride along on the CompleteJob command.
-func (r *Runner) HandleWithOutput(jobType int32, h OutputHandler) { r.handlers[jobType] = h }
+// back into the instance (e.g. a service-task worker that returns variables). Same
+// dispatch as Handle; the only difference is that its returned variables ride along
+// on the CompleteJob command.
+func (r *Runner) HandleWithOutput(jobType int32, h OutputHandler) {
+	r.handlers[jobType] = func(j Job) (Completion, error) {
+		outputs, err := h(j)
+		return Completion{Outputs: outputs}, err
+	}
+}
+
+// HandleCompleting registers a worker whose completion carries both output
+// variables and a decision evaluation to retain (the DMN worker, ADR-0066). Same
+// dispatch as the others; its Completion rides along on the CompleteJob command.
+func (r *Runner) HandleCompleting(jobType int32, h CompletingHandler) { r.handlers[jobType] = h }
 
 // PollOnce pulls every activatable job of a registered type, runs its handler,
 // and submits a completion command for each that succeeds. It returns how many
@@ -99,7 +127,7 @@ func (r *Runner) PollOnce() (int, error) {
 				ElementInstanceKey: jv.ElementInstanceKey,
 				Retries:            jv.Retries,
 			}
-			outputs, err := h(job)
+			completion, err := h(job)
 			if err != nil {
 				// A worker that can't complete its job must not abort the whole
 				// Drive — otherwise one failing job (e.g. a business rule task whose
@@ -114,7 +142,7 @@ func (r *Runner) PollOnce() (int, error) {
 				dispatched++
 				continue
 			}
-			r.engine.CompleteJob(k, outputs...)
+			r.engine.CompleteJobWithDecision(k, completion.Decision, completion.Outputs...)
 			dispatched++
 		}
 	}

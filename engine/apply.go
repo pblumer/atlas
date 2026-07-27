@@ -145,6 +145,18 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// rebuilds identical history — invariant I4, ADR-0038.
 			return tx.RecordMessageFlow(h.Timestamp, h.Position, &v.messageFlow)
 		}
+
+	case model.VTDecisionEvaluation:
+		if h.Intent == model.IntentDecisionEvaluated {
+			// Retain how a business rule task's decision was made — its inputs, outputs
+			// and trace — so an operator can inspect it live and after the fact
+			// (ADR-0066). The worker already evaluated the decision off the processor
+			// goroutine and froze the result onto the completion command; here we only
+			// record what the event carries (header timestamp/position plus the frozen
+			// evaluation), so replay rebuilds it without re-evaluating — invariants
+			// I4/I6.
+			return tx.RecordDecisionEvaluation(h.Timestamp, h.Position, &v.decisionEval)
+		}
 	}
 	return nil
 }

@@ -68,6 +68,12 @@ const (
 	// (order [received] → [approved]) whose every transition is a durable event,
 	// so its state history and provenance rebuild from the log (ADR-0053).
 	VTDataObject
+	// VTDecisionEvaluation is one business rule task's DMN decision evaluation
+	// retained for debugging: the input context it was given, the outputs it
+	// produced, and the temis trace explaining which rules fired. Like VTMessageFlow
+	// it is append-only history (one record per evaluation, never deleted), so an
+	// operator can inspect after the fact exactly how a decision was made (ADR-0066).
+	VTDecisionEvaluation
 )
 
 func (t ValueType) String() string {
@@ -98,6 +104,8 @@ func (t ValueType) String() string {
 		return "MessageFlow"
 	case VTDataObject:
 		return "DataObject"
+	case VTDecisionEvaluation:
+		return "DecisionEvaluation"
 	default:
 		return "ValueType(?)"
 	}
@@ -173,6 +181,14 @@ const (
 	// state (and, later, the value) as an activity writes to it.
 	IntentDataObjectCreated
 	IntentDataObjectStateChanged
+
+	// IntentDecisionEvaluated records that a business rule task's DMN decision was
+	// evaluated (ADR-0066). Appended after the existing intents so every prior
+	// intent keeps its numeric value on the log. It is a pure history event: the
+	// worker has already evaluated the decision off the processor goroutine, and the
+	// resulting inputs/outputs/trace are frozen into the event so replay re-applies
+	// them without re-evaluating (invariant I6).
+	IntentDecisionEvaluated
 )
 
 func (i Intent) String() string {
@@ -231,6 +247,8 @@ func (i Intent) String() string {
 		return "DataObjectCreated"
 	case IntentDataObjectStateChanged:
 		return "DataObjectStateChanged"
+	case IntentDecisionEvaluated:
+		return "DecisionEvaluated"
 	default:
 		return "Intent(?)"
 	}

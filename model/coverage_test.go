@@ -270,6 +270,7 @@ func TestValueTypeMethods(t *testing.T) {
 		{(&MessageSubscriptionValue{}), VTMessageSubscription},
 		{(&MessageFlowValue{}), VTMessageFlow},
 		{(&DataObjectValue{}), VTDataObject},
+		{(&DecisionEvaluationValue{}), VTDecisionEvaluation},
 	}
 	for _, c := range cases {
 		if got := c.v.ValueType(); got != c.want {
@@ -291,7 +292,7 @@ func TestStringersExhaustive(t *testing.T) {
 	valueTypes := []ValueType{
 		VTProcessInstance, VTElementInstance, VTJob, VTTimer, VTMessageSubscription,
 		VTMessage, VTVariable, VTIncident, VTSignal, VTError, VTProcessDefinition,
-		VTMessageFlow, VTDataObject,
+		VTMessageFlow, VTDataObject, VTDecisionEvaluation,
 	}
 	for _, vt := range valueTypes {
 		if s := vt.String(); s == "" || s == "ValueType(?)" {
@@ -308,6 +309,7 @@ func TestStringersExhaustive(t *testing.T) {
 		IntentVariableCreated, IntentVariableUpdated, IntentIncidentCreated,
 		IntentIncidentResolved, IntentJobCanceled,
 		IntentDataObjectCreated, IntentDataObjectStateChanged,
+		IntentDecisionEvaluated,
 	}
 	for _, in := range intents {
 		if s := in.String(); s == "" || s == "Intent(?)" {

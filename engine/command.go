@@ -29,6 +29,13 @@ type Command struct {
 	// produced for a job-completion command. Both are external, non-hot-path
 	// intents, so a slice here does not affect the token-movement fast path.
 	StartVars []model.VariableValue
+	// Decision carries a DMN decision evaluation a worker produced for a
+	// job-completion command (ADR-0066): the inputs, outputs, and trace it froze off
+	// the processor goroutine, recorded as history when the completion is folded. It
+	// is nil for every other command and for job completions that are not decisions,
+	// so — like StartVars, on the same non-hot-path completion intent — it never
+	// touches the token-movement fast path.
+	Decision *model.DecisionEvaluationValue
 }
 
 // sideEffect is work to run after the batch's fsync (invariant I2). It is a

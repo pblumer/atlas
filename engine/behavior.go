@@ -330,6 +330,18 @@ func handleJobCompleted(c *ProcessingContext) {
 		c.AppendVariableEvent(model.IntentVariableCreated, v)
 	}
 
+	// A business rule task's worker evaluates its decision off the processor
+	// goroutine and rides the inputs/outputs/trace back on the completion. Freeze it
+	// into a history event so an operator can inspect how the decision was made, live
+	// and after the fact (ADR-0066). The worker sees the job, so its keys are set;
+	// stamp the scope from the authoritative job in case the worker left it zero.
+	if d := c.cmd.Decision; d != nil {
+		dv := *d
+		dv.ProcessInstanceKey = job.ProcessInstanceKey
+		dv.ElementInstanceKey = job.ElementInstanceKey
+		c.AppendDecisionEvaluationEvent(dv)
+	}
+
 	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
 		c.AppendElementCommand(job.ElementInstanceKey, model.IntentCompleting, *ei)
 	}

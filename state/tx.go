@@ -495,6 +495,26 @@ func (t *Tx) RecordVariableSnapshot(ts int64, pos uint64, v *model.VariableValue
 	return t.b.Set(keyVariableSnapshot(v.ScopeKey, ts, pos), t.encodeValue(v), nil)
 }
 
+// --- Decision-evaluation history ---
+//
+// Every DMN decision a business rule task evaluates is retained here, keyed in
+// evaluation order under the owning process instance, so an operator can inspect
+// after the fact what inputs a decision saw, what it returned, and which rules
+// fired (ADR-0066). The worker evaluates off the processor goroutine and freezes
+// the inputs/outputs/trace onto the completion command; this writer runs only from
+// applyToState, from the event alone (the header's timestamp and position plus the
+// frozen evaluation), so it rebuilds identically on replay without re-evaluating
+// the decision (invariant I4/I6). Each record has a unique key (position is
+// monotonic), so this is a plain Set, never overwritten and never deleted.
+// Retention is unbounded for now, as with the other history families.
+
+// RecordDecisionEvaluation retains one decision evaluation under its owning
+// process instance, keyed in evaluation order. ts and pos come from the event
+// header; the value carries the decision id, input context, outputs, and trace.
+func (t *Tx) RecordDecisionEvaluation(ts int64, pos uint64, v *model.DecisionEvaluationValue) error {
+	return t.b.Set(keyDecisionEvaluation(v.ProcessInstanceKey, ts, pos), t.encodeValue(v), nil)
+}
+
 // ActiveChildren returns the active-child count for scope (0 if none). This read
 // folds the merged deltas, so it is used only where the current count is needed
 // (e.g. detecting a finished scope), not on every increment.
