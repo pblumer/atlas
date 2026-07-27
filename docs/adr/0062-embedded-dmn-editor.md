@@ -57,6 +57,13 @@ reverses ADR-0014's "no authoring surface" non-goal for the decision-table case.
 
 - The empty-dropdown dead end is gone: "＋ Neue Decision" authors a decision and
   selects it; "Bearbeiten" opens the current decision's local model in place.
+- The same editor is reachable from the **Project Explorer**, not only the
+  business-rule-task picker: a project's DMN artifact offers "Bearbeiten" (and the
+  read-only DRG viewer an Edit button) that opens its model in place through the
+  identical save seam (`?handle=`). Because editing keeps the handle, an in-editor
+  decision rename can leave the reference's display name stale, so the reference
+  update endpoint (`PATCH /api/v1/dmnrefs/{id}`) gained an optional `name` — the
+  Explorer mirrors the new decision name onto the reference on save.
 - Invariants are untouched. This is an authoring/UI concern on the HTTP + web
   surface; nothing changes on the single-writer processor path (I1/I4), decisions
   still compile at deploy (I5), and the event log is still the only source of truth

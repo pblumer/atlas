@@ -137,6 +137,78 @@ func TestDmnRefValidation(t *testing.T) {
 	}
 }
 
+// TestDmnRefRename covers renaming a reference through PATCH, and proves a rename
+// and a move are independent: renaming never moves the reference, and moving never
+// clears its name. This backs the Modeler's "edit a DMN in place" flow, where an
+// in-editor decision rename must keep the Project Explorer label in sync without
+// disturbing which project the reference is filed under.
+func TestDmnRefRename(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/projects", `{"name":"Lending"}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("create project status=%d body=%s", code, body)
+	}
+	var proj struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &proj); err != nil {
+		t.Fatalf("decode project: %v", err)
+	}
+
+	code, body = doReq(t, ts, http.MethodPost, "/api/v1/dmnrefs",
+		`{"name":"Old name","modelRef":"risk-score","projectId":"`+proj.ID+`"}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("create ref status=%d body=%s", code, body)
+	}
+	var ref struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &ref); err != nil {
+		t.Fatalf("decode ref: %v", err)
+	}
+
+	// Rename only: the name changes, and the reference stays in its project.
+	code, body = doReq(t, ts, http.MethodPatch, "/api/v1/dmnrefs/"+ref.ID, `{"name":"New name"}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("rename status=%d body=%s", code, body)
+	}
+	var updated struct {
+		Name      string `json:"name"`
+		ProjectID string `json:"projectId"`
+	}
+	if err := json.Unmarshal(body, &updated); err != nil {
+		t.Fatalf("decode updated ref: %v (%s)", err, body)
+	}
+	if updated.Name != "New name" || updated.ProjectID != proj.ID {
+		t.Fatalf("after rename = %+v, want name updated and project preserved", updated)
+	}
+
+	// A blank name is rejected.
+	if code, _ := doReq(t, ts, http.MethodPatch, "/api/v1/dmnrefs/"+ref.ID, `{"name":"   "}`, "application/json"); code != http.StatusBadRequest {
+		t.Fatal("blank rename: want 400")
+	}
+
+	// Move only (to Ungrouped): the project clears but the renamed name survives.
+	if code, _ := doReq(t, ts, http.MethodPatch, "/api/v1/dmnrefs/"+ref.ID, `{"projectId":""}`, "application/json"); code != http.StatusOK {
+		t.Fatal("move ref to ungrouped")
+	}
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/dmnrefs", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("list refs status=%d body=%s", code, body)
+	}
+	var refs []struct {
+		Name      string `json:"name"`
+		ProjectID string `json:"projectId"`
+	}
+	if err := json.Unmarshal(body, &refs); err != nil {
+		t.Fatalf("decode refs: %v", err)
+	}
+	if len(refs) != 1 || refs[0].Name != "New name" || refs[0].ProjectID != "" {
+		t.Fatalf("after move = %+v, want the renamed ref now ungrouped", refs)
+	}
+}
+
 // TestDmnRefSurvivesRestart proves DMN references are durable across a restart
 // and still count toward their project's artifacts.
 func TestDmnRefSurvivesRestart(t *testing.T) {

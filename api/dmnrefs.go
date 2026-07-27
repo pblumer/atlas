@@ -110,22 +110,39 @@ func (s *Server) handleListDmnRefs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, list)
 }
 
-// handleMoveDmnRef reassigns a DMN reference to a different project (or to
-// Ungrouped when projectId is empty). Body: {"projectId": "..."}. A non-empty
-// projectId must name an existing project.
-func (s *Server) handleMoveDmnRef(w http.ResponseWriter, r *http.Request) {
+// handleUpdateDmnRef updates a DMN reference. It can move the reference to a
+// different project (or to Ungrouped when projectId is empty) and/or rename it.
+// Both fields are optional and applied only when present in the body, so a move
+// never clears the name and a rename never moves the reference — the Modeler's
+// "edit a DMN in place" flow renames a reference (to track an in-editor decision
+// rename) without disturbing which project it is filed under. Body:
+// {"projectId"?: "...", "name"?: "..."}. A present projectId, when non-empty, must
+// name an existing project; a present name must not be blank.
+func (s *Server) handleUpdateDmnRef(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
+	// Pointer fields distinguish "absent" from "present but empty": an absent
+	// field leaves that attribute untouched, while a present empty projectId is a
+	// deliberate move to Ungrouped.
 	var payload struct {
-		ProjectID string `json:"projectId"`
+		ProjectID *string `json:"projectId"`
+		Name      *string `json:"name"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
+	}
+	var newName string
+	if payload.Name != nil {
+		newName = strings.TrimSpace(*payload.Name)
+		if newName == "" {
+			writeError(w, http.StatusBadRequest, "reference name cannot be blank")
+			return
+		}
 	}
 	var (
 		found, unknownProject    bool
@@ -142,18 +159,23 @@ func (s *Server) handleMoveDmnRef(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
-		if payload.ProjectID != "" {
-			_, pok, pe := s.projects.get(payload.ProjectID)
-			if pe != nil {
-				projErr = pe
-				return
+		if payload.ProjectID != nil {
+			if *payload.ProjectID != "" {
+				_, pok, pe := s.projects.get(*payload.ProjectID)
+				if pe != nil {
+					projErr = pe
+					return
+				}
+				if !pok {
+					unknownProject = true
+					return
+				}
 			}
-			if !pok {
-				unknownProject = true
-				return
-			}
+			rec.ProjectID = *payload.ProjectID
 		}
-		rec.ProjectID = payload.ProjectID
+		if payload.Name != nil {
+			rec.Name = newName
+		}
 		if saveErr = s.dmnrefs.save(rec); saveErr != nil {
 			return
 		}
@@ -169,7 +191,7 @@ func (s *Server) handleMoveDmnRef(w http.ResponseWriter, r *http.Request) {
 	case unknownProject:
 		writeError(w, http.StatusBadRequest, "unknown project id")
 	case saveErr != nil:
-		writeError(w, http.StatusInternalServerError, "move dmn reference: "+saveErr.Error())
+		writeError(w, http.StatusInternalServerError, "update dmn reference: "+saveErr.Error())
 	default:
 		writeJSON(w, http.StatusOK, view)
 	}
