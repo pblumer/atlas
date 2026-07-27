@@ -75,6 +75,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0065](0065-multi-token-process-replay.md) | Multi-token process replay and causal token lineage | Accepted |
 | [0066](0066-decision-evaluation-records.md) | Durable decision-evaluation records — capture a decision's inputs, outputs, and trace for debugging | Accepted |
 | [0067](0067-service-task-connector-catalog.md) | A service-task connector catalog, and REST with a model-authored endpoint | Accepted |
+| [0068](0068-task-io-variable-mappings.md) | Task input/output variable mappings with activity-local scopes | Proposed |
 
 ## Status values
 
