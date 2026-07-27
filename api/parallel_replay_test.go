@@ -150,6 +150,24 @@ func TestParallelReplaySourceElement(t *testing.T) {
 	}
 }
 
+// TestParallelReplayStepEndTimes checks each step of a finished instance carries a
+// completion timestamp (endAt) at or after its activation, derived from the
+// stored Action==2 replay fact, so the history can show start → end per element.
+func TestParallelReplayStepEndTimes(t *testing.T) {
+	tl := fetchParallelTimeline(t)
+	if tl.State != "completed" {
+		t.Fatalf("state = %q, want completed", tl.State)
+	}
+	for _, s := range tl.Steps {
+		if s.EndAt == 0 {
+			t.Errorf("step %q has no endAt, want a completion time on a finished instance", s.ElementID)
+		}
+		if s.EndAt < s.At {
+			t.Errorf("step %q endAt %d before activation %d", s.ElementID, s.EndAt, s.At)
+		}
+	}
+}
+
 // TestParallelReplayFramesDeterministic re-reads the same instance's timeline and
 // checks the folded frames are byte-identical, since replay must be deterministic.
 func TestParallelReplayFramesDeterministic(t *testing.T) {

@@ -193,7 +193,8 @@ type collabRuntimeResp struct {
 // oldest-first, so the Operations view can step through them and show the
 // variables at each point.
 type timelineStep struct {
-	At                 int64          `json:"at"` // unix nanoseconds
+	At                 int64          `json:"at"`              // unix nanoseconds (element activated)
+	EndAt              int64          `json:"endAt,omitempty"` // unix nanoseconds (element completed), 0 if still active
 	ElementID          string         `json:"elementId"`
 	Type               string         `json:"type"`
 	Variables          []variableView `json:"variables"`
@@ -1010,6 +1011,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		active := map[uint64]timelineToken{}
 		pending := map[uint64]state.ElementReplayValue{} // completions awaiting their successor
 		activations := map[uint64]state.ElementReplayValue{}
+		endAt := map[uint64]int64{} // element instance key → completion timestamp (Action==2)
 		emitFrame := func(pos uint64, at int64) {
 			tokens := make([]timelineToken, 0, len(active))
 			for _, token := range active {
@@ -1047,11 +1049,13 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				emitFrame(rr.pos, rr.at)
 			} else if d.cp.Node(v.ElementID).OutgoingCount == 0 {
 				// A leaf has no successor to move into: remove it at once.
+				endAt[v.ElementInstanceKey] = rr.at
 				delete(pending, v.ElementInstanceKey)
 				delete(active, v.ElementInstanceKey)
 				emitFrame(rr.pos, rr.at)
 			} else {
 				// Defer: keep the token visible until its successor activates.
+				endAt[v.ElementInstanceKey] = rr.at
 				pending[v.ElementInstanceKey] = v
 			}
 		}
@@ -1085,6 +1089,10 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			}
 			if rv, ok := activations[sr.pos]; ok {
 				step.TokenID, step.ElementInstanceKey = rv.TokenID, rv.ElementInstanceKey
+				// The completion of this same element instance (Action==2) gives the
+				// element's end time, so the history can show start → end per element
+				// like Operate. Absent (still active / parked), endAt stays zero.
+				step.EndAt = endAt[rv.ElementInstanceKey]
 				// The activation's incoming flow identifies the element the token came
 				// from (the flow's source node). The frontend animates the token dot
 				// along that real edge — for a fork branch the predecessor is the
