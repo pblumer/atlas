@@ -1848,14 +1848,37 @@ function viewComingSoon(appId) {
     </div>`;
 }
 
+// resolveProject looks up a project's display name so the editor can render a
+// breadcrumb link back to it. Returns {id, name} or null when the id is empty
+// or unknown (a new/ungrouped artifact, or a best-effort lookup that failed —
+// in which case the editor just falls back to a Home-only trail).
+async function resolveProject(projectId) {
+  if (!projectId) return null;
+  try {
+    const projects = await api("GET", "/api/v1/projects");
+    const p = projects.find((x) => x.id === projectId);
+    return p ? { id: p.id, name: p.name } : null;
+  } catch { return null; }
+}
+
 async function viewEditor(key, projectId) {
   const mod = await import("./editor.js");
-  await mod.mountEditor(view, { api, toast, key, projectId });
+  const project = await resolveProject(projectId);
+  await mod.mountEditor(view, { api, toast, key, projectId, project });
 }
 
 async function viewEditorDraft(id) {
   const mod = await import("./editor.js");
-  await mod.mountEditor(view, { api, toast, draftId: id });
+  // An existing draft carries its own projectId; resolve it so the editor can
+  // offer a "back to project" breadcrumb (the route alone doesn't name it).
+  let projectId = "";
+  try {
+    const drafts = await api("GET", "/api/v1/drafts");
+    const d = drafts.find((x) => x.processId === id);
+    projectId = (d && d.projectId) || "";
+  } catch { /* best-effort: fall back to a Home-only crumb */ }
+  const project = await resolveProject(projectId);
+  await mod.mountEditor(view, { api, toast, draftId: id, projectId, project });
 }
 
 async function viewFormEditor(formId, projectId) {
