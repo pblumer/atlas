@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
@@ -96,10 +97,10 @@ func createInstanceStats(t *testing.T, x deployTestHarness, key uint64) (proc, e
 }
 
 // TestPowerShellWorkerRunsScriptTask is the point of wiring the PowerShell worker
-// into the server: with WithPowerShellScripts, a script task runs in-process and
+// into the server: with WithScriptWorker, a script task runs in-process and
 // the instance completes instead of parking forever.
 func TestPowerShellWorkerRunsScriptTask(t *testing.T) {
-	srv, x := newPwshServer(t, WithPowerShellScripts(stubExec{result: "Hallo Anna"}))
+	srv, x := newPwshServer(t, WithScriptWorker(compiler.PwshJobTypeIndex, stubExec{result: "Hallo Anna"}))
 	_ = srv
 	key := deployGreeting(t, x)
 	if pi, ei := createInstanceStats(t, x, key); pi != 0 || ei != 0 {

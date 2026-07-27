@@ -47,6 +47,24 @@ const PwshJobType = "io.atlas.script.powershell"
 // DMN worker uses DMNJobTypeIndex (see ADR-0047).
 const PwshJobTypeIndex int32 = 2
 
+// PythonJobType is the reserved job type a Python script task carries; the
+// in-process Python worker subscribes to it (ADR-0047), like the PowerShell worker.
+const PythonJobType = "io.atlas.script.python"
+
+// PythonJobTypeIndex is the interned index PythonJobType is guaranteed to occupy:
+// NewBuilder reserves it fourth (after DMN, user tasks, PowerShell), so it is
+// always 3, giving the in-process Python worker one global index across processes.
+const PythonJobTypeIndex int32 = 3
+
+// JsJobType is the reserved job type a JavaScript script task carries; the
+// in-process Node worker subscribes to it (ADR-0047), like the PowerShell worker.
+const JsJobType = "io.atlas.script.javascript"
+
+// JsJobTypeIndex is the interned index JsJobType is guaranteed to occupy:
+// NewBuilder reserves it fifth, so it is always 4, giving the in-process Node
+// worker one global index across every deployed process.
+const JsJobTypeIndex int32 = 4
+
 // ClioWriteJobType is the reserved job type a clio "write-events" connector task
 // carries. The in-process clio connector worker subscribes to it to append the
 // event to the configured clio instance (ADR-0036), the same way the DMN worker
@@ -100,6 +118,8 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 	b.intern(DMNJobType)      // reserve DMNJobTypeIndex == 0
 	b.intern(UserTaskJobType) // reserve UserTaskJobTypeIndex == 1
 	b.intern(PwshJobType)     // reserve PwshJobTypeIndex == 2
+	b.intern(PythonJobType)   // reserve PythonJobTypeIndex == 3
+	b.intern(JsJobType)       // reserve JsJobTypeIndex == 4
 	return b
 }
 

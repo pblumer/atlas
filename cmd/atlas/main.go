@@ -27,7 +27,7 @@ import (
 	"github.com/pblumer/atlas/api"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/mcp"
-	"github.com/pblumer/atlas/pwsh"
+	"github.com/pblumer/atlas/script"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
 )
@@ -96,15 +96,18 @@ func runServe(args []string) error {
 	shutdownTimeout := fs.Duration("shutdown-timeout", 10*time.Second, "grace period for in-flight requests on shutdown")
 	docs := fs.Bool("docs", true, "serve the OpenAPI spec (/api/v1/openapi.json) and the Scalar API explorer (/api/docs); pass --docs=false to disable")
 	auth := fs.Bool("auth", false, "require login for the API and UI; seeds an admin from ATLAS_ADMIN_USERNAME/ATLAS_ADMIN_PASSWORD on first run")
-	powershell := fs.Bool("powershell", true, "run PowerShell script tasks by shelling out to pwsh on this host; on by default, pass --powershell=false to disable (it executes arbitrary interpreter code, so disable it where that trust boundary is not acceptable)")
-	powershellTimeout := fs.Duration("powershell-timeout", 30*time.Second, "wall-clock limit for a single PowerShell script; a script that overruns is killed and its job left pending")
+	powershell := fs.Bool("powershell", true, "run PowerShell script tasks by shelling out to pwsh; on by default, --powershell=false to disable (executes arbitrary interpreter code)")
+	python := fs.Bool("python", true, "run Python script tasks by shelling out to python3; on by default, --python=false to disable (executes arbitrary interpreter code)")
+	javascript := fs.Bool("javascript", true, "run JavaScript script tasks by shelling out to node; on by default, --javascript=false to disable (executes arbitrary interpreter code)")
+	scriptTimeout := fs.Duration("script-timeout", 30*time.Second, "wall-clock limit for a single script task in any language; an overrunning script is killed and its job left pending")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *powershell, *powershellTimeout)
+	enabled := map[string]bool{"powershell": *powershell, "python": *python, "javascript": *javascript}
+	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, enabled, *scriptTimeout)
 }
 
-func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, powershell bool, powershellTimeout time.Duration) error {
+func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, scriptLangs map[string]bool, scriptTimeout time.Duration) error {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return err
 	}
@@ -138,15 +141,22 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, powe
 	if auth {
 		apiOpts = append(apiOpts, api.WithAuth())
 	}
-	if powershell {
-		px := pwsh.NewCmdExec()
-		px.Timeout = powershellTimeout
-		if err := px.Check(); err != nil {
-			log.Printf("WARNING: --powershell is enabled but pwsh was not found on PATH (%v); PowerShell script tasks will park until pwsh is installed", err)
-		} else {
-			log.Printf("PowerShell script worker enabled (pwsh found on PATH)")
+	// Register a worker for each enabled script language (ADR-0047). Each runs
+	// arbitrary interpreter code, so a language can be turned off with its flag; a
+	// missing interpreter is warned about at startup (its tasks then park) rather
+	// than failing to boot.
+	for _, lang := range script.Langs {
+		if !scriptLangs[lang.Name] {
+			continue
 		}
-		apiOpts = append(apiOpts, api.WithPowerShellScripts(px))
+		ex := script.New(lang)
+		ex.Timeout = scriptTimeout
+		if err := ex.Check(); err != nil {
+			log.Printf("WARNING: %s script worker enabled but %q was not found on PATH (%v); %s script tasks will park until it is installed", lang.Name, lang.Bin, err, lang.Name)
+		} else {
+			log.Printf("%s script worker enabled (%s found on PATH)", lang.Name, lang.Bin)
+		}
+		apiOpts = append(apiOpts, api.WithScriptWorker(lang.JobType, ex))
 	}
 	srv, err := api.New(proc, store, dataDir, apiOpts...)
 	if err != nil {

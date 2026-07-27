@@ -5,6 +5,30 @@
 import { attachFeelEditor } from "./feel.js";
 import { attachJSONEditor } from "./json-editor.js";
 
+// JOB_LANGS are the general-purpose script languages a script task can use besides
+// inline FEEL (ADR-0047). Each runs on a job worker off the engine's hot path; the
+// key is the language stored in <atlas:jobScript language="...">. `short` labels
+// the script field, `placeholder` seeds an empty editor, and `hint` documents that
+// language's input/result contract (PowerShell uses its output stream; Python and
+// JavaScript assign to a variable named `result`).
+const JOB_LANGS = {
+  powershell: {
+    label: "PowerShell (job worker)", short: "PowerShell",
+    placeholder: 'Write-Output "Hallo $Vorname"',
+    hint: `Runs on a PowerShell job worker, off the engine's hot path. The instance's variables are available as <code>$name</code>; the script's <b>output</b> is written back into the result variable.`,
+  },
+  python: {
+    label: "Python (job worker)", short: "Python",
+    placeholder: 'result = f"Hallo {Vorname}"',
+    hint: `Runs on a Python job worker, off the engine's hot path. The instance's variables are available as <code>name</code>; assign your output to a variable named <code>result</code>.`,
+  },
+  javascript: {
+    label: "JavaScript (job worker)", short: "JavaScript",
+    placeholder: 'const result = "Hallo " + Vorname',
+    hint: `Runs on a Node.js job worker, off the engine's hot path. The instance's variables are available as <code>name</code>; assign your output to a variable named <code>result</code>.`,
+  },
+};
+
 const BPMN_CSS = [
   "vendor/bpmn/assets/diagram-js.css",
   "vendor/bpmn/assets/bpmn-js.css",
@@ -834,12 +858,12 @@ function wireProperties(root, modeler, api) {
           // which the task carries; both are still bpmn:ScriptTask.
           const js = findExt(bo, "atlas:JobScript");
           const lang = js ? (js.language || "powershell") : "feel";
+          const opts = [`<option value="feel" ${lang === "feel" ? "selected" : ""}>FEEL (built-in, runs in the engine)</option>`]
+            .concat(Object.entries(JOB_LANGS).map(([k, v]) =>
+              `<option value="${k}" ${lang === k ? "selected" : ""}>${v.label}</option>`));
           html += `<h3>Script</h3>
             <label class="field"><span>Language</span>
-              <select id="f-scriptlang">
-                <option value="feel" ${lang === "feel" ? "selected" : ""}>FEEL (built-in, runs in the engine)</option>
-                <option value="powershell" ${lang === "powershell" ? "selected" : ""}>PowerShell (job worker)</option>
-              </select></label>`;
+              <select id="f-scriptlang">${opts.join("")}</select></label>`;
           if (lang === "feel") {
             const s = findExt(bo, "zeebe:Script") || {};
             const exprText = (s.expression || "").replace(/^=\s*/, "");
@@ -848,11 +872,12 @@ function wireProperties(root, modeler, api) {
               <label class="field"><span>Result variable</span>
                 <input type="text" id="f-result" value="${esc(s.resultVariable || "")}" placeholder="gross"/></label>`;
           } else {
-            html += `<label class="field"><span>Script (PowerShell)</span>
-                <textarea id="f-psbody" rows="6" spellcheck="false" placeholder='Write-Output "Hallo $Vorname"'>${esc(js && js.source || "")}</textarea></label>
+            const meta = JOB_LANGS[lang] || JOB_LANGS.powershell;
+            html += `<label class="field"><span>Script (${meta.short})</span>
+                <textarea id="f-psbody" rows="6" spellcheck="false" placeholder='${meta.placeholder}'>${esc(js && js.source || "")}</textarea></label>
               <label class="field"><span>Result variable</span>
                 <input type="text" id="f-psresult" value="${esc((js && js.resultVariable) || "")}" placeholder="Greeting"/></label>
-              <p class="muted" style="font-size:12px">Runs on a PowerShell job worker, off the engine's hot path. The instance's variables are available as <code>$name</code>; the script's output is written back into the result variable.</p>`;
+              <p class="muted" style="font-size:12px">${meta.hint}</p>`;
           }
         } else if (t === "bpmn:ServiceTask") {
           const d = findExt(bo, "zeebe:TaskDefinition") || {};
@@ -977,19 +1002,19 @@ function wireProperties(root, modeler, api) {
         } catch (err) { /* stale */ }
       });
     }
-    // Script language selector: switch a script task between FEEL (inline) and
-    // PowerShell (job worker) by swapping which extension it carries, then
-    // re-render so the right fields show. Neither language's fields are lost until
-    // the author edits — switching only removes the other extension.
+    // Script language selector: switch a script task between FEEL (inline) and a
+    // job-worker language by swapping which extension it carries, then re-render so
+    // the right fields show. Switching to a job language stores it on the
+    // <atlas:jobScript>; switching to FEEL drops that extension.
     const flang = body.querySelector("#f-scriptlang");
     if (flang) {
       flang.addEventListener("change", (e) => {
         try {
-          if (e.target.value === "powershell") {
-            removeExt(modeler, element, "zeebe:Script");
-            upsertExt(modeler, element, "atlas:JobScript", { language: "powershell" });
-          } else {
+          if (e.target.value === "feel") {
             removeExt(modeler, element, "atlas:JobScript");
+          } else {
+            removeExt(modeler, element, "zeebe:Script");
+            upsertExt(modeler, element, "atlas:JobScript", { language: e.target.value });
           }
           show(element);
         } catch { /* stale */ }
@@ -1010,15 +1035,18 @@ function wireProperties(root, modeler, api) {
 
     const fpsbody = body.querySelector("#f-psbody");
     const fpsresult = body.querySelector("#f-psresult");
-    const savePowerShell = () => savePreservingPanel(() => {
+    const saveJobScript = () => savePreservingPanel(() => {
+      // The selected language is the source of truth; keep it on the extension so
+      // the compiler maps it to the right worker's job type.
+      const language = (flang && flang.value) || (findExt(element.businessObject, "atlas:JobScript") || {}).language || "powershell";
       upsertExt(modeler, element, "atlas:JobScript", {
-        language: "powershell",
+        language,
         source: fpsbody.value || "",
         resultVariable: (fpsresult.value || "").trim(),
       });
     });
-    if (fpsbody) fpsbody.addEventListener("change", savePowerShell);
-    if (fpsresult) fpsresult.addEventListener("change", savePowerShell);
+    if (fpsbody) fpsbody.addEventListener("change", saveJobScript);
+    if (fpsresult) fpsresult.addEventListener("change", saveJobScript);
 
     const fjob = body.querySelector("#f-jobtype");
     if (fjob) {

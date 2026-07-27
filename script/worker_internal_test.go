@@ -1,4 +1,4 @@
-package pwsh
+package script
 
 import (
 	"context"
@@ -111,38 +111,62 @@ func TestParseOutput(t *testing.T) {
 	})
 }
 
-// TestWrapSource proves the wrapper embeds the authored source verbatim and keeps
-// the safety flags/contract: stop-on-error and reading variables from varsEnv.
-func TestWrapSource(t *testing.T) {
-	src := `"Hallo " + $Vorname`
-	w := wrapSource(src)
-	if !strings.Contains(w, src) {
-		t.Error("wrapper does not embed the authored source")
+// TestLangs proves each language's spec is wired: its job type matches the
+// compiler's reserved index, and its bootstrap reads the source and variables from
+// the environment rather than from an interpolated command line.
+func TestLangs(t *testing.T) {
+	tests := []struct {
+		lang    Lang
+		jobType int32
+		bin     string
+	}{
+		{PowerShell, compiler.PwshJobTypeIndex, "pwsh"},
+		{Python, compiler.PythonJobTypeIndex, "python3"},
+		{JavaScript, compiler.JsJobTypeIndex, "node"},
 	}
-	if !strings.Contains(w, "$ErrorActionPreference = 'Stop'") {
-		t.Error("wrapper does not stop on error")
-	}
-	if !strings.Contains(w, varsEnv) {
-		t.Errorf("wrapper does not read variables from %s", varsEnv)
-	}
-	if !strings.Contains(w, "ConvertTo-Json") {
-		t.Error("wrapper does not emit its result as JSON")
+	for _, tt := range tests {
+		t.Run(tt.lang.Name, func(t *testing.T) {
+			if tt.lang.JobType != tt.jobType {
+				t.Errorf("job type = %d, want %d", tt.lang.JobType, tt.jobType)
+			}
+			if New(tt.lang).bin() != tt.bin {
+				t.Errorf("default bin = %q, want %q", New(tt.lang).bin(), tt.bin)
+			}
+			if !strings.Contains(tt.lang.Wrap, varsEnv) || !strings.Contains(tt.lang.Wrap, srcEnv) {
+				t.Errorf("%s bootstrap does not read both %s and %s from the env", tt.lang.Name, varsEnv, srcEnv)
+			}
+			// The bootstrap must be the argument the interpreter runs.
+			args := tt.lang.Args(tt.lang.Wrap)
+			if args[len(args)-1] != tt.lang.Wrap {
+				t.Errorf("%s args do not end with the bootstrap: %v", tt.lang.Name, args)
+			}
+		})
 	}
 }
 
-// TestCmdExecRun drives CmdExec through an injected runner (no interpreter), so the
-// env wiring, argument construction, and output decoding are all exercised.
-func TestCmdExecRun(t *testing.T) {
+// TestBinOverride: an explicit Bin wins over the language default.
+func TestBinOverride(t *testing.T) {
+	e := &CmdExec{Lang: Python, Bin: "/opt/py/python3"}
+	if e.bin() != "/opt/py/python3" {
+		t.Errorf("bin = %q, want the override", e.bin())
+	}
+}
+
+// TestRunPassesSourceAndVars drives Run through an injected runner (no interpreter)
+// and proves both the script source and the variables reach the interpreter via the
+// environment, with the language's own interpreter arguments.
+func TestRunPassesSourceAndVars(t *testing.T) {
 	var gotName string
 	var gotArgs, gotEnv []string
 	e := &CmdExec{
-		Bin: "pwsh-test",
+		Lang: PowerShell,
+		Bin:  "pwsh-test",
 		run: func(_ context.Context, name string, args, env []string) ([]byte, error) {
 			gotName, gotArgs, gotEnv = name, args, env
 			return []byte(`"ok"`), nil
 		},
 	}
-	out, err := e.Run(context.Background(), `"ok"`, map[string]any{"Vorname": "Anna"})
+	out, err := e.Run(context.Background(), `"Hallo " + $Vorname`, map[string]any{"Vorname": "Anna"})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -155,18 +179,17 @@ func TestCmdExecRun(t *testing.T) {
 	if len(gotArgs) < 3 || gotArgs[0] != "-NoProfile" || gotArgs[1] != "-NonInteractive" || gotArgs[2] != "-Command" {
 		t.Errorf("args = %v, want the non-interactive PowerShell flags", gotArgs)
 	}
-	// The instance's variables ride in the varsEnv environment entry as JSON.
-	var found bool
+	env := map[string]string{}
 	for _, kv := range gotEnv {
-		if strings.HasPrefix(kv, varsEnv+"=") {
-			found = true
-			if !strings.Contains(kv, `"Vorname":"Anna"`) {
-				t.Errorf("%s = %q, want the variables JSON", varsEnv, kv)
-			}
+		if i := strings.IndexByte(kv, '='); i >= 0 {
+			env[kv[:i]] = kv[i+1:]
 		}
 	}
-	if !found {
-		t.Errorf("no %s entry in env %v", varsEnv, gotEnv)
+	if !strings.Contains(env[varsEnv], `"Vorname":"Anna"`) {
+		t.Errorf("%s = %q, want the variables JSON", varsEnv, env[varsEnv])
+	}
+	if env[srcEnv] != `"Hallo " + $Vorname` {
+		t.Errorf("%s = %q, want the author's source", srcEnv, env[srcEnv])
 	}
 }
 
@@ -198,7 +221,7 @@ func (c *countingExec) Run(context.Context, string, map[string]any) (any, error)
 // TestRunMarshalError: input that cannot be JSON-encoded fails before the
 // interpreter is invoked.
 func TestRunMarshalError(t *testing.T) {
-	e := &CmdExec{run: func(context.Context, string, []string, []string) ([]byte, error) {
+	e := &CmdExec{Lang: PowerShell, run: func(context.Context, string, []string, []string) ([]byte, error) {
 		t.Fatal("runner must not be reached when input encoding fails")
 		return nil, nil
 	}}
@@ -210,7 +233,7 @@ func TestRunMarshalError(t *testing.T) {
 // TestRunnerError: a runner (interpreter) error surfaces from Run, so the job is
 // left pending.
 func TestRunnerError(t *testing.T) {
-	e := &CmdExec{run: func(context.Context, string, []string, []string) ([]byte, error) {
+	e := &CmdExec{Lang: Python, run: func(context.Context, string, []string, []string) ([]byte, error) {
 		return nil, errors.New("exit status 1")
 	}}
 	if _, err := e.Run(context.Background(), "x", nil); err == nil {
@@ -221,8 +244,7 @@ func TestRunnerError(t *testing.T) {
 // TestCheck reports whether the configured interpreter is resolvable on PATH, so
 // the server can warn at startup instead of letting script tasks silently park.
 func TestCheck(t *testing.T) {
-	// A missing interpreter is reported as an error.
-	if err := (&CmdExec{Bin: "atlas-no-such-pwsh-xyz"}).Check(); err == nil {
+	if err := (&CmdExec{Bin: "atlas-no-such-interp-xyz"}).Check(); err == nil {
 		t.Error("Check with a missing binary = nil, want an error")
 	}
 	// A binary that exists on PATH resolves cleanly (sh is present on the test host).
@@ -231,10 +253,10 @@ func TestCheck(t *testing.T) {
 	}
 }
 
-// TestTimeoutDefault: the zero value bounds a script with the default timeout, and
-// an explicit Timeout overrides it.
+// TestTimeoutDefault: New bounds a script with the default timeout, and an explicit
+// Timeout overrides it.
 func TestTimeoutDefault(t *testing.T) {
-	if got := (&CmdExec{}).timeout(); got != defaultTimeout {
+	if got := New(PowerShell).timeout(); got != defaultTimeout {
 		t.Errorf("default timeout = %s, want %s", got, defaultTimeout)
 	}
 	if got := (&CmdExec{Timeout: 5 * time.Second}).timeout(); got != 5*time.Second {
@@ -248,13 +270,14 @@ func TestTimeoutDefault(t *testing.T) {
 // does — it blocks until the deadline fires.
 func TestRunTimesOut(t *testing.T) {
 	e := &CmdExec{
+		Lang:    Python,
 		Timeout: 20 * time.Millisecond,
 		run: func(ctx context.Context, _ string, _, _ []string) ([]byte, error) {
 			<-ctx.Done() // CommandContext kills the process and returns when ctx is done
 			return nil, ctx.Err()
 		},
 	}
-	_, err := e.Run(context.Background(), "Start-Sleep 60", nil)
+	_, err := e.Run(context.Background(), "while True: pass", nil)
 	if err == nil {
 		t.Fatal("Run of a slow script succeeded, want a timeout error")
 	}
@@ -279,17 +302,9 @@ func TestExecCommand(t *testing.T) {
 	}
 }
 
-// TestCmdExecDefaults proves the zero value targets pwsh and NewCmdExec matches it,
-// without invoking an interpreter.
-func TestCmdExecDefaults(t *testing.T) {
-	if got := (&CmdExec{}).bin(); got != "pwsh" {
-		t.Errorf("default bin = %q, want pwsh", got)
-	}
-	if NewCmdExec().bin() != "pwsh" {
-		t.Error("NewCmdExec should default to pwsh")
-	}
-	// The default runner is the real os/exec seam (non-nil); we do not invoke it.
-	if (&CmdExec{}).runner() == nil {
+// TestDefaultRunner: the default runner is the real os/exec seam (non-nil).
+func TestDefaultRunner(t *testing.T) {
+	if New(PowerShell).runner() == nil {
 		t.Error("default runner is nil")
 	}
 }

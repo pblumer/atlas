@@ -1,17 +1,19 @@
-// Package pwsh is Atlas's in-process worker for PowerShell script tasks
-// (ADR-0047). A polyglot script task compiles to a job carrying the reserved
-// PowerShell job type (compiler.PwshJobType); this worker subscribes to that type
-// via a [job.Runner], and for each job runs the script off the processor
-// goroutine — after fsync — through an [Exec], then writes the script's result
-// back into the instance as the task's result variable.
+// Package script is Atlas's in-process worker for polyglot script tasks
+// (PowerShell, Python, JavaScript — ADR-0047). A script task compiles to a job
+// carrying the language's reserved job type (compiler.PwshJobType /
+// PythonJobType / JsJobType); this worker subscribes to a type via a [job.Runner]
+// and for each job runs the script off the processor goroutine — after fsync —
+// through an [Exec], then writes the script's result back into the instance as the
+// task's result variable.
 //
 // Keeping the interpreter here, not in an engine behavior, is what lets a general
 // -purpose language run without breaking the engine's invariants: the processor
 // stays allocation-free (I1) and side-effect-free on the recovery path (I4), and
 // the result is frozen into the job completion so replay re-applies it verbatim
-// (I6). It mirrors the DMN worker (ADR-0014): one handler serves every deployed
-// process, resolving each job's script from the compiled process.
-package pwsh
+// (I6). It mirrors the DMN worker (ADR-0014): one handler per language serves every
+// deployed process, resolving each job's script from the compiled process. The
+// handler itself is language-agnostic; only the [Exec] differs per language.
+package script
 
 import (
 	"context"
@@ -32,19 +34,19 @@ import (
 type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 
 // Exec runs a script off the hot path and returns its result. It is the seam
-// between the worker and the real interpreter: [CmdExec] shells out to pwsh, but
-// tests inject a deterministic fake so they need no PowerShell installed. input
-// is the instance's variables keyed by name; the returned value is the script's
-// result, a JSON-shaped Go value (nil, bool, json.Number, string, []any, or
-// map[string]any) that becomes the task's result variable.
+// between the worker and the real interpreter: [CmdExec] shells out to the
+// language's interpreter, but tests inject a deterministic fake so they need no
+// interpreter installed. input is the instance's variables keyed by name; the
+// returned value is the script's result, a JSON-shaped Go value (nil, bool,
+// json.Number, string, []any, or map[string]any) that becomes the result variable.
 type Exec interface {
 	Run(ctx context.Context, source string, input map[string]any) (any, error)
 }
 
-// Handler builds a job handler that runs a PowerShell script task. Register it
-// with a [job.Runner] via HandleWithOutput for the reserved PowerShell job type
-// ([compiler.PwshJobTypeIndex]); the runner then pulls activatable script jobs,
-// and for each the handler:
+// Handler builds a job handler that runs a script task in one language. Register it
+// with a [job.Runner] via HandleWithOutput for that language's reserved job type
+// (e.g. [compiler.PwshJobTypeIndex]); the runner then pulls activatable script
+// jobs, and for each the handler:
 //
 //   - resolves the script source and result variable from the compiled process,
 //   - reads the instance's variables as the script's inputs,
@@ -66,16 +68,16 @@ func Handler(store *state.Store, lookup ProcessLookup, exec Exec) job.OutputHand
 		}
 		cp := lookup(ei.ProcessDefKey)
 		if cp == nil {
-			return nil, fmt.Errorf("pwsh: no compiled process for def %d", ei.ProcessDefKey)
+			return nil, fmt.Errorf("script: no compiled process for def %d", ei.ProcessDefKey)
 		}
 		detail := cp.ScriptJobTask(cp.Node(ei.ElementId).Detail)
 		input, err := instanceVars(store, ei.ProcessInstanceKey)
 		if err != nil {
-			return nil, fmt.Errorf("pwsh: read variables for element %d: %w", j.ElementInstanceKey, err)
+			return nil, fmt.Errorf("script: read variables for element %d: %w", j.ElementInstanceKey, err)
 		}
 		result, err := exec.Run(context.Background(), cp.Intern(detail.Source), input)
 		if err != nil {
-			return nil, fmt.Errorf("pwsh: run script for element %d: %w", j.ElementInstanceKey, err)
+			return nil, fmt.Errorf("script: run script for element %d: %w", j.ElementInstanceKey, err)
 		}
 		if resultVar := cp.Intern(detail.ResultVar); resultVar != "" {
 			return []model.VariableValue{outputVariable(resultVar, result)}, nil

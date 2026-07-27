@@ -40,7 +40,7 @@ import (
 	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/job"
-	"github.com/pblumer/atlas/pwsh"
+	"github.com/pblumer/atlas/script"
 	"github.com/pblumer/atlas/state"
 )
 
@@ -126,12 +126,11 @@ type Server struct {
 	dmnRegistry *dmn.Registry
 	jobRunner   *job.Runner
 
-	// pwshExec, when non-nil, enables the in-process PowerShell script worker: the
-	// operator opts in with WithPowerShellScripts (ADR-0047). Arbitrary interpreter
-	// execution is off by default — a deployed PowerShell script task parks until an
-	// operator turns the worker on, mirroring how auth and docs are gated. Set once
-	// before Handler is mounted; read-only thereafter.
-	pwshExec pwsh.Exec
+	// scriptWorkers maps a script language's reserved job-type index to the
+	// interpreter that runs it (ADR-0047). An operator registers each language with
+	// WithScriptWorker; a language with no worker parks its tasks. Set once before
+	// Handler is mounted; read-only thereafter.
+	scriptWorkers map[int32]script.Exec
 
 	// docsEnabled gates the OpenAPI spec and the Scalar API explorer. On by
 	// default (opt-out), consistent with the already-open web UI and MCP
@@ -151,14 +150,21 @@ type Option func(*Server)
 // (ADR-0043).
 func WithoutDocs() Option { return func(s *Server) { s.docsEnabled = false } }
 
-// WithPowerShellScripts enables the in-process PowerShell script worker, so a
-// deployed PowerShell script task (ADR-0047) actually runs instead of parking on
-// its job. It is opt-in because it executes arbitrary interpreter code on the
-// server host: enable it only where that trust boundary is acceptable (the
-// eventual isolation boundary is an external worker in the customer's
-// environment). exec is the interpreter seam — pass pwsh.NewCmdExec() to shell out
-// to pwsh, or a fake in tests.
-func WithPowerShellScripts(exec pwsh.Exec) Option { return func(s *Server) { s.pwshExec = exec } }
+// WithScriptWorker registers the interpreter for one script language (identified
+// by its reserved job-type index, e.g. compiler.PwshJobTypeIndex), so a deployed
+// script task in that language actually runs instead of parking on its job
+// (ADR-0047). It executes arbitrary interpreter code on the server host, so
+// register only the languages whose trust boundary is acceptable (the eventual
+// isolation boundary is an external worker in the customer's environment). exec is
+// the interpreter seam — pass script.New(script.Python) etc., or a fake in tests.
+func WithScriptWorker(jobType int32, exec script.Exec) Option {
+	return func(s *Server) {
+		if s.scriptWorkers == nil {
+			s.scriptWorkers = map[int32]script.Exec{}
+		}
+		s.scriptWorkers[jobType] = exec
+	}
+}
 
 // New builds a Server over an already-recovered processor and its store and
 // starts the run-loop goroutine. dataDir is the base data directory; the durable
@@ -236,12 +242,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// decision's result is written back into the instance as a process variable.
 	s.jobRunner = job.NewRunner(store, proc)
 	s.jobRunner.HandleWithOutput(compiler.DMNJobTypeIndex, dmn.Handler(store, s.processLookup, s.dmnRegistry, nil))
-	// The PowerShell script worker is opt-in (WithPowerShellScripts): it runs
-	// arbitrary interpreter code, so it only subscribes when an operator enabled it.
-	// Like the DMN worker it registers once under a reserved job type and resolves
-	// each job's script from the compiled process via processLookup (ADR-0047).
-	if s.pwshExec != nil {
-		s.jobRunner.HandleWithOutput(compiler.PwshJobTypeIndex, pwsh.Handler(store, s.processLookup, s.pwshExec))
+	// Script-language workers (PowerShell, Python, JavaScript) each register under
+	// their reserved job type and resolve each job's script from the compiled
+	// process via processLookup, exactly like the DMN worker (ADR-0047). They run
+	// arbitrary interpreter code, so only the languages an operator registered with
+	// WithScriptWorker subscribe; the rest park.
+	for jobType, exec := range s.scriptWorkers {
+		s.jobRunner.HandleWithOutput(jobType, script.Handler(store, s.processLookup, exec))
 	}
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
