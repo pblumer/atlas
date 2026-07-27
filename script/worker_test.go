@@ -1,4 +1,4 @@
-package pwsh_test
+package script_test
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/model"
-	"github.com/pblumer/atlas/pwsh"
+	"github.com/pblumer/atlas/script"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
 )
@@ -96,7 +96,7 @@ func readVar(t *testing.T, s *state.Store, scope uint64, name string) *model.Var
 	return out
 }
 
-func lookupOf(cp *compiler.CompiledProcess) pwsh.ProcessLookup {
+func lookupOf(cp *compiler.CompiledProcess) script.ProcessLookup {
 	return func(k uint64) *compiler.CompiledProcess {
 		if k == cp.Key {
 			return cp
@@ -106,7 +106,7 @@ func lookupOf(cp *compiler.CompiledProcess) pwsh.ProcessLookup {
 }
 
 // TestScriptTaskRunsAndWritesResult is the vertical slice end to end: a PowerShell
-// script task creates a job, the in-process pwsh worker runs the script with the
+// script task creates a job, the in-process script worker runs the script with the
 // instance's variables as input, writes the result back as the task's result
 // variable, completes the job, and the instance finishes — proving Atlas drives a
 // polyglot script through the normal job path (ADR-0047).
@@ -121,7 +121,7 @@ func TestScriptTaskRunsAndWritesResult(t *testing.T) {
 	}
 	fx := &fakeExec{result: "Hallo Anna"}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, pwsh.Handler(store, lookupOf(cp), fx))
+	runner.HandleWithOutput(jobType, script.Handler(store, lookupOf(cp), fx))
 
 	p.CreateInstance(cp.Key, model.VariableValue{Name: "Vorname", Kind: model.VarString, Text: "Anna"})
 	if err := runner.Drive(); err != nil {
@@ -164,7 +164,7 @@ func TestScriptTaskNoProcessLookup(t *testing.T) {
 	}
 	// A lookup that never resolves the process.
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, pwsh.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, &fakeExec{result: "x"}))
+	runner.HandleWithOutput(jobType, script.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, &fakeExec{result: "x"}))
 
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {
@@ -190,7 +190,7 @@ func TestScriptTaskWithoutResultVarCompletes(t *testing.T) {
 	}
 	fx := &fakeExec{result: "ignored"}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, pwsh.Handler(store, lookupOf(cp), fx))
+	runner.HandleWithOutput(jobType, script.Handler(store, lookupOf(cp), fx))
 
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {
@@ -219,7 +219,7 @@ func TestScriptTaskExecErrorRaisesIncident(t *testing.T) {
 	}
 	fx := &fakeExec{err: context.DeadlineExceeded}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, pwsh.Handler(store, lookupOf(cp), fx))
+	runner.HandleWithOutput(jobType, script.Handler(store, lookupOf(cp), fx))
 
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {

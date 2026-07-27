@@ -1,13 +1,22 @@
 # ADR-0047: Polyglot script tasks (PowerShell, …) via job workers
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-24
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Not implemented. This ADR decides the shape;
-> PowerShell is the first target language. Python and JavaScript are explicitly
-> in scope for the *same* mechanism but are follow-up work, not part of the first
-> slice.
+> **Implementation status.** Implemented for **PowerShell, Python, and
+> JavaScript**, all through the same mechanism: a `TypeScriptJobTask` node carries
+> a per-language reserved job type (`compiler.PwshJobType` / `PythonJobType` /
+> `JsJobType`), and the language-agnostic `script` package runs each via a
+> `CmdExec` that shells out to `pwsh` / `python3` / `node`. The handler resolves
+> the script from the compiled process (like the DMN worker); only the `Exec`
+> differs per language. Each run is bounded by a wall-clock timeout
+> (`--script-timeout`, default 30s). Enablement is **opt-out per language** at the
+> CLI (`--powershell` / `--python` / `--javascript`, all default on;
+> `=false` disables). The result contract is per-language: PowerShell uses its
+> output stream, Python and JavaScript a variable named `result`. Still open: true
+> resource limits (memory/CPU), input mappings, incident/retry policy, and the
+> external gRPC worker for real customer-environment isolation.
 
 ## Context and problem statement
 
@@ -169,7 +178,13 @@ exactly as the FEEL task's result is frozen rather than re-evaluated.
   the engine host, which is acceptable for a controlled environment but is **not**
   the recommended production isolation posture — that is the external worker. The
   result-variable mapping leans on the variable subsystem the DMN/connector tasks
-  already use.
+  already use. **Enablement is opt-out at the CLI**: `atlas serve` runs the
+  PowerShell worker by default and `--powershell=false` disables it (the `api`
+  library stays explicit — `WithPowerShellScripts` — so an embedder never executes
+  interpreter code unasked). This was an operator decision to favour convenience
+  over a locked-down default; it widens the default blast radius, so a deployment
+  that does not want interpreter execution must pass `--powershell=false` (or run a
+  host without `pwsh`, where tasks park with a startup warning).
 - **Follow-ups / risks to watch:** **security is the headline risk** — run the
   interpreter under least privilege (dedicated OS user/container), enforce
   per-job timeouts and resource limits, invoke with `-NoProfile -NonInteractive`

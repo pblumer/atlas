@@ -54,7 +54,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0044](0044-user-management-and-authentication-boundary.md) | User management and the opt-in authentication boundary | Accepted |
 | [0045](0045-user-task-assignment-bound-to-identity.md) | Binding user-task assignment to real identities | Accepted |
 | [0046](0046-single-process-step-replay.md) | Retain a per-instance element-step history and replay a single process step by step | Accepted |
-| [0047](0047-polyglot-script-tasks-via-job-workers.md) | Polyglot script tasks (PowerShell, …) via job workers | Proposed |
+| [0047](0047-polyglot-script-tasks-via-job-workers.md) | Polyglot script tasks (PowerShell, …) via job workers | Accepted |
 | [0048](0048-per-step-variable-snapshots.md) | Per-step variable snapshots in the single-process replay | Accepted |
 | [0049](0049-internal-service-auth-for-mcp.md) | Internal service authentication for the in-process MCP adapter | Accepted |
 | [0050](0050-temis-decision-connector.md) | Central DMN decisions via a temis decision connector | Accepted |

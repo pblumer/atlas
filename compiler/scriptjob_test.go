@@ -143,6 +143,48 @@ func TestPwshJobTypeReserved(t *testing.T) {
 	}
 }
 
+// TestScriptJobLanguages proves each supported language compiles to a job task
+// carrying that language's own reserved job type, so a single worker per language
+// can subscribe by one global index (like the DMN worker).
+func TestScriptJobLanguages(t *testing.T) {
+	tests := []struct {
+		lang     string
+		wantType int32
+		wantJob  string
+	}{
+		{"powershell", PwshJobTypeIndex, PwshJobType},
+		{"python", PythonJobTypeIndex, PythonJobType},
+		{"javascript", JsJobTypeIndex, JsJobType},
+	}
+	for _, tt := range tests {
+		t.Run(tt.lang, func(t *testing.T) {
+			xml := `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="p" isExecutable="true">
+    <startEvent id="s"/>
+    <scriptTask id="t"><extensionElements><jobScript language="` + tt.lang + `" resultVariable="r">code here</jobScript></extensionElements></scriptTask>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </process>
+</definitions>`
+			cp, err := Parse(1, 1, strings.NewReader(xml))
+			if err != nil {
+				t.Fatalf("Parse(%s): %v", tt.lang, err)
+			}
+			_, detail := scriptJobTaskDetail(t, cp)
+			if detail.JobType != tt.wantType {
+				t.Errorf("job type = %d, want %d", detail.JobType, tt.wantType)
+			}
+			if got := cp.Intern(detail.JobType); got != tt.wantJob {
+				t.Errorf("job type string = %q, want %q", got, tt.wantJob)
+			}
+			if got := cp.Intern(detail.Language); got != tt.lang {
+				t.Errorf("language = %q, want %q", got, tt.lang)
+			}
+		})
+	}
+}
+
 // TestScriptJobTaskValidation rejects, at deploy time, a job script with no
 // source, no result variable, or an unsupported language.
 func TestScriptJobTaskValidation(t *testing.T) {

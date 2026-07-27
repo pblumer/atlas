@@ -23,6 +23,7 @@ go.work.sum
 
 # Local data / engine artifacts (WAL segments, state store)
 /data/
+/atlas-data/
 *.wal
 /.atlas/
 

@@ -41,6 +41,7 @@ import (
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/rest"
+	"github.com/pblumer/atlas/script"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/temis"
 )
@@ -167,6 +168,12 @@ type Server struct {
 	dmnRegistry *dmn.Registry
 	jobRunner   *job.Runner
 
+	// scriptWorkers maps a script language's reserved job-type index to the
+	// interpreter that runs it (ADR-0047). An operator registers each language with
+	// WithScriptWorker; a language with no worker parks its tasks. Set once before
+	// Handler is mounted; read-only thereafter.
+	scriptWorkers map[int32]script.Exec
+
 	// temisRegistry resolves a connector name to a temis service client for
 	// *central* business rule tasks (ADR-0050), built from the environment at
 	// startup (ADR-0041 secret model). Read only while driving jobs on the run loop.
@@ -189,6 +196,22 @@ type Option func(*Server)
 // it when the interactive, mutating "Try it out" surface should not be exposed
 // (ADR-0043).
 func WithoutDocs() Option { return func(s *Server) { s.docsEnabled = false } }
+
+// WithScriptWorker registers the interpreter for one script language (identified
+// by its reserved job-type index, e.g. compiler.PwshJobTypeIndex), so a deployed
+// script task in that language actually runs instead of parking on its job
+// (ADR-0047). It executes arbitrary interpreter code on the server host, so
+// register only the languages whose trust boundary is acceptable (the eventual
+// isolation boundary is an external worker in the customer's environment). exec is
+// the interpreter seam — pass script.New(script.Python) etc., or a fake in tests.
+func WithScriptWorker(jobType int32, exec script.Exec) Option {
+	return func(s *Server) {
+		if s.scriptWorkers == nil {
+			s.scriptWorkers = map[int32]script.Exec{}
+		}
+		s.scriptWorkers[jobType] = exec
+	}
+}
 
 // New builds a Server over an already-recovered processor and its store and
 // starts the run-loop goroutine. dataDir is the base data directory; the durable
@@ -287,6 +310,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// retains the evaluation (inputs, outputs, trace) for debugging (ADR-0066).
 	s.jobRunner = job.NewRunner(store, proc)
 	s.jobRunner.HandleCompleting(compiler.DMNJobTypeIndex, dmn.Handler(store, s.processLookup, s.dmnRegistry, nil))
+	// Script-language workers (PowerShell, Python, JavaScript) each register under
+	// their reserved job type and resolve each job's script from the compiled
+	// process via processLookup, exactly like the DMN worker (ADR-0047). They run
+	// arbitrary interpreter code, so only the languages an operator registered with
+	// WithScriptWorker subscribe; the rest park.
+	for jobType, exec := range s.scriptWorkers {
+		s.jobRunner.HandleWithOutput(jobType, script.Handler(store, s.processLookup, exec))
+	}
 	// A *central* business rule task delegates its decision to a remote temis
 	// service instead of the embedded library (ADR-0050). One connector worker
 	// serves every process under the reserved temis-connector job type; it resolves

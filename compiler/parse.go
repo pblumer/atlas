@@ -25,6 +25,8 @@ const defaultUserTaskPriority = 50
 // (invariant I5) so the runtime never inspects the language.
 var scriptJobTypes = map[string]string{
 	"powershell": PwshJobType,
+	"python":     PythonJobType,
+	"javascript": JsJobType,
 }
 
 // restMethods is the set of HTTP methods a REST connector task may use. The set
