@@ -289,14 +289,14 @@ func TestConnectorHandlerRegistryRebuildErrors(t *testing.T) {
 
 // TestResolveConnectorSecret covers the env-reference secret resolution.
 func TestResolveConnectorSecret(t *testing.T) {
-	if resolveConnectorSecret("") != "" {
+	if envConnectorSecret("") != "" {
 		t.Error("empty ref should resolve to no token")
 	}
 	t.Setenv("ATLAS_CONNECTOR_RISK_TOKEN_TOKEN", "sekret")
-	if got := resolveConnectorSecret("risk_token"); got != "sekret" {
-		t.Errorf("resolveConnectorSecret(risk_token) = %q, want sekret", got)
+	if got := envConnectorSecret("risk_token"); got != "sekret" {
+		t.Errorf("envConnectorSecret(risk_token) = %q, want sekret", got)
 	}
-	if resolveConnectorSecret("unset") != "" {
+	if envConnectorSecret("unset") != "" {
 		t.Error("unset ref should resolve to no token")
 	}
 }

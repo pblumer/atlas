@@ -259,6 +259,13 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/connectors/{id}", s.handleDeleteConnector, apiOp{
 			summary: "Delete a managed connector instance", tag: "Connectors", status: http.StatusNoContent}},
 
+		{"GET", "/api/v1/secrets", s.handleListSecrets, apiOp{
+			summary: "List secret names and metadata in the encrypted vault (never values)", tag: "Secrets", resp: jsonBody("Secrets", tArray())}},
+		{"PUT", "/api/v1/secrets/{name}", s.handleSetSecret, apiOp{
+			summary: "Store or overwrite a secret value in the encrypted vault", tag: "Secrets", req: jsonBody("Secret value", schemaObj(map[string]any{"value": tString()}, "value")), resp: jsonBody("Secret metadata", tObject())}},
+		{"DELETE", "/api/v1/secrets/{name}", s.handleDeleteSecret, apiOp{
+			summary: "Delete a secret from the encrypted vault", tag: "Secrets", status: http.StatusNoContent}},
+
 		{"POST", "/api/v1/auth/login", s.handleLogin, apiOp{
 			summary: "Log in with a username and password", tag: "Auth",
 			req: jsonBody("Credentials", schemaObj(map[string]any{

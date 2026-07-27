@@ -11,16 +11,35 @@ import (
 	"github.com/pblumer/atlas/temis"
 )
 
-// resolveConnectorSecret returns the token for a connector's credentialsRef, read
-// from the environment per the ADR-0041 secret model: the engine stores only the
+// envConnectorSecret returns the token for a connector's credentialsRef from the
+// environment per the ADR-0041 A2 secret model: the engine stores only the
 // reference; the value lives in ATLAS_CONNECTOR_<REF>_TOKEN (REF normalized like a
 // connector name). An empty ref yields no token.
-func resolveConnectorSecret(ref string) string {
+func envConnectorSecret(ref string) string {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
 		return ""
 	}
 	return strings.TrimSpace(os.Getenv("ATLAS_CONNECTOR_" + connectorEnvKey(ref) + "_TOKEN"))
+}
+
+// resolveConnectorSecret resolves a credentialsRef to a token, consulting the
+// engine-internal encrypted vault first (ADR-0069) and falling back to the
+// environment reference (ADR-0041 A2) on a miss or when the vault is unconfigured.
+// The decrypted value lives only in the returned string in the caller's memory at
+// call time — it is never written to a variable, the WAL, or an event (I6). Runs on
+// the run-loop goroutine (the vault store's owner), as buildTemisClients does.
+func (s *Server) resolveConnectorSecret(ref string) string {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return ""
+	}
+	if s.vault != nil {
+		if v, ok, err := s.vault.Get(ref); err == nil && ok {
+			return v
+		}
+	}
+	return envConnectorSecret(ref)
 }
 
 // envTemisClients builds the temis connector clients configured purely from the
@@ -62,7 +81,7 @@ func (s *Server) buildTemisClients() (map[string]temis.Client, error) {
 		}
 		clients[c.Name] = temis.NewHTTPClient(temis.Connector{
 			Endpoint: strings.TrimSpace(c.Endpoint),
-			Token:    resolveConnectorSecret(c.CredentialsRef),
+			Token:    s.resolveConnectorSecret(c.CredentialsRef),
 		})
 	}
 	return clients, nil
