@@ -41,6 +41,14 @@ func (e *CmdExec) bin() string {
 	return "pwsh"
 }
 
+// Check reports whether the interpreter is resolvable on PATH. The server calls
+// it once at startup so an operator who enabled the worker without installing
+// pwsh sees a clear warning, rather than watching script tasks park silently.
+func (e *CmdExec) Check() error {
+	_, err := exec.LookPath(e.bin())
+	return err
+}
+
 func (e *CmdExec) runner() func(context.Context, string, []string, []string) ([]byte, error) {
 	if e.run != nil {
 		return e.run

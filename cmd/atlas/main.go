@@ -138,7 +138,13 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, powe
 		apiOpts = append(apiOpts, api.WithAuth())
 	}
 	if powershell {
-		apiOpts = append(apiOpts, api.WithPowerShellScripts(pwsh.NewCmdExec()))
+		px := pwsh.NewCmdExec()
+		if err := px.Check(); err != nil {
+			log.Printf("WARNING: --powershell is enabled but pwsh was not found on PATH (%v); PowerShell script tasks will park until pwsh is installed", err)
+		} else {
+			log.Printf("PowerShell script worker enabled (pwsh found on PATH)")
+		}
+		apiOpts = append(apiOpts, api.WithPowerShellScripts(px))
 	}
 	srv, err := api.New(proc, store, dataDir, apiOpts...)
 	if err != nil {

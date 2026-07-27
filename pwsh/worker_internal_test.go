@@ -217,6 +217,19 @@ func TestRunnerError(t *testing.T) {
 	}
 }
 
+// TestCheck reports whether the configured interpreter is resolvable on PATH, so
+// the server can warn at startup instead of letting script tasks silently park.
+func TestCheck(t *testing.T) {
+	// A missing interpreter is reported as an error.
+	if err := (&CmdExec{Bin: "atlas-no-such-pwsh-xyz"}).Check(); err == nil {
+		t.Error("Check with a missing binary = nil, want an error")
+	}
+	// A binary that exists on PATH resolves cleanly (sh is present on the test host).
+	if err := (&CmdExec{Bin: "sh"}).Check(); err != nil {
+		t.Errorf("Check for sh = %v, want nil", err)
+	}
+}
+
 // TestExecCommand covers the real os/exec seam without an interpreter, using a
 // POSIX utility that is always present: it returns the command's stdout, and a
 // missing binary surfaces an error (which leaves a job pending).
