@@ -138,6 +138,7 @@ type Server struct {
 	projects    *projectStore    // durable sidecar for projects grouping artifacts (ADR-0034)
 	dmnrefs     *dmnRefStore     // durable sidecar for DMN reference artifacts (ADR-0034)
 	connectors  *connectorStore  // durable sidecar for managed connector instances (ADR-0041)
+	vault       *secretVault     // engine-internal encrypted secret store, nil when unconfigured (ADR-0069)
 	users       *userStore       // durable sidecar for user accounts (ADR-0044)
 
 	// sessions holds live login sessions in memory. Unlike the sidecar stores it
@@ -264,6 +265,19 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	// The encrypted secret vault (ADR-0069) is opt-in: it exists only when a master
+	// key is provisioned in the environment. With no key it stays nil, and secret
+	// resolution falls back to the environment references (ADR-0041 A2), the default.
+	vaultKey, vaultOn, err := vaultKeyFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	var vault *secretVault
+	if vaultOn {
+		if vault, err = newSecretVault(filepath.Join(dataDir, "vault"), vaultKey); err != nil {
+			return nil, err
+		}
+	}
 	// DMN reference models are resolved either from a temis model service (when
 	// configured) or the zero-config <data-dir>/dmn-models folder. Both satisfy the
 	// Resolver interface, so the rest of the server is unaffected (ADR-0034/0014).
@@ -286,6 +300,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		projects:     projects,
 		dmnrefs:      dmnrefs,
 		connectors:   connectors,
+		vault:        vault,
 		users:        users,
 		sessions:     newSessionStore(defaultSessionTTL),
 		dmnResolver:  resolver,
