@@ -105,6 +105,10 @@ type CompiledNode struct {
 	DataOutCount  int32 // number of data-output associations (0 for a node with none)
 	DataInStart   int32 // offset into dataInAssocs (the data-input associations of this activity)
 	DataInCount   int32 // number of data-input associations (0 for a node with none)
+	IOInStart     int32 // offset into ioInputs (the zeebe:ioMapping inputs of this activity)
+	IOInCount     int32 // number of input mappings (0 for a node with none)
+	IOOutStart    int32 // offset into ioOutputs (the zeebe:ioMapping outputs of this activity)
+	IOOutCount    int32 // number of output mappings (0 for a node with none)
 }
 
 // CompiledFlow is a sequence flow between two nodes. Condition is the compiled
@@ -351,6 +355,20 @@ type DataInputAssociation struct {
 	Value      *expr.Compiled
 }
 
+// IOMapping is one compiled zeebe:ioMapping entry on an activity — an input or an
+// output — the generic, task-agnostic variable mapping of ADR-0068. Source is a
+// FEEL expression compiled once at deploy time (invariant I5); Target is the
+// interned variable name it writes. The two directions differ only in where they
+// read and write at runtime (phase 4): an input evaluates Source over the scope
+// chain from the activity's flow scope and writes Target into the activity-local
+// scope on activation; an output evaluates Source over the local scope and writes
+// Target into the parent (flow) scope on completion. The compiler only records
+// them; the engine applies them.
+type IOMapping struct {
+	Target int32          // interned target variable name → index
+	Source *expr.Compiled // FEEL expression evaluated to produce the value
+}
+
 // CompiledProcess is the immutable result of compiling one process definition.
 // It is safe for concurrent reads without synchronization.
 type CompiledProcess struct {
@@ -378,6 +396,8 @@ type CompiledProcess struct {
 	dataObjects       []CompiledDataObject
 	dataOutAssocs     []DataOutputAssociation // shared: output associations grouped by activity node
 	dataInAssocs      []DataInputAssociation  // shared: input associations grouped by activity node
+	ioInputs          []IOMapping             // shared: zeebe:ioMapping inputs grouped by activity node
+	ioOutputs         []IOMapping             // shared: zeebe:ioMapping outputs grouped by activity node
 	startEvents       []int32
 	startFormId       int32    // interned start-form id (ADR-0028), -1 if none
 	elementIds        []int32  // interned source BPMN id per node id (-1 if unset)
@@ -602,6 +622,24 @@ func (p *CompiledProcess) DataOutputAssociations(id int32) []DataOutputAssociati
 func (p *CompiledProcess) DataInputAssociations(id int32) []DataInputAssociation {
 	n := &p.nodes[id]
 	return p.dataInAssocs[n.DataInStart : n.DataInStart+n.DataInCount]
+}
+
+// IOInputs returns the zeebe:ioMapping input mappings of activity node id, as a
+// slice into the shared array (no allocation). Empty for a node with none. The
+// engine evaluates them when the activity activates to write its activity-local
+// scope (ADR-0068).
+func (p *CompiledProcess) IOInputs(id int32) []IOMapping {
+	n := &p.nodes[id]
+	return p.ioInputs[n.IOInStart : n.IOInStart+n.IOInCount]
+}
+
+// IOOutputs returns the zeebe:ioMapping output mappings of activity node id, as a
+// slice into the shared array (no allocation). Empty for a node with none. The
+// engine evaluates them when the activity completes to promote selected values to
+// the parent scope (ADR-0068).
+func (p *CompiledProcess) IOOutputs(id int32) []IOMapping {
+	n := &p.nodes[id]
+	return p.ioOutputs[n.IOOutStart : n.IOOutStart+n.IOOutCount]
 }
 
 // StartFormId returns the id of the form the UI shows before starting an
