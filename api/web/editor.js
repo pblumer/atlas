@@ -515,49 +515,67 @@ function activeTab(root) {
   return (b && b.dataset.tab) || "design";
 }
 
-// drawLangBadges marks every job-script task with its executable language icon so
-// PowerShell vs Python vs JavaScript reads at a glance — a plain bpmn:ScriptTask
-// looks identical whatever language it runs. It draws for a job-worker script task
-// (a bpmn:ScriptTask carrying <atlas:jobScript>); a FEEL script task runs in the
-// engine and has no worker language, so it gets none. Each badge is a bpmn-js
-// overlay (like Operate's execution-count badges), so it tracks the shape through
-// pan/zoom and is torn down with the modeler. Returns the overlay ids it added, for
-// callers that reap their own badges (the Modeler removes them on tab switch; the
-// live views let overlays.clear() reap them). Shared by the Modeler's Implement view
-// and the read-only runtime views (live/collaboration/replay), where the language a
-// token is running is just as relevant as at authoring time.
-function drawLangBadges(modeler) {
+// implMarker resolves an element's *implementation type* to the icon shown in the
+// Implement / runtime views, or null when the element carries no such type (so the
+// generic BPMN marker shows instead). Two task families have one: a job-script task
+// resolves to its language (a FEEL script task runs in the engine — none); a service
+// task to its connector kind (the plain job worker has none — the gear bpmn-js draws
+// IS the service-task symbol). `label` is the tooltip; `icon` is a self-contained SVG.
+function implMarker(bo) {
+  if (!bo) return null;
+  if (bo.$type === "bpmn:ScriptTask") {
+    const js = findExt(bo, "atlas:JobScript");
+    if (!js) return null; // FEEL script task — runs in the engine, no worker language
+    const meta = JOB_LANGS[js.language] || JOB_LANGS.powershell;
+    return { label: meta.label, icon: meta.icon };
+  }
+  if (bo.$type === "bpmn:ServiceTask") {
+    const kind = serviceTaskKind(bo);
+    if (!kind.glyph) return null; // plain job worker — the default gear is its symbol
+    return { label: kind.name, icon: kind.glyph };
+  }
+  return null;
+}
+
+// drawImplBadges marks every element that has an implementation type (see implMarker)
+// with that type's icon, so a task's *executable* nature — PowerShell vs Python, a
+// REST connector vs a plain job worker — reads at a glance. A plain bpmn:ScriptTask or
+// bpmn:ServiceTask looks identical whatever it runs; this restores the distinction.
+// Each badge is a bpmn-js overlay (like Operate's execution-count badges), so it tracks
+// the shape through pan/zoom and is torn down with the modeler. Returns the overlay ids
+// it added, for callers that reap their own badges (the Modeler removes them on tab
+// switch; the live views let overlays.clear() reap them). Shared by the Modeler's
+// Implement view and the read-only runtime views (live/collaboration/replay), where the
+// type a token is running through is just as relevant as at authoring time.
+function drawImplBadges(modeler) {
   const ids = [];
   let overlays, registry;
   try { overlays = modeler.get("overlays"); registry = modeler.get("elementRegistry"); }
   catch { return ids; } // modeler torn down mid-flight
   registry.forEach((el) => {
-    const bo = el.businessObject;
-    if (!bo || bo.$type !== "bpmn:ScriptTask") return;
-    const js = findExt(bo, "atlas:JobScript");
-    if (!js) return; // a FEEL script task runs in the engine — no worker language
-    const meta = JOB_LANGS[js.language] || JOB_LANGS.powershell;
+    const m = implMarker(el.businessObject);
+    if (!m) return;
     try {
       // Sit the badge over the shape's own top-left type marker (the generic script
-      // scroll bpmn-js draws), so the language icon reads as *the* element marker —
-      // like a connector task's corner glyph — rather than a floating label. The
-      // opaque disc covers the scroll beneath it; in the Design view (no badge) that
-      // generic marker shows through, which is the intended level-of-detail split.
-      ids.push(overlays.add(el.id, "lang-badge", {
+      // scroll or service-task gear bpmn-js draws), so the type icon reads as *the*
+      // element marker rather than a floating label. The opaque disc covers the marker
+      // beneath it; in the Design view (no badge) that generic marker shows through,
+      // which is the intended level-of-detail split.
+      ids.push(overlays.add(el.id, "impl-badge", {
         position: { top: 2, left: 2 },
-        html: `<span class="lang-badge" title="${esc(meta.label)}">${meta.icon}</span>`,
+        html: `<span class="impl-badge" title="${esc(m.label)}">${m.icon}</span>`,
       }));
     } catch { /* shape without graphics (e.g. mid-import) — skip */ }
   });
   return ids;
 }
 
-// makeImplementBadges gates drawLangBadges on the Modeler's Implement tab: the
-// Design view is deliberately language-agnostic (control flow only), but on the
-// Implement tab the difference between a PowerShell and a Python task is exactly
-// what the author is working with. Returns a refresh function the tab toggle and
-// diagram-change events call; it is a no-op off the Implement tab, where it clears
-// any badges the author left behind.
+// makeImplementBadges gates drawImplBadges on the Modeler's Implement tab: the Design
+// view is deliberately descriptive (control flow and BPMN symbols only), but on the
+// Implement tab the difference between a PowerShell and a Python task, or a REST
+// connector and a plain worker, is exactly what the author is working with. Returns a
+// refresh function the tab toggle and diagram-change events call; it is a no-op off the
+// Implement tab, where it clears any badges the author left behind.
 function makeImplementBadges(root, modeler) {
   let ids = []; // overlay ids currently on the canvas, so we can remove ours only
 
@@ -571,7 +589,7 @@ function makeImplementBadges(root, modeler) {
   const refresh = () => {
     clear();
     if (activeTab(root) !== "implement") return;
-    ids = drawLangBadges(modeler);
+    ids = drawImplBadges(modeler);
   };
 
   // Keep badges in step with edits (language switched, task added/removed) while the
@@ -975,6 +993,11 @@ const SERVICE_TASK_KINDS = [
   },
   {
     id: "rest", name: "REST Outbound Connector", desc: "Invoke a REST API", icon: "R",
+    // glyph is the canvas type marker shown in the Implement/runtime views (drawImplBadges),
+    // the connector's counterpart to a script task's language icon. The plain job worker
+    // has none — the gear bpmn-js already draws IS the service-task symbol. A globe reads
+    // "HTTP/web API" at a glance.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#12a594"/><circle cx="8" cy="8" r="4.7" fill="none" stroke="#fff" stroke-width="1.1"/><ellipse cx="8" cy="8" rx="2.3" ry="4.7" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.3 8h9.4M8 3.3v9.4" stroke="#fff" stroke-width="1.1"/></svg>`,
     ext: "atlas:RestConnector",
     fields: [
       { key: "method", label: "Method", type: "select", options: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] },
@@ -3044,7 +3067,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
   const canvas = viewer.get("canvas");
   const overlays = viewer.get("overlays");
   const registry = viewer.get("elementRegistry");
-  drawLangBadges(viewer); // show language icons at once, before the first poll lands
+  drawImplBadges(viewer); // show type icons at once, before the first poll lands
   const countEl = root.querySelector("#inst-count");
   const tokenEl = root.querySelector("#token-count");
   const instSel = root.querySelector("#instance-sel");
@@ -3311,7 +3334,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
     catch (e) { return; } // transient; try again next tick
     if (current !== viewer) return; // navigated away mid-flight
     overlays.clear();
-    drawLangBadges(viewer); // language icons are static; overlays.clear() reaped them
+    drawImplBadges(viewer); // type icons are static; overlays.clear() reaped them
     for (const [id, marker] of marked) canvas.removeMarker(id, marker);
     marked = [];
     // The tasks in scope: a single instance's own, or (for "All instances") every
@@ -3638,7 +3661,7 @@ export async function mountCollaboration(root, { api, toast, key }) {
 
   const canvas = viewer.get("canvas");
   const registry = viewer.get("elementRegistry");
-  drawLangBadges(viewer); // static language icons; this view never clears overlays
+  drawImplBadges(viewer); // static type icons; this view never clears overlays
   const layer = canvas.getLayer("atlas-replay", 900); // message dots ride above the diagram
   const titleEl = root.querySelector("#collab-title");
   const instEl = root.querySelector("#inst-count");
@@ -3908,7 +3931,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const canvas = viewer.get("canvas");
   const registry = viewer.get("elementRegistry");
   const overlays = viewer.get("overlays");
-  drawLangBadges(viewer); // static language icons; only the count badges are re-drawn
+  drawImplBadges(viewer); // static type icons; only the count badges are re-drawn
   const eventBus = viewer.get("eventBus");
   const layer = canvas.getLayer("atlas-replay", 900); // moving token dot rides above the diagram
   const dotLayer = canvas.getLayer("atlas-tokens", 899); // static per-frame token dots

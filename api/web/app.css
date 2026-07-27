@@ -789,17 +789,17 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   font: 700 12px/1 ui-monospace, monospace; color: var(--text); box-shadow: var(--shadow);
 }
 
-/* Script-language marker the editor draws on a job-script task in the Implement view
-   (and the runtime views), so PowerShell vs Python vs JavaScript reads at a glance
-   (drawLangBadges). A round disc carrying the language logo, sized and placed to sit
-   over the shape's own top-left type marker — the corner-glyph look of a connector
-   task, not a floating label. */
-.lang-badge {
+/* Implementation-type marker the editor draws on a task in the Implement view (and the
+   runtime views), so its executable nature reads at a glance — a script task's language
+   (PowerShell/Python/JavaScript) or a service task's connector kind (REST) (drawImplBadges).
+   A round disc carrying the type icon, sized and placed to sit over the shape's own
+   top-left BPMN marker — the corner-glyph look of a connector task, not a floating label. */
+.impl-badge {
   display: grid; place-items: center; width: 26px; height: 26px;
   background: var(--surface); border-radius: 50%; box-shadow: 0 0 0 1px var(--border-strong);
   cursor: default;
 }
-.lang-badge svg { display: block; width: 16px; height: 16px; border-radius: 3px; }
+.impl-badge svg { display: block; width: 16px; height: 16px; border-radius: 3px; }
 
 /* Message-flow log beneath the diagram: one row per delivery, the current step
    highlighted as the playhead crosses it. */
