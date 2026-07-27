@@ -74,6 +74,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0064](0064-timer-feel-failure-incidents.md) | Timer FEEL-failure incidents — park and raise instead of firing immediately | Proposed |
 | [0065](0065-multi-token-process-replay.md) | Multi-token process replay and causal token lineage | Accepted |
 | [0066](0066-decision-evaluation-records.md) | Durable decision-evaluation records — capture a decision's inputs, outputs, and trace for debugging | Accepted |
+| [0067](0067-service-task-connector-catalog.md) | A service-task connector catalog, and REST with a model-authored endpoint | Accepted |
 
 ## Status values
 

@@ -687,6 +687,85 @@ function removeExt(modeler, element, type) {
   modeling.updateProperties(element, { extensionElements: ext });
 }
 
+// SERVICE_TASK_KINDS is the catalog of service-task connector kinds the modeler
+// can author (ADR-0067). Each entry maps a human-facing kind to the extension
+// element the compiler reads and the typed fields that configure it. Adding a
+// connector kind is one entry here (plus its moddle type, compiler branch, and
+// worker) — the searchable picker and the field form are both rendered
+// generically from this data, so no bespoke panel code is needed per kind.
+const SERVICE_TASK_KINDS = [
+  {
+    id: "worker", name: "Job worker", desc: "Handled by an external job worker", icon: "⚙",
+    ext: "zeebe:TaskDefinition",
+    fields: [{ key: "type", label: "Job type", placeholder: "payment" }],
+  },
+  {
+    id: "rest", name: "REST Outbound Connector", desc: "Invoke a REST API", icon: "R",
+    ext: "atlas:RestConnector",
+    fields: [
+      { key: "method", label: "Method", type: "select", options: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] },
+      { key: "url", label: "URL", placeholder: "https://api.example.com/customers" },
+      { key: "resultVariable", label: "Result variable", placeholder: "response", hint: "The JSON response is written into this process variable (leave empty to discard it)." },
+    ],
+  },
+];
+
+// serviceTaskKind returns the catalog entry a service task currently represents,
+// detected by which connector extension it carries; the plain job worker is the
+// default when no connector extension is present.
+function serviceTaskKind(bo) {
+  for (const k of SERVICE_TASK_KINDS) {
+    if (k.id !== "worker" && findExt(bo, k.ext)) return k;
+  }
+  return SERVICE_TASK_KINDS[0];
+}
+
+// serviceTaskKindHTML renders the searchable kind picker plus the current kind's
+// fields, both from SERVICE_TASK_KINDS. The picker approximates the reference
+// tooling's template chooser within the buildless panel (ADR-0067/0012).
+function serviceTaskKindHTML(bo) {
+  const cur = serviceTaskKind(bo);
+  const ext = findExt(bo, cur.ext) || {};
+  const rows = SERVICE_TASK_KINDS.map((k) => `
+    <div class="stkind-row" data-kind="${k.id}" data-match="${esc((k.name + " " + k.desc).toLowerCase())}"
+         style="display:flex;gap:8px;align-items:center;padding:8px;border:1px solid #d7d7d7;border-radius:6px;margin-bottom:6px;cursor:pointer;${k.id === cur.id ? "background:#eef2ff;border-color:#9aa8ff" : ""}">
+      <span style="flex:0 0 22px;height:22px;line-height:22px;text-align:center;border:1px solid #bbb;border-radius:50%;font-size:12px">${esc(k.icon)}</span>
+      <span style="line-height:1.25"><b>${esc(k.name)}</b><br><span class="muted" style="font-size:12px">${esc(k.desc)}</span></span>
+    </div>`).join("");
+  let fields = "";
+  for (const f of cur.fields) {
+    const val = ext[f.key] || "";
+    if (f.type === "select") {
+      const chosen = val || f.options[0];
+      const opts = f.options.map((o) => `<option value="${esc(o)}" ${o === chosen ? "selected" : ""}>${esc(o)}</option>`).join("");
+      fields += `<label class="field"><span>${esc(f.label)}</span><select id="f-st-${f.key}">${opts}</select></label>`;
+    } else {
+      fields += `<label class="field"><span>${esc(f.label)}</span>
+        <input type="text" id="f-st-${f.key}" value="${esc(val)}" placeholder="${esc(f.placeholder || "")}"/></label>`;
+    }
+    if (f.hint) fields += `<p class="muted" style="font-size:12px">${esc(f.hint)}</p>`;
+  }
+  return `<h3>Type</h3>
+    <input type="text" id="f-stkind-filter" placeholder="Search type… (e.g. rest)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
+    <div id="f-stkind-list">${rows}</div>
+    <h3>${esc(cur.name)}</h3>${fields}`;
+}
+
+// applyServiceTaskKind switches a service task to a catalog kind by writing that
+// kind's extension (seeding select defaults) and removing every other kind's
+// extension, so the compiler sees exactly one connector kind (ADR-0067).
+function applyServiceTaskKind(modeler, element, kindId) {
+  const kind = SERVICE_TASK_KINDS.find((k) => k.id === kindId) || SERVICE_TASK_KINDS[0];
+  for (const other of SERVICE_TASK_KINDS) {
+    if (other.id !== kind.id) removeExt(modeler, element, other.ext);
+  }
+  const defaults = {};
+  for (const f of kind.fields) {
+    if (f.type === "select" && f.options && f.options.length) defaults[f.key] = f.options[0];
+  }
+  upsertExt(modeler, element, kind.ext, defaults);
+}
+
 // decisionInputRowHTML renders one editable business-rule-task input mapping: a
 // decision input name (target) fed by a FEEL source over the instance's variables.
 // The stored source is '=' prefixed (Zeebe convention); it is shown stripped.
@@ -1495,10 +1574,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
               <p class="muted" style="font-size:12px">Runs on a PowerShell job worker, off the engine's hot path. The instance's variables are available as <code>$name</code>; the script's output is written back into the result variable.</p>`;
           }
         } else if (t === "bpmn:ServiceTask") {
-          const d = findExt(bo, "zeebe:TaskDefinition") || {};
-          html += `<h3>Task definition</h3>
-            <label class="field"><span>Job type</span>
-              <input type="text" id="f-jobtype" value="${esc(d.type || "")}" placeholder="payment"/></label>`;
+          html += serviceTaskKindHTML(bo);
         } else if (t === "bpmn:BusinessRuleTask") {
           const cd = findExt(bo, "zeebe:CalledDecision") || {};
           const tc = findExt(bo, "atlas:TemisConnector");
@@ -1781,11 +1857,42 @@ function wireProperties(root, modeler, api, projectId, toast) {
     if (fpsbody) fpsbody.addEventListener("change", savePowerShell);
     if (fpsresult) fpsresult.addEventListener("change", savePowerShell);
 
-    const fjob = body.querySelector("#f-jobtype");
-    if (fjob) {
-      fjob.addEventListener("change", () => {
-        upsertExt(modeler, element, "zeebe:TaskDefinition", { type: (fjob.value || "").trim() });
+    // Service-task connector kind: a searchable picker over SERVICE_TASK_KINDS
+    // (ADR-0067). Filtering narrows the list; clicking a row switches the kind
+    // (swapping which extension the task carries) and re-renders so that kind's
+    // fields show. Field edits upsert the current kind's extension generically.
+    const stfilter = body.querySelector("#f-stkind-filter");
+    const stlist = body.querySelector("#f-stkind-list");
+    if (stfilter && stlist) {
+      stfilter.addEventListener("input", () => {
+        const q = stfilter.value.trim().toLowerCase();
+        stlist.querySelectorAll(".stkind-row").forEach((row) => {
+          row.hidden = q !== "" && !row.dataset.match.includes(q);
+        });
       });
+    }
+    if (stlist) {
+      stlist.addEventListener("click", (e) => {
+        const row = e.target.closest(".stkind-row");
+        if (!row) return;
+        try {
+          applyServiceTaskKind(modeler, element, row.dataset.kind);
+          show(element);
+        } catch { /* stale */ }
+      });
+    }
+    const stKind = serviceTaskKind(bo);
+    const saveKindFields = () => savePreservingPanel(() => {
+      const props = {};
+      for (const f of stKind.fields) {
+        const el = body.querySelector("#f-st-" + f.key);
+        if (el) props[f.key] = (el.value || "").trim();
+      }
+      upsertExt(modeler, element, stKind.ext, props);
+    });
+    for (const f of stKind.fields) {
+      const el = body.querySelector("#f-st-" + f.key);
+      if (el) el.addEventListener("change", saveKindFields);
     }
 
     const fdecision = body.querySelector("#f-decisionid");

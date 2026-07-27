@@ -54,9 +54,17 @@ const PwshJobTypeIndex int32 = 2
 const ClioWriteJobType = "io.atlas.clio.write"
 
 // RestJobType is the reserved job type an HTTP-REST connector task carries. The
-// in-process REST connector worker subscribes to it to call the configured REST
-// API (ADR-0036), the same way the clio worker subscribes to ClioWriteJobType.
+// in-process REST connector worker subscribes to it to call the model-authored
+// REST endpoint off the hot path and write the response back (ADR-0036/0067), the
+// same way the clio worker subscribes to ClioWriteJobType.
 const RestJobType = "io.atlas.http.rest"
+
+// RestJobTypeIndex is the interned index RestJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it fifth (after DMN, user tasks,
+// PowerShell, and the temis connector), so it is always 4. This lets a single
+// in-process REST worker subscribe by one global index across every deployed
+// process, the same way the DMN worker uses DMNJobTypeIndex (ADR-0067).
+const RestJobTypeIndex int32 = 4
 
 // TemisDecisionJobType is the reserved job type a *central* business rule task
 // carries — one whose decision is evaluated by a remote temis service rather than
@@ -121,6 +129,7 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 	b.intern(UserTaskJobType)      // reserve UserTaskJobTypeIndex == 1
 	b.intern(PwshJobType)          // reserve PwshJobTypeIndex == 2
 	b.intern(TemisDecisionJobType) // reserve TemisDecisionJobTypeIndex == 3
+	b.intern(RestJobType)          // reserve RestJobTypeIndex == 4
 	return b
 }
 
@@ -307,7 +316,8 @@ func (b *Builder) AddClioWriteTask(connector, subject, eventType string, retries
 		Subject:   b.intern(subject),
 		EventType: b.intern(eventType),
 		Method:    -1, // not a REST task
-		Path:      -1,
+		Url:       -1,
+		ResultVar: -1,
 		Retries:   retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
@@ -316,18 +326,19 @@ func (b *Builder) AddClioWriteTask(connector, subject, eventType string, retries
 // AddRestConnectorTask adds an HTTP-REST connector task and returns its element
 // id. Like a service task it creates a job on activation and waits; the job
 // carries the reserved RestJobType so the in-process REST worker picks it up,
-// calls the named connector's REST API with the given method and path (resolved
-// against the connector's server-configured base endpoint), and completes the job
-// (ADR-0036). method is stored as given (the parser uppercases and validates it).
-func (b *Builder) AddRestConnectorTask(connector, method, path string, retries int32) int32 {
+// calls the model-authored url with the given method, writes the JSON response
+// into resultVar (empty = discard the response), and completes the job
+// (ADR-0067). method is stored as given (the parser uppercases and validates it).
+func (b *Builder) AddRestConnectorTask(method, url, resultVar string, retries int32) int32 {
 	detail := int32(len(b.connectorTasks))
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
 		JobType:   b.intern(RestJobType),
-		Connector: b.intern(connector),
+		Connector: -1, // REST carries its endpoint in the model, not a registry name
 		Subject:   -1, // not a clio task
 		EventType: -1,
 		Method:    b.intern(method),
-		Path:      b.intern(path),
+		Url:       b.intern(url),
+		ResultVar: b.intern(resultVar),
 		Retries:   retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)

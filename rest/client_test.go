@@ -12,23 +12,6 @@ import (
 	"github.com/pblumer/atlas/model"
 )
 
-func TestRegistryRegisterAndResolve(t *testing.T) {
-	reg := NewRegistry()
-	if _, ok := reg.Client("missing"); ok {
-		t.Fatal("Client on empty registry: ok = true, want false")
-	}
-	a, b := &fakeClient{}, &fakeClient{}
-	reg.Register("crm", a)
-	if got, ok := reg.Client("crm"); !ok || got != a {
-		t.Fatalf("Client(crm) = %v,%v, want the registered client", got, ok)
-	}
-	// Re-registering the same name replaces the binding (last write wins).
-	reg.Register("crm", b)
-	if got, _ := reg.Client("crm"); got != b {
-		t.Errorf("after re-register, Client(crm) = %v, want the newer client", got)
-	}
-}
-
 func TestVarToAny(t *testing.T) {
 	cases := []struct {
 		v    model.VariableValue
@@ -73,15 +56,35 @@ func TestMethodHasBody(t *testing.T) {
 	}
 }
 
+// TestResponseVariable checks the response-to-variable mapping: a scalar stays a
+// scalar and an object becomes a structured VarJSON.
+func TestResponseVariable(t *testing.T) {
+	if v := responseVariable("r", "hello"); v.Kind != model.VarString || v.Text != "hello" {
+		t.Errorf("scalar response = %+v, want a string var", v)
+	}
+	if v := responseVariable("r", true); v.Kind != model.VarBool || !v.Bool {
+		t.Errorf("bool response = %+v, want a true bool var", v)
+	}
+	if v := responseVariable("r", json.Number("42")); v.Kind != model.VarNumber || v.Text != "42" {
+		t.Errorf("number response = %+v, want the number 42", v)
+	}
+	v := responseVariable("r", map[string]any{"id": json.Number("7")})
+	if v.Kind != model.VarJSON {
+		t.Errorf("object response kind = %v, want VarJSON", v.Kind)
+	}
+	if v := responseVariable("r", nil); v.Kind != model.VarNull {
+		t.Errorf("nil response kind = %v, want VarNull", v.Kind)
+	}
+}
+
 // TestHTTPClientDoPost checks that a POST carries the JSON body and the
-// idempotency and auth headers, and that a JSON response is decoded.
+// idempotency header, and that a JSON response is decoded.
 func TestHTTPClientDoPost(t *testing.T) {
-	var gotMethod, gotPath, gotIdem, gotAuth, gotCT string
+	var gotMethod, gotPath, gotIdem, gotCT string
 	var gotBody map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod, gotPath = r.Method, r.URL.Path
 		gotIdem = r.Header.Get("Idempotency-Key")
-		gotAuth = r.Header.Get("Authorization")
 		gotCT = r.Header.Get("Content-Type")
 		raw, _ := io.ReadAll(r.Body)
 		_ = json.Unmarshal(raw, &gotBody)
@@ -90,10 +93,10 @@ func TestHTTPClientDoPost(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewHTTPClient(Connector{Endpoint: srv.URL, Token: "s3cr3t"})
+	c := NewHTTPClient()
 	resp, err := c.Do(context.Background(), Request{
 		Method:         "POST",
-		Path:           "/customers",
+		URL:            srv.URL + "/customers",
 		Body:           map[string]any{"name": "Ada"},
 		IdempotencyKey: "99",
 	})
@@ -105,9 +108,6 @@ func TestHTTPClientDoPost(t *testing.T) {
 	}
 	if gotIdem != "99" {
 		t.Errorf("Idempotency-Key = %q, want 99", gotIdem)
-	}
-	if gotAuth != "Bearer s3cr3t" {
-		t.Errorf("Authorization = %q, want Bearer s3cr3t", gotAuth)
 	}
 	if gotCT != "application/json" {
 		t.Errorf("Content-Type = %q, want application/json", gotCT)
@@ -137,8 +137,8 @@ func TestHTTPClientDoGet(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewHTTPClient(Connector{Endpoint: srv.URL})
-	resp, err := c.Do(context.Background(), Request{Method: "GET", Path: "/ping"})
+	c := NewHTTPClient()
+	resp, err := c.Do(context.Background(), Request{Method: "GET", URL: srv.URL + "/ping"})
 	if err != nil {
 		t.Fatalf("Do: %v", err)
 	}
@@ -159,8 +159,8 @@ func TestHTTPClientEmptyResponse(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer srv.Close()
-	c := NewHTTPClient(Connector{Endpoint: srv.URL})
-	resp, err := c.Do(context.Background(), Request{Method: "DELETE", Path: "/x"})
+	c := NewHTTPClient()
+	resp, err := c.Do(context.Background(), Request{Method: "DELETE", URL: srv.URL + "/x"})
 	if err != nil {
 		t.Fatalf("Do: %v", err)
 	}
@@ -176,8 +176,8 @@ func TestHTTPClientNon2xx(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv.Close()
-	c := NewHTTPClient(Connector{Endpoint: srv.URL})
-	if _, err := c.Do(context.Background(), Request{Method: "GET", Path: "/x"}); err == nil {
+	c := NewHTTPClient()
+	if _, err := c.Do(context.Background(), Request{Method: "GET", URL: srv.URL + "/x"}); err == nil {
 		t.Fatal("Do on HTTP 500: err = nil, want error")
 	}
 }
@@ -185,8 +185,8 @@ func TestHTTPClientNon2xx(t *testing.T) {
 // TestHTTPClientUnreachable surfaces a transport error as an error, so the job
 // stays pending and retries.
 func TestHTTPClientUnreachable(t *testing.T) {
-	c := NewHTTPClient(Connector{Endpoint: "http://127.0.0.1:1"}) // nothing listens on port 1
-	if _, err := c.Do(context.Background(), Request{Method: "GET", Path: "/x"}); err == nil {
+	c := NewHTTPClient()
+	if _, err := c.Do(context.Background(), Request{Method: "GET", URL: "http://127.0.0.1:1/x"}); err == nil {
 		t.Fatal("Do to an unreachable endpoint: err = nil, want error")
 	}
 }
@@ -194,8 +194,8 @@ func TestHTTPClientUnreachable(t *testing.T) {
 // TestHTTPClientEncodeError covers the body-encode failure branch: a value JSON
 // cannot marshal leaves the request unsent.
 func TestHTTPClientEncodeError(t *testing.T) {
-	c := NewHTTPClient(Connector{Endpoint: "http://example.invalid"})
-	_, err := c.Do(context.Background(), Request{Method: "POST", Path: "/x", Body: map[string]any{"bad": make(chan int)}})
+	c := NewHTTPClient()
+	_, err := c.Do(context.Background(), Request{Method: "POST", URL: "http://example.invalid/x", Body: map[string]any{"bad": make(chan int)}})
 	if err == nil {
 		t.Fatal("Do with an unmarshalable body: err = nil, want error")
 	}
@@ -204,23 +204,8 @@ func TestHTTPClientEncodeError(t *testing.T) {
 // TestHTTPClientBuildError covers the request-build failure branch: an invalid
 // method token cannot form a request.
 func TestHTTPClientBuildError(t *testing.T) {
-	c := NewHTTPClient(Connector{Endpoint: "http://example.invalid"})
-	if _, err := c.Do(context.Background(), Request{Method: "BAD METHOD", Path: "/x"}); err == nil {
+	c := NewHTTPClient()
+	if _, err := c.Do(context.Background(), Request{Method: "BAD METHOD", URL: "http://example.invalid/x"}); err == nil {
 		t.Fatal("Do with an invalid method: err = nil, want error")
 	}
-}
-
-// fakeClient records the requests made through it, for the worker tests.
-type fakeClient struct {
-	requests []Request
-	resp     Response
-	err      error
-}
-
-func (f *fakeClient) Do(_ context.Context, r Request) (Response, error) {
-	if f.err != nil {
-		return Response{}, f.err
-	}
-	f.requests = append(f.requests, r)
-	return f.resp, nil
 }

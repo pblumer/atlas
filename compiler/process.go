@@ -217,21 +217,25 @@ type UserTaskDetail struct {
 // resolve at runtime. The JobType also selects which connector kind this is, and
 // thus which of the kind-specific fields below are populated:
 //
-//   - clio "write-events" (JobType == ClioWriteJobType): Subject and EventType are
-//     the interned clio coordinates the appended event lands under.
-//   - HTTP REST (JobType == RestJobType): Method and Path are the interned request
-//     method (e.g. "POST") and the path appended to the connector's base endpoint.
+//   - clio "write-events" (JobType == ClioWriteJobType): Connector names the
+//     server-registered clio instance; Subject and EventType are the interned clio
+//     coordinates the appended event lands under.
+//   - HTTP REST (JobType == RestJobType): Method and Url are the interned request
+//     method (e.g. "POST") and the full endpoint URL authored in the model
+//     (ADR-0067, revising ADR-0036 for REST); ResultVar, if set, is the process
+//     variable the JSON response is written back into on completion.
 //
 // Unused fields for a given kind are -1 (Intern maps that back to ""). Both kinds
 // send the instance's variables as the request/event body — a stand-in for full
 // payload mappings until the variable subsystem matures.
 type ConnectorTaskDetail struct {
 	JobType   int32 // interned reserved connector job type → index
-	Connector int32 // interned connector name → index
+	Connector int32 // interned connector name → index, -1 if not a clio task
 	Subject   int32 // interned clio target subject → index, -1 if not a clio task
 	EventType int32 // interned clio event type → index, -1 if not a clio task
 	Method    int32 // interned HTTP method → index, -1 if not a REST task
-	Path      int32 // interned HTTP path → index, -1 if not a REST task
+	Url       int32 // interned full request URL → index, -1 if not a REST task
+	ResultVar int32 // interned REST result variable name → index, -1 if none
 	Retries   int32
 }
 
