@@ -234,30 +234,56 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
    (see feel.js). Both layers MUST share identical box metrics so the coloured
    backdrop lines up under the transparent caret; keep font/padding/wrapping in
    sync if you touch either. */
-.feel-editor { position: relative; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); }
-.feel-editor:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
-.feel-editor .feel-input,
-.feel-editor .feel-highlight {
+/* Shared buildless code editor (code-editor.js) — the surface behind FEEL, the
+   fx expression toggle, and the polyglot script fields (PowerShell/Python/JS). */
+.code-editor { position: relative; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); }
+.code-editor:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.code-editor .ce-input,
+.code-editor .ce-highlight {
   margin: 0; padding: 8px 10px;
   font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing: normal; tab-size: 2;
   white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;
   border: 0;
 }
-.feel-editor .feel-input {
-  position: relative; z-index: 1; display: block; width: 100%; min-height: 2.9em;
+.code-editor .ce-input {
+  position: relative; z-index: 2; display: block; width: 100%; min-height: 2.9em;
   background: transparent; color: transparent; caret-color: var(--text);
   resize: vertical; outline: none; overflow: auto;
 }
-.feel-editor .feel-highlight {
+.code-editor .ce-highlight {
   position: absolute; inset: 0; z-index: 0; pointer-events: none;
   overflow: hidden; color: var(--text);
 }
-.feel-editor .feel-highlight code { font: inherit; }
+.code-editor .ce-highlight code { font: inherit; }
 /* Hidden measuring twin used to locate the caret for popup placement. */
-.feel-editor .feel-mirror {
+.code-editor .ce-mirror {
   visibility: hidden; height: auto; overflow: hidden;
   top: 0; left: 0; z-index: -1;
+}
+/* Script fields don't wrap — long lines scroll horizontally so line numbers and
+   error markers align one-to-one with logical lines. */
+.code-editor.nowrap .ce-input,
+.code-editor.nowrap .ce-highlight { white-space: pre; word-break: normal; overflow-wrap: normal; }
+.code-editor.nowrap .ce-highlight { overflow: hidden; }
+/* Line-number gutter. */
+.code-editor.has-gutter .ce-input,
+.code-editor.has-gutter .ce-highlight { padding-left: calc(var(--ce-gutter, 2ch) + 18px); }
+.code-editor .ce-gutter {
+  position: absolute; top: 0; left: 0; bottom: 0; z-index: 1;
+  width: calc(var(--ce-gutter, 2ch) + 14px); overflow: hidden;
+  padding: 8px 6px 8px 0; box-sizing: border-box;
+  background: var(--bg); border-right: 1px solid var(--border);
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted);
+  text-align: right; user-select: none;
+}
+.code-editor .ce-ln { height: 1.5em; }
+.code-editor .ce-ln.err { color: var(--danger); font-weight: 700; }
+/* Error markers: a translucent band behind the offending line. */
+.code-editor .ce-markers { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.code-editor .ce-marker.err {
+  position: absolute; left: 0; right: 0;
+  background: rgba(207, 34, 46, 0.12); box-shadow: inset 2px 0 0 var(--danger);
 }
 
 /* Token colours — a light, GitHub-like FEEL palette. */
@@ -270,8 +296,14 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
    textarea on top (the rest of the backdrop stays pointer-transparent), which is
    how the signature tooltip hit-tests a hovered builtin. */
 .tok-builtin  { color: #8250df; pointer-events: auto; }
+.tok-cmdlet   { color: #8250df; pointer-events: auto; }
 .tok-variable { color: #953800; }
 .tok-punct    { color: #57606a; }
+/* PowerShell-specific token colours (also plain-language friendly). */
+.tok-operator  { color: #cf222e; }
+.tok-parameter { color: #0550ae; }
+.tok-type      { color: #116329; }
+.tok-member    { color: var(--text); }
 
 /* Completion popup. */
 .feel-pop {
@@ -289,16 +321,21 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   text-transform: uppercase; color: #fff; background: var(--muted); border-radius: 3px; padding: 1px 0;
 }
 .feel-opt-kind.k-function { background: #8250df; }
+.feel-opt-kind.k-cmdlet   { background: #8250df; }
 .feel-opt-kind.k-variable { background: #953800; }
 .feel-opt-kind.k-keyword  { background: #cf222e; }
+.feel-opt-kind.k-operator { background: #cf222e; }
 .feel-opt-kind.k-literal  { background: #0550ae; }
+.feel-opt-kind.k-parameter { background: #0550ae; }
+.feel-opt-kind.k-type     { background: #116329; }
+.feel-opt-kind.k-env      { background: #6e7781; }
 .feel-opt-label { flex: 0 0 auto; color: var(--text); }
 .feel-opt-detail { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; color: var(--muted); text-align: right; }
 
 /* Live-validation state: a red border while the expression doesn't compile, and
    the compiler's message below the field. */
-.feel-editor.invalid { border-color: var(--danger); }
-.feel-editor.invalid:focus-within { border-color: var(--danger); box-shadow: 0 0 0 2px #fdecea; }
+.code-editor.invalid { border-color: var(--danger); }
+.code-editor.invalid:focus-within { border-color: var(--danger); box-shadow: 0 0 0 2px #fdecea; }
 .feel-status { font-size: 11px; color: var(--danger); margin: 4px 0 0; white-space: pre-wrap; word-break: break-word; }
 
 /* Signature tooltip shown when hovering a builtin function name. */
@@ -328,6 +365,13 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .feel-test-out { font: 12px/1.4 ui-monospace, monospace; word-break: break-word; }
 .feel-test-out.ok { color: var(--ok); }
 .feel-test-out.err { color: var(--danger); }
+/* Multi-line result/error stream for a script Run (enhanceScript). */
+.ps-run-detail {
+  margin: 6px 0 0; padding: 8px 10px; max-height: 220px; overflow: auto;
+  border-radius: 6px; background: var(--bg); border: 1px solid var(--border);
+  font: 12px/1.5 ui-monospace, monospace; white-space: pre-wrap; word-break: break-word;
+}
+.ps-run-detail.err { color: var(--danger); border-color: var(--danger); background: #fff5f5; }
 
 /* ---------- JSON structure editor (json-editor.js) ---------- */
 .json-editor {

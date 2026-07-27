@@ -3,6 +3,8 @@
 // wiring are ours. Assets load lazily so non-editor pages stay light.
 
 import { attachFeelEditor } from "./feel.js";
+import { attachCodeEditor } from "./code-editor.js";
+import { moduleFor } from "./powershell.js";
 import { attachJSONEditor } from "./json-editor.js";
 import { openDmnEditor } from "./dmn-editor.js";
 
@@ -712,7 +714,7 @@ function enhanceFeel(body, sel, vars, validate, evaluate) {
   const ta = body.querySelector(sel);
   if (!ta) return;
   attachFeelEditor(ta, { variables: vars, validate });
-  const wrap = ta.closest(".feel-editor");
+  const wrap = ta.closest(".code-editor");
   if (!wrap) return;
 
   const hint = document.createElement("p");
@@ -753,6 +755,112 @@ function enhanceFeel(body, sel, vars, validate, evaluate) {
       else setOut("err", (res && res.error) || "could not evaluate");
     } catch (e) {
       setOut("err", e.message);
+    }
+  });
+}
+
+// prettyResult renders a script's decoded result for the Run panel; undefined (an
+// omitted/null result) shows as null.
+function prettyResult(v) {
+  if (v === undefined) return "null";
+  try { return JSON.stringify(v, null, 2); } catch { return String(v); }
+}
+
+// cleanScriptError strips the Go handler's "script: run <lang>: exit status N:"
+// wrapper so the panel shows the interpreter's own error, not our plumbing.
+function cleanScriptError(s) {
+  return String(s || "").replace(/^script: run \w+: (?:exit status \d+: )?/, "").trim();
+}
+
+// firstLine is the first non-blank line of a message, capped — used as an error
+// marker's hover text.
+function firstLine(s) {
+  return (String(s).split("\n").find((l) => l.trim()) || "error").trim().slice(0, 140);
+}
+
+// scriptErrorLine best-effort parses the 1-based source line an interpreter error
+// points at, so the editor can mark it. PowerShell emits either the concise
+// "Line |\n  N |" view or the classic "At line:N"; Python a "line N" traceback; a
+// JS error a "<anonymous>:N:col". Line numbers are relative to the author's source
+// because each bootstrap runs it as a fresh block (see script/exec.go). Returns 0
+// when no line can be found.
+function scriptErrorLine(language, msg) {
+  if (language === "powershell") {
+    let m = /At line:(\d+)/.exec(msg);
+    if (m) return Number(m[1]);
+    m = /\bLine \|\s*[\r\n]+\s*(\d+)\s*\|/.exec(msg);
+    if (m) return Number(m[1]);
+  }
+  if (language === "javascript") {
+    const m = /:(\d+)(?::\d+)?\b/.exec(msg);
+    if (m) return Number(m[1]);
+  }
+  const g = /\bline (\d+)/i.exec(msg);
+  return g ? Number(g[1]) : 0;
+}
+
+// enhanceScript upgrades the polyglot script field (#f-psbody — PowerShell, Python
+// or JavaScript, ADR-0047) into the shared code editor: syntax highlighting,
+// completion over the in-scope process variables ($name) and the $env: keys the
+// script references, a line-number gutter, and a Run panel that executes the script
+// through the real interpreter (POST /scripts/run), shows its result/error stream
+// and runtime, and maps a runtime error back to a marker on the offending line.
+// No-op if the field isn't present for the current selection.
+function enhanceScript(body, modeler, api) {
+  const ta = body.querySelector("#f-psbody");
+  if (!ta) return;
+  const flang = body.querySelector("#f-scriptlang");
+  const language = (flang && flang.value) || "powershell";
+  const vars = collectFeelVariables(modeler);
+  const editor = attachCodeEditor(ta, { lang: moduleFor(language), variables: vars, gutter: true, wrap: false });
+
+  const shortcut = language === "powershell"
+    ? "<code>$name</code> / <code>$env:</code> &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent"
+    : "instance variables by name &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent";
+  const hint = document.createElement("p");
+  hint.className = "feel-hint";
+  hint.innerHTML = shortcut;
+  if (editor && editor.el) editor.el.after(hint);
+
+  const runBtn = body.querySelector(".ps-run");
+  if (!runBtn || !api) return;
+  const runVars = body.querySelector(".ps-run-vars");
+  const runOut = body.querySelector(".ps-run-out");
+  const detail = body.querySelector(".ps-run-detail");
+  const setOut = (cls, text) => { runOut.className = "feel-test-out ps-run-out" + (cls ? " " + cls : ""); runOut.textContent = text; };
+  const setDetail = (cls, text) => {
+    if (!detail) return;
+    detail.hidden = !text;
+    detail.className = "ps-run-detail" + (cls ? " " + cls : "");
+    detail.textContent = text || "";
+  };
+
+  runBtn.addEventListener("click", async () => {
+    if (editor) editor.setMarkers([]);
+    let variables = {};
+    const raw = (runVars.value || "").trim();
+    if (raw) {
+      try { variables = JSON.parse(raw); }
+      catch { setOut("err", "Sample variables must be valid JSON."); setDetail("", ""); return; }
+    }
+    setOut("", "Running…"); setDetail("", "");
+    const t0 = performance.now();
+    try {
+      const r = await api("POST", "/api/v1/scripts/run", { language, source: ta.value || "", variables });
+      const ms = Math.round(performance.now() - t0);
+      if (r && r.ok) {
+        setOut("ok", `✓ ${ms} ms`);
+        setDetail("ok", "→ " + prettyResult(r.result));
+      } else {
+        setOut("err", `✗ ${ms} ms`);
+        const msg = cleanScriptError((r && r.error) || "run failed");
+        setDetail("err", msg);
+        const line = scriptErrorLine(language, msg);
+        if (line && editor) { editor.setMarkers([{ line, message: firstLine(msg) }]); editor.focusLine(line); }
+      }
+    } catch (e) {
+      setOut("err", "✗");
+      setDetail("err", (e && e.message) || String(e));
     }
   });
 }
@@ -1761,6 +1869,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
                   <button type="button" class="btn neutral ps-run">Run</button>
                   <span class="feel-test-out ps-run-out" aria-live="polite"></span>
                 </div>
+                <pre class="ps-run-detail" hidden></pre>
                 <p class="muted" style="font-size:12px">Runs the script through the real interpreter with these variables — no deploy needed. The language's worker must be enabled on the server.</p>
               </div>`;
           }
@@ -2057,28 +2166,9 @@ function wireProperties(root, modeler, api, projectId, toast) {
     if (fpsbody) fpsbody.addEventListener("change", saveJobScript);
     if (fpsresult) fpsresult.addEventListener("change", saveJobScript);
 
-    // Test/Run panel: execute the script through the real interpreter with sample
-    // variables, so an author can debug it without deploying (POST /scripts/run).
-    const runBtn = body.querySelector(".ps-run");
-    if (runBtn && api && fpsbody) {
-      const runVars = body.querySelector(".ps-run-vars");
-      const runOut = body.querySelector(".ps-run-out");
-      const setOut = (cls, text) => { runOut.className = "feel-test-out ps-run-out" + (cls ? " " + cls : ""); runOut.textContent = text; };
-      runBtn.addEventListener("click", async () => {
-        const language = (flang && flang.value) || "powershell";
-        let variables = {};
-        const raw = (runVars.value || "").trim();
-        if (raw) {
-          try { variables = JSON.parse(raw); } catch { setOut("err", "Sample variables must be valid JSON."); return; }
-        }
-        setOut("", "Running…");
-        try {
-          const r = await api("POST", "/api/v1/scripts/run", { language, source: fpsbody.value || "", variables });
-          if (r && r.ok) setOut("ok", "→ " + JSON.stringify(r.result));
-          else setOut("err", (r && r.error) || "run failed");
-        } catch (e) { setOut("err", (e && e.message) || String(e)); }
-      });
-    }
+    // The script field is upgraded to the shared code editor (highlighting,
+    // completion, gutter, error markers) and its Run panel wired in the Implement
+    // tab's enhancement pass below — see enhanceScript.
 
     // Service-task connector kind: a searchable picker over SERVICE_TASK_KINDS
     // (ADR-0067). Filtering narrows the list; clicking a row switches the kind
@@ -2487,6 +2577,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
       enhanceFeel(body, "#f-expr", feelVars, validate, evaluate);
       enhanceFeel(body, "#f-cond", feelVars, validate, evaluate);
       enhanceFeel(body, "#f-corrkey", feelVars, validate, evaluate);
+      enhanceScript(body, modeler, api);
     }
   }
 
