@@ -573,6 +573,46 @@ async function viewConsoleOrg() {
       </table>
     </div>`;
 
+  // Encrypted secret vault (ADR-0069): credentials a connector's token reference
+  // resolves to, sealed at rest. Every op is admin-gated and the vault may be
+  // unconfigured (no master key), so distinguish those states from a populated list.
+  let secrets = [];
+  let secretsState = "ok"; // "ok" | "denied" | "unconfigured"
+  try {
+    secrets = (await api("GET", "/api/v1/secrets")) || [];
+  } catch (e) {
+    secretsState = /admin/i.test(e.message) ? "denied" : "unconfigured";
+  }
+  const secretRow = (c) => `<tr data-name="${esc(c.name)}">
+      <td><span class="chip">${esc(c.name)}</span>
+        <div class="muted" style="font-size:12px; margin-top:3px">key <code>${esc(c.keyId)}</code> · updated ${esc(fmtTime(c.updatedAt))}</div></td>
+      <td style="text-align:right; white-space:nowrap">
+        <button class="btn ghost" data-sact="set">Set value</button>
+        <button class="btn ghost danger" data-sact="delete">Delete</button>
+      </td></tr>`;
+  const secretsCard = secretsState === "denied"
+    ? `<div class="card" style="margin-top:18px"><h2>Secrets</h2><p class="muted">Managing secrets requires the admin role.</p></div>`
+    : secretsState === "unconfigured"
+    ? `<div class="card" style="margin-top:18px"><h2>Secrets</h2><p class="muted">The encrypted
+        secret vault is not configured. Start the server with <code>ATLAS_VAULT_KEY</code> (a
+        32-byte key, base64 or hex) or <code>ATLAS_VAULT_KEY_FILE</code> to store connector
+        credentials here, encrypted at rest (ADR-0069).</p></div>`
+    : `<div class="card" style="padding:0; margin-top:18px">
+        <div class="between" style="padding:16px 18px 0">
+          <h2>Secrets</h2><button class="btn" id="new-secret">New secret</button>
+        </div>
+        <p class="muted" style="padding:0 18px; margin:6px 0 12px">Credentials a connector's
+        <b>token reference</b> resolves to, sealed at rest with AES-256-GCM (ADR-0069). The value
+        is <b>never</b> shown after it is set — only its name and metadata. A reference resolves
+        from the vault first, then <code>ATLAS_CONNECTOR_&lt;REF&gt;_TOKEN</code>.</p>
+        <div id="secret-form-slot" style="padding:0 18px"></div>
+        <table>
+          <thead><tr><th>Secret</th><th></th></tr></thead>
+          <tbody id="secret-rows">${secrets.map(secretRow).join("")
+            || `<tr><td colspan="2" class="muted" style="padding:14px 18px">None stored. Add one, then point a connector's token reference at its name.</td></tr>`}</tbody>
+        </table>
+      </div>`;
+
   const me = AUTH.user;
   const roleChips = (roles) => (roles || []).map((r) => `<span class="chip">${esc(r)}</span>`).join(" ");
   const statusPill = (u) => u.disabled
@@ -623,11 +663,13 @@ async function viewConsoleOrg() {
       delegates to. Each is an org-wide integration, shared across every process.</p>
       <table><tbody>${CONNECTORS.map(connectorRow).join("")}</tbody></table>
     </div>
-    ${managedCard}`;
+    ${managedCard}
+    ${secretsCard}`;
 
   // Connector management is wired before the (admin-gated) user handlers so it
   // works even when the user roster is denied to a non-admin.
   wireConnectorManagement(connectors);
+  wireSecretsManagement(secrets, secretsState);
 
   if (denied) return;
   const reload = () => viewConsoleOrg();
@@ -1133,6 +1175,59 @@ function wireConnectorManagement(connectors) {
         }
         reload();
       } catch (err) { toast("Connector update failed: " + err.message, "err"); }
+    });
+  }
+}
+
+// wireSecretsManagement binds the encrypted-vault panel (ADR-0069): a "New secret"
+// upsert form, per-row "Set value" (rotate) and "Delete". Secrets are keyed by name,
+// have no enable/disable, and are write-only — the value is never read back, so a set
+// is an idempotent PUT and the UI only ever sends values, never displays them. When
+// the vault is denied (non-admin) or unconfigured there is nothing to wire.
+function wireSecretsManagement(secrets, state) {
+  if (state !== "ok") return;
+  const reload = () => viewConsoleOrg();
+  const put = (name, value) => api("PUT", "/api/v1/secrets/" + encodeURIComponent(name), { value });
+  const slot = document.getElementById("secret-form-slot");
+  const newBtn = document.getElementById("new-secret");
+  if (newBtn && slot) {
+    newBtn.addEventListener("click", () => {
+      if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
+      slot.dataset.open = "1";
+      slot.innerHTML = `<form class="secret-form" style="display:grid;gap:8px;grid-template-columns:1fr 1fr auto;align-items:end;margin:4px 0 14px">
+        <label class="field" style="margin:0"><span>Name</span><input name="name" placeholder="risk_token" required/></label>
+        <label class="field" style="margin:0"><span>Value</span><input name="value" type="password" placeholder="••••••••" required/></label>
+        <button class="btn" type="submit">Save</button></form>`;
+      slot.querySelector("form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const f = new FormData(e.target);
+        try {
+          await put((f.get("name") || "").trim(), f.get("value") || "");
+          toast("Secret saved", "ok");
+          reload();
+        } catch (err) { toast("Could not save secret: " + err.message, "err"); }
+      });
+    });
+  }
+  const rows = document.getElementById("secret-rows");
+  if (rows) {
+    rows.addEventListener("click", async (e) => {
+      const btn = e.target.closest("button[data-sact]");
+      if (!btn) return;
+      const name = btn.closest("tr").dataset.name;
+      if (!name) return;
+      try {
+        if (btn.dataset.sact === "set") {
+          const value = window.prompt(`New value for "${name}" (stored encrypted; the old value is replaced)`);
+          if (value == null || value === "") return;
+          await put(name, value);
+          toast("Secret updated", "ok");
+        } else if (btn.dataset.sact === "delete") {
+          if (!window.confirm(`Delete secret "${name}"? A connector referencing it will resolve to no token.`)) return;
+          await api("DELETE", "/api/v1/secrets/" + encodeURIComponent(name));
+        }
+        reload();
+      } catch (err) { toast("Secret update failed: " + err.message, "err"); }
     });
   }
 }
