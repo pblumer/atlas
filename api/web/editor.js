@@ -1026,7 +1026,7 @@ function serviceTaskKindHTML(bo) {
   const rows = SERVICE_TASK_KINDS.map((k) => `
     <div class="stkind-row" data-kind="${k.id}" data-match="${esc((k.name + " " + k.desc).toLowerCase())}"
          style="display:flex;gap:8px;align-items:center;padding:8px;border:1px solid #d7d7d7;border-radius:6px;margin-bottom:6px;cursor:pointer;${k.id === cur.id ? "background:#eef2ff;border-color:#9aa8ff" : ""}">
-      <span style="flex:0 0 22px;height:22px;line-height:22px;text-align:center;border:1px solid #bbb;border-radius:50%;font-size:12px">${esc(k.icon)}</span>
+      <span class="stkind-icon">${k.glyph || esc(k.icon)}</span>
       <span style="line-height:1.25"><b>${esc(k.name)}</b><br><span class="muted" style="font-size:12px">${esc(k.desc)}</span></span>
     </div>`).join("");
   let fields = "";

@@ -801,6 +801,16 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 }
 .impl-badge svg { display: block; width: 16px; height: 16px; border-radius: 3px; }
 
+/* Type icon in the service-task kind picker (serviceTaskKindHTML) — the same disc as
+   the canvas marker so the picker and the diagram show the connector kind identically.
+   Carries a `glyph` SVG when the kind has one (REST), else the kind's letter/emoji. */
+.stkind-icon {
+  flex: 0 0 22px; height: 22px; display: grid; place-items: center;
+  background: var(--surface); border-radius: 50%; box-shadow: 0 0 0 1px var(--border-strong);
+  font-size: 12px; color: var(--text);
+}
+.stkind-icon svg { display: block; width: 15px; height: 15px; border-radius: 3px; }
+
 /* Message-flow log beneath the diagram: one row per delivery, the current step
    highlighted as the playhead crosses it. */
 .flow-log { border-top: 1px solid var(--border); background: var(--surface); max-height: 30vh; overflow: auto; flex: 0 0 auto; }
