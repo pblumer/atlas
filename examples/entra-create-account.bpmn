@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="defs_entra"
+                  targetNamespace="http://atlas/examples">
+  <bpmn:process id="entra-create-account" name="Create EntraID Account" isExecutable="true">
+
+    <bpmn:startEvent id="start" name="Onboarding requested"/>
+
+    <bpmn:scriptTask id="createAccount" name="Create EntraID account">
+      <bpmn:extensionElements>
+        <atlas:jobScript language="powershell" resultVariable="Account">$ErrorActionPreference = 'Stop'
+
+# --- Auth: credentials come from the worker environment, never from the model (ADR-0041) ---
+$secret = ConvertTo-SecureString $env:ENTRA_CLIENT_SECRET -AsPlainText -Force
+$cred   = [System.Management.Automation.PSCredential]::new($env:ENTRA_CLIENT_ID, $secret)
+Connect-MgGraph -TenantId $env:ENTRA_TENANT_ID -ClientSecretCredential $cred -NoWelcome
+
+# --- Idempotent create: the task is at-least-once, so a retry must not double-create ---
+$filter   = "userPrincipalName eq '$userPrincipalName'"
+$existing  = Get-MgUser -Filter $filter -ConsistencyLevel eventual -CountVariable found -ErrorAction SilentlyContinue
+
+if ($existing) {
+    [pscustomobject]@{ id = $existing.Id; userPrincipalName = $existing.UserPrincipalName; created = $false }
+} else {
+    $passwordProfile = @{ Password = $initialPassword; ForceChangePasswordNextSignIn = $true }
+    $user = New-MgUser -DisplayName $displayName -UserPrincipalName $userPrincipalName -MailNickname $mailNickname -AccountEnabled -PasswordProfile $passwordProfile
+    [pscustomobject]@{ id = $user.Id; userPrincipalName = $user.UserPrincipalName; created = $true }
+}</atlas:jobScript>
+      </bpmn:extensionElements>
+    </bpmn:scriptTask>
+
+    <bpmn:endEvent id="end" name="Account provisioned"/>
+
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="createAccount"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="createAccount" targetRef="end"/>
+  </bpmn:process>
+</bpmn:definitions>
