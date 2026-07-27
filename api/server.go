@@ -185,11 +185,22 @@ type Server struct {
 	// it with --docs=false / WithoutDocs (ADR-0043). Set once before Handler is
 	// mounted; read-only thereafter.
 	docsEnabled bool
+
+	// logs is the recent-process-log tail exposed at GET /api/v1/logs, so an
+	// operator can read server logs from the web UI without shell access. Nil when
+	// the command did not wire a buffer (WithLogBuffer), in which case the endpoint
+	// reports no lines. Set once at construction; read-only thereafter.
+	logs *LogBuffer
 }
 
 // Option configures a Server at construction. Options are applied in New before
 // the run loop starts, so they set fields that are read-only afterwards.
 type Option func(*Server)
+
+// WithLogBuffer wires the server's recent-log tail, exposed at GET /api/v1/logs,
+// so an operator can read server logs from the web UI. The command builds the
+// buffer, tees the standard logger into it, and passes it here.
+func WithLogBuffer(b *LogBuffer) Option { return func(s *Server) { s.logs = b } }
 
 // WithoutDocs disables the OpenAPI document at /api/v1/openapi.json and the
 // Scalar API explorer at /api/docs, which are otherwise served by default. Pass

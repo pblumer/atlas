@@ -1596,7 +1596,16 @@ function wireProperties(root, modeler, api, projectId, toast) {
                 <textarea id="f-psbody" rows="6" spellcheck="false" placeholder='${meta.placeholder}'>${esc(js && js.source || "")}</textarea></label>
               <label class="field"><span>Result variable</span>
                 <input type="text" id="f-psresult" value="${esc((js && js.resultVariable) || "")}" placeholder="Greeting"/></label>
-              <p class="muted" style="font-size:12px">${meta.hint}</p>`;
+              <p class="muted" style="font-size:12px">${meta.hint}</p>
+              <div class="feel-test" data-run-lang="${lang}">
+                <label class="field"><span>Test — sample variables (JSON)</span>
+                  <textarea class="ps-run-vars" rows="2" spellcheck="false" placeholder='{ "Vorname": "Anna" }'></textarea></label>
+                <div class="feel-test-row">
+                  <button type="button" class="btn neutral ps-run">Run</button>
+                  <span class="feel-test-out ps-run-out" aria-live="polite"></span>
+                </div>
+                <p class="muted" style="font-size:12px">Runs the script through the real interpreter with these variables — no deploy needed. The language's worker must be enabled on the server.</p>
+              </div>`;
           }
         } else if (t === "bpmn:ServiceTask") {
           html += serviceTaskKindHTML(bo);
@@ -1884,6 +1893,29 @@ function wireProperties(root, modeler, api, projectId, toast) {
     });
     if (fpsbody) fpsbody.addEventListener("change", saveJobScript);
     if (fpsresult) fpsresult.addEventListener("change", saveJobScript);
+
+    // Test/Run panel: execute the script through the real interpreter with sample
+    // variables, so an author can debug it without deploying (POST /scripts/run).
+    const runBtn = body.querySelector(".ps-run");
+    if (runBtn && api && fpsbody) {
+      const runVars = body.querySelector(".ps-run-vars");
+      const runOut = body.querySelector(".ps-run-out");
+      const setOut = (cls, text) => { runOut.className = "feel-test-out ps-run-out" + (cls ? " " + cls : ""); runOut.textContent = text; };
+      runBtn.addEventListener("click", async () => {
+        const language = (flang && flang.value) || "powershell";
+        let variables = {};
+        const raw = (runVars.value || "").trim();
+        if (raw) {
+          try { variables = JSON.parse(raw); } catch { setOut("err", "Sample variables must be valid JSON."); return; }
+        }
+        setOut("", "Running…");
+        try {
+          const r = await api("POST", "/api/v1/scripts/run", { language, source: fpsbody.value || "", variables });
+          if (r && r.ok) setOut("ok", "→ " + JSON.stringify(r.result));
+          else setOut("err", (r && r.error) || "run failed");
+        } catch (e) { setOut("err", (e && e.message) || String(e)); }
+      });
+    }
 
     // Service-task connector kind: a searchable picker over SERVICE_TASK_KINDS
     // (ADR-0067). Filtering narrows the list; clicking a row switches the kind

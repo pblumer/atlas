@@ -87,6 +87,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Instance counts", schemaObj(map[string]any{
 				"activeProcessInstances": tInteger(), "activeElementInstances": tInteger(),
 			}))}},
+		{"GET", "/api/v1/logs", s.handleLogs, apiOp{
+			summary: "Recent server log lines (admin-only when auth is on)", tag: "System",
+			resp: jsonBody("Recent log lines, oldest first", schemaObj(map[string]any{
+				"lines": tArray(),
+			}))}},
 
 		{"POST", "/api/v1/feel/validate", s.handleValidateFeel, apiOp{
 			summary: "Validate a FEEL expression compiles", tag: "FEEL",
@@ -101,6 +106,14 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "expression")),
 			resp: jsonBody("Evaluation result", schemaObj(map[string]any{
 				"ok": tBool(), "result": tObject(), "kind": tString(), "error": tString(),
+			}))}},
+		{"POST", "/api/v1/scripts/run", s.handleRunScript, apiOp{
+			summary: "Run a script task against sample variables (admin-only when auth is on)", tag: "Scripts",
+			req: jsonBody("Language, source, and sample variables", schemaObj(map[string]any{
+				"language": tString(), "source": tString(), "variables": tObject(),
+			}, "language", "source")),
+			resp: jsonBody("Run result", schemaObj(map[string]any{
+				"ok": tBool(), "result": tObject(), "error": tString(),
 			}))}},
 
 		{"POST", "/api/v1/deployments", s.handleDeploy, apiOp{

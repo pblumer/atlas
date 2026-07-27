@@ -140,6 +140,12 @@ type infoResp struct {
 	// (the --docs gate, ADR-0043), so the web UI can show or hide its
 	// "API Explorer" entry without probing /api/docs.
 	Docs bool `json:"docs"`
+	// Revision/BuildTime/Modified/Go are the binary's embedded VCS build metadata,
+	// so the web UI can show exactly which commit the running server was built from.
+	Revision  string `json:"revision,omitempty"`
+	BuildTime string `json:"buildTime,omitempty"`
+	Modified  bool   `json:"modified"`
+	Go        string `json:"go,omitempty"`
 }
 
 type runtimeElement struct {
@@ -279,8 +285,36 @@ type incidentView struct {
 }
 
 // handleInfo reports product/version metadata for the UI shell.
+type logsResp struct {
+	Lines []string `json:"lines"`
+}
+
+// handleLogs returns the recent process-log tail so an operator can diagnose from
+// the web UI without shell access. Logs can carry operational detail, so when auth
+// is enforced it is admin-only; with auth off (open single-user mode) it is open
+// like the rest of the API. Reports an empty list when no buffer was wired.
+func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	lines := []string{}
+	if s.logs != nil {
+		lines = s.logs.Lines()
+	}
+	writeJSON(w, http.StatusOK, logsResp{Lines: lines})
+}
+
 func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, infoResp{Product: "Atlas", Version: Version, Docs: s.docsEnabled})
+	b := buildInfo()
+	writeJSON(w, http.StatusOK, infoResp{
+		Product:   "Atlas",
+		Version:   Version,
+		Docs:      s.docsEnabled,
+		Revision:  b.Revision,
+		BuildTime: b.Time,
+		Modified:  b.Modified,
+		Go:        b.Go,
+	})
 }
 
 type validateFeelReq struct {

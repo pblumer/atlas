@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -141,6 +142,18 @@ func TestLangs(t *testing.T) {
 				t.Errorf("%s args do not end with the bootstrap: %v", tt.lang.Name, args)
 			}
 		})
+	}
+}
+
+// TestLangByName resolves supported languages and rejects unknown ones.
+func TestLangByName(t *testing.T) {
+	for _, name := range []string{"powershell", "python", "javascript"} {
+		if l, ok := LangByName(name); !ok || l.Name != name {
+			t.Errorf("LangByName(%q) = %+v, %v; want the matching lang", name, l, ok)
+		}
+	}
+	if _, ok := LangByName("ruby"); ok {
+		t.Error("LangByName(ruby) = ok, want not found")
 	}
 }
 
@@ -299,6 +312,21 @@ func TestExecCommand(t *testing.T) {
 	}
 	if _, err := execCommand(context.Background(), "atlas-no-such-binary-xyz", nil, nil); err == nil {
 		t.Error("execCommand of a missing binary succeeded, want an error")
+	}
+}
+
+// TestExecCommandSurfacesStderr: a non-zero exit surfaces the interpreter's stderr
+// in the error, so a failing script is debuggable rather than just "exit status 1".
+func TestExecCommandSurfacesStderr(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("sh not available")
+	}
+	_, err := execCommand(context.Background(), "sh", []string{"-c", "echo boom 1>&2; exit 3"}, nil)
+	if err == nil {
+		t.Fatal("execCommand of a failing command succeeded, want an error")
+	}
+	if !strings.Contains(err.Error(), "boom") {
+		t.Errorf("error = %v, want it to include the stderr 'boom'", err)
 	}
 }
 
