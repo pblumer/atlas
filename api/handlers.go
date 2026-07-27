@@ -994,27 +994,66 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		sort.Slice(changes, func(i, j int) bool { return changes[i].pos < changes[j].pos })
 		sort.Slice(replayRows, func(i, j int) bool { return replayRows[i].pos < replayRows[j].pos })
 
+		// Fold the causal lifecycle facts into stable multi-token frames. The
+		// processor is sequential, so a token's completion on one element and the
+		// activation it causes on the next land at different log positions. Emitting
+		// a frame per row would show the token vanish between the two — a flicker,
+		// and at a parallel join the merge would appear to lose an arrival. Instead a
+		// non-leaf completion is *deferred*: the token stays visible on the completed
+		// element until the activation it causes appears, at which point it moves.
+		// The link is the graph, not a guessed token id: an activation arriving via
+		// flow F is the successor of whatever completed on F's source node, so a join
+		// (whose continuation leaves on one flow whose source is the gateway)
+		// consumes every waiting arrival in a single transition. Only a leaf
+		// completion (an end event, no outgoing flow) removes its token at once,
+		// yielding the one legitimate empty frame that marks the instance done.
 		active := map[uint64]timelineToken{}
+		pending := map[uint64]state.ElementReplayValue{} // completions awaiting their successor
 		activations := map[uint64]state.ElementReplayValue{}
+		emitFrame := func(pos uint64, at int64) {
+			tokens := make([]timelineToken, 0, len(active))
+			for _, token := range active {
+				tokens = append(tokens, token)
+			}
+			sort.Slice(tokens, func(i, j int) bool {
+				if tokens[i].TokenID != tokens[j].TokenID {
+					return tokens[i].TokenID < tokens[j].TokenID
+				}
+				return tokens[i].ElementInstanceKey < tokens[j].ElementInstanceKey
+			})
+			resp.Frames = append(resp.Frames, timelineFrame{Position: pos, At: at, Tokens: tokens})
+		}
 		for _, rr := range replayRows {
 			v := rr.v
 			if v.Action == 1 {
 				activations[rr.pos] = v
+				// This activation is the successor of any deferred completion on its
+				// incoming flow's source node: those tokens move into it now.
+				if v.SourceFlowID >= 0 {
+					src := d.cp.Flow(v.SourceFlowID).Source
+					for eik, pc := range pending {
+						if pc.ElementID == src {
+							delete(pending, eik)
+							delete(active, eik)
+						}
+					}
+				}
 				node := d.cp.Node(v.ElementID)
 				stateName := "active"
 				if node.Type == compiler.TypeParallelGateway && node.IncomingCount > 1 {
 					stateName = "waiting"
 				}
 				active[v.ElementInstanceKey] = timelineToken{TokenID: v.TokenID, ElementID: d.cp.ElementBpmnId(v.ElementID), ElementInstanceKey: v.ElementInstanceKey, State: stateName}
-			} else {
+				emitFrame(rr.pos, rr.at)
+			} else if d.cp.Node(v.ElementID).OutgoingCount == 0 {
+				// A leaf has no successor to move into: remove it at once.
+				delete(pending, v.ElementInstanceKey)
 				delete(active, v.ElementInstanceKey)
+				emitFrame(rr.pos, rr.at)
+			} else {
+				// Defer: keep the token visible until its successor activates.
+				pending[v.ElementInstanceKey] = v
 			}
-			tokens := make([]timelineToken, 0, len(active))
-			for _, token := range active {
-				tokens = append(tokens, token)
-			}
-			sort.Slice(tokens, func(i, j int) bool { return tokens[i].TokenID < tokens[j].TokenID })
-			resp.Frames = append(resp.Frames, timelineFrame{Position: rr.pos, At: rr.at, Tokens: tokens})
 		}
 
 		// Walk the steps in order, advancing through every variable change at or
