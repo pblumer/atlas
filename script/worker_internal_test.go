@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -311,6 +312,21 @@ func TestExecCommand(t *testing.T) {
 	}
 	if _, err := execCommand(context.Background(), "atlas-no-such-binary-xyz", nil, nil); err == nil {
 		t.Error("execCommand of a missing binary succeeded, want an error")
+	}
+}
+
+// TestExecCommandSurfacesStderr: a non-zero exit surfaces the interpreter's stderr
+// in the error, so a failing script is debuggable rather than just "exit status 1".
+func TestExecCommandSurfacesStderr(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("sh not available")
+	}
+	_, err := execCommand(context.Background(), "sh", []string{"-c", "echo boom 1>&2; exit 3"}, nil)
+	if err == nil {
+		t.Fatal("execCommand of a failing command succeeded, want an error")
+	}
+	if !strings.Contains(err.Error(), "boom") {
+		t.Errorf("error = %v, want it to include the stderr 'boom'", err)
 	}
 }
 

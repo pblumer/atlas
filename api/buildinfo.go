@@ -27,20 +27,24 @@ var (
 func buildInfo() buildMeta {
 	buildOnce.Do(func() {
 		buildVal.Go = runtime.Version()
-		info, ok := debug.ReadBuildInfo()
-		if !ok {
-			return
-		}
-		for _, s := range info.Settings {
-			switch s.Key {
-			case "vcs.revision":
-				buildVal.Revision = s.Value
-			case "vcs.time":
-				buildVal.Time = s.Value
-			case "vcs.modified":
-				buildVal.Modified = s.Value == "true"
-			}
+		if info, ok := debug.ReadBuildInfo(); ok {
+			applyBuildSettings(&buildVal, info.Settings)
 		}
 	})
 	return buildVal
+}
+
+// applyBuildSettings folds the vcs.* build settings into m. Split out so it is
+// unit-testable with synthetic settings (ReadBuildInfo can't be faked).
+func applyBuildSettings(m *buildMeta, settings []debug.BuildSetting) {
+	for _, s := range settings {
+		switch s.Key {
+		case "vcs.revision":
+			m.Revision = s.Value
+		case "vcs.time":
+			m.Time = s.Value
+		case "vcs.modified":
+			m.Modified = s.Value == "true"
+		}
+	}
 }

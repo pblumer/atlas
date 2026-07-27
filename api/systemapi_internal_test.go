@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 
@@ -132,6 +133,34 @@ func TestRunScript(t *testing.T) {
 	_ = json.Unmarshal(body, &resp)
 	if resp.OK || !strings.Contains(resp.Error, "empty") {
 		t.Fatalf("empty script resp = %+v, want empty-script error", resp)
+	}
+}
+
+// TestApplyBuildSettings folds the embedded vcs.* settings into build metadata.
+func TestApplyBuildSettings(t *testing.T) {
+	var m buildMeta
+	applyBuildSettings(&m, []debug.BuildSetting{
+		{Key: "vcs.revision", Value: "abc123"},
+		{Key: "vcs.time", Value: "2026-07-27T00:00:00Z"},
+		{Key: "vcs.modified", Value: "true"},
+		{Key: "GOARCH", Value: "amd64"}, // ignored
+	})
+	if m.Revision != "abc123" || m.Time != "2026-07-27T00:00:00Z" || !m.Modified {
+		t.Fatalf("build meta = %+v, want revision/time/modified set", m)
+	}
+	var clean buildMeta
+	applyBuildSettings(&clean, []debug.BuildSetting{{Key: "vcs.modified", Value: "false"}})
+	if clean.Modified {
+		t.Error("modified=false should not set the dirty flag")
+	}
+}
+
+// TestRunScriptBadBody: a malformed request body is a 400, not an ok:false result.
+func TestRunScriptBadBody(t *testing.T) {
+	_, x := newSystemServer(t, WithScriptWorker(compiler.PwshJobTypeIndex, stubExec{result: "x"}))
+	code, _ := x.do(http.MethodPost, "/api/v1/scripts/run", "{not json")
+	if code != http.StatusBadRequest {
+		t.Fatalf("bad body = %d, want 400", code)
 	}
 }
 
