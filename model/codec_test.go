@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/binary"
 	"errors"
 	"reflect"
 	"testing"
@@ -153,6 +154,17 @@ func TestRecordRoundTrip(t *testing.T) {
 			intent: IntentActivated,
 			value: &ProcessInstanceValue{
 				ProcessDefKey: NewKey(3, 2),
+				CreatedAt:     1_700_000_000_000_000_000,
+			},
+		},
+		{
+			name:   "message-start process instance carries its correlation key",
+			vt:     VTProcessInstance,
+			intent: IntentActivated,
+			value: &ProcessInstanceValue{
+				ProcessDefKey:  NewKey(3, 2),
+				CreatedAt:      1_700_000_000_000_000_000,
+				CorrelationKey: "order-42",
 			},
 		},
 		{
@@ -160,9 +172,11 @@ func TestRecordRoundTrip(t *testing.T) {
 			vt:     VTProcessInstance,
 			intent: IntentCompleted,
 			value: &ProcessInstanceValue{
-				ProcessDefKey: NewKey(3, 2),
-				State:         PICompleted,
-				CompletedAt:   1_700_000_000_000_000_000,
+				ProcessDefKey:  NewKey(3, 2),
+				State:          PICompleted,
+				CompletedAt:    1_700_000_000_000_000_000,
+				CreatedAt:      1_699_999_999_000_000_000,
+				CorrelationKey: "order-42",
 			},
 		},
 		{
@@ -201,6 +215,29 @@ func TestRecordRoundTrip(t *testing.T) {
 				t.Errorf("round trip mismatch:\n got = %+v\nwant = %+v", got, in)
 			}
 		})
+	}
+}
+
+func TestProcessInstanceDecodeLegacy(t *testing.T) {
+	// A record written before CreatedAt/CorrelationKey were appended is just the
+	// legacy fixed layout (ProcessDefKey, State, CompletedAt). It must still decode,
+	// leaving the newer fields at their zero values (ADR-0017).
+	legacy := make([]byte, processInstanceLegacySize)
+	binary.LittleEndian.PutUint64(legacy[0:], NewKey(3, 2))
+	legacy[8] = byte(PICompleted)
+	binary.LittleEndian.PutUint64(legacy[9:], uint64(int64(1_700_000_000_000_000_000)))
+
+	var v ProcessInstanceValue
+	if err := v.decode(legacy); err != nil {
+		t.Fatalf("decode legacy: %v", err)
+	}
+	want := ProcessInstanceValue{
+		ProcessDefKey: NewKey(3, 2),
+		State:         PICompleted,
+		CompletedAt:   1_700_000_000_000_000_000,
+	}
+	if !reflect.DeepEqual(v, want) {
+		t.Errorf("legacy decode = %+v, want %+v", v, want)
 	}
 }
 

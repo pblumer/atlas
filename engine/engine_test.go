@@ -992,3 +992,99 @@ func TestVariableSnapshotHistoryRecovers(t *testing.T) {
 		t.Fatalf("replayed variable trail = %v, want %v", replayed, live)
 	}
 }
+
+// activeInstance reads one active process instance by key, or nil if it is gone.
+func activeInstance(t *testing.T, s *state.Store, key uint64) *model.ProcessInstanceValue {
+	t.Helper()
+	v, ok, err := s.ProcessInstance(key)
+	if err != nil {
+		t.Fatalf("ProcessInstance: %v", err)
+	}
+	if !ok {
+		return nil
+	}
+	return v
+}
+
+// TestProcessInstanceCreatedAtCapturedAndRecovers checks the activation timestamp
+// is captured onto the process instance, carried into its history record on
+// completion, and rebuilt identically on replay (invariants I4/I6).
+func TestProcessInstanceCreatedAtCapturedAndRecovers(t *testing.T) {
+	dir := t.TempDir()
+	cp, jobType := linearProcess(t) // waits at a service task, so we can read it live
+	clock := &manualClock{}
+
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clock)
+	p1.Deploy(cp)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.CreateInstance(cp.Key)
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle 1: %v", err)
+	}
+
+	instKey := model.NewKey(1, 1)
+	active := activeInstance(t, h1.store, instKey)
+	if active == nil {
+		t.Fatal("instance not active after start")
+	}
+	if active.CreatedAt == 0 {
+		t.Fatal("active instance has no CreatedAt")
+	}
+	if active.CompletedAt != 0 {
+		t.Fatalf("active instance has CompletedAt = %d, want 0 while live", active.CompletedAt)
+	}
+	createdAt := active.CreatedAt
+
+	// Completing the job runs the instance to completion.
+	jobs := activatableJobs(t, h1.store, jobType)
+	if len(jobs) != 1 {
+		t.Fatalf("activatable jobs = %d, want 1", len(jobs))
+	}
+	p1.CompleteJob(jobs[0])
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle 2: %v", err)
+	}
+
+	live := completedInstances(t, h1.store)
+	got, ok := live[instKey]
+	if !ok {
+		t.Fatal("finished instance missing from history")
+	}
+	if got.CreatedAt != createdAt {
+		t.Fatalf("history CreatedAt = %d, want %d (carried from activation)", got.CreatedAt, createdAt)
+	}
+	if got.CompletedAt < got.CreatedAt {
+		t.Fatalf("CompletedAt %d precedes CreatedAt %d", got.CompletedAt, got.CreatedAt)
+	}
+	h1.close(t)
+
+	// Replay the same log into a fresh, empty store: the timestamps come only from
+	// the events, so the rebuilt history must match the live one exactly.
+	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open 2: %v", err)
+	}
+	store2, err := state.Open(filepath.Join(dir, "state2"))
+	if err != nil {
+		t.Fatalf("state.Open 2: %v", err)
+	}
+	defer func() {
+		if err := store2.Close(); err != nil {
+			t.Errorf("store2.Close: %v", err)
+		}
+		if err := log2.Close(); err != nil {
+			t.Errorf("log2.Close: %v", err)
+		}
+	}()
+	p2 := engine.New(1, log2, store2, clock)
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2 (replay): %v", err)
+	}
+	if replayed := completedInstances(t, store2)[instKey]; replayed != got {
+		t.Fatalf("replayed history = %+v, want %+v", replayed, got)
+	}
+}

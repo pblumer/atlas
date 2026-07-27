@@ -183,32 +183,55 @@ func (s ProcessInstanceState) String() string {
 }
 
 // ProcessInstanceValue is the running instance as a whole — the root scope a
-// process's element instances live under. State and CompletedAt are set only
-// on the history record written when an instance ends (ADR-0017); while live,
-// they carry their zero values (Active, 0).
+// process's element instances live under. CreatedAt is set at activation (the
+// activation event's timestamp, so it replays identically — invariant I6);
+// CorrelationKey records the message key a message-start instance was created
+// with ("" for API/timer/none starts, ADR-0035). State and CompletedAt are set
+// only on the history record written when an instance ends (ADR-0017); while
+// live, they carry their zero values (Active, 0).
 type ProcessInstanceValue struct {
-	ProcessDefKey uint64
-	State         ProcessInstanceState
-	CompletedAt   int64 // unix nano when it reached a terminal state; 0 while active
+	ProcessDefKey  uint64
+	State          ProcessInstanceState
+	CompletedAt    int64  // unix nano when it reached a terminal state; 0 while active
+	CreatedAt      int64  // unix nano when the instance was activated
+	CorrelationKey string // message correlation key a message-start instance began with; "" otherwise
 }
 
-const processInstanceSize = 8 + 1 + 8
+// processInstanceLegacySize is the original fixed layout (ProcessDefKey, State,
+// CompletedAt). CreatedAt and the variable-length CorrelationKey were appended
+// later; a record written before them decodes with those fields left zero, so
+// old logs replay unchanged (ADR-0017).
+const processInstanceLegacySize = 8 + 1 + 8
 
 func (*ProcessInstanceValue) ValueType() ValueType { return VTProcessInstance }
 
 func (v *ProcessInstanceValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
 	dst = append(dst, byte(v.State))
-	return binary.LittleEndian.AppendUint64(dst, uint64(v.CompletedAt))
+	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.CompletedAt))
+	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.CreatedAt))
+	return appendString(dst, v.CorrelationKey)
 }
 
 func (v *ProcessInstanceValue) decode(src []byte) error {
-	if len(src) < processInstanceSize {
+	if len(src) < processInstanceLegacySize {
 		return ErrShortBuffer
 	}
 	v.ProcessDefKey = binary.LittleEndian.Uint64(src[0:])
 	v.State = ProcessInstanceState(src[8])
 	v.CompletedAt = int64(binary.LittleEndian.Uint64(src[9:]))
+	// CreatedAt and CorrelationKey are appended fields: a legacy record ends here
+	// and leaves them zero-valued.
+	rest := src[processInstanceLegacySize:]
+	if len(rest) < 8 {
+		return nil
+	}
+	v.CreatedAt = int64(binary.LittleEndian.Uint64(rest))
+	key, _, err := readString(rest[8:])
+	if err != nil {
+		return err
+	}
+	v.CorrelationKey = key
 	return nil
 }
 

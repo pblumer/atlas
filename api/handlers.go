@@ -246,7 +246,9 @@ type instanceResp struct {
 	Version          int32          `json:"version"`
 	ElementInstances int            `json:"elementInstances"`
 	State            string         `json:"state"`
+	CreatedAt        int64          `json:"createdAt,omitempty"`
 	CompletedAt      int64          `json:"completedAt,omitempty"`
+	CorrelationKey   string         `json:"correlationKey,omitempty"`
 	Variables        []variableView `json:"variables"`
 }
 
@@ -1480,6 +1482,8 @@ func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
 				ProcessDefKey:    v.ProcessDefKey,
 				ElementInstances: elements,
 				State:            "active",
+				CreatedAt:        v.CreatedAt,
+				CorrelationKey:   v.CorrelationKey,
 				Variables:        []variableView{},
 			}
 			if err := enrich(&r, key); err != nil {
@@ -1494,11 +1498,13 @@ func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
 
 		scanErr = s.store.CompletedProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
 			r := instanceResp{
-				Key:           key,
-				ProcessDefKey: v.ProcessDefKey,
-				State:         v.State.String(),
-				CompletedAt:   v.CompletedAt,
-				Variables:     []variableView{},
+				Key:            key,
+				ProcessDefKey:  v.ProcessDefKey,
+				State:          v.State.String(),
+				CreatedAt:      v.CreatedAt,
+				CompletedAt:    v.CompletedAt,
+				CorrelationKey: v.CorrelationKey,
+				Variables:      []variableView{},
 			}
 			if err := enrich(&r, key); err != nil {
 				return err

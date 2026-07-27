@@ -27,6 +27,45 @@ func TestDeleteProcessBadKeyAndNotFound(t *testing.T) {
 	}
 }
 
+// TestActiveInstanceReportsCreatedAt checks a live instance surfaces its start
+// time so the Operations overview can show when it started and how long it has
+// been running. The sample process waits at a service task, so the instance
+// stays active with no completion time yet.
+func TestActiveInstanceReportsCreatedAt(t *testing.T) {
+	ts := newTestServer(t)
+	if code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", sampleBPMN, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	if code, body := doReq(t, ts, http.MethodPost, "/api/v1/processes/1/instances", "{}", "application/json"); code != http.StatusOK {
+		t.Fatalf("start status=%d body=%s", code, body)
+	}
+
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/instances", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("instances status=%d body=%s", code, body)
+	}
+	var insts []struct {
+		State       string `json:"state"`
+		CreatedAt   int64  `json:"createdAt"`
+		CompletedAt int64  `json:"completedAt"`
+	}
+	if err := json.Unmarshal(body, &insts); err != nil {
+		t.Fatalf("decode instances: %v (%s)", err, body)
+	}
+	if len(insts) != 1 {
+		t.Fatalf("instances = %d, want 1: %s", len(insts), body)
+	}
+	if insts[0].State != "active" {
+		t.Errorf("state = %q, want active", insts[0].State)
+	}
+	if insts[0].CreatedAt <= 0 {
+		t.Errorf("createdAt = %d, want > 0 (start time recorded)", insts[0].CreatedAt)
+	}
+	if insts[0].CompletedAt != 0 {
+		t.Errorf("completedAt = %d, want 0 while active", insts[0].CompletedAt)
+	}
+}
+
 func TestCreateInstanceBadKey(t *testing.T) {
 	ts := newTestServer(t)
 	if code, _ := doReq(t, ts, http.MethodPost, "/api/v1/processes/abc/instances", "{}", "application/json"); code != http.StatusBadRequest {

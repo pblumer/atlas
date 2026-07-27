@@ -160,6 +160,100 @@ func TestMessageStartInstanceRecovers(t *testing.T) {
 	}
 }
 
+// keyedResponder is parkingResponder with a correlation key on the start event:
+// messageStart("request", key = orderId) → messageCatch("never") → End. The
+// created instance parks and records the key its start event evaluated over the
+// payload.
+func keyedResponder(t testing.TB, key uint64) *compiler.CompiledProcess {
+	t.Helper()
+	b := compiler.NewBuilder(key, "keyed-responder", 1)
+	ms := b.AddMessageStartEvent("request", mustCompile(t, "orderId"))
+	park := b.AddMessageCatchEvent("never", nil)
+	end := b.AddEndEvent()
+	b.Connect(ms, park)
+	b.Connect(park, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return cp
+}
+
+// TestMessageStartRecordsCorrelationKey proves a message-start instance records
+// the correlation key its start event evaluates over the incoming payload, and
+// that the key survives replay (it is written into the activation event, so
+// recovery rebuilds it — invariants I4/I6). An instance whose start event
+// declares no key records "".
+func TestMessageStartRecordsCorrelationKey(t *testing.T) {
+	dir := t.TempDir()
+	responder := keyedResponder(t, 7)
+	clock := &manualClock{}
+
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clock)
+	p1.Deploy(responder)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.PublishMessage("request", "", numVar("orderId", "42"))
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	created := singleActiveInstance(t, h1.store)
+	live := activeInstance(t, h1.store, created)
+	if live == nil {
+		t.Fatal("created instance not active")
+	}
+	if live.CorrelationKey != "42" {
+		t.Fatalf("CorrelationKey = %q, want %q (orderId evaluated over payload)", live.CorrelationKey, "42")
+	}
+	h1.close(t)
+
+	// Replay into a fresh, empty store: the key must reappear unchanged.
+	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open 2: %v", err)
+	}
+	store2, err := state.Open(filepath.Join(dir, "state2"))
+	if err != nil {
+		t.Fatalf("state.Open 2: %v", err)
+	}
+	defer func() { _ = store2.Close(); _ = log2.Close() }()
+	p2 := engine.New(1, log2, store2, clock)
+	p2.Deploy(responder)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2 (replay): %v", err)
+	}
+	if replayed := activeInstance(t, store2, created); replayed == nil || replayed.CorrelationKey != "42" {
+		t.Fatalf("replayed CorrelationKey = %+v, want %q", replayed, "42")
+	}
+}
+
+// TestMessageStartWithoutCorrelationKeyRecordsEmpty proves a message-start event
+// with no declared correlation key produces an instance with an empty key — the
+// nil expression evaluates to "" rather than erroring.
+func TestMessageStartWithoutCorrelationKeyRecordsEmpty(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	responder := parkingResponder(t, 7) // start event declares no correlation key
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(responder)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.PublishMessage("request", "", numVar("orderId", "42"))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	created := singleActiveInstance(t, h.store)
+	if live := activeInstance(t, h.store, created); live == nil || live.CorrelationKey != "" {
+		t.Fatalf("CorrelationKey = %+v, want empty (no key declared)", live)
+	}
+}
+
 // TestProcessInstanceKeyBuiltin proves the reserved FEEL identifier
 // processInstanceKey resolves to the evaluating instance's own key, as a string
 // (so the full 64-bit key is exact), usable in any expression (ADR-0035).

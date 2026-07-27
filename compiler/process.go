@@ -519,23 +519,28 @@ func (p *CompiledProcess) MessageStarts() []MessageDetail { return p.messageStar
 
 // MessageStartEvent pairs a message-start event's message name with its element
 // index, so the engine can index which element a starting message flows into for
-// the collaboration replay (ADR-0038).
+// the collaboration replay (ADR-0038). CorrelationKey is the FEEL expression
+// compiled at deploy time; the engine evaluates it over a starting message's
+// payload so the created instance records which key it began with (ADR-0020). It
+// is nil when the event declares no correlation key.
 type MessageStartEvent struct {
-	MessageName string
-	ElementId   int32
+	MessageName    string
+	ElementId      int32
+	CorrelationKey *expr.Compiled
 }
 
-// MessageStartEvents returns each message-start event with its element index.
-// Computed by scanning the node table at deploy time (off the hot path); empty
-// for a process with no message start event.
+// MessageStartEvents returns each message-start event with its element index and
+// compiled correlation-key expression. Computed by scanning the node table at
+// deploy time (off the hot path); empty for a process with no message start event.
 func (p *CompiledProcess) MessageStartEvents() []MessageStartEvent {
 	var out []MessageStartEvent
 	for id := range p.nodes {
 		n := &p.nodes[id]
 		if n.Type == TypeMessageStartEvent {
 			out = append(out, MessageStartEvent{
-				MessageName: p.messageStarts[n.Detail].MessageName,
-				ElementId:   int32(id),
+				MessageName:    p.messageStarts[n.Detail].MessageName,
+				ElementId:      int32(id),
+				CorrelationKey: p.messageStarts[n.Detail].CorrelationKey,
 			})
 		}
 	}

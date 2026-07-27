@@ -79,7 +79,13 @@ func (p *Processor) registerBehaviors() {
 func handleProcessInstanceActivating(c *ProcessingContext) {
 	defKey := c.cmd.Value.process.ProcessDefKey
 	piKey := c.NewKey()
-	c.AppendProcessInstanceEvent(piKey, model.IntentActivated, model.ProcessInstanceValue{ProcessDefKey: defKey})
+	// The correlation key (empty for a timer or API start) rides in on the create
+	// command so the instance records which message key it began with (ADR-0020);
+	// CreatedAt is stamped from the event timestamp in applyToState.
+	c.AppendProcessInstanceEvent(piKey, model.IntentActivated, model.ProcessInstanceValue{
+		ProcessDefKey:  defKey,
+		CorrelationKey: c.cmd.Value.process.CorrelationKey,
+	})
 
 	// Seed the instance's start variables under its scope before any element runs.
 	for i := range c.cmd.StartVars {
@@ -549,7 +555,7 @@ func fireStartTimer(c *ProcessingContext, timer model.TimerValue) {
 	if cp == nil {
 		return
 	}
-	c.AppendCreateInstanceCommand(timer.ProcessDefKey, nil)
+	c.AppendCreateInstanceCommand(timer.ProcessDefKey, nil, "") // a timer start has no correlation key
 	if timer.Repetitions == 0 {
 		return // one-shot (duration/date) or a finite cycle that has run out
 	}
@@ -1207,6 +1213,32 @@ func evalCorrelationKey(c *ProcessingContext, e *expr.Compiled, scope uint64) st
 	return v.String()
 }
 
+// evalStartCorrelationKey evaluates a message-start event's correlation-key
+// expression over an incoming message's payload variables — the instance does
+// not exist yet, so there is no scope to read from as evalCorrelationKey does.
+// A nil expression (no correlation key declared) or an evaluation error yields
+// "", so the started instance simply records no key.
+func evalStartCorrelationKey(e *expr.Compiled, vars []model.VariableValue) string {
+	if e == nil {
+		return ""
+	}
+	inputs := e.Inputs()
+	binding := make(map[string]expr.Value, len(inputs))
+	for _, name := range inputs {
+		for i := range vars {
+			if vars[i].Name == name {
+				binding[name] = expr.FromStored(toExprKind(vars[i].Kind), vars[i].Bool, vars[i].Text)
+				break
+			}
+		}
+	}
+	v, err := e.Eval(binding)
+	if err != nil {
+		return ""
+	}
+	return v.String()
+}
+
 // correlateMessage delivers a message with the given name and correlation key to
 // every open subscription that matches. For each match it emits
 // SubscriptionCorrelated (which retires the subscription), writes the message's
@@ -1247,13 +1279,15 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 		}
 	}
 	// A message also instantiates every deployed process with a matching message
-	// start event, seeded with the payload (ADR-0035). Matching is by name today;
-	// the message's correlation key is not evaluated for start events yet. This
-	// runs after the subscription scan so a single message can both correlate a
-	// waiting instance and start new ones, all recovered from the events the
-	// created instances emit.
+	// start event, seeded with the payload (ADR-0035). Matching is by name; the
+	// created instance additionally records the correlation key its start event
+	// evaluates over the payload, so operators can see which key it began with
+	// (ADR-0020). This runs after the subscription scan so a single message can
+	// both correlate a waiting instance and start new ones, all recovered from the
+	// events the created instances emit.
 	for _, ref := range c.p.messageStarts[name] {
-		c.AppendCreateInstanceCommand(ref.defKey, vars)
+		startKey := evalStartCorrelationKey(ref.correlationKey, vars)
+		c.AppendCreateInstanceCommand(ref.defKey, vars, startKey)
 		// Retain the delivery into the message-start event too, so the replay shows
 		// the message that opened the receiving pool. The receiver instance does not
 		// exist yet (the create is a followup), so its key is left 0 (ADR-0038).
