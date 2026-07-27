@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
@@ -89,6 +90,48 @@ func TestLogsEndpoint(t *testing.T) {
 	}
 	if err := json.Unmarshal(body, &resp); err != nil || resp.Lines == nil {
 		t.Fatalf("no-buffer lines = %v (err %v), want empty non-nil array", resp.Lines, err)
+	}
+}
+
+// TestRunScript covers the script tester endpoint: a run against an enabled
+// language returns its result; a disabled language, an unsupported language, and an
+// empty script are reported as ok:false with a helpful message (not HTTP errors).
+func TestRunScript(t *testing.T) {
+	srv, x := newSystemServer(t, WithScriptWorker(compiler.PwshJobTypeIndex, stubExec{result: "Hallo Anna"}))
+	_ = srv
+
+	// Enabled language → runs and returns the result.
+	code, body := x.do(http.MethodPost, "/api/v1/scripts/run", `{"language":"powershell","source":"x","variables":{"Vorname":"Anna"}}`)
+	if code != http.StatusOK {
+		t.Fatalf("run = %d: %s", code, body)
+	}
+	var resp runScriptResp
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !resp.OK || resp.Result != "Hallo Anna" {
+		t.Fatalf("run resp = %+v, want ok with result Hallo Anna", resp)
+	}
+
+	// A language with no registered worker is reported as not enabled.
+	_, body = x.do(http.MethodPost, "/api/v1/scripts/run", `{"language":"python","source":"x"}`)
+	_ = json.Unmarshal(body, &resp)
+	if resp.OK || !strings.Contains(resp.Error, "not enabled") {
+		t.Fatalf("disabled language resp = %+v, want not-enabled error", resp)
+	}
+
+	// An unsupported language is rejected.
+	_, body = x.do(http.MethodPost, "/api/v1/scripts/run", `{"language":"ruby","source":"x"}`)
+	_ = json.Unmarshal(body, &resp)
+	if resp.OK || !strings.Contains(resp.Error, "unsupported") {
+		t.Fatalf("unsupported language resp = %+v, want unsupported error", resp)
+	}
+
+	// An empty script is rejected before invoking the interpreter.
+	_, body = x.do(http.MethodPost, "/api/v1/scripts/run", `{"language":"powershell","source":"   "}`)
+	_ = json.Unmarshal(body, &resp)
+	if resp.OK || !strings.Contains(resp.Error, "empty") {
+		t.Fatalf("empty script resp = %+v, want empty-script error", resp)
 	}
 }
 

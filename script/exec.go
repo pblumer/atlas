@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/pblumer/atlas/compiler"
@@ -63,6 +65,17 @@ var (
 
 // Langs is every supported language, in a stable order.
 var Langs = []Lang{PowerShell, Python, JavaScript}
+
+// LangByName returns the language spec for a (lower-cased) language name, and
+// whether it is one of the supported languages.
+func LangByName(name string) (Lang, bool) {
+	for _, l := range Langs {
+		if l.Name == name {
+			return l, true
+		}
+	}
+	return Lang{}, false
+}
 
 // CmdExec runs script tasks by shelling out to a real interpreter for its Lang. It
 // is the production [Exec]; tests use a fake instead so they need no interpreter.
@@ -140,11 +153,21 @@ func (e *CmdExec) Run(ctx context.Context, source string, input map[string]any) 
 	return parseOutput(out)
 }
 
-// execCommand is the default runner: the only part that touches os/exec.
+// execCommand is the default runner: the only part that touches os/exec. On a
+// non-zero exit it surfaces the interpreter's stderr (e.g. a Python traceback or a
+// PowerShell error), which is what makes the result useful for debugging a script
+// rather than just reporting "exit status 1".
 func execCommand(ctx context.Context, name string, args, env []string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = env
-	return cmd.Output()
+	out, err := cmd.Output()
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		if msg := strings.TrimSpace(string(ee.Stderr)); msg != "" {
+			return out, fmt.Errorf("%w: %s", err, msg)
+		}
+	}
+	return out, err
 }
 
 // parseOutput decodes an interpreter's stdout as the script's result. Empty output

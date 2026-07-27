@@ -144,6 +144,18 @@ func TestLangs(t *testing.T) {
 	}
 }
 
+// TestLangByName resolves supported languages and rejects unknown ones.
+func TestLangByName(t *testing.T) {
+	for _, name := range []string{"powershell", "python", "javascript"} {
+		if l, ok := LangByName(name); !ok || l.Name != name {
+			t.Errorf("LangByName(%q) = %+v, %v; want the matching lang", name, l, ok)
+		}
+	}
+	if _, ok := LangByName("ruby"); ok {
+		t.Error("LangByName(ruby) = ok, want not found")
+	}
+}
+
 // TestBinOverride: an explicit Bin wins over the language default.
 func TestBinOverride(t *testing.T) {
 	e := &CmdExec{Lang: Python, Bin: "/opt/py/python3"}

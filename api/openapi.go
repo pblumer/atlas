@@ -107,6 +107,14 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Evaluation result", schemaObj(map[string]any{
 				"ok": tBool(), "result": tObject(), "kind": tString(), "error": tString(),
 			}))}},
+		{"POST", "/api/v1/scripts/run", s.handleRunScript, apiOp{
+			summary: "Run a script task against sample variables (admin-only when auth is on)", tag: "Scripts",
+			req: jsonBody("Language, source, and sample variables", schemaObj(map[string]any{
+				"language": tString(), "source": tString(), "variables": tObject(),
+			}, "language", "source")),
+			resp: jsonBody("Run result", schemaObj(map[string]any{
+				"ok": tBool(), "result": tObject(), "error": tString(),
+			}))}},
 
 		{"POST", "/api/v1/deployments", s.handleDeploy, apiOp{
 			summary: "Deploy a BPMN model", tag: "Deployments",
