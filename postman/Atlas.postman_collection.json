@@ -1,11 +1,124 @@
 {
   "info": {
     "name": "Atlas \u2014 Workflow Engine API",
-    "description": "# Atlas \u2014 Workflow Engine API\n\nEverything you need to drive a running **Atlas** BPMN workflow engine from Postman: deploy models, run instances, inspect live runtime, work user-task inboxes, and correlate messages.\n\n## Prerequisites\n\nYou need a running server. From the repo root:\n\n```bash\ngo run ./cmd/atlas serve --addr :8080 --data-dir ./atlas-data\n```\n\nThe API is served under `/api/v1`, the web UI at `/`, and the MCP transport at `/mcp`. Health lives at `/healthz`.\n\n## Setup (30 seconds)\n\n1. **Import** this collection **and** the `Atlas (local)` environment (`Atlas.postman_environment.json`).\n2. **Select** the `Atlas (local)` environment (top-right in Postman).\n3. Confirm `baseUrl` points at your server (default `http://localhost:8080`).\n4. Open **\ud83d\ude80 Golden Path** and hit **Send** on each request top to bottom \u2014 or run the folder in the **Collection Runner**.\n\n## How the chaining works\n\nRequests capture ids into **collection variables** (`defKey`, `instanceKey`, `taskKey`, `projectId`, \u2026) in their *Tests* tab, so downstream requests like `{{defKey}}` resolve automatically. No copy-paste of keys between steps.\n\n## Authentication\n\nThe Atlas server is **unauthenticated** by design \u2014 it expects to sit behind a reverse proxy that adds auth. If yours does, add the header/token under the collection's **Authorization** tab and it applies to every request. Out of the box, no credentials are needed.\n\n## Conventions\n\n- **Deploy** bodies are raw **BPMN XML** (`Content-Type: application/xml`).\n- Everything else is **JSON**. Variables use `{\"variables\": {name: value}}`; scalars, objects, and arrays are all supported and bind into FEEL.\n- Keys are `uint64`, assigned by the engine and returned on deploy/list.\n",
+    "description": "# Atlas \u2014 Workflow Engine API\n\nEverything you need to drive a running **Atlas** BPMN workflow engine from Postman: deploy models, run instances, inspect live runtime, work user-task inboxes, and correlate messages.\n\n## Prerequisites\n\nYou need a running server. From the repo root:\n\n```bash\ngo run ./cmd/atlas serve --addr :8080 --data-dir ./atlas-data\n```\n\nThe API is served under `/api/v1`, the web UI at `/`, and the MCP transport at `/mcp`. Health lives at `/healthz`.\n\n## Setup (30 seconds)\n\n1. **Import** this collection **and** the `Atlas (local)` environment (`Atlas.postman_environment.json`).\n2. **Select** the `Atlas (local)` environment (top-right in Postman).\n3. Confirm `baseUrl` points at your server (default `http://localhost:8080`).\n4. **If your instance enforces login** (multi-user): set the `username` variable, put your password in the Postman **Vault** (key `password`), and run **Authentication \u2192 Log in** once. A local server needs no login.\n5. Open **\ud83d\ude80 Golden Path** and hit **Send** on each request top to bottom \u2014 or run the folder in the **Collection Runner**.\n\n## How the chaining works\n\nRequests capture ids into **collection variables** (`defKey`, `instanceKey`, `taskKey`, `projectId`, \u2026) in their *Tests* tab, so downstream requests like `{{defKey}}` resolve automatically. No copy-paste of keys between steps.\n\n## Authentication\n\nTwo shapes, depending on how your instance runs:\n\n- **Local / single-user build** \u2014 no auth. Skip the Authentication folder; everything just works against `localhost:8080`.\n- **Instance with login enforced** (multi-user) \u2014 **cookie session**. Run **Authentication \u2192 Log in** once (`POST /api/v1/auth/login` with your `username` + Vault `password`). The server returns an `atlas_session` cookie; Postman's cookie jar attaches it to every later request automatically, so a `401 {\"error\":\"authentication required\"}` disappears after you log in. No `Authorization` header is involved \u2014 that's why HTTP Basic (`curl -u`) returns 401 here.\n\nStore the password in the **Postman Vault** (key `password`) so no secret lands in the collection or environment file. If cookies don't seem to attach, open the **Cookies** manager (under the address bar) and confirm `atlas_session` is listed for your host.\n\n> Fronting Atlas with a **Basic-Auth reverse proxy** instead? Set the collection's **Authorization** tab to *Basic Auth* \u2014 it then applies to every request.\n\n## Conventions\n\n- **Deploy** bodies are raw **BPMN XML** (`Content-Type: application/xml`).\n- Everything else is **JSON**. Variables use `{\"variables\": {name: value}}`; scalars, objects, and arrays are all supported and bind into FEEL.\n- Keys are `uint64`, assigned by the engine and returned on deploy/list.\n",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_postman_id": "a71a5000-0000-4000-8000-atlas0000001"
   },
+  "auth": {
+    "type": "noauth"
+  },
   "item": [
+    {
+      "name": "Authentication",
+      "description": "For Atlas instances with **login enforced** (multi-user access). Run **Log in** once: it posts your credentials to `/api/v1/auth/login`, the server returns a `Set-Cookie: atlas_session=\u2026` (HttpOnly, 12h), and Postman's cookie jar then attaches that cookie to **every** subsequent request to the same host \u2014 so the whole collection is authenticated with no per-request setup.\n\nSet `username` (environment variable) and store the password in the Postman **Vault** under the key `password`. A local/unauthenticated Atlas build has no such endpoint \u2014 skip this folder there.",
+      "item": [
+        {
+          "name": "Log in (session cookie)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Authenticate and receive the `atlas_session` cookie. Body is `{\"username\", \"password\"}`; the identifier is your console username (e.g. `patrick`) \u2014 some instances accept the email instead. On success Postman stores the cookie automatically; just run the Golden Path afterwards.\n\nUsername comes from the `username` variable, password from the Vault key `password` \u2014 no secret is stored in this file.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{vault:password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('logged in (200)', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  console.log('Authenticated \u2014 Postman stored the atlas_session cookie; it now rides every request to this host.');",
+                  "} else if (pm.response.code === 401) {",
+                  "  console.log('401: check username/password (try your email as username), or the Vault secret `password` is unset.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Who am I (auth status)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Reports whether auth is enforced and who \u2014 if anyone \u2014 is logged in. Reachable before login, so it's the quickest way to check whether your session cookie is active. After **Log in** it echoes your username and roles."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('auth status (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Log out",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "End the current session and clear the cookie. Idempotent \u2014 logging out with no session still succeeds. Postman keeps the cookie in its jar until it expires or you clear it via the **Cookies** manager under the address bar."
+          },
+          "response": []
+        }
+      ]
+    },
     {
       "name": "\ud83d\ude80 Golden Path (run top-to-bottom)",
       "description": "The five-minute tour. Hit **Send** on each request in order \u2014 or select this folder in the **Collection Runner** and run it \u2014 and it walks the full workflow lifecycle end to end.\n\nEach step's *Tests* tab captures ids (`defKey`, `taskKey`) into collection variables, so the next step just works with no copy-paste.\n\n1. Deploy a BPMN model\n2. List processes (confirm it's registered)\n3. Start an instance\n4. List open user tasks (parks on *Review order*)\n5. Complete the task with form data\n6. List instances (see the variables land)\n7. Read engine stats",
@@ -1545,6 +1658,11 @@
     {
       "key": "baseUrl",
       "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "username",
+      "value": "",
       "type": "string"
     },
     {
