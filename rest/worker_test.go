@@ -8,6 +8,7 @@ import (
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/rest"
@@ -47,7 +48,7 @@ func restProcess(t *testing.T, method, url, resultVar string) (*compiler.Compile
 	t.Helper()
 	b := compiler.NewBuilder(restDefKey, "customers", 1)
 	start := b.AddStartEvent()
-	call := b.AddRestConnectorTask(method, url, resultVar, nil, nil, compiler.RestAuth{}, 3)
+	call := b.AddRestConnectorTask(compiler.RestConfig{Method: method, Url: compiler.RestExpr{Literal: url}, ResultVar: resultVar, Retries: 3})
 	end := b.AddEndEvent()
 	b.Connect(start, call)
 	b.Connect(call, end)
@@ -65,7 +66,7 @@ func restThenWaitProcess(t *testing.T, method, url, resultVar string) (*compiler
 	t.Helper()
 	b := compiler.NewBuilder(restDefKey, "customers", 1)
 	start := b.AddStartEvent()
-	call := b.AddRestConnectorTask(method, url, resultVar, nil, nil, compiler.RestAuth{}, 3)
+	call := b.AddRestConnectorTask(compiler.RestConfig{Method: method, Url: compiler.RestExpr{Literal: url}, ResultVar: resultVar, Retries: 3})
 	wait := b.AddServiceTask("wait", 3)
 	end := b.AddEndEvent()
 	b.Connect(start, call)
@@ -368,13 +369,29 @@ func contains(s, sub string) bool {
 	return false
 }
 
+// kvLiterals turns a name→value map into literal REST key/value entries.
+func kvLiterals(m map[string]string) []compiler.RestKV {
+	out := make([]compiler.RestKV, 0, len(m))
+	for k, v := range m {
+		out = append(out, compiler.RestKV{Name: k, Val: compiler.RestExpr{Literal: v}})
+	}
+	return out
+}
+
 // restConfiguredProcess: Start → REST GET task carrying headers/query/auth → plain
 // service task (parks). Lets a test assert the request the worker built.
 func restConfiguredProcess(t *testing.T, headers, query map[string]string, auth compiler.RestAuth) (*compiler.CompiledProcess, int32) {
 	t.Helper()
 	b := compiler.NewBuilder(restDefKey, "todos", 1)
 	start := b.AddStartEvent()
-	call := b.AddRestConnectorTask("GET", "https://api.example.com/todos", "", headers, query, auth, 3)
+	call := b.AddRestConnectorTask(compiler.RestConfig{
+		Method:  "GET",
+		Url:     compiler.RestExpr{Literal: "https://api.example.com/todos"},
+		Headers: kvLiterals(headers),
+		Query:   kvLiterals(query),
+		Auth:    auth,
+		Retries: 3,
+	})
 	wait := b.AddServiceTask("wait", 3)
 	end := b.AddEndEvent()
 	b.Connect(start, call)
@@ -481,5 +498,70 @@ func TestRestConnectorAuthSecretMissing(t *testing.T) {
 	}
 	if pi := mustActiveProcs(t, store); pi != 1 {
 		t.Errorf("active instances = %d, want 1 (job parked on incident)", pi)
+	}
+}
+
+// TestRestConnectorFeelFields is the end-to-end fx slice: the worker evaluates a
+// FEEL url, header, and query value over the instance's variables at call time.
+func TestRestConnectorFeelFields(t *testing.T) {
+	log, store := openStore(t)
+	b := compiler.NewBuilder(restDefKey, "todos", 1)
+	start := b.AddStartEvent()
+	compile := func(src string) *expr.Compiled {
+		e, err := expr.CompileAuto(src)
+		if err != nil {
+			t.Fatalf("compile %q: %v", src, err)
+		}
+		return e
+	}
+	call := b.AddRestConnectorTask(compiler.RestConfig{
+		Method: "GET",
+		Url:    compiler.RestExpr{Expr: compile(`"https://api.example.com/customers/" + customerId`)},
+		Headers: []compiler.RestKV{
+			{Name: "X-Trace", Val: compiler.RestExpr{Expr: compile(`traceId`)}},
+			{Name: "Accept", Val: compiler.RestExpr{Literal: "application/json"}},
+		},
+		Query:   []compiler.RestKV{{Name: "page", Val: compiler.RestExpr{Expr: compile(`page`)}}},
+		Retries: 3,
+	})
+	wait := b.AddServiceTask("wait", 3)
+	end := b.AddEndEvent()
+	b.Connect(start, call)
+	b.Connect(call, wait)
+	b.Connect(wait, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ConnectorTask(cp.Node(call).Detail).JobType
+
+	rc := &recordingClient{resp: rest.Response{Status: 200}}
+	p := engine.New(1, log, store, &fixedClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	runner := job.NewRunner(store, p)
+	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, noSecret))
+	p.CreateInstance(cp.Key,
+		model.VariableValue{Name: "customerId", Kind: model.VarString, Text: "c-7"},
+		model.VariableValue{Name: "traceId", Kind: model.VarString, Text: "abc"},
+		model.VariableValue{Name: "page", Kind: model.VarNumber, Text: "2"},
+	)
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	if len(rc.requests) != 1 {
+		t.Fatalf("requests = %d, want 1", len(rc.requests))
+	}
+	req := rc.requests[0]
+	if req.URL != "https://api.example.com/customers/c-7" {
+		t.Errorf("url = %q, want the FEEL-computed URL", req.URL)
+	}
+	if req.Headers["X-Trace"] != "abc" {
+		t.Errorf("X-Trace = %q, want the evaluated traceId", req.Headers["X-Trace"])
+	}
+	if req.Query["page"] != "2" {
+		t.Errorf("page = %q, want the evaluated number 2", req.Query["page"])
 	}
 }

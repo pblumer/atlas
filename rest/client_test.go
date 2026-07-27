@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 )
 
@@ -261,16 +262,84 @@ func TestHTTPClientHeadersAndQuery(t *testing.T) {
 	}
 }
 
-func TestDecodeStringMap(t *testing.T) {
-	if m, err := decodeStringMap(""); err != nil || m != nil {
-		t.Errorf("decodeStringMap(empty) = %v,%v, want nil,nil", m, err)
+// TestResolveValue covers literal pass-through, FEEL string/number coercion over
+// variables, and null-propagation (an absent variable yields the empty string).
+func TestResolveValue(t *testing.T) {
+	vars := map[string]model.VariableValue{
+		"customerId": {Name: "customerId", Kind: model.VarString, Text: "c-7"},
+		"qty":        {Name: "qty", Kind: model.VarNumber, Text: "42"},
 	}
-	m, err := decodeStringMap(`{"a":"1"}`)
-	if err != nil || m["a"] != "1" {
-		t.Errorf("decodeStringMap = %v,%v, want {a:1}", m, err)
+	// Literal: returned verbatim, no evaluation.
+	if got := resolveValue(compiler.RestExpr{Literal: "https://x/y"}, 1, vars); got != "https://x/y" {
+		t.Errorf("literal = %q, want the literal", got)
 	}
-	if _, err := decodeStringMap("{bad"); err == nil {
-		t.Error("decodeStringMap(bad json): err = nil, want error")
+	// FEEL string concatenation over a variable.
+	e, err := expr.CompileAuto(`"https://api/" + customerId`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	if got := resolveValue(compiler.RestExpr{Expr: e}, 1, vars); got != "https://api/c-7" {
+		t.Errorf("feel string = %q, want https://api/c-7", got)
+	}
+	// A FEEL number coerces to its decimal string form.
+	en, _ := expr.CompileAuto(`qty`)
+	if got := resolveValue(compiler.RestExpr{Expr: en}, 1, vars); got != "42" {
+		t.Errorf("feel number = %q, want 42", got)
+	}
+	// An absent variable evaluates to FEEL null → empty string (null-propagating).
+	em, _ := expr.CompileAuto(`missing`)
+	if got := resolveValue(compiler.RestExpr{Expr: em}, 1, vars); got != "" {
+		t.Errorf("feel null = %q, want empty", got)
+	}
+}
+
+// TestResolveKVs evaluates a list of named values (literal and FEEL) into a map.
+func TestResolveKVs(t *testing.T) {
+	if m := resolveKVs(nil, 1, nil); m != nil {
+		t.Errorf("resolveKVs(nil) = %v, want nil", m)
+	}
+	e, _ := expr.CompileAuto(`"1"`)
+	m := resolveKVs([]compiler.RestKV{
+		{Name: "X", Val: compiler.RestExpr{Literal: "lit"}},
+		{Name: "page", Val: compiler.RestExpr{Expr: e}},
+	}, 1, nil)
+	if m["X"] != "lit" || m["page"] != "1" {
+		t.Errorf("resolveKVs = %v, want {X:lit, page:1}", m)
+	}
+}
+
+// TestBindVars binds the processInstanceKey builtin and scope variables of every
+// kind (exercising toExprKind), and leaves an unknown name unbound.
+func TestBindVars(t *testing.T) {
+	vars := map[string]model.VariableValue{
+		"s": {Name: "s", Kind: model.VarString, Text: "x"},
+		"n": {Name: "n", Kind: model.VarNumber, Text: "1"},
+		"b": {Name: "b", Kind: model.VarBool, Bool: true},
+		"j": {Name: "j", Kind: model.VarJSON, Text: `{"a":1}`},
+		"z": {Name: "z", Kind: model.VarNull},
+	}
+	m := bindVars(7, vars, []string{builtinProcessInstanceKey, "s", "n", "b", "j", "z", "missing"})
+	if len(m) != 6 { // the builtin + five present vars; "missing" left unbound
+		t.Fatalf("bound %d names, want 6 (missing left unbound)", len(m))
+	}
+	if bindVars(1, vars, nil) != nil {
+		t.Error("bindVars(no names) should be nil")
+	}
+}
+
+// TestToExprKind covers the stored-kind → expr-kind mapping directly.
+func TestToExprKind(t *testing.T) {
+	cases := map[model.VarKind]expr.ValueKind{
+		model.VarBool:   expr.KindBool,
+		model.VarNumber: expr.KindNumber,
+		model.VarString: expr.KindString,
+		model.VarJSON:   expr.KindJSON,
+		model.VarNull:   expr.KindNull,
+	}
+	for k, want := range cases {
+		if got := toExprKind(k); got != want {
+			t.Errorf("toExprKind(%v) = %v, want %v", k, got, want)
+		}
 	}
 }
 

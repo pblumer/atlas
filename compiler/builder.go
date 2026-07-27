@@ -339,22 +339,14 @@ func (b *Builder) AddClioWriteTask(connector, subject, eventType string, retries
 		Subject:   b.intern(subject),
 		EventType: b.intern(eventType),
 		Method:    -1, // not a REST task
-		Url:       -1,
 		ResultVar: -1,
-		Headers:   -1,
-		Query:     -1,
+		Url:       RestExpr{}, // REST-only fields stay empty for a clio task
 		Auth:      -1,
 		Retries:   retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }
 
-// AddRestConnectorTask adds an HTTP-REST connector task and returns its element
-// id. Like a service task it creates a job on activation and waits; the job
-// carries the reserved RestJobType so the in-process REST worker picks it up,
-// calls the model-authored url with the given method, writes the JSON response
-// into resultVar (empty = discard the response), and completes the job
-// (ADR-0067). method is stored as given (the parser uppercases and validates it).
 // RestAuth is a REST connector task's authentication config. Type is "", "basic",
 // "bearer", or "apiKey". Username (basic) and ApiKeyName (the apiKey header name)
 // are model data. SecretRef names a server-side secret (ADR-0041) — the basic
@@ -367,33 +359,43 @@ type RestAuth struct {
 	SecretRef  string `json:"secretRef,omitempty"`
 }
 
-func (b *Builder) AddRestConnectorTask(method, url, resultVar string, headers, query map[string]string, auth RestAuth, retries int32) int32 {
+// RestConfig is the deploy-time configuration of an HTTP-REST connector task
+// (ADR-0067). Method and ResultVar are interned; Url, Headers, and Query carry
+// literal-or-FEEL values (the parser compiles the FEEL ones); Auth references a
+// server-side secret.
+type RestConfig struct {
+	Method    string
+	Url       RestExpr
+	ResultVar string
+	Headers   []RestKV
+	Query     []RestKV
+	Auth      RestAuth
+	Retries   int32
+}
+
+// AddRestConnectorTask adds an HTTP-REST connector task and returns its element
+// id. Like a service task it creates a job on activation and waits; the job
+// carries the reserved RestJobType so the in-process REST worker picks it up,
+// evaluates any FEEL url/header/query values over the instance's variables, calls
+// the endpoint with the given method, writes the JSON response into ResultVar
+// (empty = discard the response), and completes the job (ADR-0067). Method is
+// stored as given (the parser uppercases and validates it).
+func (b *Builder) AddRestConnectorTask(cfg RestConfig) int32 {
 	detail := int32(len(b.connectorTasks))
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
 		JobType:   b.intern(RestJobType),
 		Connector: -1, // REST carries its endpoint in the model, not a registry name
 		Subject:   -1, // not a clio task
 		EventType: -1,
-		Method:    b.intern(method),
-		Url:       b.intern(url),
-		ResultVar: b.intern(resultVar),
-		Headers:   b.internStringMap(headers),
-		Query:     b.internStringMap(query),
-		Auth:      b.internAuth(auth),
-		Retries:   retries,
+		Method:    b.intern(cfg.Method),
+		ResultVar: b.intern(cfg.ResultVar),
+		Url:       cfg.Url,
+		Headers:   cfg.Headers,
+		Query:     cfg.Query,
+		Auth:      b.internAuth(cfg.Auth),
+		Retries:   cfg.Retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
-}
-
-// internStringMap interns a {name:value} map as a canonical JSON object (sorted
-// keys, so the compiled form is deterministic — invariant I5), returning -1 for an
-// empty map so the worker can skip it.
-func (b *Builder) internStringMap(m map[string]string) int32 {
-	if len(m) == 0 {
-		return -1
-	}
-	raw, _ := json.Marshal(m) // a map[string]string always marshals; keys are sorted
-	return b.intern(string(raw))
 }
 
 // internAuth interns a REST auth config as a canonical JSON object, returning -1
