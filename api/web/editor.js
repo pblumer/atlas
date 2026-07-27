@@ -835,6 +835,76 @@ function saveDecisionInputs(modeler, element, rows) {
   modeling.updateProperties(element, { extensionElements: ext });
 }
 
+// ioMapRowHTML renders one editable generic I/O mapping row (ADR-0068): a target
+// variable name fed by a FEEL source. kind is "in" (an input, source over the
+// enclosing scope → a local variable) or "out" (an output, source over the local
+// scope → a variable promoted to the parent). The stored source is '=' prefixed
+// (Zeebe convention); it is shown stripped.
+function ioMapRowHTML(kind, i, source, target) {
+  const src = (source || "").replace(/^=\s*/, "");
+  const ph = kind === "in"
+    ? { t: "amount", s: "order.total", tt: "Local variable the activity sees", st: "FEEL over the enclosing scope" }
+    : { t: "orderStatus", s: "result.status", tt: "Variable promoted to the process scope", st: "FEEL over the activity's local scope" };
+  return `<div class="io-map-row" data-kind="${kind}" data-i="${i}" style="display:flex;gap:6px;margin-bottom:6px">
+    <input type="text" class="io-target" value="${esc(target || "")}" placeholder="${ph.t}" style="flex:0 0 34%" title="${ph.tt}"/>
+    <input type="text" class="io-source" value="${esc(src)}" placeholder="${ph.s}" style="flex:1" title="${ph.st}"/>
+  </div>`;
+}
+
+// ioMappingsHTML renders the generic zeebe:ioMapping editor — input and output
+// mapping lists — for a job-backed activity (service, script, user task; ADR-0068).
+// Each list carries a trailing empty row that grows the list as it is filled. It is
+// distinct from a business rule task's ioMapping inputs (decision inputs), which
+// have their own editor.
+function ioMappingsHTML(bo) {
+  const io = findExt(bo, "zeebe:IoMapping");
+  const ins = (io && io.inputParameters) || [];
+  const outs = (io && io.outputParameters) || [];
+  return `<h3>Input mappings</h3>
+    <p class="muted" style="font-size:12px">Each row computes a variable the activity sees (its <b>local scope</b>) from a FEEL <b>source</b> over the enclosing variables. Locals shadow inherited values and are dropped when the activity completes. Leave a row's target blank to drop it.</p>
+    <div id="io-inputs">${ins.map((p, i) => ioMapRowHTML("in", i, p.source, p.target)).join("")}${ioMapRowHTML("in", ins.length, "", "")}</div>
+    <h3>Output mappings</h3>
+    <p class="muted" style="font-size:12px">Each row promotes a value to the <b>process scope</b> from a FEEL <b>source</b> over the activity's local scope (e.g. its result). With no output mapping the task's result merges into the process scope as-is.</p>
+    <div id="io-outputs">${outs.map((p, i) => ioMapRowHTML("out", i, p.source, p.target)).join("")}${ioMapRowHTML("out", outs.length, "", "")}</div>`;
+}
+
+// saveIOMappings rebuilds a task's generic zeebe:ioMapping from the panel rows: the
+// input rows become inputParameters, the output rows outputParameters. A row with no
+// target is dropped; each kept source is stored '=' prefixed. When both lists are
+// empty the ioMapping element is removed so the model stays clean (ADR-0068).
+function saveIOMappings(modeler, element, inRows, outRows) {
+  const moddle = modeler.get("moddle");
+  const modeling = modeler.get("modeling");
+  const bo = element.businessObject;
+  let ext = bo.extensionElements;
+  if (!ext) {
+    ext = moddle.create("bpmn:ExtensionElements", { values: [] });
+    ext.$parent = bo;
+  }
+  let io = (ext.values || []).find((v) => v.$type === "zeebe:IoMapping");
+  const mk = (type, rows) => rows
+    .filter((r) => r.target !== "")
+    .map((r) => moddle.create(type, {
+      source: r.source === "" ? "" : (r.source.startsWith("=") ? r.source : "= " + r.source),
+      target: r.target,
+    }));
+  const ins = mk("zeebe:Input", inRows);
+  const outs = mk("zeebe:Output", outRows);
+  if (ins.length === 0 && outs.length === 0) {
+    if (io) ext.values = (ext.values || []).filter((v) => v !== io);
+  } else {
+    if (!io) {
+      io = moddle.create("zeebe:IoMapping");
+      io.$parent = ext;
+      ext.values = [...(ext.values || []), io];
+    }
+    [...ins, ...outs].forEach((p) => (p.$parent = io));
+    io.inputParameters = ins;
+    io.outputParameters = outs;
+  }
+  modeling.updateProperties(element, { extensionElements: ext });
+}
+
 // messageFieldsHTML renders the message picker for a catch or throw event: a
 // dropdown of the model's shared messages (plus "new"), and — once one is chosen —
 // its name and correlation key, which are shared so every event using the message
@@ -1673,6 +1743,12 @@ function wireProperties(root, modeler, api, projectId, toast) {
             <p class="muted" style="font-size:12px">An ISO-8601 duration measured from when the task appears
               (e.g. <b>P2D</b> = 2 days, <b>PT4H</b> = 4 hours). Leave blank for no due date. Priority 0–100; higher sorts first.</p>`;
         }
+        // Generic zeebe:ioMapping input/output editor for job-backed activities
+        // (ADR-0068). A business rule task's ioMapping inputs are decision inputs
+        // with their own editor above, so it is excluded here.
+        if (t === "bpmn:ServiceTask" || t === "bpmn:ScriptTask" || t === "bpmn:UserTask") {
+          html += ioMappingsHTML(bo);
+        }
       } else if (isDefaultFlow) {
         html += `<h3>Condition (FEEL)</h3>
           <p class="muted" style="font-size:12px">This is the gateway's <b>default flow</b> — taken when no other branch's condition matches, so it carries no condition of its own.</p>`;
@@ -2104,6 +2180,42 @@ function wireProperties(root, modeler, api, projectId, toast) {
         });
       };
       [...inputsWrap.querySelectorAll(".dmn-input-row")].forEach(wireRow);
+    }
+
+    // Generic zeebe:ioMapping input/output editor (ADR-0068). Two lists that save on
+    // blur and grow in place, mirroring the decision-input rows above.
+    const ioInWrap = body.querySelector("#io-inputs");
+    const ioOutWrap = body.querySelector("#io-outputs");
+    if (ioInWrap || ioOutWrap) {
+      const collect = (wrap) => wrap
+        ? [...wrap.querySelectorAll(".io-map-row")].map((row) => ({
+            target: (row.querySelector(".io-target").value || "").trim(),
+            source: (row.querySelector(".io-source").value || "").trim(),
+          }))
+        : [];
+      const saveIO = () => savePreservingPanel(() => saveIOMappings(modeler, element, collect(ioInWrap), collect(ioOutWrap)));
+      const wireIOList = (wrap, kind) => {
+        if (!wrap) return;
+        const wireRow = (row) => {
+          const target = row.querySelector(".io-target");
+          const source = row.querySelector(".io-source");
+          target.addEventListener("change", saveIO);
+          source.addEventListener("change", saveIO);
+          target.addEventListener("input", () => {
+            const rows = [...wrap.querySelectorAll(".io-map-row")];
+            if (row === rows[rows.length - 1] && target.value.trim() !== "") {
+              const tmp = document.createElement("div");
+              tmp.innerHTML = ioMapRowHTML(kind, rows.length, "", "");
+              const newRow = tmp.firstElementChild;
+              wrap.appendChild(newRow);
+              wireRow(newRow);
+            }
+          });
+        };
+        [...wrap.querySelectorAll(".io-map-row")].forEach(wireRow);
+      };
+      wireIOList(ioInWrap, "in");
+      wireIOList(ioOutWrap, "out");
     }
 
     const fassignee = body.querySelector("#f-assignee");

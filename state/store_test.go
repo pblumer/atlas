@@ -185,6 +185,44 @@ func TestTransactionSeesOwnWrites(t *testing.T) {
 	}
 }
 
+// TestVariablePutGetDelete checks a variable round-trips through the store and that
+// DeleteVariable removes it (and is a no-op for an absent one) — the primitive the
+// engine uses to drop an activity-local scope on completion (ADR-0068).
+func TestVariablePutGetDelete(t *testing.T) {
+	s := openStore(t)
+	const scope uint64 = 4242
+
+	tx := s.NewTransaction()
+	if err := tx.PutVariable(&model.VariableValue{ScopeKey: scope, Name: "x", Kind: model.VarString, Text: "hi"}); err != nil {
+		t.Fatalf("PutVariable: %v", err)
+	}
+	// Deleting an absent variable is a harmless no-op.
+	if err := tx.DeleteVariable(scope, "missing"); err != nil {
+		t.Fatalf("DeleteVariable(missing): %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+
+	tx = s.NewTransaction()
+	got, err := tx.GetVariable(scope, "x")
+	if err != nil || got == nil || got.Text != "hi" {
+		t.Fatalf("GetVariable after put = %+v, err %v; want text hi", got, err)
+	}
+	if err := tx.DeleteVariable(scope, "x"); err != nil {
+		t.Fatalf("DeleteVariable(x): %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("Commit 2: %v", err)
+	}
+
+	tx = s.NewTransaction()
+	defer tx.Close()
+	if got, err := tx.GetVariable(scope, "x"); err != nil || got != nil {
+		t.Fatalf("GetVariable after delete = %+v, err %v; want nil", got, err)
+	}
+}
+
 func TestElementInstancesOfProcess(t *testing.T) {
 	s := openStore(t)
 	proc := model.NewKey(1, 1)

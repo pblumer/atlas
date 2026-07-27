@@ -727,6 +727,62 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 	}
 
+	// Wire generic zeebe:ioMapping input/output mappings (ADR-0068). Each source is a
+	// FEEL expression compiled once at deploy time (invariant I5); an empty target or
+	// an uncompilable source fails the deploy, exactly like a bad script-task
+	// expression. The compiler only records them here; the engine applies them.
+	compileSource := func(ownerId, dir, target, source string) (*expr.Compiled, error) {
+		text := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(source), "="))
+		if text == "" {
+			return nil, fmt.Errorf("compiler: task %q ioMapping %s for %q has no source expression", ownerId, dir, target)
+		}
+		e, err := expr.CompileAuto(text)
+		if err != nil {
+			return nil, fmt.Errorf("compiler: task %q ioMapping %s for %q: %w", ownerId, dir, target, err)
+		}
+		return e, nil
+	}
+	wireIO := func(ownerId string, iom xmlZeebeIOMapping) error {
+		for _, in := range iom.Inputs {
+			target := strings.TrimSpace(in.Target)
+			if target == "" {
+				return fmt.Errorf("compiler: task %q has an ioMapping input with no target", ownerId)
+			}
+			e, err := compileSource(ownerId, "input", target, in.Source)
+			if err != nil {
+				return err
+			}
+			b.AddInputMapping(ids[ownerId], target, e)
+		}
+		for _, out := range iom.Outputs {
+			target := strings.TrimSpace(out.Target)
+			if target == "" {
+				return fmt.Errorf("compiler: task %q has an ioMapping output with no target", ownerId)
+			}
+			e, err := compileSource(ownerId, "output", target, out.Source)
+			if err != nil {
+				return err
+			}
+			b.AddOutputMapping(ids[ownerId], target, e)
+		}
+		return nil
+	}
+	for _, st := range proc.ServiceTasks {
+		if err := wireIO(st.Id, st.IOMapping); err != nil {
+			return nil, err
+		}
+	}
+	for _, st := range proc.ScriptTasks {
+		if err := wireIO(st.Id, st.IOMapping); err != nil {
+			return nil, err
+		}
+	}
+	for _, ut := range proc.UserTasks {
+		if err := wireIO(ut.Id, ut.IOMapping); err != nil {
+			return nil, err
+		}
+	}
+
 	return b.Build()
 }
 
@@ -947,6 +1003,7 @@ type xmlUserTask struct {
 	Form       xmlFormDefinition          `xml:"extensionElements>formDefinition"`
 	Priority   xmlPriorityDefinition      `xml:"extensionElements>priorityDefinition"`
 	Schedule   xmlTaskSchedule            `xml:"extensionElements>taskSchedule"`
+	IOMapping  xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
 	DataOut    []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
 	DataIn     []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
@@ -986,9 +1043,10 @@ type xmlServiceTask struct {
 	// Rest, when present, marks this service task an HTTP-REST connector task
 	// (ADR-0067). The pointer is nil when the <atlas:restConnector> extension is
 	// absent.
-	Rest    *xmlRestConnector          `xml:"extensionElements>restConnector"`
-	DataOut []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
-	DataIn  []xmlDataInputAssociation  `xml:"dataInputAssociation"`
+	Rest      *xmlRestConnector          `xml:"extensionElements>restConnector"`
+	IOMapping xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
+	DataOut   []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
+	DataIn    []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
 
 // A clio connector task's parameters, carried on a service task as an
@@ -1030,6 +1088,7 @@ type xmlScriptTask struct {
 	// run via the job path rather than inline as FEEL. The pointer is nil when the
 	// <atlas:jobScript> extension is absent.
 	JobScript *xmlAtlasScript            `xml:"extensionElements>jobScript"`
+	IOMapping xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
 	DataOut   []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
 	DataIn    []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
@@ -1111,10 +1170,29 @@ type xmlDecisionInput struct {
 
 // xmlZeebeIOMapInput is a Zeebe io-mapping input: a FEEL source expression bound
 // to a target name. For a business rule task the target is the DMN decision input
-// name the source's value feeds.
+// name the source's value feeds; for the generic activity ioMapping (ADR-0068) it
+// is the activity-local variable the source's value is written to.
 type xmlZeebeIOMapInput struct {
 	Source string `xml:"source,attr"`
 	Target string `xml:"target,attr"`
+}
+
+// xmlZeebeIOMapOutput is a Zeebe io-mapping output: a FEEL source expression
+// (evaluated over the activity-local scope) promoted into the parent scope under
+// target (ADR-0068). It has the same shape as an input; the two are kept distinct
+// so the direction reads clearly in the task structs and helpers.
+type xmlZeebeIOMapOutput struct {
+	Source string `xml:"source,attr"`
+	Target string `xml:"target,attr"`
+}
+
+// xmlZeebeIOMapping is a generic <zeebe:ioMapping> on an activity: input mappings
+// applied on activation and output mappings applied on completion (ADR-0068). It is
+// distinct from a business rule task's ioMapping inputs, which have decision-input
+// semantics; here both directions are plain variable mappings.
+type xmlZeebeIOMapping struct {
+	Inputs  []xmlZeebeIOMapInput  `xml:"input"`
+	Outputs []xmlZeebeIOMapOutput `xml:"output"`
 }
 
 // decisionInputs turns parsed <decisionInput> elements into a name→value map,

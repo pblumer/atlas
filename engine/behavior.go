@@ -148,6 +148,12 @@ func handleElementActivating(c *ProcessingContext) {
 	// behavior runs, so the activity's own FEEL (e.g. a script task's expression)
 	// sees them (ADR-0059).
 	applyDataInputAssociations(c, ei)
+	// Then evaluate its zeebe:ioMapping inputs into its activity-local scope, so the
+	// behavior (and any worker) reads the mapped locals resolving up the scope chain
+	// (ADR-0068). Runs after data-input associations so a mapping can read them.
+	if hasIOMappings(c.process(ei.ProcessDefKey), ei.ElementId) {
+		applyInputMappings(c, c.cmd.Key, ei)
+	}
 	c.p.behavior(ei.BpmnElementType).OnActivated(c, c.cmd.Key, ei)
 	armBoundaryEvents(c, c.cmd.Key, ei)
 }
@@ -204,6 +210,15 @@ func handleElementCompleting(c *ProcessingContext) {
 	// element (ADR-0058). Any element type may carry associations, so this is a
 	// single shared point rather than per-behavior logic.
 	applyDataOutputAssociations(c, ei)
+	// Promote the activity's zeebe:ioMapping outputs to the parent scope, then drop
+	// its activity-local scope, before it completes and any outgoing flow activates
+	// the next element — so downstream FEEL sees the promoted values and never the
+	// dropped locals (ADR-0068). Gated so a mapping-free activity keeps the pre-0068
+	// behaviour with no scope-drop scan.
+	if hasIOMappings(c.process(ei.ProcessDefKey), ei.ElementId) {
+		applyOutputMappings(c, c.cmd.Key, ei)
+		dropLocalScope(c, c.cmd.Key)
+	}
 	c.p.behavior(ei.BpmnElementType).OnCompleting(c, c.cmd.Key, ei)
 	if c.process(ei.ProcessDefKey).Node(ei.ElementId).BoundaryCount > 0 {
 		disarmBoundaryEvents(c, c.cmd.Key, ei.ProcessInstanceKey)
@@ -324,9 +339,18 @@ func handleJobCompleted(c *ProcessingContext) {
 	}
 	c.AppendJobEvent(c.cmd.Key, model.IntentJobCompleted, *job)
 
+	// The worker's output variables land in the job's element scope: its
+	// activity-local scope when the task has output mappings (so those mappings can
+	// read the raw result before it is dropped on completion), otherwise the process
+	// scope — the pre-ADR-0068 merge behaviour. Frozen into VariableCreated events,
+	// so replay re-applies them rather than re-running the worker (invariant I6).
+	resultScope := job.ProcessInstanceKey
+	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
+		resultScope = ioResultScope(c.process(ei.ProcessDefKey), job.ElementInstanceKey, ei)
+	}
 	for i := range c.cmd.StartVars {
 		v := c.cmd.StartVars[i]
-		v.ScopeKey = job.ProcessInstanceKey
+		v.ScopeKey = resultScope
 		c.AppendVariableEvent(model.IntentVariableCreated, v)
 	}
 
@@ -865,6 +889,127 @@ func bindInputs(c *ProcessingContext, inputs []string, scope uint64) map[string]
 	return vars
 }
 
+// bindInputsChain is bindInputs resolving each name up the scope chain from
+// startScope (nearest scope wins), rather than from a single scope (ADR-0068). An
+// activity with I/O mappings starts its own FEEL evaluation from its
+// activity-local scope, so it sees its input-mapped locals shadowing anything
+// inherited; without a local scope (no variables at startScope) it degenerates to
+// reading the enclosing scope, exactly like bindInputs. The reserved
+// processInstanceKey built-in still binds to startScope's key.
+func bindInputsChain(c *ProcessingContext, inputs []string, startScope uint64) map[string]expr.Value {
+	if len(inputs) == 0 {
+		return nil
+	}
+	vars := make(map[string]expr.Value, len(inputs))
+	var piKey uint64
+	havePI := false
+	for _, name := range inputs {
+		if name == builtinProcessInstanceKey {
+			// The built-in is the process-instance key, not the (possibly local)
+			// start scope; resolve it lazily from the start scope's element instance.
+			if !havePI {
+				piKey, havePI = c.processInstanceKeyOfScope(startScope), true
+			}
+			vars[name] = expr.FromStored(expr.KindString, false, strconv.FormatUint(piKey, 10))
+			continue
+		}
+		if vv := c.ResolveVariable(startScope, name); vv != nil {
+			vars[name] = expr.FromStored(toExprKind(vv.Kind), vv.Bool, vv.Text)
+		}
+	}
+	return vars
+}
+
+// processInstanceKeyOfScope returns the process-instance key that owns a scope: the
+// scope's element instance's ProcessInstanceKey for an activity-local scope, or the
+// scope itself when it is the process-instance root (which has no element instance).
+func (c *ProcessingContext) processInstanceKeyOfScope(scope uint64) uint64 {
+	if ei := c.GetElementInstance(scope); ei != nil {
+		return ei.ProcessInstanceKey
+	}
+	return scope
+}
+
+// hasIOMappings reports whether an activity node carries any zeebe:ioMapping input
+// or output mappings (ADR-0068). It gates the activity-local-scope machinery so the
+// common mapping-free activity keeps reading and writing the process scope exactly
+// as before — no local writes, no scope-drop scan.
+func hasIOMappings(cp *compiler.CompiledProcess, elementId int32) bool {
+	n := cp.Node(elementId)
+	return n.IOInCount > 0 || n.IOOutCount > 0
+}
+
+// ioResultScope returns the scope an activity's result variables are written to: its
+// activity-local scope (the element-instance key) when it has output mappings, so
+// the mappings can read the raw result before it is dropped; otherwise the process
+// scope, preserving the pre-ADR-0068 behaviour of merging a result straight into
+// the instance (ADR-0068).
+func ioResultScope(cp *compiler.CompiledProcess, elementKey uint64, ei *model.ElementInstanceValue) uint64 {
+	if cp.Node(ei.ElementId).IOOutCount > 0 {
+		return elementKey
+	}
+	return ei.ProcessInstanceKey
+}
+
+// applyInputMappings evaluates an activating activity's zeebe:ioMapping inputs and
+// writes each into the activity-local scope (keyed by the element-instance key),
+// so the activity's own FEEL and its worker see the mapped locals resolving up the
+// scope chain (ADR-0068). Each source is evaluated over the chain from the local
+// scope, so a later input can read an earlier one and unmapped names resolve to the
+// enclosing scope. The value is frozen into a VariableCreated event, so replay
+// re-applies it rather than re-evaluating (invariants I4/I6).
+func applyInputMappings(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	for _, m := range cp.IOInputs(ei.ElementId) {
+		c.AppendVariableEvent(model.IntentVariableCreated, evalMapping(c, cp, m, key, key))
+	}
+}
+
+// evalMapping evaluates one I/O mapping's FEEL source over the scope chain from
+// evalScope and returns the variable to write at destScope under the mapping's
+// interned target name (ADR-0068). FEEL is null-propagating, so a failed evaluation
+// yields null rather than halting the processor — the same rule the inline script
+// task and data associations follow.
+func evalMapping(c *ProcessingContext, cp *compiler.CompiledProcess, m compiler.IOMapping, evalScope, destScope uint64) model.VariableValue {
+	result, err := m.Source.Eval(bindInputsChain(c, m.Source.Inputs(), evalScope))
+	if err != nil {
+		result = expr.Null
+	}
+	kind, b, text := expr.Classify(result)
+	return model.VariableValue{
+		ScopeKey: destScope,
+		Name:     cp.Intern(m.Target),
+		Kind:     toVarKind(kind),
+		Bool:     b,
+		Text:     text,
+	}
+}
+
+// applyOutputMappings evaluates a completing activity's zeebe:ioMapping outputs over
+// its activity-local scope and promotes each into the parent (flow) scope, so only
+// the selected, possibly reshaped values escape the activity (ADR-0068). Sources are
+// evaluated here (command processing) and frozen into VariableCreated events, so
+// replay re-applies them without re-evaluating (I4/I6). The raw result and input
+// locals are removed separately by dropLocalScope.
+func applyOutputMappings(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	for _, m := range cp.IOOutputs(ei.ElementId) {
+		// Evaluate over the local scope chain (key), promote to the parent (flow) scope.
+		c.AppendVariableEvent(model.IntentVariableCreated, evalMapping(c, cp, m, key, ei.FlowScopeKey))
+	}
+}
+
+// dropLocalScope deletes every variable in an activity's local scope when it
+// completes, after output mappings have promoted what escapes (ADR-0068). Each
+// deletion is a VariableDeleted event so replay reproduces the drop exactly (I6);
+// the scope holds only the activity's input-mapped locals and (with output
+// mappings) its raw result, so scratch data never accumulates in the instance.
+func dropLocalScope(c *ProcessingContext, key uint64) {
+	c.VariablesOfScope(key, func(v model.VariableValue) {
+		c.AppendVariableEvent(model.IntentVariableDeleted, v)
+	})
+}
+
 // startEventBehavior: a none start event has no work; it completes at once.
 type startEventBehavior struct{}
 
@@ -924,9 +1069,11 @@ func (scriptTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *mode
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.ScriptTask(cp.Node(ei.ElementId).Detail)
 
-	// Bind the process variables the expression reads (its inputs) from the
-	// instance scope, then evaluate.
-	result, err := detail.Expr.Eval(bindInputs(c, detail.Expr.Inputs(), ei.ProcessInstanceKey))
+	// Bind the process variables the expression reads (its inputs) resolving up the
+	// activity's scope chain, so it sees any input-mapped locals shadowing inherited
+	// values (ADR-0068); with no I/O mappings this reads the instance scope exactly
+	// as before. Then evaluate.
+	result, err := detail.Expr.Eval(bindInputsChain(c, detail.Expr.Inputs(), key))
 	if err != nil {
 		// Incidents are not modeled yet (Milestone 2); FEEL is null-propagating,
 		// so a failed evaluation yields null rather than halting the processor.
@@ -935,7 +1082,7 @@ func (scriptTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *mode
 
 	kind, b, text := expr.Classify(result)
 	c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
-		ScopeKey: ei.ProcessInstanceKey,
+		ScopeKey: ioResultScope(cp, key, ei),
 		Name:     detail.ResultVar,
 		Kind:     toVarKind(kind),
 		Bool:     b,

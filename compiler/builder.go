@@ -125,6 +125,8 @@ type Builder struct {
 	dataObjects       []CompiledDataObject
 	dataOutAssocs     []pendingDataOut // data-output associations, grouped by node in Build
 	dataInAssocs      []pendingDataIn  // data-input associations, grouped by node in Build
+	ioInputs          []pendingIO      // zeebe:ioMapping inputs, grouped by node in Build
+	ioOutputs         []pendingIO      // zeebe:ioMapping outputs, grouped by node in Build
 	elementIds        []int32          // interned source BPMN id per node, -1 if unset
 	startFormId       int32            // interned start-form id (ADR-0028), -1 if the process has none
 
@@ -486,6 +488,39 @@ func (b *Builder) AddDataOutputAssociation(node int32, dataObject string, value 
 	})
 }
 
+// pendingIO pairs a zeebe:ioMapping entry (input or output) with the activity node
+// it belongs to, until Build groups the two directions into their shared per-node
+// arrays.
+type pendingIO struct {
+	node    int32
+	mapping IOMapping
+}
+
+// AddInputMapping attaches a zeebe:ioMapping input to activity node: when the
+// activity activates, the engine evaluates source (a FEEL expression over the scope
+// chain from the activity's flow scope) and writes the result into the activity-local
+// variable named target, which the activity then sees (ADR-0068). Build groups a
+// node's input mappings into a shared array. The parser owns validation; the builder
+// only interns the target, mirroring the data-association adds.
+func (b *Builder) AddInputMapping(node int32, target string, source *expr.Compiled) {
+	b.ioInputs = append(b.ioInputs, pendingIO{
+		node:    node,
+		mapping: IOMapping{Target: b.intern(target), Source: source},
+	})
+}
+
+// AddOutputMapping attaches a zeebe:ioMapping output to activity node: when the
+// activity completes, the engine evaluates source (a FEEL expression over the
+// activity-local scope) and promotes the result into the parent (flow) scope under
+// the variable named target (ADR-0068). Build groups a node's output mappings into a
+// shared array.
+func (b *Builder) AddOutputMapping(node int32, target string, source *expr.Compiled) {
+	b.ioOutputs = append(b.ioOutputs, pendingIO{
+		node:    node,
+		mapping: IOMapping{Target: b.intern(target), Source: source},
+	})
+}
+
 // AddTask adds an undefined/manual task — one with no execution semantics — and
 // returns its element id. It carries no detail and simply passes the token
 // straight through, so a model can be drafted and its routing tested before its
@@ -653,6 +688,32 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		n.DataInCount = int32(len(dataIn)) - n.DataInStart
 	}
 
+	// Group zeebe:ioMapping input and output mappings by their activity node into
+	// two shared arrays, mirroring the data-association grouping, so evaluating an
+	// activity's mappings is an allocation-free slice at runtime (ADR-0068).
+	var ioIn []IOMapping
+	for i := range b.nodes {
+		n := &b.nodes[i]
+		n.IOInStart = int32(len(ioIn))
+		for _, p := range b.ioInputs {
+			if p.node == n.ElementId {
+				ioIn = append(ioIn, p.mapping)
+			}
+		}
+		n.IOInCount = int32(len(ioIn)) - n.IOInStart
+	}
+	var ioOut []IOMapping
+	for i := range b.nodes {
+		n := &b.nodes[i]
+		n.IOOutStart = int32(len(ioOut))
+		for _, p := range b.ioOutputs {
+			if p.node == n.ElementId {
+				ioOut = append(ioOut, p.mapping)
+			}
+		}
+		n.IOOutCount = int32(len(ioOut)) - n.IOOutStart
+	}
+
 	// Count incoming flows per node, so a parallel join knows how many tokens to
 	// wait for.
 	for _, f := range b.flows {
@@ -689,6 +750,8 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		dataObjects:       b.dataObjects,
 		dataOutAssocs:     dataOut,
 		dataInAssocs:      dataIn,
+		ioInputs:          ioIn,
+		ioOutputs:         ioOut,
 		startEvents:       startEvents,
 		elementIds:        b.elementIds,
 		startFormId:       b.startFormId,

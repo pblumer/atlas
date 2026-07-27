@@ -102,6 +102,11 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// (ADR-0048). Derived only from the event header (timestamp/position)
 			// and the variable value, so replay rebuilds it identically (I4).
 			return tx.RecordVariableSnapshot(h.Timestamp, h.Position, &v.variable)
+		case model.IntentVariableDeleted:
+			// Dropping an activity-local scope on completion (ADR-0068). The delete is
+			// idempotent and carries no snapshot: the local was scratch state, so its
+			// removal is not part of the instance's variable timeline.
+			return tx.DeleteVariable(v.variable.ScopeKey, v.variable.Name)
 		}
 
 	case model.VTDataObject:

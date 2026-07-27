@@ -189,6 +189,15 @@ const (
 	// resulting inputs/outputs/trace are frozen into the event so replay re-applies
 	// them without re-evaluating (invariant I6).
 	IntentDecisionEvaluated
+
+	// IntentVariableDeleted removes a variable from its scope. It applies like the
+	// inverse of VariableCreated (the variable is deleted rather than put), and is
+	// appended at the end so every prior intent keeps its numeric value on the log.
+	// Its use is dropping an activity-local variable scope when the activity
+	// completes, after I/O output mappings have promoted the values that escape
+	// (ADR-0068): the drop is emitted as one VariableDeleted per local variable, so
+	// replay reproduces it exactly (invariant I6) rather than recomputing it.
+	IntentVariableDeleted
 )
 
 func (i Intent) String() string {
@@ -249,6 +258,8 @@ func (i Intent) String() string {
 		return "DataObjectStateChanged"
 	case IntentDecisionEvaluated:
 		return "DecisionEvaluated"
+	case IntentVariableDeleted:
+		return "VariableDeleted"
 	default:
 		return "Intent(?)"
 	}
