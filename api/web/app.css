@@ -1147,6 +1147,81 @@ tr[hidden] { display: none; }
 .pgroup.collapsed .pgroup-body { display: none; }
 .pgroup .pgroup-body > h3 { display: none; } /* a nested legacy header, if any */
 
+/* Input/Output variable mapping groups (ADR-0068), Camunda-style: a collapsible
+   list group per direction whose header carries an add button, a count badge and a
+   collapse chevron, with one collapsible card per mapping. */
+.io-group { border-top: 1px solid var(--border); }
+.io-group-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 2px 12px 0; cursor: pointer; user-select: none;
+}
+.io-group-title {
+  flex: 1; font-size: 13px; font-weight: 600; letter-spacing: .01em; color: var(--text);
+  text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--border-strong);
+}
+.io-group-head:hover .io-group-title { color: var(--accent); }
+.io-group-add {
+  display: inline-grid; place-items: center; width: 22px; height: 22px; flex: none;
+  border: none; background: none; border-radius: 5px; cursor: pointer;
+  color: var(--muted); font-size: 17px; line-height: 1;
+}
+.io-group-add:hover { background: var(--accent-soft); color: var(--accent); }
+.io-group-count {
+  display: inline-grid; place-items: center; min-width: 20px; height: 20px; flex: none;
+  padding: 0 5px; border-radius: 10px; background: var(--muted); color: #fff;
+  font-size: 11px; font-weight: 700;
+}
+.io-group-chevron {
+  color: var(--muted); font-size: 11px; width: 12px; flex: none; text-align: center;
+  transition: transform .12s ease;
+}
+.io-group.collapsed .io-group-chevron { transform: rotate(-90deg); }
+.io-group.collapsed .io-group-body { display: none; }
+.io-group-body { padding: 0 0 12px 0; }
+.io-group-hint { font-size: 12px; margin: 8px 0 0; }
+
+.io-map-list { display: flex; flex-direction: column; gap: 8px; }
+.io-map { border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+.io-map-head {
+  display: flex; align-items: center; gap: 6px; padding: 8px 8px 8px 6px;
+  cursor: pointer; user-select: none;
+}
+.io-map-chevron {
+  color: var(--muted); font-size: 11px; width: 12px; flex: none; text-align: center;
+  transition: transform .12s ease;
+}
+.io-map.collapsed .io-map-chevron { transform: rotate(-90deg); }
+.io-map-title {
+  flex: 1; font-size: 13px; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.io-map-del {
+  display: inline-grid; place-items: center; width: 24px; height: 24px; flex: none;
+  border: none; background: none; border-radius: 5px; cursor: pointer;
+  color: var(--muted); opacity: 0; transition: opacity .1s ease;
+}
+.io-map-head:hover .io-map-del,
+.io-map-del:focus-visible { opacity: 1; }
+.io-map-del:hover { background: #fdecea; color: var(--danger); }
+.io-map-body { padding: 0 10px 10px; }
+.io-map.collapsed .io-map-body { display: none; }
+.io-map-body .field { margin: 8px 0 0; }
+.io-fx {
+  float: right; font: italic 700 12px/1.4 ui-monospace, monospace; color: var(--accent);
+}
+.io-assign { display: flex; align-items: stretch; }
+.io-assign .io-eq {
+  display: grid; place-items: center; width: 30px; flex: none;
+  border: 1px solid var(--border-strong); border-right: none;
+  border-radius: 6px 0 0 6px; background: var(--bg); color: var(--muted);
+  font: 700 13px/1 ui-monospace, monospace;
+}
+.io-assign .io-source {
+  flex: 1 1 auto; min-width: 0; margin-top: 0 !important;
+  border-radius: 0 6px 6px 0 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 /* Docked Variables panel (Camunda-style) — a modeling aid listing the variables
    the diagram writes and which element writes each. Toggled from the toolbar. */
 .vars-panel {
