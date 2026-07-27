@@ -897,7 +897,10 @@ export function attachExpressionToggle(el, opts = {}) {
   btn.className = "fx-toggle";
   btn.textContent = "fx";
   btn.title = "Toggle between a literal value and a FEEL expression (=)";
+  // Prefer the field label (a labelled row); fall back to sitting inline before the
+  // input for fields without a .field/span wrapper (e.g. a map value cell).
   if (span) span.appendChild(btn);
+  else el.insertAdjacentElement("beforebegin", btn);
 
   let feelHandle = null;
   const isExpr = () => el.value.trimStart().startsWith("=");
@@ -993,9 +996,9 @@ const SERVICE_TASK_KINDS = [
     fields: [
       { group: "HTTP endpoint" },
       { key: "method", label: "Method", type: "select", options: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] },
-      { key: "url", label: "URL", placeholder: "https://api.example.com/customers" },
-      { key: "headers", label: "Headers", type: "map", childType: "atlas:HttpHeader", hint: "Sent with the request." },
-      { key: "queryParameters", label: "Query parameters", type: "map", childType: "atlas:QueryParam", hint: "Appended to the request URL." },
+      { key: "url", label: "URL", placeholder: "https://api.example.com/customers", fx: true },
+      { key: "headers", label: "Headers", type: "map", childType: "atlas:HttpHeader", fx: true, hint: "Sent with the request. A value may be a FEEL expression (fx)." },
+      { key: "queryParameters", label: "Query parameters", type: "map", childType: "atlas:QueryParam", fx: true, hint: "Appended to the request URL. A value may be a FEEL expression (fx)." },
       { group: "Authentication" },
       {
         key: "authType", label: "Type", type: "select", reRender: true,
@@ -1031,10 +1034,12 @@ function selectOption(o) {
 }
 
 // stMapRowHTML renders one key/value row of a map field (a header or query param).
+// The value is a 1-row textarea so the fx toggle can upgrade it to a FEEL editor in
+// place (a plain input can't host the code editor).
 function stMapRowHTML(fieldKey, name, value) {
-  return `<div class="st-map-row" data-field="${esc(fieldKey)}" style="display:flex;gap:6px;margin-bottom:6px">
+  return `<div class="st-map-row" data-field="${esc(fieldKey)}" style="display:flex;gap:6px;margin-bottom:6px;align-items:start">
     <input type="text" class="st-map-name" value="${esc(name || "")}" placeholder="name" style="flex:0 0 40%"/>
-    <input type="text" class="st-map-value" value="${esc(value || "")}" placeholder="value" style="flex:1"/>
+    <textarea class="st-map-value" rows="1" spellcheck="false" placeholder="value" style="flex:1;resize:none">${esc(value || "")}</textarea>
     <button type="button" class="st-map-del" title="Remove" style="flex:0 0 auto">✕</button>
   </div>`;
 }
@@ -1072,6 +1077,10 @@ function serviceTaskKindHTML(bo) {
         return `<option value="${esc(v)}" ${v === chosen ? "selected" : ""}>${esc(l)}</option>`;
       }).join("");
       fields += `<label class="field"><span>${esc(f.label)}</span><select id="f-st-${f.key}">${opts}</select></label>`;
+    } else if (f.fx) {
+      // A 1-row textarea so the fx toggle can host the FEEL editor in place.
+      fields += `<label class="field"><span>${esc(f.label)}</span>
+        <textarea id="f-st-${f.key}" rows="1" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
     } else {
       fields += `<label class="field"><span>${esc(f.label)}</span>
         <input type="text" id="f-st-${f.key}" value="${esc(ext[f.key] || "")}" placeholder="${esc(f.placeholder || "")}"/></label>`;
@@ -2344,17 +2353,29 @@ function wireProperties(root, modeler, api, projectId, toast) {
         if (f.reRender) show(element); // e.g. auth type: reveal the scheme's fields
       });
     }
+    // Value-or-expression (fx) support: an fx field can hold a literal or a FEEL
+    // expression (stored '=' prefixed, exactly what the compiler keys on). The
+    // toggle swaps the editing surface; the value the save wiring reads is the same
+    // field element, so no save/load change is needed.
+    const stFeelVars = variablesForCompletion(modeler, element);
+    const stValidate = api ? (expression) => api("POST", "/api/v1/feel/validate", { expression }) : null;
+    const stAttachFx = (el) => { if (el) attachExpressionToggle(el, { variables: stFeelVars, validate: stValidate }); };
+    if (stKind.fields.some((f) => f.key === "url" && f.fx)) stAttachFx(body.querySelector("#f-st-url"));
+
     // Map editors: a name/value row list with add/remove. Edits and removals save;
-    // adding inserts an empty row (it saves once the author types a name).
+    // adding inserts an empty row (it saves once the author types a name). When the
+    // map is fx-capable, each value cell carries the fx toggle.
     for (const f of stKind.fields) {
       if (f.type !== "map") continue;
       const cont = body.querySelector(`.st-map[data-field="${f.key}"]`);
       if (!cont) continue;
+      if (f.fx) cont.querySelectorAll(".st-map-value").forEach(stAttachFx);
       cont.addEventListener("change", saveKindFields);
       cont.addEventListener("click", (e) => {
         if (e.target.closest(".st-map-add")) {
           e.preventDefault();
           cont.querySelector(".st-map-rows").insertAdjacentHTML("beforeend", stMapRowHTML(f.key, "", ""));
+          if (f.fx) stAttachFx(cont.querySelector(".st-map-row:last-child .st-map-value"));
         } else if (e.target.closest(".st-map-del")) {
           e.preventDefault();
           e.target.closest(".st-map-row").remove();

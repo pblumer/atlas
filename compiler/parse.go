@@ -53,22 +53,49 @@ func normalizeHTTPMethod(m string) (string, error) {
 // incomplete row the author hasn't filled in). A duplicated name is an error, so a
 // silent last-wins collision can't hide a modeling mistake. kind names the field
 // for the error message ("header" / "query parameter").
-func httpKVMap(taskID, kind string, kvs []xmlHTTPKV) (map[string]string, error) {
+func httpKVList(taskID, kind string, kvs []xmlHTTPKV) ([]RestKV, error) {
 	if len(kvs) == 0 {
 		return nil, nil
 	}
-	out := make(map[string]string, len(kvs))
+	out := make([]RestKV, 0, len(kvs))
+	seen := make(map[string]bool, len(kvs))
 	for _, kv := range kvs {
 		name := strings.TrimSpace(kv.Name)
 		if name == "" {
 			continue
 		}
-		if _, dup := out[name]; dup {
+		if seen[name] {
 			return nil, fmt.Errorf("compiler: rest connector task %q has a duplicate %s %q", taskID, kind, name)
 		}
-		out[name] = kv.Value
+		seen[name] = true
+		val, err := restValue(taskID, kind+" "+name, kv.Value)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, RestKV{Name: name, Val: val})
 	}
 	return out, nil
+}
+
+// restValue turns a model field value into a literal or a compiled FEEL expression
+// (the Camunda-style fx toggle, ADR-0067): a value with a leading '=' is a FEEL
+// expression compiled once at deploy time (invariant I5) and evaluated over the
+// instance's variables at call time; otherwise it is a literal used verbatim. what
+// names the field for error messages.
+func restValue(taskID, what, raw string) (RestExpr, error) {
+	trimmed := strings.TrimSpace(raw)
+	if !strings.HasPrefix(trimmed, "=") {
+		return RestExpr{Literal: raw}, nil
+	}
+	text := strings.TrimSpace(trimmed[1:])
+	if text == "" {
+		return RestExpr{}, fmt.Errorf("compiler: rest connector task %q has an empty FEEL expression for %s", taskID, what)
+	}
+	e, err := expr.CompileAuto(text)
+	if err != nil {
+		return RestExpr{}, fmt.Errorf("compiler: rest connector task %q: %s: %w", taskID, what, err)
+	}
+	return RestExpr{Expr: e}, nil
 }
 
 // restAuth reads a REST connector's authentication config from its extension.
@@ -316,11 +343,15 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			if err != nil {
 				return nil, fmt.Errorf("compiler: rest connector task %q: %w", st.Id, err)
 			}
-			headers, err := httpKVMap(st.Id, "header", c.Headers)
+			url, err := restValue(st.Id, "url", c.Url)
 			if err != nil {
 				return nil, err
 			}
-			query, err := httpKVMap(st.Id, "query parameter", c.QueryParams)
+			headers, err := httpKVList(st.Id, "header", c.Headers)
+			if err != nil {
+				return nil, err
+			}
+			query, err := httpKVList(st.Id, "query parameter", c.QueryParams)
 			if err != nil {
 				return nil, err
 			}
@@ -328,7 +359,15 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			if err != nil {
 				return nil, err
 			}
-			id := b.AddRestConnectorTask(method, strings.TrimSpace(c.Url), strings.TrimSpace(c.ResultVariable), headers, query, auth, retries)
+			id := b.AddRestConnectorTask(RestConfig{
+				Method:    method,
+				Url:       url,
+				ResultVar: strings.TrimSpace(c.ResultVariable),
+				Headers:   headers,
+				Query:     query,
+				Auth:      auth,
+				Retries:   retries,
+			})
 			if err := register(st.Id, id); err != nil {
 				return nil, err
 			}

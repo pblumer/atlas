@@ -38,8 +38,8 @@ func TestParseRestConnectorTask(t *testing.T) {
 	if got := cp.Intern(d.Method); got != "POST" { // upper-cased at deploy time
 		t.Errorf("method = %q, want POST", got)
 	}
-	if got := cp.Intern(d.Url); got != "https://api.example.com/customers" {
-		t.Errorf("url = %q, want the model URL", got)
+	if d.Url.Expr != nil || d.Url.Literal != "https://api.example.com/customers" {
+		t.Errorf("url = %+v, want the literal model URL", d.Url)
 	}
 	if got := cp.Intern(d.ResultVar); got != "created" {
 		t.Errorf("resultVar = %q, want created", got)
@@ -158,15 +158,13 @@ func TestParseRestConnectorHeadersQueryAuth(t *testing.T) {
 	}
 	task := cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target
 	d := cp.ConnectorTask(cp.Node(task).Detail)
-	if got := cp.Intern(d.Headers); got != `{"Accept":"application/json","X-Trace":"on"}` {
-		t.Errorf("headers = %q, want the canonical JSON object", got)
+	// Headers keep model order; the empty-named row is dropped as incomplete.
+	if len(d.Headers) != 2 || d.Headers[0].Name != "Accept" || d.Headers[0].Val.Literal != "application/json" ||
+		d.Headers[1].Name != "X-Trace" || d.Headers[1].Val.Literal != "on" {
+		t.Errorf("headers = %+v, want Accept + X-Trace literals only", d.Headers)
 	}
-	if got := cp.Intern(d.Query); got != `{"page":"1"}` {
-		t.Errorf("query = %q, want the canonical JSON object", got)
-	}
-	// A header with an empty name is an incomplete row and is dropped, not stored.
-	if strings.Contains(cp.Intern(d.Headers), `""`) {
-		t.Errorf("headers %q should not contain an empty-named entry", cp.Intern(d.Headers))
+	if len(d.Query) != 1 || d.Query[0].Name != "page" || d.Query[0].Val.Literal != "1" {
+		t.Errorf("query = %+v, want page=1", d.Query)
 	}
 	if got := cp.Intern(d.Auth); got != `{"type":"bearer","secretRef":"TODO_TOKEN"}` {
 		t.Errorf("auth = %q, want a bearer auth referencing the secret", got)
@@ -211,7 +209,74 @@ func TestParseRestConnectorNoAuthNoMaps(t *testing.T) {
 	}
 	task := cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target
 	d := cp.ConnectorTask(cp.Node(task).Detail)
-	if d.Headers != -1 || d.Query != -1 || d.Auth != -1 {
-		t.Errorf("headers/query/auth = %d/%d/%d, want -1/-1/-1 (none)", d.Headers, d.Query, d.Auth)
+	if len(d.Headers) != 0 || len(d.Query) != 0 || d.Auth != -1 {
+		t.Errorf("headers/query/auth = %+v/%+v/%d, want none/none/-1", d.Headers, d.Query, d.Auth)
+	}
+	if d.Url.Expr != nil {
+		t.Errorf("url expr = %v, want a literal url", d.Url.Expr)
+	}
+}
+
+// A url, header, or query value with a leading '=' compiles to a FEEL expression
+// evaluated over the instance's variables at call time (ADR-0067). A literal value
+// stays literal.
+func TestParseRestConnectorFeelFields(t *testing.T) {
+	const bpmn = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0">
+  <bpmn:process id="p">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t">
+      <bpmn:extensionElements>
+        <atlas:restConnector method="GET" url="=&quot;https://api/&quot; + string(customerId)">
+          <atlas:httpHeader name="X-Trace" value="=traceId"/>
+          <atlas:httpHeader name="Accept" value="application/json"/>
+          <atlas:queryParam name="since" value="=order.since"/>
+        </atlas:restConnector>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+	cp, err := Parse(1, 1, strings.NewReader(bpmn))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	task := cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target
+	d := cp.ConnectorTask(cp.Node(task).Detail)
+	if d.Url.Expr == nil {
+		t.Errorf("url should be a compiled FEEL expression, got literal %q", d.Url.Literal)
+	}
+	// X-Trace is FEEL, Accept is literal.
+	if d.Headers[0].Name != "X-Trace" || d.Headers[0].Val.Expr == nil {
+		t.Errorf("X-Trace should be a FEEL header, got %+v", d.Headers[0])
+	}
+	if d.Headers[1].Name != "Accept" || d.Headers[1].Val.Expr != nil || d.Headers[1].Val.Literal != "application/json" {
+		t.Errorf("Accept should be a literal header, got %+v", d.Headers[1])
+	}
+	if d.Query[0].Val.Expr == nil {
+		t.Errorf("since query param should be a FEEL expression, got %+v", d.Query[0])
+	}
+}
+
+// A malformed FEEL expression in a field fails the compile.
+func TestParseRestConnectorFeelError(t *testing.T) {
+	const bpmn = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas.dev/schema/1.0">
+  <bpmn:process id="p">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t">
+      <bpmn:extensionElements>
+        <atlas:restConnector method="GET" url="=("/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+	if _, err := Parse(1, 1, strings.NewReader(bpmn)); err == nil {
+		t.Fatal("Parse: want an error for a malformed FEEL url expression, got nil")
 	}
 }

@@ -238,17 +238,37 @@ type ConnectorTaskDetail struct {
 	Subject   int32 // interned clio target subject → index, -1 if not a clio task
 	EventType int32 // interned clio event type → index, -1 if not a clio task
 	Method    int32 // interned HTTP method → index, -1 if not a REST task
-	Url       int32 // interned full request URL → index, -1 if not a REST task
 	ResultVar int32 // interned REST result variable name → index, -1 if none
-	// Headers and Query are interned JSON objects ({name:value}) of the request
-	// headers and query parameters a REST task adds, -1 when none (ADR-0067). Auth
-	// is an interned JSON object describing the request's authentication —
+	// Url is the request endpoint, Headers and Query the request headers and query
+	// parameters a REST task adds (ADR-0067). Each value is literal or a FEEL
+	// expression evaluated over the instance's variables at call time (the
+	// Camunda-style fx toggle) — see RestExpr. Url is the zero RestExpr for a
+	// non-REST (clio) task; Headers/Query are then nil. Auth is an interned JSON
+	// object describing the request's authentication —
 	// {"type","username","apiKeyName","secretRef"} — where secretRef names a
 	// server-side secret (ADR-0041), never the value; -1 when unauthenticated.
-	Headers int32
-	Query   int32
+	Url     RestExpr
+	Headers []RestKV
+	Query   []RestKV
 	Auth    int32
 	Retries int32
+}
+
+// RestExpr is a REST connector field value that is either a literal string
+// (Expr == nil, use Literal) or a FEEL expression evaluated over the instance's
+// variables at call time (Expr != nil), compiled once at deploy time (invariant
+// I5, ADR-0008/0067). It backs the modeler's fx toggle: a model value with a
+// leading '=' is an expression, otherwise a literal.
+type RestExpr struct {
+	Literal string
+	Expr    *expr.Compiled
+}
+
+// RestKV is a named REST field value (one request header or query parameter): its
+// Name and a value that may be literal or a FEEL expression.
+type RestKV struct {
+	Name string
+	Val  RestExpr
 }
 
 // ScriptJobTaskDetail is the per-script-job-task data a behavior needs at
