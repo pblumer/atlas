@@ -12,6 +12,11 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 	case model.VTProcessInstance:
 		switch h.Intent {
 		case model.IntentActivated:
+			// The creation time comes only from this event's header timestamp, so
+			// replay rebuilds the identical value — invariants I4/I6. It rides on the
+			// active record and is copied into the history record on completion below,
+			// so a finished instance still reports when it started.
+			v.process.CreatedAt = h.Timestamp
 			return tx.PutProcessInstance(h.Key, &v.process)
 		case model.IntentCompleted, model.IntentTerminated:
 			// Retain a history record so operators can inspect finished

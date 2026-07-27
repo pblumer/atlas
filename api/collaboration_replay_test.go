@@ -172,6 +172,93 @@ func TestCollaborationReplayRuntime(t *testing.T) {
 	}
 }
 
+// TestInstancesExposeStartMetadata deploys the Kunde/Lieferant collaboration,
+// runs the exchange, and checks the instances listing surfaces the operator
+// metadata the Operations overview shows: every instance reports when it started
+// (createdAt) and its completion time, and the message-started Lieferant reports
+// the correlation key its start event evaluated over the order payload. The
+// API-started Kunde reports no correlation key.
+func TestInstancesExposeStartMetadata(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", replayBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	var dep collabDeployResp
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v (%s)", err, body)
+	}
+	var kundeKey uint64
+	for _, d := range dep.Deployments {
+		if d.ProcessID == "kunde" {
+			kundeKey = d.Key
+		}
+	}
+	if kundeKey == 0 {
+		t.Fatalf("missing kunde key: %+v", dep)
+	}
+
+	code, body = doReq(t, ts, http.MethodPost,
+		fmt.Sprintf("/api/v1/processes/%d/instances", kundeKey),
+		`{"variables":{"orderId":"order-1"}}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("start kunde: status=%d body=%s", code, body)
+	}
+
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/instances", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("instances status=%d body=%s", code, body)
+	}
+	var insts []struct {
+		ProcessID      string `json:"processId"`
+		State          string `json:"state"`
+		CreatedAt      int64  `json:"createdAt"`
+		CompletedAt    int64  `json:"completedAt"`
+		CorrelationKey string `json:"correlationKey"`
+	}
+	if err := json.Unmarshal(body, &insts); err != nil {
+		t.Fatalf("decode instances: %v (%s)", err, body)
+	}
+	if len(insts) != 2 {
+		t.Fatalf("instances = %d, want 2 (kunde + lieferant): %s", len(insts), body)
+	}
+
+	byProc := map[string]struct {
+		ProcessID      string `json:"processId"`
+		State          string `json:"state"`
+		CreatedAt      int64  `json:"createdAt"`
+		CompletedAt    int64  `json:"completedAt"`
+		CorrelationKey string `json:"correlationKey"`
+	}{}
+	for _, in := range insts {
+		byProc[in.ProcessID] = in
+	}
+
+	lieferant, ok := byProc["lieferant"]
+	if !ok {
+		t.Fatalf("lieferant instance missing: %s", body)
+	}
+	if lieferant.CorrelationKey != "order-1" {
+		t.Errorf("lieferant correlationKey = %q, want order-1 (evaluated over the order payload)", lieferant.CorrelationKey)
+	}
+	kunde, ok := byProc["kunde"]
+	if !ok {
+		t.Fatalf("kunde instance missing: %s", body)
+	}
+	if kunde.CorrelationKey != "" {
+		t.Errorf("kunde correlationKey = %q, want empty (started via the API, not a message)", kunde.CorrelationKey)
+	}
+	for _, in := range insts {
+		if in.CreatedAt <= 0 {
+			t.Errorf("%s createdAt = %d, want > 0", in.ProcessID, in.CreatedAt)
+		}
+		if in.CompletedAt < in.CreatedAt {
+			t.Errorf("%s completedAt %d precedes createdAt %d", in.ProcessID, in.CompletedAt, in.CreatedAt)
+		}
+	}
+}
+
 // TestCollaborationRuntimeStandalone confirms the endpoint degrades gracefully for
 // a plain (non-collaboration) process: it reports the single definition as the
 // lone pool with no message flows, and the process is not flagged as a

@@ -3219,6 +3219,58 @@ export async function mountLive(root, { api, toast, key, instance }) {
   // completedAt is unix nanoseconds; Date wants milliseconds.
   const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "";
 
+  // fmtDuration renders a nanosecond span as a short human duration (the age of
+  // a running instance, or how long a finished one took).
+  const fmtDuration = (ns) => {
+    if (!ns || ns < 0) return "";
+    const ms = ns / 1e6;
+    if (ms < 1000) return `${Math.round(ms)}ms`;
+    const s = Math.floor(ms / 1000);
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s / 60), rs = s % 60;
+    if (m < 60) return rs ? `${m}m ${rs}s` : `${m}m`;
+    const h = Math.floor(m / 60), rm = m % 60;
+    if (h < 24) return rm ? `${h}h ${rm}m` : `${h}h`;
+    const d = Math.floor(h / 24), rh = h % 24;
+    return rh ? `${d}d ${rh}h` : `${d}d`;
+  };
+
+  // instanceMeta renders the operator facts the Operations overview shows beside
+  // an instance's variables: when it started, how long it ran (or — for a live
+  // one — has been running, filled in by updateElapsed), and the message
+  // correlation key it began with. Shared by the single-instance detail and the
+  // all-instances overview so both surface the same facts.
+  const metaItem = (label, value, title) =>
+    `<span class="vp-meta-item" title="${esc(title)}"><span class="vp-meta-k">${esc(label)}</span> ${value}</span>`;
+  const instanceMeta = (inst) => {
+    const bits = [];
+    if (inst.createdAt) {
+      bits.push(metaItem("started", esc(fmtNano(inst.createdAt)), "When this instance started"));
+      if (inst.completedAt) {
+        bits.push(metaItem("took", esc(fmtDuration(inst.completedAt - inst.createdAt)), "How long this instance ran"));
+      } else if (inst.state === "active") {
+        // The live elapsed is filled by updateElapsed rather than baked into the
+        // markup, so a ticking value never forces a panel rebuild (which would
+        // reset an expanded JSON card's scroll).
+        bits.push(metaItem("running for", `<span class="vp-elapsed" data-created="${inst.createdAt}"></span>`, "How long this instance has been running"));
+      }
+    }
+    if (inst.correlationKey) {
+      bits.push(metaItem("correlationKey", `<code>${esc(inst.correlationKey)}</code>`, "The message correlation key this instance started with"));
+    }
+    return bits.length ? `<div class="vp-meta">${bits.join("")}</div>` : "";
+  };
+
+  // updateElapsed fills every live "running for" span from the current clock,
+  // outside the varsHTML diff so a ticking duration never forces a rebuild.
+  function updateElapsed() {
+    const now = Date.now() * 1e6;
+    varPanel.querySelectorAll(".vp-elapsed[data-created]").forEach((el) => {
+      const created = Number(el.getAttribute("data-created"));
+      el.textContent = created ? fmtDuration(now - created) : "";
+    });
+  }
+
   // tasksFor returns the open user-task jobs waiting in the given instance, newest
   // first — the "jump to the form" targets for a running instance.
   const tasksFor = (instanceKey) =>
@@ -3395,6 +3447,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
                 ? `<a class="task-link inline" href="#/tasks/t/${ts[0].key}" title="Open the waiting task's form">&#128203; Task&#8599;</a>`
                 : ""}<a class="replay-link" href="#/operations/i/${r.key}" title="Replay this instance step by step">&#9654; Replay</a></span>
             </div>
+            ${instanceMeta(r)}
             <div class="vp-inst-vars">${varChips(r.variables)}</div>
           </div>`;
         }).join("")}</div>`;
@@ -3412,13 +3465,15 @@ export async function mountLive(root, { api, toast, key, instance }) {
                 : `<span class="pill">${esc(inst.state)}</span>${when ? ` <span class="muted">${esc(when)}</span>` : ""}`}</span>
             <span class="vp-actions">${copyAllBtn(inst.variables)}<a class="replay-link" href="#/operations/i/${inst.key}" title="Replay this instance step by step">&#9654; Replay</a></span>
           </div>
+          ${instanceMeta(inst)}
           ${renderTaskLinks(tasksFor(inst.key))}
           <div class="vars">${renderVarsBody(inst.variables, jsonCollapsed)}</div>`;
       }
     }
-    if (html === varsHTML) return; // nothing changed — keep the DOM (and scroll) intact
+    if (html === varsHTML) { updateElapsed(); return; } // unchanged — keep DOM, just tick the age
     varsHTML = html;
     varPanel.innerHTML = html;
+    updateElapsed();
   }
 
   async function poll() {

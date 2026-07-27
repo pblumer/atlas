@@ -558,6 +558,25 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .var-panel .vp-inst-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
 .var-panel .vp-inst-vars { margin-top: 6px; }
 .var-panel .vp-inst-vars:empty { display: none; }
+
+/* Operator metadata for an instance — when it started, how long it ran (or has
+   been running), and the message correlation key it began with — shown under the
+   header in the single-instance detail and inside each overview card. */
+.var-panel .vp-meta {
+  display: flex; flex-wrap: wrap; gap: 3px 14px; margin-top: 6px;
+  font-size: 11px; color: var(--muted); text-transform: none; letter-spacing: 0;
+}
+.var-panel.side > .vp-meta { padding: 6px 14px 0; }
+.var-panel .vp-meta-item { display: inline-flex; align-items: baseline; gap: 5px; }
+.var-panel .vp-meta-k {
+  text-transform: uppercase; letter-spacing: 0.03em; font-size: 10px; opacity: 0.75;
+}
+.var-panel .vp-meta code {
+  font: 600 11px/1.4 ui-monospace, monospace; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border);
+  padding: 0 5px; border-radius: 4px;
+}
+.var-panel .vp-elapsed { font-variant-numeric: tabular-nums; }
 /* Collapsed: the panel and its divider fold away, leaving the diagram full-width.
    The toolbar toggle (#vars-toggle) reflects state via aria-pressed. */
 .editor.live.vars-collapsed .var-panel.side,

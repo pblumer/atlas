@@ -16,6 +16,7 @@ package engine
 
 import (
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
@@ -89,7 +90,7 @@ func (p *Processor) Deploy(cp *compiler.CompiledProcess) {
 	p.processes[cp.Key] = cp
 	for _, ms := range cp.MessageStartEvents() {
 		p.messageStarts[ms.MessageName] = append(p.messageStarts[ms.MessageName],
-			messageStartRef{defKey: cp.Key, elementId: ms.ElementId})
+			messageStartRef{defKey: cp.Key, elementId: ms.ElementId, correlationKey: ms.CorrelationKey})
 	}
 }
 
@@ -108,9 +109,13 @@ func (p *Processor) Undeploy(defKey uint64) {
 
 // messageStartRef points a starting message at the definition it instantiates
 // and the message-start element it flows into (for the collaboration replay).
+// correlationKey is the event's compiled correlation-key expression, evaluated
+// over the starting message's payload so the created instance records the key it
+// began with (ADR-0020); nil when the event declares none.
 type messageStartRef struct {
-	defKey    uint64
-	elementId int32
+	defKey         uint64
+	elementId      int32
+	correlationKey *expr.Compiled
 }
 
 // removeStartRef returns refs with the first entry for defKey removed. A name
