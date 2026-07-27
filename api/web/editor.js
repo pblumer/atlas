@@ -3292,25 +3292,31 @@ export async function mountCollaboration(root, { api, toast, key }) {
 }
 
 // mountInstanceReplay renders one process instance read-only and replays it step
-// by step (ADR-0046): the instance's definition diagram with a transport bar that
-// walks the token through the elements in the order they activated. Each step
-// pulses the entered element and, when the two steps are joined by a sequence
-// flow, animates a token dot along that edge — the single-process analogue of the
-// collaboration message-flow replay. The timeline is polled so a still-running
+// by step (ADR-0046), in a Camunda-Operate-style layout: a metadata header, the
+// definition diagram with per-element execution-count badges and a play/step/scrub
+// transport that walks the tokens through the elements in activation order, an
+// instance-history tree, and a tabbed inspector (Details / Variables) for the
+// element the operator selects. Selecting an element in the diagram or the history
+// cross-highlights both and shows that element instance's facts and the variables
+// as they stood when it activated. The timeline is polled so a still-running
 // instance keeps gaining steps live.
 export async function mountInstanceReplay(root, { api, toast, key }) {
   cleanup();
 
   root.innerHTML = `
-    <div class="editor live">
-      <div class="editor-bar">
-        <a class="btn neutral" href="#/operations">&larr; Instances</a>
-        <span class="crumbs" style="margin-left:8px">Replay &middot; <b id="rp-title">Instance ${esc(String(key))}</b></span>
+    <div class="editor live ops-replay">
+      <div class="ops-meta">
+        <span class="ops-title"><span class="ops-status" id="rp-status">&#9679;</span> <b id="rp-title">Instance ${esc(String(key))}</b></span>
+        <div class="ops-fields">
+          <div><label>Process Instance Key</label><span id="m-key" class="mono">${esc(String(key))}</span></div>
+          <div><label>Version</label><span id="m-version">&mdash;</span></div>
+          <div><label>Start Date</label><span id="m-start">&mdash;</span></div>
+          <div><label>End Date</label><span id="m-end">&mdash;</span></div>
+          <div><label>State</label><span class="pill" id="rp-state">&mdash;</span></div>
+        </div>
         <div style="flex:1"></div>
         <a class="btn neutral" id="rp-live" title="Open this instance's live view">Live view</a>
-        <button class="btn neutral" id="refresh">Refresh</button>
-        <span class="pill" id="rp-state" style="margin-left:8px">&mdash;</span>
-        <span class="pill" style="margin-left:8px"><b id="step-count">0</b>&nbsp;frames</span>
+        <a class="btn neutral" href="#/operations">&larr; Instances</a>
       </div>
       <div class="replay-bar">
         <button class="btn play" id="play">&#9654; Play</button>
@@ -3327,14 +3333,21 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       </div>
       <div class="editor-body"><div id="canvas"></div></div>
       <div class="token-legend" id="token-legend" aria-label="Active replay tokens"></div>
-      <div class="var-panel" id="rp-vars"></div>
-      <div class="flow-log" id="step-log"></div>
-      <div class="problems">
-        <span class="legend-swatch live"></span> current step
-        <span class="legend-swatch history" style="margin-left:12px"></span> already walked
-        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--accent);margin:0 4px 0 12px;vertical-align:middle"></span> token move
-        <span style="flex:1"></span>
-        <span class="muted">Timeline polls every 1.5s</span>
+      <div class="ops-split">
+        <div class="ops-history" id="rp-history">
+          <div class="ops-panel-head">Instance History
+            <label class="ops-toggle"><input type="checkbox" id="tg-end"> End date</label>
+          </div>
+          <div class="ops-history-list" id="history-list"></div>
+        </div>
+        <div class="ops-detail">
+          <div class="ops-tabs" id="rp-tabs">
+            <button data-tab="details" class="active">Details</button>
+            <button data-tab="variables">Variables</button>
+          </div>
+          <div class="ops-tab-body" id="tab-details"></div>
+          <div class="ops-tab-body" id="tab-variables" hidden></div>
+        </div>
       </div>
     </div>`;
 
@@ -3374,20 +3387,30 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
 
   const canvas = viewer.get("canvas");
   const registry = viewer.get("elementRegistry");
-  const layer = canvas.getLayer("atlas-replay", 900); // token dot rides above the diagram
+  const overlays = viewer.get("overlays");
+  const eventBus = viewer.get("eventBus");
+  const layer = canvas.getLayer("atlas-replay", 900); // moving token dot rides above the diagram
+  const dotLayer = canvas.getLayer("atlas-tokens", 899); // static per-frame token dots
   const titleEl = root.querySelector("#rp-title");
+  const statusEl = root.querySelector("#rp-status");
   const stateEl = root.querySelector("#rp-state");
-  const stepCountEl = root.querySelector("#step-count");
   const clockEl = root.querySelector("#clock");
   const scrub = root.querySelector("#scrub");
   const playBtn = root.querySelector("#play");
-  const logEl = root.querySelector("#step-log");
-  const varPanel = root.querySelector("#rp-vars");
+  const historyEl = root.querySelector("#history-list");
+  const detailEl = root.querySelector("#tab-details");
+  const varsEl = root.querySelector("#tab-variables");
   const speedSel = root.querySelector("#speed");
 
   let steps = [];    // element-activation audit timeline, oldest first
   let frames = [];   // complete logical token states, oldest first
   let marked = [];   // element markers to clear on the next render
+  let badges = [];   // overlay ids for the execution-count badges
+  let visits = {};   // elementId → cumulative execution count (the badge number)
+  let selEik = 0;    // selected element-instance key (0 = none / process root)
+  let selElId = "";  // selected diagram element id (may cover several instances)
+  let activeTab = "details";
+  let showEnd = false; // history shows end date instead of start date
   let playing = false;
   let playhead = 0;  // number of frames walked so far (0..frames.length)
   let animToken = 0; // bumped to supersede an in-flight animation
@@ -3397,6 +3420,12 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const tokenColors = ["#0072b2", "#d55e00", "#009e73", "#cc79a7", "#e69f00", "#56b4e9"];
   const tokenColor = (id) => tokenColors[Number(BigInt(String(id || 0)) % BigInt(tokenColors.length))];
   const fmtClock = (ns) => (ns ? new Date(ns / 1e6).toLocaleTimeString() : "");
+  const fmtDateTime = (ns) => {
+    if (!ns) return "—";
+    const d = new Date(ns / 1e6);
+    const p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  };
 
   function stepLabel(s) {
     const el = registry.get(s.elementId);
@@ -3409,18 +3438,87 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     return bare ? bare.charAt(0).toUpperCase() + bare.slice(1).toLowerCase() : "";
   }
 
-  // renderVars shows the variable values as they stood when the token entered the
-  // current step (the per-step snapshot the timeline carries, ADR-0048), using the
-  // shared polished renderer. At playhead 0 (before any step) it shows nothing yet.
-  function renderVars() {
-    const pos = playhead > 0 && playhead <= frames.length ? frames[playhead - 1].position : 0;
-    const cur = [...steps].reverse().find((s) => s.position <= pos) || null;
-    const head = cur
-      ? `Variables &middot; as of step ${playhead} (${esc(stepLabel(cur))})`
-      : "Variables";
-    varPanel.innerHTML = `<div class="vp-head">${head}</div>
-      <div class="vars">${renderVarsBody(cur ? cur.variables : [], jsonCollapsed)}</div>`;
+  // drawBadges overlays each executed element with its cumulative execution count
+  // (ADR-0022 visit history), like Operate's numbered badges. Data comes from the
+  // per-instance runtime endpoint; a still-running instance's counts grow on poll.
+  function drawBadges() {
+    for (const id of badges) { try { overlays.remove(id); } catch { /* gone */ } }
+    badges = [];
+    for (const [elId, count] of Object.entries(visits)) {
+      if (!count || !registry.get(elId)) continue;
+      try {
+        badges.push(overlays.add(elId, { position: { top: -12, right: 12 }, html: `<span class="ops-badge">${count}</span>` }));
+      } catch { /* element not in this diagram */ }
+    }
   }
+
+  async function loadBadges() {
+    let rt;
+    try { rt = await api("GET", `/api/v1/processes/${tl.processDefKey}/runtime?instance=${key}`); }
+    catch { return; }
+    if (current !== viewer) return;
+    const next = {};
+    for (const e of rt.elements || []) if (e.visits > 0) next[e.elementId] = e.visits;
+    visits = next;
+    drawBadges();
+  }
+
+  // stepsForElement returns every recorded activation of one diagram element, in
+  // order (a looped or multi-instance element appears more than once).
+  const stepsForElement = (elId) => steps.filter((s) => s.elementId === elId);
+  const stepByEik = (eik) => steps.find((s) => s.elementInstanceKey === eik) || null;
+
+  // renderDetail fills the Details tab for the selected element instance (or the
+  // process instance when nothing is selected), mirroring Operate's element panel.
+  function renderDetail() {
+    if (!selEik) {
+      detailEl.innerHTML = `<dl class="ops-props">
+        <dt>Process</dt><dd>${esc(titleEl.textContent)}</dd>
+        <dt>Instance Key</dt><dd class="mono">${esc(String(key))}</dd>
+        <dt>State</dt><dd>${esc(stateEl.textContent)}</dd>
+        <dt>Elements executed</dt><dd>${steps.length}</dd>
+        <dt class="hint" colspan>Select an element in the diagram or the history to inspect it.</dt>
+      </dl>`;
+      return;
+    }
+    const s = stepByEik(selEik);
+    if (!s) { detailEl.innerHTML = `<p class="ops-empty">No details for this element.</p>`; return; }
+    const rel = s.relation ? `<dt>Concurrency</dt><dd>${s.relation === "fork" ? "Parallel branch (fork)" : "Join arrival"}</dd>` : "";
+    const from = s.sourceElementId ? `<dt>Entered from</dt><dd>${esc(stepLabel({ elementId: s.sourceElementId }))}</dd>` : "";
+    detailEl.innerHTML = `<dl class="ops-props">
+      <dt>Element</dt><dd>${esc(stepLabel(s))}</dd>
+      <dt>Type</dt><dd>${esc(typeLabel(s.type))}</dd>
+      <dt>Element ID</dt><dd class="mono">${esc(s.elementId)}</dd>
+      <dt>Element Instance Key</dt><dd class="mono">${esc(String(s.elementInstanceKey || "—"))}</dd>
+      <dt>Token</dt><dd class="mono">${s.tokenId ? esc(String(s.tokenId)) : "—"}</dd>
+      <dt>Start Date</dt><dd>${esc(fmtDateTime(s.at))}</dd>
+      <dt>End Date</dt><dd>${s.endAt ? esc(fmtDateTime(s.endAt)) : '<span class="ops-live">active</span>'}</dd>
+      ${from}${rel}
+    </dl>`;
+  }
+
+  // renderVars fills the Variables tab. With an element selected it shows the
+  // variables as they stood when that element activated (the per-step snapshot,
+  // ADR-0048 — the closest analogue to Operate's element-scoped variables);
+  // otherwise it shows the variables as of the current replay frame.
+  function renderVars() {
+    let src, head;
+    if (selEik) {
+      const s = stepByEik(selEik);
+      src = s ? s.variables : [];
+      head = s ? `As of ${esc(stepLabel(s))} activation` : "Variables";
+    } else {
+      const pos = playhead > 0 && playhead <= frames.length ? frames[playhead - 1].position : 0;
+      const cur = [...steps].reverse().find((s) => s.position <= pos) || null;
+      src = cur ? cur.variables : [];
+      head = cur ? `As of step ${playhead} (${esc(stepLabel(cur))})` : "Variables";
+    }
+    varsEl.innerHTML = `<div class="vp-head">${head}</div>` +
+      (src && src.length ? `<div class="vars">${renderVarsBody(src, jsonCollapsed)}</div>`
+        : `<p class="ops-empty">The element has no variables</p>`);
+  }
+
+  function renderInspector() { renderDetail(); renderVars(); }
 
   function updateClock() {
     if (!frames.length) { clockEl.textContent = "no frames yet"; return; }
@@ -3428,40 +3526,81 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     clockEl.textContent = `${shown} / ${frames.length}${shown ? ` · ${fmtClock(frames[shown - 1].at)}` : ""}`;
   }
 
-  // renderOverlay marks every element walked up to the playhead: the current one
-  // green (the token is "here"), the earlier ones gray (already walked).
+  // renderOverlay paints the current frame: every element a live token sits on is
+  // highlighted (green, or orange while waiting at a join) and carries a colored
+  // token dot; elements only walked earlier are grayed. An element that holds a
+  // token now must NOT also be grayed — the two markers have equal CSS weight, so
+  // whichever is defined last would win and hide the live token. So the visited
+  // pass skips any element in the current token set, and the token dots make even
+  // two concurrent branches unmistakable.
   function renderOverlay() {
     for (const [id, m] of marked) { try { canvas.removeMarker(id, m); } catch { /* gone */ } }
     marked = [];
+    while (dotLayer.firstChild) dotLayer.removeChild(dotLayer.firstChild);
     const frame = playhead ? frames[playhead - 1] : null;
     const position = frame ? frame.position : 0;
+    const tokens = frame ? frame.tokens : [];
+    const liveOn = new Set(tokens.map((t) => t.elementId));
     for (const s of steps.filter((item) => item.position <= position)) {
-      if (!registry.get(s.elementId)) continue;
-      const marker = "atlas-visited";
-      canvas.addMarker(s.elementId, marker);
-      marked.push([s.elementId, marker]);
+      if (liveOn.has(s.elementId) || !registry.get(s.elementId)) continue;
+      canvas.addMarker(s.elementId, "atlas-visited");
+      marked.push([s.elementId, "atlas-visited"]);
     }
-    for (const token of (frame ? frame.tokens : [])) {
-      if (!registry.get(token.elementId)) continue;
+    // Count tokens per element so several tokens on one node (both arrivals at a
+    // join) fan out instead of stacking into one dot.
+    const perEl = {};
+    for (const token of tokens) {
+      const el = registry.get(token.elementId);
+      if (!el) continue;
       const marker = token.state === "waiting" ? "atlas-token-waiting" : "atlas-active";
       canvas.addMarker(token.elementId, marker);
       marked.push([token.elementId, marker]);
+      const n = perEl[token.elementId] = (perEl[token.elementId] || 0) + 1;
+      drawTokenDot(el, tokenColor(token.tokenId), n - 1);
     }
     const legend = root.querySelector("#token-legend");
-    legend.innerHTML = (frame && frame.tokens.length) ? frame.tokens.map((token) =>
+    legend.innerHTML = tokens.length ? tokens.map((token) =>
       `<span class="token-chip"><i style="--token-color:${tokenColor(token.tokenId)}">#</i>` +
       `Token ${esc(String(token.tokenId))} — ${esc(stepLabel(token))}${token.state === "waiting" ? " (waiting at join)" : ""}</span>`).join("")
       : `<span class="muted">No active tokens in this frame</span>`;
+    applySelection();
   }
 
-  function highlightCurrent() {
-    logEl.querySelectorAll("tr[data-i]").forEach((tr) => {
-      const i = Number(tr.dataset.i);
-      tr.classList.toggle("done", i < playhead);
-      tr.classList.toggle("pending", i >= playhead);
-      tr.classList.toggle("cur", i === playhead - 1);
+  // applySelection re-draws the blue "selected element" outline. renderOverlay
+  // clears every marker each frame, so the selection is re-applied here after it.
+  function applySelection() {
+    if (selElId && registry.get(selElId)) {
+      canvas.addMarker(selElId, "atlas-selected");
+      marked.push([selElId, "atlas-selected"]);
+    }
+  }
+
+  // drawTokenDot places a filled token marker at the top-left of an element (index
+  // offsets stacked tokens so concurrent ones on the same node stay distinct). The
+  // dot lives on the replay layer, so it tracks pan/zoom like the moving dot.
+  function drawTokenDot(el, color, index) {
+    const NS = "http://www.w3.org/2000/svg";
+    const g = document.createElementNS(NS, "g");
+    g.setAttribute("transform", `translate(${el.x + 6 + index * 16} ${el.y + 6})`);
+    const halo = document.createElementNS(NS, "circle");
+    halo.setAttribute("r", "9"); halo.setAttribute("fill", "#fff"); halo.setAttribute("stroke", color); halo.setAttribute("stroke-width", "2");
+    const dot = document.createElementNS(NS, "circle");
+    dot.setAttribute("r", "6"); dot.setAttribute("fill", color);
+    g.appendChild(halo); g.appendChild(dot);
+    dotLayer.appendChild(g);
+  }
+
+  // highlightHistory marks how far the replay has walked (done / current / pending)
+  // and which row is the selected element instance, and scrolls the current one in.
+  function highlightHistory() {
+    historyEl.querySelectorAll(".ops-hrow[data-i]").forEach((row) => {
+      const i = Number(row.dataset.i);
+      const pos = steps[i] ? steps[i].position : 0;
+      row.classList.toggle("done", playhead > 0 && pos <= (frames[playhead - 1] || {}).position);
+      row.classList.toggle("cur", playhead > 0 && i === playhead - 1);
+      row.classList.toggle("sel", steps[i] && steps[i].elementInstanceKey === selEik && selEik !== 0);
     });
-    const cur = logEl.querySelector("tr.cur");
+    const cur = historyEl.querySelector(".ops-hrow.cur");
     if (cur) cur.scrollIntoView({ block: "nearest" });
   }
 
@@ -3470,36 +3609,60 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     scrub.value = String(playhead);
     updateClock();
     renderOverlay();
-    highlightCurrent();
-    renderVars();
+    highlightHistory();
+    if (!selEik) renderVars(); // an unselected inspector tracks the playhead
   }
 
-  function renderLog() {
+  // renderHistory draws the instance-history tree: the process root, then every
+  // element activation in order with a lifecycle icon and its start (or end) time.
+  // A row is clickable to select and scrub to that element instance.
+  function renderHistory() {
     if (!steps.length) {
-      logEl.innerHTML = `<div class="fl-head">Steps</div>
-        <div class="empty">No steps recorded for this instance yet.</div>`;
+      historyEl.innerHTML = `<p class="ops-empty">No history recorded yet.</p>`;
       return;
     }
-    const rows = steps.map((s, i) => `
-      <tr data-i="${i}">
-        <td class="tnum">${i + 1}</td>
-        <td class="tnum">${fmtClock(s.at)}</td>
-        <td class="tnum">${s.tokenId ? `Token ${esc(String(s.tokenId))}` : "—"}</td>
-        <td><span class="msg-name">${esc(stepLabel(s))}</span></td>
-        <td class="muted">${esc(typeLabel(s.type))}</td>
-        <td class="muted">${esc(s.action || "activate")}${s.relation ? ` · ${esc(s.relation)}` : ""}</td>
-        <td class="tnum">${s.elementInstanceKey ? esc(String(s.elementInstanceKey)) : "—"}</td>
-      </tr>`).join("");
-    logEl.innerHTML = `<div class="fl-head">Engine activations <span class="muted">· ${steps.length} events</span></div>
-      <table><thead><tr><th>#</th><th>At</th><th>Token</th><th>Element</th><th>Type</th><th>Action</th><th>Element instance</th></tr></thead><tbody>${rows}</tbody></table>`;
-    logEl.querySelectorAll("tr[data-i]").forEach((tr) => tr.addEventListener("click", () => {
-      const i = Number(tr.dataset.i);
+    const rows = steps.map((s, i) => {
+      const done = s.endAt > 0;
+      const icon = done ? "&#10003;" : "&#9679;";
+      const when = showEnd ? (s.endAt ? fmtClock(s.endAt) : "—") : fmtClock(s.at);
+      return `<div class="ops-hrow" data-i="${i}" data-eik="${s.elementInstanceKey || 0}">
+        <span class="ops-hicon ${done ? "done" : "live"}">${icon}</span>
+        <span class="ops-hname">${esc(stepLabel(s))}</span>
+        <span class="ops-htime">${esc(when)}</span>
+      </div>`;
+    }).join("");
+    historyEl.innerHTML = `<div class="ops-hrow root" data-i="-1" data-eik="0">
+        <span class="ops-hicon proc">&#9635;</span>
+        <span class="ops-hname"><b>${esc(titleEl.textContent)}</b></span>
+        <span class="ops-htime">${showEnd ? "" : fmtClock(steps[0].at)}</span>
+      </div>${rows}`;
+    historyEl.querySelectorAll(".ops-hrow").forEach((row) => row.addEventListener("click", () => {
+      const i = Number(row.dataset.i);
       pause();
-      const frame = frames.findIndex((f) => f.position >= steps[i].position);
+      if (i < 0) { selectElement("", 0); return; }
+      const s = steps[i];
+      selectElement(s.elementId, s.elementInstanceKey || 0);
+      const frame = frames.findIndex((f) => f.position >= s.position);
       setPlayhead(frame < 0 ? frames.length : frame + 1);
       animateStep(i);
     }));
-    highlightCurrent();
+    highlightHistory();
+  }
+
+  // selectElement cross-highlights the diagram, the history and the inspector for
+  // one element instance (or clears the selection when elId is empty).
+  function selectElement(elId, eik) {
+    selElId = elId;
+    // Without a specific instance, default to this element's last activation so the
+    // inspector has facts to show (clicking the diagram picks the whole element).
+    if (!eik && elId) {
+      const list = stepsForElement(elId);
+      eik = list.length ? list[list.length - 1].elementInstanceKey : 0;
+    }
+    selEik = eik;
+    renderOverlay();
+    highlightHistory();
+    renderInspector();
   }
 
   // sequenceFlowBetween finds the connection the modeler drew from srcId to tgtId,
@@ -3524,8 +3687,13 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       canvas.addMarker(s.elementId, "atlas-flow-hit");
       setTimeout(() => { try { canvas.removeMarker(s.elementId, "atlas-flow-hit"); } catch { /* gone */ } }, 700);
     }
-    if (i === 0) return Promise.resolve(); // the start event has no incoming walk
-    const conn = sequenceFlowBetween(steps[i - 1].elementId, s.elementId);
+    // Animate along the edge the token actually traversed: the activation carries
+    // the element it came from (its incoming flow's source). Falling back to the
+    // previous row would draw a fork branch from its sibling (way1 → way2) instead
+    // of from the gateway.
+    const from = s.sourceElementId || (i > 0 ? steps[i - 1].elementId : null);
+    if (!from) return Promise.resolve(); // the start event has no incoming walk
+    const conn = sequenceFlowBetween(from, s.elementId);
     if (!conn) return Promise.resolve(); // a jump with no drawn edge (e.g. across a gateway)
     canvas.addMarker(conn.id, "atlas-flow-active");
     const wps = conn.waypoints.map((w) => ({ x: w.x, y: w.y }));
@@ -3557,7 +3725,25 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
 
   function applyStatePill(state) {
     stateEl.textContent = state || "—";
-    stateEl.className = "pill" + (state === "active" ? " ok" : "");
+    stateEl.className = "pill" + (state === "active" ? " ok" : state === "completed" ? "" : state ? " err" : "");
+    statusEl.className = "ops-status " + (state === "active" ? "live" : "done");
+  }
+
+  // Header name prefers the diagram's process name, falling back to its id.
+  function processName() {
+    try {
+      const bo = canvas.getRootElement().businessObject;
+      return (bo && (bo.name || bo.id)) || tl.processId || `instance ${key}`;
+    } catch { return tl.processId || `instance ${key}`; }
+  }
+
+  function applyMeta(next) {
+    titleEl.textContent = processName();
+    root.querySelector("#m-version").textContent = next.version != null ? "v" + next.version : "—";
+    root.querySelector("#m-start").textContent = steps.length ? fmtDateTime(steps[0].at) : "—";
+    const end = next.state !== "active" && steps.length ? Math.max(...steps.map((s) => s.endAt || 0)) : 0;
+    root.querySelector("#m-end").textContent = end ? fmtDateTime(end) : "—";
+    applyStatePill(next.state);
   }
 
   async function poll() {
@@ -3565,22 +3751,38 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     try { next = await api("GET", `/api/v1/instances/${key}/timeline`); }
     catch { return; } // transient; try again next tick
     if (current !== viewer) return;
-    if (next.processId) titleEl.textContent = `${next.processId} · instance ${key}`;
-    applyStatePill(next.state);
     // Rebuild only when the step set grows, so a poll never disturbs the operator's
     // current scrub position mid-replay.
     const list = next.steps || [], nextFrames = next.frames || [];
-    if (list.length !== steps.length || nextFrames.length !== frames.length) {
+    const grew = list.length !== steps.length || nextFrames.length !== frames.length;
+    if (grew) {
       const wasAtEnd = playhead >= frames.length;
       steps = list; frames = nextFrames;
-      stepCountEl.textContent = String(frames.length);
       scrub.max = String(frames.length);
-      renderLog();
+      renderHistory();
+      loadBadges();
       if (!playing && wasAtEnd) setPlayhead(frames.length); // follow new frames live
-      else { scrub.value = String(playhead); updateClock(); renderOverlay(); highlightCurrent(); renderVars(); }
+      else { scrub.value = String(playhead); updateClock(); renderOverlay(); highlightHistory(); }
+      renderInspector();
     }
+    applyMeta(next);
   }
 
+  // Selecting an element in the diagram inspects it, the same as a history click.
+  eventBus.on("element.click", (e) => {
+    const el = e.element;
+    if (!el || el.waypoints || el === canvas.getRootElement()) { selectElement("", 0); return; }
+    pause();
+    selectElement(el.id, 0);
+  });
+
+  root.querySelectorAll("#rp-tabs button").forEach((b) => b.addEventListener("click", () => {
+    activeTab = b.dataset.tab;
+    root.querySelectorAll("#rp-tabs button").forEach((x) => x.classList.toggle("active", x === b));
+    detailEl.hidden = activeTab !== "details";
+    varsEl.hidden = activeTab !== "variables";
+  }));
+  root.querySelector("#tg-end").addEventListener("change", (e) => { showEnd = e.target.checked; renderHistory(); });
   playBtn.addEventListener("click", () => { playing ? pause() : play(); });
   root.querySelector("#step-fwd").addEventListener("click", () => {
     pause();
@@ -3588,10 +3790,10 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   });
   root.querySelector("#step-back").addEventListener("click", () => { pause(); setPlayhead(playhead - 1); });
   scrub.addEventListener("input", () => { pause(); setPlayhead(Number(scrub.value)); });
-  root.querySelector("#refresh").addEventListener("click", poll);
-  bindJsonCards(varPanel, jsonCollapsed, renderVars);
-  bindVarCopy(varPanel, toast);
+  bindJsonCards(varsEl, jsonCollapsed, renderVars);
+  bindVarCopy(varsEl, toast);
 
   await poll();
+  renderInspector();
   liveTimer = setInterval(poll, 1500);
 }

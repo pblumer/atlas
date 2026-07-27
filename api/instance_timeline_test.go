@@ -40,10 +40,14 @@ type timelineVar struct {
 }
 
 type timelineStep struct {
-	At        int64         `json:"at"`
-	ElementID string        `json:"elementId"`
-	Type      string        `json:"type"`
-	Variables []timelineVar `json:"variables"`
+	At                 int64         `json:"at"`
+	EndAt              int64         `json:"endAt"`
+	ElementID          string        `json:"elementId"`
+	Type               string        `json:"type"`
+	Variables          []timelineVar `json:"variables"`
+	SourceElementID    string        `json:"sourceElementId"`
+	Relation           string        `json:"relation"`
+	ElementInstanceKey uint64        `json:"elementInstanceKey"`
 }
 
 type instanceTimeline struct {

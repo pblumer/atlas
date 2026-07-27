@@ -124,6 +124,50 @@ func TestParallelReplayFramesAreClean(t *testing.T) {
 	}
 }
 
+// TestParallelReplaySourceElement checks each activation reports the element the
+// token actually came from (its incoming flow's source), so the replay animates a
+// fork branch from the gateway — not from its sibling branch, the previous row in
+// the linear step list.
+func TestParallelReplaySourceElement(t *testing.T) {
+	tl := fetchParallelTimeline(t)
+	want := map[string]string{"fork": "start", "way1": "fork", "way2": "fork", "end": "join"}
+	got := map[string]string{}
+	joinSources := map[string]bool{}
+	for _, s := range tl.Steps {
+		if s.ElementID == "join" {
+			joinSources[s.SourceElementID] = true // both way1 and way2 feed the join
+			continue
+		}
+		got[s.ElementID] = s.SourceElementID
+	}
+	for el, src := range want {
+		if got[el] != src {
+			t.Errorf("step %q source = %q, want %q", el, got[el], src)
+		}
+	}
+	if !joinSources["way1"] || !joinSources["way2"] {
+		t.Errorf("join arrivals came from %v, want both way1 and way2", joinSources)
+	}
+}
+
+// TestParallelReplayStepEndTimes checks each step of a finished instance carries a
+// completion timestamp (endAt) at or after its activation, derived from the
+// stored Action==2 replay fact, so the history can show start → end per element.
+func TestParallelReplayStepEndTimes(t *testing.T) {
+	tl := fetchParallelTimeline(t)
+	if tl.State != "completed" {
+		t.Fatalf("state = %q, want completed", tl.State)
+	}
+	for _, s := range tl.Steps {
+		if s.EndAt == 0 {
+			t.Errorf("step %q has no endAt, want a completion time on a finished instance", s.ElementID)
+		}
+		if s.EndAt < s.At {
+			t.Errorf("step %q endAt %d before activation %d", s.ElementID, s.EndAt, s.At)
+		}
+	}
+}
+
 // TestParallelReplayFramesDeterministic re-reads the same instance's timeline and
 // checks the folded frames are byte-identical, since replay must be deterministic.
 func TestParallelReplayFramesDeterministic(t *testing.T) {

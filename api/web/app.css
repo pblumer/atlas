@@ -662,6 +662,72 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .token-chip { display:inline-flex; align-items:center; gap:6px; font-size:12px; }
 .token-chip i { display:inline-grid; place-items:center; width:20px; height:20px; border:3px solid var(--token-color); border-radius:50%; font-style:normal; font-weight:800; }
 .atlas-token-waiting .djs-visual > :first-child { stroke:#d55e00 !important; stroke-width:5px !important; stroke-dasharray:6 4; }
+/* The element the operator selected to inspect: a filled accent-tinted outline,
+   the Operate "this node is selected" affordance. */
+.djs-element.atlas-selected .djs-visual > :nth-child(1) {
+  stroke: var(--accent) !important; stroke-width: 2.5px !important; fill: var(--accent-soft) !important;
+}
+
+/* --- Operate-style instance replay --- */
+.ops-replay .ops-meta {
+  display: flex; align-items: center; gap: 18px; padding: 10px 16px;
+  border-bottom: 1px solid var(--border); background: var(--surface);
+}
+.ops-title { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; }
+.ops-status { font-size: 12px; color: var(--muted); }
+.ops-status.live { color: var(--accent); }
+.ops-status.done { color: var(--ok); }
+.ops-fields { display: flex; gap: 20px; flex-wrap: wrap; }
+.ops-fields > div { display: flex; flex-direction: column; gap: 2px; }
+.ops-fields label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.ops-fields span { font-size: 13px; color: var(--text); }
+.mono { font-family: ui-monospace, monospace; }
+
+.ops-split { display: flex; height: 280px; border-top: 1px solid var(--border); background: var(--surface); }
+.ops-history { flex: 0 0 42%; display: flex; flex-direction: column; border-right: 1px solid var(--border); min-width: 0; }
+.ops-detail { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.ops-panel-head {
+  display: flex; align-items: center; gap: 12px; padding: 8px 14px; font-weight: 600; font-size: 13px;
+  border-bottom: 1px solid var(--border); background: var(--bg);
+}
+.ops-toggle { margin-left: auto; font-weight: 400; font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; }
+.ops-history-list { overflow: auto; flex: 1; padding: 4px 0; }
+.ops-hrow {
+  display: flex; align-items: center; gap: 8px; padding: 5px 14px; cursor: pointer; font-size: 13px;
+  border-left: 3px solid transparent;
+}
+.ops-hrow:hover { background: var(--bg); }
+.ops-hrow.cur { background: var(--accent-soft); border-left-color: var(--accent); }
+.ops-hrow.sel { background: var(--accent-soft); }
+.ops-hrow.root { font-size: 13px; }
+.ops-hrow .ops-hicon { width: 16px; text-align: center; color: var(--ok); }
+.ops-hrow .ops-hicon.live { color: var(--accent); }
+.ops-hrow .ops-hicon.proc { color: var(--muted); }
+.ops-hrow:not(.root):not(.done) .ops-hname { color: var(--text); }
+.ops-hname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ops-htime { font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted); }
+
+.ops-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); background: var(--bg); padding: 0 8px; }
+.ops-tabs button {
+  border: none; background: transparent; padding: 9px 12px; font: inherit; font-size: 13px; color: var(--muted);
+  cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.ops-tabs button:hover { color: var(--text); }
+.ops-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.ops-tab-body { overflow: auto; flex: 1; padding: 12px 16px; }
+.ops-props { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 0; font-size: 13px; }
+.ops-props dt { color: var(--muted); }
+.ops-props dd { margin: 0; color: var(--text); word-break: break-word; }
+.ops-props dt.hint { grid-column: 1 / -1; color: var(--muted); font-style: italic; margin-top: 8px; }
+.ops-empty { color: var(--muted); font-size: 13px; padding: 8px 2px; }
+.ops-live { color: var(--accent); font-weight: 600; }
+
+/* Execution-count badge Operate draws at a node's corner. */
+.ops-badge {
+  display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px;
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: 999px;
+  font: 700 12px/1 ui-monospace, monospace; color: var(--text); box-shadow: var(--shadow);
+}
 
 /* Message-flow log beneath the diagram: one row per delivery, the current step
    highlighted as the playhead crosses it. */
