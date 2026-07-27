@@ -19,9 +19,10 @@ const DMN_CSS = [
   "vendor/dmn/assets/dmn-js-decision-table-controls.css",
   "vendor/dmn/assets/dmn-js-literal-expression.css",
   "vendor/dmn/assets/dmn-font/css/dmn.css",
+  "vendor/dmn/assets/properties-panel.css",
 ];
 
-let dmnReady; // memoized loader promise → window.DmnJS (the dmn-js Modeler)
+let dmnReady; // memoized loader promise → window.AtlasDmn (Modeler + properties panel)
 function loadDmn() {
   if (dmnReady) return dmnReady;
   dmnReady = new Promise((resolve, reject) => {
@@ -34,7 +35,9 @@ function loadDmn() {
     }
     const s = document.createElement("script");
     s.src = "vendor/dmn/dmn-modeler.js";
-    s.onload = () => (window.DmnJS ? resolve(window.DmnJS) : reject(new Error("dmn-js did not expose DmnJS")));
+    // The bundle exposes the Modeler *and* the properties-panel modules together
+    // (they must share one dmn-js instance) under window.AtlasDmn.
+    s.onload = () => (window.AtlasDmn ? resolve(window.AtlasDmn) : reject(new Error("dmn bundle did not expose AtlasDmn")));
     s.onerror = () => reject(new Error("failed to load the DMN modeler assets"));
     document.head.appendChild(s);
   });
@@ -181,7 +184,10 @@ export async function openDmnEditor({ api, toast, projectId, modelRef }) {
         <button class="btn ghost" data-act="cancel">Abbrechen</button>
         <button class="btn" data-act="save">Speichern &amp; übernehmen</button>
       </div>
-      <div class="dmn-canvas"></div>
+      <div class="dmn-body">
+        <div class="dmn-canvas"></div>
+        <div class="dmn-props"></div>
+      </div>
       <div class="dmn-hint muted">Modelliere die Entscheidungstabelle. <b>Input Data</b>-Knoten
         werden zu den Decision-Inputs; die Output-Spalte wird zur Result-Variable — beide werden
         beim Speichern automatisch in den Business-Rule-Task übernommen.</div>
@@ -190,6 +196,7 @@ export async function openDmnEditor({ api, toast, projectId, modelRef }) {
 
   const canvas = overlay.querySelector(".dmn-canvas");
   const viewsBar = overlay.querySelector(".dmn-views");
+  const propsPanel = overlay.querySelector(".dmn-props");
 
   let modeler;
   let done;
@@ -215,11 +222,29 @@ export async function openDmnEditor({ api, toast, projectId, modelRef }) {
   document.addEventListener("keydown", onKey);
 
   try {
-    const DmnJS = await loadDmn();
-    modeler = new DmnJS({ container: canvas });
+    const AtlasDmn = await loadDmn();
+    // The properties panel is a DRG-view feature (it edits the decision/input-data
+    // elements of the requirements graph): Name, ID, Version tag, Documentation and
+    // the output Variable — the same panel Camunda's Modeler shows. It lives on the
+    // `drd` editor and renders into propsPanel. The camunda moddle extension makes
+    // the versionTag (and other camunda:* attributes) readable and writable; temis
+    // ignores that namespace, so a saved model still compiles.
+    modeler = new AtlasDmn.DmnJS({
+      container: canvas,
+      drd: {
+        propertiesPanel: { parent: propsPanel },
+        additionalModules: [
+          AtlasDmn.DmnPropertiesPanelModule,
+          AtlasDmn.DmnPropertiesProviderModule,
+          AtlasDmn.CamundaPropertiesProviderModule,
+        ],
+      },
+      moddleExtensions: { camunda: AtlasDmn.CamundaModdleDescriptor },
+    });
 
     // The view switcher lets the author move between the DRG overview and each
-    // decision's table without hunting for a double-click.
+    // decision's table without hunting for a double-click. The properties panel
+    // only applies to the DRG view, so its column is shown only there.
     const renderViews = () => {
       const views = modeler.getViews();
       const active = modeler.getActiveView();
@@ -231,6 +256,7 @@ export async function openDmnEditor({ api, toast, projectId, modelRef }) {
         b.addEventListener("click", () => modeler.open(v).catch(() => {}));
         viewsBar.appendChild(b);
       }
+      propsPanel.hidden = !(active && active.type === "drd");
     };
     modeler.on("views.changed", renderViews);
 

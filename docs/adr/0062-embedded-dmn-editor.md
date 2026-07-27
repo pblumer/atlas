@@ -31,10 +31,24 @@ reverses ADR-0014's "no authoring surface" non-goal for the decision-table case.
 
 - **Editor:** the vendored **dmn-js** modeler (bpmn.io — the same family as the
   bpmn-js process modeler Atlas already embeds, ADR-0013). It ships a DRD editor,
-  a decision-table editor, and a literal-expression editor as a pre-built UMD
-  bundle (`window.DmnJS`), vendored under `api/web/vendor/dmn/` and served from the
-  `//go:embed web` tree exactly like bpmn-js — no CDN, no build step, no new
-  runtime dependency. Assets load lazily so non-editor pages stay light.
+  a decision-table editor, and a literal-expression editor, vendored under
+  `api/web/vendor/dmn/` and served from the `//go:embed web` tree exactly like
+  bpmn-js — no CDN, no runtime build step, no new runtime dependency. Assets load
+  lazily so non-editor pages stay light. The vendored bundle is a *combined*
+  build of dmn-js + the dmn-js properties panel (see below), because the panel and
+  the Modeler must share one dmn-js instance; it is produced offline and only its
+  output is committed, the same way the stock UMD bundles are pre-built — nothing
+  is bundled during Atlas's own build/CI. It exposes `window.AtlasDmn` (the
+  Modeler plus the panel modules and the camunda moddle descriptor); the rebuild
+  recipe lives in `api/web/vendor/dmn/ATLAS-VENDORED.txt`.
+- **Properties panel (Camunda-style).** The DRG view carries the dmn-js properties
+  panel (`dmn-js-properties-panel` + `@bpmn-io/properties-panel`, with the Camunda
+  provider), so a selected decision/input-data element exposes the same fields the
+  competition's Modeler shows: General (Name, **ID**, **Version tag**),
+  Documentation (Description, Question, Allowed answers), and the output Variable
+  (type, history TTL). Version tag and the other camunda attributes need the
+  `camunda-dmn-moddle` descriptor to be read/written; temis ignores that namespace,
+  so a model saved with `camunda:versionTag` still resolves and compiles.
 - **Authoring stays dmn-js; storage + evaluation stay temis.** dmn-js produces
   standard DMN XML (DMN 1.3, a namespace temis compiles). Atlas does not gain a DMN
   *engine* or hand-roll table editing — it hosts the editor and stores/evaluates
@@ -69,7 +83,15 @@ reverses ADR-0014's "no authoring surface" non-goal for the decision-table case.
   still compile at deploy (I5), and the event log is still the only source of truth
   (I6). Storing a model file is not engine state, so it never touches the run loop.
 - The binary grows by the vendored dmn-js bundle (~1.3 MB of JS + CSS/fonts),
-  in the same spirit as the already-vendored bpmn-js modeler.
+  in the same spirit as the already-vendored bpmn-js modeler. Folding the
+  properties panel into that bundle keeps it a single vendored artifact rather
+  than a second script + duplicated dmn-js.
+- The vendored artifact is now our own combined build rather than an untouched npm
+  UMD tarball. The trade is deliberate: a drop-in UMD can't give the panel the same
+  dmn-js instance the Modeler uses. The build is offline and reproducible (pinned
+  versions + recipe in `ATLAS-VENDORED.txt`), and Atlas's build/CI still runs no
+  bundler — the "no build step" property that matters (nothing is built to serve
+  the app) holds.
 - Editing overwrites a model in place rather than versioning it; multiple
   references to one handle all see the edit. Model *versioning* is left to temis
   (git-backed models) and is out of scope here.

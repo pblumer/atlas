@@ -1,1 +1,35 @@
-dmn-js@17.10.0 vendored from the npm tarball (registry.npmjs.org). Pre-built UMD bundle (window.DmnJS) + assets; see LICENSE (bpmn.io / MIT). Do not edit by hand.
+dmn-modeler.js is a combined, pre-built bundle (global: window.AtlasDmn) of:
+
+  - dmn-js@17.10.0              (the DRD / decision-table / literal-expression Modeler)
+  - dmn-js-properties-panel@3.11.1
+  - @bpmn-io/properties-panel@3.48.0
+  - camunda-dmn-moddle@1.3.1    (the camunda: DMN moddle descriptor, for versionTag et al.)
+
+All bpmn.io / MIT (see LICENSE). It used to be the stock dmn-js UMD tarball
+(window.DmnJS), but the properties panel and the Modeler must share ONE dmn-js
+instance, which a drop-in UMD can't provide — so we bundle them together. The
+build is done offline and only its OUTPUT is committed, exactly like the stock
+UMD bundle was; nothing is built during Atlas's own build/CI (ADR-0012/0062:
+no CDN, no build step at runtime).
+
+window.AtlasDmn exposes: DmnJS (the Modeler), DmnPropertiesPanelModule,
+DmnPropertiesProviderModule, CamundaPropertiesProviderModule, CamundaModdleDescriptor.
+
+Do not edit dmn-modeler.js by hand. To rebuild (reproducible, offline):
+
+  npm i dmn-js@17.10.0 dmn-js-properties-panel@3.11.1 \
+        @bpmn-io/properties-panel@3.48.0 camunda-dmn-moddle@1.3.1 esbuild@0.24.0
+  # src/index.js:
+  #   import Modeler from 'dmn-js/lib/Modeler';
+  #   import { DmnPropertiesPanelModule, DmnPropertiesProviderModule,
+  #            CamundaPropertiesProviderModule } from 'dmn-js-properties-panel';
+  #   import CamundaModdleDescriptor from 'camunda-dmn-moddle/resources/camunda.json';
+  #   export { Modeler as DmnJS, DmnPropertiesPanelModule, DmnPropertiesProviderModule,
+  #            CamundaPropertiesProviderModule, CamundaModdleDescriptor };
+  esbuild src/index.js --bundle --format=iife --global-name=AtlasDmn \
+        --loader:.json=json --minify --legal-comments=none --outfile=dmn-modeler.js
+
+  # CSS: cp node_modules/@bpmn-io/properties-panel/dist/assets/properties-panel.css assets/
+
+assets/ also holds the dmn-js diagram/drd/decision-table/literal-expression CSS
+and the dmn icon font, copied from dmn-js@17.10.0/dist/assets.

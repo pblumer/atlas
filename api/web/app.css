@@ -1120,8 +1120,13 @@ tr[hidden] { display: none; }
 }
 .dmn-view-tab:hover { color: var(--text); }
 .dmn-view-tab.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.dmn-body { flex: 1; min-height: 0; display: flex; }
 .dmn-canvas { flex: 1; min-height: 0; position: relative; overflow: hidden; background: var(--surface); }
 .dmn-canvas .dmn-decision-table-container { height: 100%; overflow: auto; }
+/* The Camunda-style properties panel column (DRG view). dmn-js-properties-panel
+   ships its own internal styling; we only size the column and separate it. */
+.dmn-props { width: 320px; flex: none; overflow: auto; border-left: 1px solid var(--border); background: var(--bg); }
+.dmn-props[hidden] { display: none; }
 .dmn-hint { padding: 8px 14px; border-top: 1px solid var(--border); font-size: 12px; }
 
 /* Collapsible property groups (Camunda-style tidy panel). A generic groupify
