@@ -13,7 +13,8 @@
 > activity-local scope on activation, output mappings promote to the parent scope on
 > completion, and the local scope is dropped via `VariableDeleted` events; the inline
 > script task and the polyglot script worker read their inputs up the scope chain.
-> Remaining: the properties-panel I/O-mapping editor (UI), and extending the worker
+> Also delivered: the modeler properties-panel I/O-mapping editor (input and output
+> mapping lists on service, script, and user tasks). Remaining: extending the worker
 > scope-chain read to the other job workers (DMN, REST, clio).
 
 ## Context and problem statement

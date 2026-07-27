@@ -175,6 +175,43 @@ func TestParseIOMappingScriptAndUserTasks(t *testing.T) {
 	}
 }
 
+// TestParseIOMappingModelerRoundTrip locks the contract between the modeler's I/O
+// mapping editor and the compiler: the editor stores each source '=' prefixed with a
+// space ("= expr") and writes both input and output parameters into one
+// zeebe:ioMapping. The compiler must parse that exact shape (ADR-0068, phase 5).
+func TestParseIOMappingModelerRoundTrip(t *testing.T) {
+	const model = `<?xml version="1.0"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="p" isExecutable="true">
+    <startEvent id="Start"/>
+    <userTask id="U">
+      <extensionElements>
+        <zeebe:ioMapping>
+          <zeebe:input source="= order.total" target="amount"/>
+          <zeebe:output source="= approved" target="decision"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+    </userTask>
+    <endEvent id="End"/>
+    <sequenceFlow id="f1" sourceRef="Start" targetRef="U"/>
+    <sequenceFlow id="f2" sourceRef="U" targetRef="End"/>
+  </process>
+</definitions>`
+
+	cp, err := compiler.Parse(1, 1, strings.NewReader(model))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	node := nodeByBpmnId(t, cp, "U")
+	if ins := cp.IOInputs(node); len(ins) != 1 || cp.Intern(ins[0].Target) != "amount" || ins[0].Source == nil {
+		t.Errorf("input mappings = %+v, want one targeting amount with a compiled source", ins)
+	}
+	if outs := cp.IOOutputs(node); len(outs) != 1 || cp.Intern(outs[0].Target) != "decision" || outs[0].Source == nil {
+		t.Errorf("output mappings = %+v, want one targeting decision with a compiled source", outs)
+	}
+}
+
 // TestParseIOMappingErrors rejects a mapping with no target and one with an
 // uncompilable source, exactly like a bad script-task expression fails deploy.
 func TestParseIOMappingErrors(t *testing.T) {
