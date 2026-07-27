@@ -204,6 +204,7 @@ const TOPNAV = {
   console: [
     { name: "Dashboard", route: "#/console" },
     { name: "Engine", route: "#/console/engine" },
+    { name: "Logs", route: "#/console/logs" },
     { name: "Organization", route: "#/console/org" },
   ],
   modeler: [{ name: "Home", route: "#/modeler" }],
@@ -363,15 +364,77 @@ async function viewConsoleEngine() {
         <div class="stat"><b>1</b><span>partition</span></div>
       </div>
     </div>`;
+  view.innerHTML += `
+    <div class="card" id="build-card" style="margin-top:14px">
+      <h2>Build</h2>
+      <p class="muted">Which commit this running server was built from — check it against the merged code to confirm the deployed binary is up to date.</p>
+      <div id="build-info" class="muted">loading…</div>
+    </div>`;
   try {
-    const [procs, stats] = await Promise.all([
+    const [procs, stats, info] = await Promise.all([
       api("GET", "/api/v1/processes"),
       api("GET", "/api/v1/stats"),
+      api("GET", "/api/v1/info"),
     ]);
     document.getElementById("e-pi").textContent = stats.activeProcessInstances;
     document.getElementById("e-ei").textContent = stats.activeElementInstances;
     document.getElementById("e-dep").textContent = procs.length;
+    document.getElementById("build-info").innerHTML = buildInfoHTML(info);
   } catch (e) { toast(e.message, "err"); }
+}
+
+// buildInfoHTML renders the version/VCS metadata from GET /api/v1/info: the version
+// string, the git commit (short) with a dirty marker, the build time, and the Go
+// toolchain. A missing revision means the binary was built outside a git checkout.
+function buildInfoHTML(i) {
+  i = i || {};
+  const rev = i.revision ? i.revision.slice(0, 12) + (i.modified ? " (modified)" : "") : "unknown (built outside a git checkout)";
+  const rows = [
+    ["Version", esc(i.version || "—")],
+    ["Commit", esc(rev)],
+    ["Built", esc(i.buildTime || "—")],
+    ["Go", esc(i.go || "—")],
+  ];
+  return `<table class="kv-table">${rows.map(([k, v]) =>
+    `<tr><td style="padding:2px 16px 2px 0; color:var(--muted)">${k}</td><td style="font-family:ui-monospace,monospace">${v}</td></tr>`).join("")}</table>`;
+}
+
+// viewConsoleLogs shows the recent server-log tail (GET /api/v1/logs) so an
+// operator can diagnose from the browser without shell access — e.g. to read the
+// script-worker startup lines. It auto-refreshes; the interval is cleared on route
+// change via __atlasCleanup.
+async function viewConsoleLogs() {
+  view.innerHTML = `
+    <div class="card">
+      <div class="between">
+        <h1>Server logs</h1>
+        <div class="row" style="gap:12px; align-items:center">
+          <label class="field inline" style="margin:0"><input type="checkbox" id="log-follow" checked> Auto-refresh</label>
+          <button class="btn neutral" id="log-refresh">Refresh</button>
+        </div>
+      </div>
+      <p class="muted">The most recent server log lines (an in-memory tail). Look here for the
+      script-worker startup lines, e.g. <code>powershell script worker enabled (pwsh found on PATH)</code>
+      or a <code>WARNING: … not found on PATH</code>. With authentication enabled this is admin-only.</p>
+      <pre id="log-out" style="max-height:62vh; overflow:auto; background:var(--bg); padding:12px; border-radius:8px; font-size:12px; line-height:1.5; white-space:pre-wrap; margin:0">loading…</pre>
+    </div>`;
+  const out = document.getElementById("log-out");
+  const follow = document.getElementById("log-follow");
+  const load = async () => {
+    try {
+      const r = await api("GET", "/api/v1/logs");
+      const lines = (r && r.lines) || [];
+      const atBottom = out.scrollHeight - out.scrollTop - out.clientHeight < 40;
+      out.textContent = lines.length ? lines.join("\n") : "(no log lines captured yet)";
+      if (atBottom) out.scrollTop = out.scrollHeight;
+    } catch (e) {
+      out.textContent = "Failed to load logs: " + (e && e.message || e);
+    }
+  };
+  await load();
+  document.getElementById("log-refresh").addEventListener("click", load);
+  const timer = setInterval(() => { if (follow.checked) load(); }, 2000);
+  window.__atlasCleanup = () => clearInterval(timer);
 }
 
 // userForm renders the create or edit form for a user. In edit mode the username
@@ -1956,6 +2019,7 @@ async function route() {
   try {
     if (path === "#/" || path === "#/console") return await viewConsoleDashboard();
     if (path === "#/console/engine") return await viewConsoleEngine();
+    if (path === "#/console/logs") return await viewConsoleLogs();
     if (path === "#/console/org") return await viewConsoleOrg();
     if (path === "#/modeler") return await viewModelerHome();
     const pd = path.match(/^#\/modeler\/p\/(.+)$/);

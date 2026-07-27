@@ -87,6 +87,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Instance counts", schemaObj(map[string]any{
 				"activeProcessInstances": tInteger(), "activeElementInstances": tInteger(),
 			}))}},
+		{"GET", "/api/v1/logs", s.handleLogs, apiOp{
+			summary: "Recent server log lines (admin-only when auth is on)", tag: "System",
+			resp: jsonBody("Recent log lines, oldest first", schemaObj(map[string]any{
+				"lines": tArray(),
+			}))}},
 
 		{"POST", "/api/v1/feel/validate", s.handleValidateFeel, apiOp{
 			summary: "Validate a FEEL expression compiles", tag: "FEEL",

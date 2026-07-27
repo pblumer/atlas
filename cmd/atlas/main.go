@@ -15,6 +15,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -108,6 +109,12 @@ func runServe(args []string) error {
 }
 
 func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, scriptLangs map[string]bool, scriptTimeout time.Duration) error {
+	// Tee the process log into a bounded in-memory buffer, exposed at
+	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
+	// without shell access. Set before the first log line so startup is captured.
+	logs := api.NewLogBuffer(2000)
+	log.SetOutput(io.MultiWriter(os.Stderr, logs))
+
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return err
 	}
@@ -134,7 +141,7 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool,
 		return err
 	}
 
-	var apiOpts []api.Option
+	apiOpts := []api.Option{api.WithLogBuffer(logs)}
 	if !docs {
 		apiOpts = append(apiOpts, api.WithoutDocs())
 	}
