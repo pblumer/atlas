@@ -34,6 +34,11 @@ function rankByPrefix(items, prefix, text) {
 
 const isWord = (ch) => ch !== undefined && /[A-Za-z0-9_]/.test(ch);
 
+// A context variable is either a bare name or { name, detail }, where detail is its
+// origin label (start / script result / output mapping / task-local).
+const varName = (v) => (typeof v === "string" ? v : v && v.name);
+const varDetail = (v, fallback) => (typeof v === "string" ? fallback : (v && v.detail) || fallback);
+
 // ---------- PowerShell ----------
 
 // PS_KEYWORDS are statement/flow keywords (not operators — PowerShell's logical
@@ -259,7 +264,9 @@ export function tokenizePowerShell(src) {
 function psPrefix(before) {
   let m = /\$env:([A-Za-z0-9_]*)$/i.exec(before);
   if (m) return { text: m[0], start: before.length - m[0].length, mode: "env" };
-  m = /\$[A-Za-z_][A-Za-z0-9_]*$/.exec(before);
+  // A bare `$` (no name yet) already means "a variable" — offer them all so
+  // Ctrl+Space right after the sigil lists the in-scope variables.
+  m = /\$[A-Za-z_]*$/.exec(before);
   if (m) return { text: m[0], start: before.length - m[0].length, mode: "var" };
   m = /-[A-Za-z]*$/.exec(before);
   if (m) return { text: m[0], start: before.length - m[0].length, mode: "op" };
@@ -301,9 +308,9 @@ export const powershell = {
     }
     if (p.mode === "var") {
       const rest = p.text.slice(1);
-      const items = (ctx.variables || []).map((name) => ({
-        label: "$" + name, kind: "variable", insert: "$" + name, detail: "instance variable",
-      }));
+      const items = (ctx.variables || [])
+        .filter(varName)
+        .map((v) => ({ label: "$" + varName(v), kind: "variable", insert: "$" + varName(v), detail: varDetail(v, "instance variable") }));
       return rankByPrefix(items, rest, (it) => it.label.slice(1));
     }
     if (p.mode === "op") {
@@ -398,7 +405,9 @@ function clikeModule(kind) {
     tokenize: (src) => tokenizeClike(src, kind),
     completions(prefix, ctx) {
       const items = [
-        ...(ctx.variables || []).map((name) => ({ label: name, kind: "variable", insert: name, detail: "instance variable" })),
+        ...(ctx.variables || [])
+          .filter(varName)
+          .map((v) => ({ label: varName(v), kind: "variable", insert: varName(v), detail: varDetail(v, "instance variable") })),
         ...keywords.map((k) => ({ label: k, kind: "keyword", insert: k, detail: "keyword" })),
       ];
       return rankByPrefix(items, prefix, (it) => it.label);

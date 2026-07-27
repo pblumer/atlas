@@ -244,8 +244,12 @@ export function completionsFor(prefix, variables) {
   const p = (prefix || "").toLowerCase();
   const items = [];
 
-  for (const name of variables || []) {
-    items.push({ label: name, kind: "variable", insert: name, detail: "variable" });
+  for (const v of variables || []) {
+    // A variable is either a bare name or { name, detail } where detail is its
+    // origin label (start / script result / output mapping / task-local).
+    const name = typeof v === "string" ? v : v.name;
+    const detail = typeof v === "string" ? "variable" : (v.detail || "variable");
+    if (name) items.push({ label: name, kind: "variable", insert: name, detail });
   }
   for (const b of FEEL_BUILTINS) {
     items.push({ label: b.name, kind: "function", insert: b.name, detail: b.sig, doc: b.doc });

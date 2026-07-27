@@ -45,6 +45,22 @@ const KIND_LABEL = {
 // highlightTokens renders a token list as backdrop HTML. A token that opts into
 // tooltips (tip:true with a name) is tagged with data-fn so the hover hit-test can
 // find it; an identifier that names a known variable is recoloured as one.
+// normVars accepts the caller's variables as either bare name strings or
+// { name, detail } objects (detail is the origin label shown in completion), and
+// returns both a Set of names (for highlighting an in-scope identifier) and the
+// labelled list (for the completion popup).
+function normVars(list) {
+  const names = new Set();
+  const arr = [];
+  for (const v of list || []) {
+    const name = typeof v === "string" ? v : (v && v.name);
+    if (!name) continue;
+    names.add(name);
+    arr.push(typeof v === "string" ? { name, detail: "variable" } : { name, detail: v.detail || "variable" });
+  }
+  return { names, arr };
+}
+
 function highlightTokens(tokens, variables) {
   let html = "";
   for (const t of tokens) {
@@ -74,7 +90,7 @@ export function attachCodeEditor(textarea, opts = {}) {
   if (!lang || typeof lang.tokenize !== "function") return null;
   textarea.dataset.ceOn = "1";
 
-  let variables = new Set(opts.variables || []);
+  let { names: varNames, arr: varList } = normVars(opts.variables);
   const gutterOn = opts.gutter !== false;
   const wrap = opts.wrap === true; // scripts default to no-wrap (horizontal scroll)
 
@@ -160,7 +176,7 @@ export function attachCodeEditor(textarea, opts = {}) {
   function renderHighlight() {
     // A trailing newline is not rendered by <pre> unless followed by content;
     // a zero-width space keeps the last line's height and the caret aligned.
-    code.innerHTML = highlightTokens(lang.tokenize(textarea.value), variables) + "​";
+    code.innerHTML = highlightTokens(lang.tokenize(textarea.value), varNames) + "​";
     pre.scrollTop = textarea.scrollTop;
     pre.scrollLeft = textarea.scrollLeft;
     renderGutter();
@@ -210,7 +226,7 @@ export function attachCodeEditor(textarea, opts = {}) {
   function openCompletion(explicit) {
     const { before, text } = currentPrefix();
     if (!explicit && text === "") { closePopup(); return; }
-    const ctx = { variables: [...variables], source: textarea.value, before };
+    const ctx = { variables: varList, source: textarea.value, before };
     items = (lang.completions ? lang.completions(text, ctx) : []).slice(0, 50);
     active = items.length ? 0 : -1;
     renderPopup();
@@ -454,7 +470,7 @@ export function attachCodeEditor(textarea, opts = {}) {
       wrapEl.parentNode.insertBefore(textarea, wrapEl);
       wrapEl.remove();
     },
-    setVariables(list) { variables = new Set(list || []); renderHighlight(); },
+    setVariables(list) { const n = normVars(list); varNames = n.names; varList = n.arr; renderHighlight(); },
     setMarkers(list) {
       markers = (list || []).filter((m) => m && m.line > 0);
       renderGutter();
