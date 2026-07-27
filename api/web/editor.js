@@ -496,43 +496,58 @@ function activeTab(root) {
   return (b && b.dataset.tab) || "design";
 }
 
-// makeImplementBadges surfaces a script task's *executable* language on the canvas.
-// A bpmn:ScriptTask carrying an <atlas:jobScript> looks identical whatever language
-// it runs — the design view is deliberately language-agnostic (control flow only),
-// but on the Implement tab the difference between a PowerShell and a Python task is
-// exactly what the author is working with, so we mark each with its language icon.
-// The badge is a bpmn-js overlay (like Operate's execution-count badges), so it
-// tracks the shape through pan/zoom and is torn down with the modeler. Returns a
-// refresh function the tab toggle and diagram-change events call; it is a no-op off
-// the Implement tab, where it clears any badges the author left behind.
+// drawLangBadges marks every job-script task with its executable language icon so
+// PowerShell vs Python vs JavaScript reads at a glance — a plain bpmn:ScriptTask
+// looks identical whatever language it runs. It draws for a job-worker script task
+// (a bpmn:ScriptTask carrying <atlas:jobScript>); a FEEL script task runs in the
+// engine and has no worker language, so it gets none. Each badge is a bpmn-js
+// overlay (like Operate's execution-count badges), so it tracks the shape through
+// pan/zoom and is torn down with the modeler. Returns the overlay ids it added, for
+// callers that reap their own badges (the Modeler removes them on tab switch; the
+// live views let overlays.clear() reap them). Shared by the Modeler's Implement view
+// and the read-only runtime views (live/collaboration/replay), where the language a
+// token is running is just as relevant as at authoring time.
+function drawLangBadges(modeler) {
+  const ids = [];
+  let overlays, registry;
+  try { overlays = modeler.get("overlays"); registry = modeler.get("elementRegistry"); }
+  catch { return ids; } // modeler torn down mid-flight
+  registry.forEach((el) => {
+    const bo = el.businessObject;
+    if (!bo || bo.$type !== "bpmn:ScriptTask") return;
+    const js = findExt(bo, "atlas:JobScript");
+    if (!js) return; // a FEEL script task runs in the engine — no worker language
+    const meta = JOB_LANGS[js.language] || JOB_LANGS.powershell;
+    try {
+      ids.push(overlays.add(el.id, "lang-badge", {
+        position: { top: -10, left: -10 },
+        html: `<span class="lang-badge" title="${esc(meta.label)}">${meta.icon}<span class="lb-text">${esc(meta.short)}</span></span>`,
+      }));
+    } catch { /* shape without graphics (e.g. mid-import) — skip */ }
+  });
+  return ids;
+}
+
+// makeImplementBadges gates drawLangBadges on the Modeler's Implement tab: the
+// Design view is deliberately language-agnostic (control flow only), but on the
+// Implement tab the difference between a PowerShell and a Python task is exactly
+// what the author is working with. Returns a refresh function the tab toggle and
+// diagram-change events call; it is a no-op off the Implement tab, where it clears
+// any badges the author left behind.
 function makeImplementBadges(root, modeler) {
-  const ids = []; // overlay ids currently on the canvas, so we can remove ours only
+  let ids = []; // overlay ids currently on the canvas, so we can remove ours only
 
   const clear = () => {
     let overlays;
-    try { overlays = modeler.get("overlays"); } catch { ids.length = 0; return; }
-    while (ids.length) { try { overlays.remove(ids.pop()); } catch { /* gone */ } }
+    try { overlays = modeler.get("overlays"); } catch { ids = []; return; }
+    for (const id of ids) { try { overlays.remove(id); } catch { /* gone */ } }
+    ids = [];
   };
 
   const refresh = () => {
     clear();
     if (activeTab(root) !== "implement") return;
-    let overlays, registry;
-    try { overlays = modeler.get("overlays"); registry = modeler.get("elementRegistry"); }
-    catch { return; } // modeler torn down mid-flight
-    registry.forEach((el) => {
-      const bo = el.businessObject;
-      if (!bo || bo.$type !== "bpmn:ScriptTask") return;
-      const js = findExt(bo, "atlas:JobScript");
-      if (!js) return; // a FEEL script task runs in the engine — no worker language
-      const meta = JOB_LANGS[js.language] || JOB_LANGS.powershell;
-      try {
-        ids.push(overlays.add(el.id, "lang-badge", {
-          position: { top: -10, left: -10 },
-          html: `<span class="lang-badge" title="${esc(meta.label)}">${meta.icon}<span class="lb-text">${esc(meta.short)}</span></span>`,
-        }));
-      } catch { /* shape without graphics (e.g. mid-import) — skip */ }
-    });
+    ids = drawLangBadges(modeler);
   };
 
   // Keep badges in step with edits (language switched, task added/removed) while the
@@ -2861,6 +2876,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
   const canvas = viewer.get("canvas");
   const overlays = viewer.get("overlays");
   const registry = viewer.get("elementRegistry");
+  drawLangBadges(viewer); // show language icons at once, before the first poll lands
   const countEl = root.querySelector("#inst-count");
   const tokenEl = root.querySelector("#token-count");
   const instSel = root.querySelector("#instance-sel");
@@ -3127,6 +3143,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
     catch (e) { return; } // transient; try again next tick
     if (current !== viewer) return; // navigated away mid-flight
     overlays.clear();
+    drawLangBadges(viewer); // language icons are static; overlays.clear() reaped them
     for (const [id, marker] of marked) canvas.removeMarker(id, marker);
     marked = [];
     // The tasks in scope: a single instance's own, or (for "All instances") every
@@ -3453,6 +3470,7 @@ export async function mountCollaboration(root, { api, toast, key }) {
 
   const canvas = viewer.get("canvas");
   const registry = viewer.get("elementRegistry");
+  drawLangBadges(viewer); // static language icons; this view never clears overlays
   const layer = canvas.getLayer("atlas-replay", 900); // message dots ride above the diagram
   const titleEl = root.querySelector("#collab-title");
   const instEl = root.querySelector("#inst-count");
@@ -3722,6 +3740,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const canvas = viewer.get("canvas");
   const registry = viewer.get("elementRegistry");
   const overlays = viewer.get("overlays");
+  drawLangBadges(viewer); // static language icons; only the count badges are re-drawn
   const eventBus = viewer.get("eventBus");
   const layer = canvas.getLayer("atlas-replay", 900); // moving token dot rides above the diagram
   const dotLayer = canvas.getLayer("atlas-tokens", 899); // static per-frame token dots
