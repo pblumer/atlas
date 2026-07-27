@@ -262,14 +262,31 @@ function bindJsonCards(panel, collapsed, rerender) {
   });
 }
 
-export async function mountEditor(root, { api, toast, key, draftId, projectId }) {
+// editorCrumbs renders the editor's breadcrumb trail. It always offers a way
+// back to the Modeler home, and — when the artifact belongs to a project — a
+// link straight back to that project's workspace, so authoring an artifact
+// isn't a one-way trip into the canvas (ADR-0034). `project` is {id, name} or
+// null/undefined (a new/ungrouped diagram or a deployment, which has no
+// project scope). The current segment is filled in with the diagram name once
+// the model loads; see #crumb-current.
+function editorCrumbs(project, current) {
+  const sep = `<span class="crumb-sep" aria-hidden="true">›</span>`;
+  const proj = project
+    ? `${sep}<a href="#/modeler/p/${encodeURIComponent(project.id)}">${esc(project.name)}</a>`
+    : "";
+  return `<nav class="crumbs" aria-label="Breadcrumb">` +
+    `<a href="#/modeler">Home</a>${proj}${sep}` +
+    `<span class="crumb-current">${esc(current)}</span></nav>`;
+}
+
+export async function mountEditor(root, { api, toast, key, draftId, projectId, project }) {
   cleanup();
 
   const crumb = draftId != null ? "Draft" : key == null ? "New diagram" : "Deployment " + key;
   root.innerHTML = `
     <div class="editor">
       <div class="editor-bar">
-        <span class="crumbs">${crumb}</span>
+        ${editorCrumbs(project, crumb)}
         <div class="etabs">
           <button data-tab="design" class="active">Design</button>
           <button data-tab="implement">Implement</button>
@@ -339,7 +356,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId })
     }
     modeler.get("canvas").zoom("fit-viewport");
     const pbo = rootProcess(modeler);
-    if (pbo) root.querySelector(".crumbs").textContent = pbo.name || pbo.id || "Diagram";
+    if (pbo) root.querySelector(".crumb-current").textContent = pbo.name || pbo.id || "Diagram";
   } catch (e) {
     toast("could not open diagram: " + e.message, "err");
   }
@@ -2553,7 +2570,7 @@ function wireActions(root, modeler, api, toast, projectId) {
       const { xml } = await modeler.saveXML({ format: true });
       const path = "/api/v1/drafts" + (projectId ? "?projectId=" + encodeURIComponent(projectId) : "");
       const d = await api("POST", path, xml, true);
-      root.querySelector(".crumbs").textContent = d.name || d.processId || "Draft";
+      root.querySelector(".crumb-current").textContent = d.name || d.processId || "Draft";
       toast(`Saved draft “${d.name || d.processId}”`, "ok");
     } catch (e) {
       toast("save failed: " + e.message, "err");
