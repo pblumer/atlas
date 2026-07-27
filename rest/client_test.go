@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/model"
 )
 
@@ -207,5 +208,150 @@ func TestHTTPClientBuildError(t *testing.T) {
 	c := NewHTTPClient()
 	if _, err := c.Do(context.Background(), Request{Method: "BAD METHOD", URL: "http://example.invalid/x"}); err == nil {
 		t.Fatal("Do with an invalid method: err = nil, want error")
+	}
+}
+
+// TestWithQuery merges connector query parameters with any already in the URL and
+// encodes deterministically; an empty map leaves the URL untouched.
+func TestWithQuery(t *testing.T) {
+	if got, err := withQuery("https://x/y?a=1", nil); err != nil || got != "https://x/y?a=1" {
+		t.Errorf("withQuery(no params) = %q,%v, want the URL unchanged", got, err)
+	}
+	got, err := withQuery("https://x/y?a=1", map[string]string{"b": "2", "c": "3"})
+	if err != nil {
+		t.Fatalf("withQuery: %v", err)
+	}
+	if got != "https://x/y?a=1&b=2&c=3" {
+		t.Errorf("withQuery = %q, want a=1&b=2&c=3 (sorted, merged)", got)
+	}
+	if _, err := withQuery("://bad", map[string]string{"b": "2"}); err == nil {
+		t.Error("withQuery on an unparseable URL: err = nil, want error")
+	}
+}
+
+// TestHTTPClientHeadersAndQuery checks the client sends model headers and query,
+// and that a model header overrides the default Accept.
+func TestHTTPClientHeadersAndQuery(t *testing.T) {
+	var gotAccept, gotCustom, gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAccept = r.Header.Get("Accept")
+		gotCustom = r.Header.Get("X-Custom")
+		gotQuery = r.URL.Query().Get("page")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	c := NewHTTPClient()
+	_, err := c.Do(context.Background(), Request{
+		Method:  "GET",
+		URL:     srv.URL + "/todos",
+		Headers: map[string]string{"X-Custom": "hi", "Accept": "text/plain"},
+		Query:   map[string]string{"page": "2"},
+	})
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if gotCustom != "hi" {
+		t.Errorf("X-Custom = %q, want hi", gotCustom)
+	}
+	if gotAccept != "text/plain" {
+		t.Errorf("Accept = %q, want the model override text/plain", gotAccept)
+	}
+	if gotQuery != "2" {
+		t.Errorf("query page = %q, want 2", gotQuery)
+	}
+}
+
+func TestDecodeStringMap(t *testing.T) {
+	if m, err := decodeStringMap(""); err != nil || m != nil {
+		t.Errorf("decodeStringMap(empty) = %v,%v, want nil,nil", m, err)
+	}
+	m, err := decodeStringMap(`{"a":"1"}`)
+	if err != nil || m["a"] != "1" {
+		t.Errorf("decodeStringMap = %v,%v, want {a:1}", m, err)
+	}
+	if _, err := decodeStringMap("{bad"); err == nil {
+		t.Error("decodeStringMap(bad json): err = nil, want error")
+	}
+}
+
+func TestAuthHeader(t *testing.T) {
+	if n, v := authHeader(compilerAuth("bearer", "", ""), "tok"); n != "Authorization" || v != "Bearer tok" {
+		t.Errorf("bearer = %q,%q", n, v)
+	}
+	if n, v := authHeader(compilerAuth("basic", "u", ""), "p"); n != "Authorization" || v != "Basic dTpw" {
+		t.Errorf("basic = %q,%q, want base64(u:p)=dTpw", n, v)
+	}
+	if n, v := authHeader(compilerAuth("apikey", "", "X-Key"), "k"); n != "X-Key" || v != "k" {
+		t.Errorf("apikey = %q,%q", n, v)
+	}
+	if n, _ := authHeader(compilerAuth("nope", "", ""), "x"); n != "" {
+		t.Errorf("unknown scheme name = %q, want empty", n)
+	}
+}
+
+func TestApplyAuth(t *testing.T) {
+	// No auth encoded → no change, nil map stays nil.
+	if h, err := applyAuth(nil, "", noResolver); err != nil || h != nil {
+		t.Errorf("applyAuth(none) = %v,%v, want nil,nil", h, err)
+	}
+	// Bad JSON → error.
+	if _, err := applyAuth(nil, "{bad", noResolver); err == nil {
+		t.Error("applyAuth(bad json): err = nil, want error")
+	}
+	// Empty type → no-op.
+	if h, err := applyAuth(nil, `{"type":""}`, noResolver); err != nil || h != nil {
+		t.Errorf("applyAuth(empty type) = %v,%v, want nil,nil", h, err)
+	}
+	// Missing secret → error.
+	if _, err := applyAuth(nil, `{"type":"bearer","secretRef":"X"}`, noResolver); err == nil {
+		t.Error("applyAuth(missing secret): err = nil, want error")
+	}
+	// Resolves and allocates a header map even when none was passed.
+	h, err := applyAuth(nil, `{"type":"bearer","secretRef":"X"}`, func(string) string { return "tok" })
+	if err != nil || h["Authorization"] != "Bearer tok" {
+		t.Errorf("applyAuth(bearer) = %v,%v, want Authorization header", h, err)
+	}
+	// An explicit model header of the same name is not clobbered.
+	h2, err := applyAuth(map[string]string{"Authorization": "keep"}, `{"type":"bearer","secretRef":"X"}`, func(string) string { return "tok" })
+	if err != nil || h2["Authorization"] != "keep" {
+		t.Errorf("applyAuth over an existing header = %v, want it preserved", h2)
+	}
+}
+
+func noResolver(string) string { return "" }
+
+// compilerAuth is a small ctor to keep the auth-header cases readable.
+func compilerAuth(typ, user, apiKeyName string) compiler.RestAuth {
+	return compiler.RestAuth{Type: typ, Username: user, ApiKeyName: apiKeyName}
+}
+
+// TestHTTPClientQueryError covers Do's query-append failure branch: an unparseable
+// URL with query parameters errors before any call.
+func TestHTTPClientQueryError(t *testing.T) {
+	c := NewHTTPClient()
+	if _, err := c.Do(context.Background(), Request{Method: "GET", URL: "://bad", Query: map[string]string{"a": "1"}}); err == nil {
+		t.Fatal("Do with an unparseable URL + query: err = nil, want error")
+	}
+}
+
+// TestHTTPClientModelContentType covers the branch where a model header sets
+// Content-Type on a body request, so the default is not applied.
+func TestHTTPClientModelContentType(t *testing.T) {
+	var gotCT string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotCT = r.Header.Get("Content-Type")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	c := NewHTTPClient()
+	if _, err := c.Do(context.Background(), Request{
+		Method: "POST", URL: srv.URL + "/x",
+		Headers: map[string]string{"Content-Type": "application/vnd.custom+json"},
+		Body:    map[string]any{"a": 1},
+	}); err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if gotCT != "application/vnd.custom+json" {
+		t.Errorf("Content-Type = %q, want the model override", gotCT)
 	}
 }

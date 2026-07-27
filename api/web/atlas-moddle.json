@@ -54,7 +54,29 @@
       "properties": [
         { "name": "method", "type": "String", "isAttr": true },
         { "name": "url", "type": "String", "isAttr": true },
-        { "name": "resultVariable", "type": "String", "isAttr": true }
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "authType", "type": "String", "isAttr": true },
+        { "name": "authUsername", "type": "String", "isAttr": true },
+        { "name": "authApiKeyName", "type": "String", "isAttr": true },
+        { "name": "authSecret", "type": "String", "isAttr": true },
+        { "name": "headers", "type": "HttpHeader", "isMany": true },
+        { "name": "queryParameters", "type": "QueryParam", "isMany": true }
+      ]
+    },
+    {
+      "name": "HttpHeader",
+      "superClass": ["Element"],
+      "properties": [
+        { "name": "name", "type": "String", "isAttr": true },
+        { "name": "value", "type": "String", "isAttr": true }
+      ]
+    },
+    {
+      "name": "QueryParam",
+      "superClass": ["Element"],
+      "properties": [
+        { "name": "name", "type": "String", "isAttr": true },
+        { "name": "value", "type": "String", "isAttr": true }
       ]
     }
   ]

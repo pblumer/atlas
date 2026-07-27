@@ -230,8 +230,8 @@ const CONNECTORS = [
   },
   {
     id: "http-rest", name: "HTTP REST", kind: "REST API",
-    desc: "Calls a model-authored REST endpoint from a service task off the processor loop, writing the JSON response into a result variable. Authored via the REST Outbound Connector service-task type.",
-    refs: "ADR-0036 · ADR-0067", status: "active", statusLabel: "embedded",
+    desc: "Calls a model-authored REST endpoint from a service task off the processor loop — method, URL, headers, query parameters, and basic/bearer/apiKey auth (secrets resolved server-side) — writing the JSON response into a result variable. Authored via the REST Outbound Connector service-task type.",
+    refs: "ADR-0036 · ADR-0041 · ADR-0067", status: "active", statusLabel: "embedded",
   },
 ];
 

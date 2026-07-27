@@ -48,6 +48,56 @@ func normalizeHTTPMethod(m string) (string, error) {
 	return up, nil
 }
 
+// httpKVMap turns a REST connector's header or query-parameter child elements into
+// a {name:value} map, trimming names and skipping rows with an empty name (an
+// incomplete row the author hasn't filled in). A duplicated name is an error, so a
+// silent last-wins collision can't hide a modeling mistake. kind names the field
+// for the error message ("header" / "query parameter").
+func httpKVMap(taskID, kind string, kvs []xmlHTTPKV) (map[string]string, error) {
+	if len(kvs) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]string, len(kvs))
+	for _, kv := range kvs {
+		name := strings.TrimSpace(kv.Name)
+		if name == "" {
+			continue
+		}
+		if _, dup := out[name]; dup {
+			return nil, fmt.Errorf("compiler: rest connector task %q has a duplicate %s %q", taskID, kind, name)
+		}
+		out[name] = kv.Value
+	}
+	return out, nil
+}
+
+// restAuth reads a REST connector's authentication config from its extension.
+// authType selects the scheme; an unknown scheme is rejected, and a scheme that
+// needs a secret reference must name one (secrets live server-side, ADR-0041, so
+// the model always references rather than carries them).
+func restAuth(taskID string, c *xmlRestConnector) (RestAuth, error) {
+	t := strings.ToLower(strings.TrimSpace(c.AuthType))
+	switch t {
+	case "", "none":
+		return RestAuth{}, nil
+	case "basic", "bearer", "apikey":
+		if strings.TrimSpace(c.AuthSecret) == "" {
+			return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses %s auth but names no secret reference", taskID, t)
+		}
+		if t == "apikey" && strings.TrimSpace(c.AuthApiKeyName) == "" {
+			return RestAuth{}, fmt.Errorf("compiler: rest connector task %q uses apiKey auth but names no header", taskID)
+		}
+		return RestAuth{
+			Type:       t,
+			Username:   strings.TrimSpace(c.AuthUsername),
+			ApiKeyName: strings.TrimSpace(c.AuthApiKeyName),
+			SecretRef:  strings.TrimSpace(c.AuthSecret),
+		}, nil
+	default:
+		return RestAuth{}, fmt.Errorf("compiler: rest connector task %q has an unsupported auth type %q", taskID, c.AuthType)
+	}
+}
+
 // Parse reads a BPMN 2.0 XML model and compiles the first <process> into an
 // immutable CompiledProcess keyed by key at the given version. It is the front
 // end to the linearizer (compiler.md stages 1–2 and 6): it parses the XML,
@@ -266,7 +316,20 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			if err != nil {
 				return nil, fmt.Errorf("compiler: rest connector task %q: %w", st.Id, err)
 			}
-			if err := register(st.Id, b.AddRestConnectorTask(method, strings.TrimSpace(c.Url), strings.TrimSpace(c.ResultVariable), retries)); err != nil {
+			headers, err := httpKVMap(st.Id, "header", c.Headers)
+			if err != nil {
+				return nil, err
+			}
+			query, err := httpKVMap(st.Id, "query parameter", c.QueryParams)
+			if err != nil {
+				return nil, err
+			}
+			auth, err := restAuth(st.Id, c)
+			if err != nil {
+				return nil, err
+			}
+			id := b.AddRestConnectorTask(method, strings.TrimSpace(c.Url), strings.TrimSpace(c.ResultVariable), headers, query, auth, retries)
+			if err := register(st.Id, id); err != nil {
 				return nil, err
 			}
 			continue
@@ -1061,14 +1124,30 @@ type xmlClioConnector struct {
 }
 
 // An HTTP-REST connector task's parameters, carried on a service task as an
-// <atlas:restConnector method="..." url="..." resultVariable="..."/> extension
-// element (ADR-0067). method is the HTTP method; url is the full request URL,
-// authored in the model (credentials are never authored here); resultVariable, if
-// set, is the process variable the JSON response is written back into.
+// <atlas:restConnector> extension element (ADR-0067). method is the HTTP method;
+// url is the full request URL, authored in the model; resultVariable, if set, is
+// the process variable the JSON response is written back into. Header and
+// QueryParam child elements add request headers and query parameters. The auth*
+// attributes describe authentication: authType is "basic"/"bearer"/"apiKey";
+// authUsername (basic) and authApiKeyName (the apiKey header name) are model data;
+// authSecret names a server-side secret (ADR-0041) — never the secret value.
 type xmlRestConnector struct {
-	Method         string `xml:"method,attr"`
-	Url            string `xml:"url,attr"`
-	ResultVariable string `xml:"resultVariable,attr"`
+	Method         string      `xml:"method,attr"`
+	Url            string      `xml:"url,attr"`
+	ResultVariable string      `xml:"resultVariable,attr"`
+	AuthType       string      `xml:"authType,attr"`
+	AuthUsername   string      `xml:"authUsername,attr"`
+	AuthApiKeyName string      `xml:"authApiKeyName,attr"`
+	AuthSecret     string      `xml:"authSecret,attr"`
+	Headers        []xmlHTTPKV `xml:"httpHeader"`
+	QueryParams    []xmlHTTPKV `xml:"queryParam"`
+}
+
+// xmlHTTPKV is one name/value pair in a REST connector's headers or query
+// parameters (an <atlas:httpHeader> or <atlas:queryParam> child element).
+type xmlHTTPKV struct {
+	Name  string `xml:"name,attr"`
+	Value string `xml:"value,attr"`
 }
 
 type xmlTaskDefinition struct {

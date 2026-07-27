@@ -240,7 +240,15 @@ type ConnectorTaskDetail struct {
 	Method    int32 // interned HTTP method → index, -1 if not a REST task
 	Url       int32 // interned full request URL → index, -1 if not a REST task
 	ResultVar int32 // interned REST result variable name → index, -1 if none
-	Retries   int32
+	// Headers and Query are interned JSON objects ({name:value}) of the request
+	// headers and query parameters a REST task adds, -1 when none (ADR-0067). Auth
+	// is an interned JSON object describing the request's authentication —
+	// {"type","username","apiKeyName","secretRef"} — where secretRef names a
+	// server-side secret (ADR-0041), never the value; -1 when unauthenticated.
+	Headers int32
+	Query   int32
+	Auth    int32
+	Retries int32
 }
 
 // ScriptJobTaskDetail is the per-script-job-task data a behavior needs at
