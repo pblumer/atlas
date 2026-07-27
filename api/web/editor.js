@@ -11,22 +11,28 @@ import { openDmnEditor } from "./dmn-editor.js";
 // key is the language stored in <atlas:jobScript language="...">. `short` labels
 // the script field, `placeholder` seeds an empty editor, and `hint` documents that
 // language's input/result contract (PowerShell uses its output stream; Python and
-// JavaScript assign to a variable named `result`).
+// JavaScript assign to a variable named `result`). `icon` is a self-contained SVG
+// glyph shown on the task shape in the Implement view so the executable language is
+// legible at a glance — a plain bpmn:ScriptTask looks identical whatever language
+// it runs (see makeImplementBadges).
 const JOB_LANGS = {
   powershell: {
     label: "PowerShell (job worker)", short: "PowerShell",
     placeholder: 'Write-Output "Hallo $Vorname"',
     hint: `Runs on a PowerShell job worker, off the engine's hot path. The instance's variables are available as <code>$name</code>; the script's <b>output</b> is written back into the result variable.`,
+    icon: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="0.5" y="0.5" width="15" height="15" rx="3" fill="#2c6db5"/><path d="M4 4.3 8 8 4 11.7" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 11.5h3.4" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>`,
   },
   python: {
     label: "Python (job worker)", short: "Python",
     placeholder: 'result = f"Hallo {Vorname}"',
     hint: `Runs on a Python job worker, off the engine's hot path. The instance's variables are available as <code>name</code>; assign your output to a variable named <code>result</code>.`,
+    icon: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M7.7 1.4c-2 0-3.4.4-3.4 1.9v1.6h3.5v.4H3.2C1.7 5.3 1 6.3 1 8.3s.7 3 2.2 3h1.1V9.4c0-1.5 1.2-2.7 2.7-2.7h3c1.2 0 2-.9 2-2.1V3.3C13.9 2 13 1.4 7.7 1.4zM5.9 2.5c.4 0 .7.3.7.7s-.3.7-.7.7-.7-.3-.7-.7.3-.7.7-.7z" fill="#3c78aa"/><path d="M8.3 14.6c2 0 3.4-.4 3.4-1.9v-1.6H8.2v-.4h4.6c1.5 0 2.2-1 2.2-3s-.7-3-2.2-3h-1.1v1.9c0 1.5-1.2 2.7-2.7 2.7h-3c-1.2 0-2 .9-2 2.1v2.2C2.1 14 3 14.6 8.3 14.6zm1.8-1.1c-.4 0-.7-.3-.7-.7s.3-.7.7-.7.7.3.7.7-.3.7-.7.7z" fill="#f6c945"/></svg>`,
   },
   javascript: {
     label: "JavaScript (job worker)", short: "JavaScript",
     placeholder: 'const result = "Hallo " + Vorname',
     hint: `Runs on a Node.js job worker, off the engine's hot path. The instance's variables are available as <code>name</code>; assign your output to a variable named <code>result</code>.`,
+    icon: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#f0db4f"/><text x="8.5" y="12" text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="8" font-weight="700" fill="#323330">JS</text></svg>`,
   },
 };
 
@@ -345,7 +351,9 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId })
   }
 
   const rerender = wireProperties(root, modeler, api, projectId, toast);
-  wireTabs(root, rerender);
+  const refreshBadges = makeImplementBadges(root, modeler);
+  refreshBadges(); // reflect the initial tab for the diagram just imported
+  wireTabs(root, () => { rerender(); refreshBadges(); });
   wireActions(root, modeler, api, toast, projectId);
   wireEditorVars(root, modeler);
   wireResizer(root, modeler);
@@ -486,6 +494,53 @@ function wireTabs(root, onChange) {
 function activeTab(root) {
   const b = root.querySelector(".etabs button.active");
   return (b && b.dataset.tab) || "design";
+}
+
+// makeImplementBadges surfaces a script task's *executable* language on the canvas.
+// A bpmn:ScriptTask carrying an <atlas:jobScript> looks identical whatever language
+// it runs — the design view is deliberately language-agnostic (control flow only),
+// but on the Implement tab the difference between a PowerShell and a Python task is
+// exactly what the author is working with, so we mark each with its language icon.
+// The badge is a bpmn-js overlay (like Operate's execution-count badges), so it
+// tracks the shape through pan/zoom and is torn down with the modeler. Returns a
+// refresh function the tab toggle and diagram-change events call; it is a no-op off
+// the Implement tab, where it clears any badges the author left behind.
+function makeImplementBadges(root, modeler) {
+  const ids = []; // overlay ids currently on the canvas, so we can remove ours only
+
+  const clear = () => {
+    let overlays;
+    try { overlays = modeler.get("overlays"); } catch { ids.length = 0; return; }
+    while (ids.length) { try { overlays.remove(ids.pop()); } catch { /* gone */ } }
+  };
+
+  const refresh = () => {
+    clear();
+    if (activeTab(root) !== "implement") return;
+    let overlays, registry;
+    try { overlays = modeler.get("overlays"); registry = modeler.get("elementRegistry"); }
+    catch { return; } // modeler torn down mid-flight
+    registry.forEach((el) => {
+      const bo = el.businessObject;
+      if (!bo || bo.$type !== "bpmn:ScriptTask") return;
+      const js = findExt(bo, "atlas:JobScript");
+      if (!js) return; // a FEEL script task runs in the engine — no worker language
+      const meta = JOB_LANGS[js.language] || JOB_LANGS.powershell;
+      try {
+        ids.push(overlays.add(el.id, "lang-badge", {
+          position: { top: -10, left: -10 },
+          html: `<span class="lang-badge" title="${esc(meta.label)}">${meta.icon}<span class="lb-text">${esc(meta.short)}</span></span>`,
+        }));
+      } catch { /* shape without graphics (e.g. mid-import) — skip */ }
+    });
+  };
+
+  // Keep badges in step with edits (language switched, task added/removed) while the
+  // Implement tab is showing; refresh() short-circuits when another tab is active.
+  modeler.on("element.changed", refresh);
+  modeler.on("elements.changed", refresh);
+  modeler.on("import.done", refresh);
+  return refresh;
 }
 
 // collectFeelVariables gathers names an author is likely to reference in a FEEL
