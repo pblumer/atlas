@@ -167,11 +167,11 @@ func TestScriptTaskNoProcessLookup(t *testing.T) {
 	runner.HandleWithOutput(jobType, script.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, &fakeExec{result: "x"}))
 
 	p.CreateInstance(cp.Key)
-	if err := runner.Drive(); err == nil {
-		t.Fatal("Drive succeeded, want the no-process error surfaced")
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("Drive: %v, want nil (failure routed to an incident, ADR-0061)", err)
 	}
 	if pi, ei := active(t, store); pi != 1 || ei != 1 {
-		t.Fatalf("after failed lookup: process=%d element=%d, want 1 and 1 (still parked)", pi, ei)
+		t.Fatalf("after failed lookup: process=%d element=%d, want 1 and 1 (parked with an incident)", pi, ei)
 	}
 }
 
@@ -204,11 +204,11 @@ func TestScriptTaskWithoutResultVarCompletes(t *testing.T) {
 	}
 }
 
-// TestScriptTaskExecErrorLeavesJobPending: when the interpreter fails, the handler
-// returns an error, so the job is not completed and the instance stays parked —
-// the at-least-once contract every worker shares (retry/incident is a later
-// milestone).
-func TestScriptTaskExecErrorLeavesJobPending(t *testing.T) {
+// TestScriptTaskExecErrorRaisesIncident: when the interpreter fails, the handler
+// returns an error, so the job is failed rather than completed — it does not abort
+// the drive but (retries exhausted) parks the instance on the script task with an
+// incident (ADR-0061), the at-least-once contract every worker shares.
+func TestScriptTaskExecErrorRaisesIncident(t *testing.T) {
 	store, log := openStore(t)
 	cp, jobType := scriptProcess(t, `throw "boom"`, "Greeting")
 
@@ -222,11 +222,12 @@ func TestScriptTaskExecErrorLeavesJobPending(t *testing.T) {
 	runner.HandleWithOutput(jobType, script.Handler(store, lookupOf(cp), fx))
 
 	p.CreateInstance(cp.Key)
-	if err := runner.Drive(); err == nil {
-		t.Fatal("Drive succeeded, want the exec error surfaced")
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("Drive: %v, want nil (failure routed to an incident)", err)
 	}
-	// Job stays pending: the instance is still parked on the script task.
+	// The job is failed toward an incident: the instance is still parked on the
+	// script task rather than completing.
 	if pi, ei := active(t, store); pi != 1 || ei != 1 {
-		t.Fatalf("after failed run: process=%d element=%d, want 1 and 1 (still parked)", pi, ei)
+		t.Fatalf("after failed run: process=%d element=%d, want 1 and 1 (parked with an incident)", pi, ei)
 	}
 }

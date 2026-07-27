@@ -40,8 +40,10 @@ import (
 	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/job"
+	"github.com/pblumer/atlas/rest"
 	"github.com/pblumer/atlas/script"
 	"github.com/pblumer/atlas/state"
+	"github.com/pblumer/atlas/temis"
 )
 
 // dmnResolverFromEnv picks the DMN model source. When ATLAS_DMN_RESOLVER_URL is
@@ -56,6 +58,37 @@ func dmnResolverFromEnv(dir string) dmn.Resolver {
 		}
 	}
 	return dmn.DirResolver{Dir: dir}
+}
+
+// temisRegistryFromEnv builds a temis decision-connector registry from the
+// environment alone (the pre-managed mechanism, ADR-0041's env secret model):
+// ATLAS_TEMIS_CONNECTORS lists names, and per name N, ATLAS_TEMIS_<N>_URL /
+// ATLAS_TEMIS_<N>_TOKEN configure it. Managed connector instances are layered on
+// top of this by [Server.buildTemisClients]; this helper is the env-only base.
+func temisRegistryFromEnv() *temis.Registry {
+	reg := temis.NewRegistry()
+	reg.Replace(envTemisClients())
+	return reg
+}
+
+// connectorEnvKey normalizes a connector name into its environment-variable
+// fragment: upper-case, with each run of non-alphanumeric characters collapsed to
+// a single underscore and leading/trailing underscores trimmed.
+func connectorEnvKey(name string) string {
+	var b strings.Builder
+	pendingSep := false
+	for _, r := range strings.ToUpper(name) {
+		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			if pendingSep && b.Len() > 0 {
+				b.WriteByte('_')
+			}
+			pendingSep = false
+			b.WriteRune(r)
+		} else {
+			pendingSep = true
+		}
+	}
+	return b.String()
 }
 
 //go:embed web
@@ -100,8 +133,11 @@ type Server struct {
 	deploys     *deployStore     // durable sidecar for deployments (ADR-0019)
 	drafts      *draftStore      // durable sidecar for saved-but-not-deployed diagrams
 	forms       *formStore       // durable sidecar for form definitions (ADR-0028)
+	publicLinks *publicLinkStore // durable sidecar for public start links (ADR-0029)
+	publicRate  *rateLimiter     // throttles the unauthenticated public endpoints
 	projects    *projectStore    // durable sidecar for projects grouping artifacts (ADR-0034)
 	dmnrefs     *dmnRefStore     // durable sidecar for DMN reference artifacts (ADR-0034)
+	connectors  *connectorStore  // durable sidecar for managed connector instances (ADR-0041)
 	users       *userStore       // durable sidecar for user accounts (ADR-0044)
 
 	// sessions holds live login sessions in memory. Unlike the sidecar stores it
@@ -114,6 +150,12 @@ type Server struct {
 	// mirroring how docsEnabled gates the API explorer (ADR-0044/0043). Set once
 	// before Handler is mounted; read-only thereafter.
 	authEnabled bool
+
+	// internalToken is a random secret minted at startup when auth is enabled. A
+	// trusted in-process component (the MCP adapter) presents it as a bearer token
+	// so its loopback API calls authenticate without a login (ADR-0049). It
+	// resolves to a non-admin service principal. Empty when auth is off.
+	internalToken string
 
 	// dmnResolver turns a DMN reference handle into model XML; dmnValidator wraps
 	// it with a temis compile for the deploy-time validation gate (ADR-0034).
@@ -131,6 +173,11 @@ type Server struct {
 	// WithScriptWorker; a language with no worker parks its tasks. Set once before
 	// Handler is mounted; read-only thereafter.
 	scriptWorkers map[int32]script.Exec
+
+	// temisRegistry resolves a connector name to a temis service client for
+	// *central* business rule tasks (ADR-0050), built from the environment at
+	// startup (ADR-0041 secret model). Read only while driving jobs on the run loop.
+	temisRegistry *temis.Registry
 
 	// docsEnabled gates the OpenAPI spec and the Scalar API explorer. On by
 	// default (opt-out), consistent with the already-open web UI and MCP
@@ -186,6 +233,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	publicLinks, err := newPublicLinkStore(filepath.Join(dataDir, "public-links"))
+	if err != nil {
+		return nil, err
+	}
 	projects, err := newProjectStore(filepath.Join(dataDir, "projects"))
 	if err != nil {
 		return nil, err
@@ -198,23 +249,32 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	connectors, err := newConnectorStore(filepath.Join(dataDir, "connectors"))
+	if err != nil {
+		return nil, err
+	}
 	// DMN reference models are resolved either from a temis model service (when
 	// configured) or the zero-config <data-dir>/dmn-models folder. Both satisfy the
 	// Resolver interface, so the rest of the server is unaffected (ADR-0034/0014).
 	resolver := dmnResolverFromEnv(filepath.Join(dataDir, "dmn-models"))
 	s := &Server{
-		proc:         proc,
-		store:        store,
-		tasks:        make(chan func()),
-		quit:         make(chan struct{}),
-		deployments:  map[uint64]*deployment{},
-		nextKey:      1,
-		versions:     map[string]int32{},
-		deploys:      ds,
-		drafts:       drafts,
-		forms:        forms,
+		proc:        proc,
+		store:       store,
+		tasks:       make(chan func()),
+		quit:        make(chan struct{}),
+		deployments: map[uint64]*deployment{},
+		nextKey:     1,
+		versions:    map[string]int32{},
+		deploys:     ds,
+		drafts:      drafts,
+		forms:       forms,
+		publicLinks: publicLinks,
+		// A public start link tolerates a modest burst then ~1 start/sec per IP;
+		// generous for a human intake form, throttling for a script (ADR-0029).
+		publicRate:   newRateLimiter(20, 1),
 		projects:     projects,
 		dmnrefs:      dmnrefs,
+		connectors:   connectors,
 		users:        users,
 		sessions:     newSessionStore(defaultSessionTTL),
 		dmnResolver:  resolver,
@@ -226,22 +286,30 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		opt(s)
 	}
 	// When enforcement is on, make sure a fresh instance has an admin to log in
-	// with (ADR-0044). This runs before the loop serves traffic, so touching the
-	// user store directly here respects the single-writer discipline.
+	// with (ADR-0044) and mint the internal service token the in-process MCP
+	// adapter uses to authenticate its loopback calls (ADR-0049). Both run before
+	// the loop serves traffic, so touching the user store directly here respects
+	// the single-writer discipline.
 	if s.authEnabled {
 		if err := s.bootstrapAdmin(time.Now().Unix()); err != nil {
 			return nil, err
 		}
+		token, err := randomHex(32)
+		if err != nil {
+			return nil, err
+		}
+		s.internalToken = token
 	}
 	// The in-process DMN worker evaluates business rule tasks off no separate
 	// goroutine (the single-binary server drives jobs synchronously on the run
 	// loop). One handler serves every process: it resolves each job's decision,
 	// inputs, and result variable from the compiled process the job belongs to
 	// (ProcessLookup), so it registers once under the reserved DMN job type
-	// (compiler.DMNJobTypeIndex). It registers via HandleWithOutput because a
-	// decision's result is written back into the instance as a process variable.
+	// (compiler.DMNJobTypeIndex). It registers via HandleCompleting because a
+	// decision's completion both writes its result back as a process variable and
+	// retains the evaluation (inputs, outputs, trace) for debugging (ADR-0066).
 	s.jobRunner = job.NewRunner(store, proc)
-	s.jobRunner.HandleWithOutput(compiler.DMNJobTypeIndex, dmn.Handler(store, s.processLookup, s.dmnRegistry, nil))
+	s.jobRunner.HandleCompleting(compiler.DMNJobTypeIndex, dmn.Handler(store, s.processLookup, s.dmnRegistry, nil))
 	// Script-language workers (PowerShell, Python, JavaScript) each register under
 	// their reserved job type and resolve each job's script from the compiled
 	// process via processLookup, exactly like the DMN worker (ADR-0047). They run
@@ -250,6 +318,29 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	for jobType, exec := range s.scriptWorkers {
 		s.jobRunner.HandleWithOutput(jobType, script.Handler(store, s.processLookup, exec))
 	}
+	// A *central* business rule task delegates its decision to a remote temis
+	// service instead of the embedded library (ADR-0050). One connector worker
+	// serves every process under the reserved temis-connector job type; it resolves
+	// each job's connector name from the compiled process and calls the endpoint
+	// configured for that connector. Connectors come from the environment plus
+	// operator-managed instances in the Console (ADR-0041); the registry is built
+	// here (before the loop serves traffic) and rebuilt on every connector change.
+	// A model whose connector is not configured simply parks until it is.
+	s.temisRegistry = temis.NewRegistry()
+	clients, err := s.buildTemisClients()
+	if err != nil {
+		return nil, err
+	}
+	s.temisRegistry.Replace(clients)
+	s.jobRunner.HandleCompleting(compiler.TemisDecisionJobTypeIndex, temis.Handler(store, s.processLookup, s.temisRegistry, nil))
+	// An HTTP-REST connector task calls a model-authored endpoint (ADR-0067). One
+	// worker serves every process under the reserved REST job type; it resolves each
+	// job's method/url/result-variable from the compiled process, calls the API off
+	// the run loop and after fsync, and writes the JSON response into the task's
+	// result variable. The endpoint lives in the model, so nothing needs configuring
+	// here; authentication (a type plus a server-registered credential reference) is
+	// a follow-up.
+	s.jobRunner.HandleWithOutput(compiler.RestJobTypeIndex, rest.Handler(store, s.processLookup, rest.NewHTTPClient()))
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
 	}
@@ -405,6 +496,13 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("GET /api/docs", s.handleDocs)
 		mux.HandleFunc("GET /api/docs/", s.handleDocs)
 	}
+
+	// Public, unauthenticated start links (ADR-0029). These live under /public/,
+	// outside the /api/v1 surface auth gates, and expose exactly one thing: the
+	// start form for one token. They are rate-limited in the handlers.
+	mux.HandleFunc("GET /public/forms/{token}", s.handlePublicFormPage)
+	mux.HandleFunc("GET /public/forms/{token}/schema", s.handlePublicFormSchema)
+	mux.HandleFunc("POST /public/forms/{token}/start", s.handlePublicFormStart)
 
 	// The embedded UI is the catch-all; the more specific API patterns above win
 	// under net/http's precedence rules.

@@ -34,9 +34,11 @@ const (
 	TypeUserTask          // a human task: parks a token, creates a job, waits for a person to complete it via the Tasks app (ADR-0028)
 	TypeBoundaryEvent     // a timer/message event attached to a host activity; arms while the host runs and, when it fires, interrupts the host or spawns a parallel token (ADR-0040)
 	TypeScriptJobTask     // a script task authored in a general-purpose language (PowerShell, …) that runs via the job path, not inline like a FEEL script task (ADR-0047); like a service task it creates a job and waits
+	TypeTimerStartEvent   // a start event that a due timer instantiates on a schedule (duration/date/cycle/cron, ADR-0051); at runtime it behaves like a none start (flows straight on)
+	TypeMessageEndEvent   // an end event that publishes a message, then ends the instance (ADR-0052); the send-and-stop counterpart of a message throw event, so it reuses the throw detail table
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 19
+	numBpmnTypes = 21
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -78,6 +80,10 @@ func (t BpmnType) String() string {
 		return "BoundaryEvent"
 	case TypeScriptJobTask:
 		return "ScriptJobTask"
+	case TypeTimerStartEvent:
+		return "TimerStartEvent"
+	case TypeMessageEndEvent:
+		return "MessageEndEvent"
 	default:
 		return "Unspecified"
 	}
@@ -95,6 +101,10 @@ type CompiledNode struct {
 	Detail        int32 // index into the matching detail table, -1 if none
 	BoundaryStart int32 // offset into boundaryEvents (the node ids of events attached to this activity)
 	BoundaryCount int32 // number of boundary events attached (0 for a non-host node)
+	DataOutStart  int32 // offset into dataOutAssocs (the data-output associations of this activity)
+	DataOutCount  int32 // number of data-output associations (0 for a node with none)
+	DataInStart   int32 // offset into dataInAssocs (the data-input associations of this activity)
+	DataInCount   int32 // number of data-input associations (0 for a node with none)
 }
 
 // CompiledFlow is a sequence flow between two nodes. Condition is the compiled
@@ -146,14 +156,37 @@ type DecisionInputMapping struct {
 // variables, which override a static input of the same name. ResultVar, if set,
 // is the process variable the decision's result is written back into on job
 // completion (the output mapping); -1 if the task discards its result.
+//
+// Connector selects the evaluation locus (ADR-0050): -1 (the default) means the
+// decision is evaluated locally by the embedded temis library (ADR-0014); a set
+// Connector is the interned name of a server-registered temis connector that
+// evaluates the decision centrally, and the task then carries the temis-connector
+// job type instead of the local DMN job type.
 type BusinessRuleTaskDetail struct {
-	JobType       int32 // interned reserved DMN job type → index
+	JobType       int32 // interned reserved job type (DMN local, or temis connector) → index
 	DecisionId    int32 // interned DMN decision id → index
 	Inputs        int32 // interned JSON object of static inputs → index, -1 if none
 	ResultVar     int32 // interned result-variable name → index, -1 if none
+	Connector     int32 // interned temis connector name → index, -1 = local (in-engine)
 	Retries       int32
+	Binding       DecisionBinding        // how the decision model is resolved (ADR-0063)
 	InputMappings []DecisionInputMapping // variable-driven inputs, evaluated off the hot path
 }
+
+// DecisionBinding selects which DMN model version a local business rule task
+// evaluates against (ADR-0063). It mirrors Camunda's zeebe:calledDecision
+// bindingType. It applies only to local decisions; a central (connector) decision
+// resolves through its connector, so Binding is ignored when Connector is set.
+type DecisionBinding int32
+
+const (
+	// BindingLatest evaluates the newest deployed version of the decision (the
+	// default, matching Camunda). It is zero so an unset binding means "latest".
+	BindingLatest DecisionBinding = iota
+	// BindingDeployment evaluates the decision snapshotted with this process's own
+	// deployment (the ADR-0014 behavior): pinned and reproducible.
+	BindingDeployment
+)
 
 // UserTaskDetail is the per-user-task data a behavior needs at runtime. A user
 // task parks a token and creates a job like a service task; the "worker" is a
@@ -166,6 +199,14 @@ type UserTaskDetail struct {
 	Assignee        int32
 	CandidateGroups int32
 	FormId          int32 // interned form id bound via zeebe:formDefinition → index, -1 if unset (ADR-0028)
+	// Priority is the task's static importance from zeebe:priorityDefinition
+	// (default 50, Camunda's convention); higher sorts first in the inbox.
+	Priority int32
+	// DueDateNanos is the ISO-8601 duration (from zeebe:taskSchedule dueDate),
+	// in nanoseconds, after which the task is due — relative to its creation, so
+	// the absolute due instant is frozen when the job is created (ADR-0051).
+	// 0 means the task has no due date.
+	DueDateNanos int64
 }
 
 // ConnectorTaskDetail is the per-connector-task data a behavior needs at runtime.
@@ -176,21 +217,25 @@ type UserTaskDetail struct {
 // resolve at runtime. The JobType also selects which connector kind this is, and
 // thus which of the kind-specific fields below are populated:
 //
-//   - clio "write-events" (JobType == ClioWriteJobType): Subject and EventType are
-//     the interned clio coordinates the appended event lands under.
-//   - HTTP REST (JobType == RestJobType): Method and Path are the interned request
-//     method (e.g. "POST") and the path appended to the connector's base endpoint.
+//   - clio "write-events" (JobType == ClioWriteJobType): Connector names the
+//     server-registered clio instance; Subject and EventType are the interned clio
+//     coordinates the appended event lands under.
+//   - HTTP REST (JobType == RestJobType): Method and Url are the interned request
+//     method (e.g. "POST") and the full endpoint URL authored in the model
+//     (ADR-0067, revising ADR-0036 for REST); ResultVar, if set, is the process
+//     variable the JSON response is written back into on completion.
 //
 // Unused fields for a given kind are -1 (Intern maps that back to ""). Both kinds
 // send the instance's variables as the request/event body — a stand-in for full
 // payload mappings until the variable subsystem matures.
 type ConnectorTaskDetail struct {
 	JobType   int32 // interned reserved connector job type → index
-	Connector int32 // interned connector name → index
+	Connector int32 // interned connector name → index, -1 if not a clio task
 	Subject   int32 // interned clio target subject → index, -1 if not a clio task
 	EventType int32 // interned clio event type → index, -1 if not a clio task
 	Method    int32 // interned HTTP method → index, -1 if not a REST task
-	Path      int32 // interned HTTP path → index, -1 if not a REST task
+	Url       int32 // interned full request URL → index, -1 if not a REST task
+	ResultVar int32 // interned REST result variable name → index, -1 if none
 	Retries   int32
 }
 
@@ -214,11 +259,18 @@ type ScriptJobTaskDetail struct {
 	Retries   int32
 }
 
-// TimerCatchDetail is the per-timer-intermediate-catch-event data: how long the
-// event waits before continuing, as a fixed duration in nanoseconds (a literal
-// ISO-8601 duration today; FEEL duration expressions and date/cycle timers later).
+// TimerCatchDetail is the per-timer-intermediate-catch-event data: the compiled
+// schedule that decides when the waiting token continues. A catch fires once, so
+// only duration and date schedules reach here — a cycle is a compile error
+// (ADR-0054).
 type TimerCatchDetail struct {
-	DurationNanos int64
+	Schedule TimerSchedule
+}
+
+// TimerStartDetail is the per-timer-start-event data: the compiled schedule that
+// the engine arms at deploy time and consults to compute each due date (ADR-0051).
+type TimerStartDetail struct {
+	Schedule TimerSchedule
 }
 
 // MessageDetail is the per-message-event data a behavior needs at runtime,
@@ -248,9 +300,55 @@ type BoundaryEventDetail struct {
 	HostNode       int32 // ElementId of the activity this event is attached to
 	Interrupting   bool  // true = cancel the host on fire (BPMN cancelActivity); false = run alongside
 	Kind           BoundaryEventKind
-	DurationNanos  int64          // BoundaryTimer: how long before it fires
+	Schedule       TimerSchedule  // BoundaryTimer: when it fires; a cycle (non-interrupting only) recurs (ADR-0054)
 	MessageName    string         // BoundaryMessage: the message it subscribes to
 	CorrelationKey *expr.Compiled // BoundaryMessage: correlation-key expression (ADR-0020)
+}
+
+// CompiledDataObject is one BPMN data object declared by a process: a typed,
+// named datum with an optional declared structure and initial data state. Unlike
+// a CompiledNode it is not a flow node — no token flows through it (ADR-0053) — so
+// it lives in its own table, not the node array, and the engine seeds one under
+// each instance's scope at creation. All string fields are interned indices
+// (resolve with CompiledProcess.Intern); -1 means unset.
+type CompiledDataObject struct {
+	Name         int32 // interned data-object name → index
+	ItemType     int32 // interned itemDefinition reference → index, -1 if untyped
+	InitialState int32 // interned initial data state → index, -1 if none
+	IsCollection bool
+}
+
+// DataOutputAssociation is one compiled <dataOutputAssociation> on an activity: it
+// writes a value into a data object and advances that object's data state when the
+// activity completes (ADR-0058). DataObject is the interned target data-object
+// name; Value is the FEEL expression (the association's <assignment><from>)
+// evaluated over the instance's variables to produce the written value, nil for a
+// state-only transition; TargetState is the interned data state the write moves the
+// object into (from the target <dataObjectReference>'s <dataState>), -1 to keep the
+// object's current state.
+type DataOutputAssociation struct {
+	DataObject  int32 // interned target data-object name → index
+	Value       *expr.Compiled
+	TargetState int32
+	// TargetPath is the interned member path (the association's <assignment><to>,
+	// e.g. "name" or "customer.name") the write sets within a structured data
+	// object, -1 to write the whole value (ADR-0060). A path write reads the object's
+	// current JSON, sets that member, and writes the merged value back.
+	TargetPath int32
+}
+
+// DataInputAssociation is one compiled <dataInputAssociation> on an activity: it
+// reads a data object into a process variable when the activity activates, so the
+// activity's FEEL can see it (ADR-0059). DataObject is the interned source
+// data-object name (resolved from the association's sourceRef); Variable is the
+// interned target process-variable name (its targetRef) the read value is written
+// into; Value is the optional <assignment><from> FEEL transform, evaluated over the
+// instance's variables plus the source object bound under its name — nil copies the
+// object's value verbatim.
+type DataInputAssociation struct {
+	DataObject int32 // interned source data-object name → index
+	Variable   int32 // interned target process-variable name → index
+	Value      *expr.Compiled
 }
 
 // CompiledProcess is the immutable result of compiling one process definition.
@@ -276,7 +374,12 @@ type CompiledProcess struct {
 	messageCatches    []MessageDetail
 	messageThrows     []MessageDetail
 	messageStarts     []MessageDetail
+	timerStarts       []TimerStartDetail
+	dataObjects       []CompiledDataObject
+	dataOutAssocs     []DataOutputAssociation // shared: output associations grouped by activity node
+	dataInAssocs      []DataInputAssociation  // shared: input associations grouped by activity node
 	startEvents       []int32
+	startFormId       int32    // interned start-form id (ADR-0028), -1 if none
 	elementIds        []int32  // interned source BPMN id per node id (-1 if unset)
 	strings           []string // intern table (index → string), for debug/export
 }
@@ -391,6 +494,38 @@ func (p *CompiledProcess) MessageStartEvents() []MessageStartEvent {
 	return out
 }
 
+// TimerStart returns the timer-start detail at the given table index.
+func (p *CompiledProcess) TimerStart(detail int32) *TimerStartDetail { return &p.timerStarts[detail] }
+
+// TimerStartEvent pairs a timer-start event's compiled schedule with its element
+// index, so the engine can arm the right timer for the right node (ADR-0051).
+type TimerStartEvent struct {
+	Schedule  TimerSchedule
+	ElementId int32
+}
+
+// TimerStartEvents returns each timer-start event with its element index and
+// compiled schedule. Computed by scanning the node table at deploy time (off the
+// hot path); empty for a process with no timer start event.
+func (p *CompiledProcess) TimerStartEvents() []TimerStartEvent {
+	var out []TimerStartEvent
+	for id := range p.nodes {
+		n := &p.nodes[id]
+		if n.Type == TypeTimerStartEvent {
+			out = append(out, TimerStartEvent{
+				Schedule:  p.timerStarts[n.Detail].Schedule,
+				ElementId: int32(id),
+			})
+		}
+	}
+	return out
+}
+
+// ProcessId returns the source BPMN process id (the <process id="…">), used to
+// tell one process's versions apart from another's when superseding start timers
+// (ADR-0051).
+func (p *CompiledProcess) ProcessId() string { return p.Intern(p.BpmnProcessId) }
+
 // ScriptTask returns the detail at the given table index.
 func (p *CompiledProcess) ScriptTask(detail int32) *ScriptTaskDetail {
 	return &p.scriptTasks[detail]
@@ -417,7 +552,14 @@ func (p *CompiledProcess) BusinessRuleDecisions() []string {
 		if p.nodes[i].Type != TypeBusinessRuleTask {
 			continue
 		}
-		id := p.Intern(p.BusinessRuleTask(p.nodes[i].Detail).DecisionId)
+		detail := p.BusinessRuleTask(p.nodes[i].Detail)
+		// A connector-mode (central) decision is evaluated by a remote temis
+		// service, so it has no local model to resolve and snapshot at deploy time
+		// (ADR-0050). Only local decisions contribute to the deploy-time gate.
+		if detail.Connector >= 0 {
+			continue
+		}
+		id := p.Intern(detail.DecisionId)
 		if id != "" && !seen[id] {
 			seen[id] = true
 			out = append(out, id)
@@ -438,6 +580,34 @@ func (p *CompiledProcess) ConnectorTask(detail int32) *ConnectorTaskDetail {
 
 // StartEvents returns the process's entry-point element ids.
 func (p *CompiledProcess) StartEvents() []int32 { return p.startEvents }
+
+// DataObjects returns the process's declared data objects — the typed, named
+// data seeded under each instance's scope at creation (ADR-0053). Empty for a
+// process that declares none. String fields are interned; resolve with Intern.
+func (p *CompiledProcess) DataObjects() []CompiledDataObject { return p.dataObjects }
+
+// DataOutputAssociations returns the data-output associations of activity node id,
+// as a slice into the shared array (no allocation). Empty for a node with none. The
+// engine evaluates them when the activity completes to write its data objects
+// (ADR-0058).
+func (p *CompiledProcess) DataOutputAssociations(id int32) []DataOutputAssociation {
+	n := &p.nodes[id]
+	return p.dataOutAssocs[n.DataOutStart : n.DataOutStart+n.DataOutCount]
+}
+
+// DataInputAssociations returns the data-input associations of activity node id, as
+// a slice into the shared array (no allocation). Empty for a node with none. The
+// engine evaluates them when the activity activates to read its data objects into
+// process variables (ADR-0059).
+func (p *CompiledProcess) DataInputAssociations(id int32) []DataInputAssociation {
+	n := &p.nodes[id]
+	return p.dataInAssocs[n.DataInStart : n.DataInStart+n.DataInCount]
+}
+
+// StartFormId returns the id of the form the UI shows before starting an
+// instance, or "" if the process has no start form (ADR-0028). It is design-time
+// metadata; the engine never reads it.
+func (p *CompiledProcess) StartFormId() string { return p.Intern(p.startFormId) }
 
 // Intern returns the string for an interned index, or "" if out of range.
 func (p *CompiledProcess) Intern(idx int32) string {

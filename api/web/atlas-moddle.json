@@ -38,6 +38,24 @@
         { "name": "resultVariable", "type": "String", "isAttr": true },
         { "name": "source", "type": "String", "isBody": true }
       ]
+    },
+    {
+      "name": "TemisConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:BusinessRuleTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true }
+      ]
+    },
+    {
+      "name": "RestConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "method", "type": "String", "isAttr": true },
+        { "name": "url", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true }
+      ]
     }
   ]
 }

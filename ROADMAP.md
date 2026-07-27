@@ -51,6 +51,40 @@ The control-flow basics most real models use.
   pass-through branches (no double fire), and recovery-tested. Cyclic inclusive
   joins still to come (ADR-0033).
 - 🔲 Input/output variable mappings
+- 🚧 **Data objects** ([ADR-0053](docs/adr/0053-first-class-data-objects.md)):
+  first-class, typed, event-sourced data — not the decoration most engines settle
+  for. The foundational slice landed: a modeled `<dataObject>` (its name,
+  `isCollection`, and optional `<dataState>`) compiles into the process, and at
+  instance creation each is seeded as a distinct `VTDataObject` entity bound to the
+  instance scope, carrying its declared initial **data-state**. Its value (a
+  `VarJSON`-capable payload, ADR-0037) and every state transition are durable
+  events written to a `cfDataObject` current-value family plus a `cfDataObjectSnapshot`
+  history family (the ADR-0048 two-write pattern), so the data-state history and
+  lineage rebuild identically on replay — recovery-tested. Seeded objects are also
+  read over the HTTP API (`GET /api/v1/instances/{key}/data-objects`, name + state +
+  typed value). **Data output associations now write them**
+  ([ADR-0058](docs/adr/0058-data-output-associations.md)): a
+  `<dataOutputAssociation>` on an activity evaluates an `<assignment><from>` FEEL
+  expression over the instance's variables when the activity completes and emits a
+  `DataObjectStateChanged` — setting the object's value and advancing its data state
+  to the one on the target `<dataObjectReference>` (`received → approved`), so the
+  state history becomes a real trail; recovery-tested. **Data input associations
+  read them back** ([ADR-0059](docs/adr/0059-data-input-associations.md)): a
+  `<dataInputAssociation>` on an activity, at activation, reads a source data
+  object (bound into the FEEL scope under its name), optionally transforms it with
+  an `<assignment><from>` expression, and writes the result into a process variable
+  the activity then reads — so an `order` one step wrote flows into the next step's
+  FEEL; recovery-tested. Data now flows both ways. **Field-level writes**
+  ([ADR-0060](docs/adr/0060-field-level-data-object-writes.md)) let an output
+  association target one member of a structured object via its `<assignment><to>`
+  (e.g. `name`): the engine reads the object's current JSON, sets that member, and
+  writes the merged canonical value back — so a record accrues field by field across
+  steps, and writing a member into an unset object creates it. The **Modeler** now
+  authors all of this (ADR-0053): a `DataObjectReference` panel (name, data state,
+  collection) and an association panel (the FEEL value, the target member/variable),
+  with input associations defaulting their target on draw. Next: a lineage view
+  folding the `SourcePos` chain, item-definition schema validation, list-index path
+  targets, and connector-backed data stores.
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
 - 🔲 Conformance tests against a curated BPMN model set
 - 🚧 **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)
@@ -69,10 +103,42 @@ The control-flow basics most real models use.
   (`<zeebe:input source="=…" target="…">`, FEEL evaluated over the instance off the
   hot path, overriding constant `<atlas:decisionInput>` values), and its result is
   written back into the `resultVariable` process variable through an output-carrying
-  job completion — so a downstream gateway routes on the decision. Next: explicit
-  `<zeebe:output>` mappings, decimal precision across the temis boundary, and
-  off-loop streaming evaluation as the Milestone-4 gRPC job-worker concern (the
-  single binary drives jobs synchronously).
+  job completion — so a downstream gateway routes on the decision. **A second
+  evaluation mode landed** ([ADR-0050](docs/adr/0050-temis-decision-connector.md)):
+  a business rule task marked `<atlas:temisConnector connector="…">` is a *central*
+  decision, evaluated by a remote temis service through the connector/job path
+  (ADR-0036/0041) instead of the embedded library — same authoring and I/O mappings,
+  only the evaluation locus differs, and a central decision needs no local model at
+  deploy. The `temis` connector trio (registry/client/worker) and the shared
+  `dmn.DecisionHandler` core landed, and **the connector worker is now wired into
+  the single-binary server run loop**, and **connectors are now operator-managed in
+  the Console** ([ADR-0041](docs/adr/0041-connector-management-and-secret-store.md)):
+  durable connector instances (`{name, endpoint, credentialsRef, enabled}`) live in
+  a sidecar store with CRUD on Organization → Connectors, the endpoint token is a
+  reference resolved from `ATLAS_CONNECTOR_<REF>_TOKEN` at runtime (never stored),
+  and a change rebuilds the live registry — so a central decision runs against the
+  configured temis service without a restart (server end-to-end tested). Environment
+  config (`ATLAS_TEMIS_CONNECTORS` + `ATLAS_TEMIS_<NAME>_URL`/`_TOKEN`) still works
+  as the base. Wiring the clio/REST workers the same way, health probes, and
+  external vendor workers remain ADR-0041 follow-ups.
+  **A decision can now be authored in Atlas** ([ADR-0062](docs/adr/0062-embedded-dmn-editor.md)):
+  the business rule task panel has "＋ Neue Decision" / "Bearbeiten" buttons that open
+  an embedded **dmn-js** editor (vendored, same family as the bpmn-js modeler) — a
+  DRD + decision-table authoring surface. On save the model is stored (new reference,
+  or overwritten in place when editing) and the decision's inputs and output are
+  adopted into the task automatically through the existing picker path, so the
+  empty-dropdown round trip (author elsewhere → export → upload → pick) is gone. This
+  reverses ADR-0014's "no DMN authoring" non-goal for the decision-table case;
+  authoring the FEEL/logic and model versioning still live in temis.
+  **Decision binding landed** ([ADR-0063](docs/adr/0063-dmn-decision-binding.md)):
+  a business rule task's `zeebe:calledDecision` now honors `bindingType` — `latest`
+  (the default, Camunda-style) evaluates the newest deployed version of the
+  decision, `deployment` pins to the version snapshotted with the process — surfaced
+  as a "Binding" dropdown on the task. `versionTag` (pin to a numbered version) is
+  the next step, once models are stored with version history.
+  Next: explicit `<zeebe:output>` mappings, decimal precision across the temis
+  boundary, and off-loop streaming evaluation as the Milestone-4 gRPC job-worker
+  concern (the single binary drives jobs synchronously).
 - 🚧 **Connectors** ([ADR-0036](docs/adr/0036-clio-connector.md)): a service task
   bearing an `<atlas:clioConnector>` extension is a connector task that appends an
   event to a **server-registered** clio event store through the job path (like the
@@ -87,20 +153,37 @@ The control-flow basics most real models use.
 
 Making processes wait, react, and time out.
 
-- 🚧 Timer events + due-date index scanning: **intermediate timer catch events**
-  with an ISO-8601 **duration** (e.g. PT30S) execute — the token waits, a
-  server-side scheduler fires due timers on the partition goroutine, and the
-  event continues. Recovery-tested (a pending timer is restored from the log and
-  fires afterward). Date/cycle timers, boundary timers, and FEEL duration
-  expressions still to come.
+- ✅ Timer events + due-date index scanning: **intermediate timer catch events**
+  (`<timeDuration>` or `<timeDate>`, literal **or a FEEL expression** over the
+  instance's variables — e.g. `=orderTimeout`, or FEEL date arithmetic like
+  `=deadline + duration("P2D")` read as an exact first-class temporal, ADR-0057)
+  execute: the token waits, a server-side scheduler fires due timers on the
+  partition goroutine, and the event continues. Recovery-tested (a pending timer
+  is restored from the log and fires afterward). A cycle on a plain catch is a
+  compile error (a catch fires once). An incident instead of firing immediately
+  when a FEEL timer can't resolve is still to come (ADR-0055/0056/0057).
+- ✅ **Timer start events** (duration, date, cycle, cron): a `<startEvent>` with a
+  `<timerEventDefinition>` starts a fresh instance on its schedule —
+  `<timeDuration>` (once, after a delay), `<timeDate>` (once, at an absolute
+  instant), or `<timeCycle>` as an ISO-8601 repeating interval (`R3/PT1H`) or a
+  5-field **cron** expression (`0 * * * *`, wall-clock-aligned "every full hour").
+  A schedule may also be a **constant FEEL** expression (ADR-0056; a start event
+  has no instance, so it may not read variables). The schedule is armed as a
+  durable timer at deploy, fired by the existing scheduler through the same
+  create-instance path an API create uses, and a cycle re-arms its next
+  occurrence. A new version supersedes the prior version's schedule. Recovery-
+  tested (an armed timer survives a restart and fires; a fired date timer does not
+  re-fire).
 - ✅ **Message events + subscriptions + correlation** (single-partition):
   intermediate **message catch** events subscribe on a FEEL correlation key and
-  wait; intermediate **message throw** events and an HTTP `POST /api/v1/messages`
-  publish, correlating against open subscriptions through one shared path and
-  carrying an optional variable payload into the woken instance. Recovery-tested
-  (an open subscription is restored from the log and correlates afterward).
-  Message buffering, message boundary events, and cross-partition correlation
-  still to come (ADR-0020).
+  wait; intermediate **message throw** events, **message end** events, and an HTTP
+  `POST /api/v1/messages` publish, correlating against open subscriptions through
+  one shared path and carrying an optional variable payload into the woken
+  instance. Recovery-tested (an open subscription is restored from the log and
+  correlates afterward). Message buffering, message boundary events, and
+  cross-partition correlation still to come (ADR-0020). A **message end event**
+  publishes its message, then ends the instance — the send-and-stop counterpart of
+  the throw event (ADR-0052).
 - ✅ **Message start events** (single-partition): a `<startEvent>` with a
   `messageEventDefinition` is instantiated by a correlating message (throw or API
   publish), seeded with the message payload, so a two-pool request/response runs
@@ -113,10 +196,28 @@ Making processes wait, react, and time out.
 - ✅ Boundary events: timer and message, interrupting and non-interrupting,
   attached to waiting activities. An interrupting boundary cancels the host (and
   its job) and routes out its flow; a non-interrupting one spawns a parallel
-  token. Recovery-tested (ADR-0040). Error/signal boundaries, cycle timers, and
-  boundaries on subprocesses remain.
+  token. Timer boundaries take a `<timeDuration>`, a `<timeDate>`, or — on a
+  non-interrupting boundary — a `<timeCycle>` (interval or cron) that **recurs**,
+  a repeating reminder that fires while the host runs (ADR-0054); each field may be
+  a literal or a **FEEL expression** over the instance's variables, including a
+  FEEL cycle re-evaluated each occurrence (ADR-0055/0056). Recovery-tested
+  (ADR-0040, ADR-0054). Error/signal boundaries and boundaries on subprocesses
+  remain.
 - 🔲 Receive tasks
-- 🔲 Incident model: raise/resolve, operator resume
+- 🚧 **Incident model**: a job whose retries a worker exhausts raises a durable
+  **incident** on its element instead of hanging or retrying forever; the token
+  parks off the activatable index until an operator resolves the incident, which
+  re-activates the job with fresh retries (raise / resolve / resume). Keyed by
+  element instance, so cancelling an instance clears its incidents. Recovery-
+  tested; exposed over HTTP (`POST /jobs/{key}/fail`, `GET /incidents`,
+  `POST /incidents/{key}/resolve`) (ADR-0061). **Timer FEEL failures now raise
+  incidents too** ([ADR-0064](docs/adr/0064-timer-feel-failure-incidents.md)): a
+  catch or boundary timer whose FEEL schedule can't be evaluated parks its token
+  and raises a job-less incident (the failing field in its message) instead of
+  firing immediately; resolving re-arms the timer against the instance's current
+  variables (re-raising if it still fails). Recovery-tested. Recurring-boundary
+  re-arm failures, start-event timer FEEL, retry backoff, and an operator UI still
+  to come.
 
 ## Milestone 3 — Structure 🔲
 
@@ -272,8 +373,11 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   user as its identity, and an "Assign to…" picker is sourced from a non-admin
   `GET /api/v1/users/assignable`. Next: external identity (OIDC/SAML/LDAP) via the
   `Source`/`ExternalID` hooks, per-endpoint RBAC beyond `admin`, groups, durable
-  sessions, multi-tenancy, and audit logging. One honest limitation: the `/mcp`
-  adapter is not yet auth-aware, so under `--auth` front it separately (ADR-0016).
+  sessions, multi-tenancy, and audit logging. Under `--auth` the in-process **MCP
+  adapter authenticates its loopback calls** with an internal, non-admin service
+  token ([ADR-0049](docs/adr/0049-internal-service-auth-for-mcp.md)), so enabling
+  auth no longer breaks MCP; the external `/mcp` transport is still unauthenticated
+  and should be fronted by a reverse proxy (ADR-0016).
 - 🔲 Later: a polished "workbench" experience on top.
 
 ## Milestone A — Modeler & authoring experience 🔲
@@ -357,8 +461,12 @@ the hand-written Details panel one vertical slice at a time:
 - A standalone DMN authoring/product surface. Atlas *executes* the DMN decisions
   a model references, via business rule tasks that delegate to the embedded temis
   engine ([ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)); it does
-  not ship a DMN modeler or decision-management product of its own. (FEEL is also
-  used internally for expressions.)
+  not ship a DMN **modeler/editor** or decision-management product of its own —
+  decisions are authored in temis. (Atlas does offer a **read-only** view of a
+  referenced model's decision requirements graph, and a decision picker that
+  auto-reads inputs/outputs, so an author can *use* a decision without leaving the
+  Modeler; that is a look-and-use surface, not an authoring one.) FEEL is also used
+  internally for expressions.
 
 ## Guiding constraints
 

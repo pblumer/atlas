@@ -1,8 +1,19 @@
 # ADR-0041: Connector management and the secret store
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-23
 - **Deciders:** Atlas maintainers
+
+> **Implementation status.** The base decision is now implemented for the temis
+> decision connector (ADR-0050): durable managed connector *instances* in an
+> on-disk sidecar store (**C2**), CRUD over them on the Console's Organization →
+> Connectors page, and secret **references** resolved from the environment at
+> runtime (**A2**) — `ATLAS_CONNECTOR_<REF>_TOKEN`. The engine stores only
+> `{name, kind, endpoint, credentialsRef, enabled}`, never a secret value; a
+> connector change rebuilds the live registry on the run loop. Still deferred, as
+> the ADR anticipates: wiring the clio/REST workers the same way, health probes,
+> external vendor workers (**B2**), and the optional encrypted in-engine store
+> (**A3**).
 
 ## Context and problem statement
 

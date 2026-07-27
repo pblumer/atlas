@@ -4,6 +4,7 @@
 
 import { attachFeelEditor } from "./feel.js";
 import { attachJSONEditor } from "./json-editor.js";
+import { openDmnEditor } from "./dmn-editor.js";
 
 // JOB_LANGS are the general-purpose script languages a script task can use besides
 // inline FEEL (ADR-0047). Each runs on a job worker off the engine's hot path; the
@@ -118,6 +119,149 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 
 const shortType = (t) => (t || "").replace(/^bpmn:/, "");
 
+// --- Variable presentation (shared by the live and replay views) ---
+//
+// Operators inspect an instance's variables, which can be whole JSON structures.
+// These render them clearly: scalars as labeled, type-colored fields; JSON values
+// as collapsible, syntax-highlighted, pretty-printed cards.
+
+// highlightJSON pretty-prints a canonical JSON string and wraps its tokens in
+// colored spans (keys, strings, numbers, booleans, null) — a tiny, dependency-
+// free syntax highlighter (ADR-0012 buildless UI). It escapes first, then spans.
+function highlightJSON(text) {
+  let out;
+  try { out = JSON.stringify(JSON.parse(text), null, 2); }
+  catch { return esc(text); } // not valid JSON after all — show it verbatim
+  out = out.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return out.replace(
+    /("(?:\\.|[^"\\])*"\s*:?|\btrue\b|\bfalse\b|\bnull\b|-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?)/g,
+    (m) => {
+      let cls = "j-num";
+      if (m[0] === '"') cls = /:\s*$/.test(m) ? "j-key" : "j-str";
+      else if (m === "true" || m === "false") cls = "j-bool";
+      else if (m === "null") cls = "j-null";
+      return `<span class="${cls}">${m}</span>`;
+    });
+}
+
+// jsonSummary is the compact one-liner shown on a collapsed JSON card.
+function jsonSummary(text) {
+  try {
+    const v = JSON.parse(text);
+    if (Array.isArray(v)) return `${v.length} item${v.length === 1 ? "" : "s"}`;
+    if (v && typeof v === "object") {
+      const n = Object.keys(v).length;
+      return `${n} field${n === 1 ? "" : "s"}`;
+    }
+    return String(v);
+  } catch { return ""; }
+}
+
+// renderVarsBody lays out a variable list: scalars as a labeled field grid, JSON
+// values as collapsible, syntax-highlighted cards. collapsed is a Set of the JSON
+// variable names the operator has collapsed (persists across re-renders); the
+// caller wires a delegated click on `.vj-head` to toggle it and re-render.
+function renderVarsBody(list, collapsed) {
+  if (!list || !list.length) return '<span class="muted">No variables yet.</span>';
+  const scalars = list.filter((v) => v.kind !== "json");
+  const jsons = list.filter((v) => v.kind === "json");
+  let html = "";
+  if (scalars.length) {
+    html += `<div class="vgrid">${scalars.map((v) => {
+      const cls = v.kind === "boolean" ? "bool" : v.kind === "number" ? "num" : v.kind === "null" ? "null" : "str";
+      return `<div class="vfield"><div class="vf-head"><span class="vk">${esc(v.name)}</span><span class="vtag">${esc(v.kind)}</span>${copyBtn(v.value, "Copy value")}</div>
+        <div class="vv ${cls}">${esc(v.value)}</div></div>`;
+    }).join("")}</div>`;
+  }
+  html += jsons.map((v) => {
+    const isCollapsed = collapsed.has(v.name);
+    return `<div class="vjson${isCollapsed ? " collapsed" : ""}">
+      <div class="vj-head">
+        <button class="vj-toggle" data-name="${esc(v.name)}" aria-expanded="${isCollapsed ? "false" : "true"}">
+          <span class="chev">&#9662;</span><span class="vk">${esc(v.name)}</span>
+          <span class="vtag">json</span><span class="vj-sum">${esc(jsonSummary(v.value))}</span>
+        </button>
+        ${copyBtn(prettyJSON(v.value), "Copy JSON")}
+      </div>
+      <pre class="vj-body">${highlightJSON(v.value)}</pre>
+    </div>`;
+  }).join("");
+  return html;
+}
+
+// copyBtn renders a small clipboard button carrying the raw text to copy in a data
+// attribute; a delegated handler (bindVarCopy) does the actual write. Operators
+// live in these values, so every scalar, every JSON blob and the whole set are
+// one click from the clipboard.
+function copyBtn(text, title) {
+  return `<button class="vcopy" type="button" title="${esc(title)}" aria-label="${esc(title)}" data-copy="${esc(text)}">
+    <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M5.5 1.5h6a1 1 0 0 1 1 1v8" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="3.5" y="4.5" width="8" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+  </button>`;
+}
+
+// prettyJSON canonicalizes a JSON variable's stored string to pretty-printed form
+// for copying (falling back to the raw text if it isn't valid JSON), so what lands
+// on the clipboard matches what the operator sees in the card.
+function prettyJSON(text) {
+  try { return JSON.stringify(JSON.parse(text), null, 2); }
+  catch { return String(text); }
+}
+
+// copyText writes text to the clipboard, falling back to a hidden textarea +
+// execCommand where the async Clipboard API isn't available (older browsers, or
+// insecure origins). Returns a promise that resolves once the copy is attempted.
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch { /* fall through to the legacy path */ }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch { return false; }
+}
+
+// bindVarCopy wires the delegated click on `.vcopy` buttons inside panel: it copies
+// the button's data-copy payload and flashes a brief "Copied" state on the button.
+// Attach once per view; survives the panel's inner re-renders.
+function bindVarCopy(panel, toast) {
+  panel.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".vcopy");
+    if (!btn || !panel.contains(btn)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const ok = await copyText(btn.dataset.copy || "");
+    if (ok) {
+      btn.classList.add("copied");
+      setTimeout(() => btn.classList.remove("copied"), 900);
+    } else if (toast) {
+      toast("Copy failed", "err");
+    }
+  });
+}
+
+// bindJsonCards wires the delegated expand/collapse click for JSON cards inside
+// panel, toggling names in collapsed and calling rerender. Attach once per view.
+function bindJsonCards(panel, collapsed, rerender) {
+  panel.addEventListener("click", (e) => {
+    const head = e.target.closest(".vj-toggle");
+    if (!head || !panel.contains(head)) return;
+    const name = head.dataset.name;
+    if (collapsed.has(name)) collapsed.delete(name);
+    else collapsed.add(name);
+    rerender();
+  });
+}
+
 export async function mountEditor(root, { api, toast, key, draftId, projectId }) {
   cleanup();
 
@@ -131,6 +275,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId })
           <button data-tab="implement">Implement</button>
         </div>
         <div style="flex:1"></div>
+        <button class="btn neutral" id="vars-toggle" title="Show the variables this diagram writes">Variables</button>
         <button class="btn neutral" id="save">Save</button>
         <button class="btn neutral" id="export">Export XML</button>
         <button class="btn" id="deploy">Deploy</button>
@@ -146,6 +291,12 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId })
       </div>
       <div class="editor-body">
         <div id="canvas"></div>
+        <aside class="vars-panel" id="vars-panel" hidden>
+          <div class="vars-head"><b>Variables</b>
+            <button class="icon-btn" id="vars-close" title="Close" aria-label="Close">✕</button></div>
+          <input class="vars-filter" id="vars-filter" placeholder="Filter by name or origin…"/>
+          <div class="vars-list" id="vars-list"></div>
+        </aside>
         <div class="props-resizer" id="props-resizer" title="Drag to resize the properties panel"></div>
         <aside class="props" id="props">
           <div class="phead"><span class="ptype" id="p-icon">–</span>
@@ -193,9 +344,10 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId })
     toast("could not open diagram: " + e.message, "err");
   }
 
-  const rerender = wireProperties(root, modeler, api);
+  const rerender = wireProperties(root, modeler, api, projectId, toast);
   wireTabs(root, rerender);
   wireActions(root, modeler, api, toast, projectId);
+  wireEditorVars(root, modeler);
   wireResizer(root, modeler);
 }
 
@@ -243,6 +395,77 @@ function wireResizer(root, modeler) {
     try { modeler && modeler.get("canvas").resized(); } catch { /* ignore */ }
     window.dispatchEvent(new Event("resize"));
   });
+}
+
+// wireVarsPanel makes the Live view's variables panel a first-class side panel like
+// the Modeler's properties: a toolbar toggle collapses it out of the way (operators
+// who want the diagram full-width), and a draggable divider widens it for reading
+// long JSON. Both choices persist across mounts (localStorage), and the bpmn-js
+// canvas is nudged to re-fit whenever the panel's footprint changes.
+function wireVarsPanel(root, viewer) {
+  const editor = root.querySelector(".editor.live");
+  const panel = root.querySelector("#var-panel");
+  const resizer = root.querySelector("#var-resizer");
+  const toggle = root.querySelector("#vars-toggle");
+  if (!editor || !panel) return;
+  const WKEY = "atlas.varsWidth";
+  const CKEY = "atlas.varsCollapsed";
+  const clamp = (w) => Math.max(240, Math.min(900, w));
+
+  const savedW = parseInt(localStorage.getItem(WKEY) || "", 10);
+  if (savedW) panel.style.width = clamp(savedW) + "px";
+
+  // Let bpmn-js recompute its viewport for the canvas's new width.
+  const nudge = () => {
+    try { viewer && viewer.get("canvas").resized(); } catch { /* ignore */ }
+    window.dispatchEvent(new Event("resize"));
+  };
+
+  const applyCollapsed = (collapsed) => {
+    editor.classList.toggle("vars-collapsed", collapsed);
+    if (toggle) toggle.setAttribute("aria-pressed", collapsed ? "false" : "true");
+    nudge();
+  };
+  applyCollapsed(localStorage.getItem(CKEY) === "1");
+
+  if (toggle) {
+    toggle.addEventListener("click", () => {
+      const collapsed = !editor.classList.contains("vars-collapsed");
+      localStorage.setItem(CKEY, collapsed ? "1" : "0");
+      applyCollapsed(collapsed);
+    });
+  }
+
+  if (resizer) {
+    let startX = 0, startW = 0;
+    const onMove = (e) => {
+      // The panel is on the right, so dragging the divider left widens it.
+      panel.style.width = clamp(startW - (e.clientX - startX)) + "px";
+    };
+    const onUp = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      resizer.classList.remove("dragging");
+      document.body.style.userSelect = "";
+      localStorage.setItem(WKEY, String(parseInt(panel.style.width, 10) || 320));
+      nudge();
+    };
+    resizer.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      startX = e.clientX;
+      startW = panel.getBoundingClientRect().width;
+      resizer.classList.add("dragging");
+      document.body.style.userSelect = "none";
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+    });
+    // Double-click the divider to reset to the default width.
+    resizer.addEventListener("dblclick", () => {
+      panel.style.width = "320px";
+      localStorage.setItem(WKEY, "320");
+      nudge();
+    });
+  }
 }
 
 // wireTabs toggles the Design/Implement tabs. Design is the descriptive view
@@ -296,6 +519,101 @@ function collectFeelVariables(modeler) {
     });
   } catch { /* best-effort */ }
   return [...vars].sort();
+}
+
+// collectDiagramVariables statically analyses the diagram for the variables it
+// writes and where — the data behind the Variables panel (like Camunda's). Each
+// entry is { name, origin, originId, source }: the variable name, the element that
+// writes it (name/id and the id to select it), and how (start variable, script
+// result, decision result, output mapping). De-duplicated by name, sorted.
+function collectDiagramVariables(modeler) {
+  const out = [];
+  const seen = new Set();
+  const push = (name, origin, originId, source) => {
+    name = (name || "").trim();
+    if (!name || seen.has(name)) return;
+    seen.add(name);
+    out.push({ name, origin, originId, source });
+  };
+  try {
+    const rootBo = rootProcess(modeler);
+    if (rootBo) {
+      for (const v of readStartVariables(rootBo)) {
+        push(v.name, "Start", "", "start variable" + (v.type ? " · " + v.type : ""));
+      }
+    }
+  } catch { /* best-effort */ }
+  try {
+    modeler.get("elementRegistry").forEach((el) => {
+      const bo = el.businessObject;
+      if (!bo) return;
+      const label = bo.name || bo.id;
+      const s = findExt(bo, "zeebe:Script");
+      if (s && s.resultVariable) push(s.resultVariable, label, bo.id, "FEEL script");
+      const js = findExt(bo, "atlas:JobScript");
+      if (js && js.resultVariable) push(js.resultVariable, label, bo.id, (js.language || "job") + " script");
+      const cd = findExt(bo, "zeebe:CalledDecision");
+      if (cd && cd.resultVariable) push(cd.resultVariable, label, bo.id, "decision result");
+      const io = findExt(bo, "zeebe:IoMapping");
+      for (const p of (io && io.outputParameters) || []) push(p.target, label, bo.id, "output mapping");
+    });
+  } catch { /* best-effort */ }
+  return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// wireEditorVars drives the design-time Variables panel: a toolbar toggle opens it,
+// it lists the diagram's variables (origin is click-to-select), a filter narrows
+// the list, and it refreshes as the diagram changes while open — a modeling aid
+// that answers "what variables exist here and who writes them" without running
+// anything. (The live view has its own runtime-variables panel, wireVarsPanel.)
+function wireEditorVars(root, modeler) {
+  const panel = root.querySelector("#vars-panel");
+  const toggle = root.querySelector("#vars-toggle");
+  const closeBtn = root.querySelector("#vars-close");
+  const filter = root.querySelector("#vars-filter");
+  const list = root.querySelector("#vars-list");
+  if (!panel || !toggle || !list) return;
+
+  const render = () => {
+    if (panel.hidden) return;
+    const q = (filter.value || "").trim().toLowerCase();
+    const vars = collectDiagramVariables(modeler).filter((v) =>
+      !q || v.name.toLowerCase().includes(q) || (v.origin || "").toLowerCase().includes(q));
+    if (!vars.length) {
+      list.innerHTML = `<p class="vars-empty">${q ? "No matching variables." :
+        "No variables yet. They appear as you add start variables, script or decision result variables, and output mappings."}</p>`;
+      return;
+    }
+    list.innerHTML = vars.map((v) => `<div class="var-row">
+      <div class="var-name">${esc(v.name)}</div>
+      <div class="var-meta">${esc(v.source)}${v.originId
+        ? ` · written by <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`
+        : ` · ${esc(v.origin)}`}</div></div>`).join("");
+  };
+
+  toggle.addEventListener("click", () => {
+    panel.hidden = !panel.hidden;
+    toggle.classList.toggle("active", !panel.hidden);
+    render();
+  });
+  if (closeBtn) closeBtn.addEventListener("click", () => {
+    panel.hidden = true;
+    toggle.classList.remove("active");
+  });
+  filter.addEventListener("input", render);
+  list.addEventListener("click", (e) => {
+    const o = e.target.closest(".var-origin");
+    if (!o) return;
+    const el = modeler.get("elementRegistry").get(o.dataset.el);
+    if (el) {
+      try { modeler.get("selection").select(el); } catch { /* stale */ }
+      try { modeler.get("canvas").scrollToElement(el); } catch { /* older bpmn-js */ }
+    }
+  });
+  // Keep the open panel current as the diagram is edited.
+  modeler.on("element.changed", render);
+  modeler.on("elements.changed", render);
+  modeler.on("import.done", render);
 }
 
 // enhanceFeel turns the FEEL <textarea> matched by `sel` into a syntax-highlighted
@@ -391,6 +709,85 @@ function removeExt(modeler, element, type) {
   if (next.length === ext.values.length) return;
   ext.values = next;
   modeling.updateProperties(element, { extensionElements: ext });
+}
+
+// SERVICE_TASK_KINDS is the catalog of service-task connector kinds the modeler
+// can author (ADR-0067). Each entry maps a human-facing kind to the extension
+// element the compiler reads and the typed fields that configure it. Adding a
+// connector kind is one entry here (plus its moddle type, compiler branch, and
+// worker) — the searchable picker and the field form are both rendered
+// generically from this data, so no bespoke panel code is needed per kind.
+const SERVICE_TASK_KINDS = [
+  {
+    id: "worker", name: "Job worker", desc: "Handled by an external job worker", icon: "⚙",
+    ext: "zeebe:TaskDefinition",
+    fields: [{ key: "type", label: "Job type", placeholder: "payment" }],
+  },
+  {
+    id: "rest", name: "REST Outbound Connector", desc: "Invoke a REST API", icon: "R",
+    ext: "atlas:RestConnector",
+    fields: [
+      { key: "method", label: "Method", type: "select", options: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] },
+      { key: "url", label: "URL", placeholder: "https://api.example.com/customers" },
+      { key: "resultVariable", label: "Result variable", placeholder: "response", hint: "The JSON response is written into this process variable (leave empty to discard it)." },
+    ],
+  },
+];
+
+// serviceTaskKind returns the catalog entry a service task currently represents,
+// detected by which connector extension it carries; the plain job worker is the
+// default when no connector extension is present.
+function serviceTaskKind(bo) {
+  for (const k of SERVICE_TASK_KINDS) {
+    if (k.id !== "worker" && findExt(bo, k.ext)) return k;
+  }
+  return SERVICE_TASK_KINDS[0];
+}
+
+// serviceTaskKindHTML renders the searchable kind picker plus the current kind's
+// fields, both from SERVICE_TASK_KINDS. The picker approximates the reference
+// tooling's template chooser within the buildless panel (ADR-0067/0012).
+function serviceTaskKindHTML(bo) {
+  const cur = serviceTaskKind(bo);
+  const ext = findExt(bo, cur.ext) || {};
+  const rows = SERVICE_TASK_KINDS.map((k) => `
+    <div class="stkind-row" data-kind="${k.id}" data-match="${esc((k.name + " " + k.desc).toLowerCase())}"
+         style="display:flex;gap:8px;align-items:center;padding:8px;border:1px solid #d7d7d7;border-radius:6px;margin-bottom:6px;cursor:pointer;${k.id === cur.id ? "background:#eef2ff;border-color:#9aa8ff" : ""}">
+      <span style="flex:0 0 22px;height:22px;line-height:22px;text-align:center;border:1px solid #bbb;border-radius:50%;font-size:12px">${esc(k.icon)}</span>
+      <span style="line-height:1.25"><b>${esc(k.name)}</b><br><span class="muted" style="font-size:12px">${esc(k.desc)}</span></span>
+    </div>`).join("");
+  let fields = "";
+  for (const f of cur.fields) {
+    const val = ext[f.key] || "";
+    if (f.type === "select") {
+      const chosen = val || f.options[0];
+      const opts = f.options.map((o) => `<option value="${esc(o)}" ${o === chosen ? "selected" : ""}>${esc(o)}</option>`).join("");
+      fields += `<label class="field"><span>${esc(f.label)}</span><select id="f-st-${f.key}">${opts}</select></label>`;
+    } else {
+      fields += `<label class="field"><span>${esc(f.label)}</span>
+        <input type="text" id="f-st-${f.key}" value="${esc(val)}" placeholder="${esc(f.placeholder || "")}"/></label>`;
+    }
+    if (f.hint) fields += `<p class="muted" style="font-size:12px">${esc(f.hint)}</p>`;
+  }
+  return `<h3>Type</h3>
+    <input type="text" id="f-stkind-filter" placeholder="Search type… (e.g. rest)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
+    <div id="f-stkind-list">${rows}</div>
+    <h3>${esc(cur.name)}</h3>${fields}`;
+}
+
+// applyServiceTaskKind switches a service task to a catalog kind by writing that
+// kind's extension (seeding select defaults) and removing every other kind's
+// extension, so the compiler sees exactly one connector kind (ADR-0067).
+function applyServiceTaskKind(modeler, element, kindId) {
+  const kind = SERVICE_TASK_KINDS.find((k) => k.id === kindId) || SERVICE_TASK_KINDS[0];
+  for (const other of SERVICE_TASK_KINDS) {
+    if (other.id !== kind.id) removeExt(modeler, element, other.ext);
+  }
+  const defaults = {};
+  for (const f of kind.fields) {
+    if (f.type === "select" && f.options && f.options.length) defaults[f.key] = f.options[0];
+  }
+  upsertExt(modeler, element, kind.ext, defaults);
 }
 
 // decisionInputRowHTML renders one editable business-rule-task input mapping: a
@@ -505,6 +902,45 @@ const isActivity = (bo) => /Task$/.test((bo && bo.$type) || "");
 // timerDefOf returns an event's bpmn:TimerEventDefinition, or null.
 function timerDefOf(bo) {
   return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:TimerEventDefinition") || null;
+}
+
+// The three schedule kinds a TimerEventDefinition can carry, mapped to the
+// bpmn element each writes and how the panel labels it. A start event accepts
+// all three; a catch or interrupting boundary fires once, so they omit the
+// recurring cycle (ADR-0051/0054). Iteration order (duration, date, cycle) is
+// the detection precedence in timerScheduleOf.
+const TIMER_KINDS = {
+  duration: { prop: "timeDuration", label: "Duration", placeholder: "PT30M" },
+  date: { prop: "timeDate", label: "Date & time", placeholder: "2026-08-01T09:00:00Z" },
+  cycle: { prop: "timeCycle", label: "Cycle", placeholder: "R/PT1H  ·  0 * * * *" },
+};
+
+// timerScheduleOf reports which kind a timer currently holds and its expression
+// text. It keys off which sub-element exists (not its body), so a just-switched,
+// still-empty kind survives a re-render. Defaults to duration for a bare timer.
+function timerScheduleOf(timer) {
+  for (const [kind, meta] of Object.entries(TIMER_KINDS)) {
+    if (timer && timer[meta.prop]) return { kind, body: timer[meta.prop].body || "" };
+  }
+  return { kind: "duration", body: "" };
+}
+
+// timerFieldsHTML renders the Type picker (restricted to the kinds valid in this
+// context) and the schedule-expression input, followed by a context note.
+function timerFieldsHTML(timer, kinds, note) {
+  const detected = timerScheduleOf(timer);
+  const kind = kinds.includes(detected.kind) ? detected.kind : kinds[0];
+  const meta = TIMER_KINDS[kind];
+  const body = (timer && timer[meta.prop] && timer[meta.prop].body) || "";
+  const opts = kinds
+    .map((k) => `<option value="${k}" ${k === kind ? "selected" : ""}>${TIMER_KINDS[k].label}</option>`)
+    .join("");
+  return `<h3>Timer</h3>
+    <label class="field"><span>Type</span>
+      <select id="f-timerkind">${opts}</select></label>
+    <label class="field"><span>${meta.label}</span>
+      <input type="text" id="f-timerval" value="${esc(body)}" placeholder="${esc(meta.placeholder)}"/></label>
+    <p class="muted" style="font-size:12px">${note}</p>`;
 }
 
 // messageDefOf returns an event's bpmn:MessageEventDefinition, or null.
@@ -629,11 +1065,82 @@ function readStartVariables(bo) {
 // through the modeling API (undo/redo; serializes on deploy). Rows without a
 // name are dropped; an empty result removes the atlas:StartForm entirely so a
 // cleared declaration leaves no dangling element.
-function writeStartVariables(modeler, list) {
+//
+// By default it targets the diagram's root process. A collaboration pool has no
+// single root process — each pool executes its own — so a pool passes its shape
+// (targetEl, the participant) and the process it references (targetBo) to land
+// the declaration on that process. Referenced-object updates go through
+// updateModdleProperties; the root shape keeps updateProperties (unchanged).
+// dataRefName resolves a data association's source/target reference (a data object
+// reference, which bpmn-js may hand back as a one-element list) to its display name:
+// the reference's name, else the underlying data object's name, else its id.
+function dataRefName(ref) {
+  const r = Array.isArray(ref) ? ref[0] : ref;
+  if (!r) return "?";
+  return r.name || (r.dataObjectRef && r.dataObjectRef.name) || r.id || "?";
+}
+
+// processOf returns the bpmn:Process business object that contains element — its
+// nearest Process ancestor, falling back to the diagram's single root process (for a
+// collaboration a data object lives in the pool's process, reached via the parent).
+function processOf(modeler, element) {
+  let bo = element && element.businessObject;
+  while (bo) {
+    if (/:Process$/.test(bo.$type || "")) return bo;
+    bo = bo.$parent;
+  }
+  return rootProcess(modeler);
+}
+
+// dataObjectNames lists a process's data objects distinct by name (a nameless one
+// falls back to its id), each with a representative id to point a reference at. Used
+// by the "Points to" selector so several references can share one logical object.
+function dataObjectNames(procBo) {
+  const out = [];
+  if (!procBo) return out;
+  for (const o of procBo.flowElements || []) {
+    if (o.$type !== "bpmn:DataObject") continue;
+    const name = o.name || o.id;
+    if (!out.some((e) => e.name === name)) out.push({ name, id: o.id });
+  }
+  return out;
+}
+
+// setAssignment writes a data association's single <assignment> from its two FEEL
+// bodies — <from> (the value/transform) and <to> (an output member path or an input
+// target variable). Empty bodies clear the assignment, so a stateless association
+// carries no dangling element (ADR-0058/0059/0060).
+function setAssignment(modeler, element, bo, fromBody, toBody) {
+  const modeling = modeler.get("modeling");
+  const moddle = modeler.get("moddle");
+  try {
+    if (!fromBody && !toBody) {
+      modeling.updateModdleProperties(element, bo, { assignment: [] });
+      return;
+    }
+    const asg = moddle.create("bpmn:Assignment", {});
+    asg.$parent = bo;
+    if (fromBody) {
+      const f = moddle.create("bpmn:FormalExpression", { body: fromBody });
+      f.$parent = asg;
+      asg.from = f;
+    }
+    if (toBody) {
+      const t = moddle.create("bpmn:FormalExpression", { body: toBody });
+      t.$parent = asg;
+      asg.to = t;
+    }
+    modeling.updateModdleProperties(element, bo, { assignment: [asg] });
+  } catch { /* stale */ }
+}
+
+function writeStartVariables(modeler, list, targetEl, targetBo) {
   const moddle = modeler.get("moddle");
   const modeling = modeler.get("modeling");
+  const onRoot = !targetEl;
   const rootEl = modeler.get("canvas").getRootElement();
-  const bo = rootEl.businessObject;
+  if (onRoot) { targetEl = rootEl; targetBo = rootEl.businessObject; }
+  const bo = targetBo;
   let ext = bo.extensionElements;
   if (!ext) { ext = moddle.create("bpmn:ExtensionElements", { values: [] }); ext.$parent = bo; }
   let sf = (ext.values || []).find((v) => v.$type === "atlas:StartForm");
@@ -653,7 +1160,8 @@ function writeStartVariables(modeler, list) {
       return sv;
     });
   }
-  modeling.updateProperties(rootEl, { extensionElements: ext });
+  if (onRoot) modeling.updateProperties(targetEl, { extensionElements: ext });
+  else modeling.updateModdleProperties(targetEl, bo, { extensionElements: ext });
 }
 
 // startVarRowHTML renders one editable declaration row. Values are escaped for
@@ -680,7 +1188,17 @@ function startVarRowHTML(v) {
 // so typing isn't interrupted; adding a row is DOM-only until it gets a name.
 // Editing the process root fires element.changed for the root, but with nothing
 // selected the panel isn't re-rendered, so in-progress rows survive a save.
-function wireStartVars(body, modeler) {
+//
+// targetEl/targetBo are optional: omit them for the diagram's root process, or
+// pass a collaboration pool's (participant shape, referenced process) to declare
+// the variables on the process that pool executes instead.
+//
+// wrap optionally runs the persist under a rerender guard. The root editor shows
+// with nothing selected, so its self-save re-renders nothing; a pool editor is
+// shown for the *selected* participant, so its save would rebuild the panel and
+// tear down an in-progress JSON editor — the pool passes savePreservingPanel to
+// keep the panel intact, mirroring how FEEL fields self-save.
+function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn()) {
   const listEl = body.querySelector("#sv-list");
   const addBtn = body.querySelector("#sv-add");
   if (!listEl || !addBtn) return;
@@ -704,7 +1222,7 @@ function wireStartVars(body, modeler) {
     default: row.querySelector(".sv-default").value,
     required: row.querySelector(".sv-required").checked,
   }));
-  const persist = () => { try { writeStartVariables(modeler, collect()); } catch { /* stale */ } };
+  const persist = () => wrap(() => { try { writeStartVariables(modeler, collect(), targetEl, targetBo); } catch { /* stale */ } });
 
   listEl.addEventListener("change", (e) => {
     // When the type dropdown changes to or from "json", rebuild the row so the
@@ -743,13 +1261,74 @@ function wireStartVars(body, modeler) {
   attachEditors();
 }
 
-function wireProperties(root, modeler, api) {
+// groupifyPanel turns each <h3> section of the properties panel into a collapsible
+// group (Camunda-style): the heading becomes a toggle with a chevron and a filled
+// dot when the group has content, and everything up to the next <h3> becomes its
+// collapsible body. It works on the already-rendered panel, so every element type's
+// markup is grouped by one function instead of each branch knowing about grouping.
+// Nodes are moved as whole subtrees, so field listeners and rich editors survive.
+function groupifyPanel(body, collapsed) {
+  const heads = [...body.children].filter((n) => n.tagName === "H3");
+  if (!heads.length) return;
+  for (const h3 of heads) {
+    const title = h3.textContent.trim();
+    const group = document.createElement("div");
+    group.className = "pgroup" + (collapsed.has(title) ? " collapsed" : "");
+    const bodyWrap = document.createElement("div");
+    bodyWrap.className = "pgroup-body";
+    let n = h3.nextSibling;
+    while (n && !(n.nodeType === 1 && n.tagName === "H3")) {
+      const next = n.nextSibling;
+      bodyWrap.appendChild(n);
+      n = next;
+    }
+    const fields = [...bodyWrap.querySelectorAll("input, textarea, select")];
+    const hasVal = fields.some((el) =>
+      el.tagName === "SELECT" ? el.selectedIndex > 0
+        : (el.type !== "button" && el.type !== "submit" && (el.value || "").trim() !== ""));
+    const hasRows = !!bodyWrap.querySelector(".dmn-input-row, .sv-row, .msg-row, tr, li");
+    const head = document.createElement("button");
+    head.type = "button";
+    head.className = "pgroup-head";
+    head.innerHTML = `<span class="pgroup-chevron">▸</span><span class="pgroup-title"></span>`;
+    head.querySelector(".pgroup-title").textContent = title;
+    if (hasVal || hasRows) {
+      const dot = document.createElement("span");
+      dot.className = "pgroup-dot";
+      dot.title = "has content";
+      head.appendChild(dot);
+    }
+    head.addEventListener("click", () => {
+      const isCol = group.classList.toggle("collapsed");
+      if (isCol) collapsed.add(title); else collapsed.delete(title);
+    });
+    body.insertBefore(group, h3);
+    group.appendChild(head);
+    group.appendChild(bodyWrap);
+    body.removeChild(h3);
+  }
+}
+
+function wireProperties(root, modeler, api, projectId, toast) {
   const icon = root.querySelector("#p-icon");
   const typename = root.querySelector("#p-typename");
   const nameEl = root.querySelector("#p-name");
   const body = root.querySelector("#p-body");
   const modeling = modeler.get("modeling");
   const selection = modeler.get("selection");
+
+  // Tidy the panel Camunda-style: every <h3> section becomes a collapsible group
+  // with a chevron and a filled dot when it carries content. groupifyPanel runs
+  // after each (re-)render via a MutationObserver, so no per-element branch has to
+  // know about grouping; collapse state persists across renders in `collapsed`.
+  const collapsed = new Set();
+  let groupifying = false;
+  const panelObserver = new MutationObserver(() => {
+    if (groupifying) return;
+    groupifying = true;
+    try { groupifyPanel(body, collapsed); } finally { groupifying = false; }
+  });
+  panelObserver.observe(body, { childList: true });
 
   // savePreservingPanel runs a field save whose resulting element.changed should
   // NOT rebuild the whole properties panel. Editing a FEEL field saves on blur;
@@ -762,6 +1341,77 @@ function wireProperties(root, modeler, api) {
     suppressRerender = true;
     try { fn(); } finally { suppressRerender = false; }
   };
+
+  // addProcessToPool gives a black-box pool (a Participant with no processRef) the
+  // process it needs to hold elements and deploy. Rather than hand-wire the moddle
+  // (a processRef is a *reference*, so the process would also have to be added to
+  // definitions.rootElements, and the collapsed shape expanded), it delegates to
+  // bpmn-js's own expand: replacing the participant with an expanded one runs the
+  // factory that creates the process, registers it, and grows the band — the same
+  // path the palette uses for a fresh pool. The name is carried across by replace.
+  function addProcessToPool(element) {
+    try {
+      const replaced = modeler.get("bpmnReplace")
+        .replaceElement(element, { type: "bpmn:Participant", isExpanded: true });
+      selection.select(replaced);
+      show(replaced); // now an executable pool: elements can be dropped in
+    } catch { toast("could not add a process to this pool", "err"); }
+  }
+
+  // showPool renders the Details panel for a collaboration pool (Participant).
+  // The pool executes a process; this edits that process (its id — the deploy
+  // identity — its name, and its start variables), or offers to create one when
+  // the pool is an empty black box that can't yet hold elements.
+  function showPool(element, bo) {
+    icon.textContent = "PL"; typename.textContent = "Pool";
+    nameEl.textContent = bo.name || bo.id || "(pool)";
+    const proc = bo.processRef;
+    const poolFields = `
+      <h3>Pool</h3>
+      <label class="field"><span>Name</span><input type="text" id="f-poolname" value="${esc(bo.name || "")}" placeholder="Teilnehmer"/></label>
+      <label class="field"><span>Pool ID</span><input type="text" value="${esc(bo.id || "")}" readonly/></label>`;
+
+    if (!proc) {
+      body.innerHTML = `${poolFields}
+        <p class="muted" style="font-size:12px">A pool is a <b>participant</b> — it doesn't hold the flow itself, it <i>executes a process</i>. This pool has <b>no process</b>, so it can't contain elements or run.</p>
+        <h3>Process</h3>
+        <p class="muted" style="font-size:12px">Add the process that sits between the pool and its elements — the participant runs it, and the elements you draw live inside it.</p>
+        <button type="button" class="btn" id="f-addproc" style="margin-top:6px">+ Add a process</button>`;
+      body.querySelector("#f-poolname").addEventListener("change", (e) => {
+        try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
+      });
+      body.querySelector("#f-addproc").addEventListener("click", () => addProcessToPool(element));
+      return;
+    }
+
+    let startVarsHTML = "";
+    if (activeTab(root) === "implement") {
+      const declared = readStartVariables(proc);
+      startVarsHTML = `
+        <h3>Start variables</h3>
+        <div id="sv-list">${declared.map(startVarRowHTML).join("")}</div>
+        <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px">+ Add variable</button>
+        <p class="muted" style="font-size:12px">Declared on this pool's process, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks. The engine ignores the declaration; it's authoring metadata.</p>`;
+    }
+    body.innerHTML = `${poolFields}
+      <p class="muted" style="font-size:12px">The pool is a <b>participant</b> that executes the process below. The elements live in that process — the pool only labels who runs it.</p>
+      <h3>Process</h3>
+      <label class="field"><span>Process name</span><input type="text" id="f-procname" value="${esc(proc.name || "")}" placeholder="Order fulfillment"/></label>
+      <label class="field"><span>Process ID</span><input type="text" id="f-procid" value="${esc(proc.id || "")}" placeholder="order-fulfillment"/></label>
+      <p class="muted" style="font-size:12px">Each pool deploys as its own process; the <b>Process ID</b> is that deployment's identity — instances group by it, and renaming it deploys a new process rather than a new version.</p>
+      ${startVarsHTML}`;
+    body.querySelector("#f-poolname").addEventListener("change", (e) => {
+      try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
+    });
+    body.querySelector("#f-procname").addEventListener("change", (e) => {
+      try { modeling.updateModdleProperties(element, proc, { name: e.target.value }); } catch { /* stale */ }
+    });
+    body.querySelector("#f-procid").addEventListener("change", (e) => {
+      const v = (e.target.value || "").trim();
+      if (v) { try { modeling.updateModdleProperties(element, proc, { id: v }); } catch { toast("invalid process id", "err"); } }
+    });
+    if (activeTab(root) === "implement") wireStartVars(body, modeler, element, proc, savePreservingPanel);
+  }
 
   function show(element) {
     if (!element) {
@@ -802,12 +1452,12 @@ function wireProperties(root, modeler, api) {
         return;
       }
       // A collaboration root has no single process to rename; each pool
-      // (participant) is renamed by selecting it and editing its Name.
+      // (participant) executes its own process, configured by selecting the pool.
       if (isCollaborationRoot(modeler)) {
         icon.textContent = "CO"; typename.textContent = "Collaboration"; nameEl.textContent = "(collaboration)";
         body.innerHTML = `
           <h3>Collaboration</h3>
-          <p class="muted" style="font-size:12px">This diagram has several <b>pools</b> — each deploys as its own process. Select a pool to rename it, or an element inside a pool to configure it. Pools talk to each other through <b>message events</b>: a throw event in one pool and a catch event in another that reference the <b>same message</b> below.</p>
+          <p class="muted" style="font-size:12px">This diagram has several <b>pools</b>. A pool is a <b>participant</b> that <i>executes a process</i> — the process holds the flow, the pool just names who runs it, and each deploys as its own process. Select a pool to name it and configure the process it runs, or an element inside a pool to configure it. Pools talk to each other through <b>message events</b>: a throw event in one pool and a catch event in another that reference the <b>same message</b> below.</p>
           ${messagesManagerHTML(modeler)}`;
         wireMessagesManager(body, modeler, () => show(null));
         return;
@@ -818,9 +1468,31 @@ function wireProperties(root, modeler, api) {
     }
     const bo = element.businessObject || {};
     const type = shortType(element.type);
-    icon.textContent = type.slice(0, 2).toUpperCase();
+    // The generic two-letter badge is the type's first two letters, but every data
+    // element starts "Da" (DataObject, DataStore, DataInput/OutputAssociation) and
+    // would collide on "DA" — badge them by what they are so they read at a glance:
+    // data object → DO, data store → DS, output/input association → OA/IA (ADR-0053).
+    const badges = {
+      "bpmn:DataObjectReference": "DO",
+      "bpmn:DataStoreReference": "DS",
+      "bpmn:DataOutputAssociation": "OA",
+      "bpmn:DataInputAssociation": "IA",
+    };
+    icon.textContent = badges[bo.$type] || type.slice(0, 2).toUpperCase();
     typename.textContent = type;
     nameEl.textContent = bo.name || bo.id || "(unnamed)";
+
+    // A pool (Participant) is not itself executable — in BPMN it *executes* a
+    // process: participant → processRef → the flow elements. The pool's own name
+    // is only the band label; the process it references is the deploy identity
+    // and the only thing that can hold elements (a Participant with no processRef
+    // is a black box the engine can't run and the canvas can't drop into). So the
+    // panel edits the process behind the pool, and offers to create one when the
+    // pool has none — the "Prozess dazwischen" that takes the elements.
+    if (/:Participant$/.test(bo.$type || "")) {
+      showPool(element, bo);
+      return;
+    }
 
     const tab = activeTab(root);
     const isSeqFlow = /:SequenceFlow$/.test(bo.$type || "");
@@ -837,6 +1509,53 @@ function wireProperties(root, modeler, api) {
       <h3>General</h3>
       <label class="field"><span>${isSeqFlow ? "Label" : "Name"}</span><input type="text" id="f-name" value="${esc(bo.name || "")}"${isSeqFlow ? ' placeholder="Großauftrag"' : ""}/></label>
       <label class="field"><span>ID</span><input type="text" value="${esc(bo.id || "")}" readonly/></label>`;
+
+    // A data object is the data a process carries — first-class in Atlas, not just
+    // decoration (ADR-0053). Its name is the engine's variable-like identity and its
+    // data state is the [received]/[approved] label an activity advances. Shown on
+    // both tabs since data is descriptive and executable at once.
+    if (bo.$type === "bpmn:DataObjectReference") {
+      const stateName = (bo.dataState && bo.dataState.name) || "";
+      const collection = !!(bo.dataObjectRef && bo.dataObjectRef.isCollection);
+      // The other data objects in this process, so a reference can be pointed at an
+      // existing one — showing the same object in several places (one logical object,
+      // no long arrows). Distinct by name: duplicates are folded at compile time.
+      const names = dataObjectNames(processOf(modeler, element));
+      const curName = (bo.dataObjectRef && (bo.dataObjectRef.name || bo.dataObjectRef.id)) || "";
+      let pointsTo = "";
+      if (names.length > 1) {
+        pointsTo = `<label class="field"><span>Points to</span>
+          <select id="f-pointsto">${names.map((n) => `<option value="${esc(n.id)}" ${n.name === curName ? "selected" : ""}>${esc(n.name)}</option>`).join("")}</select></label>
+          <p class="muted" style="font-size:12px">Point this box at an existing data object to show <b>the same object in several places</b> — one logical object, so you can put it next to each activity without long arrows across the diagram.</p>`;
+      }
+      html += `<h3>Data object</h3>
+        <label class="field"><span>Data state</span>
+          <input type="text" id="f-datastate" value="${esc(stateName)}" placeholder="received"/></label>
+        <label class="field checkbox"><input type="checkbox" id="f-collection" ${collection ? "checked" : ""}/> <span>Collection (a list of items)</span></label>
+        ${pointsTo}
+        <p class="muted" style="font-size:12px">A data object carries a value <i>and</i> a <b>data state</b> — <code>order [received]</code> → <code>[approved]</code>. The state set here is where the object starts each instance; a <b>data output association</b> (an arrow from an activity to this object) advances it and writes its value, a <b>data input association</b> reads it back, and the full state history is recorded per instance and survives restart. The <b>Name</b> is how the engine identifies it.</p>`;
+    }
+
+    // A data association is the arrow between an activity and a data object — it is
+    // what makes data flow (ADR-0058/0059/0060). Its <assignment> carries the FEEL:
+    // <from> is the value/transform, <to> is an output member path or an input target
+    // variable. Shown on both tabs since it is the executable data contract.
+    if (bo.$type === "bpmn:DataOutputAssociation" || bo.$type === "bpmn:DataInputAssociation") {
+      const asg = (bo.assignment && bo.assignment[0]) || {};
+      const fromBody = (asg.from && asg.from.body) || "";
+      const toBody = (asg.to && asg.to.body) || "";
+      if (bo.$type === "bpmn:DataOutputAssociation") {
+        html += `<h3>Writes data object</h3>
+          <label class="field"><span>FEEL value</span><input type="text" id="f-assoc-from" value="${esc(fromBody)}" placeholder="=amount * 1.19"/></label>
+          <label class="field"><span>Target member <span class="muted">(optional)</span></span><input type="text" id="f-assoc-to" value="${esc(toBody)}" placeholder="name"/></label>
+          <p class="muted" style="font-size:12px">When the activity completes it writes <b>${esc(dataRefName(bo.targetRef))}</b>: the <b>FEEL value</b> (over the instance's variables) becomes the object's value, and its data state advances to the one on the target reference. Leave <b>Target member</b> empty to write the whole object; set it (e.g. <code>name</code>) to update just that field of a structured object and keep the rest.</p>`;
+      } else {
+        html += `<h3>Reads data object</h3>
+          <label class="field"><span>Target variable</span><input type="text" id="f-assoc-to" value="${esc(toBody)}" placeholder="order"/></label>
+          <label class="field"><span>Transform <span class="muted">(optional)</span></span><input type="text" id="f-assoc-from" value="${esc(fromBody)}" placeholder="=order.amount"/></label>
+          <p class="muted" style="font-size:12px">At activation this reads <b>${esc(dataRefName(bo.sourceRef))}</b> into the <b>Target variable</b>, so the activity's FEEL can use it. Leave <b>Transform</b> empty to copy the object's value; set it (the object is available under its name) to compute the value written into the variable.</p>`;
+      }
+    }
 
     if (tab === "implement") {
       if (isActivity(bo)) {
@@ -880,25 +1599,48 @@ function wireProperties(root, modeler, api) {
               <p class="muted" style="font-size:12px">${meta.hint}</p>`;
           }
         } else if (t === "bpmn:ServiceTask") {
-          const d = findExt(bo, "zeebe:TaskDefinition") || {};
-          html += `<h3>Task definition</h3>
-            <label class="field"><span>Job type</span>
-              <input type="text" id="f-jobtype" value="${esc(d.type || "")}" placeholder="payment"/></label>`;
+          html += serviceTaskKindHTML(bo);
         } else if (t === "bpmn:BusinessRuleTask") {
           const cd = findExt(bo, "zeebe:CalledDecision") || {};
+          const tc = findExt(bo, "atlas:TemisConnector");
+          const mode = tc ? "connector" : "local";
           const io = findExt(bo, "zeebe:IoMapping");
           const inputs = (io && io.inputParameters) || [];
           html += `<h3>Called decision (DMN)</h3>
+            <label class="field"><span>Evaluation</span>
+              <select id="f-brt-mode">
+                <option value="local" ${mode === "local" ? "selected" : ""}>In-engine (embedded DMN)</option>
+                <option value="connector" ${mode === "connector" ? "selected" : ""}>External (temis connector)</option>
+              </select></label>`;
+          if (mode === "connector") {
+            html += `<label class="field"><span>Connector</span>
+              <input type="text" id="f-connector" value="${esc((tc && tc.connector) || "")}" placeholder="risk-service"/></label>`;
+          }
+          const binding = cd.bindingType === "deployment" ? "deployment" : "latest";
+          const bindingField = mode === "local" ? `
+            <label class="field"><span>Binding</span>
+              <select id="f-brt-binding">
+                <option value="latest" ${binding === "latest" ? "selected" : ""}>Latest — newest deployed version</option>
+                <option value="deployment" ${binding === "deployment" ? "selected" : ""}>Deployment — pinned to this deploy</option>
+              </select></label>` : "";
+          html += `<label class="field"><span>Decision</span>
+              <select id="f-decision-pick"><option value="">${cd.decisionId ? esc(cd.decisionId) + " (current)" : "— choose a decision —"}</option></select></label>
+            <div style="display:flex; gap:8px; margin:-4px 0 6px">
+              <button type="button" class="btn ghost" id="f-dmn-new">＋ Neue Decision</button>
+              <button type="button" class="btn ghost" id="f-dmn-edit"${cd.decisionId ? "" : " disabled"}>Bearbeiten</button>
+            </div>
             <label class="field"><span>Decision ID</span>
               <input type="text" id="f-decisionid" value="${esc(cd.decisionId || "")}" placeholder="Dish"/></label>
             <label class="field"><span>Result variable</span>
-              <input type="text" id="f-resultvar" value="${esc(cd.resultVariable || "")}" placeholder="dish"/></label>
-            <p class="muted" style="font-size:12px">The decision's result is written into this process variable, so a downstream gateway can route on it.</p>
+              <input type="text" id="f-resultvar" value="${esc(cd.resultVariable || "")}" placeholder="dish"/></label>${bindingField}
+            <p class="muted" style="font-size:12px">Pick a decision to auto-fill its inputs and result variable. <b>Latest</b> evaluates the newest deployed version; <b>Deployment</b> pins to the version deployed with this process.</p>
             <h3>Decision inputs</h3>
             <p class="muted" style="font-size:12px">Each row feeds one decision input from a FEEL expression over the instance's variables. Leave a row's name blank to drop it.</p>
             <div id="dmn-inputs">${inputs.map((p, i) => decisionInputRowHTML(i, p.source, p.target)).join("")}${decisionInputRowHTML(inputs.length, "", "")}</div>`;
         } else if (t === "bpmn:UserTask") {
           const a = findExt(bo, "zeebe:AssignmentDefinition") || {};
+          const pr = findExt(bo, "zeebe:PriorityDefinition") || {};
+          const sch = findExt(bo, "zeebe:TaskSchedule") || {};
           const fd = findExt(bo, "zeebe:FormDefinition") || {};
           const curForm = fd.formId || "";
           html += `<h3>Form</h3>
@@ -913,7 +1655,14 @@ function wireProperties(root, modeler, api) {
             <label class="field"><span>Assignee</span>
               <input type="text" id="f-assignee" value="${esc(a.assignee || "")}" placeholder="editor"/></label>
             <label class="field"><span>Candidate groups</span>
-              <input type="text" id="f-groups" value="${esc(a.candidateGroups || "")}" placeholder="reviewers"/></label>`;
+              <input type="text" id="f-groups" value="${esc(a.candidateGroups || "")}" placeholder="reviewers"/></label>
+            <h3>Schedule</h3>
+            <label class="field"><span>Priority</span>
+              <input type="number" id="f-priority" min="0" max="100" value="${esc(pr.priority || "50")}" placeholder="50"/></label>
+            <label class="field"><span>Due in</span>
+              <input type="text" id="f-due" value="${esc(sch.dueDate || "")}" placeholder="P2D, PT4H, PT30M"/></label>
+            <p class="muted" style="font-size:12px">An ISO-8601 duration measured from when the task appears
+              (e.g. <b>P2D</b> = 2 days, <b>PT4H</b> = 4 hours). Leave blank for no due date. Priority 0–100; higher sorts first.</p>`;
         }
       } else if (isDefaultFlow) {
         html += `<h3>Condition (FEEL)</h3>
@@ -928,11 +1677,9 @@ function wireProperties(root, modeler, api) {
         const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
         if (timer) {
-          const dur = (timer.timeDuration && timer.timeDuration.body) || "";
-          html += `<h3>Timer</h3>
-            <label class="field"><span>Duration (ISO&nbsp;8601)</span>
-              <input type="text" id="f-duration" value="${esc(dur)}" placeholder="PT30S"/></label>
-            <p class="muted" style="font-size:12px">e.g. PT30S (30s), PT5M, PT1H, P1DT2H. The event waits this long, then continues.</p>`;
+          html += timerFieldsHTML(timer, ["duration", "date"], `The event waits, then continues (ADR-0054).
+            <b>Duration</b> waits that long (<b>PT30S</b>, <b>PT5M</b>, <b>P1DT2H</b>); <b>Date &amp; time</b> waits until that instant.
+            A catch fires once, so it has no cycle. A FEEL expression is allowed in either.`);
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "The event waits until this message is published with a matching correlation key.");
         } else {
@@ -949,7 +1696,7 @@ function wireProperties(root, modeler, api) {
         // A boundary event is attached to an activity and arms while it runs. Its
         // cancelActivity attribute (interrupting by default) and its timer/message
         // trigger are configured here; the trigger's fields reuse the same
-        // f-duration / message wiring as the intermediate catch event.
+        // timer / message wiring as the intermediate catch event.
         const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
         const interrupting = bo.cancelActivity !== false;
@@ -961,22 +1708,47 @@ function wireProperties(root, modeler, api) {
             </select></label>
           <p class="muted" style="font-size:12px">Interrupting cancels the attached activity (and its job) and routes the token out this event; non-interrupting spawns a parallel token and lets the activity continue.</p>`;
         if (timer) {
-          const dur = (timer.timeDuration && timer.timeDuration.body) || "";
-          html += `<h3>Timer</h3>
-            <label class="field"><span>Duration (ISO&nbsp;8601)</span>
-              <input type="text" id="f-duration" value="${esc(dur)}" placeholder="PT30M"/></label>
-            <p class="muted" style="font-size:12px">e.g. PT30S, PT5M, PT1H. The event fires this long after the activity starts.</p>`;
+          const kinds = interrupting ? ["duration", "date"] : ["duration", "date", "cycle"];
+          const cycleNote = interrupting
+            ? "An interrupting boundary fires once, so it has no cycle."
+            : "A non-interrupting boundary may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R/PT1H</b>) or cron (<b>0 * * * *</b>) — firing a fresh token each time.";
+          html += timerFieldsHTML(timer, kinds, `The event fires relative to the activity (ADR-0054).
+            <b>Duration</b> fires that long after it starts (<b>PT30S</b>, <b>PT5M</b>); <b>Date &amp; time</b> at a fixed instant.
+            ${cycleNote} A FEEL expression is allowed in any type.`);
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "The event fires when this message is published with a matching correlation key.");
         } else {
           html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b> or <b>Message</b> boundary event, then configure its trigger here.</p>`;
         }
       } else if (bo.$type === "bpmn:StartEvent") {
+        const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
-        if (msg) {
+        if (timer) {
+          html += timerFieldsHTML(timer, ["duration", "date", "cycle"], `A timer start event fires on this schedule with no incoming token (ADR-0051).
+            <b>Duration</b> and <b>Date &amp; time</b> fire once — that long after deploy, or at that instant;
+            <b>Cycle</b> recurs, either an ISO-8601 repeating interval (<b>R/PT1H</b>, <b>R3/P1D</b>) or a cron expression (<b>0 * * * *</b>).
+            A FEEL expression is allowed in any type.`);
+        } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "A message start event: publishing this message starts a new instance of this process, matched by message name (the correlation key is shared with the throwing event but is not yet evaluated for starts).");
         } else {
-          html += `<p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Message</b> start event — a pool that a message opens — then pick its message here.</p>`;
+          const fd = findExt(bo, "zeebe:FormDefinition") || {};
+          const curForm = fd.formId || "";
+          html += `<h3>Start form</h3>
+            <label class="field"><span>Linked form</span>
+              <select id="f-form">
+                <option value="">— none —</option>
+                ${curForm ? `<option value="${esc(curForm)}" selected>${esc(curForm)}</option>` : ""}
+              </select></label>
+            <p class="muted" style="font-size:12px">Shown before the process starts — from the Tasks app's <b>Start</b> view — its data becomes the instance's start variables.
+              <a href="#/modeler/form/new" target="_blank" rel="noopener">Create a new form</a>, then reopen this to link it.</p>
+            <p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Timer</b> or <b>Message</b> start event instead.</p>`;
+        }
+      } else if (bo.$type === "bpmn:EndEvent") {
+        const msg = messageDefOf(bo);
+        if (msg) {
+          html += messageFieldsHTML(modeler, msg, "On reaching this end event the message is published; any instance waiting on it with a matching correlation key continues. The instance then ends.");
+        } else {
+          html += `<p class="muted" style="font-size:12px">A plain end event ends the instance. Use the wrench icon on the element to make this a <b>Message</b> end event, which publishes a message as the instance ends.</p>`;
         }
       }
     } else if (isGatewayFlow && !isDefaultFlow) {
@@ -989,8 +1761,73 @@ function wireProperties(root, modeler, api) {
     body.innerHTML = html;
 
     body.querySelector("#f-name").addEventListener("change", (e) => {
-      try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
+      try {
+        modeling.updateProperties(element, { name: e.target.value });
+        // A data object's engine identity is the underlying <dataObject> name, not
+        // the reference's — so setting the reference's name here also names the
+        // object it points at, keeping the modeled name and the runtime one in sync
+        // (ADR-0053).
+        if (bo.$type === "bpmn:DataObjectReference" && bo.dataObjectRef) {
+          modeling.updateModdleProperties(element, bo.dataObjectRef, { name: e.target.value });
+        }
+      } catch { /* stale */ }
     });
+
+    const fdatastate = body.querySelector("#f-datastate");
+    if (fdatastate) {
+      fdatastate.addEventListener("change", (e) => {
+        const v = (e.target.value || "").trim();
+        try {
+          let ds;
+          if (v) {
+            ds = modeler.get("moddle").create("bpmn:DataState", { name: v });
+            ds.$parent = bo;
+          }
+          // Setting dataState to undefined clears the [state] label.
+          modeling.updateModdleProperties(element, bo, { dataState: ds || undefined });
+        } catch { /* stale */ }
+      });
+    }
+    const fcollection = body.querySelector("#f-collection");
+    if (fcollection && bo.dataObjectRef) {
+      fcollection.addEventListener("change", (e) => {
+        try { modeling.updateModdleProperties(element, bo.dataObjectRef, { isCollection: !!e.target.checked }); } catch { /* stale */ }
+      });
+    }
+    const fpointsto = body.querySelector("#f-pointsto");
+    if (fpointsto) {
+      fpointsto.addEventListener("change", (e) => {
+        try {
+          const procBo = processOf(modeler, element);
+          const objs = procBo ? (procBo.flowElements || []).filter((x) => x.$type === "bpmn:DataObject") : [];
+          const target = objs.find((o) => o.id === e.target.value);
+          if (!target) return;
+          const old = bo.dataObjectRef;
+          // Point this reference at the chosen object, and relabel the box to match so
+          // the canvas and the engine identity agree.
+          modeling.updateModdleProperties(element, bo, { dataObjectRef: target });
+          if (target.name) modeling.updateProperties(element, { name: target.name });
+          // Remove the reference's former object if nothing else points at it, so a
+          // freshly-dropped duplicate does not linger as a phantom object.
+          if (old && old !== target && procBo) {
+            const stillUsed = (procBo.flowElements || []).some((x) => x.$type === "bpmn:DataObjectReference" && x.dataObjectRef === old);
+            if (!stillUsed) {
+              modeling.updateModdleProperties(element, procBo, { flowElements: (procBo.flowElements || []).filter((x) => x !== old) });
+            }
+          }
+          show(element);
+        } catch { /* stale */ }
+      });
+    }
+    const assocFrom = body.querySelector("#f-assoc-from");
+    const assocTo = body.querySelector("#f-assoc-to");
+    if (assocFrom || assocTo) {
+      const applyAssoc = () => setAssignment(modeler, element, bo,
+        assocFrom ? assocFrom.value.trim() : "",
+        assocTo ? assocTo.value.trim() : "");
+      if (assocFrom) assocFrom.addEventListener("change", applyAssoc);
+      if (assocTo) assocTo.addEventListener("change", applyAssoc);
+    }
 
     const tasktype = body.querySelector("#f-tasktype");
     if (tasktype) {
@@ -1048,23 +1885,165 @@ function wireProperties(root, modeler, api) {
     if (fpsbody) fpsbody.addEventListener("change", saveJobScript);
     if (fpsresult) fpsresult.addEventListener("change", saveJobScript);
 
-    const fjob = body.querySelector("#f-jobtype");
-    if (fjob) {
-      fjob.addEventListener("change", () => {
-        upsertExt(modeler, element, "zeebe:TaskDefinition", { type: (fjob.value || "").trim() });
+    // Service-task connector kind: a searchable picker over SERVICE_TASK_KINDS
+    // (ADR-0067). Filtering narrows the list; clicking a row switches the kind
+    // (swapping which extension the task carries) and re-renders so that kind's
+    // fields show. Field edits upsert the current kind's extension generically.
+    const stfilter = body.querySelector("#f-stkind-filter");
+    const stlist = body.querySelector("#f-stkind-list");
+    if (stfilter && stlist) {
+      stfilter.addEventListener("input", () => {
+        const q = stfilter.value.trim().toLowerCase();
+        stlist.querySelectorAll(".stkind-row").forEach((row) => {
+          row.hidden = q !== "" && !row.dataset.match.includes(q);
+        });
       });
+    }
+    if (stlist) {
+      stlist.addEventListener("click", (e) => {
+        const row = e.target.closest(".stkind-row");
+        if (!row) return;
+        try {
+          applyServiceTaskKind(modeler, element, row.dataset.kind);
+          show(element);
+        } catch { /* stale */ }
+      });
+    }
+    const stKind = serviceTaskKind(bo);
+    const saveKindFields = () => savePreservingPanel(() => {
+      const props = {};
+      for (const f of stKind.fields) {
+        const el = body.querySelector("#f-st-" + f.key);
+        if (el) props[f.key] = (el.value || "").trim();
+      }
+      upsertExt(modeler, element, stKind.ext, props);
+    });
+    for (const f of stKind.fields) {
+      const el = body.querySelector("#f-st-" + f.key);
+      if (el) el.addEventListener("change", saveKindFields);
     }
 
     const fdecision = body.querySelector("#f-decisionid");
     const fresultvar = body.querySelector("#f-resultvar");
+    const fbinding = body.querySelector("#f-brt-binding");
+    // currentBinding preserves the decision binding (ADR-0063) across every save of
+    // the called decision, so editing the id/result variable never drops it.
+    const currentBinding = () => (fbinding && fbinding.value === "deployment") ? "deployment" : "latest";
+    const calledDecisionProps = () => ({
+      decisionId: (fdecision.value || "").trim(),
+      resultVariable: (fresultvar.value || "").trim(),
+      bindingType: currentBinding(),
+    });
     const saveDecision = () => savePreservingPanel(() => {
-      upsertExt(modeler, element, "zeebe:CalledDecision", {
-        decisionId: (fdecision.value || "").trim(),
-        resultVariable: (fresultvar.value || "").trim(),
-      });
+      upsertExt(modeler, element, "zeebe:CalledDecision", calledDecisionProps());
     });
     if (fdecision) fdecision.addEventListener("change", saveDecision);
     if (fresultvar) fresultvar.addEventListener("change", saveDecision);
+    if (fbinding) fbinding.addEventListener("change", saveDecision);
+
+    // Evaluation mode: local (embedded DMN) vs a temis connector (central). The
+    // choice is the presence of the atlas:temisConnector extension the compiler
+    // reads (ADR-0050); flipping it re-renders so the connector field appears.
+    const fmode = body.querySelector("#f-brt-mode");
+    if (fmode) {
+      fmode.addEventListener("change", () => {
+        savePreservingPanel(() => {
+          if (fmode.value === "connector") {
+            const name = (body.querySelector("#f-connector")?.value || "").trim();
+            upsertExt(modeler, element, "atlas:TemisConnector", { connector: name });
+          } else {
+            removeExt(modeler, element, "atlas:TemisConnector");
+          }
+        });
+        show(element);
+      });
+    }
+    const fconnector = body.querySelector("#f-connector");
+    if (fconnector) {
+      fconnector.addEventListener("change", () => savePreservingPanel(() => {
+        upsertExt(modeler, element, "atlas:TemisConnector", { connector: (fconnector.value || "").trim() });
+      }));
+    }
+
+    // Decision picker: populate from the DMN references' decisions and, on pick,
+    // set the decision id + result variable and auto-fill the input mappings from
+    // the decision's declared inputs — so an author selects from a list instead of
+    // typing ids and parameters by hand (ADR-0050). A previously-set source for a
+    // given input target is preserved when re-picking.
+    const fpick = body.querySelector("#f-decision-pick");
+    if (fpick && api) {
+      const scope = projectId ? "?projectId=" + encodeURIComponent(projectId) : "";
+      api("GET", "/api/v1/decisions" + scope).then((decisions) => {
+        if (!document.body.contains(fpick)) return;
+        const cur = (fdecision?.value || "").trim();
+        const opts = [`<option value="">— choose a decision —</option>`];
+        for (const d of decisions || []) {
+          const label = d.model ? `${d.name} · ${d.model}` : d.name;
+          opts.push(`<option value="${esc(d.id)}"${d.id === cur ? " selected" : ""}>${esc(label)}</option>`);
+        }
+        fpick.innerHTML = opts.join("");
+        fpick._catalog = decisions || [];
+      }).catch(() => { /* leave the placeholder; manual entry still works */ });
+
+      // applyPick sets the decision id + result variable and auto-fills the input
+      // mappings from a catalog decision's declared inputs, preserving any custom
+      // source already mapped for a target. Shared by the picker's change handler
+      // and by the "author a decision" flow, so a decision created in the embedded
+      // editor is adopted exactly as if it had been picked from the list.
+      const applyPick = (d) => {
+        const io = findExt(element.businessObject, "zeebe:IoMapping");
+        const prev = {};
+        for (const p of (io && io.inputParameters) || []) {
+          if (p.target) prev[p.target] = (p.source || "").replace(/^=\s*/, "");
+        }
+        savePreservingPanel(() => {
+          upsertExt(modeler, element, "zeebe:CalledDecision", {
+            decisionId: d.id,
+            resultVariable: (fresultvar.value || "").trim() || (d.output && d.output.name) || d.id,
+            bindingType: currentBinding(),
+          });
+          const rows = (d.inputs || []).map((inp) => ({ target: inp.name, source: prev[inp.name] || inp.name }));
+          saveDecisionInputs(modeler, element, rows);
+        });
+        show(element); // reflect the filled id, result variable, and input rows
+      };
+      fpick.addEventListener("change", () => {
+        const d = (fpick._catalog || []).find((x) => x.id === fpick.value);
+        if (d) applyPick(d);
+      });
+
+      // Author-a-decision: the embedded dmn-js editor (ADR-0051). "＋ Neue Decision"
+      // creates a model + reference and adopts it; "Bearbeiten" opens the current
+      // decision's local model in place. After authoring, the catalog is re-fetched
+      // and the authored decision is adopted (id + inputs + result), so inputs and
+      // output flow in automatically — no separate upload step.
+      const adoptAuthored = async (result) => {
+        if (!result) return;
+        const scope = projectId ? "?projectId=" + encodeURIComponent(projectId) : "";
+        let decisions = [];
+        try { decisions = (await api("GET", "/api/v1/decisions" + scope)) || []; } catch { /* keep panel */ }
+        const d = decisions.find((x) => x.id === result.name) ||
+          decisions.find((x) => x.modelRef === result.modelRef);
+        if (d) applyPick(d); else show(element);
+      };
+      const fnew = body.querySelector("#f-dmn-new");
+      if (fnew) {
+        fnew.addEventListener("click", async () => {
+          adoptAuthored(await openDmnEditor({ api, toast, projectId }));
+        });
+      }
+      const fedit = body.querySelector("#f-dmn-edit");
+      if (fedit) {
+        fedit.addEventListener("click", async () => {
+          const cur = (fpick._catalog || []).find((x) => x.id === (fdecision?.value || "").trim());
+          if (!cur || !cur.modelRef) {
+            toast && toast("Diese Decision hat kein lokal editierbares Modell.", "err");
+            return;
+          }
+          adoptAuthored(await openDmnEditor({ api, toast, projectId, modelRef: cur.modelRef }));
+        });
+      }
+    }
 
     const inputsWrap = body.querySelector("#dmn-inputs");
     if (inputsWrap) {
@@ -1106,6 +2085,26 @@ function wireProperties(root, modeler, api) {
     if (fassignee) fassignee.addEventListener("change", saveAssignment);
     if (fgroups) fgroups.addEventListener("change", saveAssignment);
 
+    // Priority and due date (ADR-0051): zeebe:priorityDefinition is written only
+    // when it differs from the default 50; zeebe:taskSchedule is dropped when the
+    // due-date field is cleared, keeping the XML free of empty extensions.
+    const fpriority = body.querySelector("#f-priority");
+    const fdue = body.querySelector("#f-due");
+    if (fpriority) {
+      fpriority.addEventListener("change", () => {
+        const v = (fpriority.value || "").trim();
+        if (v === "" || v === "50") removeExt(modeler, element, "zeebe:PriorityDefinition");
+        else upsertExt(modeler, element, "zeebe:PriorityDefinition", { priority: v });
+      });
+    }
+    if (fdue) {
+      fdue.addEventListener("change", () => {
+        const v = (fdue.value || "").trim();
+        if (v) upsertExt(modeler, element, "zeebe:TaskSchedule", { dueDate: v });
+        else removeExt(modeler, element, "zeebe:TaskSchedule");
+      });
+    }
+
     const fform = body.querySelector("#f-form");
     if (fform) {
       // Link/unlink writes (or drops) the zeebe:FormDefinition formId — the same
@@ -1140,17 +2139,44 @@ function wireProperties(root, modeler, api) {
       });
     }
 
-    const fdur = body.querySelector("#f-duration");
-    if (fdur) {
-      fdur.addEventListener("change", () => {
-        const timer = timerDefOf(element.businessObject);
-        if (!timer) return;
-        const moddle = modeler.get("moddle");
-        let td = timer.timeDuration;
-        if (!td) { td = moddle.create("bpmn:FormalExpression"); td.$parent = timer; }
-        td.body = (fdur.value || "").trim();
-        modeling.updateModdleProperties(element, timer, { timeDuration: td });
-      });
+    const ftimerkind = body.querySelector("#f-timerkind");
+    const ftimerval = body.querySelector("#f-timerval");
+    if (ftimerkind || ftimerval) {
+      const moddle = modeler.get("moddle");
+      // ensureExpr returns the FormalExpression sub-element for a kind, creating
+      // an empty one parented to the timer when it does not yet exist.
+      const ensureExpr = (timer, prop) => {
+        let e = timer[prop];
+        if (!e) { e = moddle.create("bpmn:FormalExpression"); e.$parent = timer; }
+        return e;
+      };
+      if (ftimerkind) {
+        // Switching type moves the schedule to a different sub-element: the chosen
+        // kind's element is (re)created and the other two are dropped, so exactly
+        // one of timeDuration/timeDate/timeCycle is ever set (the compiler rejects
+        // more than one). Re-render so the value field's label and placeholder match.
+        ftimerkind.addEventListener("change", () => {
+          const timer = timerDefOf(element.businessObject);
+          if (!timer) return;
+          const props = {};
+          for (const [k, meta] of Object.entries(TIMER_KINDS)) {
+            props[meta.prop] = k === ftimerkind.value ? ensureExpr(timer, meta.prop) : undefined;
+          }
+          modeling.updateModdleProperties(element, timer, props);
+          show(element);
+        });
+      }
+      if (ftimerval) {
+        ftimerval.addEventListener("change", () => {
+          const timer = timerDefOf(element.businessObject);
+          if (!timer) return;
+          const kind = (ftimerkind && ftimerkind.value) || timerScheduleOf(timer).kind;
+          const prop = TIMER_KINDS[kind].prop;
+          const e = ensureExpr(timer, prop);
+          e.body = (ftimerval.value || "").trim();
+          modeling.updateModdleProperties(element, timer, { [prop]: e });
+        });
+      }
     }
 
     const fmsgref = body.querySelector("#f-msgref");
@@ -1234,6 +2260,20 @@ function wireProperties(root, modeler, api) {
   }
 
   modeler.on("selection.changed", (e) => show((e.newSelection || [])[0]));
+
+  // When an input association is freshly drawn (data object → activity), default its
+  // target variable to the source object's name, so it compiles and reads the object
+  // into a like-named variable without hand-editing (ADR-0059). Deferred so the
+  // create command settles first. Output associations need no default: a bare one is
+  // a valid state-only transition.
+  modeler.on("commandStack.connection.create.postExecuted", (e) => {
+    const conn = e.context && e.context.connection;
+    const bo = conn && conn.businessObject;
+    if (!bo || bo.$type !== "bpmn:DataInputAssociation") return;
+    if (bo.assignment && bo.assignment.length) return; // already configured
+    const objName = dataRefName(bo.sourceRef);
+    if (objName && objName !== "?") setTimeout(() => setAssignment(modeler, conn, bo, "", objName), 0);
+  });
   modeler.on("element.changed", (e) => {
     if (suppressRerender) return; // a FEEL-field self-save; keep the panel intact
     const sel = selection.get();
@@ -1557,6 +2597,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
         <a class="btn" id="replay-inst" hidden title="Replay this instance step by step">&#9654; Replay</a>
         <a class="btn" id="collab-link" hidden>⇄ Collaboration replay</a>
         <button class="btn neutral" id="refresh">Refresh</button>
+        <button class="btn neutral" id="vars-toggle" aria-pressed="true" title="Show or hide the variables panel">Variables</button>
         <span class="pill ok" style="margin-left:8px"><span class="dot"></span><b id="inst-count">0</b>&nbsp;running</span>
         <span class="pill" style="margin-left:8px"><b id="token-count">0</b>&nbsp;tokens total</span>
       </div>
@@ -1570,8 +2611,9 @@ export async function mountLive(root, { api, toast, key, instance }) {
       </div>
       <div class="editor-body">
         <div id="canvas"></div>
+        <div class="props-resizer" id="var-resizer" title="Drag to resize the variables panel"></div>
+        <aside class="var-panel side" id="var-panel"></aside>
       </div>
-      <div class="var-panel" id="var-panel"></div>
       <div class="problems">
         <span class="legend-swatch live"></span> live token
         <span class="legend-swatch history" style="margin-left:12px"></span> passed through
@@ -1625,12 +2667,17 @@ export async function mountLive(root, { api, toast, key, instance }) {
   const instSel = root.querySelector("#instance-sel");
   const varPanel = root.querySelector("#var-panel");
   let marked = [];
+  const jsonCollapsed = new Set(); // JSON variable names collapsed by the operator
+  let varsHTML = "";               // last rendered variables markup, to skip no-op rebuilds
+  let decisions = [];              // the selected instance's DMN decision evaluations (ADR-0066)
+  let focusEl = null;              // a business rule task the operator is inspecting, or null
   // "all" or an instance key (as a string). A deep-linked instance (Deploy & run's
   // roundtrip link, or a shared URL) preselects that one; refreshInstances falls
   // back to "all" if it no longer exists.
   let selected = instance != null ? String(instance) : "all";
   let instances = [];       // this version's instances, cached for the picker/variables
   let instSig = "";         // signature of the picker's current option set
+  let liveTasks = [];       // open user-task jobs for this version, refreshed each poll
 
   // refreshInstances pulls this version's instances and, only when the set of
   // instances (or their state) actually changed, rebuilds the picker — so the
@@ -1668,38 +2715,212 @@ export async function mountLive(root, { api, toast, key, instance }) {
   // completedAt is unix nanoseconds; Date wants milliseconds.
   const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "";
 
-  // renderVariables shows the selected instance's variables, or — for "All
-  // instances" — a compact per-instance table, beneath the diagram.
-  function renderVariables() {
+  // tasksFor returns the open user-task jobs waiting in the given instance, newest
+  // first — the "jump to the form" targets for a running instance.
+  const tasksFor = (instanceKey) =>
+    liveTasks.filter((t) => String(t.processInstanceKey) === String(instanceKey))
+      .sort((a, b) => b.key - a.key);
+
+  // renderTaskLinks lists a running instance's active user tasks as one-click links
+  // into the Tasks app, landing straight on the task's form (ADR-0028) — so an
+  // operator goes from "the token is on this user task" to "work it" without
+  // hunting through the inbox.
+  function renderTaskLinks(list) {
+    if (!list || !list.length) return "";
+    return `<div class="vp-tasks">
+      <div class="vp-tasks-head">Waiting on ${list.length === 1 ? "a user task" : list.length + " user tasks"}</div>
+      ${list.map((t) => `
+        <a class="task-link" href="#/tasks/t/${t.key}" title="Open this task's form in the Tasks app">
+          <span class="task-link-ic" aria-hidden="true">&#128203;</span>
+          <span class="task-link-name">${esc(t.name || t.elementId || ("Task " + t.key))}</span>
+          ${t.formId ? '<span class="task-link-tag">form</span>' : ""}
+          <span class="task-link-go">Open &#8599;</span>
+        </a>`).join("")}
+    </div>`;
+  }
+
+  // copyAllBtn copies every variable of an instance as one JSON object ({name:
+  // value}, JSON-typed values parsed back to structures) — the whole payload in one
+  // click, the shape an operator pastes into a ticket or a re-run.
+  function copyAllBtn(list) {
+    if (!list || !list.length) return "";
+    const obj = {};
+    for (const v of list) {
+      if (v.kind === "json") { try { obj[v.name] = JSON.parse(v.value); continue; } catch { /* keep raw */ } }
+      if (v.kind === "number") { const n = Number(v.value); obj[v.name] = Number.isNaN(n) ? v.value : n; }
+      else if (v.kind === "boolean") obj[v.name] = v.value === "true";
+      else if (v.kind === "null") obj[v.name] = null;
+      else obj[v.name] = v.value;
+    }
+    return `<button class="btn ghost small vcopy-all vcopy" type="button" title="Copy all variables as JSON" data-copy="${esc(JSON.stringify(obj, null, 2))}">Copy all</button>`;
+  }
+
+  // isBusinessRuleTask reports whether a diagram element is a DMN business rule
+  // task — the only element for which a decision can be inspected.
+  const isBusinessRuleTask = (elementId) => {
+    const el = registry.get(elementId);
+    return !!(el && el.businessObject && el.businessObject.$type === "bpmn:BusinessRuleTask");
+  };
+
+  // decisionLabel names a business rule task for the panel header: its diagram
+  // label if it has one, else its id.
+  const decisionLabel = (elementId) => {
+    const el = registry.get(elementId);
+    const bo = el && el.businessObject;
+    return (bo && (bo.name || bo.id)) || elementId;
+  };
+
+  // fmtVal renders a decision input/output value compactly: strings bare, objects
+  // and arrays as JSON, null as the FEEL null marker.
+  const fmtVal = (v) => {
+    if (v === null || v === undefined) return "null";
+    if (typeof v === "object") return JSON.stringify(v);
+    return String(v);
+  };
+
+  // objRows renders a JSON object as a two-column key/value list — the decision's
+  // inputs or outputs at a glance.
+  function objRows(obj) {
+    const keys = obj && typeof obj === "object" ? Object.keys(obj) : [];
+    if (!keys.length) return '<span class="muted">none</span>';
+    return `<div class="dec-kv">${keys.map((k) =>
+      `<div class="dec-kv-row"><span class="dec-k">${esc(k)}</span><span class="dec-v"><code>${esc(fmtVal(obj[k]))}</code></span></div>`
+    ).join("")}</div>`;
+  }
+
+  // renderTrace turns the temis trace tree into the "how it was decided" view: for
+  // each decision table, the values its inputs evaluated to and every rule with the
+  // matched ones highlighted, showing each cell's unary test and whether it held,
+  // plus the outputs the matching rule produced (ADR-0066). A decision with no table
+  // (a literal expression) has no trace, so this renders nothing.
+  function renderTrace(trace) {
+    if (!trace || !Array.isArray(trace.tables) || !trace.tables.length) {
+      return '<div class="dec-sect"><div class="dec-sect-h">How it was decided</div><p class="muted" style="margin:0">No decision-table trace (literal expression or remote decision).</p></div>';
+    }
+    const tables = trace.tables.map((tb) => {
+      const inputs = (tb.inputs || []).map((i) =>
+        `<span class="chip" title="${esc(i.expression)}">${esc(i.expression)} = <code>${esc(fmtVal(i.value))}</code></span>`
+      ).join(" ");
+      const rules = (tb.rules || []).map((r) => {
+        const conds = (r.conditions || []).map((c) =>
+          `<span class="dec-cond ${c.matched ? "ok" : "no"}" title="${esc(c.input)}">${esc(c.entry)}</span>`
+        ).join(" ");
+        const outs = r.matched && r.outputs && r.outputs.length
+          ? `<span class="dec-out">→ ${esc(r.outputs.map(fmtVal).join(", "))}</span>` : "";
+        return `<div class="dec-rule ${r.matched ? "matched" : ""}">
+          <span class="dec-rule-ix">#${r.index + 1}</span>
+          <span class="dec-rule-conds">${conds || '<span class="muted">—</span>'}</span>
+          ${outs}
+        </div>`;
+      }).join("");
+      return `<div class="dec-table">
+        <div class="dec-table-h">Hit policy <b>${esc(tb.hitPolicy || "U")}</b>${tb.aggregation ? " · " + esc(tb.aggregation) : ""}</div>
+        <div class="dec-inputs">${inputs || '<span class="muted">no inputs</span>'}</div>
+        <div class="dec-rules">${rules}</div>
+      </div>`;
+    }).join("");
+    return `<div class="dec-sect"><div class="dec-sect-h">How it was decided</div>${tables}</div>`;
+  }
+
+  // renderOneDecision renders a single evaluation: the decision id, the inputs it
+  // saw, the outputs it produced, and the trace explaining the outcome.
+  function renderOneDecision(d) {
+    let inputs = {}, outputs = {}, trace = null;
+    try { inputs = JSON.parse(d.inputs || "{}"); } catch { /* leave empty */ }
+    try { outputs = JSON.parse(d.outputs || "{}"); } catch { /* leave empty */ }
+    if (d.trace) { try { trace = JSON.parse(d.trace); } catch { /* no trace */ } }
+    const when = d.at ? new Date(d.at / 1e6).toLocaleString() : "";
+    return `<div class="dec-card">
+      <div class="dec-card-h"><b>${esc(d.decisionId)}</b>${when ? ` <span class="muted">${esc(when)}</span>` : ""}</div>
+      <div class="dec-sect"><div class="dec-sect-h">Inputs</div>${objRows(inputs)}</div>
+      <div class="dec-sect"><div class="dec-sect-h">Outputs</div>${objRows(outputs)}</div>
+      ${renderTrace(trace)}
+    </div>`;
+  }
+
+  // renderDecisionDetail is the inspection panel for a clicked business rule task:
+  // every evaluation the selected instance made at that task, newest last, with its
+  // inputs, outputs, and trace — the "look up after the fact how the decision was
+  // made" surface (ADR-0066). It needs a single instance selected, since decisions
+  // are per-instance history.
+  function renderDecisionDetail(elementId) {
+    const head = `<div class="vp-head">
+      <span class="vp-title">Decision · ${esc(decisionLabel(elementId))}</span>
+      <span class="vp-actions"><button class="btn ghost small dec-back" type="button" title="Back to variables">&larr; Variables</button></span>
+    </div>`;
     if (selected === "all") {
-      if (!instances.length) {
-        varPanel.innerHTML = `<div class="vp-head">Variables</div>
-          <p class="muted" style="margin:0">No instances yet — start one to see its variables here.</p>`;
-        return;
-      }
-      varPanel.innerHTML = `<div class="vp-head">Variables · all instances</div>
-        <table class="vp-table"><tbody>${instances.map((r) => `
-          <tr><td><b>${r.key}</b></td>
-            <td>${r.state === "active"
-              ? '<span class="pill ok"><span class="dot"></span>active</span>'
-              : `<span class="pill">${esc(r.state)}</span>`}</td>
-            <td>${varChips(r.variables)}</td></tr>`).join("")}</tbody></table>`;
+      return head + `<p class="muted" style="margin:0">Select a single instance (top-left) to see how its decision was made.</p>`;
+    }
+    const matches = decisions.filter((d) => d.elementId === elementId);
+    if (!matches.length) {
+      return head + `<p class="muted" style="margin:0">This instance has not evaluated this decision yet. Its inputs, outputs, and the rules that fired will appear here once a token reaches the task.</p>`;
+    }
+    return head + matches.map(renderOneDecision).join("");
+  }
+
+  // renderVariables shows the selected instance's variables with the shared
+  // polished renderer (scalars as fields, JSON as collapsible highlighted cards),
+  // or — for "All instances" — a compact per-instance overview table. When the
+  // operator is inspecting a business rule task, it shows that decision's evaluation
+  // instead (ADR-0066). It rebuilds only when the markup actually changes, so a 1.5s
+  // poll never resets an expanded JSON card's scroll or the operator's collapse
+  // choices.
+  function renderVariables() {
+    if (focusEl && isBusinessRuleTask(focusEl)) {
+      const decHTML = renderDecisionDetail(focusEl);
+      if (decHTML === varsHTML) return;
+      varsHTML = decHTML;
+      varPanel.innerHTML = decHTML;
       return;
     }
-    const inst = instances.find((r) => String(r.key) === selected);
-    if (!inst) { varPanel.innerHTML = `<div class="vp-head">Variables</div>
-      <p class="muted" style="margin:0">Instance no longer available.</p>`; return; }
-    const when = inst.state === "active" ? "" : fmtNano(inst.completedAt);
-    varPanel.innerHTML = `<div class="vp-head">Variables · instance ${inst.key}
-        ${inst.state === "active"
-          ? '<span class="pill ok"><span class="dot"></span>active</span>'
-          : `<span class="pill">${esc(inst.state)}</span>${when ? ` <span class="muted">${esc(when)}</span>` : ""}`}
-      </div>
-      <div>${varChips(inst.variables)}</div>`;
+    let html;
+    if (selected === "all") {
+      html = !instances.length
+        ? `<div class="vp-head"><span class="vp-title">Variables</span></div>
+          <p class="muted" style="margin:0">No instances yet — start one to see its variables here.</p>`
+        : `<div class="vp-head"><span class="vp-title">Variables · all instances (${instances.length})</span></div>
+        <div class="vp-insts">${instances.map((r) => {
+          const ts = tasksFor(r.key);
+          return `<div class="vp-inst">
+            <div class="vp-inst-head">
+              <b title="Select this instance">${r.key}</b>
+              ${r.state === "active"
+                ? '<span class="pill ok"><span class="dot"></span>active</span>'
+                : `<span class="pill">${esc(r.state)}</span>`}
+              <span class="vp-inst-actions">${ts.length
+                ? `<a class="task-link inline" href="#/tasks/t/${ts[0].key}" title="Open the waiting task's form">&#128203; Task&#8599;</a>`
+                : ""}<a class="replay-link" href="#/operations/i/${r.key}" title="Replay this instance step by step">&#9654; Replay</a></span>
+            </div>
+            <div class="vp-inst-vars">${varChips(r.variables)}</div>
+          </div>`;
+        }).join("")}</div>`;
+    } else {
+      const inst = instances.find((r) => String(r.key) === selected);
+      if (!inst) {
+        html = `<div class="vp-head"><span class="vp-title">Variables</span></div>
+          <p class="muted" style="margin:0">Instance no longer available.</p>`;
+      } else {
+        const when = inst.state === "active" ? "" : fmtNano(inst.completedAt);
+        html = `<div class="vp-head">
+            <span class="vp-title">Variables · instance ${inst.key}
+              ${inst.state === "active"
+                ? '<span class="pill ok"><span class="dot"></span>active</span>'
+                : `<span class="pill">${esc(inst.state)}</span>${when ? ` <span class="muted">${esc(when)}</span>` : ""}`}</span>
+            <span class="vp-actions">${copyAllBtn(inst.variables)}<a class="replay-link" href="#/operations/i/${inst.key}" title="Replay this instance step by step">&#9654; Replay</a></span>
+          </div>
+          ${renderTaskLinks(tasksFor(inst.key))}
+          <div class="vars">${renderVarsBody(inst.variables, jsonCollapsed)}</div>`;
+      }
+    }
+    if (html === varsHTML) return; // nothing changed — keep the DOM (and scroll) intact
+    varsHTML = html;
+    varPanel.innerHTML = html;
   }
 
   async function poll() {
     await refreshInstances();
+    await refreshTasks();
+    await refreshDecisions();
     updateCancelBtn();
     const q = selected === "all" ? "" : `?instance=${encodeURIComponent(selected)}`;
     let rt;
@@ -1709,6 +2930,22 @@ export async function mountLive(root, { api, toast, key, instance }) {
     overlays.clear();
     for (const [id, marker] of marked) canvas.removeMarker(id, marker);
     marked = [];
+    // The tasks in scope: a single instance's own, or (for "All instances") every
+    // waiting task of this version. Grouped by element so a user-task element in
+    // the diagram can be linked straight to its form.
+    const scopeTasks = selected === "all"
+      ? liveTasks.slice()
+      : tasksFor(selected);
+    const tasksByElement = new Map();
+    for (const t of scopeTasks) {
+      if (!t.elementId) continue;
+      const arr = tasksByElement.get(t.elementId) || [];
+      arr.push(t);
+      tasksByElement.set(t.elementId, arr);
+    }
+    // The business rule tasks the selected instance has already decided — each gets
+    // a clickable badge that opens its decision inspection (ADR-0066).
+    const decidedEls = new Set(decisions.map((d) => d.elementId));
     // Each element is drawn in one of two states: green if it holds a live token
     // right now, gray if tokens have only passed through it (history). Together
     // they show the flow distribution even once every instance has finished — a
@@ -1728,10 +2965,50 @@ export async function mountLive(root, { api, toast, key, instance }) {
         position: { bottom: 4, right: 4 },
         html: `<div class="token-badge${live ? "" : " history"}" title="${title}">${count}</div>`,
       });
+      // A user-task element with a waiting job gets a clickable "Open" badge that
+      // jumps to its form. One waiting task → straight to it; several (only under
+      // "All instances") → the inbox, where the operator picks.
+      const ets = tasksByElement.get(e.elementId);
+      if (ets && ets.length) {
+        const href = ets.length === 1 ? `#/tasks/t/${ets[0].key}` : "#/tasks";
+        const label = ets.length === 1 ? "Open task" : `${ets.length} tasks`;
+        overlays.add(e.elementId, "open-task", {
+          position: { top: 4, right: 4 },
+          html: `<a class="task-open" href="${href}" title="Open the waiting user task's form">&#128203; ${label}</a>`,
+        });
+      }
+      // A decided business rule task offers a decision-inspection badge.
+      if (decidedEls.has(e.elementId)) {
+        overlays.add(e.elementId, "decision", {
+          position: { top: 4, left: 4 },
+          html: `<button class="decision-badge${focusEl === e.elementId ? " on" : ""}" data-el="${esc(e.elementId)}" title="Inspect this decision — inputs, outputs, and how it was decided">&#9878; decision</button>`,
+        });
+      }
     }
     countEl.textContent = rt.instances;
     tokenEl.textContent = rt.tokens;
     renderVariables();
+  }
+
+  // refreshTasks pulls the open user-task jobs and keeps those for this deployed
+  // version. Best-effort: a transient failure leaves the previous set so the links
+  // and diagram badges don't flicker.
+  async function refreshTasks() {
+    let all;
+    try { all = await api("GET", "/api/v1/tasks"); }
+    catch { return; }
+    liveTasks = all.filter((t) => t.processDefKey === key);
+  }
+
+  // refreshDecisions pulls the selected instance's DMN decision evaluations so the
+  // diagram can badge decided business rule tasks and the inspection panel can show
+  // how each decision was made (ADR-0066). Only a single selected instance has a
+  // decision history to fetch; "All instances" clears it. Best-effort, like the
+  // other polled reads.
+  async function refreshDecisions() {
+    if (selected === "all") { decisions = []; return; }
+    try { decisions = await api("GET", `/api/v1/instances/${selected}/decisions`); }
+    catch { /* transient; keep the previous set */ }
   }
 
   // The Cancel button targets the selected instance; it is shown only when a
@@ -1774,6 +3051,40 @@ export async function mountLive(root, { api, toast, key, instance }) {
   });
 
   root.querySelector("#refresh").addEventListener("click", poll);
+  bindJsonCards(varPanel, jsonCollapsed, renderVariables);
+  bindVarCopy(varPanel, toast);
+  wireVarsPanel(root, viewer);
+
+  // Inspecting a decision (ADR-0066): clicking a business rule task on the diagram
+  // opens how its decision was made in the side panel (toggle off by clicking it
+  // again); clicking any other element leaves the inspection. The ⚖ badge on a
+  // decided task is the discoverable affordance for the same thing.
+  viewer.on("element.click", ({ element }) => {
+    if (element && element.businessObject && element.businessObject.$type === "bpmn:BusinessRuleTask") {
+      focusEl = focusEl === element.id ? null : element.id;
+      renderVariables();
+      poll();
+    } else if (focusEl) {
+      focusEl = null;
+      renderVariables();
+    }
+  });
+  // The ⚖ badge (a diagram overlay) and the panel's "← Variables" button are HTML,
+  // so they're wired by delegation on the view root.
+  root.addEventListener("click", (ev) => {
+    const badge = ev.target.closest(".decision-badge");
+    if (badge) {
+      ev.preventDefault();
+      focusEl = badge.dataset.el;
+      renderVariables();
+      poll();
+      return;
+    }
+    if (ev.target.closest(".dec-back")) {
+      focusEl = null;
+      renderVariables();
+    }
+  });
 
   // Start a fresh instance of this already-deployed definition. The demo and the
   // Modeler's "Deploy & run" both couple starting to a deployment; this is the
@@ -2116,31 +3427,37 @@ export async function mountCollaboration(root, { api, toast, key }) {
 }
 
 // mountInstanceReplay renders one process instance read-only and replays it step
-// by step (ADR-0046): the instance's definition diagram with a transport bar that
-// walks the token through the elements in the order they activated. Each step
-// pulses the entered element and, when the two steps are joined by a sequence
-// flow, animates a token dot along that edge — the single-process analogue of the
-// collaboration message-flow replay. The timeline is polled so a still-running
+// by step (ADR-0046), in a Camunda-Operate-style layout: a metadata header, the
+// definition diagram with per-element execution-count badges and a play/step/scrub
+// transport that walks the tokens through the elements in activation order, an
+// instance-history tree, and a tabbed inspector (Details / Variables) for the
+// element the operator selects. Selecting an element in the diagram or the history
+// cross-highlights both and shows that element instance's facts and the variables
+// as they stood when it activated. The timeline is polled so a still-running
 // instance keeps gaining steps live.
 export async function mountInstanceReplay(root, { api, toast, key }) {
   cleanup();
 
   root.innerHTML = `
-    <div class="editor live">
-      <div class="editor-bar">
-        <a class="btn neutral" href="#/operations">&larr; Instances</a>
-        <span class="crumbs" style="margin-left:8px">Replay &middot; <b id="rp-title">Instance ${esc(String(key))}</b></span>
+    <div class="editor live ops-replay">
+      <div class="ops-meta">
+        <span class="ops-title"><span class="ops-status" id="rp-status">&#9679;</span> <b id="rp-title">Instance ${esc(String(key))}</b></span>
+        <div class="ops-fields">
+          <div><label>Process Instance Key</label><span id="m-key" class="mono">${esc(String(key))}</span></div>
+          <div><label>Version</label><span id="m-version">&mdash;</span></div>
+          <div><label>Start Date</label><span id="m-start">&mdash;</span></div>
+          <div><label>End Date</label><span id="m-end">&mdash;</span></div>
+          <div><label>State</label><span class="pill" id="rp-state">&mdash;</span></div>
+        </div>
         <div style="flex:1"></div>
         <a class="btn neutral" id="rp-live" title="Open this instance's live view">Live view</a>
-        <button class="btn neutral" id="refresh">Refresh</button>
-        <span class="pill" id="rp-state" style="margin-left:8px">&mdash;</span>
-        <span class="pill" style="margin-left:8px"><b id="step-count">0</b>&nbsp;steps</span>
+        <a class="btn neutral" href="#/operations">&larr; Instances</a>
       </div>
       <div class="replay-bar">
         <button class="btn play" id="play">&#9654; Play</button>
         <button class="btn neutral" id="step-back" title="Previous step">&#9198;</button>
         <button class="btn neutral" id="step-fwd" title="Next step">&#9197;</button>
-        <input type="range" id="scrub" min="0" max="0" value="0" step="1" aria-label="Step timeline"/>
+        <input type="range" id="scrub" min="0" max="0" value="0" step="1" aria-label="Replay frames"/>
         <label class="bar-select"><span>Speed</span>
           <select id="speed" class="speed">
             <option value="1">1&times;</option>
@@ -2150,13 +3467,22 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
         <span class="clock" id="clock">no steps yet</span>
       </div>
       <div class="editor-body"><div id="canvas"></div></div>
-      <div class="flow-log" id="step-log"></div>
-      <div class="problems">
-        <span class="legend-swatch live"></span> current step
-        <span class="legend-swatch history" style="margin-left:12px"></span> already walked
-        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--accent);margin:0 4px 0 12px;vertical-align:middle"></span> token move
-        <span style="flex:1"></span>
-        <span class="muted">Timeline polls every 1.5s</span>
+      <div class="token-legend" id="token-legend" aria-label="Active replay tokens"></div>
+      <div class="ops-split">
+        <div class="ops-history" id="rp-history">
+          <div class="ops-panel-head">Instance History
+            <label class="ops-toggle"><input type="checkbox" id="tg-end"> End date</label>
+          </div>
+          <div class="ops-history-list" id="history-list"></div>
+        </div>
+        <div class="ops-detail">
+          <div class="ops-tabs" id="rp-tabs">
+            <button data-tab="details" class="active">Details</button>
+            <button data-tab="variables">Variables</button>
+          </div>
+          <div class="ops-tab-body" id="tab-details"></div>
+          <div class="ops-tab-body" id="tab-variables" hidden></div>
+        </div>
       </div>
     </div>`;
 
@@ -2196,24 +3522,45 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
 
   const canvas = viewer.get("canvas");
   const registry = viewer.get("elementRegistry");
-  const layer = canvas.getLayer("atlas-replay", 900); // token dot rides above the diagram
+  const overlays = viewer.get("overlays");
+  const eventBus = viewer.get("eventBus");
+  const layer = canvas.getLayer("atlas-replay", 900); // moving token dot rides above the diagram
+  const dotLayer = canvas.getLayer("atlas-tokens", 899); // static per-frame token dots
   const titleEl = root.querySelector("#rp-title");
+  const statusEl = root.querySelector("#rp-status");
   const stateEl = root.querySelector("#rp-state");
-  const stepCountEl = root.querySelector("#step-count");
   const clockEl = root.querySelector("#clock");
   const scrub = root.querySelector("#scrub");
   const playBtn = root.querySelector("#play");
-  const logEl = root.querySelector("#step-log");
+  const historyEl = root.querySelector("#history-list");
+  const detailEl = root.querySelector("#tab-details");
+  const varsEl = root.querySelector("#tab-variables");
   const speedSel = root.querySelector("#speed");
 
-  let steps = [];    // element-activation timeline, oldest first
+  let steps = [];    // element-activation audit timeline, oldest first
+  let frames = [];   // complete logical token states, oldest first
   let marked = [];   // element markers to clear on the next render
+  let badges = [];   // overlay ids for the execution-count badges
+  let visits = {};   // elementId → cumulative execution count (the badge number)
+  let selEik = 0;    // selected element-instance key (0 = none / process root)
+  let selElId = "";  // selected diagram element id (may cover several instances)
+  let activeTab = "details";
+  let showEnd = false; // history shows end date instead of start date
   let playing = false;
-  let playhead = 0;  // number of steps walked so far (0..steps.length)
+  let playhead = 0;  // number of frames walked so far (0..frames.length)
   let animToken = 0; // bumped to supersede an in-flight animation
+  const jsonCollapsed = new Set(); // JSON variable names the operator has collapsed (persists across scrubs)
 
   const speed = () => Number(speedSel.value) || 1;
+  const tokenColors = ["#0072b2", "#d55e00", "#009e73", "#cc79a7", "#e69f00", "#56b4e9"];
+  const tokenColor = (id) => tokenColors[Number(BigInt(String(id || 0)) % BigInt(tokenColors.length))];
   const fmtClock = (ns) => (ns ? new Date(ns / 1e6).toLocaleTimeString() : "");
+  const fmtDateTime = (ns) => {
+    if (!ns) return "—";
+    const d = new Date(ns / 1e6);
+    const p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  };
 
   function stepLabel(s) {
     const el = registry.get(s.elementId);
@@ -2226,67 +3573,231 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     return bare ? bare.charAt(0).toUpperCase() + bare.slice(1).toLowerCase() : "";
   }
 
-  function updateClock() {
-    if (!steps.length) { clockEl.textContent = "no steps yet"; return; }
-    const shown = Math.min(playhead, steps.length);
-    clockEl.textContent = `${shown} / ${steps.length}${shown ? ` · ${fmtClock(steps[shown - 1].at)}` : ""}`;
-  }
-
-  // renderOverlay marks every element walked up to the playhead: the current one
-  // green (the token is "here"), the earlier ones gray (already walked).
-  function renderOverlay() {
-    for (const [id, m] of marked) { try { canvas.removeMarker(id, m); } catch { /* gone */ } }
-    marked = [];
-    for (let i = 0; i < playhead; i++) {
-      const s = steps[i];
-      if (!registry.get(s.elementId)) continue;
-      const marker = i === playhead - 1 ? "atlas-active" : "atlas-visited";
-      canvas.addMarker(s.elementId, marker);
-      marked.push([s.elementId, marker]);
+  // drawBadges overlays each executed element with its cumulative execution count
+  // (ADR-0022 visit history), like Operate's numbered badges. Data comes from the
+  // per-instance runtime endpoint; a still-running instance's counts grow on poll.
+  function drawBadges() {
+    for (const id of badges) { try { overlays.remove(id); } catch { /* gone */ } }
+    badges = [];
+    for (const [elId, count] of Object.entries(visits)) {
+      if (!count || !registry.get(elId)) continue;
+      try {
+        badges.push(overlays.add(elId, { position: { top: -12, right: 12 }, html: `<span class="ops-badge">${count}</span>` }));
+      } catch { /* element not in this diagram */ }
     }
   }
 
-  function highlightCurrent() {
-    logEl.querySelectorAll("tr[data-i]").forEach((tr) => {
-      const i = Number(tr.dataset.i);
-      tr.classList.toggle("done", i < playhead);
-      tr.classList.toggle("pending", i >= playhead);
-      tr.classList.toggle("cur", i === playhead - 1);
+  async function loadBadges() {
+    let rt;
+    try { rt = await api("GET", `/api/v1/processes/${tl.processDefKey}/runtime?instance=${key}`); }
+    catch { return; }
+    if (current !== viewer) return;
+    const next = {};
+    for (const e of rt.elements || []) if (e.visits > 0) next[e.elementId] = e.visits;
+    visits = next;
+    drawBadges();
+  }
+
+  // stepsForElement returns every recorded activation of one diagram element, in
+  // order (a looped or multi-instance element appears more than once).
+  const stepsForElement = (elId) => steps.filter((s) => s.elementId === elId);
+  const stepByEik = (eik) => steps.find((s) => s.elementInstanceKey === eik) || null;
+
+  // renderDetail fills the Details tab for the selected element instance (or the
+  // process instance when nothing is selected), mirroring Operate's element panel.
+  function renderDetail() {
+    if (!selEik) {
+      detailEl.innerHTML = `<dl class="ops-props">
+        <dt>Process</dt><dd>${esc(titleEl.textContent)}</dd>
+        <dt>Instance Key</dt><dd class="mono">${esc(String(key))}</dd>
+        <dt>State</dt><dd>${esc(stateEl.textContent)}</dd>
+        <dt>Elements executed</dt><dd>${steps.length}</dd>
+        <dt class="hint" colspan>Select an element in the diagram or the history to inspect it.</dt>
+      </dl>`;
+      return;
+    }
+    const s = stepByEik(selEik);
+    if (!s) { detailEl.innerHTML = `<p class="ops-empty">No details for this element.</p>`; return; }
+    const rel = s.relation ? `<dt>Concurrency</dt><dd>${s.relation === "fork" ? "Parallel branch (fork)" : "Join arrival"}</dd>` : "";
+    const from = s.sourceElementId ? `<dt>Entered from</dt><dd>${esc(stepLabel({ elementId: s.sourceElementId }))}</dd>` : "";
+    detailEl.innerHTML = `<dl class="ops-props">
+      <dt>Element</dt><dd>${esc(stepLabel(s))}</dd>
+      <dt>Type</dt><dd>${esc(typeLabel(s.type))}</dd>
+      <dt>Element ID</dt><dd class="mono">${esc(s.elementId)}</dd>
+      <dt>Element Instance Key</dt><dd class="mono">${esc(String(s.elementInstanceKey || "—"))}</dd>
+      <dt>Token</dt><dd class="mono">${s.tokenId ? esc(String(s.tokenId)) : "—"}</dd>
+      <dt>Start Date</dt><dd>${esc(fmtDateTime(s.at))}</dd>
+      <dt>End Date</dt><dd>${s.endAt ? esc(fmtDateTime(s.endAt)) : '<span class="ops-live">active</span>'}</dd>
+      ${from}${rel}
+    </dl>`;
+  }
+
+  // renderVars fills the Variables tab. With an element selected it shows the
+  // variables as they stood when that element activated (the per-step snapshot,
+  // ADR-0048 — the closest analogue to Operate's element-scoped variables);
+  // otherwise it shows the variables as of the current replay frame.
+  function renderVars() {
+    let src, head;
+    if (selEik) {
+      const s = stepByEik(selEik);
+      src = s ? s.variables : [];
+      head = s ? `As of ${esc(stepLabel(s))} activation` : "Variables";
+    } else {
+      const pos = playhead > 0 && playhead <= frames.length ? frames[playhead - 1].position : 0;
+      const cur = [...steps].reverse().find((s) => s.position <= pos) || null;
+      src = cur ? cur.variables : [];
+      head = cur ? `As of step ${playhead} (${esc(stepLabel(cur))})` : "Variables";
+    }
+    varsEl.innerHTML = `<div class="vp-head">${head}</div>` +
+      (src && src.length ? `<div class="vars">${renderVarsBody(src, jsonCollapsed)}</div>`
+        : `<p class="ops-empty">The element has no variables</p>`);
+  }
+
+  function renderInspector() { renderDetail(); renderVars(); }
+
+  function updateClock() {
+    if (!frames.length) { clockEl.textContent = "no frames yet"; return; }
+    const shown = Math.min(playhead, frames.length);
+    clockEl.textContent = `${shown} / ${frames.length}${shown ? ` · ${fmtClock(frames[shown - 1].at)}` : ""}`;
+  }
+
+  // renderOverlay paints the current frame: every element a live token sits on is
+  // highlighted (green, or orange while waiting at a join) and carries a colored
+  // token dot; elements only walked earlier are grayed. An element that holds a
+  // token now must NOT also be grayed — the two markers have equal CSS weight, so
+  // whichever is defined last would win and hide the live token. So the visited
+  // pass skips any element in the current token set, and the token dots make even
+  // two concurrent branches unmistakable.
+  function renderOverlay() {
+    for (const [id, m] of marked) { try { canvas.removeMarker(id, m); } catch { /* gone */ } }
+    marked = [];
+    while (dotLayer.firstChild) dotLayer.removeChild(dotLayer.firstChild);
+    const frame = playhead ? frames[playhead - 1] : null;
+    const position = frame ? frame.position : 0;
+    const tokens = frame ? frame.tokens : [];
+    const liveOn = new Set(tokens.map((t) => t.elementId));
+    for (const s of steps.filter((item) => item.position <= position)) {
+      if (liveOn.has(s.elementId) || !registry.get(s.elementId)) continue;
+      canvas.addMarker(s.elementId, "atlas-visited");
+      marked.push([s.elementId, "atlas-visited"]);
+    }
+    // Count tokens per element so several tokens on one node (both arrivals at a
+    // join) fan out instead of stacking into one dot.
+    const perEl = {};
+    for (const token of tokens) {
+      const el = registry.get(token.elementId);
+      if (!el) continue;
+      const marker = token.state === "waiting" ? "atlas-token-waiting" : "atlas-active";
+      canvas.addMarker(token.elementId, marker);
+      marked.push([token.elementId, marker]);
+      const n = perEl[token.elementId] = (perEl[token.elementId] || 0) + 1;
+      drawTokenDot(el, tokenColor(token.tokenId), n - 1);
+    }
+    const legend = root.querySelector("#token-legend");
+    legend.innerHTML = tokens.length ? tokens.map((token) =>
+      `<span class="token-chip"><i style="--token-color:${tokenColor(token.tokenId)}">#</i>` +
+      `Token ${esc(String(token.tokenId))} — ${esc(stepLabel(token))}${token.state === "waiting" ? " (waiting at join)" : ""}</span>`).join("")
+      : `<span class="muted">No active tokens in this frame</span>`;
+    applySelection();
+  }
+
+  // applySelection re-draws the blue "selected element" outline. renderOverlay
+  // clears every marker each frame, so the selection is re-applied here after it.
+  function applySelection() {
+    if (selElId && registry.get(selElId)) {
+      canvas.addMarker(selElId, "atlas-selected");
+      marked.push([selElId, "atlas-selected"]);
+    }
+  }
+
+  // drawTokenDot places a filled token marker at the top-left of an element (index
+  // offsets stacked tokens so concurrent ones on the same node stay distinct). The
+  // dot lives on the replay layer, so it tracks pan/zoom like the moving dot.
+  function drawTokenDot(el, color, index) {
+    const NS = "http://www.w3.org/2000/svg";
+    const g = document.createElementNS(NS, "g");
+    g.setAttribute("transform", `translate(${el.x + 6 + index * 16} ${el.y + 6})`);
+    const halo = document.createElementNS(NS, "circle");
+    halo.setAttribute("r", "9"); halo.setAttribute("fill", "#fff"); halo.setAttribute("stroke", color); halo.setAttribute("stroke-width", "2");
+    const dot = document.createElementNS(NS, "circle");
+    dot.setAttribute("r", "6"); dot.setAttribute("fill", color);
+    g.appendChild(halo); g.appendChild(dot);
+    dotLayer.appendChild(g);
+  }
+
+  // highlightHistory marks how far the replay has walked (done / current / pending)
+  // and which row is the selected element instance, and scrolls the current one in.
+  function highlightHistory() {
+    historyEl.querySelectorAll(".ops-hrow[data-i]").forEach((row) => {
+      const i = Number(row.dataset.i);
+      const pos = steps[i] ? steps[i].position : 0;
+      row.classList.toggle("done", playhead > 0 && pos <= (frames[playhead - 1] || {}).position);
+      row.classList.toggle("cur", playhead > 0 && i === playhead - 1);
+      row.classList.toggle("sel", steps[i] && steps[i].elementInstanceKey === selEik && selEik !== 0);
     });
-    const cur = logEl.querySelector("tr.cur");
+    const cur = historyEl.querySelector(".ops-hrow.cur");
     if (cur) cur.scrollIntoView({ block: "nearest" });
   }
 
   function setPlayhead(n) {
-    playhead = Math.max(0, Math.min(steps.length, n));
+    playhead = Math.max(0, Math.min(frames.length, n));
     scrub.value = String(playhead);
     updateClock();
     renderOverlay();
-    highlightCurrent();
+    highlightHistory();
+    if (!selEik) renderVars(); // an unselected inspector tracks the playhead
   }
 
-  function renderLog() {
+  // renderHistory draws the instance-history tree: the process root, then every
+  // element activation in order with a lifecycle icon and its start (or end) time.
+  // A row is clickable to select and scrub to that element instance.
+  function renderHistory() {
     if (!steps.length) {
-      logEl.innerHTML = `<div class="fl-head">Steps</div>
-        <div class="empty">No steps recorded for this instance yet.</div>`;
+      historyEl.innerHTML = `<p class="ops-empty">No history recorded yet.</p>`;
       return;
     }
-    const rows = steps.map((s, i) => `
-      <tr data-i="${i}">
-        <td class="tnum">${i + 1}</td>
-        <td class="tnum">${fmtClock(s.at)}</td>
-        <td><span class="msg-name">${esc(stepLabel(s))}</span></td>
-        <td class="muted">${esc(typeLabel(s.type))}</td>
-      </tr>`).join("");
-    logEl.innerHTML = `<div class="fl-head">Steps <span class="muted">· ${steps.length}</span></div>
-      <table><tbody>${rows}</tbody></table>`;
-    logEl.querySelectorAll("tr[data-i]").forEach((tr) => tr.addEventListener("click", () => {
-      const i = Number(tr.dataset.i);
+    const rows = steps.map((s, i) => {
+      const done = s.endAt > 0;
+      const icon = done ? "&#10003;" : "&#9679;";
+      const when = showEnd ? (s.endAt ? fmtClock(s.endAt) : "—") : fmtClock(s.at);
+      return `<div class="ops-hrow" data-i="${i}" data-eik="${s.elementInstanceKey || 0}">
+        <span class="ops-hicon ${done ? "done" : "live"}">${icon}</span>
+        <span class="ops-hname">${esc(stepLabel(s))}</span>
+        <span class="ops-htime">${esc(when)}</span>
+      </div>`;
+    }).join("");
+    historyEl.innerHTML = `<div class="ops-hrow root" data-i="-1" data-eik="0">
+        <span class="ops-hicon proc">&#9635;</span>
+        <span class="ops-hname"><b>${esc(titleEl.textContent)}</b></span>
+        <span class="ops-htime">${showEnd ? "" : fmtClock(steps[0].at)}</span>
+      </div>${rows}`;
+    historyEl.querySelectorAll(".ops-hrow").forEach((row) => row.addEventListener("click", () => {
+      const i = Number(row.dataset.i);
       pause();
-      setPlayhead(i + 1);
+      if (i < 0) { selectElement("", 0); return; }
+      const s = steps[i];
+      selectElement(s.elementId, s.elementInstanceKey || 0);
+      const frame = frames.findIndex((f) => f.position >= s.position);
+      setPlayhead(frame < 0 ? frames.length : frame + 1);
       animateStep(i);
     }));
-    highlightCurrent();
+    highlightHistory();
+  }
+
+  // selectElement cross-highlights the diagram, the history and the inspector for
+  // one element instance (or clears the selection when elId is empty).
+  function selectElement(elId, eik) {
+    selElId = elId;
+    // Without a specific instance, default to this element's last activation so the
+    // inspector has facts to show (clicking the diagram picks the whole element).
+    if (!eik && elId) {
+      const list = stepsForElement(elId);
+      eik = list.length ? list[list.length - 1].elementInstanceKey : 0;
+    }
+    selEik = eik;
+    renderOverlay();
+    highlightHistory();
+    renderInspector();
   }
 
   // sequenceFlowBetween finds the connection the modeler drew from srcId to tgtId,
@@ -2311,8 +3822,13 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       canvas.addMarker(s.elementId, "atlas-flow-hit");
       setTimeout(() => { try { canvas.removeMarker(s.elementId, "atlas-flow-hit"); } catch { /* gone */ } }, 700);
     }
-    if (i === 0) return Promise.resolve(); // the start event has no incoming walk
-    const conn = sequenceFlowBetween(steps[i - 1].elementId, s.elementId);
+    // Animate along the edge the token actually traversed: the activation carries
+    // the element it came from (its incoming flow's source). Falling back to the
+    // previous row would draw a fork branch from its sibling (way1 → way2) instead
+    // of from the gateway.
+    const from = s.sourceElementId || (i > 0 ? steps[i - 1].elementId : null);
+    if (!from) return Promise.resolve(); // the start event has no incoming walk
+    const conn = sequenceFlowBetween(from, s.elementId);
     if (!conn) return Promise.resolve(); // a jump with no drawn edge (e.g. across a gateway)
     canvas.addMarker(conn.id, "atlas-flow-active");
     const wps = conn.waypoints.map((w) => ({ x: w.x, y: w.y }));
@@ -2324,18 +3840,18 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   function pause() { playing = false; playBtn.innerHTML = "&#9654; Play"; }
 
   async function play() {
-    if (!steps.length) return;
-    if (playhead >= steps.length) setPlayhead(0); // wrap to replay from the start
+    if (!frames.length) return;
+    if (playhead >= frames.length) setPlayhead(0); // wrap to replay from the start
     playing = true;
     playBtn.innerHTML = "&#9208; Pause";
-    while (playing && current === viewer && playhead < steps.length) {
+    while (playing && current === viewer && playhead < frames.length) {
       const i = playhead;
       setPlayhead(playhead + 1);
-      await animateStep(i);
+      await sleep(120 / speed());
       if (!playing || current !== viewer) break;
       // Pause between steps, scaled to the real gap (clamped) and the speed.
-      const gap = playhead < steps.length
-        ? Math.min(1200, Math.max(150, (steps[playhead].at - steps[i].at) / 1e6))
+      const gap = playhead < frames.length
+        ? Math.min(1200, Math.max(150, (frames[playhead].at - frames[i].at) / 1e6))
         : 0;
       await sleep(gap / speed());
     }
@@ -2344,7 +3860,25 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
 
   function applyStatePill(state) {
     stateEl.textContent = state || "—";
-    stateEl.className = "pill" + (state === "active" ? " ok" : "");
+    stateEl.className = "pill" + (state === "active" ? " ok" : state === "completed" ? "" : state ? " err" : "");
+    statusEl.className = "ops-status " + (state === "active" ? "live" : "done");
+  }
+
+  // Header name prefers the diagram's process name, falling back to its id.
+  function processName() {
+    try {
+      const bo = canvas.getRootElement().businessObject;
+      return (bo && (bo.name || bo.id)) || tl.processId || `instance ${key}`;
+    } catch { return tl.processId || `instance ${key}`; }
+  }
+
+  function applyMeta(next) {
+    titleEl.textContent = processName();
+    root.querySelector("#m-version").textContent = next.version != null ? "v" + next.version : "—";
+    root.querySelector("#m-start").textContent = steps.length ? fmtDateTime(steps[0].at) : "—";
+    const end = next.state !== "active" && steps.length ? Math.max(...steps.map((s) => s.endAt || 0)) : 0;
+    root.querySelector("#m-end").textContent = end ? fmtDateTime(end) : "—";
+    applyStatePill(next.state);
   }
 
   async function poll() {
@@ -2352,31 +3886,49 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     try { next = await api("GET", `/api/v1/instances/${key}/timeline`); }
     catch { return; } // transient; try again next tick
     if (current !== viewer) return;
-    if (next.processId) titleEl.textContent = `${next.processId} · instance ${key}`;
-    applyStatePill(next.state);
     // Rebuild only when the step set grows, so a poll never disturbs the operator's
     // current scrub position mid-replay.
-    const list = next.steps || [];
-    if (list.length !== steps.length) {
-      const wasAtEnd = playhead >= steps.length;
-      steps = list;
-      stepCountEl.textContent = String(steps.length);
-      scrub.max = String(steps.length);
-      renderLog();
-      if (!playing && wasAtEnd) setPlayhead(steps.length); // follow new steps live
-      else { scrub.value = String(playhead); updateClock(); renderOverlay(); highlightCurrent(); }
+    const list = next.steps || [], nextFrames = next.frames || [];
+    const grew = list.length !== steps.length || nextFrames.length !== frames.length;
+    if (grew) {
+      const wasAtEnd = playhead >= frames.length;
+      steps = list; frames = nextFrames;
+      scrub.max = String(frames.length);
+      renderHistory();
+      loadBadges();
+      if (!playing && wasAtEnd) setPlayhead(frames.length); // follow new frames live
+      else { scrub.value = String(playhead); updateClock(); renderOverlay(); highlightHistory(); }
+      renderInspector();
     }
+    applyMeta(next);
   }
 
+  // Selecting an element in the diagram inspects it, the same as a history click.
+  eventBus.on("element.click", (e) => {
+    const el = e.element;
+    if (!el || el.waypoints || el === canvas.getRootElement()) { selectElement("", 0); return; }
+    pause();
+    selectElement(el.id, 0);
+  });
+
+  root.querySelectorAll("#rp-tabs button").forEach((b) => b.addEventListener("click", () => {
+    activeTab = b.dataset.tab;
+    root.querySelectorAll("#rp-tabs button").forEach((x) => x.classList.toggle("active", x === b));
+    detailEl.hidden = activeTab !== "details";
+    varsEl.hidden = activeTab !== "variables";
+  }));
+  root.querySelector("#tg-end").addEventListener("change", (e) => { showEnd = e.target.checked; renderHistory(); });
   playBtn.addEventListener("click", () => { playing ? pause() : play(); });
   root.querySelector("#step-fwd").addEventListener("click", () => {
     pause();
-    if (playhead < steps.length) { const i = playhead; setPlayhead(playhead + 1); animateStep(i); }
+    if (playhead < frames.length) setPlayhead(playhead + 1);
   });
   root.querySelector("#step-back").addEventListener("click", () => { pause(); setPlayhead(playhead - 1); });
   scrub.addEventListener("input", () => { pause(); setPlayhead(Number(scrub.value)); });
-  root.querySelector("#refresh").addEventListener("click", poll);
+  bindJsonCards(varsEl, jsonCollapsed, renderVars);
+  bindVarCopy(varsEl, toast);
 
   await poll();
+  renderInspector();
   liveTimer = setInterval(poll, 1500);
 }

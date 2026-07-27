@@ -103,6 +103,27 @@ func TestReadIntoDecodeError(t *testing.T) {
 	}
 }
 
+// TestIncidentDecodeError covers the decode-error branch of both incident reads —
+// the point GetIncident and the Incidents scan — by planting an undersized value
+// under an incident key (ADR-0061).
+func TestIncidentDecodeError(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+	elKey := model.NewKey(1, 1)
+	if err := s.db.Set(keyIncident(elKey), []byte{0x01}, pebble.NoSync); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if _, err := s.GetIncident(elKey); err == nil {
+		t.Error("GetIncident on corrupt value: err = nil, want error")
+	}
+	if err := s.Incidents(func(uint64, *model.IncidentValue) error { return nil }); err == nil {
+		t.Error("Incidents scan over corrupt value: err = nil, want error")
+	}
+}
+
 // TestProcessInstanceDecodeError covers ProcessInstance's decode-error branch for
 // both the active and the history family, by planting an undersized value under
 // each key.
@@ -184,6 +205,14 @@ func TestStoreDecodeErrorPaths(t *testing.T) {
 	txn := s.NewTransaction()
 	if err := txn.VariablesOfScope(scope, func(*model.VariableValue) error { return nil }); err == nil {
 		t.Errorf("Tx.VariablesOfScope on corrupt value: err = nil, want error")
+	}
+
+	// VariableSnapshotHistory decode error: a too-short value under a snapshot key.
+	if err := s.db.Set(keyVariableSnapshot(model.NewKey(1, 6), 1, 1), []byte{0x01}, pebble.NoSync); err != nil {
+		t.Fatalf("Set var snapshot: %v", err)
+	}
+	if err := s.VariableSnapshotHistory(model.NewKey(1, 6), func(int64, uint64, *model.VariableValue) error { return nil }); err == nil {
+		t.Errorf("VariableSnapshotHistory on corrupt value: err = nil, want error")
 	}
 	txn.Close()
 }

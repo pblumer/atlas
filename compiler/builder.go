@@ -52,18 +52,19 @@ const PwshJobTypeIndex int32 = 2
 const PythonJobType = "io.atlas.script.python"
 
 // PythonJobTypeIndex is the interned index PythonJobType is guaranteed to occupy:
-// NewBuilder reserves it fourth (after DMN, user tasks, PowerShell), so it is
-// always 3, giving the in-process Python worker one global index across processes.
-const PythonJobTypeIndex int32 = 3
+// NewBuilder reserves it sixth (after DMN, user tasks, PowerShell, the temis
+// connector, and REST), so it is always 5, giving the in-process Python worker one
+// global index across every deployed process.
+const PythonJobTypeIndex int32 = 5
 
 // JsJobType is the reserved job type a JavaScript script task carries; the
 // in-process Node worker subscribes to it (ADR-0047), like the PowerShell worker.
 const JsJobType = "io.atlas.script.javascript"
 
 // JsJobTypeIndex is the interned index JsJobType is guaranteed to occupy:
-// NewBuilder reserves it fifth, so it is always 4, giving the in-process Node
+// NewBuilder reserves it seventh, so it is always 6, giving the in-process Node
 // worker one global index across every deployed process.
-const JsJobTypeIndex int32 = 4
+const JsJobTypeIndex int32 = 6
 
 // ClioWriteJobType is the reserved job type a clio "write-events" connector task
 // carries. The in-process clio connector worker subscribes to it to append the
@@ -72,9 +73,31 @@ const JsJobTypeIndex int32 = 4
 const ClioWriteJobType = "io.atlas.clio.write"
 
 // RestJobType is the reserved job type an HTTP-REST connector task carries. The
-// in-process REST connector worker subscribes to it to call the configured REST
-// API (ADR-0036), the same way the clio worker subscribes to ClioWriteJobType.
+// in-process REST connector worker subscribes to it to call the model-authored
+// REST endpoint off the hot path and write the response back (ADR-0036/0067), the
+// same way the clio worker subscribes to ClioWriteJobType.
 const RestJobType = "io.atlas.http.rest"
+
+// RestJobTypeIndex is the interned index RestJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it fifth (after DMN, user tasks,
+// PowerShell, and the temis connector), so it is always 4. This lets a single
+// in-process REST worker subscribe by one global index across every deployed
+// process, the same way the DMN worker uses DMNJobTypeIndex (ADR-0067).
+const RestJobTypeIndex int32 = 4
+
+// TemisDecisionJobType is the reserved job type a *central* business rule task
+// carries — one whose decision is evaluated by a remote temis service rather than
+// the embedded temis library. The in-process temis decision connector worker
+// subscribes to it to evaluate the decision off the hot path and write the result
+// back (ADR-0050), the same way the local DMN worker subscribes to DMNJobType.
+const TemisDecisionJobType = "io.atlas.temis.decision"
+
+// TemisDecisionJobTypeIndex is the interned index TemisDecisionJobType is
+// guaranteed to occupy in every compiled process: NewBuilder reserves it fourth
+// (after DMN, user tasks, and PowerShell), so it is always 3. This lets a single
+// in-process temis connector worker subscribe by one global index across every
+// deployed process, the same way the DMN worker uses DMNJobTypeIndex (ADR-0050).
+const TemisDecisionJobTypeIndex int32 = 3
 
 // Builder constructs a CompiledProcess programmatically. It stands in for the
 // XML parse/resolve/linearize pipeline until that front end exists: callers add
@@ -98,7 +121,12 @@ type Builder struct {
 	messageCatches    []MessageDetail
 	messageThrows     []MessageDetail
 	messageStarts     []MessageDetail
-	elementIds        []int32 // interned source BPMN id per node, -1 if unset
+	timerStarts       []TimerStartDetail
+	dataObjects       []CompiledDataObject
+	dataOutAssocs     []pendingDataOut // data-output associations, grouped by node in Build
+	dataInAssocs      []pendingDataIn  // data-input associations, grouped by node in Build
+	elementIds        []int32          // interned source BPMN id per node, -1 if unset
+	startFormId       int32            // interned start-form id (ADR-0028), -1 if the process has none
 
 	interner map[string]int32
 	strings  []string
@@ -113,13 +141,16 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 		key:           key,
 		bpmnProcessId: bpmnProcessId,
 		version:       version,
+		startFormId:   -1,
 		interner:      map[string]int32{},
 	}
-	b.intern(DMNJobType)      // reserve DMNJobTypeIndex == 0
-	b.intern(UserTaskJobType) // reserve UserTaskJobTypeIndex == 1
-	b.intern(PwshJobType)     // reserve PwshJobTypeIndex == 2
-	b.intern(PythonJobType)   // reserve PythonJobTypeIndex == 3
-	b.intern(JsJobType)       // reserve JsJobTypeIndex == 4
+	b.intern(DMNJobType)           // reserve DMNJobTypeIndex == 0
+	b.intern(UserTaskJobType)      // reserve UserTaskJobTypeIndex == 1
+	b.intern(PwshJobType)          // reserve PwshJobTypeIndex == 2
+	b.intern(TemisDecisionJobType) // reserve TemisDecisionJobTypeIndex == 3
+	b.intern(RestJobType)          // reserve RestJobTypeIndex == 4
+	b.intern(PythonJobType)        // reserve PythonJobTypeIndex == 5
+	b.intern(JsJobType)            // reserve JsJobTypeIndex == 6
 	return b
 }
 
@@ -160,6 +191,11 @@ func (b *Builder) SetElementBpmnId(nodeID int32, bpmnID string) {
 // AddStartEvent adds a none start event and returns its element id.
 func (b *Builder) AddStartEvent() int32 { return b.addNode(TypeStartEvent, -1) }
 
+// SetStartFormId records the process's start-form id — the form the UI shows
+// before creating an instance, whose data becomes the start variables (ADR-0028).
+// It is design-time metadata the engine ignores.
+func (b *Builder) SetStartFormId(id string) { b.startFormId = b.intern(id) }
+
 // AddMessageStartEvent adds a message start event and returns its element id. It
 // is a process entry point like a none start event — at runtime it simply flows
 // straight on — but the engine also registers it at deploy time so a correlating
@@ -170,6 +206,16 @@ func (b *Builder) AddMessageStartEvent(messageName string, correlationKey *expr.
 	detail := int32(len(b.messageStarts))
 	b.messageStarts = append(b.messageStarts, MessageDetail{MessageName: messageName, CorrelationKey: correlationKey})
 	return b.addNode(TypeMessageStartEvent, detail)
+}
+
+// AddTimerStartEvent adds a timer start event and returns its element id. Like a
+// none start it is a process entry point that flows straight on once instantiated;
+// what makes it a start is the deploy-time timer the engine arms from its schedule,
+// which instantiates a fresh process instance each time it fires (ADR-0051).
+func (b *Builder) AddTimerStartEvent(schedule TimerSchedule) int32 {
+	detail := int32(len(b.timerStarts))
+	b.timerStarts = append(b.timerStarts, TimerStartDetail{Schedule: schedule})
+	return b.addNode(TypeTimerStartEvent, detail)
 }
 
 // AddEndEvent adds a none end event and returns its element id.
@@ -219,7 +265,7 @@ func (b *Builder) AddScriptJobTask(jobType, language, source, resultVar string, 
 // the constant-input form of [Builder.AddBusinessRuleTaskMapped] (no variable
 // mappings, result discarded).
 func (b *Builder) AddBusinessRuleTask(decisionId string, inputs map[string]any, retries int32) (int32, error) {
-	return b.AddBusinessRuleTaskMapped(decisionId, "", inputs, nil, retries)
+	return b.AddBusinessRuleTaskMapped(decisionId, "", inputs, nil, retries, BindingLatest)
 }
 
 // AddBusinessRuleTaskMapped adds a business rule task that evaluates the named DMN
@@ -231,7 +277,27 @@ func (b *Builder) AddBusinessRuleTask(decisionId string, inputs map[string]any, 
 // resultVar is non-empty the decision's result is written back into that process
 // variable on job completion; an empty resultVar discards the result. It returns
 // an error if the static inputs cannot be encoded.
-func (b *Builder) AddBusinessRuleTaskMapped(decisionId, resultVar string, staticInputs map[string]any, mappings []DecisionInputMapping, retries int32) (int32, error) {
+func (b *Builder) AddBusinessRuleTaskMapped(decisionId, resultVar string, staticInputs map[string]any, mappings []DecisionInputMapping, retries int32, binding DecisionBinding) (int32, error) {
+	return b.addBusinessRuleTask("", decisionId, resultVar, staticInputs, mappings, retries, binding)
+}
+
+// AddTemisDecisionTask adds a *central* business rule task: one whose decision is
+// evaluated by the named server-registered temis connector rather than the
+// embedded temis library (ADR-0050). It returns its element id. Authoring is
+// otherwise identical to a local business rule task — same decision id, result
+// variable, static inputs, and variable mappings — the only difference is that the
+// task carries the temis-connector job type so the remote worker picks it up.
+func (b *Builder) AddTemisDecisionTask(connector, decisionId, resultVar string, staticInputs map[string]any, mappings []DecisionInputMapping, retries int32) (int32, error) {
+	// A central decision resolves through its connector, not a local snapshot, so
+	// binding does not apply (BindingLatest is a harmless placeholder).
+	return b.addBusinessRuleTask(connector, decisionId, resultVar, staticInputs, mappings, retries, BindingLatest)
+}
+
+// addBusinessRuleTask is the shared constructor for local and central business
+// rule tasks. An empty connector selects local evaluation (the DMN job type,
+// ADR-0014); a named connector selects central evaluation (the temis-connector job
+// type, ADR-0050) and records the connector name.
+func (b *Builder) addBusinessRuleTask(connector, decisionId, resultVar string, staticInputs map[string]any, mappings []DecisionInputMapping, retries int32, binding DecisionBinding) (int32, error) {
 	inputsIdx := int32(-1)
 	if len(staticInputs) > 0 {
 		encoded, err := json.Marshal(staticInputs)
@@ -240,13 +306,19 @@ func (b *Builder) AddBusinessRuleTaskMapped(decisionId, resultVar string, static
 		}
 		inputsIdx = b.intern(string(encoded))
 	}
+	jobType := DMNJobType
+	if connector != "" {
+		jobType = TemisDecisionJobType
+	}
 	detail := int32(len(b.businessRuleTasks))
 	b.businessRuleTasks = append(b.businessRuleTasks, BusinessRuleTaskDetail{
-		JobType:       b.intern(DMNJobType),
+		JobType:       b.intern(jobType),
 		DecisionId:    b.intern(decisionId),
 		Inputs:        inputsIdx,
 		ResultVar:     b.intern(resultVar),
+		Connector:     b.intern(connector),
 		Retries:       retries,
+		Binding:       binding,
 		InputMappings: mappings,
 	})
 	return b.addNode(TypeBusinessRuleTask, detail), nil
@@ -265,7 +337,8 @@ func (b *Builder) AddClioWriteTask(connector, subject, eventType string, retries
 		Subject:   b.intern(subject),
 		EventType: b.intern(eventType),
 		Method:    -1, // not a REST task
-		Path:      -1,
+		Url:       -1,
+		ResultVar: -1,
 		Retries:   retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
@@ -274,18 +347,19 @@ func (b *Builder) AddClioWriteTask(connector, subject, eventType string, retries
 // AddRestConnectorTask adds an HTTP-REST connector task and returns its element
 // id. Like a service task it creates a job on activation and waits; the job
 // carries the reserved RestJobType so the in-process REST worker picks it up,
-// calls the named connector's REST API with the given method and path (resolved
-// against the connector's server-configured base endpoint), and completes the job
-// (ADR-0036). method is stored as given (the parser uppercases and validates it).
-func (b *Builder) AddRestConnectorTask(connector, method, path string, retries int32) int32 {
+// calls the model-authored url with the given method, writes the JSON response
+// into resultVar (empty = discard the response), and completes the job
+// (ADR-0067). method is stored as given (the parser uppercases and validates it).
+func (b *Builder) AddRestConnectorTask(method, url, resultVar string, retries int32) int32 {
 	detail := int32(len(b.connectorTasks))
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
 		JobType:   b.intern(RestJobType),
-		Connector: b.intern(connector),
+		Connector: -1, // REST carries its endpoint in the model, not a registry name
 		Subject:   -1, // not a clio task
 		EventType: -1,
 		Method:    b.intern(method),
-		Path:      b.intern(path),
+		Url:       b.intern(url),
+		ResultVar: b.intern(resultVar),
 		Retries:   retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
@@ -294,7 +368,7 @@ func (b *Builder) AddRestConnectorTask(connector, method, path string, retries i
 // AddUserTask adds a user task that parks a token and creates a job for a human
 // to complete via the Tasks app (ADR-0028). assignee and candidateGroups are
 // optional (empty strings are stored as -1). Returns its element id.
-func (b *Builder) AddUserTask(name, assignee, candidateGroups, formId string, retries int32) int32 {
+func (b *Builder) AddUserTask(name, assignee, candidateGroups, formId string, priority int32, dueDateNanos int64, retries int32) int32 {
 	detail := int32(len(b.userTasks))
 	b.userTasks = append(b.userTasks, UserTaskDetail{
 		JobType:         b.intern(UserTaskJobType),
@@ -302,6 +376,8 @@ func (b *Builder) AddUserTask(name, assignee, candidateGroups, formId string, re
 		Assignee:        b.intern(assignee),
 		CandidateGroups: b.intern(candidateGroups),
 		FormId:          b.intern(formId),
+		Priority:        priority,
+		DueDateNanos:    dueDateNanos,
 		Retries:         retries,
 	})
 	return b.addNode(TypeUserTask, detail)
@@ -310,14 +386,21 @@ func (b *Builder) AddUserTask(name, assignee, candidateGroups, formId string, re
 // AddBoundaryTimerEvent adds a timer boundary event attached to host, firing
 // after durationNanos. interrupting mirrors BPMN cancelActivity: true cancels the
 // host when it fires, false spawns a parallel token (ADR-0040). Returns its
-// element id.
+// element id. It is the duration convenience over AddBoundaryTimerSchedule.
 func (b *Builder) AddBoundaryTimerEvent(host int32, interrupting bool, durationNanos int64) int32 {
+	return b.AddBoundaryTimerSchedule(host, interrupting, TimerSchedule{Kind: TimerDuration, BaseNanos: durationNanos})
+}
+
+// AddBoundaryTimerSchedule adds a timer boundary event firing on the given
+// compiled schedule. A cycle schedule on a non-interrupting boundary recurs — a
+// repeating reminder (ADR-0054). Returns its element id.
+func (b *Builder) AddBoundaryTimerSchedule(host int32, interrupting bool, schedule TimerSchedule) int32 {
 	detail := int32(len(b.boundaryEventDets))
 	b.boundaryEventDets = append(b.boundaryEventDets, BoundaryEventDetail{
-		HostNode:      host,
-		Interrupting:  interrupting,
-		Kind:          BoundaryTimer,
-		DurationNanos: durationNanos,
+		HostNode:     host,
+		Interrupting: interrupting,
+		Kind:         BoundaryTimer,
+		Schedule:     schedule,
 	})
 	return b.addNode(TypeBoundaryEvent, detail)
 }
@@ -335,6 +418,72 @@ func (b *Builder) AddBoundaryMessageEvent(host int32, interrupting bool, message
 		CorrelationKey: correlationKey,
 	})
 	return b.addNode(TypeBoundaryEvent, detail)
+}
+
+// AddDataObject declares a data object on the process: a typed, named datum with
+// an optional declared structure (itemType) and initial data state, seeded under
+// each instance's scope at creation (ADR-0053). It is not a flow node, so it
+// returns the index of the entry in the data-object table, not an element id.
+// Empty itemType or initialState intern to -1 (Intern maps that back to "").
+func (b *Builder) AddDataObject(name, itemType, initialState string, isCollection bool) int32 {
+	idx := int32(len(b.dataObjects))
+	b.dataObjects = append(b.dataObjects, CompiledDataObject{
+		Name:         b.intern(name),
+		ItemType:     b.intern(itemType),
+		InitialState: b.intern(initialState),
+		IsCollection: isCollection,
+	})
+	return idx
+}
+
+// pendingDataOut pairs a data-output association with the activity node it belongs
+// to, until Build groups them into the shared per-node array.
+type pendingDataOut struct {
+	node  int32
+	assoc DataOutputAssociation
+}
+
+// pendingDataIn pairs a data-input association with the activity node it belongs
+// to, until Build groups them into the shared per-node array.
+type pendingDataIn struct {
+	node  int32
+	assoc DataInputAssociation
+}
+
+// AddDataInputAssociation attaches a data-input association to activity node: when
+// the activity activates, the engine reads the data object named dataObject (bound
+// into the FEEL scope under its name), evaluates value (a FEEL transform over the
+// instance's variables and that object, nil to copy the object's value verbatim),
+// and writes the result into the process variable named variable, which the activity
+// then reads (ADR-0059). Build groups a node's associations into a shared array.
+func (b *Builder) AddDataInputAssociation(node int32, dataObject, variable string, value *expr.Compiled) {
+	b.dataInAssocs = append(b.dataInAssocs, pendingDataIn{
+		node: node,
+		assoc: DataInputAssociation{
+			DataObject: b.intern(dataObject),
+			Variable:   b.intern(variable),
+			Value:      value,
+		},
+	})
+}
+
+// AddDataOutputAssociation attaches a data-output association to activity node: when
+// the activity completes, the engine evaluates value (a FEEL expression over the
+// instance's variables, nil for a state-only transition) and writes it into the data
+// object named dataObject, advancing that object's data state to targetState (empty
+// keeps the object's current state) — ADR-0058. A non-empty targetPath writes only
+// that member of a structured object, keeping the rest (ADR-0060). Build groups a
+// node's associations into a shared array.
+func (b *Builder) AddDataOutputAssociation(node int32, dataObject string, value *expr.Compiled, targetState, targetPath string) {
+	b.dataOutAssocs = append(b.dataOutAssocs, pendingDataOut{
+		node: node,
+		assoc: DataOutputAssociation{
+			DataObject:  b.intern(dataObject),
+			Value:       value,
+			TargetState: b.intern(targetState),
+			TargetPath:  b.intern(targetPath),
+		},
+	})
 }
 
 // AddTask adds an undefined/manual task — one with no execution semantics — and
@@ -361,10 +510,18 @@ func (b *Builder) AddParallelGateway() int32 { return b.addNode(TypeParallelGate
 func (b *Builder) AddExclusiveGateway() int32 { return b.addNode(TypeExclusiveGateway, -1) }
 
 // AddTimerCatchEvent adds an intermediate timer catch event that waits the given
-// fixed duration (nanoseconds) before continuing, and returns its element id.
+// fixed duration (nanoseconds) before continuing, and returns its element id. It
+// is the duration convenience over AddTimerCatchSchedule.
 func (b *Builder) AddTimerCatchEvent(durationNanos int64) int32 {
+	return b.AddTimerCatchSchedule(TimerSchedule{Kind: TimerDuration, BaseNanos: durationNanos})
+}
+
+// AddTimerCatchSchedule adds an intermediate timer catch event that waits until
+// the given schedule's first due date, then continues. A catch fires once, so the
+// schedule is a duration or date, never a cycle (ADR-0054). Returns its element id.
+func (b *Builder) AddTimerCatchSchedule(schedule TimerSchedule) int32 {
 	detail := int32(len(b.timerCatches))
-	b.timerCatches = append(b.timerCatches, TimerCatchDetail{DurationNanos: durationNanos})
+	b.timerCatches = append(b.timerCatches, TimerCatchDetail{Schedule: schedule})
 	return b.addNode(TypeTimerCatchEvent, detail)
 }
 
@@ -386,6 +543,18 @@ func (b *Builder) AddMessageThrowEvent(messageName string, correlationKey *expr.
 	detail := int32(len(b.messageThrows))
 	b.messageThrows = append(b.messageThrows, MessageDetail{MessageName: messageName, CorrelationKey: correlationKey})
 	return b.addNode(TypeMessageThrowEvent, detail)
+}
+
+// AddMessageEndEvent adds an end event that, on activation, publishes the named
+// message with a correlation key produced by the given compiled FEEL expression
+// (evaluated over the ending instance's variables), then ends the instance.
+// It reuses the throw detail table, since a message end event throws exactly like
+// an intermediate throw event and only differs in its completion (ADR-0054).
+// Returns its element id.
+func (b *Builder) AddMessageEndEvent(messageName string, correlationKey *expr.Compiled) int32 {
+	detail := int32(len(b.messageThrows))
+	b.messageThrows = append(b.messageThrows, MessageDetail{MessageName: messageName, CorrelationKey: correlationKey})
+	return b.addNode(TypeMessageEndEvent, detail)
 }
 
 // Connect adds a sequence flow from source to target and returns its flow id, so
@@ -454,6 +623,36 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		n.BoundaryCount = int32(len(boundary)) - n.BoundaryStart
 	}
 
+	// Group data-output associations by their activity node into one shared array,
+	// mirroring the outgoing-flow and boundary-event grouping, so evaluating a
+	// completing activity's associations is an allocation-free slice at runtime
+	// (ADR-0058).
+	var dataOut []DataOutputAssociation
+	for i := range b.nodes {
+		n := &b.nodes[i]
+		n.DataOutStart = int32(len(dataOut))
+		for _, p := range b.dataOutAssocs {
+			if p.node == n.ElementId {
+				dataOut = append(dataOut, p.assoc)
+			}
+		}
+		n.DataOutCount = int32(len(dataOut)) - n.DataOutStart
+	}
+
+	// Group data-input associations by their activity node, mirroring the output
+	// grouping (ADR-0059).
+	var dataIn []DataInputAssociation
+	for i := range b.nodes {
+		n := &b.nodes[i]
+		n.DataInStart = int32(len(dataIn))
+		for _, p := range b.dataInAssocs {
+			if p.node == n.ElementId {
+				dataIn = append(dataIn, p.assoc)
+			}
+		}
+		n.DataInCount = int32(len(dataIn)) - n.DataInStart
+	}
+
 	// Count incoming flows per node, so a parallel join knows how many tokens to
 	// wait for.
 	for _, f := range b.flows {
@@ -486,8 +685,13 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		messageCatches:    b.messageCatches,
 		messageThrows:     b.messageThrows,
 		messageStarts:     b.messageStarts,
+		timerStarts:       b.timerStarts,
+		dataObjects:       b.dataObjects,
+		dataOutAssocs:     dataOut,
+		dataInAssocs:      dataIn,
 		startEvents:       startEvents,
 		elementIds:        b.elementIds,
+		startFormId:       b.startFormId,
 		strings:           b.strings,
 	}, nil
 }
@@ -508,7 +712,8 @@ func (b *Builder) hasStartEvent() bool {
 
 // isStartEvent reports whether a node type is a process entry point. A message
 // start event is one too: a correlating message instantiates the process, and a
-// plain create then activates it like a none start (ADR-0035).
+// plain create then activates it like a none start (ADR-0035). A timer start
+// event likewise: a due timer instantiates it, and it then flows on (ADR-0051).
 func isStartEvent(t BpmnType) bool {
-	return t == TypeStartEvent || t == TypeMessageStartEvent
+	return t == TypeStartEvent || t == TypeMessageStartEvent || t == TypeTimerStartEvent
 }

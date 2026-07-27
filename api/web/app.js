@@ -208,7 +208,7 @@ const TOPNAV = {
   ],
   modeler: [{ name: "Home", route: "#/modeler" }],
   operations: [{ name: "Instances", route: "#/operations" }],
-  tasks: [{ name: "Inbox", route: "#/tasks" }], insights: [],
+  tasks: [{ name: "Inbox", route: "#/tasks" }, { name: "Start", route: "#/tasks/start" }], insights: [],
 };
 
 // Connectors are the sibling engines Atlas hands work off to. They live under
@@ -229,8 +229,8 @@ const CONNECTORS = [
   },
   {
     id: "http-rest", name: "HTTP REST", kind: "REST API",
-    desc: "Calls an external REST API from a service task off the processor loop, with server-registered endpoints and credentials. Not wired into this build yet.",
-    refs: "ADR-0036", status: "planned", statusLabel: "not configured",
+    desc: "Calls a model-authored REST endpoint from a service task off the processor loop, writing the JSON response into a result variable. Authored via the REST Outbound Connector service-task type.",
+    refs: "ADR-0036 · ADR-0067", status: "active", statusLabel: "embedded",
   },
 ];
 
@@ -476,6 +476,40 @@ async function viewConsoleOrg() {
     if (!denied) throw e;
   }
 
+  // Managed connector instances (ADR-0041): operator-configured integrations,
+  // secret references only. Today the runtime wires the temis decision connector.
+  let connectors = [];
+  try { connectors = (await api("GET", "/api/v1/connectors")) || []; } catch { /* leave empty */ }
+  const managedRow = (c) => `<tr data-id="${esc(c.id)}">
+      <td><span class="chip">${esc(c.name)}</span>
+        <span class="muted" style="font-size:12px; margin-left:6px">${esc(c.kind)}</span>
+        <div class="muted" style="font-size:12px; margin-top:3px">${esc(c.endpoint)}${
+          c.credentialsRef ? ` · token: <code>${esc(c.credentialsRef)}</code>` : " · no token"}</div></td>
+      <td>${c.enabled
+        ? '<span class="pill ok"><span class="dot"></span>enabled</span>'
+        : '<span class="pill warn"><span class="dot"></span>disabled</span>'}</td>
+      <td style="text-align:right; white-space:nowrap">
+        <button class="btn ghost" data-cact="edit">Edit</button>
+        <button class="btn ghost" data-cact="toggle">${c.enabled ? "Disable" : "Enable"}</button>
+        <button class="btn ghost danger" data-cact="delete">Delete</button>
+      </td></tr>`;
+  const managedCard = `
+    <div class="card" style="padding:0; margin-top:18px">
+      <div class="between" style="padding:16px 18px 0">
+        <h2>Configured connectors</h2><button class="btn" id="new-connector">New connector</button>
+      </div>
+      <p class="muted" style="padding:0 18px; margin:6px 0 12px">Managed temis decision
+      connectors a business rule task references by name (ADR-0041/0050). The endpoint is
+      stored; the token is a <b>reference</b> resolved from
+      <code>ATLAS_CONNECTOR_&lt;REF&gt;_TOKEN</code> at runtime — never stored here.</p>
+      <div id="connector-form-slot" style="padding:0 18px"></div>
+      <table>
+        <thead><tr><th>Connector</th><th>Status</th><th></th></tr></thead>
+        <tbody id="connector-rows">${connectors.map(managedRow).join("")
+          || `<tr><td colspan="3" class="muted" style="padding:14px 18px">None configured. Business rule tasks marked <i>External (temis connector)</i> resolve by name to these.</td></tr>`}</tbody>
+      </table>
+    </div>`;
+
   const me = AUTH.user;
   const roleChips = (roles) => (roles || []).map((r) => `<span class="chip">${esc(r)}</span>`).join(" ");
   const statusPill = (u) => u.disabled
@@ -525,7 +559,12 @@ async function viewConsoleOrg() {
       <p class="muted" style="padding:0 18px; margin:6px 0 12px">Sibling engines Atlas
       delegates to. Each is an org-wide integration, shared across every process.</p>
       <table><tbody>${CONNECTORS.map(connectorRow).join("")}</tbody></table>
-    </div>`;
+    </div>
+    ${managedCard}`;
+
+  // Connector management is wired before the (admin-gated) user handlers so it
+  // works even when the user roster is denied to a non-admin.
+  wireConnectorManagement(connectors);
 
   if (denied) return;
   const reload = () => viewConsoleOrg();
@@ -761,16 +800,20 @@ async function viewProjectDetail(id) {
           { label: "Delete", icon: "🗑", act: "deldraft", data: { key: d.processId }, danger: true },
         ])}</td></tr>`;
     };
-    const refRow = (r) => `<tr data-name="${esc(r.name.toLowerCase())}">
-        ${nameCell("DMN", r.name, `temis model: ${esc(r.modelRef)} · <span data-refstatus="${esc(r.id)}">not validated</span>`, "")}
+    const refRow = (r) => {
+      const href = `#/modeler/dmn/${encodeURIComponent(r.id)}`;
+      return `<tr data-name="${esc(r.name.toLowerCase())}">
+        ${nameCell("DMN", r.name, `temis model: ${esc(r.modelRef)} · <span data-refstatus="${esc(r.id)}">not validated</span>`, href)}
         <td class="muted">Decision ref</td>
         <td class="muted">${esc(fmtTime(r.createdAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", [
+          { label: "View", icon: "▦", href },
           { label: "Validate", icon: "✔", act: "valref", data: { id: r.id } },
           ...moveItems(r.projectId, "moveref", r.id),
           { sep: true },
           { label: "Delete", icon: "🗑", act: "delref", data: { id: r.id }, danger: true },
         ])}</td></tr>`;
+    };
     const formRow = (f) => {
       const href = `#/modeler/form/e/${encodeURIComponent(f.id)}`;
       return `<tr data-name="${esc((f.name || f.id).toLowerCase())}">
@@ -790,7 +833,7 @@ async function viewProjectDetail(id) {
     const createItems = [
       { header: "Blank resources" },
       { label: "BPMN diagram", icon: "⚙", href: newDiagramHref },
-      { label: "DMN reference", icon: "▦", act: "newref" },
+      { label: "DMN model (upload .dmn)", icon: "▦", act: "newref" },
       { label: "Form", icon: "▤", href: newFormHref },
     ];
 
@@ -913,20 +956,122 @@ async function moveDraft(processId, projectId, reload) {
   await reload();
 }
 
-// createDmnRef adds a DMN reference — a pointer to a temis-authored decision
-// model — into a project. Atlas organizes and lists the reference; authoring
-// stays in temis (ADR-0034), so we capture only a name and the temis handle.
+// pickFile opens the OS file dialog and resolves with the chosen File, or null if
+// the dialog is cancelled. There is no reliable cross-browser "cancel" event, so a
+// window-focus fallback resolves null shortly after the dialog closes with no
+// selection.
+function pickFile(accept) {
+  return new Promise((resolve) => {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    if (accept) inp.accept = accept;
+    inp.style.display = "none";
+    let done = false;
+    const finish = (f) => {
+      if (done) return;
+      done = true;
+      window.removeEventListener("focus", onFocus, true);
+      inp.remove();
+      resolve(f);
+    };
+    const onFocus = () => setTimeout(() => finish(inp.files && inp.files[0] ? inp.files[0] : null), 300);
+    inp.addEventListener("change", () => finish(inp.files && inp.files[0] ? inp.files[0] : null), { once: true });
+    window.addEventListener("focus", onFocus, true);
+    document.body.appendChild(inp);
+    inp.click();
+  });
+}
+
+// createDmnRef adds a DMN model to a project by uploading a .dmn file: the model is
+// validated and stored in the local model folder, and a reference to it is created
+// (ADR-0034/0050). Authoring still lives in temis — this is just "pick the model
+// you exported and use it". When models come from a remote temis service (nothing
+// local to upload to), it falls back to referencing the model by its handle there.
 async function createDmnRef(projectId, reload) {
-  const name = window.prompt("Reference name (how it shows in Atlas)");
-  if (name == null) return;
-  const modelRef = window.prompt("temis model reference (the model’s name in the temis Modeler)");
-  if (modelRef == null) return;
-  if (!name.trim() || !modelRef.trim()) { toast("Name and temis model reference are required", "err"); return; }
+  const file = await pickFile(".dmn,.xml,application/xml,text/xml");
+  if (!file) return;
+  let up;
   try {
-    await api("POST", "/api/v1/dmnrefs", { name: name.trim(), modelRef: modelRef.trim(), projectId });
-    toast(`Added DMN reference "${name.trim()}"`, "ok");
-  } catch (e) { toast("could not add DMN reference: " + e.message, "err"); }
+    const xml = await file.text();
+    up = await api("POST", "/api/v1/dmn-models?name=" + encodeURIComponent(file.name), xml, true);
+  } catch (e) {
+    const modelRef = window.prompt("Couldn't upload the file (models may be served by a remote temis service).\nReference an existing temis model by name instead:");
+    if (!modelRef || !modelRef.trim()) { toast("DMN model not added: " + e.message, "err"); return; }
+    const refName = (window.prompt("Reference name (how it shows in Atlas)", modelRef.trim()) || modelRef).trim();
+    try {
+      await api("POST", "/api/v1/dmnrefs", { name: refName, modelRef: modelRef.trim(), projectId });
+      toast(`Added DMN reference "${refName}"`, "ok");
+      await reload();
+    } catch (e2) { toast("could not add DMN reference: " + e2.message, "err"); }
+    return;
+  }
+  const name = (up.modelName || file.name.replace(/\.(dmn|xml)$/i, "") || "Decision").trim();
+  const n = (up.decisions || []).length;
+  try {
+    await api("POST", "/api/v1/dmnrefs", { name, modelRef: up.modelRef, projectId });
+    toast(`Added DMN model "${name}" — ${n} decision${n === 1 ? "" : "s"}`, "ok");
+  } catch (e) { toast("could not add DMN reference: " + e.message, "err"); return; }
   await reload();
+}
+
+// wireConnectorManagement wires the Organization page's managed-connector section:
+// a "New connector" inline form and per-row Edit / Enable-Disable / Delete. Each
+// change hits the connector API, which rebuilds the runtime registry, then the page
+// re-renders. Only a token *reference* is ever entered — never a secret value
+// (ADR-0041).
+function wireConnectorManagement(connectors) {
+  const reload = () => viewConsoleOrg();
+  const slot = document.getElementById("connector-form-slot");
+  const newBtn = document.getElementById("new-connector");
+  if (newBtn && slot) {
+    newBtn.addEventListener("click", () => {
+      if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
+      slot.dataset.open = "1";
+      slot.innerHTML = `<form class="connector-form" style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr auto;align-items:end;margin:4px 0 14px">
+        <label class="field" style="margin:0"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
+        <label class="field" style="margin:0"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
+        <label class="field" style="margin:0"><span>Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
+        <button class="btn" type="submit">Add</button></form>`;
+      slot.querySelector("form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const f = new FormData(e.target);
+        try {
+          await api("POST", "/api/v1/connectors", {
+            name: (f.get("name") || "").trim(),
+            endpoint: (f.get("endpoint") || "").trim(),
+            credentialsRef: (f.get("credentialsRef") || "").trim(),
+          });
+          toast("Connector added", "ok");
+          reload();
+        } catch (err) { toast("Could not add connector: " + err.message, "err"); }
+      });
+    });
+  }
+  const rows = document.getElementById("connector-rows");
+  if (rows) {
+    rows.addEventListener("click", async (e) => {
+      const btn = e.target.closest("button[data-cact]");
+      if (!btn) return;
+      const id = btn.closest("tr").dataset.id;
+      const c = (connectors || []).find((x) => x.id === id);
+      if (!c) return;
+      try {
+        if (btn.dataset.cact === "toggle") {
+          await api("PATCH", "/api/v1/connectors/" + encodeURIComponent(id), { enabled: !c.enabled });
+        } else if (btn.dataset.cact === "edit") {
+          const endpoint = window.prompt("Endpoint URL", c.endpoint);
+          if (endpoint == null) return;
+          const credentialsRef = window.prompt("Token reference (resolved from ATLAS_CONNECTOR_<REF>_TOKEN; blank for none)", c.credentialsRef || "");
+          if (credentialsRef == null) return;
+          await api("PATCH", "/api/v1/connectors/" + encodeURIComponent(id), { endpoint: endpoint.trim(), credentialsRef: credentialsRef.trim() });
+        } else if (btn.dataset.cact === "delete") {
+          if (!window.confirm(`Delete connector "${c.name}"?`)) return;
+          await api("DELETE", "/api/v1/connectors/" + encodeURIComponent(id));
+        }
+        reload();
+      } catch (err) { toast("Connector update failed: " + err.message, "err"); }
+    });
+  }
 }
 
 // moveDmnRef reassigns a DMN reference to a project (or to Ungrouped when "").
@@ -1056,8 +1201,9 @@ async function viewInstances() {
     </div>
     <p class="muted">One row per deployed process. Open a process to pick a version, then
     watch all of its instances at once (every token on the diagram) or select a single
-    instance to isolate it — with its variables shown below the diagram. Start the demo to
-    park a token on a waiting task.</p>
+    instance to isolate it — with its variables shown below the diagram. Each instance
+    listed under the diagram has a <b>&#9654; Replay</b> link to walk it step by step. Start
+    the demo to park a token on a waiting task.</p>
     <div class="card" style="padding:0">
       <table>
         <thead><tr><th>Process</th><th>Versions</th><th>Running</th><th>Finished</th><th>Last activity</th><th></th></tr></thead>
@@ -1125,6 +1271,39 @@ async function viewInstances() {
 // id so a task authored without a name is still recognizable.
 const taskTitle = (t) => t.name || t.elementId || "User task";
 
+// taskPriority defaults an absent/zero priority to 50 (the model default), so
+// sorting and display are stable regardless of what the API omits.
+const taskPriority = (t) => (t.priority && t.priority > 0 ? t.priority : 50);
+
+// taskOrder sorts the inbox like a real task list: tasks with a due date come
+// first, earliest due first (an overdue task floats to the very top); then higher
+// priority; then, as a stable tiebreak, older tasks (smaller key) first.
+function taskOrder(a, b) {
+  const da = a.dueDate || 0, db = b.dueDate || 0;
+  if (!!da !== !!db) return da ? -1 : 1; // a due task before an undated one
+  if (da && db && da !== db) return da - db; // sooner due first
+  const pa = taskPriority(a), pb = taskPriority(b);
+  if (pa !== pb) return pb - pa; // higher priority first
+  return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
+}
+
+// dueInfo turns a task's Unix-ms due date into a short relative label and an
+// overdue flag, or null when the task has no due date.
+function dueInfo(t) {
+  if (!t.dueDate) return null;
+  const ms = t.dueDate - Date.now();
+  const overdue = ms < 0;
+  const mins = Math.round(Math.abs(ms) / 60000);
+  let rel;
+  if (mins < 1) rel = overdue ? "just now" : "in <1 min";
+  else if (mins < 60) rel = `${mins} min`;
+  else if (mins < 60 * 24) rel = `${Math.round(mins / 60)} h`;
+  else rel = `${Math.round(mins / (60 * 24))} d`;
+  const label = overdue ? `Overdue by ${rel}` : `Due in ${rel}`;
+  const abs = new Date(t.dueDate).toLocaleString();
+  return { overdue, label, rel, abs };
+}
+
 // The inbox folders. Each is a predicate over a task plus the current identity —
 // there is no auth yet (ADR-0028 leaves assignment/authorization open), so "me"
 // is a display-only identity the user types, and folder membership is derived
@@ -1155,14 +1334,16 @@ function loadFormViewer() {
   return _formViewer;
 }
 
-async function viewTasks() {
+async function viewTasks(preselectKey) {
   // With auth on, identity is the signed-in user (server-authoritative); with auth
   // off it stays a typed, display-only identity (ADR-0045).
   const authOn = AUTH.enabled;
   const state = {
     tasks: [],
+    // A deep link (…/tasks/t/{jobKey}, e.g. from the Operations live view) lands on
+    // the "All tasks" folder so the linked task is always in view, and preselects it.
     folder: "all",
-    selected: null, // job key of the selected task
+    selected: preselectKey != null ? preselectKey : null, // job key of the selected task
     me: authOn ? ((AUTH.user && AUTH.user.username) || "") : (localStorage.getItem("atlas.tasks.me") || ""),
     assignable: [], // enabled users a task can be assigned to, for the picker
     mountedForm: null, // the live form-js viewer instance for the selected task, if any
@@ -1228,12 +1409,15 @@ async function viewTasks() {
       .map((t) => {
         const sel = t.key === state.selected ? " selected" : "";
         const who = t.assignee ? esc(t.assignee) : t.candidateGroups ? esc(t.candidateGroups) : "Unassigned";
+        const hi = taskPriority(t) >= 70 ? `<span class="prio-dot" title="High priority (${taskPriority(t)})"></span>` : "";
+        const d = dueInfo(t);
+        const due = d ? `<span class="due-badge${d.overdue ? " overdue" : ""}" title="${esc(d.abs)}">${esc(d.overdue ? "Overdue" : "Due " + d.rel)}</span>` : "";
         return `<li class="tasks-item${sel}" data-key="${t.key}">
           <div class="tasks-item-top">
-            <span class="tasks-item-title">${esc(taskTitle(t))}</span>
+            <span class="tasks-item-title">${hi}${esc(taskTitle(t))}</span>
             <span class="chip">${esc(t.processId || "")}</span>
           </div>
-          <div class="tasks-item-sub muted">${who}</div>
+          <div class="tasks-item-sub muted"><span>${who}</span>${due}</div>
         </li>`;
       })
       .join("");
@@ -1255,21 +1439,25 @@ async function viewTasks() {
     }
   }
 
-  // mountForm loads the vendored form-js viewer and the task's bound form schema,
-  // then renders it into the detail pane. Guards against the selection changing
-  // while the (async) load is in flight.
+  // mountForm loads the vendored form-js viewer, the task's bound form schema,
+  // and the instance's current variables, then renders the form prefilled — a
+  // field whose key matches a variable shows its value (ADR-0028). Guards against
+  // the selection changing while the (async) load is in flight.
   async function mountForm(t) {
     const host = document.getElementById("task-form");
     if (!host) return;
     try {
-      const [{ Form }, def] = await Promise.all([
+      const [{ Form }, def, data] = await Promise.all([
         loadFormViewer(),
         api("GET", "/api/v1/forms/" + encodeURIComponent(t.formId)),
+        // Prefill from the instance's variables; a failed read just yields a
+        // blank form rather than blocking the task.
+        api("GET", "/api/v1/instances/" + t.processInstanceKey + "/variables").catch(() => ({})),
       ]);
       if (state.selected !== t.key) return; // selection moved on; drop this mount
       host.innerHTML = "";
       const form = new Form({ container: host });
-      await form.importSchema(def.schema);
+      await form.importSchema(def.schema, data || {});
       if (state.selected !== t.key) { try { form.destroy(); } catch { /* noop */ } return; }
       state.mountedForm = form;
     } catch (err) {
@@ -1318,6 +1506,8 @@ async function viewTasks() {
         ${row("Element", `<span class="chip">${esc(t.elementId || "—")}</span>`)}
         ${row("Assignee", esc(t.assignee || "—"))}
         ${row("Candidate groups", esc(t.candidateGroups || "—"))}
+        ${row("Priority", `${taskPriority(t)}${taskPriority(t) >= 70 ? ' <span class="prio-dot" title="High priority"></span>' : ""}`)}
+        ${row("Due", (() => { const d = dueInfo(t); return d ? `<span class="${d.overdue ? "due-text overdue" : "due-text"}" title="${esc(d.abs)}">${esc(d.label)} · ${esc(d.abs)}</span>` : "—"; })())}
         ${row("Instance", `<span class="chip">${t.processInstanceKey}</span>`)}
         ${row("Task key", `<span class="chip">${t.key}</span>`)}
       </div>
@@ -1392,6 +1582,7 @@ async function viewTasks() {
   async function load() {
     try {
       state.tasks = await api("GET", "/api/v1/tasks");
+      state.tasks.sort(taskOrder);
       if (!state.tasks.some((t) => t.key === state.selected)) state.selected = null;
       renderAll();
     } catch (e) {
@@ -1415,6 +1606,172 @@ async function viewTasks() {
   }
   document.getElementById("task-refresh").addEventListener("click", load);
   await loadAssignable();
+  await load();
+}
+
+// ---------- Start a process via its start form (ADR-0028) ----------
+async function viewStartProcess() {
+  const state = { procs: [], selected: null, form: null, links: [] };
+  view.innerHTML = `
+    <div class="tasks" id="start-grid">
+      <section class="tasks-list-pane">
+        <header class="tasks-list-head"><h2>Start a process</h2>
+          <button class="btn ghost small" id="start-refresh">Refresh</button></header>
+        <ul class="tasks-list" id="start-list"><li class="tasks-empty muted">Loading&hellip;</li></ul>
+      </section>
+      <section class="tasks-detail" id="start-detail"></section>
+    </div>`;
+  const listEl = view.querySelector("#start-list");
+  const detailEl = view.querySelector("#start-detail");
+
+  function destroyForm() {
+    if (state.form) { try { state.form.destroy(); } catch { /* noop */ } state.form = null; }
+  }
+
+  async function mountStartForm(p) {
+    const host = detailEl.querySelector("#start-form");
+    if (!host) return;
+    try {
+      const [{ Form }, def] = await Promise.all([
+        loadFormViewer(),
+        api("GET", "/api/v1/forms/" + encodeURIComponent(p.startFormId)),
+      ]);
+      if (state.selected !== p.key) return;
+      host.innerHTML = "";
+      const form = new Form({ container: host });
+      await form.importSchema(def.schema, {});
+      state.form = form;
+    } catch (e) {
+      host.innerHTML = `<p class="muted err">Failed to load the start form: ${esc(e.message)}</p>`;
+    }
+  }
+
+  function renderDetail() {
+    destroyForm();
+    const p = state.procs.find((x) => x.key === state.selected);
+    if (!p) {
+      detailEl.innerHTML = `<div class="tasks-detail-empty muted">Select a process to start it via its form.</div>`;
+      return;
+    }
+    detailEl.innerHTML = `
+      <header class="tasks-detail-head">
+        <h1>${esc(p.name || p.processId)}</h1>
+        <button class="btn" id="start-go">Start process</button>
+      </header>
+      <div class="tasks-fields">
+        <div class="tasks-field"><span class="tasks-field-label muted">Process</span><span class="chip">${esc(p.processId)}</span></div>
+        <div class="tasks-field"><span class="tasks-field-label muted">Version</span><span>${p.version}</span></div>
+      </div>
+      <div class="tasks-form" id="start-form"><p class="muted">Loading form&hellip;</p></div>
+      <div class="tasks-publish" id="start-publish"></div>`;
+    renderPublish(p);
+    detailEl.querySelector("#start-go").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      let variables = {};
+      if (state.form) {
+        const { data, errors } = state.form.submit();
+        if (errors && Object.keys(errors).length > 0) { toast("Please fix the highlighted fields", "err"); return; }
+        variables = data;
+      }
+      btn.disabled = true;
+      try {
+        await api("POST", `/api/v1/processes/${p.key}/instances`, { variables });
+        toast("Process started");
+        location.hash = "#/tasks"; // land in the inbox where its first task appears
+      } catch (err) { toast("Start failed: " + err.message, "err"); btn.disabled = false; }
+    });
+    mountStartForm(p);
+  }
+
+  // renderPublish draws the "Public link" section: an unauthenticated URL anyone
+  // can use to start this process via its form (ADR-0029). It offers publish,
+  // copy, and revoke, and re-renders itself after each change.
+  function renderPublish(p) {
+    const host = detailEl.querySelector("#start-publish");
+    if (!host) return;
+    const link = state.links.find((l) => l.processId === p.processId);
+    if (!link) {
+      host.innerHTML = `
+        <div class="publish-head"><span class="tasks-field-label muted">Public link</span></div>
+        <p class="muted publish-hint">No public link yet. Publish one to let anyone start this process from a form &mdash; no sign-in required.</p>
+        <button class="btn ghost small" id="publish-create">Publish public link</button>`;
+      host.querySelector("#publish-create").addEventListener("click", async (e) => {
+        e.currentTarget.disabled = true;
+        try {
+          const created = await api("POST", "/api/v1/public-links", { processId: p.processId });
+          state.links = state.links.filter((l) => l.processId !== p.processId).concat(created);
+          toast("Public link published");
+          renderPublish(p);
+        } catch (err) { toast("Publish failed: " + err.message, "err"); e.currentTarget.disabled = false; }
+      });
+      return;
+    }
+    const url = location.origin + link.url;
+    host.innerHTML = `
+      <div class="publish-head"><span class="tasks-field-label muted">Public link</span>
+        <span class="chip ok">Live</span></div>
+      <div class="publish-row">
+        <input class="publish-url" id="publish-url" type="text" readonly value="${esc(url)}" />
+        <button class="btn ghost small" id="publish-copy">Copy</button>
+        <a class="btn ghost small" href="${esc(link.url)}" target="_blank" rel="noopener">Open</a>
+      </div>
+      <button class="btn ghost small danger" id="publish-revoke">Revoke</button>`;
+    host.querySelector("#publish-url").addEventListener("focus", (e) => e.currentTarget.select());
+    host.querySelector("#publish-copy").addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(url); toast("Link copied"); }
+      catch { const el = host.querySelector("#publish-url"); el.focus(); el.select(); toast("Press Ctrl/Cmd+C to copy", "err"); }
+    });
+    host.querySelector("#publish-revoke").addEventListener("click", async (e) => {
+      if (!confirm("Revoke this public link? The URL will stop working immediately.")) return;
+      e.currentTarget.disabled = true;
+      try {
+        await api("DELETE", "/api/v1/public-links/" + encodeURIComponent(link.token));
+        state.links = state.links.filter((l) => l.token !== link.token);
+        toast("Public link revoked");
+        renderPublish(p);
+      } catch (err) { toast("Revoke failed: " + err.message, "err"); e.currentTarget.disabled = false; }
+    });
+  }
+
+  function renderList() {
+    if (!state.procs.length) {
+      listEl.innerHTML = `<li class="tasks-empty muted">No process has a start form. Link one on a start event in the Modeler's Implement tab.</li>`;
+      return;
+    }
+    listEl.innerHTML = state.procs.map((p) => {
+      const sel = p.key === state.selected ? " selected" : "";
+      return `<li class="tasks-item${sel}" data-key="${p.key}">
+        <div class="tasks-item-top"><span class="tasks-item-title">${esc(p.name || p.processId)}</span>
+          <span class="chip">v${p.version}</span></div>
+        <div class="tasks-item-sub muted">${esc(p.processId)}</div></li>`;
+    }).join("");
+    listEl.querySelectorAll(".tasks-item").forEach((li) =>
+      li.addEventListener("click", () => { state.selected = Number(li.dataset.key); renderList(); renderDetail(); }));
+  }
+
+  async function load() {
+    try {
+      const [all, links] = await Promise.all([
+        api("GET", "/api/v1/processes"),
+        api("GET", "/api/v1/public-links").catch(() => []),
+      ]);
+      state.links = Array.isArray(links) ? links : [];
+      // Only processes with a start form; keep the latest version per process id.
+      const latest = new Map();
+      for (const p of all) {
+        if (!p.startFormId) continue;
+        const cur = latest.get(p.processId);
+        if (!cur || p.version > cur.version) latest.set(p.processId, p);
+      }
+      state.procs = [...latest.values()].sort((a, b) => (a.name || a.processId).localeCompare(b.name || b.processId));
+      if (!state.procs.some((p) => p.key === state.selected)) state.selected = null;
+      renderList();
+      renderDetail();
+    } catch (e) {
+      listEl.innerHTML = `<li class="tasks-empty err">Failed to load processes: ${esc(e.message)}</li>`;
+    }
+  }
+  view.querySelector("#start-refresh").addEventListener("click", load);
   await load();
 }
 
@@ -1459,6 +1816,114 @@ async function viewInstanceReplay(key) {
 }
 
 // ---------- Router ----------
+// viewDmnViewer renders a referenced DMN model read-only: its decision
+// requirements graph (decisions, input data, and the requirements between them).
+// Atlas deliberately ships no DMN *editor* (that is temis, ADR-0014); this is a
+// look, not an edit surface, from the graph the embedded engine already exposes.
+async function viewDmnViewer(refId) {
+  view.innerHTML = `<div class="card"><p class="muted">Loading decision model…</p></div>`;
+  let g;
+  try {
+    g = await api("GET", `/api/v1/dmnrefs/${encodeURIComponent(refId)}/graph`);
+  } catch (e) {
+    view.innerHTML = `<div class="card empty"><h1>Could not load model</h1><p class="muted">${esc(e.message)}</p></div>`;
+    return;
+  }
+  const title = g.modelName || "DMN model";
+  const back = `<a href="#/modeler">← Modeler</a>`;
+  if (!g.valid) {
+    view.innerHTML = `<div class="card">${back}<h1>${esc(title)}</h1>
+      <p class="muted">${g.resolved ? "This model has errors and can't be shown:" : "This reference doesn't resolve to a temis model."}</p>
+      <pre class="muted" style="white-space:pre-wrap">${esc(g.message || "unavailable")}</pre></div>`;
+    return;
+  }
+  view.innerHTML = `<div class="card">${back}
+    <h1>${esc(title)} <span class="muted" style="font-size:14px;font-weight:normal">· read-only DMN view</span></h1>
+    <div id="dmn-canvas" style="overflow:auto;border:1px solid #e5e7eb;border-radius:10px;background:#fafafa;padding:8px">${renderDrgSvg(g)}</div>
+    <p class="muted" style="font-size:12px">Decisions are authored in temis; Atlas shows the model this reference points at. Use it in a business rule task via the Modeler's decision picker.</p></div>`;
+}
+
+// borderPoint returns the point on a box's border (centre cx,cy, size w×h) in the
+// direction of (tx,ty), so a requirement arrow lands on the box edge, not its
+// centre.
+function borderPoint(cx, cy, w, h, tx, ty) {
+  const dx = tx - cx, dy = ty - cy;
+  if (dx === 0 && dy === 0) return [cx, cy];
+  const sx = dx !== 0 ? (w / 2) / Math.abs(dx) : Infinity;
+  const sy = dy !== 0 ? (h / 2) / Math.abs(dy) : Infinity;
+  const s = Math.min(sx, sy);
+  return [cx + dx * s, cy + dy * s];
+}
+
+// renderDrgSvg draws a model's decision requirements graph as an SVG. It uses the
+// authored DMNDI bounds when the model has a diagram; otherwise it lays the graph
+// out in layers (input data at the bottom, decisions stacked above by requirement
+// depth). Read-only: no interaction, just a faithful picture.
+function renderDrgSvg(g) {
+  const NW = 168, NH = 64, GAPX = 36, GAPY = 60, PAD = 24;
+  const hasDI = (g.nodes || []).some((n) => n.width > 0);
+  let placed;
+  if (hasDI) {
+    placed = g.nodes.map((n) => ({ n, x: n.x || 0, y: n.y || 0, w: n.width || NW, h: n.height || NH }));
+  } else {
+    const reqs = {};
+    (g.edges || []).forEach((e) => { (reqs[e.target] = reqs[e.target] || []).push(e.source); });
+    const level = {};
+    const lvl = (id, seen) => {
+      if (level[id] != null) return level[id];
+      if (seen.has(id)) return 0;
+      seen.add(id);
+      const rs = reqs[id] || [];
+      return (level[id] = rs.length ? 1 + Math.max(...rs.map((r) => lvl(r, seen))) : 0);
+    };
+    g.nodes.forEach((n) => lvl(n.id, new Set()));
+    const maxL = Math.max(0, ...Object.values(level));
+    const byLevel = {};
+    g.nodes.forEach((n) => { (byLevel[level[n.id]] = byLevel[level[n.id]] || []).push(n); });
+    placed = [];
+    for (let L = 0; L <= maxL; L++) {
+      (byLevel[L] || []).forEach((n, i) =>
+        placed.push({ n, x: PAD + i * (NW + GAPX), y: PAD + (maxL - L) * (NH + GAPY), w: NW, h: NH }));
+    }
+  }
+  if (!placed.length) return `<p class="muted" style="padding:16px">This model has no decisions to show.</p>`;
+  const pos = {};
+  placed.forEach((p) => { pos[p.n.id] = p; });
+
+  const edges = (g.edges || []).map((e) => {
+    const a = pos[e.source], b = pos[e.target];
+    if (!a || !b) return "";
+    const ax = a.x + a.w / 2, ay = a.y + a.h / 2, bx = b.x + b.w / 2, by = b.y + b.h / 2;
+    const [x1, y1] = borderPoint(ax, ay, a.w, a.h, bx, by);
+    const [x2, y2] = borderPoint(bx, by, b.w, b.h, ax, ay);
+    const dash = e.type === "knowledgeRequirement" ? ` stroke-dasharray="5 4"` : "";
+    return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#94a3b8" stroke-width="1.5"${dash} marker-end="url(#drg-arrow)"/>`;
+  }).join("");
+
+  const nodes = placed.map(({ n, x, y, w, h }) => {
+    const input = n.type === "inputData";
+    const bkm = n.type === "businessKnowledgeModel";
+    const fill = input ? "#eff6ff" : bkm ? "#f5f3ff" : "#ffffff";
+    const stroke = input ? "#3b82f6" : bkm ? "#8b5cf6" : "#111827";
+    const rx = input ? h / 2 : 10;
+    const sub = input ? (n.dataType || "input data") : bkm ? "knowledge model" : (n.hasTable ? "decision table" : "decision");
+    return `<g>
+      <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>
+      <text x="${x + w / 2}" y="${y + h / 2 - 3}" text-anchor="middle" font-size="13" font-weight="600" fill="#111827">${esc(n.name || n.id)}</text>
+      <text x="${x + w / 2}" y="${y + h / 2 + 14}" text-anchor="middle" font-size="10.5" fill="#6b7280">${esc(sub)}</text>
+    </g>`;
+  }).join("");
+
+  const minX = Math.min(...placed.map((p) => p.x)) - PAD;
+  const minY = Math.min(...placed.map((p) => p.y)) - PAD;
+  const W = Math.max(...placed.map((p) => p.x + p.w)) + PAD - minX;
+  const H = Math.max(...placed.map((p) => p.y + p.h)) + PAD - minY;
+  return `<svg viewBox="${minX.toFixed(0)} ${minY.toFixed(0)} ${W.toFixed(0)} ${H.toFixed(0)}" width="${W.toFixed(0)}" height="${H.toFixed(0)}" style="max-width:100%;height:auto;display:block;font-family:system-ui,-apple-system,sans-serif">
+    <defs><marker id="drg-arrow" markerWidth="10" markerHeight="8" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 z" fill="#94a3b8"/></marker></defs>
+    ${edges}${nodes}</svg>`;
+}
+
 async function route() {
   // Any navigation closes the app switcher and tears down an editor/live view.
   document.getElementById("drawer").hidden = true;
@@ -1503,9 +1968,17 @@ async function route() {
     if (fe) return await viewFormEditor(decodeURIComponent(fe[1]));
     const dm = path.match(/^#\/modeler\/draft\/(.+)$/);
     if (dm) return await viewEditorDraft(decodeURIComponent(dm[1]));
+    const dv = path.match(/^#\/modeler\/dmn\/(.+)$/);
+    if (dv) return await viewDmnViewer(decodeURIComponent(dv[1]));
     const m = path.match(/^#\/modeler\/d\/(\d+)$/);
     if (m) return await viewEditor(Number(m[1]));
     if (path === "#/tasks") return await viewTasks();
+    if (path === "#/tasks/start") return await viewStartProcess();
+    // A single task can be deep-linked (…/t/{jobKey}) — the Operations live view
+    // links a running instance's active user task straight to its form here, so an
+    // operator jumps from "where is the token" to "work the task" in one click.
+    const tk = path.match(/^#\/tasks\/t\/(\d+)$/);
+    if (tk) return await viewTasks(Number(tk[1]));
     if (path === "#/operations") return await viewInstances();
     // A specific instance can be deep-linked (…/i/{instanceKey}) — the Modeler's
     // Deploy & run builds this so a roundtrip lands straight on the started

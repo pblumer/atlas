@@ -25,6 +25,12 @@ const (
 	cfMessageFlow            columnFamily = 0x0C // msgFlow:<receiverDefKey>:<ts>:<pos> → MessageFlowValue
 	cfJobByElement           columnFamily = 0x0D // jobByEl:<elKey> → jobKey (reverse lookup for boundary cancel)
 	cfElementStep            columnFamily = 0x0E // elStep:<piKey>:<ts>:<pos> → int32 elementId
+	cfElementReplay          columnFamily = 0x13 // elReplay:<piKey>:<ts>:<pos> → causal lifecycle value
+	cfVariableSnapshot       columnFamily = 0x0F // varSnap:<scopeKey>:<ts>:<pos> → VariableValue
+	cfDataObject             columnFamily = 0x10 // do:<scopeKey>:<name> → DataObjectValue
+	cfDataObjectSnapshot     columnFamily = 0x11 // doSnap:<scopeKey>:<ts>:<pos> → DataObjectValue
+	cfIncident               columnFamily = 0x12 // incident:<elKey> → IncidentValue (ADR-0061)
+	cfDecisionEvaluation     columnFamily = 0x14 // decEval:<scopeKey>:<ts>:<pos> → DecisionEvaluationValue (ADR-0066)
 )
 
 func appendBE64(dst []byte, v uint64) []byte { return binary.BigEndian.AppendUint64(dst, v) }
@@ -43,6 +49,12 @@ func keyElementInstance(key uint64) []byte {
 
 func keyElByProc(procKey, elKey uint64) []byte {
 	return appendBE64(elByProcPrefix(procKey), elKey)
+}
+
+// keyIncident keys an incident by the element instance it is attached to — one
+// activity holds at most one job, so at most one incident (ADR-0061).
+func keyIncident(elKey uint64) []byte {
+	return appendBE64([]byte{byte(cfIncident)}, elKey)
 }
 
 func elByProcPrefix(procKey uint64) []byte {
@@ -161,6 +173,16 @@ func elementStepInstancePrefix(piKey uint64) []byte {
 	return appendBE64([]byte{byte(cfElementStep)}, piKey)
 }
 
+func keyElementReplay(piKey uint64, ts int64, pos uint64) []byte {
+	k := appendBE64([]byte{byte(cfElementReplay)}, piKey)
+	k = appendOrderedInt64(k, ts)
+	return appendBE64(k, pos)
+}
+
+func elementReplayInstancePrefix(piKey uint64) []byte {
+	return appendBE64([]byte{byte(cfElementReplay)}, piKey)
+}
+
 // timestampFromStepKey extracts the event timestamp from an element-step key,
 // inverting the sign-flip appendOrderedInt64 applied.
 func timestampFromStepKey(k []byte) int64 {
@@ -172,6 +194,35 @@ func positionFromStepKey(k []byte) uint64 {
 	return binary.BigEndian.Uint64(k[len(k)-8:])
 }
 
+// keyVariableSnapshot keys one retained variable change of a scope (a process
+// instance today). The scope key leads, so every change under one scope is one
+// prefix scan; the event timestamp follows so the scan yields them in change
+// order, and the log position is the trailing disambiguator. Same shape as the
+// element-step key, so a single instance's step and variable timelines fold
+// together by position for step-by-step replay (ADR-0048).
+func keyVariableSnapshot(scopeKey uint64, ts int64, pos uint64) []byte {
+	b := appendOrderedInt64(variableSnapshotScopePrefix(scopeKey), ts)
+	return appendBE64(b, pos)
+}
+
+// variableSnapshotScopePrefix scans every variable change recorded under one
+// scope, in change order.
+func variableSnapshotScopePrefix(scopeKey uint64) []byte {
+	return appendBE64([]byte{byte(cfVariableSnapshot)}, scopeKey)
+}
+
+// timestampFromVarSnapKey extracts the event timestamp from a variable-snapshot
+// key, inverting the sign-flip appendOrderedInt64 applied.
+func timestampFromVarSnapKey(k []byte) int64 {
+	return int64(binary.BigEndian.Uint64(k[len(k)-16:]) ^ (1 << 63))
+}
+
+// positionFromVarSnapKey extracts the trailing log position from a
+// variable-snapshot key.
+func positionFromVarSnapKey(k []byte) uint64 {
+	return binary.BigEndian.Uint64(k[len(k)-8:])
+}
+
 func variablePrefix(scope uint64) []byte {
 	return appendBE64([]byte{byte(cfVariable)}, scope)
 }
@@ -180,6 +231,72 @@ func variablePrefix(scope uint64) []byte {
 // variable-length component, so a scope's variables are one prefix scan.
 func keyVariable(scope uint64, name string) []byte {
 	return append(variablePrefix(scope), name...)
+}
+
+func dataObjectPrefix(scope uint64) []byte {
+	return appendBE64([]byte{byte(cfDataObject)}, scope)
+}
+
+// keyDataObject keys a data object by its scope and name, the same shape as a
+// variable key: the name is the trailing, variable-length component, so a scope's
+// data objects are one prefix scan (ADR-0053).
+func keyDataObject(scope uint64, name string) []byte {
+	return append(dataObjectPrefix(scope), name...)
+}
+
+// keyDataObjectSnapshot keys one retained data-object state change of a scope,
+// the same (scope, ts, pos) shape as the variable-snapshot key, so the data
+// object, variable, and element-step timelines fold together by log position for
+// step-by-step replay and lineage (ADR-0053, mirroring ADR-0048).
+func keyDataObjectSnapshot(scopeKey uint64, ts int64, pos uint64) []byte {
+	b := appendOrderedInt64(dataObjectSnapshotScopePrefix(scopeKey), ts)
+	return appendBE64(b, pos)
+}
+
+// dataObjectSnapshotScopePrefix scans every data-object state change recorded
+// under one scope, in change order.
+func dataObjectSnapshotScopePrefix(scopeKey uint64) []byte {
+	return appendBE64([]byte{byte(cfDataObjectSnapshot)}, scopeKey)
+}
+
+// timestampFromDataObjSnapKey extracts the event timestamp from a data-object
+// snapshot key, inverting the sign-flip appendOrderedInt64 applied.
+func timestampFromDataObjSnapKey(k []byte) int64 {
+	return int64(binary.BigEndian.Uint64(k[len(k)-16:]) ^ (1 << 63))
+}
+
+// positionFromDataObjSnapKey extracts the trailing log position from a
+// data-object snapshot key.
+func positionFromDataObjSnapKey(k []byte) uint64 {
+	return binary.BigEndian.Uint64(k[len(k)-8:])
+}
+
+// keyDecisionEvaluation keys one retained DMN decision evaluation of a scope (a
+// process instance), the same (scope, ts, pos) shape as the variable-snapshot key
+// so a business rule task's evaluations fold into the same instance timeline by
+// log position (ADR-0066, mirroring ADR-0048). Append-only: one record per
+// evaluation, never overwritten.
+func keyDecisionEvaluation(scopeKey uint64, ts int64, pos uint64) []byte {
+	b := appendOrderedInt64(decisionEvaluationScopePrefix(scopeKey), ts)
+	return appendBE64(b, pos)
+}
+
+// decisionEvaluationScopePrefix scans every decision evaluation recorded under
+// one scope, in evaluation order.
+func decisionEvaluationScopePrefix(scopeKey uint64) []byte {
+	return appendBE64([]byte{byte(cfDecisionEvaluation)}, scopeKey)
+}
+
+// timestampFromDecisionEvalKey extracts the event timestamp from a
+// decision-evaluation key, inverting the sign-flip appendOrderedInt64 applied.
+func timestampFromDecisionEvalKey(k []byte) int64 {
+	return int64(binary.BigEndian.Uint64(k[len(k)-16:]) ^ (1 << 63))
+}
+
+// positionFromDecisionEvalKey extracts the trailing log position from a
+// decision-evaluation key.
+func positionFromDecisionEvalKey(k []byte) uint64 {
+	return binary.BigEndian.Uint64(k[len(k)-8:])
 }
 
 // appendLenString appends a uint32 length prefix followed by s, so a

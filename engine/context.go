@@ -55,6 +55,14 @@ func (c *ProcessingContext) JobOfElement(elKey uint64) (uint64, bool) {
 	return jobKey, ok
 }
 
+// GetIncident reads the incident attached to an element instance through the
+// in-flight transaction, or nil if there is none (ADR-0061).
+func (c *ProcessingContext) GetIncident(elKey uint64) *model.IncidentValue {
+	v, err := c.tx.GetIncident(elKey)
+	c.p.fail(err)
+	return v
+}
+
 // GetProcessInstance reads process-instance state through the in-flight transaction.
 func (c *ProcessingContext) GetProcessInstance(key uint64) *model.ProcessInstanceValue {
 	v, err := c.tx.GetProcessInstance(key)
@@ -85,6 +93,29 @@ func (c *ProcessingContext) ForEachElementInstance(procKey uint64, fn func(elKey
 	}
 	for _, k := range keys {
 		fn(k)
+	}
+}
+
+// ForEachStartTimer calls fn with the key and value of every armed start timer,
+// read from the committed timer index. Entries are collected before fn runs so fn
+// may emit timer events (arming/retiring) without disturbing the scan. Used only
+// when a definition is deployed (off the hot path), to arm and supersede start
+// timers (ADR-0051).
+func (c *ProcessingContext) ForEachStartTimer(fn func(key uint64, v model.TimerValue)) {
+	type entry struct {
+		key uint64
+		v   model.TimerValue
+	}
+	var entries []entry
+	if err := c.p.store.StartTimers(func(k uint64, v *model.TimerValue) error {
+		entries = append(entries, entry{key: k, v: *v})
+		return nil
+	}); err != nil {
+		c.p.fail(err)
+		return
+	}
+	for _, e := range entries {
+		fn(e.key, e.v)
 	}
 }
 
@@ -163,6 +194,14 @@ func (c *ProcessingContext) AppendJobEvent(key uint64, intent model.Intent, v mo
 	c.appendEvent(key, model.VTJob, intent, inflightValue{job: v})
 }
 
+// AppendIncidentEvent records an incident lifecycle fact (created or resolved).
+// The key is the element instance the incident is attached to, and the value
+// carries that key too, so applyToState can locate the index entry from the event
+// alone on either intent (ADR-0061).
+func (c *ProcessingContext) AppendIncidentEvent(intent model.Intent, v model.IncidentValue) {
+	c.appendEvent(v.ElementInstanceKey, model.VTIncident, intent, inflightValue{incident: v})
+}
+
 // AppendTimerEvent records a timer lifecycle fact (created or triggered).
 func (c *ProcessingContext) AppendTimerEvent(key uint64, intent model.Intent, v model.TimerValue) {
 	c.appendEvent(key, model.VTTimer, intent, inflightValue{timer: v})
@@ -173,6 +212,35 @@ func (c *ProcessingContext) AppendTimerEvent(key uint64, intent model.Intent, v 
 // strings — variables are runtime data, not hot-path token movement.
 func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.VariableValue) {
 	c.appendEvent(v.ScopeKey, model.VTVariable, intent, inflightValue{variable: v})
+}
+
+// AppendDataObjectEvent records a data-object write (created or state-changed).
+// Like a variable it carries genuine runtime data (a name, a data state, and a
+// value), so it allocates for its strings — data objects are runtime data, not
+// hot-path token movement (ADR-0053). The event is keyed by the owning scope.
+func (c *ProcessingContext) AppendDataObjectEvent(intent model.Intent, v model.DataObjectValue) {
+	c.appendEvent(v.ScopeKey, model.VTDataObject, intent, inflightValue{dataObject: v})
+}
+
+// AppendDecisionEvaluationEvent records how a business rule task's decision was
+// made — its inputs, outputs, and trace — as append-only history (ADR-0066). The
+// worker evaluated the decision off the processor goroutine and froze the result
+// onto the completion command; this event carries genuine runtime data (JSON
+// payloads), so it allocates for its strings, not hot-path token movement. It is
+// keyed by the owning process instance, so a scope-wide scan yields every decision
+// an instance evaluated in order.
+func (c *ProcessingContext) AppendDecisionEvaluationEvent(v model.DecisionEvaluationValue) {
+	c.appendEvent(v.ProcessInstanceKey, model.VTDecisionEvaluation, model.IntentDecisionEvaluated, inflightValue{decisionEval: v})
+}
+
+// GetDataObject reads a scope's data object by name through the in-flight
+// transaction (sees writes from earlier in this batch). A data-output association
+// uses it to keep the object's current value or state when the write changes only
+// one of them (ADR-0058); nil if the object is absent.
+func (c *ProcessingContext) GetDataObject(scope uint64, name string) *model.DataObjectValue {
+	v, err := c.tx.GetDataObject(scope, name)
+	c.p.fail(err)
+	return v
 }
 
 // AppendMessageSubscriptionEvent records a message-subscription fact (created or

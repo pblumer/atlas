@@ -31,17 +31,43 @@ func (r *recordingClient) Do(_ context.Context, req rest.Request) (rest.Response
 	return r.resp, nil
 }
 
+type erroringClient struct{}
+
+func (erroringClient) Do(context.Context, rest.Request) (rest.Response, error) {
+	return rest.Response{}, context.DeadlineExceeded
+}
+
 const restDefKey = 71
 
-// restProcess: Start → REST connector task (method/path) → End.
-func restProcess(t *testing.T, method, path string) (*compiler.CompiledProcess, int32) {
+// restProcess: Start → REST connector task → End.
+func restProcess(t *testing.T, method, url, resultVar string) (*compiler.CompiledProcess, int32) {
 	t.Helper()
 	b := compiler.NewBuilder(restDefKey, "customers", 1)
 	start := b.AddStartEvent()
-	call := b.AddRestConnectorTask("crm", method, path, 3)
+	call := b.AddRestConnectorTask(method, url, resultVar, 3)
 	end := b.AddEndEvent()
 	b.Connect(start, call)
 	b.Connect(call, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return cp, cp.ConnectorTask(cp.Node(call).Detail).JobType
+}
+
+// restThenWaitProcess: Start → REST task (writes resultVar) → plain service task
+// (parks, so the instance stays alive) → End. Parking after the REST task lets a
+// test read the written result variable before the instance ends.
+func restThenWaitProcess(t *testing.T, method, url, resultVar string) (*compiler.CompiledProcess, int32) {
+	t.Helper()
+	b := compiler.NewBuilder(restDefKey, "customers", 1)
+	start := b.AddStartEvent()
+	call := b.AddRestConnectorTask(method, url, resultVar, 3)
+	wait := b.AddServiceTask("wait", 3)
+	end := b.AddEndEvent()
+	b.Connect(start, call)
+	b.Connect(call, wait)
+	b.Connect(wait, end)
 	cp, err := b.Build()
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -71,6 +97,38 @@ func mustActiveProcs(t *testing.T, s *state.Store) int {
 	return n
 }
 
+// soleInstanceKey returns the key of the single live process instance.
+func soleInstanceKey(t *testing.T, s *state.Store) uint64 {
+	t.Helper()
+	var keys []uint64
+	if err := s.ActiveProcessInstances(func(k uint64, _ *model.ProcessInstanceValue) error {
+		keys = append(keys, k)
+		return nil
+	}); err != nil {
+		t.Fatalf("ActiveProcessInstances: %v", err)
+	}
+	if len(keys) != 1 {
+		t.Fatalf("live instances = %d, want exactly 1", len(keys))
+	}
+	return keys[0]
+}
+
+// readVar returns the variable named name in scope, or nil if absent.
+func readVar(t *testing.T, s *state.Store, scope uint64, name string) *model.VariableValue {
+	t.Helper()
+	var found *model.VariableValue
+	if err := s.VariablesOfScope(scope, func(v *model.VariableValue) error {
+		if v.Name == name {
+			cp := *v
+			found = &cp
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("VariablesOfScope: %v", err)
+	}
+	return found
+}
+
 func openStore(t *testing.T) (*wal.Log, *state.Store) {
 	t.Helper()
 	dir := t.TempDir()
@@ -86,18 +144,19 @@ func openStore(t *testing.T) (*wal.Log, *state.Store) {
 	return log, store
 }
 
-// TestRestConnectorTaskCallsAPI is the vertical slice end to end: a POST connector
-// task creates a job, the in-process REST worker calls the registered connector
-// with the instance's variables as the JSON body, reports the response to the
-// sink, completes the job, and the instance finishes — proving Atlas drives a REST
-// connector through the normal job path.
-func TestRestConnectorTaskCallsAPI(t *testing.T) {
+// TestRestConnectorWritesResponseToVariable is the vertical slice end to end: a
+// POST connector task creates a job, the in-process REST worker calls the API with
+// the instance's variables as the JSON body, writes the JSON response into the
+// task's result variable, and the token advances. The process parks on a following
+// task so the written variable is still readable.
+func TestRestConnectorWritesResponseToVariable(t *testing.T) {
 	log, store := openStore(t)
-	cp, jobType := restProcess(t, "POST", "/customers")
+	cp, jobType := restThenWaitProcess(t, "POST", "https://api.example.com/customers", "created")
+	if jobType != compiler.RestJobTypeIndex {
+		t.Fatalf("REST job type index = %d, want the reserved %d", jobType, compiler.RestJobTypeIndex)
+	}
 
-	rc := &recordingClient{resp: rest.Response{Status: 201, Body: map[string]any{"id": json.Number("7")}}}
-	reg := rest.NewRegistry()
-	reg.Register("crm", rc)
+	rc := &recordingClient{resp: rest.Response{Status: 201, Body: map[string]any{"id": json.Number("7"), "name": "Ada"}}}
 
 	p := engine.New(1, log, store, &fixedClock{})
 	p.Deploy(cp)
@@ -110,9 +169,8 @@ func TestRestConnectorTaskCallsAPI(t *testing.T) {
 		}
 		return nil
 	}
-	var results []rest.Result
 	runner := job.NewRunner(store, p)
-	runner.Handle(jobType, rest.Handler(store, lookup, reg, func(r rest.Result) { results = append(results, r) }))
+	runner.HandleWithOutput(jobType, rest.Handler(store, lookup, rc))
 
 	p.CreateInstance(cp.Key, model.VariableValue{Name: "name", Kind: model.VarString, Text: "Ada"})
 	if err := runner.Drive(); err != nil {
@@ -123,8 +181,8 @@ func TestRestConnectorTaskCallsAPI(t *testing.T) {
 		t.Fatalf("requests made = %d, want 1", len(rc.requests))
 	}
 	req := rc.requests[0]
-	if req.Method != "POST" || req.Path != "/customers" {
-		t.Errorf("request = %s %s, want POST /customers", req.Method, req.Path)
+	if req.Method != "POST" || req.URL != "https://api.example.com/customers" {
+		t.Errorf("request = %s %s, want POST the model URL", req.Method, req.URL)
 	}
 	if req.Body["name"] != "Ada" {
 		t.Errorf("request body name = %#v, want Ada", req.Body["name"])
@@ -132,24 +190,24 @@ func TestRestConnectorTaskCallsAPI(t *testing.T) {
 	if req.IdempotencyKey == "" {
 		t.Error("request idempotency key is empty, want the job key")
 	}
-	if len(results) != 1 || results[0].Status != 201 {
-		t.Fatalf("results = %+v, want one with status 201", results)
+	// The instance parked on the following task; the response is in "created".
+	scope := soleInstanceKey(t, store)
+	created := readVar(t, store, scope, "created")
+	if created == nil || created.Kind != model.VarJSON {
+		t.Fatalf("result variable = %+v, want a structured VarJSON", created)
 	}
-	if pi, ei := active(t, store); pi != 0 || ei != 0 {
-		t.Fatalf("after Drive: process=%d element=%d, want 0 and 0", pi, ei)
+	if !json.Valid([]byte(created.Text)) || !contains(created.Text, `"id"`) {
+		t.Errorf("result variable text = %q, want the JSON response", created.Text)
 	}
 }
 
-// TestRestConnectorGetSendsNoBody proves a GET connector task carries no request
-// body (only methods that conventionally have one do). A nil sink is also
-// exercised here.
-func TestRestConnectorGetSendsNoBody(t *testing.T) {
+// TestRestConnectorGetNoBodyNoResult proves a GET carries no request body and, with
+// no result variable, discards the response — the instance still finishes.
+func TestRestConnectorGetNoBodyNoResult(t *testing.T) {
 	log, store := openStore(t)
-	cp, jobType := restProcess(t, "GET", "/customers/1")
+	cp, jobType := restProcess(t, "GET", "https://api.example.com/customers/1", "")
 
-	rc := &recordingClient{resp: rest.Response{Status: 200}}
-	reg := rest.NewRegistry()
-	reg.Register("crm", rc)
+	rc := &recordingClient{resp: rest.Response{Status: 200, Body: map[string]any{"id": json.Number("1")}}}
 
 	p := engine.New(1, log, store, &fixedClock{})
 	p.Deploy(cp)
@@ -157,7 +215,7 @@ func TestRestConnectorGetSendsNoBody(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.Handle(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg, nil))
+	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc))
 
 	p.CreateInstance(cp.Key, model.VariableValue{Name: "ignored", Kind: model.VarString, Text: "x"})
 	if err := runner.Drive(); err != nil {
@@ -181,7 +239,7 @@ func TestRestConnectorGetSendsNoBody(t *testing.T) {
 // replay, so a re-run after a crash would not double-call.
 func TestRestConnectorRecoversAcrossRestart(t *testing.T) {
 	dir := t.TempDir()
-	cp, jobType := restProcess(t, "POST", "/customers")
+	cp, jobType := restProcess(t, "POST", "https://api.example.com/customers", "")
 	clock := &fixedClock{}
 	lookup := func(uint64) *compiler.CompiledProcess { return cp }
 
@@ -225,10 +283,8 @@ func TestRestConnectorRecoversAcrossRestart(t *testing.T) {
 	}
 
 	rc := &recordingClient{resp: rest.Response{Status: 200}}
-	reg := rest.NewRegistry()
-	reg.Register("crm", rc)
 	runner := job.NewRunner(store2, p2)
-	runner.Handle(jobType, rest.Handler(store2, lookup, reg, nil))
+	runner.HandleWithOutput(jobType, rest.Handler(store2, lookup, rc))
 	if err := runner.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)
 	}
@@ -240,25 +296,28 @@ func TestRestConnectorRecoversAcrossRestart(t *testing.T) {
 	}
 }
 
-// TestRestConnectorUnregistered proves a connector task whose connector is not
-// registered leaves the job pending (the handler errors), so nothing is lost.
-func TestRestConnectorUnregistered(t *testing.T) {
+// TestRestConnectorClientError proves a client (transport/HTTP) error fails the
+// job (retried, then an incident) rather than completing it.
+func TestRestConnectorClientError(t *testing.T) {
 	log, store := openStore(t)
-	cp, jobType := restProcess(t, "POST", "/x")
+	cp, jobType := restProcess(t, "GET", "https://api.example.com/x", "")
 	p := engine.New(1, log, store, &fixedClock{})
 	p.Deploy(cp)
 	if err := p.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.Handle(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rest.NewRegistry(), nil))
+	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, erroringClient{}))
 
 	p.CreateInstance(cp.Key)
-	if err := runner.Drive(); err == nil {
-		t.Fatal("Drive with an unregistered connector: err = nil, want error")
+	// A handler error does not abort Drive: it is routed into the incident model
+	// (retry, then an incident that parks the token, ADR-0061), so the job never
+	// completes and the instance stays active.
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("Drive: %v", err)
 	}
 	if pi := mustActiveProcs(t, store); pi != 1 {
-		t.Fatalf("after failed Drive: active=%d, want 1 (job still pending)", pi)
+		t.Fatalf("after client error: active=%d, want 1 (job never completed)", pi)
 	}
 }
 
@@ -266,20 +325,23 @@ func TestRestConnectorUnregistered(t *testing.T) {
 // definition can't be resolved: the handler errors, leaving the job pending.
 func TestRestConnectorNoCompiledProcess(t *testing.T) {
 	log, store := openStore(t)
-	cp, jobType := restProcess(t, "POST", "/x")
+	cp, jobType := restProcess(t, "GET", "https://api.example.com/x", "")
 	p := engine.New(1, log, store, &fixedClock{})
 	p.Deploy(cp)
 	if err := p.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	reg := rest.NewRegistry()
-	reg.Register("crm", &recordingClient{})
 	runner := job.NewRunner(store, p)
-	runner.Handle(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, reg, nil))
+	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, &recordingClient{}))
 
 	p.CreateInstance(cp.Key)
-	if err := runner.Drive(); err == nil {
-		t.Fatal("Drive with an unresolvable definition: err = nil, want error")
+	// An unresolvable definition is a handler error, routed into the incident model
+	// like any other; Drive does not abort and the instance stays active.
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	if pi := mustActiveProcs(t, store); pi != 1 {
+		t.Fatalf("after unresolvable definition: active=%d, want 1 (job never completed)", pi)
 	}
 }
 
@@ -287,38 +349,18 @@ func TestRestConnectorNoCompiledProcess(t *testing.T) {
 // element instance has already completed: it is a no-op, not an error.
 func TestRestHandlerElementInstanceGone(t *testing.T) {
 	_, store := openStore(t)
-	h := rest.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, rest.NewRegistry(), nil)
-	if err := h(job.Job{ElementInstanceKey: 424242}); err != nil {
-		t.Fatalf("handler for a vanished element instance: err = %v, want nil", err)
+	h := rest.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, &recordingClient{})
+	out, err := h(job.Job{ElementInstanceKey: 424242})
+	if err != nil || out != nil {
+		t.Fatalf("handler for a vanished element instance: out=%v err=%v, want nil,nil", out, err)
 	}
 }
 
-// TestRestConnectorClientError proves a client (transport/HTTP) error leaves the
-// job pending so it is retried at-least-once.
-func TestRestConnectorClientError(t *testing.T) {
-	log, store := openStore(t)
-	cp, jobType := restProcess(t, "GET", "/x")
-	p := engine.New(1, log, store, &fixedClock{})
-	p.Deploy(cp)
-	if err := p.Recover(); err != nil {
-		t.Fatalf("Recover: %v", err)
+func contains(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
 	}
-	reg := rest.NewRegistry()
-	reg.Register("crm", &erroringClient{})
-	runner := job.NewRunner(store, p)
-	runner.Handle(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg, nil))
-
-	p.CreateInstance(cp.Key)
-	if err := runner.Drive(); err == nil {
-		t.Fatal("Drive when the client errors: err = nil, want error")
-	}
-	if pi := mustActiveProcs(t, store); pi != 1 {
-		t.Fatalf("after failed Drive: active=%d, want 1 (job still pending)", pi)
-	}
-}
-
-type erroringClient struct{}
-
-func (erroringClient) Do(context.Context, rest.Request) (rest.Response, error) {
-	return rest.Response{}, context.DeadlineExceeded
+	return false
 }

@@ -51,8 +51,20 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// instance can be replayed step by step (ADR-0046). The order comes from
 			// the event header's timestamp and position, so replay rebuilds an
 			// identically-ordered trail (I4).
-			return tx.RecordElementStep(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId)
+			if err := tx.RecordElementStep(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId); err != nil {
+				return err
+			}
+			return tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, 1)
 		case model.IntentCompleted, model.IntentTerminated:
+			if err := tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, 2); err != nil {
+				return err
+			}
+			// Terminating an element clears any incident it carried (a stuck job's,
+			// ADR-0061); the delete is idempotent, so it is a no-op for the common
+			// element with none.
+			if err := tx.DeleteIncident(h.Key); err != nil {
+				return err
+			}
 			if err := tx.DeleteElementInstance(h.Key, &v.element); err != nil {
 				return err
 			}
@@ -61,26 +73,59 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 
 	case model.VTJob:
 		switch h.Intent {
-		case model.IntentJobCreated, model.IntentJobAssigned:
-			// Assigning re-puts the whole job with its new assignee; the
-			// activatable-index entry PutJob rewrites is idempotent, so the task
-			// stays open (ADR-0042).
+		case model.IntentJobCreated, model.IntentJobAssigned, model.IntentJobFailed:
+			// Assigning re-puts the job with its new assignee; failing re-puts it with
+			// its new (decremented, worker-reported) retry count. PutJob's activatable-
+			// index write is idempotent and keyed on Retries > 0, so a still-retryable
+			// job stays open while an exhausted one parks off the index (ADR-0042/0061).
 			return tx.PutJob(h.Key, &v.job)
-		case model.IntentJobCompleted, model.IntentJobFailed, model.IntentJobCanceled:
+		case model.IntentJobCompleted, model.IntentJobCanceled:
 			return tx.DeleteJob(h.Key, &v.job)
+		}
+
+	case model.VTIncident:
+		switch h.Intent {
+		case model.IntentIncidentCreated:
+			return tx.PutIncident(&v.incident)
+		case model.IntentIncidentResolved:
+			return tx.DeleteIncident(v.incident.ElementInstanceKey)
 		}
 
 	case model.VTVariable:
 		switch h.Intent {
 		case model.IntentVariableCreated, model.IntentVariableUpdated:
-			return tx.PutVariable(&v.variable)
+			if err := tx.PutVariable(&v.variable); err != nil {
+				return err
+			}
+			// Retain the change as an ordered, timestamped snapshot so a single
+			// instance's replay can show the variable values as of each step
+			// (ADR-0048). Derived only from the event header (timestamp/position)
+			// and the variable value, so replay rebuilds it identically (I4).
+			return tx.RecordVariableSnapshot(h.Timestamp, h.Position, &v.variable)
+		}
+
+	case model.VTDataObject:
+		switch h.Intent {
+		case model.IntentDataObjectCreated, model.IntentDataObjectStateChanged:
+			if err := tx.PutDataObject(&v.dataObject); err != nil {
+				return err
+			}
+			// Retain the change as an ordered, timestamped snapshot so the data
+			// object's state history and provenance rebuild on replay — the data
+			// analogue of the variable snapshot (ADR-0053, mirroring ADR-0048).
+			// Derived only from the event (header timestamp/position and the value),
+			// so replay rebuilds it identically (invariant I4).
+			return tx.RecordDataObjectSnapshot(h.Timestamp, h.Position, &v.dataObject)
 		}
 
 	case model.VTTimer:
 		switch h.Intent {
 		case model.IntentTimerCreated:
 			return tx.PutTimer(h.Key, &v.timer)
-		case model.IntentTimerTriggered:
+		case model.IntentTimerTriggered, model.IntentTimerCanceled:
+			// Both remove the timer from the due-date index; they differ only in the
+			// side effect the command handler runs (a trigger may fire; a cancel does
+			// not), which lives outside applyToState (ADR-0051).
 			return tx.DeleteTimer(h.Key, &v.timer)
 		}
 
@@ -99,6 +144,18 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// the timestamp and position come from this event's header, so replay
 			// rebuilds identical history — invariant I4, ADR-0038.
 			return tx.RecordMessageFlow(h.Timestamp, h.Position, &v.messageFlow)
+		}
+
+	case model.VTDecisionEvaluation:
+		if h.Intent == model.IntentDecisionEvaluated {
+			// Retain how a business rule task's decision was made — its inputs, outputs
+			// and trace — so an operator can inspect it live and after the fact
+			// (ADR-0066). The worker already evaluated the decision off the processor
+			// goroutine and froze the result onto the completion command; here we only
+			// record what the event carries (header timestamp/position plus the frozen
+			// evaluation), so replay rebuilds it without re-evaluating — invariants
+			// I4/I6.
+			return tx.RecordDecisionEvaluation(h.Timestamp, h.Position, &v.decisionEval)
 		}
 	}
 	return nil

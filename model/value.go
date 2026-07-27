@@ -33,9 +33,13 @@ type ElementInstanceValue struct {
 	// interrupting boundary find and terminate its host, and a completing host find
 	// and disarm its boundary events (ADR-0040).
 	AttachedToKey uint64
+	TokenID       uint64
+	ParentTokenID uint64
+	SourceFlowId  int32
 }
 
-const elementInstanceSize = 8 + 8 + 4 + 8 + 1 + 8
+const elementInstanceLegacySize = 8 + 8 + 4 + 8 + 1 + 8
+const elementInstanceSize = elementInstanceLegacySize + 8 + 8 + 4
 
 func (*ElementInstanceValue) ValueType() ValueType { return VTElementInstance }
 
@@ -45,11 +49,14 @@ func (v *ElementInstanceValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.ElementId))
 	dst = binary.LittleEndian.AppendUint64(dst, v.FlowScopeKey)
 	dst = append(dst, v.BpmnElementType)
-	return binary.LittleEndian.AppendUint64(dst, v.AttachedToKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.AttachedToKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.TokenID)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ParentTokenID)
+	return binary.LittleEndian.AppendUint32(dst, uint32(v.SourceFlowId))
 }
 
 func (v *ElementInstanceValue) decode(src []byte) error {
-	if len(src) < elementInstanceSize {
+	if len(src) < elementInstanceLegacySize {
 		return ErrShortBuffer
 	}
 	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src[0:])
@@ -58,6 +65,11 @@ func (v *ElementInstanceValue) decode(src []byte) error {
 	v.FlowScopeKey = binary.LittleEndian.Uint64(src[20:])
 	v.BpmnElementType = src[28]
 	v.AttachedToKey = binary.LittleEndian.Uint64(src[29:])
+	if len(src) >= elementInstanceSize {
+		v.TokenID = binary.LittleEndian.Uint64(src[37:])
+		v.ParentTokenID = binary.LittleEndian.Uint64(src[45:])
+		v.SourceFlowId = int32(binary.LittleEndian.Uint32(src[53:]))
+	}
 	return nil
 }
 
@@ -113,10 +125,16 @@ type TimerValue struct {
 	ElementInstanceKey uint64
 	TargetElementId    int32
 	DueDate            int64
-	Repetitions        int32 // -1 = infinite (timer cycle)
+	Repetitions        int32 // remaining fires after this one; -1 = infinite (timer cycle), 0 = fire once
+	// ProcessDefKey names the definition a *start* timer instantiates when it
+	// fires (ADR-0051). It is 0 for an instance-owned timer (catch/boundary),
+	// which is identified instead by ProcessInstanceKey/ElementInstanceKey. A
+	// start timer is precisely one with ProcessInstanceKey == 0 and
+	// ProcessDefKey != 0; TargetElementId then names its timer-start element.
+	ProcessDefKey uint64
 }
 
-const timerSize = 8 + 8 + 4 + 8 + 4
+const timerSize = 8 + 8 + 4 + 8 + 4 + 8
 
 func (*TimerValue) ValueType() ValueType { return VTTimer }
 
@@ -125,7 +143,8 @@ func (v *TimerValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.ElementInstanceKey)
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.TargetElementId))
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.DueDate))
-	return binary.LittleEndian.AppendUint32(dst, uint32(v.Repetitions))
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.Repetitions))
+	return binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
 }
 
 func (v *TimerValue) decode(src []byte) error {
@@ -137,6 +156,7 @@ func (v *TimerValue) decode(src []byte) error {
 	v.TargetElementId = int32(binary.LittleEndian.Uint32(src[16:]))
 	v.DueDate = int64(binary.LittleEndian.Uint64(src[20:]))
 	v.Repetitions = int32(binary.LittleEndian.Uint32(src[28:]))
+	v.ProcessDefKey = binary.LittleEndian.Uint64(src[32:])
 	return nil
 }
 
@@ -256,6 +276,135 @@ func (v *VariableValue) decode(src []byte) error {
 		return err
 	}
 	v.Text = text
+	return nil
+}
+
+// DataObjectValue is a BPMN data object owned by a scope (the process instance
+// root today). It is variable-shaped — a name and a typed value reusing the same
+// VarKind machinery, so a data object can hold a structured VarJSON payload
+// (ADR-0037) — plus a State: the BPMN data state (e.g. "received", "approved").
+// Its encoding mirrors VariableValue with the extra State string between the name
+// and the kind byte; like a variable it carries genuine runtime data, so it is
+// length-prefixed rather than fixed-size (ADR-0053).
+type DataObjectValue struct {
+	ScopeKey uint64 // owning scope (process instance key today)
+	Name     string
+	State    string // BPMN data state; "" when the object declares none
+	Kind     VarKind
+	Bool     bool
+	Text     string // number canonical string, string contents, or canonical JSON; empty otherwise
+}
+
+func (*DataObjectValue) ValueType() ValueType { return VTDataObject }
+
+func (v *DataObjectValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ScopeKey)
+	dst = appendString(dst, v.Name)
+	dst = appendString(dst, v.State)
+	dst = append(dst, byte(v.Kind))
+	if v.Bool {
+		dst = append(dst, 1)
+	} else {
+		dst = append(dst, 0)
+	}
+	return appendString(dst, v.Text)
+}
+
+func (v *DataObjectValue) decode(src []byte) error {
+	if len(src) < 8 {
+		return ErrShortBuffer
+	}
+	v.ScopeKey = binary.LittleEndian.Uint64(src)
+	rest := src[8:]
+	name, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.Name = name
+	state, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.State = state
+	if len(rest) < 2 {
+		return ErrShortBuffer
+	}
+	v.Kind = VarKind(rest[0])
+	v.Bool = rest[1] != 0
+	text, _, err := readString(rest[2:])
+	if err != nil {
+		return err
+	}
+	v.Text = text
+	return nil
+}
+
+// DecisionEvaluationValue is one business rule task's DMN decision evaluation,
+// retained for debugging (ADR-0066). It freezes what the worker computed off the
+// processor goroutine: the input context the decision was given, the outputs it
+// produced, and the temis trace explaining which rules fired. The three payloads
+// are canonical JSON text (InputsJSON and OutputsJSON are objects; TraceJSON is the
+// temis trace tree, or "" when the evaluator produced none — e.g. a literal-
+// expression decision or a remote decision whose connector returned no trace).
+//
+// It is keyed under its owning ProcessInstanceKey as append-only history — one
+// record per evaluation, never overwritten — so an operator can inspect after the
+// fact exactly how a decision was made. ElementInstanceKey, ProcessDefKey and
+// ElementId locate the business rule task on its instance and diagram. Like a
+// variable it carries genuine runtime data, so its encoding is length-prefixed.
+type DecisionEvaluationValue struct {
+	ProcessInstanceKey uint64 // owning instance (the scope this record is keyed under)
+	ElementInstanceKey uint64 // the business rule task instance that evaluated
+	ProcessDefKey      uint64 // the process definition, to map ElementId onto the diagram
+	ElementId          int32  // interned diagram node id of the business rule task
+	DecisionId         string // the evaluated DMN decision id
+	InputsJSON         string // canonical JSON object: the decision's input context
+	OutputsJSON        string // canonical JSON object: the decision's outputs (name → value)
+	TraceJSON          string // temis trace JSON (which rules fired); "" when none
+}
+
+func (*DecisionEvaluationValue) ValueType() ValueType { return VTDecisionEvaluation }
+
+func (v *DecisionEvaluationValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ElementInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.ElementId))
+	dst = appendString(dst, v.DecisionId)
+	dst = appendString(dst, v.InputsJSON)
+	dst = appendString(dst, v.OutputsJSON)
+	return appendString(dst, v.TraceJSON)
+}
+
+func (v *DecisionEvaluationValue) decode(src []byte) error {
+	if len(src) < 28 {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src)
+	v.ElementInstanceKey = binary.LittleEndian.Uint64(src[8:])
+	v.ProcessDefKey = binary.LittleEndian.Uint64(src[16:])
+	v.ElementId = int32(binary.LittleEndian.Uint32(src[24:]))
+	rest := src[28:]
+	decisionId, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.DecisionId = decisionId
+	inputs, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.InputsJSON = inputs
+	outputs, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.OutputsJSON = outputs
+	trace, _, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.TraceJSON = trace
 	return nil
 }
 
@@ -383,6 +532,50 @@ func readString(src []byte) (string, []byte, error) {
 	return string(src[:n]), src[n:], nil
 }
 
+// IncidentValue is a durable fault attached to the element instance where progress
+// stalled — today, a job whose retries were exhausted (ADR-0061). It is keyed by
+// ElementInstanceKey (one activity holds at most one job, so at most one incident)
+// and points at the job, so resolving the incident can re-activate it. Message is
+// the worker-reported failure reason; it is genuine runtime data, so the value is
+// length-prefixed rather than fixed-size.
+type IncidentValue struct {
+	ProcessInstanceKey uint64
+	ElementInstanceKey uint64
+	JobKey             uint64
+	ElementId          int32 // the compiled-graph element the token is stuck on (maps to a BPMN element id for the operator)
+	RaisedAt           int64 // unix nanoseconds the incident was raised; read at command time and frozen into the event (I6)
+	Message            string
+}
+
+func (*IncidentValue) ValueType() ValueType { return VTIncident }
+
+func (v *IncidentValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ElementInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.JobKey)
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.ElementId))
+	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.RaisedAt))
+	return appendString(dst, v.Message)
+}
+
+func (v *IncidentValue) decode(src []byte) error {
+	const incidentFixed = 8 + 8 + 8 + 4 + 8
+	if len(src) < incidentFixed {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src[0:])
+	v.ElementInstanceKey = binary.LittleEndian.Uint64(src[8:])
+	v.JobKey = binary.LittleEndian.Uint64(src[16:])
+	v.ElementId = int32(binary.LittleEndian.Uint32(src[24:]))
+	v.RaisedAt = int64(binary.LittleEndian.Uint64(src[28:]))
+	msg, _, err := readString(src[incidentFixed:])
+	if err != nil {
+		return err
+	}
+	v.Message = msg
+	return nil
+}
+
 // newValue returns a zero payload for the value types that have one. Value
 // types without a payload yet return nil; their records carry only a header.
 func newValue(vt ValueType) Value {
@@ -401,6 +594,12 @@ func newValue(vt ValueType) Value {
 		return &MessageSubscriptionValue{}
 	case VTMessageFlow:
 		return &MessageFlowValue{}
+	case VTDataObject:
+		return &DataObjectValue{}
+	case VTIncident:
+		return &IncidentValue{}
+	case VTDecisionEvaluation:
+		return &DecisionEvaluationValue{}
 	default:
 		return nil
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
+	"github.com/pblumer/atlas/state"
 )
 
 // maxXMLBytes caps a deployment body. BPMN models are small; this is a sanity
@@ -55,6 +56,10 @@ type processResp struct {
 	// replay view is opened with (#/operations/c/{collaborationKey}). Zero for a
 	// standalone process (ADR-0038).
 	CollaborationKey uint64 `json:"collaborationKey,omitempty"`
+	// StartFormID names the form the UI shows before starting an instance, empty
+	// when the process has no start form (ADR-0028). It lets the Tasks app offer a
+	// "start via form" flow whose submitted data becomes the start variables.
+	StartFormID string `json:"startFormId,omitempty"`
 }
 
 // collaborationParticipants reports how many <participant> pools a model's
@@ -183,12 +188,35 @@ type collabRuntimeResp struct {
 }
 
 // timelineStep is one element activation on a single instance's replay timeline:
-// which BPMN element a token entered, its type, and when (ADR-0046). Steps are
-// ordered oldest-first, so the Operations view can step through them.
+// which BPMN element a token entered, its type, when, and the variable values as
+// they stood when the token entered it (ADR-0046, ADR-0048). Steps are ordered
+// oldest-first, so the Operations view can step through them and show the
+// variables at each point.
 type timelineStep struct {
-	At        int64  `json:"at"` // unix nanoseconds
-	ElementID string `json:"elementId"`
-	Type      string `json:"type"`
+	At                 int64          `json:"at"`              // unix nanoseconds (element activated)
+	EndAt              int64          `json:"endAt,omitempty"` // unix nanoseconds (element completed), 0 if still active
+	ElementID          string         `json:"elementId"`
+	Type               string         `json:"type"`
+	Variables          []variableView `json:"variables"`
+	Position           uint64         `json:"position"`
+	TokenID            uint64         `json:"tokenId,omitempty"`
+	ElementInstanceKey uint64         `json:"elementInstanceKey,omitempty"`
+	SourceElementID    string         `json:"sourceElementId,omitempty"`
+	Action             string         `json:"action,omitempty"`
+	Relation           string         `json:"relation,omitempty"`
+}
+
+type timelineToken struct {
+	TokenID            uint64 `json:"tokenId"`
+	ElementID          string `json:"elementId"`
+	ElementInstanceKey uint64 `json:"elementInstanceKey"`
+	State              string `json:"state"`
+}
+
+type timelineFrame struct {
+	Position uint64          `json:"position"`
+	At       int64           `json:"at"`
+	Tokens   []timelineToken `json:"tokens"`
 }
 
 // instanceTimelineResp is one process instance's step-by-step replay: its
@@ -196,12 +224,13 @@ type timelineStep struct {
 // (ADR-0046). It powers the single-process replay transport, the analogue of the
 // collaboration message-flow timeline.
 type instanceTimelineResp struct {
-	InstanceKey   uint64         `json:"instanceKey"`
-	ProcessDefKey uint64         `json:"processDefKey"`
-	ProcessID     string         `json:"processId"`
-	Version       int32          `json:"version"`
-	State         string         `json:"state"`
-	Steps         []timelineStep `json:"steps"`
+	InstanceKey   uint64          `json:"instanceKey"`
+	ProcessDefKey uint64          `json:"processDefKey"`
+	ProcessID     string          `json:"processId"`
+	Version       int32           `json:"version"`
+	State         string          `json:"state"`
+	Steps         []timelineStep  `json:"steps"`
+	Frames        []timelineFrame `json:"frames"`
 }
 
 type instanceResp struct {
@@ -229,6 +258,24 @@ type cancelInstanceResp struct {
 	InstanceKey uint64    `json:"instanceKey"`
 	State       string    `json:"state"`
 	Stats       statsResp `json:"stats"`
+}
+
+type failJobReq struct {
+	Retries int32  `json:"retries"`
+	Message string `json:"message"`
+}
+
+type resolveIncidentReq struct {
+	Retries int32 `json:"retries"`
+}
+
+type incidentView struct {
+	ElementInstanceKey uint64 `json:"elementInstanceKey"`
+	ProcessInstanceKey uint64 `json:"processInstanceKey"`
+	JobKey             uint64 `json:"jobKey"`
+	ElementId          int32  `json:"elementId"`
+	RaisedAt           int64  `json:"raisedAt"`
+	Message            string `json:"message"`
 }
 
 // handleInfo reports product/version metadata for the UI shell.
@@ -388,6 +435,30 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve the DMN model this diagram's business rule tasks need and bundle it,
+	// so a decision authored in Atlas deploys together with its process instead of
+	// model-less (which would create DMN jobs that can never evaluate and then fail
+	// every future deploy). The reference records are read on the loop; resolving and
+	// compiling the models — I/O + CPU — runs off it, like the project deploy.
+	var (
+		refs    []dmnRef
+		loadErr error
+	)
+	s.do(func() { refs, loadErr = s.dmnrefs.loadAll() })
+	if loadErr != nil {
+		writeError(w, http.StatusInternalServerError, "list dmn references: "+loadErr.Error())
+		return
+	}
+	dmnXML, refuse, dmnErr := s.dmnForDeployBody(r.Context(), body, refs)
+	if dmnErr != nil {
+		writeError(w, http.StatusInternalServerError, "resolve dmn model: "+dmnErr.Error())
+		return
+	}
+	if refuse != "" {
+		writeError(w, http.StatusConflict, refuse)
+		return
+	}
+
 	var (
 		resp       deployResp
 		compErr    error
@@ -395,10 +466,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	)
 	s.do(func() {
 		var deployed []deployedProcess
-		// The direct deploy endpoint carries no DMN reference; a business rule task
-		// deployed this way has no decision model and would park. DMN execution is
-		// wired through project bundle-deploy, which resolves the reference (ADR-0034).
-		deployed, compErr, persistErr = s.deployModel(body, nil, time.Now().Unix())
+		deployed, compErr, persistErr = s.deployModel(body, dmnXML, time.Now().Unix())
 		if compErr != nil || persistErr != nil {
 			return
 		}
@@ -468,6 +536,15 @@ func (s *Server) deployModel(body, dmnXML []byte, deployedAt int64) (deployed []
 
 		s.versions[pid] = version
 		s.proc.Deploy(cp)
+		// Arm this fresh version's timer start events and supersede any the prior
+		// version left running, so the process starts on its schedule (ADR-0051).
+		// Only fresh deploys arm; loadDeployments (recovery) restores armed timers
+		// from the log instead. Skip it for a first-version process with no timer
+		// start events — the common case — so no timer scan runs; a re-version may
+		// need to supersede a prior version's schedule even if it has none itself.
+		if version > 1 || len(cp.TimerStartEvents()) > 0 {
+			s.proc.ArmStartTimers(cp.Key)
+		}
 		// Register the process's decisions so its business rule tasks can evaluate.
 		if dmnXML != nil {
 			if err := s.dmnRegistry.Deploy(key, dmnXML); err != nil {
@@ -489,6 +566,12 @@ func (s *Server) deployModel(body, dmnXML []byte, deployedAt int64) (deployed []
 		}
 		deployed = append(deployed, deployedProcess{Key: key, ProcessID: pid, Name: name, Version: version})
 	}
+	// Run the arm commands queued above (ADR-0051) so a timer start event's durable
+	// timer is created and fsynced as part of the deploy, before it is acknowledged.
+	// A no-op for a model with no timer start events.
+	if err := s.jobRunner.Drive(); err != nil {
+		return deployed, nil, err
+	}
 	return deployed, nil, nil
 }
 
@@ -505,6 +588,7 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
 				Version:          d.Version,
 				DeployedAt:       d.DeployedAt,
 				CollaborationKey: s.collaborationKeyOf(d),
+				StartFormID:      d.cp.StartFormId(),
 			})
 		}
 	})
@@ -840,7 +924,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		foundInstance bool
 		foundDef      bool
 		scanErr       error
-		resp          = instanceTimelineResp{InstanceKey: key, Steps: []timelineStep{}}
+		resp          = instanceTimelineResp{InstanceKey: key, Steps: []timelineStep{}, Frames: []timelineFrame{}}
 	)
 	s.do(func() {
 		pi, ok, err := s.store.ProcessInstance(key)
@@ -865,17 +949,166 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		resp.ProcessID = d.ProcessID
 		resp.Version = d.Version
 
-		scanErr = s.store.ElementStepHistory(key, func(ts int64, _ uint64, elementId int32) error {
+		// Collect the element steps and the variable changes, each with its log
+		// position, then fold the variables into the steps below.
+		type stepRow struct {
+			at        int64
+			pos       uint64
+			elementID int32
+		}
+		type varChange struct {
+			pos  uint64
+			view variableView
+		}
+		var (
+			stepRows []stepRow
+			changes  []varChange
+		)
+		type replayRow struct {
+			at  int64
+			pos uint64
+			v   state.ElementReplayValue
+		}
+		var replayRows []replayRow
+		scanErr = s.store.ElementStepHistory(key, func(ts int64, pos uint64, elementId int32) error {
+			stepRows = append(stepRows, stepRow{at: ts, pos: pos, elementID: elementId})
+			return nil
+		})
+		if scanErr == nil {
+			scanErr = s.store.ElementReplayHistory(key, func(ts int64, pos uint64, v state.ElementReplayValue) error {
+				replayRows = append(replayRows, replayRow{ts, pos, v})
+				return nil
+			})
+		}
+		if scanErr == nil {
+			scanErr = s.store.VariableSnapshotHistory(key, func(_ int64, pos uint64, v *model.VariableValue) error {
+				changes = append(changes, varChange{pos: pos, view: toVariableView(v)})
+				return nil
+			})
+		}
+		if scanErr != nil {
+			return
+		}
+		// Both histories are keyed by log position; sort by it so the fold walks
+		// them in true execution order regardless of clock monotonicity.
+		sort.Slice(stepRows, func(i, j int) bool { return stepRows[i].pos < stepRows[j].pos })
+		sort.Slice(changes, func(i, j int) bool { return changes[i].pos < changes[j].pos })
+		sort.Slice(replayRows, func(i, j int) bool { return replayRows[i].pos < replayRows[j].pos })
+
+		// Fold the causal lifecycle facts into stable multi-token frames. The
+		// processor is sequential, so a token's completion on one element and the
+		// activation it causes on the next land at different log positions. Emitting
+		// a frame per row would show the token vanish between the two — a flicker,
+		// and at a parallel join the merge would appear to lose an arrival. Instead a
+		// non-leaf completion is *deferred*: the token stays visible on the completed
+		// element until the activation it causes appears, at which point it moves.
+		// The link is the graph, not a guessed token id: an activation arriving via
+		// flow F is the successor of whatever completed on F's source node, so a join
+		// (whose continuation leaves on one flow whose source is the gateway)
+		// consumes every waiting arrival in a single transition. Only a leaf
+		// completion (an end event, no outgoing flow) removes its token at once,
+		// yielding the one legitimate empty frame that marks the instance done.
+		active := map[uint64]timelineToken{}
+		pending := map[uint64]state.ElementReplayValue{} // completions awaiting their successor
+		activations := map[uint64]state.ElementReplayValue{}
+		endAt := map[uint64]int64{} // element instance key → completion timestamp (Action==2)
+		emitFrame := func(pos uint64, at int64) {
+			tokens := make([]timelineToken, 0, len(active))
+			for _, token := range active {
+				tokens = append(tokens, token)
+			}
+			sort.Slice(tokens, func(i, j int) bool {
+				if tokens[i].TokenID != tokens[j].TokenID {
+					return tokens[i].TokenID < tokens[j].TokenID
+				}
+				return tokens[i].ElementInstanceKey < tokens[j].ElementInstanceKey
+			})
+			resp.Frames = append(resp.Frames, timelineFrame{Position: pos, At: at, Tokens: tokens})
+		}
+		for _, rr := range replayRows {
+			v := rr.v
+			if v.Action == 1 {
+				activations[rr.pos] = v
+				// This activation is the successor of any deferred completion on its
+				// incoming flow's source node: those tokens move into it now.
+				if v.SourceFlowID >= 0 {
+					src := d.cp.Flow(v.SourceFlowID).Source
+					for eik, pc := range pending {
+						if pc.ElementID == src {
+							delete(pending, eik)
+							delete(active, eik)
+						}
+					}
+				}
+				node := d.cp.Node(v.ElementID)
+				stateName := "active"
+				if node.Type == compiler.TypeParallelGateway && node.IncomingCount > 1 {
+					stateName = "waiting"
+				}
+				active[v.ElementInstanceKey] = timelineToken{TokenID: v.TokenID, ElementID: d.cp.ElementBpmnId(v.ElementID), ElementInstanceKey: v.ElementInstanceKey, State: stateName}
+				emitFrame(rr.pos, rr.at)
+			} else if d.cp.Node(v.ElementID).OutgoingCount == 0 {
+				// A leaf has no successor to move into: remove it at once.
+				endAt[v.ElementInstanceKey] = rr.at
+				delete(pending, v.ElementInstanceKey)
+				delete(active, v.ElementInstanceKey)
+				emitFrame(rr.pos, rr.at)
+			} else {
+				// Defer: keep the token visible until its successor activates.
+				endAt[v.ElementInstanceKey] = rr.at
+				pending[v.ElementInstanceKey] = v
+			}
+		}
+
+		// Walk the steps in order, advancing through every variable change at or
+		// before each step's position, so a step carries the variables as they stood
+		// when the token entered that element. A change to a name overwrites the
+		// previous value for that name (variables are instance-scoped).
+		running := map[string]variableView{}
+		ci := 0
+		for _, sr := range stepRows {
+			for ci < len(changes) && changes[ci].pos <= sr.pos {
+				running[changes[ci].view.Name] = changes[ci].view
+				ci++
+			}
+			vars := make([]variableView, 0, len(running))
+			for _, vv := range running {
+				vars = append(vars, vv)
+			}
+			sort.Slice(vars, func(i, j int) bool { return vars[i].Name < vars[j].Name })
 			// Every recorded step is a real activated node, so its diagram id is
 			// always present (unlike the shared runtime overlay's get, which guards
 			// synthetic elements).
-			resp.Steps = append(resp.Steps, timelineStep{
-				At:        ts,
-				ElementID: d.cp.ElementBpmnId(elementId),
-				Type:      d.cp.Node(elementId).Type.String(),
-			})
-			return nil
-		})
+			step := timelineStep{
+				At:        sr.at,
+				Position:  sr.pos,
+				ElementID: d.cp.ElementBpmnId(sr.elementID),
+				Type:      d.cp.Node(sr.elementID).Type.String(),
+				Variables: vars,
+				Action:    "activate",
+			}
+			if rv, ok := activations[sr.pos]; ok {
+				step.TokenID, step.ElementInstanceKey = rv.TokenID, rv.ElementInstanceKey
+				// The completion of this same element instance (Action==2) gives the
+				// element's end time, so the history can show start → end per element
+				// like Operate. Absent (still active / parked), endAt stays zero.
+				step.EndAt = endAt[rv.ElementInstanceKey]
+				// The activation's incoming flow identifies the element the token came
+				// from (the flow's source node). The frontend animates the token dot
+				// along that real edge — for a fork branch the predecessor is the
+				// gateway, not the previous row in the linear step list.
+				if rv.SourceFlowID >= 0 {
+					step.SourceElementID = d.cp.ElementBpmnId(d.cp.Flow(rv.SourceFlowID).Source)
+				}
+				if rv.ParentTokenID != 0 {
+					step.Relation = "fork"
+				}
+				if n := d.cp.Node(rv.ElementID); n.Type == compiler.TypeParallelGateway && n.IncomingCount > 1 {
+					step.Relation = "join-arrival"
+				}
+			}
+			resp.Steps = append(resp.Steps, step)
+		}
 	})
 	switch {
 	case scanErr != nil:
@@ -1011,6 +1244,173 @@ func toVariableView(v *model.VariableValue) variableView {
 		out.Kind, out.Value = "null", "null"
 	}
 	return out
+}
+
+// nativeVar converts a stored variable into its native JSON value, so a form
+// (or any client) receives real types: a number as a number, an object/array as
+// itself, not stringified. The number and JSON canonical strings are emitted
+// verbatim via json.Number / json.RawMessage.
+func nativeVar(v *model.VariableValue) any {
+	switch v.Kind {
+	case model.VarBool:
+		return v.Bool
+	case model.VarNumber:
+		return json.Number(v.Text)
+	case model.VarString:
+		return v.Text
+	case model.VarJSON:
+		return json.RawMessage(v.Text)
+	default:
+		return nil // VarNull
+	}
+}
+
+// handleInstanceVariables returns a process instance's variables as a typed JSON
+// object ({"Name": "Patrick", ...}) — the shape the Tasks app feeds a bound form
+// so a field whose key matches a variable is prefilled (ADR-0028). An instance
+// with no variables (or an unknown key) yields an empty object, not a 404: the
+// endpoint is a convenience read, not an existence check.
+func (s *Server) handleInstanceVariables(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid instance key")
+		return
+	}
+	out := map[string]any{}
+	var scanErr error
+	s.do(func() {
+		scanErr = s.store.VariablesOfScope(key, func(v *model.VariableValue) error {
+			out[v.Name] = nativeVar(v)
+			return nil
+		})
+	})
+	if scanErr != nil {
+		writeError(w, http.StatusInternalServerError, "read variables: "+scanErr.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// dataObjectView renders a data object for the operator UI: its name, its BPMN
+// data state (the [received]/[approved] label), and its typed value. The value/kind
+// mirror a variable's; state is what a variable has not — the per-datum lifecycle
+// Atlas puts front and center (ADR-0053).
+type dataObjectView struct {
+	Name  string `json:"name"`
+	State string `json:"state"`
+	Value any    `json:"value"`
+	Kind  string `json:"kind"`
+}
+
+func toDataObjectView(v *model.DataObjectValue) dataObjectView {
+	out := dataObjectView{Name: v.Name, State: v.State}
+	switch v.Kind {
+	case model.VarBool:
+		out.Kind, out.Value = "boolean", v.Bool
+	case model.VarNumber:
+		out.Kind, out.Value = "number", json.Number(v.Text)
+	case model.VarString:
+		out.Kind, out.Value = "string", v.Text
+	case model.VarJSON:
+		out.Kind, out.Value = "json", json.RawMessage(v.Text)
+	default:
+		out.Kind, out.Value = "null", nil
+	}
+	return out
+}
+
+// handleInstanceDataObjects returns a process instance's data objects as a JSON
+// array, each carrying its name, data state, and typed value — so an operator sees
+// the data the process carries and what lifecycle state it is in (ADR-0053). The
+// objects come back in name order (the store scans the family by name). An instance
+// with no data objects (or an unknown key) yields an empty array, not a 404: like
+// the variables endpoint, it is a convenience read, not an existence check.
+func (s *Server) handleInstanceDataObjects(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid instance key")
+		return
+	}
+	out := []dataObjectView{}
+	var scanErr error
+	s.do(func() {
+		scanErr = s.store.DataObjectsOfScope(key, func(v *model.DataObjectValue) error {
+			out = append(out, toDataObjectView(v))
+			return nil
+		})
+	})
+	if scanErr != nil {
+		writeError(w, http.StatusInternalServerError, "read data objects: "+scanErr.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// decisionEvaluationView renders one DMN decision evaluation for the operator UI
+// (ADR-0066): when it ran, which business rule task on the diagram made it, which
+// decision it evaluated, and — the point of the record — the input context it saw,
+// the outputs it produced, and the temis trace explaining which rules fired. The
+// three payloads are already canonical JSON in the store, so they pass through as
+// raw JSON rather than being re-encoded. Trace is omitted when the decision produced
+// none (a literal-expression decision, or a remote decision returning no trace).
+type decisionEvaluationView struct {
+	At         int64           `json:"at"`
+	ElementID  string          `json:"elementId"`
+	DecisionID string          `json:"decisionId"`
+	Inputs     json.RawMessage `json:"inputs"`
+	Outputs    json.RawMessage `json:"outputs"`
+	Trace      json.RawMessage `json:"trace,omitempty"`
+}
+
+// rawJSONOr returns s as raw JSON, or fallback when s is empty — so a view field
+// declared as JSON never carries an invalid empty document.
+func rawJSONOr(s, fallback string) json.RawMessage {
+	if s == "" {
+		return json.RawMessage(fallback)
+	}
+	return json.RawMessage(s)
+}
+
+// handleInstanceDecisions returns the DMN decision evaluations a process instance
+// made, in evaluation order, each with its inputs, outputs, and trace (ADR-0066).
+// It is the "look up after the fact how a decision was made" surface: because the
+// evaluations are durable history, it works while the instance runs and after it
+// has finished. An instance that evaluated no decisions (or an unknown key) yields
+// an empty array, not a 404 — like the variables and data-objects endpoints, it is
+// a convenience read, not an existence check. The element id is mapped to its BPMN
+// diagram id via the instance's compiled process; if the definition has since been
+// deleted, the id is left empty (the diagram can no longer be resolved).
+func (s *Server) handleInstanceDecisions(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid instance key")
+		return
+	}
+	out := []decisionEvaluationView{}
+	var scanErr error
+	s.do(func() {
+		scanErr = s.store.DecisionEvaluationHistory(key, func(ts int64, _ uint64, v *model.DecisionEvaluationValue) error {
+			view := decisionEvaluationView{
+				At:         ts,
+				DecisionID: v.DecisionId,
+				Inputs:     rawJSONOr(v.InputsJSON, "{}"),
+				Outputs:    rawJSONOr(v.OutputsJSON, "{}"),
+			}
+			if v.TraceJSON != "" {
+				view.Trace = json.RawMessage(v.TraceJSON)
+			}
+			if d, ok := s.deployments[v.ProcessDefKey]; ok {
+				view.ElementID = d.cp.ElementBpmnId(v.ElementId)
+			}
+			out = append(out, view)
+			return nil
+		})
+	})
+	if scanErr != nil {
+		writeError(w, http.StatusInternalServerError, "read decisions: "+scanErr.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // handleListInstances lists process instances — live ones (with their current
@@ -1203,6 +1603,11 @@ type taskResp struct {
 	Assignee           string `json:"assignee,omitempty"`
 	CandidateGroups    string `json:"candidateGroups,omitempty"`
 	FormID             string `json:"formId,omitempty"`
+	// Priority is the task's importance from the model (default 50); the inbox
+	// sorts by it. DueDate is the absolute due instant in Unix milliseconds, or 0
+	// when the task has no due date (ADR-0051).
+	Priority int32 `json:"priority"`
+	DueDate  int64 `json:"dueDate,omitempty"`
 }
 
 // handleListTasks lists open user tasks — activatable jobs of the reserved
@@ -1236,6 +1641,12 @@ func (s *Server) handleListTasks(w http.ResponseWriter, _ *http.Request) {
 						tr.Assignee = jv.Assignee
 						tr.CandidateGroups = cp.Intern(detail.CandidateGroups)
 						tr.FormID = cp.Intern(detail.FormId)
+						tr.Priority = detail.Priority
+						// The due date is frozen on the job as an absolute instant
+						// (nanoseconds); expose it as Unix ms for the browser.
+						if jv.Deadline != 0 {
+							tr.DueDate = jv.Deadline / int64(time.Millisecond)
+						}
 					}
 				}
 			}
@@ -1254,6 +1665,108 @@ func (s *Server) handleListTasks(w http.ResponseWriter, _ *http.Request) {
 // completion back to the processor (the same path a service-task worker uses)
 // and drives any jobs that unblocked (e.g. a business rule task the completion
 // flowed into) to idle. 404 if the job doesn't exist or is already completed.
+// handleFailJob applies a worker's failure report for a job (ADR-0061): the body
+// carries the remaining retries and a message. With retries > 0 the job is retried;
+// with none an incident is raised on its element. 404 if the job doesn't exist.
+func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid job key")
+		return
+	}
+	var req failJobReq
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	var (
+		found  bool
+		runErr error
+	)
+	s.do(func() {
+		if _, ok, err := s.store.GetJob(key); err != nil || !ok {
+			return
+		}
+		found = true
+		s.proc.FailJob(key, req.Retries, req.Message)
+		runErr = s.jobRunner.Drive()
+	})
+	switch {
+	case runErr != nil:
+		writeError(w, http.StatusInternalServerError, "fail job: "+runErr.Error())
+	case !found:
+		writeError(w, http.StatusNotFound, "no job with that key")
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"jobKey": key})
+	}
+}
+
+// handleResolveIncident resolves the incident on an element instance and resumes
+// its job (ADR-0061): the body's retries (default 1) is how many attempts the
+// re-activated job gets. 404 if there is no incident on that element.
+func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid element instance key")
+		return
+	}
+	var req resolveIncidentReq
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	retries := req.Retries
+	if retries < 1 {
+		retries = 1
+	}
+	var (
+		found  bool
+		jobKey uint64
+		runErr error
+	)
+	s.do(func() {
+		inc, err := s.store.GetIncident(key)
+		if err != nil || inc == nil {
+			return
+		}
+		found = true
+		jobKey = inc.JobKey
+		s.proc.ResolveIncident(key, retries)
+		runErr = s.jobRunner.Drive()
+	})
+	switch {
+	case runErr != nil:
+		writeError(w, http.StatusInternalServerError, "resolve incident: "+runErr.Error())
+	case !found:
+		writeError(w, http.StatusNotFound, "no incident on that element instance")
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"elementInstanceKey": key, "jobKey": jobKey, "retries": retries})
+	}
+}
+
+// handleListIncidents lists the unresolved incidents — the operator "what's stuck"
+// view (ADR-0061).
+func (s *Server) handleListIncidents(w http.ResponseWriter, _ *http.Request) {
+	list := []incidentView{}
+	var scanErr error
+	s.do(func() {
+		scanErr = s.store.Incidents(func(elKey uint64, v *model.IncidentValue) error {
+			list = append(list, incidentView{
+				ElementInstanceKey: elKey,
+				ProcessInstanceKey: v.ProcessInstanceKey,
+				JobKey:             v.JobKey,
+				ElementId:          v.ElementId,
+				RaisedAt:           v.RaisedAt,
+				Message:            v.Message,
+			})
+			return nil
+		})
+	})
+	if scanErr != nil {
+		writeError(w, http.StatusInternalServerError, "list incidents: "+scanErr.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"incidents": list})
+}
+
 func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {

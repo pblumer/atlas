@@ -129,9 +129,18 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Created instance", tObject())}},
 		{"GET", "/api/v1/instances", s.handleListInstances, apiOp{
 			summary: "List active and finished instances", tag: "Instances", resp: jsonBody("Instances", tArray())}},
+		{"GET", "/api/v1/instances/{key}/variables", s.handleInstanceVariables, apiOp{
+			summary: "Read a process instance's variables as a typed JSON object", tag: "Instances",
+			resp: jsonBody("Instance variables", tObject())}},
+		{"GET", "/api/v1/instances/{key}/data-objects", s.handleInstanceDataObjects, apiOp{
+			summary: "Read a process instance's data objects — each with its name, data state, and typed value", tag: "Instances",
+			resp: jsonBody("Instance data objects", tArray())}},
 		{"GET", "/api/v1/instances/{key}/timeline", s.handleInstanceTimeline, apiOp{
 			summary: "Read a process instance's step-by-step replay timeline", tag: "Instances",
 			resp: jsonBody("Instance timeline", tObject())}},
+		{"GET", "/api/v1/instances/{key}/decisions", s.handleInstanceDecisions, apiOp{
+			summary: "Read the DMN decision evaluations a process instance made — each with its inputs, outputs, and trace", tag: "Instances",
+			resp: jsonBody("Decision evaluations", tArray())}},
 		{"DELETE", "/api/v1/instances/{key}", s.handleCancelInstance, apiOp{
 			summary: "Cancel a running instance", tag: "Instances", resp: jsonBody("Cancellation result", tObject())}},
 
@@ -141,6 +150,19 @@ func (s *Server) apiRoutes() []apiRoute {
 				"name": tString(), "correlationKey": tString(), "variables": tObject(),
 			}, "name")),
 			resp: jsonBody("Publish result", tObject())}},
+
+		{"POST", "/api/v1/jobs/{key}/fail", s.handleFailJob, apiOp{
+			summary: "Fail a job, carrying remaining retries (0 raises an incident)", tag: "Incidents",
+			req: jsonBody("Retries left and a failure message", schemaObj(map[string]any{
+				"retries": tInteger(), "message": tString(),
+			})),
+			resp: jsonBody("Job key and stats", tObject())}},
+		{"GET", "/api/v1/incidents", s.handleListIncidents, apiOp{
+			summary: "List unresolved incidents", tag: "Incidents", resp: jsonBody("Incidents", tArray())}},
+		{"POST", "/api/v1/incidents/{key}/resolve", s.handleResolveIncident, apiOp{
+			summary: "Resolve the incident on an element instance and retry its job", tag: "Incidents",
+			req:  jsonBody("Retries to grant the resumed job (default 1)", schemaObj(map[string]any{"retries": tInteger()})),
+			resp: jsonBody("Element instance key and stats", tObject())}},
 
 		{"GET", "/api/v1/tasks", s.handleListTasks, apiOp{
 			summary: "List active user tasks", tag: "Tasks", resp: jsonBody("Tasks", tArray())}},
@@ -174,6 +196,14 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Fetch a form definition", tag: "Forms", resp: jsonBody("Form", tObject())}},
 		{"DELETE", "/api/v1/forms/{id}", s.handleDeleteForm, apiOp{
 			summary: "Delete a form definition", tag: "Forms", resp: jsonBody("Deleted id", tObject())}},
+		{"POST", "/api/v1/public-links", s.handleCreatePublicLink, apiOp{
+			summary: "Publish a process: mint a public start link (ADR-0029)", tag: "Forms",
+			req:  jsonBody("Target", schemaObj(map[string]any{"processId": tString()}, "processId")),
+			resp: jsonBody("Public link", tObject())}},
+		{"GET", "/api/v1/public-links", s.handleListPublicLinks, apiOp{
+			summary: "List public start links", tag: "Forms", resp: jsonBody("Public links", tArray())}},
+		{"DELETE", "/api/v1/public-links/{token}", s.handleRevokePublicLink, apiOp{
+			summary: "Revoke a public start link", tag: "Forms", resp: jsonBody("Revoked token", tObject())}},
 
 		{"POST", "/api/v1/projects", s.handleCreateProject, apiOp{
 			summary: "Create a project", tag: "Projects", req: jsonBody("Project", tObject()), resp: jsonBody("Created project", tObject())}},
@@ -198,6 +228,23 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Delete a DMN reference", tag: "DMN References", status: http.StatusNoContent}},
 		{"POST", "/api/v1/dmnrefs/{id}/validate", s.handleValidateDmnRef, apiOp{
 			summary: "Validate a DMN reference compiles", tag: "DMN References", resp: jsonBody("Validation result", tObject())}},
+		{"GET", "/api/v1/decisions", s.handleListDecisions, apiOp{
+			summary: "List DMN decisions (with inputs and outputs) available from DMN references", tag: "DMN References", resp: jsonBody("Decisions", tArray())}},
+		{"GET", "/api/v1/dmnrefs/{id}/graph", s.handleDmnRefGraph, apiOp{
+			summary: "A DMN reference's decision requirements graph for the read-only viewer", tag: "DMN References", resp: jsonBody("Model graph", tObject())}},
+		{"GET", "/api/v1/dmn-models/{ref}/xml", s.handleDmnModelXML, apiOp{
+			summary: "The raw DMN model XML for a model handle, for the embedded DMN editor", tag: "DMN References", resp: jsonBody("DMN XML", tObject())}},
+		{"POST", "/api/v1/dmn-models", s.handleUploadDmnModel, apiOp{
+			summary: "Upload a DMN model file into the local model store and return its reference handle", tag: "DMN References", req: jsonBody("DMN XML", tObject()), resp: jsonBody("Stored model", tObject())}},
+
+		{"GET", "/api/v1/connectors", s.handleListConnectors, apiOp{
+			summary: "List managed connector instances", tag: "Connectors", resp: jsonBody("Connectors", tArray())}},
+		{"POST", "/api/v1/connectors", s.handleCreateConnector, apiOp{
+			summary: "Create a managed connector instance", tag: "Connectors", req: jsonBody("Connector", tObject()), resp: jsonBody("Created connector", tObject())}},
+		{"PATCH", "/api/v1/connectors/{id}", s.handleUpdateConnector, apiOp{
+			summary: "Update a managed connector instance", tag: "Connectors", req: jsonBody("Connector update", tObject()), resp: jsonBody("Updated connector", tObject())}},
+		{"DELETE", "/api/v1/connectors/{id}", s.handleDeleteConnector, apiOp{
+			summary: "Delete a managed connector instance", tag: "Connectors", status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/auth/login", s.handleLogin, apiOp{
 			summary: "Log in with a username and password", tag: "Auth",

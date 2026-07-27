@@ -8,6 +8,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/job"
+	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
 )
@@ -127,20 +128,69 @@ func TestPollOnceDispatchesActivatableJob(t *testing.T) {
 	}
 }
 
-func TestHandlerErrorSurfaces(t *testing.T) {
-	p, store, jobType, defKey := setup(t)
-
+// TestHandlerRetryThenSucceeds covers the transient-failure path: a handler that
+// fails once then succeeds is failed with a retry left (not aborted, not an
+// incident), re-activated, and completes on the retry — the instance runs through.
+func TestHandlerRetryThenSucceeds(t *testing.T) {
+	p, store, jobType, defKey := setup(t) // the service task has retries=3
 	runner := job.NewRunner(store, p)
-	sentinel := errors.New("boom")
-	runner.Handle(jobType, func(job.Job) error { return sentinel })
+	calls := 0
+	runner.Handle(jobType, func(job.Job) error {
+		calls++
+		if calls == 1 {
+			return errors.New("transient")
+		}
+		return nil
+	})
 
 	p.CreateInstance(defKey)
-	err := runner.Drive()
-	if !errors.Is(err, sentinel) {
-		t.Fatalf("Drive error = %v, want it to wrap sentinel", err)
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("Drive: %v", err)
 	}
-	// The job was not completed: the instance is still waiting on it.
+	if calls < 2 {
+		t.Fatalf("handler called %d times, want it retried after the transient failure", calls)
+	}
+	// It completed on the retry: nothing left active, no incident.
+	if pi, ei := active(t, store); pi != 0 || ei != 0 {
+		t.Fatalf("after retry: process=%d element=%d, want 0 and 0 (completed)", pi, ei)
+	}
+	incidents := 0
+	if err := store.Incidents(func(uint64, *model.IncidentValue) error { incidents++; return nil }); err != nil {
+		t.Fatalf("Incidents scan: %v", err)
+	}
+	if incidents != 0 {
+		t.Fatalf("incidents = %d, want 0 (transient failure recovered)", incidents)
+	}
+}
+
+// TestHandlerErrorRaisesIncident: a handler that keeps failing does NOT abort the
+// drive (ADR-0061). The job is failed until its retries run out, then an incident
+// parks the token — so one bad job (e.g. a business rule task whose decision model
+// isn't deployed) can't poison the run loop and fail every future deploy. Drive
+// returns nil, the instance stays parked at the element, and an incident exists.
+func TestHandlerErrorRaisesIncident(t *testing.T) {
+	p, store, jobType, defKey := setup(t) // the service task has retries=3
+
+	runner := job.NewRunner(store, p)
+	runner.Handle(jobType, func(job.Job) error { return errors.New("boom") })
+
+	p.CreateInstance(defKey)
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("Drive error = %v, want nil (failure routed to an incident, not surfaced)", err)
+	}
+	// The token is still parked at the element, now blocked by an incident.
 	if pi, ei := active(t, store); pi != 1 || ei != 1 {
-		t.Fatalf("after failed handler: process=%d element=%d, want 1 and 1", pi, ei)
+		t.Fatalf("after failing handler: process=%d element=%d, want 1 and 1", pi, ei)
+	}
+	incidents := 0
+	if err := store.Incidents(func(uint64, *model.IncidentValue) error { incidents++; return nil }); err != nil {
+		t.Fatalf("Incidents scan: %v", err)
+	}
+	if incidents != 1 {
+		t.Fatalf("incidents = %d, want 1 (retries exhausted → one incident)", incidents)
+	}
+	// The parked job is off the activatable index, so a second drive is a no-op.
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("second Drive: %v", err)
 	}
 }

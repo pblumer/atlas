@@ -48,13 +48,33 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0038](0038-collaboration-message-flow-replay.md) | Retain a message-flow history and replay a collaboration's messages | Accepted |
 | [0039](0039-dmn-io-variable-mappings.md) | Input/output variable mappings for business rule tasks | Accepted |
 | [0040](0040-boundary-events.md) | Boundary events — timer and message, interrupting and non-interrupting | Accepted |
-| [0041](0041-connector-management-and-secret-store.md) | Connector management and the secret store | Proposed |
+| [0041](0041-connector-management-and-secret-store.md) | Connector management and the secret store | Accepted |
 | [0042](0042-user-task-assignment-and-claim.md) | User-task runtime assignment and claim/unclaim | Accepted |
 | [0043](0043-openapi-spec-and-embedded-api-explorer.md) | An OpenAPI spec and an embedded API explorer for the HTTP API | Accepted |
 | [0044](0044-user-management-and-authentication-boundary.md) | User management and the opt-in authentication boundary | Accepted |
 | [0045](0045-user-task-assignment-bound-to-identity.md) | Binding user-task assignment to real identities | Accepted |
 | [0046](0046-single-process-step-replay.md) | Retain a per-instance element-step history and replay a single process step by step | Accepted |
 | [0047](0047-polyglot-script-tasks-via-job-workers.md) | Polyglot script tasks (PowerShell, …) via job workers | Accepted |
+| [0048](0048-per-step-variable-snapshots.md) | Per-step variable snapshots in the single-process replay | Accepted |
+| [0049](0049-internal-service-auth-for-mcp.md) | Internal service authentication for the in-process MCP adapter | Accepted |
+| [0050](0050-temis-decision-connector.md) | Central DMN decisions via a temis decision connector | Accepted |
+| [0051](0051-timer-start-events.md) | Timer start events (duration, date, cycle, cron) | Proposed |
+| [0052](0052-message-end-events.md) | Message end events | Accepted |
+| [0053](0053-first-class-data-objects.md) | First-class data objects — typed, event-sourced state, and lineage | Accepted |
+| [0054](0054-date-cycle-timers-for-catch-and-boundary.md) | Date and cycle timers for catch and boundary events | Proposed |
+| [0055](0055-feel-expression-timer-schedules.md) | FEEL-expression timer schedules for catch and boundary events | Proposed |
+| [0056](0056-feel-cycles-and-feel-start-timers.md) | FEEL cycles, and FEEL on timer start events | Proposed |
+| [0057](0057-first-class-feel-temporals.md) | First-class FEEL temporals for timer schedules | Proposed |
+| [0058](0058-data-output-associations.md) | Data output associations — write a value and transition a data object's state | Accepted |
+| [0059](0059-data-input-associations.md) | Data input associations — read a data object into an activity | Accepted |
+| [0060](0060-field-level-data-object-writes.md) | Field-level data object writes — set one member of a structured object | Accepted |
+| [0061](0061-incident-model.md) | Incident model — job-failure incidents, raise, resolve, resume | Proposed |
+| [0062](0062-embedded-dmn-editor.md) | An embedded DMN editor (dmn-js) — author a decision in place, adopt its inputs/output | Accepted |
+| [0063](0063-dmn-decision-binding.md) | DMN decision binding — latest vs deployment on a business rule task | Accepted |
+| [0064](0064-timer-feel-failure-incidents.md) | Timer FEEL-failure incidents — park and raise instead of firing immediately | Proposed |
+| [0065](0065-multi-token-process-replay.md) | Multi-token process replay and causal token lineage | Accepted |
+| [0066](0066-decision-evaluation-records.md) | Durable decision-evaluation records — capture a decision's inputs, outputs, and trace for debugging | Accepted |
+| [0067](0067-service-task-connector-catalog.md) | A service-task connector catalog, and REST with a model-authored endpoint | Accepted |
 
 ## Status values
 

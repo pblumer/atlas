@@ -130,6 +130,25 @@ func (s *Store) DueTimers(now int64, fn func(timerKey uint64, v *model.TimerValu
 	})
 }
 
+// StartTimers calls fn for every armed start timer — one whose owning process
+// instance key is zero, so it instantiates a definition on fire rather than
+// continuing a waiting element (ADR-0051). It is a full scan of the timer family,
+// used only when a definition is (re)deployed (off the hot path), so arming can be
+// idempotent and can supersede a prior version's schedule.
+func (s *Store) StartTimers(fn func(timerKey uint64, v *model.TimerValue) error) error {
+	return s.scanPrefix([]byte{byte(cfTimer)}, func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTTimer, raw)
+		if err != nil {
+			return err
+		}
+		tv := v.(*model.TimerValue)
+		if tv.ProcessInstanceKey != 0 {
+			return nil // an instance-owned timer (catch/boundary), not a start timer
+		}
+		return fn(trailingKey(k), tv)
+	})
+}
+
 // GetJob returns the committed job for key, reporting whether it was present.
 // Unlike Tx.GetJob it reads outside a transaction, for queries such as a worker
 // runner pulling activatable jobs.
@@ -143,6 +162,21 @@ func (s *Store) GetJob(key uint64) (*model.JobValue, bool, error) {
 		return nil, false, err
 	}
 	return v.(*model.JobValue), true, nil
+}
+
+// GetIncident returns the committed incident on an element instance, or nil if
+// there is none. It reads outside a transaction, for the resolve endpoint's
+// existence check (ADR-0061).
+func (s *Store) GetIncident(elKey uint64) (*model.IncidentValue, error) {
+	raw, ok, err := getCopy(s.db, keyIncident(elKey))
+	if err != nil || !ok {
+		return nil, err
+	}
+	v, err := model.DecodeValue(model.VTIncident, raw)
+	if err != nil {
+		return nil, err
+	}
+	return v.(*model.IncidentValue), nil
 }
 
 // GetElementInstance returns the committed element instance for key, reporting
@@ -190,6 +224,18 @@ func (s *Store) CompletedProcessInstances(fn func(key uint64, v *model.ProcessIn
 			return err
 		}
 		return fn(trailingKey(k), v.(*model.ProcessInstanceValue))
+	})
+}
+
+// Incidents calls fn with the element-instance key and value of every unresolved
+// incident — the operator "list incidents" access pattern (ADR-0061).
+func (s *Store) Incidents(fn func(elementKey uint64, v *model.IncidentValue) error) error {
+	return s.scanPrefix([]byte{byte(cfIncident)}, func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTIncident, raw)
+		if err != nil {
+			return err
+		}
+		return fn(trailingKey(k), v.(*model.IncidentValue))
 	})
 }
 
@@ -257,6 +303,60 @@ func (s *Store) ElementStepHistory(piKey uint64, fn func(ts int64, pos uint64, e
 	})
 }
 
+// ElementReplayValue is one durable causal token-lifecycle fact.
+type ElementReplayValue struct {
+	ElementID, SourceFlowID                    int32
+	ElementInstanceKey, TokenID, ParentTokenID uint64
+	Action                                     byte
+}
+
+// ElementReplayHistory scans causal token lifecycle facts in deterministic order.
+func (s *Store) ElementReplayHistory(piKey uint64, fn func(ts int64, pos uint64, v ElementReplayValue) error) error {
+	return s.scanPrefix(elementReplayInstancePrefix(piKey), func(k, raw []byte) error {
+		if len(raw) != 33 {
+			return fmt.Errorf("state: corrupt element replay value (%d bytes)", len(raw))
+		}
+		return fn(timestampFromStepKey(k), positionFromStepKey(k), ElementReplayValue{
+			ElementID: int32(binary.BigEndian.Uint32(raw)), ElementInstanceKey: binary.BigEndian.Uint64(raw[4:]),
+			TokenID: binary.BigEndian.Uint64(raw[12:]), ParentTokenID: binary.BigEndian.Uint64(raw[20:]),
+			SourceFlowID: int32(binary.BigEndian.Uint32(raw[28:])), Action: raw[32],
+		})
+	})
+}
+
+// VariableSnapshotHistory folds the retained variable changes of one scope (a
+// process instance), calling fn with each change's event timestamp, log position,
+// and the variable's new state in the order they occurred (ADR-0048). Because the
+// key sorts by timestamp then position, a scope-wide scan yields a monotonic
+// sequence a caller folds by position to reconstruct the variables as of any step.
+func (s *Store) VariableSnapshotHistory(scopeKey uint64, fn func(ts int64, pos uint64, v *model.VariableValue) error) error {
+	return s.scanPrefix(variableSnapshotScopePrefix(scopeKey), func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTVariable, raw)
+		if err != nil {
+			return err
+		}
+		return fn(timestampFromVarSnapKey(k), positionFromVarSnapKey(k), v.(*model.VariableValue))
+	})
+}
+
+// DecisionEvaluationHistory folds the retained DMN decision evaluations of one
+// scope (a process instance), calling fn with each evaluation's event timestamp,
+// log position, and its frozen record (decision id, inputs, outputs, trace) in the
+// order they occurred (ADR-0066). Because the key sorts by timestamp then position,
+// a scope-wide scan yields a monotonic sequence — the same ordering as the variable
+// and element-step timelines, so a business rule task's decision reasoning lines up
+// with the step at which it ran. Used to surface how a decision was made to
+// operators, both live and after the instance has finished.
+func (s *Store) DecisionEvaluationHistory(scopeKey uint64, fn func(ts int64, pos uint64, v *model.DecisionEvaluationValue) error) error {
+	return s.scanPrefix(decisionEvaluationScopePrefix(scopeKey), func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTDecisionEvaluation, raw)
+		if err != nil {
+			return err
+		}
+		return fn(timestampFromDecisionEvalKey(k), positionFromDecisionEvalKey(k), v.(*model.DecisionEvaluationValue))
+	})
+}
+
 // ProcessInstance returns the process instance for key and whether it was found,
 // looking first in the active family and then in the terminal-history family
 // (ADR-0017). It lets a query resolve an instance's definition whether it is
@@ -289,6 +389,36 @@ func (s *Store) VariablesOfScope(scope uint64, fn func(v *model.VariableValue) e
 			return err
 		}
 		return fn(v.(*model.VariableValue))
+	})
+}
+
+// DataObjectsOfScope calls fn with every data object owned by the given scope,
+// via the data-object column family — the current value of each. Used to surface
+// an instance's data to operators and, later, to build a FEEL scope for data
+// associations (ADR-0053). Mirrors VariablesOfScope.
+func (s *Store) DataObjectsOfScope(scope uint64, fn func(v *model.DataObjectValue) error) error {
+	return s.scanPrefix(dataObjectPrefix(scope), func(_, raw []byte) error {
+		v, err := model.DecodeValue(model.VTDataObject, raw)
+		if err != nil {
+			return err
+		}
+		return fn(v.(*model.DataObjectValue))
+	})
+}
+
+// DataObjectSnapshotHistory folds the retained data-object state changes of one
+// scope, calling fn with each change's event timestamp, log position, and the
+// object's new state in the order they occurred (ADR-0053). Because the key sorts
+// by timestamp then position, a scope-wide scan yields a monotonic sequence a
+// caller folds by position — the event-sourced data-state timeline and the basis
+// for lineage. Mirrors VariableSnapshotHistory (ADR-0048).
+func (s *Store) DataObjectSnapshotHistory(scopeKey uint64, fn func(ts int64, pos uint64, v *model.DataObjectValue) error) error {
+	return s.scanPrefix(dataObjectSnapshotScopePrefix(scopeKey), func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTDataObject, raw)
+		if err != nil {
+			return err
+		}
+		return fn(timestampFromDataObjSnapKey(k), positionFromDataObjSnapKey(k), v.(*model.DataObjectValue))
 	})
 }
 

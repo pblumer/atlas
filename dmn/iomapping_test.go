@@ -32,7 +32,7 @@ func routingProcess(t *testing.T) (*compiler.CompiledProcess, int32) {
 		t.Fatalf("compile source: %v", err)
 	}
 	rule, err := b.AddBusinessRuleTaskMapped("Dish", "dish", nil,
-		[]compiler.DecisionInputMapping{{Target: "Season", Source: seasonSrc}}, 3)
+		[]compiler.DecisionInputMapping{{Target: "Season", Source: seasonSrc}}, 3, compiler.BindingLatest)
 	if err != nil {
 		t.Fatalf("AddBusinessRuleTaskMapped: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestBusinessRuleTaskMergesStaticAndMappedInputs(t *testing.T) {
 	}
 	rule, err := b.AddBusinessRuleTaskMapped("Dish", "dish",
 		map[string]any{"Guests": 8}, // static base the decision ignores
-		[]compiler.DecisionInputMapping{{Target: "Season", Source: seasonSrc}}, 3)
+		[]compiler.DecisionInputMapping{{Target: "Season", Source: seasonSrc}}, 3, compiler.BindingLatest)
 	if err != nil {
 		t.Fatalf("AddBusinessRuleTaskMapped: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestBusinessRuleTaskMergesStaticAndMappedInputs(t *testing.T) {
 
 	var got []dmn.Result
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, dmn.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg,
+	runner.HandleCompleting(jobType, dmn.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg,
 		func(r dmn.Result) { got = append(got, r) }))
 
 	p.CreateInstance(cp.Key, model.VariableValue{Name: "season", Kind: model.VarString, Text: "Winter"})
@@ -162,7 +162,7 @@ func TestBusinessRuleTaskRoutesOnMappedResult(t *testing.T) {
 			}
 
 			runner := job.NewRunner(store, p)
-			runner.HandleWithOutput(jobType, dmn.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg, nil))
+			runner.HandleCompleting(jobType, dmn.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg, nil))
 
 			p.CreateInstance(cp.Key, model.VariableValue{Name: "season", Kind: model.VarString, Text: tc.season})
 			if err := runner.Drive(); err != nil {

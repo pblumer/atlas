@@ -131,18 +131,53 @@ func (t *Tx) ElementInstancesOfProcess(procKey uint64, fn func(elKey uint64, v *
 
 // PutJob writes the job, its activatable index entry, and the reverse
 // element→job entry (so an interrupting boundary event can find the host's job).
-// The three writes go to one in-memory batch; their errors are accumulated (first
+// The writes go to one in-memory batch; their errors are accumulated (first
 // non-nil wins) rather than checked one at a time, which keeps every write on the
 // same covered path.
+//
+// A job is on the activatable index iff it has retries left (Retries > 0): a job
+// whose retries are exhausted stays stored — an incident points at it — but is
+// never handed to a worker until an operator resolves the incident and restores a
+// positive retry count (ADR-0061).
 func (t *Tx) PutJob(key uint64, v *model.JobValue) error {
 	err := t.b.Set(keyJob(key), t.encodeValue(v), nil)
-	if e := t.b.Set(keyJobActivatable(v.JobType, key), nil, nil); err == nil {
-		err = e
+	if v.Retries > 0 {
+		if e := t.b.Set(keyJobActivatable(v.JobType, key), nil, nil); err == nil {
+			err = e
+		}
+	} else {
+		if e := t.b.Delete(keyJobActivatable(v.JobType, key), nil); err == nil {
+			err = e
+		}
 	}
 	if e := t.b.Set(keyJobByElement(v.ElementInstanceKey), appendBE64(nil, key), nil); err == nil {
 		err = e
 	}
 	return err
+}
+
+// --- Incident ---
+
+// PutIncident writes an incident, keyed by the element instance it is attached to.
+func (t *Tx) PutIncident(v *model.IncidentValue) error {
+	return t.b.Set(keyIncident(v.ElementInstanceKey), t.encodeValue(v), nil)
+}
+
+// DeleteIncident removes the incident attached to an element instance. Deleting
+// one that is absent is a harmless no-op — how terminating an element clears any
+// incident it carried without first reading it (ADR-0061).
+func (t *Tx) DeleteIncident(elKey uint64) error {
+	return t.b.Delete(keyIncident(elKey), nil)
+}
+
+// GetIncident returns the incident attached to an element instance, or nil.
+func (t *Tx) GetIncident(elKey uint64) (*model.IncidentValue, error) {
+	var v model.IncidentValue
+	ok, err := t.readInto(keyIncident(elKey), &v)
+	if err != nil || !ok {
+		return nil, err
+	}
+	return &v, nil
 }
 
 // JobOfElement returns the key of the job held by the given element instance, or
@@ -317,6 +352,34 @@ func (t *Tx) VariablesOfScope(scope uint64, fn func(v *model.VariableValue) erro
 	return iter.Error()
 }
 
+// --- DataObject ---
+
+// PutDataObject writes (upserts) a data object under its scope and name — the
+// current value, mirroring PutVariable. The live store keeps only the latest;
+// the whole state history lives in the snapshot family (ADR-0053).
+func (t *Tx) PutDataObject(v *model.DataObjectValue) error {
+	return t.b.Set(keyDataObject(v.ScopeKey, v.Name), t.encodeValue(v), nil)
+}
+
+// GetDataObject returns a scope's data object by name, or nil if absent.
+func (t *Tx) GetDataObject(scope uint64, name string) (*model.DataObjectValue, error) {
+	var v model.DataObjectValue
+	ok, err := t.readInto(keyDataObject(scope, name), &v)
+	if err != nil || !ok {
+		return nil, err
+	}
+	return &v, nil
+}
+
+// RecordDataObjectSnapshot retains one data-object state change under its scope,
+// keyed in change order. ts and pos come from the event header; the value is the
+// object's new state (name, data state, value). Written only from applyToState,
+// from the event alone, so it rebuilds identically on replay (invariant I4); a
+// plain Set on a unique (position-bearing) key, never overwritten (ADR-0053).
+func (t *Tx) RecordDataObjectSnapshot(ts int64, pos uint64, v *model.DataObjectValue) error {
+	return t.b.Set(keyDataObjectSnapshot(v.ScopeKey, ts, pos), t.encodeValue(v), nil)
+}
+
 // --- Active-children counter ---
 //
 // Each scope (a process instance or a subprocess instance) tracks how many
@@ -398,6 +461,58 @@ func (t *Tx) RecordMessageFlow(ts int64, pos uint64, v *model.MessageFlowValue) 
 func (t *Tx) RecordElementStep(piKey uint64, ts int64, pos uint64, elementId int32) error {
 	t.scratch = appendBE32(t.scratch[:0], uint32(elementId))
 	return t.b.Set(keyElementStep(piKey, ts, pos), t.scratch, nil)
+}
+
+// RecordElementReplay retains an activation or consumption with its durable
+// token lineage. It is derived only from the lifecycle event by applyToState.
+func (t *Tx) RecordElementReplay(piKey uint64, ts int64, pos uint64, elementID int32, elementKey, tokenID, parentTokenID uint64, sourceFlowID int32, action byte) error {
+	t.scratch = appendBE32(t.scratch[:0], uint32(elementID))
+	t.scratch = appendBE64(t.scratch, elementKey)
+	t.scratch = appendBE64(t.scratch, tokenID)
+	t.scratch = appendBE64(t.scratch, parentTokenID)
+	t.scratch = appendBE32(t.scratch, uint32(sourceFlowID))
+	t.scratch = append(t.scratch, action)
+	return t.b.Set(keyElementReplay(piKey, ts, pos), t.scratch, nil)
+}
+
+// --- Variable-snapshot history ---
+//
+// Every variable change of a process instance is retained here, keyed in change
+// order under the variable's scope, so the single-process replay can fold the
+// variable values as they stood at each step — the variable analogue of the
+// element-step timeline (ADR-0048). It complements the live variable store (which
+// keeps only the current value): this keeps the whole history so scrubbing back
+// shows earlier values. Written only from applyToState, from the event alone (the
+// header's timestamp and position plus the changed variable), so it rebuilds
+// identically on replay (invariant I4). Each record has a unique key (position is
+// monotonic), so this is a plain Set, never overwritten and never deleted.
+// Retention is unbounded for now, as with the other history families.
+
+// RecordVariableSnapshot retains one variable change under its scope, keyed in
+// change order. ts and pos come from the event header; the value is the variable's
+// new state (name, kind, value).
+func (t *Tx) RecordVariableSnapshot(ts int64, pos uint64, v *model.VariableValue) error {
+	return t.b.Set(keyVariableSnapshot(v.ScopeKey, ts, pos), t.encodeValue(v), nil)
+}
+
+// --- Decision-evaluation history ---
+//
+// Every DMN decision a business rule task evaluates is retained here, keyed in
+// evaluation order under the owning process instance, so an operator can inspect
+// after the fact what inputs a decision saw, what it returned, and which rules
+// fired (ADR-0066). The worker evaluates off the processor goroutine and freezes
+// the inputs/outputs/trace onto the completion command; this writer runs only from
+// applyToState, from the event alone (the header's timestamp and position plus the
+// frozen evaluation), so it rebuilds identically on replay without re-evaluating
+// the decision (invariant I4/I6). Each record has a unique key (position is
+// monotonic), so this is a plain Set, never overwritten and never deleted.
+// Retention is unbounded for now, as with the other history families.
+
+// RecordDecisionEvaluation retains one decision evaluation under its owning
+// process instance, keyed in evaluation order. ts and pos come from the event
+// header; the value carries the decision id, input context, outputs, and trace.
+func (t *Tx) RecordDecisionEvaluation(ts int64, pos uint64, v *model.DecisionEvaluationValue) error {
+	return t.b.Set(keyDecisionEvaluation(v.ProcessInstanceKey, ts, pos), t.encodeValue(v), nil)
 }
 
 // ActiveChildren returns the active-child count for scope (0 if none). This read

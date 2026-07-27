@@ -1,7 +1,10 @@
 package engine
 
 import (
+	"encoding/json"
+	"errors"
 	"strconv"
+	"strings"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/expr"
@@ -32,8 +35,11 @@ func (p *Processor) registerHandlers() {
 		handlerKey(model.VTElementInstance, model.IntentActivating):  handleElementActivating,
 		handlerKey(model.VTElementInstance, model.IntentCompleting):  handleElementCompleting,
 		handlerKey(model.VTJob, model.IntentJobCompleted):            handleJobCompleted,
+		handlerKey(model.VTJob, model.IntentJobFailed):               handleJobFailed,
 		handlerKey(model.VTJob, model.IntentJobAssigned):             handleJobAssigned,
+		handlerKey(model.VTIncident, model.IntentIncidentResolved):   handleIncidentResolved,
 		handlerKey(model.VTTimer, model.IntentTimerTriggered):        handleTimerTriggered,
+		handlerKey(model.VTTimer, model.IntentTimerStartArm):         handleTimerStartArm,
 		handlerKey(model.VTMessage, model.IntentMessagePublished):    handleMessagePublished,
 	}
 }
@@ -59,6 +65,11 @@ func (p *Processor) registerBehaviors() {
 	// straight on like a none start (ADR-0035). What makes it a start is the
 	// deploy-time subscription (see Deploy), not a distinct runtime behavior.
 	p.behaviors[compiler.TypeMessageStartEvent] = startEventBehavior{}
+	// A timer start event is the same once instantiated: a due timer creates the
+	// instance and it flows straight on (ADR-0051). What makes it a start is the
+	// deploy-time timer the arm handler creates, not a distinct runtime behavior.
+	p.behaviors[compiler.TypeTimerStartEvent] = startEventBehavior{}
+	p.behaviors[compiler.TypeMessageEndEvent] = messageEndEventBehavior{}
 }
 
 // --- command handlers ---
@@ -78,14 +89,31 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 	}
 
 	cp := c.process(defKey)
+
+	// Seed the process's declared data objects under the instance scope, each with
+	// its declared initial data state (value unset for now; data associations write
+	// values in a later slice). Like the start variables, this is deterministic
+	// state mutation from already-decided data, so it replays identically (ADR-0053).
+	for _, d := range cp.DataObjects() {
+		c.AppendDataObjectEvent(model.IntentDataObjectCreated, model.DataObjectValue{
+			ScopeKey: piKey,
+			Name:     cp.Intern(d.Name),
+			State:    cp.Intern(d.InitialState),
+			Kind:     model.VarNull,
+		})
+	}
+
 	for _, startID := range cp.StartEvents() {
 		node := cp.Node(startID)
-		c.AppendElementCommand(c.NewKey(), model.IntentActivating, model.ElementInstanceValue{
+		key := c.NewKey()
+		c.AppendElementCommand(key, model.IntentActivating, model.ElementInstanceValue{
 			ProcessInstanceKey: piKey,
 			ProcessDefKey:      defKey,
 			ElementId:          startID,
 			FlowScopeKey:       piKey, // root elements are scoped by the instance
 			BpmnElementType:    uint8(node.Type),
+			TokenID:            key,
+			SourceFlowId:       -1,
 		})
 	}
 }
@@ -116,8 +144,54 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 func handleElementActivating(c *ProcessingContext) {
 	ei := &c.cmd.Value.element
 	c.AppendElementEvent(c.cmd.Key, model.IntentActivated, *ei)
+	// Read the activity's data-input associations into process variables before its
+	// behavior runs, so the activity's own FEEL (e.g. a script task's expression)
+	// sees them (ADR-0059).
+	applyDataInputAssociations(c, ei)
 	c.p.behavior(ei.BpmnElementType).OnActivated(c, c.cmd.Key, ei)
 	armBoundaryEvents(c, c.cmd.Key, ei)
+}
+
+// applyDataInputAssociations evaluates an activating activity's data-input
+// associations (ADR-0059): for each, it reads the source data object and writes a
+// value into the target process variable the activity reads. With an <assignment>
+// <from> transform, it evaluates the FEEL over the instance's variables plus the
+// source object bound under its name; with none, it copies the object's value
+// verbatim. The value is written as a VariableCreated event, so replay re-applies it
+// without re-reading the object or re-evaluating (invariants I4/I6).
+func applyDataInputAssociations(c *ProcessingContext, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	assocs := cp.DataInputAssociations(ei.ElementId)
+	for i := range assocs {
+		a := &assocs[i]
+		objName := cp.Intern(a.DataObject)
+		obj := c.GetDataObject(ei.ProcessInstanceKey, objName)
+
+		out := model.VariableValue{ScopeKey: ei.ProcessInstanceKey, Name: cp.Intern(a.Variable)}
+		switch {
+		case a.Value != nil:
+			// Bind the instance variables the transform reads plus the source object
+			// (under its own name) into the FEEL scope, then evaluate.
+			scope := bindInputs(c, a.Value.Inputs(), ei.ProcessInstanceKey)
+			if obj != nil {
+				if scope == nil {
+					scope = map[string]expr.Value{}
+				}
+				scope[objName] = expr.FromStored(toExprKind(obj.Kind), obj.Bool, obj.Text)
+			}
+			result, err := a.Value.Eval(scope)
+			if err != nil {
+				result = expr.Null
+			}
+			kind, b, text := expr.Classify(result)
+			out.Kind, out.Bool, out.Text = toVarKind(kind), b, text
+		case obj != nil:
+			// No transform: copy the object's value into the variable verbatim.
+			out.Kind, out.Bool, out.Text = obj.Kind, obj.Bool, obj.Text
+		}
+
+		c.AppendVariableEvent(model.IntentVariableCreated, out)
+	}
 }
 
 // handleElementCompleting runs the element-type completion behavior, then — if
@@ -125,10 +199,115 @@ func handleElementActivating(c *ProcessingContext) {
 // completed normally (their timers/subscriptions self-retire).
 func handleElementCompleting(c *ProcessingContext) {
 	ei := &c.cmd.Value.element
+	// Write the activity's data-output associations before it completes, so a data
+	// object it produces is in state before any outgoing flow activates the next
+	// element (ADR-0058). Any element type may carry associations, so this is a
+	// single shared point rather than per-behavior logic.
+	applyDataOutputAssociations(c, ei)
 	c.p.behavior(ei.BpmnElementType).OnCompleting(c, c.cmd.Key, ei)
 	if c.process(ei.ProcessDefKey).Node(ei.ElementId).BoundaryCount > 0 {
 		disarmBoundaryEvents(c, c.cmd.Key, ei.ProcessInstanceKey)
 	}
+}
+
+// applyDataOutputAssociations evaluates a completing activity's data-output
+// associations (ADR-0058): for each, it computes the written value from the
+// association's FEEL expression over the instance's variables (a nil expression is
+// a state-only transition that keeps the object's current value), and emits a
+// DataObjectStateChanged event moving the object into the association's target data
+// state (an unset target keeps the object's current state). The value and state ride
+// in the event, so applyToState re-applies them on replay without re-evaluating
+// (invariants I4/I6) — exactly as a script task's result variable does.
+func applyDataOutputAssociations(c *ProcessingContext, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	assocs := cp.DataOutputAssociations(ei.ElementId)
+	for i := range assocs {
+		a := &assocs[i]
+		name := cp.Intern(a.DataObject)
+		cur := c.GetDataObject(ei.ProcessInstanceKey, name)
+
+		out := model.DataObjectValue{ScopeKey: ei.ProcessInstanceKey, Name: name}
+		switch {
+		case a.Value != nil:
+			result, err := a.Value.Eval(bindInputs(c, a.Value.Inputs(), ei.ProcessInstanceKey))
+			if err != nil {
+				// Incidents are not modeled yet; FEEL is null-propagating, so a failed
+				// evaluation writes null rather than halting the processor.
+				result = expr.Null
+			}
+			if a.TargetPath >= 0 {
+				// Write only one member of the (structured) object, keeping the rest
+				// (ADR-0060): read the current JSON, set the member to the result, and
+				// write the merged canonical value back.
+				leaf, ok := expr.ToJSON(result)
+				if !ok {
+					leaf = "null"
+				}
+				current := ""
+				if cur != nil && cur.Kind == model.VarJSON {
+					current = cur.Text
+				}
+				if merged, err := setJSONMember(current, cp.Intern(a.TargetPath), leaf); err == nil {
+					out.Kind, out.Text = model.VarJSON, merged
+				} else if cur != nil {
+					out.Kind, out.Bool, out.Text = cur.Kind, cur.Bool, cur.Text
+				}
+			} else {
+				kind, b, text := expr.Classify(result)
+				out.Kind, out.Bool, out.Text = toVarKind(kind), b, text
+			}
+		case cur != nil:
+			// State-only transition: keep the object's current value.
+			out.Kind, out.Bool, out.Text = cur.Kind, cur.Bool, cur.Text
+		}
+
+		if a.TargetState >= 0 {
+			out.State = cp.Intern(a.TargetState)
+		} else if cur != nil {
+			out.State = cur.State // no target state: keep the current one
+		}
+
+		c.AppendDataObjectEvent(model.IntentDataObjectStateChanged, out)
+	}
+}
+
+// setJSONMember returns the canonical JSON of the object `current` with the dotted
+// member `path` set to the pre-encoded canonical JSON `leaf`, creating intermediate
+// objects as needed (ADR-0060). A `current` that is empty or not a JSON object
+// starts from an empty object — so writing a member into an unset data object creates
+// it. Numbers are decoded as json.Number so decimals stay exact, and the result
+// marshals with sorted keys, matching the canonical form (ADR-0037).
+func setJSONMember(current, path, leaf string) (string, error) {
+	root := map[string]any{}
+	if strings.TrimSpace(current) != "" {
+		dec := json.NewDecoder(strings.NewReader(current))
+		dec.UseNumber()
+		var v any
+		if dec.Decode(&v) == nil {
+			if m, ok := v.(map[string]any); ok {
+				root = m
+			}
+		}
+	}
+	parts := strings.Split(path, ".")
+	m := root
+	for i, p := range parts {
+		if i == len(parts)-1 {
+			m[p] = json.RawMessage(leaf)
+			break
+		}
+		child, ok := m[p].(map[string]any)
+		if !ok {
+			child = map[string]any{}
+			m[p] = child
+		}
+		m = child
+	}
+	b, err := json.Marshal(root)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 // handleJobCompleted retires the job, writes the worker's output variables into
@@ -151,8 +330,103 @@ func handleJobCompleted(c *ProcessingContext) {
 		c.AppendVariableEvent(model.IntentVariableCreated, v)
 	}
 
+	// A business rule task's worker evaluates its decision off the processor
+	// goroutine and rides the inputs/outputs/trace back on the completion. Freeze it
+	// into a history event so an operator can inspect how the decision was made, live
+	// and after the fact (ADR-0066). The worker sees the job, so its keys are set;
+	// stamp the scope from the authoritative job in case the worker left it zero.
+	if d := c.cmd.Decision; d != nil {
+		dv := *d
+		dv.ProcessInstanceKey = job.ProcessInstanceKey
+		dv.ElementInstanceKey = job.ElementInstanceKey
+		c.AppendDecisionEvaluationEvent(dv)
+	}
+
 	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
 		c.AppendElementCommand(job.ElementInstanceKey, model.IntentCompleting, *ei)
+	}
+}
+
+// handleJobFailed applies a worker's failure report for a job (ADR-0061). The
+// command carries the remaining retry count (in the job payload) and a failure
+// message (in the incident payload). The job's retries are set to that count and
+// the job is re-emitted: with retries left it returns to the activatable index for
+// another attempt; with none it parks off the index and an incident is raised on
+// its element instance, holding the token there until an operator resolves it.
+// Failing a job that is gone (already completed or canceled) is a no-op.
+func handleJobFailed(c *ProcessingContext) {
+	job := c.GetJob(c.cmd.Key)
+	if job == nil {
+		return
+	}
+	job.Retries = c.cmd.Value.job.Retries
+	c.AppendJobEvent(c.cmd.Key, model.IntentJobFailed, *job)
+	if job.Retries <= 0 {
+		var elementId int32
+		if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
+			elementId = ei.ElementId
+		}
+		c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+			ProcessInstanceKey: job.ProcessInstanceKey,
+			ElementInstanceKey: job.ElementInstanceKey,
+			JobKey:             c.cmd.Key,
+			ElementId:          elementId,
+			RaisedAt:           c.Now(),
+			Message:            c.cmd.Value.incident.Message,
+		})
+	}
+}
+
+// handleIncidentResolved clears an incident and resumes the work it blocked
+// (ADR-0061). The command is keyed by the incident's element instance and carries
+// a positive retry count: the incident is deleted and its job re-created with that
+// many retries, so the job returns to the activatable index and a worker retries it
+// — the same path a fresh job takes. If the cause is unfixed the job fails again
+// and a new incident is raised. Resolving an incident that is gone is a no-op.
+func handleIncidentResolved(c *ProcessingContext) {
+	inc := c.GetIncident(c.cmd.Key)
+	if inc == nil {
+		return
+	}
+	c.AppendIncidentEvent(model.IntentIncidentResolved, *inc)
+	if inc.JobKey == 0 {
+		// A timer incident carries no job (ADR-0064): re-arm the parked catch/boundary
+		// element instead of re-creating one.
+		rearmTimerElement(c, inc.ElementInstanceKey)
+		return
+	}
+	job := c.GetJob(inc.JobKey)
+	if job == nil {
+		return // the job vanished (e.g. its instance was canceled); nothing to resume
+	}
+	job.Retries = c.cmd.Value.job.Retries
+	c.AppendJobEvent(inc.JobKey, model.IntentJobCreated, *job)
+	c.NotifyJobAvailable(job.JobType)
+}
+
+// rearmTimerElement re-runs the timer arm for a parked catch/boundary element
+// whose FEEL schedule failed and raised an incident (ADR-0064). Re-evaluated
+// against the instance's current variables, the schedule either resolves — a
+// timer is created and the token waits normally — or fails again, raising a fresh
+// incident (resolve is a genuine retry, not a blind clear). A vanished element
+// (its instance was canceled) is a harmless no-op.
+func rearmTimerElement(c *ProcessingContext, elKey uint64) {
+	ei := c.GetElementInstance(elKey)
+	if ei == nil {
+		return
+	}
+	cp := c.process(ei.ProcessDefKey)
+	if cp == nil {
+		return
+	}
+	node := cp.Node(ei.ElementId)
+	switch node.Type {
+	case compiler.TypeTimerCatchEvent:
+		armOneShotTimer(c, elKey, ei, cp.TimerCatch(node.Detail).Schedule)
+	case compiler.TypeBoundaryEvent:
+		if d := cp.BoundaryEvent(node.Detail); d.Kind == compiler.BoundaryTimer {
+			armOneShotTimer(c, elKey, ei, d.Schedule)
+		}
 	}
 }
 
@@ -170,14 +444,158 @@ func handleJobAssigned(c *ProcessingContext) {
 	c.AppendJobEvent(c.cmd.Key, model.IntentJobAssigned, *job)
 }
 
-// handleTimerTriggered fires a due timer: it retires the timer and tells its
-// waiting element instance to complete. The command carries the timer value
-// (supplied by TriggerDueTimers), so no extra read is needed.
+// handleTimerTriggered fires a due timer. The command carries the timer value
+// (supplied by TriggerDueTimers), so no extra read is needed. A start timer (no
+// owning instance, ADR-0051) instantiates its definition and, if it recurs, arms
+// its next occurrence; an instance timer tells its waiting element to complete.
 func handleTimerTriggered(c *ProcessingContext) {
 	timer := c.cmd.Value.timer
 	c.AppendTimerEvent(c.cmd.Key, model.IntentTimerTriggered, timer)
-	if ei := c.GetElementInstance(timer.ElementInstanceKey); ei != nil {
-		c.AppendElementCommand(timer.ElementInstanceKey, model.IntentCompleting, *ei)
+	if timer.ProcessInstanceKey == 0 {
+		fireStartTimer(c, timer)
+		return
+	}
+	ei := c.GetElementInstance(timer.ElementInstanceKey)
+	if ei == nil {
+		return // element gone (cancelled/completed/host-interrupted): self-retire
+	}
+	if sched, ok := recurringBoundarySchedule(c, ei); ok {
+		fireRecurringBoundary(c, timer, ei, sched)
+		return
+	}
+	c.AppendElementCommand(timer.ElementInstanceKey, model.IntentCompleting, *ei)
+}
+
+// recurringBoundarySchedule reports whether ei is a non-interrupting boundary
+// timer whose schedule recurs, and returns the concrete cycle to re-arm from
+// (ADR-0054). For a FEEL cycle the expression is re-evaluated here — on each
+// occurrence — against the instance's current variables (ADR-0056), so a data-
+// driven cadence can change as the process runs; ok is false if it can't resolve
+// (the boundary then stops recurring).
+func recurringBoundarySchedule(c *ProcessingContext, ei *model.ElementInstanceValue) (compiler.TimerSchedule, bool) {
+	cp := c.process(ei.ProcessDefKey)
+	node := cp.Node(ei.ElementId)
+	if node.Type != compiler.TypeBoundaryEvent {
+		return compiler.TimerSchedule{}, false
+	}
+	d := cp.BoundaryEvent(node.Detail)
+	if d.Kind != compiler.BoundaryTimer || d.Interrupting || !d.Schedule.Repeats() {
+		return compiler.TimerSchedule{}, false
+	}
+	return resolveSchedule(c, d.Schedule, ei.ProcessInstanceKey)
+}
+
+// fireRecurringBoundary spawns the boundary's outgoing (reminder) token without
+// completing the boundary element instance — it stays armed — then arms the next
+// occurrence, re-anchored to the clock and frozen into the event (I6), counting a
+// finite Rn cycle down. When the count runs out it stops arming; the idle boundary
+// is removed when its host completes (existing disarm). If its host is later
+// interrupted or completes, the last re-armed timer finds no instance and does
+// nothing (ADR-0054).
+func fireRecurringBoundary(c *ProcessingContext, timer model.TimerValue, ei *model.ElementInstanceValue, sched compiler.TimerSchedule) {
+	takeOutgoingFlows(c, ei)
+	if timer.Repetitions == 0 {
+		return // finite cycle exhausted: stop arming, leave the boundary idle
+	}
+	next, ok := sched.NextDue(c.Now())
+	if !ok {
+		return
+	}
+	reps := timer.Repetitions
+	if reps > 0 {
+		reps-- // count down a finite cycle; an infinite one (-1) stays -1
+	}
+	c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: timer.ElementInstanceKey,
+		TargetElementId:    ei.ElementId,
+		DueDate:            next,
+		Repetitions:        reps,
+	})
+}
+
+// fireStartTimer instantiates the definition a due start timer names — through the
+// same create-instance command an API create uses, so the instance's events and
+// recovery are identical (ADR-0035) — then, if the timer recurs, arms its next
+// occurrence with a due date re-anchored to the current clock (so a long outage
+// does not replay a backlog) and frozen into the arming event (I6). A timer whose
+// definition was undeployed or superseded finds no compiled process and stops.
+func fireStartTimer(c *ProcessingContext, timer model.TimerValue) {
+	cp := c.process(timer.ProcessDefKey)
+	if cp == nil {
+		return
+	}
+	c.AppendCreateInstanceCommand(timer.ProcessDefKey, nil)
+	if timer.Repetitions == 0 {
+		return // one-shot (duration/date) or a finite cycle that has run out
+	}
+	node := cp.Node(timer.TargetElementId)
+	if node.Type != compiler.TypeTimerStartEvent {
+		return
+	}
+	// A start-event FEEL schedule is constant (the compiler enforces it), so it
+	// resolves against an empty scope (ADR-0056).
+	sched, ok := resolveSchedule(c, cp.TimerStart(node.Detail).Schedule, 0)
+	if !ok {
+		return
+	}
+	next, ok := sched.NextDue(c.Now())
+	if !ok {
+		return
+	}
+	reps := timer.Repetitions
+	if reps > 0 {
+		reps-- // count down a finite cycle; an infinite one (-1) stays -1
+	}
+	c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
+		ProcessDefKey:   timer.ProcessDefKey,
+		TargetElementId: timer.TargetElementId,
+		DueDate:         next,
+		Repetitions:     reps,
+	})
+}
+
+// handleTimerStartArm arms a freshly deployed definition's timer start events and
+// retires any that a prior version of the same process left armed, so only the
+// latest version's schedule is active (ADR-0051). It runs once per fresh deploy,
+// never on recovery — commands are not replayed (I6), and the restored
+// TimerCreated events already hold the armed timers. The command carries the new
+// definition key in cmd.Key.
+func handleTimerStartArm(c *ProcessingContext) {
+	defKey := c.cmd.Key
+	cp := c.process(defKey)
+	if cp == nil {
+		return
+	}
+	// Retire a prior version's start timers for the same process id, and note which
+	// of this definition's elements are already armed (idempotency if arm repeats).
+	armed := map[int32]bool{}
+	c.ForEachStartTimer(func(key uint64, v model.TimerValue) {
+		if v.ProcessDefKey == defKey {
+			armed[v.TargetElementId] = true
+			return
+		}
+		if other := c.process(v.ProcessDefKey); other != nil && other.ProcessId() == cp.ProcessId() {
+			c.AppendTimerEvent(key, model.IntentTimerCanceled, v)
+		}
+	})
+	now := c.Now()
+	for _, s := range cp.TimerStartEvents() {
+		if armed[s.ElementId] {
+			continue
+		}
+		// A start-event FEEL schedule is constant (compiler-enforced), so it
+		// resolves against an empty scope; an unresolvable one is not armed (ADR-0056).
+		sched, ok := resolveSchedule(c, s.Schedule, 0)
+		if !ok {
+			continue
+		}
+		c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
+			ProcessDefKey:   defKey,
+			TargetElementId: s.ElementId,
+			DueDate:         sched.FirstDue(now),
+			Repetitions:     sched.Repetitions,
+		})
 	}
 }
 
@@ -208,14 +626,23 @@ func completeAndTakeFlows(c *ProcessingContext, key uint64, ei *model.ElementIns
 // activateElement schedules activation of a fresh element instance on targetId,
 // scoped like ei. It is the single "take a flow" primitive the flow-taking
 // behaviors share.
-func activateElement(c *ProcessingContext, ei *model.ElementInstanceValue, targetId int32) {
+func activateElement(c *ProcessingContext, ei *model.ElementInstanceValue, flowID int32, fork bool) {
+	targetId := c.process(ei.ProcessDefKey).Flow(flowID).Target
 	target := c.process(ei.ProcessDefKey).Node(targetId)
-	c.AppendElementCommand(c.NewKey(), model.IntentActivating, model.ElementInstanceValue{
+	key := c.NewKey()
+	tokenID, parentID := ei.TokenID, uint64(0)
+	if tokenID == 0 || fork {
+		parentID, tokenID = ei.TokenID, key
+	}
+	c.AppendElementCommand(key, model.IntentActivating, model.ElementInstanceValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ProcessDefKey:      ei.ProcessDefKey,
 		ElementId:          targetId,
 		FlowScopeKey:       ei.FlowScopeKey,
 		BpmnElementType:    uint8(target.Type),
+		TokenID:            tokenID,
+		ParentTokenID:      parentID,
+		SourceFlowId:       flowID,
 	})
 }
 
@@ -296,8 +723,9 @@ func interruptHost(c *ProcessingContext, hostKey, selfKey uint64) {
 // are enough to drive and recover state.)
 func takeOutgoingFlows(c *ProcessingContext, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
-	for _, flowID := range cp.Outgoing(ei.ElementId) {
-		activateElement(c, ei, cp.Flow(flowID).Target)
+	flows := cp.Outgoing(ei.ElementId)
+	for _, flowID := range flows {
+		activateElement(c, ei, flowID, len(flows) > 1)
 	}
 }
 
@@ -316,18 +744,18 @@ func takeInclusiveOutgoing(c *ProcessingContext, ei *model.ElementInstanceValue)
 			continue
 		}
 		if f.Condition == nil {
-			activateElement(c, ei, f.Target)
+			activateElement(c, ei, flowID, true)
 			took = true
 			continue
 		}
 		v, err := f.Condition.Eval(bindInputs(c, f.Condition.Inputs(), ei.ProcessInstanceKey))
 		if err == nil && expr.IsTrue(v) {
-			activateElement(c, ei, f.Target)
+			activateElement(c, ei, flowID, true)
 			took = true
 		}
 	}
 	if !took && defaultFlow >= 0 {
-		activateElement(c, ei, cp.Flow(defaultFlow).Target)
+		activateElement(c, ei, defaultFlow, false)
 	}
 }
 
@@ -339,9 +767,85 @@ func takeInclusiveOutgoing(c *ProcessingContext, ei *model.ElementInstanceValue)
 // name is shadowed by the built-in.
 const builtinProcessInstanceKey = "processInstanceKey"
 
+// resolveSchedule returns the concrete schedule to compute a timer from: a fixed
+// schedule as-is, or a FEEL schedule (ADR-0055/0056) evaluated against scope and
+// reduced to the duration/date/cycle it names. ok is false if a FEEL
+// expression can't be evaluated or its result isn't valid for the field. scope is
+// the instance whose variables the expression reads; it is 0 for a start-event
+// timer, whose FEEL must be constant (the compiler enforces this), so an empty
+// scope still resolves it. Variables and the clock are read at command time and
+// frozen into the event (invariants I4/I6).
+func resolveSchedule(c *ProcessingContext, s compiler.TimerSchedule, scope uint64) (compiler.TimerSchedule, bool) {
+	r, err := resolveScheduleErr(c, s, scope)
+	return r, err == nil
+}
+
+// resolveScheduleErr is resolveSchedule but reports *why* a FEEL schedule could
+// not be resolved — an evaluation error, or a result that isn't a usable temporal
+// for the field — so a catch/boundary arm can put the reason in an incident's
+// message (ADR-0064). A non-FEEL schedule always resolves.
+func resolveScheduleErr(c *ProcessingContext, s compiler.TimerSchedule, scope uint64) (compiler.TimerSchedule, error) {
+	if !s.IsFeel() {
+		return s, nil
+	}
+	v, err := s.Expr.Eval(bindInputs(c, s.Expr.Inputs(), scope))
+	if err != nil {
+		return compiler.TimerSchedule{}, err
+	}
+	// Prefer a first-class FEEL temporal (exact nanoseconds/instant); fall back to
+	// the canonical string form for a variable holding an ISO string, or a cycle
+	// (ADR-0057).
+	r, ok := s.ResolveFeelValue(v)
+	if !ok {
+		return compiler.TimerSchedule{}, errors.New("result is not a valid " + feelKindName(s.Kind))
+	}
+	return r, nil
+}
+
+// feelKindName names a FEEL schedule's field for an incident message.
+func feelKindName(k compiler.TimerScheduleKind) string {
+	switch k {
+	case compiler.TimerFeelDate:
+		return "date"
+	case compiler.TimerFeelCycle:
+		return "cycle"
+	default:
+		return "duration"
+	}
+}
+
+// armOneShotTimer resolves a catch/boundary timer's schedule and appends its
+// TimerCreated event. If the schedule is a FEEL expression that can't be
+// evaluated, it raises an incident on the element instead of firing the timer
+// immediately, so the token parks visibly and an operator can fix the data and
+// resolve it (ADR-0064). Either way the element stays Activated; only a created
+// timer will ever fire it. The clock and variables are read here (command time)
+// and frozen into the event (I4/I6).
+func armOneShotTimer(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue, s compiler.TimerSchedule) {
+	sched, err := resolveScheduleErr(c, s, ei.ProcessInstanceKey)
+	if err != nil {
+		c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+			ProcessInstanceKey: ei.ProcessInstanceKey,
+			ElementInstanceKey: key,
+			ElementId:          ei.ElementId,
+			RaisedAt:           c.Now(),
+			Message:            "timer schedule: " + err.Error(),
+		})
+		return
+	}
+	now := c.Now()
+	c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		TargetElementId:    ei.ElementId,
+		DueDate:            sched.FirstDue(now),
+		Repetitions:        sched.Repetitions,
+	})
+}
+
 // bindInputs reads the named variables from a scope into a FEEL binding map for
-// evaluation. A name absent from the scope is simply left unbound (FEEL null).
-// The reserved name processInstanceKey binds to the scope's own key (the built-in
+// evaluation. A name absent from the scope is simply left unbound (FEEL null). The
+// reserved name processInstanceKey binds to the scope's own key (the built-in
 // above); at every call site the scope is the process instance, so it is the
 // instance's key.
 func bindInputs(c *ProcessingContext, inputs []string, scope uint64) map[string]expr.Value {
@@ -453,16 +957,12 @@ type timerCatchEventBehavior struct{}
 func (timerCatchEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.TimerCatch(cp.Node(ei.ElementId).Detail)
-	// Now() is read here (command processing) and frozen into the event's due
-	// date; applyToState never reads the clock (invariant I4).
-	due := c.Now() + detail.DurationNanos
-	c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
-		ProcessInstanceKey: ei.ProcessInstanceKey,
-		ElementInstanceKey: key,
-		TargetElementId:    ei.ElementId,
-		DueDate:            due,
-	})
-	// Stays Activated: no Completing until the timer fires.
+	// A catch schedule is a duration or date (a cycle is rejected at compile time),
+	// so it fires once. armOneShotTimer computes the due date here (command
+	// processing) and freezes it into the event (I4/I6), or — for an unresolvable
+	// FEEL schedule — raises an incident and parks (ADR-0064).
+	armOneShotTimer(c, key, ei, detail.Schedule)
+	// Stays Activated: no Completing until the timer fires (or the incident resolves).
 }
 
 func (timerCatchEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
@@ -518,6 +1018,31 @@ func (messageThrowEventBehavior) OnActivated(c *ProcessingContext, key uint64, e
 
 func (messageThrowEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	completeAndTakeFlows(c, key, ei)
+}
+
+// messageEndEventBehavior: an end event that publishes a message, then ends the
+// instance (ADR-0052). It is the send-and-stop union of a message throw event and
+// a none end event: OnActivated correlates exactly like a throw (reusing the
+// throw detail table), and OnCompleting ends the instance exactly like a none end
+// event rather than taking outgoing flows. Correlating on the command path keeps
+// applyToState pure (I4/I6), the same reasoning as the throw event.
+type messageEndEventBehavior struct{}
+
+func (messageEndEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.MessageThrow(cp.Node(ei.ElementId).Detail)
+	payload := instanceVariables(c, ei.ProcessInstanceKey)
+	correlateMessage(c, detail.MessageName, evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey), payload, ei.ProcessInstanceKey)
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (messageEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendElementEvent(key, model.IntentCompleted, *ei) // decrements scope's active children
+	if c.ActiveChildren(ei.FlowScopeKey) == 0 {
+		if pi := c.GetProcessInstance(ei.ProcessInstanceKey); pi != nil {
+			c.AppendProcessInstanceEvent(ei.ProcessInstanceKey, model.IntentCompleted, *pi)
+		}
+	}
 }
 
 // evalCorrelationKey evaluates a compiled correlation-key expression over a
@@ -637,6 +1162,8 @@ func (exclusiveGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, e
 		ElementId:          target.ElementId,
 		FlowScopeKey:       ei.FlowScopeKey,
 		BpmnElementType:    uint8(target.Type),
+		TokenID:            ei.TokenID,
+		SourceFlowId:       flowID,
 	})
 }
 
@@ -667,7 +1194,10 @@ func (parallelGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei 
 			c.AppendElementEvent(k, model.IntentCompleted, *a)
 		}
 	}
-	takeOutgoingFlows(c, ei)
+	continuation := *ei
+	continuation.ParentTokenID = ei.TokenID
+	continuation.TokenID = 0
+	takeOutgoingFlows(c, &continuation)
 }
 
 func (parallelGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
@@ -855,12 +1385,22 @@ type userTaskBehavior struct{}
 func (userTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.UserTask(cp.Node(ei.ElementId).Detail)
+	// A due date is authored as a duration relative to task creation, so the
+	// absolute due instant is computed here and frozen into the job-created event
+	// (ADR-0051). Now() is read at command processing and recorded, so recovery
+	// replays the identical deadline — exactly like a timer's due date. 0 means
+	// the task has no due date.
+	var deadline int64
+	if detail.DueDateNanos != 0 {
+		deadline = c.Now() + detail.DueDateNanos
+	}
 	jobKey := c.NewKey()
 	c.AppendJobEvent(jobKey, model.IntentJobCreated, model.JobValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ElementInstanceKey: key,
 		JobType:            detail.JobType,
 		Retries:            detail.Retries,
+		Deadline:           deadline,
 		// Seed the runtime assignee with the model's default; claim/unclaim
 		// rewrites it through the job lifecycle (ADR-0042).
 		Assignee: cp.Intern(detail.Assignee),
@@ -889,14 +1429,13 @@ func (boundaryEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *m
 	d := cp.BoundaryEvent(cp.Node(ei.ElementId).Detail)
 	switch d.Kind {
 	case compiler.BoundaryTimer:
-		// Now() is read here (command processing) and frozen into the due date;
-		// applyToState never reads the clock (invariant I4).
-		c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
-			ProcessInstanceKey: ei.ProcessInstanceKey,
-			ElementInstanceKey: key,
-			TargetElementId:    ei.ElementId,
-			DueDate:            c.Now() + d.DurationNanos,
-		})
+		// The schedule is resolved here (command processing) — reading the clock and,
+		// for a FEEL schedule, the instance's variables — and the due date and cycle
+		// count are frozen into the event; applyToState never reads either (I4/I6). A
+		// non-interrupting cycle boundary seeds Repetitions so a finite Rn cycle counts
+		// down as it recurs (ADR-0054). An unresolvable FEEL schedule raises an
+		// incident and parks instead of firing immediately (ADR-0064).
+		armOneShotTimer(c, key, ei, d.Schedule)
 	case compiler.BoundaryMessage:
 		c.AppendMessageSubscriptionEvent(key, model.IntentSubscriptionCreated, model.MessageSubscriptionValue{
 			ProcessInstanceKey: ei.ProcessInstanceKey,

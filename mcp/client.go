@@ -17,16 +17,32 @@ import (
 // the engine directly.
 type Client struct {
 	baseURL string
+	token   string // optional bearer token attached to every request
 	http    *http.Client
+}
+
+// ClientOption configures a Client at construction.
+type ClientOption func(*Client)
+
+// WithBearer attaches an Authorization: Bearer <token> header to every request.
+// The single-binary server uses it so the in-process adapter can authenticate its
+// loopback calls when the API requires login (ADR-0049). An empty token is a
+// no-op, so callers can pass it unconditionally.
+func WithBearer(token string) ClientOption {
+	return func(c *Client) { c.token = token }
 }
 
 // NewClient builds a Client for the Atlas server at baseURL (e.g.
 // "http://localhost:8080"). A trailing slash is tolerated.
-func NewClient(baseURL string) *Client {
-	return &Client{
+func NewClient(baseURL string, opts ...ClientOption) *Client {
+	c := &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),
 		http:    &http.Client{Timeout: 30 * time.Second},
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 // apiError carries the {"error": "..."} body Atlas returns on a 4xx/5xx so tool
@@ -70,6 +86,9 @@ func (c *Client) do(method, path, contentType string, body []byte) ([]byte, erro
 	}
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
+	}
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {

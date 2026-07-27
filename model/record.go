@@ -63,6 +63,17 @@ const (
 	// it is never deleted, so the Operations collaboration view can replay the
 	// exchange between pools after the fact (ADR-0038).
 	VTMessageFlow
+	// VTDataObject is a BPMN data object: a typed, named, scope-owned datum with a
+	// declared lifecycle state. Unlike a plain variable it carries a data state
+	// (order [received] → [approved]) whose every transition is a durable event,
+	// so its state history and provenance rebuild from the log (ADR-0053).
+	VTDataObject
+	// VTDecisionEvaluation is one business rule task's DMN decision evaluation
+	// retained for debugging: the input context it was given, the outputs it
+	// produced, and the temis trace explaining which rules fired. Like VTMessageFlow
+	// it is append-only history (one record per evaluation, never deleted), so an
+	// operator can inspect after the fact exactly how a decision was made (ADR-0066).
+	VTDecisionEvaluation
 )
 
 func (t ValueType) String() string {
@@ -91,6 +102,10 @@ func (t ValueType) String() string {
 		return "ProcessDefinition"
 	case VTMessageFlow:
 		return "MessageFlow"
+	case VTDataObject:
+		return "DataObject"
+	case VTDecisionEvaluation:
+		return "DecisionEvaluation"
 	default:
 		return "ValueType(?)"
 	}
@@ -144,6 +159,36 @@ const (
 	// than beside the other job intents so the existing intents keep their numeric
 	// values on the log.
 	IntentJobCanceled
+
+	// IntentTimerCanceled retires a timer without firing it — used when a new
+	// version of a process supersedes a prior version's timer start event, so the
+	// old schedule stops (ADR-0051). It applies like TimerTriggered (the timer is
+	// deleted from the due-date index) but, unlike it, drives no side effect: no
+	// instance is created. Appended at the end so existing intents keep their log
+	// values.
+	IntentTimerCanceled
+
+	// IntentTimerStartArm is a command-only intent (never persisted as an event):
+	// it directs the processor to arm a freshly deployed definition's timer start
+	// events, creating their durable timers and retiring any that a prior version
+	// left armed (ADR-0051). Because commands are not replayed (invariant I6), its
+	// numeric value never reaches the log.
+	IntentTimerStartArm
+
+	// DataObject. Appended after the existing intents so every prior intent keeps
+	// its numeric value on the log (ADR-0053). Created seeds a data object under a
+	// scope with its declared initial data state; StateChanged transitions the data
+	// state (and, later, the value) as an activity writes to it.
+	IntentDataObjectCreated
+	IntentDataObjectStateChanged
+
+	// IntentDecisionEvaluated records that a business rule task's DMN decision was
+	// evaluated (ADR-0066). Appended after the existing intents so every prior
+	// intent keeps its numeric value on the log. It is a pure history event: the
+	// worker has already evaluated the decision off the processor goroutine, and the
+	// resulting inputs/outputs/trace are frozen into the event so replay re-applies
+	// them without re-evaluating (invariant I6).
+	IntentDecisionEvaluated
 )
 
 func (i Intent) String() string {
@@ -180,6 +225,10 @@ func (i Intent) String() string {
 		return "TimerCreated"
 	case IntentTimerTriggered:
 		return "TimerTriggered"
+	case IntentTimerCanceled:
+		return "TimerCanceled"
+	case IntentTimerStartArm:
+		return "TimerStartArm"
 	case IntentSubscriptionCreated:
 		return "SubscriptionCreated"
 	case IntentSubscriptionCorrelated:
@@ -194,6 +243,12 @@ func (i Intent) String() string {
 		return "IncidentCreated"
 	case IntentIncidentResolved:
 		return "IncidentResolved"
+	case IntentDataObjectCreated:
+		return "DataObjectCreated"
+	case IntentDataObjectStateChanged:
+		return "DataObjectStateChanged"
+	case IntentDecisionEvaluated:
+		return "DecisionEvaluated"
 	default:
 		return "Intent(?)"
 	}

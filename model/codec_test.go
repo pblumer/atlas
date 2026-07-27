@@ -36,6 +36,9 @@ func TestRecordRoundTrip(t *testing.T) {
 				ElementId:          17,
 				FlowScopeKey:       NewKey(3, 3),
 				BpmnElementType:    5,
+				TokenID:            NewKey(3, 4),
+				ParentTokenID:      NewKey(3, 5),
+				SourceFlowId:       9,
 			},
 		},
 		{
@@ -116,6 +119,32 @@ func TestRecordRoundTrip(t *testing.T) {
 				TargetElementId:    8,
 				DueDate:            1_700_000_123,
 				Repetitions:        -1,
+			},
+		},
+		{
+			name:   "start timer carries a process definition key",
+			vt:     VTTimer,
+			intent: IntentTimerCreated,
+			value: &TimerValue{
+				// A start timer has no owning instance/element; it names the
+				// definition it instantiates on fire (ADR-0051).
+				TargetElementId: 3,
+				DueDate:         1_700_000_456,
+				Repetitions:     0,
+				ProcessDefKey:   NewKey(1, 7),
+			},
+		},
+		{
+			name:   "incident carries its job and message",
+			vt:     VTIncident,
+			intent: IntentIncidentCreated,
+			value: &IncidentValue{
+				ProcessInstanceKey: NewKey(1, 5),
+				ElementInstanceKey: NewKey(1, 6),
+				JobKey:             NewKey(1, 7),
+				ElementId:          4,
+				RaisedAt:           1_700_000_999,
+				Message:            "worker: connection refused",
 			},
 		},
 		{

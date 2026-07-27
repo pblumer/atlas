@@ -129,6 +129,22 @@ func removeStartRef(refs []messageStartRef, defKey uint64) []messageStartRef {
 // fsync) when a job of a type becomes available.
 func (p *Processor) SetJobNotifier(fn func(jobType int32)) { p.jobNotifier = fn }
 
+// ArmStartTimers enqueues arming of a freshly deployed definition's timer start
+// events: the handler creates their durable timers and retires any that a prior
+// version of the same process left armed, so only the latest version's schedule
+// is active (ADR-0051). Call it once per *fresh* deploy (not on recovery — the
+// restored TimerCreated events already hold the armed timers), then RunUntilIdle
+// (or Drive) to process it. It scans the armed start timers, so callers skip it
+// for a first-version process with no timer start events (nothing to arm or
+// supersede); a re-version still calls it so a removed schedule is retired.
+func (p *Processor) ArmStartTimers(defKey uint64) {
+	p.queue = append(p.queue, Command{
+		Key:       defKey,
+		ValueType: model.VTTimer,
+		Intent:    model.IntentTimerStartArm,
+	})
+}
+
 // CreateInstance enqueues creation of a new instance of the given definition,
 // optionally seeded with initial variables. Call RunUntilIdle to process it.
 func (p *Processor) CreateInstance(defKey uint64, startVars ...model.VariableValue) {
@@ -152,6 +168,52 @@ func (p *Processor) CompleteJob(jobKey uint64, outputs ...model.VariableValue) {
 		ValueType: model.VTJob,
 		Intent:    model.IntentJobCompleted,
 		StartVars: outputs,
+	})
+}
+
+// CompleteJobWithDecision completes a business rule task's job like CompleteJob,
+// additionally carrying the DMN decision evaluation the worker produced (ADR-0066):
+// its inputs, outputs, and trace, frozen into a history event when the completion
+// is folded so an operator can later inspect how the decision was made. decision
+// may be nil, in which case this behaves exactly like CompleteJob.
+func (p *Processor) CompleteJobWithDecision(jobKey uint64, decision *model.DecisionEvaluationValue, outputs ...model.VariableValue) {
+	p.queue = append(p.queue, Command{
+		Key:       jobKey,
+		ValueType: model.VTJob,
+		Intent:    model.IntentJobCompleted,
+		StartVars: outputs,
+		Decision:  decision,
+	})
+}
+
+// FailJob enqueues a worker's failure report for a job (ADR-0061), carrying the
+// retries the worker leaves it and a failure message. With retries > 0 the job is
+// retried (back on the activatable index); with retries <= 0 an incident is raised
+// on the job's element and the token parks there. Failing a job that no longer
+// exists is a no-op. Call RunUntilIdle (or Drive) to process it.
+func (p *Processor) FailJob(jobKey uint64, retries int32, message string) {
+	p.queue = append(p.queue, Command{
+		Key:       jobKey,
+		ValueType: model.VTJob,
+		Intent:    model.IntentJobFailed,
+		Value: inflightValue{
+			job:      model.JobValue{Retries: retries},
+			incident: model.IncidentValue{Message: message},
+		},
+	})
+}
+
+// ResolveIncident enqueues an operator's resolution of the incident attached to
+// elementKey (ADR-0061): the incident is cleared and its job re-created with
+// retries (>= 1), returning it to the activatable index so a worker retries it.
+// Resolving an incident that no longer exists is a no-op. Call RunUntilIdle (or
+// Drive) to process it.
+func (p *Processor) ResolveIncident(elementKey uint64, retries int32) {
+	p.queue = append(p.queue, Command{
+		Key:       elementKey,
+		ValueType: model.VTIncident,
+		Intent:    model.IntentIncidentResolved,
+		Value:     inflightValue{job: model.JobValue{Retries: retries}},
 	})
 }
 
