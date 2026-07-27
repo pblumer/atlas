@@ -283,7 +283,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// (ProcessLookup), so it registers once under the reserved DMN job type
 	// (compiler.DMNJobTypeIndex). It registers via HandleCompleting because a
 	// decision's completion both writes its result back as a process variable and
-	// retains the evaluation (inputs, outputs, trace) for debugging (ADR-0064).
+	// retains the evaluation (inputs, outputs, trace) for debugging (ADR-0066).
 	s.jobRunner = job.NewRunner(store, proc)
 	s.jobRunner.HandleCompleting(compiler.DMNJobTypeIndex, dmn.Handler(store, s.processLookup, s.dmnRegistry, nil))
 	// A *central* business rule task delegates its decision to a remote temis

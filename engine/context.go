@@ -223,7 +223,7 @@ func (c *ProcessingContext) AppendDataObjectEvent(intent model.Intent, v model.D
 }
 
 // AppendDecisionEvaluationEvent records how a business rule task's decision was
-// made — its inputs, outputs, and trace — as append-only history (ADR-0064). The
+// made — its inputs, outputs, and trace — as append-only history (ADR-0066). The
 // worker evaluated the decision off the processor goroutine and froze the result
 // onto the completion command; this event carries genuine runtime data (JSON
 // payloads), so it allocates for its strings, not hot-path token movement. It is

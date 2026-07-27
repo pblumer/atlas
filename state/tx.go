@@ -463,6 +463,18 @@ func (t *Tx) RecordElementStep(piKey uint64, ts int64, pos uint64, elementId int
 	return t.b.Set(keyElementStep(piKey, ts, pos), t.scratch, nil)
 }
 
+// RecordElementReplay retains an activation or consumption with its durable
+// token lineage. It is derived only from the lifecycle event by applyToState.
+func (t *Tx) RecordElementReplay(piKey uint64, ts int64, pos uint64, elementID int32, elementKey, tokenID, parentTokenID uint64, sourceFlowID int32, action byte) error {
+	t.scratch = appendBE32(t.scratch[:0], uint32(elementID))
+	t.scratch = appendBE64(t.scratch, elementKey)
+	t.scratch = appendBE64(t.scratch, tokenID)
+	t.scratch = appendBE64(t.scratch, parentTokenID)
+	t.scratch = appendBE32(t.scratch, uint32(sourceFlowID))
+	t.scratch = append(t.scratch, action)
+	return t.b.Set(keyElementReplay(piKey, ts, pos), t.scratch, nil)
+}
+
 // --- Variable-snapshot history ---
 //
 // Every variable change of a process instance is retained here, keyed in change
@@ -488,7 +500,7 @@ func (t *Tx) RecordVariableSnapshot(ts int64, pos uint64, v *model.VariableValue
 // Every DMN decision a business rule task evaluates is retained here, keyed in
 // evaluation order under the owning process instance, so an operator can inspect
 // after the fact what inputs a decision saw, what it returned, and which rules
-// fired (ADR-0064). The worker evaluates off the processor goroutine and freezes
+// fired (ADR-0066). The worker evaluates off the processor goroutine and freezes
 // the inputs/outputs/trace onto the completion command; this writer runs only from
 // applyToState, from the event alone (the header's timestamp and position plus the
 // frozen evaluation), so it rebuilds identically on replay without re-evaluating

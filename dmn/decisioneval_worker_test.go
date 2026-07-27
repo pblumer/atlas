@@ -15,7 +15,7 @@ import (
 )
 
 // TestBusinessRuleTaskRetainsDecisionEvaluation drives a real DMN business rule
-// task end to end and asserts the debugging record it leaves behind (ADR-0064): the
+// task end to end and asserts the debugging record it leaves behind (ADR-0066): the
 // worker evaluates the "Dish" decision for Season "Winter", and once the instance
 // completes the store holds one decision-evaluation record under the instance whose
 // inputs, outputs, and temis trace explain exactly how the decision was made. This

@@ -4,7 +4,7 @@ import "testing"
 
 // TestJsonObject covers jsonObject's three outcomes: an empty context renders as an
 // empty JSON object, a populated one as its canonical JSON, and a value with no JSON
-// image degrades to "{}" rather than producing an invalid record (ADR-0064).
+// image degrades to "{}" rather than producing an invalid record (ADR-0066).
 func TestJsonObject(t *testing.T) {
 	if got := jsonObject(nil); got != "{}" {
 		t.Errorf("jsonObject(nil) = %q, want {}", got)

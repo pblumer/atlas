@@ -39,7 +39,7 @@ type OutputHandler func(Job) ([]model.VariableValue, error)
 
 // Completion is everything a worker hands back when a job succeeds: the output
 // variables to write into the instance and, for a business rule task, the decision
-// evaluation to retain for debugging (ADR-0064). Decision is nil for workers that
+// evaluation to retain for debugging (ADR-0066). Decision is nil for workers that
 // do not produce one.
 type Completion struct {
 	Outputs  []model.VariableValue
@@ -94,7 +94,7 @@ func (r *Runner) HandleWithOutput(jobType int32, h OutputHandler) {
 }
 
 // HandleCompleting registers a worker whose completion carries both output
-// variables and a decision evaluation to retain (the DMN worker, ADR-0064). Same
+// variables and a decision evaluation to retain (the DMN worker, ADR-0066). Same
 // dispatch as the others; its Completion rides along on the CompleteJob command.
 func (r *Runner) HandleCompleting(jobType int32, h CompletingHandler) { r.handlers[jobType] = h }
 

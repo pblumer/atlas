@@ -16,7 +16,7 @@ import (
 // Result is one evaluated business rule task's outcome, delivered to the optional
 // sink a [Handler] is built with. The decision's outputs are written back into the
 // instance as process variables (see Handler), and the full evaluation (inputs,
-// outputs, trace) is retained as a durable debugging record (ADR-0064); the sink is
+// outputs, trace) is retained as a durable debugging record (ADR-0066); the sink is
 // an additional observation seam for tests and diagnostics, not the primary path.
 type Result struct {
 	ElementInstanceKey uint64
@@ -39,7 +39,7 @@ const builtinProcessInstanceKey = "processInstanceKey"
 
 // Evaluation is what running a decision yields: its named outputs and, when the
 // engine can produce one, the temis trace explaining how it got there — which
-// tables ran and which rules fired (ADR-0064). Trace is canonical JSON or nil when
+// tables ran and which rules fired (ADR-0066). Trace is canonical JSON or nil when
 // no trace is available (a literal-expression decision, or a remote decision whose
 // connector returns none).
 type Evaluation struct {
@@ -77,7 +77,7 @@ type Bind func(cp *compiler.CompiledProcess, detail *compiler.BusinessRuleTaskDe
 // (invariant I2/I4). Returning an error leaves the job pending. Alongside the
 // output variables, the completion carries a durable decision-evaluation record —
 // the inputs, outputs, and trace — so an operator can inspect how the decision was
-// made live and after the fact (ADR-0064). sink, if non-nil, additionally observes
+// made live and after the fact (ADR-0066). sink, if non-nil, additionally observes
 // each result. [Handler] (local) and the temis connector worker (central, ADR-0050)
 // are both built on it.
 func DecisionHandler(store *state.Store, lookup ProcessLookup, bind Bind, sink func(Result)) job.CompletingHandler {
@@ -118,7 +118,7 @@ func DecisionHandler(store *state.Store, lookup ProcessLookup, bind Bind, sink f
 				Trace:              eval.Trace,
 			})
 		}
-		// Retain how the decision was made as a durable record on completion (ADR-0064).
+		// Retain how the decision was made as a durable record on completion (ADR-0066).
 		// ProcessInstanceKey/ElementInstanceKey are re-stamped from the authoritative
 		// job when the completion folds, so they need not be set here.
 		decision := &model.DecisionEvaluationValue{
@@ -164,7 +164,7 @@ func Handler(store *state.Store, lookup ProcessLookup, reg *Registry, sink func(
 		// The task's binding selects which deployed model version to evaluate
 		// (ADR-0063): deployment pins to this process's own snapshot; latest (the
 		// default) tracks the newest deployed version of the decision. Both request
-		// the trace so the evaluation is retained with its explanation (ADR-0064).
+		// the trace so the evaluation is retained with its explanation (ADR-0066).
 		return func(ctx context.Context, decisionId string, inputs map[string]any) (Evaluation, error) {
 			if detail.Binding == compiler.BindingDeployment {
 				out, trace, err := reg.EvaluateTraced(ctx, cp.Key, decisionId, inputs)

@@ -125,6 +125,9 @@ type ElementInstanceValue struct {
     ElementId          int32   // INDEX into the compiled graph, not a string
     FlowScopeKey       uint64  // parent scope (subprocess instance), 0 = root
     BpmnElementType    uint8   // for fast dispatch
+    TokenID            uint64  // stable logical token line for causal replay
+    ParentTokenID      uint64  // split parent; zero when the line was not forked
+    SourceFlowId       int32   // compiled sequence flow that activated this element
 }
 
 type JobValue struct {

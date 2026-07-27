@@ -21,7 +21,7 @@ import (
 // a central decision and a local one differ only in the [dmn.Evaluator] bound to
 // them: this one resolves the task's connector from reg and calls the remote
 // client. A remote evaluation returns no temis trace, so its retained
-// decision-evaluation record (ADR-0064) carries inputs and outputs but an empty
+// decision-evaluation record (ADR-0066) carries inputs and outputs but an empty
 // trace. A job whose connector is not registered leaves the job pending with an
 // error, exactly like any worker failure. sink, if non-nil, observes each result.
 func Handler(store *state.Store, lookup dmn.ProcessLookup, reg *Registry, sink func(dmn.Result)) job.CompletingHandler {

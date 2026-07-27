@@ -1,4 +1,4 @@
-# ADR-0064: Durable decision-evaluation records for debugging
+# ADR-0066: Durable decision-evaluation records for debugging
 
 - **Status:** Accepted
 - **Date:** 2026-07-25

@@ -9,7 +9,7 @@ import (
 
 // TestInstanceDecisionsEndpoint deploys the dinner process (Start → business rule
 // task "Dish" → End), runs an instance to completion, then reads the new
-// /instances/{key}/decisions surface (ADR-0064). It asserts the durable evaluation
+// /instances/{key}/decisions surface (ADR-0066). It asserts the durable evaluation
 // is served back with everything an operator needs to see how the decision was
 // made after the fact: the diagram element, the inputs it saw, the outputs it
 // produced, and the temis trace.

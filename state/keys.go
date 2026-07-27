@@ -25,11 +25,12 @@ const (
 	cfMessageFlow            columnFamily = 0x0C // msgFlow:<receiverDefKey>:<ts>:<pos> → MessageFlowValue
 	cfJobByElement           columnFamily = 0x0D // jobByEl:<elKey> → jobKey (reverse lookup for boundary cancel)
 	cfElementStep            columnFamily = 0x0E // elStep:<piKey>:<ts>:<pos> → int32 elementId
+	cfElementReplay          columnFamily = 0x13 // elReplay:<piKey>:<ts>:<pos> → causal lifecycle value
 	cfVariableSnapshot       columnFamily = 0x0F // varSnap:<scopeKey>:<ts>:<pos> → VariableValue
 	cfDataObject             columnFamily = 0x10 // do:<scopeKey>:<name> → DataObjectValue
 	cfDataObjectSnapshot     columnFamily = 0x11 // doSnap:<scopeKey>:<ts>:<pos> → DataObjectValue
 	cfIncident               columnFamily = 0x12 // incident:<elKey> → IncidentValue (ADR-0061)
-	cfDecisionEvaluation     columnFamily = 0x13 // decEval:<scopeKey>:<ts>:<pos> → DecisionEvaluationValue (ADR-0064)
+	cfDecisionEvaluation     columnFamily = 0x14 // decEval:<scopeKey>:<ts>:<pos> → DecisionEvaluationValue (ADR-0066)
 )
 
 func appendBE64(dst []byte, v uint64) []byte { return binary.BigEndian.AppendUint64(dst, v) }
@@ -172,6 +173,16 @@ func elementStepInstancePrefix(piKey uint64) []byte {
 	return appendBE64([]byte{byte(cfElementStep)}, piKey)
 }
 
+func keyElementReplay(piKey uint64, ts int64, pos uint64) []byte {
+	k := appendBE64([]byte{byte(cfElementReplay)}, piKey)
+	k = appendOrderedInt64(k, ts)
+	return appendBE64(k, pos)
+}
+
+func elementReplayInstancePrefix(piKey uint64) []byte {
+	return appendBE64([]byte{byte(cfElementReplay)}, piKey)
+}
+
 // timestampFromStepKey extracts the event timestamp from an element-step key,
 // inverting the sign-flip appendOrderedInt64 applied.
 func timestampFromStepKey(k []byte) int64 {
@@ -263,7 +274,7 @@ func positionFromDataObjSnapKey(k []byte) uint64 {
 // keyDecisionEvaluation keys one retained DMN decision evaluation of a scope (a
 // process instance), the same (scope, ts, pos) shape as the variable-snapshot key
 // so a business rule task's evaluations fold into the same instance timeline by
-// log position (ADR-0064, mirroring ADR-0048). Append-only: one record per
+// log position (ADR-0066, mirroring ADR-0048). Append-only: one record per
 // evaluation, never overwritten.
 func keyDecisionEvaluation(scopeKey uint64, ts int64, pos uint64) []byte {
 	b := appendOrderedInt64(decisionEvaluationScopePrefix(scopeKey), ts)

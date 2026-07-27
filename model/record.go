@@ -72,7 +72,7 @@ const (
 	// retained for debugging: the input context it was given, the outputs it
 	// produced, and the temis trace explaining which rules fired. Like VTMessageFlow
 	// it is append-only history (one record per evaluation, never deleted), so an
-	// operator can inspect after the fact exactly how a decision was made (ADR-0064).
+	// operator can inspect after the fact exactly how a decision was made (ADR-0066).
 	VTDecisionEvaluation
 )
 
@@ -183,7 +183,7 @@ const (
 	IntentDataObjectStateChanged
 
 	// IntentDecisionEvaluated records that a business rule task's DMN decision was
-	// evaluated (ADR-0064). Appended after the existing intents so every prior
+	// evaluated (ADR-0066). Appended after the existing intents so every prior
 	// intent keeps its numeric value on the log. It is a pure history event: the
 	// worker has already evaluated the decision off the processor goroutine, and the
 	// resulting inputs/outputs/trace are frozen into the event so replay re-applies

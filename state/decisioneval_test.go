@@ -10,7 +10,7 @@ import (
 
 // TestDecisionEvaluationHistory records decision evaluations for two instances and
 // checks that DecisionEvaluationHistory returns one instance's evaluations in
-// (timestamp, position) order, isolated from the other's (ADR-0064). Written out of
+// (timestamp, position) order, isolated from the other's (ADR-0066). Written out of
 // order to prove the scan sorts, with two evaluations on the same instance to show
 // each is retained as a distinct record.
 func TestDecisionEvaluationHistory(t *testing.T) {

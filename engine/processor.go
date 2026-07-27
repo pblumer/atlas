@@ -172,7 +172,7 @@ func (p *Processor) CompleteJob(jobKey uint64, outputs ...model.VariableValue) {
 }
 
 // CompleteJobWithDecision completes a business rule task's job like CompleteJob,
-// additionally carrying the DMN decision evaluation the worker produced (ADR-0064):
+// additionally carrying the DMN decision evaluation the worker produced (ADR-0066):
 // its inputs, outputs, and trace, frozen into a history event when the completion
 // is folded so an operator can later inspect how the decision was made. decision
 // may be nil, in which case this behaves exactly like CompleteJob.

@@ -86,7 +86,7 @@ func (r *Registry) Evaluate(ctx context.Context, defKey uint64, decisionId strin
 }
 
 // EvaluateTraced is Evaluate plus the temis trace explaining how the decision was
-// made — which tables ran, which rules matched, and why (ADR-0064). The trace is
+// made — which tables ran, which rules matched, and why (ADR-0066). The trace is
 // canonical JSON (temis's [tdmn.Trace] tree) or nil for a decision with no table
 // logic (a literal expression). The DMN worker uses it to retain a debuggable
 // record of the evaluation. Tracing runs off the processor goroutine, so its extra
@@ -117,7 +117,7 @@ func (r *Registry) EvaluateLatestTraced(ctx context.Context, decisionId string, 
 }
 
 // evalDecision evaluates one decision from an already-compiled model, requesting
-// the temis trace so the worker can retain how the decision was made (ADR-0064).
+// the temis trace so the worker can retain how the decision was made (ADR-0066).
 // `where` names the model in errors ("def 7" or "the latest deployed model"). The
 // returned trace bytes are the JSON image of the temis trace tree, or nil when the
 // decision produced none (a literal-expression decision has no tables to trace).

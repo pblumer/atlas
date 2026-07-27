@@ -25,7 +25,7 @@ func collectDecisions(t *testing.T, s interface {
 }
 
 // TestJobCompletionRecordsDecisionEvaluation covers the debugging side of the job
-// path (ADR-0064): a business rule task's worker completes its job carrying the
+// path (ADR-0066): a business rule task's worker completes its job carrying the
 // decision evaluation it made off the processor goroutine, and handleJobCompleted
 // freezes that evaluation — inputs, outputs, and trace — into a durable history
 // record keyed under the process instance. The record's scope keys are stamped from

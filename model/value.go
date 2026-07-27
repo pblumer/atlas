@@ -33,9 +33,13 @@ type ElementInstanceValue struct {
 	// interrupting boundary find and terminate its host, and a completing host find
 	// and disarm its boundary events (ADR-0040).
 	AttachedToKey uint64
+	TokenID       uint64
+	ParentTokenID uint64
+	SourceFlowId  int32
 }
 
-const elementInstanceSize = 8 + 8 + 4 + 8 + 1 + 8
+const elementInstanceLegacySize = 8 + 8 + 4 + 8 + 1 + 8
+const elementInstanceSize = elementInstanceLegacySize + 8 + 8 + 4
 
 func (*ElementInstanceValue) ValueType() ValueType { return VTElementInstance }
 
@@ -45,11 +49,14 @@ func (v *ElementInstanceValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.ElementId))
 	dst = binary.LittleEndian.AppendUint64(dst, v.FlowScopeKey)
 	dst = append(dst, v.BpmnElementType)
-	return binary.LittleEndian.AppendUint64(dst, v.AttachedToKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.AttachedToKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.TokenID)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ParentTokenID)
+	return binary.LittleEndian.AppendUint32(dst, uint32(v.SourceFlowId))
 }
 
 func (v *ElementInstanceValue) decode(src []byte) error {
-	if len(src) < elementInstanceSize {
+	if len(src) < elementInstanceLegacySize {
 		return ErrShortBuffer
 	}
 	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src[0:])
@@ -58,6 +65,11 @@ func (v *ElementInstanceValue) decode(src []byte) error {
 	v.FlowScopeKey = binary.LittleEndian.Uint64(src[20:])
 	v.BpmnElementType = src[28]
 	v.AttachedToKey = binary.LittleEndian.Uint64(src[29:])
+	if len(src) >= elementInstanceSize {
+		v.TokenID = binary.LittleEndian.Uint64(src[37:])
+		v.ParentTokenID = binary.LittleEndian.Uint64(src[45:])
+		v.SourceFlowId = int32(binary.LittleEndian.Uint32(src[53:]))
+	}
 	return nil
 }
 
@@ -328,7 +340,7 @@ func (v *DataObjectValue) decode(src []byte) error {
 }
 
 // DecisionEvaluationValue is one business rule task's DMN decision evaluation,
-// retained for debugging (ADR-0064). It freezes what the worker computed off the
+// retained for debugging (ADR-0066). It freezes what the worker computed off the
 // processor goroutine: the input context the decision was given, the outputs it
 // produced, and the temis trace explaining which rules fired. The three payloads
 // are canonical JSON text (InputsJSON and OutputsJSON are objects; TraceJSON is the
