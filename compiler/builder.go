@@ -341,6 +341,9 @@ func (b *Builder) AddClioWriteTask(connector, subject, eventType string, retries
 		Method:    -1, // not a REST task
 		Url:       -1,
 		ResultVar: -1,
+		Headers:   -1,
+		Query:     -1,
+		Auth:      -1,
 		Retries:   retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
@@ -352,7 +355,19 @@ func (b *Builder) AddClioWriteTask(connector, subject, eventType string, retries
 // calls the model-authored url with the given method, writes the JSON response
 // into resultVar (empty = discard the response), and completes the job
 // (ADR-0067). method is stored as given (the parser uppercases and validates it).
-func (b *Builder) AddRestConnectorTask(method, url, resultVar string, retries int32) int32 {
+// RestAuth is a REST connector task's authentication config. Type is "", "basic",
+// "bearer", or "apiKey". Username (basic) and ApiKeyName (the apiKey header name)
+// are model data. SecretRef names a server-side secret (ADR-0041) — the basic
+// password, bearer token, or api-key value — resolved at runtime; the secret value
+// itself is never authored in the model or stored here.
+type RestAuth struct {
+	Type       string `json:"type,omitempty"`
+	Username   string `json:"username,omitempty"`
+	ApiKeyName string `json:"apiKeyName,omitempty"`
+	SecretRef  string `json:"secretRef,omitempty"`
+}
+
+func (b *Builder) AddRestConnectorTask(method, url, resultVar string, headers, query map[string]string, auth RestAuth, retries int32) int32 {
 	detail := int32(len(b.connectorTasks))
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
 		JobType:   b.intern(RestJobType),
@@ -362,9 +377,33 @@ func (b *Builder) AddRestConnectorTask(method, url, resultVar string, retries in
 		Method:    b.intern(method),
 		Url:       b.intern(url),
 		ResultVar: b.intern(resultVar),
+		Headers:   b.internStringMap(headers),
+		Query:     b.internStringMap(query),
+		Auth:      b.internAuth(auth),
 		Retries:   retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
+}
+
+// internStringMap interns a {name:value} map as a canonical JSON object (sorted
+// keys, so the compiled form is deterministic — invariant I5), returning -1 for an
+// empty map so the worker can skip it.
+func (b *Builder) internStringMap(m map[string]string) int32 {
+	if len(m) == 0 {
+		return -1
+	}
+	raw, _ := json.Marshal(m) // a map[string]string always marshals; keys are sorted
+	return b.intern(string(raw))
+}
+
+// internAuth interns a REST auth config as a canonical JSON object, returning -1
+// when there is no authentication (empty type).
+func (b *Builder) internAuth(a RestAuth) int32 {
+	if a.Type == "" {
+		return -1
+	}
+	raw, _ := json.Marshal(a) // a fixed struct of strings always marshals
+	return b.intern(string(raw))
 }
 
 // AddUserTask adds a user task that parks a token and creates a job for a human

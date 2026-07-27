@@ -1000,8 +1000,24 @@ const SERVICE_TASK_KINDS = [
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#12a594"/><circle cx="8" cy="8" r="4.7" fill="none" stroke="#fff" stroke-width="1.1"/><ellipse cx="8" cy="8" rx="2.3" ry="4.7" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.3 8h9.4M8 3.3v9.4" stroke="#fff" stroke-width="1.1"/></svg>`,
     ext: "atlas:RestConnector",
     fields: [
+      { group: "HTTP endpoint" },
       { key: "method", label: "Method", type: "select", options: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] },
       { key: "url", label: "URL", placeholder: "https://api.example.com/customers" },
+      { key: "headers", label: "Headers", type: "map", childType: "atlas:HttpHeader", hint: "Sent with the request." },
+      { key: "queryParameters", label: "Query parameters", type: "map", childType: "atlas:QueryParam", hint: "Appended to the request URL." },
+      { group: "Authentication" },
+      {
+        key: "authType", label: "Type", type: "select", reRender: true,
+        options: [{ v: "", l: "None" }, { v: "basic", l: "Basic" }, { v: "bearer", l: "Bearer token" }, { v: "apiKey", l: "API key" }],
+      },
+      { key: "authUsername", label: "Username", showIf: (v) => v.authType === "basic" },
+      { key: "authApiKeyName", label: "API key header name", placeholder: "X-API-Key", showIf: (v) => v.authType === "apiKey" },
+      {
+        key: "authSecret", label: "Secret reference", placeholder: "MY_TOKEN",
+        showIf: (v) => v.authType === "basic" || v.authType === "bearer" || v.authType === "apiKey",
+        hint: "The credential lives on the server as ATLAS_CONNECTOR_<REF>_TOKEN; the model stores only this reference, never the secret value.",
+      },
+      { group: "Output" },
       { key: "resultVariable", label: "Result variable", placeholder: "response", hint: "The JSON response is written into this process variable (leave empty to discard it)." },
     ],
   },
@@ -1017,9 +1033,26 @@ function serviceTaskKind(bo) {
   return SERVICE_TASK_KINDS[0];
 }
 
+// selectOption normalizes a select option to {v,l} (a bare string is both value and
+// label).
+function selectOption(o) {
+  return typeof o === "string" ? { v: o, l: o } : o;
+}
+
+// stMapRowHTML renders one key/value row of a map field (a header or query param).
+function stMapRowHTML(fieldKey, name, value) {
+  return `<div class="st-map-row" data-field="${esc(fieldKey)}" style="display:flex;gap:6px;margin-bottom:6px">
+    <input type="text" class="st-map-name" value="${esc(name || "")}" placeholder="name" style="flex:0 0 40%"/>
+    <input type="text" class="st-map-value" value="${esc(value || "")}" placeholder="value" style="flex:1"/>
+    <button type="button" class="st-map-del" title="Remove" style="flex:0 0 auto">✕</button>
+  </div>`;
+}
+
 // serviceTaskKindHTML renders the searchable kind picker plus the current kind's
 // fields, both from SERVICE_TASK_KINDS. The picker approximates the reference
-// tooling's template chooser within the buildless panel (ADR-0067/0012).
+// tooling's template chooser within the buildless panel (ADR-0067/0012); the field
+// form is generic over text/select/map fields, section groups, and showIf
+// visibility so a new connector kind needs no bespoke panel code.
 function serviceTaskKindHTML(bo) {
   const cur = serviceTaskKind(bo);
   const ext = findExt(bo, cur.ext) || {};
@@ -1031,14 +1064,26 @@ function serviceTaskKindHTML(bo) {
     </div>`).join("");
   let fields = "";
   for (const f of cur.fields) {
-    const val = ext[f.key] || "";
-    if (f.type === "select") {
-      const chosen = val || f.options[0];
-      const opts = f.options.map((o) => `<option value="${esc(o)}" ${o === chosen ? "selected" : ""}>${esc(o)}</option>`).join("");
+    if (f.group) { fields += `<h3>${esc(f.group)}</h3>`; continue; }
+    if (f.showIf && !f.showIf(ext)) continue;
+    if (f.type === "map") {
+      const list = Array.isArray(ext[f.key]) ? ext[f.key] : [];
+      const rowsHTML = list.map((kv) => stMapRowHTML(f.key, kv.name, kv.value)).join("");
+      fields += `<div class="field"><span>${esc(f.label)}</span>
+        <div class="st-map" data-field="${esc(f.key)}" data-childtype="${esc(f.childType)}">
+          <div class="st-map-rows">${rowsHTML}</div>
+          <button type="button" class="st-map-add" style="margin-top:2px">+ Add</button>
+        </div></div>`;
+    } else if (f.type === "select") {
+      const chosen = ext[f.key] || "";
+      const opts = f.options.map((o) => {
+        const { v, l } = selectOption(o);
+        return `<option value="${esc(v)}" ${v === chosen ? "selected" : ""}>${esc(l)}</option>`;
+      }).join("");
       fields += `<label class="field"><span>${esc(f.label)}</span><select id="f-st-${f.key}">${opts}</select></label>`;
     } else {
       fields += `<label class="field"><span>${esc(f.label)}</span>
-        <input type="text" id="f-st-${f.key}" value="${esc(val)}" placeholder="${esc(f.placeholder || "")}"/></label>`;
+        <input type="text" id="f-st-${f.key}" value="${esc(ext[f.key] || "")}" placeholder="${esc(f.placeholder || "")}"/></label>`;
     }
     if (f.hint) fields += `<p class="muted" style="font-size:12px">${esc(f.hint)}</p>`;
   }
@@ -1058,7 +1103,10 @@ function applyServiceTaskKind(modeler, element, kindId) {
   }
   const defaults = {};
   for (const f of kind.fields) {
-    if (f.type === "select" && f.options && f.options.length) defaults[f.key] = f.options[0];
+    if (f.type === "select" && f.options && f.options.length) {
+      const v = selectOption(f.options[0]).v;
+      if (v) defaults[f.key] = v;
+    }
   }
   upsertExt(modeler, element, kind.ext, defaults);
 }
@@ -2273,17 +2321,55 @@ function wireProperties(root, modeler, api, projectId, toast) {
       });
     }
     const stKind = serviceTaskKind(bo);
+    const stModdle = modeler.get("moddle");
+    // readMapField rebuilds a map field's moddle children (headers/query params)
+    // from its rows, keeping only rows with a name (an unnamed row is incomplete).
+    const readMapField = (f) => {
+      const out = [];
+      body.querySelectorAll(`.st-map-row[data-field="${f.key}"]`).forEach((r) => {
+        const name = (r.querySelector(".st-map-name").value || "").trim();
+        if (!name) return;
+        out.push(stModdle.create(f.childType, { name, value: r.querySelector(".st-map-value").value || "" }));
+      });
+      return out;
+    };
     const saveKindFields = () => savePreservingPanel(() => {
       const props = {};
       for (const f of stKind.fields) {
+        if (f.group) continue;
+        if (f.type === "map") { props[f.key] = readMapField(f); continue; }
+        // A showIf-hidden field isn't rendered; leave its stored value untouched.
         const el = body.querySelector("#f-st-" + f.key);
         if (el) props[f.key] = (el.value || "").trim();
       }
       upsertExt(modeler, element, stKind.ext, props);
     });
     for (const f of stKind.fields) {
+      if (f.group || f.type === "map") continue;
       const el = body.querySelector("#f-st-" + f.key);
-      if (el) el.addEventListener("change", saveKindFields);
+      if (!el) continue;
+      el.addEventListener("change", () => {
+        saveKindFields();
+        if (f.reRender) show(element); // e.g. auth type: reveal the scheme's fields
+      });
+    }
+    // Map editors: a name/value row list with add/remove. Edits and removals save;
+    // adding inserts an empty row (it saves once the author types a name).
+    for (const f of stKind.fields) {
+      if (f.type !== "map") continue;
+      const cont = body.querySelector(`.st-map[data-field="${f.key}"]`);
+      if (!cont) continue;
+      cont.addEventListener("change", saveKindFields);
+      cont.addEventListener("click", (e) => {
+        if (e.target.closest(".st-map-add")) {
+          e.preventDefault();
+          cont.querySelector(".st-map-rows").insertAdjacentHTML("beforeend", stMapRowHTML(f.key, "", ""));
+        } else if (e.target.closest(".st-map-del")) {
+          e.preventDefault();
+          e.target.closest(".st-map-row").remove();
+          saveKindFields();
+        }
+      });
     }
 
     const fdecision = body.querySelector("#f-decisionid");

@@ -37,6 +37,9 @@ func (erroringClient) Do(context.Context, rest.Request) (rest.Response, error) {
 	return rest.Response{}, context.DeadlineExceeded
 }
 
+// noSecret is a resolver for tests that use no authentication.
+func noSecret(string) string { return "" }
+
 const restDefKey = 71
 
 // restProcess: Start → REST connector task → End.
@@ -44,7 +47,7 @@ func restProcess(t *testing.T, method, url, resultVar string) (*compiler.Compile
 	t.Helper()
 	b := compiler.NewBuilder(restDefKey, "customers", 1)
 	start := b.AddStartEvent()
-	call := b.AddRestConnectorTask(method, url, resultVar, 3)
+	call := b.AddRestConnectorTask(method, url, resultVar, nil, nil, compiler.RestAuth{}, 3)
 	end := b.AddEndEvent()
 	b.Connect(start, call)
 	b.Connect(call, end)
@@ -62,7 +65,7 @@ func restThenWaitProcess(t *testing.T, method, url, resultVar string) (*compiler
 	t.Helper()
 	b := compiler.NewBuilder(restDefKey, "customers", 1)
 	start := b.AddStartEvent()
-	call := b.AddRestConnectorTask(method, url, resultVar, 3)
+	call := b.AddRestConnectorTask(method, url, resultVar, nil, nil, compiler.RestAuth{}, 3)
 	wait := b.AddServiceTask("wait", 3)
 	end := b.AddEndEvent()
 	b.Connect(start, call)
@@ -170,7 +173,7 @@ func TestRestConnectorWritesResponseToVariable(t *testing.T) {
 		return nil
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, rest.Handler(store, lookup, rc))
+	runner.HandleWithOutput(jobType, rest.Handler(store, lookup, rc, noSecret))
 
 	p.CreateInstance(cp.Key, model.VariableValue{Name: "name", Kind: model.VarString, Text: "Ada"})
 	if err := runner.Drive(); err != nil {
@@ -215,7 +218,7 @@ func TestRestConnectorGetNoBodyNoResult(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc))
+	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, noSecret))
 
 	p.CreateInstance(cp.Key, model.VariableValue{Name: "ignored", Kind: model.VarString, Text: "x"})
 	if err := runner.Drive(); err != nil {
@@ -284,7 +287,7 @@ func TestRestConnectorRecoversAcrossRestart(t *testing.T) {
 
 	rc := &recordingClient{resp: rest.Response{Status: 200}}
 	runner := job.NewRunner(store2, p2)
-	runner.HandleWithOutput(jobType, rest.Handler(store2, lookup, rc))
+	runner.HandleWithOutput(jobType, rest.Handler(store2, lookup, rc, noSecret))
 	if err := runner.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)
 	}
@@ -307,7 +310,7 @@ func TestRestConnectorClientError(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, erroringClient{}))
+	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, erroringClient{}, noSecret))
 
 	p.CreateInstance(cp.Key)
 	// A handler error does not abort Drive: it is routed into the incident model
@@ -332,7 +335,7 @@ func TestRestConnectorNoCompiledProcess(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, &recordingClient{}))
+	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, &recordingClient{}, noSecret))
 
 	p.CreateInstance(cp.Key)
 	// An unresolvable definition is a handler error, routed into the incident model
@@ -349,7 +352,7 @@ func TestRestConnectorNoCompiledProcess(t *testing.T) {
 // element instance has already completed: it is a no-op, not an error.
 func TestRestHandlerElementInstanceGone(t *testing.T) {
 	_, store := openStore(t)
-	h := rest.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, &recordingClient{})
+	h := rest.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, &recordingClient{}, noSecret)
 	out, err := h(job.Job{ElementInstanceKey: 424242})
 	if err != nil || out != nil {
 		t.Fatalf("handler for a vanished element instance: out=%v err=%v, want nil,nil", out, err)
@@ -363,4 +366,120 @@ func contains(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+// restConfiguredProcess: Start → REST GET task carrying headers/query/auth → plain
+// service task (parks). Lets a test assert the request the worker built.
+func restConfiguredProcess(t *testing.T, headers, query map[string]string, auth compiler.RestAuth) (*compiler.CompiledProcess, int32) {
+	t.Helper()
+	b := compiler.NewBuilder(restDefKey, "todos", 1)
+	start := b.AddStartEvent()
+	call := b.AddRestConnectorTask("GET", "https://api.example.com/todos", "", headers, query, auth, 3)
+	wait := b.AddServiceTask("wait", 3)
+	end := b.AddEndEvent()
+	b.Connect(start, call)
+	b.Connect(call, wait)
+	b.Connect(wait, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return cp, cp.ConnectorTask(cp.Node(call).Detail).JobType
+}
+
+func driveRest(t *testing.T, cp *compiler.CompiledProcess, jobType int32, rc rest.Client, secret rest.SecretResolver, store *state.Store, log *wal.Log) error {
+	t.Helper()
+	p := engine.New(1, log, store, &fixedClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	runner := job.NewRunner(store, p)
+	runner.HandleWithOutput(jobType, rest.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, rc, secret))
+	p.CreateInstance(cp.Key)
+	return runner.Drive()
+}
+
+// TestRestConnectorAppliesHeadersQueryAuth proves the worker sends the model
+// headers and query, and turns a bearer auth's secret *reference* into an
+// Authorization header via the resolver (the token never being in the model).
+func TestRestConnectorAppliesHeadersQueryAuth(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := restConfiguredProcess(t,
+		map[string]string{"Accept": "application/json"},
+		map[string]string{"page": "1"},
+		compiler.RestAuth{Type: "bearer", SecretRef: "TODO_TOKEN"})
+	rc := &recordingClient{resp: rest.Response{Status: 200}}
+	secret := func(ref string) string {
+		if ref == "TODO_TOKEN" {
+			return "s3cr3t"
+		}
+		return ""
+	}
+	if err := driveRest(t, cp, jobType, rc, secret, store, log); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	if len(rc.requests) != 1 {
+		t.Fatalf("requests = %d, want 1", len(rc.requests))
+	}
+	req := rc.requests[0]
+	if req.Headers["Accept"] != "application/json" {
+		t.Errorf("Accept header = %q, want application/json", req.Headers["Accept"])
+	}
+	if req.Headers["Authorization"] != "Bearer s3cr3t" {
+		t.Errorf("Authorization = %q, want the resolved bearer token", req.Headers["Authorization"])
+	}
+	if req.Query["page"] != "1" {
+		t.Errorf("query page = %q, want 1", req.Query["page"])
+	}
+}
+
+// TestRestConnectorBasicAuth checks HTTP Basic: username (model) + resolved secret
+// become a base64 Authorization header.
+func TestRestConnectorBasicAuth(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := restConfiguredProcess(t, nil, nil,
+		compiler.RestAuth{Type: "basic", Username: "ada", SecretRef: "PW"})
+	rc := &recordingClient{resp: rest.Response{Status: 200}}
+	if err := driveRest(t, cp, jobType, rc, func(string) string { return "lovelace" }, store, log); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	// base64("ada:lovelace") == "YWRhOmxvdmVsYWNl"
+	if got := rc.requests[0].Headers["Authorization"]; got != "Basic YWRhOmxvdmVsYWNl" {
+		t.Errorf("Authorization = %q, want Basic base64(ada:lovelace)", got)
+	}
+}
+
+// TestRestConnectorApiKeyAuth checks an api-key: the resolved secret goes into the
+// named header.
+func TestRestConnectorApiKeyAuth(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := restConfiguredProcess(t, nil, nil,
+		compiler.RestAuth{Type: "apikey", ApiKeyName: "X-API-Key", SecretRef: "K"})
+	rc := &recordingClient{resp: rest.Response{Status: 200}}
+	if err := driveRest(t, cp, jobType, rc, func(string) string { return "abc123" }, store, log); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	if got := rc.requests[0].Headers["X-API-Key"]; got != "abc123" {
+		t.Errorf("X-API-Key = %q, want the resolved key", got)
+	}
+}
+
+// TestRestConnectorAuthSecretMissing proves a configured auth whose secret is not
+// resolvable fails the job (incident) rather than calling the API unauthenticated:
+// no request is made and the instance stays active.
+func TestRestConnectorAuthSecretMissing(t *testing.T) {
+	log, store := openStore(t)
+	cp, jobType := restConfiguredProcess(t, nil, nil,
+		compiler.RestAuth{Type: "bearer", SecretRef: "MISSING"})
+	rc := &recordingClient{resp: rest.Response{Status: 200}}
+	if err := driveRest(t, cp, jobType, rc, noSecret, store, log); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	if len(rc.requests) != 0 {
+		t.Errorf("requests = %d, want 0 (unauthenticated call refused)", len(rc.requests))
+	}
+	if pi := mustActiveProcs(t, store); pi != 1 {
+		t.Errorf("active instances = %d, want 1 (job parked on incident)", pi)
+	}
 }

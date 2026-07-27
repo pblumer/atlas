@@ -13,9 +13,9 @@
 //     and completes the job, which drives the token onward.
 //
 // Unlike the clio connector (ADR-0036), a REST task authors its full URL, method,
-// and (as they land) headers/query in the model; credentials are never authored
-// there — authentication is a follow-up as a type plus a server-registered
-// credential reference (ADR-0067).
+// headers, and query parameters in the model; credentials are never authored there
+// — authentication (basic/bearer/apiKey) names a server-side secret the worker
+// resolves at runtime (ADR-0041/0067), so a token never appears in a BPMN file.
 //
 // Delivery is at-least-once (a crash between "the API accepted the call" and "job
 // completed" replays the request); every request carries the job key as an
@@ -30,16 +30,21 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 )
 
 // Request is one HTTP call a REST connector task makes. URL is the full,
-// model-authored endpoint (ADR-0067). Body, when non-nil, is sent as a JSON
-// request body (the worker attaches it only for methods that carry one).
-// IdempotencyKey is deterministic (the job key), so an at-least-once retry can be
-// de-duplicated by the target API.
+// model-authored endpoint (ADR-0067). Headers are set on the request (including
+// any Authorization/api-key header the worker resolved from a secret); Query is
+// appended to the URL. Body, when non-nil, is sent as a JSON request body (the
+// worker attaches it only for methods that carry one). IdempotencyKey is
+// deterministic (the job key), so an at-least-once retry can be de-duplicated by
+// the target API.
 type Request struct {
 	Method         string
 	URL            string
+	Headers        map[string]string
+	Query          map[string]string
 	Body           map[string]any
 	IdempotencyKey string
 }
@@ -81,14 +86,25 @@ func (c *HTTPClient) Do(ctx context.Context, r Request) (Response, error) {
 		}
 		reqBody = bytes.NewReader(raw)
 	}
-	req, err := http.NewRequestWithContext(ctx, r.Method, r.URL, reqBody)
+	reqURL, err := withQuery(r.URL, r.Query)
+	if err != nil {
+		return Response{}, err
+	}
+	req, err := http.NewRequestWithContext(ctx, r.Method, reqURL, reqBody)
 	if err != nil {
 		return Response{}, fmt.Errorf("rest: build request: %w", err)
 	}
-	if reqBody != nil {
+	// Model-authored headers first, so a task can override the defaults below
+	// (e.g. a different Accept or Content-Type) — but never the idempotency key.
+	for k, v := range r.Headers {
+		req.Header.Set(k, v)
+	}
+	if reqBody != nil && req.Header.Get("Content-Type") == "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	req.Header.Set("Accept", "application/json")
+	if req.Header.Get("Accept") == "" {
+		req.Header.Set("Accept", "application/json")
+	}
 	if r.IdempotencyKey != "" {
 		req.Header.Set("Idempotency-Key", r.IdempotencyKey)
 	}
@@ -105,6 +121,26 @@ func (c *HTTPClient) Do(ctx context.Context, r Request) (Response, error) {
 		return Response{}, fmt.Errorf("rest: %s %s returned HTTP %d", r.Method, r.URL, resp.StatusCode)
 	}
 	return Response{Status: resp.StatusCode, Body: decodeBody(raw)}, nil
+}
+
+// withQuery appends the connector's query parameters to the endpoint URL,
+// preserving any already present in the model URL. Encoding sorts keys, so the
+// request URL is deterministic. An unparseable URL is an error (the job then
+// retries/incidents like any other failure).
+func withQuery(raw string, q map[string]string) (string, error) {
+	if len(q) == 0 {
+		return raw, nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("rest: parse url %q: %w", raw, err)
+	}
+	values := u.Query()
+	for k, v := range q {
+		values.Set(k, v)
+	}
+	u.RawQuery = values.Encode()
+	return u.String(), nil
 }
 
 // decodeBody parses a response body as JSON (numbers preserved as json.Number),
