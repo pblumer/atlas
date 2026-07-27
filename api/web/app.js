@@ -208,7 +208,10 @@ const TOPNAV = {
     { name: "Organization", route: "#/console/org" },
   ],
   modeler: [{ name: "Home", route: "#/modeler" }],
-  operations: [{ name: "Instances", route: "#/operations" }],
+  operations: [
+    { name: "Instances", route: "#/operations" },
+    { name: "Decisions", route: "#/operations/decisions" },
+  ],
   tasks: [{ name: "Inbox", route: "#/tasks" }, { name: "Start", route: "#/tasks/start" }], insights: [],
 };
 
@@ -1423,6 +1426,70 @@ async function viewInstances() {
   await load();
 }
 
+// viewDecisions is the Operations "Decisions" overview: one row per DMN decision
+// that a deployed process references and/or that instances have evaluated — the
+// decision counterpart of the one-row-per-process instances list (ADR-0066). It
+// shows where each decision is used (its processes) and how heavily (evaluations
+// and last-evaluated time), and links each evaluation-bearing process back to its
+// live view so an operator can drill from "which decision" to "which instance".
+async function viewDecisions() {
+  view.innerHTML = `
+    <div class="between">
+      <h1>Decisions</h1>
+      <button class="btn neutral" id="refresh">Refresh</button>
+    </div>
+    <p class="muted">One row per deployed DMN decision. A decision appears once any
+    deployed process references it — even before it has run — and its usage grows as
+    instances evaluate it. Open a process to watch the instances whose business rule
+    tasks drove the decision; each instance's decision reasoning (inputs, outputs, and
+    the rule trace) is retained for debugging.</p>
+    <div class="card" style="padding:0">
+      <table>
+        <thead><tr><th>Decision</th><th>Evaluation</th><th>Used by</th><th>Evaluations</th><th>Last evaluated</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>`;
+  const tbody = document.getElementById("rows");
+  // lastEvaluatedAt is unix nanoseconds; Date wants milliseconds.
+  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—";
+
+  const load = async () => {
+    try {
+      const decisions = await api("GET", "/api/v1/decisions/deployed");
+      if (!decisions.length) {
+        tbody.innerHTML = `<tr><td colspan="5" class="empty">
+          No decisions deployed. Add a business rule task to a process in the
+          <a href="#/modeler">Modeler</a> and deploy it.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = decisions.map((d) => {
+        const locus = d.local
+          ? '<span class="pill"><span class="dot"></span>local</span>'
+          : '<span class="pill muted">central</span>';
+        const procs = (d.processes || []).length
+          ? (d.processes || []).map((p) =>
+              `<a href="#/operations/p/${p.key}">${esc(p.name || p.processId)}</a>`
+            ).join(", ")
+          : '<span class="muted">—</span>';
+        const evals = d.evaluations
+          ? `<span class="pill ok"><span class="dot"></span>${d.evaluations}</span>`
+          : '<span class="muted">0</span>';
+        return `<tr>
+          <td><b>${esc(d.decisionId)}</b></td>
+          <td>${locus}</td>
+          <td>${procs}</td>
+          <td>${evals}</td>
+          <td class="muted">${esc(fmtNano(d.lastEvaluatedAt))}</td>
+        </tr>`;
+      }).join("");
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`;
+    }
+  };
+  document.getElementById("refresh").addEventListener("click", load);
+  await load();
+}
+
 // ---------- Tasks (Outlook-style inbox, ADR-0028) ----------
 
 // A task's display title: the user task's element name, falling back to its BPMN
@@ -2162,6 +2229,7 @@ async function route() {
     const tk = path.match(/^#\/tasks\/t\/(\d+)$/);
     if (tk) return await viewTasks(Number(tk[1]));
     if (path === "#/operations") return await viewInstances();
+    if (path === "#/operations/decisions") return await viewDecisions();
     // A specific instance can be deep-linked (…/i/{instanceKey}) — the Modeler's
     // Deploy & run builds this so a roundtrip lands straight on the started
     // instance. The plain form defaults the picker to "All instances".
