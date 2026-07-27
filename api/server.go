@@ -29,6 +29,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -126,20 +127,21 @@ type Server struct {
 
 	// The fields below are touched only on the run-loop goroutine (via do), so
 	// they need no locking — the same single-owner discipline as process state.
-	deployments map[uint64]*deployment
-	order       []uint64 // deployment keys in registration order, for stable listing
-	nextKey     uint64
-	versions    map[string]int32 // bpmnProcessId → highest version deployed
-	deploys     *deployStore     // durable sidecar for deployments (ADR-0019)
-	drafts      *draftStore      // durable sidecar for saved-but-not-deployed diagrams
-	forms       *formStore       // durable sidecar for form definitions (ADR-0028)
-	publicLinks *publicLinkStore // durable sidecar for public start links (ADR-0029)
-	publicRate  *rateLimiter     // throttles the unauthenticated public endpoints
-	projects    *projectStore    // durable sidecar for projects grouping artifacts (ADR-0034)
-	dmnrefs     *dmnRefStore     // durable sidecar for DMN reference artifacts (ADR-0034)
-	connectors  *connectorStore  // durable sidecar for managed connector instances (ADR-0041)
-	vault       *secretVault     // engine-internal encrypted secret store, nil when unconfigured (ADR-0069)
-	users       *userStore       // durable sidecar for user accounts (ADR-0044)
+	deployments  map[uint64]*deployment
+	order        []uint64 // deployment keys in registration order, for stable listing
+	nextKey      uint64
+	versions     map[string]int32 // bpmnProcessId → highest version deployed
+	deploys      *deployStore     // durable sidecar for deployments (ADR-0019)
+	drafts       *draftStore      // durable sidecar for saved-but-not-deployed diagrams
+	forms        *formStore       // durable sidecar for form definitions (ADR-0028)
+	publicLinks  *publicLinkStore // durable sidecar for public start links (ADR-0029)
+	publicRate   *rateLimiter     // throttles the unauthenticated public endpoints
+	projects     *projectStore    // durable sidecar for projects grouping artifacts (ADR-0034)
+	dmnrefs      *dmnRefStore     // durable sidecar for DMN reference artifacts (ADR-0034)
+	connectors   *connectorStore  // durable sidecar for managed connector instances (ADR-0041)
+	vault        *secretVault     // engine-internal encrypted secret store, nil when disabled (ADR-0069/0070)
+	vaultEnabled bool             // whether to build the vault; on by default, off via WithoutVault (ADR-0070)
+	users        *userStore       // durable sidecar for user accounts (ADR-0044)
 
 	// sessions holds live login sessions in memory. Unlike the sidecar stores it
 	// is touched from concurrent handler goroutines, so it guards itself with a
@@ -209,6 +211,12 @@ func WithLogBuffer(b *LogBuffer) Option { return func(s *Server) { s.logs = b } 
 // (ADR-0043).
 func WithoutDocs() Option { return func(s *Server) { s.docsEnabled = false } }
 
+// WithoutVault disables the engine-internal encrypted secret vault, which is
+// otherwise on by default (ADR-0070). With it disabled the secret endpoints
+// return 503 and connector credentials resolve only from the environment
+// (ADR-0041 A2). Pass it when Atlas must not custody a key or ciphertext at all.
+func WithoutVault() Option { return func(s *Server) { s.vaultEnabled = false } }
+
 // WithScriptWorker registers the interpreter for one script language (identified
 // by its reserved job-type index, e.g. compiler.PwshJobTypeIndex), so a deployed
 // script task in that language actually runs instead of parking on its job
@@ -265,19 +273,6 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
-	// The encrypted secret vault (ADR-0069) is opt-in: it exists only when a master
-	// key is provisioned in the environment. With no key it stays nil, and secret
-	// resolution falls back to the environment references (ADR-0041 A2), the default.
-	vaultKey, vaultOn, err := vaultKeyFromEnv()
-	if err != nil {
-		return nil, err
-	}
-	var vault *secretVault
-	if vaultOn {
-		if vault, err = newSecretVault(filepath.Join(dataDir, "vault"), vaultKey); err != nil {
-			return nil, err
-		}
-	}
 	// DMN reference models are resolved either from a temis model service (when
 	// configured) or the zero-config <data-dir>/dmn-models folder. Both satisfy the
 	// Resolver interface, so the rest of the server is unaffected (ADR-0034/0014).
@@ -300,7 +295,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		projects:     projects,
 		dmnrefs:      dmnrefs,
 		connectors:   connectors,
-		vault:        vault,
+		vaultEnabled: true, // opt-out: built unless WithoutVault is passed (ADR-0070)
 		users:        users,
 		sessions:     newSessionStore(defaultSessionTTL),
 		dmnResolver:  resolver,
@@ -310,6 +305,25 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	}
 	for _, opt := range opts {
 		opt(s)
+	}
+	// The encrypted secret vault (ADR-0069) is on by default (ADR-0070) unless
+	// WithoutVault disabled it. An operator key from the environment is preferred
+	// and never persisted; absent one, a key is loaded from — or generated into —
+	// <data-dir>/vault.key so the vault works with no provisioning. Built after the
+	// options so WithoutVault takes effect before any key file is touched.
+	if s.vaultEnabled {
+		key, source, err := resolveVaultKey(filepath.Join(dataDir, "vault.key"))
+		if err != nil {
+			return nil, err
+		}
+		if s.vault, err = newSecretVault(filepath.Join(dataDir, "vault"), key); err != nil {
+			return nil, err
+		}
+		if source == "generated" {
+			log.Printf("vault: generated a master key at %s (mode 0600); set ATLAS_VAULT_KEY "+
+				"for a stronger at-rest posture or pass --vault=false to disable (ADR-0070)",
+				filepath.Join(dataDir, "vault.key"))
+		}
 	}
 	// When enforcement is on, make sure a fresh instance has an admin to log in
 	// with (ADR-0044) and mint the internal service token the in-process MCP

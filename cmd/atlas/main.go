@@ -97,6 +97,7 @@ func runServe(args []string) error {
 	shutdownTimeout := fs.Duration("shutdown-timeout", 10*time.Second, "grace period for in-flight requests on shutdown")
 	docs := fs.Bool("docs", true, "serve the OpenAPI spec (/api/v1/openapi.json) and the Scalar API explorer (/api/docs); pass --docs=false to disable")
 	auth := fs.Bool("auth", false, "require login for the API and UI; seeds an admin from ATLAS_ADMIN_USERNAME/ATLAS_ADMIN_PASSWORD on first run")
+	vault := fs.Bool("vault", true, "enable the encrypted secret vault; on by default (generates a key at <data-dir>/vault.key unless ATLAS_VAULT_KEY is set), --vault=false to disable (ADR-0070)")
 	powershell := fs.Bool("powershell", true, "run PowerShell script tasks by shelling out to pwsh; on by default, --powershell=false to disable (executes arbitrary interpreter code)")
 	python := fs.Bool("python", true, "run Python script tasks by shelling out to python3; on by default, --python=false to disable (executes arbitrary interpreter code)")
 	javascript := fs.Bool("javascript", true, "run JavaScript script tasks by shelling out to node; on by default, --javascript=false to disable (executes arbitrary interpreter code)")
@@ -105,10 +106,10 @@ func runServe(args []string) error {
 		return err
 	}
 	enabled := map[string]bool{"powershell": *powershell, "python": *python, "javascript": *javascript}
-	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, enabled, *scriptTimeout)
+	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, enabled, *scriptTimeout)
 }
 
-func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, scriptLangs map[string]bool, scriptTimeout time.Duration) error {
+func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault bool, scriptLangs map[string]bool, scriptTimeout time.Duration) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -147,6 +148,9 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool,
 	}
 	if auth {
 		apiOpts = append(apiOpts, api.WithAuth())
+	}
+	if !vault {
+		apiOpts = append(apiOpts, api.WithoutVault())
 	}
 	// Register a worker for each enabled script language (ADR-0047). Each runs
 	// arbitrary interpreter code, so a language can be turned off with its flag; a

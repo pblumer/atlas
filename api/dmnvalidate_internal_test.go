@@ -36,7 +36,7 @@ const brokenDMNModel = `<?xml version="1.0" encoding="UTF-8"?>
 
 // newValidateServer builds a Server over a known data dir (so the test can seed
 // its dmn-models folder) and returns both.
-func newValidateServer(t *testing.T) (*Server, string) {
+func newValidateServer(t *testing.T, opts ...Option) (*Server, string) {
 	t.Helper()
 	dir := t.TempDir()
 	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
@@ -51,7 +51,7 @@ func newValidateServer(t *testing.T) (*Server, string) {
 	if err := proc.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	srv, err := New(proc, store, dir)
+	srv, err := New(proc, store, dir, opts...)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

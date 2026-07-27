@@ -18,10 +18,10 @@ import (
 	"time"
 )
 
-// Environment variables that configure the vault master key (ADR-0069). The key is
-// 32 bytes (AES-256), given as hex (64 chars) or base64. It is read once at startup,
-// held only in memory, and NEVER written to the data directory — the engine
-// custodies ciphertext at rest but not the key that protects it.
+// Environment variables that configure the vault master key. The key is 32 bytes
+// (AES-256), given as hex (64 chars) or base64. An operator key from either of these
+// is preferred and, per ADR-0069, is NEVER written to disk by Atlas. When neither is
+// set the vault is on by default and generates its own key file (ADR-0070).
 const (
 	vaultKeyEnv     = "ATLAS_VAULT_KEY"
 	vaultKeyFileEnv = "ATLAS_VAULT_KEY_FILE"
@@ -217,11 +217,61 @@ func parseVaultKey(raw string) ([]byte, error) {
 	return nil, fmt.Errorf("vault: master key must be 32 bytes as hex (64 chars) or base64")
 }
 
+// resolveVaultKey sources the master key with operator precedence (ADR-0070): an
+// operator key from the environment (ATLAS_VAULT_KEY / ATLAS_VAULT_KEY_FILE) wins and
+// is never written to disk; absent one, the key is loaded from keyFile, or generated
+// into it (mode 0600) so the vault is on by default without provisioning. source is
+// "env", "file", or "generated" — the caller logs the generated case, which trades a
+// weaker at-rest guarantee (key beside the ciphertext) for turnkey operation.
+func resolveVaultKey(keyFile string) (key []byte, source string, err error) {
+	k, ok, err := vaultKeyFromEnv()
+	if err != nil {
+		return nil, "", err
+	}
+	if ok {
+		return k, "env", nil
+	}
+	return loadOrCreateKeyFile(keyFile)
+}
+
+// loadOrCreateKeyFile returns the master key stored at path, generating and persisting
+// a fresh 32-byte key (0600, parent 0700, fsynced) when the file does not yet exist.
+// It is the default key source when no operator key is set (ADR-0070).
+func loadOrCreateKeyFile(path string) ([]byte, string, error) {
+	data, err := os.ReadFile(path)
+	if err == nil {
+		key, perr := parseVaultKey(strings.TrimSpace(string(data)))
+		if perr != nil {
+			return nil, "", fmt.Errorf("vault: key file %s: %w", path, perr)
+		}
+		return key, "file", nil
+	}
+	if !os.IsNotExist(err) {
+		return nil, "", fmt.Errorf("vault: read key file: %w", err)
+	}
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return nil, "", fmt.Errorf("vault: generate key: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, "", fmt.Errorf("vault: create key dir: %w", err)
+	}
+	if err := os.WriteFile(path, []byte(hex.EncodeToString(key)), 0o600); err != nil {
+		return nil, "", fmt.Errorf("vault: write key file: %w", err)
+	}
+	if err := os.Chmod(path, 0o600); err != nil { // ensure 0600 even if the file pre-existed under a umask
+		return nil, "", fmt.Errorf("vault: chmod key file: %w", err)
+	}
+	if err := fsyncDir(filepath.Dir(path)); err != nil {
+		return nil, "", err
+	}
+	return key, "generated", nil
+}
+
 // vaultKeyFromEnv sources the master key from ATLAS_VAULT_KEY, or from the file at
-// ATLAS_VAULT_KEY_FILE. It returns ok=false when neither is set — the vault stays
-// disabled and A2 (environment references) remains the default. A key that is set
-// but invalid is an error, so a misconfiguration fails loudly at startup rather than
-// silently leaving the vault off.
+// ATLAS_VAULT_KEY_FILE. It returns ok=false when neither is set, so the caller falls
+// back to the generated key file (ADR-0070). A key that is set but invalid is an
+// error, so a misconfiguration fails loudly at startup.
 func vaultKeyFromEnv() ([]byte, bool, error) {
 	raw := strings.TrimSpace(os.Getenv(vaultKeyEnv))
 	if raw == "" {
