@@ -7,16 +7,17 @@ This folder contains:
 
 | File | What it is |
 |------|-----------|
-| [`Atlas.postman_collection.json`](Atlas.postman_collection.json) | The full API collection (49 requests, every `/api/v1` endpoint + `/healthz` + `/mcp`), organized by resource, with auto-chaining variables and test assertions. |
+| [`Atlas.postman_collection.json`](Atlas.postman_collection.json) | The full API collection (52 requests, every `/api/v1` endpoint + `/healthz` + `/mcp`, plus session login/logout), organized by resource, with auto-chaining variables and test assertions. |
 | [`Atlas.postman_environment.json`](Atlas.postman_environment.json) | The `Atlas (local)` environment. One variable: `baseUrl` → `http://localhost:8080`. |
 | [`order-approval.bpmn`](order-approval.bpmn) | The sample model the Golden Path deploys — a two-step human approval that parks on user tasks, so you can watch the whole lifecycle. |
 
 Every request in the collection was verified against a live Atlas server, so what
 you import matches what the server actually returns.
 
-> **Coming alongside this: a built-in Swagger UI / OpenAPI spec** (in progress on a
-> separate branch). The two are complementary, not competing — see
-> [_Swagger UI / OpenAPI_](#relationship-to-swagger-ui--openapi) below.
+> **Atlas also ships a built-in API explorer** (Scalar) at **`/api/docs`**, backed
+> by an **OpenAPI** spec at **`/api/v1/openapi.json`** (enable with `--docs`). It
+> and this collection are complementary — see
+> [_OpenAPI / API explorer_](#relationship-to-swagger-ui--openapi) below.
 
 ---
 
@@ -41,6 +42,9 @@ they survive a restart.
 1. **Import** both JSON files (drag them onto Postman, or **Import → Files**).
 2. Top-right environment selector → choose **`Atlas (local)`**.
 3. If your server isn't on `localhost:8080`, edit the environment's `baseUrl`.
+4. **Instance with login enforced?** Set the `username` variable, add the
+   `password` secret to the Postman Vault, and run **Authentication → Log in** once
+   — see [_Authentication_](#authentication). For a local server, skip this.
 
 ## 3. Take the tour
 
@@ -73,6 +77,8 @@ codes and shapes, so a green run means the server behaved.
 
 The reference folders cover the complete surface, grouped by resource:
 
+- **Authentication** — `Log in` / `Who am I` / `Log out` for instances that enforce
+  login (session cookie); skip on a local server
 - **Health & Info** — `/healthz`, `/api/v1/info`, `/api/v1/stats`
 - **FEEL Playground** — validate/evaluate FEEL expressions with the same engine
   deployment uses (great for authoring gateway conditions before deploying)
@@ -88,34 +94,80 @@ The reference folders cover the complete surface, grouped by resource:
 
 ## Relationship to Swagger UI / OpenAPI
 
-Atlas is also getting a built-in **Swagger UI** backed by an **OpenAPI** spec
-(built on a separate branch). They serve different moments, and Postman works well
-with both:
+Atlas ships a built-in **API explorer** (Scalar) at **`/api/docs`**, backed by an
+**OpenAPI** document at **`/api/v1/openapi.json`** (both served when the server runs
+with `--docs`; ADR-0043). It and this collection serve different moments — Postman
+works well with both:
 
-| | Swagger UI / OpenAPI | This Postman collection |
+| | Built-in API explorer / OpenAPI | This Postman collection |
 |---|---|---|
 | **Best for** | Browsing the surface, exact per-endpoint schemas, try-it-in-the-page | A guided, runnable lifecycle you step through and reuse |
 | **Golden Path** | — | Auto-chains ids across steps (`{{defKey}}` → `{{taskKey}}`), so a whole workflow runs top-to-bottom |
 | **Assertions** | — | Each request tests status/shape, so a green run means the server behaved |
 | **Automation** | Generate clients from the spec | Collection Runner / Newman in CI |
 
-When the OpenAPI spec is available, you can also **import it straight into
-Postman** (*Import → Link* the spec URL, e.g. `.../openapi.json`) to get an
-always-in-sync, generated collection. Use that generated collection as the
-exhaustive schema reference, and keep this hand-curated one as the opinionated
-onboarding path — the golden-path chaining and tests are the parts a raw
-spec-to-Postman import can't give you.
+You can also **import the OpenAPI spec straight into Postman** — *Import → Link* →
+`{{baseUrl}}/api/v1/openapi.json` — to get an always-in-sync, generated collection.
+Use that as the exhaustive schema reference, and keep this hand-curated one as the
+opinionated onboarding path: the golden-path chaining, the session login, and the
+test assertions are the parts a raw spec-to-Postman import can't give you.
+
+> The OpenAPI doc, `/api/v1/info`, and `/api/v1/auth/login` are reachable **before**
+> login; the rest of `/api/v1` requires a session when auth is enforced.
 
 Once the spec lands, this kit will link to it here so newcomers can pick whichever
 entry point suits them.
 
 ## Authentication
 
-The Atlas server is **unauthenticated by design** — it expects to sit behind a
-reverse proxy that adds auth (the `/mcp` endpoint especially). Out of the box no
-credentials are needed. If your deployment fronts it with auth, add the token or
-header once under the **collection's Authorization tab** and it applies to every
-request.
+Two shapes, depending on how your instance runs:
+
+### Local / single-user build — no auth
+
+Nothing to do. Skip the **Authentication** folder and run straight against
+`localhost:8080`.
+
+### Instance with login enforced (multi-user) — cookie session
+
+Multi-user Atlas instances enforce login and authenticate with a **session
+cookie**, *not* an `Authorization` header. That's why `curl -u user:pass` (HTTP
+Basic) returns `401 {"error":"authentication required"}` with no
+`WWW-Authenticate` header — Atlas never looks at that header; it wants the cookie.
+
+To authenticate in Postman:
+
+1. Set the **`username`** variable (your console username, e.g. `patrick` — some
+   instances accept the email instead).
+2. Store the password in the **Postman Vault**: 🔑 (bottom-left) → *Add secret* →
+   key `password`. Nothing secret is written into the collection or environment.
+3. Run **Authentication → Log in** once. It calls:
+
+   ```
+   POST {{baseUrl}}/api/v1/auth/login
+   { "username": "…", "password": "…" }
+   → 200  Set-Cookie: atlas_session=…; HttpOnly; SameSite=Lax; Max-Age=43200
+   ```
+
+4. Postman's cookie jar stores `atlas_session` and **attaches it to every
+   subsequent request** to that host automatically. Now the Golden Path and every
+   other folder work — the session lasts 12 hours.
+
+**Gotchas**
+
+- **Still `401` after login?** Open the **Cookies** manager (under the address bar)
+  and confirm `atlas_session` is listed for your host. If your `username`/password
+  is wrong the Log in request itself returns `401` — try your email as the
+  username, and make sure the Vault `password` secret is actually set (an unset
+  `{{vault:password}}` sends an empty password).
+- The login path here is `/api/v1/auth/login`; if your build differs, adjust the
+  request URL (find the real one in the browser's DevTools → Network on login).
+
+### Behind a Basic-Auth reverse proxy instead?
+
+If you front Atlas with a proxy that does HTTP Basic, set the **collection's
+Authorization tab** to *Basic Auth* (username + Vault password) — it then applies
+to every request. The `WWW-Authenticate` header on a `401` tells you which scheme a
+proxy expects.
 
 ## Conventions worth knowing
 
