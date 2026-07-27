@@ -366,7 +366,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// task's result variable. The endpoint and headers live in the model; a request's
 	// authentication secret is a *reference* the worker resolves at call time from the
 	// environment (resolveConnectorSecret, ADR-0041), so a token never lives in a model.
-	s.jobRunner.HandleWithOutput(compiler.RestJobTypeIndex, rest.Handler(store, s.processLookup, rest.NewHTTPClient(), resolveConnectorSecret))
+	s.jobRunner.HandleWithOutput(compiler.RestJobTypeIndex, rest.Handler(store, s.processLookup, rest.NewHTTPClient(), s.resolveConnectorSecret))
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
 	}
