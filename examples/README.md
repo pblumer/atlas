@@ -6,6 +6,7 @@ against a live Atlas server (`0.1.0-dev`).
 
 | File | What it is |
 |------|-----------|
+| [`pruefe-auftrag.bpmn`](pruefe-auftrag.bpmn) | The minimal runnable scenario: `Start → Script Task "prüfe den Auftrag" → Ende`. A single inline FEEL script releases an order at/below the 1000 € approval limit and flags larger ones. Self-completing, no external worker. |
 | [`order-fulfillment.bpmn`](order-fulfillment.bpmn) | A self-completing order-fulfillment process that exercises inline scripts and all three gateway kinds, and drives itself to an end event with **no external workers attached**. |
 | [`cart-total.bpmn`](cart-total.bpmn) | A shopping-cart checkout that computes an order total (subtotal → rebate → VAT → shipping) entirely in inline FEEL, and routes on the computed sum. Self-completing. |
 | [`order-to-cash.bpmn`](order-to-cash.bpmn) | The full order lifecycle: cart calculation → approval (≥ 100 €, user task) → **parallel** delivery & billing (service tasks). Parks on the worker-backed steps — a realistic, not-fully-automatic process. |

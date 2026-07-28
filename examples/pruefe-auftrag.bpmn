@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  prüfe den Auftrag — minimal, self-completing Atlas scenario.
+
+  Start → Script Task "prüfe den Auftrag" → Ende. The runnable core of the
+  modeled scenario: the embedded subprocess wrapper ("Arbeit-01") is a
+  Milestone-3 feature the engine does not execute yet, so the check lives
+  directly in the top-level process as a single inline FEEL script task.
+
+  * Inline FEEL: the script is evaluated *in-engine* (no external worker), so
+    an instance runs straight to the end event — a deterministic smoke test.
+  * Self-completing: a null-guard supplies a default order, so starting an
+    instance with NO input still runs to "Ende". Enter your own `auftrag` in
+    the Deploy form / Variables panel and the verdict recomputes.
+  * The check: an order is released automatically when its amount is at or
+    below the 1000 EUR approval limit, otherwise it is flagged for manual
+    approval. The result is written to the `pruefung` variable.
+
+  Default order → betrag 250 EUR ⇒ freigegeben=true.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_check_order" targetNamespace="http://atlas/examples">
+  <process id="proc_check_order" name="prüfe den Auftrag" isExecutable="true">
+
+    <!-- Enter your own order when starting an instance; the Deploy form
+         pre-fills this default. -->
+    <extensionElements>
+      <atlas:startForm>
+        <atlas:startVariable name="auftrag" type="json" required="false" default="{ &quot;kunde&quot;: &quot;Muster GmbH&quot;, &quot;betrag&quot;: 250, &quot;artikel&quot;: 3 }"/>
+      </atlas:startForm>
+    </extensionElements>
+
+    <startEvent id="start" name="Start"/>
+
+    <scriptTask id="check_order" name="prüfe den Auftrag">
+      <extensionElements>
+        <zeebe:script expression="= { bestellung: if auftrag = null then { kunde: &quot;Muster GmbH&quot;, betrag: 250, artikel: 3 } else auftrag, freigegeben: (if auftrag = null then 250 else auftrag.betrag) &lt;= 1000, grund: if (if auftrag = null then 250 else auftrag.betrag) &lt;= 1000 then &quot;unterhalb der Freigabegrenze (1000 EUR)&quot; else &quot;manuelle Freigabe erforderlich&quot; }" resultVariable="pruefung"/>
+      </extensionElements>
+    </scriptTask>
+
+    <endEvent id="end" name="Ende"/>
+
+    <sequenceFlow id="f1" sourceRef="start" targetRef="check_order"/>
+    <sequenceFlow id="f2" sourceRef="check_order" targetRef="end"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_check_order">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="160" y="120" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="166" y="160" width="26" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_check_order" bpmnElement="check_order">
+        <dc:Bounds x="250" y="98" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end">
+        <dc:Bounds x="430" y="120" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="437" y="160" width="24" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1">
+        <di:waypoint x="196" y="138"/><di:waypoint x="250" y="138"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2">
+        <di:waypoint x="370" y="138"/><di:waypoint x="430" y="138"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
