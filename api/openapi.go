@@ -154,6 +154,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/instances/{key}/decisions", s.handleInstanceDecisions, apiOp{
 			summary: "Read the DMN decision evaluations a process instance made — each with its inputs, outputs, and trace", tag: "Instances",
 			resp: jsonBody("Decision evaluations", tArray())}},
+		{"GET", "/api/v1/instances/{key}/jobs", s.handleListInstanceJobs, apiOp{
+			summary: "List the activatable jobs an instance is parked on (any type) — the read side of POST /jobs/{key}/complete", tag: "Instances",
+			resp: jsonBody("Activatable jobs", tArray())}},
 		{"GET", "/api/v1/decisions/deployed", s.handleDeployedDecisions, apiOp{
 			summary: "List deployed and evaluated DMN decisions, one row per decision, with the processes that use it and its evaluation usage", tag: "Decisions",
 			resp: jsonBody("Deployed decisions", tArray())}},

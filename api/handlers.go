@@ -1664,6 +1664,59 @@ func (s *Server) handleCancelInstance(w http.ResponseWriter, r *http.Request) {
 
 // --- user tasks (ADR-0028) ---
 
+// jobResp is one activatable job an instance is parked on: its key (what
+// /jobs/{key}/complete takes), the instance and definition it belongs to, the BPMN
+// element it sits on, and its interned job type. It is the read side of the
+// operator complete/fail affordance.
+type jobResp struct {
+	Key                uint64 `json:"key"`
+	ProcessInstanceKey uint64 `json:"processInstanceKey"`
+	ProcessDefKey      uint64 `json:"processDefKey,omitempty"`
+	ElementID          string `json:"elementId,omitempty"`
+	JobType            string `json:"jobType,omitempty"`
+	Retries            int32  `json:"retries"`
+}
+
+// handleListInstanceJobs lists the activatable jobs one instance is parked on,
+// regardless of type — the read side of POST /jobs/{key}/complete. It mirrors
+// handleListTasks but is scoped to one instance and not limited to user tasks, so
+// a client that only speaks HTTP can discover the job keys of parked service tasks
+// and finish them by hand. The scan runs on the run-loop goroutine (state's sole
+// owner) via do.
+func (s *Server) handleListInstanceJobs(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid instance key")
+		return
+	}
+	jobs := []jobResp{}
+	var scanErr error
+	s.do(func() {
+		scanErr = s.store.AllActivatableJobs(func(jobKey uint64) error {
+			jv, ok, err := s.store.GetJob(jobKey)
+			if err != nil || !ok || jv.ProcessInstanceKey != key {
+				return err // err is nil for the skip cases (missing job / other instance)
+			}
+			jr := jobResp{Key: jobKey, ProcessInstanceKey: jv.ProcessInstanceKey, Retries: jv.Retries}
+			if ei, ok, err := s.store.GetElementInstance(jv.ElementInstanceKey); err == nil && ok {
+				jr.ProcessDefKey = ei.ProcessDefKey
+				if d, dok := s.deployments[ei.ProcessDefKey]; dok {
+					cp := d.cp
+					jr.ElementID = cp.ElementBpmnId(ei.ElementId)
+					jr.JobType = cp.Intern(jv.JobType)
+				}
+			}
+			jobs = append(jobs, jr)
+			return nil
+		})
+	})
+	if scanErr != nil {
+		writeError(w, http.StatusInternalServerError, "list jobs: "+scanErr.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, jobs)
+}
+
 type taskResp struct {
 	Key                uint64 `json:"key"`
 	ProcessInstanceKey uint64 `json:"processInstanceKey"`
