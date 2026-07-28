@@ -38,6 +38,14 @@ func main() {
 	// subcommand (or a leading flag) we default to "serve" so existing
 	// invocations like `atlas --addr :8080` keep working.
 	args := os.Args[1:]
+
+	// A leading -v/--version prints the build version and exits, before the
+	// serve-default dispatch below would otherwise swallow it as a serve flag.
+	if len(args) > 0 && (args[0] == "-v" || args[0] == "--version") {
+		printVersion(os.Stdout)
+		return
+	}
+
 	cmd := "serve"
 	if len(args) > 0 && !isFlag(args[0]) {
 		cmd, args = args[0], args[1:]
@@ -52,6 +60,8 @@ func main() {
 		if err := runMCP(args); err != nil {
 			log.Fatalf("atlas mcp: %v", err)
 		}
+	case "version":
+		printVersion(os.Stdout)
 	case "help", "-h", "--help":
 		usage()
 	default:
@@ -84,6 +94,7 @@ func usage() {
 Usage:
   atlas serve [flags]   Run the engine, HTTP API, and web UI (default)
   atlas mcp   [flags]   Run the Model Context Protocol adapter on stdio
+  atlas version         Print the build version and exit
 
 Run "atlas <command> -h" for the flags of a command.
 `)

@@ -8,6 +8,32 @@
 
 ---
 
+## Install
+
+Atlas ships as a **single self-contained binary** — the engine, the HTTP API, and the browser-based BPMN modeler/operator UI are all in one executable (the web assets are embedded, [ADR-0011](docs/adr/0011-single-binary-distribution-and-web-ui.md)). No runtime dependencies, no database to stand up.
+
+**Download a pre-built binary** for your platform from the [latest release](https://github.com/pblumer/atlas/releases/latest) (Linux, macOS, and Windows; amd64 and arm64). Verify it against the published `SHA256SUMS.txt`, then:
+
+```bash
+# macOS/Linux example (adjust the archive name to your platform):
+tar -xzf atlas_v0.1.0_linux_amd64.tar.gz
+./atlas_v0.1.0_linux_amd64/atlas version
+./atlas_v0.1.0_linux_amd64/atlas serve --addr :8080 --data-dir ./atlas-data
+```
+
+Then open <http://localhost:8080> for the web UI, or point a worker/agent at the HTTP API.
+
+**Install from source** (requires Go 1.26+):
+
+```bash
+go install github.com/pblumer/atlas/cmd/atlas@latest   # or @v0.1.0
+# or, from a clone:
+make server        # builds a version-stamped ./bin/atlas
+./bin/atlas serve
+```
+
+Run `atlas version` to see the exact build, or `atlas help` for the available commands.
+
 ## Why another workflow engine?
 
 Most BPMN engines spend their time interpreting XML at runtime and writing process state to a SQL database one transaction at a time. Both are throughput killers. Atlas takes a different path, borrowed from the design lineage of log-structured, event-sourced systems:
