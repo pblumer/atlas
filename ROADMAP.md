@@ -253,7 +253,10 @@ Making processes wait, react, and time out.
   re-activates the job with fresh retries (raise / resolve / resume). Keyed by
   element instance, so cancelling an instance clears its incidents. Recovery-
   tested; exposed over HTTP (`POST /jobs/{key}/fail`, `GET /incidents`,
-  `POST /incidents/{key}/resolve`) (ADR-0061). **Timer FEEL failures now raise
+  `POST /incidents/{key}/resolve`) (ADR-0061). Its completion mirror
+  `POST /jobs/{key}/complete` lets an operator finish a parked service-task job by
+  hand (outputs as `{"variables": …}`) — a synchronous affordance, not the leased
+  gRPC worker protocol (still Milestone 4, ADR-0007). **Timer FEEL failures now raise
   incidents too** ([ADR-0064](docs/adr/0064-timer-feel-failure-incidents.md)): a
   catch or boundary timer whose FEEL schedule can't be evaluated parks its token
   and raises a job-less incident (the failing field in its message) instead of

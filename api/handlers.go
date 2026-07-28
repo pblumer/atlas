@@ -1740,6 +1740,61 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleCompleteJob is the operator/manual counterpart to handleFailJob: it
+// completes an activatable job by key, optionally writing the outputs a worker
+// would have produced as {"variables": {...}} into the instance scope, then
+// drives any jobs that unblocked. It runs the same processor path a service-task
+// worker's CompleteJob takes, so it works for any job type. 404 if the job
+// doesn't exist or is already completed.
+//
+// This is deliberately NOT the gRPC job-worker protocol (ADR-0007): there is no
+// lease, fencing token, or at-least-once streaming — it is a synchronous
+// operator affordance, the completion mirror of POST /jobs/{key}/fail from the
+// incident model (ADR-0061), for finishing a parked service-task job by hand
+// (e.g. when the external work was carried out out-of-band) until a real worker
+// transport lands. Discovering the job key is out of scope here — that comes
+// from runtime inspection.
+func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid job key")
+		return
+	}
+	// Variables are parsed (and rejected on bad JSON) before the job is looked
+	// up, so a malformed body is a 400 regardless of whether the key exists —
+	// matching handleCompleteTask. An empty body completes with no variables.
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	vars, err := parseStartVariables(body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	var (
+		found  bool
+		runErr error
+	)
+	s.do(func() {
+		if _, ok, err := s.store.GetJob(key); err != nil || !ok {
+			return
+		}
+		found = true
+		s.proc.CompleteJob(key, vars...)
+		runErr = s.jobRunner.Drive()
+	})
+	switch {
+	case runErr != nil:
+		writeError(w, http.StatusInternalServerError, "complete job: "+runErr.Error())
+	case !found:
+		writeError(w, http.StatusNotFound, "no job with that key")
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"jobKey": key})
+	}
+}
+
 // handleResolveIncident resolves the incident on an element instance and resumes
 // its job (ADR-0061): the body's retries (default 1) is how many attempts the
 // re-activated job gets. 404 if there is no incident on that element.
