@@ -209,6 +209,35 @@ function decMiniTable(tt, n) {
     `<table class="mgrid">${hr}${body}</table></div>`;
 }
 
+// decCard renders one decision evaluation: a header, its input pills, and its result
+// rows. Each result carries a "Rule N" badge; a row backed by a decision table is
+// hoverable — data-dec indexes the caller's evaluation list so a shared popover can
+// look the trace back up. Shared by the replay Decisions tab and the live view.
+function decCard(d, i) {
+  const when = d.at ? new Date(d.at / 1e6).toLocaleString() : "";
+  const inEntries = Object.entries(decVal(d.inputs, {}) || {});
+  const outEntries = Object.entries(decVal(d.outputs, {}) || {});
+  const pills = inEntries.length
+    ? `<div class="in-pills">${inEntries.map(([k, v]) => `<span class="pill-kv"><b>${esc(k)}</b> = ${esc(decFmtVal(v))}</span>`).join("")}</div>`
+    : '<span class="muted">none</span>';
+  const nums = decMatchedNums(d);
+  const badge = nums.length ? `<span class="res-rule">Rule ${nums.join(", ")}</span>` : "";
+  const hoverable = decTablesOf(d).length ? " hoverable" : "";
+  const result = outEntries.length
+    ? `<div class="res">${outEntries.map(([k, v], oi) =>
+        `<div class="res-row${hoverable}" data-dec="${i}"${hoverable ? ' tabindex="0"' : ""}>
+          <span class="res-key">${esc(k)}</span>
+          <span class="res-val">${esc(decFmtVal(v))}</span>
+          ${oi === 0 ? badge : ""}
+        </div>`).join("")}</div>`
+    : '<span class="muted">none</span>';
+  return `<div class="dec-card2">
+    <div class="dec-card2-h"><b>${esc(d.decisionId)}</b>${when ? ` <span class="muted">${esc(when)}</span>` : ""}</div>
+    <div class="dec-sect2"><span class="dec-sect2-l">Inputs</span>${pills}</div>
+    <div class="dec-sect2"><span class="dec-sect2-l">Result</span>${result}</div>
+  </div>`;
+}
+
 // renderVarsBody lays out a variable list: scalars as a labeled field grid, JSON
 // values as collapsible, syntax-highlighted cards. collapsed is a Set of the JSON
 // variable names the operator has collapsed (persists across re-renders); the
@@ -3387,6 +3416,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
   const jsonCollapsed = new Set(); // JSON variable names collapsed by the operator
   let varsHTML = "";               // last rendered variables markup, to skip no-op rebuilds
   let decisions = [];              // the selected instance's DMN decision evaluations (ADR-0066)
+  let curDecs = [];                // the evaluations the decision panel is showing (backs the hover popover)
   let focusEl = null;              // a business rule task the operator is inspecting, or null
   // "all" or an instance key (as a string). A deep-linked instance (Deploy & run's
   // roundtrip link, or a shared URL) preselects that one; refreshInstances falls
@@ -3523,91 +3553,26 @@ export async function mountLive(root, { api, toast, key, instance }) {
     return (bo && (bo.name || bo.id)) || elementId;
   };
 
-  // fmtVal renders a decision input/output value compactly: strings bare, objects
-  // and arrays as JSON, null as the FEEL null marker.
-  const fmtVal = (v) => {
-    if (v === null || v === undefined) return "null";
-    if (typeof v === "object") return JSON.stringify(v);
-    return String(v);
-  };
-
-  // objRows renders a JSON object as a two-column key/value list — the decision's
-  // inputs or outputs at a glance.
-  function objRows(obj) {
-    const keys = obj && typeof obj === "object" ? Object.keys(obj) : [];
-    if (!keys.length) return '<span class="muted">none</span>';
-    return `<div class="dec-kv">${keys.map((k) =>
-      `<div class="dec-kv-row"><span class="dec-k">${esc(k)}</span><span class="dec-v"><code>${esc(fmtVal(obj[k]))}</code></span></div>`
-    ).join("")}</div>`;
-  }
-
-  // renderTrace turns the temis trace tree into the "how it was decided" view: for
-  // each decision table, the values its inputs evaluated to and every rule with the
-  // matched ones highlighted, showing each cell's unary test and whether it held,
-  // plus the outputs the matching rule produced (ADR-0066). A decision with no table
-  // (a literal expression) has no trace, so this renders nothing.
-  function renderTrace(trace) {
-    if (!trace || !Array.isArray(trace.tables) || !trace.tables.length) {
-      return '<div class="dec-sect"><div class="dec-sect-h">How it was decided</div><p class="muted" style="margin:0">No decision-table trace (literal expression or remote decision).</p></div>';
-    }
-    const tables = trace.tables.map((tb) => {
-      const inputs = (tb.inputs || []).map((i) =>
-        `<span class="chip" title="${esc(i.expression)}">${esc(i.expression)} = <code>${esc(fmtVal(i.value))}</code></span>`
-      ).join(" ");
-      const rules = (tb.rules || []).map((r) => {
-        const conds = (r.conditions || []).map((c) =>
-          `<span class="dec-cond ${c.matched ? "ok" : "no"}" title="${esc(c.input)}">${esc(c.entry)}</span>`
-        ).join(" ");
-        const outs = r.matched && r.outputs && r.outputs.length
-          ? `<span class="dec-out">→ ${esc(r.outputs.map(fmtVal).join(", "))}</span>` : "";
-        return `<div class="dec-rule ${r.matched ? "matched" : ""}">
-          <span class="dec-rule-ix">#${r.index + 1}</span>
-          <span class="dec-rule-conds">${conds || '<span class="muted">—</span>'}</span>
-          ${outs}
-        </div>`;
-      }).join("");
-      return `<div class="dec-table">
-        <div class="dec-table-h">Hit policy <b>${esc(tb.hitPolicy || "U")}</b>${tb.aggregation ? " · " + esc(tb.aggregation) : ""}</div>
-        <div class="dec-inputs">${inputs || '<span class="muted">no inputs</span>'}</div>
-        <div class="dec-rules">${rules}</div>
-      </div>`;
-    }).join("");
-    return `<div class="dec-sect"><div class="dec-sect-h">How it was decided</div>${tables}</div>`;
-  }
-
-  // renderOneDecision renders a single evaluation: the decision id, the inputs it
-  // saw, the outputs it produced, and the trace explaining the outcome.
-  function renderOneDecision(d) {
-    const inputs = decVal(d.inputs, {});
-    const outputs = decVal(d.outputs, {});
-    const trace = decVal(d.trace, null);
-    const when = d.at ? new Date(d.at / 1e6).toLocaleString() : "";
-    return `<div class="dec-card">
-      <div class="dec-card-h"><b>${esc(d.decisionId)}</b>${when ? ` <span class="muted">${esc(when)}</span>` : ""}</div>
-      <div class="dec-sect"><div class="dec-sect-h">Inputs</div>${objRows(inputs)}</div>
-      <div class="dec-sect"><div class="dec-sect-h">Outputs</div>${objRows(outputs)}</div>
-      ${renderTrace(trace)}
-    </div>`;
-  }
-
   // renderDecisionDetail is the inspection panel for a clicked business rule task:
-  // every evaluation the selected instance made at that task, newest last, with its
-  // inputs, outputs, and trace — the "look up after the fact how the decision was
-  // made" surface (ADR-0066). It needs a single instance selected, since decisions
-  // are per-instance history.
+  // every evaluation the selected instance made at that task, newest last, rendered
+  // in the temis style (input pills, a Rule N badge, and the matched-rule table on
+  // hover) — the same surface as the Operations decision views. curDecs backs the
+  // hover popover; decisions are per-instance history, so it needs one instance.
   function renderDecisionDetail(elementId) {
     const head = `<div class="vp-head">
       <span class="vp-title">Decision · ${esc(decisionLabel(elementId))}</span>
       <span class="vp-actions"><button class="btn ghost small dec-back" type="button" title="Back to variables">&larr; Variables</button></span>
     </div>`;
     if (selected === "all") {
+      curDecs = [];
       return head + `<p class="muted" style="margin:0">Select a single instance (top-left) to see how its decision was made.</p>`;
     }
     const matches = decisions.filter((d) => d.elementId === elementId);
+    curDecs = matches;
     if (!matches.length) {
       return head + `<p class="muted" style="margin:0">This instance has not evaluated this decision yet. Its inputs, outputs, and the rules that fired will appear here once a token reaches the task.</p>`;
     }
-    return head + matches.map(renderOneDecision).join("");
+    return head + matches.map((d, i) => decCard(d, i)).join("");
   }
 
   // renderVariables shows the selected instance's variables with the shared
@@ -3810,6 +3775,39 @@ export async function mountLive(root, { api, toast, key, instance }) {
   bindJsonCards(varPanel, jsonCollapsed, renderVariables);
   bindVarCopy(varPanel, toast);
   wireVarsPanel(root, viewer);
+
+  // Decision panel: hovering (or focusing) a result row backed by a decision table
+  // reveals that table, matched rule highlighted, in a shared viewport popover — the
+  // same interaction as the Operations decision views. The popover lives outside the
+  // var panel (which re-renders on poll), so it survives; the delegated listeners are
+  // attached once and survive the panel's inner rebuilds.
+  const decPop = document.createElement("div");
+  decPop.className = "dec-pop";
+  decPop.hidden = true;
+  root.appendChild(decPop);
+  const showDecPop = (row) => {
+    const d = curDecs[Number(row.dataset.dec)];
+    const tables = d ? decTablesOf(d) : [];
+    if (!tables.length) return;
+    decPop.innerHTML = `<div class="pop-title">${esc(d.decisionId)}</div>` +
+      tables.map((tt, i) => decMiniTable(tt, tables.length > 1 ? i + 1 : 0)).join("");
+    decPop.hidden = false;
+    const box = row.getBoundingClientRect();
+    const top = box.top - decPop.offsetHeight - 10;
+    decPop.style.left = Math.max(8, Math.min(box.left, window.innerWidth - decPop.offsetWidth - 8)) + "px";
+    decPop.style.top = (top < 8 ? box.bottom + 10 : top) + "px";
+  };
+  const hideDecPop = () => { decPop.hidden = true; };
+  varPanel.addEventListener("pointerover", (e) => {
+    const row = e.target.closest(".res-row.hoverable");
+    if (row && varPanel.contains(row)) showDecPop(row);
+  });
+  varPanel.addEventListener("pointerout", (e) => {
+    const row = e.target.closest(".res-row.hoverable");
+    if (row && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest(".res-row.hoverable") === row)) hideDecPop();
+  });
+  varPanel.addEventListener("focusin", (e) => { const row = e.target.closest(".res-row.hoverable"); if (row) showDecPop(row); });
+  varPanel.addEventListener("focusout", hideDecPop);
 
   // Inspecting a decision (ADR-0066): clicking a business rule task on the diagram
   // opens how its decision was made in the side panel (toggle off by clicking it
@@ -4543,33 +4541,6 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const bo = el && el.businessObject;
     return (bo && (bo.name || bo.id)) || elId;
   };
-  // decCard renders one evaluation: a header, its input pills, and its result rows.
-  // Each result carries a "Rule N" badge; a row backed by a decision table is
-  // hoverable — data-dec indexes curDecs so the shared popover looks the trace up.
-  function decCard(d, i) {
-    const when = d.at ? new Date(d.at / 1e6).toLocaleString() : "";
-    const inEntries = Object.entries(decVal(d.inputs, {}) || {});
-    const outEntries = Object.entries(decVal(d.outputs, {}) || {});
-    const pills = inEntries.length
-      ? `<div class="in-pills">${inEntries.map(([k, v]) => `<span class="pill-kv"><b>${esc(k)}</b> = ${esc(decFmtVal(v))}</span>`).join("")}</div>`
-      : '<span class="muted">none</span>';
-    const nums = decMatchedNums(d);
-    const badge = nums.length ? `<span class="res-rule">Rule ${nums.join(", ")}</span>` : "";
-    const hoverable = decTablesOf(d).length ? " hoverable" : "";
-    const result = outEntries.length
-      ? `<div class="res">${outEntries.map(([k, v], oi) =>
-          `<div class="res-row${hoverable}" data-dec="${i}"${hoverable ? ' tabindex="0"' : ""}>
-            <span class="res-key">${esc(k)}</span>
-            <span class="res-val">${esc(decFmtVal(v))}</span>
-            ${oi === 0 ? badge : ""}
-          </div>`).join("")}</div>`
-      : '<span class="muted">none</span>';
-    return `<div class="dec-card2">
-      <div class="dec-card2-h"><b>${esc(d.decisionId)}</b>${when ? ` <span class="muted">${esc(when)}</span>` : ""}</div>
-      <div class="dec-sect2"><span class="dec-sect2-l">Inputs</span>${pills}</div>
-      <div class="dec-sect2"><span class="dec-sect2-l">Result</span>${result}</div>
-    </div>`;
-  }
   // renderDecisions lists the instance's evaluations grouped by the task that made
   // them. If a business-rule task is selected it narrows to that task's decisions —
   // the same scoping the Variables tab uses. curDecs backs the hover popover.
