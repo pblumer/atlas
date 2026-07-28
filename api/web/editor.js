@@ -165,6 +165,18 @@ function jsonSummary(text) {
   } catch { return ""; }
 }
 
+// decVal reads a decision evaluation's inputs/outputs/trace. The API returns these
+// as raw JSON values (json.RawMessage) — i.e. already-parsed objects/arrays — so
+// they must NOT be JSON.parse'd again (parsing an object stringifies it to
+// "[object Object]" and throws, which silently emptied the panel to "none"). It
+// still accepts a JSON string for robustness (older payloads, tests), and falls
+// back when a string can't be parsed.
+function decVal(x, fallback) {
+  if (x === null || x === undefined) return fallback;
+  if (typeof x === "string") { try { return JSON.parse(x); } catch { return fallback; } }
+  return x;
+}
+
 // renderVarsBody lays out a variable list: scalars as a labeled field grid, JSON
 // values as collapsible, syntax-highlighted cards. collapsed is a Set of the JSON
 // variable names the operator has collapsed (persists across re-renders); the
@@ -3534,10 +3546,9 @@ export async function mountLive(root, { api, toast, key, instance }) {
   // renderOneDecision renders a single evaluation: the decision id, the inputs it
   // saw, the outputs it produced, and the trace explaining the outcome.
   function renderOneDecision(d) {
-    let inputs = {}, outputs = {}, trace = null;
-    try { inputs = JSON.parse(d.inputs || "{}"); } catch { /* leave empty */ }
-    try { outputs = JSON.parse(d.outputs || "{}"); } catch { /* leave empty */ }
-    if (d.trace) { try { trace = JSON.parse(d.trace); } catch { /* no trace */ } }
+    const inputs = decVal(d.inputs, {});
+    const outputs = decVal(d.outputs, {});
+    const trace = decVal(d.trace, null);
     const when = d.at ? new Date(d.at / 1e6).toLocaleString() : "";
     return `<div class="dec-card">
       <div class="dec-card-h"><b>${esc(d.decisionId)}</b>${when ? ` <span class="muted">${esc(when)}</span>` : ""}</div>
@@ -4530,10 +4541,9 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     return `<div class="dec-sect"><div class="dec-sect-h">How it was decided</div>${tables}</div>`;
   }
   function renderOneDecision(d) {
-    let inputs = {}, outputs = {}, trace = null;
-    try { inputs = JSON.parse(d.inputs || "{}"); } catch { /* leave empty */ }
-    try { outputs = JSON.parse(d.outputs || "{}"); } catch { /* leave empty */ }
-    if (d.trace) { try { trace = JSON.parse(d.trace); } catch { /* no trace */ } }
+    const inputs = decVal(d.inputs, {});
+    const outputs = decVal(d.outputs, {});
+    const trace = decVal(d.trace, null);
     const when = d.at ? new Date(d.at / 1e6).toLocaleString() : "";
     return `<div class="dec-card">
       <div class="dec-card-h"><b>${esc(d.decisionId)}</b>${when ? ` <span class="muted">${esc(when)}</span>` : ""}</div>
