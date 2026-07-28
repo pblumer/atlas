@@ -504,6 +504,36 @@ type MessageFlowValue struct {
 
 func (*MessageFlowValue) ValueType() ValueType { return VTMessageFlow }
 
+// InboundDeliveryValue advances an external event source's inbound high-water mark
+// (ADR-0074). SourceID is an opaque per-source identifier (e.g. a clio connector +
+// watched subject) the engine never interprets; SourceSeq is that source's
+// monotonic sequence up to which delivery has been applied. Folding these into a
+// per-source high-water mark lets a replayed at-least-once publish be skipped.
+type InboundDeliveryValue struct {
+	SourceID  string
+	SourceSeq uint64
+}
+
+func (*InboundDeliveryValue) ValueType() ValueType { return VTInboundDelivery }
+
+func (v *InboundDeliveryValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.SourceSeq)
+	return appendString(dst, v.SourceID)
+}
+
+func (v *InboundDeliveryValue) decode(src []byte) error {
+	if len(src) < 8 {
+		return ErrShortBuffer
+	}
+	v.SourceSeq = binary.LittleEndian.Uint64(src[0:])
+	id, _, err := readString(src[8:])
+	if err != nil {
+		return err
+	}
+	v.SourceID = id
+	return nil
+}
+
 func (v *MessageFlowValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.SenderProcessInstanceKey)
 	dst = binary.LittleEndian.AppendUint64(dst, v.ReceiverProcessInstanceKey)
@@ -623,6 +653,8 @@ func newValue(vt ValueType) Value {
 		return &IncidentValue{}
 	case VTDecisionEvaluation:
 		return &DecisionEvaluationValue{}
+	case VTInboundDelivery:
+		return &InboundDeliveryValue{}
 	default:
 		return nil
 	}

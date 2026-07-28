@@ -103,7 +103,7 @@ func TestDecodeValueNoPayloadType(t *testing.T) {
 // TestDecodeValueShortBuffer covers the decode error propagation for each
 // payload type on a truncated buffer.
 func TestDecodeValueShortBuffer(t *testing.T) {
-	for _, vt := range []ValueType{VTElementInstance, VTJob, VTTimer, VTProcessInstance, VTVariable, VTMessageSubscription, VTMessageFlow, VTDataObject, VTIncident} {
+	for _, vt := range []ValueType{VTElementInstance, VTJob, VTTimer, VTProcessInstance, VTVariable, VTMessageSubscription, VTMessageFlow, VTDataObject, VTIncident, VTInboundDelivery} {
 		if _, err := DecodeValue(vt, nil); !errors.Is(err, ErrShortBuffer) {
 			t.Errorf("DecodeValue(%v, nil) err = %v, want ErrShortBuffer", vt, err)
 		}
@@ -229,6 +229,27 @@ func TestMessageFlowDecodeErrors(t *testing.T) {
 	}
 }
 
+// TestInboundDeliveryDecodeErrors covers InboundDeliveryValue.decode's guards: a
+// buffer shorter than the 8-byte sequence prefix, and a source-id length prefix
+// truncated past that prefix.
+func TestInboundDeliveryDecodeErrors(t *testing.T) {
+	full := AppendValue(nil, &InboundDeliveryValue{SourceID: "s", SourceSeq: 9})
+	for _, tt := range []struct {
+		name string
+		src  []byte
+	}{
+		{"short sequence", full[:4]},       // less than the 8-byte SourceSeq prefix
+		{"truncated source id", full[:10]}, // seq consumed, id length prefix truncated
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var v InboundDeliveryValue
+			if err := v.decode(tt.src); !errors.Is(err, ErrShortBuffer) {
+				t.Errorf("decode(%d bytes) err = %v, want ErrShortBuffer", len(tt.src), err)
+			}
+		})
+	}
+}
+
 // TestProcessInstanceStateString covers ProcessInstanceState.String() for each
 // terminal state and the default (active / unknown) arm.
 func TestProcessInstanceStateString(t *testing.T) {
@@ -271,6 +292,7 @@ func TestValueTypeMethods(t *testing.T) {
 		{(&MessageFlowValue{}), VTMessageFlow},
 		{(&DataObjectValue{}), VTDataObject},
 		{(&DecisionEvaluationValue{}), VTDecisionEvaluation},
+		{(&InboundDeliveryValue{}), VTInboundDelivery},
 	}
 	for _, c := range cases {
 		if got := c.v.ValueType(); got != c.want {
@@ -292,7 +314,7 @@ func TestStringersExhaustive(t *testing.T) {
 	valueTypes := []ValueType{
 		VTProcessInstance, VTElementInstance, VTJob, VTTimer, VTMessageSubscription,
 		VTMessage, VTVariable, VTIncident, VTSignal, VTError, VTProcessDefinition,
-		VTMessageFlow, VTDataObject, VTDecisionEvaluation,
+		VTMessageFlow, VTDataObject, VTDecisionEvaluation, VTInboundDelivery,
 	}
 	for _, vt := range valueTypes {
 		if s := vt.String(); s == "" || s == "ValueType(?)" {
@@ -309,7 +331,7 @@ func TestStringersExhaustive(t *testing.T) {
 		IntentVariableCreated, IntentVariableUpdated, IntentIncidentCreated,
 		IntentIncidentResolved, IntentJobCanceled,
 		IntentDataObjectCreated, IntentDataObjectStateChanged,
-		IntentDecisionEvaluated,
+		IntentDecisionEvaluated, IntentVariableDeleted, IntentInboundDeliveryApplied,
 	}
 	for _, in := range intents {
 		if s := in.String(); s == "" || s == "Intent(?)" {

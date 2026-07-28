@@ -279,6 +279,15 @@ func (c *ProcessingContext) AppendMessageFlowEvent(v model.MessageFlowValue) {
 	c.appendEvent(v.ReceiverProcessDefKey, model.VTMessageFlow, model.IntentMessagePublished, inflightValue{messageFlow: v})
 }
 
+// AppendInboundDeliveryEvent advances an external source's inbound high-water mark
+// (ADR-0074), keyed on the receiving definition space as a neutral key (the record
+// carries the source id and sequence it needs). Emitted in the same batch as the
+// message publish it guards, so the dedup mark and the effects it authorizes commit
+// atomically under one fsync (invariant I2).
+func (c *ProcessingContext) AppendInboundDeliveryEvent(v model.InboundDeliveryValue) {
+	c.appendEvent(0, model.VTInboundDelivery, model.IntentInboundDeliveryApplied, inflightValue{inbound: v})
+}
+
 // AppendElementCommand schedules an element-instance command for a later batch.
 func (c *ProcessingContext) AppendElementCommand(key uint64, intent model.Intent, v model.ElementInstanceValue) {
 	c.appendCommand(key, model.VTElementInstance, intent, inflightValue{element: v})

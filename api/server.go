@@ -193,6 +193,12 @@ type Server struct {
 	// jobs on the run loop, so it needs no lock.
 	clioRegistry *clio.Registry
 
+	// inboundSubs holds the operator-configured clio inbound subscriptions the
+	// inbound bridge polls (ADR-0074). Owned by the run-loop goroutine. inboundPoll
+	// is that bridge's poll cadence (WithInboundPollInterval; 0 disables the bridge).
+	inboundSubs *inboundSubStore
+	inboundPoll time.Duration
+
 	// docsEnabled gates the OpenAPI spec and the Scalar API explorer. On by
 	// default (opt-out), consistent with the already-open web UI and MCP
 	// endpoint; an operator who does not want the interactive surface disables
@@ -221,6 +227,13 @@ func WithLogBuffer(b *LogBuffer) Option { return func(s *Server) { s.logs = b } 
 // it when the interactive, mutating "Try it out" surface should not be exposed
 // (ADR-0043).
 func WithoutDocs() Option { return func(s *Server) { s.docsEnabled = false } }
+
+// WithInboundPollInterval sets the clio inbound bridge's poll cadence (ADR-0074).
+// A non-positive interval disables the bridge (useful in tests that drive it
+// directly). The default is 2s.
+func WithInboundPollInterval(d time.Duration) Option {
+	return func(s *Server) { s.inboundPoll = d }
+}
 
 // WithoutVault disables the engine-internal encrypted secret vault, which is
 // otherwise on by default (ADR-0070). With it disabled the secret endpoints
@@ -284,6 +297,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	inboundSubs, err := newInboundSubStore(filepath.Join(dataDir, "inbound-subscriptions"))
+	if err != nil {
+		return nil, err
+	}
 	// DMN reference models are resolved either from a temis model service (when
 	// configured) or the zero-config <data-dir>/dmn-models folder. Both satisfy the
 	// Resolver interface, so the rest of the server is unaffected (ADR-0034/0014).
@@ -306,7 +323,9 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		projects:     projects,
 		dmnrefs:      dmnrefs,
 		connectors:   connectors,
-		vaultEnabled: true, // opt-out: built unless WithoutVault is passed (ADR-0070)
+		inboundSubs:  inboundSubs,
+		inboundPoll:  2 * time.Second, // default cadence; WithInboundPollInterval overrides, 0 disables
+		vaultEnabled: true,            // opt-out: built unless WithoutVault is passed (ADR-0070)
 		users:        users,
 		sessions:     newSessionStore(defaultSessionTTL),
 		dmnResolver:  resolver,
@@ -416,6 +435,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.wg.Add(2)
 	go s.loop()
 	go s.timerScheduler(time.Second)
+	// The clio inbound bridge polls configured subscriptions and republishes new
+	// clio events as Atlas messages (ADR-0074). It is a separate goroutine like the
+	// timer scheduler — it does its network reads off the run loop and hands only the
+	// resulting publish onto it (invariant I3). A non-positive interval disables it.
+	if s.inboundPoll > 0 {
+		s.wg.Add(1)
+		go s.inboundBridge(s.inboundPoll)
+	}
 	return s, nil
 }
 

@@ -81,6 +81,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0071](0071-sharing-scopes.md) | Sharing scopes — private and shared access boundaries for design-time work | Accepted |
 | [0072](0072-multiple-dmn-models-per-process.md) | Multiple DMN models per process deployment | Accepted |
 | [0073](0073-principals-directory.md) | A principals directory for member and assignee pickers | Accepted |
+| [0074](0074-clio-inbound-event-bridge.md) | A clio inbound event bridge with engine-side idempotent delivery | Accepted |
 
 ## Status values
 

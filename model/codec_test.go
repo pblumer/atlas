@@ -191,6 +191,15 @@ func TestRecordRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name:   "inbound delivery high-water",
+			vt:     VTInboundDelivery,
+			intent: IntentInboundDeliveryApplied,
+			value: &InboundDeliveryValue{
+				SourceID:  "clio:orders-clio:/orders",
+				SourceSeq: 1_700_000_042,
+			},
+		},
+		{
 			name:   "header only, no payload",
 			vt:     VTSignal, // a value type without a payload codec yet
 			intent: IntentActivating,

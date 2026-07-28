@@ -555,6 +555,7 @@ async function viewConsoleOrg() {
         ? '<span class="pill ok"><span class="dot"></span>enabled</span>'
         : '<span class="pill warn"><span class="dot"></span>disabled</span>'}</td>
       <td style="text-align:right; white-space:nowrap">
+        ${c.kind === "clio" ? '<button class="btn ghost" data-cact="subs">Events</button>' : ""}
         <button class="btn ghost" data-cact="edit">Edit</button>
         <button class="btn ghost" data-cact="toggle">${c.enabled ? "Disable" : "Enable"}</button>
         <button class="btn ghost danger" data-cact="delete">Delete</button>
@@ -1339,7 +1340,10 @@ function wireConnectorManagement(connectors) {
       const c = (connectors || []).find((x) => x.id === id);
       if (!c) return;
       try {
-        if (btn.dataset.cact === "toggle") {
+        if (btn.dataset.cact === "subs") {
+          await toggleInboundSubs(btn.closest("tr"), id);
+          return;
+        } else if (btn.dataset.cact === "toggle") {
           await api("PATCH", "/api/v1/connectors/" + encodeURIComponent(id), { enabled: !c.enabled });
         } else if (btn.dataset.cact === "edit") {
           const endpoint = window.prompt("Endpoint URL", c.endpoint);
@@ -1355,6 +1359,62 @@ function wireConnectorManagement(connectors) {
       } catch (err) { toast("Connector update failed: " + err.message, "err"); }
     });
   }
+}
+
+// toggleInboundSubs expands (or collapses) an inline panel under a clio connector row
+// listing its inbound event subscriptions (ADR-0074) with an add form and per-row
+// delete. A subscription watches a clio subject and republishes each new event as an
+// Atlas message that starts/wakes processes; the correlation key is a FEEL expression
+// over the event body (blank = keyless).
+async function toggleInboundSubs(row, connectorId) {
+  const existing = row.nextElementSibling;
+  if (existing && existing.classList.contains("subs-row")) {
+    existing.remove();
+    return;
+  }
+  const subs = (await api("GET", "/api/v1/connectors/" + encodeURIComponent(connectorId) + "/inbound-subscriptions")) || [];
+  const list = subs.map((s) => `<tr data-sid="${esc(s.id)}">
+      <td><code>${esc(s.watchedSubject)}</code>${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}</td>
+      <td>→ message <span class="chip">${esc(s.messageName)}</span>${s.correlationKey ? ` on <code>${esc(s.correlationKey)}</code>` : ""}</td>
+      <td>${s.enabled ? '<span class="pill ok"><span class="dot"></span>on</span>' : '<span class="pill warn"><span class="dot"></span>off</span>'}</td>
+      <td style="text-align:right"><button class="btn ghost danger" data-sdel>Delete</button></td>
+    </tr>`).join("") || `<tr><td colspan="4" class="muted" style="padding:10px">No subscriptions. Add one below to have clio events start or wake processes.</td></tr>`;
+  const panel = document.createElement("tr");
+  panel.className = "subs-row";
+  panel.innerHTML = `<td colspan="3" style="background:var(--surface); padding:12px 18px">
+    <div class="muted" style="margin-bottom:8px">Inbound event subscriptions — a watched clio subject's events are published as Atlas messages (ADR-0074).</div>
+    <table style="width:100%"><tbody id="subs-body">${list}</tbody></table>
+    <form id="subs-form" style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr auto;align-items:end;margin-top:10px">
+      <label class="field" style="margin:0"><span>Watched subject</span><input name="watchedSubject" placeholder="orders/new" required/></label>
+      <label class="field" style="margin:0"><span>Message name</span><input name="messageName" placeholder="orderEvent" required/></label>
+      <label class="field" style="margin:0"><span>Correlation key (FEEL, optional)</span><input name="correlationKey" placeholder="= orderId"/></label>
+      <button class="btn" type="submit">Add</button>
+    </form></td>`;
+  row.after(panel);
+  panel.querySelector("#subs-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    try {
+      await api("POST", "/api/v1/connectors/" + encodeURIComponent(connectorId) + "/inbound-subscriptions", {
+        watchedSubject: (f.get("watchedSubject") || "").trim(),
+        messageName: (f.get("messageName") || "").trim(),
+        correlationKey: (f.get("correlationKey") || "").trim(),
+      });
+      toast("Subscription added", "ok");
+      panel.remove();
+      await toggleInboundSubs(row, connectorId);
+    } catch (err) { toast("Could not add subscription: " + err.message, "err"); }
+  });
+  panel.querySelector("#subs-body").addEventListener("click", async (e) => {
+    const del = e.target.closest("button[data-sdel]");
+    if (!del) return;
+    const sid = del.closest("tr").dataset.sid;
+    try {
+      await api("DELETE", "/api/v1/inbound-subscriptions/" + encodeURIComponent(sid));
+      panel.remove();
+      await toggleInboundSubs(row, connectorId);
+    } catch (err) { toast("Could not delete subscription: " + err.message, "err"); }
+  });
 }
 
 // wireSecretsManagement binds the encrypted-vault panel (ADR-0069): a "New secret"

@@ -635,6 +635,24 @@ func handleTimerStartArm(c *ProcessingContext) {
 // StartVars); correlation is the same path a message throw event uses.
 func handleMessagePublished(c *ProcessingContext) {
 	pub := c.cmd.Value.subscription
+	// A publish from an external event source (ADR-0074) carries a source id and
+	// sequence; deduplicate it against the source's durable high-water mark so an
+	// at-least-once replay is skipped rather than re-correlated (which would
+	// double-start a message-start process). An API/throw publish has an empty
+	// source id and is never deduplicated. The high-water advance rides this same
+	// batch as the correlate/start effects, so one fsync commits them atomically.
+	src := c.cmd.Value.inbound
+	if src.SourceID != "" {
+		hw, err := c.tx.InboundHighWater(src.SourceID)
+		if err != nil {
+			c.p.fail(err)
+			return
+		}
+		if src.SourceSeq <= hw {
+			return // already applied; a duplicate delivery is a no-op
+		}
+		c.AppendInboundDeliveryEvent(src)
+	}
 	// An API publish has no sending instance, so the recorded flow's sender is 0.
 	correlateMessage(c, pub.MessageName, pub.CorrelationKey, c.cmd.StartVars, 0)
 }
