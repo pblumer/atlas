@@ -164,6 +164,18 @@ func (s *Store) GetJob(key uint64) (*model.JobValue, bool, error) {
 	return v.(*model.JobValue), true, nil
 }
 
+// JobOfElement returns the key of the job held by the given element instance,
+// reporting ok=false if it holds none. It reads the jobByElement reverse index
+// outside a transaction, for queries such as the runtime view surfacing the
+// waiting job key on a parked element so an operator can act on it.
+func (s *Store) JobOfElement(elKey uint64) (uint64, bool, error) {
+	raw, ok, err := getCopy(s.db, keyJobByElement(elKey))
+	if err != nil || !ok {
+		return 0, ok, err
+	}
+	return binary.BigEndian.Uint64(raw), true, nil
+}
+
 // GetIncident returns the committed incident on an element instance, or nil if
 // there is none. It reads outside a transaction, for the resolve endpoint's
 // existence check (ADR-0061).

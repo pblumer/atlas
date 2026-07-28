@@ -148,11 +148,23 @@ type infoResp struct {
 	Go        string `json:"go,omitempty"`
 }
 
+// runtimeJob is a single activatable job waiting on an element, exposed so an
+// operator can discover the key to complete or fail over HTTP (POST
+// /jobs/{key}/complete, .../fail) without a worker. One entry per parked token,
+// since an element aggregates every instance's tokens.
+type runtimeJob struct {
+	JobKey             uint64 `json:"jobKey"`
+	ProcessInstanceKey uint64 `json:"processInstanceKey"`
+}
+
 type runtimeElement struct {
 	ElementID string `json:"elementId"`
 	Type      string `json:"type"`
 	Tokens    int    `json:"tokens"` // tokens sitting here now (live — drawn green)
 	Visits    int    `json:"visits"` // tokens that have ever passed through (history — drawn gray)
+	// Jobs are the keys of the jobs held by the live tokens on this element, so
+	// the runtime view is a discovery surface for the job-complete/fail endpoints.
+	Jobs []runtimeJob `json:"jobs,omitempty"`
 }
 
 type runtimeResp struct {
@@ -764,17 +776,29 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			return e
 		}
 
-		// Live tokens: element instances sitting on an element right now.
-		scanErr = s.store.ActiveElementInstances(func(_ uint64, v *model.ElementInstanceValue) error {
+		// Live tokens: element instances sitting on an element right now. A token
+		// parked on a job-backed element (service/user task, business rule task, …)
+		// carries a job key, surfaced via the reverse index so the operator can
+		// complete or fail it by key over HTTP.
+		scanErr = s.store.ActiveElementInstances(func(eiKey uint64, v *model.ElementInstanceValue) error {
 			if v.ProcessDefKey != key {
 				return nil
 			}
 			if instanceFilter != 0 && v.ProcessInstanceKey != instanceFilter {
 				return nil
 			}
-			if e := get(v.ElementId); e != nil {
-				e.Tokens++
-				resp.Tokens++
+			e := get(v.ElementId)
+			if e == nil {
+				return nil
+			}
+			e.Tokens++
+			resp.Tokens++
+			jobKey, ok, err := s.store.JobOfElement(eiKey)
+			if err != nil {
+				return err
+			}
+			if ok {
+				e.Jobs = append(e.Jobs, runtimeJob{JobKey: jobKey, ProcessInstanceKey: v.ProcessInstanceKey})
 			}
 			return nil
 		})
@@ -876,13 +900,22 @@ func (s *Server) handleCollaborationRuntime(w http.ResponseWriter, r *http.Reque
 				return e
 			}
 			scan(func() error {
-				return s.store.ActiveElementInstances(func(_ uint64, v *model.ElementInstanceValue) error {
+				return s.store.ActiveElementInstances(func(eiKey uint64, v *model.ElementInstanceValue) error {
 					if v.ProcessDefKey != pd.Key {
 						return nil
 					}
-					if e := get(v.ElementId); e != nil {
-						e.Tokens++
-						resp.Tokens++
+					e := get(v.ElementId)
+					if e == nil {
+						return nil
+					}
+					e.Tokens++
+					resp.Tokens++
+					jobKey, ok, err := s.store.JobOfElement(eiKey)
+					if err != nil {
+						return err
+					}
+					if ok {
+						e.Jobs = append(e.Jobs, runtimeJob{JobKey: jobKey, ProcessInstanceKey: v.ProcessInstanceKey})
 					}
 					return nil
 				})
