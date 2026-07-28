@@ -811,7 +811,20 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .ops-fields span { font-size: 13px; color: var(--text); }
 .mono { font-family: ui-monospace, monospace; }
 
-.ops-split { display: flex; height: 280px; border-top: 1px solid var(--border); background: var(--surface); }
+/* Draggable divider between the diagram and the bottom panel (Instance History +
+   inspector): a thin surface strip with a centred grip, row-resize cursor, and a
+   focus ring for keyboard resize. */
+.ops-resizer {
+  flex: 0 0 7px; height: 7px; cursor: row-resize; background: var(--surface);
+  display: flex; align-items: center; justify-content: center;
+}
+.ops-resizer::after {
+  content: ""; width: 40px; height: 3px; border-radius: 2px;
+  background: var(--border-strong); transition: background 0.12s;
+}
+.ops-resizer:hover::after, .ops-resizer.dragging::after { background: var(--accent); }
+.ops-resizer:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ops-split { display: flex; flex: 0 0 auto; height: 280px; border-top: 1px solid var(--border); background: var(--surface); }
 .ops-history { flex: 0 0 42%; display: flex; flex-direction: column; border-right: 1px solid var(--border); min-width: 0; }
 .ops-detail { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .ops-panel-head {
