@@ -4,14 +4,26 @@
 - **Date:** 2026-07-28
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Not started — this ADR is the plan. The work is
-> phased, each phase test-first with a recovery test (ADR-0018): compiler parse
-> + `FlowScope` → runtime scope lifecycle (the happy path that makes a plain
+> **Implementation status.** Phase 1 delivered (compiler); Phases 2–4 pending. The
+> work is phased, each phase test-first with a recovery test (ADR-0018): compiler
+> parse + `FlowScope` → runtime scope lifecycle (the happy path that makes a plain
 > embedded subprocess run) → termination/interruption and boundary events on the
 > subprocess → nesting depth, empty-scope, and subprocess-level variables/I/O
 > mappings. Event subprocesses, multi-instance activities, and call activities are
 > **out of scope** here — they are separate ROADMAP Milestone-3 items that build
 > on this one.
+>
+> **Delivered (Phase 1):** the `TypeSubProcess` element type; recursive parsing of
+> `<subProcess>` (a shared `xmlFlowContent` embedded in both the process and each
+> subprocess; `registerScope`/`connectScope` compile the root and every nested
+> scope); a Builder scope cursor (`PushScope`/`PopScope`) so a subprocess's children
+> carry it as their `FlowScope`; root-scoped process-entry start-event collection
+> (a start nested in a subprocess is that scope's entry, not the process's); the
+> now-load-bearing cross-scope sequence-flow rejection in `checkScopes`; reachability
+> that enters a subprocess through its own start; and `TypeSubProcess` counted as an
+> activity (a valid boundary-event host). **Runtime boundary:** a subprocess model
+> now compiles and deploys, but no `subProcessBehavior` is registered yet, so an
+> instance must not be *run* until Phase 2 — the token would reach a nil behavior.
 
 ## Context and problem statement
 

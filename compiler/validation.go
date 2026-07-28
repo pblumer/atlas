@@ -145,6 +145,16 @@ func checkReachability(cp *CompiledProcess) []Problem {
 		for _, be := range cp.BoundaryEvents(n) {
 			push(be)
 		}
+		// A token entering a subprocess enters its scope through the subprocess's
+		// own start event(s), so a reached subprocess makes its inner starts reached
+		// and the walk continues from there (ADR-0073).
+		if cp.nodes[n].Type == TypeSubProcess {
+			for id := range cp.nodes {
+				if isStartEvent(cp.nodes[id].Type) && cp.nodes[id].FlowScope == n {
+					push(int32(id))
+				}
+			}
+		}
 	}
 	var ps []Problem
 	for id := range cp.nodes {
@@ -299,7 +309,7 @@ func isGateway(t BpmnType) bool {
 func isActivity(t BpmnType) bool {
 	switch t {
 	case TypeServiceTask, TypeScriptTask, TypeScriptJobTask, TypeBusinessRuleTask,
-		TypeUserTask, TypeConnectorTask, TypeTask:
+		TypeUserTask, TypeConnectorTask, TypeTask, TypeSubProcess:
 		return true
 	default:
 		return false
