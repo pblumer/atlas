@@ -36,7 +36,7 @@ const (
 	TypeScriptJobTask     // a script task authored in a general-purpose language (PowerShell, …) that runs via the job path, not inline like a FEEL script task (ADR-0047); like a service task it creates a job and waits
 	TypeTimerStartEvent   // a start event that a due timer instantiates on a schedule (duration/date/cycle/cron, ADR-0051); at runtime it behaves like a none start (flows straight on)
 	TypeMessageEndEvent   // an end event that publishes a message, then ends the instance (ADR-0052); the send-and-stop counterpart of a message throw event, so it reuses the throw detail table
-	TypeSubProcess        // an embedded subprocess: a container that is itself a scope; a token entering it runs its inner start→…→end in a child scope, and it completes when that scope empties (ADR-0073)
+	TypeSubProcess        // an embedded subprocess: a container that is itself a scope; a token entering it runs its inner start→…→end in a child scope, and it completes when that scope empties (ADR-0074)
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
 	numBpmnTypes = 22
@@ -431,6 +431,7 @@ type CompiledProcess struct {
 	ioOutputs         []IOMapping             // shared: zeebe:ioMapping outputs grouped by activity node
 	startEvents       []int32
 	startFormId       int32    // interned start-form id (ADR-0028), -1 if none
+	versionTag        int32    // interned atlas:versionTag revision label, -1 if none
 	isExecutable      bool     // bpmn:isExecutable — a non-executable process can't be started
 	elementIds        []int32  // interned source BPMN id per node id (-1 if unset)
 	strings           []string // intern table (index → string), for debug/export
@@ -688,6 +689,11 @@ func (p *CompiledProcess) StartFormId() string { return p.Intern(p.startFormId) 
 // process is descriptive-only: the API refuses to start it and omits it from the
 // start surfaces. Absent in the source defaults to true (see the parser).
 func (p *CompiledProcess) IsExecutable() bool { return p.isExecutable }
+
+// VersionTag returns the process's atlas:versionTag revision label ("" if none). It
+// is design-time metadata Operations shows beside the deploy version; the engine
+// never reads it.
+func (p *CompiledProcess) VersionTag() string { return p.Intern(p.versionTag) }
 
 // Intern returns the string for an interned index, or "" if out of range.
 func (p *CompiledProcess) Intern(idx int32) string {

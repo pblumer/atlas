@@ -302,6 +302,8 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "List user accounts", tag: "Users", resp: jsonBody("Users", tArray())}},
 		{"GET", "/api/v1/users/assignable", s.handleListAssignableUsers, apiOp{
 			summary: "List users a task can be assigned to", tag: "Users", resp: jsonBody("Assignable users", tArray())}},
+		{"GET", "/api/v1/principals", s.handleListPrincipals, apiOp{
+			summary: "List principals (users; groups later) for member and assignee pickers — id-referenced, any authenticated caller (ADR-0073)", tag: "Users", resp: jsonBody("Principals", tArray())}},
 		{"POST", "/api/v1/users", s.handleCreateUser, apiOp{
 			summary: "Create a user account", tag: "Users", status: http.StatusCreated,
 			req: jsonBody("New user", schemaObj(map[string]any{

@@ -1,4 +1,4 @@
-# ADR-0073: Embedded subprocesses (scope lifecycle via child counters)
+# ADR-0074: Embedded subprocesses (scope lifecycle via child counters)
 
 - **Status:** Proposed
 - **Date:** 2026-07-28

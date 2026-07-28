@@ -1093,27 +1093,25 @@ function visBadge(p) {
   return `<span class="pill vis" title="Only the owner can see this project">Private</span>`;
 }
 
-// shareProject loads the user directory (to resolve member names and populate the
-// add-picker) and opens the share dialog. A non-admin owner cannot list users
-// (ADR-0044), so on a 403 the dialog degrades to adding members by id.
+// shareProject loads the principals directory (to resolve member names and
+// populate the add-picker) and opens the share dialog. The directory is readable
+// by any authenticated caller (ADR-0073), so an owner needn't be an admin; if the
+// fetch fails for any reason the dialog degrades to adding members by id.
 async function shareProject(proj, reload) {
-  let users = null, denied = false;
-  try { users = await api("GET", "/api/v1/users"); }
-  catch (e) {
-    denied = /admin/i.test(e.message);
-    if (!denied) { toast("could not load users: " + e.message, "err"); return; }
-  }
-  openShareModal(proj, users, denied, reload);
+  let users = null, degraded = false;
+  try { users = await api("GET", "/api/v1/principals"); }
+  catch { degraded = true; }
+  openShareModal(proj, users, degraded, reload);
 }
 
 // openShareModal renders the share dialog and wires its controls to the project
 // scope endpoints. It keeps a local copy of the project, updated from each
 // mutation's response so the dialog reflects server truth without a full refetch;
 // closing runs reload() once to refresh the underlying page (badges and gating).
-function openShareModal(proj, users, denied, reload) {
+function openShareModal(proj, users, degraded, reload) {
   let p = proj;
   const byId = new Map((users || []).map((u) => [u.id, u]));
-  const nameOf = (id) => { const u = byId.get(id); return u ? (u.displayName || u.username) : id; };
+  const nameOf = (id) => { const u = byId.get(id); return u ? u.name : id; };
   const me = AUTH.user && AUTH.user.id;
 
   const ov = document.createElement("div");
@@ -1166,17 +1164,17 @@ function openShareModal(proj, users, denied, reload) {
       ` data-uid="${esc(m.ref.id)}"`,
     )).join("");
 
-    const addControl = denied
+    const addControl = degraded
       ? `<div class="add-row">
            <input class="field" id="add-uid" placeholder="User ID (usr_…)" autocomplete="off">
            ${roleSelect("viewer", 'id="add-role"')}
            <button type="button" class="btn" id="add-btn">Add</button>
          </div>
-         <p class="muted small">A searchable directory needs the admin role — add by user ID for now.</p>`
+         <p class="muted small">Could not load the directory — add by user ID for now.</p>`
       : eligible.length
         ? `<div class="add-row">
              <select class="field" id="add-uid">
-               ${eligible.map((u) => `<option value="${esc(u.id)}">${esc(u.displayName || u.username)}</option>`).join("")}
+               ${eligible.map((u) => `<option value="${esc(u.id)}">${esc(u.name)}</option>`).join("")}
              </select>
              ${roleSelect("viewer", 'id="add-role"')}
              <button type="button" class="btn" id="add-btn">Add</button>
@@ -1567,6 +1565,16 @@ async function viewInstances() {
     instance to isolate it — with its variables shown below the diagram. Each instance
     listed under the diagram has a <b>&#9654; Replay</b> link to walk it step by step. Start
     the demo to park a token on a waiting task.</p>
+    <div class="ops-toolbar">
+      <span class="ops-search">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
+        <input id="proc-filter" type="text" placeholder="Filter processes by name or ID…" aria-label="Filter processes" spellcheck="false"/>
+      </span>
+      <form class="ops-jump" id="inst-jump" title="Open a specific instance's replay by its key">
+        <input id="inst-key" type="text" inputmode="numeric" placeholder="Instance key…" aria-label="Instance key" spellcheck="false"/>
+        <button class="btn neutral" type="submit">Open replay</button>
+      </form>
+    </div>
     <div class="card" style="padding:0">
       <table>
         <thead><tr><th>Process</th><th>Versions</th><th>Running</th><th>Finished</th><th>Last activity</th><th></th></tr></thead>
@@ -1575,50 +1583,74 @@ async function viewInstances() {
     </div>`;
   const tbody = document.getElementById("rows");
 
+  let allGroups = [];
+  let summary = new Map();
+  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—"; // completedAt is ns
+
+  // renderRows draws the process rows, narrowed by the filter box (name or process
+  // id). Kept separate from load so filtering never refetches.
+  function renderRows() {
+    if (!allGroups.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="empty">
+        No processes deployed. Click <b>Deploy demo</b> above, or create one in the
+        <a href="#/modeler">Modeler</a>.</td></tr>`;
+      return;
+    }
+    const q = (document.getElementById("proc-filter").value || "").trim().toLowerCase();
+    const groups = q
+      ? allGroups.filter((g) => ((g.latest.name || "") + " " + g.processId).toLowerCase().includes(q))
+      : allGroups;
+    if (!groups.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="empty">No processes match “${esc(q)}”.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = groups.map((g) => {
+      const s = summary.get(g.processId) || { running: 0, finished: 0, latestCompletedAt: 0 };
+      const label = g.latest.name || g.processId;
+      const sub = g.latest.name
+        ? `<div class="muted" style="font-size:12px">${esc(g.processId)}</div>` : "";
+      const tag = g.latest.versionTag ? ` <span class="ver-tag" title="Version tag">${esc(g.latest.versionTag)}</span>` : "";
+      const versions = (g.versions.length === 1
+        ? `v${g.latest.version}`
+        : `${g.versions.length} versions <span class="muted">· latest v${g.latest.version}</span>`) + tag;
+      const running = s.running
+        ? `<span class="pill ok"><span class="dot"></span>${s.running}</span>`
+        : '<span class="muted">0</span>';
+      const collab = g.latest.collaborationKey
+        ? `<a class="replay-link" href="#/operations/c/${g.latest.collaborationKey}" title="Replay the message flow between pools">⇄ Replay</a>`
+        : "";
+      return `<tr>
+        <td><a href="#/operations/p/${g.latest.key}"><b>${esc(label)}</b></a>${collab}${sub}</td>
+        <td>${versions}</td>
+        <td>${running}</td>
+        <td>${s.finished || '<span class="muted">0</span>'}</td>
+        <td class="muted">${esc(fmtNano(s.latestCompletedAt))}</td>
+        <td style="text-align:right"><a class="btn ghost" href="#/operations/p/${g.latest.key}">Open</a></td>
+      </tr>`;
+    }).join("");
+  }
+
   const load = async () => {
     try {
       const [procs, instances] = await Promise.all([
         api("GET", "/api/v1/processes"),
         api("GET", "/api/v1/instances"),
       ]);
-      const groups = groupByProcess(procs);
-      if (!groups.length) {
-        tbody.innerHTML = `<tr><td colspan="6" class="empty">
-          No processes deployed. Click <b>Deploy demo</b> above, or create one in the
-          <a href="#/modeler">Modeler</a>.</td></tr>`;
-        return;
-      }
-      const summary = summarizeInstances(instances);
-      // completedAt is unix nanoseconds; Date wants milliseconds.
-      const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—";
-      tbody.innerHTML = groups.map((g) => {
-        const s = summary.get(g.processId) || { running: 0, finished: 0, latestCompletedAt: 0 };
-        const label = g.latest.name || g.processId;
-        const sub = g.latest.name
-          ? `<div class="muted" style="font-size:12px">${esc(g.processId)}</div>` : "";
-        const versions = g.versions.length === 1
-          ? `v${g.latest.version}`
-          : `${g.versions.length} versions <span class="muted">· latest v${g.latest.version}</span>`;
-        const running = s.running
-          ? `<span class="pill ok"><span class="dot"></span>${s.running}</span>`
-          : '<span class="muted">0</span>';
-        const collab = g.latest.collaborationKey
-          ? `<a class="replay-link" href="#/operations/c/${g.latest.collaborationKey}" title="Replay the message flow between pools">⇄ Replay</a>`
-          : "";
-        return `<tr>
-          <td><a href="#/operations/p/${g.latest.key}"><b>${esc(label)}</b></a>${collab}${sub}</td>
-          <td>${versions}</td>
-          <td>${running}</td>
-          <td>${s.finished || '<span class="muted">0</span>'}</td>
-          <td class="muted">${esc(fmtNano(s.latestCompletedAt))}</td>
-          <td style="text-align:right"><a class="btn ghost" href="#/operations/p/${g.latest.key}">Open</a></td>
-        </tr>`;
-      }).join("");
+      allGroups = groupByProcess(procs);
+      summary = summarizeInstances(instances);
+      renderRows();
     } catch (e) {
       tbody.innerHTML = `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;
     }
   };
   document.getElementById("refresh").addEventListener("click", load);
+  document.getElementById("proc-filter").addEventListener("input", renderRows);
+  document.getElementById("inst-jump").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const key = (document.getElementById("inst-key").value || "").trim();
+    if (/^\d+$/.test(key)) location.hash = `#/operations/i/${key}`;
+    else toast("Enter a numeric instance key", "err");
+  });
   const demoBtn = document.getElementById("demo");
   demoBtn.addEventListener("click", async () => {
     demoBtn.disabled = true;

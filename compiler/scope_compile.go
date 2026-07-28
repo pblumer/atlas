@@ -11,7 +11,7 @@ import (
 // registerScope registers every flow node of one scope — the process root or an
 // embedded subprocess — into the flat node array and the shared id map, then
 // recurses into nested subprocesses under a pushed scope so their children carry
-// the subprocess as their FlowScope (ADR-0073). It is the per-scope half of
+// the subprocess as their FlowScope (ADR-0074). It is the per-scope half of
 // compileProcess's node registration; data objects and I/O mappings stay
 // process-scoped and are wired by the root pass in compileProcess.
 //
@@ -321,7 +321,7 @@ func registerScope(
 	// Nested subprocesses: register the container node, then push its scope so its
 	// own flow nodes (registered by recursion) carry it as their FlowScope. The
 	// container is created before its children so it has an ElementId to scope them
-	// to (ADR-0073).
+	// to (ADR-0074).
 	for i := range c.SubProcesses {
 		sub := &c.SubProcesses[i]
 		subID := b.AddSubProcess()
@@ -390,7 +390,7 @@ func registerScope(
 // condition and marking each exclusive/inclusive gateway's default flow — then
 // recurses into nested subprocesses. A flow's endpoints resolve through the flat,
 // process-wide id map; a flow that connects two different scopes compiles here but
-// is rejected by checkScopes (ADR-0073). Defaults are per scope: a gateway's
+// is rejected by checkScopes (ADR-0074). Defaults are per scope: a gateway's
 // default is one of its own outgoing flows, so a scope-local flow index suffices.
 func connectScope(b *Builder, ids map[string]int32, c *xmlFlowContent) error {
 	flowIdx := make(map[string]int32, len(c.Flows))

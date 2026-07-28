@@ -4210,6 +4210,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
         <div class="ops-fields">
           <div><label>Process Instance Key</label><span id="m-key" class="mono">${esc(String(key))}</span></div>
           <div><label>Version</label><span id="m-version">&mdash;</span></div>
+          <div id="m-vtag-wrap" hidden><label>Version tag</label><span id="m-vtag" class="ver-tag"></span></div>
           <div><label>Start Date</label><span id="m-start">&mdash;</span></div>
           <div><label>End Date</label><span id="m-end">&mdash;</span></div>
           <div><label>State</label><span class="pill" id="rp-state">&mdash;</span></div>
@@ -4804,6 +4805,12 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   function applyMeta(next) {
     titleEl.textContent = processName();
     root.querySelector("#m-version").textContent = next.version != null ? "v" + next.version : "—";
+    const vtag = next.versionTag || "";
+    const vtWrap = root.querySelector("#m-vtag-wrap");
+    if (vtWrap) {
+      if (vtag) { root.querySelector("#m-vtag").textContent = vtag; vtWrap.hidden = false; }
+      else { vtWrap.hidden = true; }
+    }
     root.querySelector("#m-start").textContent = steps.length ? fmtDateTime(steps[0].at) : "—";
     const end = next.state !== "active" && steps.length ? Math.max(...steps.map((s) => s.endAt || 0)) : 0;
     root.querySelector("#m-end").textContent = end ? fmtDateTime(end) : "—";

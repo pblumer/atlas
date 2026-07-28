@@ -267,6 +267,9 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	// Atlas has always run every deployed process), so an existing model without it
 	// keeps working. Only an explicit "false" marks a process non-executable.
 	b.SetExecutable(proc.IsExecutable != "false")
+	if proc.VersionTag != "" {
+		b.SetVersionTag(proc.VersionTag)
+	}
 	ids := make(map[string]int32, len(proc.StartEvents)+len(proc.ServiceTasks)+len(proc.EndEvents))
 	register := func(id string, nodeID int32) error {
 		if id == "" {
@@ -282,7 +285,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 
 	// Register every flow node — the process root and, recursively, each embedded
 	// subprocess scope — then require a root-scope start event before wiring flows.
-	// Data objects and I/O mappings below stay process-scoped (ADR-0073).
+	// Data objects and I/O mappings below stay process-scoped (ADR-0074).
 	if err := registerScope(b, ids, register, resolveMessage, &proc.xmlFlowContent); err != nil {
 		return nil, err
 	}
@@ -568,6 +571,7 @@ type xmlProcess struct {
 	Id           string `xml:"id,attr"`
 	Name         string `xml:"name,attr"`
 	IsExecutable string `xml:"isExecutable,attr"`
+	VersionTag   string `xml:"versionTag,attr"`
 
 	xmlFlowContent // the process root's flow nodes and sequence flows
 
@@ -577,7 +581,7 @@ type xmlProcess struct {
 
 // xmlFlowContent is the set of flow nodes and sequence flows of one scope — the
 // process root or an embedded subprocess. Both xmlProcess and xmlSubProcess embed
-// it, so a subprocess nests the very same element shapes (ADR-0073). encoding/xml
+// it, so a subprocess nests the very same element shapes (ADR-0074). encoding/xml
 // promotes the embedded fields, so a <subProcess>'s own <startEvent>, <task>,
 // <sequenceFlow>, … unmarshal exactly as they do at the process root.
 type xmlFlowContent struct {
@@ -611,7 +615,7 @@ type xmlFlowContent struct {
 
 // xmlSubProcess is an embedded <subProcess>: a container whose own flow nodes and
 // sequence flows compile into the flat node array, linked back to it only by their
-// FlowScope (ADR-0073). It recurses — a subprocess may contain subprocesses.
+// FlowScope (ADR-0074). It recurses — a subprocess may contain subprocesses.
 type xmlSubProcess struct {
 	Id   string `xml:"id,attr"`
 	Name string `xml:"name,attr"`

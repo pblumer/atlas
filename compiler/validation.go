@@ -147,7 +147,7 @@ func checkReachability(cp *CompiledProcess) []Problem {
 		}
 		// A token entering a subprocess enters its scope through the subprocess's
 		// own start event(s), so a reached subprocess makes its inner starts reached
-		// and the walk continues from there (ADR-0073).
+		// and the walk continues from there (ADR-0074).
 		if cp.nodes[n].Type == TypeSubProcess {
 			for id := range cp.nodes {
 				if isStartEvent(cp.nodes[id].Type) && cp.nodes[id].FlowScope == n {

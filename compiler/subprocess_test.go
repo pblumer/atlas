@@ -7,7 +7,7 @@ import (
 )
 
 // A plain embedded subprocess: start → subProcess{ innerStart → check → innerEnd }
-// → end. Phase 1 (ADR-0073) compiles it — the container is a real node and its
+// → end. Phase 1 (ADR-0074) compiles it — the container is a real node and its
 // children carry the subprocess as their flow scope — even though the runtime
 // behavior that enters the scope lands in a later phase.
 const subProcessXML = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
