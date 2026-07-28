@@ -20,11 +20,29 @@ type persistedDeployment struct {
 	Version    int32  `json:"version"`
 	DeployedAt int64  `json:"deployedAt"`
 	XML        string `json:"xml"`
-	// DMNXML is the resolved DMN model this process's business rule tasks evaluate
-	// against, snapshotted at deploy time so it is self-contained and re-registers
-	// on restart without re-resolving the temis reference (ADR-0034/ADR-0014).
-	// Empty when the process has no business rule tasks.
+	// DMNXMLs are the resolved DMN models this process's business rule tasks evaluate
+	// against, snapshotted at deploy time so the deployment is self-contained and
+	// re-registers on restart without re-resolving the temis references
+	// (ADR-0034/ADR-0014). A process may reference decisions across several models, so
+	// this is a list; empty when the process has no local business rule tasks.
+	DMNXMLs []string `json:"dmnXmls,omitempty"`
+	// DMNXML is the pre-multi-model single-model field. Deployments written before
+	// multi-model support carry it; loadDeployments reads it as a one-element list
+	// when DMNXMLs is absent. New deployments write DMNXMLs and leave this empty.
 	DMNXML string `json:"dmnXml,omitempty"`
+}
+
+// dmnModels returns the deployment's DMN models as a list, transparently reading a
+// legacy single-model record (DMNXML) as a one-element list so old deployments load
+// unchanged.
+func (d persistedDeployment) dmnModels() []string {
+	if len(d.DMNXMLs) > 0 {
+		return d.DMNXMLs
+	}
+	if d.DMNXML != "" {
+		return []string{d.DMNXML}
+	}
+	return nil
 }
 
 // deployStore is a small durable store for deployments, backed by one JSON file

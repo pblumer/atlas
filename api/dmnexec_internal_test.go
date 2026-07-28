@@ -55,7 +55,7 @@ func TestDeployModelBadDMN(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	var persistErr error
 	srv.do(func() {
-		_, _, persistErr = srv.deployModel([]byte(deployableBPMN), []byte("<not-dmn"), 123)
+		_, _, persistErr = srv.deployModel([]byte(deployableBPMN), [][]byte{[]byte("<not-dmn")}, 123)
 	})
 	if persistErr == nil {
 		t.Fatal("deployModel with an uncompilable DMN snapshot: want an error")
@@ -202,22 +202,27 @@ func bootAPIWithModels(t *testing.T, dir string, seed bool) (*Server, func()) {
 	return srv, func() { srv.Close(); _ = store.Close(); _ = log.Close() }
 }
 
-// TestMatchModelPicksCoveringModel checks the model-matching helper directly:
-// it picks the model that provides every needed decision, and reports no match
-// when the decisions span models or are absent.
-func TestMatchModelPicksCoveringModel(t *testing.T) {
+// TestCoverModelsPicksCoveringModels checks the model-covering helper directly: it
+// returns the single model that provides every needed decision when they share one,
+// the set of models when the decisions span models, and reports no match when a
+// decision is provided by none.
+func TestCoverModelsPicksCoveringModels(t *testing.T) {
 	models := []resolvedModel{
 		{decisions: []string{"A", "B"}, xml: []byte("<first/>")},
 		{decisions: []string{"Dish", "C"}, xml: []byte("<second/>")},
 	}
-	if xml, ok := matchModel(models, []string{"Dish"}); !ok || string(xml) != "<second/>" {
-		t.Fatalf("matchModel = (%q, %v), want the second model", xml, ok)
+	// All needed decisions in one model → just that model.
+	if xmls, ok := coverModels(models, []string{"Dish"}); !ok || len(xmls) != 1 || string(xmls[0]) != "<second/>" {
+		t.Fatalf("coverModels([Dish]) = (%v, %v), want [<second/>]", xmls, ok)
 	}
-	if _, ok := matchModel(models, []string{"A", "Dish"}); ok {
-		t.Fatal("matchModel spanning two models: want no match")
+	// Decisions spanning two models → both models, in model order.
+	xmls, ok := coverModels(models, []string{"A", "Dish"})
+	if !ok || len(xmls) != 2 || string(xmls[0]) != "<first/>" || string(xmls[1]) != "<second/>" {
+		t.Fatalf("coverModels([A, Dish]) = (%v, %v), want [<first/>, <second/>] (spanning models)", xmls, ok)
 	}
-	if _, ok := matchModel(models, []string{"Zzz"}); ok {
-		t.Fatal("matchModel unknown decision: want no match")
+	// A decision provided by no model → no cover.
+	if _, ok := coverModels(models, []string{"Zzz"}); ok {
+		t.Fatal("coverModels unknown decision: want no cover")
 	}
 }
 

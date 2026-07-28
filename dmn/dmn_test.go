@@ -371,6 +371,29 @@ const menuModel = `<?xml version="1.0" encoding="UTF-8"?>
   <decision id="Menu" name="Menu"><literalExpression id="mle"><text>"Fixed"</text></literalExpression></decision>
 </definitions>`
 
+// TestRegistryMultiModelPerProcess proves a process may bundle several DMN models:
+// both its decisions evaluate under its key even though they live in different
+// models, and a decision in none of them is an error, not a silent nil.
+func TestRegistryMultiModelPerProcess(t *testing.T) {
+	reg := dmn.NewRegistry()
+	const key = 7
+	if err := reg.Deploy(key, []byte(dishModel)); err != nil {
+		t.Fatalf("deploy dish: %v", err)
+	}
+	if err := reg.Deploy(key, []byte(menuModel)); err != nil {
+		t.Fatalf("deploy menu: %v", err)
+	}
+	if out, err := reg.Evaluate(context.Background(), key, "Dish", map[string]any{"Season": "Winter"}); err != nil || out["Dish"] != "Roastbeef" {
+		t.Fatalf("Evaluate(Dish) = %v, %v, want Roastbeef (from the first bundled model)", out, err)
+	}
+	if out, err := reg.Evaluate(context.Background(), key, "Menu", nil); err != nil || out["Menu"] != "Fixed" {
+		t.Fatalf("Evaluate(Menu) = %v, %v, want Fixed (from the second bundled model)", out, err)
+	}
+	if _, err := reg.Evaluate(context.Background(), key, "Nope", nil); err == nil {
+		t.Fatal("Evaluate(unknown) = nil error, want an error (in none of the process's models)")
+	}
+}
+
 // TestRegistryUnknownDecision surfaces a missing decision as an error rather than
 // a silent empty result.
 func TestRegistryUnknownDecision(t *testing.T) {

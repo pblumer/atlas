@@ -122,7 +122,7 @@ func (s *Server) handleDeployProject(w http.ResponseWriter, r *http.Request) {
 	// that provides its business rule tasks' decisions. A draft that does not
 	// compile, or references a decision no project model provides, refuses the
 	// whole bundle before anything is registered.
-	dmnForDraft := make([][]byte, len(drafts))
+	dmnForDraft := make([][][]byte, len(drafts))
 	for i, d := range drafts {
 		deployables, err := compiler.ParseAll(1, 1, bytes.NewReader([]byte(d.XML)))
 		if err != nil {
@@ -137,7 +137,7 @@ func (s *Server) handleDeployProject(w http.ResponseWriter, r *http.Request) {
 		if len(needed) == 0 {
 			continue
 		}
-		xml, ok := matchModel(models, needed)
+		xmls, ok := coverModels(models, needed)
 		if !ok {
 			writeJSON(w, http.StatusConflict, projectDeployResp{
 				ID: proj.ID, Name: proj.Name, Deployed: false,
@@ -146,7 +146,7 @@ func (s *Server) handleDeployProject(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		dmnForDraft[i] = xml
+		dmnForDraft[i] = xmls
 	}
 
 	// Phase 3 (on-loop): deploy each draft with its matched DMN model.
@@ -208,14 +208,15 @@ func draftDecisions(deployables []compiler.Deployable) []string {
 // drives all pending jobs, one such job then fails every future deploy. It mirrors
 // the project deploy's matching but over all DMN references passed in.
 //
-// Returns (xml, "", nil) when a stored model provides every needed local decision;
+// Returns (xmls, "", nil) when stored models together provide every needed local
+// decision (one model when they share it, several when the tasks span models);
 // (nil, "", nil) when the body needs none (no business rule tasks, or only central
-// connector decisions, which carry no local model); (nil, reason, nil) when no
-// single model provides them, so the caller refuses (409) instead of deploying a
+// connector decisions, which carry no local model); (nil, reason, nil) when a needed
+// decision is in no model, so the caller refuses (409) instead of deploying a
 // process that can never run; or (nil, "", err) on an infrastructure failure. It
 // resolves and compiles models (I/O + CPU), so it runs OFF the run loop; the
 // reference records are read on the loop and passed in.
-func (s *Server) dmnForDeployBody(ctx context.Context, body []byte, refs []dmnRef) ([]byte, string, error) {
+func (s *Server) dmnForDeployBody(ctx context.Context, body []byte, refs []dmnRef) ([][]byte, string, error) {
 	deployables, err := compiler.ParseAll(1, 1, bytes.NewReader(body))
 	if err != nil {
 		return nil, "", nil // a compile error is surfaced (as a 400) by the deploy itself
@@ -239,32 +240,42 @@ func (s *Server) dmnForDeployBody(ctx context.Context, body []byte, refs []dmnRe
 		}
 		models = append(models, resolvedModel{decisions: res.Decisions, xml: xml})
 	}
-	if xml, ok := matchModel(models, needed); ok {
-		return xml, "", nil
+	if xmls, ok := coverModels(models, needed); ok {
+		return xmls, "", nil
 	}
 	return nil, fmt.Sprintf("this diagram's business rule task(s) reference decision(s) %v that no DMN model provides — create the decision (or add its reference) in Atlas, then deploy", needed), nil
 }
 
-// matchModel returns the XML of a model that provides every needed decision, or
-// ok=false if none does. A draft's decisions must all live in a single model
-// (the DMN registry holds one model per process) — spanning models is not
-// supported yet.
-func matchModel(models []resolvedModel, needed []string) ([]byte, bool) {
-	for _, m := range models {
-		have := make(map[string]bool, len(m.decisions))
+// coverModels returns the XML of the models that together provide every needed
+// decision — one model when they all live together, several when a process's
+// business rule tasks reference decisions across different models (the registry
+// holds a list per process, so a deployment can bundle more than one). Each needed
+// decision is assigned to the first model that provides it, and the distinct chosen
+// models are returned in model order for determinism. ok is false if any needed
+// decision is in no model at all, in which case the deploy is refused rather than
+// registering a business rule task that can never evaluate.
+func coverModels(models []resolvedModel, needed []string) ([][]byte, bool) {
+	provider := map[string]int{} // decision id → index of the model that provides it
+	for i, m := range models {
 		for _, d := range m.decisions {
-			have[d] = true
-		}
-		covers := true
-		for _, n := range needed {
-			if !have[n] {
-				covers = false
-				break
+			if _, ok := provider[d]; !ok {
+				provider[d] = i
 			}
 		}
-		if covers {
-			return m.xml, true
+	}
+	used := map[int]bool{}
+	for _, n := range needed {
+		i, ok := provider[n]
+		if !ok {
+			return nil, false
+		}
+		used[i] = true
+	}
+	var out [][]byte
+	for i := range models {
+		if used[i] {
+			out = append(out, models[i].xml)
 		}
 	}
-	return nil, false
+	return out, true
 }
