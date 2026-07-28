@@ -790,16 +790,19 @@ async function viewModelerHome() {
     const projectRow = (p) => {
       const n = countIn(p.id);
       const href = `#/modeler/p/${encodeURIComponent(p.id)}`;
+      const owner = p.myRole === "owner";
+      const items = [{ label: "Open", icon: "→", href }];
+      if (AUTH.enabled && owner) items.push({ label: "Share…", icon: "👤", act: "share", data: { id: p.id } });
+      if (owner) items.push(
+        { label: "Rename", icon: "✎", act: "rename", data: { id: p.id, name: p.name } },
+        { sep: true },
+        { label: "Delete", icon: "🗑", act: "del", data: { id: p.id, name: p.name }, danger: true },
+      );
       return `<tr>
-        <td><div class="artifact-name"><span class="mi-icon">📁</span><a href="${href}"><b>${esc(p.name)}</b></a></div></td>
+        <td><div class="artifact-name"><span class="mi-icon">📁</span><a href="${href}"><b>${esc(p.name)}</b></a>${visBadge(p)}</div></td>
         <td class="muted">${n}</td>
         <td class="muted">${esc(fmtTime(p.updatedAt))}</td>
-        <td class="row-actions">${dropdown("⋯", "icon-btn", [
-          { label: "Open", icon: "→", href },
-          { label: "Rename", icon: "✎", act: "rename", data: { id: p.id, name: p.name } },
-          { sep: true },
-          { label: "Delete", icon: "🗑", act: "del", data: { id: p.id, name: p.name }, danger: true },
-        ])}</td>
+        <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td>
       </tr>`;
     };
     const ungroupedRow = ungrouped.length ? `<tr>
@@ -813,6 +816,7 @@ async function viewModelerHome() {
     onMenuAction(projRows, (act, b) => {
       if (act === "rename") renameProject(b.dataset.id, b.dataset.name, renderProjects);
       if (act === "del") deleteProject(b.dataset.id, b.dataset.name, renderProjects);
+      if (act === "share") { const pr = projects.find((x) => x.id === b.dataset.id); if (pr) shareProject(pr, renderProjects); }
     });
   };
   onMenuAction(view, (act) => { if (act === "new-project") createProject(renderProjects); });
@@ -881,6 +885,12 @@ async function viewProjectDetail(id) {
     const mine = (a) => ungrouped ? (!a.projectId || !known.has(a.projectId)) : a.projectId === id;
     const dl = drafts.filter(mine), rl = refs.filter(mine), fl = forms.filter(mine);
 
+    // Scope gating (ADR-0071). Ungrouped is the un-scoped personal/legacy bucket,
+    // so it stays fully writable; a real project's actions follow the caller's
+    // role. With auth off the server reports "owner", so everything shows as before.
+    const isOwner = !ungrouped && proj.myRole === "owner";
+    const canWrite = ungrouped || roleRank(proj.myRole) >= 2;
+
     // "Move to" items for a row's action menu: Ungrouped plus every project, with
     // the current one marked. Forms have no move endpoint, so only drafts/refs get it.
     const moveItems = (currentPid, act, key) => [
@@ -897,43 +907,46 @@ async function viewProjectDetail(id) {
 
     const draftRow = (d) => {
       const href = `#/modeler/draft/${encodeURIComponent(d.processId)}`;
+      const items = [{ label: "Open", icon: "→", href }];
+      if (canWrite) items.push(
+        ...moveItems(d.projectId, "movedraft", d.processId),
+        { sep: true },
+        { label: "Delete", icon: "🗑", act: "deldraft", data: { key: d.processId }, danger: true },
+      );
       return `<tr data-name="${esc((d.name || d.processId).toLowerCase())}">
         ${nameCell("BPMN", d.name || d.processId, esc(d.processId), href)}
         <td class="muted">Diagram</td>
         <td class="muted">${esc(fmtTime(d.savedAt))}</td>
-        <td class="row-actions">${dropdown("⋯", "icon-btn", [
-          { label: "Open", icon: "→", href },
-          ...moveItems(d.projectId, "movedraft", d.processId),
-          { sep: true },
-          { label: "Delete", icon: "🗑", act: "deldraft", data: { key: d.processId }, danger: true },
-        ])}</td></tr>`;
+        <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
     const refRow = (r) => {
       const href = `#/modeler/dmn/${encodeURIComponent(r.id)}`;
+      const items = [{ label: "View", icon: "▦", href }, { label: "Validate", icon: "✔", act: "valref", data: { id: r.id } }];
+      if (canWrite) items.unshift(
+        { label: "Bearbeiten", icon: "✎", act: "editref", data: { id: r.id, ref: r.modelRef, pid: r.projectId || "", name: r.name } });
+      if (canWrite) items.push(
+        ...moveItems(r.projectId, "moveref", r.id),
+        { sep: true },
+        { label: "Delete", icon: "🗑", act: "delref", data: { id: r.id }, danger: true },
+      );
       return `<tr data-name="${esc(r.name.toLowerCase())}">
         ${nameCell("DMN", r.name, `temis model: ${esc(r.modelRef)} · <span data-refstatus="${esc(r.id)}">not validated</span>`, href)}
         <td class="muted">Decision ref</td>
         <td class="muted">${esc(fmtTime(r.createdAt))}</td>
-        <td class="row-actions">${dropdown("⋯", "icon-btn", [
-          { label: "Bearbeiten", icon: "✎", act: "editref", data: { id: r.id, ref: r.modelRef, pid: r.projectId || "", name: r.name } },
-          { label: "View", icon: "▦", href },
-          { label: "Validate", icon: "✔", act: "valref", data: { id: r.id } },
-          ...moveItems(r.projectId, "moveref", r.id),
-          { sep: true },
-          { label: "Delete", icon: "🗑", act: "delref", data: { id: r.id }, danger: true },
-        ])}</td></tr>`;
+        <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
     const formRow = (f) => {
       const href = `#/modeler/form/e/${encodeURIComponent(f.id)}`;
+      const items = [{ label: "Open", icon: "→", href }];
+      if (canWrite) items.push(
+        { sep: true },
+        { label: "Delete", icon: "🗑", act: "delform", data: { id: f.id }, danger: true },
+      );
       return `<tr data-name="${esc((f.name || f.id).toLowerCase())}">
         ${nameCell("FORM", f.name || f.id, esc(f.id), href)}
         <td class="muted">Form</td>
         <td class="muted">${esc(fmtTime(f.savedAt))}</td>
-        <td class="row-actions">${dropdown("⋯", "icon-btn", [
-          { label: "Open", icon: "→", href },
-          { sep: true },
-          { label: "Delete", icon: "🗑", act: "delform", data: { id: f.id }, danger: true },
-        ])}</td></tr>`;
+        <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
 
     const bodyRows = dl.map(draftRow).join("") + rl.map(refRow).join("") + fl.map(formRow).join("");
@@ -946,19 +959,20 @@ async function viewProjectDetail(id) {
       { label: "Form", icon: "▤", href: newFormHref },
     ];
 
+    const projItems = ungrouped ? [] : [
+      ...(rl.length ? [{ label: "Validate DMN", icon: "✔", act: "valproj" }] : []),
+      ...(AUTH.enabled && isOwner ? [{ label: "Share…", icon: "👤", act: "shareproj" }] : []),
+      ...(isOwner ? [{ label: "Rename project", icon: "✎", act: "renproj" }] : []),
+      ...(isOwner ? [{ sep: true }, { label: "Delete project", icon: "🗑", act: "delproj", danger: true }] : []),
+    ];
     root.innerHTML = `
       <div class="crumb"><a href="#/modeler">Home</a> › ${esc(proj.name)}</div>
       <div class="between">
-        <h1>${esc(proj.name)}</h1>
+        <h1>${esc(proj.name)}${ungrouped ? "" : " " + visBadge(proj)}</h1>
         <div class="row">
-          ${ungrouped ? "" : `<button class="btn" id="pd-deploy">Deploy</button>`}
-          ${dropdown("Create new", "btn neutral", createItems)}
-          ${ungrouped ? "" : dropdown("⋯", "icon-btn", [
-            ...(rl.length ? [{ label: "Validate DMN", icon: "✔", act: "valproj" }] : []),
-            { label: "Rename project", icon: "✎", act: "renproj" },
-            { sep: true },
-            { label: "Delete project", icon: "🗑", act: "delproj", danger: true },
-          ])}
+          ${(!ungrouped && canWrite) ? `<button class="btn" id="pd-deploy">Deploy</button>` : ""}
+          ${canWrite ? dropdown("Create new", "btn neutral", createItems) : ""}
+          ${projItems.length ? dropdown("⋯", "icon-btn", projItems) : ""}
         </div>
       </div>
       <input class="filter-input" id="pd-filter" placeholder="Filter artifacts…" autocomplete="off">
@@ -966,7 +980,9 @@ async function viewProjectDetail(id) {
         <table>
           <thead><tr><th>Name</th><th>Type</th><th>Last changed</th><th></th></tr></thead>
           <tbody id="pd-rows">${bodyRows ||
-            `<tr><td colspan="4" class="empty">No artifacts yet — use <b>Create new</b> to add one.</td></tr>`}</tbody>
+            `<tr><td colspan="4" class="empty">${canWrite
+              ? "No artifacts yet — use <b>Create new</b> to add one."
+              : "No artifacts in this project yet."}</td></tr>`}</tbody>
         </table>
       </div>`;
 
@@ -980,6 +996,7 @@ async function viewProjectDetail(id) {
     onMenuAction(root, (act, b) => {
       switch (act) {
         case "newref": createDmnRef(ungrouped ? "" : id, render); break;
+        case "shareproj": shareProject(proj, render); break;
         case "renproj": renameProject(id, proj.name, render); break;
         case "delproj": deleteProject(id, proj.name, () => { location.hash = "#/modeler"; }); break;
         case "valproj": validateProject(id); break;
@@ -1056,6 +1073,162 @@ async function deleteProject(id, name, reload) {
     toast(`Deleted project "${name}"`, "ok");
   } catch (e) { toast("could not delete project: " + e.message, "err"); }
   await reload();
+}
+
+// ---------- Sharing scopes (ADR-0071) ----------
+// A sharing scope is a design-time access boundary on a project: private (owner
+// only) or shared with named members as viewer/editor. It is only meaningful when
+// auth is enforced; in single-user mode the controls are hidden and the server
+// reports the caller as owner of every project, so the classic open flow is
+// unchanged. Runtime/Operations isolation is out of scope for this slice.
+const roleRank = (r) => ({ viewer: 1, editor: 2, owner: 3 }[r] || 0);
+
+// visBadge renders a project's private/shared pill, or "" when auth is off (there
+// is nothing to share in single-user mode).
+function visBadge(p) {
+  if (!AUTH.enabled) return "";
+  const n = (p.members || []).length;
+  if (p.visibility === "shared")
+    return `<span class="pill vis shared" title="Shared with ${n} ${n === 1 ? "person" : "people"}">Shared${n ? " · " + n : ""}</span>`;
+  return `<span class="pill vis" title="Only the owner can see this project">Private</span>`;
+}
+
+// shareProject loads the user directory (to resolve member names and populate the
+// add-picker) and opens the share dialog. A non-admin owner cannot list users
+// (ADR-0044), so on a 403 the dialog degrades to adding members by id.
+async function shareProject(proj, reload) {
+  let users = null, denied = false;
+  try { users = await api("GET", "/api/v1/users"); }
+  catch (e) {
+    denied = /admin/i.test(e.message);
+    if (!denied) { toast("could not load users: " + e.message, "err"); return; }
+  }
+  openShareModal(proj, users, denied, reload);
+}
+
+// openShareModal renders the share dialog and wires its controls to the project
+// scope endpoints. It keeps a local copy of the project, updated from each
+// mutation's response so the dialog reflects server truth without a full refetch;
+// closing runs reload() once to refresh the underlying page (badges and gating).
+function openShareModal(proj, users, denied, reload) {
+  let p = proj;
+  const byId = new Map((users || []).map((u) => [u.id, u]));
+  const nameOf = (id) => { const u = byId.get(id); return u ? (u.displayName || u.username) : id; };
+  const me = AUTH.user && AUTH.user.id;
+
+  const ov = document.createElement("div");
+  ov.className = "modal-ov";
+  ov.innerHTML = `
+    <div class="modal share-modal" role="dialog" aria-modal="true" aria-label="Share project">
+      <div class="modal-head">
+        <h2>Share “${esc(p.name)}”</h2>
+        <button type="button" class="icon-btn" data-x aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body" id="share-body"></div>
+      <div class="modal-foot">
+        <span class="muted small">Sharing controls who can view and edit this project’s diagrams. Running instances are not affected.</span>
+        <button type="button" class="btn" data-done>Done</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  const body = ov.querySelector("#share-body");
+
+  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); reload(); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(); });
+  ov.querySelector("[data-x]").addEventListener("click", close);
+  ov.querySelector("[data-done]").addEventListener("click", close);
+
+  const roleSelect = (value, attrs) =>
+    `<select ${attrs} class="role-sel">
+       <option value="viewer"${value === "viewer" ? " selected" : ""}>Viewer</option>
+       <option value="editor"${value === "editor" ? " selected" : ""}>Editor</option>
+     </select>`;
+
+  const renderBody = () => {
+    const members = p.members || [];
+    const memberIds = new Set(members.map((m) => m.ref.id));
+    const eligible = (users || []).filter((u) => u.id !== p.ownerId && !memberIds.has(u.id));
+
+    const personRow = (id, right, extra = "") => `
+      <div class="member-row"${extra}>
+        <span class="avatar sm">${esc(initials(nameOf(id)))}</span>
+        <div class="member-id">${esc(nameOf(id))}${id === me ? ' <span class="muted">(you)</span>' : ""}</div>
+        ${right}
+      </div>`;
+
+    const ownerRow = personRow(p.ownerId, `<span class="muted">Owner</span>`);
+    const memberRows = members.map((m) => personRow(
+      m.ref.id,
+      `${roleSelect(m.role, `data-role-for="${esc(m.ref.id)}"`)}
+       <button type="button" class="icon-btn danger" data-remove="${esc(m.ref.id)}" title="Remove access">✕</button>`,
+      ` data-uid="${esc(m.ref.id)}"`,
+    )).join("");
+
+    const addControl = denied
+      ? `<div class="add-row">
+           <input class="field" id="add-uid" placeholder="User ID (usr_…)" autocomplete="off">
+           ${roleSelect("viewer", 'id="add-role"')}
+           <button type="button" class="btn" id="add-btn">Add</button>
+         </div>
+         <p class="muted small">A searchable directory needs the admin role — add by user ID for now.</p>`
+      : eligible.length
+        ? `<div class="add-row">
+             <select class="field" id="add-uid">
+               ${eligible.map((u) => `<option value="${esc(u.id)}">${esc(u.displayName || u.username)}</option>`).join("")}
+             </select>
+             ${roleSelect("viewer", 'id="add-role"')}
+             <button type="button" class="btn" id="add-btn">Add</button>
+           </div>`
+        : `<p class="muted small">Everyone already has access.</p>`;
+
+    const privateHint = p.visibility !== "shared" && members.length
+      ? `<p class="muted small">Members are kept but have no access while the project is private.</p>`
+      : "";
+
+    body.innerHTML = `
+      <div class="share-sec">
+        <div class="seg" role="group" aria-label="Visibility">
+          <button type="button" data-vis="private" class="${p.visibility !== "shared" ? "active" : ""}">Private</button>
+          <button type="button" data-vis="shared" class="${p.visibility === "shared" ? "active" : ""}">Shared</button>
+        </div>
+        ${privateHint}
+      </div>
+      <div class="share-sec">
+        <div class="mlabel">People with access</div>
+        ${ownerRow}${memberRows}
+      </div>
+      <div class="share-sec">
+        <div class="mlabel">Add people</div>
+        ${addControl}
+      </div>`;
+    wire();
+  };
+
+  const apply = async (fn) => { try { p = await fn(); renderBody(); } catch (e) { toast(e.message, "err"); } };
+  const setVisibility = (v) => apply(() =>
+    api("PATCH", `/api/v1/projects/${encodeURIComponent(p.id)}`, { visibility: v }));
+  const setMember = (uid, role) => uid && apply(() =>
+    api("PUT", `/api/v1/projects/${encodeURIComponent(p.id)}/members/${encodeURIComponent(uid)}`, { role }));
+  const removeMember = (uid) => apply(() =>
+    api("DELETE", `/api/v1/projects/${encodeURIComponent(p.id)}/members/${encodeURIComponent(uid)}`));
+
+  function wire() {
+    for (const b of body.querySelectorAll("[data-vis]"))
+      b.addEventListener("click", () => { if (b.dataset.vis !== (p.visibility === "shared" ? "shared" : "private")) setVisibility(b.dataset.vis); });
+    for (const s of body.querySelectorAll("[data-role-for]"))
+      s.addEventListener("change", () => setMember(s.dataset.roleFor, s.value));
+    for (const b of body.querySelectorAll("[data-remove]"))
+      b.addEventListener("click", () => removeMember(b.dataset.remove));
+    const addBtn = body.querySelector("#add-btn");
+    if (addBtn) addBtn.addEventListener("click", () => {
+      const uid = (body.querySelector("#add-uid").value || "").trim();
+      setMember(uid, body.querySelector("#add-role").value);
+    });
+  }
+
+  renderBody();
 }
 
 // moveDraft reassigns a draft to a project (or to Ungrouped when projectId is "").
