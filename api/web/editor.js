@@ -4193,7 +4193,8 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       </div>
       <div class="editor-body"><div id="canvas"></div></div>
       <div class="token-legend" id="token-legend" aria-label="Active replay tokens"></div>
-      <div class="ops-split">
+      <div class="ops-resizer" id="ops-resizer" title="Drag to resize · double-click to reset" role="separator" aria-orientation="horizontal" tabindex="0"></div>
+      <div class="ops-split" id="ops-split">
         <div class="ops-history" id="rp-history">
           <div class="ops-panel-head">Instance History
             <label class="ops-toggle"><input type="checkbox" id="tg-end"> End date</label>
@@ -4880,8 +4881,68 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   root.querySelector("#var-modal-x").addEventListener("click", closeVarModal);
   bindVarCopy(varsEl, toast);
   bindVarCopy(modalOv, toast);
+  wireOpsResizer(root, viewer);
 
   await poll();
   renderInspector();
   liveTimer = setInterval(poll, 1500);
+}
+
+// wireOpsResizer makes the boundary between the diagram and the bottom panel
+// (Instance History + inspector) draggable, so an operator can trade diagram room
+// for a taller history/variables view — mirroring the Modeler's properties resizer.
+// The chosen height persists across mounts (localStorage) and the bpmn-js canvas is
+// re-fit whenever the split's footprint settles.
+function wireOpsResizer(root, viewer) {
+  const resizer = root.querySelector("#ops-resizer");
+  const split = root.querySelector("#ops-split");
+  if (!resizer || !split) return;
+  const KEY = "atlas.opsSplitHeight";
+  const clamp = (h) => Math.max(140, Math.min(Math.round(window.innerHeight * 0.75), h));
+
+  const saved = parseInt(localStorage.getItem(KEY) || "", 10);
+  if (saved) split.style.height = clamp(saved) + "px";
+
+  // Let bpmn-js recompute its viewport for the diagram's new height.
+  const nudge = () => {
+    try { viewer && viewer.get("canvas").resized(); } catch { /* ignore */ }
+    window.dispatchEvent(new Event("resize"));
+  };
+
+  let startY = 0, startH = 0;
+  const onMove = (e) => {
+    // The split sits below the divider, so dragging up (clientY decreases) grows it.
+    split.style.height = clamp(startH - (e.clientY - startY)) + "px";
+  };
+  const onUp = () => {
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+    resizer.classList.remove("dragging");
+    document.body.style.userSelect = "";
+    localStorage.setItem(KEY, String(parseInt(split.style.height, 10) || 280));
+    nudge();
+  };
+  resizer.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    startY = e.clientY;
+    startH = split.getBoundingClientRect().height;
+    resizer.classList.add("dragging");
+    document.body.style.userSelect = "none";
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  });
+  // Double-click the divider to reset to the default height.
+  resizer.addEventListener("dblclick", () => {
+    split.style.height = "280px";
+    localStorage.setItem(KEY, "280");
+    nudge();
+  });
+  // Keyboard: arrow up/down resize in 24px steps (the divider is focusable).
+  resizer.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+    e.preventDefault();
+    split.style.height = clamp(split.getBoundingClientRect().height + (e.key === "ArrowUp" ? 24 : -24)) + "px";
+    localStorage.setItem(KEY, String(parseInt(split.style.height, 10)));
+    nudge();
+  });
 }
