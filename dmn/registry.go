@@ -39,8 +39,12 @@ import (
 // A Registry is safe for concurrent evaluation once populated. Populate it
 // (via Deploy) before the processes that use it start running.
 type Registry struct {
-	engine      *tdmn.Engine
-	definitions map[uint64]*tdmn.Definitions
+	engine *tdmn.Engine
+	// definitions maps a process-definition key to the compiled DMN models bundled
+	// with it. A process may reference decisions from several models (its business
+	// rule tasks are not confined to one), so each key holds a list, appended to by
+	// Deploy and searched by decision id at evaluation time.
+	definitions map[uint64][]*tdmn.Definitions
 	// latest maps a decision id to the newest deployed model that provides it, for
 	// latest-bound business rule tasks (ADR-0063). Deploy overwrites it, so after
 	// replaying deployments oldest-first the pointer holds the last-deployed model.
@@ -51,17 +55,19 @@ type Registry struct {
 func NewRegistry() *Registry {
 	return &Registry{
 		engine:      tdmn.New(),
-		definitions: map[uint64]*tdmn.Definitions{},
+		definitions: map[uint64][]*tdmn.Definitions{},
 		latest:      map[string]*tdmn.Definitions{},
 	}
 }
 
-// Deploy compiles a DMN model and registers it under the process-definition key
-// of the process whose business rule tasks reference it. It also updates the
-// latest-version pointer for every decision the model provides (ADR-0063), so a
-// latest-bound task resolves the newest deployed version. Compilation happens
-// here, at deploy time, never at evaluation time (invariant I5). It returns an
-// error if temis cannot parse or compile the model.
+// Deploy compiles a DMN model and registers it under the process-definition key of
+// the process whose business rule tasks reference it. A process may bundle several
+// models (its tasks can call decisions from different models), so Deploy appends —
+// call it once per bundled model. It also updates the latest-version pointer for
+// every decision the model provides (ADR-0063), so a latest-bound task resolves the
+// newest deployed version. Compilation happens here, at deploy time, never at
+// evaluation time (invariant I5). It returns an error if temis cannot parse or
+// compile the model.
 func (r *Registry) Deploy(defKey uint64, dmnXML []byte) error {
 	defs, diags, err := r.engine.Compile(context.Background(), dmnXML)
 	if err != nil {
@@ -70,9 +76,23 @@ func (r *Registry) Deploy(defKey uint64, dmnXML []byte) error {
 	if diags.HasErrors() {
 		return fmt.Errorf("dmn: model for def %d has errors: %v", defKey, diags)
 	}
-	r.definitions[defKey] = defs
+	r.definitions[defKey] = append(r.definitions[defKey], defs)
 	for _, id := range defs.Index().Decisions {
 		r.latest[id] = defs
+	}
+	return nil
+}
+
+// modelProviding returns the model in the list that provides the decision id, or
+// nil if none does — how a deployment-bound evaluation finds the bundled model that
+// declares its decision when a process bundles several.
+func modelProviding(list []*tdmn.Definitions, decisionId string) *tdmn.Definitions {
+	for _, defs := range list {
+		for _, id := range defs.Index().Decisions {
+			if id == decisionId {
+				return defs
+			}
+		}
 	}
 	return nil
 }
@@ -93,9 +113,13 @@ func (r *Registry) Evaluate(ctx context.Context, defKey uint64, decisionId strin
 // record of the evaluation. Tracing runs off the processor goroutine, so its extra
 // allocation is not on any hot path (temis's WithTrace, ADR-0013/WP-51).
 func (r *Registry) EvaluateTraced(ctx context.Context, defKey uint64, decisionId string, in map[string]any) (map[string]any, []byte, error) {
-	defs, ok := r.definitions[defKey]
-	if !ok {
+	list, ok := r.definitions[defKey]
+	if !ok || len(list) == 0 {
 		return nil, nil, fmt.Errorf("dmn: no model deployed for def %d", defKey)
+	}
+	defs := modelProviding(list, decisionId)
+	if defs == nil {
+		return nil, nil, fmt.Errorf("dmn: decision %q in no model deployed for def %d", decisionId, defKey)
 	}
 	return evalDecision(ctx, defs, decisionId, in, fmt.Sprintf("def %d", defKey))
 }

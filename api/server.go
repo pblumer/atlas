@@ -424,12 +424,12 @@ func (s *Server) loadDeployments() error {
 		}
 		cp.Version = rec.Version
 		s.proc.Deploy(cp)
-		// Re-register the process's DMN model so its business rule tasks evaluate
+		// Re-register the process's DMN models so its business rule tasks evaluate
 		// after a restart, exactly as they did when first deployed (ADR-0014). The
-		// model is snapshotted in the deployment record, so no temis reference has
-		// to be re-resolved here.
-		if rec.DMNXML != "" {
-			if err := s.dmnRegistry.Deploy(rec.Key, []byte(rec.DMNXML)); err != nil {
+		// models are snapshotted in the deployment record (a legacy record carries a
+		// single model), so no temis reference has to be re-resolved here.
+		for _, dmnXML := range rec.dmnModels() {
+			if err := s.dmnRegistry.Deploy(rec.Key, []byte(dmnXML)); err != nil {
 				return fmt.Errorf("api: reload dmn model for def %d (%s): %w", rec.Key, rec.ProcessID, err)
 			}
 		}

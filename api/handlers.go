@@ -485,7 +485,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "list dmn references: "+loadErr.Error())
 		return
 	}
-	dmnXML, refuse, dmnErr := s.dmnForDeployBody(r.Context(), body, refs)
+	dmnXMLs, refuse, dmnErr := s.dmnForDeployBody(r.Context(), body, refs)
 	if dmnErr != nil {
 		writeError(w, http.StatusInternalServerError, "resolve dmn model: "+dmnErr.Error())
 		return
@@ -502,7 +502,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	)
 	s.do(func() {
 		var deployed []deployedProcess
-		deployed, compErr, persistErr = s.deployModel(body, dmnXML, time.Now().Unix())
+		deployed, compErr, persistErr = s.deployModel(body, dmnXMLs, time.Now().Unix())
 		if compErr != nil || persistErr != nil {
 			return
 		}
@@ -540,10 +540,14 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 // deployment record and registered in the DMN registry under the process key, so
 // the tasks run now and re-register on restart (ADR-0014/ADR-0034). The caller is
 // responsible for having validated it; a compile failure here is a server error.
-func (s *Server) deployModel(body, dmnXML []byte, deployedAt int64) (deployed []deployedProcess, compErr, persistErr error) {
+func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64) (deployed []deployedProcess, compErr, persistErr error) {
 	deployables, err := compiler.ParseAll(s.nextKey, 1, bytes.NewReader(body))
 	if err != nil {
 		return nil, err, nil
+	}
+	dmnStrings := make([]string, len(dmnXMLs))
+	for i, x := range dmnXMLs {
+		dmnStrings[i] = string(x)
 	}
 	deployed = make([]deployedProcess, 0, len(deployables))
 	for i := range deployables {
@@ -565,7 +569,7 @@ func (s *Server) deployModel(body, dmnXML []byte, deployedAt int64) (deployed []
 			Version:    version,
 			DeployedAt: deployedAt,
 			XML:        string(body),
-			DMNXML:     string(dmnXML),
+			DMNXMLs:    dmnStrings,
 		}); err != nil {
 			return deployed, nil, err
 		}
@@ -582,7 +586,8 @@ func (s *Server) deployModel(body, dmnXML []byte, deployedAt int64) (deployed []
 			s.proc.ArmStartTimers(cp.Key)
 		}
 		// Register the process's decisions so its business rule tasks can evaluate.
-		if dmnXML != nil {
+		// A process may bundle several models (its tasks span models); register each.
+		for _, dmnXML := range dmnXMLs {
 			if err := s.dmnRegistry.Deploy(key, dmnXML); err != nil {
 				return deployed, nil, fmt.Errorf("register dmn model for %s: %w", pid, err)
 			}
