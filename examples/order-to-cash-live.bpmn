@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Order-to-Cash (Live) — user-task lifecycle, drivable over the HTTP API.
+
+  Extends the cart-total calculation into the whole order-to-cash flow:
+
+    Bestellung → Summe berechnen → (Freigabe ab 100 €) → PARALLEL:
+        Liefern     : Ware kommissionieren → Ware versenden
+        Verrechnen  : Rechnung erstellen   → Zahlung verbuchen
+      → Auftrag abgeschlossen
+
+  This is the "live" sibling of order-to-cash.bpmn. There, delivery and billing
+  are `serviceTask`s that only a gRPC job worker can complete. Here they are
+  `userTask`s, which the Atlas HTTP API can complete directly
+  (POST /api/v1/tasks/{key}/complete) — so a browser app can drive the whole
+  process without a worker. Starting an instance runs the calculation to
+  completion, then parks one token on "Ware kommissionieren" and one on
+  "Rechnung erstellen" (the two parallel branches); completing those tasks (and the
+  >100 € approval, when it appears) advances the instance to the end.
+
+  This is exactly the model behind api/web/order-to-cash-live.html — the app that
+  deploys it, starts an instance with the entered cart, and clears each task.
+
+  `positions` and `customerType` are start variables (also passable as instance
+  variables via the API); a FEEL guard defaults the cart when none is given.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_order_to_cash_live" targetNamespace="http://atlas/examples">
+  <process id="order-to-cash-live" name="Order-to-Cash Live (User-Tasks)" isExecutable="true">
+
+    <extensionElements>
+      <atlas:startForm>
+        <atlas:startVariable name="positions" type="json" required="true" default="[ {&quot;name&quot;: &quot;BPMN-Buch&quot;, &quot;price&quot;: 24.90, &quot;qty&quot;: 1}, {&quot;name&quot;: &quot;Kaffeetasse&quot;, &quot;price&quot;: 9.95, &quot;qty&quot;: 2}, {&quot;name&quot;: &quot;Aufkleber-Set&quot;, &quot;price&quot;: 4.50, &quot;qty&quot;: 3} ]"/>
+        <atlas:startVariable name="customerType" type="string" required="false" default="Business"/>
+      </atlas:startForm>
+    </extensionElements>
+
+    <startEvent id="order_received" name="Bestellung eingegangen"/>
+
+    <!-- ── Kalkulation (inline FEEL, self-completing) ── -->
+    <scriptTask id="take_cart" name="Warenkorb uebernehmen">
+      <extensionElements><zeebe:script expression="= if positions = null then [ {name: &quot;BPMN-Buch&quot;, price: 24.90, qty: 1}, {name: &quot;Kaffeetasse&quot;, price: 9.95, qty: 2}, {name: &quot;Aufkleber-Set&quot;, price: 4.50, qty: 3} ] else positions" resultVariable="cart"/></extensionElements>
+    </scriptTask>
+    <scriptTask id="subtotal" name="Zwischensumme berechnen">
+      <extensionElements><zeebe:script expression="= decimal(sum(for p in cart return p.price * p.qty), 2)" resultVariable="subtotal"/></extensionElements>
+    </scriptTask>
+    <scriptTask id="discount_rate" name="Rabattsatz ermitteln">
+      <extensionElements><zeebe:script expression="= if customerType = &quot;Private&quot; then (if subtotal &gt;= 200 then 0.05 else 0) else (if subtotal &gt;= 1000 then 0.15 else 0.10)" resultVariable="discountRate"/></extensionElements>
+    </scriptTask>
+    <scriptTask id="discount_amt" name="Rabatt berechnen">
+      <extensionElements><zeebe:script expression="= decimal(subtotal * discountRate, 2)" resultVariable="discount"/></extensionElements>
+    </scriptTask>
+    <scriptTask id="grand_total" name="Gesamtsumme berechnen">
+      <extensionElements><zeebe:script expression="= decimal((subtotal - discount) * 1.19, 2)" resultVariable="total"/></extensionElements>
+    </scriptTask>
+
+    <!-- ── Freigabe ab 100 € (User-Task, parkt bis ein Mensch freigibt) ── -->
+    <exclusiveGateway id="approval_gw" name="Summe &gt; 100 EUR?" default="f_auto"/>
+    <userTask id="approve_order" name="Bestellung freigeben">
+      <extensionElements><zeebe:assignmentDefinition candidateGroups="management"/></extensionElements>
+    </userTask>
+    <exclusiveGateway id="approval_join"/>
+
+    <!-- ── Abwicklung: Liefern und Verrechnen laufen parallel (User-Tasks,
+         per HTTP abschliessbar: POST /api/v1/tasks/{key}/complete) ── -->
+    <parallelGateway id="fork" name="Auftragsabwicklung"/>
+    <userTask id="pick" name="Ware kommissionieren">
+      <extensionElements><zeebe:assignmentDefinition candidateGroups="lager"/></extensionElements>
+    </userTask>
+    <userTask id="ship" name="Ware versenden">
+      <extensionElements><zeebe:assignmentDefinition candidateGroups="versand"/></extensionElements>
+    </userTask>
+    <userTask id="invoice" name="Rechnung erstellen">
+      <extensionElements><zeebe:assignmentDefinition candidateGroups="buchhaltung"/></extensionElements>
+    </userTask>
+    <userTask id="collect" name="Zahlung verbuchen">
+      <extensionElements><zeebe:assignmentDefinition candidateGroups="buchhaltung"/></extensionElements>
+    </userTask>
+    <parallelGateway id="join"/>
+    <endEvent id="order_closed" name="Auftrag abgeschlossen"/>
+
+    <sequenceFlow id="fa" sourceRef="order_received" targetRef="take_cart"/>
+    <sequenceFlow id="fb" sourceRef="take_cart" targetRef="subtotal"/>
+    <sequenceFlow id="fc" sourceRef="subtotal" targetRef="discount_rate"/>
+    <sequenceFlow id="fd" sourceRef="discount_rate" targetRef="discount_amt"/>
+    <sequenceFlow id="fe" sourceRef="discount_amt" targetRef="grand_total"/>
+    <sequenceFlow id="ff" sourceRef="grand_total" targetRef="approval_gw"/>
+    <sequenceFlow id="f_appr" name="ja" sourceRef="approval_gw" targetRef="approve_order">
+      <conditionExpression>= total &gt; 100</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_auto" name="nein" sourceRef="approval_gw" targetRef="approval_join"/>
+    <sequenceFlow id="fg" sourceRef="approve_order" targetRef="approval_join"/>
+    <sequenceFlow id="fh" sourceRef="approval_join" targetRef="fork"/>
+    <sequenceFlow id="fi" sourceRef="fork" targetRef="pick"/>
+    <sequenceFlow id="fj" sourceRef="pick" targetRef="ship"/>
+    <sequenceFlow id="fk" sourceRef="ship" targetRef="join"/>
+    <sequenceFlow id="fl" sourceRef="fork" targetRef="invoice"/>
+    <sequenceFlow id="fm" sourceRef="invoice" targetRef="collect"/>
+    <sequenceFlow id="fn" sourceRef="collect" targetRef="join"/>
+    <sequenceFlow id="fo" sourceRef="join" targetRef="order_closed"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="order-to-cash-live">
+      <bpmndi:BPMNShape id="di_order_received" bpmnElement="order_received">
+        <dc:Bounds x="160" y="222" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="140" y="262" width="76" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_take_cart" bpmnElement="take_cart">
+        <dc:Bounds x="250" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_subtotal" bpmnElement="subtotal">
+        <dc:Bounds x="400" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_discount_rate" bpmnElement="discount_rate">
+        <dc:Bounds x="550" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_discount_amt" bpmnElement="discount_amt">
+        <dc:Bounds x="700" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_grand_total" bpmnElement="grand_total">
+        <dc:Bounds x="850" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_approval_gw" bpmnElement="approval_gw" isMarkerVisible="true">
+        <dc:Bounds x="1000" y="215" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="980" y="269" width="90" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_approve_order" bpmnElement="approve_order">
+        <dc:Bounds x="975" y="90" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_approval_join" bpmnElement="approval_join" isMarkerVisible="true">
+        <dc:Bounds x="1150" y="215" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_fork" bpmnElement="fork">
+        <dc:Bounds x="1250" y="215" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1230" y="188" width="90" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_pick" bpmnElement="pick">
+        <dc:Bounds x="1350" y="90" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ship" bpmnElement="ship">
+        <dc:Bounds x="1510" y="90" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_invoice" bpmnElement="invoice">
+        <dc:Bounds x="1350" y="350" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_collect" bpmnElement="collect">
+        <dc:Bounds x="1510" y="350" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_join" bpmnElement="join">
+        <dc:Bounds x="1670" y="215" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_order_closed" bpmnElement="order_closed">
+        <dc:Bounds x="1770" y="222" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1750" y="262" width="76" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="di_fa" bpmnElement="fa">
+        <di:waypoint x="196" y="240"/><di:waypoint x="250" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fb" bpmnElement="fb">
+        <di:waypoint x="350" y="240"/><di:waypoint x="400" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fc" bpmnElement="fc">
+        <di:waypoint x="500" y="240"/><di:waypoint x="550" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fd" bpmnElement="fd">
+        <di:waypoint x="650" y="240"/><di:waypoint x="700" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fe" bpmnElement="fe">
+        <di:waypoint x="800" y="240"/><di:waypoint x="850" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_ff" bpmnElement="ff">
+        <di:waypoint x="950" y="240"/><di:waypoint x="1000" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_appr" bpmnElement="f_appr">
+        <di:waypoint x="1025" y="215"/><di:waypoint x="1025" y="170"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1031" y="185" width="14" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_auto" bpmnElement="f_auto">
+        <di:waypoint x="1050" y="240"/><di:waypoint x="1150" y="240"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1085" y="218" width="22" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fg" bpmnElement="fg">
+        <di:waypoint x="1075" y="130"/><di:waypoint x="1175" y="130"/><di:waypoint x="1175" y="215"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fh" bpmnElement="fh">
+        <di:waypoint x="1200" y="240"/><di:waypoint x="1250" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fi" bpmnElement="fi">
+        <di:waypoint x="1275" y="215"/><di:waypoint x="1275" y="130"/><di:waypoint x="1350" y="130"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fj" bpmnElement="fj">
+        <di:waypoint x="1450" y="130"/><di:waypoint x="1510" y="130"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fk" bpmnElement="fk">
+        <di:waypoint x="1610" y="130"/><di:waypoint x="1695" y="130"/><di:waypoint x="1695" y="215"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fl" bpmnElement="fl">
+        <di:waypoint x="1275" y="265"/><di:waypoint x="1275" y="390"/><di:waypoint x="1350" y="390"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fm" bpmnElement="fm">
+        <di:waypoint x="1450" y="390"/><di:waypoint x="1510" y="390"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fn" bpmnElement="fn">
+        <di:waypoint x="1610" y="390"/><di:waypoint x="1695" y="390"/><di:waypoint x="1695" y="265"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fo" bpmnElement="fo">
+        <di:waypoint x="1720" y="240"/><di:waypoint x="1770" y="240"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
