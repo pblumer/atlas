@@ -228,8 +228,8 @@ const CONNECTORS = [
   },
   {
     id: "clio", name: "clio", kind: "Event store",
-    desc: "Durable event log with registered schemas and reduce specs, queried to project read-side state. Not wired into this build yet.",
-    refs: "", status: "planned", statusLabel: "not configured",
+    desc: "Durable event log with registered schemas and reduce specs. A clio connector task sends, queries, or reads events off the processor loop; the endpoint and token are managed below and resolved from the vault. Authored via the clio Event Store Connector service-task type.",
+    refs: "ADR-0036 · ADR-0041", status: "active", statusLabel: "configurable",
   },
   {
     id: "http-rest", name: "HTTP REST", kind: "REST API",
@@ -564,10 +564,10 @@ async function viewConsoleOrg() {
       <div class="between" style="padding:16px 18px 0">
         <h2>Configured connectors</h2><button class="btn" id="new-connector">New connector</button>
       </div>
-      <p class="muted" style="padding:0 18px; margin:6px 0 12px">Managed temis decision
-      connectors a business rule task references by name (ADR-0041/0050). The endpoint is
-      stored; the token is a <b>reference</b> resolved from
-      <code>ATLAS_CONNECTOR_&lt;REF&gt;_TOKEN</code> at runtime — never stored here.</p>
+      <p class="muted" style="padding:0 18px; margin:6px 0 12px">Managed <b>temis</b> decision
+      and <b>clio</b> event-store connectors a task references by name (ADR-0036/0041/0050). The
+      endpoint is stored; the token is a <b>reference</b> resolved from the vault (or
+      <code>ATLAS_CONNECTOR_&lt;REF&gt;_TOKEN</code>) at runtime — never stored here.</p>
       <div id="connector-form-slot" style="padding:0 18px"></div>
       <table>
         <thead><tr><th>Connector</th><th>Status</th><th></th></tr></thead>
@@ -1308,7 +1308,8 @@ function wireConnectorManagement(connectors) {
     newBtn.addEventListener("click", () => {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
-      slot.innerHTML = `<form class="connector-form" style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr auto;align-items:end;margin:4px 0 14px">
+      slot.innerHTML = `<form class="connector-form" style="display:grid;gap:8px;grid-template-columns:auto 1fr 1fr 1fr auto;align-items:end;margin:4px 0 14px">
+        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option></select></label>
         <label class="field" style="margin:0"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field" style="margin:0"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
         <label class="field" style="margin:0"><span>Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
@@ -1319,6 +1320,7 @@ function wireConnectorManagement(connectors) {
         try {
           await api("POST", "/api/v1/connectors", {
             name: (f.get("name") || "").trim(),
+            kind: (f.get("kind") || "temis").trim(),
             endpoint: (f.get("endpoint") || "").trim(),
             credentialsRef: (f.get("credentialsRef") || "").trim(),
           });

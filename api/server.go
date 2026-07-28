@@ -40,6 +40,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pblumer/atlas/clio"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/engine"
@@ -184,6 +185,13 @@ type Server struct {
 	// *central* business rule tasks (ADR-0050), built from the environment at
 	// startup (ADR-0041 secret model). Read only while driving jobs on the run loop.
 	temisRegistry *temis.Registry
+
+	// clioRegistry resolves a connector name to a clio event-store client for clio
+	// connector tasks (write/query/read, ADR-0036), built from the managed
+	// connector store at startup and rebuilt on every connector change, with each
+	// endpoint token resolved from the vault (ADR-0041). Read only while driving
+	// jobs on the run loop, so it needs no lock.
+	clioRegistry *clio.Registry
 
 	// docsEnabled gates the OpenAPI spec and the Scalar API explorer. On by
 	// default (opt-out), consistent with the already-open web UI and MCP
@@ -376,6 +384,24 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	}
 	s.temisRegistry.Replace(clients)
 	s.jobRunner.HandleCompleting(compiler.TemisDecisionJobTypeIndex, temis.Handler(store, s.processLookup, s.temisRegistry, nil))
+	// A clio connector task appends, reads, or queries a server-registered clio
+	// event store (ADR-0036). One worker per operation serves every process under a
+	// reserved clio job type; each resolves its job's connector name from the
+	// compiled process and calls the endpoint configured for that connector. Unlike
+	// REST's model-authored endpoint, a clio connector's endpoint and token live in
+	// the managed connector store; the token is resolved from the vault at build time
+	// (ADR-0041). The registry is built here (before the loop serves traffic) and
+	// rebuilt on every connector change; a task whose connector is not configured
+	// parks until it is.
+	s.clioRegistry = clio.NewRegistry()
+	clioClients, err := s.buildClioClients()
+	if err != nil {
+		return nil, err
+	}
+	s.clioRegistry.Replace(clioClients)
+	s.jobRunner.Handle(compiler.ClioWriteJobTypeIndex, clio.Handler(store, s.processLookup, s.clioRegistry))
+	s.jobRunner.HandleWithOutput(compiler.ClioQueryJobTypeIndex, clio.QueryHandler(store, s.processLookup, s.clioRegistry))
+	s.jobRunner.HandleWithOutput(compiler.ClioReadJobTypeIndex, clio.ReadHandler(store, s.processLookup, s.clioRegistry))
 	// An HTTP-REST connector task calls a model-authored endpoint (ADR-0067). One
 	// worker serves every process under the reserved REST job type; it resolves each
 	// job's method/url/headers/query/result-variable from the compiled process, calls

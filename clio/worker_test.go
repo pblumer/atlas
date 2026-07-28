@@ -2,6 +2,7 @@ package clio_test
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -18,15 +19,48 @@ type fixedClock struct{ t int64 }
 
 func (c *fixedClock) Now() int64 { c.t++; return c.t }
 
-// recordingClient captures the events a connector task writes.
-type recordingClient struct{ events []clio.Event }
+// recordingClient captures the events a connector task writes and serves canned
+// read/query results back.
+type recordingClient struct {
+	events   []clio.Event
+	state    map[string]any
+	queryOut any
+	readOut  []clio.InboundEvent
+}
 
 func (r *recordingClient) WriteEvent(_ context.Context, e clio.Event) error {
 	r.events = append(r.events, e)
 	return nil
 }
 
+func (r *recordingClient) GetState(_ context.Context, _, _ string) (map[string]any, error) {
+	return r.state, nil
+}
+
+func (r *recordingClient) Query(_ context.Context, _ string) (any, error) {
+	return r.queryOut, nil
+}
+
+func (r *recordingClient) ReadEvents(_ context.Context, _ clio.ReadEventsRequest) ([]clio.InboundEvent, error) {
+	return r.readOut, nil
+}
+
 const connDefKey = 55
+
+var errBoom = errors.New("clio unreachable")
+
+// errClient fails every operation, so a handler that calls it returns an error and
+// the job stays pending (at-least-once retry, then an incident).
+type errClient struct{ err error }
+
+func (e *errClient) WriteEvent(context.Context, clio.Event) error { return e.err }
+func (e *errClient) GetState(context.Context, string, string) (map[string]any, error) {
+	return nil, e.err
+}
+func (e *errClient) Query(context.Context, string) (any, error) { return nil, e.err }
+func (e *errClient) ReadEvents(context.Context, clio.ReadEventsRequest) ([]clio.InboundEvent, error) {
+	return nil, e.err
+}
 
 // connectorProcess: Start → clio write-events task → End.
 func connectorProcess(t *testing.T) (*compiler.CompiledProcess, int32) {
@@ -272,4 +306,275 @@ func mustActiveProcs(t *testing.T, s *state.Store) int {
 		t.Fatalf("ActiveProcessInstanceCount: %v", err)
 	}
 	return n
+}
+
+// soleInstanceKey returns the key of the single live process instance.
+func soleInstanceKey(t *testing.T, s *state.Store) uint64 {
+	t.Helper()
+	var keys []uint64
+	if err := s.ActiveProcessInstances(func(k uint64, _ *model.ProcessInstanceValue) error {
+		keys = append(keys, k)
+		return nil
+	}); err != nil {
+		t.Fatalf("ActiveProcessInstances: %v", err)
+	}
+	if len(keys) != 1 {
+		t.Fatalf("live instances = %d, want exactly 1", len(keys))
+	}
+	return keys[0]
+}
+
+// readVar returns the variable named name in scope, or nil if absent.
+func readVar(t *testing.T, s *state.Store, scope uint64, name string) *model.VariableValue {
+	t.Helper()
+	var found *model.VariableValue
+	if err := s.VariablesOfScope(scope, func(v *model.VariableValue) error {
+		if v.Name == name {
+			cp := *v
+			found = &cp
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("VariablesOfScope: %v", err)
+	}
+	return found
+}
+
+// clioReadThenWaitProcess: Start → clio task (writes resultVar) → plain service
+// task (parks) → End, so a test can read the written result before the instance
+// ends. build wires the specific clio task under test.
+func clioReadThenWaitProcess(t *testing.T, add func(b *compiler.Builder) int32) (*compiler.CompiledProcess, int32) {
+	t.Helper()
+	b := compiler.NewBuilder(connDefKey, "orders", 1)
+	start := b.AddStartEvent()
+	call := add(b)
+	wait := b.AddServiceTask("wait", 3)
+	end := b.AddEndEvent()
+	b.Connect(start, call)
+	b.Connect(call, wait)
+	b.Connect(wait, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return cp, cp.ConnectorTask(cp.Node(call).Detail).JobType
+}
+
+// TestClioQueryTaskWritesResult drives a clio query task end to end: the worker runs
+// the query on the registered connector and writes the result into the task's result
+// variable, which the parked instance still holds.
+func TestClioQueryTaskWritesResult(t *testing.T) {
+	dir := t.TempDir()
+	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open: %v", err)
+	}
+	store, err := state.Open(filepath.Join(dir, "state"))
+	if err != nil {
+		t.Fatalf("state.Open: %v", err)
+	}
+	t.Cleanup(func() { store.Close(); log.Close() })
+
+	cp, jobType := clioReadThenWaitProcess(t, func(b *compiler.Builder) int32 {
+		return b.AddClioQueryTask("orders-clio", "", "", "select count(*)", "total", 3)
+	})
+	rc := &recordingClient{queryOut: map[string]any{"count": float64(7)}}
+	reg := clio.NewRegistry()
+	reg.Register("orders-clio", rc)
+
+	p := engine.New(1, log, store, &fixedClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	runner := job.NewRunner(store, p)
+	runner.HandleWithOutput(jobType, clio.QueryHandler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg))
+
+	p.CreateInstance(cp.Key)
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	scope := soleInstanceKey(t, store)
+	total := readVar(t, store, scope, "total")
+	if total == nil {
+		t.Fatal("result variable total not written")
+	}
+	if total.Kind != model.VarJSON {
+		t.Errorf("total kind = %v, want VarJSON (an object)", total.Kind)
+	}
+}
+
+// TestClioResultDiscarded drives query and read tasks whose result variable is
+// empty: the worker performs the call but writes nothing back, and the instance
+// still advances (the discard branch each OutputHandler takes).
+func TestClioResultDiscarded(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		add     func(b *compiler.Builder) int32
+		handler func(*state.Store, clio.ProcessLookup, *clio.Registry) job.OutputHandler
+	}{
+		{"query", func(b *compiler.Builder) int32 { return b.AddClioQueryTask("orders-clio", "", "", "q", "", 3) }, clio.QueryHandler},
+		{"read", func(b *compiler.Builder) int32 { return b.AddClioReadTask("orders-clio", "s", "", 0, 3) }, clio.ReadHandler},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+			if err != nil {
+				t.Fatalf("wal.Open: %v", err)
+			}
+			store, err := state.Open(filepath.Join(dir, "state"))
+			if err != nil {
+				t.Fatalf("state.Open: %v", err)
+			}
+			t.Cleanup(func() { store.Close(); log.Close() })
+
+			cp, jobType := clioReadThenWaitProcess(t, tc.add)
+			reg := clio.NewRegistry()
+			reg.Register("orders-clio", &recordingClient{})
+			p := engine.New(1, log, store, &fixedClock{})
+			p.Deploy(cp)
+			if err := p.Recover(); err != nil {
+				t.Fatalf("Recover: %v", err)
+			}
+			runner := job.NewRunner(store, p)
+			runner.HandleWithOutput(jobType, tc.handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg))
+			p.CreateInstance(cp.Key)
+			if err := runner.Drive(); err != nil {
+				t.Fatalf("Drive: %v", err)
+			}
+			// The instance advanced past the clio task and parks on the wait task.
+			if pi := mustActiveProcs(t, store); pi != 1 {
+				t.Fatalf("active procs = %d, want 1 (parked on wait)", pi)
+			}
+		})
+	}
+}
+
+// TestClioHandlerCallErrors proves that when the clio call fails, each output
+// handler surfaces the error so the job stays pending (the instance parks), covering
+// the run_query, get_state, and read_events error branches.
+func TestClioHandlerCallErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		add     func(b *compiler.Builder) int32
+		handler func(*state.Store, clio.ProcessLookup, *clio.Registry) job.OutputHandler
+	}{
+		{"run_query", func(b *compiler.Builder) int32 { return b.AddClioQueryTask("orders-clio", "", "", "q", "r", 3) }, clio.QueryHandler},
+		{"get_state", func(b *compiler.Builder) int32 { return b.AddClioQueryTask("orders-clio", "s", "spec", "", "r", 3) }, clio.QueryHandler},
+		{"read", func(b *compiler.Builder) int32 { return b.AddClioReadTask("orders-clio", "s", "r", 0, 3) }, clio.ReadHandler},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+			if err != nil {
+				t.Fatalf("wal.Open: %v", err)
+			}
+			store, err := state.Open(filepath.Join(dir, "state"))
+			if err != nil {
+				t.Fatalf("state.Open: %v", err)
+			}
+			t.Cleanup(func() { store.Close(); log.Close() })
+
+			cp, jobType := clioReadThenWaitProcess(t, tc.add)
+			reg := clio.NewRegistry()
+			reg.Register("orders-clio", &errClient{err: errBoom})
+			p := engine.New(1, log, store, &fixedClock{})
+			p.Deploy(cp)
+			if err := p.Recover(); err != nil {
+				t.Fatalf("Recover: %v", err)
+			}
+			runner := job.NewRunner(store, p)
+			runner.HandleWithOutput(jobType, tc.handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg))
+			p.CreateInstance(cp.Key)
+			if err := runner.Drive(); err != nil {
+				t.Fatalf("Drive: %v", err)
+			}
+			// The clio call failed, so the token parks on the clio task (job pending).
+			if pi := mustActiveProcs(t, store); pi != 1 {
+				t.Fatalf("active procs = %d, want 1 (parked on the failed clio job)", pi)
+			}
+		})
+	}
+}
+
+// TestClioQueryTaskGetStateBranch drives a query task with no query string, so the
+// worker takes the get_state branch (subject + reduce spec) instead of run_query.
+func TestClioQueryTaskGetStateBranch(t *testing.T) {
+	dir := t.TempDir()
+	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open: %v", err)
+	}
+	store, err := state.Open(filepath.Join(dir, "state"))
+	if err != nil {
+		t.Fatalf("state.Open: %v", err)
+	}
+	t.Cleanup(func() { store.Close(); log.Close() })
+
+	cp, jobType := clioReadThenWaitProcess(t, func(b *compiler.Builder) int32 {
+		return b.AddClioQueryTask("orders-clio", "orders/42", "orderTotals", "", "state", 3)
+	})
+	rc := &recordingClient{state: map[string]any{"total": float64(9)}}
+	reg := clio.NewRegistry()
+	reg.Register("orders-clio", rc)
+
+	p := engine.New(1, log, store, &fixedClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	runner := job.NewRunner(store, p)
+	runner.HandleWithOutput(jobType, clio.QueryHandler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg))
+
+	p.CreateInstance(cp.Key)
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	scope := soleInstanceKey(t, store)
+	if got := readVar(t, store, scope, "state"); got == nil || got.Kind != model.VarJSON {
+		t.Fatalf("state variable = %+v, want a VarJSON object", got)
+	}
+}
+
+// TestClioReadTaskWritesEvents drives a clio read task: the worker reads the
+// subject's events and writes them into the result variable as a JSON array.
+func TestClioReadTaskWritesEvents(t *testing.T) {
+	dir := t.TempDir()
+	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open: %v", err)
+	}
+	store, err := state.Open(filepath.Join(dir, "state"))
+	if err != nil {
+		t.Fatalf("state.Open: %v", err)
+	}
+	t.Cleanup(func() { store.Close(); log.Close() })
+
+	cp, jobType := clioReadThenWaitProcess(t, func(b *compiler.Builder) int32 {
+		return b.AddClioReadTask("orders-clio", "orders/new", "events", 10, 3)
+	})
+	rc := &recordingClient{readOut: []clio.InboundEvent{
+		{ID: "e1", Type: "OrderPlaced", Subject: "orders/new", Data: map[string]any{"orderId": "c-1"}},
+		{ID: "e2", Type: "OrderPlaced", Subject: "orders/new", Data: map[string]any{"orderId": "c-2"}},
+	}}
+	reg := clio.NewRegistry()
+	reg.Register("orders-clio", rc)
+
+	p := engine.New(1, log, store, &fixedClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	runner := job.NewRunner(store, p)
+	runner.HandleWithOutput(jobType, clio.ReadHandler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg))
+
+	p.CreateInstance(cp.Key)
+	if err := runner.Drive(); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	scope := soleInstanceKey(t, store)
+	events := readVar(t, store, scope, "events")
+	if events == nil || events.Kind != model.VarJSON {
+		t.Fatalf("events variable = %+v, want a VarJSON array", events)
+	}
 }

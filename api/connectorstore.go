@@ -10,10 +10,16 @@ import (
 	"strings"
 )
 
-// connectorKindTemis is the one connector kind this build wires into the runtime
-// (the central DMN decision connector, ADR-0050). Other kinds (clio, http.rest)
-// can be stored for future wiring but do not affect execution yet.
-const connectorKindTemis = "temis"
+// connectorKindTemis is the central DMN decision connector kind (ADR-0050);
+// connectorKindClio is the clio event-store connector kind (ADR-0036). Both are
+// wired into the runtime and configurable in the Console: a connector record of
+// either kind resolves to a live client with its token from the vault. The
+// http.rest kind is model-authored (its endpoint lives in the model, not a record),
+// so it is not a managed kind here.
+const (
+	connectorKindTemis = "temis"
+	connectorKindClio  = "clio"
+)
 
 // connector is a managed connector instance: an operator-configured, durable
 // integration Atlas delegates to (ADR-0041). It holds a name a model refers to, an

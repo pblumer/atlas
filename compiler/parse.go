@@ -48,6 +48,30 @@ func normalizeHTTPMethod(m string) (string, error) {
 	return up, nil
 }
 
+// clioOperation normalizes a clio connector task's operation attribute, defaulting
+// an empty value to "write" so the original write-only <atlas:clioConnector>
+// element (which carried no operation) keeps compiling unchanged.
+func clioOperation(op string) string {
+	op = strings.ToLower(strings.TrimSpace(op))
+	if op == "" {
+		return "write"
+	}
+	return op
+}
+
+// clioLimit parses a clio read task's limit attribute: empty is 0 (the connector's
+// default), otherwise a non-negative integer. taskID names the task for the error.
+func clioLimit(taskID, raw string) (int32, error) {
+	if strings.TrimSpace(raw) == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || n < 0 {
+		return 0, fmt.Errorf("compiler: clio read task %q has invalid limit %q", taskID, raw)
+	}
+	return int32(n), nil
+}
+
 // httpKVMap turns a REST connector's header or query-parameter child elements into
 // a {name:value} map, trimming names and skipping rows with an empty name (an
 // incomplete row the author hasn't filled in). A duplicated name is an error, so a
@@ -328,12 +352,44 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		// A service task bearing an <atlas:clioConnector> extension is a connector
 		// task: it delegates to a server-registered clio connector via the job path
-		// (ADR-0036), not to an external service-task worker.
+		// (ADR-0036), not to an external service-task worker. operation selects the
+		// clio call (write/query/read); write is the default for back-compatibility
+		// with the original write-only element.
 		if c := st.Clio; c != nil {
-			if c.Connector == "" || c.Subject == "" || c.EventType == "" {
-				return nil, fmt.Errorf("compiler: clio connector task %q needs connector, subject, and eventType", st.Id)
+			if c.Connector == "" {
+				return nil, fmt.Errorf("compiler: clio connector task %q needs a connector", st.Id)
 			}
-			if err := register(st.Id, b.AddClioWriteTask(c.Connector, c.Subject, c.EventType, retries)); err != nil {
+			var id int32
+			switch op := clioOperation(c.Operation); op {
+			case "write":
+				if c.Subject == "" || c.EventType == "" {
+					return nil, fmt.Errorf("compiler: clio write task %q needs subject and eventType", st.Id)
+				}
+				id = b.AddClioWriteTask(c.Connector, c.Subject, c.EventType, retries)
+			case "query":
+				if c.Query == "" && c.Subject == "" {
+					return nil, fmt.Errorf("compiler: clio query task %q needs a query or a subject", st.Id)
+				}
+				if strings.TrimSpace(c.ResultVariable) == "" {
+					return nil, fmt.Errorf("compiler: clio query task %q needs a resultVariable", st.Id)
+				}
+				id = b.AddClioQueryTask(c.Connector, c.Subject, c.ReduceSpec, c.Query, strings.TrimSpace(c.ResultVariable), retries)
+			case "read":
+				if c.Subject == "" {
+					return nil, fmt.Errorf("compiler: clio read task %q needs a subject", st.Id)
+				}
+				if strings.TrimSpace(c.ResultVariable) == "" {
+					return nil, fmt.Errorf("compiler: clio read task %q needs a resultVariable", st.Id)
+				}
+				limit, err := clioLimit(st.Id, c.Limit)
+				if err != nil {
+					return nil, err
+				}
+				id = b.AddClioReadTask(c.Connector, c.Subject, strings.TrimSpace(c.ResultVariable), limit, retries)
+			default:
+				return nil, fmt.Errorf("compiler: clio connector task %q has unknown operation %q (want write, query, or read)", st.Id, op)
+			}
+			if err := register(st.Id, id); err != nil {
 				return nil, err
 			}
 			continue
@@ -1174,14 +1230,25 @@ type xmlServiceTask struct {
 }
 
 // A clio connector task's parameters, carried on a service task as an
-// <atlas:clioConnector connector="..." subject="..." eventType="..."/> extension
-// element. connector names a server-registered connector (its endpoint and
-// credentials live in the server config, never in the model); subject and
-// eventType are the clio coordinates the appended event lands under.
+// <atlas:clioConnector connector="..." operation="..." .../> extension element.
+// connector names a server-registered connector (its endpoint and credentials live
+// in the server config, never in the model). operation is "write" (default),
+// "query", or "read", selecting which of the remaining attributes apply:
+//   - write: subject and eventType — the clio coordinates the appended event
+//     (the instance's variables) lands under.
+//   - query: resultVariable receives the result; either query (a run_query string)
+//     or subject (with the optional reduceSpec projection, a get_state read).
+//   - read: subject's events (up to limit; 0 = the connector's default) are read
+//     into resultVariable as a JSON array.
 type xmlClioConnector struct {
-	Connector string `xml:"connector,attr"`
-	Subject   string `xml:"subject,attr"`
-	EventType string `xml:"eventType,attr"`
+	Connector      string `xml:"connector,attr"`
+	Operation      string `xml:"operation,attr"`
+	Subject        string `xml:"subject,attr"`
+	EventType      string `xml:"eventType,attr"`
+	Query          string `xml:"query,attr"`
+	ReduceSpec     string `xml:"reduceSpec,attr"`
+	Limit          string `xml:"limit,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
 }
 
 // An HTTP-REST connector task's parameters, carried on a service task as an

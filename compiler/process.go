@@ -223,22 +223,35 @@ type UserTaskDetail struct {
 //
 //   - clio "write-events" (JobType == ClioWriteJobType): Connector names the
 //     server-registered clio instance; Subject and EventType are the interned clio
-//     coordinates the appended event lands under.
+//     coordinates the appended event lands under. The event body is the instance's
+//     variables.
+//   - clio "query" (JobType == ClioQueryJobType): Connector names the clio
+//     instance; the task reads projected state or runs a stored query and writes
+//     the result into ResultVar. Either ClioQuery (a run_query query string) is set
+//     — then the worker runs that query — or Subject (with the optional ReduceSpec
+//     projection) is set — then the worker reads get_state for that subject.
+//   - clio "read" (JobType == ClioReadJobType): Connector names the clio instance;
+//     Subject is the subject whose events are read (up to Limit, 0 = the connector's
+//     default) into ResultVar as a JSON array.
 //   - HTTP REST (JobType == RestJobType): Method and Url are the interned request
 //     method (e.g. "POST") and the full endpoint URL authored in the model
 //     (ADR-0067, revising ADR-0036 for REST); ResultVar, if set, is the process
 //     variable the JSON response is written back into on completion.
 //
-// Unused fields for a given kind are -1 (Intern maps that back to ""). Both kinds
-// send the instance's variables as the request/event body — a stand-in for full
-// payload mappings until the variable subsystem matures.
+// Unused fields for a given kind are -1 (Intern maps that back to ""); Limit is 0
+// when unset. The write and REST kinds send the instance's variables as the
+// request/event body — a stand-in for full payload mappings until the variable
+// subsystem matures.
 type ConnectorTaskDetail struct {
-	JobType   int32 // interned reserved connector job type → index
-	Connector int32 // interned connector name → index, -1 if not a clio task
-	Subject   int32 // interned clio target subject → index, -1 if not a clio task
-	EventType int32 // interned clio event type → index, -1 if not a clio task
-	Method    int32 // interned HTTP method → index, -1 if not a REST task
-	ResultVar int32 // interned REST result variable name → index, -1 if none
+	JobType    int32 // interned reserved connector job type → index
+	Connector  int32 // interned connector name → index, -1 if not a clio task
+	Subject    int32 // interned clio target subject → index, -1 if unused
+	EventType  int32 // interned clio event type → index, -1 if not a clio write task
+	ClioQuery  int32 // interned clio run_query query string → index, -1 if unused
+	ReduceSpec int32 // interned clio get_state reduce-spec name → index, -1 if unused
+	Limit      int32 // clio read_events limit, 0 = the connector's default
+	Method     int32 // interned HTTP method → index, -1 if not a REST task
+	ResultVar  int32 // interned REST/clio result variable name → index, -1 if none
 	// Url is the request endpoint, Headers and Query the request headers and query
 	// parameters a REST task adds (ADR-0067). Each value is literal or a FEEL
 	// expression evaluated over the instance's variables at call time (the
