@@ -1136,11 +1136,15 @@ function applyServiceTaskKind(modeler, element, kindId) {
 // decisionInputRowHTML renders one editable business-rule-task input mapping: a
 // decision input name (target) fed by a FEEL source over the instance's variables.
 // The stored source is '=' prefixed (Zeebe convention); it is shown stripped.
+// Both fields are comboboxes (native datalist, ADR-0012 buildless): the name offers
+// the decision's declared inputs (#dmn-inputs-dl), the source offers the diagram's
+// known variables (#dmn-vars-dl) — so an author picks from a list instead of
+// hand-typing, while any FEEL expression stays typable for composite sources.
 function decisionInputRowHTML(i, source, target) {
   const src = (source || "").replace(/^=\s*/, "");
   return `<div class="dmn-input-row" data-i="${i}" style="display:flex;gap:6px;margin-bottom:6px">
-    <input type="text" class="dmn-in-target" value="${esc(target || "")}" placeholder="Season" style="flex:0 0 34%" title="Decision input name"/>
-    <input type="text" class="dmn-in-source" value="${esc(src)}" placeholder="order.season" style="flex:1" title="FEEL source over the instance's variables"/>
+    <input type="text" class="dmn-in-target" list="dmn-inputs-dl" value="${esc(target || "")}" placeholder="Season" style="flex:0 0 34%" title="Decision input name (from the decision)"/>
+    <input type="text" class="dmn-in-source" list="dmn-vars-dl" value="${esc(src)}" placeholder="order.season" style="flex:1" title="A known variable, or any FEEL expression over the instance's variables"/>
   </div>`;
 }
 
@@ -2087,6 +2091,13 @@ function wireProperties(root, modeler, api, projectId, toast) {
           const mode = tc ? "connector" : "local";
           const io = findExt(bo, "zeebe:IoMapping");
           const inputs = (io && io.inputParameters) || [];
+          // Combobox option sets: the diagram's known variables for the source
+          // column, and the already-declared input names for the name column (the
+          // picker enriches the latter with the decision's full input list on load).
+          const varOpts = collectDiagramVariables(modeler)
+            .map((v) => `<option value="${esc(v.name)}">${esc(v.source || v.origin || "")}</option>`).join("");
+          const inNameOpts = [...new Set(inputs.map((p) => (p.target || "").trim()).filter(Boolean))]
+            .map((n) => `<option value="${esc(n)}"></option>`).join("");
           html += `<h3>Called decision (DMN)</h3>
             <label class="field"><span>Evaluation</span>
               <select id="f-brt-mode">
@@ -2110,14 +2121,16 @@ function wireProperties(root, modeler, api, projectId, toast) {
               <button type="button" class="btn ghost" id="f-dmn-new">＋ Neue Decision</button>
               <button type="button" class="btn ghost" id="f-dmn-edit"${cd.decisionId ? "" : " disabled"}>Bearbeiten</button>
             </div>
-            <label class="field"><span>Decision ID</span>
-              <input type="text" id="f-decisionid" value="${esc(cd.decisionId || "")}" placeholder="Dish"/></label>
+            <label class="field"><span>Decision ID <span class="field-derived">derived</span></span>
+              <input type="text" id="f-decisionid" value="${esc(cd.decisionId || "")}" placeholder="pick a decision above" readonly title="Set by the decision picked above — no need to type it"/></label>
             <label class="field"><span>Result variable</span>
               <input type="text" id="f-resultvar" value="${esc(cd.resultVariable || "")}" placeholder="dish"/></label>${bindingField}
-            <p class="muted" style="font-size:12px">Pick a decision to auto-fill its inputs and result variable. <b>Latest</b> evaluates the newest deployed version; <b>Deployment</b> pins to the version deployed with this process.</p>
+            <p class="muted" style="font-size:12px">Pick a decision to auto-fill its id, inputs and result variable. <b>Latest</b> evaluates the newest deployed version; <b>Deployment</b> pins to the version deployed with this process.</p>
             <h3>Decision inputs</h3>
-            <p class="muted" style="font-size:12px">Each row feeds one decision input from a FEEL expression over the instance's variables. Leave a row's name blank to drop it.</p>
-            <div id="dmn-inputs">${inputs.map((p, i) => decisionInputRowHTML(i, p.source, p.target)).join("")}${decisionInputRowHTML(inputs.length, "", "")}</div>`;
+            <p class="muted" style="font-size:12px">Each row feeds one decision input. Pick a variable from the list or type any FEEL expression over the instance's variables. Leave a row's name blank to drop it.</p>
+            <div id="dmn-inputs">${inputs.map((p, i) => decisionInputRowHTML(i, p.source, p.target)).join("")}${decisionInputRowHTML(inputs.length, "", "")}</div>
+            <datalist id="dmn-vars-dl">${varOpts}</datalist>
+            <datalist id="dmn-inputs-dl">${inNameOpts}</datalist>`;
         } else if (t === "bpmn:UserTask") {
           const a = findExt(bo, "zeebe:AssignmentDefinition") || {};
           const pr = findExt(bo, "zeebe:PriorityDefinition") || {};
@@ -2556,6 +2569,13 @@ function wireProperties(root, modeler, api, projectId, toast) {
         if (otherOpts.length) parts.push(`<optgroup label="${projectOpts.length ? "Other decisions" : "Available decisions"}">${otherOpts.join("")}</optgroup>`);
         fpick.innerHTML = parts.join("");
         fpick._catalog = catalog;
+        // Offer the current decision's full declared inputs in the name combobox,
+        // not just the rows already mapped — so adding a row suggests every input.
+        const curDec = catalog.find((d) => d.id === cur);
+        const dl = body.querySelector("#dmn-inputs-dl");
+        if (curDec && dl && Array.isArray(curDec.inputs) && curDec.inputs.length) {
+          dl.innerHTML = curDec.inputs.map((inp) => `<option value="${esc(inp.name)}"></option>`).join("");
+        }
       }).catch(() => { /* leave the placeholder; manual entry still works */ });
 
       // applyPick sets the decision id + result variable and auto-fills the input

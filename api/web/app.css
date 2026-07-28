@@ -1259,6 +1259,17 @@ tr[hidden] { display: none; }
 .pgroup.collapsed .pgroup-body { display: none; }
 .pgroup .pgroup-body > h3 { display: none; } /* a nested legacy header, if any */
 
+/* A derived, read-only property (e.g. Decision ID, set by the decision picker):
+   dimmed with a dashed border and a small "derived" tag beside the label, so it
+   reads as computed rather than a blank to fill by hand. */
+.props input[readonly] { background: var(--bg); color: var(--muted); border-style: dashed; cursor: default; }
+.props input[readonly]:focus { box-shadow: none; border-color: var(--border-strong); }
+.field-derived {
+  font: 600 9px/1.6 system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-soft);
+  padding: 0 5px; border-radius: 4px; margin-left: 6px; vertical-align: middle;
+}
+
 /* Input/Output variable mapping groups (ADR-0068), Camunda-style: a collapsible
    list group per direction whose header carries an add button, a count badge and a
    collapse chevron, with one collapsible card per mapping. */
