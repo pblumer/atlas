@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Warenkorb-Summenberechnung — Atlas engine showcase / self-completing test scenario.
+
+  A shopping-cart checkout that computes an order total end to end, entirely from
+  inline FEEL script tasks (evaluated in-engine, no external worker). The cart is
+  seeded by the first task, so starting an instance drives it straight to an end
+  event — usable as a deterministic smoke/regression test. Both gateways branch on
+  the *computed* sum, so the visited end event proves the arithmetic without
+  reading any variable. Expected per-element visits are in examples/README.md.
+
+  Seeded cart → subtotal 58.30 €, −5.83 € rebate (≥50 €), +9.97 € VAT, 0 € shipping
+             → grand total 62.44 € → "Bestellung bestaetigt".
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="cart-total" name="Warenkorb-Summenberechnung" isExecutable="true">
+
+    <startEvent id="cart_submitted" name="Warenkorb abgeschickt"/>
+
+    <!-- Seed the cart as a FEEL list of line items (name, unit price, quantity). -->
+    <scriptTask id="load_cart" name="Warenkorb laden">
+      <extensionElements>
+        <script expression="= [ {name: &quot;BPMN-Buch&quot;, price: 24.90, qty: 1}, {name: &quot;Kaffeetasse&quot;, price: 9.95, qty: 2}, {name: &quot;Aufkleber-Set&quot;, price: 4.50, qty: 3} ]" resultVariable="positions"/>
+      </extensionElements>
+    </scriptTask>
+
+    <!-- Aggregate quantity across all line items: sum(for …). -->
+    <scriptTask id="count_items" name="Artikelanzahl zaehlen">
+      <extensionElements>
+        <script expression="= sum(for p in positions return p.qty)" resultVariable="itemCount"/>
+      </extensionElements>
+    </scriptTask>
+
+    <!-- The cart sum: sum(price * qty over all items), rounded to cents. -->
+    <scriptTask id="subtotal" name="Zwischensumme berechnen">
+      <extensionElements>
+        <script expression="= decimal(sum(for p in positions return p.price * p.qty), 2)" resultVariable="subtotal"/>
+      </extensionElements>
+    </scriptTask>
+
+    <!-- Orders of 50 € or more earn a 10% rebate and free shipping. -->
+    <exclusiveGateway id="threshold_gw" name="Zwischensumme &gt;= 50 EUR?" default="f_standard"/>
+
+    <scriptTask id="apply_rebate" name="Rabatt und Gratisversand gewaehren">
+      <extensionElements>
+        <script expression="= {discount: decimal(subtotal * 0.10, 2), shipping: 0}" resultVariable="rebate"/>
+      </extensionElements>
+    </scriptTask>
+    <scriptTask id="standard_shipping" name="Standardversand berechnen">
+      <extensionElements>
+        <script expression="= {discount: 0, shipping: 4.90}" resultVariable="rebate"/>
+      </extensionElements>
+    </scriptTask>
+    <exclusiveGateway id="rebate_join"/>
+
+    <!-- net = subtotal − discount; VAT = 19% of net; total = net + VAT + shipping. -->
+    <scriptTask id="net" name="Nettobetrag berechnen">
+      <extensionElements>
+        <script expression="= decimal(subtotal - rebate.discount, 2)" resultVariable="net"/>
+      </extensionElements>
+    </scriptTask>
+    <scriptTask id="tax" name="MwSt (19%) berechnen">
+      <extensionElements>
+        <script expression="= decimal(net * 0.19, 2)" resultVariable="tax"/>
+      </extensionElements>
+    </scriptTask>
+    <scriptTask id="grand_total" name="Gesamtsumme berechnen">
+      <extensionElements>
+        <script expression="= decimal(net + tax + rebate.shipping, 2)" resultVariable="total"/>
+      </extensionElements>
+    </scriptTask>
+
+    <!-- Large orders (> 100 €) route to manual approval; the rest are confirmed. -->
+    <exclusiveGateway id="approval_gw" name="Summe &gt; 100 EUR?" default="f_confirm"/>
+    <endEvent id="needs_approval" name="Freigabe erforderlich"/>
+    <endEvent id="confirmed" name="Bestellung bestaetigt"/>
+
+    <sequenceFlow id="f1" sourceRef="cart_submitted" targetRef="load_cart"/>
+    <sequenceFlow id="f2" sourceRef="load_cart" targetRef="count_items"/>
+    <sequenceFlow id="f3" sourceRef="count_items" targetRef="subtotal"/>
+    <sequenceFlow id="f4" sourceRef="subtotal" targetRef="threshold_gw"/>
+    <sequenceFlow id="f_rebate" name="ja" sourceRef="threshold_gw" targetRef="apply_rebate">
+      <conditionExpression>= subtotal &gt;= 50</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_standard" name="nein" sourceRef="threshold_gw" targetRef="standard_shipping"/>
+    <sequenceFlow id="f5" sourceRef="apply_rebate" targetRef="rebate_join"/>
+    <sequenceFlow id="f6" sourceRef="standard_shipping" targetRef="rebate_join"/>
+    <sequenceFlow id="f7" sourceRef="rebate_join" targetRef="net"/>
+    <sequenceFlow id="f8" sourceRef="net" targetRef="tax"/>
+    <sequenceFlow id="f9" sourceRef="tax" targetRef="grand_total"/>
+    <sequenceFlow id="f10" sourceRef="grand_total" targetRef="approval_gw"/>
+    <sequenceFlow id="f_approval" name="ja" sourceRef="approval_gw" targetRef="needs_approval">
+      <conditionExpression>= total &gt; 100</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_confirm" name="nein" sourceRef="approval_gw" targetRef="confirmed"/>
+  </process>
+</definitions>
