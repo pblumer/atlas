@@ -488,29 +488,48 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .decision-badge:hover { filter: brightness(1.1); }
 .decision-badge.on { outline: 2px solid #fff; box-shadow: 0 0 0 2px #6b3fd4; }
 
-/* Decision-inspection panel: one card per evaluation, with sections for inputs,
-   outputs, and the decision-table trace. Rendered in the variables side panel. */
-.dec-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; margin: 0 0 10px; background: var(--surface); }
-.dec-card-h { font-size: 14px; margin-bottom: 6px; }
-.dec-card-h .muted { font-weight: 400; font-size: 12px; }
-.dec-sect { margin-top: 10px; }
-.dec-sect-h { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 5px; }
-.dec-kv { display: flex; flex-direction: column; gap: 3px; }
-.dec-kv-row { display: flex; gap: 8px; align-items: baseline; }
-.dec-kv .dec-k { min-width: 90px; color: var(--muted); font-size: 12px; }
-.dec-kv .dec-v code { font: 12px/1.5 ui-monospace, monospace; word-break: break-word; }
-.dec-table { border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-bottom: 8px; }
-.dec-table-h { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
-.dec-inputs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
-.dec-rules { display: flex; flex-direction: column; gap: 3px; }
-.dec-rule { display: flex; align-items: baseline; gap: 8px; padding: 3px 6px; border-radius: 5px; opacity: 0.55; }
-.dec-rule.matched { opacity: 1; background: #eef7f0; border: 1px solid #cfe8d6; }
-.dec-rule-ix { font: 700 11px/1.4 ui-monospace, monospace; color: var(--muted); min-width: 26px; }
-.dec-rule-conds { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; }
-.dec-cond { font: 12px/1.5 ui-monospace, monospace; padding: 0 5px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); }
-.dec-cond.ok { border-color: #cfe8d6; background: #eef7f0; color: var(--ok); }
-.dec-cond.no { color: var(--muted); }
-.dec-out { font: 700 12px/1.5 system-ui, sans-serif; color: var(--ok); white-space: nowrap; }
+
+/* Decision-evaluation detail (Operations): inputs as typed pills, results tagged
+   with the rule that fired, and the matched-rule decision table revealed on hover —
+   mirroring temis' Operate view. Semantic colours (green fired-rule/ok, red no-match,
+   blue hit row) are deliberate and separate from the app accent. */
+.in-pills { display: flex; flex-wrap: wrap; gap: 4px; }
+.pill-kv { font: 12px/1.5 ui-monospace, monospace; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 1px 7px; white-space: nowrap; }
+.pill-kv b { color: var(--muted); font-weight: 600; }
+.res { display: flex; flex-direction: column; gap: 2px; min-width: 190px; }
+.res-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; font-size: 12.5px; padding: 2px 4px; border-radius: 5px; }
+.res-row.hoverable { cursor: help; }
+.res-row.hoverable:hover, .res-row.hoverable:focus-visible { background: var(--accent-soft); outline: none; }
+.res-row.hoverable .res-key::after { content: "\229e"; margin-left: 5px; color: var(--accent); font-weight: 700; opacity: 0.8; }
+.res-key { color: var(--text); font-weight: 600; white-space: nowrap; }
+.res-val { font: 12px/1.3 ui-monospace, monospace; color: var(--text); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.res-rule { grid-column: 2 / 4; justify-self: end; font: 600 10px/1.4 ui-monospace, monospace; color: #15803d; background: #dcfce7; padding: 1px 7px; border-radius: 999px; }
+
+/* The hover popover: a frosted card holding the matched-rule table. */
+.dec-pop {
+  position: fixed; z-index: 60; pointer-events: none; max-width: 480px;
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border-strong); border-radius: 10px; padding: 9px 11px;
+  box-shadow: 0 10px 30px rgba(20, 33, 61, 0.22);
+}
+.dec-pop[hidden] { display: none; }
+.pop-title { font: 700 12px/1 system-ui, sans-serif; margin-bottom: 6px; color: var(--text); }
+.mtable { margin-top: 6px; }
+.mtable-head { display: flex; align-items: center; gap: 8px; font: 600 11px/1 system-ui, sans-serif; margin-bottom: 4px; color: var(--text); }
+.mtable-policy { font: 10px/1 ui-monospace, monospace; background: var(--bg); color: var(--muted); padding: 2px 5px; border-radius: 5px; }
+.mgrid { border-collapse: collapse; font-size: 11px; }
+.mgrid th, .mgrid td { border: 1px solid var(--border); padding: 2px 6px; text-align: left; white-space: nowrap; color: var(--text); }
+.mgrid th { background: var(--bg); font-weight: 600; }
+.mgrid code { font: 11px/1 ui-monospace, monospace; }
+.mcol-idx { width: 20px; text-align: center; color: var(--muted); }
+.mrule.is-hit { background: #eaf1ff; }
+.mrule.is-hit .mcol-idx { color: #1d4ed8; font-weight: 700; }
+.mcell.is-ok { color: #166534; background: rgba(22, 163, 74, 0.08); }
+.mcell.is-no { color: #b91c1c; }
+.mcell.is-skip { color: #c3cad6; }
+.mout { font: 11px/1.2 ui-monospace, monospace; }
+
 .legend-swatch {
   display: inline-block; width: 22px; height: 0;
   border-top: 2.5px solid var(--ok); vertical-align: middle; margin-right: 4px;
@@ -592,22 +611,24 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .var-panel .vp-actions .replay-link { text-transform: none; letter-spacing: 0; }
 
 /* Copy buttons: one per scalar field, per JSON card, and a "Copy all" in the head.
-   A brief green check confirms the write (the ::after swaps in on .copied). */
-.var-panel .vcopy {
+   A brief green check confirms the write (the ::after swaps in on .copied). Shared
+   by the Live view's side panel (.var-panel) and the Operations replay inspector
+   (.ops-tab-body), so both surfaces get identical, first-class copy affordances. */
+.var-panel .vcopy, .ops-tab-body .vcopy, .var-modal .vcopy {
   display: inline-grid; place-items: center; flex: 0 0 auto;
   width: 22px; height: 22px; padding: 0; border: 1px solid var(--border);
   border-radius: 5px; background: var(--surface); color: var(--muted);
   cursor: pointer; transition: color 0.12s, border-color 0.12s, background 0.12s;
 }
-.var-panel .vcopy:hover { color: var(--text); border-color: var(--border-strong); background: var(--bg); }
-.var-panel .vcopy.copied { color: var(--ok, #2d8a4e); border-color: #bfe3cb; background: #eaf7ef; }
-.var-panel .vcopy.copied svg { display: none; }
-.var-panel .vcopy.copied::after { content: "\2713"; font: 700 12px/1 system-ui, sans-serif; }
-.var-panel .vcopy-all {
+.var-panel .vcopy:hover, .ops-tab-body .vcopy:hover, .var-modal .vcopy:hover { color: var(--text); border-color: var(--border-strong); background: var(--bg); }
+.var-panel .vcopy.copied, .ops-tab-body .vcopy.copied, .var-modal .vcopy.copied { color: var(--ok, #2d8a4e); border-color: #bfe3cb; background: #eaf7ef; }
+.var-panel .vcopy.copied svg, .ops-tab-body .vcopy.copied svg, .var-modal .vcopy.copied svg { display: none; }
+.var-panel .vcopy.copied::after, .ops-tab-body .vcopy.copied::after, .var-modal .vcopy.copied::after { content: "\2713"; font: 700 12px/1 system-ui, sans-serif; }
+.var-panel .vcopy-all, .ops-tab-body .vcopy-all, .var-modal .vcopy-all {
   width: auto; height: auto; padding: 3px 9px; font-size: 11px;
   display: inline-flex; gap: 4px;
 }
-.var-panel .vcopy-all svg { display: none; }
+.var-panel .vcopy-all svg, .ops-tab-body .vcopy-all svg, .var-modal .vcopy-all svg { display: none; }
 
 /* Waiting-task links: jump from a running instance to its user task's form. */
 .var-panel .vp-tasks {
@@ -638,62 +659,67 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .var-panel .vp-table td:first-child { font: 12px/1.6 ui-monospace, monospace; white-space: nowrap; }
 .var-panel .chip { margin: 0 4px 4px 0; }
 
-/* Polished per-step variables presentation in the replay view: scalars as a
-   labeled field grid, JSON values as collapsible, syntax-highlighted cards. */
-.var-panel .vars { display: flex; flex-direction: column; gap: 10px; }
-.var-panel .vgrid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px;
+/* Polished variables presentation, shared by the Live view side panel and the
+   Operations replay inspector: scalars as a labeled field grid, JSON values as
+   collapsible, syntax-highlighted cards. Scoped to the `.vars` container the body
+   is wrapped in (not to a particular panel), so every surface that shows variables
+   renders them identically — the replay tab is not a second-class citizen. */
+.vars { display: flex; flex-direction: column; gap: 10px; }
+.vars .vgrid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px;
 }
-.var-panel .vfield {
+.vars .vfield {
   border: 1px solid var(--border); border-radius: var(--radius);
   background: var(--bg); padding: 7px 10px 8px; min-width: 0;
+  transition: border-color 0.12s, box-shadow 0.12s;
 }
-.var-panel .vf-head { display: flex; align-items: center; gap: 6px; }
-.var-panel .vf-head .vcopy { margin-left: auto; width: 20px; height: 20px; opacity: 0; }
-.var-panel .vfield:hover .vf-head .vcopy, .var-panel .vf-head .vcopy:focus-visible { opacity: 1; }
-.var-panel .vk { font: 600 12px/1.4 ui-monospace, monospace; color: var(--muted); word-break: break-word; }
-.var-panel .vtag {
+.vars .vfield:hover { border-color: var(--border-strong); box-shadow: var(--shadow); }
+.vars .vf-head { display: flex; align-items: center; gap: 6px; }
+.vars .vf-head .vcopy { margin-left: auto; width: 20px; height: 20px; opacity: 0; }
+.vars .vfield:hover .vf-head .vcopy, .vars .vf-head .vcopy:focus-visible { opacity: 1; }
+.vars .vk { font: 600 12px/1.4 ui-monospace, monospace; color: var(--muted); word-break: break-word; }
+.vars .vtag {
   font: 600 9px/1.6 system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.05em;
   padding: 0 5px; border-radius: 4px; color: var(--muted);
   background: var(--surface); border: 1px solid var(--border); white-space: nowrap;
 }
-.var-panel .vv { font: 13px/1.5 ui-monospace, monospace; margin-top: 3px; word-break: break-word; }
-.var-panel .vv.num  { color: #0a7c5a; }
-.var-panel .vv.str  { color: var(--text); }
-.var-panel .vv.bool { color: #b26a00; font-weight: 600; }
-.var-panel .vv.null { color: var(--muted); font-style: italic; }
+.vars .vv { font: 13px/1.5 ui-monospace, monospace; margin-top: 3px; word-break: break-word; }
+.vars .vv.num  { color: #0a7c5a; }
+.vars .vv.str  { color: var(--text); }
+.vars .vv.bool { color: #b26a00; font-weight: 600; }
+.vars .vv.null { color: var(--muted); font-style: italic; }
 
-.var-panel .vjson {
+.vars .vjson {
   border: 1px solid var(--border); border-radius: var(--radius);
   overflow: hidden; background: var(--surface);
 }
 /* The card header is a row: an expand/collapse toggle button that fills the width,
    plus a copy button. (The toggle can't wrap the copy — nested buttons are invalid.) */
-.var-panel .vj-head {
+.vars .vj-head {
   display: flex; align-items: center; gap: 6px;
   padding: 4px 7px 4px 0; background: var(--bg); border-bottom: 1px solid transparent;
 }
-.var-panel .vjson:not(.collapsed) .vj-head { border-bottom-color: var(--border); }
-.var-panel .vj-toggle {
+.vars .vjson:not(.collapsed) .vj-head { border-bottom-color: var(--border); }
+.vars .vj-toggle {
   display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0;
   padding: 3px 10px; background: none; border: 0; cursor: pointer;
   font: inherit; text-align: left; color: var(--text);
 }
-.var-panel .vj-head:hover { background: var(--accent-soft); }
-.var-panel .vj-toggle .chev { color: var(--muted); font-size: 11px; transition: transform 0.12s ease; }
-.var-panel .vjson.collapsed .vj-toggle .chev { transform: rotate(-90deg); }
-.var-panel .vj-sum { margin-left: auto; color: var(--muted); font-size: 12px; }
-.var-panel .vj-body {
+.vars .vj-head:hover { background: var(--accent-soft); }
+.vars .vj-toggle .chev { color: var(--muted); font-size: 11px; transition: transform 0.12s ease; }
+.vars .vjson.collapsed .vj-toggle .chev { transform: rotate(-90deg); }
+.vars .vj-sum { margin-left: auto; color: var(--muted); font-size: 12px; }
+.vars .vj-body {
   margin: 0; padding: 10px 12px; border-top: 1px solid var(--border);
   font: 12.5px/1.55 ui-monospace, monospace; white-space: pre;
   overflow: auto; max-height: 220px; tab-size: 2;
 }
-.var-panel .vjson.collapsed .vj-body { display: none; }
-.var-panel .j-key  { color: #7a3e9d; }
-.var-panel .j-str  { color: #0a7c5a; }
-.var-panel .j-num  { color: #0b5cff; }
-.var-panel .j-bool { color: #b26a00; }
-.var-panel .j-null { color: var(--muted); }
+.vars .vjson.collapsed .vj-body { display: none; }
+.vars .j-key  { color: #7a3e9d; }
+.vars .j-str  { color: #0a7c5a; }
+.vars .j-num  { color: #0b5cff; }
+.vars .j-bool { color: #b26a00; }
+.vars .j-null { color: var(--muted); }
 
 /* Start-variables input, revealed under the live toolbar by "Start instance". */
 .start-panel {
@@ -762,7 +788,20 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .ops-fields span { font-size: 13px; color: var(--text); }
 .mono { font-family: ui-monospace, monospace; }
 
-.ops-split { display: flex; height: 280px; border-top: 1px solid var(--border); background: var(--surface); }
+/* Draggable divider between the diagram and the bottom panel (Instance History +
+   inspector): a thin surface strip with a centred grip, row-resize cursor, and a
+   focus ring for keyboard resize. */
+.ops-resizer {
+  flex: 0 0 7px; height: 7px; cursor: row-resize; background: var(--surface);
+  display: flex; align-items: center; justify-content: center;
+}
+.ops-resizer::after {
+  content: ""; width: 40px; height: 3px; border-radius: 2px;
+  background: var(--border-strong); transition: background 0.12s;
+}
+.ops-resizer:hover::after, .ops-resizer.dragging::after { background: var(--accent); }
+.ops-resizer:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ops-split { display: flex; flex: 0 0 auto; height: 280px; border-top: 1px solid var(--border); background: var(--surface); }
 .ops-history { flex: 0 0 42%; display: flex; flex-direction: column; border-right: 1px solid var(--border); min-width: 0; }
 .ops-detail { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .ops-panel-head {
@@ -800,6 +839,122 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .ops-props dt.hint { grid-column: 1 / -1; color: var(--muted); font-style: italic; margin-top: 8px; }
 .ops-empty { color: var(--muted); font-size: 13px; padding: 8px 2px; }
 .ops-live { color: var(--accent); font-weight: 600; }
+
+/* Variables inspector header in the replay tab: a caption row that names the scope
+   the values belong to (the activated element / replay step), a count chip, and the
+   copy-all action — so the tab reads as a deliberate data surface, not a raw dump. */
+.ops-tab-body .vp-head {
+  display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap;
+  margin: -2px 0 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border);
+}
+.ops-tab-body .vp-title {
+  font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em;
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0;
+}
+.ops-tab-body .vp-title b { color: var(--text); text-transform: none; letter-spacing: 0; font-weight: 600; }
+.ops-tab-body .vp-count {
+  font: 600 11px/1.6 system-ui, sans-serif; color: var(--muted);
+  padding: 1px 8px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.ops-tab-body .vp-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+/* In the Variables toolbar the filter takes the free space; count sits by the scope
+   and copy-all pins right after it. */
+.ops-tab-body .v-toolbar .vp-actions { margin-left: 0; }
+.ops-tab-body .v-filter { position: relative; margin-left: auto; display: inline-flex; align-items: center; }
+.ops-tab-body .v-filter input {
+  font: 13px/1.4 ui-monospace, monospace; padding: 5px 9px 5px 27px; width: 150px;
+  border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text);
+}
+.ops-tab-body .v-filter input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.ops-tab-body .v-filter svg { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+
+/* Variables table (Operate-style): a dense, scannable Name · Value · Type grid.
+   Long identifiers get their own wide column and can't wrap against the badge. */
+.ops-tab-body .v-scroll { overflow: auto; }
+table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
+.vt thead th {
+  position: sticky; top: 0; z-index: 1; text-align: left; background: var(--bg);
+  font: 600 11px/1.5 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+  padding: 7px 12px; border-bottom: 1px solid var(--border);
+}
+.vt tbody tr { border-bottom: 1px solid var(--border); }
+.vt tbody tr:last-child { border-bottom: none; }
+.vt tbody tr:hover { background: var(--accent-soft); }
+.vt td { padding: 8px 12px; vertical-align: top; }
+.vt .c-name { font: 600 12.5px/1.45 ui-monospace, monospace; color: var(--text); width: 40%; word-break: break-all; }
+.vt .c-valcell { min-width: 0; }
+.vt .c-val { font: 13px/1.5 ui-monospace, monospace; word-break: break-word; }
+.vt .c-val.num  { color: #0a7c5a; }
+.vt .c-val.bool { color: #b26a00; font-weight: 600; }
+.vt .c-val.null { color: var(--muted); font-style: italic; }
+.vt .c-type { width: 1%; white-space: nowrap; }
+.vt .c-act  { width: 1%; white-space: nowrap; text-align: right; }
+.vt .c-act .vcopy { opacity: 0; }
+.vt tbody tr:hover .c-act .vcopy, .vt .c-act .vcopy:focus-visible { opacity: 1; }
+.vt .v-none { color: var(--muted); padding: 14px 12px; }
+
+/* Object/array value → a "···" button that opens the deep-inspect modal. */
+.vt .v-open {
+  display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-width: 0;
+  font: inherit; font-size: 12.5px; cursor: pointer; text-align: left;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  padding: 2px 9px; border-radius: 6px;
+}
+.vt .v-open:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.vt .v-open .more { font-weight: 700; letter-spacing: 1px; color: var(--muted); flex: none; }
+.vt .v-open:hover .more { color: var(--accent); }
+.vt .v-open .v-sum { font: 600 11px/1.5 system-ui, sans-serif; white-space: nowrap; flex: none; }
+.vt .v-open .peek { color: var(--muted); font: 12px/1.4 ui-monospace, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.vt .v-open:hover .peek { color: var(--accent); }
+.vtag.obj { color: var(--accent); border-color: var(--accent-soft); }
+
+/* Deep-inspect modal: an object/array variable's full value as pretty, colored JSON. */
+.var-modal-ov {
+  position: fixed; inset: 0; z-index: 60; padding: 24px;
+  background: rgba(20, 22, 26, 0.42); display: flex; align-items: center; justify-content: center;
+}
+.var-modal-ov[hidden] { display: none; }
+.var-modal {
+  width: min(620px, 100%); max-height: 82vh; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow);
+}
+.var-modal-head { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-bottom: 1px solid var(--border); }
+.var-modal-title { font: 600 13px/1.4 ui-monospace, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.var-modal-body { overflow: auto; padding: 12px 14px; background: var(--bg); }
+.var-modal-body .vj-body {
+  margin: 0; padding: 0; border: 0; background: none; max-height: none;
+  white-space: pre; font: 12.5px/1.6 ui-monospace, monospace; color: var(--text); tab-size: 2;
+}
+.var-modal .j-key  { color: #7a3e9d; }
+.var-modal .j-str  { color: #0a7c5a; }
+.var-modal .j-num  { color: #0b5cff; }
+.var-modal .j-bool { color: #b26a00; }
+.var-modal .j-null { color: var(--muted); }
+
+/* Decisions tab: the shared .dec-* cards, grouped by the task that evaluated them. */
+.ops-tab-body .dec-group { margin-bottom: 14px; }
+.ops-tab-body .dec-group:last-child { margin-bottom: 0; }
+.ops-tab-body .dec-group-h {
+  font: 600 12px/1.4 system-ui, sans-serif; color: var(--muted);
+  margin: 0 0 8px; padding-bottom: 5px; border-bottom: 1px solid var(--border);
+}
+/* One evaluation as a card — in the replay Decisions tab and the live view's
+   decision panel: header, then Inputs and Result on a label/content grid, with the
+   shared temis-style result rows and hover table (.res-*/.mtable/.dec-pop) inside. */
+.dec-card2 {
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg);
+  padding: 8px 10px; margin-bottom: 8px;
+}
+.dec-card2:last-child { margin-bottom: 0; }
+.dec-card2-h { font: 600 12.5px/1.4 ui-monospace, monospace; word-break: break-word; }
+.dec-card2-h .muted { font-weight: 400; font-size: 11px; }
+.dec-sect2 { display: grid; grid-template-columns: 58px 1fr; gap: 8px; align-items: start; margin-top: 7px; }
+.dec-sect2-l { font: 600 10px/1.7 system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+/* In the narrow live-view side panel the cards need horizontal gutters (the replay
+   tab already pads its body). */
+.var-panel.side .dec-card2 { margin-left: 14px; margin-right: 14px; }
+.var-panel.side .dec-card2:first-of-type { margin-top: 12px; }
 
 /* Execution-count badge Operate draws at a node's corner. */
 .ops-badge {
@@ -1152,6 +1307,27 @@ tr[hidden] { display: none; }
 .pgroup.collapsed .pgroup-body { display: none; }
 .pgroup .pgroup-body > h3 { display: none; } /* a nested legacy header, if any */
 
+/* Uniform vertical rhythm inside a property group. Different element branches emit
+   a mix of fields, hint paragraphs, and rows, each with its own margins — so gaps
+   drifted between 8px, 10px and the UA <p> default (which "verreisst" the panel).
+   Pin every direct child to one 10px step (hints a touch tighter), and zero the
+   first child so it never doubles the header's gap. Scoped to the group body, so it
+   can't leak into other panels. */
+.pgroup-body > * { margin-top: 10px; margin-bottom: 0; }
+.pgroup-body > *:first-child { margin-top: 0; }
+.pgroup-body > p { margin-top: 8px; font-size: 12px; line-height: 1.5; color: var(--muted); }
+
+/* A derived, read-only property (e.g. Decision ID, set by the decision picker):
+   dimmed with a dashed border and a small "derived" tag beside the label, so it
+   reads as computed rather than a blank to fill by hand. */
+.props input[readonly] { background: var(--bg); color: var(--muted); border-style: dashed; cursor: default; }
+.props input[readonly]:focus { box-shadow: none; border-color: var(--border-strong); }
+.field-derived {
+  font: 600 9px/1.6 system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-soft);
+  padding: 0 5px; border-radius: 4px; margin-left: 6px; vertical-align: middle;
+}
+
 /* Input/Output variable mapping groups (ADR-0068), Camunda-style: a collapsible
    list group per direction whose header carries an add button, a count badge and a
    collapse chevron, with one collapsible card per mapping. */
@@ -1251,3 +1427,46 @@ tr[hidden] { display: none; }
 .var-origin:hover { text-decoration: underline; }
 .vars-empty { padding: 14px; color: var(--muted); font-size: 13px; line-height: 1.5; }
 #vars-toggle.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+
+/* ---------- Sharing scopes (ADR-0071): visibility pill + share dialog ---------- */
+.pill.vis { background: var(--bg); color: var(--muted); border: 1px solid var(--border); margin-left: 8px; vertical-align: middle; }
+.pill.vis.shared { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+
+.modal-ov {
+  position: fixed; inset: 0; z-index: 60; padding: 24px;
+  background: rgba(20, 22, 26, 0.42); display: flex; align-items: center; justify-content: center;
+}
+.modal {
+  width: min(520px, 100%); max-height: 84vh; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow);
+}
+.modal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.modal-head h2 { margin: 0; font-size: 16px; }
+.modal-body { overflow-y: auto; overflow-x: hidden; padding: 4px 16px 14px; }
+.modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--border); }
+
+.share-sec { margin-top: 16px; }
+.share-sec .mlabel { margin: 0 0 8px; font-weight: 600; color: var(--text); font-size: 13px; }
+.muted.small, p.small, .small { font-size: 12px; }
+.share-sec > .small { margin: 8px 0 0; }
+
+.seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: var(--surface); color: var(--muted); padding: 6px 18px; font: inherit; font-size: 13px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--border-strong); }
+.seg button.active { background: var(--accent); color: #fff; }
+
+.member-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; }
+.member-row + .member-row { border-top: 1px solid var(--border); }
+.member-id { flex: 1 1 auto; min-width: 0; font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.member-row .role-sel { max-width: 110px; }
+.avatar.sm { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: var(--accent); flex: 0 0 auto; }
+
+.add-row { display: flex; gap: 8px; align-items: center; }
+.add-row input, .add-row select, .role-sel {
+  font: inherit; font-size: 13px; color: var(--text); background: var(--surface);
+  border: 1px solid var(--border-strong); border-radius: 6px; padding: 6px 8px; margin: 0;
+}
+.add-row #add-uid { flex: 1 1 auto; min-width: 0; }
+.add-row #add-role { flex: 0 0 auto; width: 104px; }
+.add-row #add-btn { flex: 0 0 auto; }
+.role-sel { flex: 0 0 auto; font-size: 12px; padding: 4px 6px; }

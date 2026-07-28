@@ -1,0 +1,49 @@
+name: Pages
+
+# Publishes the examples single-page app to GitHub Pages, so the order-to-cash
+# demo opens straight from a github.io URL. The app is self-contained (no build),
+# so the job just assembles a small site directory and deploys it.
+#
+# One-time enablement: repo Settings → Pages → Build and deployment → Source:
+# "GitHub Actions". After that this runs on every push to main that touches
+# examples/, and the site is served at https://<owner>.github.io/<repo>/.
+
+on:
+  push:
+    branches: [main]
+    paths: ['examples/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; a newer push supersedes an in-flight one.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site
+          # The order-to-cash app is the site root, so the Pages URL opens it directly.
+          cp examples/order-to-cash-app.html _site/index.html
+          # Ship the BPMN models alongside so they can be linked/downloaded.
+          cp examples/*.bpmn _site/ 2>/dev/null || true
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

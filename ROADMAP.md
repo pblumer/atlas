@@ -50,7 +50,22 @@ The control-flow basics most real models use.
   for exactly the branches the split took. Correct for reconverging splits with
   pass-through branches (no double fire), and recovery-tested. Cyclic inclusive
   joins still to come (ADR-0033).
-- 🔲 Input/output variable mappings
+- 🚧 **Input/output variable mappings** ([ADR-0068](docs/adr/0068-task-io-variable-mappings.md)):
+  generic `zeebe:ioMapping` on job-backed activities, backed by **activity-local
+  variable scopes** and scope-chain FEEL resolution — Camunda-faithful semantics
+  (input mappings create locals the activity sees; output mappings promote only
+  selected, possibly reshaped values to the parent scope; unmapped names resolve
+  up the chain). Built on the existing `FlowScopeKey`/`ScopeKey` model and the
+  `DecisionInputMapping` compile path: sources compile at deploy (I5), mapping
+  results freeze into variable events so replay re-applies rather than
+  re-evaluates (I6), and the activity-local scope is dropped via a deterministic
+  scope-drop event on completion. Delivered: scope-chain resolution
+  (`ResolveVariable`), compiler parsing (`compiler.IOMapping`), the engine apply
+  (activation writes locals, completion promotes, then drops), the inline and
+  polyglot script workers reading up the chain, and the **Modeler properties-panel
+  I/O-mapping editor** (input/output lists on service, script, and user tasks).
+  Remaining: extend the scope-chain read to the DMN/REST/clio workers, and reuse
+  the local-scope machinery for embedded subprocess scopes.
 - 🚧 **Data objects** ([ADR-0053](docs/adr/0053-first-class-data-objects.md)):
   first-class, typed, event-sourced data — not the decoration most engines settle
   for. The foundational slice landed: a modeled `<dataObject>` (its name,
@@ -136,6 +151,19 @@ The control-flow basics most real models use.
   decision, `deployment` pins to the version snapshotted with the process — surfaced
   as a "Binding" dropdown on the task. `versionTag` (pin to a numbered version) is
   the next step, once models are stored with version history.
+  **A decision is now debuggable end to end**
+  ([ADR-0066](docs/adr/0066-decision-evaluation-records.md)): the DMN worker
+  requests temis's rules-fired **trace** during its off-path evaluation and rides
+  the inputs, outputs, and trace back on the job completion (the ADR-0039
+  output-carrying completion, widened again), which the processor freezes into a
+  durable `VTDecisionEvaluation` history record — append-only, keyed under the
+  instance in the ADR-0048 `(scope, ts, pos)` shape, so it rebuilds from the log on
+  replay without re-running the decision. Served over
+  `GET /api/v1/instances/{key}/decisions` and surfaced in Operations: the live
+  viewer badges each decided business rule task and shows the inputs it saw, the
+  outputs it produced, and a rules-fired view of the trace — live and long after
+  the instance finished (remote ADR-0050 decisions record an empty trace).
+  Recovery-tested. Retention/compaction for the new family remains future work.
   Next: explicit `<zeebe:output>` mappings, decimal precision across the temis
   boundary, and off-loop streaming evaluation as the Milestone-4 gRPC job-worker
   concern (the single binary drives jobs synchronously).
@@ -147,7 +175,22 @@ The control-flow basics most real models use.
   worker, recovery) landed; each write is idempotency-keyed by the job key so
   at-least-once delivery is safe against clio's append-only log. Wiring the worker
   into the server run loop, a `clio:query` operation, and a WAL→clio event mirror
-  are follow-ups.
+  are follow-ups. **A service-task connector catalog now makes connector kinds a
+  data entry, not a bespoke panel** ([ADR-0067](docs/adr/0067-service-task-connector-catalog.md)):
+  the modeler carries an array of kind entries `{id, name, description, icon,
+  extension, fields[]}` and renders a searchable "Implement" picker over them —
+  approximating the bpmn.io element-templates popup within the buildless panel
+  (ADR-0012/0027) — while the compiler keeps discriminating by extension/job type
+  and one worker serves each kind; the plain job-worker task, clio, and REST are
+  its first three entries, and the next kind is additive at every layer. The same
+  ADR gives the **REST connector a model-authored endpoint**: the model carries the
+  method, the full URL, and a result variable the JSON response is written into on
+  completion (the ADR-0066 output-mapping path), and **the REST worker is wired into
+  the run loop** so a REST task is authored and executed end to end. This revises
+  ADR-0036's "endpoint by registry name only" rule **for REST alone** (clio stays
+  registry-only); credentials are still never authored in a model — an auth type
+  plus a server-registered credential reference is a follow-up, alongside
+  headers/query maps and FEEL-in-fields.
 
 ## Milestone 2 — Events and timers 🚧
 
@@ -210,7 +253,10 @@ Making processes wait, react, and time out.
   re-activates the job with fresh retries (raise / resolve / resume). Keyed by
   element instance, so cancelling an instance clears its incidents. Recovery-
   tested; exposed over HTTP (`POST /jobs/{key}/fail`, `GET /incidents`,
-  `POST /incidents/{key}/resolve`) (ADR-0061). **Timer FEEL failures now raise
+  `POST /incidents/{key}/resolve`) (ADR-0061). Its completion mirror
+  `POST /jobs/{key}/complete` lets an operator finish a parked service-task job by
+  hand (outputs as `{"variables": …}`) — a synchronous affordance, not the leased
+  gRPC worker protocol (still Milestone 4, ADR-0007). **Timer FEEL failures now raise
   incidents too** ([ADR-0064](docs/adr/0064-timer-feel-failure-incidents.md)): a
   catch or boundary timer whose FEEL schedule can't be evaluated parks its token
   and raises a job-less incident (the failing field in its message) instead of
@@ -296,6 +342,18 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   can't offer. Incidents/history overlays still to come.
 - ✅ **Instance management** view: Operations lists running process instances
   (process, version, tokens, status) and links each to its live diagram.
+- ✅ **Multi-token replay & causal token lineage**
+  ([ADR-0065](docs/adr/0065-multi-token-process-replay.md)): element-instance
+  events now carry a durable token id, an optional parent token id, and the
+  sequence-flow index that activated them — a fork mints a new id per target and
+  records the parent, a parallel join retains every arrival and consumes them into
+  one continuation, an exclusive gateway never synchronizes. `applyToState` derives
+  a per-instance lifecycle history from these facts, and the timeline endpoint folds
+  it by log position into **frames** carrying the complete active token set, so a
+  replay shows genuinely parallel tokens instead of guessing concurrency from
+  timestamps. Recovery rebuilds the same ids, relationships, and frames; old
+  payloads stay decodable and the legacy linear `steps` response remains as a
+  fallback (supersedes the single-token visualization assumption of ADR-0046).
 - ✅ Auto-layout for deployed models that carry no BPMN-DI: a generated
   left-to-right layered layout is injected when serving XML, so API-deployed
   semantic-only models render in the editor and the live overlay.
@@ -378,6 +436,27 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   token ([ADR-0049](docs/adr/0049-internal-service-auth-for-mcp.md)), so enabling
   auth no longer breaks MCP; the external `/mcp` transport is still unauthenticated
   and should be fronted by a reverse proxy (ADR-0016).
+- ✅ **Engine-internal encrypted secret vault**
+  ([ADR-0069](docs/adr/0069-engine-internal-encrypted-secret-vault.md),
+  [ADR-0070](docs/adr/0070-vault-on-by-default-with-generated-key.md)): closes
+  ADR-0041's deferred **A3** so an operator can set a connector credential from the
+  Console/API on a single node without provisioning env vars or an external secret
+  manager. Secrets are sealed with **AES-256-GCM** (standard-library crypto, no
+  CGO) into a sidecar store mirroring the connector store — one record
+  `{name, keyId, nonce, ciphertext, …}` per secret, atomic write + fsync — and
+  resolved through the same `credentialsRef` indirection: the vault is consulted
+  first, falling through to the ADR-0041 A2 environment lookup on a miss. The
+  admin-guarded HTTP surface (`GET`/`PUT`/`DELETE /api/v1/secrets`) takes secrets in
+  and lists names + metadata but **never hands a value back**. It is entirely a
+  side-effect-phase concern: no new value type, no `applyToState` change, and the
+  event log/WAL/variables still never see a secret (I6). The vault is **on by
+  default with a generated key** (ADR-0070): an operator `ATLAS_VAULT_KEY` /
+  `_FILE` wins and is never persisted; absent one, Atlas generates a 32-byte key at
+  `<data-dir>/vault.key` (`0600`) and logs how to harden it; `--vault=false`
+  disables it entirely — one flag, three postures. Follow-ups: key rotation/re-seal
+  tooling via `keyId`, a KMS/envelope (A4) backend, extending the vault to the DMN
+  resolver and other `ATLAS_*_TOKEN` references, and a Console Organization →
+  Secrets panel over the CRUD endpoints.
 - 🔲 Later: a polished "workbench" experience on top.
 
 ## Milestone A — Modeler & authoring experience 🔲
@@ -395,8 +474,9 @@ the hand-written Details panel one vertical slice at a time:
 - 🔲 General: element id, name.
 - 🔲 Documentation: `<bpmn:documentation>` as passthrough (compiler ignores it,
   codec preserves it).
-- 🔲 Input/output variable mappings (`zeebe:ioMapping`) — depends on the
-  Milestone 1 variable subsystem.
+- ✅ Input/output variable mappings (`zeebe:ioMapping`) — the properties-panel
+  editor (input/output lists on service, script, and user tasks) landed with the
+  Milestone 1 variable subsystem ([ADR-0068](docs/adr/0068-task-io-variable-mappings.md)).
 - 🔲 Execution listeners (`zeebe:executionListeners`) mapped to engine hooks.
 - 🔲 Extension properties (`zeebe:properties`) — generic name/value pairs, stored
   and round-tripped even when Atlas assigns them no meaning.

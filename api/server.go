@@ -19,9 +19,12 @@
 // on-disk sidecar store (ADR-0019) reloaded on startup, so diagrams, versions,
 // and recovered instances survive a restart; the eventual event-sourced
 // deployment path arrives with the Milestone 4 public API. One honest limitation
-// remains: there is no job-worker HTTP surface yet (that follows the gRPC job
-// protocol, ADR-0007), so an instance parks at its service task — which is
-// exactly the "waiting token" the live viewer will show.
+// remains: there is no streaming job-worker transport yet (that follows the gRPC
+// job protocol, ADR-0007), so an instance parks at its service task — exactly the
+// "waiting token" the live viewer shows. Such a parked job can be finished by
+// hand over HTTP (POST /jobs/{key}/complete, the operator mirror of .../fail from
+// the incident model), but that is a synchronous operator affordance, not the
+// leased, at-least-once worker protocol.
 package api
 
 import (

@@ -78,7 +78,8 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0068](0068-task-io-variable-mappings.md) | Task input/output variable mappings with activity-local scopes | Proposed |
 | [0069](0069-engine-internal-encrypted-secret-vault.md) | An engine-internal encrypted secret vault (ADR-0041 option A3) | Accepted |
 | [0070](0070-vault-on-by-default-with-generated-key.md) | The secret vault is on by default, with a generated key | Accepted |
-| [0071](0071-multiple-dmn-models-per-process.md) | Multiple DMN models per process deployment | Accepted |
+| [0071](0071-sharing-scopes.md) | Sharing scopes — private and shared access boundaries for design-time work | Accepted |
+| [0072](0072-multiple-dmn-models-per-process.md) | Multiple DMN models per process deployment | Accepted |
 
 ## Status values
 

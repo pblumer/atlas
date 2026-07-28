@@ -100,6 +100,12 @@ func (s *Server) handleValidateProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "list dmn references: "+loadErr.Error())
 		return
 	}
+	// Validating a project reads its artifacts, so it needs the viewer role
+	// (ADR-0071).
+	if code, msg := s.checkProjectRole(r, proj, ScopeRoleViewer); code != 0 {
+		writeError(w, code, msg)
+		return
+	}
 	out := projectValidationResp{ID: proj.ID, Name: proj.Name, OK: true, References: []dmnRefValidationResp{}}
 	for _, rec := range refs {
 		res, err := s.dmnValidator.Validate(r.Context(), rec.ModelRef)

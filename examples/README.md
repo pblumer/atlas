@@ -7,6 +7,11 @@ against a live Atlas server (`0.1.0-dev`).
 | File | What it is |
 |------|-----------|
 | [`order-fulfillment.bpmn`](order-fulfillment.bpmn) | A self-completing order-fulfillment process that exercises inline scripts and all three gateway kinds, and drives itself to an end event with **no external workers attached**. |
+| [`cart-total.bpmn`](cart-total.bpmn) | A shopping-cart checkout that computes an order total (subtotal → rebate → VAT → shipping) entirely in inline FEEL, and routes on the computed sum. Self-completing. |
+| [`order-to-cash.bpmn`](order-to-cash.bpmn) | The full order lifecycle: cart calculation → approval (≥ 100 €, user task) → **parallel** delivery & billing (service tasks). Parks on the worker-backed steps — a realistic, not-fully-automatic process. |
+| [`order-to-cash-app.html`](order-to-cash-app.html) | A self-contained single-page app that mirrors `order-to-cash.bpmn`: edit the cart, watch the sum compute live, approve, and clear the delivery/billing tasks. No server needed — open it in a browser. |
+| [`order-to-cash-live.bpmn`](order-to-cash-live.bpmn) | The **live** sibling: same flow, but delivery/billing are `userTask`s (HTTP-completable) instead of `serviceTask`s, so a browser app can drive the real instance end to end. |
+| [`../api/web/order-to-cash-live.html`](../api/web/order-to-cash-live.html) | The **live** app — served by the Atlas server itself (`/order-to-cash-live.html`). It deploys the model, starts a real instance with your cart, and completes each task over the HTTP API. No business logic in the client; Atlas runs the process. |
 | [`entra-create-account.bpmn`](entra-create-account.bpmn) | A PowerShell `jobScript` task that creates an EntraID account — the *worker-backed* counterpart: its token parks on the script job until a PowerShell script worker runs it. |
 
 > Looking for a model that parks on human tasks so you can watch the task
@@ -151,6 +156,184 @@ Those three highlighted numbers are the interesting invariants:
 To exercise the *other* exclusive branch, change the seeded amount in
 `register_order` to a value `≤ 1000`; the instance then takes
 `Auto-approve small order → Order fast-tracked` instead.
+
+---
+
+## `cart-total.bpmn` — shopping-cart sum calculation
+
+A checkout that turns a cart of line items into a payable order total, computed
+step by step in inline FEEL — the engine does real money arithmetic, no worker
+involved:
+
+```
+Warenkorb abgeschickt
+   → Warenkorb uebernehmen    cart = positions  (or a default cart if none given)
+   → Artikelanzahl zaehlen    itemCount = sum(for p in cart return p.qty)
+   → Zwischensumme berechnen  subtotal  = decimal(sum(for p in cart
+                                                      return p.price * p.qty), 2)
+   → Rabattsatz ermitteln     discountRate = «rule table» (customerType × subtotal)
+   → Rabatt berechnen         discount = decimal(subtotal * discountRate, 2)
+   → Zwischensumme ≥ 50 €? ──┐
+        ja                  nein
+        Gratisversand        Standardversand
+        shipping = 0         shipping = 4.90
+   └──────────┬──────────┘
+   → Nettobetrag    net   = decimal(subtotal − discount, 2)
+   → MwSt (19%)     tax   = decimal(net * 0.19, 2)
+   → Gesamtsumme    total = decimal(net + tax + shipping, 2)
+   → Summe > 100 €? ── ja → Freigabe erforderlich
+                      nein → Bestellung bestaetigt
+```
+
+### Dynamic input via start variables
+
+The cart and the customer type are declared as **start variables**
+(`atlas:startForm`), so in the Modeler's Deploy form (or the Variables panel) you
+enter your own cart and every figure recomputes:
+
+| Start variable | Type | Default |
+|----------------|------|---------|
+| `positions` | json | the 3-item demo cart |
+| `customerType` | string | `Business` (`Business` \| `Private`) |
+
+Start-variable defaults are applied by the Deploy form, not by a bare
+instance-create, so the first task `Warenkorb uebernehmen` guards `positions` with
+a default cart — meaning an instance started with **no input still self-completes**
+against the demo cart, which is what makes this usable as a deterministic test.
+
+### The discount — a FEEL rule table
+
+`Rabattsatz ermitteln` is an inline FEEL decision table (the same logic a DMN
+`businessRuleTask` would model, but evaluated in-engine so it needs no external
+decision service):
+
+| Customer type | Order value | Rate |
+|---------------|-------------|-----:|
+| Business | ≥ 1000 € | 15 % |
+| Business | otherwise | 10 % |
+| Private | ≥ 200 € | 5 % |
+| Private | otherwise | 0 % |
+
+> Want a *real* DMN task instead? Reference a decision with
+> `<zeebe:calledDecision decisionId="…">` and register that decision as a DMN
+> reference in Atlas (Modeler → business rule task → decision picker) first — a
+> plain deploy of a business rule task whose decision isn't registered is refused
+> (`no DMN model provides …`).
+
+### The calculation — default cart, Business customer
+
+`sum(for p in cart return p.price * p.qty)` is the cart sum; `decimal(x, 2)` rounds
+to cents (FEEL uses exact decimals, so the figures are reproducible):
+
+| Step | FEEL | Value |
+|------|------|------:|
+| Zwischensumme | `decimal(sum(p.price·p.qty), 2)` | **58.30 €** |
+| Rabattsatz | rule table: Business, < 1000 € | 10 % |
+| Rabatt | `decimal(subtotal · discountRate, 2)` | − 5.83 € |
+| Nettobetrag | `subtotal − discount` | 52.47 € |
+| MwSt 19 % | `decimal(net · 0.19, 2)` | + 9.97 € |
+| Versand (frei ≥ 50 €) | — | 0.00 € |
+| **Gesamtsumme** | `decimal(net + tax + shipping, 2)` | **62.44 €** |
+
+Both gateways branch on the *computed* sum, so the visited end event alone proves
+the arithmetic. Expected visits after one default-cart instance
+(`instances: 0, tokens: 0`):
+
+| Element | Type | Visits |
+|---------|------|:------:|
+| `cart_submitted` | StartEvent | 1 |
+| `take_cart` · `count_items` · `subtotal` | ScriptTask | 1 each |
+| `discount_rate` · `discount_amt` | ScriptTask | 1 each |
+| `ship_gw` | ExclusiveGateway | 1 |
+| `free_ship` | ScriptTask | 1 |
+| `std_ship` | ScriptTask | **0** (subtotal ≥ 50 → free shipping) |
+| `ship_join` | ExclusiveGateway | 1 |
+| `net` · `tax` · `grand_total` | ScriptTask | 1 each |
+| `approval_gw` | ExclusiveGateway | 1 |
+| `confirmed` | EndEvent | 1 |
+| `needs_approval` | EndEvent | **0** (total ≤ 100 → no approval) |
+
+To land on the *other* branches, start with your own `positions`: a cart under 50 €
+takes `Standardversand` (4.90 € shipping), and one whose total exceeds 100 € reaches
+`Freigabe erforderlich`. Setting `customerType` to `Private` switches the discount
+row.
+
+> **Scope:** this models the cart → order-sum calculation. It does *not* cover the
+> downstream order-to-cash lifecycle (delivery, invoicing, settlement) — those are
+> worker-backed steps that park until completed.
+
+---
+
+## `order-to-cash.bpmn` — the full order lifecycle
+
+Where `cart-total.bpmn` stops at the order sum, this model carries the order all
+the way to cash, and shows what a *realistic* (not fully automatic) process looks
+like:
+
+```
+Bestellung eingegangen
+  → Warenkorb → Zwischensumme → Rabattsatz → Rabatt → Gesamtsumme   (inline FEEL, auto)
+  → Summe > 100 €?  ── ja → [User-Task] Bestellung freigeben ──┐
+                     nein ───────────────────────────────────┤
+  → ⟨parallel⟩                                                 │
+       Liefern:    [Service] Ware kommissionieren → Ware versenden
+       Verrechnen: [Service] Rechnung erstellen   → Zahlung verbuchen
+    ⟨join⟩
+  → Auftrag abgeschlossen
+```
+
+The calculation part self-completes, then the instance **parks**: on the
+`Bestellung freigeben` user task (only when the sum exceeds 100 €), and on the two
+parallel service tasks `Ware kommissionieren` (job `kommissionierung`) and
+`Rechnung erstellen` (job `fakturierung`). Those tokens wait until a user
+completes the task / a job worker runs — the honest behaviour of a live business
+process. Verified on the live server: with the default cart the instance parks
+with one token on `pick` and one on `invoice`.
+
+`positions` and `customerType` are the same start variables as `cart-total`.
+
+## `order-to-cash-app.html` — an interactive single-page app
+
+A self-contained SPA (vanilla HTML/JS, no build, no server) that mirrors the BPMN
+and embodies its **forms**:
+
+- the **cart** is the start form — add/remove positions, pick the customer type;
+- the **sum** recomputes live in the exact same FEEL logic (rule-table discount,
+  VAT, free shipping ≥ 50 €), with the matched discount rule highlighted;
+- **Bestellung freigeben** is the user-task form (shown only above 100 €);
+- **Liefern** and **Verrechnen** are two lanes whose service tasks you clear one
+  by one — standing in for the job workers — until the order closes.
+
+**Open it:**
+
+- Download and open the file in any browser, or
+- browse the repo file and use a raw-HTML preview
+  (`https://htmlpreview.github.io/?<raw file URL>`) if the repo is public, or
+- serve `examples/` via GitHub Pages for a permanent link (ask and I'll add a
+  Pages workflow).
+
+## Live mode — `api/web/order-to-cash-live.html`
+
+`order-to-cash-app.html` *simulates* the process in the browser. The **live** app
+drives a **real** Atlas instance instead, and shows how little client code that
+takes — the business logic stays in the engine. Two facts shape it:
+
+- **User tasks, not service tasks.** Only `userTask`s can be completed over HTTP
+  (`POST /api/v1/tasks/{key}/complete`); service-task jobs need a gRPC worker.
+  So the live model, [`order-to-cash-live.bpmn`](order-to-cash-live.bpmn), makes
+  delivery and billing user tasks the app can clear.
+- **Same-origin, because the server sends no CORS headers.** The app therefore
+  lives in `api/web/` and is served by Atlas itself at
+  `https://<your-atlas>/order-to-cash-live.html`, so `fetch("/api/v1/…")` is
+  same-origin. (Opening the file from another origin would be blocked by the
+  browser unless a proxy adds CORS. The base-URL field at the bottom lets you
+  repoint it if you have one.)
+
+The entire integration is three calls — `POST /deployments`, `POST
+/processes/{key}/instances`, `POST /tasks/{key}/complete` — and a live request log
+on the page makes them visible. Because it ships under `api/web/`, it is embedded
+in the binary: **rebuild and redeploy the Atlas server**, then open
+`/order-to-cash-live.html`.
 
 ## Clean up
 

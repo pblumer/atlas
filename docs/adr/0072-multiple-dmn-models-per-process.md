@@ -1,4 +1,4 @@
-# ADR-0071: Multiple DMN models per process deployment
+# ADR-0072: Multiple DMN models per process deployment
 
 - **Status:** Accepted
 - **Date:** 2026-07-28

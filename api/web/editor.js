@@ -165,6 +165,79 @@ function jsonSummary(text) {
   } catch { return ""; }
 }
 
+// decVal reads a decision evaluation's inputs/outputs/trace. The API returns these
+// as raw JSON values (json.RawMessage) — i.e. already-parsed objects/arrays — so
+// they must NOT be JSON.parse'd again (parsing an object stringifies it to
+// "[object Object]" and throws, which silently emptied the panel to "none"). It
+// still accepts a JSON string for robustness (older payloads, tests), and falls
+// back when a string can't be parsed.
+function decVal(x, fallback) {
+  if (x === null || x === undefined) return fallback;
+  if (typeof x === "string") { try { return JSON.parse(x); } catch { return fallback; } }
+  return x;
+}
+
+// Decision-trace presentation, shared with the Operations decision-detail page
+// (temis Operate style): values compact, and a decision table rendered as a matrix
+// with the matched rule highlighted and each cell tinted by whether its condition
+// held. decTablesOf/decMatchedNums read an evaluation's (already-parsed) trace.
+const decFmtVal = (v) => (v === null || v === undefined ? "null" : typeof v === "string" ? v : JSON.stringify(v));
+const decCellText = (t) => { const s = (t ?? "").trim(); return s === "" || s === "-" ? "–" : s; };
+const decTablesOf = (d) => { const t = decVal(d.trace, null); return (t && Array.isArray(t.tables)) ? t.tables : []; };
+const decMatchedNums = (d) => {
+  const nums = [];
+  for (const t of decTablesOf(d)) for (const r of (t.rules || [])) if (r.matched) nums.push(r.index + 1);
+  return [...new Set(nums)];
+};
+function decMiniTable(tt, n) {
+  const matched = (tt.rules || []).filter((r) => r.matched).map((r) => r.index + 1);
+  const policy = (tt.hitPolicy || "U") + (tt.aggregation ? " " + tt.aggregation : "");
+  const head = matched.length ? `Rule ${matched.join(", ")} fired` : "no rule fired";
+  const ins = tt.inputs || [];
+  const hr = `<tr><th class="mcol-idx">#</th>${ins.map((i) =>
+    `<th>${esc(i.expression)} <code>= ${esc(decFmtVal(i.value))}</code></th>`).join("")}<th>&rarr;</th></tr>`;
+  const body = (tt.rules || []).map((r) => {
+    const cells = ins.map((_, k) => {
+      const c = r.conditions && r.conditions[k];
+      const cls = c ? (c.matched ? "mcell is-ok" : "mcell is-no") : "mcell is-skip";
+      return `<td class="${cls}">${c ? esc(decCellText(c.entry)) : ""}</td>`;
+    }).join("");
+    const out = r.matched && r.outputs ? esc(r.outputs.map(decFmtVal).join(", ")) : "";
+    return `<tr class="mrule${r.matched ? " is-hit" : ""}"><td class="mcol-idx">${r.index + 1}</td>${cells}<td class="mout">${out}</td></tr>`;
+  }).join("");
+  return `<div class="mtable"><div class="mtable-head">${n ? `Table ${n} · ` : ""}${esc(head)}<span class="mtable-policy">${esc(policy)}</span></div>` +
+    `<table class="mgrid">${hr}${body}</table></div>`;
+}
+
+// decCard renders one decision evaluation: a header, its input pills, and its result
+// rows. Each result carries a "Rule N" badge; a row backed by a decision table is
+// hoverable — data-dec indexes the caller's evaluation list so a shared popover can
+// look the trace back up. Shared by the replay Decisions tab and the live view.
+function decCard(d, i) {
+  const when = d.at ? new Date(d.at / 1e6).toLocaleString() : "";
+  const inEntries = Object.entries(decVal(d.inputs, {}) || {});
+  const outEntries = Object.entries(decVal(d.outputs, {}) || {});
+  const pills = inEntries.length
+    ? `<div class="in-pills">${inEntries.map(([k, v]) => `<span class="pill-kv"><b>${esc(k)}</b> = ${esc(decFmtVal(v))}</span>`).join("")}</div>`
+    : '<span class="muted">none</span>';
+  const nums = decMatchedNums(d);
+  const badge = nums.length ? `<span class="res-rule">Rule ${nums.join(", ")}</span>` : "";
+  const hoverable = decTablesOf(d).length ? " hoverable" : "";
+  const result = outEntries.length
+    ? `<div class="res">${outEntries.map(([k, v], oi) =>
+        `<div class="res-row${hoverable}" data-dec="${i}"${hoverable ? ' tabindex="0"' : ""}>
+          <span class="res-key">${esc(k)}</span>
+          <span class="res-val">${esc(decFmtVal(v))}</span>
+          ${oi === 0 ? badge : ""}
+        </div>`).join("")}</div>`
+    : '<span class="muted">none</span>';
+  return `<div class="dec-card2">
+    <div class="dec-card2-h"><b>${esc(d.decisionId)}</b>${when ? ` <span class="muted">${esc(when)}</span>` : ""}</div>
+    <div class="dec-sect2"><span class="dec-sect2-l">Inputs</span>${pills}</div>
+    <div class="dec-sect2"><span class="dec-sect2-l">Result</span>${result}</div>
+  </div>`;
+}
+
 // renderVarsBody lays out a variable list: scalars as a labeled field grid, JSON
 // values as collapsible, syntax-highlighted cards. collapsed is a Set of the JSON
 // variable names the operator has collapsed (persists across re-renders); the
@@ -177,8 +250,13 @@ function renderVarsBody(list, collapsed) {
   if (scalars.length) {
     html += `<div class="vgrid">${scalars.map((v) => {
       const cls = v.kind === "boolean" ? "bool" : v.kind === "number" ? "num" : v.kind === "null" ? "null" : "str";
-      return `<div class="vfield"><div class="vf-head"><span class="vk">${esc(v.name)}</span><span class="vtag">${esc(v.kind)}</span>${copyBtn(v.value, "Copy value")}</div>
-        <div class="vv ${cls}">${esc(v.value)}</div></div>`;
+      // The name gets its own full-width line (long identifiers like
+      // "textfield_nachnamestring" must not wrap mid-word against the type badge);
+      // the badge rides the value row, and the copy button floats in the corner so
+      // it never steals width from the name.
+      return `<div class="vfield"><div class="vf-head"><span class="vk" title="${esc(v.name)}">${esc(v.name)}</span></div>
+        <div class="vf-val"><span class="vv ${cls}">${esc(v.value)}</span><span class="vtag">${esc(v.kind)}</span></div>
+        ${copyBtn(v.value, "Copy value")}</div>`;
     }).join("")}</div>`;
   }
   html += jsons.map((v) => {
@@ -205,6 +283,23 @@ function copyBtn(text, title) {
   return `<button class="vcopy" type="button" title="${esc(title)}" aria-label="${esc(title)}" data-copy="${esc(text)}">
     <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M5.5 1.5h6a1 1 0 0 1 1 1v8" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="3.5" y="4.5" width="8" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
   </button>`;
+}
+
+// copyAllBtn renders a "Copy all" button that carries every variable of a set as
+// one JSON object ({name: value}, JSON-typed values parsed back to structures) —
+// the whole payload in one click, the shape an operator pastes into a ticket or a
+// re-run. Module-level so both the Live side panel and the replay inspector share it.
+function copyAllBtn(list) {
+  if (!list || !list.length) return "";
+  const obj = {};
+  for (const v of list) {
+    if (v.kind === "json") { try { obj[v.name] = JSON.parse(v.value); continue; } catch { /* keep raw */ } }
+    if (v.kind === "number") { const n = Number(v.value); obj[v.name] = Number.isNaN(n) ? v.value : n; }
+    else if (v.kind === "boolean") obj[v.name] = v.value === "true";
+    else if (v.kind === "null") obj[v.name] = null;
+    else obj[v.name] = v.value;
+  }
+  return `<button class="btn ghost small vcopy-all vcopy" type="button" title="Copy all variables as JSON" data-copy="${esc(JSON.stringify(obj, null, 2))}">Copy all</button>`;
 }
 
 // prettyJSON canonicalizes a JSON variable's stored string to pretty-printed form
@@ -1114,11 +1209,15 @@ function applyServiceTaskKind(modeler, element, kindId) {
 // decisionInputRowHTML renders one editable business-rule-task input mapping: a
 // decision input name (target) fed by a FEEL source over the instance's variables.
 // The stored source is '=' prefixed (Zeebe convention); it is shown stripped.
+// Both fields are comboboxes (native datalist, ADR-0012 buildless): the name offers
+// the decision's declared inputs (#dmn-inputs-dl), the source offers the diagram's
+// known variables (#dmn-vars-dl) — so an author picks from a list instead of
+// hand-typing, while any FEEL expression stays typable for composite sources.
 function decisionInputRowHTML(i, source, target) {
   const src = (source || "").replace(/^=\s*/, "");
   return `<div class="dmn-input-row" data-i="${i}" style="display:flex;gap:6px;margin-bottom:6px">
-    <input type="text" class="dmn-in-target" value="${esc(target || "")}" placeholder="Season" style="flex:0 0 34%" title="Decision input name"/>
-    <input type="text" class="dmn-in-source" value="${esc(src)}" placeholder="order.season" style="flex:1" title="FEEL source over the instance's variables"/>
+    <input type="text" class="dmn-in-target" list="dmn-inputs-dl" value="${esc(target || "")}" placeholder="Season" style="flex:0 0 34%" title="Decision input name (from the decision)"/>
+    <input type="text" class="dmn-in-source" list="dmn-vars-dl" value="${esc(src)}" placeholder="order.season" style="flex:1" title="A known variable, or any FEEL expression over the instance's variables"/>
   </div>`;
 }
 
@@ -2065,6 +2164,13 @@ function wireProperties(root, modeler, api, projectId, toast) {
           const mode = tc ? "connector" : "local";
           const io = findExt(bo, "zeebe:IoMapping");
           const inputs = (io && io.inputParameters) || [];
+          // Combobox option sets: the diagram's known variables for the source
+          // column, and the already-declared input names for the name column (the
+          // picker enriches the latter with the decision's full input list on load).
+          const varOpts = collectDiagramVariables(modeler)
+            .map((v) => `<option value="${esc(v.name)}">${esc(v.source || v.origin || "")}</option>`).join("");
+          const inNameOpts = [...new Set(inputs.map((p) => (p.target || "").trim()).filter(Boolean))]
+            .map((n) => `<option value="${esc(n)}"></option>`).join("");
           html += `<h3>Called decision (DMN)</h3>
             <label class="field"><span>Evaluation</span>
               <select id="f-brt-mode">
@@ -2088,14 +2194,16 @@ function wireProperties(root, modeler, api, projectId, toast) {
               <button type="button" class="btn ghost" id="f-dmn-new">＋ Neue Decision</button>
               <button type="button" class="btn ghost" id="f-dmn-edit"${cd.decisionId ? "" : " disabled"}>Bearbeiten</button>
             </div>
-            <label class="field"><span>Decision ID</span>
-              <input type="text" id="f-decisionid" value="${esc(cd.decisionId || "")}" placeholder="Dish"/></label>
+            <label class="field"><span>Decision ID <span class="field-derived">derived</span></span>
+              <input type="text" id="f-decisionid" value="${esc(cd.decisionId || "")}" placeholder="pick a decision above" readonly title="Set by the decision picked above — no need to type it"/></label>
             <label class="field"><span>Result variable</span>
               <input type="text" id="f-resultvar" value="${esc(cd.resultVariable || "")}" placeholder="dish"/></label>${bindingField}
-            <p class="muted" style="font-size:12px">Pick a decision to auto-fill its inputs and result variable. <b>Latest</b> evaluates the newest deployed version; <b>Deployment</b> pins to the version deployed with this process.</p>
+            <p class="muted" style="font-size:12px">Pick a decision to auto-fill its id, inputs and result variable. <b>Latest</b> evaluates the newest deployed version; <b>Deployment</b> pins to the version deployed with this process.</p>
             <h3>Decision inputs</h3>
-            <p class="muted" style="font-size:12px">Each row feeds one decision input from a FEEL expression over the instance's variables. Leave a row's name blank to drop it.</p>
-            <div id="dmn-inputs">${inputs.map((p, i) => decisionInputRowHTML(i, p.source, p.target)).join("")}${decisionInputRowHTML(inputs.length, "", "")}</div>`;
+            <p class="muted" style="font-size:12px">Each row feeds one decision input. Pick a variable from the list or type any FEEL expression over the instance's variables. Leave a row's name blank to drop it.</p>
+            <div id="dmn-inputs">${inputs.map((p, i) => decisionInputRowHTML(i, p.source, p.target)).join("")}${decisionInputRowHTML(inputs.length, "", "")}</div>
+            <datalist id="dmn-vars-dl">${varOpts}</datalist>
+            <datalist id="dmn-inputs-dl">${inNameOpts}</datalist>`;
         } else if (t === "bpmn:UserTask") {
           const a = findExt(bo, "zeebe:AssignmentDefinition") || {};
           const pr = findExt(bo, "zeebe:PriorityDefinition") || {};
@@ -2534,6 +2642,13 @@ function wireProperties(root, modeler, api, projectId, toast) {
         if (otherOpts.length) parts.push(`<optgroup label="${projectOpts.length ? "Other decisions" : "Available decisions"}">${otherOpts.join("")}</optgroup>`);
         fpick.innerHTML = parts.join("");
         fpick._catalog = catalog;
+        // Offer the current decision's full declared inputs in the name combobox,
+        // not just the rows already mapped — so adding a row suggests every input.
+        const curDec = catalog.find((d) => d.id === cur);
+        const dl = body.querySelector("#dmn-inputs-dl");
+        if (curDec && dl && Array.isArray(curDec.inputs) && curDec.inputs.length) {
+          dl.innerHTML = curDec.inputs.map((inp) => `<option value="${esc(inp.name)}"></option>`).join("");
+        }
       }).catch(() => { /* leave the placeholder; manual entry still works */ });
 
       // applyPick sets the decision id + result variable and auto-fills the input
@@ -3301,6 +3416,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
   const jsonCollapsed = new Set(); // JSON variable names collapsed by the operator
   let varsHTML = "";               // last rendered variables markup, to skip no-op rebuilds
   let decisions = [];              // the selected instance's DMN decision evaluations (ADR-0066)
+  let curDecs = [];                // the evaluations the decision panel is showing (backs the hover popover)
   let focusEl = null;              // a business rule task the operator is inspecting, or null
   // "all" or an instance key (as a string). A deep-linked instance (Deploy & run's
   // roundtrip link, or a shared URL) preselects that one; refreshInstances falls
@@ -3422,22 +3538,6 @@ export async function mountLive(root, { api, toast, key, instance }) {
     </div>`;
   }
 
-  // copyAllBtn copies every variable of an instance as one JSON object ({name:
-  // value}, JSON-typed values parsed back to structures) — the whole payload in one
-  // click, the shape an operator pastes into a ticket or a re-run.
-  function copyAllBtn(list) {
-    if (!list || !list.length) return "";
-    const obj = {};
-    for (const v of list) {
-      if (v.kind === "json") { try { obj[v.name] = JSON.parse(v.value); continue; } catch { /* keep raw */ } }
-      if (v.kind === "number") { const n = Number(v.value); obj[v.name] = Number.isNaN(n) ? v.value : n; }
-      else if (v.kind === "boolean") obj[v.name] = v.value === "true";
-      else if (v.kind === "null") obj[v.name] = null;
-      else obj[v.name] = v.value;
-    }
-    return `<button class="btn ghost small vcopy-all vcopy" type="button" title="Copy all variables as JSON" data-copy="${esc(JSON.stringify(obj, null, 2))}">Copy all</button>`;
-  }
-
   // isBusinessRuleTask reports whether a diagram element is a DMN business rule
   // task — the only element for which a decision can be inspected.
   const isBusinessRuleTask = (elementId) => {
@@ -3453,92 +3553,26 @@ export async function mountLive(root, { api, toast, key, instance }) {
     return (bo && (bo.name || bo.id)) || elementId;
   };
 
-  // fmtVal renders a decision input/output value compactly: strings bare, objects
-  // and arrays as JSON, null as the FEEL null marker.
-  const fmtVal = (v) => {
-    if (v === null || v === undefined) return "null";
-    if (typeof v === "object") return JSON.stringify(v);
-    return String(v);
-  };
-
-  // objRows renders a JSON object as a two-column key/value list — the decision's
-  // inputs or outputs at a glance.
-  function objRows(obj) {
-    const keys = obj && typeof obj === "object" ? Object.keys(obj) : [];
-    if (!keys.length) return '<span class="muted">none</span>';
-    return `<div class="dec-kv">${keys.map((k) =>
-      `<div class="dec-kv-row"><span class="dec-k">${esc(k)}</span><span class="dec-v"><code>${esc(fmtVal(obj[k]))}</code></span></div>`
-    ).join("")}</div>`;
-  }
-
-  // renderTrace turns the temis trace tree into the "how it was decided" view: for
-  // each decision table, the values its inputs evaluated to and every rule with the
-  // matched ones highlighted, showing each cell's unary test and whether it held,
-  // plus the outputs the matching rule produced (ADR-0066). A decision with no table
-  // (a literal expression) has no trace, so this renders nothing.
-  function renderTrace(trace) {
-    if (!trace || !Array.isArray(trace.tables) || !trace.tables.length) {
-      return '<div class="dec-sect"><div class="dec-sect-h">How it was decided</div><p class="muted" style="margin:0">No decision-table trace (literal expression or remote decision).</p></div>';
-    }
-    const tables = trace.tables.map((tb) => {
-      const inputs = (tb.inputs || []).map((i) =>
-        `<span class="chip" title="${esc(i.expression)}">${esc(i.expression)} = <code>${esc(fmtVal(i.value))}</code></span>`
-      ).join(" ");
-      const rules = (tb.rules || []).map((r) => {
-        const conds = (r.conditions || []).map((c) =>
-          `<span class="dec-cond ${c.matched ? "ok" : "no"}" title="${esc(c.input)}">${esc(c.entry)}</span>`
-        ).join(" ");
-        const outs = r.matched && r.outputs && r.outputs.length
-          ? `<span class="dec-out">→ ${esc(r.outputs.map(fmtVal).join(", "))}</span>` : "";
-        return `<div class="dec-rule ${r.matched ? "matched" : ""}">
-          <span class="dec-rule-ix">#${r.index + 1}</span>
-          <span class="dec-rule-conds">${conds || '<span class="muted">—</span>'}</span>
-          ${outs}
-        </div>`;
-      }).join("");
-      return `<div class="dec-table">
-        <div class="dec-table-h">Hit policy <b>${esc(tb.hitPolicy || "U")}</b>${tb.aggregation ? " · " + esc(tb.aggregation) : ""}</div>
-        <div class="dec-inputs">${inputs || '<span class="muted">no inputs</span>'}</div>
-        <div class="dec-rules">${rules}</div>
-      </div>`;
-    }).join("");
-    return `<div class="dec-sect"><div class="dec-sect-h">How it was decided</div>${tables}</div>`;
-  }
-
-  // renderOneDecision renders a single evaluation: the decision id, the inputs it
-  // saw, the outputs it produced, and the trace explaining the outcome.
-  function renderOneDecision(d) {
-    let inputs = {}, outputs = {}, trace = null;
-    try { inputs = JSON.parse(d.inputs || "{}"); } catch { /* leave empty */ }
-    try { outputs = JSON.parse(d.outputs || "{}"); } catch { /* leave empty */ }
-    if (d.trace) { try { trace = JSON.parse(d.trace); } catch { /* no trace */ } }
-    const when = d.at ? new Date(d.at / 1e6).toLocaleString() : "";
-    return `<div class="dec-card">
-      <div class="dec-card-h"><b>${esc(d.decisionId)}</b>${when ? ` <span class="muted">${esc(when)}</span>` : ""}</div>
-      <div class="dec-sect"><div class="dec-sect-h">Inputs</div>${objRows(inputs)}</div>
-      <div class="dec-sect"><div class="dec-sect-h">Outputs</div>${objRows(outputs)}</div>
-      ${renderTrace(trace)}
-    </div>`;
-  }
-
   // renderDecisionDetail is the inspection panel for a clicked business rule task:
-  // every evaluation the selected instance made at that task, newest last, with its
-  // inputs, outputs, and trace — the "look up after the fact how the decision was
-  // made" surface (ADR-0066). It needs a single instance selected, since decisions
-  // are per-instance history.
+  // every evaluation the selected instance made at that task, newest last, rendered
+  // in the temis style (input pills, a Rule N badge, and the matched-rule table on
+  // hover) — the same surface as the Operations decision views. curDecs backs the
+  // hover popover; decisions are per-instance history, so it needs one instance.
   function renderDecisionDetail(elementId) {
     const head = `<div class="vp-head">
       <span class="vp-title">Decision · ${esc(decisionLabel(elementId))}</span>
       <span class="vp-actions"><button class="btn ghost small dec-back" type="button" title="Back to variables">&larr; Variables</button></span>
     </div>`;
     if (selected === "all") {
+      curDecs = [];
       return head + `<p class="muted" style="margin:0">Select a single instance (top-left) to see how its decision was made.</p>`;
     }
     const matches = decisions.filter((d) => d.elementId === elementId);
+    curDecs = matches;
     if (!matches.length) {
       return head + `<p class="muted" style="margin:0">This instance has not evaluated this decision yet. Its inputs, outputs, and the rules that fired will appear here once a token reaches the task.</p>`;
     }
-    return head + matches.map(renderOneDecision).join("");
+    return head + matches.map((d, i) => decCard(d, i)).join("");
   }
 
   // renderVariables shows the selected instance's variables with the shared
@@ -3741,6 +3775,39 @@ export async function mountLive(root, { api, toast, key, instance }) {
   bindJsonCards(varPanel, jsonCollapsed, renderVariables);
   bindVarCopy(varPanel, toast);
   wireVarsPanel(root, viewer);
+
+  // Decision panel: hovering (or focusing) a result row backed by a decision table
+  // reveals that table, matched rule highlighted, in a shared viewport popover — the
+  // same interaction as the Operations decision views. The popover lives outside the
+  // var panel (which re-renders on poll), so it survives; the delegated listeners are
+  // attached once and survive the panel's inner rebuilds.
+  const decPop = document.createElement("div");
+  decPop.className = "dec-pop";
+  decPop.hidden = true;
+  root.appendChild(decPop);
+  const showDecPop = (row) => {
+    const d = curDecs[Number(row.dataset.dec)];
+    const tables = d ? decTablesOf(d) : [];
+    if (!tables.length) return;
+    decPop.innerHTML = `<div class="pop-title">${esc(d.decisionId)}</div>` +
+      tables.map((tt, i) => decMiniTable(tt, tables.length > 1 ? i + 1 : 0)).join("");
+    decPop.hidden = false;
+    const box = row.getBoundingClientRect();
+    const top = box.top - decPop.offsetHeight - 10;
+    decPop.style.left = Math.max(8, Math.min(box.left, window.innerWidth - decPop.offsetWidth - 8)) + "px";
+    decPop.style.top = (top < 8 ? box.bottom + 10 : top) + "px";
+  };
+  const hideDecPop = () => { decPop.hidden = true; };
+  varPanel.addEventListener("pointerover", (e) => {
+    const row = e.target.closest(".res-row.hoverable");
+    if (row && varPanel.contains(row)) showDecPop(row);
+  });
+  varPanel.addEventListener("pointerout", (e) => {
+    const row = e.target.closest(".res-row.hoverable");
+    if (row && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest(".res-row.hoverable") === row)) hideDecPop();
+  });
+  varPanel.addEventListener("focusin", (e) => { const row = e.target.closest(".res-row.hoverable"); if (row) showDecPop(row); });
+  varPanel.addEventListener("focusout", hideDecPop);
 
   // Inspecting a decision (ADR-0066): clicking a business rule task on the diagram
   // opens how its decision was made in the side panel (toggle off by clicking it
@@ -4156,7 +4223,8 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       </div>
       <div class="editor-body"><div id="canvas"></div></div>
       <div class="token-legend" id="token-legend" aria-label="Active replay tokens"></div>
-      <div class="ops-split">
+      <div class="ops-resizer" id="ops-resizer" title="Drag to resize · double-click to reset" role="separator" aria-orientation="horizontal" tabindex="0"></div>
+      <div class="ops-split" id="ops-split">
         <div class="ops-history" id="rp-history">
           <div class="ops-panel-head">Instance History
             <label class="ops-toggle"><input type="checkbox" id="tg-end"> End date</label>
@@ -4167,11 +4235,26 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
           <div class="ops-tabs" id="rp-tabs">
             <button data-tab="details" class="active">Details</button>
             <button data-tab="variables">Variables</button>
+            <button data-tab="decisions">Decisions</button>
           </div>
           <div class="ops-tab-body" id="tab-details"></div>
           <div class="ops-tab-body" id="tab-variables" hidden></div>
+          <div class="ops-tab-body" id="tab-decisions" hidden></div>
         </div>
       </div>
+      <div class="var-modal-ov" id="var-modal-ov" hidden>
+        <div class="var-modal" role="dialog" aria-modal="true" aria-labelledby="var-modal-title">
+          <div class="var-modal-head">
+            <span class="var-modal-title mono" id="var-modal-title"></span>
+            <span class="vtag obj" id="var-modal-tag"></span>
+            <span style="flex:1"></span>
+            <button class="btn ghost small vcopy vcopy-all" id="var-modal-copy" type="button" data-copy="">Copy JSON</button>
+            <button class="icon-btn" id="var-modal-x" type="button" title="Close" aria-label="Close">✕</button>
+          </div>
+          <div class="var-modal-body"><pre class="vj-body" id="var-modal-body"></pre></div>
+        </div>
+      </div>
+      <div class="dec-pop" id="dec-pop" hidden></div>
     </div>`;
 
   let lib;
@@ -4224,6 +4307,8 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const historyEl = root.querySelector("#history-list");
   const detailEl = root.querySelector("#tab-details");
   const varsEl = root.querySelector("#tab-variables");
+  const decEl = root.querySelector("#tab-decisions");
+  const decPop = root.querySelector("#dec-pop");
   const speedSel = root.querySelector("#speed");
 
   let steps = [];    // element-activation audit timeline, oldest first
@@ -4238,7 +4323,11 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   let playing = false;
   let playhead = 0;  // number of frames walked so far (0..frames.length)
   let animToken = 0; // bumped to supersede an in-flight animation
-  const jsonCollapsed = new Set(); // JSON variable names the operator has collapsed (persists across scrubs)
+  let decisions = [];    // this instance's DMN decision evaluations (ADR-0066)
+  let curDecs = [];      // the evaluations the Decisions tab is currently showing (backs the hover popover)
+  let varFilter = "";    // Variables-tab name filter (persists across scrubs)
+  let curVarList = [];   // the variable set the Variables tab is currently showing
+  let varsBuilt = false; // the Variables tab's stable shell (toolbar + table) is mounted
 
   const speed = () => Number(speedSel.value) || 1;
   const tokenColors = ["#0072b2", "#d55e00", "#009e73", "#cc79a7", "#e69f00", "#56b4e9"];
@@ -4321,28 +4410,169 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     </dl>`;
   }
 
+  // A JSON variable's stored value is a JSON string; these read its shape without
+  // throwing. isComplexVar tells the structures (objects/arrays, shown behind a
+  // modal) from the scalars shown inline in the table.
+  const parseJson = (text) => { try { return JSON.parse(text); } catch { return undefined; } };
+  const isComplexVar = (v) => {
+    if (v.kind !== "json") return false;
+    const parsed = parseJson(v.value);
+    return parsed !== null && typeof parsed === "object";
+  };
+  const jsonTypeLabel = (text) => (Array.isArray(parseJson(text)) ? "array" : "object");
+  // A one-line preview of a structure for the table cell, truncated so a big object
+  // never blows out the row — the full value is one click away in the modal.
+  const jsonPeek = (text) => {
+    const s = (() => { try { return JSON.stringify(JSON.parse(text)); } catch { return String(text); } })();
+    return s.length > 40 ? s.slice(0, 39) + "…" : s;
+  };
+
+  // varRow renders one variable as a table row: name, value, type, and a copy
+  // action. Scalars show inline and type-colored; objects and arrays show a compact
+  // summary + preview behind a "···" button that opens the value in a modal — the
+  // table stays scannable no matter how deep a structure is (operator's request).
+  function varRow(v) {
+    const complex = isComplexVar(v);
+    let valCell;
+    if (complex) {
+      valCell = `<button class="v-open" type="button" data-name="${esc(v.name)}" data-json="${esc(v.value)}" data-type="${esc(jsonTypeLabel(v.value))}" title="Open ${esc(v.name)}">
+          <span class="more" aria-hidden="true">···</span>
+          <span class="v-sum">${esc(jsonSummary(v.value))}</span>
+          <span class="peek">${esc(jsonPeek(v.value))}</span></button>`;
+    } else {
+      const cls = v.kind === "boolean" ? "bool" : v.kind === "number" ? "num" : v.kind === "null" ? "null" : "str";
+      valCell = `<span class="c-val ${cls}">${esc(v.value)}</span>`;
+    }
+    const typeBadge = complex
+      ? `<span class="vtag obj">${esc(jsonTypeLabel(v.value))}</span>`
+      : `<span class="vtag">${esc(v.kind)}</span>`;
+    const copyData = complex ? prettyJSON(v.value) : v.value;
+    return `<tr>
+      <td class="c-name" title="${esc(v.name)}">${esc(v.name)}</td>
+      <td class="c-valcell">${valCell}</td>
+      <td class="c-type">${typeBadge}</td>
+      <td class="c-act">${copyBtn(copyData, complex ? "Copy JSON" : "Copy value")}</td>
+    </tr>`;
+  }
+
+  // renderVarRows fills the table body from the current variable set, honoring the
+  // name filter. Split out from renderVars so typing in the filter (or scrubbing a
+  // frame) only rewrites the rows — the toolbar and its focused filter input survive.
+  function renderVarRows() {
+    const body = varsEl.querySelector("#v-rows");
+    if (!body) return;
+    const f = varFilter.trim().toLowerCase();
+    const shown = f ? curVarList.filter((v) => v.name.toLowerCase().includes(f)) : curVarList;
+    varsEl.querySelector("#v-count").textContent = `${shown.length} variable${shown.length === 1 ? "" : "s"}`;
+    body.innerHTML = shown.length
+      ? shown.map(varRow).join("")
+      : `<tr><td colspan="4" class="v-none">${f ? `No variables match “${esc(varFilter)}”.` : "The element has no variables."}</td></tr>`;
+  }
+
+  // buildVarsShell mounts the Variables tab's stable frame once: a toolbar (scope,
+  // count, filter, copy-all) over a scrollable table. renderVars then only refreshes
+  // the parts that change, so a 1.5s poll never steals the filter's focus.
+  function buildVarsShell() {
+    varsEl.innerHTML = `
+      <div class="vp-head v-toolbar">
+        <span class="vp-title" id="v-scope">Variables</span>
+        <span class="vp-count" id="v-count">0 variables</span>
+        <span class="v-filter">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
+          <input id="v-filter" type="text" placeholder="Filter…" aria-label="Filter variables by name"/>
+        </span>
+        <span class="vp-actions" id="v-copyall"></span>
+      </div>
+      <div class="v-scroll">
+        <table class="vt">
+          <thead><tr><th>Name</th><th>Value</th><th>Type</th><th class="c-act" aria-label="Actions"></th></tr></thead>
+          <tbody id="v-rows"></tbody>
+        </table>
+      </div>`;
+    const filterEl = varsEl.querySelector("#v-filter");
+    filterEl.value = varFilter;
+    filterEl.addEventListener("input", () => { varFilter = filterEl.value; renderVarRows(); });
+    varsBuilt = true;
+  }
+
   // renderVars fills the Variables tab. With an element selected it shows the
   // variables as they stood when that element activated (the per-step snapshot,
   // ADR-0048 — the closest analogue to Operate's element-scoped variables);
   // otherwise it shows the variables as of the current replay frame.
   function renderVars() {
-    let src, head;
+    if (!varsBuilt) buildVarsShell();
+    let src, scope;
     if (selEik) {
       const s = stepByEik(selEik);
       src = s ? s.variables : [];
-      head = s ? `As of ${esc(stepLabel(s))} activation` : "Variables";
+      scope = s ? `As of <b>${esc(stepLabel(s))}</b> activation` : "Variables";
     } else {
       const pos = playhead > 0 && playhead <= frames.length ? frames[playhead - 1].position : 0;
       const cur = [...steps].reverse().find((s) => s.position <= pos) || null;
       src = cur ? cur.variables : [];
-      head = cur ? `As of step ${playhead} (${esc(stepLabel(cur))})` : "Variables";
+      scope = cur ? `As of step ${playhead} · <b>${esc(stepLabel(cur))}</b>` : "Variables";
     }
-    varsEl.innerHTML = `<div class="vp-head">${head}</div>` +
-      (src && src.length ? `<div class="vars">${renderVarsBody(src, jsonCollapsed)}</div>`
-        : `<p class="ops-empty">The element has no variables</p>`);
+    curVarList = src || [];
+    varsEl.querySelector("#v-scope").innerHTML = scope;
+    varsEl.querySelector("#v-copyall").innerHTML = copyAllBtn(curVarList);
+    renderVarRows();
   }
 
-  function renderInspector() { renderDetail(); renderVars(); }
+  // openVarModal shows an object/array variable's full value as pretty-printed,
+  // syntax-highlighted JSON — the deep-inspect surface the table's "···" opens.
+  const modalOv = root.querySelector("#var-modal-ov");
+  function openVarModal(name, jsonText, typeLabel) {
+    root.querySelector("#var-modal-title").textContent = name;
+    root.querySelector("#var-modal-tag").textContent = typeLabel || "json";
+    root.querySelector("#var-modal-body").innerHTML = highlightJSON(jsonText);
+    root.querySelector("#var-modal-copy").dataset.copy = prettyJSON(jsonText);
+    modalOv.hidden = false;
+    root.querySelector("#var-modal-x").focus(); // so Escape closes and focus is trapped in the dialog
+  }
+  const closeVarModal = () => { modalOv.hidden = true; };
+
+  // --- Decisions tab: the DMN evaluations this instance made (ADR-0066) ---
+  // Rendered like the Operations decision-detail page (temis Operate style): inputs
+  // as typed pills, each result tagged with the rule that fired, and the matched-rule
+  // table revealed on hover. Scoped to the selected business rule task when one is
+  // picked, the same as the Variables tab.
+  const decLabel = (elId) => {
+    const el = registry.get(elId);
+    const bo = el && el.businessObject;
+    return (bo && (bo.name || bo.id)) || elId;
+  };
+  // renderDecisions lists the instance's evaluations grouped by the task that made
+  // them. If a business-rule task is selected it narrows to that task's decisions —
+  // the same scoping the Variables tab uses. curDecs backs the hover popover.
+  function renderDecisions() {
+    if (!decisions.length) {
+      decEl.innerHTML = `<p class="ops-empty">This instance made no decisions. A business rule task's inputs, outputs, and the rules that fired appear here once it runs.</p>`;
+      curDecs = [];
+      return;
+    }
+    const sel = selEik ? stepByEik(selEik) : null;
+    const focusEl = sel && (registry.get(sel.elementId) || {}).businessObject
+      && (registry.get(sel.elementId).businessObject.$type === "bpmn:BusinessRuleTask") ? sel.elementId : "";
+    const list = focusEl ? decisions.filter((d) => d.elementId === focusEl) : decisions;
+    const scope = focusEl ? `Decisions · <b>${esc(decLabel(focusEl))}</b>` : "Decisions";
+    curDecs = list;
+    if (!list.length) {
+      decEl.innerHTML = `<div class="vp-head"><span class="vp-title">${scope}</span></div>
+        <p class="ops-empty">This task has not evaluated a decision at this point.</p>`;
+      return;
+    }
+    const groups = {};
+    list.forEach((d, i) => { (groups[d.elementId] = groups[d.elementId] || []).push(i); });
+    const body = Object.entries(groups).map(([elId, idxs]) =>
+      `<div class="dec-group">${focusEl ? "" : `<div class="dec-group-h">${esc(decLabel(elId))}</div>`}` +
+      idxs.map((i) => decCard(list[i], i)).join("") + "</div>").join("");
+    decEl.innerHTML = `<div class="vp-head">
+        <span class="vp-title">${scope}</span>
+        <span class="vp-count">${list.length} evaluation${list.length === 1 ? "" : "s"}</span>
+      </div>${body}`;
+  }
+
+  function renderInspector() { renderDetail(); renderVars(); renderDecisions(); }
 
   function updateClock() {
     if (!frames.length) { clockEl.textContent = "no frames yet"; return; }
@@ -4590,6 +4820,20 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       renderInspector();
     }
     applyMeta(next);
+    await refreshDecisions();
+  }
+
+  // refreshDecisions pulls the instance's DMN evaluations and re-renders the tab
+  // when they change, so a still-running instance's decisions appear live.
+  async function refreshDecisions() {
+    let next;
+    try { next = await api("GET", `/api/v1/instances/${key}/decisions`); }
+    catch { return; } // transient; keep what we have
+    if (current !== viewer) return;
+    next = next || [];
+    if (next.length === decisions.length) return; // nothing new
+    decisions = next;
+    renderDecisions();
   }
 
   // Selecting an element in the diagram inspects it, the same as a history click.
@@ -4605,6 +4849,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     root.querySelectorAll("#rp-tabs button").forEach((x) => x.classList.toggle("active", x === b));
     detailEl.hidden = activeTab !== "details";
     varsEl.hidden = activeTab !== "variables";
+    decEl.hidden = activeTab !== "decisions";
   }));
   root.querySelector("#tg-end").addEventListener("change", (e) => { showEnd = e.target.checked; renderHistory(); });
   playBtn.addEventListener("click", () => { playing ? pause() : play(); });
@@ -4614,10 +4859,105 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   });
   root.querySelector("#step-back").addEventListener("click", () => { pause(); setPlayhead(playhead - 1); });
   scrub.addEventListener("input", () => { pause(); setPlayhead(Number(scrub.value)); });
-  bindJsonCards(varsEl, jsonCollapsed, renderVars);
+  // A "···" button in the Variables table opens its object/array value in the modal.
+  varsEl.addEventListener("click", (e) => {
+    const open = e.target.closest(".v-open");
+    if (!open || !varsEl.contains(open)) return;
+    openVarModal(open.dataset.name, open.dataset.json, open.dataset.type);
+  });
+  modalOv.addEventListener("click", (e) => { if (e.target === modalOv) closeVarModal(); });
+  modalOv.addEventListener("keydown", (e) => { if (e.key === "Escape") closeVarModal(); });
+  root.querySelector("#var-modal-x").addEventListener("click", closeVarModal);
   bindVarCopy(varsEl, toast);
+  bindVarCopy(modalOv, toast);
+  wireOpsResizer(root, viewer);
+
+  // Decisions tab: hovering (or focusing) a result row backed by a decision table
+  // reveals that table, matched rule highlighted, in a shared viewport popover.
+  const showDecPop = (row) => {
+    const d = curDecs[Number(row.dataset.dec)];
+    const tables = d ? decTablesOf(d) : [];
+    if (!tables.length) return;
+    decPop.innerHTML = `<div class="pop-title">${esc(d.decisionId)}</div>` +
+      tables.map((tt, i) => decMiniTable(tt, tables.length > 1 ? i + 1 : 0)).join("");
+    decPop.hidden = false;
+    const box = row.getBoundingClientRect();
+    const top = box.top - decPop.offsetHeight - 10;
+    decPop.style.left = Math.max(8, Math.min(box.left, window.innerWidth - decPop.offsetWidth - 8)) + "px";
+    decPop.style.top = (top < 8 ? box.bottom + 10 : top) + "px";
+  };
+  const hideDecPop = () => { decPop.hidden = true; };
+  decEl.addEventListener("pointerover", (e) => {
+    const row = e.target.closest(".res-row.hoverable");
+    if (row && decEl.contains(row)) showDecPop(row);
+  });
+  decEl.addEventListener("pointerout", (e) => {
+    const row = e.target.closest(".res-row.hoverable");
+    if (row && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest(".res-row.hoverable") === row)) hideDecPop();
+  });
+  decEl.addEventListener("focusin", (e) => { const row = e.target.closest(".res-row.hoverable"); if (row) showDecPop(row); });
+  decEl.addEventListener("focusout", hideDecPop);
 
   await poll();
   renderInspector();
   liveTimer = setInterval(poll, 1500);
+}
+
+// wireOpsResizer makes the boundary between the diagram and the bottom panel
+// (Instance History + inspector) draggable, so an operator can trade diagram room
+// for a taller history/variables view — mirroring the Modeler's properties resizer.
+// The chosen height persists across mounts (localStorage) and the bpmn-js canvas is
+// re-fit whenever the split's footprint settles.
+function wireOpsResizer(root, viewer) {
+  const resizer = root.querySelector("#ops-resizer");
+  const split = root.querySelector("#ops-split");
+  if (!resizer || !split) return;
+  const KEY = "atlas.opsSplitHeight";
+  const clamp = (h) => Math.max(140, Math.min(Math.round(window.innerHeight * 0.75), h));
+
+  const saved = parseInt(localStorage.getItem(KEY) || "", 10);
+  if (saved) split.style.height = clamp(saved) + "px";
+
+  // Let bpmn-js recompute its viewport for the diagram's new height.
+  const nudge = () => {
+    try { viewer && viewer.get("canvas").resized(); } catch { /* ignore */ }
+    window.dispatchEvent(new Event("resize"));
+  };
+
+  let startY = 0, startH = 0;
+  const onMove = (e) => {
+    // The split sits below the divider, so dragging up (clientY decreases) grows it.
+    split.style.height = clamp(startH - (e.clientY - startY)) + "px";
+  };
+  const onUp = () => {
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+    resizer.classList.remove("dragging");
+    document.body.style.userSelect = "";
+    localStorage.setItem(KEY, String(parseInt(split.style.height, 10) || 280));
+    nudge();
+  };
+  resizer.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    startY = e.clientY;
+    startH = split.getBoundingClientRect().height;
+    resizer.classList.add("dragging");
+    document.body.style.userSelect = "none";
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  });
+  // Double-click the divider to reset to the default height.
+  resizer.addEventListener("dblclick", () => {
+    split.style.height = "280px";
+    localStorage.setItem(KEY, "280");
+    nudge();
+  });
+  // Keyboard: arrow up/down resize in 24px steps (the divider is focusable).
+  resizer.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+    e.preventDefault();
+    split.style.height = clamp(split.getBoundingClientRect().height + (e.key === "ArrowUp" ? 24 : -24)) + "px";
+    localStorage.setItem(KEY, String(parseInt(split.style.height, 10)));
+    nudge();
+  });
 }

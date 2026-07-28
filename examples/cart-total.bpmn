@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Warenkorb-Summenberechnung — Atlas engine showcase / self-completing test scenario.
+
+  A shopping-cart checkout that computes an order total end to end, entirely from
+  inline FEEL script tasks (evaluated in-engine, no external worker).
+
+  * Dynamic input: the cart `positions` and the `customerType` are declared as
+    start variables (atlas:startForm), so you can enter your own cart in the
+    Modeler's Deploy form / Variables panel and every figure recomputes.
+  * Self-completing: the first script guards `positions` with a default cart, so
+    starting an instance with NO input still runs straight to an end event — a
+    deterministic smoke/regression scenario. (Start-variable defaults are applied
+    by the Deploy form, not by a bare instance-create, hence the FEEL guard.)
+  * A rule-table decision: "Rabattsatz ermitteln" is an inline FEEL decision
+    table (customerType × subtotal → discount rate) — the same shape a DMN
+    decision would model, but evaluated in-engine so it needs no external
+    decision service.
+  * Both gateways branch on the *computed* sum, so the visited end event proves
+    the arithmetic. Hand-authored diagram layout renders it left-to-right.
+
+  Default cart → subtotal 58.30 €, Business ⇒ 10 % (−5.83 €), +9.97 € VAT,
+  free shipping (≥50 €) → grand total 62.44 € → "Bestellung bestaetigt".
+
+  Scope: this models the cart→sum calculation only, not the full order-to-cash
+  lifecycle (delivery, invoicing/settlement), which would add worker-backed tasks
+  that park until a worker completes them.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_cart_total" targetNamespace="http://atlas/examples">
+  <process id="cart-total" name="Warenkorb-Summenberechnung" isExecutable="true">
+
+    <!-- Start variables: enter your own cart and customer type when starting an
+         instance (the Deploy form pre-fills these defaults). -->
+    <extensionElements>
+      <atlas:startForm>
+        <atlas:startVariable name="positions" type="json" required="true" default="[ {&quot;name&quot;: &quot;BPMN-Buch&quot;, &quot;price&quot;: 24.90, &quot;qty&quot;: 1}, {&quot;name&quot;: &quot;Kaffeetasse&quot;, &quot;price&quot;: 9.95, &quot;qty&quot;: 2}, {&quot;name&quot;: &quot;Aufkleber-Set&quot;, &quot;price&quot;: 4.50, &quot;qty&quot;: 3} ]"/>
+        <atlas:startVariable name="customerType" type="string" required="false" default="Business"/>
+      </atlas:startForm>
+    </extensionElements>
+
+    <startEvent id="cart_submitted" name="Warenkorb abgeschickt"/>
+
+    <!-- Guard: use the entered cart, or a default cart when started without input. -->
+    <scriptTask id="take_cart" name="Warenkorb uebernehmen">
+      <extensionElements>
+        <zeebe:script expression="= if positions = null then [ {name: &quot;BPMN-Buch&quot;, price: 24.90, qty: 1}, {name: &quot;Kaffeetasse&quot;, price: 9.95, qty: 2}, {name: &quot;Aufkleber-Set&quot;, price: 4.50, qty: 3} ] else positions" resultVariable="cart"/>
+      </extensionElements>
+    </scriptTask>
+
+    <scriptTask id="count_items" name="Artikelanzahl zaehlen">
+      <extensionElements>
+        <zeebe:script expression="= sum(for p in cart return p.qty)" resultVariable="itemCount"/>
+      </extensionElements>
+    </scriptTask>
+
+    <scriptTask id="subtotal" name="Zwischensumme berechnen">
+      <extensionElements>
+        <zeebe:script expression="= decimal(sum(for p in cart return p.price * p.qty), 2)" resultVariable="subtotal"/>
+      </extensionElements>
+    </scriptTask>
+
+    <!-- Decision table (FEEL): customer type × order value → discount rate.
+         Business: 15% from 1000 €, else 10%. Private: 5% from 200 €, else 0%. -->
+    <scriptTask id="discount_rate" name="Rabattsatz ermitteln">
+      <extensionElements>
+        <zeebe:script expression="= if customerType = &quot;Private&quot; then (if subtotal &gt;= 200 then 0.05 else 0) else (if subtotal &gt;= 1000 then 0.15 else 0.10)" resultVariable="discountRate"/>
+      </extensionElements>
+    </scriptTask>
+
+    <scriptTask id="discount_amt" name="Rabatt berechnen">
+      <extensionElements>
+        <zeebe:script expression="= decimal(subtotal * discountRate, 2)" resultVariable="discount"/>
+      </extensionElements>
+    </scriptTask>
+
+    <!-- Free shipping from 50 €, otherwise a 4.90 € flat rate. -->
+    <exclusiveGateway id="ship_gw" name="Zwischensumme &gt;= 50 EUR?" default="f_std"/>
+    <scriptTask id="free_ship" name="Gratisversand">
+      <extensionElements>
+        <zeebe:script expression="= 0" resultVariable="shipping"/>
+      </extensionElements>
+    </scriptTask>
+    <scriptTask id="std_ship" name="Standardversand">
+      <extensionElements>
+        <zeebe:script expression="= 4.90" resultVariable="shipping"/>
+      </extensionElements>
+    </scriptTask>
+    <exclusiveGateway id="ship_join"/>
+
+    <!-- net = subtotal − discount; VAT = 19% of net; total = net + VAT + shipping. -->
+    <scriptTask id="net" name="Nettobetrag berechnen">
+      <extensionElements>
+        <zeebe:script expression="= decimal(subtotal - discount, 2)" resultVariable="net"/>
+      </extensionElements>
+    </scriptTask>
+    <scriptTask id="tax" name="MwSt (19%) berechnen">
+      <extensionElements>
+        <zeebe:script expression="= decimal(net * 0.19, 2)" resultVariable="tax"/>
+      </extensionElements>
+    </scriptTask>
+    <scriptTask id="grand_total" name="Gesamtsumme berechnen">
+      <extensionElements>
+        <zeebe:script expression="= decimal(net + tax + shipping, 2)" resultVariable="total"/>
+      </extensionElements>
+    </scriptTask>
+
+    <!-- Large orders (> 100 €) route to manual approval; the rest are confirmed. -->
+    <exclusiveGateway id="approval_gw" name="Summe &gt; 100 EUR?" default="f_confirm"/>
+    <endEvent id="needs_approval" name="Freigabe erforderlich"/>
+    <endEvent id="confirmed" name="Bestellung bestaetigt"/>
+
+    <sequenceFlow id="fa" sourceRef="cart_submitted" targetRef="take_cart"/>
+    <sequenceFlow id="fb" sourceRef="take_cart" targetRef="count_items"/>
+    <sequenceFlow id="fc" sourceRef="count_items" targetRef="subtotal"/>
+    <sequenceFlow id="fd" sourceRef="subtotal" targetRef="discount_rate"/>
+    <sequenceFlow id="fe" sourceRef="discount_rate" targetRef="discount_amt"/>
+    <sequenceFlow id="ff" sourceRef="discount_amt" targetRef="ship_gw"/>
+    <sequenceFlow id="f_free" name="ja" sourceRef="ship_gw" targetRef="free_ship">
+      <conditionExpression>= subtotal &gt;= 50</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_std" name="nein" sourceRef="ship_gw" targetRef="std_ship"/>
+    <sequenceFlow id="fg" sourceRef="free_ship" targetRef="ship_join"/>
+    <sequenceFlow id="fh" sourceRef="std_ship" targetRef="ship_join"/>
+    <sequenceFlow id="fi" sourceRef="ship_join" targetRef="net"/>
+    <sequenceFlow id="fj" sourceRef="net" targetRef="tax"/>
+    <sequenceFlow id="fk" sourceRef="tax" targetRef="grand_total"/>
+    <sequenceFlow id="fl" sourceRef="grand_total" targetRef="approval_gw"/>
+    <sequenceFlow id="f_appr" name="ja" sourceRef="approval_gw" targetRef="needs_approval">
+      <conditionExpression>= total &gt; 100</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_confirm" name="nein" sourceRef="approval_gw" targetRef="confirmed"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="cart-total">
+      <bpmndi:BPMNShape id="di_cart_submitted" bpmnElement="cart_submitted">
+        <dc:Bounds x="150" y="222" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="130" y="262" width="76" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_take_cart" bpmnElement="take_cart">
+        <dc:Bounds x="240" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_count_items" bpmnElement="count_items">
+        <dc:Bounds x="390" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_subtotal" bpmnElement="subtotal">
+        <dc:Bounds x="540" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_discount_rate" bpmnElement="discount_rate">
+        <dc:Bounds x="690" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_discount_amt" bpmnElement="discount_amt">
+        <dc:Bounds x="840" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ship_gw" bpmnElement="ship_gw" isMarkerVisible="true">
+        <dc:Bounds x="990" y="215" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="966" y="269" width="98" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_free_ship" bpmnElement="free_ship">
+        <dc:Bounds x="1090" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_std_ship" bpmnElement="std_ship">
+        <dc:Bounds x="1090" y="320" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ship_join" bpmnElement="ship_join" isMarkerVisible="true">
+        <dc:Bounds x="1240" y="215" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_net" bpmnElement="net">
+        <dc:Bounds x="1340" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_tax" bpmnElement="tax">
+        <dc:Bounds x="1490" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_grand_total" bpmnElement="grand_total">
+        <dc:Bounds x="1640" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_approval_gw" bpmnElement="approval_gw" isMarkerVisible="true">
+        <dc:Bounds x="1790" y="215" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1772" y="269" width="86" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_needs_approval" bpmnElement="needs_approval">
+        <dc:Bounds x="1890" y="122" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1870" y="162" width="76" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_confirmed" bpmnElement="confirmed">
+        <dc:Bounds x="1890" y="222" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1870" y="262" width="76" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="di_fa" bpmnElement="fa">
+        <di:waypoint x="186" y="240"/><di:waypoint x="240" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fb" bpmnElement="fb">
+        <di:waypoint x="340" y="240"/><di:waypoint x="390" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fc" bpmnElement="fc">
+        <di:waypoint x="490" y="240"/><di:waypoint x="540" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fd" bpmnElement="fd">
+        <di:waypoint x="640" y="240"/><di:waypoint x="690" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fe" bpmnElement="fe">
+        <di:waypoint x="790" y="240"/><di:waypoint x="840" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_ff" bpmnElement="ff">
+        <di:waypoint x="940" y="240"/><di:waypoint x="990" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_free" bpmnElement="f_free">
+        <di:waypoint x="1015" y="215"/><di:waypoint x="1015" y="120"/><di:waypoint x="1090" y="120"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1023" y="95" width="14" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_std" bpmnElement="f_std">
+        <di:waypoint x="1015" y="265"/><di:waypoint x="1015" y="360"/><di:waypoint x="1090" y="360"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1018" y="338" width="22" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fg" bpmnElement="fg">
+        <di:waypoint x="1190" y="120"/><di:waypoint x="1265" y="120"/><di:waypoint x="1265" y="215"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fh" bpmnElement="fh">
+        <di:waypoint x="1190" y="360"/><di:waypoint x="1265" y="360"/><di:waypoint x="1265" y="265"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fi" bpmnElement="fi">
+        <di:waypoint x="1290" y="240"/><di:waypoint x="1340" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fj" bpmnElement="fj">
+        <di:waypoint x="1440" y="240"/><di:waypoint x="1490" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fk" bpmnElement="fk">
+        <di:waypoint x="1590" y="240"/><di:waypoint x="1640" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fl" bpmnElement="fl">
+        <di:waypoint x="1740" y="240"/><di:waypoint x="1790" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_appr" bpmnElement="f_appr">
+        <di:waypoint x="1815" y="215"/><di:waypoint x="1815" y="140"/><di:waypoint x="1890" y="140"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1823" y="115" width="14" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_confirm" bpmnElement="f_confirm">
+        <di:waypoint x="1840" y="240"/><di:waypoint x="1890" y="240"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1848" y="218" width="22" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
