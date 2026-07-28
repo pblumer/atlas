@@ -317,6 +317,60 @@ func TestRegistryLatestVsDeployment(t *testing.T) {
 	}
 }
 
+// TestDeployedDecisions proves the Modeler picker's deployed-decision source: a
+// deployed model's decisions are described with their id, inputs, and output, so an
+// author can pick a decision that is deployed even without a DMN reference. The
+// newest deployed version supplies the description (ADR-0063 latest binding).
+func TestDeployedDecisions(t *testing.T) {
+	reg := dmn.NewRegistry()
+	if err := reg.Deploy(1, []byte(dishModel)); err != nil {
+		t.Fatalf("Deploy: %v", err)
+	}
+	got := reg.DeployedDecisions()
+	if len(got) != 1 {
+		t.Fatalf("DeployedDecisions = %+v, want one (Dish)", got)
+	}
+	d := got[0]
+	if d.ID != "Dish" || d.Name != "Dish" {
+		t.Errorf("decision id/name = %q/%q, want Dish/Dish", d.ID, d.Name)
+	}
+	if len(d.Inputs) != 1 || d.Inputs[0].Name != "Season" {
+		t.Errorf("inputs = %+v, want one input named Season (for auto-fill)", d.Inputs)
+	}
+	if d.Output.Name != "Dish" {
+		t.Errorf("output name = %q, want Dish", d.Output.Name)
+	}
+
+	// A second model adds a second decision: both are listed, sorted by id.
+	if err := reg.Deploy(3, []byte(menuModel)); err != nil {
+		t.Fatalf("Deploy menu: %v", err)
+	}
+	got = reg.DeployedDecisions()
+	if len(got) != 2 || got[0].ID != "Dish" || got[1].ID != "Menu" {
+		t.Fatalf("DeployedDecisions = %+v, want [Dish, Menu] sorted by id", got)
+	}
+
+	// After a newer version deploys, the description comes from the latest model.
+	if err := reg.Deploy(2, []byte(dishModelV2)); err != nil {
+		t.Fatalf("Deploy v2: %v", err)
+	}
+	got = reg.DeployedDecisions()
+	if len(got) != 2 || got[0].ID != "Dish" {
+		t.Fatalf("after v2 DeployedDecisions = %+v, want Dish and Menu", got)
+	}
+	// An empty registry offers nothing.
+	if got := dmn.NewRegistry().DeployedDecisions(); len(got) != 0 {
+		t.Errorf("empty registry DeployedDecisions = %+v, want none", got)
+	}
+}
+
+// menuModel is a second deployed model with a distinct, input-free literal-expression
+// decision ("Menu"), so a test can hold two deployed decisions at once.
+const menuModel = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="menudefs" name="menu" namespace="http://atlas/dmn">
+  <decision id="Menu" name="Menu"><literalExpression id="mle"><text>"Fixed"</text></literalExpression></decision>
+</definitions>`
+
 // TestRegistryUnknownDecision surfaces a missing decision as an error rather than
 // a silent empty result.
 func TestRegistryUnknownDecision(t *testing.T) {

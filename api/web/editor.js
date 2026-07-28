@@ -2491,17 +2491,49 @@ function wireProperties(root, modeler, api, projectId, toast) {
     // given input target is preserved when re-picking.
     const fpick = body.querySelector("#f-decision-pick");
     if (fpick && api) {
+      const decKey = (d) => `${d.modelRef} ${d.id}`;
+      // The picker offers every decision the engine can resolve, not just this
+      // project's own references: a business rule task routinely calls a decision
+      // that lives in another project or is shared engine-wide (ADR-0034 project
+      // scoping organizes artifacts, it does not gate reuse). Fetch the project's
+      // decisions and the full catalog, list the project's own first (as an
+      // optgroup) and every other decision below, so the dropdown is never empty
+      // when a usable decision exists — and picking any of them auto-fills its
+      // declared inputs. Without a project scope the full catalog is the only list.
       const scope = projectId ? "?projectId=" + encodeURIComponent(projectId) : "";
-      api("GET", "/api/v1/decisions" + scope).then((decisions) => {
+      const both = projectId
+        ? Promise.all([
+            api("GET", "/api/v1/decisions" + scope).catch(() => []),
+            api("GET", "/api/v1/decisions").catch(() => []),
+          ])
+        : api("GET", "/api/v1/decisions").then((all) => [[], all || []]).catch(() => [[], []]);
+      both.then(([scoped, all]) => {
         if (!document.body.contains(fpick)) return;
         const cur = (fdecision?.value || "").trim();
-        const opts = [`<option value="">— choose a decision —</option>`];
-        for (const d of decisions || []) {
+        const inProject = new Set((scoped || []).map(decKey));
+        const seen = new Set();
+        const catalog = [];
+        const optionFor = (d) => {
           const label = d.model ? `${d.name} · ${d.model}` : d.name;
-          opts.push(`<option value="${esc(d.id)}"${d.id === cur ? " selected" : ""}>${esc(label)}</option>`);
-        }
-        fpick.innerHTML = opts.join("");
-        fpick._catalog = decisions || [];
+          return `<option value="${esc(d.id)}" data-key="${esc(decKey(d))}"${d.id === cur ? " selected" : ""}>${esc(label)}</option>`;
+        };
+        const takeGroup = (list) => {
+          const out = [];
+          for (const d of list || []) {
+            if (seen.has(decKey(d))) continue;
+            seen.add(decKey(d));
+            catalog.push(d);
+            out.push(optionFor(d));
+          }
+          return out;
+        };
+        const projectOpts = takeGroup(scoped);
+        const otherOpts = takeGroup((all || []).filter((d) => !inProject.has(decKey(d))));
+        const parts = [`<option value="">— choose a decision —</option>`];
+        if (projectOpts.length) parts.push(`<optgroup label="This project">${projectOpts.join("")}</optgroup>`);
+        if (otherOpts.length) parts.push(`<optgroup label="${projectOpts.length ? "Other decisions" : "Available decisions"}">${otherOpts.join("")}</optgroup>`);
+        fpick.innerHTML = parts.join("");
+        fpick._catalog = catalog;
       }).catch(() => { /* leave the placeholder; manual entry still works */ });
 
       // applyPick sets the decision id + result variable and auto-fills the input
@@ -2527,7 +2559,9 @@ function wireProperties(root, modeler, api, projectId, toast) {
         show(element); // reflect the filled id, result variable, and input rows
       };
       fpick.addEventListener("change", () => {
-        const d = (fpick._catalog || []).find((x) => x.id === fpick.value);
+        const k = fpick.selectedOptions[0] && fpick.selectedOptions[0].getAttribute("data-key");
+        const d = (fpick._catalog || []).find((x) => decKey(x) === k) ||
+          (fpick._catalog || []).find((x) => x.id === fpick.value);
         if (d) applyPick(d);
       });
 

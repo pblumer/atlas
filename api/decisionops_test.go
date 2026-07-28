@@ -199,6 +199,156 @@ func listDeployed(t *testing.T, x deployTestHarness) []deployedDecision {
 	return rows
 }
 
+// TestDecisionEvaluationsDrilldown deploys the dinner process (decision "Dish"),
+// runs an instance, then reads the per-decision drill-down. The evaluation must come
+// back tied to the instance it ran in, its diagram element, and the exact
+// inputs/outputs/trace an operator needs to debug what the decision saw. A different
+// decision id yields an empty list — the scan filters by id.
+func TestDecisionEvaluationsDrilldown(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+	pid := x.mkProject("Dinner")
+	x.saveDraft(pid, dinnerBPMN)
+	x.addRef(pid, "Dish decision", "dish")
+	code, b := x.do(http.MethodPost, "/api/v1/projects/"+pid+"/deploy", "")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, b)
+	}
+	var rep projectDeployResp
+	if err := json.Unmarshal(b, &rep); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+	key := rep.Definitions[0].Key
+	if code, b := x.do(http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", key), "{}"); code != http.StatusOK {
+		t.Fatalf("create instance status=%d body=%s", code, b)
+	}
+
+	code, b = x.do(http.MethodGet, "/api/v1/decisions/Dish/evaluations", "")
+	if code != http.StatusOK {
+		t.Fatalf("evaluations status=%d body=%s", code, b)
+	}
+	var rows []struct {
+		At          int64           `json:"at"`
+		InstanceKey uint64          `json:"instanceKey"`
+		ProcessID   string          `json:"processId"`
+		ElementID   string          `json:"elementId"`
+		Inputs      json.RawMessage `json:"inputs"`
+		Outputs     json.RawMessage `json:"outputs"`
+		Trace       json.RawMessage `json:"trace"`
+	}
+	if err := json.Unmarshal(b, &rows); err != nil {
+		t.Fatalf("decode rows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows = %d, want 1; body=%s", len(rows), b)
+	}
+	r := rows[0]
+	if r.InstanceKey == 0 {
+		t.Errorf("instanceKey = 0, want the running instance")
+	}
+	if r.ProcessID != "dinner" {
+		t.Errorf("processId = %q, want dinner", r.ProcessID)
+	}
+	if r.ElementID != "decide" {
+		t.Errorf("elementId = %q, want decide (the business rule task's diagram id)", r.ElementID)
+	}
+	if string(r.Inputs) != `{"Season":"Winter"}` {
+		t.Errorf("inputs = %s, want {\"Season\":\"Winter\"}", r.Inputs)
+	}
+	if string(r.Outputs) != `{"Dish":"Roastbeef"}` {
+		t.Errorf("outputs = %s, want {\"Dish\":\"Roastbeef\"}", r.Outputs)
+	}
+	if len(r.Trace) == 0 {
+		t.Errorf("trace is empty, want the temis explanation; body=%s", b)
+	}
+
+	// A different decision id filters to nothing — a 200 empty array, not a 404.
+	code, b = x.do(http.MethodGet, "/api/v1/decisions/Nope/evaluations", "")
+	if code != http.StatusOK || (string(b) != "[]\n" && string(b) != "[]") {
+		t.Fatalf("unknown decision: status=%d body=%q, want 200 []", code, b)
+	}
+}
+
+// TestListDecisionsIncludesDeployed proves the picker can offer a decision that is
+// deployed even when no DMN reference exists for it. It deploys the dinner process
+// (which bundles the "dish" model into the registry), deletes the reference, then
+// reads the unscoped catalog: the decision must still be listed, sourced from the
+// deployed model, with its inputs so the picker can auto-fill them. A project-scoped
+// listing, by contrast, stays limited to the project's own references and omits it.
+func TestListDecisionsIncludesDeployed(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+	pid := x.mkProject("Dinner")
+	x.saveDraft(pid, dinnerBPMN)
+	code, b := x.do(http.MethodPost, "/api/v1/dmnrefs", `{"name":"Dish decision","modelRef":"dish","projectId":"`+pid+`"}`)
+	if code != http.StatusOK {
+		t.Fatalf("add ref status=%d body=%s", code, b)
+	}
+	var ref struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(b, &ref); err != nil || ref.ID == "" {
+		t.Fatalf("decode ref id: %v body=%s", err, b)
+	}
+	if code, b := x.do(http.MethodPost, "/api/v1/projects/"+pid+"/deploy", ""); code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, b)
+	}
+	countDish := func(body []byte) (decisionCatalogItem, int) {
+		var items []decisionCatalogItem
+		if err := json.Unmarshal(body, &items); err != nil {
+			t.Fatalf("decode catalog: %v", err)
+		}
+		var hit decisionCatalogItem
+		n := 0
+		for _, it := range items {
+			if it.ID == "Dish" {
+				hit = it
+				n++
+			}
+		}
+		return hit, n
+	}
+	find := func(body []byte) (decisionCatalogItem, bool) {
+		it, n := countDish(body)
+		return it, n > 0
+	}
+
+	// While the reference still exists, the decision is offered exactly once: the
+	// deployed-model source is deduped against the reference that already lists it.
+	if _, refBody := x.do(http.MethodGet, "/api/v1/decisions", ""); true {
+		if refItem, n := countDish(refBody); n != 1 {
+			t.Fatalf("Dish listed %d times with a reference present, want exactly 1; body=%s", n, refBody)
+		} else if refItem.ModelRef == "" {
+			t.Errorf("with a reference present, Dish ModelRef = empty, want the editable handle")
+		}
+	}
+
+	// Remove the reference: the decision is now only known through the deployed model.
+	if code, b := x.do(http.MethodDelete, "/api/v1/dmnrefs/"+ref.ID, ""); code != http.StatusNoContent {
+		t.Fatalf("delete ref status=%d body=%s", code, b)
+	}
+
+	// Unscoped: the deployed decision is offered, with its input for auto-fill.
+	_, cat := x.do(http.MethodGet, "/api/v1/decisions", "")
+	dish, ok := find(cat)
+	if !ok {
+		t.Fatalf("unscoped catalog omits the deployed decision Dish; body=%s", cat)
+	}
+	if dish.ModelRef != "" {
+		t.Errorf("deployed decision ModelRef = %q, want empty (no editable handle)", dish.ModelRef)
+	}
+	if len(dish.Inputs) != 1 || dish.Inputs[0].Name != "Season" {
+		t.Errorf("inputs = %+v, want one input named Season", dish.Inputs)
+	}
+
+	// Project-scoped: deployed decisions are engine-wide, not the project's, so the
+	// scoped listing (only project references) no longer lists Dish once the ref is gone.
+	_, bs := x.do(http.MethodGet, "/api/v1/decisions?projectId="+pid, "")
+	if _, ok := find(bs); ok {
+		t.Errorf("project-scoped catalog should omit the deployed-only decision; body=%s", bs)
+	}
+}
+
 // getDeployed fetches the decisions overview and returns the row for decisionID,
 // failing the test if the endpoint errors or the decision is absent.
 func getDeployed(t *testing.T, x deployTestHarness, decisionID string) deployedDecision {

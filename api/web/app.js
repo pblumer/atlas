@@ -1469,9 +1469,9 @@ async function viewDecisions() {
     </div>
     <p class="muted">One row per deployed DMN decision. A decision appears once any
     deployed process references it — even before it has run — and its usage grows as
-    instances evaluate it. Open a process to watch the instances whose business rule
-    tasks drove the decision; each instance's decision reasoning (inputs, outputs, and
-    the rule trace) is retained for debugging.</p>
+    instances evaluate it. Open a decision to inspect each evaluation — the exact
+    inputs it saw, the outputs it produced, and the rule trace — or open a process to
+    watch the instances that drove it.</p>
     <div class="card" style="padding:0">
       <table>
         <thead><tr><th>Decision</th><th>Evaluation</th><th>Used by</th><th>Evaluations</th><th>Last evaluated</th></tr></thead>
@@ -1500,11 +1500,12 @@ async function viewDecisions() {
               `<a href="#/operations/p/${p.key}">${esc(p.name || p.processId)}</a>`
             ).join(", ")
           : '<span class="muted">—</span>';
+        const detail = `#/operations/decisions/${encodeURIComponent(d.decisionId)}`;
         const evals = d.evaluations
-          ? `<span class="pill ok"><span class="dot"></span>${d.evaluations}</span>`
+          ? `<a href="${detail}"><span class="pill ok"><span class="dot"></span>${d.evaluations}</span></a>`
           : '<span class="muted">0</span>';
         return `<tr>
-          <td><b>${esc(d.decisionId)}</b></td>
+          <td><a href="${detail}"><b>${esc(d.decisionId)}</b></a></td>
           <td>${locus}</td>
           <td>${procs}</td>
           <td>${evals}</td>
@@ -1513,6 +1514,67 @@ async function viewDecisions() {
       }).join("");
     } catch (e) {
       tbody.innerHTML = `<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`;
+    }
+  };
+  document.getElementById("refresh").addEventListener("click", load);
+  await load();
+}
+
+// viewDecisionDetail lists every evaluation of one decision — its "instances" —
+// newest first, each showing the exact inputs it saw, the outputs it produced, and
+// (expandable) the temis trace of which rules fired (ADR-0066). This is the
+// drill-down for debugging a decision that isn't returning what you expect: the
+// inputs show the precise evaluated value, with its JSON type and quoting, so a
+// string compared against a number, a stray space, or a wrong type is visible.
+async function viewDecisionDetail(id) {
+  view.innerHTML = `
+    <div class="between">
+      <div>
+        <div class="muted" style="font-size:12px"><a href="#/operations/decisions">← Decisions</a></div>
+        <h1>${esc(id)}</h1>
+      </div>
+      <button class="btn neutral" id="refresh">Refresh</button>
+    </div>
+    <p class="muted">Every evaluation of this decision, newest first — one row per
+    evaluation. <b>Inputs</b> is what the decision actually saw (each value with its
+    type and quoting); <b>Outputs</b> is what it produced; <b>Trace</b> expands to show
+    which rules fired. A rule that never matches — a string compared against a number,
+    a stray space, a wrong type — shows here as empty or unexpected outputs against
+    inputs you can inspect.</p>
+    <div class="card" style="padding:0">
+      <table>
+        <thead><tr><th>When</th><th>Instance</th><th>Element</th><th>Inputs</th><th>Outputs</th><th>Trace</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>`;
+  const tbody = document.getElementById("rows");
+  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—";
+  const jsonCell = (v) => `<code style="font-size:12px">${esc(JSON.stringify(v))}</code>`;
+
+  const load = async () => {
+    try {
+      const rows = await api("GET", `/api/v1/decisions/${encodeURIComponent(id)}/evaluations`);
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="empty">
+          This decision has not been evaluated yet. Start a process instance whose
+          business rule task calls it.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = rows.map((r) => {
+        const trace = r.trace !== undefined
+          ? `<details><summary class="muted" style="cursor:pointer">show</summary><pre style="white-space:pre-wrap;font-size:12px;margin:6px 0 0">${esc(JSON.stringify(r.trace, null, 2))}</pre></details>`
+          : '<span class="muted">—</span>';
+        return `<tr>
+          <td class="muted">${esc(fmtNano(r.at))}</td>
+          <td><a href="#/operations/i/${r.instanceKey}" title="Replay this instance step by step">&#9654; ${r.instanceKey}</a></td>
+          <td class="muted">${esc(r.elementId || "—")}</td>
+          <td>${jsonCell(r.inputs)}</td>
+          <td>${jsonCell(r.outputs)}</td>
+          <td>${trace}</td>
+        </tr>`;
+      }).join("");
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;
     }
   };
   document.getElementById("refresh").addEventListener("click", load);
@@ -2283,6 +2345,10 @@ async function route() {
     if (tk) return await viewTasks(Number(tk[1]));
     if (path === "#/operations") return await viewInstances();
     if (path === "#/operations/decisions") return await viewDecisions();
+    // Drill into one decision's evaluations (its "instances"). The id is URL-encoded
+    // because a DMN decision id may contain spaces or other reserved characters.
+    const dd = path.match(/^#\/operations\/decisions\/(.+)$/);
+    if (dd) return await viewDecisionDetail(decodeURIComponent(dd[1]));
     // A specific instance can be deep-linked (…/i/{instanceKey}) — the Modeler's
     // Deploy & run builds this so a roundtrip lands straight on the started
     // instance. The plain form defaults the picker to "All instances".

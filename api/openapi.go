@@ -157,6 +157,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/decisions/deployed", s.handleDeployedDecisions, apiOp{
 			summary: "List deployed and evaluated DMN decisions, one row per decision, with the processes that use it and its evaluation usage", tag: "Decisions",
 			resp: jsonBody("Deployed decisions", tArray())}},
+		{"GET", "/api/v1/decisions/{id}/evaluations", s.handleDecisionEvaluations, apiOp{
+			summary: "List every retained evaluation of one decision — its inputs, outputs, and trace — newest first, for drilling into a decision's instances", tag: "Decisions",
+			resp: jsonBody("Decision evaluations", tArray())}},
 		{"DELETE", "/api/v1/instances/{key}", s.handleCancelInstance, apiOp{
 			summary: "Cancel a running instance", tag: "Instances", resp: jsonBody("Cancellation result", tObject())}},
 
