@@ -79,6 +79,13 @@ func (s *Server) handleDeployProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "list artifacts: "+loadErr.Error())
 		return
 	}
+	// Deploying a project's artifacts is a write on the project, so it needs the
+	// editor role (ADR-0071). This gates the design-time action; it does not
+	// isolate the resulting running instances, which stay out of scope.
+	if code, msg := s.checkProjectRole(r, proj, ScopeRoleEditor); code != 0 {
+		writeError(w, code, msg)
+		return
+	}
 
 	// Phase 2 (off-loop): DMN preflight. Resolve + validate every reference; a
 	// single failure refuses the bundle without deploying anything. For each valid

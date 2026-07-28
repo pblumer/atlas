@@ -15,11 +15,21 @@ import (
 // membership is a projectId tag carried on each artifact (a draft, in Phase 1),
 // not a list stored here, so a project and its artifacts stay loosely coupled and
 // deleting a project leaves its artifacts intact (they fall back to "Ungrouped").
+//
+// The access fields (OwnerID, Visibility, Members) are the ADR-0071 sharing
+// scope: they turn the project into a private-or-shared access boundary enforced
+// by the HTTP handlers against the request Principal (ADR-0044). They are
+// optional and omitempty so a pre-scopes project — which carries none of them —
+// keeps deserializing and reads as an ownerless, legacy project (see
+// effectiveRole), needing no migration.
 type project struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	CreatedAt int64  `json:"createdAt"`
-	UpdatedAt int64  `json:"updatedAt"`
+	ID         string          `json:"id"`
+	Name       string          `json:"name"`
+	OwnerID    string          `json:"ownerId,omitempty"`
+	Visibility string          `json:"visibility,omitempty"`
+	Members    []projectMember `json:"members,omitempty"`
+	CreatedAt  int64           `json:"createdAt"`
+	UpdatedAt  int64           `json:"updatedAt"`
 }
 
 // projectStore is a durable store for projects, one JSON file per project id

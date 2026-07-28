@@ -12,13 +12,46 @@ import (
 
 // projectView is the JSON shape of a project for the Modeler. Artifacts is the
 // number of artifacts (BPMN drafts + DMN references) currently tagged with this
-// project.
+// project. OwnerID, Visibility, and Members are the ADR-0071 sharing scope;
+// MyRole is the caller's own effective role, so the UI can gate its sharing
+// controls (hide "Share" from a viewer, "Delete" from a non-owner, …) without
+// re-deriving the rule client-side.
 type projectView struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	CreatedAt int64  `json:"createdAt"`
-	UpdatedAt int64  `json:"updatedAt"`
-	Artifacts int    `json:"artifacts"`
+	ID         string          `json:"id"`
+	Name       string          `json:"name"`
+	OwnerID    string          `json:"ownerId,omitempty"`
+	Visibility string          `json:"visibility"`
+	Members    []projectMember `json:"members"`
+	MyRole     string          `json:"myRole"`
+	CreatedAt  int64           `json:"createdAt"`
+	UpdatedAt  int64           `json:"updatedAt"`
+	Artifacts  int             `json:"artifacts"`
+}
+
+// projectViewFor renders a project for the requesting principal. It normalizes
+// Members to a non-nil slice and defaults an empty (pre-scopes) Visibility to
+// private, so the JSON shape is stable, and stamps MyRole from the same pure
+// access rule the handlers enforce.
+func (s *Server) projectViewFor(r *http.Request, p project, artifacts int) projectView {
+	vis := p.Visibility
+	if vis == "" {
+		vis = VisibilityPrivate
+	}
+	members := p.Members
+	if members == nil {
+		members = []projectMember{}
+	}
+	return projectView{
+		ID:         p.ID,
+		Name:       p.Name,
+		OwnerID:    p.OwnerID,
+		Visibility: vis,
+		Members:    members,
+		MyRole:     p.effectiveRole(principalFrom(r.Context()), s.authEnabled),
+		CreatedAt:  p.CreatedAt,
+		UpdatedAt:  p.UpdatedAt,
+		Artifacts:  artifacts,
+	}
 }
 
 // newID mints a random, URL-safe id for design-time artifacts (projects, DMN
@@ -58,19 +91,28 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now().Unix()
-	rec := project{ID: id, Name: name, CreatedAt: now, UpdatedAt: now}
+	// A new project is private to its creator (ADR-0071). Under auth the owner is
+	// the signed-in principal; with auth off there is no principal, so the project
+	// is ownerless and the open single-user server treats it as fully accessible.
+	rec := project{ID: id, Name: name, Visibility: VisibilityPrivate, CreatedAt: now, UpdatedAt: now}
+	if p := principalFrom(r.Context()); p != nil {
+		rec.OwnerID = p.UserID
+	}
 	var saveErr error
 	s.do(func() { saveErr = s.projects.save(rec) })
 	if saveErr != nil {
 		writeError(w, http.StatusInternalServerError, "create project: "+saveErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, projectView{ID: id, Name: name, CreatedAt: now, UpdatedAt: now})
+	writeJSON(w, http.StatusOK, s.projectViewFor(r, rec, 0))
 }
 
-// handleListProjects lists projects (oldest first) with a live count of the
-// artifacts tagged into each.
-func (s *Server) handleListProjects(w http.ResponseWriter, _ *http.Request) {
+// handleListProjects lists the projects the caller may see (oldest first) with a
+// live count of the artifacts tagged into each. Under auth a project the caller
+// has no role on is filtered out entirely — the same information hiding the
+// per-project 404 gives — so a private project never appears in another user's
+// list (ADR-0071). With auth off every project is listed (open, single-user).
+func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 	list := []projectView{}
 	var loadErr error
 	s.do(func() {
@@ -92,19 +134,16 @@ func (s *Server) handleListProjects(w http.ResponseWriter, _ *http.Request) {
 				counts[d.ProjectID]++
 			}
 		}
-		for _, r := range refs {
-			if r.ProjectID != "" {
-				counts[r.ProjectID]++
+		for _, rec := range refs {
+			if rec.ProjectID != "" {
+				counts[rec.ProjectID]++
 			}
 		}
 		for _, p := range projs {
-			list = append(list, projectView{
-				ID:        p.ID,
-				Name:      p.Name,
-				CreatedAt: p.CreatedAt,
-				UpdatedAt: p.UpdatedAt,
-				Artifacts: counts[p.ID],
-			})
+			if scopeRank(p.effectiveRole(principalFrom(r.Context()), s.authEnabled)) == 0 {
+				continue
+			}
+			list = append(list, s.projectViewFor(r, p, counts[p.ID]))
 		}
 	})
 	if loadErr != nil {
@@ -114,8 +153,13 @@ func (s *Server) handleListProjects(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, list)
 }
 
-// handleRenameProject renames a project. Body: {"name": "..."}.
-func (s *Server) handleRenameProject(w http.ResponseWriter, r *http.Request) {
+// handleUpdateProject updates a project's mutable fields. Body may carry any of
+// {"name","visibility","ownerId"}; at least one is required. Renaming, changing
+// visibility (private/shared), and transferring ownership all require the owner
+// role (ADR-0071) — under auth off the open server treats every caller as owner,
+// so a name-only PATCH keeps working exactly as before. A transfer must name an
+// existing user.
+func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
@@ -123,22 +167,37 @@ func (s *Server) handleRenameProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var payload struct {
-		Name string `json:"name"`
+		Name       *string `json:"name"`
+		Visibility *string `json:"visibility"`
+		OwnerID    *string `json:"ownerId"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
-	name := strings.TrimSpace(payload.Name)
-	if name == "" {
-		writeError(w, http.StatusBadRequest, "project name is required")
+	if payload.Name == nil && payload.Visibility == nil && payload.OwnerID == nil {
+		writeError(w, http.StatusBadRequest, "no fields to update")
+		return
+	}
+	var name string
+	if payload.Name != nil {
+		if name = strings.TrimSpace(*payload.Name); name == "" {
+			writeError(w, http.StatusBadRequest, "project name cannot be empty")
+			return
+		}
+	}
+	if payload.Visibility != nil && *payload.Visibility != VisibilityPrivate && *payload.Visibility != VisibilityShared {
+		writeError(w, http.StatusBadRequest, `visibility must be "private" or "shared"`)
 		return
 	}
 	var (
-		found           bool
-		getErr, saveErr error
-		countErr        error
-		view            projectView
+		notFound            bool
+		forbidden           int
+		fmsg                string
+		ownerMissing        bool
+		getErr, saveErr     error
+		lookupErr, countErr error
+		view                projectView
 	)
 	s.do(func() {
 		rec, ok, e := s.projects.get(id)
@@ -147,28 +206,55 @@ func (s *Server) handleRenameProject(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !ok {
+			notFound = true
 			return
 		}
-		rec.Name = name
+		if code, msg := s.checkProjectRole(r, rec, ScopeRoleOwner); code != 0 {
+			forbidden, fmsg = code, msg
+			return
+		}
+		if payload.OwnerID != nil && s.authEnabled {
+			if _, ok, e := s.users.get(*payload.OwnerID); e != nil {
+				lookupErr = e
+				return
+			} else if !ok {
+				ownerMissing = true
+				return
+			}
+		}
+		if payload.Name != nil {
+			rec.Name = name
+		}
+		if payload.Visibility != nil {
+			rec.Visibility = *payload.Visibility
+		}
+		if payload.OwnerID != nil {
+			rec.OwnerID = *payload.OwnerID
+		}
 		rec.UpdatedAt = time.Now().Unix()
 		if saveErr = s.projects.save(rec); saveErr != nil {
 			return
 		}
-		found = true
 		n, e := s.countArtifactsInProject(id)
 		if e != nil {
 			countErr = e
 			return
 		}
-		view = projectView{ID: rec.ID, Name: rec.Name, CreatedAt: rec.CreatedAt, UpdatedAt: rec.UpdatedAt, Artifacts: n}
+		view = s.projectViewFor(r, rec, n)
 	})
 	switch {
 	case getErr != nil:
 		writeError(w, http.StatusInternalServerError, "read project: "+getErr.Error())
-	case !found:
+	case notFound:
 		writeError(w, http.StatusNotFound, "no project with that id")
+	case forbidden != 0:
+		writeError(w, forbidden, fmsg)
+	case lookupErr != nil:
+		writeError(w, http.StatusInternalServerError, "look up new owner: "+lookupErr.Error())
+	case ownerMissing:
+		writeError(w, http.StatusBadRequest, "no user with that id")
 	case saveErr != nil:
-		writeError(w, http.StatusInternalServerError, "rename project: "+saveErr.Error())
+		writeError(w, http.StatusInternalServerError, "update project: "+saveErr.Error())
 	case countErr != nil:
 		writeError(w, http.StatusInternalServerError, "count artifacts: "+countErr.Error())
 	default:
@@ -176,18 +262,48 @@ func (s *Server) handleRenameProject(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleDeleteProject removes a project. It is idempotent (deleting an absent
-// project succeeds). Artifacts tagged with the id are intentionally left in
-// place; they read as Ungrouped once the project is gone (ADR-0034).
+// handleDeleteProject removes a project. Deleting requires the owner role
+// (ADR-0071); it stays idempotent, so deleting an absent project — one a caller
+// cannot see is indistinguishable from one that is gone — still succeeds.
+// Artifacts tagged with the id are intentionally left in place; they read as
+// Ungrouped once the project is gone (ADR-0034).
 func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var delErr error
-	s.do(func() { delErr = s.projects.delete(id) })
-	if delErr != nil {
+	var (
+		notFound  bool
+		forbidden int
+		fmsg      string
+		getErr    error
+		delErr    error
+	)
+	s.do(func() {
+		rec, ok, e := s.projects.get(id)
+		if e != nil {
+			getErr = e
+			return
+		}
+		if !ok {
+			notFound = true // absent: idempotent success below
+			return
+		}
+		if code, msg := s.checkProjectRole(r, rec, ScopeRoleOwner); code != 0 {
+			forbidden, fmsg = code, msg
+			return
+		}
+		delErr = s.projects.delete(id)
+	})
+	switch {
+	case getErr != nil:
+		writeError(w, http.StatusInternalServerError, "read project: "+getErr.Error())
+	case forbidden != 0:
+		writeError(w, forbidden, fmsg)
+	case delErr != nil:
 		writeError(w, http.StatusInternalServerError, "delete project: "+delErr.Error())
-		return
+	case notFound:
+		w.WriteHeader(http.StatusNoContent) // idempotent: nothing to delete
+	default:
+		w.WriteHeader(http.StatusNoContent)
 	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 // countArtifactsInProject counts the artifacts (BPMN drafts + DMN references)
