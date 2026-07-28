@@ -49,6 +49,7 @@ func (s *Server) handleListDecisions(w http.ResponseWriter, r *http.Request) {
 
 	out := []decisionCatalogItem{}
 	seenModel := map[string]bool{} // the same model may be referenced twice; describe it once
+	seenDecision := map[string]bool{}
 	for _, rec := range refs {
 		if seenModel[rec.ModelRef] {
 			continue
@@ -59,11 +60,40 @@ func (s *Server) handleListDecisions(w http.ResponseWriter, r *http.Request) {
 			continue // infra failure on one model; the validate endpoint reports it per-ref
 		}
 		for _, d := range decisions {
+			seenDecision[d.ID] = true
 			out = append(out, decisionCatalogItem{
 				ID:       d.ID,
 				Name:     d.Name,
 				Model:    modelName,
 				ModelRef: rec.ModelRef,
+				Inputs:   d.Inputs,
+				Output:   d.Output,
+			})
+		}
+	}
+
+	// Beyond referenced models, offer the decisions of *deployed* models — those the
+	// engine can actually evaluate — so an author can pick a decision that is deployed
+	// even when no DMN reference artifact exists for it (a decision deployed directly,
+	// or whose reference was later removed). These carry no editable model handle
+	// (ModelRef stays empty), and a decision already offered by a reference wins, so
+	// the picker never lists the same decision twice. Only the unscoped catalog
+	// includes them: they are engine-wide, not owned by any one project (ADR-0034), so
+	// a project-scoped listing stays limited to the project's own references. Reading
+	// the registry's compiled models is run-loop-owned state, so it runs on the loop.
+	if filter == "" {
+		var deployed []dmn.DeployedDecision
+		s.do(func() { deployed = s.dmnRegistry.DeployedDecisions() })
+		for _, d := range deployed {
+			if seenDecision[d.ID] {
+				continue
+			}
+			seenDecision[d.ID] = true
+			out = append(out, decisionCatalogItem{
+				ID:       d.ID,
+				Name:     d.Name,
+				Model:    d.Model,
+				ModelRef: "",
 				Inputs:   d.Inputs,
 				Output:   d.Output,
 			})

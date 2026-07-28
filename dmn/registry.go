@@ -27,6 +27,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	tdmn "github.com/pblumer/temis/dmn"
 )
@@ -114,6 +115,45 @@ func (r *Registry) EvaluateLatestTraced(ctx context.Context, decisionId string, 
 		return nil, nil, fmt.Errorf("dmn: no model deployed providing decision %q", decisionId)
 	}
 	return evalDecision(ctx, defs, decisionId, in, "the latest deployed model")
+}
+
+// DeployedDecision is a decision available from a deployed model, described for the
+// Modeler's decision picker (ADR-0050): its id, declared inputs and output, and the
+// name of the model that provides it. It lets an author select — and auto-fill the
+// inputs of — a decision that is deployed (and thus runnable) even when no separate
+// DMN reference artifact exists for it.
+type DeployedDecision struct {
+	ID     string
+	Name   string
+	Model  string
+	Inputs []DecisionField
+	Output DecisionField
+}
+
+// DeployedDecisions describes every decision provided by the newest deployed model
+// that supplies it (ADR-0063 latest binding), for the Modeler's picker. It reads the
+// registry's already-compiled models — no XML parsing or resolver I/O — so it must
+// run on the registry's owning goroutine (the run loop), the same single-writer
+// discipline as Deploy. Results are sorted by decision id for a stable picker.
+func (r *Registry) DeployedDecisions() []DeployedDecision {
+	out := make([]DeployedDecision, 0, len(r.latest))
+	for id, defs := range r.latest {
+		for _, di := range describeDecisions(defs) {
+			if di.ID != id {
+				continue // describe the one decision this model is latest for
+			}
+			out = append(out, DeployedDecision{
+				ID:     di.ID,
+				Name:   di.Name,
+				Model:  defs.ModelName(),
+				Inputs: di.Inputs,
+				Output: di.Output,
+			})
+			break
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
 }
 
 // evalDecision evaluates one decision from an already-compiled model, requesting
