@@ -13,6 +13,7 @@ against a live Atlas server (`0.1.0-dev`).
 | [`order-to-cash-app.html`](order-to-cash-app.html) | A self-contained single-page app that mirrors `order-to-cash.bpmn`: edit the cart, watch the sum compute live, approve, and clear the delivery/billing tasks. No server needed — open it in a browser. |
 | [`order-to-cash-live.bpmn`](order-to-cash-live.bpmn) | The **live** sibling: same flow, but delivery/billing are `userTask`s (HTTP-completable) instead of `serviceTask`s, so a browser app can drive the real instance end to end. |
 | [`../api/web/order-to-cash-live.html`](../api/web/order-to-cash-live.html) | The **live** app — served by the Atlas server itself (`/order-to-cash-live.html`). It deploys the model, starts a real instance with your cart, and completes each task over the HTTP API. No business logic in the client; Atlas runs the process. |
+| [`../api/web/order-to-cash-jobs.html`](../api/web/order-to-cash-jobs.html) | The **live** app against the *service-task* model: it lists the parked jobs (`GET /instances/{key}/jobs`) and completes them (`POST /jobs/{key}/complete`) — the app acts as the job worker. |
 | [`entra-create-account.bpmn`](entra-create-account.bpmn) | A PowerShell `jobScript` task that creates an EntraID account — the *worker-backed* counterpart: its token parks on the script job until a PowerShell script worker runs it. |
 
 > Looking for a model that parks on human tasks so you can watch the task
@@ -335,6 +336,21 @@ The entire integration is three calls — `POST /deployments`, `POST
 on the page makes them visible. Because it ships under `api/web/`, it is embedded
 in the binary: **rebuild and redeploy the Atlas server**, then open
 `/order-to-cash-live.html`.
+
+### Service-task variant — `api/web/order-to-cash-jobs.html`
+
+The live app above uses user tasks because only they are listed by `GET /tasks`.
+The **jobs** variant drives the *service-task* model instead, using the read side
+of the operator job affordance:
+
+- `GET /api/v1/instances/{key}/jobs` lists every activatable job the instance is
+  parked on — of **any** type, not just user tasks (this is the endpoint that makes
+  the operator complete usable from a client), and
+- `POST /api/v1/jobs/{key}/complete` finishes each one, the same call for a
+  service-task job and the approval user-task job alike.
+
+So the app becomes the job worker: list the parked jobs, complete them, watch the
+parallel delivery/billing branches close. Same tiny client, different mechanism.
 
 ## Clean up
 

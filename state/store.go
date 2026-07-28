@@ -115,6 +115,17 @@ func (s *Store) ActivatableJobs(jobType int32, fn func(jobKey uint64) error) err
 	})
 }
 
+// AllActivatableJobs calls fn with the key of every open job of ANY type, via the
+// same jobActivatable index — the whole column family rather than one job type's
+// slice. It backs the read side of the operator complete/fail affordance (listing
+// the jobs an instance is parked on); worker polling still uses the type-scoped
+// ActivatableJobs.
+func (s *Store) AllActivatableJobs(fn func(jobKey uint64) error) error {
+	return s.scanPrefix([]byte{byte(cfJobActivatable)}, func(k, _ []byte) error {
+		return fn(trailingKey(k))
+	})
+}
+
 // DueTimers calls fn for every timer whose due date is at or before now, in due
 // order. Because the due date is the index prefix, this is a range scan from the
 // start of the timer family up to now — no scheduler structure, no full scan.
