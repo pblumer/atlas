@@ -264,6 +264,10 @@ func buildMessageResolver(defs xmlDefinitions) func(ownerId, messageRef string) 
 // collaboration's processes).
 func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error)) (*CompiledProcess, error) {
 	b := NewBuilder(key, proc.Id, version)
+	// isExecutable defaults to true when the attribute is absent (BPMN convention;
+	// Atlas has always run every deployed process), so an existing model without it
+	// keeps working. Only an explicit "false" marks a process non-executable.
+	b.SetExecutable(proc.IsExecutable != "false")
 	ids := make(map[string]int32, len(proc.StartEvents)+len(proc.ServiceTasks)+len(proc.EndEvents))
 	register := func(id string, nodeID int32) error {
 		if id == "" {
@@ -942,6 +946,7 @@ type xmlMessageEventDefinition struct {
 type xmlProcess struct {
 	Id                string                `xml:"id,attr"`
 	Name              string                `xml:"name,attr"`
+	IsExecutable      string                `xml:"isExecutable,attr"`
 	StartEvents       []xmlStartEvent       `xml:"startEvent"`
 	EndEvents         []xmlEndEvent         `xml:"endEvent"`
 	ServiceTasks      []xmlServiceTask      `xml:"serviceTask"`

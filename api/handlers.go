@@ -60,6 +60,10 @@ type processResp struct {
 	// when the process has no start form (ADR-0028). It lets the Tasks app offer a
 	// "start via form" flow whose submitted data becomes the start variables.
 	StartFormID string `json:"startFormId,omitempty"`
+	// Executable is the process's bpmn:isExecutable flag. A non-executable process
+	// still lists (so it can be inspected) but is omitted from the start surfaces and
+	// cannot be started. Always emitted so the UI can filter on it.
+	Executable bool `json:"executable"`
 }
 
 // collaborationParticipants reports how many <participant> pools a model's
@@ -630,6 +634,7 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
 				DeployedAt:       d.DeployedAt,
 				CollaborationKey: s.collaborationKeyOf(d),
 				StartFormID:      d.cp.StartFormId(),
+				Executable:       d.cp.IsExecutable(),
 			})
 		}
 	})
@@ -1184,15 +1189,23 @@ func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 	}
 	var (
 		found   bool
+		notExec bool
 		runErr  error
 		statErr error
 		stats   statsResp
 	)
 	s.do(func() {
-		if _, ok := s.deployments[key]; !ok {
+		d, ok := s.deployments[key]
+		if !ok {
 			return
 		}
 		found = true
+		// A non-executable process is descriptive-only; refuse to start it (the UI
+		// also hides it, but this guards the API and public start paths directly).
+		if d.cp != nil && !d.cp.IsExecutable() {
+			notExec = true
+			return
+		}
 		s.proc.CreateInstance(key, startVars...)
 		if err := s.jobRunner.Drive(); err != nil {
 			runErr = err
@@ -1203,6 +1216,8 @@ func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case !found:
 		writeError(w, http.StatusNotFound, "no deployment with that key")
+	case notExec:
+		writeError(w, http.StatusConflict, "process is not executable and cannot be started")
 	case runErr != nil:
 		writeError(w, http.StatusInternalServerError, "run instance: "+runErr.Error())
 	case statErr != nil:

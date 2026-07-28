@@ -63,6 +63,7 @@ func (s *Server) handleCreatePublicLink(w http.ResponseWriter, r *http.Request) 
 	var (
 		out         publicLink
 		notDeployed bool
+		notExec     bool
 		noForm      bool
 		opErr       error
 	)
@@ -70,6 +71,11 @@ func (s *Server) handleCreatePublicLink(w http.ResponseWriter, r *http.Request) 
 		d := s.latestDeploymentByProcessID(payload.ProcessID)
 		if d == nil {
 			notDeployed = true
+			return
+		}
+		// A non-executable process must not be published for public starting.
+		if d.cp != nil && !d.cp.IsExecutable() {
+			notExec = true
 			return
 		}
 		formID := d.cp.StartFormId()
@@ -102,6 +108,8 @@ func (s *Server) handleCreatePublicLink(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, "create public link: "+opErr.Error())
 	case notDeployed:
 		writeError(w, http.StatusNotFound, "no deployed process with that id")
+	case notExec:
+		writeError(w, http.StatusConflict, "process is not executable and cannot be published")
 	case noForm:
 		writeError(w, http.StatusBadRequest, "the process has no start form to publish")
 	default:
@@ -214,8 +222,9 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var (
-		found  bool
-		runErr error
+		found   bool
+		notExec bool
+		runErr  error
 	)
 	s.do(func() {
 		link, ok, e := s.publicLinks.get(token)
@@ -227,6 +236,12 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 		if d == nil {
 			return // token valid but process undeployed → treated as not found
 		}
+		// The current version may have become non-executable since the link was
+		// minted (a redeploy); refuse to start it.
+		if d.cp != nil && !d.cp.IsExecutable() {
+			notExec = true
+			return
+		}
 		found = true
 		s.proc.CreateInstance(d.Key, vars...)
 		runErr = s.jobRunner.Drive()
@@ -234,6 +249,8 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case runErr != nil:
 		writeError(w, http.StatusInternalServerError, "start: "+runErr.Error())
+	case notExec:
+		writeError(w, http.StatusConflict, "process is not executable and cannot be started")
 	case !found:
 		writeError(w, http.StatusNotFound, "unknown or revoked link")
 	default:

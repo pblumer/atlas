@@ -2317,10 +2317,12 @@ async function viewStartProcess() {
         api("GET", "/api/v1/public-links").catch(() => []),
       ]);
       state.links = Array.isArray(links) ? links : [];
-      // Only processes with a start form; keep the latest version per process id.
+      // Only executable processes with a start form; keep the latest version per
+      // process id. A non-executable process is descriptive-only and never offered
+      // to start (the API refuses it too).
       const latest = new Map();
       for (const p of all) {
-        if (!p.startFormId) continue;
+        if (!p.startFormId || p.executable === false) continue;
         const cur = latest.get(p.processId);
         if (!cur || p.version > cur.version) latest.set(p.processId, p);
       }
