@@ -7,6 +7,7 @@ against a live Atlas server (`0.1.0-dev`).
 | File | What it is |
 |------|-----------|
 | [`order-fulfillment.bpmn`](order-fulfillment.bpmn) | A self-completing order-fulfillment process that exercises inline scripts and all three gateway kinds, and drives itself to an end event with **no external workers attached**. |
+| [`cart-total.bpmn`](cart-total.bpmn) | A shopping-cart checkout that computes an order total (subtotal → rebate → VAT → shipping) entirely in inline FEEL, and routes on the computed sum. Self-completing. |
 | [`entra-create-account.bpmn`](entra-create-account.bpmn) | A PowerShell `jobScript` task that creates an EntraID account — the *worker-backed* counterpart: its token parks on the script job until a PowerShell script worker runs it. |
 
 > Looking for a model that parks on human tasks so you can watch the task
@@ -151,6 +152,73 @@ Those three highlighted numbers are the interesting invariants:
 To exercise the *other* exclusive branch, change the seeded amount in
 `register_order` to a value `≤ 1000`; the instance then takes
 `Auto-approve small order → Order fast-tracked` instead.
+
+---
+
+## `cart-total.bpmn` — shopping-cart sum calculation
+
+A checkout that turns a cart of line items into a payable order total, computed
+step by step in inline FEEL — the engine does real money arithmetic, no worker
+involved:
+
+```
+Warenkorb abgeschickt
+   → Warenkorb laden          positions = [ {BPMN-Buch, 24.90, ×1},
+                                            {Kaffeetasse, 9.95, ×2},
+                                            {Aufkleber-Set, 4.50, ×3} ]
+   → Artikelanzahl zaehlen    itemCount = sum(for p in positions return p.qty)
+   → Zwischensumme berechnen  subtotal  = decimal(sum(for p in positions
+                                                      return p.price * p.qty), 2)
+   → Zwischensumme ≥ 50 €? ──┐
+        ja                  nein
+        Rabatt & Gratis-     Standard-
+        versand              versand
+        {discount: 10%,      {discount: 0,
+         shipping: 0}         shipping: 4.90}
+   └──────────┬──────────┘
+   → Nettobetrag    net   = decimal(subtotal − rebate.discount, 2)
+   → MwSt (19%)     tax   = decimal(net * 0.19, 2)
+   → Gesamtsumme    total = decimal(net + tax + rebate.shipping, 2)
+   → Summe > 100 €? ── ja → Freigabe erforderlich
+                      nein → Bestellung bestaetigt
+```
+
+### The calculation
+
+`sum(for p in positions return p.price * p.qty)` is the cart sum; `decimal(x, 2)`
+rounds to cents (FEEL uses exact decimals, so the figures are reproducible). For
+the seeded cart:
+
+| Step | FEEL | Value |
+|------|------|------:|
+| Zwischensumme | `decimal(sum(p.price·p.qty), 2)` | **58.30 €** |
+| Rabatt 10 % (≥ 50 €) | `decimal(subtotal · 0.10, 2)` | − 5.83 € |
+| Nettobetrag | `subtotal − discount` | 52.47 € |
+| MwSt 19 % | `decimal(net · 0.19, 2)` | + 9.97 € |
+| Versand (frei ≥ 50 €) | — | 0.00 € |
+| **Gesamtsumme** | `decimal(net + tax + shipping, 2)` | **62.44 €** |
+
+Both gateways branch on the *computed* sum, so the visited end event alone proves
+the arithmetic: `subtotal ≥ 50` takes the rebate branch, and `total ≤ 100` reaches
+`Bestellung bestaetigt`. Expected visits after one instance
+(`instances: 0, tokens: 0`):
+
+| Element | Type | Visits |
+|---------|------|:------:|
+| `cart_submitted` | StartEvent | 1 |
+| `load_cart` · `count_items` · `subtotal` | ScriptTask | 1 each |
+| `threshold_gw` | ExclusiveGateway | 1 |
+| `apply_rebate` | ScriptTask | 1 |
+| `standard_shipping` | ScriptTask | **0** (subtotal ≥ 50 → rebate branch) |
+| `rebate_join` | ExclusiveGateway | 1 |
+| `net` · `tax` · `grand_total` | ScriptTask | 1 each |
+| `approval_gw` | ExclusiveGateway | 1 |
+| `confirmed` | EndEvent | 1 |
+| `needs_approval` | EndEvent | **0** (total ≤ 100 → no approval) |
+
+To land on the *other* branches, edit the seeded `positions` in `load_cart`: a cart
+under 50 € takes `Standardversand` (with 4.90 € shipping), and one whose total
+exceeds 100 € reaches `Freigabe erforderlich`.
 
 ## Clean up
 
