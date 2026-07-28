@@ -80,6 +80,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0070](0070-vault-on-by-default-with-generated-key.md) | The secret vault is on by default, with a generated key | Accepted |
 | [0071](0071-sharing-scopes.md) | Sharing scopes — private and shared access boundaries for design-time work | Accepted |
 | [0072](0072-multiple-dmn-models-per-process.md) | Multiple DMN models per process deployment | Accepted |
+| [0073](0073-embedded-subprocesses.md) | Embedded subprocesses — scope lifecycle via child counters, reusing the ADR-0068 scope substrate | Proposed |
 
 ## Status values
 

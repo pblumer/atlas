@@ -277,7 +277,7 @@ Composition and reuse.
   viewer auto-lays-out DI-less collaborations as stacked pools; the editor
   authors pools, message flows, and pool names (ADR-0023). Atomic multi-pool
   deploy and message-flow validation still to come.
-- 🔲 Embedded subprocesses (scope lifecycle via child counters)
+- 🔲 Embedded subprocesses (scope lifecycle via child counters) — plan in [ADR-0073](docs/adr/0073-embedded-subprocesses.md)
 - 🔲 Event subprocesses (interrupting and non-interrupting)
 - 🔲 Call activities (single-partition)
 - 🔲 Multi-instance activities (sequential and parallel)
