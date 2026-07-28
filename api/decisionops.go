@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"sort"
 
@@ -136,5 +137,63 @@ func (s *Server) handleDeployedDecisions(w http.ResponseWriter, _ *http.Request)
 		}
 		return out[i].DecisionID < out[j].DecisionID
 	})
+	writeJSON(w, http.StatusOK, out)
+}
+
+// decisionEvaluationRow is one evaluation of a given decision — a "decision
+// instance" — as shown when drilling into a decision from the overview: when it
+// ran, the process instance it ran in, the diagram element that drove it, and the
+// exact inputs it saw, outputs it produced, and temis trace explaining which rules
+// fired (ADR-0066). The inputs are the debugging payload: they show the precise
+// evaluated value (with its JSON type and quoting), so a decision that silently
+// returns nothing — a string compared against the wrong type, a trailing space, a
+// number where a string was expected — is diagnosable from what it actually saw.
+type decisionEvaluationRow struct {
+	At          int64           `json:"at"`
+	InstanceKey uint64          `json:"instanceKey"`
+	ProcessID   string          `json:"processId"`
+	ElementID   string          `json:"elementId"`
+	Inputs      json.RawMessage `json:"inputs"`
+	Outputs     json.RawMessage `json:"outputs"`
+	Trace       json.RawMessage `json:"trace,omitempty"`
+}
+
+// handleDecisionEvaluations returns every retained evaluation of one decision id,
+// newest first — the drill-down from the Operations decisions overview into a single
+// decision's "instances". It folds the whole decision-evaluation history and keeps
+// the records for the named decision, resolving each to its process id and diagram
+// element via the owning deployment. Like the other convenience reads, an unknown or
+// never-evaluated decision id yields an empty array and a 200, not a 404.
+func (s *Server) handleDecisionEvaluations(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	out := []decisionEvaluationRow{}
+	var scanErr error
+	s.do(func() {
+		scanErr = s.store.EachDecisionEvaluation(func(_ uint64, ts int64, v *model.DecisionEvaluationValue) error {
+			if v.DecisionId != id {
+				return nil
+			}
+			row := decisionEvaluationRow{
+				At:          ts,
+				InstanceKey: v.ProcessInstanceKey,
+				Inputs:      rawJSONOr(v.InputsJSON, "{}"),
+				Outputs:     rawJSONOr(v.OutputsJSON, "{}"),
+			}
+			if v.TraceJSON != "" {
+				row.Trace = json.RawMessage(v.TraceJSON)
+			}
+			if d, ok := s.deployments[v.ProcessDefKey]; ok {
+				row.ProcessID = d.ProcessID
+				row.ElementID = d.cp.ElementBpmnId(v.ElementId)
+			}
+			out = append(out, row)
+			return nil
+		})
+	})
+	if scanErr != nil {
+		writeError(w, http.StatusInternalServerError, "list decision evaluations: "+scanErr.Error())
+		return
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].At > out[j].At })
 	writeJSON(w, http.StatusOK, out)
 }

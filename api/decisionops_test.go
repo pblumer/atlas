@@ -199,6 +199,76 @@ func listDeployed(t *testing.T, x deployTestHarness) []deployedDecision {
 	return rows
 }
 
+// TestDecisionEvaluationsDrilldown deploys the dinner process (decision "Dish"),
+// runs an instance, then reads the per-decision drill-down. The evaluation must come
+// back tied to the instance it ran in, its diagram element, and the exact
+// inputs/outputs/trace an operator needs to debug what the decision saw. A different
+// decision id yields an empty list — the scan filters by id.
+func TestDecisionEvaluationsDrilldown(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+	pid := x.mkProject("Dinner")
+	x.saveDraft(pid, dinnerBPMN)
+	x.addRef(pid, "Dish decision", "dish")
+	code, b := x.do(http.MethodPost, "/api/v1/projects/"+pid+"/deploy", "")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, b)
+	}
+	var rep projectDeployResp
+	if err := json.Unmarshal(b, &rep); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+	key := rep.Definitions[0].Key
+	if code, b := x.do(http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", key), "{}"); code != http.StatusOK {
+		t.Fatalf("create instance status=%d body=%s", code, b)
+	}
+
+	code, b = x.do(http.MethodGet, "/api/v1/decisions/Dish/evaluations", "")
+	if code != http.StatusOK {
+		t.Fatalf("evaluations status=%d body=%s", code, b)
+	}
+	var rows []struct {
+		At          int64           `json:"at"`
+		InstanceKey uint64          `json:"instanceKey"`
+		ProcessID   string          `json:"processId"`
+		ElementID   string          `json:"elementId"`
+		Inputs      json.RawMessage `json:"inputs"`
+		Outputs     json.RawMessage `json:"outputs"`
+		Trace       json.RawMessage `json:"trace"`
+	}
+	if err := json.Unmarshal(b, &rows); err != nil {
+		t.Fatalf("decode rows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows = %d, want 1; body=%s", len(rows), b)
+	}
+	r := rows[0]
+	if r.InstanceKey == 0 {
+		t.Errorf("instanceKey = 0, want the running instance")
+	}
+	if r.ProcessID != "dinner" {
+		t.Errorf("processId = %q, want dinner", r.ProcessID)
+	}
+	if r.ElementID != "decide" {
+		t.Errorf("elementId = %q, want decide (the business rule task's diagram id)", r.ElementID)
+	}
+	if string(r.Inputs) != `{"Season":"Winter"}` {
+		t.Errorf("inputs = %s, want {\"Season\":\"Winter\"}", r.Inputs)
+	}
+	if string(r.Outputs) != `{"Dish":"Roastbeef"}` {
+		t.Errorf("outputs = %s, want {\"Dish\":\"Roastbeef\"}", r.Outputs)
+	}
+	if len(r.Trace) == 0 {
+		t.Errorf("trace is empty, want the temis explanation; body=%s", b)
+	}
+
+	// A different decision id filters to nothing — a 200 empty array, not a 404.
+	code, b = x.do(http.MethodGet, "/api/v1/decisions/Nope/evaluations", "")
+	if code != http.StatusOK || (string(b) != "[]\n" && string(b) != "[]") {
+		t.Fatalf("unknown decision: status=%d body=%q, want 200 []", code, b)
+	}
+}
+
 // getDeployed fetches the decisions overview and returns the row for decisionID,
 // failing the test if the endpoint errors or the decision is absent.
 func getDeployed(t *testing.T, x deployTestHarness, decisionID string) deployedDecision {
