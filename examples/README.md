@@ -163,62 +163,100 @@ involved:
 
 ```
 Warenkorb abgeschickt
-   → Warenkorb laden          positions = [ {BPMN-Buch, 24.90, ×1},
-                                            {Kaffeetasse, 9.95, ×2},
-                                            {Aufkleber-Set, 4.50, ×3} ]
-   → Artikelanzahl zaehlen    itemCount = sum(for p in positions return p.qty)
-   → Zwischensumme berechnen  subtotal  = decimal(sum(for p in positions
+   → Warenkorb uebernehmen    cart = positions  (or a default cart if none given)
+   → Artikelanzahl zaehlen    itemCount = sum(for p in cart return p.qty)
+   → Zwischensumme berechnen  subtotal  = decimal(sum(for p in cart
                                                       return p.price * p.qty), 2)
+   → Rabattsatz ermitteln     discountRate = «rule table» (customerType × subtotal)
+   → Rabatt berechnen         discount = decimal(subtotal * discountRate, 2)
    → Zwischensumme ≥ 50 €? ──┐
         ja                  nein
-        Rabatt & Gratis-     Standard-
-        versand              versand
-        {discount: 10%,      {discount: 0,
-         shipping: 0}         shipping: 4.90}
+        Gratisversand        Standardversand
+        shipping = 0         shipping = 4.90
    └──────────┬──────────┘
-   → Nettobetrag    net   = decimal(subtotal − rebate.discount, 2)
+   → Nettobetrag    net   = decimal(subtotal − discount, 2)
    → MwSt (19%)     tax   = decimal(net * 0.19, 2)
-   → Gesamtsumme    total = decimal(net + tax + rebate.shipping, 2)
+   → Gesamtsumme    total = decimal(net + tax + shipping, 2)
    → Summe > 100 €? ── ja → Freigabe erforderlich
                       nein → Bestellung bestaetigt
 ```
 
-### The calculation
+### Dynamic input via start variables
 
-`sum(for p in positions return p.price * p.qty)` is the cart sum; `decimal(x, 2)`
-rounds to cents (FEEL uses exact decimals, so the figures are reproducible). For
-the seeded cart:
+The cart and the customer type are declared as **start variables**
+(`atlas:startForm`), so in the Modeler's Deploy form (or the Variables panel) you
+enter your own cart and every figure recomputes:
+
+| Start variable | Type | Default |
+|----------------|------|---------|
+| `positions` | json | the 3-item demo cart |
+| `customerType` | string | `Business` (`Business` \| `Private`) |
+
+Start-variable defaults are applied by the Deploy form, not by a bare
+instance-create, so the first task `Warenkorb uebernehmen` guards `positions` with
+a default cart — meaning an instance started with **no input still self-completes**
+against the demo cart, which is what makes this usable as a deterministic test.
+
+### The discount — a FEEL rule table
+
+`Rabattsatz ermitteln` is an inline FEEL decision table (the same logic a DMN
+`businessRuleTask` would model, but evaluated in-engine so it needs no external
+decision service):
+
+| Customer type | Order value | Rate |
+|---------------|-------------|-----:|
+| Business | ≥ 1000 € | 15 % |
+| Business | otherwise | 10 % |
+| Private | ≥ 200 € | 5 % |
+| Private | otherwise | 0 % |
+
+> Want a *real* DMN task instead? Reference a decision with
+> `<zeebe:calledDecision decisionId="…">` and register that decision as a DMN
+> reference in Atlas (Modeler → business rule task → decision picker) first — a
+> plain deploy of a business rule task whose decision isn't registered is refused
+> (`no DMN model provides …`).
+
+### The calculation — default cart, Business customer
+
+`sum(for p in cart return p.price * p.qty)` is the cart sum; `decimal(x, 2)` rounds
+to cents (FEEL uses exact decimals, so the figures are reproducible):
 
 | Step | FEEL | Value |
 |------|------|------:|
 | Zwischensumme | `decimal(sum(p.price·p.qty), 2)` | **58.30 €** |
-| Rabatt 10 % (≥ 50 €) | `decimal(subtotal · 0.10, 2)` | − 5.83 € |
+| Rabattsatz | rule table: Business, < 1000 € | 10 % |
+| Rabatt | `decimal(subtotal · discountRate, 2)` | − 5.83 € |
 | Nettobetrag | `subtotal − discount` | 52.47 € |
 | MwSt 19 % | `decimal(net · 0.19, 2)` | + 9.97 € |
 | Versand (frei ≥ 50 €) | — | 0.00 € |
 | **Gesamtsumme** | `decimal(net + tax + shipping, 2)` | **62.44 €** |
 
 Both gateways branch on the *computed* sum, so the visited end event alone proves
-the arithmetic: `subtotal ≥ 50` takes the rebate branch, and `total ≤ 100` reaches
-`Bestellung bestaetigt`. Expected visits after one instance
+the arithmetic. Expected visits after one default-cart instance
 (`instances: 0, tokens: 0`):
 
 | Element | Type | Visits |
 |---------|------|:------:|
 | `cart_submitted` | StartEvent | 1 |
-| `load_cart` · `count_items` · `subtotal` | ScriptTask | 1 each |
-| `threshold_gw` | ExclusiveGateway | 1 |
-| `apply_rebate` | ScriptTask | 1 |
-| `standard_shipping` | ScriptTask | **0** (subtotal ≥ 50 → rebate branch) |
-| `rebate_join` | ExclusiveGateway | 1 |
+| `take_cart` · `count_items` · `subtotal` | ScriptTask | 1 each |
+| `discount_rate` · `discount_amt` | ScriptTask | 1 each |
+| `ship_gw` | ExclusiveGateway | 1 |
+| `free_ship` | ScriptTask | 1 |
+| `std_ship` | ScriptTask | **0** (subtotal ≥ 50 → free shipping) |
+| `ship_join` | ExclusiveGateway | 1 |
 | `net` · `tax` · `grand_total` | ScriptTask | 1 each |
 | `approval_gw` | ExclusiveGateway | 1 |
 | `confirmed` | EndEvent | 1 |
 | `needs_approval` | EndEvent | **0** (total ≤ 100 → no approval) |
 
-To land on the *other* branches, edit the seeded `positions` in `load_cart`: a cart
-under 50 € takes `Standardversand` (with 4.90 € shipping), and one whose total
-exceeds 100 € reaches `Freigabe erforderlich`.
+To land on the *other* branches, start with your own `positions`: a cart under 50 €
+takes `Standardversand` (4.90 € shipping), and one whose total exceeds 100 € reaches
+`Freigabe erforderlich`. Setting `customerType` to `Private` switches the discount
+row.
+
+> **Scope:** this models the cart → order-sum calculation. It does *not* cover the
+> downstream order-to-cash lifecycle (delivery, invoicing, settlement) — those are
+> worker-backed steps that park until completed.
 
 ## Clean up
 
