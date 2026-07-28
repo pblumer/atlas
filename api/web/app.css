@@ -1259,6 +1259,16 @@ tr[hidden] { display: none; }
 .pgroup.collapsed .pgroup-body { display: none; }
 .pgroup .pgroup-body > h3 { display: none; } /* a nested legacy header, if any */
 
+/* Uniform vertical rhythm inside a property group. Different element branches emit
+   a mix of fields, hint paragraphs, and rows, each with its own margins — so gaps
+   drifted between 8px, 10px and the UA <p> default (which "verreisst" the panel).
+   Pin every direct child to one 10px step (hints a touch tighter), and zero the
+   first child so it never doubles the header's gap. Scoped to the group body, so it
+   can't leak into other panels. */
+.pgroup-body > * { margin-top: 10px; margin-bottom: 0; }
+.pgroup-body > *:first-child { margin-top: 0; }
+.pgroup-body > p { margin-top: 8px; font-size: 12px; line-height: 1.5; color: var(--muted); }
+
 /* A derived, read-only property (e.g. Decision ID, set by the decision picker):
    dimmed with a dashed border and a small "derived" tag beside the label, so it
    reads as computed rather than a blank to fill by hand. */
