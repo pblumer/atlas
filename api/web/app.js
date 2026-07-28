@@ -1908,6 +1908,23 @@ async function viewTasks(preselectKey) {
     me: authOn ? ((AUTH.user && AUTH.user.username) || "") : (localStorage.getItem("atlas.tasks.me") || ""),
     assignable: [], // enabled users a task can be assigned to, for the picker
     mountedForm: null, // the live form-js viewer instance for the selected task, if any
+    query: "", // free-text filter over the visible tasks (name/process/assignee/…)
+    sort: localStorage.getItem("atlas.tasks.sort") || "smart", // sort key, see SORTS
+    selectMode: false, // multi-select for bulk actions
+    picked: new Set(), // job keys ticked for a bulk action
+  };
+
+  // SORTS are the orderings the toolbar offers over the visible tasks. "smart" is
+  // the default inbox order (taskOrder); the rest are single-key sorts an operator
+  // reaches for when triaging a big queue. Age uses the monotonic job key.
+  const SORTS = {
+    smart: { label: "Smart (due · priority)", cmp: taskOrder },
+    due: { label: "Due date", cmp: (a, b) => (a.dueDate || 8.64e15) - (b.dueDate || 8.64e15) || a.key - b.key },
+    priority: { label: "Priority", cmp: (a, b) => taskPriority(b) - taskPriority(a) || a.key - b.key },
+    name: { label: "Name (A–Z)", cmp: (a, b) => taskTitle(a).localeCompare(taskTitle(b)) || a.key - b.key },
+    process: { label: "Process", cmp: (a, b) => (a.processId || "").localeCompare(b.processId || "") || a.key - b.key },
+    newest: { label: "Newest first", cmp: (a, b) => b.key - a.key },
+    oldest: { label: "Oldest first", cmp: (a, b) => a.key - b.key },
   };
 
   const identity = authOn
@@ -1924,8 +1941,19 @@ async function viewTasks(preselectKey) {
       <section class="tasks-list-pane">
         <header class="tasks-list-head">
           <h2 id="task-list-title">All tasks</h2>
+          <button class="btn ghost small" id="task-select">Select</button>
           <button class="btn ghost small" id="task-refresh">Refresh</button>
         </header>
+        <div class="tasks-toolbar">
+          <span class="tasks-search">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
+            <input id="task-q" type="text" placeholder="Filter tasks…" aria-label="Filter tasks" spellcheck="false"/>
+          </span>
+          <label class="tasks-sort">Sort
+            <select id="task-sort">${Object.entries(SORTS).map(([k, s]) => `<option value="${k}"${k === state.sort ? " selected" : ""}>${esc(s.label)}</option>`).join("")}</select>
+          </label>
+        </div>
+        <div class="tasks-bulk" id="task-bulk" hidden></div>
         <ul class="tasks-list" id="task-list"><li class="tasks-empty muted">Loading&hellip;</li></ul>
       </section>
       <section class="tasks-detail" id="task-detail"></section>
@@ -1936,9 +1964,15 @@ async function viewTasks(preselectKey) {
   const detailEl = document.getElementById("task-detail");
   const titleEl = document.getElementById("task-list-title");
 
+  // visible applies the folder, then the free-text query, then the chosen sort.
+  const matchesQuery = (t, q) =>
+    (taskTitle(t) + " " + (t.processId || "") + " " + (t.assignee || "") + " " +
+      (t.candidateGroups || "") + " " + (t.elementId || "")).toLowerCase().includes(q);
   const visible = () => {
     const f = TASK_FOLDERS.find((x) => x.id === state.folder) || TASK_FOLDERS[0];
-    return state.tasks.filter((t) => f.match(t, state.me));
+    const q = state.query.trim().toLowerCase();
+    const items = state.tasks.filter((t) => f.match(t, state.me) && (!q || matchesQuery(t, q)));
+    return items.sort((SORTS[state.sort] || SORTS.smart).cmp);
   };
 
   function renderFolders() {
@@ -1958,37 +1992,168 @@ async function viewTasks(preselectKey) {
     });
   }
 
+  const byKey = (k) => state.tasks.find((t) => t.key === k);
+
   function renderList() {
     const items = visible();
     const f = TASK_FOLDERS.find((x) => x.id === state.folder) || TASK_FOLDERS[0];
     titleEl.textContent = f.label;
+    renderBulk();
     if (!items.length) {
-      listEl.innerHTML = `<li class="tasks-empty muted">No tasks in this folder.</li>`;
+      listEl.innerHTML = `<li class="tasks-empty muted">${state.query.trim() ? "No tasks match your filter." : "No tasks in this folder."}</li>`;
       return;
     }
+    const selMode = state.selectMode;
     listEl.innerHTML = items
       .map((t) => {
         const sel = t.key === state.selected ? " selected" : "";
+        const picked = state.picked.has(t.key);
         const who = t.assignee ? esc(t.assignee) : t.candidateGroups ? esc(t.candidateGroups) : "Unassigned";
         const hi = taskPriority(t) >= 70 ? `<span class="prio-dot" title="High priority (${taskPriority(t)})"></span>` : "";
         const d = dueInfo(t);
         const due = d ? `<span class="due-badge${d.overdue ? " overdue" : ""}" title="${esc(d.abs)}">${esc(d.overdue ? "Overdue" : "Due " + d.rel)}</span>` : "";
-        return `<li class="tasks-item${sel}" data-key="${t.key}">
-          <div class="tasks-item-top">
-            <span class="tasks-item-title">${hi}${esc(taskTitle(t))}</span>
-            <span class="chip">${esc(t.processId || "")}</span>
+        const cb = selMode ? `<input type="checkbox" class="tasks-check"${picked ? " checked" : ""} aria-label="Select task"/>` : "";
+        return `<li class="tasks-item${sel}${picked ? " picked" : ""}" data-key="${t.key}">
+          ${cb}
+          <div class="tasks-item-body">
+            <div class="tasks-item-top">
+              <span class="tasks-item-title">${hi}${esc(taskTitle(t))}</span>
+              <span class="chip">${esc(t.processId || "")}</span>
+            </div>
+            <div class="tasks-item-sub muted"><span>${who}</span>${due}</div>
           </div>
-          <div class="tasks-item-sub muted"><span>${who}</span>${due}</div>
         </li>`;
       })
       .join("");
     listEl.querySelectorAll(".tasks-item").forEach((li) => {
       li.addEventListener("click", () => {
-        state.selected = Number(li.dataset.key);
+        const key = Number(li.dataset.key);
+        if (state.selectMode) { togglePick(key, li); return; }
+        state.selected = key;
         renderList();
         renderDetail();
       });
     });
+  }
+
+  // togglePick flips one task's bulk selection. It updates just that row (and the
+  // bulk bar) rather than rebuilding the whole list, so ticking through a long
+  // queue stays snappy.
+  function togglePick(key, li) {
+    if (state.picked.has(key)) state.picked.delete(key); else state.picked.add(key);
+    const on = state.picked.has(key);
+    if (li) {
+      li.classList.toggle("picked", on);
+      const cb = li.querySelector(".tasks-check");
+      if (cb) cb.checked = on;
+    }
+    renderBulk();
+  }
+
+  // renderBulk draws the bulk-action bar while in select mode: a count, "all
+  // visible", and the actions (claim / unclaim / assign / complete). Hidden
+  // otherwise. Rebuilt on each pick, which is cheap (a handful of controls).
+  function renderBulk() {
+    const bulkEl = document.getElementById("task-bulk");
+    if (!bulkEl) return;
+    if (!state.selectMode) { bulkEl.hidden = true; bulkEl.innerHTML = ""; return; }
+    const vis = visible();
+    const n = state.picked.size;
+    const allVisPicked = vis.length > 0 && vis.every((t) => state.picked.has(t.key));
+    const assignOpts = state.assignable
+      .map((u) => `<option value="${esc(u.username)}">${esc(u.displayName || u.username)}</option>`).join("");
+    bulkEl.hidden = false;
+    bulkEl.innerHTML = `
+      <label class="tasks-bulk-all"><input type="checkbox" id="bulk-all"${allVisPicked ? " checked" : ""}/> All visible</label>
+      <span class="tasks-bulk-count">${n} selected</span>
+      <span class="tasks-bulk-actions">
+        <button class="btn small" id="bulk-claim"${n ? "" : " disabled"}>Claim</button>
+        <button class="btn small" id="bulk-unclaim"${n ? "" : " disabled"}>Unclaim</button>
+        ${state.assignable.length ? `<select class="tasks-assign" id="bulk-assign"${n ? "" : " disabled"}><option value="">Assign to&hellip;</option>${assignOpts}</select>` : ""}
+        <button class="btn small" id="bulk-complete"${n ? "" : " disabled"}>Complete</button>
+        <button class="btn ghost small" id="bulk-clear"${n ? "" : " disabled"}>Clear</button>
+      </span>`;
+    bulkEl.querySelector("#bulk-all").addEventListener("change", (e) => {
+      if (e.target.checked) vis.forEach((t) => state.picked.add(t.key));
+      else vis.forEach((t) => state.picked.delete(t.key));
+      renderList();
+    });
+    bulkEl.querySelector("#bulk-claim").addEventListener("click", () => bulkAction("claim"));
+    bulkEl.querySelector("#bulk-unclaim").addEventListener("click", () => bulkAction("unclaim"));
+    bulkEl.querySelector("#bulk-complete").addEventListener("click", bulkComplete);
+    bulkEl.querySelector("#bulk-clear").addEventListener("click", () => { state.picked.clear(); renderList(); });
+    const asg = bulkEl.querySelector("#bulk-assign");
+    if (asg) asg.addEventListener("change", (e) => { if (e.target.value) bulkAction("assign", e.target.value); });
+  }
+
+  // bulkAction claims / unclaims / assigns every picked task. The per-task calls run
+  // in parallel (the engine serializes writes) and it reports how many succeeded.
+  async function bulkAction(kind, assignee) {
+    const keys = [...state.picked];
+    if (!keys.length) return;
+    if (kind === "claim" && !authOn && !state.me) { toast("Set your identity (top left) to claim", "err"); return; }
+    const call = (k) => {
+      if (kind === "unclaim") return api("POST", `/api/v1/tasks/${k}/unclaim`);
+      if (kind === "assign") return api("POST", `/api/v1/tasks/${k}/claim`, { assignee });
+      return api("POST", `/api/v1/tasks/${k}/claim`, authOn ? undefined : { assignee: state.me });
+    };
+    const verb = kind === "unclaim" ? "Unclaimed" : kind === "assign" ? `Assigned to ${assignee}` : "Claimed";
+    const results = await Promise.allSettled(keys.map(call));
+    const ok = results.filter((r) => r.status === "fulfilled").length;
+    const fail = results.length - ok;
+    toast(`${verb}: ${ok} done${fail ? `, ${fail} failed` : ""}`, fail ? "err" : "ok");
+    state.picked.clear();
+    await load();
+  }
+
+  // bulkComplete completes the picked tasks that have no form (a form needs its
+  // own data, so those are skipped with a note). Confirms first, since completing
+  // is irreversible.
+  async function bulkComplete() {
+    const tasks = [...state.picked].map(byKey).filter(Boolean);
+    const formless = tasks.filter((t) => !t.formId);
+    const withForm = tasks.length - formless.length;
+    if (!formless.length) {
+      toast(withForm ? "Selected tasks all have a form — complete those individually." : "Nothing to complete.", "err");
+      return;
+    }
+    const skip = withForm ? ` (${withForm} with a form will be skipped)` : "";
+    if (!confirm(`Complete ${formless.length} task${formless.length === 1 ? "" : "s"}?${skip}`)) return;
+    const results = await Promise.allSettled(formless.map((t) => api("POST", `/api/v1/tasks/${t.key}/complete`)));
+    const ok = results.filter((r) => r.status === "fulfilled").length;
+    const fail = results.length - ok;
+    toast(`Completed ${ok}${fail ? `, ${fail} failed` : ""}${withForm ? `, skipped ${withForm} with forms` : ""}`, fail ? "err" : "ok");
+    state.picked.clear();
+    await load();
+  }
+
+  // completeCurrent completes the selected task, then lands on the task that slides
+  // into its place (auto-advance), so an operator can clear a queue without
+  // reaching for the mouse between tasks. Bound to the button and Ctrl/⌘+Enter.
+  async function completeCurrent() {
+    const t = state.tasks.find((x) => x.key === state.selected);
+    if (!t) return;
+    let payload;
+    if (state.mountedForm) {
+      const { data, errors } = state.mountedForm.submit();
+      if (errors && Object.keys(errors).length > 0) { toast("Please fix the highlighted fields", "err"); return; }
+      payload = { variables: data };
+    }
+    const btn = document.getElementById("task-complete");
+    if (btn) btn.disabled = true;
+    const idx = visible().findIndex((x) => x.key === t.key); // the slot to land back on
+    try {
+      await api("POST", "/api/v1/tasks/" + t.key + "/complete", payload);
+      toast("Task completed");
+      state.tasks = await api("GET", "/api/v1/tasks");
+      state.tasks.sort(taskOrder);
+      const after = visible();
+      state.selected = after.length ? after[Math.min(Math.max(idx, 0), after.length - 1)].key : null;
+      renderAll();
+    } catch (err) {
+      toast("Complete failed: " + err.message, "err");
+      if (btn) btn.disabled = false;
+    }
   }
 
   // destroyForm tears down the live form-js instance (if any) before the detail
@@ -2059,7 +2224,7 @@ async function viewTasks(preselectKey) {
         <div class="tasks-detail-actions">
           ${assignSelect}
           <button class="btn neutral" id="task-claim"${claimDisabled}${claimHint}>${claimLabel}</button>
-          <button class="btn" id="task-complete">Complete task</button>
+          <button class="btn" id="task-complete" title="Complete (Ctrl/⌘ + Enter)">Complete task</button>
         </div>
       </header>
       <div class="tasks-fields">
@@ -2073,30 +2238,7 @@ async function viewTasks(preselectKey) {
         ${row("Task key", `<span class="chip">${t.key}</span>`)}
       </div>
       ${formArea}`;
-    document.getElementById("task-complete").addEventListener("click", async (e) => {
-      const btn = e.currentTarget;
-      // If a form is mounted, validate and collect its data as the task's
-      // variables; an invalid form blocks completion.
-      let payload;
-      if (state.mountedForm) {
-        const { data, errors } = state.mountedForm.submit();
-        if (errors && Object.keys(errors).length > 0) {
-          toast("Please fix the highlighted fields", "err");
-          return;
-        }
-        payload = { variables: data };
-      }
-      btn.disabled = true;
-      try {
-        await api("POST", "/api/v1/tasks/" + t.key + "/complete", payload);
-        toast("Task completed");
-        state.selected = null;
-        await load();
-      } catch (err) {
-        toast("Complete failed: " + err.message, "err");
-        btn.disabled = false;
-      }
-    });
+    document.getElementById("task-complete").addEventListener("click", () => completeCurrent());
     document.getElementById("task-claim").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
       btn.disabled = true;
@@ -2166,6 +2308,38 @@ async function viewTasks(preselectKey) {
     });
   }
   document.getElementById("task-refresh").addEventListener("click", load);
+
+  const qEl = document.getElementById("task-q");
+  if (qEl) qEl.addEventListener("input", (e) => { state.query = e.target.value; renderList(); });
+  const sortEl = document.getElementById("task-sort");
+  if (sortEl) sortEl.addEventListener("change", (e) => {
+    state.sort = SORTS[e.target.value] ? e.target.value : "smart";
+    localStorage.setItem("atlas.tasks.sort", state.sort);
+    renderList();
+  });
+  const selectBtn = document.getElementById("task-select");
+  if (selectBtn) selectBtn.addEventListener("click", () => {
+    state.selectMode = !state.selectMode;
+    selectBtn.classList.toggle("on", state.selectMode);
+    selectBtn.textContent = state.selectMode ? "Done" : "Select";
+    if (!state.selectMode) state.picked.clear();
+    renderList();
+  });
+
+  // Ctrl/⌘+Enter completes the selected task (auto-advancing to the next), so an
+  // operator can clear a queue from the keyboard. A self-removing capture listener
+  // keeps it scoped to the tasks view — the SPA replaces view.innerHTML on
+  // navigation, so once .tasks leaves the DOM the handler unbinds itself.
+  const tasksRoot = view.querySelector(".tasks");
+  const onTasksKey = (e) => {
+    if (!tasksRoot || !document.body.contains(tasksRoot)) { document.removeEventListener("keydown", onTasksKey, true); return; }
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && !state.selectMode && state.selected != null) {
+      e.preventDefault();
+      completeCurrent();
+    }
+  };
+  document.addEventListener("keydown", onTasksKey, true);
+
   await loadAssignable();
   await load();
 }
