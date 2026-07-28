@@ -228,10 +228,18 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Create a project", tag: "Projects", req: jsonBody("Project", tObject()), resp: jsonBody("Created project", tObject())}},
 		{"GET", "/api/v1/projects", s.handleListProjects, apiOp{
 			summary: "List projects", tag: "Projects", resp: jsonBody("Projects", tArray())}},
-		{"PATCH", "/api/v1/projects/{id}", s.handleRenameProject, apiOp{
-			summary: "Rename a project", tag: "Projects", req: jsonBody("Rename", tObject()), resp: jsonBody("Updated project", tObject())}},
+		{"PATCH", "/api/v1/projects/{id}", s.handleUpdateProject, apiOp{
+			summary: "Update a project: rename, set visibility (private/shared), or transfer ownership (ADR-0071)", tag: "Projects",
+			req:  jsonBody("Update", schemaObj(map[string]any{"name": tString(), "visibility": tString(), "ownerId": tString()})),
+			resp: jsonBody("Updated project", tObject())}},
 		{"DELETE", "/api/v1/projects/{id}", s.handleDeleteProject, apiOp{
 			summary: "Delete a project", tag: "Projects", status: http.StatusNoContent}},
+		{"PUT", "/api/v1/projects/{id}/members/{userId}", s.handleSetProjectMember, apiOp{
+			summary: "Share a project with a user, or change their role (ADR-0071)", tag: "Projects",
+			req:  jsonBody("Member role", schemaObj(map[string]any{"role": tString()}, "role")),
+			resp: jsonBody("Updated project", tObject())}},
+		{"DELETE", "/api/v1/projects/{id}/members/{userId}", s.handleRemoveProjectMember, apiOp{
+			summary: "Revoke a user's membership on a project (ADR-0071)", tag: "Projects", resp: jsonBody("Updated project", tObject())}},
 		{"POST", "/api/v1/projects/{id}/validate", s.handleValidateProject, apiOp{
 			summary: "Validate a project's artifacts", tag: "Projects", resp: jsonBody("Validation result", tObject())}},
 		{"POST", "/api/v1/projects/{id}/deploy", s.handleDeployProject, apiOp{
