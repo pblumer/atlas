@@ -1,0 +1,109 @@
+package api
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// scopeBPMN is a minimal draft with the given process id, so handleSaveDraft can
+// derive that id from the body.
+func scopeBPMN(id string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <bpmn:process id="` + id + `"><bpmn:startEvent id="s"/></bpmn:process>
+</bpmn:definitions>`
+}
+
+// TestArtifactScopeStoreErrors drives the 500 branches the scope-inheritance
+// wiring adds to the artifact handlers: a broken projects store during list
+// filtering, a project record that errors on read (governing an artifact), and a
+// broken artifact store on the load-before-authorize step. Auth is off, so the
+// authorization itself is a no-op — these exercise only the store-error paths.
+func TestArtifactScopeStoreErrors(t *testing.T) {
+	srv := newServerForErrors(t)
+	h := srv.Handler()
+	do := func(method, path, body string) int {
+		var req *http.Request
+		if body != "" {
+			req = httptest.NewRequest(method, path, strings.NewReader(body))
+		} else {
+			req = httptest.NewRequest(method, path, nil)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	// A) projectsByID error → the four scope-filtered list handlers 500.
+	realProjects := srv.projects
+	srv.projects = &projectStore{dir: filepath.Join(t.TempDir(), "gone")}
+	for _, p := range []string{"/api/v1/drafts", "/api/v1/dmnrefs", "/api/v1/forms", "/api/v1/decisions"} {
+		if got := do(http.MethodGet, p, ""); got != http.StatusInternalServerError {
+			t.Fatalf("GET %s with broken projects = %d, want 500", p, got)
+		}
+	}
+	srv.projects = realProjects
+
+	// B) A project whose record is a directory errors on read; an artifact filed
+	// under it makes every authorize step 500.
+	if err := os.MkdirAll(srv.projects.fileFor("pdir"), 0o755); err != nil {
+		t.Fatalf("mk pdir: %v", err)
+	}
+	must := func(e error) {
+		if e != nil {
+			t.Fatalf("seed: %v", e)
+		}
+	}
+	must(srv.drafts.save(draft{ProcessID: "d1", ProjectID: "pdir", XML: "<x/>", SavedAt: 1}))
+	must(srv.dmnrefs.save(dmnRef{ID: "r1", Name: "R", ModelRef: "m", ProjectID: "pdir", CreatedAt: 1}))
+	must(srv.forms.save(form{ID: "f1", Name: "F", ProjectID: "pdir", Schema: "{}", SavedAt: 1}))
+	must(srv.drafts.save(draft{ProcessID: "d2", XML: "<x/>", SavedAt: 1})) // ungrouped, for a move target test
+
+	cases := []struct {
+		name, method, path, body string
+	}{
+		{"draft xml (authorizeArtifact)", "GET", "/api/v1/drafts/d1/xml", ""},
+		{"dmnref graph (authorizeArtifact)", "GET", "/api/v1/dmnrefs/r1/graph", ""},
+		{"dmnref validate (authorizeArtifact)", "POST", "/api/v1/dmnrefs/r1/validate", ""},
+		{"delete draft (authorizeArtifact)", "DELETE", "/api/v1/drafts/d1", ""},
+		{"delete dmnref (authorizeArtifact)", "DELETE", "/api/v1/dmnrefs/r1", ""},
+		{"delete form (authorizeArtifact)", "DELETE", "/api/v1/forms/f1", ""},
+		{"overwrite form (authorizeArtifact source)", "POST", "/api/v1/forms", `{"id":"f1","schema":{"a":1}}`},
+		{"overwrite draft (authorizeArtifact source)", "POST", "/api/v1/drafts", scopeBPMN("d1")},
+		{"move draft (authorizeArtifact source)", "PATCH", "/api/v1/drafts/d1", `{"projectId":""}`},
+		{"update dmnref (authorizeArtifact source)", "PATCH", "/api/v1/dmnrefs/r1", `{"name":"X"}`},
+		{"create dmnref (authorizeTargetProject)", "POST", "/api/v1/dmnrefs", `{"name":"N","modelRef":"m","projectId":"pdir"}`},
+		{"create draft (authorizeTargetProject)", "POST", "/api/v1/drafts?projectId=pdir", scopeBPMN("newp")},
+		{"move draft into target (authorizeTargetProject)", "PATCH", "/api/v1/drafts/d2", `{"projectId":"pdir"}`},
+	}
+	for _, tc := range cases {
+		if got := do(tc.method, tc.path, tc.body); got != http.StatusInternalServerError {
+			t.Fatalf("%s = %d, want 500", tc.name, got)
+		}
+	}
+
+	// C) A broken artifact store errors on the load-before-authorize step.
+	must(os.MkdirAll(srv.drafts.fileFor("ddir"), 0o755))
+	must(os.MkdirAll(srv.dmnrefs.fileFor("rdir"), 0o755))
+	must(os.MkdirAll(srv.forms.fileFor("fdir"), 0o755))
+	storeErr := []struct {
+		name, method, path, body string
+	}{
+		{"delete draft get error", "DELETE", "/api/v1/drafts/ddir", ""},
+		{"save draft existing-read error", "POST", "/api/v1/drafts", scopeBPMN("ddir")},
+		{"move draft get error", "PATCH", "/api/v1/drafts/ddir", `{"projectId":""}`},
+		{"delete dmnref get error", "DELETE", "/api/v1/dmnrefs/rdir", ""},
+		{"update dmnref get error", "PATCH", "/api/v1/dmnrefs/rdir", `{"name":"x"}`},
+		{"delete form get error", "DELETE", "/api/v1/forms/fdir", ""},
+		{"save form existing-read error", "POST", "/api/v1/forms", `{"id":"fdir","schema":{}}`},
+	}
+	for _, tc := range storeErr {
+		if got := do(tc.method, tc.path, tc.body); got != http.StatusInternalServerError {
+			t.Fatalf("%s = %d, want 500", tc.name, got)
+		}
+	}
+}

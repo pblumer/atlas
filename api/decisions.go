@@ -34,9 +34,21 @@ func (s *Server) handleListDecisions(w http.ResponseWriter, r *http.Request) {
 	)
 	s.do(func() {
 		var all []dmnRef
-		all, loadErr = s.dmnrefs.loadAll()
+		if all, loadErr = s.dmnrefs.loadAll(); loadErr != nil {
+			return
+		}
+		var projs map[string]project
+		if projs, loadErr = s.projectsByID(); loadErr != nil {
+			return
+		}
 		for _, rec := range all {
 			if filter != "" && rec.ProjectID != filter {
+				continue
+			}
+			// A reference the caller cannot view contributes no decisions to the
+			// catalog (ADR-0071). Deployed decisions (below) stay: they are engine-
+			// wide runtime state, not design-time artifacts.
+			if !s.canViewArtifact(r, rec.ProjectID, projs) {
 				continue
 			}
 			refs = append(refs, rec)
@@ -121,6 +133,10 @@ func (s *Server) handleDmnRefGraph(w http.ResponseWriter, r *http.Request) {
 		return
 	case !ok:
 		writeError(w, http.StatusNotFound, "no dmn reference with that id")
+		return
+	}
+	if code, msg := s.authorizeArtifact(r, rec.ProjectID, ScopeRoleViewer); code != 0 {
+		writeError(w, code, msg)
 		return
 	}
 	g, err := s.dmnValidator.Graph(r.Context(), rec.ModelRef)
