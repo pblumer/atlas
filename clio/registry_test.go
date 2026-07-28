@@ -214,6 +214,25 @@ func TestHTTPClientQueryError(t *testing.T) {
 	}
 }
 
+// TestHTTPClientBuildRequestErrors covers the request-construction error branch of
+// every operation: an endpoint containing a control character makes
+// http.NewRequestWithContext fail before any network call.
+func TestHTTPClientBuildRequestErrors(t *testing.T) {
+	c := NewHTTPClient(Connector{Endpoint: "http://\x7f-bad"})
+	if err := c.WriteEvent(context.Background(), Event{Subject: "s"}); err == nil {
+		t.Error("WriteEvent with a bad endpoint: want a build error")
+	}
+	if _, err := c.GetState(context.Background(), "s", ""); err == nil {
+		t.Error("GetState with a bad endpoint: want a build error")
+	}
+	if _, err := c.Query(context.Background(), "q"); err == nil {
+		t.Error("Query with a bad endpoint: want a build error")
+	}
+	if _, err := c.ReadEvents(context.Background(), ReadEventsRequest{Subject: "s"}); err == nil {
+		t.Error("ReadEvents with a bad endpoint: want a build error")
+	}
+}
+
 // TestHTTPClientDecodeErrors surfaces malformed clio response bodies as errors on
 // every reading operation (the JSON/NDJSON decode-failure branches).
 func TestHTTPClientDecodeErrors(t *testing.T) {

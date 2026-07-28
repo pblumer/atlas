@@ -80,6 +80,23 @@ func TestResolveInboundSubsSkips(t *testing.T) {
 	}
 }
 
+// TestResolveInboundSubsBadKey covers resolveInboundSubs' compile-error branch: a
+// subscription stored with an uncompilable correlation key (bypassing the API's
+// config-time validation) is skipped rather than crashing the poll.
+func TestResolveInboundSubsBadKey(t *testing.T) {
+	srv, _ := newValidateServer(t, WithInboundPollInterval(0))
+	var got []pendingSub
+	srv.do(func() {
+		_ = srv.connectors.save(connector{ID: "c", Name: "on", Kind: "clio", Endpoint: "http://x", Enabled: true, CreatedAt: 1})
+		_ = srv.inboundSubs.save(inboundSubscription{ID: "s", ConnectorID: "c", WatchedSubject: "a", MessageName: "m", CorrelationKey: "( unbalanced", Enabled: true, CreatedAt: 1})
+		srv.clioRegistry.Replace(map[string]clio.Client{"on": &fakeClioReader{}})
+		got = srv.resolveInboundSubs()
+	})
+	if len(got) != 0 {
+		t.Fatalf("resolveInboundSubs with an uncompilable key = %d, want 0 (skipped)", len(got))
+	}
+}
+
 // TestAdvanceInboundCursorMissing covers the guard for advancing a vanished
 // subscription's cursor: it is a no-op, not a panic.
 func TestAdvanceInboundCursorMissing(t *testing.T) {

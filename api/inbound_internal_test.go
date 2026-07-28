@@ -8,9 +8,48 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pblumer/atlas/clio"
 )
+
+// TestInboundBridgeLive runs the bridge's ticker goroutine (not pollInbound
+// directly): with a short poll interval a configured subscription's clio event is
+// picked up and starts a process without any manual poll, exercising the
+// inboundBridge loop and its shutdown on Close.
+func TestInboundBridgeLive(t *testing.T) {
+	srv, _ := newValidateServer(t, WithInboundPollInterval(15*time.Millisecond))
+	x := deployTestHarness{t, srv.Handler()}
+
+	pid := x.mkProject("Onboard")
+	x.saveDraft(pid, messageStartBridgeBPMN)
+	if code, b := x.do(http.MethodPost, "/api/v1/projects/"+pid+"/deploy", ""); code != http.StatusOK {
+		t.Fatalf("deploy: %d %s", code, b)
+	}
+	code, cb := x.do(http.MethodPost, "/api/v1/connectors", `{"name":"events","kind":"clio","endpoint":"http://x"}`)
+	if code != http.StatusOK {
+		t.Fatalf("create connector: %d %s", code, cb)
+	}
+	var conn connector
+	_ = json.Unmarshal(cb, &conn)
+	if code, sb := x.do(http.MethodPost, "/api/v1/connectors/"+conn.ID+"/inbound-subscriptions",
+		`{"watchedSubject":"orders/new","messageName":"orderEvent"}`); code != http.StatusOK {
+		t.Fatalf("create subscription: %d %s", code, sb)
+	}
+	srv.do(func() {
+		srv.clioRegistry.Replace(map[string]clio.Client{"events": &fakeClioReader{events: []clio.InboundEvent{
+			{ID: "e1", Seq: 1, Subject: "orders/new", Type: "OrderPlaced", Data: map[string]any{"orderId": "o-1"}},
+		}}})
+	})
+	// The ticker fires within a few intervals; wait until the bridge starts the process.
+	deadline := time.Now().Add(3 * time.Second)
+	for activeInstances(t, srv) == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("bridge did not start a process within the deadline")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
 
 // messageStartBridgeBPMN: a message start event named "orderEvent" begins an
 // instance that parks at a keyless "never" catch, so an instance the bridge starts
@@ -205,11 +244,25 @@ func TestInboundSubscriptionHandlers(t *testing.T) {
 	var sub inboundSubscription
 	_ = json.Unmarshal(sb, &sub)
 
-	if code, lb := do(http.MethodGet, base, ""); code != http.StatusOK || !strings.Contains(string(lb), `"messageName":"orderEvent"`) {
-		t.Fatalf("list: %d %s", code, lb)
+	// A subscription on a second clio connector must be filtered out of this
+	// connector's list (the list is scoped by connector id).
+	_, ob := do(http.MethodPost, "/api/v1/connectors", `{"name":"other","kind":"clio","endpoint":"http://z"}`)
+	var otherConn connector
+	_ = json.Unmarshal(ob, &otherConn)
+	_, _ = do(http.MethodPost, "/api/v1/connectors/"+otherConn.ID+"/inbound-subscriptions", `{"watchedSubject":"x","messageName":"otherEvent"}`)
+
+	if code, lb := do(http.MethodGet, base, ""); code != http.StatusOK || !strings.Contains(string(lb), `"messageName":"orderEvent"`) || strings.Contains(string(lb), "otherEvent") {
+		t.Fatalf("list (should be scoped to this connector): %d %s", code, lb)
 	}
-	if code, _ := do(http.MethodPatch, "/api/v1/inbound-subscriptions/"+sub.ID, `{"enabled":false,"correlationKey":"= orderId"}`); code != http.StatusOK {
-		t.Error("patch: want 200")
+	if code, pb := do(http.MethodPatch, "/api/v1/inbound-subscriptions/"+sub.ID,
+		`{"enabled":false,"correlationKey":"= orderId","watchedSubject":"orders/all","messageName":"orderChanged","recursive":false}`); code != http.StatusOK {
+		t.Fatalf("patch: %d %s", code, pb)
+	} else {
+		var up inboundSubscription
+		_ = json.Unmarshal(pb, &up)
+		if up.WatchedSubject != "orders/all" || up.MessageName != "orderChanged" || up.CorrelationKey != "orderId" || up.Enabled {
+			t.Errorf("patch result = %+v, want all fields updated", up)
+		}
 	}
 	if code, _ := do(http.MethodPatch, "/api/v1/inbound-subscriptions/"+sub.ID, `{"correlationKey":"= ("}`); code != http.StatusBadRequest {
 		t.Error("patch with bad FEEL: want 400")
