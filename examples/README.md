@@ -8,6 +8,8 @@ against a live Atlas server (`0.1.0-dev`).
 |------|-----------|
 | [`order-fulfillment.bpmn`](order-fulfillment.bpmn) | A self-completing order-fulfillment process that exercises inline scripts and all three gateway kinds, and drives itself to an end event with **no external workers attached**. |
 | [`cart-total.bpmn`](cart-total.bpmn) | A shopping-cart checkout that computes an order total (subtotal → rebate → VAT → shipping) entirely in inline FEEL, and routes on the computed sum. Self-completing. |
+| [`order-to-cash.bpmn`](order-to-cash.bpmn) | The full order lifecycle: cart calculation → approval (≥ 100 €, user task) → **parallel** delivery & billing (service tasks). Parks on the worker-backed steps — a realistic, not-fully-automatic process. |
+| [`order-to-cash-app.html`](order-to-cash-app.html) | A self-contained single-page app that mirrors `order-to-cash.bpmn`: edit the cart, watch the sum compute live, approve, and clear the delivery/billing tasks. No server needed — open it in a browser. |
 | [`entra-create-account.bpmn`](entra-create-account.bpmn) | A PowerShell `jobScript` task that creates an EntraID account — the *worker-backed* counterpart: its token parks on the script job until a PowerShell script worker runs it. |
 
 > Looking for a model that parks on human tasks so you can watch the task
@@ -257,6 +259,56 @@ row.
 > **Scope:** this models the cart → order-sum calculation. It does *not* cover the
 > downstream order-to-cash lifecycle (delivery, invoicing, settlement) — those are
 > worker-backed steps that park until completed.
+
+---
+
+## `order-to-cash.bpmn` — the full order lifecycle
+
+Where `cart-total.bpmn` stops at the order sum, this model carries the order all
+the way to cash, and shows what a *realistic* (not fully automatic) process looks
+like:
+
+```
+Bestellung eingegangen
+  → Warenkorb → Zwischensumme → Rabattsatz → Rabatt → Gesamtsumme   (inline FEEL, auto)
+  → Summe > 100 €?  ── ja → [User-Task] Bestellung freigeben ──┐
+                     nein ───────────────────────────────────┤
+  → ⟨parallel⟩                                                 │
+       Liefern:    [Service] Ware kommissionieren → Ware versenden
+       Verrechnen: [Service] Rechnung erstellen   → Zahlung verbuchen
+    ⟨join⟩
+  → Auftrag abgeschlossen
+```
+
+The calculation part self-completes, then the instance **parks**: on the
+`Bestellung freigeben` user task (only when the sum exceeds 100 €), and on the two
+parallel service tasks `Ware kommissionieren` (job `kommissionierung`) and
+`Rechnung erstellen` (job `fakturierung`). Those tokens wait until a user
+completes the task / a job worker runs — the honest behaviour of a live business
+process. Verified on the live server: with the default cart the instance parks
+with one token on `pick` and one on `invoice`.
+
+`positions` and `customerType` are the same start variables as `cart-total`.
+
+## `order-to-cash-app.html` — an interactive single-page app
+
+A self-contained SPA (vanilla HTML/JS, no build, no server) that mirrors the BPMN
+and embodies its **forms**:
+
+- the **cart** is the start form — add/remove positions, pick the customer type;
+- the **sum** recomputes live in the exact same FEEL logic (rule-table discount,
+  VAT, free shipping ≥ 50 €), with the matched discount rule highlighted;
+- **Bestellung freigeben** is the user-task form (shown only above 100 €);
+- **Liefern** and **Verrechnen** are two lanes whose service tasks you clear one
+  by one — standing in for the job workers — until the order closes.
+
+**Open it:**
+
+- Download and open the file in any browser, or
+- browse the repo file and use a raw-HTML preview
+  (`https://htmlpreview.github.io/?<raw file URL>`) if the repo is public, or
+- serve `examples/` via GitHub Pages for a permanent link (ask and I'll add a
+  Pages workflow).
 
 ## Clean up
 
