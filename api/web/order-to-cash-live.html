@@ -46,6 +46,13 @@
   .lede code{font-family:var(--mono);font-size:.92em}
   .callout{margin:18px 0 0;padding:13px 16px;border-radius:12px;background:var(--accent-soft);color:var(--accent-ink);font-size:14px;font-weight:520}
   .callout b{font-weight:700}
+  .account{margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px}
+  .account input{padding:7px 10px}
+  .account input[type="text"],.account input[type="password"]{width:150px}
+  .account .who{color:var(--muted)}
+  .account .who b{color:var(--ink)}
+  .account .err{color:#b23a3a;font-size:13px}
+  .account .lock{font-size:12px;color:var(--faint);font-family:var(--mono)}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}
   @media (max-width:860px){.grid{grid-template-columns:1fr}}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:20px}
@@ -99,6 +106,7 @@
       Aufgaben ab. <b>Rechnen, Regeln, Routing und Parallelität macht die Engine.</b></p>
     <div class="callout">Keine Geschäftslogik im Client. Der einzige Vertrag zum Server sind drei Aufrufe:
       <b>deploy</b> · <b>start instance</b> · <b>complete task</b>. Alles Fachliche steckt im BPMN.</div>
+    <div class="account" id="account"></div>
   </header>
 
   <div class="grid">
@@ -154,7 +162,7 @@ const base = () => $("#base").value.replace(/\/$/,"");
 
 // A one-line fetch wrapper that also writes every call into the on-screen log,
 // so a developer literally sees the handful of requests this app makes.
-async function api(method, path, body){
+async function api(method, path, body, quiet){
   const opts = {method, credentials:"same-origin", headers:{}};
   if (body !== undefined){
     const xml = typeof body === "string";
@@ -163,8 +171,11 @@ async function api(method, path, body){
   }
   let res, text;
   try { res = await fetch(base()+path, opts); text = await res.text(); }
-  catch(e){ logLine(method, path, "ERR", e.message); throw e; }
-  logLine(method, path, res.status);
+  catch(e){ if(!quiet) logLine(method, path, "ERR", e.message); throw e; }
+  if(!quiet) logLine(method, path, res.status);
+  // Auth is optional: if the server has it enabled, a 401 means "log in first".
+  // Reveal the login bar so the user can authenticate without leaving the page.
+  if (res.status === 401){ showLogin(); throw new Error("401 — bitte anmelden"); }
   if (!res.ok) throw new Error(method+" "+path+" → "+res.status+" "+text);
   return text ? JSON.parse(text) : null;
 }
@@ -174,6 +185,39 @@ function logLine(method, path, status, extra){
   el.innerHTML = `<span class="m">${method}</span> ${path} <span class="${cls}">→ ${status}${extra?" "+extra:""}</span>`;
   const log = $("#log"); if (log.firstChild && log.firstChild.classList?.contains("s2") && log.children.length===1) log.innerHTML="";
   log.appendChild(el); log.scrollTop = log.scrollHeight;
+}
+
+// ————— Authentication —————
+// Atlas auth is optional. When the server runs with --auth, the API answers 401
+// until a session cookie is present. Logging in (POST /auth/login) sets the
+// HttpOnly `atlas_session` cookie; from then on every same-origin fetch carries
+// it automatically — so after login the rest of the app needs no token handling.
+let authed = false;
+async function whoami(){ try { return await api("GET","/auth/me", undefined, true); } catch { return null; } }
+function showLogin(){ if (!document.getElementById("loginBtn")) renderAccount(null); }
+function renderAccount(user){
+  const el = $("#account");
+  if (user){
+    authed = true;
+    el.innerHTML = `<span class="who">Angemeldet als <b>${(user.username||user.name||"?")}</b></span>`+
+                   `<button class="btn ghost small" id="logoutBtn">Abmelden</button>`;
+    $("#logoutBtn").onclick = async ()=>{ try{ await api("POST","/auth/logout",{}); }catch{} renderAccount(null); };
+  } else {
+    authed = false;
+    el.innerHTML = `<span class="lock">🔒 API erfordert Login</span>`+
+      `<input type="text" id="lu" placeholder="Benutzer" autocomplete="username"/>`+
+      `<input type="password" id="lp" placeholder="Passwort" autocomplete="current-password"/>`+
+      `<button class="btn primary small" id="loginBtn">Anmelden</button>`+
+      `<span class="err" id="loginErr"></span>`;
+    const submit = async ()=>{
+      $("#loginErr").textContent = "";
+      try{ await api("POST","/auth/login", {username:$("#lu").value.trim(), password:$("#lp").value});
+           renderAccount(await whoami()); }
+      catch(e){ $("#loginErr").textContent = "Login fehlgeschlagen"; }
+    };
+    $("#loginBtn").onclick = submit;
+    $("#lp").addEventListener("keydown", e=>{ if(e.key==="Enter") submit(); });
+  }
 }
 
 // The process model, embedded so the app is self-contained. No diagram layout —
@@ -322,6 +366,7 @@ $("#startBtn").onclick = async ()=>{
 };
 window.refresh = refresh; // for the inline "Aktualisieren" button
 renderRows();
+whoami().then(renderAccount); // on load: greet the user, or reveal the login bar
 </script>
 </body>
 </html>
