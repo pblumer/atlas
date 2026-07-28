@@ -122,6 +122,12 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Deployed processes", schemaObj(map[string]any{
 				"key": tInteger(), "processId": tString(), "version": tInteger(), "deployments": tArray(),
 			}))}},
+		{"POST", "/api/v1/validate", s.handleValidate, apiOp{
+			summary: "Dry-run compile a BPMN model and return structured problems (no deploy)", tag: "Deployments",
+			req: xmlBody("BPMN 2.0 XML"),
+			resp: jsonBody("Validation problems and the engine version that produced them", schemaObj(map[string]any{
+				"valid": tBool(), "version": tString(), "problems": tArray(),
+			}))}},
 
 		{"GET", "/api/v1/processes", s.handleListProcesses, apiOp{
 			summary: "List deployed processes", tag: "Processes", resp: jsonBody("Processes", tArray())}},

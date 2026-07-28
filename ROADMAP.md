@@ -483,8 +483,16 @@ the hand-written Details panel one vertical slice at a time:
 - 🔲 Example data — editor-only mock data used by Play mode, never by the runtime.
 
 **Validation & problems** ([ADR-0026](docs/adr/0026-problems-panel-and-versioned-validation.md)):
-- 🔲 A `POST /api/v1/validate` dry-run compile (no register, no version, no run)
-  returning structured problems (element ref, severity, rule, message).
+- ✅ A `POST /api/v1/validate` dry-run compile (no register, no version, no run)
+  returning structured problems (element ref, severity, rule, message) plus the
+  engine version that produced them. It runs the real compiler pipeline off the
+  run loop: graph-wide faults come back as element-anchored problems (the
+  `compiler.Validate` findings, ADR-0026), warnings (dead code, a split missing
+  its default) leave the model valid, and a stage-1–4 compile error is one
+  generic `compile` problem. An invalid model is a 200 with `valid:false` and the
+  findings in the body — only a malformed request is a 4xx. Next: anchoring
+  stage-1–4 faults to their element, aggregating problems across all pools of a
+  collaboration, and a capability catalog behind the version tag.
 - 🔲 A Problems panel that calls it debounced on edit, links each problem to its
   element, and shows a version selector ("check problems against Atlas <version>").
 
