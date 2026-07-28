@@ -11,8 +11,16 @@
 
   Seeded cart → subtotal 58.30 €, −5.83 € rebate (≥50 €), +9.97 € VAT, 0 € shipping
              → grand total 62.44 € → "Bestellung bestaetigt".
+
+  This file ships a hand-authored <bpmndi:BPMNDiagram> so it renders with a clean
+  left-to-right layout (straight happy path, symmetric gateway branches) in any
+  BPMN viewer; Atlas preserves supplied diagram layout instead of generating one.
 -->
-<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_cart_total" targetNamespace="http://atlas/examples">
   <process id="cart-total" name="Warenkorb-Summenberechnung" isExecutable="true">
 
     <startEvent id="cart_submitted" name="Warenkorb abgeschickt"/>
@@ -94,4 +102,103 @@
     </sequenceFlow>
     <sequenceFlow id="f_confirm" name="nein" sourceRef="approval_gw" targetRef="confirmed"/>
   </process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="cart-total">
+      <bpmndi:BPMNShape id="di_cart_submitted" bpmnElement="cart_submitted">
+        <dc:Bounds x="150" y="222" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="130" y="262" width="76" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_load_cart" bpmnElement="load_cart">
+        <dc:Bounds x="240" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_count_items" bpmnElement="count_items">
+        <dc:Bounds x="390" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_subtotal" bpmnElement="subtotal">
+        <dc:Bounds x="540" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_threshold_gw" bpmnElement="threshold_gw" isMarkerVisible="true">
+        <dc:Bounds x="690" y="215" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="666" y="269" width="98" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_apply_rebate" bpmnElement="apply_rebate">
+        <dc:Bounds x="790" y="100" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_standard_shipping" bpmnElement="standard_shipping">
+        <dc:Bounds x="790" y="300" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_rebate_join" bpmnElement="rebate_join" isMarkerVisible="true">
+        <dc:Bounds x="940" y="215" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_net" bpmnElement="net">
+        <dc:Bounds x="1040" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_tax" bpmnElement="tax">
+        <dc:Bounds x="1190" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_grand_total" bpmnElement="grand_total">
+        <dc:Bounds x="1340" y="200" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_approval_gw" bpmnElement="approval_gw" isMarkerVisible="true">
+        <dc:Bounds x="1490" y="215" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1472" y="269" width="86" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_needs_approval" bpmnElement="needs_approval">
+        <dc:Bounds x="1590" y="122" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1570" y="162" width="76" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_confirmed" bpmnElement="confirmed">
+        <dc:Bounds x="1590" y="222" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1570" y="262" width="76" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1">
+        <di:waypoint x="186" y="240"/><di:waypoint x="240" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2">
+        <di:waypoint x="340" y="240"/><di:waypoint x="390" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3">
+        <di:waypoint x="490" y="240"/><di:waypoint x="540" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f4" bpmnElement="f4">
+        <di:waypoint x="640" y="240"/><di:waypoint x="690" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_rebate" bpmnElement="f_rebate">
+        <di:waypoint x="715" y="215"/><di:waypoint x="715" y="140"/><di:waypoint x="790" y="140"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="723" y="115" width="14" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_standard" bpmnElement="f_standard">
+        <di:waypoint x="715" y="265"/><di:waypoint x="715" y="340"/><di:waypoint x="790" y="340"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="720" y="318" width="22" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f5" bpmnElement="f5">
+        <di:waypoint x="890" y="140"/><di:waypoint x="965" y="140"/><di:waypoint x="965" y="215"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f6" bpmnElement="f6">
+        <di:waypoint x="890" y="340"/><di:waypoint x="965" y="340"/><di:waypoint x="965" y="265"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f7" bpmnElement="f7">
+        <di:waypoint x="990" y="240"/><di:waypoint x="1040" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f8" bpmnElement="f8">
+        <di:waypoint x="1140" y="240"/><di:waypoint x="1190" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f9" bpmnElement="f9">
+        <di:waypoint x="1290" y="240"/><di:waypoint x="1340" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f10" bpmnElement="f10">
+        <di:waypoint x="1440" y="240"/><di:waypoint x="1490" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_approval" bpmnElement="f_approval">
+        <di:waypoint x="1515" y="215"/><di:waypoint x="1515" y="140"/><di:waypoint x="1590" y="140"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1523" y="115" width="14" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_confirm" bpmnElement="f_confirm">
+        <di:waypoint x="1540" y="240"/><di:waypoint x="1590" y="240"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1548" y="218" width="22" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 </definitions>
