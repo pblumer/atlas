@@ -885,7 +885,20 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 	}
 
-	return b.Build()
+	cp, err := b.Build()
+	if err != nil {
+		return nil, err
+	}
+	// Stage 5 (compiler.md): graph-wide validation. An error-severity Problem
+	// refuses the deploy, preserving the compile-gate contract (invariant I5) — the
+	// same fatal-at-deploy behavior structural parse errors already have, now for
+	// graph-level faults (an unroutable gateway, a boundary event on a non-activity).
+	// Warnings (e.g. unreachable dead code) are non-fatal and surface through the
+	// future /validate dry-run (ADR-0026), not here.
+	if problems := Validate(cp); HasErrors(problems) {
+		return nil, &ValidationError{Problems: problems}
+	}
+	return cp, nil
 }
 
 // BPMN XML is matched by element/attribute local name, so namespace prefixes
