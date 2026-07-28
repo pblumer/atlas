@@ -1537,46 +1537,118 @@ async function viewDecisionDetail(id) {
     </div>
     <p class="muted">Every evaluation of this decision, newest first — one row per
     evaluation. <b>Inputs</b> is what the decision actually saw (each value with its
-    type and quoting); <b>Outputs</b> is what it produced; <b>Trace</b> expands to show
-    which rules fired. A rule that never matches — a string compared against a number,
-    a stray space, a wrong type — shows here as empty or unexpected outputs against
-    inputs you can inspect.</p>
+    type); <b>Result</b> is what it produced, tagged with the rule that fired. Hover a
+    result marked <b>&#8862;</b> to see the decision table with the matched rule
+    highlighted — a rule that never matches (a string compared against a number, a
+    stray space, a wrong type) shows its condition in red.</p>
     <div class="card" style="padding:0">
       <table>
-        <thead><tr><th>When</th><th>Instance</th><th>Element</th><th>Inputs</th><th>Outputs</th><th>Trace</th></tr></thead>
-        <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+        <thead><tr><th>When</th><th>Instance</th><th>Element</th><th>Inputs</th><th>Result</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
       </table>
-    </div>`;
+    </div>
+    <div class="dec-pop" id="dec-pop" hidden></div>`;
   const tbody = document.getElementById("rows");
+  const pop = document.getElementById("dec-pop");
   const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—";
-  const jsonCell = (v) => `<code style="font-size:12px">${esc(JSON.stringify(v))}</code>`;
+  const fmtVal = (v) => (v === null || v === undefined ? "null" : typeof v === "string" ? v : JSON.stringify(v));
+  const cellText = (t) => { const s = (t ?? "").trim(); return s === "" || s === "-" ? "–" : s; };
+  const tablesOf = (r) => (r && r.trace && Array.isArray(r.trace.tables)) ? r.trace.tables : [];
+  const matchedNums = (r) => {
+    const nums = [];
+    for (const t of tablesOf(r)) for (const rule of (t.rules || [])) if (rule.matched) nums.push(rule.index + 1);
+    return [...new Set(nums)];
+  };
 
+  // miniTable renders one decision table as a compact matrix (mirrors temis' Operate
+  // view): a row per rule, input columns + output, the matched rule highlighted and
+  // each cell tinted by whether its condition held.
+  const miniTable = (tt, n) => {
+    const matched = (tt.rules || []).filter((r) => r.matched).map((r) => r.index + 1);
+    const policy = (tt.hitPolicy || "U") + (tt.aggregation ? " " + tt.aggregation : "");
+    const head = matched.length ? `Rule ${matched.join(", ")} fired` : "no rule fired";
+    const ins = tt.inputs || [];
+    const hr = `<tr><th class="mcol-idx">#</th>${ins.map((i) =>
+      `<th>${esc(i.expression)} <code>= ${esc(fmtVal(i.value))}</code></th>`).join("")}<th>&rarr;</th></tr>`;
+    const body = (tt.rules || []).map((r) => {
+      const cells = ins.map((_, k) => {
+        const c = r.conditions && r.conditions[k];
+        const cls = c ? (c.matched ? "mcell is-ok" : "mcell is-no") : "mcell is-skip";
+        return `<td class="${cls}">${c ? esc(cellText(c.entry)) : ""}</td>`;
+      }).join("");
+      const out = r.matched && r.outputs ? esc(r.outputs.map(fmtVal).join(", ")) : "";
+      return `<tr class="mrule${r.matched ? " is-hit" : ""}"><td class="mcol-idx">${r.index + 1}</td>${cells}<td class="mout">${out}</td></tr>`;
+    }).join("");
+    return `<div class="mtable"><div class="mtable-head">${n ? `Table ${n} · ` : ""}${esc(head)}<span class="mtable-policy">${esc(policy)}</span></div>` +
+      `<table class="mgrid">${hr}${body}</table></div>`;
+  };
+
+  let evals = [];
   const load = async () => {
     try {
-      const rows = await api("GET", `/api/v1/decisions/${encodeURIComponent(id)}/evaluations`);
-      if (!rows.length) {
-        tbody.innerHTML = `<tr><td colspan="6" class="empty">
+      evals = await api("GET", `/api/v1/decisions/${encodeURIComponent(id)}/evaluations`) || [];
+      if (!evals.length) {
+        tbody.innerHTML = `<tr><td colspan="5" class="empty">
           This decision has not been evaluated yet. Start a process instance whose
           business rule task calls it.</td></tr>`;
         return;
       }
-      tbody.innerHTML = rows.map((r) => {
-        const trace = r.trace !== undefined
-          ? `<details><summary class="muted" style="cursor:pointer">show</summary><pre style="white-space:pre-wrap;font-size:12px;margin:6px 0 0">${esc(JSON.stringify(r.trace, null, 2))}</pre></details>`
+      tbody.innerHTML = evals.map((r, i) => {
+        const ins = r.inputs && typeof r.inputs === "object" ? Object.entries(r.inputs) : [];
+        const pills = ins.length
+          ? `<div class="in-pills">${ins.map(([k, v]) => `<span class="pill-kv"><b>${esc(k)}</b> = ${esc(fmtVal(v))}</span>`).join("")}</div>`
+          : '<span class="muted">—</span>';
+        const outs = r.outputs && typeof r.outputs === "object" ? Object.entries(r.outputs) : [];
+        const nums = matchedNums(r);
+        const badge = nums.length ? `<span class="res-rule">Rule ${nums.join(", ")}</span>` : "";
+        const hoverable = tablesOf(r).length ? " hoverable" : "";
+        const result = outs.length
+          ? `<div class="res">${outs.map(([k, v], oi) =>
+              `<div class="res-row${hoverable}" data-ev="${i}"${hoverable ? ' tabindex="0"' : ""}>
+                <span class="res-key">${esc(k)}</span>
+                <span class="res-val">${esc(fmtVal(v))}</span>
+                ${oi === 0 ? badge : ""}
+              </div>`).join("")}</div>`
           : '<span class="muted">—</span>';
         return `<tr>
           <td class="muted">${esc(fmtNano(r.at))}</td>
           <td><a href="#/operations/i/${r.instanceKey}" title="Replay this instance step by step">&#9654; ${r.instanceKey}</a></td>
           <td class="muted">${esc(r.elementId || "—")}</td>
-          <td>${jsonCell(r.inputs)}</td>
-          <td>${jsonCell(r.outputs)}</td>
-          <td>${trace}</td>
+          <td>${pills}</td>
+          <td>${result}</td>
         </tr>`;
       }).join("");
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`;
     }
   };
+
+  // A shared, viewport-positioned popover reveals the matched-rule table on hover —
+  // the "table as graphic" from temis, without a column of raw JSON.
+  const showPop = (row) => {
+    const r = evals[Number(row.dataset.ev)];
+    const tables = tablesOf(r);
+    if (!tables.length) return;
+    pop.innerHTML = `<div class="pop-title">${esc(id)}</div>` +
+      tables.map((tt, i) => miniTable(tt, tables.length > 1 ? i + 1 : 0)).join("");
+    pop.hidden = false;
+    const box = row.getBoundingClientRect();
+    const top = box.top - pop.offsetHeight - 10;
+    pop.style.left = Math.max(8, Math.min(box.left, window.innerWidth - pop.offsetWidth - 8)) + "px";
+    pop.style.top = (top < 8 ? box.bottom + 10 : top) + "px";
+  };
+  const hidePop = () => { pop.hidden = true; };
+  tbody.addEventListener("pointerover", (e) => {
+    const row = e.target.closest(".res-row.hoverable");
+    if (row && tbody.contains(row)) showPop(row);
+  });
+  tbody.addEventListener("pointerout", (e) => {
+    const row = e.target.closest(".res-row.hoverable");
+    if (row && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest(".res-row.hoverable") === row)) hidePop();
+  });
+  tbody.addEventListener("focusin", (e) => { const row = e.target.closest(".res-row.hoverable"); if (row) showPop(row); });
+  tbody.addEventListener("focusout", hidePop);
+
   document.getElementById("refresh").addEventListener("click", load);
   await load();
 }
