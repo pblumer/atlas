@@ -138,6 +138,9 @@ ol.steps li { margin: 6px 0; }
 .field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .field.inline { display: flex; align-items: center; gap: 8px; color: var(--text); }
 .field.inline input { width: auto; margin: 0; }
+/* A labelled checkbox property (e.g. Executable) in the properties panel. */
+.pcheck { display: inline-flex; align-items: center; gap: 8px; margin: 10px 0 0; font-size: 13px; color: var(--text); cursor: pointer; }
+.pcheck input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); cursor: pointer; }
 
 /* Stat tiles */
 .stats { display: flex; gap: 34px; flex-wrap: wrap; }
@@ -408,17 +411,39 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .json-editor.invalid:focus-within { border-color: var(--danger); box-shadow: 0 0 0 2px #fdecea; }
 .json-status { font-size: 11px; color: var(--danger); margin: 4px 0 0; white-space: pre-wrap; word-break: break-word; }
 
-/* Compact mode: one-line height, expands on focus. */
-.json-editor.compact .json-input { resize: none; min-height: 34px; height: 34px; transition: height 0.15s; }
-.json-editor.compact.expanded .json-input { height: auto; min-height: 80px; }
+/* Compact mode: a tidy one-liner when empty/unfocused, growing to a comfortable,
+   vertically resizable box once it holds (or gains) content — so a nested array is
+   actually editable inline, with the ⤢ button for the full modal beyond that. */
+.json-editor.compact .json-input { resize: none; min-height: 34px; height: 34px; transition: height 0.15s; padding-right: 56px; }
+.json-editor.compact.expanded .json-input { height: auto; min-height: 108px; resize: vertical; }
 
-/* Toolbar floats in the top-right corner. */
+/* Toolbar floats in the top-right corner (a row, so the format + expand buttons sit
+   within a collapsed field's height; the input reserves right padding for them). */
 .json-toolbar {
   position: absolute; top: 4px; right: 4px; z-index: 2;
-  display: flex; gap: 2px;
+  display: flex; flex-direction: row; gap: 3px;
 }
-.json-toolbar .icon-btn { width: 24px; height: 24px; font-size: 11px; opacity: 0.5; }
-.json-toolbar .icon-btn:hover { opacity: 1; }
+.json-toolbar .icon-btn {
+  width: 24px; height: 24px; font-size: 11px; opacity: 0.55;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 5px;
+}
+.json-toolbar .icon-btn:hover { opacity: 1; color: var(--accent); border-color: var(--accent); }
+
+/* Expand-to-modal: a full-size JSON editor for comfortable editing of big values. */
+.json-modal-overlay {
+  position: fixed; inset: 0; z-index: 70; padding: 24px;
+  background: rgba(20, 22, 26, 0.5); display: flex; align-items: center; justify-content: center;
+}
+.json-modal {
+  width: min(760px, 100%); max-height: 86vh; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(20, 33, 61, 0.35);
+}
+.json-modal-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.json-modal-head strong { font-size: 14px; }
+.json-modal-body { padding: 14px; background: var(--bg); overflow: auto; flex: 1; }
+.json-modal-body .json-editor { margin: 0; width: 100%; }
+.json-modal-body .json-input { min-height: min(52vh, 440px); resize: vertical; }
 
 /* JSON token colours — a light palette consistent with the FEEL editor. */
 .jtok-key      { color: #953800; }

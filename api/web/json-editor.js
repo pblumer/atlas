@@ -133,10 +133,13 @@ export function attachJSONEditor(textarea, opts = {}) {
   const code = document.createElement("code");
   pre.appendChild(code);
 
-  // Toolbar: format button.
+  // Toolbar: format button, plus (compact/inline fields) an expand button that opens
+  // the value in a large modal editor — the comfortable surface for a nested array
+  // that a 34px inline box can't show.
   const toolbar = document.createElement("div");
   toolbar.className = "json-toolbar";
-  toolbar.innerHTML = `<button type="button" class="json-fmt icon-btn" title="Format JSON" aria-label="Format JSON">{ }</button>`;
+  toolbar.innerHTML = `<button type="button" class="json-fmt icon-btn" title="Format JSON" aria-label="Format JSON">{ }</button>` +
+    (opts.compact ? `<button type="button" class="json-expand icon-btn" title="Open in a large editor" aria-label="Open in a large editor">⤢</button>` : "");
 
   wrap.appendChild(pre);
   wrap.appendChild(textarea);
@@ -299,6 +302,56 @@ export function attachJSONEditor(textarea, opts = {}) {
   textarea.addEventListener("keydown", onKeydown);
   toolbar.querySelector(".json-fmt").addEventListener("click", format);
 
+  // Expand-to-modal: edit the value in a full-size JSON editor (a non-compact one,
+  // so it carries no further expand button), writing back on Apply. The overlay is
+  // tracked so destroying this editor (e.g. a removed row) tears it down too.
+  let modalOverlay = null;
+  const closeModal = () => {
+    if (!modalOverlay) return;
+    try { modalOverlay._handle && modalOverlay._handle.destroy(); } catch { /* gone */ }
+    document.removeEventListener("keydown", modalOverlay._onKey, true);
+    modalOverlay.remove();
+    modalOverlay = null;
+  };
+  const openModal = () => {
+    if (modalOverlay || destroyed) return;
+    const overlay = document.createElement("div");
+    overlay.className = "json-modal-overlay";
+    overlay.innerHTML = `
+      <div class="json-modal" role="dialog" aria-modal="true" aria-label="Edit JSON value">
+        <div class="json-modal-head">
+          <strong>Edit JSON</strong>
+          <span style="flex:1"></span>
+          <button type="button" class="btn ghost small json-modal-fmt">{ } Format</button>
+          <button type="button" class="btn ghost small json-modal-cancel">Cancel</button>
+          <button type="button" class="btn small json-modal-apply">Apply</button>
+        </div>
+        <div class="json-modal-body"><textarea class="json-modal-ta" spellcheck="false" aria-label="JSON value"></textarea></div>
+      </div>`;
+    document.body.appendChild(overlay);
+    modalOverlay = overlay;
+    const ta2 = overlay.querySelector(".json-modal-ta");
+    ta2.value = textarea.value;
+    const handle = attachJSONEditor(ta2, { rows: 18 });
+    overlay._handle = handle;
+    ta2.focus();
+    const apply = () => {
+      textarea.value = handle ? handle.getValue() : ta2.value;
+      renderHighlight();
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      textarea.dispatchEvent(new Event("change", { bubbles: true }));
+      closeModal();
+    };
+    overlay.querySelector(".json-modal-apply").addEventListener("click", apply);
+    overlay.querySelector(".json-modal-cancel").addEventListener("click", closeModal);
+    overlay.querySelector(".json-modal-fmt").addEventListener("click", () => { if (handle) handle.format(); });
+    overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) closeModal(); });
+    overlay._onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); closeModal(); } };
+    document.addEventListener("keydown", overlay._onKey, true);
+  };
+  const expandBtn = toolbar.querySelector(".json-expand");
+  if (expandBtn) expandBtn.addEventListener("click", openModal);
+
   // Compact mode: expand on focus, collapse on blur.
   if (opts.compact) {
     textarea.addEventListener("focus", () => wrap.classList.add("expanded"));
@@ -320,9 +373,11 @@ export function attachJSONEditor(textarea, opts = {}) {
       textarea.classList.remove("json-input");
       delete textarea.dataset.jsonOn;
       statusEl.remove();
+      closeModal();
       wrap.parentNode.insertBefore(textarea, wrap);
       wrap.remove();
     },
+    format,
     getValue() { return textarea.value; },
     setValue(v) {
       textarea.value = typeof v === "string" ? v : JSON.stringify(v, null, 2);
