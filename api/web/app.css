@@ -962,6 +962,18 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   font: 600 12px/1.4 system-ui, sans-serif; color: var(--muted);
   margin: 0 0 8px; padding-bottom: 5px; border-bottom: 1px solid var(--border);
 }
+/* One evaluation as a card in the replay Decisions tab: header, then Inputs and
+   Result on a label/content grid — the temis-style result rows and hover table
+   (shared .res-*/.mtable/.dec-pop styles) live inside. */
+.ops-tab-body .dec-card2 {
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg);
+  padding: 8px 10px; margin-bottom: 8px;
+}
+.ops-tab-body .dec-card2:last-child { margin-bottom: 0; }
+.ops-tab-body .dec-card2-h { font: 600 12.5px/1.4 ui-monospace, monospace; word-break: break-word; }
+.ops-tab-body .dec-card2-h .muted { font-weight: 400; font-size: 11px; }
+.ops-tab-body .dec-sect2 { display: grid; grid-template-columns: 58px 1fr; gap: 8px; align-items: start; margin-top: 7px; }
+.ops-tab-body .dec-sect2-l { font: 600 10px/1.7 system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
 
 /* Execution-count badge Operate draws at a node's corner. */
 .ops-badge {
