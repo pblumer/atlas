@@ -63,4 +63,30 @@ func TestDecisionEvaluationHistory(t *testing.T) {
 	if got := fold(model.NewKey(1, 99)); len(got) != 0 {
 		t.Errorf("unknown scope evaluations = %v, want none", got)
 	}
+
+	// EachDecisionEvaluation folds the whole column family, across instances, and
+	// recovers each record's owning scope from its key — the global "which decisions
+	// ran, how often" access pattern the Operations overview uses. All three records
+	// must appear, each tagged with the scope it was written under.
+	type g struct {
+		scope    uint64
+		decision string
+	}
+	var all []g
+	if err := s.EachDecisionEvaluation(func(scope uint64, _ int64, v *model.DecisionEvaluationValue) error {
+		all = append(all, g{scope, v.DecisionId})
+		return nil
+	}); err != nil {
+		t.Fatalf("EachDecisionEvaluation: %v", err)
+	}
+	if len(all) != 3 {
+		t.Fatalf("global evaluations = %d, want 3: %v", len(all), all)
+	}
+	counts := map[uint64]int{}
+	for _, e := range all {
+		counts[e.scope]++
+	}
+	if counts[i1] != 2 || counts[i2] != 1 {
+		t.Errorf("per-scope counts = %v, want {i1:2, i2:1}", counts)
+	}
 }

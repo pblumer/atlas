@@ -299,6 +299,14 @@ func positionFromDecisionEvalKey(k []byte) uint64 {
 	return binary.BigEndian.Uint64(k[len(k)-8:])
 }
 
+// scopeFromDecisionEvalKey extracts the owning scope (process instance) key from a
+// decision-evaluation key: it follows the one-byte column-family tag. Used by a
+// column-family-wide scan, which — unlike a single-scope scan — must recover each
+// record's owning instance from the key itself.
+func scopeFromDecisionEvalKey(k []byte) uint64 {
+	return binary.BigEndian.Uint64(k[1:9])
+}
+
 // appendLenString appends a uint32 length prefix followed by s, so a
 // variable-length string can be an unambiguous key component (the length marks
 // where it ends, letting a later component follow).

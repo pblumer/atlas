@@ -357,6 +357,24 @@ func (s *Store) DecisionEvaluationHistory(scopeKey uint64, fn func(ts int64, pos
 	})
 }
 
+// EachDecisionEvaluation folds every retained DMN decision evaluation across all
+// process instances, calling fn with the owning scope (process instance) key, the
+// evaluation's event timestamp, and its frozen record (ADR-0066). It scans the
+// whole decision-evaluation column family — the global "which decisions ran, and
+// how often" access pattern the Operations decisions overview uses, as opposed to
+// DecisionEvaluationHistory, which folds a single instance's evaluations. The scan
+// order is scope then timestamp then position; a caller that only aggregates by
+// decision id does not depend on it.
+func (s *Store) EachDecisionEvaluation(fn func(scopeKey uint64, ts int64, v *model.DecisionEvaluationValue) error) error {
+	return s.scanPrefix([]byte{byte(cfDecisionEvaluation)}, func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTDecisionEvaluation, raw)
+		if err != nil {
+			return err
+		}
+		return fn(scopeFromDecisionEvalKey(k), timestampFromDecisionEvalKey(k), v.(*model.DecisionEvaluationValue))
+	})
+}
+
 // ProcessInstance returns the process instance for key and whether it was found,
 // looking first in the active family and then in the terminal-history family
 // (ADR-0017). It lets a query resolve an instance's definition whether it is
