@@ -64,6 +64,8 @@ type processResp struct {
 	// still lists (so it can be inspected) but is omitted from the start surfaces and
 	// cannot be started. Always emitted so the UI can filter on it.
 	Executable bool `json:"executable"`
+	// VersionTag is the process's atlas:versionTag revision label, empty when unset.
+	VersionTag string `json:"versionTag,omitempty"`
 }
 
 // collaborationParticipants reports how many <participant> pools a model's
@@ -238,6 +240,7 @@ type instanceTimelineResp struct {
 	ProcessDefKey uint64          `json:"processDefKey"`
 	ProcessID     string          `json:"processId"`
 	Version       int32           `json:"version"`
+	VersionTag    string          `json:"versionTag,omitempty"`
 	State         string          `json:"state"`
 	Steps         []timelineStep  `json:"steps"`
 	Frames        []timelineFrame `json:"frames"`
@@ -248,6 +251,7 @@ type instanceResp struct {
 	ProcessDefKey    uint64         `json:"processDefKey"`
 	ProcessID        string         `json:"processId"`
 	Version          int32          `json:"version"`
+	VersionTag       string         `json:"versionTag,omitempty"`
 	ElementInstances int            `json:"elementInstances"`
 	State            string         `json:"state"`
 	CreatedAt        int64          `json:"createdAt,omitempty"`
@@ -635,6 +639,7 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
 				CollaborationKey: s.collaborationKeyOf(d),
 				StartFormID:      d.cp.StartFormId(),
 				Executable:       d.cp.IsExecutable(),
+				VersionTag:       d.cp.VersionTag(),
 			})
 		}
 	})
@@ -994,6 +999,9 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		foundDef = true
 		resp.ProcessID = d.ProcessID
 		resp.Version = d.Version
+		if d.cp != nil {
+			resp.VersionTag = d.cp.VersionTag()
+		}
 
 		// Collect the element steps and the variable changes, each with its log
 		// position, then fold the variables into the steps below.
@@ -1482,6 +1490,9 @@ func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
 			if d, ok := s.deployments[r.ProcessDefKey]; ok {
 				r.ProcessID = d.ProcessID
 				r.Version = d.Version
+				if d.cp != nil {
+					r.VersionTag = d.cp.VersionTag()
+				}
 			}
 			return s.store.VariablesOfScope(key, func(vv *model.VariableValue) error {
 				r.Variables = append(r.Variables, toVariableView(vv))

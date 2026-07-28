@@ -268,6 +268,9 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	// Atlas has always run every deployed process), so an existing model without it
 	// keeps working. Only an explicit "false" marks a process non-executable.
 	b.SetExecutable(proc.IsExecutable != "false")
+	if proc.VersionTag != "" {
+		b.SetVersionTag(proc.VersionTag)
+	}
 	ids := make(map[string]int32, len(proc.StartEvents)+len(proc.ServiceTasks)+len(proc.EndEvents))
 	register := func(id string, nodeID int32) error {
 		if id == "" {
@@ -947,6 +950,7 @@ type xmlProcess struct {
 	Id                string                `xml:"id,attr"`
 	Name              string                `xml:"name,attr"`
 	IsExecutable      string                `xml:"isExecutable,attr"`
+	VersionTag        string                `xml:"versionTag,attr"`
 	StartEvents       []xmlStartEvent       `xml:"startEvent"`
 	EndEvents         []xmlEndEvent         `xml:"endEvent"`
 	ServiceTasks      []xmlServiceTask      `xml:"serviceTask"`

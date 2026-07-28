@@ -129,6 +129,7 @@ type Builder struct {
 	ioOutputs         []pendingIO      // zeebe:ioMapping outputs, grouped by node in Build
 	elementIds        []int32          // interned source BPMN id per node, -1 if unset
 	startFormId       int32            // interned start-form id (ADR-0028), -1 if the process has none
+	versionTag        int32            // interned atlas:versionTag revision label, -1 if none
 	isExecutable      bool             // bpmn:isExecutable; defaults true (set in NewBuilder)
 
 	interner map[string]int32
@@ -145,6 +146,7 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 		bpmnProcessId: bpmnProcessId,
 		version:       version,
 		startFormId:   -1,
+		versionTag:    -1,
 		isExecutable:  true, // BPMN default; the parser sets false only for isExecutable="false"
 		interner:      map[string]int32{},
 	}
@@ -204,6 +206,10 @@ func (b *Builder) SetStartFormId(id string) { b.startFormId = b.intern(id) }
 // process is descriptive-only — the API refuses to start it and hides it from the
 // start surfaces (it still deploys and lists so it can be inspected).
 func (b *Builder) SetExecutable(v bool) { b.isExecutable = v }
+
+// SetVersionTag records the process's atlas:versionTag — an optional revision label
+// (e.g. "1.4.0") shown in Operations beside the deploy version. Design-time metadata.
+func (b *Builder) SetVersionTag(s string) { b.versionTag = b.intern(s) }
 
 // AddMessageStartEvent adds a message start event and returns its element id. It
 // is a process entry point like a none start event — at runtime it simply flows
@@ -803,6 +809,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		startEvents:       startEvents,
 		elementIds:        b.elementIds,
 		startFormId:       b.startFormId,
+		versionTag:        b.versionTag,
 		isExecutable:      b.isExecutable,
 		strings:           b.strings,
 	}, nil
