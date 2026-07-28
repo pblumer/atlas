@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Atlas · Order-to-Cash (live)</title>
+</head>
+<body>
+<!--
+  Order-to-Cash — LIVE against the Atlas HTTP API.
+
+  Served by the Atlas server itself (api/web/), so `fetch("/api/v1/…")` is
+  same-origin — no CORS, no SDK, no build step. The whole point of this file:
+  the client carries NO business logic. Atlas runs the BPMN process
+  (examples/order-to-cash-live.bpmn) — the cart sum, the discount rule table, the
+  19% VAT, the "> 100 €" approval routing, and the parallel Liefern/Verrechnen
+  branches all live in the engine. This page only ever does three things:
+
+      1) deploy the model         POST /api/v1/deployments
+      2) start an instance        POST /api/v1/processes/{key}/instances
+      3) complete the open tasks  POST /api/v1/tasks/{key}/complete
+
+  Everything else — how much, which branch, what comes next — is Atlas's job.
+  That is why this app is so small. Read the ~120 lines of script below and you
+  have seen the entire integration.
+-->
+<style>
+  :root{
+    --bg:#f5f7f5;--panel:#fff;--panel-2:#f0f3f1;--ink:#17201c;--muted:#5d6b64;--faint:#8a9690;
+    --line:#e2e8e4;--accent:#0d7a63;--accent-ink:#0a5f4d;--accent-soft:#e2f1ec;--amber:#9a6a15;
+    --amber-soft:#f6ecd8;--shadow:0 1px 2px rgba(20,40,32,.04),0 8px 30px rgba(20,40,32,.06);
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;--sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#0e1310;--panel:#161d19;--panel-2:#1b241f;--ink:#e8efea;--muted:#9aa8a1;--faint:#6f7d76;
+    --line:#26302a;--accent:#34b498;--accent-ink:#56c9af;--accent-soft:#14261f;--amber:#d6a24a;
+    --amber-soft:#2a2113;--shadow:0 1px 2px rgba(0,0,0,.3),0 10px 34px rgba(0,0,0,.4);}}
+  :root[data-theme="dark"]{--bg:#0e1310;--panel:#161d19;--panel-2:#1b241f;--ink:#e8efea;--muted:#9aa8a1;--faint:#6f7d76;--line:#26302a;--accent:#34b498;--accent-ink:#56c9af;--accent-soft:#14261f;--amber:#d6a24a;--amber-soft:#2a2113;--shadow:0 1px 2px rgba(0,0,0,.3),0 10px 34px rgba(0,0,0,.4);}
+  :root[data-theme="light"]{--bg:#f5f7f5;--panel:#fff;--panel-2:#f0f3f1;--ink:#17201c;--muted:#5d6b64;--faint:#8a9690;--line:#e2e8e4;--accent:#0d7a63;--accent-ink:#0a5f4d;--accent-soft:#e2f1ec;--amber:#9a6a15;--amber-soft:#f6ecd8;--shadow:0 1px 2px rgba(20,40,32,.04),0 8px 30px rgba(20,40,32,.06);}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1020px;margin:0 auto;padding:40px 20px 72px}
+  .eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-ink);font-weight:600;margin:0 0 6px}
+  h1{font-size:clamp(24px,4vw,32px);margin:0;letter-spacing:-.02em;font-weight:680}
+  .lede{color:var(--muted);margin:8px 0 0;max-width:64ch}
+  .lede code{font-family:var(--mono);font-size:.92em}
+  .callout{margin:18px 0 0;padding:13px 16px;border-radius:12px;background:var(--accent-soft);color:var(--accent-ink);font-size:14px;font-weight:520}
+  .callout b{font-weight:700}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}
+  @media (max-width:860px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:20px}
+  .card h2{font-size:13px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);font-weight:600;margin:0 0 14px;display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .card h2 .hint{letter-spacing:0;text-transform:none;color:var(--muted);font-weight:500;font-size:12px;font-family:var(--mono)}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{padding:8px 6px;text-align:right}
+  th:first-child,td:first-child{text-align:left}
+  thead th{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);font-weight:600;border-bottom:1px solid var(--line)}
+  tbody td{border-bottom:1px solid var(--line)}
+  .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  input,select{font:inherit;color:inherit;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+  input:focus,select:focus{outline:2px solid var(--accent);outline-offset:1px}
+  input.name{width:100%}input.price,input.qty{width:72px;text-align:right;font-family:var(--mono)}
+  .iconbtn{background:none;border:0;color:var(--faint);cursor:pointer;font-size:15px;padding:2px 6px;border-radius:6px}
+  .iconbtn:hover{color:#b23a3a}
+  .btn{font:inherit;font-weight:600;cursor:pointer;border-radius:10px;padding:9px 16px;border:1px solid transparent}
+  .btn.primary{background:var(--accent);color:#fff}.btn.primary:hover{background:var(--accent-ink)}
+  .btn.ghost{background:var(--panel-2);color:var(--ink);border-color:var(--line)}.btn.ghost:hover{border-color:var(--accent)}
+  .btn.small{padding:6px 12px;font-size:13px}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .field{display:flex;flex-direction:column;gap:5px;margin:12px 0}
+  .field label{font-size:12px;color:var(--muted);font-weight:560}
+  .toggle{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .toggle button{font:inherit;font-weight:600;padding:7px 14px;border:0;background:var(--panel-2);color:var(--muted);cursor:pointer}
+  .toggle button.on{background:var(--accent);color:#fff}
+  .kv{display:grid;grid-template-columns:1fr auto;gap:8px;padding:8px 2px;border-bottom:1px dashed var(--line);align-items:baseline}
+  .kv:last-child{border-bottom:0}.kv .k{font-weight:550}.kv .k small{display:block;font-family:var(--mono);font-size:11px;color:var(--faint)}
+  .kv .v{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .kv.total .k{font-size:16px;font-weight:680}.kv.total .v{font-size:20px;font-weight:700;color:var(--accent)}
+  .task{border:1px solid var(--line);border-radius:11px;padding:12px 13px;margin-bottom:10px;background:var(--panel-2);display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .task .t{font-weight:600}.task .g{font-family:var(--mono);font-size:11px;color:var(--faint)}
+  .banner{margin-top:6px;padding:14px;border-radius:12px;background:var(--accent-soft);color:var(--accent-ink);font-weight:600;text-align:center}
+  .muted{color:var(--muted);font-size:13px}
+  .status{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:var(--panel-2);color:var(--muted)}
+  .status.active{background:var(--amber-soft);color:var(--amber)}.status.completed{background:var(--accent-soft);color:var(--accent-ink)}
+  .log{font-family:var(--mono);font-size:12px;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;max-height:220px;overflow:auto}
+  .log div{padding:2px 0;border-bottom:1px dashed var(--line);white-space:pre-wrap}
+  .log .m{font-weight:700;color:var(--accent-ink)}.log .s2{color:var(--faint)}.log .err{color:#b23a3a}
+  footer{margin-top:26px;color:var(--faint);font-size:12px;text-align:center}
+  footer code{font-family:var(--mono)}
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Atlas · Order-to-Cash · live</p>
+    <h1>Der Prozess läuft in Atlas. Die App bleibt winzig.</h1>
+    <p class="lede">Diese Seite steuert eine <b>echte</b> Instanz von
+      <code>order-to-cash-live.bpmn</code> über die Atlas-HTTP-API — same-origin,
+      ohne SDK, ohne Build. Sie erfasst nur den Warenkorb und schließt die offenen
+      Aufgaben ab. <b>Rechnen, Regeln, Routing und Parallelität macht die Engine.</b></p>
+    <div class="callout">Keine Geschäftslogik im Client. Der einzige Vertrag zum Server sind drei Aufrufe:
+      <b>deploy</b> · <b>start instance</b> · <b>complete task</b>. Alles Fachliche steckt im BPMN.</div>
+  </header>
+
+  <div class="grid">
+    <!-- INPUT: the only thing the client owns -->
+    <section class="card">
+      <h2><span>Warenkorb</span><span class="hint">→ Startvariablen</span></h2>
+      <table>
+        <thead><tr><th>Artikel</th><th>Preis</th><th>Menge</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <button class="btn ghost small" id="addRow" style="margin-top:10px">+ Position</button>
+      <div class="field">
+        <label>Kundentyp</label>
+        <div class="toggle" id="ctype">
+          <button data-v="Business" class="on">Business</button>
+          <button data-v="Private">Private</button>
+        </div>
+      </div>
+      <button class="btn primary" id="startBtn" style="width:100%;margin-top:6px">Bestellung an Atlas übergeben →</button>
+      <p class="muted" id="startHint" style="margin-top:10px"></p>
+    </section>
+
+    <!-- OUTPUT: everything here comes back FROM Atlas -->
+    <section class="card">
+      <h2><span>Instanz</span><span class="hint" id="instHint">—</span></h2>
+      <div id="live"><p class="muted">Noch keine Instanz gestartet. Gib links deinen Warenkorb ein und übergib ihn an Atlas.</p></div>
+    </section>
+  </div>
+
+  <section class="card" style="margin-top:18px">
+    <h2><span>HTTP-Aufrufe an Atlas</span><span class="hint">das ist die gesamte Integration</span></h2>
+    <div class="log" id="log"><div class="s2">Wartet auf den ersten Aufruf …</div></div>
+  </section>
+
+  <footer>
+    Wird von Atlas unter <code>/order-to-cash-live.html</code> ausgeliefert · Prozessmodell:
+    <code>examples/order-to-cash-live.bpmn</code> · Basis-URL:
+    <input id="base" value="/api/v1" style="width:180px;font-family:var(--mono);font-size:11px" title="Same-origin per Default. Für Cross-Origin muss der Server CORS senden."/>
+  </footer>
+</div>
+
+<script>
+"use strict";
+// ————————————————————————————————————————————————————————————————
+// The entire Atlas integration. Notice there is no discount math, no VAT, no
+// "if total > 100" here — that logic is in the BPMN and runs in the engine.
+// ————————————————————————————————————————————————————————————————
+
+const PROCESS_ID = "order-to-cash-live";
+const money = n => new Intl.NumberFormat("de-DE",{style:"currency",currency:"EUR"}).format(Number(n));
+const $ = s => document.querySelector(s);
+const base = () => $("#base").value.replace(/\/$/,"");
+
+// A one-line fetch wrapper that also writes every call into the on-screen log,
+// so a developer literally sees the handful of requests this app makes.
+async function api(method, path, body){
+  const opts = {method, credentials:"same-origin", headers:{}};
+  if (body !== undefined){
+    const xml = typeof body === "string";
+    opts.headers["Content-Type"] = xml ? "application/xml" : "application/json";
+    opts.body = xml ? body : JSON.stringify(body);
+  }
+  let res, text;
+  try { res = await fetch(base()+path, opts); text = await res.text(); }
+  catch(e){ logLine(method, path, "ERR", e.message); throw e; }
+  logLine(method, path, res.status);
+  if (!res.ok) throw new Error(method+" "+path+" → "+res.status+" "+text);
+  return text ? JSON.parse(text) : null;
+}
+function logLine(method, path, status, extra){
+  const el = document.createElement("div");
+  const cls = (typeof status === "number" && status < 400) ? "s2" : "err";
+  el.innerHTML = `<span class="m">${method}</span> ${path} <span class="${cls}">→ ${status}${extra?" "+extra:""}</span>`;
+  const log = $("#log"); if (log.firstChild && log.firstChild.classList?.contains("s2") && log.children.length===1) log.innerHTML="";
+  log.appendChild(el); log.scrollTop = log.scrollHeight;
+}
+
+// The process model, embedded so the app is self-contained. No diagram layout —
+// Atlas generates one on deploy. This is the same model as
+// examples/order-to-cash-live.bpmn (there with a hand-authored diagram).
+const BPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs_o2c_live" targetNamespace="http://atlas/examples">
+  <process id="order-to-cash-live" name="Order-to-Cash Live (User-Tasks)" isExecutable="true">
+    <extensionElements><atlas:startForm>
+      <atlas:startVariable name="positions" type="json" required="true"/>
+      <atlas:startVariable name="customerType" type="string" required="false" default="Business"/>
+    </atlas:startForm></extensionElements>
+    <startEvent id="order_received" name="Bestellung eingegangen"/>
+    <scriptTask id="take_cart" name="Warenkorb uebernehmen"><extensionElements><zeebe:script expression="= if positions = null then [] else positions" resultVariable="cart"/></extensionElements></scriptTask>
+    <scriptTask id="subtotal" name="Zwischensumme berechnen"><extensionElements><zeebe:script expression="= decimal(sum(for p in cart return p.price * p.qty), 2)" resultVariable="subtotal"/></extensionElements></scriptTask>
+    <scriptTask id="discount_rate" name="Rabattsatz ermitteln"><extensionElements><zeebe:script expression="= if customerType = &quot;Private&quot; then (if subtotal &gt;= 200 then 0.05 else 0) else (if subtotal &gt;= 1000 then 0.15 else 0.10)" resultVariable="discountRate"/></extensionElements></scriptTask>
+    <scriptTask id="discount_amt" name="Rabatt berechnen"><extensionElements><zeebe:script expression="= decimal(subtotal * discountRate, 2)" resultVariable="discount"/></extensionElements></scriptTask>
+    <scriptTask id="grand_total" name="Gesamtsumme berechnen"><extensionElements><zeebe:script expression="= decimal((subtotal - discount) * 1.19, 2)" resultVariable="total"/></extensionElements></scriptTask>
+    <exclusiveGateway id="approval_gw" name="Summe &gt; 100 EUR?" default="f_auto"/>
+    <userTask id="approve_order" name="Bestellung freigeben"><extensionElements><zeebe:assignmentDefinition candidateGroups="management"/></extensionElements></userTask>
+    <exclusiveGateway id="approval_join"/>
+    <parallelGateway id="fork" name="Auftragsabwicklung"/>
+    <userTask id="pick" name="Ware kommissionieren"><extensionElements><zeebe:assignmentDefinition candidateGroups="lager"/></extensionElements></userTask>
+    <userTask id="ship" name="Ware versenden"><extensionElements><zeebe:assignmentDefinition candidateGroups="versand"/></extensionElements></userTask>
+    <userTask id="invoice" name="Rechnung erstellen"><extensionElements><zeebe:assignmentDefinition candidateGroups="buchhaltung"/></extensionElements></userTask>
+    <userTask id="collect" name="Zahlung verbuchen"><extensionElements><zeebe:assignmentDefinition candidateGroups="buchhaltung"/></extensionElements></userTask>
+    <parallelGateway id="join"/>
+    <endEvent id="order_closed" name="Auftrag abgeschlossen"/>
+    <sequenceFlow id="fa" sourceRef="order_received" targetRef="take_cart"/>
+    <sequenceFlow id="fb" sourceRef="take_cart" targetRef="subtotal"/>
+    <sequenceFlow id="fc" sourceRef="subtotal" targetRef="discount_rate"/>
+    <sequenceFlow id="fd" sourceRef="discount_rate" targetRef="discount_amt"/>
+    <sequenceFlow id="fe" sourceRef="discount_amt" targetRef="grand_total"/>
+    <sequenceFlow id="ff" sourceRef="grand_total" targetRef="approval_gw"/>
+    <sequenceFlow id="f_appr" name="ja" sourceRef="approval_gw" targetRef="approve_order"><conditionExpression>= total &gt; 100</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_auto" name="nein" sourceRef="approval_gw" targetRef="approval_join"/>
+    <sequenceFlow id="fg" sourceRef="approve_order" targetRef="approval_join"/>
+    <sequenceFlow id="fh" sourceRef="approval_join" targetRef="fork"/>
+    <sequenceFlow id="fi" sourceRef="fork" targetRef="pick"/>
+    <sequenceFlow id="fj" sourceRef="pick" targetRef="ship"/>
+    <sequenceFlow id="fk" sourceRef="ship" targetRef="join"/>
+    <sequenceFlow id="fl" sourceRef="fork" targetRef="invoice"/>
+    <sequenceFlow id="fm" sourceRef="invoice" targetRef="collect"/>
+    <sequenceFlow id="fn" sourceRef="collect" targetRef="join"/>
+    <sequenceFlow id="fo" sourceRef="join" targetRef="order_closed"/>
+  </process>
+</definitions>`;
+
+// —— client-owned state: only the cart. ——
+const cart = {
+  positions:[{name:"BPMN-Buch",price:24.90,qty:1},{name:"Kaffeetasse",price:9.95,qty:2},{name:"Aufkleber-Set",price:4.50,qty:3}],
+  customerType:"Business",
+};
+let instanceKey = null, polling = null;
+
+// 1) DEPLOY — reuse the latest deployed version if present, else deploy once.
+async function ensureDeployed(){
+  const procs = await api("GET","/processes");
+  const mine = procs.filter(p => p.processId === PROCESS_ID).sort((a,b)=> b.version - a.version);
+  if (mine.length) return mine[0].key;
+  const dep = await api("POST","/deployments", BPMN);
+  return dep.key;
+}
+
+// 2) START — hand Atlas the cart as instance variables. The create response does
+// not carry the instance key, so we diff /instances before and after.
+async function startInstance(defKey){
+  const before = new Set((await api("GET","/instances")).filter(i=>i.processDefKey===defKey).map(i=>i.key));
+  await api("POST",`/processes/${defKey}/instances`, {variables:{positions:cart.positions, customerType:cart.customerType}});
+  const after = (await api("GET","/instances")).filter(i=>i.processDefKey===defKey);
+  const fresh = after.find(i=>!before.has(i.key)) || after.sort((a,b)=>b.key-a.key)[0];
+  return fresh.key;
+}
+
+// 3) POLL — read what Atlas computed and which tasks it is waiting on.
+async function refresh(){
+  const [vars, tasks, instances] = await Promise.all([
+    api("GET",`/instances/${instanceKey}/variables`),
+    api("GET","/tasks"),
+    api("GET","/instances"),
+  ]);
+  const inst = instances.find(i=>i.key===instanceKey);
+  const open = tasks.filter(t=>t.processInstanceKey===instanceKey);
+  renderLive(vars, open, inst);
+  if (inst && inst.state !== "active"){ clearInterval(polling); polling=null; }
+}
+
+// COMPLETE — the one write that advances the process. No follow-up logic here;
+// Atlas decides what becomes active next (the parallel branch, the join, the end).
+async function completeTask(key){
+  await api("POST",`/tasks/${key}/complete`, {variables:{}});
+  refresh();
+}
+
+// —— rendering ——
+function num(v){ return (v===undefined||v===null) ? "—" : money(v); }
+function renderLive(vars, open, inst){
+  const v = vars || {};
+  const state = inst ? inst.state : "active";
+  $("#instHint").textContent = "#"+instanceKey+" · v"+(inst?inst.version:"?");
+  const stat = `<span class="status ${state}">${state==="active"?"aktiv":state}</span>`;
+  const ledger =
+    `<div class="kv"><div class="k">Zwischensumme<small>engine: sum(p.price·p.qty)</small></div><div class="v">${num(v.subtotal)}</div></div>`+
+    `<div class="kv"><div class="k">Rabatt<small>engine: Regeltabelle → ${v.discountRate!==undefined?(v.discountRate*100)+" %":"—"}</small></div><div class="v">${v.discount!==undefined?"− "+money(v.discount):"—"}</div></div>`+
+    `<div class="kv total"><div class="k">Gesamtsumme<small>engine: decimal((subtotal−discount)·1.19, 2)</small></div><div class="v">${num(v.total)}</div></div>`;
+  let tasksHtml;
+  if (state !== "active"){
+    tasksHtml = state==="completed"
+      ? `<div class="banner">✓ Auftrag abgeschlossen — von Atlas geliefert &amp; verrechnet</div>`
+      : `<div class="banner" style="background:var(--amber-soft);color:var(--amber)">Instanz ${state}</div>`;
+  } else if (open.length === 0){
+    tasksHtml = `<p class="muted">Keine offene Aufgabe gerade — die Engine rechnet/routet. <button class="btn ghost small" onclick="refresh()">Aktualisieren</button></p>`;
+  } else {
+    tasksHtml = `<p class="muted" style="margin:14px 0 8px">Offene Aufgaben (die Engine wartet):</p>` + open.map(t=>
+      `<div class="task"><div><div class="t">${t.name||t.elementId}</div><div class="g">${t.candidateGroups||""} · task #${t.key}</div></div>`+
+      `<button class="btn ghost small" data-done="${t.key}">Erledigen →</button></div>`).join("");
+  }
+  $("#live").innerHTML = `<div style="margin-bottom:12px">${stat}</div>${ledger}<div style="margin-top:8px">${tasksHtml}</div>`;
+  $("#live").querySelectorAll("[data-done]").forEach(b=> b.onclick=()=>completeTask(+b.dataset.done));
+}
+
+// —— cart editor (client-owned input) ——
+function renderRows(){
+  $("#rows").innerHTML = cart.positions.map((p,i)=>
+    `<tr><td><input class="name" value="${(p.name||"").replace(/"/g,"&quot;")}" data-i="${i}" data-k="name"/></td>`+
+    `<td><input class="price num" type="number" step="0.01" min="0" value="${p.price}" data-i="${i}" data-k="price"/></td>`+
+    `<td><input class="qty num" type="number" step="1" min="0" value="${p.qty}" data-i="${i}" data-k="qty"/></td>`+
+    `<td><button class="iconbtn" data-del="${i}" title="Entfernen">✕</button></td></tr>`).join("");
+}
+$("#rows").addEventListener("input", e=>{ const el=e.target; if(!el.dataset.k) return;
+  cart.positions[+el.dataset.i][el.dataset.k] = el.dataset.k==="name" ? el.value : Number(el.value); });
+$("#rows").addEventListener("click", e=>{ const d=e.target.dataset.del; if(d!==undefined){ cart.positions.splice(+d,1); renderRows(); }});
+$("#addRow").onclick = ()=>{ cart.positions.push({name:"Neuer Artikel",price:0,qty:1}); renderRows(); };
+$("#ctype").addEventListener("click", e=>{ const v=e.target.dataset.v; if(!v) return; cart.customerType=v;
+  $("#ctype").querySelectorAll("button").forEach(b=>b.classList.toggle("on", b.dataset.v===v)); });
+
+$("#startBtn").onclick = async ()=>{
+  const btn=$("#startBtn"); btn.disabled=true; $("#startHint").textContent="Deploye Modell & starte Instanz …";
+  try{
+    const defKey = await ensureDeployed();
+    instanceKey = await startInstance(defKey);
+    $("#startHint").textContent = "Instanz #"+instanceKey+" läuft in Atlas.";
+    await refresh();
+    if (!polling) polling = setInterval(refresh, 2500);  // keep in sync while active
+  }catch(e){ $("#startHint").innerHTML = `<span style="color:#b23a3a">Fehler: ${e.message}</span>`; }
+  finally{ btn.disabled=false; }
+};
+window.refresh = refresh; // for the inline "Aktualisieren" button
+renderRows();
+</script>
+</body>
+</html>

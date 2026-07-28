@@ -10,6 +10,8 @@ against a live Atlas server (`0.1.0-dev`).
 | [`cart-total.bpmn`](cart-total.bpmn) | A shopping-cart checkout that computes an order total (subtotal → rebate → VAT → shipping) entirely in inline FEEL, and routes on the computed sum. Self-completing. |
 | [`order-to-cash.bpmn`](order-to-cash.bpmn) | The full order lifecycle: cart calculation → approval (≥ 100 €, user task) → **parallel** delivery & billing (service tasks). Parks on the worker-backed steps — a realistic, not-fully-automatic process. |
 | [`order-to-cash-app.html`](order-to-cash-app.html) | A self-contained single-page app that mirrors `order-to-cash.bpmn`: edit the cart, watch the sum compute live, approve, and clear the delivery/billing tasks. No server needed — open it in a browser. |
+| [`order-to-cash-live.bpmn`](order-to-cash-live.bpmn) | The **live** sibling: same flow, but delivery/billing are `userTask`s (HTTP-completable) instead of `serviceTask`s, so a browser app can drive the real instance end to end. |
+| [`../api/web/order-to-cash-live.html`](../api/web/order-to-cash-live.html) | The **live** app — served by the Atlas server itself (`/order-to-cash-live.html`). It deploys the model, starts a real instance with your cart, and completes each task over the HTTP API. No business logic in the client; Atlas runs the process. |
 | [`entra-create-account.bpmn`](entra-create-account.bpmn) | A PowerShell `jobScript` task that creates an EntraID account — the *worker-backed* counterpart: its token parks on the script job until a PowerShell script worker runs it. |
 
 > Looking for a model that parks on human tasks so you can watch the task
@@ -309,6 +311,29 @@ and embodies its **forms**:
   (`https://htmlpreview.github.io/?<raw file URL>`) if the repo is public, or
 - serve `examples/` via GitHub Pages for a permanent link (ask and I'll add a
   Pages workflow).
+
+## Live mode — `api/web/order-to-cash-live.html`
+
+`order-to-cash-app.html` *simulates* the process in the browser. The **live** app
+drives a **real** Atlas instance instead, and shows how little client code that
+takes — the business logic stays in the engine. Two facts shape it:
+
+- **User tasks, not service tasks.** Only `userTask`s can be completed over HTTP
+  (`POST /api/v1/tasks/{key}/complete`); service-task jobs need a gRPC worker.
+  So the live model, [`order-to-cash-live.bpmn`](order-to-cash-live.bpmn), makes
+  delivery and billing user tasks the app can clear.
+- **Same-origin, because the server sends no CORS headers.** The app therefore
+  lives in `api/web/` and is served by Atlas itself at
+  `https://<your-atlas>/order-to-cash-live.html`, so `fetch("/api/v1/…")` is
+  same-origin. (Opening the file from another origin would be blocked by the
+  browser unless a proxy adds CORS. The base-URL field at the bottom lets you
+  repoint it if you have one.)
+
+The entire integration is three calls — `POST /deployments`, `POST
+/processes/{key}/instances`, `POST /tasks/{key}/complete` — and a live request log
+on the page makes them visible. Because it ships under `api/web/`, it is embedded
+in the binary: **rebuild and redeploy the Atlas server**, then open
+`/order-to-cash-live.html`.
 
 ## Clean up
 
