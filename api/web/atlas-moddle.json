@@ -78,6 +78,13 @@
         { "name": "name", "type": "String", "isAttr": true },
         { "name": "value", "type": "String", "isAttr": true }
       ]
+    },
+    {
+      "name": "ProcessMeta",
+      "extends": ["bpmn:Process"],
+      "properties": [
+        { "name": "versionTag", "type": "String", "isAttr": true }
+      ]
     }
   ]
 }

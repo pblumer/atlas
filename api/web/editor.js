@@ -1985,6 +1985,9 @@ function wireProperties(root, modeler, api, projectId, toast) {
           <label class="field"><span>Name</span><input type="text" id="f-pname" value="${esc(rootBo.name || "")}" placeholder="Order fulfillment"/></label>
           <label class="field"><span>Process ID</span><input type="text" id="f-pid" value="${esc(rootBo.id || "")}" placeholder="order-fulfillment"/></label>
           <p class="muted" style="font-size:12px">The Process ID is the identity deployments and instances are grouped by. Renaming it and deploying creates a new process rather than a new version.</p>
+          <label class="field"><span>Version tag</span><input type="text" id="f-pver" value="${esc(rootBo.versionTag || "")}" placeholder="1.0.0"/></label>
+          <label class="pcheck"><input type="checkbox" id="f-pexec"${rootBo.isExecutable !== false ? " checked" : ""}/> <span>Executable</span></label>
+          <p class="muted" style="font-size:12px">An <b>executable</b> process can be started and offered in the start lists; leave it off for a descriptive-only diagram. <b>Version tag</b> is an optional label for this revision.</p>
           ${startVarsHTML}
           ${messagesManagerHTML(modeler)}`;
         const rootEl = modeler.get("canvas").getRootElement();
@@ -1994,6 +1997,13 @@ function wireProperties(root, modeler, api, projectId, toast) {
         body.querySelector("#f-pid").addEventListener("change", (e) => {
           const v = (e.target.value || "").trim();
           if (v) { try { modeling.updateProperties(rootEl, { id: v }); } catch { toast("invalid process id", "err"); } }
+        });
+        body.querySelector("#f-pver").addEventListener("change", (e) => {
+          const v = (e.target.value || "").trim();
+          try { modeling.updateProperties(rootEl, { versionTag: v || undefined }); } catch { /* ignore */ }
+        });
+        body.querySelector("#f-pexec").addEventListener("change", (e) => {
+          try { modeling.updateProperties(rootEl, { isExecutable: e.target.checked }); } catch { /* ignore */ }
         });
         wireStartVars(body, modeler);
         wireMessagesManager(body, modeler, () => show(null));

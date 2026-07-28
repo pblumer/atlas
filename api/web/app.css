@@ -138,6 +138,9 @@ ol.steps li { margin: 6px 0; }
 .field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .field.inline { display: flex; align-items: center; gap: 8px; color: var(--text); }
 .field.inline input { width: auto; margin: 0; }
+/* A labelled checkbox property (e.g. Executable) in the properties panel. */
+.pcheck { display: inline-flex; align-items: center; gap: 8px; margin: 10px 0 0; font-size: 13px; color: var(--text); cursor: pointer; }
+.pcheck input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); cursor: pointer; }
 
 /* Stat tiles */
 .stats { display: flex; gap: 34px; flex-wrap: wrap; }
