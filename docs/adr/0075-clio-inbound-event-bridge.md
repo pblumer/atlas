@@ -1,4 +1,4 @@
-# ADR-0074: A clio inbound event bridge — at-least-once ingestion with engine-side idempotent delivery
+# ADR-0075: A clio inbound event bridge — at-least-once ingestion with engine-side idempotent delivery
 
 - **Status:** Accepted
 - **Date:** 2026-07-28

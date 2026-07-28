@@ -31,11 +31,11 @@ const (
 	cfDataObjectSnapshot     columnFamily = 0x11 // doSnap:<scopeKey>:<ts>:<pos> → DataObjectValue
 	cfIncident               columnFamily = 0x12 // incident:<elKey> → IncidentValue (ADR-0061)
 	cfDecisionEvaluation     columnFamily = 0x14 // decEval:<scopeKey>:<ts>:<pos> → DecisionEvaluationValue (ADR-0066)
-	cfInboundHighWater       columnFamily = 0x15 // inboundHW:<sourceID> → uint64 last-applied sequence (ADR-0074)
+	cfInboundHighWater       columnFamily = 0x15 // inboundHW:<sourceID> → uint64 last-applied sequence (ADR-0075)
 )
 
 // keyInboundHighWater keys an external event source's inbound high-water mark by
-// its opaque source id (ADR-0074). It is a point key (get/put only, never scanned),
+// its opaque source id (ADR-0075). It is a point key (get/put only, never scanned),
 // so the id bytes follow the column-family byte directly.
 func keyInboundHighWater(sourceID string) []byte {
 	return append([]byte{byte(cfInboundHighWater)}, sourceID...)

@@ -43,7 +43,7 @@ type Event struct {
 }
 
 // InboundEvent is one event read back from clio (a read/query result, or an event
-// the inbound bridge consumes, ADR-0074). ID is clio's globally-unique event id
+// the inbound bridge consumes, ADR-0075). ID is clio's globally-unique event id
 // (the cursor/dedup key); Seq is the monotonic per-subject sequence.
 type InboundEvent struct {
 	ID      string         `json:"id"`

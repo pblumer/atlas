@@ -1362,7 +1362,7 @@ function wireConnectorManagement(connectors) {
 }
 
 // toggleInboundSubs expands (or collapses) an inline panel under a clio connector row
-// listing its inbound event subscriptions (ADR-0074) with an add form and per-row
+// listing its inbound event subscriptions (ADR-0075) with an add form and per-row
 // delete. A subscription watches a clio subject and republishes each new event as an
 // Atlas message that starts/wakes processes; the correlation key is a FEEL expression
 // over the event body (blank = keyless).
@@ -1382,7 +1382,7 @@ async function toggleInboundSubs(row, connectorId) {
   const panel = document.createElement("tr");
   panel.className = "subs-row";
   panel.innerHTML = `<td colspan="3" style="background:var(--surface); padding:12px 18px">
-    <div class="muted" style="margin-bottom:8px">Inbound event subscriptions — a watched clio subject's events are published as Atlas messages (ADR-0074).</div>
+    <div class="muted" style="margin-bottom:8px">Inbound event subscriptions — a watched clio subject's events are published as Atlas messages (ADR-0075).</div>
     <table style="width:100%"><tbody id="subs-body">${list}</tbody></table>
     <form id="subs-form" style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr auto;align-items:end;margin-top:10px">
       <label class="field" style="margin:0"><span>Watched subject</span><input name="watchedSubject" placeholder="orders/new" required/></label>

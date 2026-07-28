@@ -32,7 +32,7 @@
 > connector store and resolved from the vault (ADR-0041). It is authored via a first-
 > class **clio Event Store Connector** service-task type in the modeler. The inbound
 > counterpart — letting a clio event start and wake Atlas processes — landed as the
-> **clio inbound event bridge** ([ADR-0074](0074-clio-inbound-event-bridge.md)), which
+> **clio inbound event bridge** ([ADR-0075](0075-clio-inbound-event-bridge.md)), which
 > supersedes this ADR's deferred Variant B: instead of a blanket WAL→clio audit mirror
 > it is an opt-in, operator-configured bridge that republishes watched clio events as
 > Atlas messages through the existing correlation path, with engine-side idempotent

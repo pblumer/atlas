@@ -194,7 +194,7 @@ type Server struct {
 	clioRegistry *clio.Registry
 
 	// inboundSubs holds the operator-configured clio inbound subscriptions the
-	// inbound bridge polls (ADR-0074). Owned by the run-loop goroutine. inboundPoll
+	// inbound bridge polls (ADR-0075). Owned by the run-loop goroutine. inboundPoll
 	// is that bridge's poll cadence (WithInboundPollInterval; 0 disables the bridge).
 	inboundSubs *inboundSubStore
 	inboundPoll time.Duration
@@ -228,7 +228,7 @@ func WithLogBuffer(b *LogBuffer) Option { return func(s *Server) { s.logs = b } 
 // (ADR-0043).
 func WithoutDocs() Option { return func(s *Server) { s.docsEnabled = false } }
 
-// WithInboundPollInterval sets the clio inbound bridge's poll cadence (ADR-0074).
+// WithInboundPollInterval sets the clio inbound bridge's poll cadence (ADR-0075).
 // A non-positive interval disables the bridge (useful in tests that drive it
 // directly). The default is 2s.
 func WithInboundPollInterval(d time.Duration) Option {
@@ -436,7 +436,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	go s.loop()
 	go s.timerScheduler(time.Second)
 	// The clio inbound bridge polls configured subscriptions and republishes new
-	// clio events as Atlas messages (ADR-0074). It is a separate goroutine like the
+	// clio events as Atlas messages (ADR-0075). It is a separate goroutine like the
 	// timer scheduler — it does its network reads off the run loop and hands only the
 	// resulting publish onto it (invariant I3). A non-positive interval disables it.
 	if s.inboundPoll > 0 {

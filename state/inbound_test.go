@@ -6,7 +6,7 @@ import (
 	"github.com/pblumer/atlas/state"
 )
 
-// TestInboundHighWater covers the per-source high-water accessors (ADR-0074): an
+// TestInboundHighWater covers the per-source high-water accessors (ADR-0075): an
 // unset source reads 0, a put is read back, a re-put advances it, and distinct
 // sources are independent.
 func TestInboundHighWater(t *testing.T) {

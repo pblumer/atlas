@@ -159,6 +159,12 @@ type Builder struct {
 	versionTag        int32            // interned atlas:versionTag revision label, -1 if none
 	isExecutable      bool             // bpmn:isExecutable; defaults true (set in NewBuilder)
 
+	// flowScope is the enclosing scope every node added now lands in: -1 for the
+	// process root, or a subprocess node's ElementId while its children are being
+	// added. scopeStack saves the outer scope across nesting (ADR-0074).
+	flowScope  int32
+	scopeStack []int32
+
 	interner map[string]int32
 	strings  []string
 }
@@ -175,6 +181,7 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 		startFormId:   -1,
 		versionTag:    -1,
 		isExecutable:  true, // BPMN default; the parser sets false only for isExecutable="false"
+		flowScope:     -1,   // nodes land at the process root until a scope is pushed
 		interner:      map[string]int32{},
 	}
 	b.intern(DMNJobType)           // reserve DMNJobTypeIndex == 0
@@ -208,12 +215,35 @@ func (b *Builder) addNode(t BpmnType, detail int32) int32 {
 	b.nodes = append(b.nodes, CompiledNode{
 		ElementId: id,
 		Type:      t,
-		FlowScope: -1, // process root; nested scopes arrive with subprocesses
+		FlowScope: b.flowScope, // the scope currently open (-1 = process root)
 		Detail:    detail,
 	})
 	b.elementIds = append(b.elementIds, -1) // kept in lockstep with nodes
 	return id
 }
+
+// AddSubProcess adds an embedded subprocess container node and returns its element
+// id. It carries no detail; its inner flow lives in the flat node/flow arrays,
+// linked back to it only by the children's FlowScope. Create it first, then
+// PushScope(its id) before adding its children so they land in its scope (ADR-0074).
+func (b *Builder) AddSubProcess() int32 { return b.addNode(TypeSubProcess, -1) }
+
+// PushScope opens scope id: every node added until the matching PopScope carries id
+// as its FlowScope. Scopes nest, so the outer scope is saved and restored.
+func (b *Builder) PushScope(id int32) {
+	b.scopeStack = append(b.scopeStack, b.flowScope)
+	b.flowScope = id
+}
+
+// PopScope closes the innermost open scope, restoring the enclosing one.
+func (b *Builder) PopScope() {
+	n := len(b.scopeStack)
+	b.flowScope = b.scopeStack[n-1]
+	b.scopeStack = b.scopeStack[:n-1]
+}
+
+// CurrentScope reports the scope nodes are added into now (-1 at the process root).
+func (b *Builder) CurrentScope() int32 { return b.flowScope }
 
 // SetElementBpmnId records the source BPMN element id (e.g. "StartEvent_1") for a
 // node so it can be mapped back for diagnostics and the live diagram overlay. It
@@ -856,9 +886,13 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		b.nodes[f.Target].IncomingCount++
 	}
 
+	// Only root-scope start events are process entry points — the engine seeds a
+	// token at each when an instance starts. A start event nested in a subprocess is
+	// that scope's entry and is seeded by the subprocess behavior, not at instance
+	// creation (ADR-0074).
 	var startEvents []int32
 	for i := range b.nodes {
-		if isStartEvent(b.nodes[i].Type) {
+		if isStartEvent(b.nodes[i].Type) && b.nodes[i].FlowScope == -1 {
 			startEvents = append(startEvents, b.nodes[i].ElementId)
 		}
 	}
@@ -901,10 +935,12 @@ func (b *Builder) validNode(id int32) bool {
 	return id >= 0 && int(id) < len(b.nodes)
 }
 
-// hasStartEvent reports whether any start event has been added.
+// hasStartEvent reports whether the process has a root-scope start event — its
+// entry point. A start event nested in a subprocess does not count: it is that
+// scope's entry, not the process's (ADR-0074).
 func (b *Builder) hasStartEvent() bool {
 	for i := range b.nodes {
-		if isStartEvent(b.nodes[i].Type) {
+		if isStartEvent(b.nodes[i].Type) && b.nodes[i].FlowScope == -1 {
 			return true
 		}
 	}

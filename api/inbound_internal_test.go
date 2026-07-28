@@ -57,7 +57,7 @@ func activeInstances(t *testing.T, srv *Server) int {
 	return n
 }
 
-// TestInboundBridgeStartsAndDedupes is the ADR-0074 vertical slice at the server
+// TestInboundBridgeStartsAndDedupes is the ADR-0075 vertical slice at the server
 // level: the bridge reads a new clio event, publishes it as an Atlas message that
 // starts a message-start process, advances its resume cursor, and — on a re-poll —
 // does not re-deliver the same event (cursor) nor start a duplicate even if it did

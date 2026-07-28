@@ -12,7 +12,7 @@ import (
 
 // inboundBridge polls the configured clio inbound subscriptions and republishes new
 // clio events as Atlas messages, so an external event both starts message-start
-// processes and wakes waiting message-catch instances (ADR-0074). It mirrors the
+// processes and wakes waiting message-catch instances (ADR-0075). It mirrors the
 // timer scheduler: a ticker goroutine that does its network I/O off the run loop and
 // hands only the resulting publish onto it via s.do (invariant I3). Stopped by the
 // shared quit channel.
@@ -45,7 +45,7 @@ type pendingSub struct {
 // off the loop, and hands a single publish batch per subscription back onto the run
 // loop. The publish is made durable (Drive → fsync) before the best-effort resume
 // cursor advances; a crash in that window re-reads on restart, where the engine's
-// durable high-water mark dedupes the replay (ADR-0074).
+// durable high-water mark dedupes the replay (ADR-0075).
 func (s *Server) pollInbound(ctx context.Context) {
 	var subs []pendingSub
 	s.do(func() { subs = s.resolveInboundSubs() })
@@ -130,7 +130,7 @@ func (s *Server) resolveInboundSubs() []pendingSub {
 // advanceInboundCursor persists a subscription's best-effort resume cursor. It runs
 // on the run loop (the store's owner). A save failure is ignored: the cursor is only
 // an optimization — the engine high-water mark, not this cursor, guarantees no
-// duplicate delivery (ADR-0074).
+// duplicate delivery (ADR-0075).
 func (s *Server) advanceInboundCursor(subID, lastEventID string) {
 	rec, ok, err := s.inboundSubs.get(subID)
 	if err != nil || !ok {
@@ -141,7 +141,7 @@ func (s *Server) advanceInboundCursor(subID, lastEventID string) {
 }
 
 // inboundSourceID is the opaque per-source key the engine deduplicates on: a clio
-// connector plus the watched subject. The engine never interprets it (ADR-0074).
+// connector plus the watched subject. The engine never interprets it (ADR-0075).
 func inboundSourceID(r inboundSubscription) string {
 	return "clio:" + r.ConnectorID + ":" + r.WatchedSubject
 }

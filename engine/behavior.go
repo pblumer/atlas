@@ -635,7 +635,7 @@ func handleTimerStartArm(c *ProcessingContext) {
 // StartVars); correlation is the same path a message throw event uses.
 func handleMessagePublished(c *ProcessingContext) {
 	pub := c.cmd.Value.subscription
-	// A publish from an external event source (ADR-0074) carries a source id and
+	// A publish from an external event source (ADR-0075) carries a source id and
 	// sequence; deduplicate it against the source's durable high-water mark so an
 	// at-least-once replay is skipped rather than re-correlated (which would
 	// double-start a message-start process). An API/throw publish has an empty

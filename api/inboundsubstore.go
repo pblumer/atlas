@@ -11,14 +11,14 @@ import (
 )
 
 // inboundSubscription is an operator-configured inbound event binding for a clio
-// connector (ADR-0074): the bridge watches WatchedSubject on the connector's clio
+// connector (ADR-0075): the bridge watches WatchedSubject on the connector's clio
 // instance and republishes each new event as an Atlas message named MessageName,
 // correlated on CorrelationKey (a FEEL expression over the event body; empty =
 // keyless), so the event both starts message-start processes and wakes waiting
 // message-catch instances. LastEventID is a *best-effort* cursor advanced after each
 // batch is durably published: it only speeds a restart's resume. Correctness — no
 // duplicate delivery across a crash — is guaranteed by the engine's durable
-// high-water mark (ADR-0074), not by this cursor, so losing it re-reads harmlessly.
+// high-water mark (ADR-0075), not by this cursor, so losing it re-reads harmlessly.
 type inboundSubscription struct {
 	ID             string `json:"id"`
 	ConnectorID    string `json:"connectorId"`    // FK → a kind:"clio" connector record

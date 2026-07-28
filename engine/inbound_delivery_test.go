@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/wal"
 )
 
-// TestInboundDeliveryIdempotentAcrossRestart is the ADR-0074 correctness crux: an
+// TestInboundDeliveryIdempotentAcrossRestart is the ADR-0075 correctness crux: an
 // at-least-once inbound publish that is replayed after a crash must NOT double-start
 // a message-start process. PublishInbound carries the source's id and sequence; the
 // engine folds a per-source high-water mark into the same durable batch as the

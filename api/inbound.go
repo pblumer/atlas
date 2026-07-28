@@ -50,7 +50,7 @@ func (s *Server) handleListInboundSubscriptions(w http.ResponseWriter, r *http.R
 }
 
 // handleCreateInboundSubscription creates an inbound subscription for a clio
-// connector (ADR-0074). It validates that the connector exists and is a clio
+// connector (ADR-0075). It validates that the connector exists and is a clio
 // connector, that a message name and watched subject are given, and that the
 // correlation key (if any) compiles — a bad FEEL expression is rejected at config
 // time, not left to fail on every poll.

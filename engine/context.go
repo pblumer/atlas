@@ -280,7 +280,7 @@ func (c *ProcessingContext) AppendMessageFlowEvent(v model.MessageFlowValue) {
 }
 
 // AppendInboundDeliveryEvent advances an external source's inbound high-water mark
-// (ADR-0074), keyed on the receiving definition space as a neutral key (the record
+// (ADR-0075), keyed on the receiving definition space as a neutral key (the record
 // carries the source id and sequence it needs). Emitted in the same batch as the
 // message publish it guards, so the dedup mark and the effects it authorizes commit
 // atomically under one fsync (invariant I2).

@@ -394,7 +394,7 @@ func (t *Tx) RecordDataObjectSnapshot(ts int64, pos uint64, v *model.DataObjectV
 // zero. The counter is pure state — mutated only from applyToState — so it is
 // rebuilt identically on recovery.
 
-// --- Inbound delivery high-water (ADR-0074) ---
+// --- Inbound delivery high-water (ADR-0075) ---
 
 // PutInboundHighWater upserts an external event source's last-applied sequence.
 // It writes the absolute sequence (not a delta), so a replayed IntentInbound-

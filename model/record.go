@@ -75,7 +75,7 @@ const (
 	// operator can inspect after the fact exactly how a decision was made (ADR-0066).
 	VTDecisionEvaluation
 	// VTInboundDelivery is a per-source high-water mark for an at-least-once inbound
-	// event bridge (ADR-0074): it records that an external source's deliveries up to
+	// event bridge (ADR-0075): it records that an external source's deliveries up to
 	// a sequence have been applied, so a replayed publish is skipped rather than
 	// re-correlated (which would double-start a message-start process). It is generic
 	// — the engine never interprets the opaque source id — and appended last so every
@@ -209,7 +209,7 @@ const (
 	IntentVariableDeleted
 
 	// IntentInboundDeliveryApplied advances an external source's inbound high-water
-	// mark (ADR-0074). It applies by upserting the source's last-applied sequence,
+	// mark (ADR-0075). It applies by upserting the source's last-applied sequence,
 	// and is appended at the end so every prior intent keeps its numeric value on the
 	// log. It rides in the same batch as the message publish it guards, so the
 	// dedup mark and the correlate/start effects it authorizes commit atomically.

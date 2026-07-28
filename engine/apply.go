@@ -158,7 +158,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 
 	case model.VTInboundDelivery:
 		if h.Intent == model.IntentInboundDeliveryApplied {
-			// Advance the external source's inbound high-water mark (ADR-0074). The
+			// Advance the external source's inbound high-water mark (ADR-0075). The
 			// sequence comes only from the event payload, so replay rebuilds the
 			// identical mark (invariant I4) and a duplicate publish that a replay
 			// re-drives is skipped by handleMessagePublished's guard.
