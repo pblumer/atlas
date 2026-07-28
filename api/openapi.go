@@ -170,6 +170,10 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "name")),
 			resp: jsonBody("Publish result", tObject())}},
 
+		{"POST", "/api/v1/jobs/{key}/complete", s.handleCompleteJob, apiOp{
+			summary: "Complete a job by hand (operator counterpart to fail; not the worker protocol)", tag: "Incidents",
+			req:  jsonBody("Completion variables", schemaObj(map[string]any{"variables": tObject()})),
+			resp: jsonBody("Job key", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/fail", s.handleFailJob, apiOp{
 			summary: "Fail a job, carrying remaining retries (0 raises an incident)", tag: "Incidents",
 			req: jsonBody("Retries left and a failure message", schemaObj(map[string]any{
