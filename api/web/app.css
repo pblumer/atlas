@@ -511,6 +511,48 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .dec-cond.ok { border-color: #cfe8d6; background: #eef7f0; color: var(--ok); }
 .dec-cond.no { color: var(--muted); }
 .dec-out { font: 700 12px/1.5 system-ui, sans-serif; color: var(--ok); white-space: nowrap; }
+
+/* Decision-evaluation detail (Operations): inputs as typed pills, results tagged
+   with the rule that fired, and the matched-rule decision table revealed on hover —
+   mirroring temis' Operate view. Semantic colours (green fired-rule/ok, red no-match,
+   blue hit row) are deliberate and separate from the app accent. */
+.in-pills { display: flex; flex-wrap: wrap; gap: 4px; }
+.pill-kv { font: 12px/1.5 ui-monospace, monospace; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 1px 7px; white-space: nowrap; }
+.pill-kv b { color: var(--muted); font-weight: 600; }
+.res { display: flex; flex-direction: column; gap: 2px; min-width: 190px; }
+.res-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; font-size: 12.5px; padding: 2px 4px; border-radius: 5px; }
+.res-row.hoverable { cursor: help; }
+.res-row.hoverable:hover, .res-row.hoverable:focus-visible { background: var(--accent-soft); outline: none; }
+.res-row.hoverable .res-key::after { content: "\2b22"; margin-left: 5px; color: var(--accent); font-weight: 700; opacity: 0.8; }
+.res-key { color: var(--text); font-weight: 600; white-space: nowrap; }
+.res-val { font: 12px/1.3 ui-monospace, monospace; color: var(--text); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.res-rule { grid-column: 2 / 4; justify-self: end; font: 600 10px/1.4 ui-monospace, monospace; color: #15803d; background: #dcfce7; padding: 1px 7px; border-radius: 999px; }
+
+/* The hover popover: a frosted card holding the matched-rule table. */
+.dec-pop {
+  position: fixed; z-index: 60; pointer-events: none; max-width: 480px;
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border-strong); border-radius: 10px; padding: 9px 11px;
+  box-shadow: 0 10px 30px rgba(20, 33, 61, 0.22);
+}
+.dec-pop[hidden] { display: none; }
+.pop-title { font: 700 12px/1 system-ui, sans-serif; margin-bottom: 6px; color: var(--text); }
+.mtable { margin-top: 6px; }
+.mtable-head { display: flex; align-items: center; gap: 8px; font: 600 11px/1 system-ui, sans-serif; margin-bottom: 4px; color: var(--text); }
+.mtable-policy { font: 10px/1 ui-monospace, monospace; background: var(--bg); color: var(--muted); padding: 2px 5px; border-radius: 5px; }
+.mgrid { border-collapse: collapse; font-size: 11px; }
+.mgrid th, .mgrid td { border: 1px solid var(--border); padding: 2px 6px; text-align: left; white-space: nowrap; color: var(--text); }
+.mgrid th { background: var(--bg); font-weight: 600; }
+.mgrid code { font: 11px/1 ui-monospace, monospace; }
+.mcol-idx { width: 20px; text-align: center; color: var(--muted); }
+.mrule.is-hit { background: #eaf1ff; }
+.mrule.is-hit .mcol-idx { color: #1d4ed8; font-weight: 700; }
+.mcell.is-ok { color: #166534; background: rgba(22, 163, 74, 0.08); }
+.mcell.is-no { color: #b91c1c; }
+.mcell.is-skip { color: #c3cad6; }
+.mout { font: 11px/1.2 ui-monospace, monospace; }
+
 .legend-swatch {
   display: inline-block; width: 22px; height: 0;
   border-top: 2.5px solid var(--ok); vertical-align: middle; margin-right: 4px;
