@@ -177,8 +177,13 @@ function renderVarsBody(list, collapsed) {
   if (scalars.length) {
     html += `<div class="vgrid">${scalars.map((v) => {
       const cls = v.kind === "boolean" ? "bool" : v.kind === "number" ? "num" : v.kind === "null" ? "null" : "str";
-      return `<div class="vfield"><div class="vf-head"><span class="vk">${esc(v.name)}</span><span class="vtag">${esc(v.kind)}</span>${copyBtn(v.value, "Copy value")}</div>
-        <div class="vv ${cls}">${esc(v.value)}</div></div>`;
+      // The name gets its own full-width line (long identifiers like
+      // "textfield_nachnamestring" must not wrap mid-word against the type badge);
+      // the badge rides the value row, and the copy button floats in the corner so
+      // it never steals width from the name.
+      return `<div class="vfield"><div class="vf-head"><span class="vk" title="${esc(v.name)}">${esc(v.name)}</span></div>
+        <div class="vf-val"><span class="vv ${cls}">${esc(v.value)}</span><span class="vtag">${esc(v.kind)}</span></div>
+        ${copyBtn(v.value, "Copy value")}</div>`;
     }).join("")}</div>`;
   }
   html += jsons.map((v) => {
@@ -205,6 +210,23 @@ function copyBtn(text, title) {
   return `<button class="vcopy" type="button" title="${esc(title)}" aria-label="${esc(title)}" data-copy="${esc(text)}">
     <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M5.5 1.5h6a1 1 0 0 1 1 1v8" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="3.5" y="4.5" width="8" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
   </button>`;
+}
+
+// copyAllBtn renders a "Copy all" button that carries every variable of a set as
+// one JSON object ({name: value}, JSON-typed values parsed back to structures) —
+// the whole payload in one click, the shape an operator pastes into a ticket or a
+// re-run. Module-level so both the Live side panel and the replay inspector share it.
+function copyAllBtn(list) {
+  if (!list || !list.length) return "";
+  const obj = {};
+  for (const v of list) {
+    if (v.kind === "json") { try { obj[v.name] = JSON.parse(v.value); continue; } catch { /* keep raw */ } }
+    if (v.kind === "number") { const n = Number(v.value); obj[v.name] = Number.isNaN(n) ? v.value : n; }
+    else if (v.kind === "boolean") obj[v.name] = v.value === "true";
+    else if (v.kind === "null") obj[v.name] = null;
+    else obj[v.name] = v.value;
+  }
+  return `<button class="btn ghost small vcopy-all vcopy" type="button" title="Copy all variables as JSON" data-copy="${esc(JSON.stringify(obj, null, 2))}">Copy all</button>`;
 }
 
 // prettyJSON canonicalizes a JSON variable's stored string to pretty-printed form
@@ -3422,22 +3444,6 @@ export async function mountLive(root, { api, toast, key, instance }) {
     </div>`;
   }
 
-  // copyAllBtn copies every variable of an instance as one JSON object ({name:
-  // value}, JSON-typed values parsed back to structures) — the whole payload in one
-  // click, the shape an operator pastes into a ticket or a re-run.
-  function copyAllBtn(list) {
-    if (!list || !list.length) return "";
-    const obj = {};
-    for (const v of list) {
-      if (v.kind === "json") { try { obj[v.name] = JSON.parse(v.value); continue; } catch { /* keep raw */ } }
-      if (v.kind === "number") { const n = Number(v.value); obj[v.name] = Number.isNaN(n) ? v.value : n; }
-      else if (v.kind === "boolean") obj[v.name] = v.value === "true";
-      else if (v.kind === "null") obj[v.name] = null;
-      else obj[v.name] = v.value;
-    }
-    return `<button class="btn ghost small vcopy-all vcopy" type="button" title="Copy all variables as JSON" data-copy="${esc(JSON.stringify(obj, null, 2))}">Copy all</button>`;
-  }
-
   // isBusinessRuleTask reports whether a diagram element is a DMN business rule
   // task — the only element for which a decision can be inspected.
   const isBusinessRuleTask = (elementId) => {
@@ -4167,9 +4173,23 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
           <div class="ops-tabs" id="rp-tabs">
             <button data-tab="details" class="active">Details</button>
             <button data-tab="variables">Variables</button>
+            <button data-tab="decisions">Decisions</button>
           </div>
           <div class="ops-tab-body" id="tab-details"></div>
           <div class="ops-tab-body" id="tab-variables" hidden></div>
+          <div class="ops-tab-body" id="tab-decisions" hidden></div>
+        </div>
+      </div>
+      <div class="var-modal-ov" id="var-modal-ov" hidden>
+        <div class="var-modal" role="dialog" aria-modal="true" aria-labelledby="var-modal-title">
+          <div class="var-modal-head">
+            <span class="var-modal-title mono" id="var-modal-title"></span>
+            <span class="vtag obj" id="var-modal-tag"></span>
+            <span style="flex:1"></span>
+            <button class="btn ghost small vcopy vcopy-all" id="var-modal-copy" type="button" data-copy="">Copy JSON</button>
+            <button class="icon-btn" id="var-modal-x" type="button" title="Close" aria-label="Close">✕</button>
+          </div>
+          <div class="var-modal-body"><pre class="vj-body" id="var-modal-body"></pre></div>
         </div>
       </div>
     </div>`;
@@ -4224,6 +4244,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const historyEl = root.querySelector("#history-list");
   const detailEl = root.querySelector("#tab-details");
   const varsEl = root.querySelector("#tab-variables");
+  const decEl = root.querySelector("#tab-decisions");
   const speedSel = root.querySelector("#speed");
 
   let steps = [];    // element-activation audit timeline, oldest first
@@ -4238,7 +4259,10 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   let playing = false;
   let playhead = 0;  // number of frames walked so far (0..frames.length)
   let animToken = 0; // bumped to supersede an in-flight animation
-  const jsonCollapsed = new Set(); // JSON variable names the operator has collapsed (persists across scrubs)
+  let decisions = [];    // this instance's DMN decision evaluations (ADR-0066)
+  let varFilter = "";    // Variables-tab name filter (persists across scrubs)
+  let curVarList = [];   // the variable set the Variables tab is currently showing
+  let varsBuilt = false; // the Variables tab's stable shell (toolbar + table) is mounted
 
   const speed = () => Number(speedSel.value) || 1;
   const tokenColors = ["#0072b2", "#d55e00", "#009e73", "#cc79a7", "#e69f00", "#56b4e9"];
@@ -4321,28 +4345,214 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     </dl>`;
   }
 
+  // A JSON variable's stored value is a JSON string; these read its shape without
+  // throwing. isComplexVar tells the structures (objects/arrays, shown behind a
+  // modal) from the scalars shown inline in the table.
+  const parseJson = (text) => { try { return JSON.parse(text); } catch { return undefined; } };
+  const isComplexVar = (v) => {
+    if (v.kind !== "json") return false;
+    const parsed = parseJson(v.value);
+    return parsed !== null && typeof parsed === "object";
+  };
+  const jsonTypeLabel = (text) => (Array.isArray(parseJson(text)) ? "array" : "object");
+  // A one-line preview of a structure for the table cell, truncated so a big object
+  // never blows out the row — the full value is one click away in the modal.
+  const jsonPeek = (text) => {
+    const s = (() => { try { return JSON.stringify(JSON.parse(text)); } catch { return String(text); } })();
+    return s.length > 40 ? s.slice(0, 39) + "…" : s;
+  };
+
+  // varRow renders one variable as a table row: name, value, type, and a copy
+  // action. Scalars show inline and type-colored; objects and arrays show a compact
+  // summary + preview behind a "···" button that opens the value in a modal — the
+  // table stays scannable no matter how deep a structure is (operator's request).
+  function varRow(v) {
+    const complex = isComplexVar(v);
+    let valCell;
+    if (complex) {
+      valCell = `<button class="v-open" type="button" data-name="${esc(v.name)}" data-json="${esc(v.value)}" data-type="${esc(jsonTypeLabel(v.value))}" title="Open ${esc(v.name)}">
+          <span class="more" aria-hidden="true">···</span>
+          <span class="v-sum">${esc(jsonSummary(v.value))}</span>
+          <span class="peek">${esc(jsonPeek(v.value))}</span></button>`;
+    } else {
+      const cls = v.kind === "boolean" ? "bool" : v.kind === "number" ? "num" : v.kind === "null" ? "null" : "str";
+      valCell = `<span class="c-val ${cls}">${esc(v.value)}</span>`;
+    }
+    const typeBadge = complex
+      ? `<span class="vtag obj">${esc(jsonTypeLabel(v.value))}</span>`
+      : `<span class="vtag">${esc(v.kind)}</span>`;
+    const copyData = complex ? prettyJSON(v.value) : v.value;
+    return `<tr>
+      <td class="c-name" title="${esc(v.name)}">${esc(v.name)}</td>
+      <td class="c-valcell">${valCell}</td>
+      <td class="c-type">${typeBadge}</td>
+      <td class="c-act">${copyBtn(copyData, complex ? "Copy JSON" : "Copy value")}</td>
+    </tr>`;
+  }
+
+  // renderVarRows fills the table body from the current variable set, honoring the
+  // name filter. Split out from renderVars so typing in the filter (or scrubbing a
+  // frame) only rewrites the rows — the toolbar and its focused filter input survive.
+  function renderVarRows() {
+    const body = varsEl.querySelector("#v-rows");
+    if (!body) return;
+    const f = varFilter.trim().toLowerCase();
+    const shown = f ? curVarList.filter((v) => v.name.toLowerCase().includes(f)) : curVarList;
+    varsEl.querySelector("#v-count").textContent = `${shown.length} variable${shown.length === 1 ? "" : "s"}`;
+    body.innerHTML = shown.length
+      ? shown.map(varRow).join("")
+      : `<tr><td colspan="4" class="v-none">${f ? `No variables match “${esc(varFilter)}”.` : "The element has no variables."}</td></tr>`;
+  }
+
+  // buildVarsShell mounts the Variables tab's stable frame once: a toolbar (scope,
+  // count, filter, copy-all) over a scrollable table. renderVars then only refreshes
+  // the parts that change, so a 1.5s poll never steals the filter's focus.
+  function buildVarsShell() {
+    varsEl.innerHTML = `
+      <div class="vp-head v-toolbar">
+        <span class="vp-title" id="v-scope">Variables</span>
+        <span class="vp-count" id="v-count">0 variables</span>
+        <span class="v-filter">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
+          <input id="v-filter" type="text" placeholder="Filter…" aria-label="Filter variables by name"/>
+        </span>
+        <span class="vp-actions" id="v-copyall"></span>
+      </div>
+      <div class="v-scroll">
+        <table class="vt">
+          <thead><tr><th>Name</th><th>Value</th><th>Type</th><th class="c-act" aria-label="Actions"></th></tr></thead>
+          <tbody id="v-rows"></tbody>
+        </table>
+      </div>`;
+    const filterEl = varsEl.querySelector("#v-filter");
+    filterEl.value = varFilter;
+    filterEl.addEventListener("input", () => { varFilter = filterEl.value; renderVarRows(); });
+    varsBuilt = true;
+  }
+
   // renderVars fills the Variables tab. With an element selected it shows the
   // variables as they stood when that element activated (the per-step snapshot,
   // ADR-0048 — the closest analogue to Operate's element-scoped variables);
   // otherwise it shows the variables as of the current replay frame.
   function renderVars() {
-    let src, head;
+    if (!varsBuilt) buildVarsShell();
+    let src, scope;
     if (selEik) {
       const s = stepByEik(selEik);
       src = s ? s.variables : [];
-      head = s ? `As of ${esc(stepLabel(s))} activation` : "Variables";
+      scope = s ? `As of <b>${esc(stepLabel(s))}</b> activation` : "Variables";
     } else {
       const pos = playhead > 0 && playhead <= frames.length ? frames[playhead - 1].position : 0;
       const cur = [...steps].reverse().find((s) => s.position <= pos) || null;
       src = cur ? cur.variables : [];
-      head = cur ? `As of step ${playhead} (${esc(stepLabel(cur))})` : "Variables";
+      scope = cur ? `As of step ${playhead} · <b>${esc(stepLabel(cur))}</b>` : "Variables";
     }
-    varsEl.innerHTML = `<div class="vp-head">${head}</div>` +
-      (src && src.length ? `<div class="vars">${renderVarsBody(src, jsonCollapsed)}</div>`
-        : `<p class="ops-empty">The element has no variables</p>`);
+    curVarList = src || [];
+    varsEl.querySelector("#v-scope").innerHTML = scope;
+    varsEl.querySelector("#v-copyall").innerHTML = copyAllBtn(curVarList);
+    renderVarRows();
   }
 
-  function renderInspector() { renderDetail(); renderVars(); }
+  // openVarModal shows an object/array variable's full value as pretty-printed,
+  // syntax-highlighted JSON — the deep-inspect surface the table's "···" opens.
+  const modalOv = root.querySelector("#var-modal-ov");
+  function openVarModal(name, jsonText, typeLabel) {
+    root.querySelector("#var-modal-title").textContent = name;
+    root.querySelector("#var-modal-tag").textContent = typeLabel || "json";
+    root.querySelector("#var-modal-body").innerHTML = highlightJSON(jsonText);
+    root.querySelector("#var-modal-copy").dataset.copy = prettyJSON(jsonText);
+    modalOv.hidden = false;
+    root.querySelector("#var-modal-x").focus(); // so Escape closes and focus is trapped in the dialog
+  }
+  const closeVarModal = () => { modalOv.hidden = true; };
+
+  // --- Decisions tab: the DMN evaluations this instance made (ADR-0066) ---
+  // These mirror the live view's decision inspector, ported here so the replay can
+  // explain every business-rule outcome after the fact, scoped to the selected task
+  // when one is picked. fmtVal/objRows/renderTrace/renderOneDecision are the same
+  // shape as the live view's.
+  const decLabel = (elId) => {
+    const el = registry.get(elId);
+    const bo = el && el.businessObject;
+    return (bo && (bo.name || bo.id)) || elId;
+  };
+  const fmtVal = (v) => (v === null || v === undefined ? "null" : typeof v === "object" ? JSON.stringify(v) : String(v));
+  function objRows(obj) {
+    const keys = obj && typeof obj === "object" ? Object.keys(obj) : [];
+    if (!keys.length) return '<span class="muted">none</span>';
+    return `<div class="dec-kv">${keys.map((k) =>
+      `<div class="dec-kv-row"><span class="dec-k">${esc(k)}</span><span class="dec-v"><code>${esc(fmtVal(obj[k]))}</code></span></div>`).join("")}</div>`;
+  }
+  function renderTrace(trace) {
+    if (!trace || !Array.isArray(trace.tables) || !trace.tables.length) {
+      return '<div class="dec-sect"><div class="dec-sect-h">How it was decided</div><p class="muted" style="margin:0">No decision-table trace (literal expression or remote decision).</p></div>';
+    }
+    const tables = trace.tables.map((tb) => {
+      const inputs = (tb.inputs || []).map((i) =>
+        `<span class="chip" title="${esc(i.expression)}">${esc(i.expression)} = <code>${esc(fmtVal(i.value))}</code></span>`).join(" ");
+      const rules = (tb.rules || []).map((r) => {
+        const conds = (r.conditions || []).map((c) =>
+          `<span class="dec-cond ${c.matched ? "ok" : "no"}" title="${esc(c.input)}">${esc(c.entry)}</span>`).join(" ");
+        const outs = r.matched && r.outputs && r.outputs.length
+          ? `<span class="dec-out">→ ${esc(r.outputs.map(fmtVal).join(", "))}</span>` : "";
+        return `<div class="dec-rule ${r.matched ? "matched" : ""}">
+          <span class="dec-rule-ix">#${r.index + 1}</span>
+          <span class="dec-rule-conds">${conds || '<span class="muted">—</span>'}</span>
+          ${outs}
+        </div>`;
+      }).join("");
+      return `<div class="dec-table">
+        <div class="dec-table-h">Hit policy <b>${esc(tb.hitPolicy || "U")}</b>${tb.aggregation ? " · " + esc(tb.aggregation) : ""}</div>
+        <div class="dec-inputs">${inputs || '<span class="muted">no inputs</span>'}</div>
+        <div class="dec-rules">${rules}</div>
+      </div>`;
+    }).join("");
+    return `<div class="dec-sect"><div class="dec-sect-h">How it was decided</div>${tables}</div>`;
+  }
+  function renderOneDecision(d) {
+    let inputs = {}, outputs = {}, trace = null;
+    try { inputs = JSON.parse(d.inputs || "{}"); } catch { /* leave empty */ }
+    try { outputs = JSON.parse(d.outputs || "{}"); } catch { /* leave empty */ }
+    if (d.trace) { try { trace = JSON.parse(d.trace); } catch { /* no trace */ } }
+    const when = d.at ? new Date(d.at / 1e6).toLocaleString() : "";
+    return `<div class="dec-card">
+      <div class="dec-card-h"><b>${esc(d.decisionId)}</b>${when ? ` <span class="muted">${esc(when)}</span>` : ""}</div>
+      <div class="dec-sect"><div class="dec-sect-h">Inputs</div>${objRows(inputs)}</div>
+      <div class="dec-sect"><div class="dec-sect-h">Outputs</div>${objRows(outputs)}</div>
+      ${renderTrace(trace)}
+    </div>`;
+  }
+  // renderDecisions lists the instance's evaluations grouped by the task that made
+  // them, newest last within each. If a business-rule task is selected it narrows to
+  // that task's decisions — the same scoping the Variables tab uses.
+  function renderDecisions() {
+    if (!decisions.length) {
+      decEl.innerHTML = `<p class="ops-empty">This instance made no decisions. A business rule task's inputs, outputs, and the rules that fired appear here once it runs.</p>`;
+      return;
+    }
+    const sel = selEik ? stepByEik(selEik) : null;
+    const focusEl = sel && (registry.get(sel.elementId) || {}).businessObject
+      && (registry.get(sel.elementId).businessObject.$type === "bpmn:BusinessRuleTask") ? sel.elementId : "";
+    const list = focusEl ? decisions.filter((d) => d.elementId === focusEl) : decisions;
+    const scope = focusEl
+      ? `Decisions · <b>${esc(decLabel(focusEl))}</b>`
+      : "Decisions";
+    if (!list.length) {
+      decEl.innerHTML = `<div class="vp-head"><span class="vp-title">${scope}</span></div>
+        <p class="ops-empty">This task has not evaluated a decision at this point.</p>`;
+      return;
+    }
+    const groups = {};
+    for (const d of list) (groups[d.elementId] = groups[d.elementId] || []).push(d);
+    const body = Object.entries(groups).map(([elId, ds]) =>
+      `<div class="dec-group">${focusEl ? "" : `<div class="dec-group-h">${esc(decLabel(elId))}</div>`}${ds.map(renderOneDecision).join("")}</div>`).join("");
+    decEl.innerHTML = `<div class="vp-head">
+        <span class="vp-title">${scope}</span>
+        <span class="vp-count">${list.length} evaluation${list.length === 1 ? "" : "s"}</span>
+      </div>${body}`;
+  }
+
+  function renderInspector() { renderDetail(); renderVars(); renderDecisions(); }
 
   function updateClock() {
     if (!frames.length) { clockEl.textContent = "no frames yet"; return; }
@@ -4590,6 +4800,20 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       renderInspector();
     }
     applyMeta(next);
+    await refreshDecisions();
+  }
+
+  // refreshDecisions pulls the instance's DMN evaluations and re-renders the tab
+  // when they change, so a still-running instance's decisions appear live.
+  async function refreshDecisions() {
+    let next;
+    try { next = await api("GET", `/api/v1/instances/${key}/decisions`); }
+    catch { return; } // transient; keep what we have
+    if (current !== viewer) return;
+    next = next || [];
+    if (next.length === decisions.length) return; // nothing new
+    decisions = next;
+    renderDecisions();
   }
 
   // Selecting an element in the diagram inspects it, the same as a history click.
@@ -4605,6 +4829,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     root.querySelectorAll("#rp-tabs button").forEach((x) => x.classList.toggle("active", x === b));
     detailEl.hidden = activeTab !== "details";
     varsEl.hidden = activeTab !== "variables";
+    decEl.hidden = activeTab !== "decisions";
   }));
   root.querySelector("#tg-end").addEventListener("change", (e) => { showEnd = e.target.checked; renderHistory(); });
   playBtn.addEventListener("click", () => { playing ? pause() : play(); });
@@ -4614,8 +4839,17 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   });
   root.querySelector("#step-back").addEventListener("click", () => { pause(); setPlayhead(playhead - 1); });
   scrub.addEventListener("input", () => { pause(); setPlayhead(Number(scrub.value)); });
-  bindJsonCards(varsEl, jsonCollapsed, renderVars);
+  // A "···" button in the Variables table opens its object/array value in the modal.
+  varsEl.addEventListener("click", (e) => {
+    const open = e.target.closest(".v-open");
+    if (!open || !varsEl.contains(open)) return;
+    openVarModal(open.dataset.name, open.dataset.json, open.dataset.type);
+  });
+  modalOv.addEventListener("click", (e) => { if (e.target === modalOv) closeVarModal(); });
+  modalOv.addEventListener("keydown", (e) => { if (e.key === "Escape") closeVarModal(); });
+  root.querySelector("#var-modal-x").addEventListener("click", closeVarModal);
   bindVarCopy(varsEl, toast);
+  bindVarCopy(modalOv, toast);
 
   await poll();
   renderInspector();
