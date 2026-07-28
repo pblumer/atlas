@@ -1093,27 +1093,25 @@ function visBadge(p) {
   return `<span class="pill vis" title="Only the owner can see this project">Private</span>`;
 }
 
-// shareProject loads the user directory (to resolve member names and populate the
-// add-picker) and opens the share dialog. A non-admin owner cannot list users
-// (ADR-0044), so on a 403 the dialog degrades to adding members by id.
+// shareProject loads the principals directory (to resolve member names and
+// populate the add-picker) and opens the share dialog. The directory is readable
+// by any authenticated caller (ADR-0073), so an owner needn't be an admin; if the
+// fetch fails for any reason the dialog degrades to adding members by id.
 async function shareProject(proj, reload) {
-  let users = null, denied = false;
-  try { users = await api("GET", "/api/v1/users"); }
-  catch (e) {
-    denied = /admin/i.test(e.message);
-    if (!denied) { toast("could not load users: " + e.message, "err"); return; }
-  }
-  openShareModal(proj, users, denied, reload);
+  let users = null, degraded = false;
+  try { users = await api("GET", "/api/v1/principals"); }
+  catch { degraded = true; }
+  openShareModal(proj, users, degraded, reload);
 }
 
 // openShareModal renders the share dialog and wires its controls to the project
 // scope endpoints. It keeps a local copy of the project, updated from each
 // mutation's response so the dialog reflects server truth without a full refetch;
 // closing runs reload() once to refresh the underlying page (badges and gating).
-function openShareModal(proj, users, denied, reload) {
+function openShareModal(proj, users, degraded, reload) {
   let p = proj;
   const byId = new Map((users || []).map((u) => [u.id, u]));
-  const nameOf = (id) => { const u = byId.get(id); return u ? (u.displayName || u.username) : id; };
+  const nameOf = (id) => { const u = byId.get(id); return u ? u.name : id; };
   const me = AUTH.user && AUTH.user.id;
 
   const ov = document.createElement("div");
@@ -1166,17 +1164,17 @@ function openShareModal(proj, users, denied, reload) {
       ` data-uid="${esc(m.ref.id)}"`,
     )).join("");
 
-    const addControl = denied
+    const addControl = degraded
       ? `<div class="add-row">
            <input class="field" id="add-uid" placeholder="User ID (usr_…)" autocomplete="off">
            ${roleSelect("viewer", 'id="add-role"')}
            <button type="button" class="btn" id="add-btn">Add</button>
          </div>
-         <p class="muted small">A searchable directory needs the admin role — add by user ID for now.</p>`
+         <p class="muted small">Could not load the directory — add by user ID for now.</p>`
       : eligible.length
         ? `<div class="add-row">
              <select class="field" id="add-uid">
-               ${eligible.map((u) => `<option value="${esc(u.id)}">${esc(u.displayName || u.username)}</option>`).join("")}
+               ${eligible.map((u) => `<option value="${esc(u.id)}">${esc(u.name)}</option>`).join("")}
              </select>
              ${roleSelect("viewer", 'id="add-role"')}
              <button type="button" class="btn" id="add-btn">Add</button>
