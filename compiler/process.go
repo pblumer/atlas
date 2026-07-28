@@ -428,6 +428,7 @@ type CompiledProcess struct {
 	ioOutputs         []IOMapping             // shared: zeebe:ioMapping outputs grouped by activity node
 	startEvents       []int32
 	startFormId       int32    // interned start-form id (ADR-0028), -1 if none
+	isExecutable      bool     // bpmn:isExecutable — a non-executable process can't be started
 	elementIds        []int32  // interned source BPMN id per node id (-1 if unset)
 	strings           []string // intern table (index → string), for debug/export
 }
@@ -679,6 +680,11 @@ func (p *CompiledProcess) IOOutputs(id int32) []IOMapping {
 // instance, or "" if the process has no start form (ADR-0028). It is design-time
 // metadata; the engine never reads it.
 func (p *CompiledProcess) StartFormId() string { return p.Intern(p.startFormId) }
+
+// IsExecutable reports the process's bpmn:isExecutable flag. A non-executable
+// process is descriptive-only: the API refuses to start it and omits it from the
+// start surfaces. Absent in the source defaults to true (see the parser).
+func (p *CompiledProcess) IsExecutable() bool { return p.isExecutable }
 
 // Intern returns the string for an interned index, or "" if out of range.
 func (p *CompiledProcess) Intern(idx int32) string {
