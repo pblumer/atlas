@@ -1,14 +1,16 @@
 # ADR-0077: Multi-instance activities (parallel and sequential)
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phases 1–4 delivered; Phase 5 (Modeler) pending. Each
-> phase lands test-first with a recovery test (ADR-0018). Multi-instance builds directly
-> on the embedded-subprocess scope lifecycle (ADR-0074) and the call-activity child
-> termination (ADR-0076); it introduces no new value type, record, counter, or recovery
-> path.
+> **Implementation status.** Phases 1–5 delivered — a multi-instance activity compiles,
+> runs (parallel and sequential), assembles an ordered output collection, honours a
+> completion condition, is interruptible, nests over subprocesses and call activities,
+> and is authored in the Modeler. Each engine phase landed test-first with a recovery
+> test (ADR-0018). Multi-instance builds directly on the embedded-subprocess scope
+> lifecycle (ADR-0074) and the call-activity child termination (ADR-0076); it introduces
+> no new value type, record, counter, or recovery path.
 >
 > **Delivered (Phase 1, compiler):** a `MultiInstanceDetail` (input collection or
 > cardinality, input element, output collection/element, completion condition,
@@ -83,6 +85,20 @@
 > and routing out its flow; a multi-instance subprocess assembling an output collection;
 > and a multi-instance call activity fanning out children and, on interrupt, terminating
 > every child.
+>
+> **Delivered (Phase 5, Modeler):** the Implement panel gains a **Multi-instance**
+> section on service, script, and user tasks, call activities, and subprocesses (the
+> types the compiler supports). It reads and writes the activity's
+> `bpmn:MultiInstanceLoopCharacteristics` and its nested `<zeebe:loopCharacteristics>`
+> plus `<loopCardinality>`/`<completionCondition>`: a **Mode** select (none / parallel /
+> sequential), an **Iterate over** choice (a collection or a fixed count), the input
+> element, an optional output collection/element, and a completion condition. Setting a
+> mode makes bpmn-js draw the ∥/≡ marker automatically; clearing it to *None* drops the
+> element. FEEL values are stored `=`-prefixed (stripped for display), matching the
+> io-mapping editor; the whole element is rewritten on any change so editing one field
+> never leaves a stale sibling. Verified end to end in a real browser (the vendored
+> bpmn-js + zeebe moddle): the panel reads an imported multi-instance activity, an edited
+> field exports the expected XML, and clearing the mode removes the element.
 
 ## Context and problem statement
 
