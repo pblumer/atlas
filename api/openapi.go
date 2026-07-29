@@ -140,6 +140,13 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Start a process instance", tag: "Instances",
 			req:  jsonBody("Initial variables", schemaObj(map[string]any{"variables": tObject()})),
 			resp: jsonBody("Created instance", tObject())}},
+		{"POST", "/api/v1/processes/{key}/instances-from-csv", s.handleCreateInstanceFromCSV, apiOp{
+			summary: "Start a process instance from an uploaded CSV — multipart file + JSON column layout; seeds rows/rowCount/fileName as start variables (ADR-0084)", tag: "Instances",
+			req: &bodySpec{mediaType: "multipart/form-data", desc: "CSV file and a JSON column layout", schema: schemaObj(map[string]any{
+				"file":   map[string]any{"type": "string", "format": "binary"},
+				"config": tString(),
+			}, "file", "config")},
+			resp: jsonBody("Created instance with parsed row count", tObject())}},
 		{"GET", "/api/v1/instances", s.handleListInstances, apiOp{
 			summary: "List active and finished instances — capped per call (?limit=, default 1000, max 10000); narrow to one definition with ?process=<key>; X-Instances-Truncated: true marks a capped page", tag: "Instances", resp: jsonBody("Instances", tArray())}},
 		{"GET", "/api/v1/instances/summary", s.handleInstancesSummary, apiOp{
