@@ -37,9 +37,10 @@ const (
 	TypeTimerStartEvent   // a start event that a due timer instantiates on a schedule (duration/date/cycle/cron, ADR-0051); at runtime it behaves like a none start (flows straight on)
 	TypeMessageEndEvent   // an end event that publishes a message, then ends the instance (ADR-0052); the send-and-stop counterpart of a message throw event, so it reuses the throw detail table
 	TypeSubProcess        // an embedded subprocess: a container that is itself a scope; a token entering it runs its inner start→…→end in a child scope, and it completes when that scope empties (ADR-0074)
+	TypeCallActivity      // a call activity: starts a separate process as a child instance, waits for it, then continues; variables pass in/out by mapping (ADR-0076)
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 22
+	numBpmnTypes = 23
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -87,6 +88,8 @@ func (t BpmnType) String() string {
 		return "MessageEndEvent"
 	case TypeSubProcess:
 		return "SubProcess"
+	case TypeCallActivity:
+		return "CallActivity"
 	default:
 		return "Unspecified"
 	}
@@ -139,6 +142,19 @@ type ServiceTaskDetail struct {
 type ScriptTaskDetail struct {
 	Expr      *expr.Compiled
 	ResultVar string
+}
+
+// CallActivityDetail is the per-call-activity data a behavior needs at runtime: the
+// bpmn process id of the process to start as a child instance (interned), the
+// binding that picks its version (latest vs this deployment), and whether variables
+// propagate wholesale in and out (Zeebe's propagateAll flags — when off, only the
+// activity's input/output mappings pass variables, giving an isolated child)
+// (ADR-0076). The called def key is resolved at deploy/runtime, not compiled here.
+type CallActivityDetail struct {
+	CalledProcessId    int32 // interned bpmn process id of the called process
+	Binding            DecisionBinding
+	PropagateAllParent bool // pass all caller variables into the child (default true)
+	PropagateAllChild  bool // return all child variables to the caller (default true)
 }
 
 // DecisionInputMapping is one explicit input to a DMN decision: the decision's
@@ -430,6 +446,7 @@ type CompiledProcess struct {
 	scopeStarts       []int32 // shared topology: nested start-event node ids grouped by subprocess node
 	serviceTasks      []ServiceTaskDetail
 	scriptTasks       []ScriptTaskDetail
+	callActivities    []CallActivityDetail
 	scriptJobTasks    []ScriptJobTaskDetail
 	businessRuleTasks []BusinessRuleTaskDetail
 	timerCatches      []TimerCatchDetail
@@ -612,6 +629,11 @@ func (p *CompiledProcess) ProcessId() string { return p.Intern(p.BpmnProcessId) 
 // ScriptTask returns the detail at the given table index.
 func (p *CompiledProcess) ScriptTask(detail int32) *ScriptTaskDetail {
 	return &p.scriptTasks[detail]
+}
+
+// CallActivity returns the call-activity detail at the given table index.
+func (p *CompiledProcess) CallActivity(detail int32) *CallActivityDetail {
+	return &p.callActivities[detail]
 }
 
 // ScriptJobTask returns the script-job-task detail at the given table index.
