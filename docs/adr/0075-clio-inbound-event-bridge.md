@@ -66,19 +66,39 @@ bridge is at-least-once. The mark is deliberately generic — the engine never i
 `SourceID` — so clio is never named in the engine, preserving ADR-0036's layering.
 
 The bridge itself (`api/inboundBridge`) mirrors the timer scheduler: a ticker goroutine
-that reads new clio events **off** the run loop (`clio.Client.ReadEvents`), computes each
-event's correlation key (a FEEL expression over the event body) and payload off the loop,
-and hands one publish batch per subscription back onto the run loop via `s.do`. The
-publish is made durable (`Drive` → fsync) *before* a **best-effort** sidecar cursor
-advances. The cursor only speeds a restart's resume; it is explicitly **not** the
-correctness authority. If it is lost or stale, the bridge re-reads and the engine
-high-water mark drops the duplicates. `SourceID = "clio:" + connectorID + ":" + subject`;
-`SourceSeq` is clio's monotonic per-subject event sequence.
+that reads new clio events **off** the run loop (`clio.Client.ReadEvents` → clio's
+`POST /api/v1/read-events`, NDJSON oldest-first), computes each event's correlation key
+and payload off the loop, and hands one publish batch per subscription back onto the run
+loop via `s.do`. The publish is made durable (`Drive` → fsync) *before* a **best-effort**
+sidecar cursor advances. The cursor only speeds a restart's resume; it is explicitly
+**not** the correctness authority. If it is lost or stale, the bridge re-reads and the
+engine high-water mark drops the duplicates. `SourceID = "clio:" + connectorID + ":" +
+subject`.
+
+**`SourceSeq` is the clio event `id`.** A clio event carries no separate sequence field;
+its `id` *is* a per-partition monotonic counter rendered as a decimal string
+(`strconv.FormatUint`), and clio's own read cursor (`lowerBound`) is an inclusive `id`
+bound. The bridge parses the `id` to the `uint64` the engine deduplicates on, so the mark
+advances in clio's own event order. This assumes a single-partition clio
+(`CLIO_PARTITIONS=1`, clio's recommended production setting): clio documents its scalar
+`lowerBound` cursor as well-defined only for `N=1`, and the same restriction is what makes
+one global `id` order — and thus one high-water per source — correct here.
+
+**Correlation keys and seeded variables see the event's subject, not just its body.**
+`correlationKeyOf` evaluates the FEEL key over the event body **plus** four reserved
+envelope fields — `subject`, `subjectTail` (the last `/`-segment, e.g. `E-123456` for
+`/employees/E-123456`), `eventType`, `eventId` — and `eventVars` seeds those same fields
+as variables on the started/woken instance. This is what lets a watch on a parent subject
+derive a per-entity correlation key (`= subjectTail`) from the child subject an event was
+written to, the motivating use case. Envelope fields take precedence over a body field of
+the same name so a subscription can always rely on them.
 
 Subscriptions are operator-managed like connectors: an `inboundSubStore` sidecar holds
 `{connectorId, watchedSubject, recursive, messageName, correlationKey, enabled}` records,
-CRUD'd under `/api/v1/connectors/{id}/inbound-subscriptions`. A bad correlation-key FEEL
-expression is rejected at config time, not left to fail every poll.
+CRUD'd under `/api/v1/connectors/{id}/inbound-subscriptions` and editable in the Console.
+`recursive` reads the watched subject's whole subtree (clio's `recursive` read flag), so a
+watch on `/employees` catches an event on `/employees/E-123456`. A bad correlation-key
+FEEL expression is rejected at config time, not left to fail every poll.
 
 ### Consequences
 
@@ -90,17 +110,21 @@ expression is rejected at config time, not left to fail every poll.
   are new surface. Polling has latency (default 2s) versus a push subscription. The
   high-water table grows one entry per source (bounded by configured subscriptions).
 - **Follow-ups / risks to watch:** a push/streaming clio subscription instead of polling;
-  bounding/rotating the high-water table if sources ever become unbounded; cross-partition
-  correlation (ADR-0020) applies to inbound too once partitions land; pin the clio
-  `read_events` API version (the wire format in `clio.HTTPClient.ReadEvents` is provisional).
+  bounding/rotating the high-water table if sources ever become unbounded; **multi-partition
+  clio** (`CLIO_PARTITIONS>1`) would break the single global `id` order the dedup relies on
+  — supporting it means keying the high-water per `(source, partition)` and is deferred until
+  clio itself makes its scalar cursor well-defined for `N>1`. The wire format now targets the
+  clio v1 API (`/api/v1/read-events`, `/api/v1/write-events`, `/api/v1/run-query`,
+  `/api/v1/state/<subject>`); it is isolated in `clio.HTTPClient`.
 
 ## Pros and cons of the options
 
 ### Option 1 — sidecar cursor only
 - Good: no engine change; correct for catch via natural idempotency.
 - Bad: double-starts message-start processes in the crash window — a real duplicate
-  instance, since Atlas is the downstream here (unlike the outbound connector, where clio
-  dedups by idempotency key).
+  instance. Atlas is the downstream here, so it must own the dedup: unlike a message
+  *catch* (naturally idempotent once the subscription is retired), a *start* has no such
+  guard.
 
 ### Option 2 — clio-specific WAL cursor
 - Good: atomic and correct.

@@ -38,7 +38,7 @@ func TestInboundBridgeLive(t *testing.T) {
 	}
 	srv.do(func() {
 		srv.clioRegistry.Replace(map[string]clio.Client{"events": &fakeClioReader{events: []clio.InboundEvent{
-			{ID: "e1", Seq: 1, Subject: "orders/new", Type: "OrderPlaced", Data: map[string]any{"orderId": "o-1"}},
+			{ID: "1", Subject: "orders/new", Type: "OrderPlaced", Data: map[string]any{"orderId": "o-1"}},
 		}}})
 	})
 	// The ticker fires within a few intervals; wait until the bridge starts the process.
@@ -66,15 +66,20 @@ const messageStartBridgeBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN
   </process>
 </definitions>`
 
-// fakeClioReader serves a fixed event list, honoring the exclusive AfterID cursor.
-type fakeClioReader struct{ events []clio.InboundEvent }
+// fakeClioReader serves a fixed event list, honoring the exclusive AfterID cursor,
+// and records the last read request so a test can assert the recursive/subject flags.
+type fakeClioReader struct {
+	events  []clio.InboundEvent
+	lastReq clio.ReadEventsRequest
+}
 
 func (f *fakeClioReader) WriteEvent(context.Context, clio.Event) error { return nil }
 func (f *fakeClioReader) GetState(context.Context, string, string) (map[string]any, error) {
 	return nil, nil
 }
-func (f *fakeClioReader) Query(context.Context, string) (any, error) { return nil, nil }
+func (f *fakeClioReader) Query(context.Context, string, string) (any, error) { return nil, nil }
 func (f *fakeClioReader) ReadEvents(_ context.Context, r clio.ReadEventsRequest) ([]clio.InboundEvent, error) {
+	f.lastReq = r
 	seen := r.AfterID == ""
 	var out []clio.InboundEvent
 	for _, e := range f.events {
@@ -125,7 +130,7 @@ func TestInboundBridgeStartsAndDedupes(t *testing.T) {
 
 	// Inject a fake clio client so the bridge reads canned events (no live clio).
 	fake := &fakeClioReader{events: []clio.InboundEvent{
-		{ID: "e1", Seq: 1, Subject: "orders/new", Type: "OrderPlaced", Data: map[string]any{"orderId": "o-1"}},
+		{ID: "1", Subject: "orders/new", Type: "OrderPlaced", Data: map[string]any{"orderId": "o-1"}},
 	}}
 	srv.do(func() { srv.clioRegistry.Replace(map[string]clio.Client{"events": fake}) })
 
@@ -141,7 +146,7 @@ func TestInboundBridgeStartsAndDedupes(t *testing.T) {
 	}
 
 	// A brand-new event starts another instance.
-	fake.events = append(fake.events, clio.InboundEvent{ID: "e2", Seq: 2, Subject: "orders/new", Type: "OrderPlaced", Data: map[string]any{"orderId": "o-2"}})
+	fake.events = append(fake.events, clio.InboundEvent{ID: "2", Subject: "orders/new", Type: "OrderPlaced", Data: map[string]any{"orderId": "o-2"}})
 	srv.pollInbound(context.Background())
 	if n := activeInstances(t, srv); n != 2 {
 		t.Fatalf("after new event: active=%d, want 2", n)
@@ -175,7 +180,7 @@ func TestInboundBridgeDedupesLostCursor(t *testing.T) {
 	_ = json.Unmarshal(sb, &sub)
 
 	fake := &fakeClioReader{events: []clio.InboundEvent{
-		{ID: "e1", Seq: 1, Subject: "orders/new", Type: "T", Data: map[string]any{"orderId": "o-1"}},
+		{ID: "1", Subject: "orders/new", Type: "T", Data: map[string]any{"orderId": "o-1"}},
 	}}
 	srv.do(func() { srv.clioRegistry.Replace(map[string]clio.Client{"events": fake}) })
 
@@ -193,6 +198,59 @@ func TestInboundBridgeDedupesLostCursor(t *testing.T) {
 	srv.pollInbound(context.Background())
 	if n := activeInstances(t, srv); n != 1 {
 		t.Fatalf("after re-reading a re-delivered event: active=%d, want 1 (engine high-water dedupes)", n)
+	}
+}
+
+// employeeStartBPMN: a message start event named "employee.created" — the reported
+// scenario — that begins an instance parking at a keyless catch so it stays observable.
+const employeeStartBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <message id="Mstart" name="employee.created"/>
+  <message id="Mnever" name="never"/>
+  <process id="onEmployee" isExecutable="true">
+    <startEvent id="s"><messageEventDefinition messageRef="Mstart"/></startEvent>
+    <intermediateCatchEvent id="park"><messageEventDefinition messageRef="Mnever"/></intermediateCatchEvent>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="park"/>
+    <sequenceFlow id="f2" sourceRef="park" targetRef="e"/>
+  </process>
+</definitions>`
+
+// TestInboundBridgeRecursiveSubjectKey is the reported use case end to end: a
+// recursive watch on /employees, correlating on the subject's leaf. An event written
+// to the child subject /employees/E-123456 (with no employeeId in its body) starts the
+// employee.created process; the bridge reads recursively and the started instance
+// carries subjectTail = E-123456.
+func TestInboundBridgeRecursiveSubjectKey(t *testing.T) {
+	srv, _ := newValidateServer(t, WithInboundPollInterval(0))
+	x := deployTestHarness{t, srv.Handler()}
+
+	pid := x.mkProject("Onboard")
+	x.saveDraft(pid, employeeStartBPMN)
+	if code, b := x.do(http.MethodPost, "/api/v1/projects/"+pid+"/deploy", ""); code != http.StatusOK {
+		t.Fatalf("deploy: %d %s", code, b)
+	}
+	code, cb := x.do(http.MethodPost, "/api/v1/connectors", `{"name":"events","kind":"clio","endpoint":"http://x"}`)
+	if code != http.StatusOK {
+		t.Fatalf("create connector: %d %s", code, cb)
+	}
+	var conn connector
+	_ = json.Unmarshal(cb, &conn)
+	if code, sb := x.do(http.MethodPost, "/api/v1/connectors/"+conn.ID+"/inbound-subscriptions",
+		`{"watchedSubject":"/employees","recursive":true,"messageName":"employee.created","correlationKey":"= subjectTail"}`); code != http.StatusOK {
+		t.Fatalf("create subscription: %d %s", code, sb)
+	}
+
+	fake := &fakeClioReader{events: []clio.InboundEvent{
+		{ID: "1", Subject: "/employees/E-123456", Type: "employee.created", Data: map[string]any{"firstName": "Ada"}},
+	}}
+	srv.do(func() { srv.clioRegistry.Replace(map[string]clio.Client{"events": fake}) })
+
+	srv.pollInbound(context.Background())
+	if n := activeInstances(t, srv); n != 1 {
+		t.Fatalf("active=%d, want 1 (a subtree event started the process)", n)
+	}
+	if !fake.lastReq.Recursive || fake.lastReq.Subject != "/employees" {
+		t.Errorf("read request = %+v, want recursive on subject /employees", fake.lastReq)
 	}
 }
 

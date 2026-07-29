@@ -45,10 +45,15 @@ func TestServerExecutesClioConnector(t *testing.T) {
 		gotAuth = r.Header.Get("Authorization")
 		b, _ := io.ReadAll(r.Body)
 		var req struct {
-			Subject string `json:"subject"`
+			Events []struct {
+				Source  string `json:"source"`
+				Subject string `json:"subject"`
+			} `json:"events"`
 		}
 		_ = json.Unmarshal(b, &req)
-		gotSubject = req.Subject
+		if len(req.Events) > 0 {
+			gotSubject = req.Events[0].Subject
+		}
 		w.WriteHeader(http.StatusCreated)
 	}))
 	defer ts.Close()
@@ -100,8 +105,8 @@ func TestServerExecutesClioConnector(t *testing.T) {
 	if atomic.LoadInt32(&calls) == callsBefore {
 		t.Fatal("after configuring the connector: clio was never called")
 	}
-	if gotSubject != "orders/new" {
-		t.Errorf("event subject = %q, want orders/new", gotSubject)
+	if gotSubject != "/orders/new" {
+		t.Errorf("event subject = %q, want /orders/new (clio subjects are absolute)", gotSubject)
 	}
 	if gotAuth != "Bearer s3cr3t" {
 		t.Errorf("Authorization = %q, want the token resolved from the connector ref", gotAuth)

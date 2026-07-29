@@ -27,15 +27,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
-	"strconv"
+	"strings"
 )
 
 // Event is one event a connector task appends to clio. IdempotencyKey is
 // deterministic (the job key), so an at-least-once retry is de-duplicated by
 // clio rather than appended twice.
 type Event struct {
+	Source         string // CloudEvents source (clio requires it); defaults to DefaultEventSource when empty
 	Subject        string
 	Type           string
 	Data           map[string]any
@@ -43,14 +45,18 @@ type Event struct {
 }
 
 // InboundEvent is one event read back from clio (a read/query result, or an event
-// the inbound bridge consumes, ADR-0075). ID is clio's globally-unique event id
-// (the cursor/dedup key); Seq is the monotonic per-subject sequence.
+// the inbound bridge consumes, ADR-0075). ID is clio's event id — a per-partition
+// monotonic sequence rendered as a decimal string (clio's `strconv.FormatUint`),
+// which is both the resume cursor and, parsed as a uint64, the inbound bridge's
+// dedup sequence. clio events carry no separate `seq` field. Partition is a
+// server-derived view attribute set only on reads (0 for a single-partition clio,
+// the recommended production configuration).
 type InboundEvent struct {
-	ID      string         `json:"id"`
-	Seq     uint64         `json:"seq"`
-	Subject string         `json:"subject"`
-	Type    string         `json:"type"`
-	Data    map[string]any `json:"data"`
+	ID        string         `json:"id"`
+	Subject   string         `json:"subject"`
+	Type      string         `json:"type"`
+	Data      map[string]any `json:"data"`
+	Partition int            `json:"partition,omitempty"`
 }
 
 // ReadEventsRequest selects the events a read returns: a Subject, an optional
@@ -72,7 +78,7 @@ type ReadEventsRequest struct {
 type Client interface {
 	WriteEvent(ctx context.Context, e Event) error
 	GetState(ctx context.Context, subject, reduceSpec string) (map[string]any, error)
-	Query(ctx context.Context, query string) (any, error)
+	Query(ctx context.Context, subject, where string) (any, error)
 	ReadEvents(ctx context.Context, req ReadEventsRequest) ([]InboundEvent, error)
 }
 
@@ -118,12 +124,16 @@ type Connector struct {
 	Token    string
 }
 
-// HTTPClient talks to a real clio instance over HTTP.
-//
-// The wire format is provisional pending the clio API contract: it POSTs the
-// event as JSON to {Endpoint}/api/events with an Idempotency-Key header, so an
-// at-least-once retry is de-duplicated by clio. Swap the path/shape here when the
-// contract is fixed; nothing outside this method depends on it.
+// DefaultEventSource is the CloudEvents `source` an outbound write carries when a
+// task does not set one. clio rejects a write with an empty source, so this keeps
+// a model that only names a subject and type working.
+const DefaultEventSource = "atlas"
+
+// HTTPClient talks to a real clio instance over its HTTP API (clio v1). Each
+// method targets clio's documented route: write-events, read-events, run-query
+// (all POST with a JSON body) and state (GET with the subject in the path). clio
+// subjects are absolute ("/orders/42"); a leading slash is added if a task omits
+// it. Reads stream NDJSON, one event JSON per line, oldest first.
 type HTTPClient struct {
 	conn Connector
 	http *http.Client
@@ -135,25 +145,34 @@ func NewHTTPClient(conn Connector) *HTTPClient {
 }
 
 func (c *HTTPClient) WriteEvent(ctx context.Context, e Event) error {
+	source := e.Source
+	if source == "" {
+		source = DefaultEventSource
+	}
+	// clio's write-events takes a batch of CloudEvents candidates; each needs a
+	// source, an absolute subject, and a type (clio 400s otherwise). We send one.
 	body, err := json.Marshal(map[string]any{
-		"subject": e.Subject,
-		"type":    e.Type,
-		"data":    e.Data,
+		"events": []map[string]any{{
+			"source":  source,
+			"subject": withLeadingSlash(e.Subject),
+			"type":    e.Type,
+			"data":    e.Data,
+		}},
 	})
 	if err != nil {
 		return fmt.Errorf("clio: encode event: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.conn.Endpoint+"/api/events", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.conn.Endpoint+"/api/v1/write-events", bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("clio: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	// clio de-duplicates writes with optimistic-concurrency preconditions, not a
+	// header, so the idempotency key rides along only as a hint clio may ignore.
 	if e.IdempotencyKey != "" {
 		req.Header.Set("Idempotency-Key", e.IdempotencyKey)
 	}
-	if c.conn.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.conn.Token)
-	}
+	c.authorize(req)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return fmt.Errorf("clio: post event: %w", err)
@@ -165,103 +184,91 @@ func (c *HTTPClient) WriteEvent(ctx context.Context, e Event) error {
 	return nil
 }
 
-// GetState reads a projection (reduceSpec) for a subject and returns its state
-// object. Provisional wire format: GET {Endpoint}/api/state?subject=…&reduceSpec=….
+// GetState reads a subject's folded state and returns its state object. clio's
+// state route is GET {Endpoint}/api/v1/state/<subject> with the subject in the
+// path; the effective reduce spec is chosen server-side by registered prefix
+// (ADR-0041), so reduceSpec is accepted for interface symmetry but not sent. The
+// response is a state envelope; we return its `state` object.
 func (c *HTTPClient) GetState(ctx context.Context, subject, reduceSpec string) (map[string]any, error) {
-	q := url.Values{"subject": {subject}}
-	if reduceSpec != "" {
-		q.Set("reduceSpec", reduceSpec)
+	_ = reduceSpec // clio resolves the reduce spec by subject prefix, not per request
+	var env struct {
+		State map[string]any `json:"state"`
 	}
-	var out map[string]any
-	if err := c.getJSON(ctx, "/api/state?"+q.Encode(), &out); err != nil {
+	if err := c.getJSON(ctx, "/api/v1/state/"+escapeSubjectPath(subject), &env); err != nil {
 		return nil, fmt.Errorf("clio: get-state for %q: %w", subject, err)
 	}
-	return out, nil
+	return env.State, nil
 }
 
-// Query runs a stored query and returns its result (rows/object). Provisional wire
-// format: POST {Endpoint}/api/query with {"query":…}.
-func (c *HTTPClient) Query(ctx context.Context, query string) (any, error) {
-	body, err := json.Marshal(map[string]any{"query": query})
+// Query runs a clio filter query over a subject and returns the matching events.
+// Wire format: POST {Endpoint}/api/v1/run-query with {subject, where}, where
+// `where` is clio's CEL predicate ("" = every event in the scope). The response
+// streams NDJSON (one event per line); we collect the events into a slice so the
+// result canonicalizes into a process variable like any other JSON array.
+func (c *HTTPClient) Query(ctx context.Context, subject, where string) (any, error) {
+	body, err := json.Marshal(map[string]any{
+		"subject": withLeadingSlash(subject),
+		"where":   where,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("clio: encode query: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.conn.Endpoint+"/api/query", bytes.NewReader(body))
+	events, err := c.postNDJSON(ctx, "/api/v1/run-query", body)
 	if err != nil {
-		return nil, fmt.Errorf("clio: build query request: %w", err)
+		return nil, fmt.Errorf("clio: run-query for %q: %w", subject, err)
 	}
-	req.Header.Set("Content-Type", "application/json")
-	c.authorize(req)
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("clio: run-query: %w", err)
+	rows := make([]any, len(events))
+	for i := range events {
+		rows[i] = events[i]
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode/100 != 2 {
-		return nil, fmt.Errorf("clio: run-query returned HTTP %d", resp.StatusCode)
-	}
-	dec := json.NewDecoder(resp.Body)
-	dec.UseNumber()
-	var out any
-	if err := dec.Decode(&out); err != nil {
-		return nil, fmt.Errorf("clio: decode query result: %w", err)
-	}
-	return out, nil
+	return rows, nil
 }
 
-// ReadEvents reads a subject's events oldest-first. Provisional wire format: GET
-// {Endpoint}/api/events/read?subject=…&lowerBound=…&recursive=…&limit=… returning
-// NDJSON (one event JSON per line). clio's lowerBound is inclusive but AfterID is
-// the last-consumed id, so the first line equal to AfterID is dropped, making
-// AfterID an exclusive cursor. This translation is the only place that depends on
-// the wire shape; swap it here when the contract firms up.
+// ReadEvents reads a subject's events oldest-first. Wire format: POST
+// {Endpoint}/api/v1/read-events with a JSON body {subject, recursive, lowerBound,
+// types, limit}, returning NDJSON (one event JSON per line). clio's lowerBound is
+// inclusive but AfterID is the last-consumed id, so the first line equal to
+// AfterID is dropped, making AfterID an exclusive cursor. `recursive` includes the
+// subject's whole subtree — the setting that lets a watch on /employees catch an
+// event written to /employees/E-123456.
 func (c *HTTPClient) ReadEvents(ctx context.Context, r ReadEventsRequest) ([]InboundEvent, error) {
-	q := url.Values{"subject": {r.Subject}}
-	if r.AfterID != "" {
-		q.Set("lowerBound", r.AfterID)
+	reqBody := map[string]any{
+		"subject":   withLeadingSlash(r.Subject),
+		"recursive": r.Recursive,
 	}
-	if r.Recursive {
-		q.Set("recursive", "true")
+	if r.AfterID != "" {
+		reqBody["lowerBound"] = r.AfterID
 	}
 	if r.Limit > 0 {
-		q.Set("limit", strconv.Itoa(r.Limit))
+		reqBody["limit"] = r.Limit
 	}
-	for _, t := range r.Types {
-		q.Add("types", t)
+	if len(r.Types) > 0 {
+		reqBody["types"] = r.Types
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.conn.Endpoint+"/api/events/read?"+q.Encode(), nil)
+	body, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("clio: build read request: %w", err)
+		return nil, fmt.Errorf("clio: encode read request: %w", err)
 	}
-	c.authorize(req)
-	resp, err := c.http.Do(req)
+	rc, err := c.postStream(ctx, "/api/v1/read-events", body)
 	if err != nil {
 		return nil, fmt.Errorf("clio: read-events for %q: %w", r.Subject, err)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode/100 != 2 {
-		return nil, fmt.Errorf("clio: read-events for %q returned HTTP %d", r.Subject, resp.StatusCode)
-	}
+	defer rc.Close()
 	var out []InboundEvent
-	sc := bufio.NewScanner(resp.Body)
-	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
-	for sc.Scan() {
-		line := bytes.TrimSpace(sc.Bytes())
-		if len(line) == 0 {
-			continue
-		}
-		var e InboundEvent
+	err = scanNDJSON(rc, func(line []byte) error {
 		dec := json.NewDecoder(bytes.NewReader(line))
 		dec.UseNumber()
+		var e InboundEvent
 		if err := dec.Decode(&e); err != nil {
-			return nil, fmt.Errorf("clio: decode read-events line: %w", err)
+			return fmt.Errorf("decode read-events line: %w", err)
 		}
-		if e.ID == r.AfterID { // exclusive cursor: drop the boundary event
-			continue
+		if e.ID == r.AfterID { // exclusive cursor: drop the inclusive lowerBound boundary
+			return nil
 		}
 		out = append(out, e)
-	}
-	if err := sc.Err(); err != nil {
+		return nil
+	})
+	if err != nil {
 		return nil, fmt.Errorf("clio: read-events stream for %q: %w", r.Subject, err)
 	}
 	return out, nil
@@ -296,4 +303,95 @@ func (c *HTTPClient) getJSON(ctx context.Context, path string, out any) error {
 		return fmt.Errorf("decode response: %w", err)
 	}
 	return nil
+}
+
+// postStream performs an authorized JSON POST and returns the response body for
+// the caller to stream (NDJSON). The caller must close it. A non-2xx status is an
+// error (the body is closed first).
+func (c *HTTPClient) postStream(ctx context.Context, path string, body []byte) (io.ReadCloser, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.conn.Endpoint+path, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	c.authorize(req)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode/100 != 2 {
+		resp.Body.Close()
+		return nil, fmt.Errorf("returned HTTP %d", resp.StatusCode)
+	}
+	return resp.Body, nil
+}
+
+// postNDJSON POSTs a JSON body and decodes the NDJSON response into a slice of
+// generic event objects (exact decimals preserved via UseNumber).
+func (c *HTTPClient) postNDJSON(ctx context.Context, path string, body []byte) ([]map[string]any, error) {
+	rc, err := c.postStream(ctx, path, body)
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close()
+	var out []map[string]any
+	err = scanNDJSON(rc, func(line []byte) error {
+		dec := json.NewDecoder(bytes.NewReader(line))
+		dec.UseNumber()
+		var m map[string]any
+		if err := dec.Decode(&m); err != nil {
+			return fmt.Errorf("decode line: %w", err)
+		}
+		out = append(out, m)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// scanNDJSON reads an NDJSON stream and invokes fn for each non-empty line. It
+// grows its buffer to 8 MiB so a single large event line does not truncate.
+func scanNDJSON(r io.Reader, fn func(line []byte) error) error {
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
+	for sc.Scan() {
+		line := bytes.TrimSpace(sc.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		if err := fn(line); err != nil {
+			return err
+		}
+	}
+	return sc.Err()
+}
+
+// withLeadingSlash returns an absolute clio subject: clio subjects begin with "/"
+// (the root is "/"), so a task that names "orders/new" still targets "/orders/new".
+func withLeadingSlash(s string) string {
+	if s == "" {
+		return "/"
+	}
+	if s[0] == '/' {
+		return s
+	}
+	return "/" + s
+}
+
+// escapeSubjectPath renders an absolute subject as the path segment of clio's
+// state route (GET /api/v1/state/<subject>): the leading slash is dropped (clio's
+// {subject...} route re-adds it) and each segment is path-escaped while the slashes
+// between segments are preserved.
+func escapeSubjectPath(subject string) string {
+	trimmed := strings.TrimPrefix(withLeadingSlash(subject), "/")
+	if trimmed == "" {
+		return ""
+	}
+	parts := strings.Split(trimmed, "/")
+	for i, p := range parts {
+		parts[i] = url.PathEscape(p)
+	}
+	return strings.Join(parts, "/")
 }
