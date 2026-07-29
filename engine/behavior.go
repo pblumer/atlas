@@ -757,16 +757,60 @@ func disarmBoundaryEvents(c *ProcessingContext, hostKey, procKey uint64) {
 	}
 }
 
+// scopeContains reports whether elKey lies within the scope rooted at ancestor —
+// i.e. ancestor appears on elKey's flow-scope chain. It is how an interrupted
+// subprocess finds the inner tokens it must terminate. Bounded by scope-chain
+// depth (the same defensive bound variable resolution walks, ADR-0074).
+func scopeContains(c *ProcessingContext, ancestor, elKey uint64) bool {
+	for cur := c.GetElementInstance(elKey); cur != nil; cur = c.GetElementInstance(cur.FlowScopeKey) {
+		if cur.FlowScopeKey == ancestor {
+			return true
+		}
+	}
+	return false
+}
+
+// terminateScope terminates every active element instance inside the scope rooted
+// at scopeKey (a subprocess), recursively, cancelling any job each holds. Each
+// Terminated event drops the element and decrements its own scope's child counter
+// (apply.go). Victims are collected before any termination so the scope-chain walk
+// sees an intact tree. A no-op for a plain activity — nothing is scoped under it.
+func terminateScope(c *ProcessingContext, procKey, scopeKey uint64) {
+	var victims []uint64
+	c.ForEachElementInstance(procKey, func(elKey uint64) {
+		if scopeContains(c, scopeKey, elKey) {
+			victims = append(victims, elKey)
+		}
+	})
+	for _, k := range victims {
+		ei := c.GetElementInstance(k)
+		if ei == nil {
+			continue
+		}
+		if jobKey, ok := c.JobOfElement(k); ok {
+			if job := c.GetJob(jobKey); job != nil {
+				c.AppendJobEvent(jobKey, model.IntentJobCanceled, *job)
+			}
+		}
+		c.AppendElementEvent(k, model.IntentTerminated, *ei)
+	}
+}
+
 // interruptHost terminates the host activity an interrupting boundary event fired
-// on: it cancels the host's job (if any), terminates the host element instance,
-// and terminates the host's other boundary siblings (their timers/subscriptions
-// self-retire). It is idempotent — if the host is already gone (it completed, or a
-// sibling boundary already interrupted it), it does nothing.
+// on: it tears down the host's inner scope (for a subprocess), cancels the host's
+// job (if any), terminates the host element instance, and terminates the host's
+// other boundary siblings (their timers/subscriptions self-retire). It is
+// idempotent — if the host is already gone (it completed, or a sibling boundary
+// already interrupted it), it does nothing.
 func interruptHost(c *ProcessingContext, hostKey, selfKey uint64) {
 	host := c.GetElementInstance(hostKey)
 	if host == nil {
 		return
 	}
+	// If the host is a subprocess, its inner tokens must not outlive it: tear down
+	// everything inside its scope (recursively) before the host itself. A no-op for
+	// a plain activity, which is no one's flow scope (ADR-0074).
+	terminateScope(c, host.ProcessInstanceKey, hostKey)
 	if jobKey, ok := c.JobOfElement(hostKey); ok {
 		if job := c.GetJob(jobKey); job != nil {
 			c.AppendJobEvent(jobKey, model.IntentJobCanceled, *job)

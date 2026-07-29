@@ -4,14 +4,15 @@
 - **Date:** 2026-07-28
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phases 1–2 delivered (a plain embedded subprocess
-> compiles and *runs* end to end); Phases 3–4 pending. The work is phased, each
-> phase test-first with a recovery test (ADR-0018): compiler parse + `FlowScope` →
-> runtime scope lifecycle (the happy path that makes a plain embedded subprocess
-> run) → termination/interruption and boundary events on the subprocess → nesting
-> depth and subprocess-level variables/I/O mappings. Event subprocesses,
-> multi-instance activities, and call activities are **out of scope** here — they
-> are separate ROADMAP Milestone-3 items that build on this one.
+> **Implementation status.** Phases 1–3 delivered (a plain embedded subprocess
+> compiles, *runs* end to end, and can be interrupted by a boundary event); Phase 4
+> pending. The work is phased, each phase test-first with a recovery test
+> (ADR-0018): compiler parse + `FlowScope` → runtime scope lifecycle (the happy path
+> that makes a plain embedded subprocess run) → termination/interruption and
+> boundary events on the subprocess → nesting depth and subprocess-level
+> variables/I/O mappings. Event subprocesses, multi-instance activities, and call
+> activities are **out of scope** here — they are separate ROADMAP Milestone-3 items
+> that build on this one.
 >
 > **Delivered (Phase 1, compiler):** the `TypeSubProcess` element type; recursive
 > parsing of `<subProcess>` (a shared `xmlFlowContent` embedded in both the process
@@ -36,6 +37,19 @@
 > (no inner start) completes immediately rather than parking. Verified end to end:
 > an inline-script subprocess runs to completion, and a token parked on a service
 > task inside a subprocess survives crash + replay and still completes.
+>
+> **Delivered (Phase 3, boundary events & interruption):** a boundary event may
+> attach to a subprocess (armed like any activity's when it activates). A
+> non-interrupting boundary spawns its parallel token while the subprocess keeps
+> running (no engine change needed). An **interrupting** boundary now tears down the
+> whole subprocess scope: `interruptHost` calls a new `terminateScope`, which finds
+> every element instance whose flow-scope chain leads to the subprocess
+> (`scopeContains`, recursive so nesting is handled), cancels each job, and
+> terminates them before the subprocess element itself — so no inner token outlives
+> the interrupt. Verified: an interrupting timer boundary on a subprocess with a
+> parked inner service task terminates the task and cancels its job, the
+> non-interrupting case runs both branches, and an interrupt fired *after* crash +
+> recovery still tears the recovered scope down cleanly.
 
 ## Context and problem statement
 
