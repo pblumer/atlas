@@ -117,10 +117,17 @@ func TestParseMailConnectorErrors(t *testing.T) {
   </bpmn:process>
 </bpmn:definitions>`
 	}
+	// A malformed FEEL expression in any message field fails the compile — each field
+	// is validated on its own, so a case per field exercises every validation branch.
 	cases := map[string]string{
-		"missing connector": `<atlas:mailConnector to="a@b.c" subject="hi" body="x"/>`,
-		"missing recipient": `<atlas:mailConnector connector="m" subject="hi" body="x"/>`,
-		"malformed FEEL to": `<atlas:mailConnector connector="m" to="=(" subject="hi" body="x"/>`,
+		"missing connector":      `<atlas:mailConnector to="a@b.c" subject="hi" body="x"/>`,
+		"missing recipient":      `<atlas:mailConnector connector="m" subject="hi" body="x"/>`,
+		"malformed FEEL to":      `<atlas:mailConnector connector="m" to="=(" subject="hi" body="x"/>`,
+		"malformed FEEL cc":      `<atlas:mailConnector connector="m" to="a@b.c" cc="=(" body="x"/>`,
+		"malformed FEEL bcc":     `<atlas:mailConnector connector="m" to="a@b.c" bcc="=(" body="x"/>`,
+		"malformed FEEL from":    `<atlas:mailConnector connector="m" to="a@b.c" from="=(" body="x"/>`,
+		"malformed FEEL subject": `<atlas:mailConnector connector="m" to="a@b.c" subject="=(" body="x"/>`,
+		"malformed FEEL body":    `<atlas:mailConnector connector="m" to="a@b.c" subject="hi" body="=("/>`,
 	}
 	for name, inner := range cases {
 		if _, err := Parse(1, 1, strings.NewReader(wrap(inner))); err == nil {

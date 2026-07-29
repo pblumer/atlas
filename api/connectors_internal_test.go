@@ -228,6 +228,51 @@ func TestMailConnectorValidationAndCreate(t *testing.T) {
 	}
 }
 
+// TestMailConnectorLifecycle drives a mail connector through the full Console
+// management surface — create, sender update, list, delete — so the create branch
+// (mail kind), the sender-update branch, and the mail arm of the registry rebuild
+// are all exercised end to end (ADR-0079).
+func TestMailConnectorLifecycle(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	h := srv.Handler()
+	do := func(method, path, body string) (int, []byte) {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code, rec.Body.Bytes()
+	}
+	code, b := do(http.MethodPost, "/api/v1/connectors",
+		`{"name":"office365","kind":"mail","endpoint":"smtp.office365.com:587","sender":"bot@example.com","credentialsRef":"o365_pw"}`)
+	if code != http.StatusOK {
+		t.Fatalf("create mail connector: %d %s", code, b)
+	}
+	var c connector
+	_ = json.Unmarshal(b, &c)
+
+	// Update the sender (the mail-only field) — rebuilds the registry with the new value.
+	code, b = do(http.MethodPatch, "/api/v1/connectors/"+c.ID, `{"sender":"notifications@example.com"}`)
+	if code != http.StatusOK {
+		t.Fatalf("update mail sender: %d %s", code, b)
+	}
+	var up connector
+	_ = json.Unmarshal(b, &up)
+	if up.Sender != "notifications@example.com" {
+		t.Fatalf("sender after update = %q, want the new sender", up.Sender)
+	}
+
+	// The list shows the mail connector and never a secret value.
+	_, lb := do(http.MethodGet, "/api/v1/connectors", "")
+	if !strings.Contains(string(lb), `"kind":"mail"`) || strings.Contains(string(lb), "o365_pw_value") {
+		t.Fatalf("connector list = %s, want the mail connector and only the reference", lb)
+	}
+
+	// Delete it → the registry rebuilds without it.
+	if code, _ := do(http.MethodDelete, "/api/v1/connectors/"+c.ID, ""); code != http.StatusNoContent {
+		t.Fatalf("delete mail connector: want 204")
+	}
+}
+
 // TestBuildMailClients covers the managed-connector → SMTP client build: only enabled
 // records of kind "mail" with a non-empty endpoint and a supported provider become
 // clients; a disabled, non-mail, endpoint-less, or unknown-provider record is skipped.
