@@ -1,15 +1,15 @@
 # ADR-0076: Call activities (single-partition)
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phases 1–2 delivered — a call activity runs end to end:
-> it starts the called process as a child instance, passes variables in and out, and
-> resumes the caller on the child's completion. Phase 3 (termination propagation,
-> Modeler editor) pending. Each phase was test-first with a recovery test (ADR-0018).
-> Cross-partition call activities are **out of scope** (ADR-0006, Milestone 5); the
-> child runs in the caller's partition.
+> **Implementation status.** Phases 1–3 delivered — a call activity runs end to end:
+> it starts the called process as a child instance, passes variables in and out,
+> resumes the caller on the child's completion, and tears the child down when the
+> caller is cancelled or interrupted. Each phase was test-first with a recovery test
+> (ADR-0018). Cross-partition call activities are **out of scope** (ADR-0006,
+> Milestone 5); the child runs in the caller's partition.
 >
 > **Delivered (Phase 1, compiler):** `TypeCallActivity` + `CallActivityDetail`
 > (called process id, binding, `propagateAll*` flags); parse of `<callActivity>` /
@@ -30,6 +30,20 @@
 > outputs come from the child, not a local scope). Verified: isolation both ways,
 > propagate-all both ways, and a child parked on a job that recovers across a crash
 > and still resumes its caller.
+>
+> **Delivered (Phase 3, termination + Modeler):** terminating a call-activity element
+> tears down its child instance. `terminateChildInstance` finds the child by its
+> persisted `ParentElementInstanceKey` (via a new `ForEachActiveProcessInstance`
+> context helper) and enqueues the same `IntentTerminating` command an API cancel does
+> (`AppendProcessInstanceCommand`), so the child unwinds through the identical path —
+> and recurses, so cancelling the top of a call chain tears the whole chain down.
+> Hooked into all three termination sites: instance cancellation
+> (`handleProcessInstanceTerminating`), an interrupted enclosing scope
+> (`terminateScope`), and an interrupting boundary event on the call activity itself
+> (`interruptHost`). Verified: cancel-terminates-child, boundary-terminates-child, and
+> cancel-terminates-grandchild (three-level chain). The Modeler gains a Call-activity
+> Implement editor — called process id, binding, the two propagation toggles, and the
+> generic I/O-mapping editor (ADR-0068).
 
 ## Context and problem statement
 

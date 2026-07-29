@@ -141,6 +141,7 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 	}
 	c.ForEachElementInstance(piKey, func(elKey uint64) {
 		if ei := c.GetElementInstance(elKey); ei != nil {
+			terminateChildInstance(c, elKey, ei.BpmnElementType)
 			c.AppendElementEvent(elKey, model.IntentTerminated, *ei)
 		}
 	})
@@ -782,6 +783,31 @@ func scopeContains(c *ProcessingContext, ancestor, elKey uint64) bool {
 	return false
 }
 
+// terminateChildInstance tears down the child process instance a call-activity
+// element started, when that element is terminated (a cancel of the caller, or an
+// interrupting boundary event). The child is found by its persisted parent link, so
+// this stays a pure function of committed state (I6); terminating it enqueues the
+// same Terminating command an API cancel does, which recurses into the child's own
+// element instances — and, through this helper, into any call activities the child
+// itself is running. A no-op for an element with no live child (a plain activity, or
+// a call activity whose child already completed).
+func terminateChildInstance(c *ProcessingContext, callElKey uint64, elemType uint8) {
+	if elemType != uint8(compiler.TypeCallActivity) {
+		return
+	}
+	var children []uint64
+	c.ForEachActiveProcessInstance(func(piKey uint64, pi *model.ProcessInstanceValue) {
+		if pi.ParentElementInstanceKey == callElKey {
+			children = append(children, piKey)
+		}
+	})
+	for _, ck := range children {
+		if pi := c.GetProcessInstance(ck); pi != nil {
+			c.AppendProcessInstanceCommand(ck, model.IntentTerminating, *pi)
+		}
+	}
+}
+
 // terminateScope terminates every active element instance inside the scope rooted
 // at scopeKey (a subprocess), recursively, cancelling any job each holds. Each
 // Terminated event drops the element and decrements its own scope's child counter
@@ -799,6 +825,7 @@ func terminateScope(c *ProcessingContext, procKey, scopeKey uint64) {
 		if ei == nil {
 			continue
 		}
+		terminateChildInstance(c, k, ei.BpmnElementType)
 		if jobKey, ok := c.JobOfElement(k); ok {
 			if job := c.GetJob(jobKey); job != nil {
 				c.AppendJobEvent(jobKey, model.IntentJobCanceled, *job)
@@ -823,6 +850,8 @@ func interruptHost(c *ProcessingContext, hostKey, selfKey uint64) {
 	// everything inside its scope (recursively) before the host itself. A no-op for
 	// a plain activity, which is no one's flow scope (ADR-0074).
 	terminateScope(c, host.ProcessInstanceKey, hostKey)
+	// If the host is a call activity, its child instance must die with it (ADR-0076).
+	terminateChildInstance(c, hostKey, host.BpmnElementType)
 	if jobKey, ok := c.JobOfElement(hostKey); ok {
 		if job := c.GetJob(jobKey); job != nil {
 			c.AppendJobEvent(jobKey, model.IntentJobCanceled, *job)

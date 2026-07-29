@@ -123,6 +123,29 @@ func (c *ProcessingContext) ForEachElementInstance(procKey uint64, fn func(elKey
 	}
 }
 
+// ForEachActiveProcessInstance calls fn with the key and value of every live
+// process instance, via the committed process-instance column family. Entries are
+// collected before fn runs so fn may emit events/commands (e.g. terminate a child)
+// without disturbing the scan. Used to find the child a call activity started, via
+// its persisted parent link (ADR-0076).
+func (c *ProcessingContext) ForEachActiveProcessInstance(fn func(piKey uint64, pi *model.ProcessInstanceValue)) {
+	type entry struct {
+		key uint64
+		v   model.ProcessInstanceValue
+	}
+	var entries []entry
+	if err := c.p.store.ActiveProcessInstances(func(k uint64, v *model.ProcessInstanceValue) error {
+		entries = append(entries, entry{key: k, v: *v})
+		return nil
+	}); err != nil {
+		c.p.fail(err)
+		return
+	}
+	for i := range entries {
+		fn(entries[i].key, &entries[i].v)
+	}
+}
+
 // ForEachStartTimer calls fn with the key and value of every armed start timer,
 // read from the committed timer index. Entries are collected before fn runs so fn
 // may emit timer events (arming/retiring) without disturbing the scan. Used only
@@ -209,6 +232,14 @@ func (c *ProcessingContext) ActiveChildren(scope uint64) int32 {
 // AppendProcessInstanceEvent records a process-instance lifecycle fact.
 func (c *ProcessingContext) AppendProcessInstanceEvent(key uint64, intent model.Intent, v model.ProcessInstanceValue) {
 	c.appendEvent(key, model.VTProcessInstance, intent, inflightValue{process: v})
+}
+
+// AppendProcessInstanceCommand schedules a process-instance command (e.g. the
+// Terminating that cancels a call activity's child) for a later batch — the same
+// command an API cancel enqueues, so the child tears down through the identical
+// path however its termination was triggered (ADR-0076).
+func (c *ProcessingContext) AppendProcessInstanceCommand(key uint64, intent model.Intent, v model.ProcessInstanceValue) {
+	c.appendCommand(key, model.VTProcessInstance, intent, inflightValue{process: v})
 }
 
 // AppendElementEvent records an element-instance lifecycle fact.

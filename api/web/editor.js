@@ -2285,6 +2285,30 @@ function wireProperties(root, modeler, api, projectId, toast) {
         // mappings promote selected values to the enclosing scope on completion.
         html += `<p class="muted" style="font-size:12px">Pass variables in and out of this subprocess. <b>Input mappings</b> create variables its inner elements see (its local scope); <b>output mappings</b> promote selected values back to the enclosing scope when it completes.</p>`;
         html += ioMappingsHTML(bo);
+      } else if (bo.$type === "bpmn:CallActivity") {
+        // A call activity invokes a *separate* deployed process as a child instance
+        // (ADR-0076). It is configured by its <zeebe:calledElement>: which process to
+        // call (by its bpmn process id), the version binding, and whether variables
+        // propagate wholesale in each direction. With propagation off, only the I/O
+        // mappings below cross the boundary — true isolation.
+        const ce = findExt(bo, "zeebe:CalledElement") || {};
+        const binding = ce.bindingType === "deployment" ? "deployment" : "latest";
+        const propParent = ce.propagateAllParentVariables !== false; // default true (Zeebe)
+        const propChild = ce.propagateAllChildVariables !== false;   // default true (Zeebe)
+        html += `<h3>Called process</h3>
+          <label class="field"><span>Process ID</span>
+            <input type="text" id="f-call-processid" value="${esc(ce.processId || "")}" placeholder="pruefe-auftrag"/></label>
+          <label class="field"><span>Binding</span>
+            <select id="f-call-binding">
+              <option value="latest" ${binding === "latest" ? "selected" : ""}>Latest — newest deployed version</option>
+              <option value="deployment" ${binding === "deployment" ? "selected" : ""}>Deployment — pinned to this deploy</option>
+            </select></label>
+          <p class="muted" style="font-size:12px">Starts the process with this <b>id</b> as a child instance and waits for it to finish. <b>Latest</b> calls the newest deployed version; <b>Deployment</b> pins to the version deployed alongside this one.</p>
+          <h3>Variables</h3>
+          <label class="field checkbox"><input type="checkbox" id="f-call-prop-parent" ${propParent ? "checked" : ""}/> <span>Pass all caller variables in</span></label>
+          <label class="field checkbox"><input type="checkbox" id="f-call-prop-child" ${propChild ? "checked" : ""}/> <span>Return all child variables out</span></label>
+          <p class="muted" style="font-size:12px">With a box <b>unchecked</b>, only the matching mappings below cross that direction — the child sees only what you map in, or the caller gets back only what you map out (isolation).</p>`;
+        html += ioMappingsHTML(bo);
       } else if (isDefaultFlow) {
         html += `<h3>Condition (FEEL)</h3>
           <p class="muted" style="font-size:12px">This is the gateway's <b>default flow</b> — taken when no other branch's condition matches, so it carries no condition of its own.</p>`;
@@ -2859,6 +2883,29 @@ function wireProperties(root, modeler, api, projectId, toast) {
           name.select();
         });
       }
+    }
+
+    // Call activity: the whole <zeebe:calledElement> is rewritten on any field
+    // change, so editing one field never drops the others (ADR-0076). Propagation
+    // flags are written as booleans (moddle omits a value equal to its default);
+    // the compiler reads an absent flag as true, matching Zeebe.
+    const fcallpid = body.querySelector("#f-call-processid");
+    if (fcallpid) {
+      const fcallbind = body.querySelector("#f-call-binding");
+      const fcallpp = body.querySelector("#f-call-prop-parent");
+      const fcallpc = body.querySelector("#f-call-prop-child");
+      const saveCall = () => savePreservingPanel(() => {
+        upsertExt(modeler, element, "zeebe:CalledElement", {
+          processId: (fcallpid.value || "").trim(),
+          bindingType: fcallbind.value === "deployment" ? "deployment" : "latest",
+          propagateAllParentVariables: fcallpp.checked,
+          propagateAllChildVariables: fcallpc.checked,
+        });
+      });
+      fcallpid.addEventListener("change", saveCall);
+      fcallbind.addEventListener("change", saveCall);
+      fcallpp.addEventListener("change", saveCall);
+      fcallpc.addEventListener("change", saveCall);
     }
 
     const fassignee = body.querySelector("#f-assignee");
