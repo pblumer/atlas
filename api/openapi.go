@@ -141,7 +141,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  jsonBody("Initial variables", schemaObj(map[string]any{"variables": tObject()})),
 			resp: jsonBody("Created instance", tObject())}},
 		{"GET", "/api/v1/instances", s.handleListInstances, apiOp{
-			summary: "List active and finished instances", tag: "Instances", resp: jsonBody("Instances", tArray())}},
+			summary: "List active and finished instances — capped per call (?limit=, default 1000, max 10000); narrow to one definition with ?process=<key>; X-Instances-Truncated: true marks a capped page", tag: "Instances", resp: jsonBody("Instances", tArray())}},
+		{"GET", "/api/v1/instances/summary", s.handleInstancesSummary, apiOp{
+			summary: "Per-definition instance counts (active/completed) — lean count-only scan for the operations overview", tag: "Instances", resp: jsonBody("Instance summary", tArray())}},
 		{"GET", "/api/v1/instances/search", s.handleSearchInstances, apiOp{
 			summary: "Search instances by variable content — ?q=name=value (name exact, value substring) or free text over variable names and values", tag: "Instances",
 			resp: jsonBody("Matching instances", tArray())}},
@@ -168,6 +170,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Decision evaluations", tArray())}},
 		{"DELETE", "/api/v1/instances/{key}", s.handleCancelInstance, apiOp{
 			summary: "Cancel a running instance", tag: "Instances", resp: jsonBody("Cancellation result", tObject())}},
+		{"POST", "/api/v1/processes/{key}/cancel-instances", s.handleCancelInstancesOfProcess, apiOp{
+			summary: "Cancel a bounded batch of a definition's running instances (?limit=, default 5000, max 50000); repeat while the response reports remaining=true", tag: "Instances",
+			resp: jsonBody("Bulk cancellation result", tObject())}},
 
 		{"POST", "/api/v1/messages", s.handlePublishMessage, apiOp{
 			summary: "Publish a message for correlation", tag: "Messages",
@@ -187,14 +192,14 @@ func (s *Server) apiRoutes() []apiRoute {
 			})),
 			resp: jsonBody("Job key and stats", tObject())}},
 		{"GET", "/api/v1/incidents", s.handleListIncidents, apiOp{
-			summary: "List unresolved incidents", tag: "Incidents", resp: jsonBody("Incidents", tArray())}},
+			summary: "List unresolved incidents — capped per call (?limit=, max 5000); X-Incidents-Truncated: true marks a capped page", tag: "Incidents", resp: jsonBody("Incidents", tArray())}},
 		{"POST", "/api/v1/incidents/{key}/resolve", s.handleResolveIncident, apiOp{
 			summary: "Resolve the incident on an element instance and retry its job", tag: "Incidents",
 			req:  jsonBody("Retries to grant the resumed job (default 1)", schemaObj(map[string]any{"retries": tInteger()})),
 			resp: jsonBody("Element instance key and stats", tObject())}},
 
 		{"GET", "/api/v1/tasks", s.handleListTasks, apiOp{
-			summary: "List active user tasks", tag: "Tasks", resp: jsonBody("Tasks", tArray())}},
+			summary: "List active user tasks — capped per call (?limit=, default 500, max 5000); X-Tasks-Truncated: true marks a capped page", tag: "Tasks", resp: jsonBody("Tasks", tArray())}},
 		{"POST", "/api/v1/tasks/{key}/complete", s.handleCompleteTask, apiOp{
 			summary: "Complete a user task", tag: "Tasks",
 			req:  jsonBody("Completion variables", schemaObj(map[string]any{"variables": tObject()})),

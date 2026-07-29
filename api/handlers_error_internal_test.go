@@ -1,10 +1,13 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/engine"
@@ -73,6 +76,62 @@ func TestReadBodyErrors(t *testing.T) {
 				t.Fatalf("status = %d, want 400 (body %s)", rec.Code, rec.Body.String())
 			}
 		})
+	}
+}
+
+// TestScanHandlersReportDecodeErrors injects an undecodable process-instance record so
+// the instance-scan handlers (list, summary, bulk-cancel) surface a 500 instead of
+// silently returning a partial result. It covers the store-scan error branch each of
+// them shares.
+func TestScanHandlersReportDecodeErrors(t *testing.T) {
+	srv := newServerForErrors(t)
+	h := srv.Handler()
+
+	// A deployment so the bulk-cancel path passes its existence check and reaches the
+	// scan; minimalBPMN is a trivial one-flow process.
+	const minimalBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="p" name="P" isExecutable="true">
+    <startEvent id="s"/><endEvent id="e"/><sequenceFlow id="f" sourceRef="s" targetRef="e"/>
+  </process>
+</definitions>`
+	depRec := httptest.NewRecorder()
+	depReq := httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(minimalBPMN))
+	depReq.Header.Set("Content-Type", "application/xml")
+	h.ServeHTTP(depRec, depReq)
+	if depRec.Code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", depRec.Code, depRec.Body.String())
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(depRec.Body.Bytes(), &dep); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+
+	// Plant an undecodable record under the active process-instance column family.
+	srv.do(func() {
+		if err := srv.store.InjectCorruptProcessInstance(99); err != nil {
+			t.Fatalf("inject corrupt record: %v", err)
+		}
+	})
+
+	for _, tc := range []struct {
+		method, path string
+	}{
+		{http.MethodGet, "/api/v1/instances"},
+		// /api/v1/instances/summary is not listed: it reads O(1) per-definition counters
+		// (ADR-0083), not the instance records, so an undecodable instance does not
+		// affect it — that decoupling is the point of the change.
+		{http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/cancel-instances", dep.Key)},
+		// The single-instance runtime overlay scans the process instances (ADR-0080),
+		// so the undecodable record surfaces as a 500 there too.
+		{http.MethodGet, fmt.Sprintf("/api/v1/processes/%d/runtime?instance=99", dep.Key)},
+	} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, nil))
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("%s %s status=%d, want 500 (undecodable record)", tc.method, tc.path, rec.Code)
+		}
 	}
 }
 

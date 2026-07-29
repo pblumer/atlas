@@ -433,8 +433,65 @@ func (t *Tx) DecrementActiveChildren(scope uint64) error {
 }
 
 func (t *Tx) mergeActiveChildren(scope uint64, delta int64) error {
+	return t.mergeCounter(keyActiveChildren(scope), delta)
+}
+
+// mergeCounter applies a signed delta to a counter key as a write-only Pebble
+// merge — no read, no allocation beyond the reused scratch buffer (invariant I1).
+func (t *Tx) mergeCounter(key []byte, delta int64) error {
 	t.scratch = appendCounter(t.scratch[:0], delta)
-	return t.b.Merge(keyActiveChildren(scope), t.scratch, nil)
+	return t.b.Merge(key, t.scratch, nil)
+}
+
+// --- Runtime aggregate counters (ADR-0080) ---
+//
+// Definition-scoped active-instance and per-element live-token/visit counters,
+// maintained as signed merges from applyToState so the Operations runtime view
+// reads a definition's live state in O(elements) rather than scanning every
+// instance. Write-only merges (no read on the hot path, invariant I1); they
+// compose across a crash and rebuild on replay (invariant I4), generalizing the
+// active-children (ADR) and element-visit (ADR-0022) counters.
+
+// IncDefInstanceCount and DecDefInstanceCount move a definition's active-instance
+// count by one, on process-instance creation and termination.
+func (t *Tx) IncDefInstanceCount(procDefKey uint64) error {
+	return t.mergeCounter(keyDefInstanceCount(procDefKey), 1)
+}
+func (t *Tx) DecDefInstanceCount(procDefKey uint64) error {
+	return t.mergeCounter(keyDefInstanceCount(procDefKey), -1)
+}
+
+// IncDefCompletedCount bumps a definition's finished-instance count by one, on each
+// process-instance completion or termination. Monotonic (never decremented) — the
+// count of finished instances only grows — so the summary's "finished" column reads
+// in O(1) instead of scanning the history, which draining active instances only makes
+// larger (ADR-0083).
+func (t *Tx) IncDefCompletedCount(procDefKey uint64) error {
+	return t.mergeCounter(keyDefCompletedCount(procDefKey), 1)
+}
+
+// SetDefLastActivity records a definition's most recent instance-event timestamp by
+// overwrite (ADR-0083). The processor's event timestamps are non-decreasing in log
+// order, so the last write is the latest and replay rebuilds the identical value
+// (invariant I4). Write-only, no read.
+func (t *Tx) SetDefLastActivity(procDefKey uint64, unixNano int64) error {
+	t.scratch = appendBE64(t.scratch[:0], uint64(unixNano))
+	return t.b.Set(keyDefLastActivity(procDefKey), t.scratch, nil)
+}
+
+// IncElementToken and DecElementToken move a definition-element live-token count
+// by one, on element-instance activation and completion/termination.
+func (t *Tx) IncElementToken(procDefKey uint64, elementId int32) error {
+	return t.mergeCounter(keyElementTokenCount(procDefKey, elementId), 1)
+}
+func (t *Tx) DecElementToken(procDefKey uint64, elementId int32) error {
+	return t.mergeCounter(keyElementTokenCount(procDefKey, elementId), -1)
+}
+
+// IncElementVisitAgg bumps a definition-element cumulative-visit count on
+// activation. Never decremented — it is the retained historical heatmap.
+func (t *Tx) IncElementVisitAgg(procDefKey uint64, elementId int32) error {
+	return t.mergeCounter(keyElementVisitAgg(procDefKey, elementId), 1)
 }
 
 // --- Element-visit history ---
@@ -552,6 +609,35 @@ func (t *Tx) RecordDecisionEvaluation(ts int64, pos uint64, v *model.DecisionEva
 // (e.g. detecting a finished scope), not on every increment.
 func (t *Tx) ActiveChildren(scope uint64) (int32, error) {
 	raw, ok, err := getCopy(t.b, keyActiveChildren(scope))
+	if err != nil || !ok {
+		return 0, err
+	}
+	return int32(decodeCounter(raw)), nil
+}
+
+// IncrementActiveStartKey / DecrementActiveStartKey maintain the count of live
+// message-start instances of a definition that began with a correlation key
+// (ADR-0082). Like the active-children counter they are write-only composing merges,
+// so they neither read nor allocate beyond the reused scratch buffer, and rebuild
+// identically on replay (I4/I6).
+func (t *Tx) IncrementActiveStartKey(defKey uint64, correlationKey string) error {
+	return t.mergeActiveStartKey(defKey, correlationKey, 1)
+}
+
+func (t *Tx) DecrementActiveStartKey(defKey uint64, correlationKey string) error {
+	return t.mergeActiveStartKey(defKey, correlationKey, -1)
+}
+
+func (t *Tx) mergeActiveStartKey(defKey uint64, correlationKey string, delta int64) error {
+	t.scratch = appendCounter(t.scratch[:0], delta)
+	return t.b.Merge(keyActiveStartKey(defKey, correlationKey), t.scratch, nil)
+}
+
+// ActiveStartKeyCount returns how many live instances of defKey began with
+// correlationKey (0 if none). It folds the merged deltas, so it is read only where the
+// current count is needed — the singleton-start gate (ADR-0082), not on every merge.
+func (t *Tx) ActiveStartKeyCount(defKey uint64, correlationKey string) (int32, error) {
+	raw, ok, err := getCopy(t.b, keyActiveStartKey(defKey, correlationKey))
 	if err != nil || !ok {
 		return 0, err
 	}

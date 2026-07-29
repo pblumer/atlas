@@ -1,6 +1,27 @@
 package engine
 
-import "github.com/pblumer/atlas/model"
+import (
+	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/model"
+)
+
+// eventSubTrigger is the element type of an armed event-subprocess trigger (ADR-0082).
+// It is excluded from a scope's active-child counter so an armed trigger never keeps
+// the scope from completing; it is a real element instance in every other respect.
+const eventSubTrigger = uint8(compiler.TypeEventSubProcessStart)
+
+// firstErr returns the first non-nil error of a sequence, so a run of state
+// mutations that each already ran can be checked once instead of after every call.
+// The arguments are evaluated eagerly — correct in applyToState, where each step must
+// be applied regardless of an earlier one's (in practice unreachable) failure.
+func firstErr(errs ...error) error {
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 // applyToState mutates state from a single event record. It is the one place
 // state changes from a record, and it runs identically live (in the processor)
@@ -17,7 +38,21 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// active record and is copied into the history record on completion below,
 			// so a finished instance still reports when it started.
 			v.process.CreatedAt = h.Timestamp
-			return tx.PutProcessInstance(h.Key, &v.process)
+			// One process-instance activation touches several derived indices:
+			// the instance record itself, the per-definition active counter and
+			// last-activity for the O(1) runtime view / instances summary (ADR-0080/0083),
+			// and — for a message-start instance — the per-key live counter a singleton
+			// message start gates on (ADR-0082). All are event-driven, so replay rebuilds
+			// them (I4/I6). firstErr applies them and reports the first failure.
+			err := firstErr(
+				tx.PutProcessInstance(h.Key, &v.process),
+				tx.IncDefInstanceCount(v.process.ProcessDefKey),
+				tx.SetDefLastActivity(v.process.ProcessDefKey, h.Timestamp),
+			)
+			if err == nil && v.process.CorrelationKey != "" {
+				err = tx.IncrementActiveStartKey(v.process.ProcessDefKey, v.process.CorrelationKey)
+			}
+			return err
 		case model.IntentCompleted, model.IntentTerminated:
 			// Retain a history record so operators can inspect finished
 			// instances, then drop the active record. The terminal state and
@@ -31,10 +66,22 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 				hist.State = model.PICompleted
 			}
 			hist.CompletedAt = h.Timestamp
-			if err := tx.PutProcessInstanceHistory(h.Key, &hist); err != nil {
-				return err
+			// A finishing instance moves to the history, drops the active record, and
+			// updates the derived counters: the active count down, the finished count up,
+			// and last-activity stamped, so the summary reads both in O(1) (ADR-0083).
+			err := firstErr(
+				tx.PutProcessInstanceHistory(h.Key, &hist),
+				tx.DeleteProcessInstance(h.Key),
+				tx.DecDefInstanceCount(v.process.ProcessDefKey),
+				tx.IncDefCompletedCount(v.process.ProcessDefKey),
+				tx.SetDefLastActivity(v.process.ProcessDefKey, h.Timestamp),
+			)
+			// Releasing a message-start instance re-opens its correlation key so a later
+			// message can start a fresh one (ADR-0082).
+			if err == nil && v.process.CorrelationKey != "" {
+				err = tx.DecrementActiveStartKey(v.process.ProcessDefKey, v.process.CorrelationKey)
 			}
-			return tx.DeleteProcessInstance(h.Key)
+			return err
 		}
 
 	case model.VTElementInstance:
@@ -43,8 +90,10 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err := tx.PutElementInstance(h.Key, &v.element); err != nil {
 				return err
 			}
-			if err := tx.IncrementActiveChildren(v.element.FlowScopeKey); err != nil {
-				return err
+			if v.element.BpmnElementType != eventSubTrigger {
+				if err := tx.IncrementActiveChildren(v.element.FlowScopeKey); err != nil {
+					return err
+				}
 			}
 			// Retain a token-visit count per element so the Operations overlay can
 			// show where tokens have flowed even after instances finish (ADR-0022).
@@ -59,7 +108,16 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err := tx.RecordElementStep(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId); err != nil {
 				return err
 			}
-			return tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, 1)
+			if err := tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, 1); err != nil {
+				return err
+			}
+			// Maintain the per-(definition, element) live-token counter and the
+			// cumulative-visit counter so the runtime overlay reads them in
+			// O(elements) rather than scanning every instance (ADR-0080).
+			if err := tx.IncElementToken(v.element.ProcessDefKey, v.element.ElementId); err != nil {
+				return err
+			}
+			return tx.IncElementVisitAgg(v.element.ProcessDefKey, v.element.ElementId)
 		case model.IntentCompleted, model.IntentTerminated:
 			if err := tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, 2); err != nil {
 				return err
@@ -73,7 +131,12 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err := tx.DeleteElementInstance(h.Key, &v.element); err != nil {
 				return err
 			}
-			return tx.DecrementActiveChildren(v.element.FlowScopeKey)
+			if v.element.BpmnElementType != eventSubTrigger {
+				if err := tx.DecrementActiveChildren(v.element.FlowScopeKey); err != nil {
+					return err
+				}
+			}
+			return tx.DecElementToken(v.element.ProcessDefKey, v.element.ElementId)
 		}
 
 	case model.VTJob:

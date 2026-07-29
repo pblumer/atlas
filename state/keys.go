@@ -32,7 +32,67 @@ const (
 	cfIncident               columnFamily = 0x12 // incident:<elKey> → IncidentValue (ADR-0061)
 	cfDecisionEvaluation     columnFamily = 0x14 // decEval:<scopeKey>:<ts>:<pos> → DecisionEvaluationValue (ADR-0066)
 	cfInboundHighWater       columnFamily = 0x15 // inboundHW:<sourceID> → uint64 last-applied sequence (ADR-0075)
+	cfActiveStartKey         columnFamily = 0x16 // activeStartKey:<defKey>:<corrKey> → int32 live message-start instances (ADR-0082)
+	cfDefInstanceCount       columnFamily = 0x17 // defInst:<procDefKey> → int64 active-instance count (merge, ADR-0080)
+	cfElementTokenCount      columnFamily = 0x18 // elTok:<procDefKey>:<elementId> → int64 live-token count (merge, ADR-0080)
+	cfElementVisitAgg        columnFamily = 0x19 // elVisAgg:<procDefKey>:<elementId> → int64 cumulative visits (merge, ADR-0080)
+	cfDefCompletedCount      columnFamily = 0x1A // defDone:<procDefKey> → int64 finished-instance count (merge, ADR-0083)
+	cfDefLastActivity        columnFamily = 0x1B // defAct:<procDefKey> → int64 unix-nano of the latest instance event (set, ADR-0083)
 )
+
+// keyDefInstanceCount keys a definition's active-instance counter. A point key
+// (get/merge only), so the definition key follows the column-family byte directly.
+// Maintained as a signed merge so create (+1) and terminate (−1) are write-only
+// (invariant I1), and read in O(1) instead of scanning every instance (ADR-0080).
+func keyDefInstanceCount(procDefKey uint64) []byte {
+	return appendBE64([]byte{byte(cfDefInstanceCount)}, procDefKey)
+}
+
+// keyDefCompletedCount keys a definition's finished-instance counter (completed or
+// terminated). A point key, maintained as a monotonic merge (+1 on each terminal
+// event, never decremented — there is no un-finishing), so the instances-summary
+// "finished" column reads in O(1) instead of scanning the whole history, which does
+// not shrink when active instances are drained into it (ADR-0083, extending ADR-0080).
+func keyDefCompletedCount(procDefKey uint64) []byte {
+	return appendBE64([]byte{byte(cfDefCompletedCount)}, procDefKey)
+}
+
+// keyDefLastActivity keys a definition's last-activity timestamp: the unix-nano of
+// the most recent instance lifecycle event (start or finish) of any of its instances.
+// A point key written by overwrite — the processor's event timestamps are non-
+// decreasing in log order, so the last write is the latest and replay rebuilds it
+// identically (invariant I4); read in O(1) for the summary's "last activity" column
+// (ADR-0083).
+func keyDefLastActivity(procDefKey uint64) []byte {
+	return appendBE64([]byte{byte(cfDefLastActivity)}, procDefKey)
+}
+
+// runtimeCountPrefix scans every per-element counter of one definition (its live
+// tokens, or its cumulative visits) — O(elements), not O(instances).
+func runtimeCountPrefix(cf columnFamily, procDefKey uint64) []byte {
+	return appendBE64([]byte{byte(cf)}, procDefKey)
+}
+
+// keyElementTokenCount keys a definition-element live-token counter: the
+// definition leads so one definition's per-element token counts are a single
+// prefix scan; the element index is the trailing component. Incremented when an
+// element instance activates, decremented when it completes/terminates (ADR-0080).
+func keyElementTokenCount(procDefKey uint64, elementId int32) []byte {
+	return appendBE32(runtimeCountPrefix(cfElementTokenCount, procDefKey), uint32(elementId))
+}
+
+// keyElementVisitAgg keys a definition-element cumulative-visit counter — the
+// aggregate of the per-instance visit history (ADR-0022) so the heatmap reads in
+// O(elements). Incremented on activation, never decremented (ADR-0080).
+func keyElementVisitAgg(procDefKey uint64, elementId int32) []byte {
+	return appendBE32(runtimeCountPrefix(cfElementVisitAgg, procDefKey), uint32(elementId))
+}
+
+// elementIdFromCountKey extracts the trailing element index from a per-element
+// runtime counter key (token or visit).
+func elementIdFromCountKey(k []byte) int32 {
+	return int32(binary.BigEndian.Uint32(k[len(k)-4:]))
+}
 
 // keyInboundHighWater keys an external event source's inbound high-water mark by
 // its opaque source id (ADR-0075). It is a point key (get/put only, never scanned),
@@ -102,6 +162,13 @@ func keyProcessInstanceHistory(key uint64) []byte {
 
 func keyActiveChildren(scope uint64) []byte {
 	return appendBE64([]byte{byte(cfActiveChildren)}, scope)
+}
+
+// keyActiveStartKey keys the count of live message-start instances of one definition
+// that began with a given correlation key (ADR-0082). The definition key is fixed-
+// width big-endian so a variable-length correlation key can follow unambiguously.
+func keyActiveStartKey(defKey uint64, correlationKey string) []byte {
+	return append(appendBE64([]byte{byte(cfActiveStartKey)}, defKey), correlationKey...)
 }
 
 func keyMeta(name string) []byte {

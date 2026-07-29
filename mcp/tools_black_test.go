@@ -126,6 +126,46 @@ func TestCancelMissingInstanceIsToolError(t *testing.T) {
 	}
 }
 
+// TestCancelInstancesBulkViaTool drains a definition's instances through the bulk
+// atlas_cancel_instances tool: several parked instances are cancelled in bounded
+// batches (the reported flood's cleanup path) until nothing remains, after which the
+// definition deletes cleanly. A bulk cancel of an unknown definition is a tool error.
+func TestCancelInstancesBulkViaTool(t *testing.T) {
+	ts := newAtlas(t)
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN}))[0])); isErr {
+		t.Fatal("deploy failed")
+	}
+	for i := 0; i < 3; i++ {
+		if _, isErr := toolText(t, result(t, run(t, ts, callTool(2, "atlas_create_instance", map[string]any{"key": 1}))[0])); isErr {
+			t.Fatalf("create_instance %d failed", i)
+		}
+	}
+	// Batch of two: the first call hits the cap (remaining true); a follow-up with
+	// the default cap clears the rest (remaining false).
+	text, isErr := toolText(t, result(t, run(t, ts, callTool(3, "atlas_cancel_instances", map[string]any{"key": 1, "limit": 2}))[0]))
+	if isErr || !strings.Contains(text, `"remaining":true`) {
+		t.Fatalf("bulk cancel (batch 1) = (%q, isErr=%v), want remaining:true", text, isErr)
+	}
+	text, isErr = toolText(t, result(t, run(t, ts, callTool(4, "atlas_cancel_instances", map[string]any{"key": 1}))[0]))
+	if isErr || !strings.Contains(text, `"remaining":false`) {
+		t.Fatalf("bulk cancel (batch 2) = (%q, isErr=%v), want remaining:false", text, isErr)
+	}
+	if text, isErr := toolText(t, result(t, run(t, ts, callTool(5, "atlas_delete_process", map[string]any{"key": 1}))[0])); isErr || !strings.Contains(text, `"deleted":true`) {
+		t.Fatalf("delete_process = (%q, isErr=%v), want deleted:true", text, isErr)
+	}
+	// A bulk cancel of a definition that does not exist surfaces as a tool error.
+	if text, isErr := toolText(t, result(t, run(t, ts, callTool(6, "atlas_cancel_instances", map[string]any{"key": 999999}))[0])); !isErr || !strings.Contains(text, "no deployment") {
+		t.Fatalf("bulk cancel unknown def = (%q, isErr=%v), want a not-found tool error", text, isErr)
+	}
+	// A missing key and a non-integer limit are argument errors from the tool handler.
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(7, "atlas_cancel_instances", map[string]any{}))[0])); !isErr {
+		t.Fatal("bulk cancel without key: want a tool error")
+	}
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(8, "atlas_cancel_instances", map[string]any{"key": 1, "limit": "nope"}))[0])); !isErr {
+		t.Fatal("bulk cancel with non-integer limit: want a tool error")
+	}
+}
+
 // TestBadKeyArgumentIsToolError sends an out-of-range key so the tool handler's
 // argUint returns an error, surfaced as a tool result with isError:true.
 func TestBadKeyArgumentIsToolError(t *testing.T) {

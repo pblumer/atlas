@@ -63,7 +63,7 @@ func buildKundeLieferant(t *testing.T) (kunde, lieferant *compiler.CompiledProce
 	}
 
 	lb := compiler.NewBuilder(31, "lieferant", 1)
-	lstart := lb.AddMessageStartEvent("order", nil)
+	lstart := lb.AddMessageStartEvent("order", nil, false)
 	lthrow := lb.AddMessageThrowEvent("confirm", mustCompile(t, "orderId"))
 	lend := lb.AddEndEvent()
 	lb.Connect(lstart, lthrow)

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -274,6 +275,13 @@ type cancelInstanceResp struct {
 	InstanceKey uint64    `json:"instanceKey"`
 	State       string    `json:"state"`
 	Stats       statsResp `json:"stats"`
+}
+
+type cancelInstancesResp struct {
+	DefinitionKey uint64    `json:"definitionKey"`
+	Canceled      int       `json:"canceled"`
+	Remaining     bool      `json:"remaining"` // the per-call cap was hit; call again to continue
+	Stats         statsResp `json:"stats"`
 }
 
 type failJobReq struct {
@@ -779,47 +787,67 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			return e
 		}
 
-		// Live tokens: element instances sitting on an element right now.
-		scanErr = s.store.ActiveElementInstances(func(_ uint64, v *model.ElementInstanceValue) error {
-			if v.ProcessDefKey != key {
+		if instanceFilter == 0 {
+			// Aggregate over the whole definition: read the maintained per-element
+			// and per-definition counters (ADR-0080). This is O(elements), never a
+			// scan over every instance, so the view stays responsive — and the run
+			// loop unblocked — at hundreds of thousands of instances. The reads nest
+			// so a failure short-circuits to the single error check below.
+			if scanErr = s.store.ElementLiveTokens(key, func(elementId int32, count int64) error {
+				if count == 0 {
+					return nil
+				}
+				if e := get(elementId); e != nil {
+					e.Tokens += int(count)
+					resp.Tokens += int(count)
+				}
 				return nil
+			}); scanErr == nil {
+				if scanErr = s.store.ElementVisitTotals(key, func(elementId int32, count int64) error {
+					if e := get(elementId); e != nil {
+						e.Visits += int(count)
+					}
+					return nil
+				}); scanErr == nil {
+					resp.Instances, scanErr = s.store.DefInstanceCount(key)
+				}
 			}
-			if instanceFilter != 0 && v.ProcessInstanceKey != instanceFilter {
+		} else {
+			// Isolating one instance on the diagram (a deliberate single-instance
+			// action, not the default view): the overlay walks instances filtered to
+			// this one. Making this path sublinear too is a follow-up to ADR-0080 (the
+			// aggregate default view above is what mattered for scale).
+			if scanErr = s.store.ActiveElementInstances(func(_ uint64, v *model.ElementInstanceValue) error {
+				if v.ProcessDefKey != key || v.ProcessInstanceKey != instanceFilter {
+					return nil
+				}
+				if e := get(v.ElementId); e != nil {
+					e.Tokens++
+					resp.Tokens++
+				}
 				return nil
+			}); scanErr == nil {
+				if scanErr = s.store.ElementVisitHistory(key, instanceFilter, func(elementId int32, count int64) error {
+					if e := get(elementId); e != nil {
+						e.Visits += int(count)
+					}
+					return nil
+				}); scanErr == nil {
+					scanErr = s.store.ActiveProcessInstances(func(piKey uint64, v *model.ProcessInstanceValue) error {
+						if v.ProcessDefKey == key && piKey == instanceFilter {
+							resp.Instances++
+						}
+						return nil
+					})
+				}
 			}
-			if e := get(v.ElementId); e != nil {
-				e.Tokens++
-				resp.Tokens++
-			}
-			return nil
-		})
-		if scanErr != nil {
-			return
 		}
-		// History: every token that has ever passed through an element, so the
-		// overlay shows the flow distribution even once instances have finished.
-		scanErr = s.store.ElementVisitHistory(key, instanceFilter, func(elementId int32, count int64) error {
-			if e := get(elementId); e != nil {
-				e.Visits += int(count)
-			}
-			return nil
-		})
 		if scanErr != nil {
 			return
 		}
 		for _, bid := range order {
 			resp.Elements = append(resp.Elements, *byElement[bid])
 		}
-		scanErr = s.store.ActiveProcessInstances(func(piKey uint64, v *model.ProcessInstanceValue) error {
-			if v.ProcessDefKey != key {
-				return nil
-			}
-			if instanceFilter != 0 && piKey != instanceFilter {
-				return nil
-			}
-			resp.Instances++
-			return nil
-		})
 	})
 	switch {
 	case !found:
@@ -1536,9 +1564,60 @@ func (s *Server) handleInstanceDecisions(w http.ResponseWriter, r *http.Request)
 // handleListInstances lists process instances — live ones (with their current
 // token count) followed by finished ones from the history index, most recently
 // completed first (ADR-0017). It is the operator "instances" view.
-func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
+// errListTruncated stops a bounded list scan once the page cap is reached. It is a
+// sentinel to break the scan early, not a failure.
+var errListTruncated = errors.New("list page full")
+
+// unlessTruncated maps a bounded-scan result to a real error: the page-full sentinel
+// (a deliberate early stop) becomes nil, any other error passes through. It lets the
+// capped list handlers report a genuine scan failure without treating truncation as one.
+func unlessTruncated(err error) error {
+	if errors.Is(err, errListTruncated) {
+		return nil
+	}
+	return err
+}
+
+const (
+	// maxInstanceListDefault and maxInstanceListMax bound how many active and how many
+	// completed instances GET /api/v1/instances returns (each capped independently),
+	// so the endpoint can never try to enrich and serialize hundreds of thousands of
+	// rows — the shape that made the operations page unreachable during the reported
+	// flood. Raise per request with ?limit= (up to the max); narrow to one definition
+	// with ?process=. The overview reads per-definition counts from
+	// /api/v1/instances/summary instead, so the cap does not skew its tallies.
+	maxInstanceListDefault = 1000
+	maxInstanceListMax     = 10000
+)
+
+func (s *Server) handleListInstances(w http.ResponseWriter, r *http.Request) {
+	limit := maxInstanceListDefault
+	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
+		n, err := strconv.Atoi(q)
+		if err != nil || n <= 0 {
+			writeError(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
+			return
+		}
+		limit = n
+	}
+	if limit > maxInstanceListMax {
+		limit = maxInstanceListMax
+	}
+	var (
+		filterDef uint64
+		hasFilter bool
+	)
+	if q := strings.TrimSpace(r.URL.Query().Get("process")); q != "" {
+		n, err := strconv.ParseUint(q, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid process key")
+			return
+		}
+		filterDef, hasFilter = n, true
+	}
 	active := []instanceResp{}
 	done := []instanceResp{}
+	truncated := false
 	var scanErr error
 	s.do(func() {
 		// Attach the definition's id/version and the scope's variables to a row.
@@ -1556,7 +1635,14 @@ func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
 			})
 		}
 
-		scanErr = s.store.ActiveProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
+		err := s.store.ActiveProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
+			if hasFilter && v.ProcessDefKey != filterDef {
+				return nil
+			}
+			if len(active) >= limit {
+				truncated = true
+				return errListTruncated // page full: stop enriching further rows
+			}
 			elements := 0
 			if err := s.store.ElementInstancesOfProcess(key, func(uint64) error {
 				elements++
@@ -1579,11 +1665,19 @@ func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
 			active = append(active, r)
 			return nil
 		})
-		if scanErr != nil {
+		if err != nil && !errors.Is(err, errListTruncated) {
+			scanErr = err
 			return
 		}
 
-		scanErr = s.store.CompletedProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
+		err = s.store.CompletedProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
+			if hasFilter && v.ProcessDefKey != filterDef {
+				return nil
+			}
+			if len(done) >= limit {
+				truncated = true
+				return errListTruncated
+			}
 			r := instanceResp{
 				Key:            key,
 				ProcessDefKey:  v.ProcessDefKey,
@@ -1599,6 +1693,7 @@ func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
 			done = append(done, r)
 			return nil
 		})
+		scanErr = unlessTruncated(err)
 	})
 	if scanErr != nil {
 		writeError(w, http.StatusInternalServerError, "list instances: "+scanErr.Error())
@@ -1606,7 +1701,54 @@ func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
 	}
 	// Finished instances: most recently completed first.
 	sort.Slice(done, func(i, j int) bool { return done[i].CompletedAt > done[j].CompletedAt })
+	if truncated {
+		// Signal that the page was capped so a client can page with ?process=/?limit=
+		// rather than assume it received every instance.
+		w.Header().Set("X-Instances-Truncated", "true")
+	}
 	writeJSON(w, http.StatusOK, append(active, done...))
+}
+
+type instanceSummaryRow struct {
+	ProcessDefKey     uint64 `json:"processDefKey"`
+	ProcessID         string `json:"processId"`
+	Version           int32  `json:"version"`
+	Active            int    `json:"active"`
+	Completed         int    `json:"completed"`
+	LatestCompletedAt int64  `json:"latestCompletedAt"`
+}
+
+// handleInstancesSummary returns per-definition instance counts (active and finished,
+// plus the last-activity time) read from the maintained O(1) counters — one point read
+// per deployed definition, no instance scan (ADR-0083, extending ADR-0080). This is
+// what keeps the operations overview responsive even when a definition has hundreds of
+// thousands of instances: the earlier scan-based version blocked the single-writer loop
+// on every load (the reported flood), and draining active instances into the history
+// only moved that cost rather than removing it.
+func (s *Server) handleInstancesSummary(w http.ResponseWriter, _ *http.Request) {
+	var out []instanceSummaryRow
+	s.do(func() {
+		out = make([]instanceSummaryRow, 0, len(s.order))
+		for _, key := range s.order {
+			d := s.deployments[key]
+			// Each is one O(1) point read of a maintained counter (ADR-0083/0080); the
+			// only failure mode is a catastrophic store error, and this is a display
+			// aggregate — a counter that cannot be read is shown as 0 rather than failing
+			// the whole overview.
+			active, _ := s.store.DefInstanceCount(key)
+			completed, _ := s.store.DefCompletedCount(key)
+			lastAct, _ := s.store.DefLastActivity(key)
+			out = append(out, instanceSummaryRow{
+				ProcessDefKey:     key,
+				ProcessID:         d.ProcessID,
+				Version:           d.Version,
+				Active:            active,
+				Completed:         completed,
+				LatestCompletedAt: lastAct,
+			})
+		}
+	})
+	writeJSON(w, http.StatusOK, out)
 }
 
 // maxInstanceSearchResults caps a variable search so a single query can't return
@@ -1856,6 +1998,90 @@ func (s *Server) handleCancelInstance(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// errCancelBatchFull stops the active-instance scan once a bulk cancel has collected
+// its per-call cap of instance keys. It is a sentinel to break the scan early, not a
+// failure — the handler treats it as success.
+var errCancelBatchFull = errors.New("cancel batch full")
+
+const (
+	// bulkCancelBatchDefault and bulkCancelBatchMax bound how many of a definition's
+	// instances one POST .../cancel-instances call terminates. The cap keeps a single
+	// call from holding the single-writer run loop while it terminates a runaway
+	// backlog of hundreds of thousands of instances; the caller repeats while the
+	// response reports remaining=true. This is the drain path for the reported
+	// /employees flood, where per-instance cancellation is infeasible.
+	bulkCancelBatchDefault = 5000
+	bulkCancelBatchMax     = 50000
+)
+
+// handleCancelInstancesOfProcess terminates a bounded batch of a definition's running
+// instances in one call: it scans the active process instances, cancels up to the
+// per-call cap that belong to the definition, and reports how many it cancelled and
+// whether the cap was hit (remaining=true → call again). All work happens in one run-
+// loop turn so the terminations are atomic with the scan; the cap bounds the turn.
+func (s *Server) handleCancelInstancesOfProcess(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid definition key")
+		return
+	}
+	limit := bulkCancelBatchDefault
+	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
+		n, err := strconv.Atoi(q)
+		if err != nil || n <= 0 {
+			writeError(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
+			return
+		}
+		limit = n
+	}
+	if limit > bulkCancelBatchMax {
+		limit = bulkCancelBatchMax
+	}
+	var (
+		found     bool
+		remaining bool
+		keys      []uint64
+		opErr     error // any scan / drive / stats failure inside the run loop
+		stats     statsResp
+	)
+	s.do(func() {
+		if _, ok := s.deployments[key]; !ok {
+			return
+		}
+		found = true
+		err := s.store.ActiveProcessInstances(func(k uint64, v *model.ProcessInstanceValue) error {
+			if v.ProcessDefKey != key {
+				return nil
+			}
+			keys = append(keys, k)
+			if len(keys) >= limit {
+				return errCancelBatchFull // stop early: this batch is full
+			}
+			return nil
+		})
+		if err != nil && !errors.Is(err, errCancelBatchFull) {
+			opErr = err
+			return
+		}
+		remaining = errors.Is(err, errCancelBatchFull) // hit the cap → more may remain
+		for _, k := range keys {
+			s.proc.CancelInstance(k)
+		}
+		if opErr = s.jobRunner.Drive(); opErr != nil {
+			return
+		}
+		stats, opErr = s.readStats()
+	})
+	switch {
+	case !found:
+		writeError(w, http.StatusNotFound, "no deployment with that key")
+	case opErr != nil:
+		writeError(w, http.StatusInternalServerError, "cancel instances: "+opErr.Error())
+	default:
+		writeJSON(w, http.StatusOK, cancelInstancesResp{DefinitionKey: key, Canceled: len(keys), Remaining: remaining, Stats: stats})
+	}
+}
+
 // --- user tasks (ADR-0028) ---
 
 // jobResp is one activatable job an instance is parked on: its key (what
@@ -1931,11 +2157,38 @@ type taskResp struct {
 // handleListTasks lists open user tasks — activatable jobs of the reserved
 // user-task type. Each entry carries the task's key, the instance it belongs to,
 // and the element's assignment metadata from the compiled process.
-func (s *Server) handleListTasks(w http.ResponseWriter, _ *http.Request) {
+// maxTaskListDefault and maxTaskListMax bound how many user tasks GET /api/v1/tasks
+// returns per call, so the inbox loads even when a definition has parked hundreds of
+// thousands of instances on a user task (the reported flood): the scan stops at the
+// cap instead of enriching and shipping every job. Raise per request with ?limit= (up
+// to the max); a capped page is flagged with X-Tasks-Truncated.
+const (
+	maxTaskListDefault = 500
+	maxTaskListMax     = 5000
+)
+
+func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
+	limit := maxTaskListDefault
+	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
+		n, err := strconv.Atoi(q)
+		if err != nil || n <= 0 {
+			writeError(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
+			return
+		}
+		limit = n
+	}
+	if limit > maxTaskListMax {
+		limit = maxTaskListMax
+	}
 	tasks := []taskResp{}
+	truncated := false
 	var scanErr error
 	s.do(func() {
-		scanErr = s.store.ActivatableJobs(compiler.UserTaskJobTypeIndex, func(jobKey uint64) error {
+		err := s.store.ActivatableJobs(compiler.UserTaskJobTypeIndex, func(jobKey uint64) error {
+			if len(tasks) >= limit {
+				truncated = true
+				return errListTruncated // page full: stop before enriching more jobs
+			}
 			jv, ok, err := s.store.GetJob(jobKey)
 			if err != nil || !ok {
 				return err
@@ -1971,12 +2224,18 @@ func (s *Server) handleListTasks(w http.ResponseWriter, _ *http.Request) {
 			tasks = append(tasks, tr)
 			return nil
 		})
+		scanErr = unlessTruncated(err)
 	})
 	if scanErr != nil {
 		writeError(w, http.StatusInternalServerError, "list tasks: "+scanErr.Error())
-	} else {
-		writeJSON(w, http.StatusOK, tasks)
+		return
 	}
+	if truncated {
+		// Signal a capped page so a client can narrow (by process/assignee) rather than
+		// assume it received every task.
+		w.Header().Set("X-Tasks-Truncated", "true")
+	}
+	writeJSON(w, http.StatusOK, tasks)
 }
 
 // handleCompleteTask completes a user task by its job key: it feeds the job
@@ -2117,11 +2376,27 @@ func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 
 // handleListIncidents lists the unresolved incidents — the operator "what's stuck"
 // view (ADR-0061).
-func (s *Server) handleListIncidents(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
+	limit := maxTaskListMax // incidents share the task list's ceiling; the default page is generous
+	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
+		n, err := strconv.Atoi(q)
+		if err != nil || n <= 0 {
+			writeError(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
+			return
+		}
+		if limit = n; limit > maxTaskListMax {
+			limit = maxTaskListMax
+		}
+	}
 	list := []incidentView{}
+	truncated := false
 	var scanErr error
 	s.do(func() {
-		scanErr = s.store.Incidents(func(elKey uint64, v *model.IncidentValue) error {
+		err := s.store.Incidents(func(elKey uint64, v *model.IncidentValue) error {
+			if len(list) >= limit {
+				truncated = true
+				return errListTruncated // page full: bound the response even under a flood of failures
+			}
 			list = append(list, incidentView{
 				ElementInstanceKey: elKey,
 				ProcessInstanceKey: v.ProcessInstanceKey,
@@ -2132,10 +2407,14 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, _ *http.Request) {
 			})
 			return nil
 		})
+		scanErr = unlessTruncated(err)
 	})
 	if scanErr != nil {
 		writeError(w, http.StatusInternalServerError, "list incidents: "+scanErr.Error())
 		return
+	}
+	if truncated {
+		w.Header().Set("X-Incidents-Truncated", "true")
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"incidents": list})
 }

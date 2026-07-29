@@ -353,3 +353,15 @@ func TestRecoverCorruptRecord(t *testing.T) {
 		t.Fatal("Recover over a corrupt record = nil error, want error")
 	}
 }
+
+// TestFirstErr covers the error-aggregation helper: it returns the first non-nil
+// error and nil when every argument is nil.
+func TestFirstErr(t *testing.T) {
+	if err := firstErr(nil, nil, nil); err != nil {
+		t.Fatalf("firstErr(all nil) = %v, want nil", err)
+	}
+	want := errors.New("boom")
+	if err := firstErr(nil, want, errors.New("later")); err != want {
+		t.Fatalf("firstErr = %v, want the first non-nil error", err)
+	}
+}

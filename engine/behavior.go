@@ -72,6 +72,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeMessageEndEvent] = messageEndEventBehavior{}
 	p.behaviors[compiler.TypeSubProcess] = subProcessBehavior{}
 	p.behaviors[compiler.TypeCallActivity] = callActivityBehavior{}
+	p.behaviors[compiler.TypeEventSubProcessStart] = eventSubProcessStartBehavior{}
 }
 
 // --- command handlers ---
@@ -125,6 +126,9 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 			SourceFlowId:       -1,
 		})
 	}
+	// Arm the root-scope event subprocesses: each opens its trigger (message/timer) and
+	// waits, ready to run its handler while the instance runs (ADR-0082).
+	armEventSubprocesses(c, piKey, defKey, piKey, cp.RootEventSubprocesses())
 }
 
 // handleProcessInstanceTerminating cancels a running instance: it terminates
@@ -733,13 +737,16 @@ func completeScope(c *ProcessingContext, scope uint64) {
 		return
 	}
 	if ei := c.GetElementInstance(scope); ei != nil {
-		// A subprocess scope: drive its container to Completing.
+		// A subprocess scope: disarm its event-subprocess triggers (they are uncounted, so
+		// the scope drained with them still armed), then drive its container to Completing.
+		disarmEventSubprocesses(c, ei.ProcessInstanceKey, scope)
 		c.AppendElementCommand(scope, model.IntentCompleting, *ei)
 		return
 	}
 	// The process-instance root scope: the instance itself completes. If it is a
 	// child of a call activity, its completion resumes the caller (ADR-0076).
 	if pi := c.GetProcessInstance(scope); pi != nil {
+		disarmEventSubprocesses(c, scope, scope)
 		c.AppendProcessInstanceEvent(scope, model.IntentCompleted, *pi)
 		if pi.ParentElementInstanceKey != 0 {
 			resumeCaller(c, scope, pi.ParentElementInstanceKey)
@@ -1462,6 +1469,19 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 	// events the created instances emit.
 	for _, ref := range c.p.messageStarts[name] {
 		startKey := evalStartCorrelationKey(ref.correlationKey, vars)
+		// A singleton message start (ADR-0082) instantiates only if no instance of this
+		// definition is already live for this correlation key. An empty key identifies
+		// no entity, so it is never singleton (it always starts).
+		if ref.singletonStart && startKey != "" {
+			taken, err := c.singletonStartTaken(ref.defKey, startKey)
+			if err != nil {
+				c.p.fail(err)
+				return
+			}
+			if taken {
+				continue // a live instance for this key already exists (or is being started this batch)
+			}
+		}
 		c.AppendCreateInstanceCommand(ref.defKey, vars, startKey)
 		// Retain the delivery into the message-start event too, so the replay shows
 		// the message that opened the receiving pool. The receiver instance does not
@@ -1474,6 +1494,31 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 			CorrelationKey:           correlationKey,
 		})
 	}
+}
+
+// singletonStartTaken reports whether a singleton message start for (defKey, key)
+// should be skipped because a live instance already exists — either durably (the
+// ActiveStartKey counter, maintained by applyToState) or already scheduled earlier in
+// this batch (the per-batch set, which closes the window before the durable counter
+// reflects a same-batch create). When it returns false it records the pair so a second
+// message for the same key in the same batch is skipped (ADR-0082).
+func (c *ProcessingContext) singletonStartTaken(defKey uint64, key string) (bool, error) {
+	if c.p.startsThisBatch == nil {
+		c.p.startsThisBatch = make(map[startKeyIdent]struct{})
+	}
+	ident := startKeyIdent{defKey: defKey, key: key}
+	if _, ok := c.p.startsThisBatch[ident]; ok {
+		return true, nil
+	}
+	n, err := c.tx.ActiveStartKeyCount(defKey, key)
+	if err != nil {
+		return false, err
+	}
+	if n > 0 {
+		return true, nil
+	}
+	c.p.startsThisBatch[ident] = struct{}{}
+	return false, nil
 }
 
 // instanceVariables reads all of an instance's variables into a fresh slice, to
@@ -1860,7 +1905,109 @@ func (subProcessBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *mod
 	// drained by handleElementCompleting (after promoting), so this is a no-op there;
 	// one without mappings is drained here (ADR-0074).
 	dropLocalScope(c, key)
+	// An event-subprocess handler has no outgoing flow; its completion instead drains
+	// the parent scope it ran in, which may in turn complete that scope (ADR-0082).
+	if c.process(ei.ProcessDefKey).IsEventSubProcess(ei.ElementId) {
+		c.AppendElementEvent(key, model.IntentCompleted, *ei)
+		completeScope(c, ei.FlowScopeKey)
+		return
+	}
 	completeAndTakeFlows(c, key, ei)
+}
+
+// armEventSubprocesses activates one waiting trigger instance per event subprocess in a
+// scope, scoped by it (ADR-0082). A trigger is a TypeEventSubProcessStart element whose
+// ElementId is the handler container node — so its behavior can read the handler's
+// trigger detail and, on firing, seed the handler — and is excluded from the scope's
+// active-child counter (apply.go), so an armed trigger never blocks scope completion.
+// Called when a scope is entered: the process root at instance creation (and, later,
+// a subprocess on its activation).
+func armEventSubprocesses(c *ProcessingContext, piKey, defKey, scopeKey uint64, handlers []int32) {
+	for _, handlerNode := range handlers {
+		c.AppendElementCommand(c.NewKey(), model.IntentActivating, model.ElementInstanceValue{
+			ProcessInstanceKey: piKey,
+			ProcessDefKey:      defKey,
+			ElementId:          handlerNode, // the handler container; its EventSub detail names the trigger
+			FlowScopeKey:       scopeKey,
+			BpmnElementType:    uint8(compiler.TypeEventSubProcessStart),
+		})
+	}
+}
+
+// disarmEventSubprocesses terminates every still-armed event-subprocess trigger in a
+// scope, when the scope completes (ADR-0082). A trigger is uncounted, so the scope
+// drained with it still armed; its Terminated event drops the element and its
+// message subscription / timer self-retires (it fires later, finds no element, does
+// nothing) — the same pattern disarmBoundaryEvents uses.
+func disarmEventSubprocesses(c *ProcessingContext, procKey, scope uint64) {
+	var triggers []uint64
+	c.ForEachElementInstance(procKey, func(elKey uint64) {
+		if t := c.GetElementInstance(elKey); t != nil &&
+			t.BpmnElementType == uint8(compiler.TypeEventSubProcessStart) && t.FlowScopeKey == scope {
+			triggers = append(triggers, elKey)
+		}
+	})
+	for _, tk := range triggers {
+		if t := c.GetElementInstance(tk); t != nil {
+			c.AppendElementEvent(tk, model.IntentTerminated, *t)
+		}
+	}
+}
+
+// eventSubProcessStartBehavior is the armed trigger of an event subprocess (ADR-0082).
+// On activation it opens its trigger — a message subscription or a one-shot timer,
+// exactly as a boundary event does — and waits. When the trigger fires, the existing
+// timer/message path drives it to Completing: it terminates the parent scope's other
+// work if interrupting, then activates the handler subprocess. The handler runs as an
+// ordinary subprocess scope; its inner start (a message/timer start) flows straight on.
+type eventSubProcessStartBehavior struct{}
+
+func (eventSubProcessStartBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	d := cp.EventSubProcess(cp.Node(ei.ElementId).EventSub)
+	switch d.Kind {
+	case compiler.BoundaryTimer:
+		armOneShotTimer(c, key, ei, d.Schedule)
+	case compiler.BoundaryMessage:
+		c.AppendMessageSubscriptionEvent(key, model.IntentSubscriptionCreated, model.MessageSubscriptionValue{
+			ProcessInstanceKey: ei.ProcessInstanceKey,
+			ElementInstanceKey: key,
+			MessageName:        d.MessageName,
+			CorrelationKey:     evalCorrelationKey(c, d.CorrelationKey, ei.ProcessInstanceKey),
+		})
+	}
+	// Stays Activated: waits until the trigger fires.
+}
+
+func (eventSubProcessStartBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	// A parent-scope interrupt (or the scope completing) may have terminated this armed
+	// trigger after its Completing command was queued; if so, there is nothing to fire.
+	if c.GetElementInstance(key) == nil {
+		return
+	}
+	cp := c.process(ei.ProcessDefKey)
+	handlerNode := ei.ElementId
+	d := cp.EventSubProcess(cp.Node(handlerNode).EventSub)
+	parentScope := ei.FlowScopeKey
+	// The trigger fired: it completes (uncounted, so no counter change).
+	c.AppendElementEvent(key, model.IntentCompleted, *ei)
+	if d.Interrupting {
+		// Terminate the parent scope's other work — the main flow and, since event-sub
+		// triggers live in the same scope, the sibling triggers — before the handler runs.
+		terminateScope(c, ei.ProcessInstanceKey, parentScope)
+	}
+	// Activate the handler subprocess in the parent scope; it seeds its inner start (which
+	// flows straight on) and runs to its end, draining its scope and completing.
+	k := c.NewKey()
+	c.AppendElementCommand(k, model.IntentActivating, model.ElementInstanceValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ProcessDefKey:      ei.ProcessDefKey,
+		ElementId:          handlerNode,
+		FlowScopeKey:       parentScope,
+		BpmnElementType:    uint8(cp.Node(handlerNode).Type), // TypeSubProcess
+		TokenID:            k,
+		SourceFlowId:       -1,
+	})
 }
 
 // loopCounterVar is the standard multi-instance per-iteration counter variable

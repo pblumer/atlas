@@ -216,3 +216,135 @@ func TestStoreDecodeErrorPaths(t *testing.T) {
 	}
 	txn.Close()
 }
+
+// TestBackfillRuntimeCounters proves the one-time migration (ADR-0080): a store
+// that gained instances before the counters existed seeds them correctly from a
+// scan of the current state, and re-running it is a no-op (no double count).
+func TestBackfillRuntimeCounters(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+
+	// Write pre-migration state directly. The Put/RecordElementVisit primitives do
+	// not maintain the aggregate counters (only applyToState does), so this mirrors
+	// instances that existed before the counters were added.
+	tx := s.NewTransaction()
+	mustNil(t, tx.PutProcessInstance(1, &model.ProcessInstanceValue{ProcessDefKey: 100}))
+	mustNil(t, tx.PutProcessInstance(2, &model.ProcessInstanceValue{ProcessDefKey: 100}))
+	mustNil(t, tx.PutProcessInstance(3, &model.ProcessInstanceValue{ProcessDefKey: 200}))
+	mustNil(t, tx.PutElementInstance(11, &model.ElementInstanceValue{ProcessDefKey: 100, ElementId: 5, ProcessInstanceKey: 1}))
+	mustNil(t, tx.PutElementInstance(12, &model.ElementInstanceValue{ProcessDefKey: 100, ElementId: 5, ProcessInstanceKey: 2}))
+	mustNil(t, tx.PutElementInstance(13, &model.ElementInstanceValue{ProcessDefKey: 100, ElementId: 7, ProcessInstanceKey: 1}))
+	mustNil(t, tx.RecordElementVisit(100, 1, 5))
+	mustNil(t, tx.RecordElementVisit(100, 2, 5))
+	mustNil(t, tx.RecordElementVisit(100, 1, 7))
+	mustNil(t, tx.Commit())
+	mustNil(t, tx.Close())
+
+	// Counters are still zero: Open's backfill ran on an empty store, and the direct
+	// writes above did not maintain them.
+	if n, _ := s.DefInstanceCount(100); n != 0 {
+		t.Fatalf("pre-backfill def 100 count = %d, want 0", n)
+	}
+
+	// Clear the migration marker and re-run the backfill, as a store predating the
+	// counters would on its first open after upgrade.
+	mustNil(t, s.db.Delete(keyMeta(metaRuntimeCountersV1), pebble.Sync))
+	mustNil(t, s.backfillRuntimeCountersIfNeeded())
+
+	if n, _ := s.DefInstanceCount(100); n != 2 {
+		t.Errorf("def 100 count = %d, want 2", n)
+	}
+	if n, _ := s.DefInstanceCount(200); n != 1 {
+		t.Errorf("def 200 count = %d, want 1", n)
+	}
+	if got := tokenMap(t, s, 100); got[5] != 2 || got[7] != 1 {
+		t.Errorf("def 100 live tokens = %v, want {5:2, 7:1}", got)
+	}
+	if got := visitMap(t, s, 100); got[5] != 2 || got[7] != 1 {
+		t.Errorf("def 100 visits = %v, want {5:2, 7:1}", got)
+	}
+
+	// Idempotent: with the marker back in place, a second call changes nothing.
+	mustNil(t, s.backfillRuntimeCountersIfNeeded())
+	if n, _ := s.DefInstanceCount(100); n != 2 {
+		t.Errorf("after re-run def 100 count = %d, want 2 (idempotent, no double count)", n)
+	}
+}
+
+func mustNil(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func tokenMap(t *testing.T, s *Store, def uint64) map[int32]int64 {
+	t.Helper()
+	m := map[int32]int64{}
+	mustNil(t, s.ElementLiveTokens(def, func(el int32, c int64) error { m[el] = c; return nil }))
+	return m
+}
+
+func visitMap(t *testing.T, s *Store, def uint64) map[int32]int64 {
+	t.Helper()
+	m := map[int32]int64{}
+	mustNil(t, s.ElementVisitTotals(def, func(el int32, c int64) error { m[el] = c; return nil }))
+	return m
+}
+
+// TestRuntimeCounterMethods exercises the tx-level counter mutators directly and
+// reads them back through the store accessors (ADR-0080).
+func TestRuntimeCounterMethods(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+
+	tx := s.NewTransaction()
+	mustNil(t, tx.IncDefInstanceCount(42))
+	mustNil(t, tx.IncDefInstanceCount(42))
+	mustNil(t, tx.DecDefInstanceCount(42))
+	mustNil(t, tx.IncElementToken(42, 3))
+	mustNil(t, tx.IncElementToken(42, 3))
+	mustNil(t, tx.DecElementToken(42, 3))
+	mustNil(t, tx.IncElementVisitAgg(42, 3))
+	mustNil(t, tx.IncElementVisitAgg(42, 3))
+	mustNil(t, tx.Commit())
+	mustNil(t, tx.Close())
+
+	if n, _ := s.DefInstanceCount(42); n != 1 {
+		t.Errorf("def 42 count = %d, want 1 (2 inc, 1 dec)", n)
+	}
+	if got := tokenMap(t, s, 42); got[3] != 1 {
+		t.Errorf("def 42 tokens = %v, want {3:1}", got)
+	}
+	if got := visitMap(t, s, 42); got[3] != 2 {
+		t.Errorf("def 42 visits = %v, want {3:2}", got)
+	}
+}
+
+// TestBackfillRuntimeCountersScanErrors covers the migration's decode-error
+// branches: a corrupt process-instance or element-instance record surfaces as a
+// backfill error (and thus a failed Open) rather than a silent miscount.
+func TestBackfillRuntimeCountersScanErrors(t *testing.T) {
+	corrupt := func(key []byte) error {
+		s, err := Open(t.TempDir())
+		if err != nil {
+			t.Fatalf("Open: %v", err)
+		}
+		defer s.Close()
+		mustNil(t, s.db.Set(key, []byte("not a value"), pebble.Sync))
+		mustNil(t, s.db.Delete(keyMeta(metaRuntimeCountersV1), pebble.Sync))
+		return s.backfillRuntimeCountersIfNeeded()
+	}
+	if err := corrupt(keyProcessInstance(1)); err == nil {
+		t.Error("corrupt process-instance record: want a backfill error")
+	}
+	if err := corrupt(keyElementInstance(1)); err == nil {
+		t.Error("corrupt element-instance record: want a backfill error")
+	}
+}

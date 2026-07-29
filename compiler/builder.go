@@ -160,6 +160,7 @@ type Builder struct {
 	connectorTasks    []ConnectorTaskDetail
 	userTasks         []UserTaskDetail
 	boundaryEventDets []BoundaryEventDetail
+	eventSubProcesses []EventSubProcessDetail
 	messageCatches    []MessageDetail
 	messageThrows     []MessageDetail
 	messageStarts     []MessageDetail
@@ -234,6 +235,7 @@ func (b *Builder) addNode(t BpmnType, detail int32) int32 {
 		FlowScope:     b.flowScope, // the scope currently open (-1 = process root)
 		Detail:        detail,
 		MultiInstance: -1, // not a loop unless SetMultiInstance marks it (ADR-0077)
+		EventSub:      -1, // not event-triggered unless SetEventSubProcess marks it (ADR-0082)
 	})
 	b.elementIds = append(b.elementIds, -1) // kept in lockstep with nodes
 	return id
@@ -300,6 +302,20 @@ func (b *Builder) PopScope() {
 // CurrentScope reports the scope nodes are added into now (-1 at the process root).
 func (b *Builder) CurrentScope() int32 { return b.flowScope }
 
+// SetEventSubProcess marks an already-added subprocess node event-triggered (ADR-0082),
+// carrying the trigger detail its start event describes. It is applied after the
+// subprocess and its inner start exist (like SetMultiInstance), and its EventSub field
+// then indexes the detail. Build groups event-subprocess handlers by their parent scope
+// so the runtime can arm them when the scope is entered.
+func (b *Builder) SetEventSubProcess(nodeID int32, d EventSubProcessDetail) {
+	if !b.validNode(nodeID) {
+		return
+	}
+	idx := int32(len(b.eventSubProcesses))
+	b.eventSubProcesses = append(b.eventSubProcesses, d)
+	b.nodes[nodeID].EventSub = idx
+}
+
 // SetElementBpmnId records the source BPMN element id (e.g. "StartEvent_1") for a
 // node so it can be mapped back for diagnostics and the live diagram overlay. It
 // is optional: nodes without one report "" from CompiledProcess.ElementBpmnId.
@@ -332,9 +348,9 @@ func (b *Builder) SetVersionTag(s string) { b.versionTag = b.intern(s) }
 // message (a throw event or an API publish of messageName) instantiates a fresh
 // process instance seeded with the message's payload (ADR-0035). correlationKey
 // is compiled for future use; message-start matching is by name today.
-func (b *Builder) AddMessageStartEvent(messageName string, correlationKey *expr.Compiled) int32 {
+func (b *Builder) AddMessageStartEvent(messageName string, correlationKey *expr.Compiled, singletonStart bool) int32 {
 	detail := int32(len(b.messageStarts))
-	b.messageStarts = append(b.messageStarts, MessageDetail{MessageName: messageName, CorrelationKey: correlationKey})
+	b.messageStarts = append(b.messageStarts, MessageDetail{MessageName: messageName, CorrelationKey: correlationKey, SingletonStart: singletonStart})
 	return b.addNode(TypeMessageStartEvent, detail)
 }
 
@@ -946,6 +962,32 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		n.ScopeStartCount = int32(len(scopeStarts)) - n.ScopeStartStart
 	}
 
+	// Group event-subprocess handler nodes by their parent scope, mirroring the nested-
+	// start grouping, so the runtime arms a scope's event-subprocess triggers as an
+	// allocation-free slice when the scope is entered. A handler's FlowScope is its
+	// parent scope (a subprocess node, or -1 for the process root — collected separately
+	// into rootEventSubs) (ADR-0082).
+	var eventSubs []int32
+	for i := range b.nodes {
+		n := &b.nodes[i]
+		n.EventSubStart = int32(len(eventSubs))
+		if n.Type == TypeSubProcess {
+			for j := range b.nodes {
+				h := &b.nodes[j]
+				if h.EventSub >= 0 && h.FlowScope == n.ElementId {
+					eventSubs = append(eventSubs, h.ElementId)
+				}
+			}
+		}
+		n.EventSubCount = int32(len(eventSubs)) - n.EventSubStart
+	}
+	var rootEventSubs []int32
+	for i := range b.nodes {
+		if b.nodes[i].EventSub >= 0 && b.nodes[i].FlowScope == -1 {
+			rootEventSubs = append(rootEventSubs, b.nodes[i].ElementId)
+		}
+	}
+
 	// Group data-output associations by their activity node into one shared array,
 	// mirroring the outgoing-flow and boundary-event grouping, so evaluating a
 	// completing activity's associations is an allocation-free slice at runtime
@@ -1038,6 +1080,9 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		connectorTasks:    b.connectorTasks,
 		userTasks:         b.userTasks,
 		boundaryEventDets: b.boundaryEventDets,
+		eventSubProcesses: b.eventSubProcesses,
+		eventSubs:         eventSubs,
+		rootEventSubs:     rootEventSubs,
 		messageCatches:    b.messageCatches,
 		messageThrows:     b.messageThrows,
 		messageStarts:     b.messageStarts,

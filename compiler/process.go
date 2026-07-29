@@ -38,6 +38,12 @@ const (
 	TypeMessageEndEvent   // an end event that publishes a message, then ends the instance (ADR-0052); the send-and-stop counterpart of a message throw event, so it reuses the throw detail table
 	TypeSubProcess        // an embedded subprocess: a container that is itself a scope; a token entering it runs its inner start→…→end in a child scope, and it completes when that scope empties (ADR-0074)
 	TypeCallActivity      // a call activity: starts a separate process as a child instance, waits for it, then continues; variables pass in/out by mapping (ADR-0076)
+	// TypeEventSubProcessStart is a runtime-only element type: the armed trigger of an
+	// event subprocess (ADR-0082). No compiled node carries it (the handler compiles as
+	// TypeSubProcess); the engine arms one waiting instance per event subprocess in a
+	// scope, and its firing activates the handler. It is excluded from the scope's
+	// active-child counter so it never blocks scope completion.
+	TypeEventSubProcessStart
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
 	numBpmnTypes = 23
@@ -90,6 +96,8 @@ func (t BpmnType) String() string {
 		return "SubProcess"
 	case TypeCallActivity:
 		return "CallActivity"
+	case TypeEventSubProcessStart:
+		return "EventSubProcessStart"
 	default:
 		return "Unspecified"
 	}
@@ -118,6 +126,9 @@ type CompiledNode struct {
 	ScopeStartStart int32 // offset into scopeStarts (the start events nested directly in this subprocess)
 	ScopeStartCount int32 // number of nested start events (0 for a non-subprocess node)
 	MultiInstance   int32 // index into multiInstances, -1 if this node is not a multi-instance loop (ADR-0077)
+	EventSub        int32 // index into eventSubProcesses, -1 if this subprocess is not event-triggered (ADR-0082)
+	EventSubStart   int32 // offset into eventSubs (the event-subprocess handler nodes nested directly in this scope)
+	EventSubCount   int32 // number of event subprocesses in this scope (0 for a node that hosts none)
 }
 
 // CompiledFlow is a sequence flow between two nodes. Condition is the compiled
@@ -382,6 +393,29 @@ type TimerStartDetail struct {
 type MessageDetail struct {
 	MessageName    string
 	CorrelationKey *expr.Compiled
+	// SingletonStart marks a message *start* event as one-per-correlation-key: while
+	// an instance started with a given key is live, another correlating message starts
+	// no duplicate (ADR-0082). Only meaningful on a message start event; ignored on
+	// catch/throw/end. Default false keeps ADR-0035's start-per-message behavior.
+	SingletonStart bool
+}
+
+// EventSubProcessDetail is the per-event-subprocess data the runtime needs to arm its
+// trigger (ADR-0082). An event subprocess (`<subProcess triggeredByEvent="true">`) is
+// not entered by a sequence flow; instead its start event's event definition is armed
+// while the parent scope runs. Interrupting (from the start event's isInterrupting,
+// default true) decides whether firing terminates the parent scope's other work before
+// the handler runs. Kind reuses BoundaryEventKind: the timer field applies for a timer
+// trigger, the message fields for a message trigger. StartNode is the handler's inner
+// start event, seeded (like any message/timer start, flowing straight on) when the
+// handler is activated on a trigger.
+type EventSubProcessDetail struct {
+	StartNode      int32 // the handler's inner start event node id
+	Interrupting   bool  // true = terminate the parent scope's other work on trigger (isInterrupting)
+	Kind           BoundaryEventKind
+	Schedule       TimerSchedule  // BoundaryTimer: when the trigger fires
+	MessageName    string         // BoundaryMessage: the message it subscribes to
+	CorrelationKey *expr.Compiled // BoundaryMessage: correlation-key expression (ADR-0020)
 }
 
 // BoundaryEventKind discriminates what a boundary event waits on.
@@ -489,6 +523,9 @@ type CompiledProcess struct {
 	connectorTasks    []ConnectorTaskDetail
 	userTasks         []UserTaskDetail
 	boundaryEventDets []BoundaryEventDetail
+	eventSubProcesses []EventSubProcessDetail
+	eventSubs         []int32 // shared topology: event-subprocess handler node ids grouped by parent scope node
+	rootEventSubs     []int32 // event-subprocess handler node ids whose parent scope is the process root
 	messageCatches    []MessageDetail
 	messageThrows     []MessageDetail
 	messageStarts     []MessageDetail
@@ -540,6 +577,30 @@ func (p *CompiledProcess) ScopeStartEvents(id int32) []int32 {
 func (p *CompiledProcess) BoundaryEvent(detail int32) *BoundaryEventDetail {
 	return &p.boundaryEventDets[detail]
 }
+
+// IsEventSubProcess reports whether the subprocess node id is event-triggered — a
+// `<subProcess triggeredByEvent="true">` armed by its start event's event definition
+// rather than entered by a flow (ADR-0082).
+func (p *CompiledProcess) IsEventSubProcess(id int32) bool { return p.nodes[id].EventSub >= 0 }
+
+// EventSubProcess returns the event-subprocess detail at the given table index — the
+// trigger the runtime arms while the parent scope runs (ADR-0082).
+func (p *CompiledProcess) EventSubProcess(detail int32) *EventSubProcessDetail {
+	return &p.eventSubProcesses[detail]
+}
+
+// EventSubprocesses returns the handler node ids of the event subprocesses nested
+// directly in the subprocess scope id — the triggers the runtime arms when that
+// subprocess is entered — as a slice into the shared topology array (no allocation).
+// Empty for a scope that hosts none. Use RootEventSubprocesses for the process root.
+func (p *CompiledProcess) EventSubprocesses(id int32) []int32 {
+	n := &p.nodes[id]
+	return p.eventSubs[n.EventSubStart : n.EventSubStart+n.EventSubCount]
+}
+
+// RootEventSubprocesses returns the handler node ids of the event subprocesses at the
+// process root — the triggers armed when an instance is created (ADR-0082).
+func (p *CompiledProcess) RootEventSubprocesses() []int32 { return p.rootEventSubs }
 
 // NodesReaching returns the set of node ids from which target is reachable by
 // following sequence flows — target's ancestors in the flow graph. An inclusive
@@ -610,6 +671,7 @@ type MessageStartEvent struct {
 	MessageName    string
 	ElementId      int32
 	CorrelationKey *expr.Compiled
+	SingletonStart bool // one live instance per correlation key (ADR-0082)
 }
 
 // MessageStartEvents returns each message-start event with its element index and
@@ -619,11 +681,14 @@ func (p *CompiledProcess) MessageStartEvents() []MessageStartEvent {
 	var out []MessageStartEvent
 	for id := range p.nodes {
 		n := &p.nodes[id]
-		if n.Type == TypeMessageStartEvent {
+		// Only a root-scope message start instantiates the process; a message start
+		// nested in an event subprocess is that scope's trigger, not an entry point (ADR-0082).
+		if n.Type == TypeMessageStartEvent && n.FlowScope == -1 {
 			out = append(out, MessageStartEvent{
 				MessageName:    p.messageStarts[n.Detail].MessageName,
 				ElementId:      int32(id),
 				CorrelationKey: p.messageStarts[n.Detail].CorrelationKey,
+				SingletonStart: p.messageStarts[n.Detail].SingletonStart,
 			})
 		}
 	}
@@ -647,7 +712,9 @@ func (p *CompiledProcess) TimerStartEvents() []TimerStartEvent {
 	var out []TimerStartEvent
 	for id := range p.nodes {
 		n := &p.nodes[id]
-		if n.Type == TypeTimerStartEvent {
+		// Only a root-scope timer start arms a process-instantiating timer; a timer start
+		// nested in an event subprocess is that scope's trigger, not an entry point (ADR-0082).
+		if n.Type == TypeTimerStartEvent && n.FlowScope == -1 {
 			out = append(out, TimerStartEvent{
 				Schedule:  p.timerStarts[n.Detail].Schedule,
 				ElementId: int32(id),
