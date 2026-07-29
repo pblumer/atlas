@@ -388,3 +388,180 @@ func TestEventSubprocessNonInterruptingRecovers(t *testing.T) {
 		t.Errorf("after recovery: handler visits = %d, want 2 (re-armed trigger fired post-restart)", v)
 	}
 }
+
+// subprocessEventSubProcess builds start → sub{istart → inner(svc) → iend} → after(svc)
+// → end, where the subprocess `sub` carries a message-triggered interrupting event
+// subprocess {es(message "cancel") → he}. It returns the process and the inner/after job
+// types. Firing the message interrupts only the subprocess; `after` (outside it) runs on.
+func subprocessEventSubProcess(t *testing.T) (*compiler.CompiledProcess, int32, int32) {
+	t.Helper()
+	b := compiler.NewBuilder(1, "esp-sub", 1)
+	start := b.AddStartEvent()
+	sub := b.AddSubProcess()
+	after := b.AddServiceTask("after", 3)
+	end := b.AddEndEvent()
+	b.Connect(start, sub)
+	b.Connect(sub, after)
+	b.Connect(after, end)
+
+	b.PushScope(sub)
+	istart := b.AddStartEvent()
+	inner := b.AddServiceTask("inner", 3)
+	iend := b.AddEndEvent()
+	b.Connect(istart, inner)
+	b.Connect(inner, iend)
+	handler := b.AddSubProcess()
+	b.PushScope(handler)
+	corr := mustCompile(t, `"k"`)
+	es := b.AddMessageStartEvent("cancel", corr, false)
+	he := b.AddEndEvent()
+	b.Connect(es, he)
+	b.PopScope() // handler
+	b.SetEventSubProcess(handler, compiler.EventSubProcessDetail{
+		StartNode: es, Interrupting: true, Kind: compiler.BoundaryMessage,
+		MessageName: "cancel", CorrelationKey: corr,
+	})
+	b.PopScope() // sub
+
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return cp, cp.ServiceTask(cp.Node(inner).Detail).JobType, cp.ServiceTask(cp.Node(after).Detail).JobType
+}
+
+// TestEventSubprocessSubprocessLevelInterrupt fires a message-triggered interrupting event
+// subprocess scoped to an embedded subprocess: only the subprocess is torn down (its inner
+// job canceled, its handler run), the subprocess then completes and takes its outgoing
+// flow, and the flow *after* the subprocess continues — the instance is not aborted
+// (ADR-0082 Phase 4).
+func TestEventSubprocessSubprocessLevelInterrupt(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	cp, innerJT, afterJT := subprocessEventSubProcess(t)
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if jobGone(t, h.store, innerJT) {
+		t.Fatal("inner job missing while the subprocess runs")
+	}
+
+	p.PublishMessage("cancel", "k")
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle after publish: %v", err)
+	}
+	if !jobGone(t, h.store, innerJT) {
+		t.Error("inner job survived the subprocess-level interrupt (should be canceled)")
+	}
+	if jobGone(t, h.store, afterJT) {
+		t.Fatal("the flow after the subprocess did not continue (after job missing)")
+	}
+	if pi, _ := counts(t, h.store); pi != 1 {
+		t.Fatalf("instance count = %d, want 1 (only the subprocess was interrupted, not the instance)", pi)
+	}
+
+	p.CompleteJob(activatableJobs(t, h.store, afterJT)[0])
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle after complete: %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after outer flow completes: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+}
+
+// TestEventSubprocessSubprocessDisarmOnCompletion completes an embedded subprocess normally
+// while its event subprocess is armed: the trigger is disarmed as the subprocess drains,
+// the outer flow runs on, and a late message is inert (ADR-0082 Phase 4).
+func TestEventSubprocessSubprocessDisarmOnCompletion(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	cp, innerJT, afterJT := subprocessEventSubProcess(t)
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	// Complete the inner task normally: the subprocess drains (disarming its trigger) and
+	// the outer `after` task activates.
+	p.CompleteJob(activatableJobs(t, h.store, innerJT)[0])
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle after inner: %v", err)
+	}
+	if jobGone(t, h.store, afterJT) {
+		t.Fatal("outer `after` task did not activate after the subprocess completed")
+	}
+	// A message now must not resurrect the disarmed event subprocess.
+	p.PublishMessage("cancel", "k")
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle after late publish: %v", err)
+	}
+	p.CompleteJob(activatableJobs(t, h.store, afterJT)[0])
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle after after: %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after normal completion: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+}
+
+// TestEventSubprocessSubprocessInterruptRecovers arms a subprocess-scoped event subprocess,
+// parks, crashes, and recovers: the armed subscription (scoped to the subprocess) rebuilds
+// so a message after restart still interrupts only the subprocess and the outer flow
+// continues (ADR-0082 Phase 4).
+func TestEventSubprocessSubprocessInterruptRecovers(t *testing.T) {
+	dir := t.TempDir()
+	cp, innerJT, afterJT := subprocessEventSubProcess(t)
+	clk := &manualClock{}
+
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clk)
+	p1.Deploy(cp)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.CreateInstance(cp.Key)
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle 1: %v", err)
+	}
+	if jobGone(t, h1.store, innerJT) {
+		t.Fatal("inner job missing before crash")
+	}
+	h1.close(t)
+
+	h2 := openHarness(t, dir)
+	defer h2.close(t)
+	p2 := engine.New(1, h2.log, h2.store, clk)
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2: %v", err)
+	}
+	p2.PublishMessage("cancel", "k")
+	if err := p2.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle 2: %v", err)
+	}
+	if !jobGone(t, h2.store, innerJT) {
+		t.Error("inner job survived the recovered subprocess-level interrupt")
+	}
+	if jobGone(t, h2.store, afterJT) {
+		t.Fatal("outer flow did not continue after the recovered interrupt")
+	}
+	p2.CompleteJob(activatableJobs(t, h2.store, afterJT)[0])
+	if err := p2.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle after complete: %v", err)
+	}
+	if pi, ei := counts(t, h2.store); pi != 0 || ei != 0 {
+		t.Fatalf("after recovery completion: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+}

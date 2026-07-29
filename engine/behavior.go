@@ -1931,6 +1931,11 @@ func (subProcessBehavior) OnActivated(c *ProcessingContext, key uint64, ei *mode
 		c.AppendElementCommand(key, model.IntentCompleting, *ei)
 		return
 	}
+	// Arm this subprocess scope's event subprocesses (ADR-0082 Phase 4) — the analog of
+	// arming the root's at instance creation. They are disarmed when this scope completes
+	// (completeScope) or is torn down by an interrupt (terminateScope terminates every
+	// element scoped under it, triggers included).
+	armEventSubprocesses(c, ei.ProcessInstanceKey, ei.ProcessDefKey, key, cp.EventSubprocesses(ei.ElementId))
 	for _, startID := range starts {
 		node := cp.Node(startID)
 		k := c.NewKey()
