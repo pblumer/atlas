@@ -67,6 +67,7 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 		MessageName    string `json:"messageName"`
 		CorrelationKey string `json:"correlationKey"`
 		Enabled        *bool  `json:"enabled"`
+		StartFromTip   *bool  `json:"startFromTip"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -94,10 +95,17 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 	if p.Enabled != nil {
 		enabled = *p.Enabled
 	}
+	// Forward-only by default: a new watch skips the subject's backlog rather than
+	// replaying it into one process per historical event (ADR-0075). An operator who
+	// wants to backfill the whole history sets startFromTip:false explicitly.
+	startFromTip := true
+	if p.StartFromTip != nil {
+		startFromTip = *p.StartFromTip
+	}
 	rec := inboundSubscription{
 		ID: id, ConnectorID: connID, WatchedSubject: subject, Recursive: p.Recursive,
 		MessageName: messageName, CorrelationKey: corr, Enabled: enabled,
-		CreatedAt: time.Now().Unix(),
+		StartFromTip: startFromTip, CreatedAt: time.Now().Unix(),
 	}
 	var (
 		notClio bool
@@ -142,6 +150,7 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 		MessageName    *string `json:"messageName"`
 		CorrelationKey *string `json:"correlationKey"`
 		Enabled        *bool   `json:"enabled"`
+		StartFromTip   *bool   `json:"startFromTip"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -182,6 +191,9 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 		}
 		if p.Enabled != nil {
 			rec.Enabled = *p.Enabled
+		}
+		if p.StartFromTip != nil {
+			rec.StartFromTip = *p.StartFromTip
 		}
 		saveErr = s.inboundSubs.save(rec)
 	})

@@ -62,6 +62,10 @@ func (s *Server) pollInbound(ctx context.Context) {
 	s.do(func() { subs = s.resolveInboundSubs() })
 
 	for _, sb := range subs {
+		if sb.rec.StartFromTip && !sb.rec.Primed {
+			s.primeInbound(ctx, sb) // skip the backlog to the tip, publishing nothing
+			continue
+		}
 		events, err := sb.client.ReadEvents(ctx, clio.ReadEventsRequest{
 			Subject:   sb.rec.WatchedSubject,
 			AfterID:   sb.rec.LastEventID,
@@ -95,6 +99,56 @@ func (s *Server) pollInbound(ctx context.Context) {
 			s.advanceInboundCursor(subID, lastID)
 		})
 	}
+}
+
+// inboundPrimeBatch is the page size the priming path reads while skipping a
+// forward-only subscription's backlog. It is larger than the live cap because
+// priming publishes nothing (no run-loop work per event), so a big page just
+// advances the cursor toward the tip faster; a backlog larger than one page is
+// primed across several polls, one page each.
+const inboundPrimeBatch = 4096
+
+// primeInbound advances a forward-only (StartFromTip) subscription's resume cursor
+// past the subject's existing backlog WITHOUT republishing it, so enabling a watch
+// on a subject that already has history does not start a process per historical
+// event (the reported /employees flood, ADR-0075). It reads one bounded page off the
+// run loop; a short page means the tip is reached and the subscription is marked
+// primed, after which pollInbound publishes new events normally. Publishing nothing
+// here means a lost cursor update is harmless — a re-prime simply skips again.
+func (s *Server) primeInbound(ctx context.Context, sb pendingSub) {
+	events, err := sb.client.ReadEvents(ctx, clio.ReadEventsRequest{
+		Subject:   sb.rec.WatchedSubject,
+		AfterID:   sb.rec.LastEventID,
+		Recursive: sb.rec.Recursive,
+		Limit:     inboundPrimeBatch,
+	})
+	if err != nil {
+		return // transient read failure; retry next tick
+	}
+	var lastID string
+	if len(events) > 0 {
+		lastID = events[len(events)-1].ID
+	}
+	caughtUp := len(events) < inboundPrimeBatch // a short (or empty) page reached the tip
+	subID := sb.rec.ID
+	s.do(func() { s.markInboundPrimed(subID, lastID, caughtUp) })
+}
+
+// markInboundPrimed persists one priming step: it advances the resume cursor to the
+// last skipped event (when the page carried any) and sets Primed once the backlog is
+// exhausted. It runs on the run loop (the store's owner).
+func (s *Server) markInboundPrimed(subID, lastEventID string, primed bool) {
+	rec, ok, err := s.inboundSubs.get(subID)
+	if err != nil || !ok {
+		return
+	}
+	if lastEventID != "" {
+		rec.LastEventID = lastEventID
+	}
+	if primed {
+		rec.Primed = true
+	}
+	_ = s.inboundSubs.save(rec)
 }
 
 // resolveInboundSubs loads the enabled subscriptions whose connector is an enabled
