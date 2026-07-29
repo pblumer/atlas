@@ -1710,53 +1710,36 @@ type instanceSummaryRow struct {
 	LatestCompletedAt int64  `json:"latestCompletedAt"`
 }
 
-// handleInstancesSummary returns per-definition instance counts (active and completed,
-// plus the newest completion time) via count-only scans — no per-instance element or
-// variable enrichment. It is what lets the operations overview show one running/finished
-// row per process without the list endpoint's cost of enriching and shipping every
-// instance, so the overview stays responsive even when one definition has a very large
-// number of instances (the reported flood).
+// handleInstancesSummary returns per-definition instance counts (active and finished,
+// plus the last-activity time) read from the maintained O(1) counters — one point read
+// per deployed definition, no instance scan (ADR-0083, extending ADR-0080). This is
+// what keeps the operations overview responsive even when a definition has hundreds of
+// thousands of instances: the earlier scan-based version blocked the single-writer loop
+// on every load (the reported flood), and draining active instances into the history
+// only moved that cost rather than removing it.
 func (s *Server) handleInstancesSummary(w http.ResponseWriter, _ *http.Request) {
-	byDef := map[uint64]*instanceSummaryRow{}
-	var scanErr error
+	var out []instanceSummaryRow
 	s.do(func() {
-		row := func(defKey uint64) *instanceSummaryRow {
-			r, ok := byDef[defKey]
-			if !ok {
-				r = &instanceSummaryRow{ProcessDefKey: defKey}
-				if d, ok := s.deployments[defKey]; ok {
-					r.ProcessID = d.ProcessID
-					r.Version = d.Version
-				}
-				byDef[defKey] = r
-			}
-			return r
+		out = make([]instanceSummaryRow, 0, len(s.order))
+		for _, key := range s.order {
+			d := s.deployments[key]
+			// Each is one O(1) point read of a maintained counter (ADR-0083/0080); the
+			// only failure mode is a catastrophic store error, and this is a display
+			// aggregate — a counter that cannot be read is shown as 0 rather than failing
+			// the whole overview.
+			active, _ := s.store.DefInstanceCount(key)
+			completed, _ := s.store.DefCompletedCount(key)
+			lastAct, _ := s.store.DefLastActivity(key)
+			out = append(out, instanceSummaryRow{
+				ProcessDefKey:     key,
+				ProcessID:         d.ProcessID,
+				Version:           d.Version,
+				Active:            active,
+				Completed:         completed,
+				LatestCompletedAt: lastAct,
+			})
 		}
-		scanErr = s.store.ActiveProcessInstances(func(_ uint64, v *model.ProcessInstanceValue) error {
-			row(v.ProcessDefKey).Active++
-			return nil
-		})
-		if scanErr != nil {
-			return
-		}
-		scanErr = s.store.CompletedProcessInstances(func(_ uint64, v *model.ProcessInstanceValue) error {
-			r := row(v.ProcessDefKey)
-			r.Completed++
-			if v.CompletedAt > r.LatestCompletedAt {
-				r.LatestCompletedAt = v.CompletedAt
-			}
-			return nil
-		})
 	})
-	if scanErr != nil {
-		writeError(w, http.StatusInternalServerError, "summarize instances: "+scanErr.Error())
-		return
-	}
-	out := make([]instanceSummaryRow, 0, len(byDef))
-	for _, r := range byDef {
-		out = append(out, *r)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ProcessDefKey < out[j].ProcessDefKey })
 	writeJSON(w, http.StatusOK, out)
 }
 

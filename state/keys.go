@@ -36,6 +36,8 @@ const (
 	cfDefInstanceCount       columnFamily = 0x17 // defInst:<procDefKey> → int64 active-instance count (merge, ADR-0080)
 	cfElementTokenCount      columnFamily = 0x18 // elTok:<procDefKey>:<elementId> → int64 live-token count (merge, ADR-0080)
 	cfElementVisitAgg        columnFamily = 0x19 // elVisAgg:<procDefKey>:<elementId> → int64 cumulative visits (merge, ADR-0080)
+	cfDefCompletedCount      columnFamily = 0x1A // defDone:<procDefKey> → int64 finished-instance count (merge, ADR-0083)
+	cfDefLastActivity        columnFamily = 0x1B // defAct:<procDefKey> → int64 unix-nano of the latest instance event (set, ADR-0083)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -44,6 +46,25 @@ const (
 // (invariant I1), and read in O(1) instead of scanning every instance (ADR-0080).
 func keyDefInstanceCount(procDefKey uint64) []byte {
 	return appendBE64([]byte{byte(cfDefInstanceCount)}, procDefKey)
+}
+
+// keyDefCompletedCount keys a definition's finished-instance counter (completed or
+// terminated). A point key, maintained as a monotonic merge (+1 on each terminal
+// event, never decremented — there is no un-finishing), so the instances-summary
+// "finished" column reads in O(1) instead of scanning the whole history, which does
+// not shrink when active instances are drained into it (ADR-0083, extending ADR-0080).
+func keyDefCompletedCount(procDefKey uint64) []byte {
+	return appendBE64([]byte{byte(cfDefCompletedCount)}, procDefKey)
+}
+
+// keyDefLastActivity keys a definition's last-activity timestamp: the unix-nano of
+// the most recent instance lifecycle event (start or finish) of any of its instances.
+// A point key written by overwrite — the processor's event timestamps are non-
+// decreasing in log order, so the last write is the latest and replay rebuilds it
+// identically (invariant I4); read in O(1) for the summary's "last activity" column
+// (ADR-0083).
+func keyDefLastActivity(procDefKey uint64) []byte {
+	return appendBE64([]byte{byte(cfDefLastActivity)}, procDefKey)
 }
 
 // runtimeCountPrefix scans every per-element counter of one definition (its live

@@ -89,6 +89,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0080](0080-native-mail-providers.md) | Native Gmail and Microsoft Graph mail providers — OAuth2 (app-only + refresh-token) behind the mail.Client seam, credential bundle in the vault | Accepted |
 | [0081](0081-community-marketplace-for-connectors-and-tasks.md) | A community marketplace for connectors, service tasks, and script tasks | Proposed |
 | [0082](0082-singleton-message-start.md) | Singleton message start — at most one live instance per correlation key | Accepted |
+| [0083](0083-o1-instance-summary.md) | An O(1) instances summary — per-definition finished-count and last-activity counters | Accepted |
 
 ## Status values
 

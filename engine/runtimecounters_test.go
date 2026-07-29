@@ -1,12 +1,14 @@
 package engine_test
 
 import (
+	"path/filepath"
 	"reflect"
 	"testing"
 
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
+	"github.com/pblumer/atlas/wal"
 )
 
 // TestRuntimeCountersAgreeAndRecover proves the ADR-0080 runtime aggregate
@@ -136,5 +138,56 @@ func TestRuntimeCountersReturnToZeroOnCompletion(t *testing.T) {
 	}
 	if visits == 0 {
 		t.Fatal("visit heatmap should persist after completion")
+	}
+}
+
+// TestSummaryCountersCompletionAndRecovery covers the ADR-0083 summary counters: a
+// completing instance bumps its definition's finished count and last-activity, and
+// both rebuild identically when the log is replayed into a fresh store (I4/I6).
+func TestSummaryCountersCompletionAndRecovery(t *testing.T) {
+	dir := t.TempDir()
+	cp := scriptProcess(t, "1 < 2", "flag") // start → script → end, runs to completion
+	clock := &manualClock{}
+
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clock)
+	p1.Deploy(cp)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.CreateInstance(cp.Key)
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	if n, err := h1.store.DefCompletedCount(cp.Key); err != nil || n != 1 {
+		t.Fatalf("finished count after completion = %d (err %v), want 1", n, err)
+	}
+	act, err := h1.store.DefLastActivity(cp.Key)
+	if err != nil || act == 0 {
+		t.Fatalf("last activity = %d (err %v), want > 0", act, err)
+	}
+	h1.close(t)
+
+	// Replay the log into a fresh, empty store: the counters rebuild from the events.
+	log2, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	if err != nil {
+		t.Fatalf("wal.Open 2: %v", err)
+	}
+	store2, err := state.Open(filepath.Join(dir, "state2"))
+	if err != nil {
+		t.Fatalf("state.Open 2: %v", err)
+	}
+	defer func() { _ = store2.Close(); _ = log2.Close() }()
+	p2 := engine.New(1, log2, store2, clock)
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2 (replay): %v", err)
+	}
+	if n, _ := store2.DefCompletedCount(cp.Key); n != 1 {
+		t.Fatalf("replayed finished count = %d, want 1", n)
+	}
+	if a, _ := store2.DefLastActivity(cp.Key); a != act {
+		t.Fatalf("replayed last activity = %d, want %d", a, act)
 	}
 }

@@ -21,8 +21,12 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 				return err
 			}
 			// Maintain the per-definition active-instance counter so the runtime view
-			// reads it in O(1) rather than scanning every instance (ADR-0080).
+			// reads it in O(1) rather than scanning every instance (ADR-0080), and the
+			// last-activity timestamp for the instances summary (ADR-0083).
 			if err := tx.IncDefInstanceCount(v.process.ProcessDefKey); err != nil {
+				return err
+			}
+			if err := tx.SetDefLastActivity(v.process.ProcessDefKey, h.Timestamp); err != nil {
 				return err
 			}
 			// A message-start instance carries the correlation key it began with; count
@@ -52,6 +56,14 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 				return err
 			}
 			if err := tx.DecDefInstanceCount(v.process.ProcessDefKey); err != nil {
+				return err
+			}
+			// A finished instance moves into the history; count it and stamp the
+			// definition's last activity so the summary reads both in O(1) (ADR-0083).
+			if err := tx.IncDefCompletedCount(v.process.ProcessDefKey); err != nil {
+				return err
+			}
+			if err := tx.SetDefLastActivity(v.process.ProcessDefKey, h.Timestamp); err != nil {
 				return err
 			}
 			// Releasing a message-start instance re-opens its correlation key so a
