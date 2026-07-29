@@ -207,7 +207,10 @@ const TOPNAV = {
     { name: "Logs", route: "#/console/logs" },
     { name: "Organization", route: "#/console/org" },
   ],
-  modeler: [{ name: "Home", route: "#/modeler" }],
+  modeler: [
+    { name: "Home", route: "#/modeler" },
+    { name: "Marketplace", route: "#/modeler/marketplace" },
+  ],
   operations: [
     { name: "Instances", route: "#/operations" },
     { name: "Decisions", route: "#/operations/decisions" },
@@ -2992,6 +2995,134 @@ function setTitle(label) {
 // routeTitle derives a tab title from the route alone (set immediately on navigation).
 // Views with a dynamic subject — a diagram, an instance, a decision — refine it once
 // their data loads (see setTitle calls in the editor/live/replay mounts).
+// viewMarketplace is the community marketplace gallery (ADR-0081): browse the
+// curated catalog of connectors, service tasks and script tasks and install one
+// into this server's template store. The trust split is the load-bearing UI
+// signal — a data-only connector/service task installs in one click ("Data only"),
+// while a script task carries code, so it reads "Runs code" and installs through a
+// review affordance (and is admin-gated server-side). No secret ever travels in a
+// shared package.
+async function viewMarketplace() {
+  view.innerHTML = `
+    <div class="between">
+      <h1>Marketplace</h1>
+      <button class="btn neutral" id="mkt-refresh">Refresh</button>
+    </div>
+    <p class="muted">Connectors, service tasks and scripts the community already built,
+    packaged as element templates. Install one and it lands in your palette ready to
+    configure. Data-only connectors install in a click; a script task carries code, so it
+    is imported for review. Credentials never travel in a shared package — you connect
+    those on your server.</p>
+    <div class="ops-toolbar">
+      <input id="mkt-q" class="filter-input" type="search" placeholder="Search connectors, tasks and scripts…" aria-label="Search the marketplace">
+      <div class="seg" id="mkt-kinds" role="tablist">
+        <button class="active" data-kind="" role="tab">All</button>
+        <button data-kind="connector" role="tab">Connectors</button>
+        <button data-kind="service-task" role="tab">Service tasks</button>
+        <button data-kind="script-task" role="tab">Script tasks</button>
+      </div>
+    </div>
+    <div id="mkt-grid" class="mkt-grid"><div class="card empty">Loading…</div></div>`;
+
+  const grid = document.getElementById("mkt-grid");
+  const kindLabel = { "connector": "Connector", "service-task": "Service task", "script-task": "Script task" };
+  let packages = [];
+  let installed = new Set();
+  let kind = "";
+
+  const render = () => {
+    const q = document.getElementById("mkt-q").value.trim().toLowerCase();
+    const list = packages.filter((p) => {
+      if (kind && p.kind !== kind) return false;
+      if (q && !(`${p.title} ${p.description} ${p.author}`).toLowerCase().includes(q)) return false;
+      return true;
+    });
+    if (!list.length) {
+      grid.innerHTML = `<div class="card empty">Nothing matches. Try another term or tab.</div>`;
+      return;
+    }
+    grid.innerHTML = list.map((p) => {
+      const isInstalled = installed.has(p.id);
+      const trust = p.carriesCode
+        ? '<span class="pill warn"><span class="dot"></span>Runs code</span>'
+        : '<span class="pill ok"><span class="dot"></span>Data only</span>';
+      const action = isInstalled
+        ? `<button class="btn ghost danger" data-act="uninstall" data-id="${esc(p.id)}">Remove</button>`
+        : p.carriesCode
+          ? `<button class="btn neutral" data-act="install" data-id="${esc(p.id)}">Review &amp; install</button>`
+          : `<button class="btn" data-act="install" data-id="${esc(p.id)}">Install</button>`;
+      const installedTag = isInstalled ? '<span class="pill ok"><span class="dot"></span>Installed</span>' : "";
+      return `<div class="mkt-card card">
+        <div class="mkt-head">
+          <div class="mkt-title">
+            <h3>${esc(p.title)}</h3>
+            <div class="muted mkt-author">${esc(p.author)}</div>
+          </div>
+          <span class="chip">${esc(kindLabel[p.kind] || p.kind)}</span>
+        </div>
+        <p class="mkt-desc">${esc(p.description)}</p>
+        <div class="mkt-meta">
+          <span class="chip">v${esc(p.version)}</span>
+          <span class="chip">Atlas ${esc(p.engineCompat)}</span>
+          ${trust}
+          ${installedTag}
+        </div>
+        <div class="mkt-foot">${action}</div>
+      </div>`;
+    }).join("");
+  };
+
+  const load = async () => {
+    grid.innerHTML = `<div class="card empty">Loading…</div>`;
+    try {
+      const [pkgs, inst] = await Promise.all([
+        api("GET", "/api/v1/marketplace/packages"),
+        api("GET", "/api/v1/marketplace/installed"),
+      ]);
+      packages = pkgs || [];
+      installed = new Set((inst || []).map((r) => r.id));
+      render();
+    } catch (e) {
+      grid.innerHTML = `<div class="card empty">${esc(e.message)}</div>`;
+    }
+  };
+
+  grid.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+    const id = btn.dataset.id;
+    const pkg = packages.find((p) => p.id === id);
+    const name = pkg ? pkg.title : "Package";
+    btn.disabled = true;
+    try {
+      if (btn.dataset.act === "install") {
+        const res = await api("POST", `/api/v1/marketplace/packages/${encodeURIComponent(id)}/install`);
+        installed.add(id);
+        toast(res && res.reviewRequired ? `${name} imported for review` : `${name} installed`, "ok");
+      } else {
+        await api("DELETE", `/api/v1/marketplace/installed/${encodeURIComponent(id)}`);
+        installed.delete(id);
+        toast(`${name} removed`, "ok");
+      }
+      render();
+    } catch (err) {
+      toast(err.message, "err");
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById("mkt-q").addEventListener("input", render);
+  document.getElementById("mkt-kinds").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-kind]");
+    if (!b) return;
+    kind = b.dataset.kind;
+    document.querySelectorAll("#mkt-kinds button").forEach((x) => x.classList.toggle("active", x === b));
+    render();
+  });
+  document.getElementById("mkt-refresh").addEventListener("click", load);
+  await load();
+}
+
 function routeTitle(path) {
   const opsInst = path.match(/^#\/operations\/i\/(\d+)$/);
   if (opsInst) return `Instance ${opsInst[1]} · Operations`;
@@ -3006,6 +3137,7 @@ function routeTitle(path) {
     [/^#\/modeler\/dmn\//, "Decision · Modeler"],
     [/^#\/modeler\/(d|draft)\//, "Diagram · Modeler"],
     [/^#\/modeler\/p\//, "Project · Modeler"],
+    [/^#\/modeler\/marketplace$/, "Marketplace · Modeler"],
     [/^#\/modeler$/, "Modeler"],
     [/^#\/tasks\/start$/, "Start a process · Tasks"],
     [/^#\/tasks\/t\//, "Task · Tasks"],
@@ -3056,6 +3188,7 @@ async function route() {
     if (path === "#/console/logs") return await viewConsoleLogs();
     if (path === "#/console/org") return await viewConsoleOrg();
     if (path === "#/modeler") return await viewModelerHome();
+    if (path === "#/modeler/marketplace") return await viewMarketplace();
     const pd = path.match(/^#\/modeler\/p\/(.+)$/);
     if (pd) return await viewProjectDetail(decodeURIComponent(pd[1]));
     const dnew = path.match(/^#\/modeler\/new(?:\/p\/(.+))?$/);
