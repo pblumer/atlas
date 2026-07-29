@@ -1034,14 +1034,16 @@ func hasIOMappings(cp *compiler.CompiledProcess, elementId int32) bool {
 
 // ioResultScope returns the scope an activity's result variables are written to: its
 // activity-local scope (the element-instance key) when it has output mappings, so
-// the mappings can read the raw result before it is dropped; otherwise the process
-// scope, preserving the pre-ADR-0068 behaviour of merging a result straight into
-// the instance (ADR-0068).
+// the mappings can read the raw result before it is dropped; otherwise the
+// activity's enclosing (flow) scope — the process instance for a top-level activity,
+// or the subprocess for one nested inside it, so an inner result stays local to its
+// subprocess rather than leaking to the process root (ADR-0068/0074). For a
+// top-level activity FlowScopeKey == ProcessInstanceKey, so this is unchanged there.
 func ioResultScope(cp *compiler.CompiledProcess, elementKey uint64, ei *model.ElementInstanceValue) uint64 {
 	if cp.Node(ei.ElementId).IOOutCount > 0 {
 		return elementKey
 	}
-	return ei.ProcessInstanceKey
+	return ei.FlowScopeKey
 }
 
 // applyInputMappings evaluates an activating activity's zeebe:ioMapping inputs and
@@ -1762,6 +1764,12 @@ func (subProcessBehavior) OnActivated(c *ProcessingContext, key uint64, ei *mode
 }
 
 func (subProcessBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	// A subprocess is a scope: its locals (input mappings, and the results inner
+	// activities wrote into it) are dropped when it completes, so only an explicit
+	// output mapping escapes. A subprocess *with* output mappings was already
+	// drained by handleElementCompleting (after promoting), so this is a no-op there;
+	// one without mappings is drained here (ADR-0074).
+	dropLocalScope(c, key)
 	completeAndTakeFlows(c, key, ei)
 }
 

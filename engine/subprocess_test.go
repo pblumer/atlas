@@ -170,11 +170,9 @@ func TestSubProcessIOMappingScopesVariables(t *testing.T) {
 	}
 
 	root := model.NewKey(1, 1)
-	// The inner script saw the input-mapped subprocess-local (innerVal = 6).
-	if got := readVar(t, h.store, root, "innerEcho"); got == nil || got.Text != "6" {
-		t.Errorf("innerEcho = %v, want 6 (inner node saw the input-mapped local)", got)
-	}
-	// The output mapping promoted a subprocess-local value to the process scope.
+	// The output mapping promoted a subprocess-local value to the process scope —
+	// which also proves the inner script saw the input-mapped local (promoted =
+	// innerVal * 100 = 600).
 	if got := readVar(t, h.store, root, "promoted"); got == nil || got.Text != "600" {
 		t.Errorf("promoted = %v, want 600 (output mapping promoted out)", got)
 	}
@@ -182,6 +180,55 @@ func TestSubProcessIOMappingScopesVariables(t *testing.T) {
 	// never leaked to the process root.
 	if got := readVar(t, h.store, root, "innerVal"); got != nil {
 		t.Errorf("innerVal = %v at root, want nil (subprocess-local, dropped)", got)
+	}
+	// The inner script's own result is written to its enclosing (subprocess) scope,
+	// not the process root, so it too is dropped when the subprocess completes — only
+	// an explicit output mapping escapes (ADR-0074).
+	if got := readVar(t, h.store, root, "innerEcho"); got != nil {
+		t.Errorf("innerEcho = %v at root, want nil (inner result is subprocess-local, not leaked)", got)
+	}
+}
+
+// TestSubProcessInnerResultStaysLocal checks that an inner activity's result does
+// not leak to the process root even when the subprocess itself has no I/O mappings:
+// it is written to the subprocess scope and dropped when the subprocess completes,
+// so only explicitly output-mapped values escape (ADR-0074).
+func TestSubProcessInnerResultStaysLocal(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	b := compiler.NewBuilder(defKey, "sublocal", 1)
+	start := b.AddStartEvent()
+	sub := b.AddSubProcess() // no I/O mappings on the subprocess
+	b.PushScope(sub)
+	iStart := b.AddStartEvent()
+	iTask := b.AddScriptTask(mustCompile(t, `"checked"`), "innerResult")
+	iEnd := b.AddEndEvent()
+	b.Connect(iStart, iTask)
+	b.Connect(iTask, iEnd)
+	b.PopScope()
+	end := b.AddEndEvent()
+	b.Connect(start, sub)
+	b.Connect(sub, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after run: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+	if got := readVar(t, h.store, model.NewKey(1, 1), "innerResult"); got != nil {
+		t.Errorf("innerResult = %v at root, want nil (inner result is subprocess-local, dropped on completion)", got)
 	}
 }
 

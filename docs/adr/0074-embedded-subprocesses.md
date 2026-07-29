@@ -62,7 +62,11 @@
 > local scope is dropped on completion so scratch data never leaks. Verified: an input
 > mapping's value is visible to an inner script and does not leak to the process root,
 > an output mapping promotes a subprocess-local value out, and a subprocess nested
-> inside another runs to completion. The Modeler exposes the generic zeebe:ioMapping
+> inside another runs to completion. An inner activity's result variable is written
+> to its *enclosing* scope (`ioResultScope` returns `FlowScopeKey`, not the process
+> instance), so a result produced inside a subprocess stays local to it and is
+> dropped when the subprocess completes — only an explicit output mapping escapes to
+> the process scope. The Modeler exposes the generic zeebe:ioMapping
 > editor for a subprocess (the same one tasks use, reused as-is — `bpmn:SubProcess`
 > is already in the moddle's `IoMapping.allowedIn`), with no task-type selector.
 
