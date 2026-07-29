@@ -112,6 +112,19 @@ const RestJobType = "io.atlas.http.rest"
 // process, the same way the DMN worker uses DMNJobTypeIndex (ADR-0067).
 const RestJobTypeIndex int32 = 4
 
+// MailJobType is the reserved job type an outbound mail connector task carries.
+// The in-process mail connector worker subscribes to it to send the model-authored
+// message through a server-registered mail provider off the hot path (ADR-0079),
+// the same way the clio worker subscribes to ClioWriteJobType.
+const MailJobType = "io.atlas.mail.send"
+
+// MailJobTypeIndex is the interned index MailJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it eleventh (after the ten job types
+// above), so it is always 10. This lets a single in-process mail worker subscribe by
+// one global index across every deployed process, the same way the REST worker uses
+// RestJobTypeIndex (ADR-0067/0078).
+const MailJobTypeIndex int32 = 10
+
 // TemisDecisionJobType is the reserved job type a *central* business rule task
 // carries — one whose decision is evaluated by a remote temis service rather than
 // the embedded temis library. The in-process temis decision connector worker
@@ -196,6 +209,7 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 	b.intern(ClioWriteJobType)     // reserve ClioWriteJobTypeIndex == 7
 	b.intern(ClioQueryJobType)     // reserve ClioQueryJobTypeIndex == 8
 	b.intern(ClioReadJobType)      // reserve ClioReadJobTypeIndex == 9
+	b.intern(MailJobType)          // reserve MailJobTypeIndex == 10
 	return b
 }
 
@@ -572,6 +586,53 @@ func (b *Builder) internAuth(a RestAuth) int32 {
 	}
 	raw, _ := json.Marshal(a) // a fixed struct of strings always marshals
 	return b.intern(string(raw))
+}
+
+// MailConfig is the deploy-time configuration of an outbound mail connector task
+// (ADR-0079). Connector names the server-registered mail provider (its host and
+// credentials live server-side, never in the model); To/Cc/Bcc/From/Subject/Body
+// carry literal-or-FEEL values (the parser compiles the FEEL ones) evaluated over
+// the instance's variables at send time. To and Subject/Body are the message; Cc,
+// Bcc and From are optional (a zero RestExpr means unset).
+type MailConfig struct {
+	Connector string
+	To        RestExpr
+	Cc        RestExpr
+	Bcc       RestExpr
+	From      RestExpr
+	Subject   RestExpr
+	Body      RestExpr
+	Retries   int32
+}
+
+// AddMailConnectorTask adds an outbound mail connector task and returns its element
+// id. Like a service task it creates a job on activation and waits; the job carries
+// the reserved MailJobType so the in-process mail worker picks it up, evaluates any
+// FEEL recipient/subject/body values over the instance's variables, resolves the
+// named connector's provider client, sends the message, and completes the job
+// (ADR-0079). The provider endpoint and credentials are resolved server-side from
+// the named connector, never authored in the model — mirroring clio (ADR-0036).
+func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:     b.intern(MailJobType),
+		Connector:   b.intern(cfg.Connector),
+		Subject:     -1, // not a clio task
+		EventType:   -1,
+		ClioQuery:   -1,
+		ReduceSpec:  -1,
+		Method:      -1, // not a REST task
+		ResultVar:   -1, // mail sends, it produces no result variable
+		Auth:        -1,
+		To:          cfg.To,
+		Cc:          cfg.Cc,
+		Bcc:         cfg.Bcc,
+		From:        cfg.From,
+		MailSubject: cfg.Subject,
+		Body:        cfg.Body,
+		Retries:     cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
 }
 
 // AddUserTask adds a user task that parks a token and creates a job for a human

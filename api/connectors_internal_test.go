@@ -199,6 +199,112 @@ func TestConnectorUpdateFields(t *testing.T) {
 	}
 }
 
+// TestMailConnectorValidationAndCreate covers the create endpoint's mail-specific
+// input checks and a successful mail connector create (ADR-0079).
+func TestMailConnectorValidationAndCreate(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	h := srv.Handler()
+	post := func(body string) (int, connector) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/connectors", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		var c connector
+		_ = json.Unmarshal(rec.Body.Bytes(), &c)
+		return rec.Code, c
+	}
+	if code, _ := post(`{"name":"m1","kind":"mail","endpoint":"smtp.example.com:587"}`); code != http.StatusBadRequest {
+		t.Error("mail without sender: want 400")
+	}
+	if code, _ := post(`{"name":"m2","kind":"mail","endpoint":"smtp.example.com:587","sender":"bot@x","provider":"gmail-api"}`); code != http.StatusBadRequest {
+		t.Error("mail with an unsupported provider: want 400")
+	}
+	code, c := post(`{"name":"office365","kind":"mail","endpoint":"smtp.office365.com:587","sender":"bot@example.com","credentialsRef":"o365_pw"}`)
+	if code != http.StatusOK {
+		t.Fatalf("valid mail create: want 200, got %d", code)
+	}
+	if c.Kind != "mail" || c.Provider != mailProviderSMTP || c.Sender != "bot@example.com" {
+		t.Errorf("mail record = %+v, want kind mail, provider smtp, sender set", c)
+	}
+}
+
+// TestMailConnectorLifecycle drives a mail connector through the full Console
+// management surface — create, sender update, list, delete — so the create branch
+// (mail kind), the sender-update branch, and the mail arm of the registry rebuild
+// are all exercised end to end (ADR-0079).
+func TestMailConnectorLifecycle(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	h := srv.Handler()
+	do := func(method, path, body string) (int, []byte) {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code, rec.Body.Bytes()
+	}
+	code, b := do(http.MethodPost, "/api/v1/connectors",
+		`{"name":"office365","kind":"mail","endpoint":"smtp.office365.com:587","sender":"bot@example.com","credentialsRef":"o365_pw"}`)
+	if code != http.StatusOK {
+		t.Fatalf("create mail connector: %d %s", code, b)
+	}
+	var c connector
+	_ = json.Unmarshal(b, &c)
+
+	// Update the sender (the mail-only field) — rebuilds the registry with the new value.
+	code, b = do(http.MethodPatch, "/api/v1/connectors/"+c.ID, `{"sender":"notifications@example.com"}`)
+	if code != http.StatusOK {
+		t.Fatalf("update mail sender: %d %s", code, b)
+	}
+	var up connector
+	_ = json.Unmarshal(b, &up)
+	if up.Sender != "notifications@example.com" {
+		t.Fatalf("sender after update = %q, want the new sender", up.Sender)
+	}
+
+	// The list shows the mail connector and never a secret value.
+	_, lb := do(http.MethodGet, "/api/v1/connectors", "")
+	if !strings.Contains(string(lb), `"kind":"mail"`) || strings.Contains(string(lb), "o365_pw_value") {
+		t.Fatalf("connector list = %s, want the mail connector and only the reference", lb)
+	}
+
+	// Delete it → the registry rebuilds without it.
+	if code, _ := do(http.MethodDelete, "/api/v1/connectors/"+c.ID, ""); code != http.StatusNoContent {
+		t.Fatalf("delete mail connector: want 204")
+	}
+}
+
+// TestBuildMailClients covers the managed-connector → SMTP client build: only enabled
+// records of kind "mail" with a non-empty endpoint and a supported provider become
+// clients; a disabled, non-mail, endpoint-less, or unknown-provider record is skipped.
+func TestBuildMailClients(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	_ = srv.connectors.save(connector{ID: "1", Name: "on", Kind: "mail", Endpoint: "smtp.a:587", Sender: "a@x", Enabled: true, CreatedAt: 1})
+	_ = srv.connectors.save(connector{ID: "2", Name: "off", Kind: "mail", Endpoint: "smtp.b:587", Sender: "b@x", Enabled: false, CreatedAt: 2})
+	_ = srv.connectors.save(connector{ID: "3", Name: "clio", Kind: "clio", Endpoint: "http://c", Enabled: true, CreatedAt: 3})
+	_ = srv.connectors.save(connector{ID: "4", Name: "noendpoint", Kind: "mail", Endpoint: "", Sender: "d@x", Enabled: true, CreatedAt: 4})
+	_ = srv.connectors.save(connector{ID: "5", Name: "future", Kind: "mail", Endpoint: "graph:0", Provider: "microsoft-graph", Enabled: true, CreatedAt: 5})
+
+	clients, err := srv.buildMailClients()
+	if err != nil {
+		t.Fatalf("buildMailClients: %v", err)
+	}
+	if len(clients) != 1 {
+		t.Fatalf("clients = %d, want 1 (only the enabled SMTP mail record)", len(clients))
+	}
+	if _, ok := clients["on"]; !ok {
+		t.Errorf("clients = %v, want the 'on' connector", clients)
+	}
+}
+
+// TestBuildMailClientsLoadError covers buildMailClients' store-read failure.
+func TestBuildMailClientsLoadError(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	srv.connectors = &connectorStore{dir: filepath.Join(t.TempDir(), "gone")}
+	if _, err := srv.buildMailClients(); err == nil {
+		t.Error("buildMailClients with a broken store: want error")
+	}
+}
+
 // TestConnectorStoreLoadAllOrdering exercises loadAll's sort comparator with
 // records that both differ in and share CreatedAt (the tie-break by id).
 func TestConnectorStoreLoadAllOrdering(t *testing.T) {

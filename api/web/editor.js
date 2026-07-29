@@ -1215,6 +1215,26 @@ const SERVICE_TASK_KINDS = [
       { key: "resultVariable", label: "Result variable", placeholder: "result", showIf: (v) => v.operation === "query" || v.operation === "read", hint: "The query result / events are written into this process variable." },
     ],
   },
+  {
+    id: "mail", name: "E-Mail Outbound Connector", desc: "Send an e-mail via a mail provider", icon: "M",
+    // An envelope on a warm amber tile reads "outbound mail" at a glance — the mail
+    // connector's counterpart to REST's globe and clio's event stream. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white envelope strokes.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#e5484d"/><rect x="3" y="4.6" width="10" height="6.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 5.2L8 8.6l4.6-3.4" fill="none" stroke="#fff" stroke-width="1.1"/></svg>`,
+    ext: "atlas:MailConnector",
+    fields: [
+      { group: "Mail provider" },
+      { key: "connector", label: "Connector", placeholder: "office365", hint: "Names a server-registered mail provider (its host, credentials, and default sender live on the server, never in the model)." },
+      { group: "Message" },
+      { key: "to", label: "To", placeholder: "ops@example.com, =customer.email", fx: true, hint: "Comma-separated recipients. A value may be a FEEL expression (fx)." },
+      { key: "cc", label: "Cc", placeholder: "team@example.com", fx: true },
+      { key: "bcc", label: "Bcc", placeholder: "audit@example.com", fx: true, hint: "Delivered but never shown in the message headers." },
+      { key: "from", label: "From", placeholder: "leave empty for the connector's default sender", fx: true },
+      { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true },
+      { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, hint: "Plain-text body. A value may be a FEEL expression (fx) composed over the instance's variables." },
+    ],
+  },
 ];
 
 // serviceTaskKind returns the catalog entry a service task currently represents,

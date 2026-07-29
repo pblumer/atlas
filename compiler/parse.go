@@ -965,7 +965,11 @@ type xmlServiceTask struct {
 	// Rest, when present, marks this service task an HTTP-REST connector task
 	// (ADR-0067). The pointer is nil when the <atlas:restConnector> extension is
 	// absent.
-	Rest          *xmlRestConnector          `xml:"extensionElements>restConnector"`
+	Rest *xmlRestConnector `xml:"extensionElements>restConnector"`
+	// Mail, when present, marks this service task an outbound mail connector task
+	// (ADR-0079). The pointer is nil when the <atlas:mailConnector> extension is
+	// absent.
+	Mail          *xmlMailConnector          `xml:"extensionElements>mailConnector"`
 	IOMapping     xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
 	MultiInstance *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
 	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
@@ -1019,6 +1023,23 @@ type xmlRestConnector struct {
 type xmlHTTPKV struct {
 	Name  string `xml:"name,attr"`
 	Value string `xml:"value,attr"`
+}
+
+// An outbound mail connector task's parameters, carried on a service task as an
+// <atlas:mailConnector connector="..." to="..." .../> extension element (ADR-0079).
+// connector names a server-registered mail provider (its host and credentials live
+// on the server, never in the model). to (required) is a comma-separated recipient
+// list; cc, bcc and from are optional; subject and body are the message. Every field
+// value is literal or, with a leading '=', a FEEL expression evaluated over the
+// instance's variables at send time (the fx toggle, ADR-0067).
+type xmlMailConnector struct {
+	Connector string `xml:"connector,attr"`
+	To        string `xml:"to,attr"`
+	Cc        string `xml:"cc,attr"`
+	Bcc       string `xml:"bcc,attr"`
+	From      string `xml:"from,attr"`
+	Subject   string `xml:"subject,attr"`
+	Body      string `xml:"body,attr"`
 }
 
 type xmlTaskDefinition struct {

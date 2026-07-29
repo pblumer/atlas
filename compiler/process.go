@@ -308,6 +308,19 @@ type ConnectorTaskDetail struct {
 	Query   []RestKV
 	Auth    int32
 	Retries int32
+	// Mail connector fields (JobType == MailJobType, ADR-0079). Connector (above)
+	// names the server-registered mail provider; the message is authored in the
+	// model as literal-or-FEEL values evaluated over the instance's variables at
+	// send time. To and Bcc/Cc are comma-separated recipient lists; From overrides
+	// the provider's default sender; MailSubject and Body are the message. Each is
+	// the zero RestExpr for a non-mail task. Cc/Bcc/From are also zero when a mail
+	// task omits them.
+	To          RestExpr
+	Cc          RestExpr
+	Bcc         RestExpr
+	From        RestExpr
+	MailSubject RestExpr
+	Body        RestExpr
 }
 
 // RestExpr is a REST connector field value that is either a literal string

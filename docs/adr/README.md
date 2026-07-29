@@ -85,6 +85,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0076](0076-call-activities.md) | Call activities (single-partition) — start a separate process as a child instance, linked by a caller key | Proposed |
 | [0075](0075-clio-inbound-event-bridge.md) | A clio inbound event bridge with engine-side idempotent delivery | Accepted |
 | [0078](0078-design-view-token-simulation.md) | Design-view token simulation — a client-side control-flow walkthrough | Accepted |
+| [0079](0079-outbound-mail-connector.md) | An outbound mail connector (SMTP first) — provider managed like clio, message model-authored like REST | Accepted |
 
 ## Status values
 
