@@ -141,7 +141,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  jsonBody("Initial variables", schemaObj(map[string]any{"variables": tObject()})),
 			resp: jsonBody("Created instance", tObject())}},
 		{"GET", "/api/v1/instances", s.handleListInstances, apiOp{
-			summary: "List active and finished instances", tag: "Instances", resp: jsonBody("Instances", tArray())}},
+			summary: "List active and finished instances — capped per call (?limit=, default 1000, max 10000); narrow to one definition with ?process=<key>; X-Instances-Truncated: true marks a capped page", tag: "Instances", resp: jsonBody("Instances", tArray())}},
+		{"GET", "/api/v1/instances/summary", s.handleInstancesSummary, apiOp{
+			summary: "Per-definition instance counts (active/completed) — lean count-only scan for the operations overview", tag: "Instances", resp: jsonBody("Instance summary", tArray())}},
 		{"GET", "/api/v1/instances/search", s.handleSearchInstances, apiOp{
 			summary: "Search instances by variable content — ?q=name=value (name exact, value substring) or free text over variable names and values", tag: "Instances",
 			resp: jsonBody("Matching instances", tArray())}},
@@ -168,6 +170,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Decision evaluations", tArray())}},
 		{"DELETE", "/api/v1/instances/{key}", s.handleCancelInstance, apiOp{
 			summary: "Cancel a running instance", tag: "Instances", resp: jsonBody("Cancellation result", tObject())}},
+		{"POST", "/api/v1/processes/{key}/cancel-instances", s.handleCancelInstancesOfProcess, apiOp{
+			summary: "Cancel a bounded batch of a definition's running instances (?limit=, default 5000, max 50000); repeat while the response reports remaining=true", tag: "Instances",
+			resp: jsonBody("Bulk cancellation result", tObject())}},
 
 		{"POST", "/api/v1/messages", s.handlePublishMessage, apiOp{
 			summary: "Publish a message for correlation", tag: "Messages",

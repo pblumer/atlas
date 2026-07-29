@@ -17,7 +17,16 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// active record and is copied into the history record on completion below,
 			// so a finished instance still reports when it started.
 			v.process.CreatedAt = h.Timestamp
-			return tx.PutProcessInstance(h.Key, &v.process)
+			if err := tx.PutProcessInstance(h.Key, &v.process); err != nil {
+				return err
+			}
+			// A message-start instance carries the correlation key it began with; count
+			// it as one live instance for that (definition, key) so a singleton message
+			// start can gate on it (ADR-0082). Event-driven, so replay rebuilds it (I4).
+			if v.process.CorrelationKey != "" {
+				return tx.IncrementActiveStartKey(v.process.ProcessDefKey, v.process.CorrelationKey)
+			}
+			return nil
 		case model.IntentCompleted, model.IntentTerminated:
 			// Retain a history record so operators can inspect finished
 			// instances, then drop the active record. The terminal state and
@@ -34,7 +43,16 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err := tx.PutProcessInstanceHistory(h.Key, &hist); err != nil {
 				return err
 			}
-			return tx.DeleteProcessInstance(h.Key)
+			if err := tx.DeleteProcessInstance(h.Key); err != nil {
+				return err
+			}
+			// Releasing a message-start instance re-opens its correlation key so a
+			// later message can start a fresh one (ADR-0082). Mirrors the increment on
+			// activation, keyed by the same fields the still-populated value carries.
+			if v.process.CorrelationKey != "" {
+				return tx.DecrementActiveStartKey(v.process.ProcessDefKey, v.process.CorrelationKey)
+			}
+			return nil
 		}
 
 	case model.VTElementInstance:

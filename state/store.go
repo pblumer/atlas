@@ -211,6 +211,15 @@ func (s *Store) ActiveProcessInstanceCount() (int, error) {
 	return s.countPrefix([]byte{byte(cfProcessInstance)})
 }
 
+// InjectCorruptProcessInstance writes an undecodable record under a process
+// instance's key. It is a test/tooling affordance only — it lets a caller in another
+// package exercise the decode-error path of the active-instance scan
+// (ActiveProcessInstances) that operator read/admin handlers depend on. Production
+// code writes process instances through Tx.PutProcessInstance, never this.
+func (s *Store) InjectCorruptProcessInstance(key uint64) error {
+	return s.db.Set(keyProcessInstance(key), []byte{0x01}, pebble.NoSync)
+}
+
 // ActiveProcessInstances calls fn with the key and value of every live process
 // instance, via the process-instance column family — the operator "list running
 // instances" access pattern.

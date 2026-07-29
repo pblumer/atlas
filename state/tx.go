@@ -557,3 +557,32 @@ func (t *Tx) ActiveChildren(scope uint64) (int32, error) {
 	}
 	return int32(decodeCounter(raw)), nil
 }
+
+// IncrementActiveStartKey / DecrementActiveStartKey maintain the count of live
+// message-start instances of a definition that began with a correlation key
+// (ADR-0082). Like the active-children counter they are write-only composing merges,
+// so they neither read nor allocate beyond the reused scratch buffer, and rebuild
+// identically on replay (I4/I6).
+func (t *Tx) IncrementActiveStartKey(defKey uint64, correlationKey string) error {
+	return t.mergeActiveStartKey(defKey, correlationKey, 1)
+}
+
+func (t *Tx) DecrementActiveStartKey(defKey uint64, correlationKey string) error {
+	return t.mergeActiveStartKey(defKey, correlationKey, -1)
+}
+
+func (t *Tx) mergeActiveStartKey(defKey uint64, correlationKey string, delta int64) error {
+	t.scratch = appendCounter(t.scratch[:0], delta)
+	return t.b.Merge(keyActiveStartKey(defKey, correlationKey), t.scratch, nil)
+}
+
+// ActiveStartKeyCount returns how many live instances of defKey began with
+// correlationKey (0 if none). It folds the merged deltas, so it is read only where the
+// current count is needed — the singleton-start gate (ADR-0082), not on every merge.
+func (t *Tx) ActiveStartKeyCount(defKey uint64, correlationKey string) (int32, error) {
+	raw, ok, err := getCopy(t.b, keyActiveStartKey(defKey, correlationKey))
+	if err != nil || !ok {
+		return 0, err
+	}
+	return int32(decodeCounter(raw)), nil
+}

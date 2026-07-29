@@ -143,6 +143,44 @@ func defaultTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_cancel_instances",
+			Description: "Bulk-cancel (terminate) a definition's running instances by its DEFINITION key — " +
+				"the drain for a runaway flood where cancelling instances one at a time is infeasible. " +
+				"Cancels up to a bounded batch per call (optional 'limit', default 5000, max 50000) and " +
+				"returns {definitionKey, canceled, remaining, stats}. When 'remaining' is true the cap was " +
+				"hit; call again with the same key until 'canceled' is 0. Pass the small DEFINITION key " +
+				"from atlas_list_processes, not an instance key.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key": map[string]any{
+						"type":        "integer",
+						"description": "The process DEFINITION key (from atlas_list_processes) whose running instances to cancel.",
+					},
+					"limit": map[string]any{
+						"type":        "integer",
+						"description": "Maximum instances to cancel in this call (default 5000, capped at 50000).",
+					},
+				},
+				"required": []any{"key"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				path := "/api/v1/processes/" + strconv.FormatUint(key, 10) + "/cancel-instances"
+				if _, ok := args["limit"]; ok {
+					limit, err := argUint(args, "limit")
+					if err != nil {
+						return "", err
+					}
+					path += "?limit=" + strconv.FormatUint(limit, 10)
+				}
+				return asText(c.post(path, "application/json", []byte("{}")))
+			},
+		},
+		{
 			Name: "atlas_delete_process",
 			Description: "Delete a deployed process definition by its key, removing it from the engine " +
 				"and from disk. Refused with a conflict error if the definition still has running " +

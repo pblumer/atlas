@@ -1462,6 +1462,19 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 	// events the created instances emit.
 	for _, ref := range c.p.messageStarts[name] {
 		startKey := evalStartCorrelationKey(ref.correlationKey, vars)
+		// A singleton message start (ADR-0082) instantiates only if no instance of this
+		// definition is already live for this correlation key. An empty key identifies
+		// no entity, so it is never singleton (it always starts).
+		if ref.singletonStart && startKey != "" {
+			taken, err := c.singletonStartTaken(ref.defKey, startKey)
+			if err != nil {
+				c.p.fail(err)
+				return
+			}
+			if taken {
+				continue // a live instance for this key already exists (or is being started this batch)
+			}
+		}
 		c.AppendCreateInstanceCommand(ref.defKey, vars, startKey)
 		// Retain the delivery into the message-start event too, so the replay shows
 		// the message that opened the receiving pool. The receiver instance does not
@@ -1474,6 +1487,31 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 			CorrelationKey:           correlationKey,
 		})
 	}
+}
+
+// singletonStartTaken reports whether a singleton message start for (defKey, key)
+// should be skipped because a live instance already exists — either durably (the
+// ActiveStartKey counter, maintained by applyToState) or already scheduled earlier in
+// this batch (the per-batch set, which closes the window before the durable counter
+// reflects a same-batch create). When it returns false it records the pair so a second
+// message for the same key in the same batch is skipped (ADR-0082).
+func (c *ProcessingContext) singletonStartTaken(defKey uint64, key string) (bool, error) {
+	if c.p.startsThisBatch == nil {
+		c.p.startsThisBatch = make(map[startKeyIdent]struct{})
+	}
+	ident := startKeyIdent{defKey: defKey, key: key}
+	if _, ok := c.p.startsThisBatch[ident]; ok {
+		return true, nil
+	}
+	n, err := c.tx.ActiveStartKeyCount(defKey, key)
+	if err != nil {
+		return false, err
+	}
+	if n > 0 {
+		return true, nil
+	}
+	c.p.startsThisBatch[ident] = struct{}{}
+	return false, nil
 }
 
 // instanceVariables reads all of an instance's variables into a fresh slice, to

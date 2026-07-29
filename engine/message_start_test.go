@@ -18,7 +18,7 @@ import (
 func parkingResponder(t testing.TB, key uint64) *compiler.CompiledProcess {
 	t.Helper()
 	b := compiler.NewBuilder(key, "responder", 1)
-	ms := b.AddMessageStartEvent("request", nil)
+	ms := b.AddMessageStartEvent("request", nil, false)
 	park := b.AddMessageCatchEvent("never", nil)
 	end := b.AddEndEvent()
 	b.Connect(ms, park)
@@ -167,7 +167,7 @@ func TestMessageStartInstanceRecovers(t *testing.T) {
 func keyedResponder(t testing.TB, key uint64) *compiler.CompiledProcess {
 	t.Helper()
 	b := compiler.NewBuilder(key, "keyed-responder", 1)
-	ms := b.AddMessageStartEvent("request", mustCompile(t, "orderId"))
+	ms := b.AddMessageStartEvent("request", mustCompile(t, "orderId"), false)
 	park := b.AddMessageCatchEvent("never", nil)
 	end := b.AddEndEvent()
 	b.Connect(ms, park)
@@ -304,7 +304,7 @@ func TestMessageStartRequestResponse(t *testing.T) {
 
 	// Responder: messageStart("request") → throw("reply", key = senderId) → End.
 	rb := compiler.NewBuilder(20, "responder", 1)
-	rms := rb.AddMessageStartEvent("request", nil)
+	rms := rb.AddMessageStartEvent("request", nil, false)
 	rthrow := rb.AddMessageThrowEvent("reply", mustCompile(t, "senderId"))
 	rend := rb.AddEndEvent()
 	rb.Connect(rms, rthrow)

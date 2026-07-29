@@ -68,6 +68,22 @@ type Processor struct {
 	sideEffects  []sideEffect
 	encBuf       []byte
 	fatalErr     error
+
+	// startsThisBatch remembers the (defKey, correlationKey) pairs a singleton message
+	// start has already scheduled a create for in the current batch (ADR-0082). The
+	// durable ActiveStartKey counter only reflects an instance once its Activated
+	// followup applies (a later batch), so within one batch several messages for the
+	// same key would all read zero; this set closes that same-batch window. Cleared
+	// each batch (reused, not reallocated).
+	startsThisBatch map[startKeyIdent]struct{}
+}
+
+// startKeyIdent identifies a (definition, correlation key) pair for the per-batch
+// singleton-start dedup set. Both fields are values, so it is a comparable map key
+// with no allocation beyond the already-existing correlation-key string.
+type startKeyIdent struct {
+	defKey uint64
+	key    string
 }
 
 // New creates a processor for the given partition over an open log and store.
@@ -101,7 +117,7 @@ func (p *Processor) Deploy(cp *compiler.CompiledProcess) {
 	p.latestProcess[cp.ProcessId()] = cp.Key
 	for _, ms := range cp.MessageStartEvents() {
 		p.messageStarts[ms.MessageName] = append(p.messageStarts[ms.MessageName],
-			messageStartRef{defKey: cp.Key, elementId: ms.ElementId, correlationKey: ms.CorrelationKey})
+			messageStartRef{defKey: cp.Key, elementId: ms.ElementId, correlationKey: ms.CorrelationKey, singletonStart: ms.SingletonStart})
 	}
 }
 
@@ -127,6 +143,10 @@ type messageStartRef struct {
 	defKey         uint64
 	elementId      int32
 	correlationKey *expr.Compiled
+	// singletonStart gates instantiation on there being no live instance of defKey
+	// already started with the same correlation key (ADR-0082); false = ADR-0035's
+	// start-per-message default.
+	singletonStart bool
 }
 
 // removeStartRef returns refs with the first entry for defKey removed. A name
@@ -347,6 +367,9 @@ func (p *Processor) processBatch() error {
 	p.followups = p.followups[:0]
 	p.sideEffects = p.sideEffects[:0]
 	p.fatalErr = nil
+	for k := range p.startsThisBatch {
+		delete(p.startsThisBatch, k) // reuse the map; empty by the next batch (ADR-0082)
+	}
 
 	tx := p.store.NewTransaction()
 	p.tx = tx
