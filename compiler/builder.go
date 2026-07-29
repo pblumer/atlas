@@ -140,6 +140,7 @@ type Builder struct {
 	serviceTasks      []ServiceTaskDetail
 	scriptTasks       []ScriptTaskDetail
 	callActivities    []CallActivityDetail
+	multiInstances    []MultiInstanceDetail
 	scriptJobTasks    []ScriptJobTaskDetail
 	businessRuleTasks []BusinessRuleTaskDetail
 	timerCatches      []TimerCatchDetail
@@ -214,10 +215,11 @@ func (b *Builder) intern(s string) int32 {
 func (b *Builder) addNode(t BpmnType, detail int32) int32 {
 	id := int32(len(b.nodes))
 	b.nodes = append(b.nodes, CompiledNode{
-		ElementId: id,
-		Type:      t,
-		FlowScope: b.flowScope, // the scope currently open (-1 = process root)
-		Detail:    detail,
+		ElementId:     id,
+		Type:          t,
+		FlowScope:     b.flowScope, // the scope currently open (-1 = process root)
+		Detail:        detail,
+		MultiInstance: -1, // not a loop unless SetMultiInstance marks it (ADR-0077)
 	})
 	b.elementIds = append(b.elementIds, -1) // kept in lockstep with nodes
 	return id
@@ -236,6 +238,29 @@ func (b *Builder) AddCallActivity(calledProcessId string, binding DecisionBindin
 		PropagateAllChild:  propagateAllChild,
 	})
 	return b.addNode(TypeCallActivity, detail)
+}
+
+// SetMultiInstance marks an already-added node a multi-instance activity carrying
+// the given loop characteristics (ADR-0077), interning the per-iteration and result
+// variable names. The node keeps its real activity type; its MultiInstance field is
+// set to index the loop detail. Applied after the node exists (like io-mappings), so
+// any activity — task, subprocess, or call activity — can be a loop. Exactly one of
+// inputCollection or cardinality should be non-nil (the parser enforces it).
+func (b *Builder) SetMultiInstance(nodeID int32, sequential bool, inputElement, outputCollection string, inputCollection, cardinality, outputElement, completionCondition *expr.Compiled) {
+	if !b.validNode(nodeID) {
+		return
+	}
+	idx := int32(len(b.multiInstances))
+	b.multiInstances = append(b.multiInstances, MultiInstanceDetail{
+		InputCollection:     inputCollection,
+		Cardinality:         cardinality,
+		InputElement:        b.intern(inputElement),
+		OutputCollection:    b.intern(outputCollection),
+		OutputElement:       outputElement,
+		CompletionCondition: completionCondition,
+		Sequential:          sequential,
+	})
+	b.nodes[nodeID].MultiInstance = idx
 }
 
 // AddSubProcess adds an embedded subprocess container node and returns its element
@@ -945,6 +970,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		serviceTasks:      b.serviceTasks,
 		scriptTasks:       b.scriptTasks,
 		callActivities:    b.callActivities,
+		multiInstances:    b.multiInstances,
 		scriptJobTasks:    b.scriptJobTasks,
 		businessRuleTasks: b.businessRuleTasks,
 		timerCatches:      b.timerCatches,
