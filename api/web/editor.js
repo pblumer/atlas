@@ -1508,6 +1508,115 @@ function saveIOMappings(modeler, element, inRows, outRows) {
   modeling.updateProperties(element, { extensionElements: ext });
 }
 
+// multiInstanceHTML renders the Multi-instance section for an activity (ADR-0077):
+// the sequential/parallel mode, and — once on — whether the loop runs over a
+// collection or a fixed count, the per-iteration input element, an optional output
+// collection/element, and an optional completion condition. It reads the activity's
+// bpmn:MultiInstanceLoopCharacteristics (bo.loopCharacteristics) and its nested
+// <zeebe:loopCharacteristics> plus <loopCardinality>/<completionCondition>. Changing
+// the mode or the collection/count choice re-renders the panel so the right fields
+// show; FEEL values are stored '=' prefixed (stripped for display), matching the
+// io-mapping editor. The whole block only shows for the activity types the compiler
+// supports (service/script/user tasks, call activities, subprocesses).
+function multiInstanceHTML(bo) {
+  const mi = bo.loopCharacteristics;
+  const on = !!(mi && mi.$type === "bpmn:MultiInstanceLoopCharacteristics");
+  const mode = !on ? "none" : (mi.isSequential ? "sequential" : "parallel");
+  const loop = on && mi.extensionElements
+    ? (mi.extensionElements.values || []).find((v) => v.$type === "zeebe:LoopCharacteristics")
+    : null;
+  const cardBody = on && mi.loopCardinality ? (mi.loopCardinality.body || "") : "";
+  const compBody = on && mi.completionCondition ? (mi.completionCondition.body || "") : "";
+  const ic = (loop && loop.inputCollection) || "";
+  const ie = (loop && loop.inputElement) || "";
+  const oc = (loop && loop.outputCollection) || "";
+  const oe = (loop && loop.outputElement) || "";
+  // A loop with a cardinality and no input collection is the "fixed count" variant.
+  const src = cardBody && !ic ? "cardinality" : "collection";
+  const strip = (s) => (s || "").replace(/^=\s*/, "");
+
+  let html = `<h3>Multi-instance</h3>
+    <label class="field"><span>Mode</span>
+      <select id="f-mi-mode">
+        <option value="none" ${mode === "none" ? "selected" : ""}>None — runs once</option>
+        <option value="parallel" ${mode === "parallel" ? "selected" : ""}>Parallel — all iterations at once</option>
+        <option value="sequential" ${mode === "sequential" ? "selected" : ""}>Sequential — one after another</option>
+      </select></label>`;
+  if (mode === "none") return html;
+
+  html += `<label class="field"><span>Iterate over</span>
+      <select id="f-mi-src">
+        <option value="collection" ${src === "collection" ? "selected" : ""}>A collection</option>
+        <option value="cardinality" ${src === "cardinality" ? "selected" : ""}>A fixed count</option>
+      </select></label>`;
+  if (src === "collection") {
+    html += `<label class="field"><span>Input collection (FEEL)</span>
+        <input type="text" id="f-mi-inputCollection" value="${esc(strip(ic))}" placeholder="orderLines"/></label>
+      <label class="field"><span>Input element</span>
+        <input type="text" id="f-mi-inputElement" value="${esc(ie)}" placeholder="line"/></label>`;
+  } else {
+    html += `<label class="field"><span>Loop cardinality (FEEL or a number)</span>
+        <input type="text" id="f-mi-cardinality" value="${esc(strip(cardBody))}" placeholder="3"/></label>`;
+  }
+  html += `<label class="field"><span>Output collection <span class="muted">(optional)</span></span>
+      <input type="text" id="f-mi-outputCollection" value="${esc(oc)}" placeholder="totals"/></label>
+    <label class="field"><span>Output element (FEEL) <span class="muted">(optional)</span></span>
+      <input type="text" id="f-mi-outputElement" value="${esc(strip(oe))}" placeholder="line.qty * line.price"/></label>
+    <label class="field"><span>Completion condition (FEEL) <span class="muted">(optional)</span></span>
+      <input type="text" id="f-mi-completion" value="${esc(strip(compBody))}" placeholder="count(totals) > 2"/></label>
+    <p class="muted" style="font-size:12px">${mode === "sequential"
+      ? "Runs one iteration at a time — the next starts only when the previous finishes."
+      : "Starts every iteration at once and waits until all finish."} ${src === "collection"
+      ? "One iteration per element of the <b>input collection</b>; the <b>input element</b> is the variable each iteration binds its item to (plus the built-in <code>loopCounter</code>)."
+      : "Runs <b>loop cardinality</b> times, each with a <code>loopCounter</code>."} An <b>output collection</b> gathers each iteration's <b>output element</b> into a list in order; a <b>completion condition</b> ends the loop early.</p>`;
+  return html;
+}
+
+// saveMultiInstance writes (or clears) an activity's bpmn:MultiInstanceLoopCharacteristics
+// from the panel fields (ADR-0077). Mode "none" drops it entirely; otherwise it
+// rebuilds the whole element — the isSequential flag, a nested <zeebe:loopCharacteristics>
+// (only the non-empty of inputCollection/inputElement or outputCollection/outputElement),
+// a <loopCardinality> for the fixed-count variant, and a <completionCondition> — so
+// editing one field never leaves a stale sibling. FEEL values are stored '=' prefixed.
+function saveMultiInstance(modeler, element, vals) {
+  const moddle = modeler.get("moddle");
+  const modeling = modeler.get("modeling");
+  const bo = element.businessObject;
+  if (vals.mode === "none") {
+    modeling.updateProperties(element, { loopCharacteristics: undefined });
+    return;
+  }
+  const feel = (v) => { v = (v || "").trim(); return v === "" ? "" : (v.startsWith("=") ? v : "= " + v); };
+  const mi = moddle.create("bpmn:MultiInstanceLoopCharacteristics", { isSequential: vals.mode === "sequential" });
+  mi.$parent = bo;
+
+  const loopProps = {};
+  if (vals.src === "collection") {
+    if (vals.inputCollection) loopProps.inputCollection = feel(vals.inputCollection);
+    if (vals.inputElement) loopProps.inputElement = vals.inputElement;
+  }
+  if (vals.outputCollection) loopProps.outputCollection = vals.outputCollection;
+  if (vals.outputElement) loopProps.outputElement = feel(vals.outputElement);
+  if (Object.keys(loopProps).length) {
+    const loop = moddle.create("zeebe:LoopCharacteristics", loopProps);
+    const ext = moddle.create("bpmn:ExtensionElements", { values: [loop] });
+    ext.$parent = mi;
+    loop.$parent = ext;
+    mi.extensionElements = ext;
+  }
+  if (vals.src === "cardinality" && vals.cardinality) {
+    const card = moddle.create("bpmn:FormalExpression", { body: feel(vals.cardinality) });
+    card.$parent = mi;
+    mi.loopCardinality = card;
+  }
+  if (vals.completion) {
+    const cc = moddle.create("bpmn:FormalExpression", { body: feel(vals.completion) });
+    cc.$parent = mi;
+    mi.completionCondition = cc;
+  }
+  modeling.updateProperties(element, { loopCharacteristics: mi });
+}
+
 // messageFieldsHTML renders the message picker for a catch or throw event: a
 // dropdown of the model's shared messages (plus "new"), and — once one is chosen —
 // its name and correlation key, which are shared so every event using the message
@@ -2375,6 +2484,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         // with their own editor above, so it is excluded here.
         if (t === "bpmn:ServiceTask" || t === "bpmn:ScriptTask" || t === "bpmn:UserTask") {
           html += ioMappingsHTML(bo);
+          html += multiInstanceHTML(bo); // ADR-0077: run this task once per collection element
         }
       } else if (bo.$type === "bpmn:SubProcess") {
         // An embedded subprocess is a scope, so it takes the same generic
@@ -2384,6 +2494,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         // mappings promote selected values to the enclosing scope on completion.
         html += `<p class="muted" style="font-size:12px">Pass variables in and out of this subprocess. <b>Input mappings</b> create variables its inner elements see (its local scope); <b>output mappings</b> promote selected values back to the enclosing scope when it completes.</p>`;
         html += ioMappingsHTML(bo);
+        html += multiInstanceHTML(bo); // ADR-0077: run this subprocess once per collection element
       } else if (bo.$type === "bpmn:CallActivity") {
         // A call activity invokes a *separate* deployed process as a child instance
         // (ADR-0076). It is configured by its <zeebe:calledElement>: which process to
@@ -2408,6 +2519,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
           <label class="field checkbox"><input type="checkbox" id="f-call-prop-child" ${propChild ? "checked" : ""}/> <span>Return all child variables out</span></label>
           <p class="muted" style="font-size:12px">With a box <b>unchecked</b>, only the matching mappings below cross that direction — the child sees only what you map in, or the caller gets back only what you map out (isolation).</p>`;
         html += ioMappingsHTML(bo);
+        html += multiInstanceHTML(bo); // ADR-0077: call the process once per collection element
       } else if (isDefaultFlow) {
         html += `<h3>Condition (FEEL)</h3>
           <p class="muted" style="font-size:12px">This is the gateway's <b>default flow</b> — taken when no other branch's condition matches, so it carries no condition of its own.</p>`;
@@ -3005,6 +3117,33 @@ function wireProperties(root, modeler, api, projectId, toast) {
       fcallbind.addEventListener("change", saveCall);
       fcallpp.addEventListener("change", saveCall);
       fcallpc.addEventListener("change", saveCall);
+    }
+
+    // Multi-instance (ADR-0077): the whole bpmn:MultiInstanceLoopCharacteristics is
+    // rewritten on any field change so editing one field never leaves a stale sibling.
+    // Mode and the collection/count choice re-render the panel (fields appear/vanish);
+    // the text fields save on blur.
+    const fmiMode = body.querySelector("#f-mi-mode");
+    if (fmiMode) {
+      const v = (sel) => { const el = body.querySelector(sel); return el ? (el.value || "").trim() : ""; };
+      const saveMI = () => savePreservingPanel(() => saveMultiInstance(modeler, element, {
+        mode: fmiMode.value,
+        src: v("#f-mi-src") || "collection",
+        inputCollection: v("#f-mi-inputCollection"),
+        inputElement: v("#f-mi-inputElement"),
+        cardinality: v("#f-mi-cardinality"),
+        outputCollection: v("#f-mi-outputCollection"),
+        outputElement: v("#f-mi-outputElement"),
+        completion: v("#f-mi-completion"),
+      }));
+      fmiMode.addEventListener("change", () => { saveMI(); show(element); });
+      const fmiSrc = body.querySelector("#f-mi-src");
+      if (fmiSrc) fmiSrc.addEventListener("change", () => { saveMI(); show(element); });
+      ["#f-mi-inputCollection", "#f-mi-inputElement", "#f-mi-cardinality",
+        "#f-mi-outputCollection", "#f-mi-outputElement", "#f-mi-completion"].forEach((sel) => {
+        const el = body.querySelector(sel);
+        if (el) el.addEventListener("change", saveMI);
+      });
     }
 
     const fassignee = body.querySelector("#f-assignee");
