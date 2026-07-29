@@ -46,6 +46,13 @@ type Processor struct {
 	// normal event path and recover from the log.
 	messageStarts map[string][]messageStartRef
 
+	// latestProcess indexes bpmn process id → the newest deployed definition key, so
+	// a call activity with `latest` binding resolves the process to start as a child
+	// (ADR-0076). Like messageStarts it is derived from the compiled definitions and
+	// rebuilt by Deploy on every start; deployments reload oldest-first on recovery,
+	// so the last write wins deterministically (the ADR-0063 binding argument, I6).
+	latestProcess map[string]uint64
+
 	jobNotifier func(jobType int32)
 
 	queue        []Command
@@ -77,6 +84,7 @@ func New(partition uint16, log *wal.Log, store *state.Store, clock Clock) *Proce
 		keygen:        &keyGen{partition: partition},
 		processes:     map[uint64]*compiler.CompiledProcess{},
 		messageStarts: map[string][]messageStartRef{},
+		latestProcess: map[string]uint64{},
 	}
 	p.registerHandlers()
 	p.registerBehaviors()
@@ -88,6 +96,9 @@ func New(partition uint16, log *wal.Log, store *state.Store, clock Clock) *Proce
 // (ADR-0035).
 func (p *Processor) Deploy(cp *compiler.CompiledProcess) {
 	p.processes[cp.Key] = cp
+	// Newest definition per process id wins; deployments reload oldest-first on
+	// recovery, so this is deterministic (ADR-0076).
+	p.latestProcess[cp.ProcessId()] = cp.Key
 	for _, ms := range cp.MessageStartEvents() {
 		p.messageStarts[ms.MessageName] = append(p.messageStarts[ms.MessageName],
 			messageStartRef{defKey: cp.Key, elementId: ms.ElementId, correlationKey: ms.CorrelationKey})

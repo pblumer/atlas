@@ -195,6 +195,10 @@ type ProcessInstanceValue struct {
 	CompletedAt    int64  // unix nano when it reached a terminal state; 0 while active
 	CreatedAt      int64  // unix nano when the instance was activated
 	CorrelationKey string // message correlation key a message-start instance began with; "" otherwise
+	// ParentElementInstanceKey is the call-activity element instance that started
+	// this instance as its child, 0 for a root instance (API/message/timer start).
+	// A completing child resumes its caller through it (ADR-0076).
+	ParentElementInstanceKey uint64
 }
 
 // processInstanceLegacySize is the original fixed layout (ProcessDefKey, State,
@@ -210,7 +214,8 @@ func (v *ProcessInstanceValue) encode(dst []byte) []byte {
 	dst = append(dst, byte(v.State))
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.CompletedAt))
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.CreatedAt))
-	return appendString(dst, v.CorrelationKey)
+	dst = appendString(dst, v.CorrelationKey)
+	return binary.LittleEndian.AppendUint64(dst, v.ParentElementInstanceKey)
 }
 
 func (v *ProcessInstanceValue) decode(src []byte) error {
@@ -227,11 +232,16 @@ func (v *ProcessInstanceValue) decode(src []byte) error {
 		return nil
 	}
 	v.CreatedAt = int64(binary.LittleEndian.Uint64(rest))
-	key, _, err := readString(rest[8:])
+	key, tail, err := readString(rest[8:])
 	if err != nil {
 		return err
 	}
 	v.CorrelationKey = key
+	// ParentElementInstanceKey is a later appended field: a record written before it
+	// ends after the correlation key and leaves it zero (a root instance).
+	if len(tail) >= 8 {
+		v.ParentElementInstanceKey = binary.LittleEndian.Uint64(tail)
+	}
 	return nil
 }
 
