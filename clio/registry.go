@@ -129,6 +129,61 @@ type Connector struct {
 // a model that only names a subject and type working.
 const DefaultEventSource = "atlas"
 
+// KeyRequest describes a clio API key to mint (clio's POST /api/v1/keys). Scopes are
+// clio scope strings — e.g. "read:/employees/*" grants read on the /employees
+// subtree (the recursive grant a subtree watch needs), "read:/employees" only the
+// exact subject. ExpiresAt is an optional RFC3339 timestamp ("" = no expiry).
+type KeyRequest struct {
+	Name      string
+	Scopes    []string
+	ExpiresAt string
+}
+
+// MintKey creates a new clio API key and returns its full, once-shown secret
+// (clio's "kid.secret"). It is a standalone call — not a [Client] method — because
+// it authenticates with a clio **admin** token, distinct from a connector's read
+// token, and exists only to provision a connector's credential (ADR-0077) without an operator
+// copy-pasting one. The caller must never persist adminToken; only the returned
+// scoped key is stored (sealed in the vault). Delivery is not idempotent, so a
+// caller should mint once per provisioning action.
+func MintKey(ctx context.Context, endpoint, adminToken string, req KeyRequest) (string, error) {
+	if strings.TrimSpace(adminToken) == "" {
+		return "", fmt.Errorf("clio: mint key: admin token is required")
+	}
+	payload := map[string]any{"name": req.Name, "scopes": req.Scopes}
+	if strings.TrimSpace(req.ExpiresAt) != "" {
+		payload["expiresAt"] = req.ExpiresAt
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("clio: mint key: encode request: %w", err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint+"/api/v1/keys", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("clio: mint key: build request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+adminToken)
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return "", fmt.Errorf("clio: mint key: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return "", fmt.Errorf("clio: mint key returned HTTP %d", resp.StatusCode)
+	}
+	var out struct {
+		Secret string `json:"secret"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return "", fmt.Errorf("clio: mint key: decode response: %w", err)
+	}
+	if out.Secret == "" {
+		return "", fmt.Errorf("clio: mint key: response carried no secret")
+	}
+	return out.Secret, nil
+}
+
 // HTTPClient talks to a real clio instance over its HTTP API (clio v1). Each
 // method targets clio's documented route: write-events, read-events, run-query
 // (all POST with a JSON body) and state (GET with the subject in the path). clio

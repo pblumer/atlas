@@ -554,7 +554,7 @@ async function viewConsoleOrg() {
         ? '<span class="pill ok"><span class="dot"></span>enabled</span>'
         : '<span class="pill warn"><span class="dot"></span>disabled</span>'}</td>
       <td style="text-align:right; white-space:nowrap">
-        ${c.kind === "clio" ? '<button class="btn ghost" data-cact="subs">Events</button>' : ""}
+        ${c.kind === "clio" ? '<button class="btn ghost" data-cact="provision">Provision access</button><button class="btn ghost" data-cact="subs">Events</button>' : ""}
         <button class="btn ghost" data-cact="edit">Edit</button>
         <button class="btn ghost" data-cact="toggle">${c.enabled ? "Disable" : "Enable"}</button>
         <button class="btn ghost danger" data-cact="delete">Delete</button>
@@ -1343,6 +1343,9 @@ function wireConnectorManagement(connectors) {
         if (btn.dataset.cact === "subs") {
           await toggleInboundSubs(btn.closest("tr"), id);
           return;
+        } else if (btn.dataset.cact === "provision") {
+          toggleProvisionClio(btn.closest("tr"), id, c.name);
+          return;
         } else if (btn.dataset.cact === "toggle") {
           await api("PATCH", "/api/v1/connectors/" + encodeURIComponent(id), { enabled: !c.enabled });
         } else if (btn.dataset.cact === "edit") {
@@ -1359,6 +1362,51 @@ function wireConnectorManagement(connectors) {
       } catch (err) { toast("Connector update failed: " + err.message, "err"); }
     });
   }
+}
+
+// toggleProvisionClio expands (or collapses) an inline panel under a clio connector
+// row that provisions the connector's credential in one step: the operator supplies
+// a clio admin token once, and Atlas mints a scoped read key on the clio instance
+// and seals it as this connector's token — no copy-pasting a key. The admin token is
+// sent once and never stored.
+function toggleProvisionClio(row, connectorId, connectorName) {
+  const existing = row.nextElementSibling;
+  if (existing && existing.classList.contains("provision-row")) {
+    existing.remove();
+    return;
+  }
+  // Collapse a sibling Events panel if open, so only one panel shows at a time.
+  if (existing && existing.classList.contains("subs-row")) existing.remove();
+
+  const panel = document.createElement("tr");
+  panel.className = "provision-row";
+  panel.innerHTML = `<td colspan="3" style="background:var(--surface); padding:12px 18px">
+    <div class="muted" style="margin-bottom:8px">Provision access — Atlas mints a scoped clio key with your admin token and stores it as this connector's credential. The admin token is used once and never stored.</div>
+    <form id="prov-form" style="display:grid;gap:8px;grid-template-columns:1fr 1fr auto;align-items:end">
+      <label class="field" style="margin:0"><span>clio admin token</span><input name="adminToken" type="password" autocomplete="off" placeholder="kid.secret (admin)" required/></label>
+      <label class="field" style="margin:0"><span>Read subject</span><input name="subject" placeholder="/employees" required/></label>
+      <button class="btn" type="submit">Provision</button>
+      <label class="check" style="grid-column:1 / -1;margin:0;display:flex;gap:8px;align-items:center">
+        <input type="checkbox" name="recursive" checked/>
+        <span>Recursive — grant read on the whole subtree (<code>read:/employees/*</code>), needed to watch child subjects.</span>
+      </label>
+      <div class="muted" style="grid-column:1 / -1">Requires a clio <b>admin</b> key. The minted key is read-only on the subject above; nothing writes your admin token to disk.</div>
+    </form></td>`;
+  row.after(panel);
+  panel.querySelector("#prov-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    try {
+      const res = await api("POST", "/api/v1/connectors/" + encodeURIComponent(connectorId) + "/provision-clio-key", {
+        adminToken: f.get("adminToken") || "",
+        subject: (f.get("subject") || "").trim(),
+        recursive: f.get("recursive") === "on",
+        keyName: "atlas-" + connectorName,
+      });
+      toast("Provisioned — token " + (res && res.credentialsRef ? res.credentialsRef : "stored") + " (" + (res && res.scope) + ")", "ok");
+      panel.remove();
+    } catch (err) { toast("Provisioning failed: " + err.message, "err"); }
+  });
 }
 
 // toggleInboundSubs expands (or collapses) an inline panel under a clio connector row

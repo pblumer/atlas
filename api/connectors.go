@@ -12,6 +12,28 @@ import (
 	"github.com/pblumer/atlas/temis"
 )
 
+// clioReadScope builds the clio scope string granting read on a subject: the exact
+// subject ("read:/employees") or, when recursive, its whole subtree
+// ("read:/employees/*") — the recursive grant a subtree watch needs. The subject is
+// made absolute first (clio subjects begin with "/").
+func clioReadScope(subject string, recursive bool) string {
+	subject = strings.TrimSpace(subject)
+	if !strings.HasPrefix(subject, "/") {
+		subject = "/" + subject
+	}
+	subject = strings.TrimRight(subject, "/")
+	if subject == "" {
+		subject = "/"
+	}
+	if recursive {
+		if subject == "/" {
+			return "read:/*"
+		}
+		return "read:" + subject + "/*"
+	}
+	return "read:" + subject
+}
+
 // envConnectorSecret returns the token for a connector's credentialsRef from the
 // environment per the ADR-0041 A2 secret model: the engine stores only the
 // reference; the value lives in ATLAS_CONNECTOR_<REF>_TOKEN (REF normalized like a
@@ -308,4 +330,112 @@ func (s *Server) handleDeleteConnector(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleProvisionClioKey provisions a managed clio connector's credential in one
+// step (ADR-0077): it mints a scoped read key on the connector's clio instance (using an admin
+// token the operator supplies once) and seals the returned key in the vault as the
+// connector's credential, then rebuilds the registries so the inbound bridge and
+// outbound tasks use it at once — no copy-pasting a token. The admin token is used
+// only for the one-off mint and is never stored (I6); only the scoped key is sealed.
+// Admin-gated, and the mint (a network call) runs off the run loop (I3); only the
+// connector read and the vault write ride s.do.
+func (s *Server) handleProvisionClioKey(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	if s.vault == nil {
+		writeError(w, http.StatusServiceUnavailable, "vault not configured")
+		return
+	}
+	connID := r.PathValue("id")
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	var p struct {
+		AdminToken string `json:"adminToken"`
+		Subject    string `json:"subject"`
+		Recursive  bool   `json:"recursive"`
+		KeyName    string `json:"keyName"`
+		ExpiresAt  string `json:"expiresAt"`
+	}
+	if err := json.Unmarshal(body, &p); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return
+	}
+	adminToken := strings.TrimSpace(p.AdminToken)
+	subject := strings.TrimSpace(p.Subject)
+	if adminToken == "" || subject == "" {
+		writeError(w, http.StatusBadRequest, "adminToken and subject are required")
+		return
+	}
+
+	// Resolve the connector on the run loop (the store's owner).
+	var (
+		conn    connector
+		ok      bool
+		loadErr error
+	)
+	s.do(func() { conn, ok, loadErr = s.connectors.get(connID) })
+	if loadErr != nil {
+		writeError(w, http.StatusInternalServerError, "load connector: "+loadErr.Error())
+		return
+	}
+	if !ok || conn.Kind != connectorKindClio {
+		writeError(w, http.StatusBadRequest, "no clio connector with that id")
+		return
+	}
+	if strings.TrimSpace(conn.Endpoint) == "" {
+		writeError(w, http.StatusBadRequest, "connector has no endpoint")
+		return
+	}
+
+	keyName := strings.TrimSpace(p.KeyName)
+	if keyName == "" {
+		keyName = "atlas-" + conn.Name
+	}
+	scope := clioReadScope(subject, p.Recursive)
+
+	// Mint the scoped key OFF the run loop (a network call, I3). The admin token
+	// lives only for this call and is never written anywhere.
+	token, err := clio.MintKey(r.Context(), strings.TrimSpace(conn.Endpoint), adminToken, clio.KeyRequest{
+		Name:      keyName,
+		Scopes:    []string{scope},
+		ExpiresAt: strings.TrimSpace(p.ExpiresAt),
+	})
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "mint clio key: "+err.Error())
+		return
+	}
+
+	// Seal the scoped key as the connector's credential and rebuild, on the run loop.
+	ref := strings.TrimSpace(conn.CredentialsRef)
+	setRef := ref == ""
+	if setRef {
+		ref = conn.Name
+	}
+	var saveErr error
+	s.do(func() {
+		if _, saveErr = s.vault.Set(ref, token); saveErr != nil {
+			return
+		}
+		if setRef {
+			conn.CredentialsRef = ref
+			if saveErr = s.connectors.save(conn); saveErr != nil {
+				return
+			}
+		}
+		saveErr = s.rebuildConnectorRegistries()
+	})
+	if saveErr != nil {
+		writeError(w, http.StatusInternalServerError, "store provisioned key: "+saveErr.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"credentialsRef": ref,
+		"scope":          scope,
+		"keyName":        keyName,
+	})
 }

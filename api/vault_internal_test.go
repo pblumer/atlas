@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -390,6 +391,197 @@ func TestSecretUpdateRebuildsConnectorClients(t *testing.T) {
 	fire()
 	if gotAuth != "" {
 		t.Fatalf("after delete: Authorization=%q, want empty (no token)", gotAuth)
+	}
+}
+
+// TestProvisionClioKey drives one-click provisioning end to end: an admin token
+// mints a scoped read key on a fake clio, the key is sealed as the connector's
+// credential, and the live clio client carries the minted token at once — no
+// copy-paste, and the connector needed no credentialsRef beforehand.
+func TestProvisionClioKey(t *testing.T) {
+	var mintAuth, mintPath, writeAuth string
+	var mintBody map[string]any
+	clioSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/keys":
+			mintAuth, mintPath = r.Header.Get("Authorization"), r.URL.Path
+			raw, _ := io.ReadAll(r.Body)
+			_ = json.Unmarshal(raw, &mintBody)
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"kid":"kid_new","secret":"kid_new.minted"}`))
+		case "/api/v1/write-events":
+			writeAuth = r.Header.Get("Authorization")
+			w.WriteHeader(http.StatusOK)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer clioSrv.Close()
+
+	srv := newVaultServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+	code, cb := x.do(http.MethodPost, "/api/v1/connectors",
+		`{"name":"events","kind":"clio","endpoint":"`+clioSrv.URL+`"}`) // no credentialsRef yet
+	if code != http.StatusOK {
+		t.Fatalf("create connector: %d %s", code, cb)
+	}
+	var conn connector
+	_ = json.Unmarshal(cb, &conn)
+
+	code, pb := x.do(http.MethodPost, "/api/v1/connectors/"+conn.ID+"/provision-clio-key",
+		`{"adminToken":"ADMIN","subject":"/employees","recursive":true}`)
+	if code != http.StatusOK {
+		t.Fatalf("provision: %d %s", code, pb)
+	}
+	if mintPath != "/api/v1/keys" || mintAuth != "Bearer ADMIN" {
+		t.Errorf("mint path/auth = %q / %q", mintPath, mintAuth)
+	}
+	scopes, _ := mintBody["scopes"].([]any)
+	if len(scopes) != 1 || scopes[0] != "read:/employees/*" {
+		t.Errorf("mint scopes = %#v, want [read:/employees/*]", mintBody["scopes"])
+	}
+	var resp struct {
+		CredentialsRef string `json:"credentialsRef"`
+	}
+	_ = json.Unmarshal(pb, &resp)
+	if resp.CredentialsRef == "" || strings.Contains(string(pb), "minted") {
+		t.Fatalf("provision response = %s (must carry a ref, never the token)", pb)
+	}
+
+	// The credential resolves to the minted token, and the live client uses it.
+	var resolved string
+	srv.do(func() {
+		resolved = srv.resolveConnectorSecret(resp.CredentialsRef)
+		c, ok := srv.clioRegistry.Client("events")
+		if !ok {
+			t.Fatal("clio client not registered after provisioning")
+		}
+		_ = c.WriteEvent(context.Background(), clio.Event{Subject: "/s", Type: "T"})
+	})
+	if resolved != "kid_new.minted" {
+		t.Errorf("resolved credential = %q, want kid_new.minted", resolved)
+	}
+	if writeAuth != "Bearer kid_new.minted" {
+		t.Errorf("live client Authorization = %q, want Bearer kid_new.minted (rebuild did not happen)", writeAuth)
+	}
+
+	// A second provision on the now-referenced connector exercises the path where the
+	// credentialsRef already exists (no connector re-save, just re-seal + rebuild).
+	if code, pb := x.do(http.MethodPost, "/api/v1/connectors/"+conn.ID+"/provision-clio-key",
+		`{"adminToken":"ADMIN","subject":"/employees","recursive":false}`); code != http.StatusOK {
+		t.Fatalf("re-provision: %d %s", code, pb)
+	}
+	scopes, _ = mintBody["scopes"].([]any)
+	if len(scopes) != 1 || scopes[0] != "read:/employees" {
+		t.Errorf("re-provision scopes = %#v, want [read:/employees] (exact, non-recursive)", mintBody["scopes"])
+	}
+}
+
+// TestProvisionClioKeyRequireAdmin proves the provisioning endpoint refuses a
+// non-admin when auth is enabled.
+func TestProvisionClioKeyRequireAdmin(t *testing.T) {
+	srv := newVaultServer(t)
+	srv.authEnabled = true
+	rec := httptest.NewRecorder()
+	srv.handleProvisionClioKey(rec, httptest.NewRequest(http.MethodPost, "/api/v1/connectors/x/provision-clio-key", nil))
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("provision without admin: code=%d, want 403", rec.Code)
+	}
+}
+
+// TestProvisionClioKeyErrors covers the provisioning handler's rejection paths:
+// missing fields, bad JSON, a non-clio/unknown connector, a clio that refuses the
+// mint (502), and the vault-disabled 503.
+func TestProvisionClioKeyErrors(t *testing.T) {
+	forbid := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden) // clio refuses the mint (bad admin token)
+	}))
+	defer forbid.Close()
+
+	srv := newVaultServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+	_, cb := x.do(http.MethodPost, "/api/v1/connectors", `{"name":"ev","kind":"clio","endpoint":"`+forbid.URL+`"}`)
+	var clioConn connector
+	_ = json.Unmarshal(cb, &clioConn)
+	_, tb := x.do(http.MethodPost, "/api/v1/connectors", `{"name":"dec","kind":"temis","endpoint":"http://y"}`)
+	var temisConn connector
+	_ = json.Unmarshal(tb, &temisConn)
+
+	post := func(path, body string) int { code, _ := x.do(http.MethodPost, path, body); return code }
+	base := "/api/v1/connectors/"
+
+	// A body that errors mid-read → 400.
+	h := srv.Handler()
+	rreq := httptest.NewRequest(http.MethodPost, base+clioConn.ID+"/provision-clio-key", errReader{})
+	rreq.Header.Set("Content-Type", "application/json")
+	rrec := httptest.NewRecorder()
+	h.ServeHTTP(rrec, rreq)
+	if rrec.Code != http.StatusBadRequest {
+		t.Errorf("read-body error: want 400, got %d", rrec.Code)
+	}
+
+	// A clio connector saved without an endpoint → 400.
+	srv.do(func() {
+		_ = srv.connectors.save(connector{ID: "noep", Name: "noep", Kind: connectorKindClio, Enabled: true, CreatedAt: 9})
+	})
+	if post(base+"noep/provision-clio-key", `{"adminToken":"a","subject":"/e"}`) != http.StatusBadRequest {
+		t.Error("connector with no endpoint: want 400")
+	}
+
+	if post(base+clioConn.ID+"/provision-clio-key", `{"subject":"/e"}`) != http.StatusBadRequest {
+		t.Error("missing adminToken: want 400")
+	}
+	if post(base+clioConn.ID+"/provision-clio-key", `{"adminToken":"a"}`) != http.StatusBadRequest {
+		t.Error("missing subject: want 400")
+	}
+	if post(base+clioConn.ID+"/provision-clio-key", `{bad`) != http.StatusBadRequest {
+		t.Error("invalid JSON: want 400")
+	}
+	if post(base+temisConn.ID+"/provision-clio-key", `{"adminToken":"a","subject":"/e"}`) != http.StatusBadRequest {
+		t.Error("temis connector: want 400")
+	}
+	if post(base+"missing/provision-clio-key", `{"adminToken":"a","subject":"/e"}`) != http.StatusBadRequest {
+		t.Error("unknown connector: want 400")
+	}
+	// A corrupt connector record makes the load error → 500.
+	srv.do(func() {
+		_ = os.WriteFile(srv.connectors.fileFor("corrupt"), []byte("{not json"), 0o644)
+	})
+	if post(base+"corrupt/provision-clio-key", `{"adminToken":"a","subject":"/e"}`) != http.StatusInternalServerError {
+		t.Error("corrupt connector record: want 500")
+	}
+	if post(base+clioConn.ID+"/provision-clio-key", `{"adminToken":"a","subject":"/e"}`) != http.StatusBadGateway {
+		t.Error("clio refuses the mint: want 502")
+	}
+
+	// Vault disabled → 503.
+	noVault, _ := newValidateServer(t, WithoutVault())
+	nx := deployTestHarness{t, noVault.Handler()}
+	_, ncb := nx.do(http.MethodPost, "/api/v1/connectors", `{"name":"c","kind":"clio","endpoint":"http://x"}`)
+	var nconn connector
+	_ = json.Unmarshal(ncb, &nconn)
+	if c, _ := nx.do(http.MethodPost, base+nconn.ID+"/provision-clio-key", `{"adminToken":"a","subject":"/e"}`); c != http.StatusServiceUnavailable {
+		t.Errorf("vault disabled: want 503, got %d", c)
+	}
+}
+
+// TestClioReadScope covers the scope-string builder for exact and recursive grants.
+func TestClioReadScope(t *testing.T) {
+	cases := []struct {
+		subject   string
+		recursive bool
+		want      string
+	}{
+		{"/employees", true, "read:/employees/*"},
+		{"/employees", false, "read:/employees"},
+		{"employees", true, "read:/employees/*"}, // made absolute
+		{"/employees/", true, "read:/employees/*"},
+		{"/", true, "read:/*"},
+	}
+	for _, c := range cases {
+		if got := clioReadScope(c.subject, c.recursive); got != c.want {
+			t.Errorf("clioReadScope(%q, %v) = %q, want %q", c.subject, c.recursive, got, c.want)
+		}
 	}
 }
 

@@ -289,6 +289,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/inbound-subscriptions/{id}", s.handleDeleteInboundSubscription, apiOp{
 			summary: "Delete an inbound event subscription", tag: "Connectors", status: http.StatusNoContent}},
 
+		{"POST", "/api/v1/connectors/{id}/provision-clio-key", s.handleProvisionClioKey, apiOp{
+			summary: "Mint a scoped clio key (admin token supplied once) and seal it as this connector's credential", tag: "Connectors", req: jsonBody("Provision request", tObject()), resp: jsonBody("Provisioned credential", tObject())}},
+
 		{"GET", "/api/v1/secrets", s.handleListSecrets, apiOp{
 			summary: "List secret names and metadata in the encrypted vault (never values)", tag: "Secrets", resp: jsonBody("Secrets", tArray())}},
 		{"PUT", "/api/v1/secrets/{name}", s.handleSetSecret, apiOp{
