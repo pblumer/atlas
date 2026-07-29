@@ -816,14 +816,25 @@ type xmlServiceTask struct {
 }
 
 // A clio connector task's parameters, carried on a service task as an
-// <atlas:clioConnector connector="..." subject="..." eventType="..."/> extension
-// element. connector names a server-registered connector (its endpoint and
-// credentials live in the server config, never in the model); subject and
-// eventType are the clio coordinates the appended event lands under.
+// <atlas:clioConnector connector="..." operation="..." .../> extension element.
+// connector names a server-registered connector (its endpoint and credentials live
+// in the server config, never in the model). operation is "write" (default),
+// "query", or "read", selecting which of the remaining attributes apply:
+//   - write: subject and eventType — the clio coordinates the appended event
+//     (the instance's variables) lands under.
+//   - query: resultVariable receives the result; either query (a run_query string)
+//     or subject (with the optional reduceSpec projection, a get_state read).
+//   - read: subject's events (up to limit; 0 = the connector's default) are read
+//     into resultVariable as a JSON array.
 type xmlClioConnector struct {
-	Connector string `xml:"connector,attr"`
-	Subject   string `xml:"subject,attr"`
-	EventType string `xml:"eventType,attr"`
+	Connector      string `xml:"connector,attr"`
+	Operation      string `xml:"operation,attr"`
+	Subject        string `xml:"subject,attr"`
+	EventType      string `xml:"eventType,attr"`
+	Query          string `xml:"query,attr"`
+	ReduceSpec     string `xml:"reduceSpec,attr"`
+	Limit          string `xml:"limit,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
 }
 
 // An HTTP-REST connector task's parameters, carried on a service task as an

@@ -394,6 +394,31 @@ func (t *Tx) RecordDataObjectSnapshot(ts int64, pos uint64, v *model.DataObjectV
 // zero. The counter is pure state — mutated only from applyToState — so it is
 // rebuilt identically on recovery.
 
+// --- Inbound delivery high-water (ADR-0075) ---
+
+// PutInboundHighWater upserts an external event source's last-applied sequence.
+// It writes the absolute sequence (not a delta), so a replayed IntentInbound-
+// DeliveryApplied rebuilds the identical mark (invariant I4). Reads through the
+// batch see it immediately, so the guard in the same batch observes it.
+func (t *Tx) PutInboundHighWater(sourceID string, seq uint64) error {
+	t.scratch = binary.LittleEndian.AppendUint64(t.scratch[:0], seq)
+	return t.b.Set(keyInboundHighWater(sourceID), t.scratch, nil)
+}
+
+// InboundHighWater returns the last-applied sequence for a source, or 0 if the
+// source has no mark yet. It reads through the in-flight batch, so a guard sees a
+// mark written earlier in the same batch.
+func (t *Tx) InboundHighWater(sourceID string) (uint64, error) {
+	raw, ok, err := getCopy(t.b, keyInboundHighWater(sourceID))
+	if err != nil || !ok {
+		return 0, err
+	}
+	if len(raw) < 8 {
+		return 0, errors.New("state: inbound high-water value too short")
+	}
+	return binary.LittleEndian.Uint64(raw), nil
+}
+
 // IncrementActiveChildren adds one active child to scope. It is a write-only
 // merge (no read), so it does not allocate on the hot path (invariant I1).
 func (t *Tx) IncrementActiveChildren(scope uint64) error {

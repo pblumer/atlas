@@ -18,6 +18,7 @@ type inflightValue struct {
 	dataObject   model.DataObjectValue
 	incident     model.IncidentValue
 	decisionEval model.DecisionEvaluationValue
+	inbound      model.InboundDeliveryValue
 }
 
 // asValue returns a model.Value pointing at the active field, for encoding. The
@@ -45,6 +46,8 @@ func (v *inflightValue) asValue(vt model.ValueType) model.Value {
 		return &v.incident
 	case model.VTDecisionEvaluation:
 		return &v.decisionEval
+	case model.VTInboundDelivery:
+		return &v.inbound
 	}
 	return nil
 }
@@ -101,6 +104,10 @@ func inflightFromRecord(rec model.Record) inflightValue {
 	case model.VTDecisionEvaluation:
 		if v, ok := rec.Value.(*model.DecisionEvaluationValue); ok {
 			iv.decisionEval = *v
+		}
+	case model.VTInboundDelivery:
+		if v, ok := rec.Value.(*model.InboundDeliveryValue); ok {
+			iv.inbound = *v
 		}
 	}
 	return iv

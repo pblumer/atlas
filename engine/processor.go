@@ -263,6 +263,25 @@ func (p *Processor) PublishMessage(name, correlationKey string, vars ...model.Va
 	})
 }
 
+// PublishInbound enqueues publication of a message that originated from an external
+// event source (ADR-0075), carrying the source's identity (sourceID) and monotonic
+// sequence (seq) so the publish is deduplicated against the source's durable
+// high-water mark: a replayed at-least-once delivery is skipped rather than
+// re-correlated (which would double-start a message-start process). Apart from the
+// dedup guard it correlates exactly like PublishMessage. Call RunUntilIdle to
+// process it.
+func (p *Processor) PublishInbound(sourceID string, seq uint64, name, correlationKey string, vars ...model.VariableValue) {
+	p.queue = append(p.queue, Command{
+		ValueType: model.VTMessage,
+		Intent:    model.IntentMessagePublished,
+		Value: inflightValue{
+			subscription: model.MessageSubscriptionValue{MessageName: name, CorrelationKey: correlationKey},
+			inbound:      model.InboundDeliveryValue{SourceID: sourceID, SourceSeq: seq},
+		},
+		StartVars: vars,
+	})
+}
+
 // TriggerDueTimers enqueues a trigger command for every timer due at or before
 // the current clock, carrying each timer's value so the handler needs no extra
 // read. Call RunUntilIdle (or TickTimers) to process them. It is time-driven, so

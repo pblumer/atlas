@@ -1110,6 +1110,32 @@ const SERVICE_TASK_KINDS = [
       { key: "resultVariable", label: "Result variable", placeholder: "response", hint: "The JSON response is written into this process variable (leave empty to discard it)." },
     ],
   },
+  {
+    id: "clio", name: "clio Event Store Connector", desc: "Send, query, or read events on a clio event store", icon: "C",
+    // A stacked event-stream mark on a violet tile reads "append-only event log" at a
+    // glance — clio's counterpart to REST's globe. Three white rows with a leading
+    // dot suggest a growing stream of events; the drawImplBadges/stkind-icon CSS adds
+    // the round tile chrome, so the SVG only needs the fill and the white marks.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#7c5cff"/><circle cx="4.1" cy="4.6" r="1.05" fill="#fff"/><rect x="6.4" y="3.85" width="6.2" height="1.5" rx="0.75" fill="#fff"/><circle cx="4.1" cy="8" r="1.05" fill="#fff"/><rect x="6.4" y="7.25" width="6.2" height="1.5" rx="0.75" fill="#fff"/><circle cx="4.1" cy="11.4" r="1.05" fill="#fff"/><rect x="6.4" y="10.65" width="6.2" height="1.5" rx="0.75" fill="#fff"/></svg>`,
+    ext: "atlas:ClioConnector",
+    fields: [
+      { group: "clio connector" },
+      { key: "connector", label: "Connector", placeholder: "orders-clio", hint: "Names a server-registered clio connector (its endpoint and token live on the server, never in the model)." },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [{ v: "write", l: "Send event (write-events)" }, { v: "query", l: "Query state (get_state / run_query)" }, { v: "read", l: "Read events (read-events)" }],
+      },
+      { group: "Event", showIf: (v) => !v.operation || v.operation === "write" },
+      { key: "subject", label: "Subject", placeholder: "orders/new", showIf: (v) => !v.operation || v.operation === "write" || v.operation === "read", hint: "The clio subject the event lands under (write) or is read from (read/get_state)." },
+      { key: "eventType", label: "Event type", placeholder: "OrderPlaced", showIf: (v) => !v.operation || v.operation === "write", hint: "The instance's variables are sent as the event body." },
+      { group: "Query", showIf: (v) => v.operation === "query" },
+      { key: "query", label: "Query", placeholder: "leave empty for get_state", showIf: (v) => v.operation === "query", hint: "A run_query query string. If empty, get_state is read for the subject above." },
+      { key: "reduceSpec", label: "Reduce spec", placeholder: "orderTotals", showIf: (v) => v.operation === "query", hint: "The projection to read for get_state (ignored when a query is set)." },
+      { group: "Read", showIf: (v) => v.operation === "read" },
+      { key: "limit", label: "Limit", placeholder: "0 = connector default", showIf: (v) => v.operation === "read" },
+      { key: "resultVariable", label: "Result variable", placeholder: "result", showIf: (v) => v.operation === "query" || v.operation === "read", hint: "The query result / events are written into this process variable." },
+    ],
+  },
 ];
 
 // serviceTaskKind returns the catalog entry a service task currently represents,
@@ -1155,7 +1181,11 @@ function serviceTaskKindHTML(bo) {
     </div>`).join("");
   let fields = "";
   for (const f of cur.fields) {
-    if (f.group) { fields += `<h3>${esc(f.group)}</h3>`; continue; }
+    if (f.group) {
+      if (f.showIf && !f.showIf(ext)) continue;
+      fields += `<h3>${esc(f.group)}</h3>`;
+      continue;
+    }
     if (f.showIf && !f.showIf(ext)) continue;
     if (f.type === "map") {
       const list = Array.isArray(ext[f.key]) ? ext[f.key] : [];

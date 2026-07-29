@@ -74,6 +74,13 @@ const (
 	// it is append-only history (one record per evaluation, never deleted), so an
 	// operator can inspect after the fact exactly how a decision was made (ADR-0066).
 	VTDecisionEvaluation
+	// VTInboundDelivery is a per-source high-water mark for an at-least-once inbound
+	// event bridge (ADR-0075): it records that an external source's deliveries up to
+	// a sequence have been applied, so a replayed publish is skipped rather than
+	// re-correlated (which would double-start a message-start process). It is generic
+	// — the engine never interprets the opaque source id — and appended last so every
+	// prior value type keeps its numeric value on the log.
+	VTInboundDelivery
 )
 
 func (t ValueType) String() string {
@@ -106,6 +113,8 @@ func (t ValueType) String() string {
 		return "DataObject"
 	case VTDecisionEvaluation:
 		return "DecisionEvaluation"
+	case VTInboundDelivery:
+		return "InboundDelivery"
 	default:
 		return "ValueType(?)"
 	}
@@ -198,6 +207,13 @@ const (
 	// (ADR-0068): the drop is emitted as one VariableDeleted per local variable, so
 	// replay reproduces it exactly (invariant I6) rather than recomputing it.
 	IntentVariableDeleted
+
+	// IntentInboundDeliveryApplied advances an external source's inbound high-water
+	// mark (ADR-0075). It applies by upserting the source's last-applied sequence,
+	// and is appended at the end so every prior intent keeps its numeric value on the
+	// log. It rides in the same batch as the message publish it guards, so the
+	// dedup mark and the correlate/start effects it authorizes commit atomically.
+	IntentInboundDeliveryApplied
 )
 
 func (i Intent) String() string {
@@ -260,6 +276,8 @@ func (i Intent) String() string {
 		return "DecisionEvaluated"
 	case IntentVariableDeleted:
 		return "VariableDeleted"
+	case IntentInboundDeliveryApplied:
+		return "InboundDeliveryApplied"
 	default:
 		return "Intent(?)"
 	}

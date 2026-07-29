@@ -40,6 +40,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pblumer/atlas/clio"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/engine"
@@ -185,6 +186,19 @@ type Server struct {
 	// startup (ADR-0041 secret model). Read only while driving jobs on the run loop.
 	temisRegistry *temis.Registry
 
+	// clioRegistry resolves a connector name to a clio event-store client for clio
+	// connector tasks (write/query/read, ADR-0036), built from the managed
+	// connector store at startup and rebuilt on every connector change, with each
+	// endpoint token resolved from the vault (ADR-0041). Read only while driving
+	// jobs on the run loop, so it needs no lock.
+	clioRegistry *clio.Registry
+
+	// inboundSubs holds the operator-configured clio inbound subscriptions the
+	// inbound bridge polls (ADR-0075). Owned by the run-loop goroutine. inboundPoll
+	// is that bridge's poll cadence (WithInboundPollInterval; 0 disables the bridge).
+	inboundSubs *inboundSubStore
+	inboundPoll time.Duration
+
 	// docsEnabled gates the OpenAPI spec and the Scalar API explorer. On by
 	// default (opt-out), consistent with the already-open web UI and MCP
 	// endpoint; an operator who does not want the interactive surface disables
@@ -213,6 +227,13 @@ func WithLogBuffer(b *LogBuffer) Option { return func(s *Server) { s.logs = b } 
 // it when the interactive, mutating "Try it out" surface should not be exposed
 // (ADR-0043).
 func WithoutDocs() Option { return func(s *Server) { s.docsEnabled = false } }
+
+// WithInboundPollInterval sets the clio inbound bridge's poll cadence (ADR-0075).
+// A non-positive interval disables the bridge (useful in tests that drive it
+// directly). The default is 2s.
+func WithInboundPollInterval(d time.Duration) Option {
+	return func(s *Server) { s.inboundPoll = d }
+}
 
 // WithoutVault disables the engine-internal encrypted secret vault, which is
 // otherwise on by default (ADR-0070). With it disabled the secret endpoints
@@ -276,6 +297,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	inboundSubs, err := newInboundSubStore(filepath.Join(dataDir, "inbound-subscriptions"))
+	if err != nil {
+		return nil, err
+	}
 	// DMN reference models are resolved either from a temis model service (when
 	// configured) or the zero-config <data-dir>/dmn-models folder. Both satisfy the
 	// Resolver interface, so the rest of the server is unaffected (ADR-0034/0014).
@@ -298,7 +323,9 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		projects:     projects,
 		dmnrefs:      dmnrefs,
 		connectors:   connectors,
-		vaultEnabled: true, // opt-out: built unless WithoutVault is passed (ADR-0070)
+		inboundSubs:  inboundSubs,
+		inboundPoll:  2 * time.Second, // default cadence; WithInboundPollInterval overrides, 0 disables
+		vaultEnabled: true,            // opt-out: built unless WithoutVault is passed (ADR-0070)
 		users:        users,
 		sessions:     newSessionStore(defaultSessionTTL),
 		dmnResolver:  resolver,
@@ -376,6 +403,24 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	}
 	s.temisRegistry.Replace(clients)
 	s.jobRunner.HandleCompleting(compiler.TemisDecisionJobTypeIndex, temis.Handler(store, s.processLookup, s.temisRegistry, nil))
+	// A clio connector task appends, reads, or queries a server-registered clio
+	// event store (ADR-0036). One worker per operation serves every process under a
+	// reserved clio job type; each resolves its job's connector name from the
+	// compiled process and calls the endpoint configured for that connector. Unlike
+	// REST's model-authored endpoint, a clio connector's endpoint and token live in
+	// the managed connector store; the token is resolved from the vault at build time
+	// (ADR-0041). The registry is built here (before the loop serves traffic) and
+	// rebuilt on every connector change; a task whose connector is not configured
+	// parks until it is.
+	s.clioRegistry = clio.NewRegistry()
+	clioClients, err := s.buildClioClients()
+	if err != nil {
+		return nil, err
+	}
+	s.clioRegistry.Replace(clioClients)
+	s.jobRunner.Handle(compiler.ClioWriteJobTypeIndex, clio.Handler(store, s.processLookup, s.clioRegistry))
+	s.jobRunner.HandleWithOutput(compiler.ClioQueryJobTypeIndex, clio.QueryHandler(store, s.processLookup, s.clioRegistry))
+	s.jobRunner.HandleWithOutput(compiler.ClioReadJobTypeIndex, clio.ReadHandler(store, s.processLookup, s.clioRegistry))
 	// An HTTP-REST connector task calls a model-authored endpoint (ADR-0067). One
 	// worker serves every process under the reserved REST job type; it resolves each
 	// job's method/url/headers/query/result-variable from the compiled process, calls
@@ -390,6 +435,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.wg.Add(2)
 	go s.loop()
 	go s.timerScheduler(time.Second)
+	// The clio inbound bridge polls configured subscriptions and republishes new
+	// clio events as Atlas messages (ADR-0075). It is a separate goroutine like the
+	// timer scheduler — it does its network reads off the run loop and hands only the
+	// resulting publish onto it (invariant I3). A non-positive interval disables it.
+	if s.inboundPoll > 0 {
+		s.wg.Add(1)
+		go s.inboundBridge(s.inboundPoll)
+	}
 	return s, nil
 }
 

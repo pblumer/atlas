@@ -70,12 +70,44 @@ func registerScope(
 		}
 		// A service task bearing an <atlas:clioConnector> extension is a connector
 		// task: it delegates to a server-registered clio connector via the job path
-		// (ADR-0036), not to an external service-task worker.
+		// (ADR-0036), not to an external service-task worker. operation selects the
+		// clio call (write/query/read); write is the default for back-compatibility
+		// with the original write-only element.
 		if cn := st.Clio; cn != nil {
-			if cn.Connector == "" || cn.Subject == "" || cn.EventType == "" {
-				return fmt.Errorf("compiler: clio connector task %q needs connector, subject, and eventType", st.Id)
+			if cn.Connector == "" {
+				return fmt.Errorf("compiler: clio connector task %q needs a connector", st.Id)
 			}
-			if err := register(st.Id, b.AddClioWriteTask(cn.Connector, cn.Subject, cn.EventType, retries)); err != nil {
+			var id int32
+			switch op := clioOperation(cn.Operation); op {
+			case "write":
+				if cn.Subject == "" || cn.EventType == "" {
+					return fmt.Errorf("compiler: clio write task %q needs subject and eventType", st.Id)
+				}
+				id = b.AddClioWriteTask(cn.Connector, cn.Subject, cn.EventType, retries)
+			case "query":
+				if cn.Query == "" && cn.Subject == "" {
+					return fmt.Errorf("compiler: clio query task %q needs a query or a subject", st.Id)
+				}
+				if strings.TrimSpace(cn.ResultVariable) == "" {
+					return fmt.Errorf("compiler: clio query task %q needs a resultVariable", st.Id)
+				}
+				id = b.AddClioQueryTask(cn.Connector, cn.Subject, cn.ReduceSpec, cn.Query, strings.TrimSpace(cn.ResultVariable), retries)
+			case "read":
+				if cn.Subject == "" {
+					return fmt.Errorf("compiler: clio read task %q needs a subject", st.Id)
+				}
+				if strings.TrimSpace(cn.ResultVariable) == "" {
+					return fmt.Errorf("compiler: clio read task %q needs a resultVariable", st.Id)
+				}
+				limit, err := clioLimit(st.Id, cn.Limit)
+				if err != nil {
+					return err
+				}
+				id = b.AddClioReadTask(cn.Connector, cn.Subject, strings.TrimSpace(cn.ResultVariable), limit, retries)
+			default:
+				return fmt.Errorf("compiler: clio connector task %q has unknown operation %q (want write, query, or read)", st.Id, op)
+			}
+			if err := register(st.Id, id); err != nil {
 				return err
 			}
 			continue
@@ -443,4 +475,28 @@ func connectScope(b *Builder, ids map[string]int32, c *xmlFlowContent) error {
 		}
 	}
 	return nil
+}
+
+// clioOperation normalizes a clio connector task's operation attribute, defaulting
+// an empty value to "write" so the original write-only <atlas:clioConnector>
+// element (which carried no operation) keeps compiling unchanged.
+func clioOperation(op string) string {
+	op = strings.ToLower(strings.TrimSpace(op))
+	if op == "" {
+		return "write"
+	}
+	return op
+}
+
+// clioLimit parses a clio read task's limit attribute: empty is 0 (the connector's
+// default), otherwise a non-negative integer. taskID names the task for the error.
+func clioLimit(taskID, raw string) (int32, error) {
+	if strings.TrimSpace(raw) == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || n < 0 {
+		return 0, fmt.Errorf("compiler: clio read task %q has invalid limit %q", taskID, raw)
+	}
+	return int32(n), nil
 }

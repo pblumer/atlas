@@ -23,9 +23,20 @@
 > `ConnectorTaskDetail` carries a `Connector` name plus the kind-specific
 > coordinates (clio: subject/eventType; REST: method/path); the generic
 > `connectorTaskBehavior` only creates the job, so no engine change was needed for
-> the second kind. Neither connector worker is yet wired into the HTTP server run
-> loop (the DMN worker isn't either — same follow-up). Variant B (the event
-> mirror) and `clio:query` remain future work.
+> the second kind.
+>
+> **Update (2026-07-28).** The clio connector is now finished: it is wired into the
+> single-binary server run loop under three reserved job types — `clio:write-events`,
+> `clio:query` (get_state / run_query, result written back), and `clio:read`
+> (read_events into a variable) — with the endpoint and token managed in the Console
+> connector store and resolved from the vault (ADR-0041). It is authored via a first-
+> class **clio Event Store Connector** service-task type in the modeler. The inbound
+> counterpart — letting a clio event start and wake Atlas processes — landed as the
+> **clio inbound event bridge** ([ADR-0075](0075-clio-inbound-event-bridge.md)), which
+> supersedes this ADR's deferred Variant B: instead of a blanket WAL→clio audit mirror
+> it is an opt-in, operator-configured bridge that republishes watched clio events as
+> Atlas messages through the existing correlation path, with engine-side idempotent
+> delivery so an at-least-once replay never double-starts a process.
 
 ## Context and problem statement
 

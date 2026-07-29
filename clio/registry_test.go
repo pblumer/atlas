@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/model"
@@ -99,6 +100,170 @@ func TestHTTPClientWriteEvent(t *testing.T) {
 	}
 }
 
+// TestRegistryReplace swaps the whole set of registered connectors at once.
+func TestRegistryReplace(t *testing.T) {
+	reg := NewRegistry()
+	reg.Register("stale", &fakeClient{})
+	a := &fakeClient{}
+	reg.Replace(map[string]Client{"fresh": a})
+	if _, ok := reg.Client("stale"); ok {
+		t.Error("after Replace, stale connector still resolves")
+	}
+	if got, ok := reg.Client("fresh"); !ok || got != a {
+		t.Errorf("Client(fresh) = %v,%v, want the replacement", got, ok)
+	}
+	reg.Replace(nil) // a nil map clears the registry
+	if _, ok := reg.Client("fresh"); ok {
+		t.Error("after Replace(nil), a connector still resolves")
+	}
+}
+
+// TestHTTPClientGetState checks the provisional get_state wire format: a GET to
+// /api/state carrying subject and reduceSpec, decoded into a state object.
+func TestHTTPClientGetState(t *testing.T) {
+	var gotPath, gotQuery, gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath, gotQuery, gotAuth = r.URL.Path, r.URL.RawQuery, r.Header.Get("Authorization")
+		_, _ = w.Write([]byte(`{"total":42}`))
+	}))
+	defer srv.Close()
+	c := NewHTTPClient(Connector{Endpoint: srv.URL, Token: "t"})
+	state, err := c.GetState(context.Background(), "orders/42", "orderTotals")
+	if err != nil {
+		t.Fatalf("GetState: %v", err)
+	}
+	if gotPath != "/api/state" || !strings.Contains(gotQuery, "subject=orders%2F42") || !strings.Contains(gotQuery, "reduceSpec=orderTotals") {
+		t.Errorf("path/query = %q?%q", gotPath, gotQuery)
+	}
+	if gotAuth != "Bearer t" {
+		t.Errorf("Authorization = %q, want Bearer t", gotAuth)
+	}
+	if state["total"] != json.Number("42") {
+		t.Errorf("state total = %#v, want json.Number 42", state["total"])
+	}
+}
+
+// TestHTTPClientQuery checks the provisional run_query wire format.
+func TestHTTPClientQuery(t *testing.T) {
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &gotBody)
+		_, _ = w.Write([]byte(`[{"id":1}]`))
+	}))
+	defer srv.Close()
+	c := NewHTTPClient(Connector{Endpoint: srv.URL})
+	out, err := c.Query(context.Background(), "select * from x")
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if gotBody["query"] != "select * from x" {
+		t.Errorf("query body = %#v", gotBody["query"])
+	}
+	rows, ok := out.([]any)
+	if !ok || len(rows) != 1 {
+		t.Fatalf("query result = %#v, want a 1-element array", out)
+	}
+}
+
+// TestHTTPClientReadEvents checks the NDJSON parse and the exclusive-cursor
+// translation: the boundary event equal to AfterID is dropped.
+func TestHTTPClientReadEvents(t *testing.T) {
+	var gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		_, _ = w.Write([]byte(`{"id":"e1","seq":1,"subject":"orders/new","type":"T","data":{"a":1}}
+{"id":"e2","seq":2,"subject":"orders/new","type":"T","data":{"a":2}}
+`))
+	}))
+	defer srv.Close()
+	c := NewHTTPClient(Connector{Endpoint: srv.URL})
+	events, err := c.ReadEvents(context.Background(), ReadEventsRequest{Subject: "orders/new", AfterID: "e1", Recursive: true, Limit: 10})
+	if err != nil {
+		t.Fatalf("ReadEvents: %v", err)
+	}
+	if !strings.Contains(gotQuery, "lowerBound=e1") || !strings.Contains(gotQuery, "recursive=true") || !strings.Contains(gotQuery, "limit=10") {
+		t.Errorf("query = %q", gotQuery)
+	}
+	if len(events) != 1 || events[0].ID != "e2" {
+		t.Fatalf("events = %+v, want only e2 (e1 is the excluded cursor boundary)", events)
+	}
+}
+
+// TestHTTPClientGetStateError surfaces a non-2xx get_state as an error.
+func TestHTTPClientGetStateError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	c := NewHTTPClient(Connector{Endpoint: srv.URL})
+	if _, err := c.GetState(context.Background(), "s", ""); err == nil {
+		t.Fatal("GetState on HTTP 500: err = nil, want error")
+	}
+}
+
+// TestHTTPClientQueryError surfaces a non-2xx run_query as an error.
+func TestHTTPClientQueryError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	c := NewHTTPClient(Connector{Endpoint: srv.URL})
+	if _, err := c.Query(context.Background(), "q"); err == nil {
+		t.Fatal("Query on HTTP 500: err = nil, want error")
+	}
+}
+
+// TestHTTPClientBuildRequestErrors covers the request-construction error branch of
+// every operation: an endpoint containing a control character makes
+// http.NewRequestWithContext fail before any network call.
+func TestHTTPClientBuildRequestErrors(t *testing.T) {
+	c := NewHTTPClient(Connector{Endpoint: "http://\x7f-bad"})
+	if err := c.WriteEvent(context.Background(), Event{Subject: "s"}); err == nil {
+		t.Error("WriteEvent with a bad endpoint: want a build error")
+	}
+	if _, err := c.GetState(context.Background(), "s", ""); err == nil {
+		t.Error("GetState with a bad endpoint: want a build error")
+	}
+	if _, err := c.Query(context.Background(), "q"); err == nil {
+		t.Error("Query with a bad endpoint: want a build error")
+	}
+	if _, err := c.ReadEvents(context.Background(), ReadEventsRequest{Subject: "s"}); err == nil {
+		t.Error("ReadEvents with a bad endpoint: want a build error")
+	}
+}
+
+// TestHTTPClientDecodeErrors surfaces malformed clio response bodies as errors on
+// every reading operation (the JSON/NDJSON decode-failure branches).
+func TestHTTPClientDecodeErrors(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("{not json"))
+	}))
+	defer srv.Close()
+	c := NewHTTPClient(Connector{Endpoint: srv.URL})
+	if _, err := c.GetState(context.Background(), "s", ""); err == nil {
+		t.Error("GetState on a malformed body: want error")
+	}
+	if _, err := c.Query(context.Background(), "q"); err == nil {
+		t.Error("Query on a malformed body: want error")
+	}
+	if _, err := c.ReadEvents(context.Background(), ReadEventsRequest{Subject: "s"}); err == nil {
+		t.Error("ReadEvents on a malformed NDJSON line: want error")
+	}
+}
+
+// TestHTTPClientReadEventsError surfaces a non-2xx read as an error.
+func TestHTTPClientReadEventsError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer srv.Close()
+	c := NewHTTPClient(Connector{Endpoint: srv.URL})
+	if _, err := c.ReadEvents(context.Background(), ReadEventsRequest{Subject: "s"}); err == nil {
+		t.Fatal("ReadEvents on HTTP 502: err = nil, want error")
+	}
+}
+
 // TestHTTPClientNon2xx surfaces a non-2xx clio response as an error, so the job
 // stays pending and is retried (at-least-once).
 func TestHTTPClientNon2xx(t *testing.T) {
@@ -113,11 +278,40 @@ func TestHTTPClientNon2xx(t *testing.T) {
 }
 
 // TestHTTPClientUnreachable surfaces a transport error (clio unreachable) as an
-// error, so the job stays pending and retries.
+// error on every operation, so the job stays pending and retries.
 func TestHTTPClientUnreachable(t *testing.T) {
 	c := NewHTTPClient(Connector{Endpoint: "http://127.0.0.1:1"}) // nothing listens on port 1
 	if err := c.WriteEvent(context.Background(), Event{Subject: "s"}); err == nil {
 		t.Fatal("WriteEvent to an unreachable endpoint: err = nil, want error")
+	}
+	if _, err := c.GetState(context.Background(), "s", ""); err == nil {
+		t.Fatal("GetState to an unreachable endpoint: err = nil, want error")
+	}
+	if _, err := c.Query(context.Background(), "q"); err == nil {
+		t.Fatal("Query to an unreachable endpoint: err = nil, want error")
+	}
+	if _, err := c.ReadEvents(context.Background(), ReadEventsRequest{Subject: "s"}); err == nil {
+		t.Fatal("ReadEvents to an unreachable endpoint: err = nil, want error")
+	}
+}
+
+// TestResultVariableKinds checks the result canonicalization maps each JSON value
+// to the matching stored variable kind (covers toVarKind's arms).
+func TestResultVariableKinds(t *testing.T) {
+	cases := []struct {
+		value any
+		want  model.VarKind
+	}{
+		{"hi", model.VarString},
+		{true, model.VarBool},
+		{json.Number("42"), model.VarNumber},
+		{map[string]any{"a": 1}, model.VarJSON},
+		{nil, model.VarNull},
+	}
+	for _, c := range cases {
+		if got := resultVariable("r", c.value).Kind; got != c.want {
+			t.Errorf("resultVariable(%#v).Kind = %v, want %v", c.value, got, c.want)
+		}
 	}
 }
 
@@ -133,4 +327,14 @@ func (f *fakeClient) WriteEvent(_ context.Context, e Event) error {
 	}
 	f.events = append(f.events, e)
 	return nil
+}
+
+func (f *fakeClient) GetState(context.Context, string, string) (map[string]any, error) {
+	return nil, f.err
+}
+
+func (f *fakeClient) Query(context.Context, string) (any, error) { return nil, f.err }
+
+func (f *fakeClient) ReadEvents(context.Context, ReadEventsRequest) ([]InboundEvent, error) {
+	return nil, f.err
 }

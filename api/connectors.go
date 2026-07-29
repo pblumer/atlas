@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pblumer/atlas/clio"
 	"github.com/pblumer/atlas/temis"
 )
 
@@ -87,6 +88,49 @@ func (s *Server) buildTemisClients() (map[string]temis.Client, error) {
 	return clients, nil
 }
 
+// buildClioClients assembles the clio connector clients from the enabled managed
+// connector instances of kind "clio", resolving each instance's token from its
+// credentialsRef via the vault (ADR-0036/0041). It reads the connector store, so
+// callers run it on the run-loop goroutine (the store's owner). It mirrors
+// buildTemisClients; clio has no environment base (its endpoints are managed only).
+func (s *Server) buildClioClients() (map[string]clio.Client, error) {
+	clients := map[string]clio.Client{}
+	recs, err := s.connectors.loadAll()
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range recs {
+		if !c.Enabled || c.Kind != connectorKindClio || strings.TrimSpace(c.Endpoint) == "" {
+			continue
+		}
+		clients[c.Name] = clio.NewHTTPClient(clio.Connector{
+			Endpoint: strings.TrimSpace(c.Endpoint),
+			Token:    s.resolveConnectorSecret(c.CredentialsRef),
+		})
+	}
+	return clients, nil
+}
+
+// rebuildConnectorRegistries rebuilds every managed connector registry (temis and
+// clio) from the current connector store and swaps each live registry atomically, so
+// a task referencing a changed connector starts (or stops) resolving at once. Callers
+// run it on the run-loop goroutine, inside the same s.do closure that saved the
+// change, so the rebuild sees the write. A single helper keeps every CRUD handler
+// from having to know which kinds exist.
+func (s *Server) rebuildConnectorRegistries() error {
+	temisClients, err := s.buildTemisClients()
+	if err != nil {
+		return err
+	}
+	clioClients, err := s.buildClioClients()
+	if err != nil {
+		return err
+	}
+	s.temisRegistry.Replace(temisClients)
+	s.clioRegistry.Replace(clioClients)
+	return nil
+}
+
 // handleListConnectors lists the managed connector instances, oldest first. The
 // records carry only credential *references*, never secrets, so nothing is
 // redacted.
@@ -135,8 +179,8 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "connector name is required")
 		return
 	}
-	if kind != connectorKindTemis {
-		writeError(w, http.StatusBadRequest, "only the \"temis\" connector kind is configurable in this build")
+	if kind != connectorKindTemis && kind != connectorKindClio {
+		writeError(w, http.StatusBadRequest, "connector kind must be \"temis\" or \"clio\"")
 		return
 	}
 	if endpoint == "" {
@@ -177,11 +221,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		if saveErr = s.connectors.save(rec); saveErr != nil {
 			return
 		}
-		var clients map[string]temis.Client
-		if clients, saveErr = s.buildTemisClients(); saveErr != nil {
-			return
-		}
-		s.temisRegistry.Replace(clients)
+		saveErr = s.rebuildConnectorRegistries()
 	})
 	switch {
 	case dupErr:
@@ -239,11 +279,7 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		if saveErr = s.connectors.save(rec); saveErr != nil {
 			return
 		}
-		var clients map[string]temis.Client
-		if clients, saveErr = s.buildTemisClients(); saveErr != nil {
-			return
-		}
-		s.temisRegistry.Replace(clients)
+		saveErr = s.rebuildConnectorRegistries()
 	})
 	switch {
 	case saveErr != nil:
@@ -265,11 +301,7 @@ func (s *Server) handleDeleteConnector(w http.ResponseWriter, r *http.Request) {
 		if delErr = s.connectors.delete(id); delErr != nil {
 			return
 		}
-		var clients map[string]temis.Client
-		if clients, delErr = s.buildTemisClients(); delErr != nil {
-			return
-		}
-		s.temisRegistry.Replace(clients)
+		delErr = s.rebuildConnectorRegistries()
 	})
 	if delErr != nil {
 		writeError(w, http.StatusInternalServerError, "delete connector: "+delErr.Error())

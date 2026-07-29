@@ -59,7 +59,10 @@ func TestConnectorValidation(t *testing.T) {
 	if post(`{"name":"a"}`) != http.StatusBadRequest {
 		t.Error("missing endpoint: want 400")
 	}
-	if post(`{"name":"a","kind":"clio","endpoint":"http://x"}`) != http.StatusBadRequest {
+	if post(`{"name":"cliocon","kind":"clio","endpoint":"http://x"}`) != http.StatusOK {
+		t.Error("clio kind is now configurable: want 200")
+	}
+	if post(`{"name":"a","kind":"http.rest","endpoint":"http://x"}`) != http.StatusBadRequest {
 		t.Error("unsupported kind: want 400")
 	}
 	if post(`{"name":"dup","endpoint":"http://x"}`) != http.StatusOK {

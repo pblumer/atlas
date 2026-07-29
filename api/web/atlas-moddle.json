@@ -48,6 +48,21 @@
       ]
     },
     {
+      "name": "ClioConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "subject", "type": "String", "isAttr": true },
+        { "name": "eventType", "type": "String", "isAttr": true },
+        { "name": "query", "type": "String", "isAttr": true },
+        { "name": "reduceSpec", "type": "String", "isAttr": true },
+        { "name": "limit", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "RestConnector",
       "superClass": ["Element"],
       "meta": { "allowedIn": ["bpmn:ServiceTask"] },

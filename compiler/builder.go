@@ -72,6 +72,33 @@ const JsJobTypeIndex int32 = 6
 // subscribes to DMNJobType.
 const ClioWriteJobType = "io.atlas.clio.write"
 
+// ClioWriteJobTypeIndex is the interned index ClioWriteJobType is guaranteed to
+// occupy in every compiled process: NewBuilder reserves it eighth, so it is always
+// 7. This lets a single in-process clio worker subscribe by one global index across
+// every deployed process, the same way the DMN worker uses DMNJobTypeIndex — which
+// is what wires the clio connector into the server run loop (ADR-0036).
+const ClioWriteJobTypeIndex int32 = 7
+
+// ClioQueryJobType is the reserved job type a clio "query" connector task carries.
+// The in-process clio worker subscribes to it to read projected state (get_state)
+// or run a stored query (run_query) on the configured clio instance and write the
+// result back into the task's result variable (ADR-0036).
+const ClioQueryJobType = "io.atlas.clio.query"
+
+// ClioQueryJobTypeIndex is the interned index ClioQueryJobType is guaranteed to
+// occupy: NewBuilder reserves it ninth, so it is always 8.
+const ClioQueryJobTypeIndex int32 = 8
+
+// ClioReadJobType is the reserved job type a clio "read" connector task carries.
+// The in-process clio worker subscribes to it to read a subject's events
+// (read_events) from the configured clio instance and write them back into the
+// task's result variable as a JSON array (ADR-0036).
+const ClioReadJobType = "io.atlas.clio.read"
+
+// ClioReadJobTypeIndex is the interned index ClioReadJobType is guaranteed to
+// occupy: NewBuilder reserves it tenth, so it is always 9.
+const ClioReadJobTypeIndex int32 = 9
+
 // RestJobType is the reserved job type an HTTP-REST connector task carries. The
 // in-process REST connector worker subscribes to it to call the model-authored
 // REST endpoint off the hot path and write the response back (ADR-0036/0067), the
@@ -164,6 +191,9 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 	b.intern(RestJobType)          // reserve RestJobTypeIndex == 4
 	b.intern(PythonJobType)        // reserve PythonJobTypeIndex == 5
 	b.intern(JsJobType)            // reserve JsJobTypeIndex == 6
+	b.intern(ClioWriteJobType)     // reserve ClioWriteJobTypeIndex == 7
+	b.intern(ClioQueryJobType)     // reserve ClioQueryJobTypeIndex == 8
+	b.intern(ClioReadJobType)      // reserve ClioReadJobTypeIndex == 9
 	return b
 }
 
@@ -377,15 +407,65 @@ func (b *Builder) addBusinessRuleTask(connector, decisionId, resultVar string, s
 func (b *Builder) AddClioWriteTask(connector, subject, eventType string, retries int32) int32 {
 	detail := int32(len(b.connectorTasks))
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
-		JobType:   b.intern(ClioWriteJobType),
-		Connector: b.intern(connector),
-		Subject:   b.intern(subject),
-		EventType: b.intern(eventType),
-		Method:    -1, // not a REST task
-		ResultVar: -1,
-		Url:       RestExpr{}, // REST-only fields stay empty for a clio task
-		Auth:      -1,
-		Retries:   retries,
+		JobType:    b.intern(ClioWriteJobType),
+		Connector:  b.intern(connector),
+		Subject:    b.intern(subject),
+		EventType:  b.intern(eventType),
+		ClioQuery:  -1,
+		ReduceSpec: -1,
+		Method:     -1, // not a REST task
+		ResultVar:  -1,
+		Url:        RestExpr{}, // REST-only fields stay empty for a clio task
+		Auth:       -1,
+		Retries:    retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// AddClioQueryTask adds a clio "query" connector task and returns its element id.
+// It reads from the named connector's clio instance and writes the result into
+// resultVar. When query is non-empty the worker runs it as a run_query; otherwise
+// it reads get_state for subject (with the optional reduceSpec projection). Like a
+// service task it creates a job on activation carrying the reserved ClioQueryJobType
+// and waits for the in-process clio worker to complete it (ADR-0036).
+func (b *Builder) AddClioQueryTask(connector, subject, reduceSpec, query, resultVar string, retries int32) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:    b.intern(ClioQueryJobType),
+		Connector:  b.intern(connector),
+		Subject:    b.intern(subject),
+		EventType:  -1,
+		ClioQuery:  b.intern(query),
+		ReduceSpec: b.intern(reduceSpec),
+		Method:     -1,
+		ResultVar:  b.intern(resultVar),
+		Url:        RestExpr{},
+		Auth:       -1,
+		Retries:    retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// AddClioReadTask adds a clio "read" connector task and returns its element id. It
+// reads subject's events (up to limit; 0 = the connector's default) from the named
+// connector's clio instance and writes them into resultVar as a JSON array. Like a
+// service task it creates a job on activation carrying the reserved ClioReadJobType
+// and waits for the in-process clio worker to complete it (ADR-0036).
+func (b *Builder) AddClioReadTask(connector, subject, resultVar string, limit, retries int32) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:    b.intern(ClioReadJobType),
+		Connector:  b.intern(connector),
+		Subject:    b.intern(subject),
+		EventType:  -1,
+		ClioQuery:  -1,
+		ReduceSpec: -1,
+		Limit:      limit,
+		Method:     -1,
+		ResultVar:  b.intern(resultVar),
+		Url:        RestExpr{},
+		Auth:       -1,
+		Retries:    retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }
@@ -426,17 +506,19 @@ type RestConfig struct {
 func (b *Builder) AddRestConnectorTask(cfg RestConfig) int32 {
 	detail := int32(len(b.connectorTasks))
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
-		JobType:   b.intern(RestJobType),
-		Connector: -1, // REST carries its endpoint in the model, not a registry name
-		Subject:   -1, // not a clio task
-		EventType: -1,
-		Method:    b.intern(cfg.Method),
-		ResultVar: b.intern(cfg.ResultVar),
-		Url:       cfg.Url,
-		Headers:   cfg.Headers,
-		Query:     cfg.Query,
-		Auth:      b.internAuth(cfg.Auth),
-		Retries:   cfg.Retries,
+		JobType:    b.intern(RestJobType),
+		Connector:  -1, // REST carries its endpoint in the model, not a registry name
+		Subject:    -1, // not a clio task
+		EventType:  -1,
+		ClioQuery:  -1,
+		ReduceSpec: -1,
+		Method:     b.intern(cfg.Method),
+		ResultVar:  b.intern(cfg.ResultVar),
+		Url:        cfg.Url,
+		Headers:    cfg.Headers,
+		Query:      cfg.Query,
+		Auth:       b.internAuth(cfg.Auth),
+		Retries:    cfg.Retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

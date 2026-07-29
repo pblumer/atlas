@@ -280,6 +280,15 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/connectors/{id}", s.handleDeleteConnector, apiOp{
 			summary: "Delete a managed connector instance", tag: "Connectors", status: http.StatusNoContent}},
 
+		{"GET", "/api/v1/connectors/{id}/inbound-subscriptions", s.handleListInboundSubscriptions, apiOp{
+			summary: "List a clio connector's inbound event subscriptions", tag: "Connectors", resp: jsonBody("Subscriptions", tArray())}},
+		{"POST", "/api/v1/connectors/{id}/inbound-subscriptions", s.handleCreateInboundSubscription, apiOp{
+			summary: "Create an inbound event subscription for a clio connector", tag: "Connectors", req: jsonBody("Subscription", tObject()), resp: jsonBody("Created subscription", tObject())}},
+		{"PATCH", "/api/v1/inbound-subscriptions/{id}", s.handleUpdateInboundSubscription, apiOp{
+			summary: "Update an inbound event subscription", tag: "Connectors", req: jsonBody("Subscription update", tObject()), resp: jsonBody("Updated subscription", tObject())}},
+		{"DELETE", "/api/v1/inbound-subscriptions/{id}", s.handleDeleteInboundSubscription, apiOp{
+			summary: "Delete an inbound event subscription", tag: "Connectors", status: http.StatusNoContent}},
+
 		{"GET", "/api/v1/secrets", s.handleListSecrets, apiOp{
 			summary: "List secret names and metadata in the encrypted vault (never values)", tag: "Secrets", resp: jsonBody("Secrets", tArray())}},
 		{"PUT", "/api/v1/secrets/{name}", s.handleSetSecret, apiOp{
