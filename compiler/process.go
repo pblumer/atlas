@@ -38,6 +38,12 @@ const (
 	TypeMessageEndEvent   // an end event that publishes a message, then ends the instance (ADR-0052); the send-and-stop counterpart of a message throw event, so it reuses the throw detail table
 	TypeSubProcess        // an embedded subprocess: a container that is itself a scope; a token entering it runs its inner start→…→end in a child scope, and it completes when that scope empties (ADR-0074)
 	TypeCallActivity      // a call activity: starts a separate process as a child instance, waits for it, then continues; variables pass in/out by mapping (ADR-0076)
+	// TypeEventSubProcessStart is a runtime-only element type: the armed trigger of an
+	// event subprocess (ADR-0082). No compiled node carries it (the handler compiles as
+	// TypeSubProcess); the engine arms one waiting instance per event subprocess in a
+	// scope, and its firing activates the handler. It is excluded from the scope's
+	// active-child counter so it never blocks scope completion.
+	TypeEventSubProcessStart
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
 	numBpmnTypes = 23
@@ -90,6 +96,8 @@ func (t BpmnType) String() string {
 		return "SubProcess"
 	case TypeCallActivity:
 		return "CallActivity"
+	case TypeEventSubProcessStart:
+		return "EventSubProcessStart"
 	default:
 		return "Unspecified"
 	}

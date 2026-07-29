@@ -1,6 +1,14 @@
 package engine
 
-import "github.com/pblumer/atlas/model"
+import (
+	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/model"
+)
+
+// eventSubTrigger is the element type of an armed event-subprocess trigger (ADR-0082).
+// It is excluded from a scope's active-child counter so an armed trigger never keeps
+// the scope from completing; it is a real element instance in every other respect.
+const eventSubTrigger = uint8(compiler.TypeEventSubProcessStart)
 
 // firstErr returns the first non-nil error of a sequence, so a run of state
 // mutations that each already ran can be checked once instead of after every call.
@@ -82,8 +90,10 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err := tx.PutElementInstance(h.Key, &v.element); err != nil {
 				return err
 			}
-			if err := tx.IncrementActiveChildren(v.element.FlowScopeKey); err != nil {
-				return err
+			if v.element.BpmnElementType != eventSubTrigger {
+				if err := tx.IncrementActiveChildren(v.element.FlowScopeKey); err != nil {
+					return err
+				}
 			}
 			// Retain a token-visit count per element so the Operations overlay can
 			// show where tokens have flowed even after instances finish (ADR-0022).
@@ -121,8 +131,10 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err := tx.DeleteElementInstance(h.Key, &v.element); err != nil {
 				return err
 			}
-			if err := tx.DecrementActiveChildren(v.element.FlowScopeKey); err != nil {
-				return err
+			if v.element.BpmnElementType != eventSubTrigger {
+				if err := tx.DecrementActiveChildren(v.element.FlowScopeKey); err != nil {
+					return err
+				}
 			}
 			return tx.DecElementToken(v.element.ProcessDefKey, v.element.ElementId)
 		}
