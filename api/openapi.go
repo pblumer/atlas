@@ -142,6 +142,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Created instance", tObject())}},
 		{"GET", "/api/v1/instances", s.handleListInstances, apiOp{
 			summary: "List active and finished instances", tag: "Instances", resp: jsonBody("Instances", tArray())}},
+		{"GET", "/api/v1/instances/search", s.handleSearchInstances, apiOp{
+			summary: "Search instances by variable content — ?q=name=value (name exact, value substring) or free text over variable names and values", tag: "Instances",
+			resp: jsonBody("Matching instances", tArray())}},
 		{"GET", "/api/v1/instances/{key}/variables", s.handleInstanceVariables, apiOp{
 			summary: "Read a process instance's variables as a typed JSON object", tag: "Instances",
 			resp: jsonBody("Instance variables", tObject())}},
@@ -288,6 +291,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Update an inbound event subscription", tag: "Connectors", req: jsonBody("Subscription update", tObject()), resp: jsonBody("Updated subscription", tObject())}},
 		{"DELETE", "/api/v1/inbound-subscriptions/{id}", s.handleDeleteInboundSubscription, apiOp{
 			summary: "Delete an inbound event subscription", tag: "Connectors", status: http.StatusNoContent}},
+
+		{"POST", "/api/v1/connectors/{id}/provision-clio-key", s.handleProvisionClioKey, apiOp{
+			summary: "Mint a scoped clio key (admin token supplied once) and seal it as this connector's credential", tag: "Connectors", req: jsonBody("Provision request", tObject()), resp: jsonBody("Provisioned credential", tObject())}},
 
 		{"GET", "/api/v1/secrets", s.handleListSecrets, apiOp{
 			summary: "List secret names and metadata in the encrypted vault (never values)", tag: "Secrets", resp: jsonBody("Secrets", tArray())}},

@@ -200,7 +200,7 @@ func TestConnectorUpdateFields(t *testing.T) {
 }
 
 // TestMailConnectorValidationAndCreate covers the create endpoint's mail-specific
-// input checks and a successful mail connector create (ADR-0078).
+// input checks and a successful mail connector create (ADR-0079).
 func TestMailConnectorValidationAndCreate(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	h := srv.Handler()

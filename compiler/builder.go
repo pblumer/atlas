@@ -114,7 +114,7 @@ const RestJobTypeIndex int32 = 4
 
 // MailJobType is the reserved job type an outbound mail connector task carries.
 // The in-process mail connector worker subscribes to it to send the model-authored
-// message through a server-registered mail provider off the hot path (ADR-0078),
+// message through a server-registered mail provider off the hot path (ADR-0079),
 // the same way the clio worker subscribes to ClioWriteJobType.
 const MailJobType = "io.atlas.mail.send"
 
@@ -153,6 +153,7 @@ type Builder struct {
 	serviceTasks      []ServiceTaskDetail
 	scriptTasks       []ScriptTaskDetail
 	callActivities    []CallActivityDetail
+	multiInstances    []MultiInstanceDetail
 	scriptJobTasks    []ScriptJobTaskDetail
 	businessRuleTasks []BusinessRuleTaskDetail
 	timerCatches      []TimerCatchDetail
@@ -228,10 +229,11 @@ func (b *Builder) intern(s string) int32 {
 func (b *Builder) addNode(t BpmnType, detail int32) int32 {
 	id := int32(len(b.nodes))
 	b.nodes = append(b.nodes, CompiledNode{
-		ElementId: id,
-		Type:      t,
-		FlowScope: b.flowScope, // the scope currently open (-1 = process root)
-		Detail:    detail,
+		ElementId:     id,
+		Type:          t,
+		FlowScope:     b.flowScope, // the scope currently open (-1 = process root)
+		Detail:        detail,
+		MultiInstance: -1, // not a loop unless SetMultiInstance marks it (ADR-0077)
 	})
 	b.elementIds = append(b.elementIds, -1) // kept in lockstep with nodes
 	return id
@@ -250,6 +252,29 @@ func (b *Builder) AddCallActivity(calledProcessId string, binding DecisionBindin
 		PropagateAllChild:  propagateAllChild,
 	})
 	return b.addNode(TypeCallActivity, detail)
+}
+
+// SetMultiInstance marks an already-added node a multi-instance activity carrying
+// the given loop characteristics (ADR-0077), interning the per-iteration and result
+// variable names. The node keeps its real activity type; its MultiInstance field is
+// set to index the loop detail. Applied after the node exists (like io-mappings), so
+// any activity — task, subprocess, or call activity — can be a loop. Exactly one of
+// inputCollection or cardinality should be non-nil (the parser enforces it).
+func (b *Builder) SetMultiInstance(nodeID int32, sequential bool, inputElement, outputCollection string, inputCollection, cardinality, outputElement, completionCondition *expr.Compiled) {
+	if !b.validNode(nodeID) {
+		return
+	}
+	idx := int32(len(b.multiInstances))
+	b.multiInstances = append(b.multiInstances, MultiInstanceDetail{
+		InputCollection:     inputCollection,
+		Cardinality:         cardinality,
+		InputElement:        b.intern(inputElement),
+		OutputCollection:    b.intern(outputCollection),
+		OutputElement:       outputElement,
+		CompletionCondition: completionCondition,
+		Sequential:          sequential,
+	})
+	b.nodes[nodeID].MultiInstance = idx
 }
 
 // AddSubProcess adds an embedded subprocess container node and returns its element
@@ -564,7 +589,7 @@ func (b *Builder) internAuth(a RestAuth) int32 {
 }
 
 // MailConfig is the deploy-time configuration of an outbound mail connector task
-// (ADR-0078). Connector names the server-registered mail provider (its host and
+// (ADR-0079). Connector names the server-registered mail provider (its host and
 // credentials live server-side, never in the model); To/Cc/Bcc/From/Subject/Body
 // carry literal-or-FEEL values (the parser compiles the FEEL ones) evaluated over
 // the instance's variables at send time. To and Subject/Body are the message; Cc,
@@ -585,7 +610,7 @@ type MailConfig struct {
 // the reserved MailJobType so the in-process mail worker picks it up, evaluates any
 // FEEL recipient/subject/body values over the instance's variables, resolves the
 // named connector's provider client, sends the message, and completes the job
-// (ADR-0078). The provider endpoint and credentials are resolved server-side from
+// (ADR-0079). The provider endpoint and credentials are resolved server-side from
 // the named connector, never authored in the model — mirroring clio (ADR-0036).
 func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
 	detail := int32(len(b.connectorTasks))
@@ -1006,6 +1031,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		serviceTasks:      b.serviceTasks,
 		scriptTasks:       b.scriptTasks,
 		callActivities:    b.callActivities,
+		multiInstances:    b.multiInstances,
 		scriptJobTasks:    b.scriptJobTasks,
 		businessRuleTasks: b.businessRuleTasks,
 		timerCatches:      b.timerCatches,

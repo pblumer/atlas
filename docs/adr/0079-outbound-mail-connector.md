@@ -1,4 +1,4 @@
-# ADR-0078: An outbound mail connector (SMTP first)
+# ADR-0079: An outbound mail connector (SMTP first)
 
 - **Status:** Accepted
 - **Date:** 2026-07-29

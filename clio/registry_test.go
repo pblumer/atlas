@@ -128,6 +128,74 @@ func TestHTTPClientWriteEventDefaultSource(t *testing.T) {
 	}
 }
 
+// TestMintKey checks the clio admin key-mint wire format: a POST to /api/v1/keys
+// with the admin bearer and {name, scopes}, returning the once-shown secret.
+func TestMintKey(t *testing.T) {
+	var gotPath, gotAuth string
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath, gotAuth = r.URL.Path, r.Header.Get("Authorization")
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &gotBody)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"kid":"kid_x","secret":"kid_x.s3cr3t"}`))
+	}))
+	defer srv.Close()
+
+	got, err := MintKey(context.Background(), srv.URL, "admintok", KeyRequest{Name: "atlas-events", Scopes: []string{"read:/employees/*"}, ExpiresAt: "2027-01-01T00:00:00Z"})
+	if err != nil {
+		t.Fatalf("MintKey: %v", err)
+	}
+	if got != "kid_x.s3cr3t" {
+		t.Errorf("MintKey secret = %q, want kid_x.s3cr3t", got)
+	}
+	if gotPath != "/api/v1/keys" || gotAuth != "Bearer admintok" {
+		t.Errorf("path/auth = %q / %q", gotPath, gotAuth)
+	}
+	if gotBody["name"] != "atlas-events" || gotBody["expiresAt"] != "2027-01-01T00:00:00Z" {
+		t.Errorf("body name/expiresAt = %#v / %#v", gotBody["name"], gotBody["expiresAt"])
+	}
+	scopes, _ := gotBody["scopes"].([]any)
+	if len(scopes) != 1 || scopes[0] != "read:/employees/*" {
+		t.Errorf("body scopes = %#v, want [read:/employees/*]", gotBody["scopes"])
+	}
+}
+
+// TestMintKeyErrors covers MintKey's failure branches: a missing admin token, a
+// non-2xx response, and a response with no secret.
+func TestMintKeyErrors(t *testing.T) {
+	if _, err := MintKey(context.Background(), "http://x", "", KeyRequest{Name: "n", Scopes: []string{"read:/a"}}); err == nil {
+		t.Error("MintKey with no admin token: want error")
+	}
+	forbidden := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer forbidden.Close()
+	if _, err := MintKey(context.Background(), forbidden.URL, "t", KeyRequest{Name: "n", Scopes: []string{"read:/a"}}); err == nil {
+		t.Error("MintKey on HTTP 403: want error")
+	}
+	empty := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"kid":"k"}`))
+	}))
+	defer empty.Close()
+	if _, err := MintKey(context.Background(), empty.URL, "t", KeyRequest{Name: "n", Scopes: []string{"read:/a"}}); err == nil {
+		t.Error("MintKey with no secret in response: want error")
+	}
+	badJSON := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("{not json"))
+	}))
+	defer badJSON.Close()
+	if _, err := MintKey(context.Background(), badJSON.URL, "t", KeyRequest{Name: "n", Scopes: []string{"read:/a"}}); err == nil {
+		t.Error("MintKey on a malformed response: want a decode error")
+	}
+	if _, err := MintKey(context.Background(), "http://127.0.0.1:1", "t", KeyRequest{Name: "n", Scopes: []string{"read:/a"}}); err == nil {
+		t.Error("MintKey to an unreachable endpoint: want a transport error")
+	}
+	if _, err := MintKey(context.Background(), "http://\x7f-bad", "t", KeyRequest{Name: "n", Scopes: []string{"read:/a"}}); err == nil {
+		t.Error("MintKey with a bad endpoint: want a build error")
+	}
+}
+
 // TestRegistryReplace swaps the whole set of registered connectors at once.
 func TestRegistryReplace(t *testing.T) {
 	reg := NewRegistry()

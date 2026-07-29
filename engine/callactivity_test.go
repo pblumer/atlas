@@ -178,6 +178,166 @@ func TestCallActivityRecovers(t *testing.T) {
 	}
 }
 
+// callerWithChildServiceTask deploys a caller whose call activity invokes a child
+// that parks on a service task, and returns the processor, the caller instance key,
+// and the child's job type. Used by the termination tests.
+func callerWithChildServiceTask(t *testing.T, h *harness, clk engine.Clock, callBuild func(b *compiler.Builder, call int32)) (*engine.Processor, int32) {
+	t.Helper()
+	cb := compiler.NewBuilder(8, "child-term", 1)
+	cs := cb.AddStartEvent()
+	ct := cb.AddServiceTask("childwork", 3)
+	ce := cb.AddEndEvent()
+	cb.Connect(cs, ct)
+	cb.Connect(ct, ce)
+	childCp, err := cb.Build()
+	if err != nil {
+		t.Fatalf("child Build: %v", err)
+	}
+	jobType := childCp.ServiceTask(childCp.Node(ct).Detail).JobType
+
+	b := compiler.NewBuilder(9, "caller-term", 1)
+	start := b.AddStartEvent()
+	call := b.AddCallActivity("child-term", compiler.BindingLatest, true, true)
+	b.Connect(start, call)
+	callBuild(b, call)
+	callerCp, err := b.Build()
+	if err != nil {
+		t.Fatalf("caller Build: %v", err)
+	}
+
+	p := engine.New(1, h.log, h.store, clk)
+	p.Deploy(childCp)
+	p.Deploy(callerCp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(callerCp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	// Two live instances (caller + child); the caller's call activity and the child's
+	// service task are both parked. A boundary-armed caller also has a boundary element
+	// instance, so assert only the instance count here.
+	if pi, _ := counts(t, h.store); pi != 2 {
+		t.Fatalf("parked: process=%d, want 2 (caller + child)", pi)
+	}
+	return p, jobType
+}
+
+// TestCallActivityCancelTerminatesChild cancels a caller whose call activity is
+// still running: the child instance must be terminated too, not left running
+// (ADR-0076).
+func TestCallActivityCancelTerminatesChild(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	p, _ := callerWithChildServiceTask(t, h, &manualClock{}, func(b *compiler.Builder, call int32) {
+		b.Connect(call, b.AddEndEvent())
+	})
+
+	p.CancelInstance(model.NewKey(1, 1)) // cancel the caller
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after cancel: process=%d element=%d, want 0 and 0 (caller and child terminated)", pi, ei)
+	}
+}
+
+// TestCallActivityBoundaryTerminatesChild fires an interrupting boundary timer on a
+// running call activity: the child instance is terminated and the escalation flow
+// runs to completion (ADR-0076).
+func TestCallActivityBoundaryTerminatesChild(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	const dur = int64(30e9)
+	clk := &fixedClock{t: 1_000}
+	var escEnd int32
+	p, _ := callerWithChildServiceTask(t, h, clk, func(b *compiler.Builder, call int32) {
+		b.Connect(call, b.AddEndEvent()) // normal path
+		boundary := b.AddBoundaryTimerEvent(call, true, dur)
+		escEnd = b.AddEndEvent()
+		b.Connect(boundary, escEnd)
+	})
+
+	clk.t = 1_000 + dur + 1
+	if err := p.TickTimers(); err != nil {
+		t.Fatalf("TickTimers: %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after interrupt: process=%d element=%d, want 0 and 0 (child terminated, caller escalated)", pi, ei)
+	}
+	_ = escEnd
+}
+
+// TestCallActivityCancelTerminatesGrandchild cancels the top of a three-level call
+// chain (A calls B calls C, with C parked on a service task): terminating A must
+// cascade through B down to C, so no instance is left running (ADR-0076). This
+// exercises the recursion — terminating a call-activity element enqueues its child's
+// termination, which in turn terminates that child's call activity.
+func TestCallActivityCancelTerminatesGrandchild(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	// Leaf C: parks on a service task.
+	cb := compiler.NewBuilder(7, "leaf-c", 1)
+	cs := cb.AddStartEvent()
+	ct := cb.AddServiceTask("leafwork", 3)
+	ce := cb.AddEndEvent()
+	cb.Connect(cs, ct)
+	cb.Connect(ct, ce)
+	leafCp, err := cb.Build()
+	if err != nil {
+		t.Fatalf("leaf Build: %v", err)
+	}
+
+	// Middle B: calls C.
+	bb := compiler.NewBuilder(8, "mid-b", 1)
+	bs := bb.AddStartEvent()
+	bcall := bb.AddCallActivity("leaf-c", compiler.BindingLatest, true, true)
+	be := bb.AddEndEvent()
+	bb.Connect(bs, bcall)
+	bb.Connect(bcall, be)
+	midCp, err := bb.Build()
+	if err != nil {
+		t.Fatalf("mid Build: %v", err)
+	}
+
+	// Top A: calls B.
+	ab := compiler.NewBuilder(9, "top-a", 1)
+	as := ab.AddStartEvent()
+	acall := ab.AddCallActivity("mid-b", compiler.BindingLatest, true, true)
+	ae := ab.AddEndEvent()
+	ab.Connect(as, acall)
+	ab.Connect(acall, ae)
+	topCp, err := ab.Build()
+	if err != nil {
+		t.Fatalf("top Build: %v", err)
+	}
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(leafCp)
+	p.Deploy(midCp)
+	p.Deploy(topCp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(topCp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if pi, _ := counts(t, h.store); pi != 3 {
+		t.Fatalf("parked: process=%d, want 3 (A + B + C)", pi)
+	}
+
+	p.CancelInstance(model.NewKey(1, 1)) // cancel the top instance
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after cancel: process=%d element=%d, want 0 and 0 (whole chain terminated)", pi, ei)
+	}
+}
+
 // TestCallActivityPropagatesAll runs a call activity with propagation on (the
 // default): all caller variables flow into the child and all child variables flow
 // back, no mappings needed (ADR-0076).

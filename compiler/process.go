@@ -117,6 +117,7 @@ type CompiledNode struct {
 	IOOutCount      int32 // number of output mappings (0 for a node with none)
 	ScopeStartStart int32 // offset into scopeStarts (the start events nested directly in this subprocess)
 	ScopeStartCount int32 // number of nested start events (0 for a non-subprocess node)
+	MultiInstance   int32 // index into multiInstances, -1 if this node is not a multi-instance loop (ADR-0077)
 }
 
 // CompiledFlow is a sequence flow between two nodes. Condition is the compiled
@@ -155,6 +156,27 @@ type CallActivityDetail struct {
 	Binding            DecisionBinding
 	PropagateAllParent bool // pass all caller variables into the child (default true)
 	PropagateAllChild  bool // return all child variables to the caller (default true)
+}
+
+// MultiInstanceDetail is the per-multi-instance-activity data a behavior needs at
+// runtime (ADR-0077). A multi-instance activity runs its node N times — once per
+// element of InputCollection (a FEEL list), or Cardinality times — as inner element
+// instances scoped under a body. InputElement (interned, -1 if none) is the local
+// variable each iteration binds to its item; the standard loopCounter (1-based) is
+// bound alongside it. Each iteration's OutputElement (a FEEL over its variables, nil
+// if none) is appended to the OutputCollection (interned, -1 if none) list promoted
+// to the parent when the loop completes. CompletionCondition (nil if none) is a FEEL
+// early-exit evaluated after each iteration. Sequential runs one iteration at a time;
+// parallel (the default) seeds them all at once. Exactly one of InputCollection or
+// Cardinality is set — the deploy is refused otherwise.
+type MultiInstanceDetail struct {
+	InputCollection     *expr.Compiled // FEEL list to iterate; nil when Cardinality is used
+	Cardinality         *expr.Compiled // FEEL count; nil when InputCollection is used
+	InputElement        int32          // interned per-iteration variable name, -1 if none
+	OutputCollection    int32          // interned result-list variable name, -1 if none
+	OutputElement       *expr.Compiled // FEEL per-iteration contribution, nil if none
+	CompletionCondition *expr.Compiled // FEEL early-exit, nil if none
+	Sequential          bool           // one iteration at a time (else parallel)
 }
 
 // DecisionInputMapping is one explicit input to a DMN decision: the decision's
@@ -286,7 +308,7 @@ type ConnectorTaskDetail struct {
 	Query   []RestKV
 	Auth    int32
 	Retries int32
-	// Mail connector fields (JobType == MailJobType, ADR-0078). Connector (above)
+	// Mail connector fields (JobType == MailJobType, ADR-0079). Connector (above)
 	// names the server-registered mail provider; the message is authored in the
 	// model as literal-or-FEEL values evaluated over the instance's variables at
 	// send time. To and Bcc/Cc are comma-separated recipient lists; From overrides
@@ -460,6 +482,7 @@ type CompiledProcess struct {
 	serviceTasks      []ServiceTaskDetail
 	scriptTasks       []ScriptTaskDetail
 	callActivities    []CallActivityDetail
+	multiInstances    []MultiInstanceDetail
 	scriptJobTasks    []ScriptJobTaskDetail
 	businessRuleTasks []BusinessRuleTaskDetail
 	timerCatches      []TimerCatchDetail
@@ -647,6 +670,13 @@ func (p *CompiledProcess) ScriptTask(detail int32) *ScriptTaskDetail {
 // CallActivity returns the call-activity detail at the given table index.
 func (p *CompiledProcess) CallActivity(detail int32) *CallActivityDetail {
 	return &p.callActivities[detail]
+}
+
+// MultiInstance returns the loop characteristics at the given table index — the
+// per-activity multi-instance detail a node's MultiInstance field points at
+// (ADR-0077).
+func (p *CompiledProcess) MultiInstance(detail int32) *MultiInstanceDetail {
+	return &p.multiInstances[detail]
 }
 
 // ScriptJobTask returns the script-job-task detail at the given table index.

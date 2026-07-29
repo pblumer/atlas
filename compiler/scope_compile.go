@@ -156,7 +156,7 @@ func registerScope(
 		}
 		// A service task bearing an <atlas:mailConnector> extension is an outbound
 		// mail connector task: it sends a model-authored message through a
-		// server-registered mail provider via the job path (ADR-0078). The provider
+		// server-registered mail provider via the job path (ADR-0079). The provider
 		// (host, credentials) is resolved server-side by connector name, like clio;
 		// only the message (recipients, subject, body) lives in the model.
 		if cn := st.Mail; cn != nil {

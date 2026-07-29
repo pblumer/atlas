@@ -1,6 +1,6 @@
 // Package mail integrates an outbound e-mail provider as a server-registered Atlas
 // connector: a BPMN mail connector task sends a model-authored message through a
-// configured provider via the job path (ADR-0078), mirroring how the clio package
+// configured provider via the job path (ADR-0079), mirroring how the clio package
 // delegates an append to a registry-managed endpoint (ADR-0036). The integration
 // inherits the job protocol's durability and non-blocking properties (ADR-0007):
 //
@@ -17,7 +17,7 @@
 //
 // The first provider is SMTP ([SMTPClient]), which reaches Google, Microsoft 365,
 // and any standards-compliant server via its submission endpoint; native Gmail /
-// Microsoft Graph API providers are additive behind the same [Client] seam (ADR-0078).
+// Microsoft Graph API providers are additive behind the same [Client] seam (ADR-0079).
 //
 // Delivery is at-least-once (a crash between "the provider accepted the message" and
 // "job completed" replays the send); every message carries the job key as its
@@ -127,7 +127,7 @@ func NewSMTPClient(conn Connector) *SMTPClient {
 // addresses are delivered but never written into a header. A missing recipient or a
 // send failure returns an error so the job stays pending and is retried (at-least-once).
 func (c *SMTPClient) Send(ctx context.Context, m Message) error {
-	_ = ctx // net/smtp's SendMail predates context; ret/timeout handling is a follow-up (ADR-0078)
+	_ = ctx // net/smtp's SendMail predates context; ret/timeout handling is a follow-up (ADR-0079)
 	from := strings.TrimSpace(m.From)
 	if from == "" {
 		from = strings.TrimSpace(c.conn.From)

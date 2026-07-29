@@ -6,7 +6,7 @@ import (
 )
 
 // A service task bearing an <atlas:mailConnector> extension is an outbound mail
-// connector task (ADR-0078): it sends an e-mail through a server-registered mail
+// connector task (ADR-0079): it sends an e-mail through a server-registered mail
 // provider via the job path, mirroring clio's registry-managed endpoint (the
 // provider host and credentials live server-side, never in the model) while the
 // message fields (recipients, subject, body) are model-authored like REST's.

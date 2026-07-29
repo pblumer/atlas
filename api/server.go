@@ -195,7 +195,7 @@ type Server struct {
 	clioRegistry *clio.Registry
 
 	// mailRegistry resolves a connector name to a mail-provider client for outbound
-	// mail connector tasks (ADR-0078), built from the managed connector store at
+	// mail connector tasks (ADR-0079), built from the managed connector store at
 	// startup and rebuilt on every connector change, with each provider's credential
 	// resolved from the vault (ADR-0041). Read only while driving jobs on the run
 	// loop, so it needs no lock.
@@ -430,7 +430,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.jobRunner.HandleWithOutput(compiler.ClioQueryJobTypeIndex, clio.QueryHandler(store, s.processLookup, s.clioRegistry))
 	s.jobRunner.HandleWithOutput(compiler.ClioReadJobTypeIndex, clio.ReadHandler(store, s.processLookup, s.clioRegistry))
 	// An outbound mail connector task sends a model-authored message through a
-	// server-registered mail provider (ADR-0078). One worker serves every process
+	// server-registered mail provider (ADR-0079). One worker serves every process
 	// under the reserved mail job type; it resolves each job's connector name and
 	// recipients/subject/body from the compiled process, sends the message off the run
 	// loop and after fsync, and completes the job. The provider host and credentials

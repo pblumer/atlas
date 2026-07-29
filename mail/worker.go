@@ -24,7 +24,7 @@ type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 // task's connector/recipients/subject/body from the compiled process — evaluating
 // any FEEL field over the instance's variables (the fx toggle, ADR-0067) — resolves
 // the named connector's provider client from reg, and sends the message keyed by the
-// job key so an at-least-once retry de-duplicates (ADR-0078). Returning an error
+// job key so an at-least-once retry de-duplicates (ADR-0079). Returning an error
 // leaves the job pending (retry, then an incident, ADR-0061); the runner completes it
 // only on success.
 func Handler(store *state.Store, lookup ProcessLookup, reg *Registry) job.Handler {

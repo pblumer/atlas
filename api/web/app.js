@@ -239,7 +239,7 @@ const CONNECTORS = [
   {
     id: "mail", name: "Mail", kind: "Outbound e-mail",
     desc: "Sends an e-mail from a service task off the processor loop via a managed SMTP provider (Google, Microsoft 365, or any server). Recipients, subject, and body are model-authored (FEEL-capable); the provider host, credentials, and default sender are managed below and resolved from the vault. Authored via the E-Mail Outbound Connector service-task type.",
-    refs: "ADR-0041 · ADR-0078", status: "active", statusLabel: "configurable",
+    refs: "ADR-0041 · ADR-0079", status: "active", statusLabel: "configurable",
   },
 ];
 
@@ -559,7 +559,7 @@ async function viewConsoleOrg() {
         ? '<span class="pill ok"><span class="dot"></span>enabled</span>'
         : '<span class="pill warn"><span class="dot"></span>disabled</span>'}</td>
       <td style="text-align:right; white-space:nowrap">
-        ${c.kind === "clio" ? '<button class="btn ghost" data-cact="subs">Events</button>' : ""}
+        ${c.kind === "clio" ? '<button class="btn ghost" data-cact="provision">Provision access</button><button class="btn ghost" data-cact="subs">Events</button>' : ""}
         <button class="btn ghost" data-cact="edit">Edit</button>
         <button class="btn ghost" data-cact="toggle">${c.enabled ? "Disable" : "Enable"}</button>
         <button class="btn ghost danger" data-cact="delete">Delete</button>
@@ -1363,6 +1363,9 @@ function wireConnectorManagement(connectors) {
         if (btn.dataset.cact === "subs") {
           await toggleInboundSubs(btn.closest("tr"), id);
           return;
+        } else if (btn.dataset.cact === "provision") {
+          toggleProvisionClio(btn.closest("tr"), id, c.name);
+          return;
         } else if (btn.dataset.cact === "toggle") {
           await api("PATCH", "/api/v1/connectors/" + encodeURIComponent(id), { enabled: !c.enabled });
         } else if (btn.dataset.cact === "edit") {
@@ -1379,6 +1382,51 @@ function wireConnectorManagement(connectors) {
       } catch (err) { toast("Connector update failed: " + err.message, "err"); }
     });
   }
+}
+
+// toggleProvisionClio expands (or collapses) an inline panel under a clio connector
+// row that provisions the connector's credential in one step: the operator supplies
+// a clio admin token once, and Atlas mints a scoped read key on the clio instance
+// and seals it as this connector's token — no copy-pasting a key. The admin token is
+// sent once and never stored.
+function toggleProvisionClio(row, connectorId, connectorName) {
+  const existing = row.nextElementSibling;
+  if (existing && existing.classList.contains("provision-row")) {
+    existing.remove();
+    return;
+  }
+  // Collapse a sibling Events panel if open, so only one panel shows at a time.
+  if (existing && existing.classList.contains("subs-row")) existing.remove();
+
+  const panel = document.createElement("tr");
+  panel.className = "provision-row";
+  panel.innerHTML = `<td colspan="3" style="background:var(--surface); padding:12px 18px">
+    <div class="muted" style="margin-bottom:8px">Provision access — Atlas mints a scoped clio key with your admin token and stores it as this connector's credential. The admin token is used once and never stored.</div>
+    <form id="prov-form" style="display:grid;gap:8px;grid-template-columns:1fr 1fr auto;align-items:end">
+      <label class="field" style="margin:0"><span>clio admin token</span><input name="adminToken" type="password" autocomplete="off" placeholder="kid.secret (admin)" required/></label>
+      <label class="field" style="margin:0"><span>Read subject</span><input name="subject" placeholder="/employees" required/></label>
+      <button class="btn" type="submit">Provision</button>
+      <label class="check" style="grid-column:1 / -1;margin:0;display:flex;gap:8px;align-items:center">
+        <input type="checkbox" name="recursive" checked/>
+        <span>Recursive — grant read on the whole subtree (<code>read:/employees/*</code>), needed to watch child subjects.</span>
+      </label>
+      <div class="muted" style="grid-column:1 / -1">Requires a clio <b>admin</b> key. The minted key is read-only on the subject above; nothing writes your admin token to disk.</div>
+    </form></td>`;
+  row.after(panel);
+  panel.querySelector("#prov-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    try {
+      const res = await api("POST", "/api/v1/connectors/" + encodeURIComponent(connectorId) + "/provision-clio-key", {
+        adminToken: f.get("adminToken") || "",
+        subject: (f.get("subject") || "").trim(),
+        recursive: f.get("recursive") === "on",
+        keyName: "atlas-" + connectorName,
+      });
+      toast("Provisioned — token " + (res && res.credentialsRef ? res.credentialsRef : "stored") + " (" + (res && res.scope) + ")", "ok");
+      panel.remove();
+    } catch (err) { toast("Provisioning failed: " + err.message, "err"); }
+  });
 }
 
 // toggleInboundSubs expands (or collapses) an inline panel under a clio connector row
@@ -1663,7 +1711,17 @@ async function viewInstances() {
         <button class="btn neutral" type="submit">Open replay</button>
       </form>
     </div>
-    <div class="card" style="padding:0">
+    <form class="ops-varsearch" id="var-search" title="Find instances by the content of their process variables">
+      <span class="ops-search">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
+        <input id="var-q" type="text" placeholder="Search instances by variable — e.g. customerType=Business" aria-label="Search instances by variable" spellcheck="false" autocomplete="off"/>
+      </span>
+      <button class="btn" type="submit">Search variables</button>
+      <button class="btn ghost" type="button" id="var-clear" hidden>Clear</button>
+    </form>
+    <p class="muted var-hint" style="font-size:12px;margin:-4px 2px 12px">Contains <code>=</code> → structured <code>name=value</code> (name exact, value substring); otherwise free text across variable names and values.</p>
+    <div id="var-panel" hidden></div>
+    <div class="card" id="proc-card" style="padding:0">
       <table>
         <thead><tr><th>Process</th><th>Versions</th><th>Running</th><th>Finished</th><th>Last activity</th><th></th></tr></thead>
         <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
@@ -1739,6 +1797,84 @@ async function viewInstances() {
     if (/^\d+$/.test(key)) location.hash = `#/operations/i/${key}`;
     else toast("Enter a numeric instance key", "err");
   });
+
+  // Variable-content search: query the backend for instances whose variables
+  // match, then render a per-instance results table (each matched variable
+  // highlighted) in place of the per-process list. Clearing restores the list.
+  const varPanel = document.getElementById("var-panel");
+  const procCard = document.getElementById("proc-card");
+  const varClear = document.getElementById("var-clear");
+  const varInput = document.getElementById("var-q");
+  // needleOf mirrors the server's parse: an "=" makes it structured (the value
+  // side is the highlight needle); otherwise the whole query is the needle.
+  const needleOf = (q) => {
+    const i = q.indexOf("=");
+    return (i >= 0 && q.slice(0, i).trim() ? q.slice(i + 1) : q).trim().toLowerCase();
+  };
+  const highlight = (s, needle) => {
+    if (!needle) return esc(s);
+    const i = s.toLowerCase().indexOf(needle);
+    if (i < 0) return esc(s);
+    return esc(s.slice(0, i)) + "<mark>" + esc(s.slice(i, i + needle.length)) + "</mark>" + esc(s.slice(i + needle.length));
+  };
+  const showList = () => {
+    varPanel.hidden = true;
+    varPanel.innerHTML = "";
+    procCard.hidden = false;
+    varClear.hidden = true;
+  };
+  const runVarSearch = async (q) => {
+    q = q.trim();
+    if (!q) { showList(); return; }
+    procCard.hidden = true;
+    varClear.hidden = false;
+    varPanel.hidden = false;
+    varPanel.innerHTML = `<div class="card"><div class="empty">Searching…</div></div>`;
+    let rows;
+    try {
+      rows = await api("GET", "/api/v1/instances/search?q=" + encodeURIComponent(q));
+    } catch (e) {
+      varPanel.innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`;
+      return;
+    }
+    if (!rows.length) {
+      varPanel.innerHTML = `<div class="card"><div class="empty">No instance has a variable matching “${esc(q)}”.</div></div>`;
+      return;
+    }
+    const needle = needleOf(q);
+    const body = rows.map((r) => {
+      const label = r.processId || `#${r.processDefKey}`;
+      const tag = r.versionTag ? ` <span class="ver-tag" title="Version tag">${esc(r.versionTag)}</span>` : "";
+      const state = r.state === "active"
+        ? '<span class="pill ok"><span class="dot"></span>active</span>'
+        : `<span class="pill">${esc(r.state)}</span>`;
+      const hits = (r.variables || []).map((v) =>
+        `<div class="var-hit"><b>${esc(v.name)}</b> = ${highlight(v.value, needle)} <span class="var-kind">${esc(v.kind)}</span></div>`
+      ).join("");
+      return `<tr>
+        <td><b>${esc(label)}</b>${tag}<div class="muted" style="font-size:12px">${esc(String(r.key))}</div></td>
+        <td>v${r.version}</td>
+        <td>${state}</td>
+        <td class="muted">${esc(fmtNano(r.completedAt || r.createdAt))}</td>
+        <td>${hits}</td>
+        <td style="text-align:right"><a class="replay-link" href="#/operations/i/${r.key}">&#9654; Replay</a></td>
+      </tr>`;
+    }).join("");
+    const capped = rows.length >= 200 ? ' <span class="muted">(showing first 200)</span>' : "";
+    varPanel.innerHTML = `
+      <p class="muted" style="font-size:12px;margin:0 2px 8px">${rows.length} instance${rows.length === 1 ? "" : "s"} matched${capped} · full scan</p>
+      <div class="card" style="padding:0">
+        <table class="var-results">
+          <thead><tr><th>Process</th><th>Version</th><th>State</th><th>Started</th><th>Matched variable(s)</th><th></th></tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      </div>`;
+  };
+  document.getElementById("var-search").addEventListener("submit", (e) => {
+    e.preventDefault();
+    runVarSearch(varInput.value);
+  });
+  varClear.addEventListener("click", () => { varInput.value = ""; showList(); varInput.focus(); });
   const demoBtn = document.getElementById("demo");
   demoBtn.addEventListener("click", async () => {
     demoBtn.disabled = true;
