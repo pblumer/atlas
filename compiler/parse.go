@@ -770,10 +770,14 @@ type xmlZeebeLoopChars struct {
 // sequence flows compile into the flat node array, linked back to it only by their
 // FlowScope (ADR-0074). It recurses — a subprocess may contain subprocesses.
 type xmlSubProcess struct {
-	Id            string            `xml:"id,attr"`
-	Name          string            `xml:"name,attr"`
-	IOMapping     xmlZeebeIOMapping `xml:"extensionElements>ioMapping"`
-	MultiInstance *xmlMultiInstance `xml:"multiInstanceLoopCharacteristics"`
+	Id        string            `xml:"id,attr"`
+	Name      string            `xml:"name,attr"`
+	IOMapping xmlZeebeIOMapping `xml:"extensionElements>ioMapping"`
+	// TriggeredByEvent marks an event subprocess (ADR-0082): it is not entered by a
+	// sequence flow but armed by its start event's event definition while the parent
+	// scope runs. "true" makes it an event subprocess; empty/absent is an ordinary one.
+	TriggeredByEvent string            `xml:"triggeredByEvent,attr"`
+	MultiInstance    *xmlMultiInstance `xml:"multiInstanceLoopCharacteristics"`
 	xmlFlowContent
 }
 
@@ -860,6 +864,10 @@ type xmlStartEvent struct {
 	// fresh instance on the schedule (duration/date/cycle/cron) the definition
 	// carries, armed at deploy time (ADR-0051). A pointer so an absent one is nil.
 	Timer *xmlTimerEventDefinition `xml:"timerEventDefinition"`
+	// IsInterrupting is the event-subprocess start event's cancel flag (ADR-0082):
+	// absent or "true" interrupts the parent scope when the trigger fires, "false" runs
+	// the handler alongside it. Empty for an ordinary start event.
+	IsInterrupting string `xml:"isInterrupting,attr"`
 	// Form binds a start form to a none start event (ADR-0028): the form the UI
 	// shows before creating the instance, whose data becomes the start variables.
 	// The engine never sees it — it is pre-start UI metadata.

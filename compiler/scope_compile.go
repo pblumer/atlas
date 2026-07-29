@@ -8,6 +8,18 @@ import (
 	"github.com/pblumer/atlas/expr"
 )
 
+// eventSubStart returns the event subprocess's triggering start event — the first
+// start event carrying a message or timer event definition — or nil if it has none
+// (ADR-0082).
+func eventSubStart(sub *xmlSubProcess) *xmlStartEvent {
+	for i := range sub.StartEvents {
+		if s := &sub.StartEvents[i]; s.Message != nil || s.Timer != nil {
+			return s
+		}
+	}
+	return nil
+}
+
 // registerScope registers every flow node of one scope — the process root or an
 // embedded subprocess — into the flat node array and the shared id map, then
 // recurses into nested subprocesses under a pushed scope so their children carry
@@ -430,6 +442,33 @@ func registerScope(
 			return err
 		}
 		b.PopScope()
+		// An event subprocess (triggeredByEvent) is not entered by a flow; capture its
+		// start event's trigger (message/timer) and interrupting flag so the runtime can
+		// arm it while the parent scope runs (ADR-0082). Its inner nodes were registered
+		// above (the start also stays a normal message/timer start that flows on when the
+		// handler runs); this only records the arming spec on the container.
+		if sub.TriggeredByEvent == "true" {
+			st := eventSubStart(sub)
+			if st == nil {
+				return fmt.Errorf("compiler: event subprocess %q must have a start event with a message or timer event definition", sub.Id)
+			}
+			d := EventSubProcessDetail{StartNode: ids[st.Id], Interrupting: st.IsInterrupting != "false"}
+			switch {
+			case st.Message != nil:
+				name, keyExpr, err := resolveMessage(st.Id, st.Message.MessageRef)
+				if err != nil {
+					return err
+				}
+				d.Kind, d.MessageName, d.CorrelationKey = BoundaryMessage, name, keyExpr
+			case st.Timer != nil:
+				schedule, err := parseTimerSchedule(st.Timer)
+				if err != nil {
+					return fmt.Errorf("compiler: event subprocess %q timer: %w", sub.Id, err)
+				}
+				d.Kind, d.Schedule = BoundaryTimer, schedule
+			}
+			b.SetEventSubProcess(subID, d)
+		}
 	}
 	// Boundary events are registered last in their scope: each attaches to a host
 	// activity by id, which must already be registered so attachedToRef resolves
