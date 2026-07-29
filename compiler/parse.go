@@ -851,6 +851,11 @@ type xmlStartEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Name    string                     `xml:"name,attr"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
+	// SingletonStart ("true") marks a message start event as one-per-correlation-key
+	// (ADR-0078): while an instance started with a key is live, a further correlating
+	// message starts no duplicate. A plain attribute (like versionTag on a process);
+	// absent = the default start-per-message behavior (ADR-0035).
+	SingletonStart string `xml:"singletonStart,attr"`
 	// Timer, when present, makes this a timer start event: the process starts a
 	// fresh instance on the schedule (duration/date/cycle/cron) the definition
 	// carries, armed at deploy time (ADR-0051). A pointer so an absent one is nil.

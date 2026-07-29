@@ -31,7 +31,7 @@ func registerScope(
 			if err != nil {
 				return err
 			}
-			if err := register(s.Id, b.AddMessageStartEvent(name, keyExpr)); err != nil {
+			if err := register(s.Id, b.AddMessageStartEvent(name, keyExpr, s.SingletonStart == "true")); err != nil {
 				return err
 			}
 			continue

@@ -369,6 +369,11 @@ type TimerStartDetail struct {
 type MessageDetail struct {
 	MessageName    string
 	CorrelationKey *expr.Compiled
+	// SingletonStart marks a message *start* event as one-per-correlation-key: while
+	// an instance started with a given key is live, another correlating message starts
+	// no duplicate (ADR-0078). Only meaningful on a message start event; ignored on
+	// catch/throw/end. Default false keeps ADR-0035's start-per-message behavior.
+	SingletonStart bool
 }
 
 // BoundaryEventKind discriminates what a boundary event waits on.
@@ -597,6 +602,7 @@ type MessageStartEvent struct {
 	MessageName    string
 	ElementId      int32
 	CorrelationKey *expr.Compiled
+	SingletonStart bool // one live instance per correlation key (ADR-0078)
 }
 
 // MessageStartEvents returns each message-start event with its element index and
@@ -611,6 +617,7 @@ func (p *CompiledProcess) MessageStartEvents() []MessageStartEvent {
 				MessageName:    p.messageStarts[n.Detail].MessageName,
 				ElementId:      int32(id),
 				CorrelationKey: p.messageStarts[n.Detail].CorrelationKey,
+				SingletonStart: p.messageStarts[n.Detail].SingletonStart,
 			})
 		}
 	}

@@ -318,9 +318,9 @@ func (b *Builder) SetVersionTag(s string) { b.versionTag = b.intern(s) }
 // message (a throw event or an API publish of messageName) instantiates a fresh
 // process instance seeded with the message's payload (ADR-0035). correlationKey
 // is compiled for future use; message-start matching is by name today.
-func (b *Builder) AddMessageStartEvent(messageName string, correlationKey *expr.Compiled) int32 {
+func (b *Builder) AddMessageStartEvent(messageName string, correlationKey *expr.Compiled, singletonStart bool) int32 {
 	detail := int32(len(b.messageStarts))
-	b.messageStarts = append(b.messageStarts, MessageDetail{MessageName: messageName, CorrelationKey: correlationKey})
+	b.messageStarts = append(b.messageStarts, MessageDetail{MessageName: messageName, CorrelationKey: correlationKey, SingletonStart: singletonStart})
 	return b.addNode(TypeMessageStartEvent, detail)
 }
 
