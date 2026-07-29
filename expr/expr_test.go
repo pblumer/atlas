@@ -126,6 +126,18 @@ func TestAsList(t *testing.T) {
 	}
 }
 
+func TestListOfRoundTrips(t *testing.T) {
+	list := expr.ListOf(expr.Number(10), expr.Number(20), expr.Number(30))
+	elems, ok := expr.AsList(list)
+	if !ok || len(elems) != 3 {
+		t.Fatalf("AsList(ListOf(...)) = %v, %v; want 3 elements, true", elems, ok)
+	}
+	kind, _, text := expr.Classify(list)
+	if kind != expr.KindJSON || text != "[10,20,30]" {
+		t.Errorf("Classify(list) = %v, %q; want KindJSON, [10,20,30]", kind, text)
+	}
+}
+
 func TestAsInt(t *testing.T) {
 	if n, ok := expr.AsInt(evalAuto(t, "3")); !ok || n != 3 {
 		t.Errorf("AsInt(3) = %d, %v; want 3, true", n, ok)

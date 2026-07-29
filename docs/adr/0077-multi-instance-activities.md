@@ -4,7 +4,7 @@
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phases 1–2 delivered; Phases 3–5 pending. Each phase
+> **Implementation status.** Phases 1–3 delivered; Phases 4–5 pending. Each phase
 > lands test-first with a recovery test (ADR-0018). Multi-instance builds directly on
 > the embedded-subprocess scope lifecycle (ADR-0074) and the call-activity child
 > termination (ADR-0076); it introduces no new value type, record, counter, or
@@ -43,6 +43,26 @@
 > three-element collection with per-iteration `item`/`loopCounter` bindings and a join;
 > the cardinality form; the empty and degenerate-collection edges; and a crash+replay
 > with every iteration parked on its job that still joins and finishes.
+>
+> **Delivered (Phase 3, sequential + output collection):** a **sequential** loop seeds
+> only the first iteration; each completion seeds the next (in `loopCounter` order)
+> until the set is exhausted, then the body completes — so exactly one iteration is
+> live at a time. The **output collection** is order-preserving: `seedMultiInstance`
+> initialises a slot-per-iteration list on the body scope, and each iteration writes its
+> `outputElement` (a FEEL over the iteration's own variables) at its own index, so
+> completion order does not matter; on body completion `promoteMultiInstanceOutput`
+> promotes the assembled list to the enclosing scope and drops the body's locals. An
+> iteration's own result is now **inner-scoped** (`ioResultScope` returns the inner key
+> for a multi-instance iteration), so each iteration's `outputElement` reads *its* value
+> rather than a value colliding at the shared body scope. Deviation from the plan below:
+> the sequential "seed next" reads the iteration set by **re-deriving it from the
+> committed scope chain** on each completion rather than freezing it into a body-scope
+> variable — because seeding runs only live (never during replay), this is
+> deterministic under I6 and equivalent to a one-time freeze for any model that does not
+> mutate the collection source mid-loop. Verified: sequential runs one job at a time in
+> index order; the output collection is assembled in input order for both parallel and
+> sequential (`[1,2,3] → [10,20,30]`); and a sequential loop parked mid-sequence
+> recovers and finishes the remainder.
 
 ## Context and problem statement
 

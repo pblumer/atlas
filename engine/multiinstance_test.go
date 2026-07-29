@@ -8,6 +8,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/expr"
+	"github.com/pblumer/atlas/model"
 )
 
 // miServiceProcess builds start → setup(items = collection) → work → end, where work
@@ -275,5 +276,184 @@ func TestMultiInstanceRecovers(t *testing.T) {
 	}
 	if pi, ei := counts(t, h2.store); pi != 0 || ei != 0 {
 		t.Fatalf("after completion: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+}
+
+// miSeqServiceProcess builds a sequential multi-instance service task over items —
+// like miServiceProcess but one iteration at a time.
+func miSeqServiceProcess(t *testing.T, collection string) (*compiler.CompiledProcess, int32) {
+	t.Helper()
+	b := compiler.NewBuilder(1, "mi-seq", 1)
+	start := b.AddStartEvent()
+	setup := b.AddScriptTask(mustCompile(t, collection), "items")
+	work := b.AddServiceTask("seqwork", 3)
+	b.SetMultiInstance(work, true /*sequential*/, "item", "", mustCompile(t, "items"), nil, nil, nil)
+	end := b.AddEndEvent()
+	b.Connect(start, setup)
+	b.Connect(setup, work)
+	b.Connect(work, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return cp, cp.ServiceTask(cp.Node(work).Detail).JobType
+}
+
+// TestMultiInstanceSequentialRunsOneAtATime drives a sequential multi-instance service
+// task: exactly one iteration is active at any moment, and completing it seeds the next
+// — in index order — until the loop drains and the body completes (ADR-0077 Phase 3).
+func TestMultiInstanceSequentialRunsOneAtATime(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	cp, jobType := miSeqServiceProcess(t, "[10, 20, 30]")
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	// Iterations run 1 → 2 → 3, one job live at a time, each bound its item in order.
+	for want := 1; want <= 3; want++ {
+		jobs := activatableJobs(t, h.store, jobType)
+		if len(jobs) != 1 {
+			t.Fatalf("iteration %d: active jobs = %d, want 1 (sequential)", want, len(jobs))
+		}
+		job, ok, err := h.store.GetJob(jobs[0])
+		if err != nil || !ok {
+			t.Fatalf("GetJob: ok=%v err=%v", ok, err)
+		}
+		if lc := readVar(t, h.store, job.ElementInstanceKey, "loopCounter"); lc == nil || atoi(t, lc.Text) != want {
+			t.Fatalf("iteration loopCounter = %v, want %d", lc, want)
+		}
+		if it := readVar(t, h.store, job.ElementInstanceKey, "item"); it == nil || atoi(t, it.Text) != want*10 {
+			t.Fatalf("iteration item = %v, want %d", it, want*10)
+		}
+		p.CompleteJob(jobs[0])
+		if err := p.RunUntilIdle(); err != nil {
+			t.Fatalf("RunUntilIdle: %v", err)
+		}
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after all iterations: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+}
+
+// miCollectProcess builds start → setup(items=collection) → work(script result=item*10,
+// collecting result into results) → end, parallel or sequential.
+func miCollectProcess(t *testing.T, collection string, sequential bool) *compiler.CompiledProcess {
+	t.Helper()
+	b := compiler.NewBuilder(1, "mi-collect", 1)
+	start := b.AddStartEvent()
+	setup := b.AddScriptTask(mustCompile(t, collection), "items")
+	work := b.AddScriptTask(mustCompile(t, "item * 10"), "result")
+	b.SetMultiInstance(work, sequential, "item", "results",
+		mustCompile(t, "items"), nil, mustCompile(t, "result"), nil)
+	end := b.AddEndEvent()
+	b.Connect(start, setup)
+	b.Connect(setup, work)
+	b.Connect(work, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return cp
+}
+
+// TestMultiInstanceOutputCollection collects each iteration's output element into an
+// ordered output collection promoted to the enclosing scope on completion — for both
+// parallel and sequential loops, the list preserves input order (ADR-0077 Phase 3).
+func TestMultiInstanceOutputCollection(t *testing.T) {
+	for _, seq := range []bool{false, true} {
+		name := "parallel"
+		if seq {
+			name = "sequential"
+		}
+		t.Run(name, func(t *testing.T) {
+			h := openHarness(t, t.TempDir())
+			defer h.close(t)
+			cp := miCollectProcess(t, "[1, 2, 3]", seq)
+
+			p := engine.New(1, h.log, h.store, &manualClock{})
+			p.Deploy(cp)
+			if err := p.Recover(); err != nil {
+				t.Fatalf("Recover: %v", err)
+			}
+			p.CreateInstance(cp.Key)
+			if err := p.RunUntilIdle(); err != nil {
+				t.Fatalf("RunUntilIdle: %v", err)
+			}
+			if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+				t.Fatalf("process=%d element=%d, want 0 and 0 (completed)", pi, ei)
+			}
+			// results promoted to the process root, in input order (10, 20, 30).
+			got := readVar(t, h.store, model.NewKey(1, 1), "results")
+			if got == nil || got.Kind != model.VarJSON {
+				t.Fatalf("results = %v, want a JSON list", got)
+			}
+			if got.Text != "[10,20,30]" {
+				t.Errorf("results = %s, want [10,20,30] (input order preserved)", got.Text)
+			}
+		})
+	}
+}
+
+// TestMultiInstanceSequentialRecovers parks a sequential loop mid-sequence (iteration 1
+// done, iteration 2 waiting on its job), crashes, and recovers: the body, the current
+// iteration, and the counter rebuild from the log so completing the remaining jobs still
+// seeds iteration 3 and finishes the instance (ADR-0077 Phase 3).
+func TestMultiInstanceSequentialRecovers(t *testing.T) {
+	dir := t.TempDir()
+	cp, jobType := miSeqServiceProcess(t, "[1, 2, 3]")
+	clk := &manualClock{}
+
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clk)
+	p1.Deploy(cp)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.CreateInstance(cp.Key)
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle 1: %v", err)
+	}
+	// Complete iteration 1; iteration 2 is now the single live job.
+	jobs := activatableJobs(t, h1.store, jobType)
+	if len(jobs) != 1 {
+		t.Fatalf("iteration 1: jobs = %d, want 1", len(jobs))
+	}
+	p1.CompleteJob(jobs[0])
+	if err := p1.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle after iter 1: %v", err)
+	}
+	if jobs := activatableJobs(t, h1.store, jobType); len(jobs) != 1 {
+		t.Fatalf("iteration 2: jobs = %d, want 1", len(jobs))
+	}
+	h1.close(t)
+
+	// Recover mid-sequence, then finish iterations 2 and 3.
+	h2 := openHarness(t, dir)
+	defer h2.close(t)
+	p2 := engine.New(1, h2.log, h2.store, clk)
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2: %v", err)
+	}
+	for want := 2; want <= 3; want++ {
+		jobs := activatableJobs(t, h2.store, jobType)
+		if len(jobs) != 1 {
+			t.Fatalf("iteration %d after recovery: jobs = %d, want 1", want, len(jobs))
+		}
+		p2.CompleteJob(jobs[0])
+		if err := p2.RunUntilIdle(); err != nil {
+			t.Fatalf("RunUntilIdle iter %d: %v", want, err)
+		}
+	}
+	if pi, ei := counts(t, h2.store); pi != 0 || ei != 0 {
+		t.Fatalf("after recovery completion: process=%d element=%d, want 0 and 0", pi, ei)
 	}
 }
