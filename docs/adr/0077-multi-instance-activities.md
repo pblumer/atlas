@@ -4,11 +4,24 @@
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Not started. This ADR plans the work; each phase will
-> land test-first with a recovery test (ADR-0018). Multi-instance builds directly on
-> the embedded-subprocess scope lifecycle (ADR-0074) and the call-activity child
-> termination (ADR-0076); it introduces no new value type, record, counter, or
+> **Implementation status.** Phase 1 (compiler) delivered; Phases 2–5 pending. Each
+> phase lands test-first with a recovery test (ADR-0018). Multi-instance builds
+> directly on the embedded-subprocess scope lifecycle (ADR-0074) and the call-activity
+> child termination (ADR-0076); it introduces no new value type, record, counter, or
 > recovery path.
+>
+> **Delivered (Phase 1, compiler):** a `MultiInstanceDetail` (input collection or
+> cardinality, input element, output collection/element, completion condition,
+> sequential flag) indexed by a new `CompiledNode.MultiInstance` field — the node keeps
+> its real activity type, no new `BpmnType`. `<multiInstanceLoopCharacteristics>` (with
+> Zeebe's nested `<zeebe:loopCharacteristics>`) is parsed on service, script, and user
+> tasks, call activities, and subprocesses, and wired recursively over the scope tree
+> (`wireScopeMI`, mirroring `wireScopeIO`). Every FEEL source compiles once at deploy
+> (I5); a loop with neither an input collection nor a cardinality — or with both — is
+> refused, as is an uncompilable source. Verified: the detail compiles with its fields
+> (sequential/parallel default, optional output and completion condition, cardinality
+> form), a multi-instance subprocess keeps its `TypeSubProcess` type and carries the
+> loop, and the deploy-refusal branches.
 
 ## Context and problem statement
 
