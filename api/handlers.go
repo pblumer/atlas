@@ -1609,6 +1609,144 @@ func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, append(active, done...))
 }
 
+// maxInstanceSearchResults caps a variable search so a single query can't return
+// an unbounded response on a large deployment. The search is a full scan (v1, no
+// index); the cap keeps the answer size and scan cost bounded — active instances
+// first, then finished ones most-recently-completed first, so the newest matches
+// survive truncation.
+const maxInstanceSearchResults = 200
+
+// varQuery is a parsed instance-variable search. Two shapes: a structured
+// name=value match (variable name exact, value substring) when the query
+// contains "="; otherwise a free-text substring over variable names and values.
+// All comparisons are case-insensitive.
+type varQuery struct {
+	structured bool
+	name       string // lower-cased variable name; structured only
+	needle     string // lower-cased substring (value in structured, term in free-text)
+}
+
+// parseVarQuery interprets a raw ?q= value. ok is false for a blank query (the
+// caller returns an empty result set rather than scanning everything). A query
+// like "=value" with no name degrades to free text — an empty exact name can
+// never match, so treating it structurally would be a silent dead end.
+func parseVarQuery(q string) (varQuery, bool) {
+	q = strings.TrimSpace(q)
+	if q == "" {
+		return varQuery{}, false
+	}
+	if i := strings.IndexByte(q, '='); i >= 0 {
+		if name := strings.TrimSpace(q[:i]); name != "" {
+			return varQuery{
+				structured: true,
+				name:       strings.ToLower(name),
+				needle:     strings.ToLower(strings.TrimSpace(q[i+1:])),
+			}, true
+		}
+	}
+	return varQuery{needle: strings.ToLower(q)}, true
+}
+
+// match reports whether a variable satisfies the query.
+func (p varQuery) match(v variableView) bool {
+	if p.structured {
+		return strings.ToLower(v.Name) == p.name && strings.Contains(strings.ToLower(v.Value), p.needle)
+	}
+	return strings.Contains(strings.ToLower(v.Name), p.needle) || strings.Contains(strings.ToLower(v.Value), p.needle)
+}
+
+// handleSearchInstances finds process instances by the content of their
+// variables — the operator "which instance had customerType=Business?" surface.
+// It reuses the same live+history scan as handleListInstances, but keeps only
+// instances with a variable matching ?q= and, on each row, only the matching
+// variables (so the UI can highlight them). A blank query returns an empty list,
+// not every instance. This is a full scan with no value index (v1): finished
+// instances are searchable only while their scope's variables are retained, same
+// as the instances list. Results are capped at maxInstanceSearchResults.
+func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
+	pred, ok := parseVarQuery(r.URL.Query().Get("q"))
+	if !ok {
+		writeJSON(w, http.StatusOK, []instanceResp{})
+		return
+	}
+	active := []instanceResp{}
+	done := []instanceResp{}
+	var scanErr error
+	s.do(func() {
+		// matchingVars returns the scope's variables that satisfy the query, or
+		// nil if none do (so the caller can drop the instance).
+		matchingVars := func(key uint64) ([]variableView, error) {
+			var hits []variableView
+			err := s.store.VariablesOfScope(key, func(vv *model.VariableValue) error {
+				if view := toVariableView(vv); pred.match(view) {
+					hits = append(hits, view)
+				}
+				return nil
+			})
+			return hits, err
+		}
+		enrichDef := func(r *instanceResp) {
+			if d, ok := s.deployments[r.ProcessDefKey]; ok {
+				r.ProcessID = d.ProcessID
+				r.Version = d.Version
+				if d.cp != nil {
+					r.VersionTag = d.cp.VersionTag()
+				}
+			}
+		}
+
+		scanErr = s.store.ActiveProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
+			hits, err := matchingVars(key)
+			if err != nil || len(hits) == 0 {
+				return err
+			}
+			r := instanceResp{
+				Key:            key,
+				ProcessDefKey:  v.ProcessDefKey,
+				State:          "active",
+				CreatedAt:      v.CreatedAt,
+				CorrelationKey: v.CorrelationKey,
+				Variables:      hits,
+			}
+			enrichDef(&r)
+			active = append(active, r)
+			return nil
+		})
+		if scanErr != nil {
+			return
+		}
+
+		scanErr = s.store.CompletedProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
+			hits, err := matchingVars(key)
+			if err != nil || len(hits) == 0 {
+				return err
+			}
+			r := instanceResp{
+				Key:            key,
+				ProcessDefKey:  v.ProcessDefKey,
+				State:          v.State.String(),
+				CreatedAt:      v.CreatedAt,
+				CompletedAt:    v.CompletedAt,
+				CorrelationKey: v.CorrelationKey,
+				Variables:      hits,
+			}
+			enrichDef(&r)
+			done = append(done, r)
+			return nil
+		})
+	})
+	if scanErr != nil {
+		writeError(w, http.StatusInternalServerError, "search instances: "+scanErr.Error())
+		return
+	}
+	sort.Slice(done, func(i, j int) bool { return done[i].CompletedAt > done[j].CompletedAt })
+	out := append(active, done...)
+	if len(out) > maxInstanceSearchResults {
+		out = out[:maxInstanceSearchResults]
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 type publishMessageResp struct {
 	Name           string    `json:"name"`
 	CorrelationKey string    `json:"correlationKey"`

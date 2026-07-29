@@ -1643,7 +1643,17 @@ async function viewInstances() {
         <button class="btn neutral" type="submit">Open replay</button>
       </form>
     </div>
-    <div class="card" style="padding:0">
+    <form class="ops-varsearch" id="var-search" title="Find instances by the content of their process variables">
+      <span class="ops-search">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
+        <input id="var-q" type="text" placeholder="Search instances by variable — e.g. customerType=Business" aria-label="Search instances by variable" spellcheck="false" autocomplete="off"/>
+      </span>
+      <button class="btn" type="submit">Search variables</button>
+      <button class="btn ghost" type="button" id="var-clear" hidden>Clear</button>
+    </form>
+    <p class="muted var-hint" style="font-size:12px;margin:-4px 2px 12px">Contains <code>=</code> → structured <code>name=value</code> (name exact, value substring); otherwise free text across variable names and values.</p>
+    <div id="var-panel" hidden></div>
+    <div class="card" id="proc-card" style="padding:0">
       <table>
         <thead><tr><th>Process</th><th>Versions</th><th>Running</th><th>Finished</th><th>Last activity</th><th></th></tr></thead>
         <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
@@ -1719,6 +1729,84 @@ async function viewInstances() {
     if (/^\d+$/.test(key)) location.hash = `#/operations/i/${key}`;
     else toast("Enter a numeric instance key", "err");
   });
+
+  // Variable-content search: query the backend for instances whose variables
+  // match, then render a per-instance results table (each matched variable
+  // highlighted) in place of the per-process list. Clearing restores the list.
+  const varPanel = document.getElementById("var-panel");
+  const procCard = document.getElementById("proc-card");
+  const varClear = document.getElementById("var-clear");
+  const varInput = document.getElementById("var-q");
+  // needleOf mirrors the server's parse: an "=" makes it structured (the value
+  // side is the highlight needle); otherwise the whole query is the needle.
+  const needleOf = (q) => {
+    const i = q.indexOf("=");
+    return (i >= 0 && q.slice(0, i).trim() ? q.slice(i + 1) : q).trim().toLowerCase();
+  };
+  const highlight = (s, needle) => {
+    if (!needle) return esc(s);
+    const i = s.toLowerCase().indexOf(needle);
+    if (i < 0) return esc(s);
+    return esc(s.slice(0, i)) + "<mark>" + esc(s.slice(i, i + needle.length)) + "</mark>" + esc(s.slice(i + needle.length));
+  };
+  const showList = () => {
+    varPanel.hidden = true;
+    varPanel.innerHTML = "";
+    procCard.hidden = false;
+    varClear.hidden = true;
+  };
+  const runVarSearch = async (q) => {
+    q = q.trim();
+    if (!q) { showList(); return; }
+    procCard.hidden = true;
+    varClear.hidden = false;
+    varPanel.hidden = false;
+    varPanel.innerHTML = `<div class="card"><div class="empty">Searching…</div></div>`;
+    let rows;
+    try {
+      rows = await api("GET", "/api/v1/instances/search?q=" + encodeURIComponent(q));
+    } catch (e) {
+      varPanel.innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`;
+      return;
+    }
+    if (!rows.length) {
+      varPanel.innerHTML = `<div class="card"><div class="empty">No instance has a variable matching “${esc(q)}”.</div></div>`;
+      return;
+    }
+    const needle = needleOf(q);
+    const body = rows.map((r) => {
+      const label = r.processId || `#${r.processDefKey}`;
+      const tag = r.versionTag ? ` <span class="ver-tag" title="Version tag">${esc(r.versionTag)}</span>` : "";
+      const state = r.state === "active"
+        ? '<span class="pill ok"><span class="dot"></span>active</span>'
+        : `<span class="pill">${esc(r.state)}</span>`;
+      const hits = (r.variables || []).map((v) =>
+        `<div class="var-hit"><b>${esc(v.name)}</b> = ${highlight(v.value, needle)} <span class="var-kind">${esc(v.kind)}</span></div>`
+      ).join("");
+      return `<tr>
+        <td><b>${esc(label)}</b>${tag}<div class="muted" style="font-size:12px">${esc(String(r.key))}</div></td>
+        <td>v${r.version}</td>
+        <td>${state}</td>
+        <td class="muted">${esc(fmtNano(r.completedAt || r.createdAt))}</td>
+        <td>${hits}</td>
+        <td style="text-align:right"><a class="replay-link" href="#/operations/i/${r.key}">&#9654; Replay</a></td>
+      </tr>`;
+    }).join("");
+    const capped = rows.length >= 200 ? ' <span class="muted">(showing first 200)</span>' : "";
+    varPanel.innerHTML = `
+      <p class="muted" style="font-size:12px;margin:0 2px 8px">${rows.length} instance${rows.length === 1 ? "" : "s"} matched${capped} · full scan</p>
+      <div class="card" style="padding:0">
+        <table class="var-results">
+          <thead><tr><th>Process</th><th>Version</th><th>State</th><th>Started</th><th>Matched variable(s)</th><th></th></tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      </div>`;
+  };
+  document.getElementById("var-search").addEventListener("submit", (e) => {
+    e.preventDefault();
+    runVarSearch(varInput.value);
+  });
+  varClear.addEventListener("click", () => { varInput.value = ""; showList(); varInput.focus(); });
   const demoBtn = document.getElementById("demo");
   demoBtn.addEventListener("click", async () => {
     demoBtn.disabled = true;

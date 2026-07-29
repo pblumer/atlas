@@ -131,6 +131,15 @@ h2 { font-size: 15px; margin: 0 0 10px; }
   border: 1px solid var(--border-strong); border-radius: 7px; background: var(--surface); color: var(--text);
 }
 .ops-jump input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+/* Variable-content instance search. */
+.ops-varsearch { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
+.ops-varsearch .ops-search { flex: 1 1 320px; }
+.var-hint code { font: 12px/1.4 ui-monospace, monospace; background: var(--bg); border: 1px solid var(--border); padding: 0 4px; border-radius: 4px; }
+.var-results td { vertical-align: top; }
+.var-hit { display: inline-flex; gap: 6px; align-items: baseline; font: 12px/1.5 ui-monospace, monospace; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 1px 7px; margin: 1px 0; }
+.var-hit b { color: var(--muted); font-weight: 600; }
+.var-hit .var-kind { font: 600 10px/1.6 system-ui; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; }
+.var-results mark { background: #fff3c4; color: #7a5b00; border-radius: 2px; padding: 0 1px; }
 ol.steps { margin: 10px 0; padding-left: 20px; }
 ol.steps li { margin: 6px 0; }
 
