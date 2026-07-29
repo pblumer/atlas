@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/pblumer/atlas/mail"
 )
 
 // TestConnectorStoreCRUD covers the durable store directly.
@@ -223,8 +225,56 @@ func TestMailConnectorValidationAndCreate(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("valid mail create: want 200, got %d", code)
 	}
-	if c.Kind != "mail" || c.Provider != mailProviderSMTP || c.Sender != "bot@example.com" {
+	if c.Kind != "mail" || c.Provider != mail.ProviderSMTP || c.Sender != "bot@example.com" {
 		t.Errorf("mail record = %+v, want kind mail, provider smtp, sender set", c)
+	}
+	// A native provider needs a credentialsRef (its vault auth bundle) but no endpoint.
+	if code, _ := post(`{"name":"g1","kind":"mail","provider":"gmail","sender":"bot@x"}`); code != http.StatusBadRequest {
+		t.Error("gmail without credentialsRef: want 400")
+	}
+	code, g := post(`{"name":"gmail-notify","kind":"mail","provider":"gmail","sender":"bot@example.com","credentialsRef":"gmail_bundle"}`)
+	if code != http.StatusOK {
+		t.Fatalf("valid gmail create (no endpoint): want 200, got %d", code)
+	}
+	if g.Provider != mail.ProviderGmail || g.Endpoint != "" {
+		t.Errorf("gmail record = %+v, want provider gmail and no endpoint", g)
+	}
+	if code, _ := post(`{"name":"ms1","kind":"mail","provider":"microsoft","sender":"bot@example.com","credentialsRef":"graph_bundle"}`); code != http.StatusOK {
+		t.Error("valid microsoft create (no endpoint): want 200")
+	}
+}
+
+// TestBuildMailNativeClients proves buildMailClients dispatches native providers: a
+// gmail/microsoft record whose credentialsRef resolves to a valid OAuth bundle becomes
+// the matching client, while a record whose bundle is malformed is skipped (its tasks
+// park) rather than failing the whole rebuild (ADR-0080).
+func TestBuildMailNativeClients(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	// The credential bundle lives in the vault; here it resolves from the env fallback
+	// (ATLAS_CONNECTOR_<REF>_TOKEN), never in the record itself.
+	t.Setenv("ATLAS_CONNECTOR_GMAIL_BUNDLE_TOKEN", `{"method":"refreshToken","clientId":"c","clientSecret":"s","refreshToken":"r"}`)
+	t.Setenv("ATLAS_CONNECTOR_GRAPH_BUNDLE_TOKEN", `{"method":"clientCredentials","tenantId":"t","clientId":"c","clientSecret":"s"}`)
+	t.Setenv("ATLAS_CONNECTOR_BAD_BUNDLE_TOKEN", `not valid json`)
+
+	_ = srv.connectors.save(connector{ID: "1", Name: "gmail", Kind: "mail", Provider: "gmail", Sender: "a@x", CredentialsRef: "gmail_bundle", Enabled: true, CreatedAt: 1})
+	_ = srv.connectors.save(connector{ID: "2", Name: "graph", Kind: "mail", Provider: "microsoft", Sender: "b@x", CredentialsRef: "graph_bundle", Enabled: true, CreatedAt: 2})
+	_ = srv.connectors.save(connector{ID: "3", Name: "broken", Kind: "mail", Provider: "gmail", Sender: "c@x", CredentialsRef: "bad_bundle", Enabled: true, CreatedAt: 3})
+
+	clients, err := srv.buildMailClients()
+	if err != nil {
+		t.Fatalf("buildMailClients: %v", err)
+	}
+	if len(clients) != 2 {
+		t.Fatalf("clients = %d, want 2 (gmail + graph; the broken bundle is skipped)", len(clients))
+	}
+	if _, ok := clients["gmail"].(*mail.GmailClient); !ok {
+		t.Errorf("gmail connector = %T, want *mail.GmailClient", clients["gmail"])
+	}
+	if _, ok := clients["graph"].(*mail.GraphClient); !ok {
+		t.Errorf("microsoft connector = %T, want *mail.GraphClient", clients["graph"])
+	}
+	if _, ok := clients["broken"]; ok {
+		t.Error("a malformed credential bundle should be skipped, not built")
 	}
 }
 

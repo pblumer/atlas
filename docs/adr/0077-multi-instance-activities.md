@@ -4,11 +4,11 @@
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phases 1–2 delivered; Phases 3–5 pending. Each phase
-> lands test-first with a recovery test (ADR-0018). Multi-instance builds directly on
-> the embedded-subprocess scope lifecycle (ADR-0074) and the call-activity child
-> termination (ADR-0076); it introduces no new value type, record, counter, or
-> recovery path.
+> **Implementation status.** Phases 1–4 delivered; Phase 5 (Modeler) pending. Each
+> phase lands test-first with a recovery test (ADR-0018). Multi-instance builds directly
+> on the embedded-subprocess scope lifecycle (ADR-0074) and the call-activity child
+> termination (ADR-0076); it introduces no new value type, record, counter, or recovery
+> path.
 >
 > **Delivered (Phase 1, compiler):** a `MultiInstanceDetail` (input collection or
 > cardinality, input element, output collection/element, completion condition,
@@ -43,6 +43,46 @@
 > three-element collection with per-iteration `item`/`loopCounter` bindings and a join;
 > the cardinality form; the empty and degenerate-collection edges; and a crash+replay
 > with every iteration parked on its job that still joins and finishes.
+>
+> **Delivered (Phase 3, sequential + output collection):** a **sequential** loop seeds
+> only the first iteration; each completion seeds the next (in `loopCounter` order)
+> until the set is exhausted, then the body completes — so exactly one iteration is
+> live at a time. The **output collection** is order-preserving: `seedMultiInstance`
+> initialises a slot-per-iteration list on the body scope, and each iteration writes its
+> `outputElement` (a FEEL over the iteration's own variables) at its own index, so
+> completion order does not matter; on body completion `promoteMultiInstanceOutput`
+> promotes the assembled list to the enclosing scope and drops the body's locals. An
+> iteration's own result is now **inner-scoped** (`ioResultScope` returns the inner key
+> for a multi-instance iteration), so each iteration's `outputElement` reads *its* value
+> rather than a value colliding at the shared body scope. Deviation from the plan below:
+> the sequential "seed next" reads the iteration set by **re-deriving it from the
+> committed scope chain** on each completion rather than freezing it into a body-scope
+> variable — because seeding runs only live (never during replay), this is
+> deterministic under I6 and equivalent to a one-time freeze for any model that does not
+> mutate the collection source mid-loop. Verified: sequential runs one job at a time in
+> index order; the output collection is assembled in input order for both parallel and
+> sequential (`[1,2,3] → [10,20,30]`); and a sequential loop parked mid-sequence
+> recovers and finishes the remainder.
+>
+> **Delivered (Phase 4, completion condition, interruption, nesting):** a
+> **completion condition** is evaluated over each iteration's scope chain (so it reads
+> `loopCounter`, the item, and the accumulating output collection) after the iteration
+> completes; when it holds, the loop ends early — `terminateScope` cancels any
+> still-running iterations (a no-op for a sequential loop) and the body completes.
+> **Interruption** needed no new engine code: the body is a scope, so an interrupting
+> boundary on a multi-instance activity runs `interruptHost` → `terminateScope`, which
+> tears down every iteration; a fix hardened the sibling path so terminating a *process
+> instance* (`handleProcessInstanceTerminating`) now also cancels each element's job,
+> leaving no orphan in the activatable index — matching `terminateScope`. **Nesting**
+> also composed for free: a multi-instance **subprocess** runs each iteration as a full
+> subprocess instance (the inner dispatch runs `subProcessBehavior`), and a
+> multi-instance **call activity** starts one child per iteration, an interrupt tearing
+> each child down through the ADR-0076 `terminateChildInstance` that `terminateScope`
+> already calls per victim. Verified: sequential and parallel completion conditions
+> (early stop / cancel remaining); an interrupting boundary terminating all iterations
+> and routing out its flow; a multi-instance subprocess assembling an output collection;
+> and a multi-instance call activity fanning out children and, on interrupt, terminating
+> every child.
 
 ## Context and problem statement
 
