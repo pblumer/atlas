@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
@@ -12,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/clio"
 )
 
 func testVaultKey(t *testing.T) []byte {
@@ -317,6 +320,76 @@ func TestSecretHandlersCRUD(t *testing.T) {
 	}
 	if got := srv.resolveConnectorSecret("gmail_ops"); got != "" {
 		t.Errorf("after delete resolveConnectorSecret = %q, want empty", got)
+	}
+}
+
+// TestSecretUpdateRebuildsConnectorClients proves a rotated secret reaches the live
+// connector clients immediately: setting (or deleting) the secret a clio connector
+// references rebuilds the registry, so the bridge/worker picks up the new token
+// without the operator re-saving the connector. The Authorization header the clio
+// client sends is the observable proof of which token is live.
+func TestSecretUpdateRebuildsConnectorClients(t *testing.T) {
+	var gotAuth string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	srv := newVaultServer(t)
+	h := srv.Handler()
+	put := func(name, val string) int {
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/secrets/"+name, strings.NewReader(`{"value":"`+val+`"}`))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	// Seed the token, then a clio connector referencing it (create builds the client).
+	if put("clio-token", "tokenA") != http.StatusOK {
+		t.Fatal("seed secret")
+	}
+	x := deployTestHarness{t, h}
+	if code, cb := x.do(http.MethodPost, "/api/v1/connectors",
+		`{"name":"events","kind":"clio","endpoint":"`+ts.URL+`","credentialsRef":"clio-token"}`); code != http.StatusOK {
+		t.Fatalf("create connector: %d %s", code, cb)
+	}
+
+	// Fire the live client at the test server and read back the token it carried.
+	fire := func() {
+		srv.do(func() {
+			c, ok := srv.clioRegistry.Client("events")
+			if !ok {
+				t.Fatal("clio client not registered")
+			}
+			_ = c.WriteEvent(context.Background(), clio.Event{Subject: "/s", Type: "T"})
+		})
+	}
+	fire()
+	if gotAuth != "Bearer tokenA" {
+		t.Fatalf("before rotation: Authorization=%q, want Bearer tokenA", gotAuth)
+	}
+
+	// Rotate the secret WITHOUT touching the connector: the rebuild must swap the client.
+	if put("clio-token", "tokenB") != http.StatusOK {
+		t.Fatal("rotate secret")
+	}
+	fire()
+	if gotAuth != "Bearer tokenB" {
+		t.Fatalf("after rotation: Authorization=%q, want Bearer tokenB (secret update did not rebuild the client)", gotAuth)
+	}
+
+	// Deleting the secret also rebuilds: the client resolves to no token.
+	dreq := httptest.NewRequest(http.MethodDelete, "/api/v1/secrets/clio-token", nil)
+	drec := httptest.NewRecorder()
+	h.ServeHTTP(drec, dreq)
+	if drec.Code != http.StatusNoContent {
+		t.Fatalf("DELETE: code=%d", drec.Code)
+	}
+	fire()
+	if gotAuth != "" {
+		t.Fatalf("after delete: Authorization=%q, want empty (no token)", gotAuth)
 	}
 }
 
