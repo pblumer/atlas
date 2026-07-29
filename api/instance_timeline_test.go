@@ -37,6 +37,7 @@ type timelineVar struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
 	Kind  string `json:"kind"`
+	Scope string `json:"scope"`
 }
 
 type timelineStep struct {
@@ -340,6 +341,117 @@ func TestInstanceTimelineVariableSnapshots(t *testing.T) {
 	// At the next step, the script's greeting is visible alongside x.
 	if got := vars(2); got["x"] != "1" || got["greeting"] != "hi" {
 		t.Errorf("end-step vars = %v, want x=1 and greeting=hi", got)
+	}
+}
+
+// subProcessVarBPMN mirrors the "Arbeit-01" scenario: a subprocess with an input
+// mapping (meine-subproc-var = prozess-var-01, a subprocess-local) and an output
+// mapping (output_var_test = pruefresultat) around an inner script that writes
+// pruefresultat.
+const subProcessVarBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="subvar" isExecutable="true">
+    <startEvent id="start"/>
+    <subProcess id="Arbeit-01">
+      <extensionElements>
+        <zeebe:ioMapping>
+          <zeebe:input source="= prozessVar" target="meineSubprocVar"/>
+          <zeebe:output source="= pruefresultat" target="outputVarTest"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+      <startEvent id="iStart"/>
+      <scriptTask id="check">
+        <extensionElements><zeebe:script expression="= true" resultVariable="pruefresultat"/></extensionElements>
+      </scriptTask>
+      <endEvent id="iEnd"/>
+      <sequenceFlow id="if1" sourceRef="iStart" targetRef="check"/>
+      <sequenceFlow id="if2" sourceRef="check" targetRef="iEnd"/>
+    </subProcess>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="Arbeit-01"/>
+    <sequenceFlow id="f2" sourceRef="Arbeit-01" targetRef="end"/>
+  </process>
+</definitions>`
+
+// TestInstanceTimelineSubProcessScopedVariables checks the replay timeline is
+// scope-aware (ADR-0074): a subprocess's input-mapped local variable shows inside
+// the subprocess, labeled with the subprocess id, and is gone once the subprocess
+// completes — while the output-mapped value is promoted to the process scope.
+func TestInstanceTimelineSubProcessScopedVariables(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", subProcessVarBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+	code, body = doReq(t, ts, http.MethodPost,
+		fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key), `{"variables":{"prozessVar":"meinWert"}}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("start instance: status=%d body=%s", code, body)
+	}
+	instKey := onlyInstanceKey(t, ts)
+
+	code, body = doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/instances/%d/timeline", instKey), "", "")
+	if code != http.StatusOK {
+		t.Fatalf("timeline status=%d body=%s", code, body)
+	}
+	var tl instanceTimeline
+	if err := json.Unmarshal(body, &tl); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+
+	// varsAt indexes a step's variables by name; scopeAt gives the scope label.
+	stepByElem := func(id string) (timelineStep, bool) {
+		for _, s := range tl.Steps {
+			if s.ElementID == id {
+				return s, true
+			}
+		}
+		return timelineStep{}, false
+	}
+	vmap := func(s timelineStep) map[string]timelineVar {
+		out := map[string]timelineVar{}
+		for _, v := range s.Variables {
+			out[v.Name] = v
+		}
+		return out
+	}
+
+	// Inside the subprocess (at the inner script), the input-mapped local is visible,
+	// labeled with its subprocess, alongside the inherited process variable.
+	inner, ok := stepByElem("check")
+	if !ok {
+		t.Fatalf("no timeline step for inner script; steps=%+v", tl.Steps)
+	}
+	iv := vmap(inner)
+	if got, ok := iv["meineSubprocVar"]; !ok {
+		t.Errorf("inner step missing subprocess-local var; vars=%+v", inner.Variables)
+	} else if got.Value != "meinWert" || got.Scope != "Arbeit-01" {
+		t.Errorf("meineSubprocVar = {value:%q scope:%q}, want {meinWert Arbeit-01}", got.Value, got.Scope)
+	}
+	if got, ok := iv["prozessVar"]; !ok || got.Scope != "" {
+		t.Errorf("prozessVar = %+v, want present at process scope (empty scope)", got)
+	}
+
+	// At the outer end (after the subprocess completed), the promoted output is at the
+	// process scope and the subprocess-local is gone (its drop is not snapshotted, so
+	// it must be gated out by the subprocess's lifetime — not linger).
+	outer, ok := stepByElem("end")
+	if !ok {
+		t.Fatalf("no timeline step for outer end; steps=%+v", tl.Steps)
+	}
+	ov := vmap(outer)
+	if got, ok := ov["outputVarTest"]; !ok || got.Value != "true" || got.Scope != "" {
+		t.Errorf("outputVarTest = {%+v ok:%v}, want value true at process scope", got, ok)
+	}
+	if _, ok := ov["meineSubprocVar"]; ok {
+		t.Errorf("subprocess-local var lingered past the subprocess at the outer end step; vars=%+v", outer.Variables)
 	}
 }
 
