@@ -7,7 +7,7 @@ import (
 )
 
 // TestActiveStartKeyCounter covers the per-(definition, correlation key) live-instance
-// counter behind singleton message start (ADR-0078): an unset key reads 0, increments
+// counter behind singleton message start (ADR-0082): an unset key reads 0, increments
 // accumulate, a decrement reduces, and distinct keys and distinct definitions are
 // independent.
 func TestActiveStartKeyCounter(t *testing.T) {

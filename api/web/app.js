@@ -236,6 +236,11 @@ const CONNECTORS = [
     desc: "Calls a model-authored REST endpoint from a service task off the processor loop — method, URL, headers, query parameters, and basic/bearer/apiKey auth (secrets resolved server-side) — writing the JSON response into a result variable. Authored via the REST Outbound Connector service-task type.",
     refs: "ADR-0036 · ADR-0041 · ADR-0067", status: "active", statusLabel: "embedded",
   },
+  {
+    id: "mail", name: "Mail", kind: "Outbound e-mail",
+    desc: "Sends an e-mail from a service task off the processor loop via a managed provider — SMTP (any server, incl. Google/Microsoft 365 submission) or the native Gmail and Microsoft Graph APIs (OAuth2 app-only or refresh-token). Recipients, subject, and body are model-authored (FEEL-capable); the provider, default sender, and credentials are managed below and resolved from the vault. Authored via the E-Mail Outbound Connector service-task type.",
+    refs: "ADR-0041 · ADR-0079 · ADR-0080", status: "active", statusLabel: "configurable",
+  },
 ];
 
 // ---------- Shell ----------
@@ -1309,22 +1314,55 @@ function wireConnectorManagement(connectors) {
     newBtn.addEventListener("click", () => {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
-      slot.innerHTML = `<form class="connector-form" style="display:grid;gap:8px;grid-template-columns:auto 1fr 1fr 1fr auto;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option></select></label>
-        <label class="field" style="margin:0"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
-        <label class="field" style="margin:0"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
-        <label class="field" style="margin:0"><span>Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
+      slot.innerHTML = `<form class="connector-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
+        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option></select></label>
+        <label class="field mail-only" style="margin:0"><span>Provider</span><select name="provider"><option value="smtp">SMTP</option><option value="gmail">Gmail API</option><option value="microsoft">Microsoft Graph</option></select></label>
+        <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
+        <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
+        <label class="field mail-only" style="margin:0;flex:1 1 180px"><span>Sender</span><input name="sender" placeholder="bot@example.com"/></label>
+        <label class="field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
         <button class="btn" type="submit">Add</button></form>`;
-      slot.querySelector("form").addEventListener("submit", async (e) => {
+      // Adapt the form to the kind and mail provider: SMTP needs a host:port endpoint
+      // and (optionally) a password reference; a native provider (Gmail/Graph) needs no
+      // endpoint but a credentialsRef naming a vault JSON auth bundle, and sends as the
+      // sender mailbox. The mail-only fields hide for temis/clio.
+      const form = slot.querySelector("form");
+      const kindSel = form.querySelector('[name="kind"]');
+      const providerSel = form.querySelector('[name="provider"]');
+      const endpointIn = form.querySelector('[name="endpoint"]');
+      const senderIn = form.querySelector('[name="sender"]');
+      const credRefIn = form.querySelector('[name="credentialsRef"]');
+      const credRefLabel = form.querySelector(".credref-label");
+      const endpointField = form.querySelector(".endpoint-field");
+      const sync = () => {
+        const mail = kindSel.value === "mail";
+        const native = mail && providerSel.value !== "smtp";
+        form.querySelectorAll(".mail-only").forEach((el) => { el.style.display = mail ? "" : "none"; });
+        senderIn.required = mail;
+        // A native provider needs no endpoint; SMTP and the other kinds do.
+        endpointField.style.display = native ? "none" : "";
+        endpointIn.required = !native;
+        endpointIn.placeholder = mail ? "smtp.office365.com:587" : "https://temis.internal";
+        credRefIn.required = native;
+        credRefIn.placeholder = native ? "gmail_auth (vault JSON bundle)" : "risk_token";
+        credRefLabel.textContent = native ? "Credential reference (vault auth bundle)" : "Token reference (optional)";
+      };
+      kindSel.addEventListener("change", sync);
+      providerSel.addEventListener("change", sync);
+      sync();
+      form.addEventListener("submit", async (e) => {
         e.preventDefault();
         const f = new FormData(e.target);
+        const body = {
+          name: (f.get("name") || "").trim(),
+          kind: (f.get("kind") || "temis").trim(),
+          endpoint: (f.get("endpoint") || "").trim(),
+          sender: (f.get("sender") || "").trim(),
+          credentialsRef: (f.get("credentialsRef") || "").trim(),
+        };
+        if (body.kind === "mail") body.provider = (f.get("provider") || "smtp").trim();
         try {
-          await api("POST", "/api/v1/connectors", {
-            name: (f.get("name") || "").trim(),
-            kind: (f.get("kind") || "temis").trim(),
-            endpoint: (f.get("endpoint") || "").trim(),
-            credentialsRef: (f.get("credentialsRef") || "").trim(),
-          });
+          await api("POST", "/api/v1/connectors", body);
           toast("Connector added", "ok");
           reload();
         } catch (err) { toast("Could not add connector: " + err.message, "err"); }

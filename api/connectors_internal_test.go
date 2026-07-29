@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/pblumer/atlas/mail"
 )
 
 // TestConnectorStoreCRUD covers the durable store directly.
@@ -196,6 +198,160 @@ func TestConnectorUpdateFields(t *testing.T) {
 	_ = json.Unmarshal(b, &up)
 	if up.Endpoint != "http://y" || up.CredentialsRef != "cred" {
 		t.Fatalf("update result = %+v, want endpoint http://y and ref cred", up)
+	}
+}
+
+// TestMailConnectorValidationAndCreate covers the create endpoint's mail-specific
+// input checks and a successful mail connector create (ADR-0079).
+func TestMailConnectorValidationAndCreate(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	h := srv.Handler()
+	post := func(body string) (int, connector) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/connectors", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		var c connector
+		_ = json.Unmarshal(rec.Body.Bytes(), &c)
+		return rec.Code, c
+	}
+	if code, _ := post(`{"name":"m1","kind":"mail","endpoint":"smtp.example.com:587"}`); code != http.StatusBadRequest {
+		t.Error("mail without sender: want 400")
+	}
+	if code, _ := post(`{"name":"m2","kind":"mail","endpoint":"smtp.example.com:587","sender":"bot@x","provider":"gmail-api"}`); code != http.StatusBadRequest {
+		t.Error("mail with an unsupported provider: want 400")
+	}
+	code, c := post(`{"name":"office365","kind":"mail","endpoint":"smtp.office365.com:587","sender":"bot@example.com","credentialsRef":"o365_pw"}`)
+	if code != http.StatusOK {
+		t.Fatalf("valid mail create: want 200, got %d", code)
+	}
+	if c.Kind != "mail" || c.Provider != mail.ProviderSMTP || c.Sender != "bot@example.com" {
+		t.Errorf("mail record = %+v, want kind mail, provider smtp, sender set", c)
+	}
+	// A native provider needs a credentialsRef (its vault auth bundle) but no endpoint.
+	if code, _ := post(`{"name":"g1","kind":"mail","provider":"gmail","sender":"bot@x"}`); code != http.StatusBadRequest {
+		t.Error("gmail without credentialsRef: want 400")
+	}
+	code, g := post(`{"name":"gmail-notify","kind":"mail","provider":"gmail","sender":"bot@example.com","credentialsRef":"gmail_bundle"}`)
+	if code != http.StatusOK {
+		t.Fatalf("valid gmail create (no endpoint): want 200, got %d", code)
+	}
+	if g.Provider != mail.ProviderGmail || g.Endpoint != "" {
+		t.Errorf("gmail record = %+v, want provider gmail and no endpoint", g)
+	}
+	if code, _ := post(`{"name":"ms1","kind":"mail","provider":"microsoft","sender":"bot@example.com","credentialsRef":"graph_bundle"}`); code != http.StatusOK {
+		t.Error("valid microsoft create (no endpoint): want 200")
+	}
+}
+
+// TestBuildMailNativeClients proves buildMailClients dispatches native providers: a
+// gmail/microsoft record whose credentialsRef resolves to a valid OAuth bundle becomes
+// the matching client, while a record whose bundle is malformed is skipped (its tasks
+// park) rather than failing the whole rebuild (ADR-0080).
+func TestBuildMailNativeClients(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	// The credential bundle lives in the vault; here it resolves from the env fallback
+	// (ATLAS_CONNECTOR_<REF>_TOKEN), never in the record itself.
+	t.Setenv("ATLAS_CONNECTOR_GMAIL_BUNDLE_TOKEN", `{"method":"refreshToken","clientId":"c","clientSecret":"s","refreshToken":"r"}`)
+	t.Setenv("ATLAS_CONNECTOR_GRAPH_BUNDLE_TOKEN", `{"method":"clientCredentials","tenantId":"t","clientId":"c","clientSecret":"s"}`)
+	t.Setenv("ATLAS_CONNECTOR_BAD_BUNDLE_TOKEN", `not valid json`)
+
+	_ = srv.connectors.save(connector{ID: "1", Name: "gmail", Kind: "mail", Provider: "gmail", Sender: "a@x", CredentialsRef: "gmail_bundle", Enabled: true, CreatedAt: 1})
+	_ = srv.connectors.save(connector{ID: "2", Name: "graph", Kind: "mail", Provider: "microsoft", Sender: "b@x", CredentialsRef: "graph_bundle", Enabled: true, CreatedAt: 2})
+	_ = srv.connectors.save(connector{ID: "3", Name: "broken", Kind: "mail", Provider: "gmail", Sender: "c@x", CredentialsRef: "bad_bundle", Enabled: true, CreatedAt: 3})
+
+	clients, err := srv.buildMailClients()
+	if err != nil {
+		t.Fatalf("buildMailClients: %v", err)
+	}
+	if len(clients) != 2 {
+		t.Fatalf("clients = %d, want 2 (gmail + graph; the broken bundle is skipped)", len(clients))
+	}
+	if _, ok := clients["gmail"].(*mail.GmailClient); !ok {
+		t.Errorf("gmail connector = %T, want *mail.GmailClient", clients["gmail"])
+	}
+	if _, ok := clients["graph"].(*mail.GraphClient); !ok {
+		t.Errorf("microsoft connector = %T, want *mail.GraphClient", clients["graph"])
+	}
+	if _, ok := clients["broken"]; ok {
+		t.Error("a malformed credential bundle should be skipped, not built")
+	}
+}
+
+// TestMailConnectorLifecycle drives a mail connector through the full Console
+// management surface — create, sender update, list, delete — so the create branch
+// (mail kind), the sender-update branch, and the mail arm of the registry rebuild
+// are all exercised end to end (ADR-0079).
+func TestMailConnectorLifecycle(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	h := srv.Handler()
+	do := func(method, path, body string) (int, []byte) {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code, rec.Body.Bytes()
+	}
+	code, b := do(http.MethodPost, "/api/v1/connectors",
+		`{"name":"office365","kind":"mail","endpoint":"smtp.office365.com:587","sender":"bot@example.com","credentialsRef":"o365_pw"}`)
+	if code != http.StatusOK {
+		t.Fatalf("create mail connector: %d %s", code, b)
+	}
+	var c connector
+	_ = json.Unmarshal(b, &c)
+
+	// Update the sender (the mail-only field) — rebuilds the registry with the new value.
+	code, b = do(http.MethodPatch, "/api/v1/connectors/"+c.ID, `{"sender":"notifications@example.com"}`)
+	if code != http.StatusOK {
+		t.Fatalf("update mail sender: %d %s", code, b)
+	}
+	var up connector
+	_ = json.Unmarshal(b, &up)
+	if up.Sender != "notifications@example.com" {
+		t.Fatalf("sender after update = %q, want the new sender", up.Sender)
+	}
+
+	// The list shows the mail connector and never a secret value.
+	_, lb := do(http.MethodGet, "/api/v1/connectors", "")
+	if !strings.Contains(string(lb), `"kind":"mail"`) || strings.Contains(string(lb), "o365_pw_value") {
+		t.Fatalf("connector list = %s, want the mail connector and only the reference", lb)
+	}
+
+	// Delete it → the registry rebuilds without it.
+	if code, _ := do(http.MethodDelete, "/api/v1/connectors/"+c.ID, ""); code != http.StatusNoContent {
+		t.Fatalf("delete mail connector: want 204")
+	}
+}
+
+// TestBuildMailClients covers the managed-connector → SMTP client build: only enabled
+// records of kind "mail" with a non-empty endpoint and a supported provider become
+// clients; a disabled, non-mail, endpoint-less, or unknown-provider record is skipped.
+func TestBuildMailClients(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	_ = srv.connectors.save(connector{ID: "1", Name: "on", Kind: "mail", Endpoint: "smtp.a:587", Sender: "a@x", Enabled: true, CreatedAt: 1})
+	_ = srv.connectors.save(connector{ID: "2", Name: "off", Kind: "mail", Endpoint: "smtp.b:587", Sender: "b@x", Enabled: false, CreatedAt: 2})
+	_ = srv.connectors.save(connector{ID: "3", Name: "clio", Kind: "clio", Endpoint: "http://c", Enabled: true, CreatedAt: 3})
+	_ = srv.connectors.save(connector{ID: "4", Name: "noendpoint", Kind: "mail", Endpoint: "", Sender: "d@x", Enabled: true, CreatedAt: 4})
+	_ = srv.connectors.save(connector{ID: "5", Name: "future", Kind: "mail", Endpoint: "graph:0", Provider: "microsoft-graph", Enabled: true, CreatedAt: 5})
+
+	clients, err := srv.buildMailClients()
+	if err != nil {
+		t.Fatalf("buildMailClients: %v", err)
+	}
+	if len(clients) != 1 {
+		t.Fatalf("clients = %d, want 1 (only the enabled SMTP mail record)", len(clients))
+	}
+	if _, ok := clients["on"]; !ok {
+		t.Errorf("clients = %v, want the 'on' connector", clients)
+	}
+}
+
+// TestBuildMailClientsLoadError covers buildMailClients' store-read failure.
+func TestBuildMailClientsLoadError(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	srv.connectors = &connectorStore{dir: filepath.Join(t.TempDir(), "gone")}
+	if _, err := srv.buildMailClients(); err == nil {
+		t.Error("buildMailClients with a broken store: want error")
 	}
 }
 

@@ -70,7 +70,7 @@ type Processor struct {
 	fatalErr     error
 
 	// startsThisBatch remembers the (defKey, correlationKey) pairs a singleton message
-	// start has already scheduled a create for in the current batch (ADR-0078). The
+	// start has already scheduled a create for in the current batch (ADR-0082). The
 	// durable ActiveStartKey counter only reflects an instance once its Activated
 	// followup applies (a later batch), so within one batch several messages for the
 	// same key would all read zero; this set closes that same-batch window. Cleared
@@ -144,7 +144,7 @@ type messageStartRef struct {
 	elementId      int32
 	correlationKey *expr.Compiled
 	// singletonStart gates instantiation on there being no live instance of defKey
-	// already started with the same correlation key (ADR-0078); false = ADR-0035's
+	// already started with the same correlation key (ADR-0082); false = ADR-0035's
 	// start-per-message default.
 	singletonStart bool
 }
@@ -368,7 +368,7 @@ func (p *Processor) processBatch() error {
 	p.sideEffects = p.sideEffects[:0]
 	p.fatalErr = nil
 	for k := range p.startsThisBatch {
-		delete(p.startsThisBatch, k) // reuse the map; empty by the next batch (ADR-0078)
+		delete(p.startsThisBatch, k) // reuse the map; empty by the next batch (ADR-0082)
 	}
 
 	tx := p.store.NewTransaction()

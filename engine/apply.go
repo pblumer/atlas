@@ -22,7 +22,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			}
 			// A message-start instance carries the correlation key it began with; count
 			// it as one live instance for that (definition, key) so a singleton message
-			// start can gate on it (ADR-0078). Event-driven, so replay rebuilds it (I4).
+			// start can gate on it (ADR-0082). Event-driven, so replay rebuilds it (I4).
 			if v.process.CorrelationKey != "" {
 				return tx.IncrementActiveStartKey(v.process.ProcessDefKey, v.process.CorrelationKey)
 			}
@@ -47,7 +47,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 				return err
 			}
 			// Releasing a message-start instance re-opens its correlation key so a
-			// later message can start a fresh one (ADR-0078). Mirrors the increment on
+			// later message can start a fresh one (ADR-0082). Mirrors the increment on
 			// activation, keyed by the same fields the still-populated value carries.
 			if v.process.CorrelationKey != "" {
 				return tx.DecrementActiveStartKey(v.process.ProcessDefKey, v.process.CorrelationKey)

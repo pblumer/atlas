@@ -45,6 +45,7 @@ import (
 	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/job"
+	"github.com/pblumer/atlas/mail"
 	"github.com/pblumer/atlas/rest"
 	"github.com/pblumer/atlas/script"
 	"github.com/pblumer/atlas/state"
@@ -192,6 +193,13 @@ type Server struct {
 	// endpoint token resolved from the vault (ADR-0041). Read only while driving
 	// jobs on the run loop, so it needs no lock.
 	clioRegistry *clio.Registry
+
+	// mailRegistry resolves a connector name to a mail-provider client for outbound
+	// mail connector tasks (ADR-0079), built from the managed connector store at
+	// startup and rebuilt on every connector change, with each provider's credential
+	// resolved from the vault (ADR-0041). Read only while driving jobs on the run
+	// loop, so it needs no lock.
+	mailRegistry *mail.Registry
 
 	// inboundSubs holds the operator-configured clio inbound subscriptions the
 	// inbound bridge polls (ADR-0075). Owned by the run-loop goroutine. inboundPoll
@@ -439,6 +447,22 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.jobRunner.Handle(compiler.ClioWriteJobTypeIndex, clio.Handler(store, s.processLookup, s.clioRegistry))
 	s.jobRunner.HandleWithOutput(compiler.ClioQueryJobTypeIndex, clio.QueryHandler(store, s.processLookup, s.clioRegistry))
 	s.jobRunner.HandleWithOutput(compiler.ClioReadJobTypeIndex, clio.ReadHandler(store, s.processLookup, s.clioRegistry))
+	// An outbound mail connector task sends a model-authored message through a
+	// server-registered mail provider (ADR-0079). One worker serves every process
+	// under the reserved mail job type; it resolves each job's connector name and
+	// recipients/subject/body from the compiled process, sends the message off the run
+	// loop and after fsync, and completes the job. The provider host and credentials
+	// live in the managed connector store like clio's; the credential is resolved from
+	// the vault at build time (ADR-0041), so a secret never lives in a model. The
+	// registry is built here and rebuilt on every connector change; a task whose
+	// connector is not configured parks until it is.
+	s.mailRegistry = mail.NewRegistry()
+	mailClients, err := s.buildMailClients()
+	if err != nil {
+		return nil, err
+	}
+	s.mailRegistry.Replace(mailClients)
+	s.jobRunner.Handle(compiler.MailJobTypeIndex, mail.Handler(store, s.processLookup, s.mailRegistry))
 	// An HTTP-REST connector task calls a model-authored endpoint (ADR-0067). One
 	// worker serves every process under the reserved REST job type; it resolves each
 	// job's method/url/headers/query/result-variable from the compiled process, calls

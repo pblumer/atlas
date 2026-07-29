@@ -308,6 +308,19 @@ type ConnectorTaskDetail struct {
 	Query   []RestKV
 	Auth    int32
 	Retries int32
+	// Mail connector fields (JobType == MailJobType, ADR-0079). Connector (above)
+	// names the server-registered mail provider; the message is authored in the
+	// model as literal-or-FEEL values evaluated over the instance's variables at
+	// send time. To and Bcc/Cc are comma-separated recipient lists; From overrides
+	// the provider's default sender; MailSubject and Body are the message. Each is
+	// the zero RestExpr for a non-mail task. Cc/Bcc/From are also zero when a mail
+	// task omits them.
+	To          RestExpr
+	Cc          RestExpr
+	Bcc         RestExpr
+	From        RestExpr
+	MailSubject RestExpr
+	Body        RestExpr
 }
 
 // RestExpr is a REST connector field value that is either a literal string
@@ -371,7 +384,7 @@ type MessageDetail struct {
 	CorrelationKey *expr.Compiled
 	// SingletonStart marks a message *start* event as one-per-correlation-key: while
 	// an instance started with a given key is live, another correlating message starts
-	// no duplicate (ADR-0078). Only meaningful on a message start event; ignored on
+	// no duplicate (ADR-0082). Only meaningful on a message start event; ignored on
 	// catch/throw/end. Default false keeps ADR-0035's start-per-message behavior.
 	SingletonStart bool
 }
@@ -602,7 +615,7 @@ type MessageStartEvent struct {
 	MessageName    string
 	ElementId      int32
 	CorrelationKey *expr.Compiled
-	SingletonStart bool // one live instance per correlation key (ADR-0078)
+	SingletonStart bool // one live instance per correlation key (ADR-0082)
 }
 
 // MessageStartEvents returns each message-start event with its element index and

@@ -36,10 +36,16 @@ type ElementInstanceValue struct {
 	TokenID       uint64
 	ParentTokenID uint64
 	SourceFlowId  int32
+	// MultiInstance marks an element instance's role in a multi-instance activity
+	// (ADR-0077): 0 = not multi-instance, 1 = the body (the scope that seeds the
+	// iterations), 2 = an inner iteration (running the node's real behavior, scoped
+	// under the body). Append-compatible: an old record without it decodes to 0.
+	MultiInstance uint8
 }
 
 const elementInstanceLegacySize = 8 + 8 + 4 + 8 + 1 + 8
 const elementInstanceSize = elementInstanceLegacySize + 8 + 8 + 4
+const elementInstanceMISize = elementInstanceSize + 1
 
 func (*ElementInstanceValue) ValueType() ValueType { return VTElementInstance }
 
@@ -52,7 +58,8 @@ func (v *ElementInstanceValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.AttachedToKey)
 	dst = binary.LittleEndian.AppendUint64(dst, v.TokenID)
 	dst = binary.LittleEndian.AppendUint64(dst, v.ParentTokenID)
-	return binary.LittleEndian.AppendUint32(dst, uint32(v.SourceFlowId))
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.SourceFlowId))
+	return append(dst, v.MultiInstance)
 }
 
 func (v *ElementInstanceValue) decode(src []byte) error {
@@ -69,6 +76,9 @@ func (v *ElementInstanceValue) decode(src []byte) error {
 		v.TokenID = binary.LittleEndian.Uint64(src[37:])
 		v.ParentTokenID = binary.LittleEndian.Uint64(src[45:])
 		v.SourceFlowId = int32(binary.LittleEndian.Uint32(src[53:]))
+	}
+	if len(src) >= elementInstanceMISize {
+		v.MultiInstance = src[57]
 	}
 	return nil
 }
