@@ -515,6 +515,9 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   stroke: var(--muted) !important; stroke-width: 2px !important;
   stroke-dasharray: 4 3 !important;
 }
+/* Each element carries up to two counts side by side: gray (tokens that have
+   passed through) on the left, green (tokens live here now) on the right. */
+.token-badges { display: inline-flex; gap: 3px; align-items: center; pointer-events: none; }
 .token-badge {
   background: var(--ok); color: #fff; border-radius: 999px;
   min-width: 20px; height: 20px; padding: 0 6px;
