@@ -1,17 +1,18 @@
 # ADR-0074: Embedded subprocesses (scope lifecycle via child counters)
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-28
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phases 1–2 delivered (a plain embedded subprocess
-> compiles and *runs* end to end); Phases 3–4 pending. The work is phased, each
-> phase test-first with a recovery test (ADR-0018): compiler parse + `FlowScope` →
-> runtime scope lifecycle (the happy path that makes a plain embedded subprocess
-> run) → termination/interruption and boundary events on the subprocess → nesting
-> depth and subprocess-level variables/I/O mappings. Event subprocesses,
-> multi-instance activities, and call activities are **out of scope** here — they
-> are separate ROADMAP Milestone-3 items that build on this one.
+> **Implementation status.** Phases 1–4 delivered — a plain embedded subprocess
+> compiles, *runs* end to end, can be interrupted by a boundary event, nests, and
+> passes variables in and out via I/O mappings. Each phase was test-first with a
+> recovery test (ADR-0018): compiler parse + `FlowScope` → runtime scope lifecycle
+> (the happy path that makes a plain embedded subprocess run) →
+> termination/interruption and boundary events on the subprocess → nesting depth and
+> subprocess-level variables/I/O mappings, and the Modeler I/O-mapping editor for a
+> subprocess. Event subprocesses, multi-instance activities, and call activities are **out of
+> scope** here — they are separate ROADMAP Milestone-3 items that build on this one.
 >
 > **Delivered (Phase 1, compiler):** the `TypeSubProcess` element type; recursive
 > parsing of `<subProcess>` (a shared `xmlFlowContent` embedded in both the process
@@ -36,6 +37,34 @@
 > (no inner start) completes immediately rather than parking. Verified end to end:
 > an inline-script subprocess runs to completion, and a token parked on a service
 > task inside a subprocess survives crash + replay and still completes.
+>
+> **Delivered (Phase 3, boundary events & interruption):** a boundary event may
+> attach to a subprocess (armed like any activity's when it activates). A
+> non-interrupting boundary spawns its parallel token while the subprocess keeps
+> running (no engine change needed). An **interrupting** boundary now tears down the
+> whole subprocess scope: `interruptHost` calls a new `terminateScope`, which finds
+> every element instance whose flow-scope chain leads to the subprocess
+> (`scopeContains`, recursive so nesting is handled), cancels each job, and
+> terminates them before the subprocess element itself — so no inner token outlives
+> the interrupt. Verified: an interrupting timer boundary on a subprocess with a
+> parked inner service task terminates the task and cancels its job, the
+> non-interrupting case runs both branches, and an interrupt fired *after* crash +
+> recovery still tears the recovered scope down cleanly.
+>
+> **Delivered (Phase 4, nesting & variables):** the compiler wires `zeebe:ioMapping`
+> on a `<subProcess>` (and on activities inside one) recursively over the scope tree.
+> No engine change was needed — the generic activity-local-scope machinery (ADR-0068)
+> already applies input mappings on activation and output mappings + scope-drop on
+> completion, and the scope keys line up exactly: a subprocess's input mapping writes
+> its own element-instance key, which *is* the scope its inner nodes resolve against,
+> so a mapped value becomes a subprocess-local variable the inner nodes inherit up the
+> chain; an output mapping promotes a selected value to the parent scope; and the
+> local scope is dropped on completion so scratch data never leaks. Verified: an input
+> mapping's value is visible to an inner script and does not leak to the process root,
+> an output mapping promotes a subprocess-local value out, and a subprocess nested
+> inside another runs to completion. The Modeler exposes the generic zeebe:ioMapping
+> editor for a subprocess (the same one tasks use, reused as-is — `bpmn:SubProcess`
+> is already in the moddle's `IoMapping.allowedIn`), with no task-type selector.
 
 ## Context and problem statement
 

@@ -277,7 +277,7 @@ Composition and reuse.
   viewer auto-lays-out DI-less collaborations as stacked pools; the editor
   authors pools, message flows, and pool names (ADR-0023). Atomic multi-pool
   deploy and message-flow validation still to come.
-- 🔲 Embedded subprocesses (scope lifecycle via child counters) — plan in [ADR-0074](docs/adr/0074-embedded-subprocesses.md)
+- ✅ **Embedded subprocesses** (scope lifecycle via child counters): a `<subProcess>` runs its inner start→…→end in a child scope keyed by its element instance, completes when that scope drains, supports interrupting/non-interrupting boundary events (with scope-recursive termination), nests, and passes variables in/out via I/O mappings — including the Modeler's I/O-mapping editor for a subprocess ([ADR-0074](docs/adr/0074-embedded-subprocesses.md)).
 - 🔲 Event subprocesses (interrupting and non-interrupting)
 - 🔲 Call activities (single-partition)
 - 🔲 Multi-instance activities (sequential and parallel)

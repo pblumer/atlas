@@ -72,6 +72,44 @@ func TestParseSubProcess(t *testing.T) {
 	}
 }
 
+// TestParseSubProcessIOMapping checks that a zeebe:ioMapping on a <subProcess> is
+// parsed and wired onto the container node — the compiler half of subprocess-level
+// variable passing; the engine applies these generically (ADR-0074 Phase 4).
+func TestParseSubProcessIOMapping(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+	             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+	  <process id="p" isExecutable="true">
+	    <startEvent id="s"/>
+	    <subProcess id="sub">
+	      <extensionElements>
+	        <zeebe:ioMapping>
+	          <zeebe:input source="= outerVal + 1" target="innerVal"/>
+	          <zeebe:output source="= innerVal * 100" target="promoted"/>
+	        </zeebe:ioMapping>
+	      </extensionElements>
+	      <startEvent id="iStart"/>
+	      <scriptTask id="echo">
+	        <extensionElements><zeebe:script expression="= innerVal" resultVariable="innerEcho"/></extensionElements>
+	      </scriptTask>
+	      <endEvent id="iEnd"/>
+	      <sequenceFlow id="if1" sourceRef="iStart" targetRef="echo"/>
+	      <sequenceFlow id="if2" sourceRef="echo" targetRef="iEnd"/>
+	    </subProcess>
+	    <endEvent id="e"/>
+	    <sequenceFlow id="f1" sourceRef="s" targetRef="sub"/>
+	    <sequenceFlow id="f2" sourceRef="sub" targetRef="e"/>
+	  </process>
+	</definitions>`
+	cp, err := Parse(1, 1, strings.NewReader(xml))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	sub := nodeByBpmnId(t, cp, "sub")
+	if sub.IOInCount != 1 || sub.IOOutCount != 1 {
+		t.Fatalf("subprocess io mapping counts = in %d out %d, want 1 and 1", sub.IOInCount, sub.IOOutCount)
+	}
+}
+
 // TestParseSubProcessCrossScopeFlowRejected checks that a sequence flow crossing a
 // scope boundary (an inner node wired directly to a root node) fails deploy with a
 // cross-scope validation error — the dormant checkScopes rule becomes load-bearing

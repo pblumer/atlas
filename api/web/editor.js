@@ -2277,6 +2277,14 @@ function wireProperties(root, modeler, api, projectId, toast) {
         if (t === "bpmn:ServiceTask" || t === "bpmn:ScriptTask" || t === "bpmn:UserTask") {
           html += ioMappingsHTML(bo);
         }
+      } else if (bo.$type === "bpmn:SubProcess") {
+        // An embedded subprocess is a scope, so it takes the same generic
+        // zeebe:ioMapping editor as a task (ADR-0074) — but no task-type selector, a
+        // subprocess is not a task. Input mappings write a variable into the
+        // subprocess scope on entry (its inner elements see it, up the chain); output
+        // mappings promote selected values to the enclosing scope on completion.
+        html += `<p class="muted" style="font-size:12px">Pass variables in and out of this subprocess. <b>Input mappings</b> create variables its inner elements see (its local scope); <b>output mappings</b> promote selected values back to the enclosing scope when it completes.</p>`;
+        html += ioMappingsHTML(bo);
       } else if (isDefaultFlow) {
         html += `<h3>Condition (FEEL)</h3>
           <p class="muted" style="font-size:12px">This is the gateway's <b>default flow</b> — taken when no other branch's condition matches, so it carries no condition of its own.</p>`;
