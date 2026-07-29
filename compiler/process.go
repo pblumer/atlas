@@ -95,23 +95,25 @@ func (t BpmnType) String() string {
 // CompiledNode is one BPMN element. It stays small; type-specific data lives in
 // detail tables referenced by Detail.
 type CompiledNode struct {
-	ElementId     int32 // == index in nodes[]
-	Type          BpmnType
-	OutgoingStart int32 // offset into outgoingFlows
-	OutgoingCount int32
-	IncomingCount int32 // number of sequence flows targeting this node (a parallel join waits for all)
-	FlowScope     int32 // ElementId of enclosing scope, -1 = process root
-	Detail        int32 // index into the matching detail table, -1 if none
-	BoundaryStart int32 // offset into boundaryEvents (the node ids of events attached to this activity)
-	BoundaryCount int32 // number of boundary events attached (0 for a non-host node)
-	DataOutStart  int32 // offset into dataOutAssocs (the data-output associations of this activity)
-	DataOutCount  int32 // number of data-output associations (0 for a node with none)
-	DataInStart   int32 // offset into dataInAssocs (the data-input associations of this activity)
-	DataInCount   int32 // number of data-input associations (0 for a node with none)
-	IOInStart     int32 // offset into ioInputs (the zeebe:ioMapping inputs of this activity)
-	IOInCount     int32 // number of input mappings (0 for a node with none)
-	IOOutStart    int32 // offset into ioOutputs (the zeebe:ioMapping outputs of this activity)
-	IOOutCount    int32 // number of output mappings (0 for a node with none)
+	ElementId       int32 // == index in nodes[]
+	Type            BpmnType
+	OutgoingStart   int32 // offset into outgoingFlows
+	OutgoingCount   int32
+	IncomingCount   int32 // number of sequence flows targeting this node (a parallel join waits for all)
+	FlowScope       int32 // ElementId of enclosing scope, -1 = process root
+	Detail          int32 // index into the matching detail table, -1 if none
+	BoundaryStart   int32 // offset into boundaryEvents (the node ids of events attached to this activity)
+	BoundaryCount   int32 // number of boundary events attached (0 for a non-host node)
+	DataOutStart    int32 // offset into dataOutAssocs (the data-output associations of this activity)
+	DataOutCount    int32 // number of data-output associations (0 for a node with none)
+	DataInStart     int32 // offset into dataInAssocs (the data-input associations of this activity)
+	DataInCount     int32 // number of data-input associations (0 for a node with none)
+	IOInStart       int32 // offset into ioInputs (the zeebe:ioMapping inputs of this activity)
+	IOInCount       int32 // number of input mappings (0 for a node with none)
+	IOOutStart      int32 // offset into ioOutputs (the zeebe:ioMapping outputs of this activity)
+	IOOutCount      int32 // number of output mappings (0 for a node with none)
+	ScopeStartStart int32 // offset into scopeStarts (the start events nested directly in this subprocess)
+	ScopeStartCount int32 // number of nested start events (0 for a non-subprocess node)
 }
 
 // CompiledFlow is a sequence flow between two nodes. Condition is the compiled
@@ -425,6 +427,7 @@ type CompiledProcess struct {
 
 	outgoingFlows     []int32 // shared topology: flow ids grouped by source node
 	boundaryEvents    []int32 // shared topology: boundary-event node ids grouped by host node
+	scopeStarts       []int32 // shared topology: nested start-event node ids grouped by subprocess node
 	serviceTasks      []ServiceTaskDetail
 	scriptTasks       []ScriptTaskDetail
 	scriptJobTasks    []ScriptJobTaskDetail
@@ -469,6 +472,15 @@ func (p *CompiledProcess) Outgoing(id int32) []int32 {
 func (p *CompiledProcess) BoundaryEvents(id int32) []int32 {
 	n := &p.nodes[id]
 	return p.boundaryEvents[n.BoundaryStart : n.BoundaryStart+n.BoundaryCount]
+}
+
+// ScopeStartEvents returns the element ids of the start events nested directly in
+// the subprocess node id — the scope's entry points the subprocess behavior seeds
+// on activation — as a slice into the shared topology array (no allocation). Empty
+// for a non-subprocess node or a subprocess with no start event (ADR-0074).
+func (p *CompiledProcess) ScopeStartEvents(id int32) []int32 {
+	n := &p.nodes[id]
+	return p.scopeStarts[n.ScopeStartStart : n.ScopeStartStart+n.ScopeStartCount]
 }
 
 // BoundaryEvent returns the boundary-event detail at the given table index.

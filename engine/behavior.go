@@ -70,6 +70,7 @@ func (p *Processor) registerBehaviors() {
 	// deploy-time timer the arm handler creates, not a distinct runtime behavior.
 	p.behaviors[compiler.TypeTimerStartEvent] = startEventBehavior{}
 	p.behaviors[compiler.TypeMessageEndEvent] = messageEndEventBehavior{}
+	p.behaviors[compiler.TypeSubProcess] = subProcessBehavior{}
 }
 
 // --- command handlers ---
@@ -671,6 +672,30 @@ func completeAndTakeFlows(c *ProcessingContext, key uint64, ei *model.ElementIns
 	takeOutgoingFlows(c, ei)
 }
 
+// completeScope finishes a scope whose last child just left. It is called after an
+// end event's Completed decrements the scope's active-child counter: if the counter
+// reached zero, the scope has drained and its owner completes. The owner is either
+// the process-instance root (no element instance for the scope key) or an embedded
+// subprocess element instance (ADR-0074). For a subprocess it schedules the
+// container's Completing, so the subprocess behavior completes it and takes its
+// outgoing flow — which may in turn drain the parent scope. The decision is a pure
+// function of state (GetElementInstance / ActiveChildren), so recovery reconstructs
+// it identically (I4/I6). A no-op while the scope still has active children.
+func completeScope(c *ProcessingContext, scope uint64) {
+	if c.ActiveChildren(scope) != 0 {
+		return
+	}
+	if ei := c.GetElementInstance(scope); ei != nil {
+		// A subprocess scope: drive its container to Completing.
+		c.AppendElementCommand(scope, model.IntentCompleting, *ei)
+		return
+	}
+	// The process-instance root scope: the instance itself completes.
+	if pi := c.GetProcessInstance(scope); pi != nil {
+		c.AppendProcessInstanceEvent(scope, model.IntentCompleted, *pi)
+	}
+}
+
 // activateElement schedules activation of a fresh element instance on targetId,
 // scoped like ei. It is the single "take a flow" primitive the flow-taking
 // behaviors share.
@@ -1209,11 +1234,7 @@ func (messageEndEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei 
 
 func (messageEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	c.AppendElementEvent(key, model.IntentCompleted, *ei) // decrements scope's active children
-	if c.ActiveChildren(ei.FlowScopeKey) == 0 {
-		if pi := c.GetProcessInstance(ei.ProcessInstanceKey); pi != nil {
-			c.AppendProcessInstanceEvent(ei.ProcessInstanceKey, model.IntentCompleted, *pi)
-		}
-	}
+	completeScope(c, ei.FlowScopeKey)                     // completes the scope owner if it drained
 }
 
 // evalCorrelationKey evaluates a compiled correlation-key expression over a
@@ -1661,6 +1682,45 @@ func (boundaryEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *
 
 // endEventBehavior: a none end event completes and, if it was the last active
 // element in its scope, completes the process instance.
+// subProcessBehavior runs an embedded subprocess: a container that is itself a
+// scope. On activation it seeds the subprocess's inner start event(s) as element
+// instances scoped by the subprocess (their FlowScopeKey is the container's key),
+// so each increments the subprocess's active-child counter. The subprocess then
+// waits — it is not driven to Completing by a token flowing through it but by its
+// scope draining: when its last inner token leaves, an inner end event's
+// completeScope schedules the container's Completing (ADR-0074). On completion it
+// behaves like any activity: emit Completed (decrementing its parent scope) and
+// take its outgoing flow.
+type subProcessBehavior struct{}
+
+func (subProcessBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	starts := cp.ScopeStartEvents(ei.ElementId)
+	if len(starts) == 0 {
+		// A subprocess with no start event has an already-empty scope; complete it
+		// immediately rather than parking a token forever.
+		c.AppendElementCommand(key, model.IntentCompleting, *ei)
+		return
+	}
+	for _, startID := range starts {
+		node := cp.Node(startID)
+		k := c.NewKey()
+		c.AppendElementCommand(k, model.IntentActivating, model.ElementInstanceValue{
+			ProcessInstanceKey: ei.ProcessInstanceKey,
+			ProcessDefKey:      ei.ProcessDefKey,
+			ElementId:          startID,
+			FlowScopeKey:       key, // inner elements are scoped by this subprocess instance
+			BpmnElementType:    uint8(node.Type),
+			TokenID:            k,
+			SourceFlowId:       -1,
+		})
+	}
+}
+
+func (subProcessBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
 type endEventBehavior struct{}
 
 func (endEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
@@ -1669,9 +1729,5 @@ func (endEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.
 
 func (endEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	c.AppendElementEvent(key, model.IntentCompleted, *ei) // decrements scope's active children
-	if c.ActiveChildren(ei.FlowScopeKey) == 0 {
-		if pi := c.GetProcessInstance(ei.ProcessInstanceKey); pi != nil {
-			c.AppendProcessInstanceEvent(ei.ProcessInstanceKey, model.IntentCompleted, *pi)
-		}
-	}
+	completeScope(c, ei.FlowScopeKey)                     // completes the scope owner if it drained
 }

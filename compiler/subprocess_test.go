@@ -55,6 +55,15 @@ func TestParseSubProcess(t *testing.T) {
 			t.Errorf("node %q FlowScope = %d, want %d (the subprocess)", id, got, sub.ElementId)
 		}
 	}
+	// The subprocess exposes its inner start as its scope entry point (what the
+	// runtime seeds on activation); a non-subprocess node exposes none.
+	starts := cp.ScopeStartEvents(sub.ElementId)
+	if len(starts) != 1 || starts[0] != nodeByBpmnId(t, cp, "innerStart").ElementId {
+		t.Errorf("ScopeStartEvents(sub) = %v, want [%d]", starts, nodeByBpmnId(t, cp, "innerStart").ElementId)
+	}
+	if got := cp.ScopeStartEvents(nodeByBpmnId(t, cp, "check").ElementId); len(got) != 0 {
+		t.Errorf("ScopeStartEvents(check) = %v, want empty (not a subprocess)", got)
+	}
 	// Root-level nodes stay at the process root.
 	for _, id := range []string{"s", "e"} {
 		if got := nodeByBpmnId(t, cp, id).FlowScope; got != -1 {

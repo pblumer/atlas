@@ -4,26 +4,38 @@
 - **Date:** 2026-07-28
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phase 1 delivered (compiler); Phases 2–4 pending. The
-> work is phased, each phase test-first with a recovery test (ADR-0018): compiler
-> parse + `FlowScope` → runtime scope lifecycle (the happy path that makes a plain
-> embedded subprocess run) → termination/interruption and boundary events on the
-> subprocess → nesting depth, empty-scope, and subprocess-level variables/I/O
-> mappings. Event subprocesses, multi-instance activities, and call activities are
-> **out of scope** here — they are separate ROADMAP Milestone-3 items that build
-> on this one.
+> **Implementation status.** Phases 1–2 delivered (a plain embedded subprocess
+> compiles and *runs* end to end); Phases 3–4 pending. The work is phased, each
+> phase test-first with a recovery test (ADR-0018): compiler parse + `FlowScope` →
+> runtime scope lifecycle (the happy path that makes a plain embedded subprocess
+> run) → termination/interruption and boundary events on the subprocess → nesting
+> depth and subprocess-level variables/I/O mappings. Event subprocesses,
+> multi-instance activities, and call activities are **out of scope** here — they
+> are separate ROADMAP Milestone-3 items that build on this one.
 >
-> **Delivered (Phase 1):** the `TypeSubProcess` element type; recursive parsing of
-> `<subProcess>` (a shared `xmlFlowContent` embedded in both the process and each
-> subprocess; `registerScope`/`connectScope` compile the root and every nested
-> scope); a Builder scope cursor (`PushScope`/`PopScope`) so a subprocess's children
-> carry it as their `FlowScope`; root-scoped process-entry start-event collection
-> (a start nested in a subprocess is that scope's entry, not the process's); the
-> now-load-bearing cross-scope sequence-flow rejection in `checkScopes`; reachability
-> that enters a subprocess through its own start; and `TypeSubProcess` counted as an
-> activity (a valid boundary-event host). **Runtime boundary:** a subprocess model
-> now compiles and deploys, but no `subProcessBehavior` is registered yet, so an
-> instance must not be *run* until Phase 2 — the token would reach a nil behavior.
+> **Delivered (Phase 1, compiler):** the `TypeSubProcess` element type; recursive
+> parsing of `<subProcess>` (a shared `xmlFlowContent` embedded in both the process
+> and each subprocess; `registerScope`/`connectScope` compile the root and every
+> nested scope); a Builder scope cursor (`PushScope`/`PopScope`) so a subprocess's
+> children carry it as their `FlowScope`; root-scoped process-entry start-event
+> collection (a start nested in a subprocess is that scope's entry, not the
+> process's); the now-load-bearing cross-scope sequence-flow rejection in
+> `checkScopes`; reachability that enters a subprocess through its own start; and
+> `TypeSubProcess` counted as an activity (a valid boundary-event host).
+>
+> **Delivered (Phase 2, runtime):** a `subProcessBehavior` — on activation it seeds
+> the subprocess's inner start event(s) scoped by the container (their `FlowScopeKey`
+> is its element-instance key), so they increment its `activeChildren` counter; on
+> completion it takes its outgoing flow like any activity. The compiler exposes a
+> subprocess's inner starts as an allocation-free slice (`ScopeStartEvents`, grouped
+> in `Build` like boundary events). End-event completion is generalized into
+> `completeScope`: when a scope's counter drains to zero it completes the scope's
+> owner — the process instance for the root, or the subprocess element instance
+> (which then takes its outgoing flow, possibly draining the parent) — as a pure
+> function of state, so recovery reconstructs it identically. An empty subprocess
+> (no inner start) completes immediately rather than parking. Verified end to end:
+> an inline-script subprocess runs to completion, and a token parked on a service
+> task inside a subprocess survives crash + replay and still completes.
 
 ## Context and problem statement
 

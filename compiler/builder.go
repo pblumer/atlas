@@ -824,6 +824,26 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		n.BoundaryCount = int32(len(boundary)) - n.BoundaryStart
 	}
 
+	// Group nested start events by their enclosing subprocess into one shared array,
+	// mirroring the boundary-event grouping, so a subprocess behavior seeds its
+	// scope's entry points as an allocation-free slice at runtime. A start event's
+	// FlowScope is the subprocess node it belongs to (-1 = process root, not grouped
+	// here) (ADR-0074).
+	var scopeStarts []int32
+	for i := range b.nodes {
+		n := &b.nodes[i]
+		n.ScopeStartStart = int32(len(scopeStarts))
+		if n.Type == TypeSubProcess {
+			for j := range b.nodes {
+				s := &b.nodes[j]
+				if isStartEvent(s.Type) && s.FlowScope == n.ElementId {
+					scopeStarts = append(scopeStarts, s.ElementId)
+				}
+			}
+		}
+		n.ScopeStartCount = int32(len(scopeStarts)) - n.ScopeStartStart
+	}
+
 	// Group data-output associations by their activity node into one shared array,
 	// mirroring the outgoing-flow and boundary-event grouping, so evaluating a
 	// completing activity's associations is an allocation-free slice at runtime
@@ -905,6 +925,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		flows:             b.flows,
 		outgoingFlows:     outgoing,
 		boundaryEvents:    boundary,
+		scopeStarts:       scopeStarts,
 		serviceTasks:      b.serviceTasks,
 		scriptTasks:       b.scriptTasks,
 		scriptJobTasks:    b.scriptJobTasks,
