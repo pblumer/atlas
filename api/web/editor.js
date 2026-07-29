@@ -3957,7 +3957,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
             <span class="vp-actions">${selectMode
               ? (() => {
                   const n = scopeAllActive ? allActive : picked.size;
-                  return `<button class="btn ghost danger sm" data-term-go ${n ? "" : "disabled"} title="Terminate the selected instances">Terminate${n ? ` ${n}` : ""}</button>
+                  return `<button class="btn danger sm" data-term-go ${n ? "" : "disabled"} title="Terminate the selected instances">Terminate${n ? ` ${n}` : ""}</button>
                  <button class="btn neutral sm${scopeAllActive ? " on" : ""}" data-term-all title="Select every running instance of this version">All active (${allActive})</button>
                  <button class="btn neutral sm" data-term-off>Done</button>`;
                 })()
