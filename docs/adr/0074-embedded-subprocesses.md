@@ -10,11 +10,8 @@
 > recovery test (ADR-0018): compiler parse + `FlowScope` → runtime scope lifecycle
 > (the happy path that makes a plain embedded subprocess run) →
 > termination/interruption and boundary events on the subprocess → nesting depth and
-> subprocess-level variables/I/O mappings. **Remaining (separate follow-up):** the
-> Modeler properties panel does not yet expose an I/O-mapping editor for a
-> subprocess — mappings authored in the model XML work, but the panel shows only
-> General (name/id); adding the editor reuses the existing ADR-0068 io-mapping UI.
-> Event subprocesses, multi-instance activities, and call activities are **out of
+> subprocess-level variables/I/O mappings, and the Modeler I/O-mapping editor for a
+> subprocess. Event subprocesses, multi-instance activities, and call activities are **out of
 > scope** here — they are separate ROADMAP Milestone-3 items that build on this one.
 >
 > **Delivered (Phase 1, compiler):** the `TypeSubProcess` element type; recursive
@@ -65,7 +62,9 @@
 > local scope is dropped on completion so scratch data never leaks. Verified: an input
 > mapping's value is visible to an inner script and does not leak to the process root,
 > an output mapping promotes a subprocess-local value out, and a subprocess nested
-> inside another runs to completion.
+> inside another runs to completion. The Modeler exposes the generic zeebe:ioMapping
+> editor for a subprocess (the same one tasks use, reused as-is — `bpmn:SubProcess`
+> is already in the moddle's `IoMapping.allowedIn`), with no task-type selector.
 
 ## Context and problem statement
 
