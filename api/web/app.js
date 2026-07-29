@@ -275,7 +275,6 @@ function initShell() {
 
   api("GET", "/api/v1/info").then((i) => {
     document.querySelectorAll(".org").forEach((e) => { e.textContent = "Atlas Org"; });
-    if (i && i.version) document.title = `Atlas ${i.version}`;
     initHelpMenu(!!(i && i.docs));
   }).catch(() => { initHelpMenu(false); });
 }
@@ -883,6 +882,7 @@ async function viewProjectDetail(id) {
       root.innerHTML = `<div class="card empty">This project no longer exists. <a href="#/modeler">Back to Modeler</a></div>`;
       return;
     }
+    setTitle(`${proj.name || "Project"} · Modeler`);
     const mine = (a) => ungrouped ? (!a.projectId || !known.has(a.projectId)) : a.projectId === id;
     const dl = drafts.filter(mine), rl = refs.filter(mine), fl = forms.filter(mine);
 
@@ -1800,6 +1800,7 @@ async function viewDecisions() {
 // inputs show the precise evaluated value, with its JSON type and quoting, so a
 // string compared against a number, a stray space, or a wrong type is visible.
 async function viewDecisionDetail(id) {
+  setTitle(`${id} · Decisions`);
   view.innerHTML = `
     <div class="between">
       <div>
@@ -2808,6 +2809,43 @@ function renderDrgSvg(g) {
     ${edges}${nodes}</svg>`;
 }
 
+// setTitle sets the browser tab / history title with the distinctive part first, so
+// several open Atlas tabs are told apart at a glance. "" falls back to plain "Atlas".
+function setTitle(label) {
+  document.title = label ? `${label} · Atlas` : "Atlas";
+}
+
+// routeTitle derives a tab title from the route alone (set immediately on navigation).
+// Views with a dynamic subject — a diagram, an instance, a decision — refine it once
+// their data loads (see setTitle calls in the editor/live/replay mounts).
+function routeTitle(path) {
+  const opsInst = path.match(/^#\/operations\/i\/(\d+)$/);
+  if (opsInst) return `Instance ${opsInst[1]} · Operations`;
+  const rules = [
+    [/^#\/(console)?$/, "Console"],
+    [/^#\/console\/engine$/, "Engine · Console"],
+    [/^#\/console\/logs$/, "Logs · Console"],
+    [/^#\/console\/org$/, "Organization · Console"],
+    [/^#\/modeler\/new/, "New diagram · Modeler"],
+    [/^#\/modeler\/form\/new/, "New form · Modeler"],
+    [/^#\/modeler\/form\//, "Form · Modeler"],
+    [/^#\/modeler\/dmn\//, "Decision · Modeler"],
+    [/^#\/modeler\/(d|draft)\//, "Diagram · Modeler"],
+    [/^#\/modeler\/p\//, "Project · Modeler"],
+    [/^#\/modeler$/, "Modeler"],
+    [/^#\/tasks\/start$/, "Start a process · Tasks"],
+    [/^#\/tasks\/t\//, "Task · Tasks"],
+    [/^#\/tasks$/, "Tasks"],
+    [/^#\/operations\/decisions\//, "Decision · Operations"],
+    [/^#\/operations\/decisions$/, "Decisions · Operations"],
+    [/^#\/operations\/c\//, "Collaboration · Operations"],
+    [/^#\/operations\/p\//, "Live view · Operations"],
+    [/^#\/operations$/, "Instances · Operations"],
+  ];
+  for (const [re, label] of rules) if (re.test(path)) return label;
+  return "";
+}
+
 async function route() {
   // Any navigation closes the app switcher and tears down an editor/live view.
   document.getElementById("drawer").hidden = true;
@@ -2834,6 +2872,7 @@ async function route() {
   }
 
   setChrome(appId, path);
+  setTitle(routeTitle(path));
   updateAccount();
   window.scrollTo(0, 0);
 
