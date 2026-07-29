@@ -267,6 +267,20 @@ func registerScope(
 			return err
 		}
 	}
+	for _, ca := range c.CallActivities {
+		ce := ca.CalledElement
+		pid := strings.TrimSpace(ce.ProcessId)
+		if pid == "" {
+			return fmt.Errorf("compiler: call activity %q has no calledElement processId", ca.Id)
+		}
+		// Each propagation flag defaults to true (Zeebe): an absent or non-"false"
+		// value propagates all variables in that direction.
+		propParent := ce.PropagateAllParentVariables != "false"
+		propChild := ce.PropagateAllChildVariables != "false"
+		if err := register(ca.Id, b.AddCallActivity(pid, decisionBinding(ce.BindingType), propParent, propChild)); err != nil {
+			return err
+		}
+	}
 	for _, g := range c.ExclusiveGateways {
 		if err := register(g.Id, b.AddExclusiveGateway()); err != nil {
 			return err

@@ -518,6 +518,11 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 				return err
 			}
 		}
+		for _, ca := range c.CallActivities {
+			if err := wireIO(ca.Id, ca.IOMapping); err != nil {
+				return err
+			}
+		}
 		for i := range c.SubProcesses {
 			sub := &c.SubProcesses[i]
 			if err := wireIO(sub.Id, sub.IOMapping); err != nil {
@@ -625,12 +630,33 @@ type xmlFlowContent struct {
 
 	UserTasks []xmlUserTask `xml:"userTask"`
 
-	SubProcesses []xmlSubProcess `xml:"subProcess"`
+	SubProcesses   []xmlSubProcess   `xml:"subProcess"`
+	CallActivities []xmlCallActivity `xml:"callActivity"`
 
 	// Captured only to give a clear "unsupported element" error (see Parse); none
 	// of these are executable yet.
 	SendTasks    []xmlNode `xml:"sendTask"`
 	ReceiveTasks []xmlNode `xml:"receiveTask"`
+}
+
+// xmlCallActivity is a <callActivity>: it starts a separate process (named by
+// <zeebe:calledElement processId=…>) as a child instance and passes variables via
+// its <zeebe:ioMapping> and the propagation flags (ADR-0076).
+type xmlCallActivity struct {
+	Id            string            `xml:"id,attr"`
+	Name          string            `xml:"name,attr"`
+	CalledElement xmlZeebeCalledEl  `xml:"extensionElements>calledElement"`
+	IOMapping     xmlZeebeIOMapping `xml:"extensionElements>ioMapping"`
+}
+
+// xmlZeebeCalledEl is the <zeebe:calledElement> of a call activity: the called
+// process id, its version binding, and the two variable-propagation flags (each
+// defaults to true when the attribute is absent, matching Zeebe).
+type xmlZeebeCalledEl struct {
+	ProcessId                   string `xml:"processId,attr"`
+	BindingType                 string `xml:"bindingType,attr"`
+	PropagateAllParentVariables string `xml:"propagateAllParentVariables,attr"`
+	PropagateAllChildVariables  string `xml:"propagateAllChildVariables,attr"`
 }
 
 // xmlSubProcess is an embedded <subProcess>: a container whose own flow nodes and

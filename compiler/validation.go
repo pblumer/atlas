@@ -309,7 +309,7 @@ func isGateway(t BpmnType) bool {
 func isActivity(t BpmnType) bool {
 	switch t {
 	case TypeServiceTask, TypeScriptTask, TypeScriptJobTask, TypeBusinessRuleTask,
-		TypeUserTask, TypeConnectorTask, TypeTask, TypeSubProcess:
+		TypeUserTask, TypeConnectorTask, TypeTask, TypeSubProcess, TypeCallActivity:
 		return true
 	default:
 		return false

@@ -139,6 +139,7 @@ type Builder struct {
 	flows             []CompiledFlow
 	serviceTasks      []ServiceTaskDetail
 	scriptTasks       []ScriptTaskDetail
+	callActivities    []CallActivityDetail
 	scriptJobTasks    []ScriptJobTaskDetail
 	businessRuleTasks []BusinessRuleTaskDetail
 	timerCatches      []TimerCatchDetail
@@ -220,6 +221,21 @@ func (b *Builder) addNode(t BpmnType, detail int32) int32 {
 	})
 	b.elementIds = append(b.elementIds, -1) // kept in lockstep with nodes
 	return id
+}
+
+// AddCallActivity adds a call activity that starts the process with the given bpmn
+// id as a child instance, under the given binding and variable-propagation flags
+// (ADR-0076), and returns its element id. The called process id is interned; the
+// called def key is resolved at deploy/runtime, not here.
+func (b *Builder) AddCallActivity(calledProcessId string, binding DecisionBinding, propagateAllParent, propagateAllChild bool) int32 {
+	detail := int32(len(b.callActivities))
+	b.callActivities = append(b.callActivities, CallActivityDetail{
+		CalledProcessId:    b.intern(calledProcessId),
+		Binding:            binding,
+		PropagateAllParent: propagateAllParent,
+		PropagateAllChild:  propagateAllChild,
+	})
+	return b.addNode(TypeCallActivity, detail)
 }
 
 // AddSubProcess adds an embedded subprocess container node and returns its element
@@ -928,6 +944,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		scopeStarts:       scopeStarts,
 		serviceTasks:      b.serviceTasks,
 		scriptTasks:       b.scriptTasks,
+		callActivities:    b.callActivities,
 		scriptJobTasks:    b.scriptJobTasks,
 		businessRuleTasks: b.businessRuleTasks,
 		timerCatches:      b.timerCatches,
