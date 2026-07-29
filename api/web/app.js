@@ -1385,10 +1385,15 @@ async function toggleInboundSubs(row, connectorId) {
     <div class="muted" style="margin-bottom:8px">Inbound event subscriptions — a watched clio subject's events are published as Atlas messages (ADR-0075).</div>
     <table style="width:100%"><tbody id="subs-body">${list}</tbody></table>
     <form id="subs-form" style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr auto;align-items:end;margin-top:10px">
-      <label class="field" style="margin:0"><span>Watched subject</span><input name="watchedSubject" placeholder="orders/new" required/></label>
-      <label class="field" style="margin:0"><span>Message name</span><input name="messageName" placeholder="orderEvent" required/></label>
-      <label class="field" style="margin:0"><span>Correlation key (FEEL, optional)</span><input name="correlationKey" placeholder="= orderId"/></label>
+      <label class="field" style="margin:0"><span>Watched subject</span><input name="watchedSubject" placeholder="/employees" required/></label>
+      <label class="field" style="margin:0"><span>Message name</span><input name="messageName" placeholder="employee.created" required/></label>
+      <label class="field" style="margin:0"><span>Correlation key (FEEL, optional)</span><input name="correlationKey" placeholder="= subjectTail"/></label>
       <button class="btn" type="submit">Add</button>
+      <label class="check" style="grid-column:1 / -1;margin:0;display:flex;gap:8px;align-items:center">
+        <input type="checkbox" name="recursive"/>
+        <span>Recursive — also watch the subject's subtree (a watch on <code>/employees</code> catches an event written to <code>/employees/E-123456</code>).</span>
+      </label>
+      <div class="muted" style="grid-column:1 / -1">The correlation key (FEEL) sees the event body plus <code>subject</code>, <code>subjectTail</code> (the last path segment, e.g. <code>E-123456</code>), <code>eventType</code> and <code>eventId</code>. These are also seeded as process variables on the started/woken instance.</div>
     </form></td>`;
   row.after(panel);
   panel.querySelector("#subs-form").addEventListener("submit", async (e) => {
@@ -1399,6 +1404,7 @@ async function toggleInboundSubs(row, connectorId) {
         watchedSubject: (f.get("watchedSubject") || "").trim(),
         messageName: (f.get("messageName") || "").trim(),
         correlationKey: (f.get("correlationKey") || "").trim(),
+        recursive: f.get("recursive") === "on",
       });
       toast("Subscription added", "ok");
       panel.remove();
