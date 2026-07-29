@@ -806,10 +806,9 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			// Isolating one instance on the diagram (a deliberate single-instance
-			// action, not the default view): the per-instance overlay still walks the
-			// instances, filtered to this one. Making this path sublinear too is a
-			// follow-up to ADR-0080 (the aggregate default view above is what mattered
-			// for scale).
+			// action, not the default view): the overlay walks instances filtered to
+			// this one. Making this path sublinear too is a follow-up to ADR-0080 (the
+			// aggregate default view above is what mattered for scale).
 			if scanErr = s.store.ActiveElementInstances(func(_ uint64, v *model.ElementInstanceValue) error {
 				if v.ProcessDefKey != key || v.ProcessInstanceKey != instanceFilter {
 					return nil
@@ -911,24 +910,20 @@ func (s *Server) handleCollaborationRuntime(w http.ResponseWriter, r *http.Reque
 				}
 				return e
 			}
-			// Per-pool live tokens, visit heatmap, and instance count come from the
-			// maintained counters (ADR-0080) — O(elements) per pool, never a scan over
-			// every instance, so the collaboration view scales like the single-process
-			// view.
 			scan(func() error {
-				return s.store.ElementLiveTokens(pd.Key, func(elementId int32, count int64) error {
-					if count == 0 {
+				return s.store.ActiveElementInstances(func(_ uint64, v *model.ElementInstanceValue) error {
+					if v.ProcessDefKey != pd.Key {
 						return nil
 					}
-					if e := get(elementId); e != nil {
-						e.Tokens += int(count)
-						resp.Tokens += int(count)
+					if e := get(v.ElementId); e != nil {
+						e.Tokens++
+						resp.Tokens++
 					}
 					return nil
 				})
 			})
 			scan(func() error {
-				return s.store.ElementVisitTotals(pd.Key, func(elementId int32, count int64) error {
+				return s.store.ElementVisitHistory(pd.Key, 0, func(elementId int32, count int64) error {
 					if e := get(elementId); e != nil {
 						e.Visits += int(count)
 					}
@@ -936,9 +931,12 @@ func (s *Server) handleCollaborationRuntime(w http.ResponseWriter, r *http.Reque
 				})
 			})
 			scan(func() error {
-				n, err := s.store.DefInstanceCount(pd.Key)
-				resp.Instances += n // n is 0 on error; scan() captures err
-				return err
+				return s.store.ActiveProcessInstances(func(_ uint64, v *model.ProcessInstanceValue) error {
+					if v.ProcessDefKey == pd.Key {
+						resp.Instances++
+					}
+					return nil
+				})
 			})
 			scan(func() error {
 				return s.store.MessageFlowHistory(pd.Key, func(ts int64, pos uint64, v *model.MessageFlowValue) error {

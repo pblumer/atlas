@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -124,5 +125,157 @@ func TestRuntimeFilterWrongDefinition(t *testing.T) {
 	}
 	if rf.Instances != 0 {
 		t.Fatalf("instance of another definition filtered here: instances=%d, want 0", rf.Instances)
+	}
+}
+
+// TestListAndSearchInstancesWithVariables exercises the instance-listing and search
+// endpoints with an instance carrying variables — the enrichment (definition
+// id/version/tag and per-scope variables), the search match, and the variables read.
+func TestListAndSearchInstancesWithVariables(t *testing.T) {
+	ts := newTestServer(t)
+	if code, b := doReq(t, ts, http.MethodPost, "/api/v1/deployments", sampleBPMN, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy: %d %s", code, b)
+	}
+	// An instance that parks at the task, carrying start variables.
+	if code, b := doReq(t, ts, http.MethodPost, "/api/v1/processes/1/instances",
+		`{"variables":{"orderId":"o-77","amount":42}}`, "application/json"); code != http.StatusOK {
+		t.Fatalf("create instance: %d %s", code, b)
+	}
+
+	// List: the active instance appears, enriched with its process id and variables.
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/instances", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("list instances: %d %s", code, body)
+	}
+	s := string(body)
+	if !strings.Contains(s, `"orderId"`) || !strings.Contains(s, "o-77") {
+		t.Fatalf("list instances missing variables: %s", s)
+	}
+
+	// Search by variable content: name=value (name exact, value substring).
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/instances/search?q=orderId=o-77", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("search instances: %d %s", code, body)
+	}
+	if !strings.Contains(string(body), "o-77") {
+		t.Fatalf("search did not match the instance: %s", string(body))
+	}
+
+	// Free-text search over variable names and values.
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/instances/search?q=o-77", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("free-text search: %d %s", code, body)
+	}
+	if !strings.Contains(string(body), "o-77") {
+		t.Fatalf("free-text search did not match: %s", string(body))
+	}
+
+	// Read the instance's variables directly.
+	var insts []struct {
+		Key uint64 `json:"key"`
+	}
+	_ = json.Unmarshal(body, &insts)
+	if len(insts) > 0 {
+		code, vb := doReq(t, ts, http.MethodGet, "/api/v1/instances/"+strconv.FormatUint(insts[0].Key, 10)+"/variables", "", "")
+		if code != http.StatusOK {
+			t.Fatalf("instance variables: %d %s", code, vb)
+		}
+		if !strings.Contains(string(vb), "o-77") {
+			t.Fatalf("instance variables missing orderId: %s", string(vb))
+		}
+	}
+}
+
+// TestSearchInstancesEdgeCases covers the search endpoint's reachable branches: an
+// empty/invalid query returns nothing, and a query that matches no variable drops
+// every instance — exercising the no-match skip paths deterministically.
+func TestSearchInstancesEdgeCases(t *testing.T) {
+	ts := newTestServer(t)
+	if code, b := doReq(t, ts, http.MethodPost, "/api/v1/deployments", sampleBPMN, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy: %d %s", code, b)
+	}
+	if code, b := doReq(t, ts, http.MethodPost, "/api/v1/processes/1/instances",
+		`{"variables":{"orderId":"o-99"}}`, "application/json"); code != http.StatusOK {
+		t.Fatalf("create instance: %d %s", code, b)
+	}
+
+	// An empty query returns an empty result (the parse-miss branch).
+	if code, body := doReq(t, ts, http.MethodGet, "/api/v1/instances/search?q=", "", ""); code != http.StatusOK || strings.TrimSpace(string(body)) != "[]" {
+		t.Fatalf("empty query: %d %s, want []", code, body)
+	}
+
+	// A query that matches nothing drops the instance (the len(hits)==0 skip).
+	if code, body := doReq(t, ts, http.MethodGet, "/api/v1/instances/search?q=orderId=nope", "", ""); code != http.StatusOK || strings.TrimSpace(string(body)) != "[]" {
+		t.Fatalf("non-matching query: %d %s, want []", code, body)
+	}
+
+	// Reading variables of a non-existent instance yields an empty object, not an error.
+	if code, _ := doReq(t, ts, http.MethodGet, "/api/v1/instances/999999/variables", "", ""); code != http.StatusOK {
+		t.Fatalf("variables of a missing instance: code=%d, want 200", code)
+	}
+}
+
+// TestSearchAndListFindCompletedInstance covers the completed-instance branches of
+// list and search: an instance that completed with a variable is still found by a
+// variable search and appears in the finished list.
+func TestSearchAndListFindCompletedInstance(t *testing.T) {
+	ts := newTestServer(t)
+	if code, b := doReq(t, ts, http.MethodPost, "/api/v1/deployments", completingBPMN, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy: %d %s", code, b)
+	}
+	if code, b := doReq(t, ts, http.MethodPost, "/api/v1/processes/1/instances",
+		`{"variables":{"orderId":"o-done"}}`, "application/json"); code != http.StatusOK {
+		t.Fatalf("create instance: %d %s", code, b)
+	}
+
+	// The finished list carries the completed instance and its variable.
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/instances", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("list: %d %s", code, body)
+	}
+	if !strings.Contains(string(body), `"state":"completed"`) || !strings.Contains(string(body), "o-done") {
+		t.Fatalf("finished list missing the completed instance/variable: %s", body)
+	}
+
+	// A variable search finds the completed instance.
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/instances/search?q=orderId=o-done", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("search: %d %s", code, body)
+	}
+	if !strings.Contains(string(body), "o-done") || !strings.Contains(string(body), `"state":"completed"`) {
+		t.Fatalf("search did not find the completed instance: %s", body)
+	}
+}
+
+// TestSearchCompletedSortAndSkip covers the finished-instance branches of search:
+// two matching completed instances make the finished-sort comparator run, and a
+// third completed instance that does not match is dropped (the len(hits)==0 skip).
+func TestSearchCompletedSortAndSkip(t *testing.T) {
+	ts := newTestServer(t)
+	if code, b := doReq(t, ts, http.MethodPost, "/api/v1/deployments", completingBPMN, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy: %d %s", code, b)
+	}
+	mk := func(tag string) {
+		if code, b := doReq(t, ts, http.MethodPost, "/api/v1/processes/1/instances",
+			`{"variables":{"tag":"`+tag+`"}}`, "application/json"); code != http.StatusOK {
+			t.Fatalf("create instance: %d %s", code, b)
+		}
+	}
+	mk("keep")
+	mk("keep")
+	mk("drop")
+
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/instances/search?q=tag=keep", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("search: %d %s", code, body)
+	}
+	var matches []struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &matches); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	if len(matches) != 2 {
+		t.Fatalf("search matched %d, want the 2 keep instances (%s)", len(matches), body)
 	}
 }
