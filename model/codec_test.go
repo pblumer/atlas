@@ -40,6 +40,7 @@ func TestRecordRoundTrip(t *testing.T) {
 				TokenID:            NewKey(3, 4),
 				ParentTokenID:      NewKey(3, 5),
 				SourceFlowId:       9,
+				MultiInstance:      2, // an inner multi-instance iteration (ADR-0077)
 			},
 		},
 		{
@@ -250,6 +251,35 @@ func TestProcessInstanceDecodeLegacy(t *testing.T) {
 	}
 }
 
+func TestElementInstanceDecodeLegacy(t *testing.T) {
+	// A record written before MultiInstance was appended is just the prior fixed
+	// layout (through SourceFlowId). It must still decode, leaving MultiInstance at 0
+	// (ADR-0017/0077).
+	full := (&ElementInstanceValue{
+		ProcessInstanceKey: NewKey(3, 1),
+		ProcessDefKey:      NewKey(3, 2),
+		ElementId:          17,
+		FlowScopeKey:       NewKey(3, 3),
+		BpmnElementType:    5,
+		TokenID:            NewKey(3, 4),
+		ParentTokenID:      NewKey(3, 5),
+		SourceFlowId:       9,
+		MultiInstance:      2,
+	}).encode(nil)
+	legacy := full[:elementInstanceSize] // drop the trailing MultiInstance byte
+
+	var v ElementInstanceValue
+	if err := v.decode(legacy); err != nil {
+		t.Fatalf("decode legacy: %v", err)
+	}
+	if v.MultiInstance != 0 {
+		t.Errorf("legacy MultiInstance = %d, want 0 (absent → default)", v.MultiInstance)
+	}
+	if v.SourceFlowId != 9 || v.TokenID != NewKey(3, 4) {
+		t.Errorf("legacy decode lost prior fields: %+v", v)
+	}
+}
+
 func TestAppendRecordIsAppendOnly(t *testing.T) {
 	// AppendRecord must extend the existing buffer, not overwrite a prefix.
 	prefix := []byte{0xDE, 0xAD}
@@ -296,7 +326,7 @@ func TestReadRecordUnknownVersion(t *testing.T) {
 func TestEncodedSize(t *testing.T) {
 	r := Record{Header: sampleHeader(), Value: &ElementInstanceValue{}}
 	buf := AppendRecord(nil, &r)
-	if want := HeaderSize + elementInstanceSize; len(buf) != want {
+	if want := HeaderSize + elementInstanceMISize; len(buf) != want {
 		t.Errorf("encoded size = %d, want %d", len(buf), want)
 	}
 }

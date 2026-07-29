@@ -154,6 +154,15 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 func handleElementActivating(c *ProcessingContext) {
 	ei := &c.cmd.Value.element
 	c.AppendElementEvent(c.cmd.Key, model.IntentActivated, *ei)
+	// A multi-instance body seeds its iterations rather than running the node's real
+	// behavior; its per-iteration data-input associations and io-mappings apply on
+	// each inner instance, not on the body (ADR-0077). An inner instance (role 2)
+	// falls through to the normal path and runs the real behavior.
+	if node := c.process(ei.ProcessDefKey).Node(ei.ElementId); node.MultiInstance >= 0 && ei.MultiInstance != miInner {
+		seedMultiInstance(c, c.cmd.Key, ei)
+		armBoundaryEvents(c, c.cmd.Key, ei)
+		return
+	}
 	// Read the activity's data-input associations into process variables before its
 	// behavior runs, so the activity's own FEEL (e.g. a script task's expression)
 	// sees them (ADR-0059).
@@ -167,6 +176,14 @@ func handleElementActivating(c *ProcessingContext) {
 	c.p.behavior(ei.BpmnElementType).OnActivated(c, c.cmd.Key, ei)
 	armBoundaryEvents(c, c.cmd.Key, ei)
 }
+
+// Multi-instance element-instance roles (ADR-0077), mirrored on
+// model.ElementInstanceValue.MultiInstance.
+const (
+	miNone  uint8 = 0 // not a multi-instance element instance
+	miBody  uint8 = 1 // the body: the scope that seeds and joins the iterations
+	miInner uint8 = 2 // one iteration: runs the node's real behavior, scoped under the body
+)
 
 // applyDataInputAssociations evaluates an activating activity's data-input
 // associations (ADR-0059): for each, it reads the source data object and writes a
@@ -234,6 +251,13 @@ func handleElementCompleting(c *ProcessingContext) {
 			applyOutputMappings(c, c.cmd.Key, ei)
 		}
 		dropLocalScope(c, c.cmd.Key)
+	}
+	// An inner multi-instance iteration does not take the node's outgoing flow (the
+	// body owns it): it completes, decrementing the body's active-child counter, and
+	// the body completes once the last iteration drains (ADR-0077).
+	if ei.MultiInstance == miInner {
+		finishMultiInstanceIteration(c, c.cmd.Key, ei)
+		return
 	}
 	c.p.behavior(ei.BpmnElementType).OnCompleting(c, c.cmd.Key, ei)
 	if c.process(ei.ProcessDefKey).Node(ei.ElementId).BoundaryCount > 0 {
@@ -720,12 +744,19 @@ func activateElement(c *ProcessingContext, ei *model.ElementInstanceValue, flowI
 	if tokenID == 0 || fork {
 		parentID, tokenID = ei.TokenID, key
 	}
+	// A flow into a multi-instance activity activates its body — the scope that seeds
+	// the iterations (ADR-0077); an ordinary node activates with no role.
+	miRole := miNone
+	if target.MultiInstance >= 0 {
+		miRole = miBody
+	}
 	c.AppendElementCommand(key, model.IntentActivating, model.ElementInstanceValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ProcessDefKey:      ei.ProcessDefKey,
 		ElementId:          targetId,
 		FlowScopeKey:       ei.FlowScopeKey,
 		BpmnElementType:    uint8(target.Type),
+		MultiInstance:      miRole,
 		TokenID:            tokenID,
 		ParentTokenID:      parentID,
 		SourceFlowId:       flowID,
@@ -1812,6 +1843,93 @@ func (subProcessBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *mod
 	// one without mappings is drained here (ADR-0074).
 	dropLocalScope(c, key)
 	completeAndTakeFlows(c, key, ei)
+}
+
+// loopCounterVar is the standard multi-instance per-iteration counter variable
+// (1-based), bound into each inner iteration's scope (ADR-0077, matching Zeebe).
+const loopCounterVar = "loopCounter"
+
+// seedMultiInstance runs a multi-instance body's activation (ADR-0077): it evaluates
+// the loop's input collection (or cardinality) over the body's scope chain to N
+// items, then seeds N inner element instances of the same node scoped under the body
+// — all at once (parallel). Each inner carries loopCounter (1-based) and, when the
+// loop names an input element, its item, written into the inner's own scope so the
+// iteration's behavior resolves them up the chain. An empty collection seeds nothing
+// and completes the body at once. The collection is evaluated once, live; the inner
+// Activated and variable events persist, so replay rebuilds the iterations without
+// re-evaluating (I6).
+func seedMultiInstance(c *ProcessingContext, bodyKey uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	d := cp.MultiInstance(cp.Node(ei.ElementId).MultiInstance)
+	n, items := multiInstanceItems(c, d, bodyKey)
+	if n == 0 {
+		// No iterations: the body completes immediately, taking its outgoing flow.
+		c.AppendElementCommand(bodyKey, model.IntentCompleting, *ei)
+		return
+	}
+	inputElem := cp.Intern(d.InputElement) // "" when the loop names no input element
+	for i := 0; i < n; i++ {
+		k := c.NewKey()
+		c.AppendElementCommand(k, model.IntentActivating, model.ElementInstanceValue{
+			ProcessInstanceKey: ei.ProcessInstanceKey,
+			ProcessDefKey:      ei.ProcessDefKey,
+			ElementId:          ei.ElementId, // the same node, run again
+			FlowScopeKey:       bodyKey,      // scoped under the body
+			BpmnElementType:    ei.BpmnElementType,
+			MultiInstance:      miInner,
+			TokenID:            k,
+			ParentTokenID:      ei.TokenID,
+			SourceFlowId:       -1,
+		})
+		c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+			ScopeKey: k, Name: loopCounterVar, Kind: model.VarNumber, Text: strconv.Itoa(i + 1),
+		})
+		if inputElem != "" && items != nil {
+			kind, b, text := expr.Classify(items[i])
+			c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+				ScopeKey: k, Name: inputElem, Kind: toVarKind(kind), Bool: b, Text: text,
+			})
+		}
+	}
+}
+
+// multiInstanceItems evaluates a loop's iteration set over the body's scope chain: the
+// input collection to its N items, or the cardinality to a count (with nil items —
+// there is no input element to bind). A non-list collection, a non-integer cardinality,
+// or an evaluation error yields zero iterations rather than a panic.
+func multiInstanceItems(c *ProcessingContext, d *compiler.MultiInstanceDetail, bodyKey uint64) (int, []expr.Value) {
+	if d.InputCollection != nil {
+		v, err := d.InputCollection.Eval(bindInputsChain(c, d.InputCollection.Inputs(), bodyKey))
+		if err != nil {
+			return 0, nil
+		}
+		items, ok := expr.AsList(v)
+		if !ok {
+			return 0, nil
+		}
+		return len(items), items
+	}
+	if d.Cardinality != nil {
+		v, err := d.Cardinality.Eval(bindInputsChain(c, d.Cardinality.Inputs(), bodyKey))
+		if err != nil {
+			return 0, nil
+		}
+		if n, ok := expr.AsInt(v); ok && n >= 0 {
+			return n, nil
+		}
+	}
+	return 0, nil
+}
+
+// finishMultiInstanceIteration completes one inner iteration (ADR-0077): it drops the
+// iteration's local scope (loopCounter, the input element, and any io-mapped locals),
+// emits Completed — which decrements the body's active-child counter — and asks the
+// body to complete, which it does once the last iteration has drained. An inner never
+// takes an outgoing flow; the body owns it.
+func finishMultiInstanceIteration(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	dropLocalScope(c, key)
+	c.AppendElementEvent(key, model.IntentCompleted, *ei)
+	completeScope(c, ei.FlowScopeKey)
 }
 
 // callActivityBehavior runs a call activity: on activation it starts a separate

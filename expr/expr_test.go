@@ -103,6 +103,38 @@ func TestIsTrue(t *testing.T) {
 	}
 }
 
+func evalAuto(t *testing.T, src string) expr.Value {
+	t.Helper()
+	c, err := expr.CompileAuto(src)
+	if err != nil {
+		t.Fatalf("CompileAuto(%q): %v", src, err)
+	}
+	v, err := c.Eval(nil)
+	if err != nil {
+		t.Fatalf("Eval(%q): %v", src, err)
+	}
+	return v
+}
+
+func TestAsList(t *testing.T) {
+	elems, ok := expr.AsList(evalAuto(t, "[10, 20, 30]"))
+	if !ok || len(elems) != 3 {
+		t.Fatalf("AsList(list) = %v, %v; want 3 elements, true", elems, ok)
+	}
+	if _, ok := expr.AsList(expr.Number(5)); ok {
+		t.Errorf("AsList(number) ok = true, want false (not a list)")
+	}
+}
+
+func TestAsInt(t *testing.T) {
+	if n, ok := expr.AsInt(evalAuto(t, "3")); !ok || n != 3 {
+		t.Errorf("AsInt(3) = %d, %v; want 3, true", n, ok)
+	}
+	if _, ok := expr.AsInt(expr.String("3")); ok {
+		t.Errorf("AsInt(string) ok = true, want false (not a number)")
+	}
+}
+
 func TestFromStoredRoundTrip(t *testing.T) {
 	for _, tc := range []struct {
 		kind expr.ValueKind
