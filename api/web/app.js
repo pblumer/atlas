@@ -238,8 +238,8 @@ const CONNECTORS = [
   },
   {
     id: "mail", name: "Mail", kind: "Outbound e-mail",
-    desc: "Sends an e-mail from a service task off the processor loop via a managed SMTP provider (Google, Microsoft 365, or any server). Recipients, subject, and body are model-authored (FEEL-capable); the provider host, credentials, and default sender are managed below and resolved from the vault. Authored via the E-Mail Outbound Connector service-task type.",
-    refs: "ADR-0041 · ADR-0079", status: "active", statusLabel: "configurable",
+    desc: "Sends an e-mail from a service task off the processor loop via a managed provider — SMTP (any server, incl. Google/Microsoft 365 submission) or the native Gmail and Microsoft Graph APIs (OAuth2 app-only or refresh-token). Recipients, subject, and body are model-authored (FEEL-capable); the provider, default sender, and credentials are managed below and resolved from the vault. Authored via the E-Mail Outbound Connector service-task type.",
+    refs: "ADR-0041 · ADR-0079 · ADR-0080", status: "active", statusLabel: "configurable",
   },
 ];
 
@@ -1314,37 +1314,55 @@ function wireConnectorManagement(connectors) {
     newBtn.addEventListener("click", () => {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
-      slot.innerHTML = `<form class="connector-form" style="display:grid;gap:8px;grid-template-columns:auto 1fr 1fr 1fr 1fr auto;align-items:end;margin:4px 0 14px">
+      slot.innerHTML = `<form class="connector-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
         <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option></select></label>
-        <label class="field" style="margin:0"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
-        <label class="field" style="margin:0"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
-        <label class="field" style="margin:0"><span>Sender (mail only)</span><input name="sender" placeholder="bot@example.com"/></label>
-        <label class="field" style="margin:0"><span>Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
+        <label class="field mail-only" style="margin:0"><span>Provider</span><select name="provider"><option value="smtp">SMTP</option><option value="gmail">Gmail API</option><option value="microsoft">Microsoft Graph</option></select></label>
+        <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
+        <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
+        <label class="field mail-only" style="margin:0;flex:1 1 180px"><span>Sender</span><input name="sender" placeholder="bot@example.com"/></label>
+        <label class="field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
         <button class="btn" type="submit">Add</button></form>`;
-      // Nudge the operator toward the right endpoint/secret for a mail provider: an
-      // SMTP host:port for the endpoint (Google/Microsoft submission), and a sender
-      // that doubles as the SMTP username and default From.
+      // Adapt the form to the kind and mail provider: SMTP needs a host:port endpoint
+      // and (optionally) a password reference; a native provider (Gmail/Graph) needs no
+      // endpoint but a credentialsRef naming a vault JSON auth bundle, and sends as the
+      // sender mailbox. The mail-only fields hide for temis/clio.
       const form = slot.querySelector("form");
       const kindSel = form.querySelector('[name="kind"]');
+      const providerSel = form.querySelector('[name="provider"]');
       const endpointIn = form.querySelector('[name="endpoint"]');
       const senderIn = form.querySelector('[name="sender"]');
-      const syncKind = () => {
+      const credRefIn = form.querySelector('[name="credentialsRef"]');
+      const credRefLabel = form.querySelector(".credref-label");
+      const endpointField = form.querySelector(".endpoint-field");
+      const sync = () => {
         const mail = kindSel.value === "mail";
-        endpointIn.placeholder = mail ? "smtp.office365.com:587" : "https://temis.internal";
+        const native = mail && providerSel.value !== "smtp";
+        form.querySelectorAll(".mail-only").forEach((el) => { el.style.display = mail ? "" : "none"; });
         senderIn.required = mail;
+        // A native provider needs no endpoint; SMTP and the other kinds do.
+        endpointField.style.display = native ? "none" : "";
+        endpointIn.required = !native;
+        endpointIn.placeholder = mail ? "smtp.office365.com:587" : "https://temis.internal";
+        credRefIn.required = native;
+        credRefIn.placeholder = native ? "gmail_auth (vault JSON bundle)" : "risk_token";
+        credRefLabel.textContent = native ? "Credential reference (vault auth bundle)" : "Token reference (optional)";
       };
-      kindSel.addEventListener("change", syncKind);
+      kindSel.addEventListener("change", sync);
+      providerSel.addEventListener("change", sync);
+      sync();
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         const f = new FormData(e.target);
+        const body = {
+          name: (f.get("name") || "").trim(),
+          kind: (f.get("kind") || "temis").trim(),
+          endpoint: (f.get("endpoint") || "").trim(),
+          sender: (f.get("sender") || "").trim(),
+          credentialsRef: (f.get("credentialsRef") || "").trim(),
+        };
+        if (body.kind === "mail") body.provider = (f.get("provider") || "smtp").trim();
         try {
-          await api("POST", "/api/v1/connectors", {
-            name: (f.get("name") || "").trim(),
-            kind: (f.get("kind") || "temis").trim(),
-            endpoint: (f.get("endpoint") || "").trim(),
-            sender: (f.get("sender") || "").trim(),
-            credentialsRef: (f.get("credentialsRef") || "").trim(),
-          });
+          await api("POST", "/api/v1/connectors", body);
           toast("Connector added", "ok");
           reload();
         } catch (err) { toast("Could not add connector: " + err.message, "err"); }
@@ -1669,20 +1687,20 @@ async function deployProject(id, reload) {
   for (const r of rep.references || []) applyRefStatus(r.id, r);
 }
 
-// summarizeInstances rolls the flat instance list up per process id, so the
-// Instances view can show one row per process (not one per instance): how many
-// are running vs. finished, and the newest activity time, keyed by processId.
-function summarizeInstances(instances) {
+// summarizeFromServer builds the per-process running/finished rollup the Instances
+// overview renders from the server's lean instance summary (one row per definition,
+// GET /api/v1/instances/summary), so the page never fetches and enriches every
+// instance — the shape that made this page unreachable during a large-scale flood.
+// Rows share a processId across versions, so counts are summed per processId.
+function summarizeFromServer(rows) {
   const byProc = new Map();
-  for (const r of instances) {
+  for (const r of rows) {
     if (!r.processId) continue; // orphaned instance (its definition was deleted)
     let s = byProc.get(r.processId);
     if (!s) { s = { running: 0, finished: 0, latestCompletedAt: 0 }; byProc.set(r.processId, s); }
-    if (r.state === "active") s.running++;
-    else {
-      s.finished++;
-      if (r.completedAt > s.latestCompletedAt) s.latestCompletedAt = r.completedAt;
-    }
+    s.running += r.active;
+    s.finished += r.completed;
+    if (r.latestCompletedAt > s.latestCompletedAt) s.latestCompletedAt = r.latestCompletedAt;
   }
   return byProc;
 }
@@ -1778,12 +1796,12 @@ async function viewInstances() {
 
   const load = async () => {
     try {
-      const [procs, instances] = await Promise.all([
+      const [procs, rows] = await Promise.all([
         api("GET", "/api/v1/processes"),
-        api("GET", "/api/v1/instances"),
+        api("GET", "/api/v1/instances/summary"),
       ]);
       allGroups = groupByProcess(procs);
-      summary = summarizeInstances(instances);
+      summary = summarizeFromServer(rows);
       renderRows();
     } catch (e) {
       tbody.innerHTML = `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;

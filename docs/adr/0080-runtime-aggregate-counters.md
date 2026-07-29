@@ -49,9 +49,10 @@ allocation, I1): `cfDefInstanceCount`, `cfElementTokenCount`, `cfElementVisitAgg
 `applyToState` bumps them on the instance/element activation and completion/
 termination events it already folds, so they compose across a crash and rebuild on
 replay (I4/I6), exactly like the active-children and element-visit counters they
-generalize. `handleProcessRuntime`'s aggregate path and every pool of
-`handleCollaborationRuntime` now read the counters — O(elements), never a scan over
-every instance, so the run loop is never held for an O(N) read.
+generalize. `handleProcessRuntime`'s aggregate path now reads the counters —
+O(elements), never a scan over every instance, so the run loop is never held for an
+O(N) read. (The collaboration runtime view has the same shape and is a natural
+follow-up; the single-process view is what stalled in practice.)
 
 Because a live store persists and replays only the tail, the counters are **seeded
 once** from existing state on store open (`backfillRuntimeCountersIfNeeded`): a
@@ -74,9 +75,10 @@ too is a follow-up.
   lifecycle event (write amplification traded for cheap reads — the right trade when
   reads must scale); a one-time backfill scan on the first open after upgrade; the
   `?instance=` filter path remains O(instances) for now.
-- **Follow-ups / risks to watch:** make the `?instance=` overlay sublinear; paginate
-  the instance/finished listings (still O(N)); state snapshots for fast recovery
-  (restart still replays the tail from the last snapshot/genesis).
+- **Follow-ups / risks to watch:** apply the same counters to the collaboration
+  runtime view and the `?instance=` overlay (both still O(instances)); paginate the
+  instance/finished listings (still O(N)); state snapshots for fast recovery (restart
+  still replays the tail from the last snapshot/genesis).
 
 ## Pros and cons of the options
 

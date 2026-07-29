@@ -136,12 +136,14 @@ func (s *Server) buildClioClients() (map[string]clio.Client, error) {
 
 // buildMailClients assembles the mail connector clients from the enabled managed
 // connector instances of kind "mail", resolving each instance's credential from its
-// credentialsRef via the vault (ADR-0079/0041). It reads the connector store, so
+// credentialsRef via the vault (ADR-0079/0081/0041). It reads the connector store, so
 // callers run it on the run-loop goroutine (the store's owner). It mirrors
 // buildClioClients; a mail connector has no environment base (its provider and
-// credentials are managed only). Only the SMTP provider is wired today; a record
-// naming an unknown provider is skipped (it parks its tasks) rather than failing the
-// whole rebuild.
+// credentials are managed only). Provider dispatch (SMTP, Gmail, Microsoft Graph)
+// lives in mail.NewProviderClient; a record whose provider is misconfigured — an
+// unparseable credential bundle, a missing field — is skipped (its tasks park) rather
+// than failing the whole rebuild. The resolved secret is an SMTP password or, for a
+// native provider, the OAuth credential JSON bundle held in the vault (I6).
 func (s *Server) buildMailClients() (map[string]mail.Client, error) {
 	clients := map[string]mail.Client{}
 	recs, err := s.connectors.loadAll()
@@ -149,19 +151,27 @@ func (s *Server) buildMailClients() (map[string]mail.Client, error) {
 		return nil, err
 	}
 	for _, c := range recs {
-		if !c.Enabled || c.Kind != connectorKindMail || strings.TrimSpace(c.Endpoint) == "" {
+		if !c.Enabled || c.Kind != connectorKindMail {
 			continue
 		}
-		if provider := c.Provider; provider != "" && provider != mailProviderSMTP {
-			continue // only SMTP is wired today (ADR-0079); a future native provider is additive
+		provider := strings.TrimSpace(c.Provider)
+		if provider == "" {
+			provider = mail.ProviderSMTP
 		}
-		sender := strings.TrimSpace(c.Sender)
-		clients[c.Name] = mail.NewSMTPClient(mail.Connector{
+		// SMTP needs a submission endpoint; the native providers default their API base.
+		if provider == mail.ProviderSMTP && strings.TrimSpace(c.Endpoint) == "" {
+			continue
+		}
+		client, err := mail.NewProviderClient(mail.ProviderConfig{
+			Provider: provider,
 			Endpoint: strings.TrimSpace(c.Endpoint),
-			Username: sender,
-			Password: s.resolveConnectorSecret(c.CredentialsRef),
-			From:     sender,
+			Sender:   strings.TrimSpace(c.Sender),
+			Secret:   s.resolveConnectorSecret(c.CredentialsRef),
 		})
+		if err != nil {
+			continue // misconfigured provider: its tasks park until it is fixed (ADR-0080)
+		}
+		clients[c.Name] = client
 	}
 	return clients, nil
 }
@@ -247,25 +257,39 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "connector kind must be \"temis\", \"clio\", or \"mail\"")
 		return
 	}
-	if endpoint == "" {
-		writeError(w, http.StatusBadRequest, "connector endpoint is required")
-		return
-	}
 	if kind == connectorKindMail {
 		if provider == "" {
-			provider = mailProviderSMTP
+			provider = mail.ProviderSMTP
 		}
-		if provider != mailProviderSMTP {
-			writeError(w, http.StatusBadRequest, "mail connector provider must be \"smtp\" (native Gmail/Graph providers are not yet available)")
+		switch provider {
+		case mail.ProviderSMTP, mail.ProviderGmail, mail.ProviderMicrosoft:
+		default:
+			writeError(w, http.StatusBadRequest, "mail connector provider must be \"smtp\", \"gmail\", or \"microsoft\"")
 			return
 		}
 		if sender == "" {
-			writeError(w, http.StatusBadRequest, "mail connector sender (default From / SMTP username) is required")
+			writeError(w, http.StatusBadRequest, "mail connector sender (default From address) is required")
+			return
+		}
+		// SMTP needs a submission endpoint (host:port); Gmail/Microsoft default their
+		// API base and need a credentialsRef pointing at a vault auth bundle instead.
+		if provider == mail.ProviderSMTP {
+			if endpoint == "" {
+				writeError(w, http.StatusBadRequest, "smtp mail connector endpoint (host:port) is required")
+				return
+			}
+		} else if strings.TrimSpace(p.CredentialsRef) == "" {
+			writeError(w, http.StatusBadRequest, "a "+provider+" mail connector requires a credentialsRef naming a vault auth bundle")
 			return
 		}
 	} else {
-		// Provider/Sender are mail-only; ignore them for the other kinds.
+		// Provider/Sender are mail-only; ignore them for the other kinds, which all
+		// require an endpoint.
 		provider, sender = "", ""
+		if endpoint == "" {
+			writeError(w, http.StatusBadRequest, "connector endpoint is required")
+			return
+		}
 	}
 	id, err := newID()
 	if err != nil {

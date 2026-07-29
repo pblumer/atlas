@@ -1,14 +1,16 @@
 # ADR-0077: Multi-instance activities (parallel and sequential)
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phase 1 (compiler) delivered; Phases 2–5 pending. Each
-> phase lands test-first with a recovery test (ADR-0018). Multi-instance builds
-> directly on the embedded-subprocess scope lifecycle (ADR-0074) and the call-activity
-> child termination (ADR-0076); it introduces no new value type, record, counter, or
-> recovery path.
+> **Implementation status.** Phases 1–5 delivered — a multi-instance activity compiles,
+> runs (parallel and sequential), assembles an ordered output collection, honours a
+> completion condition, is interruptible, nests over subprocesses and call activities,
+> and is authored in the Modeler. Each engine phase landed test-first with a recovery
+> test (ADR-0018). Multi-instance builds directly on the embedded-subprocess scope
+> lifecycle (ADR-0074) and the call-activity child termination (ADR-0076); it introduces
+> no new value type, record, counter, or recovery path.
 >
 > **Delivered (Phase 1, compiler):** a `MultiInstanceDetail` (input collection or
 > cardinality, input element, output collection/element, completion condition,
@@ -22,6 +24,81 @@
 > (sequential/parallel default, optional output and completion condition, cardinality
 > form), a multi-instance subprocess keeps its `TypeSubProcess` type and carries the
 > loop, and the deploy-refusal branches.
+>
+> **Delivered (Phase 2, parallel runtime):** an append-compatible
+> `ElementInstanceValue.MultiInstance uint8` role marker (0 none / 1 body / 2 inner).
+> A flow into a multi-instance activity activates its **body** (`activateElement` sets
+> the marker); `handleElementActivating` routes the body to `seedMultiInstance` instead
+> of the node's real behavior. The body evaluates the input collection (or cardinality)
+> once over its scope chain and seeds N **inner** element instances of the same node,
+> each scoped under the body (`FlowScopeKey = body key`) with its `loopCounter`
+> (1-based) and, when named, its input element written as variable events into the
+> inner's own scope. Each inner runs the node's real behavior (a service task parks on
+> its own job); `handleElementCompleting` routes an inner through
+> `finishMultiInstanceIteration` — drop the iteration's locals, `Completed` (which
+> decrements the body's `activeChildren`), then `completeScope(body)` — so an inner
+> never takes an outgoing flow. When the last iteration drains, the body completes like
+> any activity and takes its single outgoing flow. An empty collection / non-positive
+> cardinality seeds nothing and completes the body at once. Recovery is inherited: the
+> collection is evaluated only live, and the inner `Activated`/variable events plus the
+> merge counter rebuild the iterations on replay. Verified: parallel fan-out over a
+> three-element collection with per-iteration `item`/`loopCounter` bindings and a join;
+> the cardinality form; the empty and degenerate-collection edges; and a crash+replay
+> with every iteration parked on its job that still joins and finishes.
+>
+> **Delivered (Phase 3, sequential + output collection):** a **sequential** loop seeds
+> only the first iteration; each completion seeds the next (in `loopCounter` order)
+> until the set is exhausted, then the body completes — so exactly one iteration is
+> live at a time. The **output collection** is order-preserving: `seedMultiInstance`
+> initialises a slot-per-iteration list on the body scope, and each iteration writes its
+> `outputElement` (a FEEL over the iteration's own variables) at its own index, so
+> completion order does not matter; on body completion `promoteMultiInstanceOutput`
+> promotes the assembled list to the enclosing scope and drops the body's locals. An
+> iteration's own result is now **inner-scoped** (`ioResultScope` returns the inner key
+> for a multi-instance iteration), so each iteration's `outputElement` reads *its* value
+> rather than a value colliding at the shared body scope. Deviation from the plan below:
+> the sequential "seed next" reads the iteration set by **re-deriving it from the
+> committed scope chain** on each completion rather than freezing it into a body-scope
+> variable — because seeding runs only live (never during replay), this is
+> deterministic under I6 and equivalent to a one-time freeze for any model that does not
+> mutate the collection source mid-loop. Verified: sequential runs one job at a time in
+> index order; the output collection is assembled in input order for both parallel and
+> sequential (`[1,2,3] → [10,20,30]`); and a sequential loop parked mid-sequence
+> recovers and finishes the remainder.
+>
+> **Delivered (Phase 4, completion condition, interruption, nesting):** a
+> **completion condition** is evaluated over each iteration's scope chain (so it reads
+> `loopCounter`, the item, and the accumulating output collection) after the iteration
+> completes; when it holds, the loop ends early — `terminateScope` cancels any
+> still-running iterations (a no-op for a sequential loop) and the body completes.
+> **Interruption** needed no new engine code: the body is a scope, so an interrupting
+> boundary on a multi-instance activity runs `interruptHost` → `terminateScope`, which
+> tears down every iteration; a fix hardened the sibling path so terminating a *process
+> instance* (`handleProcessInstanceTerminating`) now also cancels each element's job,
+> leaving no orphan in the activatable index — matching `terminateScope`. **Nesting**
+> also composed for free: a multi-instance **subprocess** runs each iteration as a full
+> subprocess instance (the inner dispatch runs `subProcessBehavior`), and a
+> multi-instance **call activity** starts one child per iteration, an interrupt tearing
+> each child down through the ADR-0076 `terminateChildInstance` that `terminateScope`
+> already calls per victim. Verified: sequential and parallel completion conditions
+> (early stop / cancel remaining); an interrupting boundary terminating all iterations
+> and routing out its flow; a multi-instance subprocess assembling an output collection;
+> and a multi-instance call activity fanning out children and, on interrupt, terminating
+> every child.
+>
+> **Delivered (Phase 5, Modeler):** the Implement panel gains a **Multi-instance**
+> section on service, script, and user tasks, call activities, and subprocesses (the
+> types the compiler supports). It reads and writes the activity's
+> `bpmn:MultiInstanceLoopCharacteristics` and its nested `<zeebe:loopCharacteristics>`
+> plus `<loopCardinality>`/`<completionCondition>`: a **Mode** select (none / parallel /
+> sequential), an **Iterate over** choice (a collection or a fixed count), the input
+> element, an optional output collection/element, and a completion condition. Setting a
+> mode makes bpmn-js draw the ∥/≡ marker automatically; clearing it to *None* drops the
+> element. FEEL values are stored `=`-prefixed (stripped for display), matching the
+> io-mapping editor; the whole element is rewritten on any change so editing one field
+> never leaves a stale sibling. Verified end to end in a real browser (the vendored
+> bpmn-js + zeebe moddle): the panel reads an imported multi-instance activity, an edited
+> field exports the expected XML, and clearing the mode removes the element.
 
 ## Context and problem statement
 

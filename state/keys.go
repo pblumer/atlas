@@ -32,9 +32,10 @@ const (
 	cfIncident               columnFamily = 0x12 // incident:<elKey> → IncidentValue (ADR-0061)
 	cfDecisionEvaluation     columnFamily = 0x14 // decEval:<scopeKey>:<ts>:<pos> → DecisionEvaluationValue (ADR-0066)
 	cfInboundHighWater       columnFamily = 0x15 // inboundHW:<sourceID> → uint64 last-applied sequence (ADR-0075)
-	cfDefInstanceCount       columnFamily = 0x16 // defInst:<procDefKey> → int64 active-instance count (merge, ADR-0080)
-	cfElementTokenCount      columnFamily = 0x17 // elTok:<procDefKey>:<elementId> → int64 live-token count (merge, ADR-0080)
-	cfElementVisitAgg        columnFamily = 0x18 // elVisAgg:<procDefKey>:<elementId> → int64 cumulative visits (merge, ADR-0080)
+	cfActiveStartKey         columnFamily = 0x16 // activeStartKey:<defKey>:<corrKey> → int32 live message-start instances (ADR-0082)
+	cfDefInstanceCount       columnFamily = 0x17 // defInst:<procDefKey> → int64 active-instance count (merge, ADR-0080)
+	cfElementTokenCount      columnFamily = 0x18 // elTok:<procDefKey>:<elementId> → int64 live-token count (merge, ADR-0080)
+	cfElementVisitAgg        columnFamily = 0x19 // elVisAgg:<procDefKey>:<elementId> → int64 cumulative visits (merge, ADR-0080)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -140,6 +141,13 @@ func keyProcessInstanceHistory(key uint64) []byte {
 
 func keyActiveChildren(scope uint64) []byte {
 	return appendBE64([]byte{byte(cfActiveChildren)}, scope)
+}
+
+// keyActiveStartKey keys the count of live message-start instances of one definition
+// that began with a given correlation key (ADR-0082). The definition key is fixed-
+// width big-endian so a variable-length correlation key can follow unambiguously.
+func keyActiveStartKey(defKey uint64, correlationKey string) []byte {
+	return append(appendBE64([]byte{byte(cfActiveStartKey)}, defKey), correlationKey...)
 }
 
 func keyMeta(name string) []byte {

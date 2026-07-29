@@ -206,6 +206,11 @@ type Server struct {
 	// is that bridge's poll cadence (WithInboundPollInterval; 0 disables the bridge).
 	inboundSubs *inboundSubStore
 	inboundPoll time.Duration
+	// inboundBatch caps how many clio events one poll of a subscription reads and
+	// republishes (the ReadEvents Limit). It bounds the burst a single poll can hand
+	// the run loop so a large backlog drains as bounded catch-up across ticks rather
+	// than monopolizing the single writer with one unbounded publish storm (ADR-0075).
+	inboundBatch int
 
 	// docsEnabled gates the OpenAPI spec and the Scalar API explorer. On by
 	// default (opt-out), consistent with the already-open web UI and MCP
@@ -241,6 +246,18 @@ func WithoutDocs() Option { return func(s *Server) { s.docsEnabled = false } }
 // directly). The default is 2s.
 func WithInboundPollInterval(d time.Duration) Option {
 	return func(s *Server) { s.inboundPoll = d }
+}
+
+// WithInboundBatchLimit caps how many clio events one poll of a subscription reads
+// and republishes (ADR-0075). A non-positive value restores the default. It bounds
+// the burst a single poll hands the run loop; a large backlog then drains as
+// bounded catch-up across ticks instead of one unbounded publish storm.
+func WithInboundBatchLimit(n int) Option {
+	return func(s *Server) {
+		if n > 0 {
+			s.inboundBatch = n
+		}
+	}
 }
 
 // WithoutVault disables the engine-internal encrypted secret vault, which is
@@ -332,8 +349,9 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		dmnrefs:      dmnrefs,
 		connectors:   connectors,
 		inboundSubs:  inboundSubs,
-		inboundPoll:  2 * time.Second, // default cadence; WithInboundPollInterval overrides, 0 disables
-		vaultEnabled: true,            // opt-out: built unless WithoutVault is passed (ADR-0070)
+		inboundPoll:  2 * time.Second,     // default cadence; WithInboundPollInterval overrides, 0 disables
+		inboundBatch: defaultInboundBatch, // per-poll ReadEvents cap; WithInboundBatchLimit overrides
+		vaultEnabled: true,                // opt-out: built unless WithoutVault is passed (ADR-0070)
 		users:        users,
 		sessions:     newSessionStore(defaultSessionTTL),
 		dmnResolver:  resolver,

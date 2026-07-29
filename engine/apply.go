@@ -22,7 +22,16 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			}
 			// Maintain the per-definition active-instance counter so the runtime view
 			// reads it in O(1) rather than scanning every instance (ADR-0080).
-			return tx.IncDefInstanceCount(v.process.ProcessDefKey)
+			if err := tx.IncDefInstanceCount(v.process.ProcessDefKey); err != nil {
+				return err
+			}
+			// A message-start instance carries the correlation key it began with; count
+			// it as one live instance for that (definition, key) so a singleton message
+			// start can gate on it (ADR-0082). Event-driven, so replay rebuilds it (I4).
+			if v.process.CorrelationKey != "" {
+				return tx.IncrementActiveStartKey(v.process.ProcessDefKey, v.process.CorrelationKey)
+			}
+			return nil
 		case model.IntentCompleted, model.IntentTerminated:
 			// Retain a history record so operators can inspect finished
 			// instances, then drop the active record. The terminal state and
@@ -42,7 +51,16 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err := tx.DeleteProcessInstance(h.Key); err != nil {
 				return err
 			}
-			return tx.DecDefInstanceCount(v.process.ProcessDefKey)
+			if err := tx.DecDefInstanceCount(v.process.ProcessDefKey); err != nil {
+				return err
+			}
+			// Releasing a message-start instance re-opens its correlation key so a
+			// later message can start a fresh one (ADR-0082). Mirrors the increment on
+			// activation, keyed by the same fields the still-populated value carries.
+			if v.process.CorrelationKey != "" {
+				return tx.DecrementActiveStartKey(v.process.ProcessDefKey, v.process.CorrelationKey)
+			}
+			return nil
 		}
 
 	case model.VTElementInstance:

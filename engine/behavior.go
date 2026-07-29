@@ -142,6 +142,14 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 	c.ForEachElementInstance(piKey, func(elKey uint64) {
 		if ei := c.GetElementInstance(elKey); ei != nil {
 			terminateChildInstance(c, elKey, ei.BpmnElementType)
+			// Cancel any job the element left waiting, so a terminated instance leaves no
+			// orphan in the activatable index (the same teardown terminateScope does for a
+			// subprocess/multi-instance scope).
+			if jobKey, ok := c.JobOfElement(elKey); ok {
+				if job := c.GetJob(jobKey); job != nil {
+					c.AppendJobEvent(jobKey, model.IntentJobCanceled, *job)
+				}
+			}
 			c.AppendElementEvent(elKey, model.IntentTerminated, *ei)
 		}
 	})
@@ -154,6 +162,15 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 func handleElementActivating(c *ProcessingContext) {
 	ei := &c.cmd.Value.element
 	c.AppendElementEvent(c.cmd.Key, model.IntentActivated, *ei)
+	// A multi-instance body seeds its iterations rather than running the node's real
+	// behavior; its per-iteration data-input associations and io-mappings apply on
+	// each inner instance, not on the body (ADR-0077). An inner instance (role 2)
+	// falls through to the normal path and runs the real behavior.
+	if node := c.process(ei.ProcessDefKey).Node(ei.ElementId); node.MultiInstance >= 0 && ei.MultiInstance != miInner {
+		seedMultiInstance(c, c.cmd.Key, ei)
+		armBoundaryEvents(c, c.cmd.Key, ei)
+		return
+	}
 	// Read the activity's data-input associations into process variables before its
 	// behavior runs, so the activity's own FEEL (e.g. a script task's expression)
 	// sees them (ADR-0059).
@@ -167,6 +184,14 @@ func handleElementActivating(c *ProcessingContext) {
 	c.p.behavior(ei.BpmnElementType).OnActivated(c, c.cmd.Key, ei)
 	armBoundaryEvents(c, c.cmd.Key, ei)
 }
+
+// Multi-instance element-instance roles (ADR-0077), mirrored on
+// model.ElementInstanceValue.MultiInstance.
+const (
+	miNone  uint8 = 0 // not a multi-instance element instance
+	miBody  uint8 = 1 // the body: the scope that seeds and joins the iterations
+	miInner uint8 = 2 // one iteration: runs the node's real behavior, scoped under the body
+)
 
 // applyDataInputAssociations evaluates an activating activity's data-input
 // associations (ADR-0059): for each, it reads the source data object and writes a
@@ -234,6 +259,19 @@ func handleElementCompleting(c *ProcessingContext) {
 			applyOutputMappings(c, c.cmd.Key, ei)
 		}
 		dropLocalScope(c, c.cmd.Key)
+	}
+	// An inner multi-instance iteration does not take the node's outgoing flow (the
+	// body owns it): it completes, decrementing the body's active-child counter, and
+	// the body completes once the last iteration drains (ADR-0077).
+	if ei.MultiInstance == miInner {
+		finishMultiInstanceIteration(c, c.cmd.Key, ei)
+		return
+	}
+	// A completing multi-instance body promotes its assembled output collection to the
+	// enclosing scope and drops its own locals before it takes its outgoing flow, so
+	// downstream FEEL sees the collected list (ADR-0077).
+	if ei.MultiInstance == miBody {
+		promoteMultiInstanceOutput(c, c.cmd.Key, ei)
 	}
 	c.p.behavior(ei.BpmnElementType).OnCompleting(c, c.cmd.Key, ei)
 	if c.process(ei.ProcessDefKey).Node(ei.ElementId).BoundaryCount > 0 {
@@ -720,12 +758,19 @@ func activateElement(c *ProcessingContext, ei *model.ElementInstanceValue, flowI
 	if tokenID == 0 || fork {
 		parentID, tokenID = ei.TokenID, key
 	}
+	// A flow into a multi-instance activity activates its body — the scope that seeds
+	// the iterations (ADR-0077); an ordinary node activates with no role.
+	miRole := miNone
+	if target.MultiInstance >= 0 {
+		miRole = miBody
+	}
 	c.AppendElementCommand(key, model.IntentActivating, model.ElementInstanceValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ProcessDefKey:      ei.ProcessDefKey,
 		ElementId:          targetId,
 		FlowScopeKey:       ei.FlowScopeKey,
 		BpmnElementType:    uint8(target.Type),
+		MultiInstance:      miRole,
 		TokenID:            tokenID,
 		ParentTokenID:      parentID,
 		SourceFlowId:       flowID,
@@ -1081,7 +1126,11 @@ func hasIOMappings(cp *compiler.CompiledProcess, elementId int32) bool {
 // subprocess rather than leaking to the process root (ADR-0068/0074). For a
 // top-level activity FlowScopeKey == ProcessInstanceKey, so this is unchanged there.
 func ioResultScope(cp *compiler.CompiledProcess, elementKey uint64, ei *model.ElementInstanceValue) uint64 {
-	if cp.Node(ei.ElementId).IOOutCount > 0 {
+	// A multi-instance iteration's result is its own — inner-scoped, so each iteration's
+	// output element reads this iteration's value and it is dropped with the iteration
+	// rather than colliding at the shared body scope (ADR-0077). Otherwise the local
+	// scope when the node has output mappings, else the enclosing scope (ADR-0068).
+	if ei.MultiInstance == miInner || cp.Node(ei.ElementId).IOOutCount > 0 {
 		return elementKey
 	}
 	return ei.FlowScopeKey
@@ -1413,6 +1462,19 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 	// events the created instances emit.
 	for _, ref := range c.p.messageStarts[name] {
 		startKey := evalStartCorrelationKey(ref.correlationKey, vars)
+		// A singleton message start (ADR-0082) instantiates only if no instance of this
+		// definition is already live for this correlation key. An empty key identifies
+		// no entity, so it is never singleton (it always starts).
+		if ref.singletonStart && startKey != "" {
+			taken, err := c.singletonStartTaken(ref.defKey, startKey)
+			if err != nil {
+				c.p.fail(err)
+				return
+			}
+			if taken {
+				continue // a live instance for this key already exists (or is being started this batch)
+			}
+		}
 		c.AppendCreateInstanceCommand(ref.defKey, vars, startKey)
 		// Retain the delivery into the message-start event too, so the replay shows
 		// the message that opened the receiving pool. The receiver instance does not
@@ -1425,6 +1487,31 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 			CorrelationKey:           correlationKey,
 		})
 	}
+}
+
+// singletonStartTaken reports whether a singleton message start for (defKey, key)
+// should be skipped because a live instance already exists — either durably (the
+// ActiveStartKey counter, maintained by applyToState) or already scheduled earlier in
+// this batch (the per-batch set, which closes the window before the durable counter
+// reflects a same-batch create). When it returns false it records the pair so a second
+// message for the same key in the same batch is skipped (ADR-0082).
+func (c *ProcessingContext) singletonStartTaken(defKey uint64, key string) (bool, error) {
+	if c.p.startsThisBatch == nil {
+		c.p.startsThisBatch = make(map[startKeyIdent]struct{})
+	}
+	ident := startKeyIdent{defKey: defKey, key: key}
+	if _, ok := c.p.startsThisBatch[ident]; ok {
+		return true, nil
+	}
+	n, err := c.tx.ActiveStartKeyCount(defKey, key)
+	if err != nil {
+		return false, err
+	}
+	if n > 0 {
+		return true, nil
+	}
+	c.p.startsThisBatch[ident] = struct{}{}
+	return false, nil
 }
 
 // instanceVariables reads all of an instance's variables into a fresh slice, to
@@ -1812,6 +1899,212 @@ func (subProcessBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *mod
 	// one without mappings is drained here (ADR-0074).
 	dropLocalScope(c, key)
 	completeAndTakeFlows(c, key, ei)
+}
+
+// loopCounterVar is the standard multi-instance per-iteration counter variable
+// (1-based), bound into each inner iteration's scope (ADR-0077, matching Zeebe).
+const loopCounterVar = "loopCounter"
+
+// seedMultiInstance runs a multi-instance body's activation (ADR-0077): it evaluates
+// the loop's input collection (or cardinality) over the body's scope chain to N items
+// and seeds inner iterations of the same node scoped under the body — all N at once
+// (parallel), or just the first (sequential; the rest follow one per completion). Each
+// inner carries loopCounter (1-based) and, when the loop names an input element, its
+// item, written into the inner's own scope so the iteration's behavior resolves them up
+// the chain. When the loop has an output collection, a slot-per-iteration list is
+// initialised on the body scope so each iteration writes its own index (order-
+// preserving). An empty collection seeds nothing and completes the body at once. The
+// collection is evaluated live; the inner Activated and variable events persist, so
+// replay rebuilds the iterations without re-evaluating (I6).
+func seedMultiInstance(c *ProcessingContext, bodyKey uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	d := cp.MultiInstance(cp.Node(ei.ElementId).MultiInstance)
+	items := multiInstanceItems(c, d, bodyKey)
+	if d.OutputCollection >= 0 {
+		writeList(c, bodyKey, cp.Intern(d.OutputCollection), nullList(len(items)))
+	}
+	if len(items) == 0 {
+		// No iterations: the body completes immediately, taking its outgoing flow.
+		c.AppendElementCommand(bodyKey, model.IntentCompleting, *ei)
+		return
+	}
+	if d.Sequential {
+		seedMultiInstanceIteration(c, bodyKey, ei, cp, d, 0, items[0])
+		return
+	}
+	for i := range items {
+		seedMultiInstanceIteration(c, bodyKey, ei, cp, d, i, items[i])
+	}
+}
+
+// seedMultiInstanceIteration activates one inner iteration i (0-based) of the body,
+// scoped under it, binding its loopCounter (1-based) and — when the loop names an input
+// element — its item, both as variable events in the inner's own scope (ADR-0077).
+func seedMultiInstanceIteration(c *ProcessingContext, bodyKey uint64, body *model.ElementInstanceValue, cp *compiler.CompiledProcess, d *compiler.MultiInstanceDetail, i int, item expr.Value) {
+	k := c.NewKey()
+	c.AppendElementCommand(k, model.IntentActivating, model.ElementInstanceValue{
+		ProcessInstanceKey: body.ProcessInstanceKey,
+		ProcessDefKey:      body.ProcessDefKey,
+		ElementId:          body.ElementId, // the same node, run again
+		FlowScopeKey:       bodyKey,        // scoped under the body
+		BpmnElementType:    body.BpmnElementType,
+		MultiInstance:      miInner,
+		TokenID:            k,
+		ParentTokenID:      body.TokenID,
+		SourceFlowId:       -1,
+	})
+	c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+		ScopeKey: k, Name: loopCounterVar, Kind: model.VarNumber, Text: strconv.Itoa(i + 1),
+	})
+	if inputElem := cp.Intern(d.InputElement); inputElem != "" {
+		kind, b, text := expr.Classify(item)
+		c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+			ScopeKey: k, Name: inputElem, Kind: toVarKind(kind), Bool: b, Text: text,
+		})
+	}
+}
+
+// multiInstanceItems evaluates a loop's iteration set over the body's scope chain to a
+// concrete list of N items: the input collection's elements, or — for a cardinality —
+// N nulls (there is no input element to bind). A non-list collection, a non-integer or
+// negative cardinality, or an evaluation error yields no iterations rather than a panic.
+func multiInstanceItems(c *ProcessingContext, d *compiler.MultiInstanceDetail, bodyKey uint64) []expr.Value {
+	if d.InputCollection != nil {
+		v, err := d.InputCollection.Eval(bindInputsChain(c, d.InputCollection.Inputs(), bodyKey))
+		if err != nil {
+			return nil
+		}
+		items, ok := expr.AsList(v)
+		if !ok {
+			return nil
+		}
+		return items
+	}
+	if d.Cardinality != nil {
+		v, err := d.Cardinality.Eval(bindInputsChain(c, d.Cardinality.Inputs(), bodyKey))
+		if err != nil {
+			return nil
+		}
+		if n, ok := expr.AsInt(v); ok && n >= 0 {
+			return nullList(n)
+		}
+	}
+	return nil
+}
+
+// finishMultiInstanceIteration completes one inner iteration (ADR-0077): it collects the
+// iteration's output element into the body's output collection (at its own index, so
+// the list preserves iteration order regardless of completion order), drops the
+// iteration's local scope, and emits Completed — which decrements the body's
+// active-child counter. Then it decides how the loop proceeds: a satisfied completion
+// condition ends the loop early (cancelling any still-running iterations); otherwise a
+// sequential loop seeds the next iteration if one remains, and the body completes once
+// the last iteration has drained. An inner never takes an outgoing flow; the body owns it.
+func finishMultiInstanceIteration(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	d := cp.MultiInstance(cp.Node(ei.ElementId).MultiInstance)
+	bodyKey := ei.FlowScopeKey
+	idx := iterationIndex(c, key)
+	if d.OutputCollection >= 0 && d.OutputElement != nil {
+		val, err := d.OutputElement.Eval(bindInputsChain(c, d.OutputElement.Inputs(), key))
+		if err != nil {
+			val = expr.Null
+		}
+		setListElement(c, bodyKey, cp.Intern(d.OutputCollection), idx, val)
+	}
+	// The completion condition is evaluated over this iteration's scope chain (so it can
+	// read loopCounter, the item, and the accumulating output collection at the body)
+	// before the iteration's locals are dropped (ADR-0077).
+	done := false
+	if d.CompletionCondition != nil {
+		v, err := d.CompletionCondition.Eval(bindInputsChain(c, d.CompletionCondition.Inputs(), key))
+		done = err == nil && expr.IsTrue(v)
+	}
+	dropLocalScope(c, key)
+	c.AppendElementEvent(key, model.IntentCompleted, *ei)
+	if done {
+		// Early exit: cancel any iterations still running (a no-op for a sequential loop,
+		// where this was the only one live), then complete the body once its scope drains.
+		terminateScope(c, ei.ProcessInstanceKey, bodyKey)
+		completeScope(c, bodyKey)
+		return
+	}
+	if d.Sequential {
+		if items := multiInstanceItems(c, d, bodyKey); idx+1 < len(items) {
+			if body := c.GetElementInstance(bodyKey); body != nil {
+				seedMultiInstanceIteration(c, bodyKey, body, cp, d, idx+1, items[idx+1])
+			}
+			return // the body completes after this next iteration, not yet
+		}
+	}
+	completeScope(c, bodyKey)
+}
+
+// promoteMultiInstanceOutput moves a completed body's output collection up to its
+// enclosing scope and drops the body's own locals (the collection plus any per-
+// iteration scratch), so only the assembled list escapes (ADR-0077). A no-op for a loop
+// with no output collection beyond the scope drop.
+func promoteMultiInstanceOutput(c *ProcessingContext, bodyKey uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	d := cp.MultiInstance(cp.Node(ei.ElementId).MultiInstance)
+	if d.OutputCollection >= 0 {
+		if v := c.GetVariable(bodyKey, cp.Intern(d.OutputCollection)); v != nil {
+			out := *v
+			out.ScopeKey = ei.FlowScopeKey // promote to the parent scope
+			c.AppendVariableEvent(model.IntentVariableCreated, out)
+		}
+	}
+	dropLocalScope(c, bodyKey)
+}
+
+// iterationIndex reads an inner iteration's 0-based index from its loopCounter (1-based).
+func iterationIndex(c *ProcessingContext, key uint64) int {
+	if v := c.GetVariable(key, loopCounterVar); v != nil {
+		if n, err := strconv.Atoi(v.Text); err == nil && n > 0 {
+			return n - 1
+		}
+	}
+	return 0
+}
+
+// nullList returns a slice of n FEEL nulls — the initial output-collection slots and a
+// cardinality loop's (bindingless) items.
+func nullList(n int) []expr.Value {
+	items := make([]expr.Value, n)
+	for i := range items {
+		items[i] = expr.Null
+	}
+	return items
+}
+
+// writeList writes a FEEL list value (canonical JSON) into scope under name (ADR-0077).
+func writeList(c *ProcessingContext, scope uint64, name string, elems []expr.Value) {
+	kind, b, text := expr.Classify(expr.ListOf(elems...))
+	c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+		ScopeKey: scope, Name: name, Kind: toVarKind(kind), Bool: b, Text: text,
+	})
+}
+
+// readList reads a stored JSON list variable back into FEEL values; nil if absent or
+// not a list.
+func readList(c *ProcessingContext, scope uint64, name string) []expr.Value {
+	if v := c.GetVariable(scope, name); v != nil && v.Kind == model.VarJSON {
+		if elems, ok := expr.AsList(expr.FromStored(expr.KindJSON, false, v.Text)); ok {
+			return elems
+		}
+	}
+	return nil
+}
+
+// setListElement sets index idx of a stored JSON list variable and writes it back; a
+// no-op if idx is out of range (ADR-0077).
+func setListElement(c *ProcessingContext, scope uint64, name string, idx int, val expr.Value) {
+	elems := readList(c, scope, name)
+	if idx < 0 || idx >= len(elems) {
+		return
+	}
+	elems[idx] = val
+	writeList(c, scope, name, elems)
 }
 
 // callActivityBehavior runs a call activity: on activation it starts a separate
