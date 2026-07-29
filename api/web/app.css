@@ -1573,3 +1573,86 @@ tr[hidden] { display: none; }
 .add-row #add-role { flex: 0 0 auto; width: 104px; }
 .add-row #add-btn { flex: 0 0 auto; }
 .role-sel { flex: 0 0 auto; font-size: 12px; padding: 4px 6px; }
+
+/* ---------- Token simulation (Design view, ADR-0078) ---------- */
+/* A client-side walkthrough: tokens move along sequence flows so the control flow
+   reads at a glance. No engine, no deploy — a teaching aid on the unsaved diagram. */
+.sim-toggle.active {
+  background: var(--accent); color: #fff; border-color: var(--accent);
+}
+/* In simulation mode the diagram is driven by tokens, not edited: hide the modeling
+   affordances so clicks mean "spawn / choose a path", not "add a shape". */
+.editor.sim-active .djs-palette,
+.editor.sim-active .djs-context-pad { display: none !important; }
+.editor.sim-active .djs-element { cursor: pointer; }
+
+/* Control bar under the toolbar: play / step / reset / speed + live counts. */
+.sim-bar {
+  display: flex; align-items: center; gap: 12px; padding: 8px 14px;
+  border-bottom: 1px solid var(--border); background: var(--surface);
+}
+.sim-bar .btn.play { min-width: 84px; }
+.sim-bar .sim-speed { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.sim-bar .sim-speed .speed {
+  font: inherit; font-size: 13px; color: var(--text); background: var(--surface);
+  border: 1px solid var(--border-strong); border-radius: 6px; padding: 5px 8px;
+}
+.sim-bar .sim-hint { font-size: 12px; color: var(--accent); }
+.sim-bar .sim-stats { font: 12px ui-monospace, monospace; color: var(--muted); }
+
+/* A token in flight: a filled dot with a soft halo, drawn in its own SVG layer above
+   the diagram (diagram coordinates, so it tracks pan/zoom). */
+.atlas-sim-dot { fill: var(--accent); stroke: #fff; stroke-width: 1.5px; }
+.atlas-sim-halo { fill: var(--accent); opacity: 0.18; }
+
+/* The resting-token count badge sitting on an element. */
+.atlas-sim-token {
+  display: inline-block; background: var(--accent); color: #fff; border-radius: 999px;
+  min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box;
+  font: 700 12px/20px system-ui, sans-serif; text-align: center;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.35); pointer-events: none;
+}
+/* A partial join: how many of a converging gateway's branches have arrived. */
+.atlas-sim-join {
+  display: inline-block; background: var(--surface); color: var(--muted);
+  border: 1px solid var(--border-strong); border-radius: 999px;
+  padding: 0 6px; height: 18px; font: 700 11px/18px system-ui, sans-serif;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2); pointer-events: none;
+}
+/* The "spawn a token here" affordance on every start event. */
+.atlas-sim-spawn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 999px; background: var(--ok); color: #fff;
+  font-size: 10px; cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+}
+.atlas-sim-spawn:hover { filter: brightness(1.08); }
+
+/* Element holding one or more tokens right now. */
+.djs-element.atlas-sim-here .djs-visual > :nth-child(1) {
+  stroke: var(--accent) !important; stroke-width: 2.5px !important;
+}
+/* A gateway that is waiting for the user to choose a path. */
+.djs-element.atlas-sim-deciding .djs-visual > :nth-child(1) {
+  stroke: var(--accent) !important; stroke-width: 2.5px !important;
+}
+/* A token lands on / leaves an element (start / end pulse). */
+.djs-element.atlas-sim-hit .djs-visual > :nth-child(1) {
+  stroke: var(--ok) !important; stroke-width: 3px !important;
+  animation: atlas-pulse 0.65s ease-out;
+}
+/* The flow a token is travelling right now: accent stroke with marching ants. */
+.djs-connection.atlas-sim-flow .djs-visual > :nth-child(1) {
+  stroke: var(--accent) !important; stroke-width: 2.5px !important;
+  stroke-dasharray: 6 4 !important; animation: atlas-ants 0.6s linear infinite;
+}
+/* An outgoing flow offered as a choice at a diverging gateway — click it to send the
+   waiting token that way. The modelled default flow is emphasised. */
+.djs-connection.atlas-sim-choice { cursor: pointer; }
+.djs-connection.atlas-sim-choice .djs-visual > :nth-child(1) {
+  stroke: var(--accent) !important; stroke-width: 3px !important;
+  animation: atlas-sim-glow 1.1s ease-in-out infinite;
+}
+.djs-connection.atlas-sim-default .djs-visual > :nth-child(1) {
+  stroke: var(--ok) !important;
+}
+@keyframes atlas-sim-glow { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
