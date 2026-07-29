@@ -433,8 +433,47 @@ func (t *Tx) DecrementActiveChildren(scope uint64) error {
 }
 
 func (t *Tx) mergeActiveChildren(scope uint64, delta int64) error {
+	return t.mergeCounter(keyActiveChildren(scope), delta)
+}
+
+// mergeCounter applies a signed delta to a counter key as a write-only Pebble
+// merge — no read, no allocation beyond the reused scratch buffer (invariant I1).
+func (t *Tx) mergeCounter(key []byte, delta int64) error {
 	t.scratch = appendCounter(t.scratch[:0], delta)
-	return t.b.Merge(keyActiveChildren(scope), t.scratch, nil)
+	return t.b.Merge(key, t.scratch, nil)
+}
+
+// --- Runtime aggregate counters (ADR-0080) ---
+//
+// Definition-scoped active-instance and per-element live-token/visit counters,
+// maintained as signed merges from applyToState so the Operations runtime view
+// reads a definition's live state in O(elements) rather than scanning every
+// instance. Write-only merges (no read on the hot path, invariant I1); they
+// compose across a crash and rebuild on replay (invariant I4), generalizing the
+// active-children (ADR) and element-visit (ADR-0022) counters.
+
+// IncDefInstanceCount and DecDefInstanceCount move a definition's active-instance
+// count by one, on process-instance creation and termination.
+func (t *Tx) IncDefInstanceCount(procDefKey uint64) error {
+	return t.mergeCounter(keyDefInstanceCount(procDefKey), 1)
+}
+func (t *Tx) DecDefInstanceCount(procDefKey uint64) error {
+	return t.mergeCounter(keyDefInstanceCount(procDefKey), -1)
+}
+
+// IncElementToken and DecElementToken move a definition-element live-token count
+// by one, on element-instance activation and completion/termination.
+func (t *Tx) IncElementToken(procDefKey uint64, elementId int32) error {
+	return t.mergeCounter(keyElementTokenCount(procDefKey, elementId), 1)
+}
+func (t *Tx) DecElementToken(procDefKey uint64, elementId int32) error {
+	return t.mergeCounter(keyElementTokenCount(procDefKey, elementId), -1)
+}
+
+// IncElementVisitAgg bumps a definition-element cumulative-visit count on
+// activation. Never decremented — it is the retained historical heatmap.
+func (t *Tx) IncElementVisitAgg(procDefKey uint64, elementId int32) error {
+	return t.mergeCounter(keyElementVisitAgg(procDefKey, elementId), 1)
 }
 
 // --- Element-visit history ---

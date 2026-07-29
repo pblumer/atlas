@@ -17,7 +17,12 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// active record and is copied into the history record on completion below,
 			// so a finished instance still reports when it started.
 			v.process.CreatedAt = h.Timestamp
-			return tx.PutProcessInstance(h.Key, &v.process)
+			if err := tx.PutProcessInstance(h.Key, &v.process); err != nil {
+				return err
+			}
+			// Maintain the per-definition active-instance counter so the runtime view
+			// reads it in O(1) rather than scanning every instance (ADR-0080).
+			return tx.IncDefInstanceCount(v.process.ProcessDefKey)
 		case model.IntentCompleted, model.IntentTerminated:
 			// Retain a history record so operators can inspect finished
 			// instances, then drop the active record. The terminal state and
@@ -34,7 +39,10 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err := tx.PutProcessInstanceHistory(h.Key, &hist); err != nil {
 				return err
 			}
-			return tx.DeleteProcessInstance(h.Key)
+			if err := tx.DeleteProcessInstance(h.Key); err != nil {
+				return err
+			}
+			return tx.DecDefInstanceCount(v.process.ProcessDefKey)
 		}
 
 	case model.VTElementInstance:
@@ -59,7 +67,16 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err := tx.RecordElementStep(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId); err != nil {
 				return err
 			}
-			return tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, 1)
+			if err := tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, 1); err != nil {
+				return err
+			}
+			// Maintain the per-(definition, element) live-token counter and the
+			// cumulative-visit counter so the runtime overlay reads them in
+			// O(elements) rather than scanning every instance (ADR-0080).
+			if err := tx.IncElementToken(v.element.ProcessDefKey, v.element.ElementId); err != nil {
+				return err
+			}
+			return tx.IncElementVisitAgg(v.element.ProcessDefKey, v.element.ElementId)
 		case model.IntentCompleted, model.IntentTerminated:
 			if err := tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, 2); err != nil {
 				return err
@@ -73,7 +90,10 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err := tx.DeleteElementInstance(h.Key, &v.element); err != nil {
 				return err
 			}
-			return tx.DecrementActiveChildren(v.element.FlowScopeKey)
+			if err := tx.DecrementActiveChildren(v.element.FlowScopeKey); err != nil {
+				return err
+			}
+			return tx.DecElementToken(v.element.ProcessDefKey, v.element.ElementId)
 		}
 
 	case model.VTJob:

@@ -49,7 +49,17 @@ func Open(dir string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Store{db: db}, nil
+	s := &Store{db: db}
+	// The runtime aggregate counters (ADR-0080) are derived state added after the
+	// fact. A live store persists across restarts and replays only the tail, so the
+	// counters would read zero for instances that already exist. Seed them once from
+	// the current state; thereafter applyToState maintains them and replay rebuilds
+	// the tail.
+	if err := s.backfillRuntimeCountersIfNeeded(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("state: backfill runtime counters: %w", err)
+	}
+	return s, nil
 }
 
 // Close flushes and closes the store.
@@ -209,6 +219,119 @@ func (s *Store) GetElementInstance(key uint64) (*model.ElementInstanceValue, boo
 // ActiveProcessInstanceCount returns how many process instances are live.
 func (s *Store) ActiveProcessInstanceCount() (int, error) {
 	return s.countPrefix([]byte{byte(cfProcessInstance)})
+}
+
+// DefInstanceCount returns how many instances of one definition are live, read
+// from the maintained per-definition counter in O(1) rather than scanning every
+// instance (ADR-0080).
+func (s *Store) DefInstanceCount(procDefKey uint64) (int, error) {
+	raw, ok, err := getCopy(s.db, keyDefInstanceCount(procDefKey))
+	if err != nil || !ok {
+		return 0, err
+	}
+	return int(decodeCounter(raw)), nil
+}
+
+// ElementLiveTokens calls fn with each of a definition's elements that currently
+// holds live tokens and how many — one prefix scan over the per-element token
+// counters, so it is O(elements), not O(instances) (ADR-0080).
+func (s *Store) ElementLiveTokens(procDefKey uint64, fn func(elementId int32, count int64) error) error {
+	return s.scanPrefix(runtimeCountPrefix(cfElementTokenCount, procDefKey), func(k, raw []byte) error {
+		return fn(elementIdFromCountKey(k), decodeCounter(raw))
+	})
+}
+
+// ElementVisitTotals calls fn with each of a definition's elements and its
+// cumulative visit count — the aggregate heatmap, read in O(elements) from the
+// maintained per-element visit counter instead of summing every instance's visit
+// history (ADR-0080, aggregating ADR-0022).
+func (s *Store) ElementVisitTotals(procDefKey uint64, fn func(elementId int32, count int64) error) error {
+	return s.scanPrefix(runtimeCountPrefix(cfElementVisitAgg, procDefKey), func(k, raw []byte) error {
+		return fn(elementIdFromCountKey(k), decodeCounter(raw))
+	})
+}
+
+// metaRuntimeCountersV1 marks that the ADR-0080 runtime counters have been seeded
+// from pre-existing state. Its presence makes the backfill a one-time migration.
+const metaRuntimeCountersV1 = "runtime_counters_v1"
+
+// backfillRuntimeCountersIfNeeded seeds the runtime aggregate counters from the
+// current state the first time a store gains them, then records that it has done
+// so. It scans the process-instance, element-instance, and element-visit families
+// once, accumulating per-definition and per-(definition, element) totals in memory,
+// and writes them plus the marker in a single atomic, synced batch — so a crash
+// mid-migration leaves nothing and the next open re-runs cleanly (no double count).
+func (s *Store) backfillRuntimeCountersIfNeeded() error {
+	if _, ok, err := getCopy(s.db, keyMeta(metaRuntimeCountersV1)); err != nil || ok {
+		return err
+	}
+
+	type defElem struct {
+		def uint64
+		el  int32
+	}
+	defCounts := map[uint64]int64{}
+	tokenCounts := map[defElem]int64{}
+	visitCounts := map[defElem]int64{}
+
+	if err := s.scanPrefix([]byte{byte(cfProcessInstance)}, func(_, raw []byte) error {
+		v, err := model.DecodeValue(model.VTProcessInstance, raw)
+		if err != nil {
+			return err
+		}
+		defCounts[v.(*model.ProcessInstanceValue).ProcessDefKey]++
+		return nil
+	}); err != nil {
+		return err
+	}
+	if err := s.scanPrefix([]byte{byte(cfElementInstance)}, func(_, raw []byte) error {
+		v, err := model.DecodeValue(model.VTElementInstance, raw)
+		if err != nil {
+			return err
+		}
+		ei := v.(*model.ElementInstanceValue)
+		tokenCounts[defElem{ei.ProcessDefKey, ei.ElementId}]++
+		return nil
+	}); err != nil {
+		return err
+	}
+	if err := s.scanPrefix([]byte{byte(cfElementVisit)}, func(k, raw []byte) error {
+		// elVisit key: [cf][procDefKey:8][piKey:8][elementId:4]; value is the count.
+		def := binary.BigEndian.Uint64(k[1:9])
+		visitCounts[defElem{def, elementIdFromVisitKey(k)}] += decodeCounter(raw)
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	// Collect every counter merge into one list so the writes and their single error
+	// check are shared across the three families.
+	type counterMerge struct {
+		key   []byte
+		delta int64
+	}
+	merges := make([]counterMerge, 0, len(defCounts)+len(tokenCounts)+len(visitCounts))
+	for def, n := range defCounts {
+		merges = append(merges, counterMerge{keyDefInstanceCount(def), n})
+	}
+	for de, n := range tokenCounts {
+		merges = append(merges, counterMerge{keyElementTokenCount(de.def, de.el), n})
+	}
+	for de, n := range visitCounts {
+		merges = append(merges, counterMerge{keyElementVisitAgg(de.def, de.el), n})
+	}
+
+	b := s.db.NewBatch()
+	defer b.Close()
+	for _, m := range merges {
+		if err := b.Merge(m.key, encodeCounter(m.delta), nil); err != nil {
+			return err
+		}
+	}
+	if err := b.Set(keyMeta(metaRuntimeCountersV1), []byte{1}, nil); err != nil {
+		return err
+	}
+	return b.Commit(pebble.Sync)
 }
 
 // ActiveProcessInstances calls fn with the key and value of every live process
