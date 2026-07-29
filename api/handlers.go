@@ -1333,11 +1333,21 @@ func parseStartVariables(body []byte) ([]model.VariableValue, error) {
 	if err := dec.Decode(&payload); err != nil {
 		return nil, fmt.Errorf("invalid JSON body: %v", err)
 	}
-	if len(payload.Variables) == 0 {
+	return startVarsFromMap(payload.Variables)
+}
+
+// startVarsFromMap converts a name→value map (values in the encoding/json shape
+// produced with UseNumber: nil, bool, json.Number, string, map, slice) into
+// VariableValues. Scalars are stored directly, keeping a number's exact textual
+// form for FEEL's decimal semantics; objects and arrays are stored as canonical
+// JSON under VarJSON, so they bind back into FEEL as contexts and lists
+// (ADR-0037). Shared by the JSON start body and the CSV upload path (ADR-0084).
+func startVarsFromMap(vars map[string]any) ([]model.VariableValue, error) {
+	if len(vars) == 0 {
 		return nil, nil
 	}
-	out := make([]model.VariableValue, 0, len(payload.Variables))
-	for name, raw := range payload.Variables {
+	out := make([]model.VariableValue, 0, len(vars))
+	for name, raw := range vars {
 		vv := model.VariableValue{Name: name}
 		switch x := raw.(type) {
 		case nil:
