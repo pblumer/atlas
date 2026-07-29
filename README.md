@@ -5,6 +5,8 @@
 **Atlas** is named after the Titan who bears an immense load without ever letting it drop. That's exactly what it does: it carries millions of process instances, batch after batch, and never drops a token.
 
 > 🚧 **Early development.** APIs are unstable and changing fast. Not ready for production use. See the [roadmap](ROADMAP.md).
+>
+> ⚖️ **Temporary project name and release gate.** `Atlas` is currently a development name under trade-mark review. It must not be used for a public or commercial release unless it is professionally cleared; the preferred remediation is a rename before release. See the [IP and licence review](docs/legal/IP_AND_LICENSE_REVIEW.md), [remediation plan](docs/legal/REMEDIATION_PLAN.md), [trade-mark notice](TRADEMARKS.md), and [third-party notices](THIRD_PARTY_NOTICES.md).
 
 ---
 
@@ -46,6 +48,8 @@ The three core pillars:
 - **[Architecture Decision Records](docs/adr/)** — *why* things are the way they are
 - **[Postman onboarding kit](postman/)** — import the collection + environment and drive the HTTP API (deploy, run instances, work user tasks) in five minutes
 - **[Roadmap](ROADMAP.md)** — where this is going
+- **[Legal and IP review](docs/legal/IP_AND_LICENSE_REVIEW.md)** · **[Remediation plan](docs/legal/REMEDIATION_PLAN.md)**
+- **[Trade marks](TRADEMARKS.md)** · **[Third-party notices](THIRD_PARTY_NOTICES.md)**
 - **[Contributing](CONTRIBUTING.md)** · **[Development](DEVELOPMENT.md)** · **[Security](SECURITY.md)**
 
 **Working on this with an AI coding agent?** Start at **[`AGENTS.md`](AGENTS.md)** (Claude Code: [`CLAUDE.md`](CLAUDE.md)). It carries the invariants, the exact build/test commands, and how to approach a task.
@@ -62,9 +66,13 @@ The three core pillars:
 - A *bespoke* graphical modeler — Atlas ships a browser viewer/editor by embedding the standard [`bpmn-js`](https://bpmn.io) toolkit ([ADR-0011](docs/adr/0011-single-binary-distribution-and-web-ui.md)), rather than reimplementing BPMN rendering from scratch
 - A full-stack, batteries-included server beyond the single self-contained binary — the engine core stays a library first, embedded by the server
 
+## Independence and compatibility
+
+This is an independent project. It is not affiliated with or endorsed by the Object Management Group, the Apache Software Foundation, Camunda or bpmn.io. BPMN, DMN, Camunda, Zeebe and other third-party names are used only to identify standards, upstream software or specific interoperability behaviour. See [TRADEMARKS.md](TRADEMARKS.md).
+
 ## License
 
-[Apache License 2.0](LICENSE). *(Proposed default — chosen for its explicit patent grant, which suits an infrastructure component others build on. Change it if you prefer MIT or another license before the first release.)*
+Original project code is licensed under the [Apache License 2.0](LICENSE), unless a file states otherwise. Embedded and vendored third-party components retain their own licences and attribution requirements; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ---
 
