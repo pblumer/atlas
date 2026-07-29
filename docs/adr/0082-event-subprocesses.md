@@ -4,8 +4,10 @@
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phase 1 (compiler) delivered; Phases 2–5 pending. Each phase
-> lands test-first with a recovery test (ADR-0018). Event subprocesses build on the
+> **Implementation status.** Phases 1–2 delivered; Phases 3–5 pending. Each phase lands
+> test-first with a recovery test (ADR-0018). (Note: the ADR *number* 0082 collides with
+> `0082-singleton-message-start.md`, merged in parallel — a pre-existing collision like
+> ADR-0077; the documents are distinct files.) Event subprocesses build on the
 > embedded-subprocess scope lifecycle (ADR-0074), the boundary-event arming/firing/
 > interruption machinery (ADR-0040), and message/timer correlation (ADR-0020, ADR-0051).
 > They introduce no new value type or recovery path — the trigger reuses the existing
@@ -30,6 +32,23 @@
 > triggers compile with their detail; a nested event subprocess groups under its enclosing
 > subprocess, not the root; the inner start is not an entry point; and the missing-trigger
 > rejection.
+>
+> **Delivered (Phase 2, message-triggered interrupting at the root):** a new runtime-only
+> `TypeEventSubProcessStart` element type + `eventSubProcessStartBehavior`. At instance
+> creation `armEventSubprocesses` activates one trigger instance per root event subprocess
+> (its `ElementId` is the handler container so its behavior can read the trigger detail);
+> the trigger opens a message subscription like a boundary event and waits. The trigger is
+> **excluded from the scope's `activeChildren` counter** in `applyToState` (both increment
+> and decrement), so an armed trigger never blocks scope completion. On a correlating
+> message the trigger completes and — interrupting — `terminateScope` tears down the parent
+> scope's other work (and its sibling triggers) before activating the handler subprocess;
+> the handler runs as an ordinary subprocess whose completion (having no outgoing flow)
+> drains the parent scope via `completeScope`. When a scope completes without the trigger
+> firing, `completeScope` disarms its still-armed triggers (their subscriptions self-retire,
+> like `disarmBoundaryEvents`). Verified: a message interrupts a waiting service task
+> (cancelling its job) and runs the handler to instance completion; a normal completion
+> disarms the trigger and a late message is inert; and a crash+replay rebuilds the armed
+> subscription so a post-restart message still interrupts and runs the handler.
 
 ## Context and problem statement
 
