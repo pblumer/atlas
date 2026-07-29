@@ -4,8 +4,8 @@
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Not started. This ADR plans the work; each phase will land
-> test-first with a recovery test (ADR-0018). Event subprocesses build on the
+> **Implementation status.** Phase 1 (compiler) delivered; Phases 2–5 pending. Each phase
+> lands test-first with a recovery test (ADR-0018). Event subprocesses build on the
 > embedded-subprocess scope lifecycle (ADR-0074), the boundary-event arming/firing/
 > interruption machinery (ADR-0040), and message/timer correlation (ADR-0020, ADR-0051).
 > They introduce no new value type or recovery path — the trigger reuses the existing
@@ -13,6 +13,23 @@
 > **message** and **timer** triggers are in scope; error/signal/escalation-triggered
 > event subprocesses depend on error and signal events (ROADMAP Milestone 2, not built)
 > and are deferred.
+>
+> **Delivered (Phase 1, compiler):** `triggeredByEvent` (on `<subProcess>`) and
+> `isInterrupting` (on the start event) are parsed; an event subprocess compiles to an
+> ordinary `TypeSubProcess` node carrying a new `CompiledNode.EventSub` index into an
+> `EventSubProcessDetail{StartNode, Interrupting, Kind, Schedule|MessageName/CorrelationKey}`
+> (mirroring `BoundaryEventDetail`, with the parent scope as the "host"). Handlers are
+> grouped per parent scope (`EventSubprocesses(scopeNode)` / `RootEventSubprocesses()`,
+> mirroring the nested-start grouping) so the runtime can arm them on scope entry. The
+> trigger (message correlation key or timer schedule) compiles through the existing
+> `resolveMessage`/`parseTimerSchedule` paths. The container's inner message/timer start is
+> no longer a process entry point — `MessageStartEvents`/`TimerStartEvents` filter to root
+> scope — and `checkReachability` seeds each handler as a reachability root (reached via its
+> trigger, not a flow). A `triggeredByEvent` subprocess whose start carries no event
+> definition is a deploy error. Verified: message (interrupting) and timer (non-interrupting)
+> triggers compile with their detail; a nested event subprocess groups under its enclosing
+> subprocess, not the root; the inner start is not an entry point; and the missing-trigger
+> rejection.
 
 ## Context and problem statement
 

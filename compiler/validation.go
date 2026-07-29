@@ -136,6 +136,14 @@ func checkReachability(cp *CompiledProcess) []Problem {
 	for _, s := range cp.startEvents {
 		push(s)
 	}
+	// An event subprocess is reached via its start event's trigger, not by a token
+	// flowing in, so seed each event-subprocess container as a reachability root — the
+	// subprocess case below then reaches its inner nodes (ADR-0082).
+	for id := range cp.nodes {
+		if cp.nodes[id].EventSub >= 0 {
+			push(int32(id))
+		}
+	}
 	for len(stack) > 0 {
 		n := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
