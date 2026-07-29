@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  prüfe Datensätze — Massenprüfung von CSV-Datensätzen gegen Geschäftsregeln
+  (ADR-0084, Slice 2).
+
+  Start → (Multi-Instance-Subprozess "prüfe Datensatz") → Ende
+
+  Der Qualitätsmanager lädt ein CSV über den Endpoint
+  `POST /api/v1/processes/{key}/instances-from-csv` hoch (Slice 1). Der Server
+  parst es gegen die Spaltenkonfiguration und startet diese Instanz mit der
+  Variable `rows` (ein Array von Datensatz-Objekten).
+
+  Der eingebettete Subprozess ist multi-instanziert über `=rows`: er läuft
+  einmal pro Datensatz, gebunden an `row`. Darin ruft ein Business-Rule-Task
+  die DMN-Entscheidung `RowValid` (siehe pruefe-datensaetze.dmn) auf und
+  übergibt per Input-Mapping die Felder des Datensatzes; das Ergebnis landet in
+  der iterationslokalen Variable `verdict`. Die Multi-Instance sammelt jede
+  `verdict` geordnet in die Sammlung `verdicts` und hebt sie beim Abschluss auf
+  die Prozessebene — ein Verdict je Zeile, in Eingabereihenfolge.
+
+  Ein Business-Rule-Task kann nicht direkt multi-instanziert werden; deshalb
+  wickelt ihn der eingebettete Subprozess ein (ADR-0074 + ADR-0077).
+
+  Kein externer Worker: der DMN-Worker wertet die Entscheidung in-process aus,
+  sodass eine Instanz ohne parkenden Token bis "Ende" durchläuft. Die Layout-
+  Information (BPMN-DI) wird beim Ausliefern automatisch erzeugt.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_pruefe_datensaetze" targetNamespace="http://atlas/examples">
+  <process id="proc_pruefe_datensaetze" name="prüfe Datensätze" isExecutable="true">
+
+    <startEvent id="start" name="Start"/>
+
+    <subProcess id="pruefe_datensatz" name="prüfe Datensatz">
+      <multiInstanceLoopCharacteristics>
+        <extensionElements>
+          <zeebe:loopCharacteristics inputCollection="=rows" inputElement="row"
+            outputCollection="verdicts" outputElement="=verdict"/>
+        </extensionElements>
+      </multiInstanceLoopCharacteristics>
+
+      <startEvent id="row_start"/>
+
+      <businessRuleTask id="regelpruefung" name="Regelprüfung">
+        <extensionElements>
+          <calledDecision decisionId="RowValid" resultVariable="verdict" retries="3"/>
+          <ioMapping>
+            <input source="=row.email" target="email"/>
+            <input source="=row.group" target="group"/>
+            <input source="=row.license" target="license"/>
+          </ioMapping>
+        </extensionElements>
+      </businessRuleTask>
+
+      <endEvent id="row_end"/>
+
+      <sequenceFlow id="rf1" sourceRef="row_start" targetRef="regelpruefung"/>
+      <sequenceFlow id="rf2" sourceRef="regelpruefung" targetRef="row_end"/>
+    </subProcess>
+
+    <endEvent id="end" name="Ende"/>
+
+    <sequenceFlow id="f1" sourceRef="start" targetRef="pruefe_datensatz"/>
+    <sequenceFlow id="f2" sourceRef="pruefe_datensatz" targetRef="end"/>
+  </process>
+</definitions>

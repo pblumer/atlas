@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  RowValid — die Geschäftsregeln für einen einzelnen Datensatz (ADR-0084).
+
+  Eine Entscheidungstabelle prüft je Datensatz drei Felder und liefert einen
+  strukturierten Verdict zurück:
+
+    * emailOk    — die E-Mail-Adresse enthält ein "@"
+    * groupOk    — die Gruppe ist "users"
+    * licenseOk  — die Lizenz ist "PRO" oder "BASIC"
+    * valid      — alle drei Regeln erfüllt
+
+  Die eine Regel trifft immer zu (alle Eingabespalten sind "-"); die Logik
+  steckt in den FEEL-Ausdrücken der Ausgabespalten, die die Eingaben lesen.
+  So bleibt die Tabelle frei von der Unary-Test-Falle (ein berechneter
+  Ausdruck in einer Eingabezelle würde nie zünden) und liefert vier benannte
+  Ausgaben — der DMN-Worker legt einen Mehr-Ausgaben-Verdict als JSON-Kontext
+  ab, sodass ein Datensatz feldweise korrigiert werden kann.
+
+  Der Business-Rule-Task ruft die Entscheidung als decisionId="RowValid" auf.
+  Die Geschäftsregeln (welche Gruppe, welche Lizenz) leben hier — sie ändern
+  sich ohne ein Redeploy der Engine.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="defs_rowvalid" name="rowvalid" namespace="http://atlas/dmn">
+  <inputData id="id_email" name="email"/>
+  <inputData id="id_group" name="group"/>
+  <inputData id="id_license" name="license"/>
+  <decision id="RowValid" name="RowValid">
+    <informationRequirement><requiredInput href="#id_email"/></informationRequirement>
+    <informationRequirement><requiredInput href="#id_group"/></informationRequirement>
+    <informationRequirement><requiredInput href="#id_license"/></informationRequirement>
+    <decisionTable id="dt" hitPolicy="UNIQUE">
+      <input id="in_e" label="email"><inputExpression id="ie_e" typeRef="string"><text>email</text></inputExpression></input>
+      <input id="in_g" label="group"><inputExpression id="ie_g" typeRef="string"><text>group</text></inputExpression></input>
+      <input id="in_l" label="license"><inputExpression id="ie_l" typeRef="string"><text>license</text></inputExpression></input>
+      <output id="o_e" label="emailOk" name="emailOk" typeRef="boolean"/>
+      <output id="o_g" label="groupOk" name="groupOk" typeRef="boolean"/>
+      <output id="o_l" label="licenseOk" name="licenseOk" typeRef="boolean"/>
+      <output id="o_v" label="valid" name="valid" typeRef="boolean"/>
+      <rule id="r1">
+        <inputEntry id="e1"><text>-</text></inputEntry>
+        <inputEntry id="e2"><text>-</text></inputEntry>
+        <inputEntry id="e3"><text>-</text></inputEntry>
+        <outputEntry id="oe1"><text>contains(email, "@")</text></outputEntry>
+        <outputEntry id="oe2"><text>group = "users"</text></outputEntry>
+        <outputEntry id="oe3"><text>license = "PRO" or license = "BASIC"</text></outputEntry>
+        <outputEntry id="oe4"><text>contains(email, "@") and group = "users" and (license = "PRO" or license = "BASIC")</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

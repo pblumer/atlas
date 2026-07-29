@@ -105,11 +105,23 @@ corrected* rather than rejected at the door — that is the whole point of the
 feature. Structural mismatch (a configured `header` absent from the file's header
 row) is a `400`, because the file does not match the declared layout.
 
-**Slice 2 (follow-up) — the validation process + decision.** An example BPMN
-whose multi-instance business rule task evaluates a DMN decision
-(`email valid? · correct group? · correct licence?`) once per row over
+**Slice 2 — the validation process + decision (landed).** The example decision
+`examples/pruefe-datensaetze.dmn` (`RowValid`: `emailOk · groupOk · licenseOk ·
+valid`) and process `examples/pruefe-datensaetze.bpmn` validate each row over
 `inputCollection="=rows"`, assembling an `outputCollection` of per-row verdicts.
-The decision is authored in temis; Atlas executes it via the existing worker.
+Two facts shaped the implementation:
+
+- **A business rule task cannot be multi-instanced directly** — the compiler wires
+  multi-instance only onto service/script/user tasks, call activities, and
+  subprocesses (ADR-0077). So the row check is a business rule task **wrapped in an
+  embedded subprocess** that is multi-instanced (ADR-0074 + ADR-0077); the
+  subprocess's `outputElement="=verdict"` collects each iteration's decision result.
+- **The DMN worker had to learn the scope chain.** It read input mappings against
+  the process root only, so a per-iteration `inputElement` (`row`) resolved to null.
+  It now resolves up the element's full scope chain (nearest scope wins), mirroring
+  the script worker — the ADR-0068 follow-up the ROADMAP called out. This is an
+  off-processor read whose result still freezes into the job completion (I6), so
+  replay is unaffected.
 
 **Slice 3 (follow-up) — the correction loop.** Rows whose verdict is invalid
 route to `userTask`s (multi-instance over the failing rows) that the Quality

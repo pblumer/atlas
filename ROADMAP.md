@@ -64,7 +64,11 @@ The control-flow basics most real models use.
   (activation writes locals, completion promotes, then drops), the inline and
   polyglot script workers reading up the chain, and the **Modeler properties-panel
   I/O-mapping editor** (input/output lists on service, script, and user tasks).
-  Remaining: extend the scope-chain read to the DMN/REST/clio workers, and reuse
+  The **DMN worker now resolves input mappings up the full scope chain**
+  ([ADR-0084](docs/adr/0084-csv-batch-validation.md)), so a business rule task
+  nested in a subprocess or a multi-instance body reads its enclosing scope's
+  variables (e.g. a per-row `inputElement`) rather than only the process root.
+  Remaining: extend the same scope-chain read to the REST/clio workers, and reuse
   the local-scope machinery for embedded subprocess scopes.
 - 🚧 **Data objects** ([ADR-0053](docs/adr/0053-first-class-data-objects.md)):
   first-class, typed, event-sourced data — not the decoration most engines settle
