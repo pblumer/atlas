@@ -1564,9 +1564,19 @@ func (s *Server) handleInstanceDecisions(w http.ResponseWriter, r *http.Request)
 // handleListInstances lists process instances — live ones (with their current
 // token count) followed by finished ones from the history index, most recently
 // completed first (ADR-0017). It is the operator "instances" view.
-// errListTruncated stops an instance-list scan once the page cap is reached. It is a
+// errListTruncated stops a bounded list scan once the page cap is reached. It is a
 // sentinel to break the scan early, not a failure.
-var errListTruncated = errors.New("instance list page full")
+var errListTruncated = errors.New("list page full")
+
+// unlessTruncated maps a bounded-scan result to a real error: the page-full sentinel
+// (a deliberate early stop) becomes nil, any other error passes through. It lets the
+// capped list handlers report a genuine scan failure without treating truncation as one.
+func unlessTruncated(err error) error {
+	if errors.Is(err, errListTruncated) {
+		return nil
+	}
+	return err
+}
 
 const (
 	// maxInstanceListDefault and maxInstanceListMax bound how many active and how many
@@ -1683,9 +1693,7 @@ func (s *Server) handleListInstances(w http.ResponseWriter, r *http.Request) {
 			done = append(done, r)
 			return nil
 		})
-		if err != nil && !errors.Is(err, errListTruncated) {
-			scanErr = err
-		}
+		scanErr = unlessTruncated(err)
 	})
 	if scanErr != nil {
 		writeError(w, http.StatusInternalServerError, "list instances: "+scanErr.Error())
@@ -2149,11 +2157,38 @@ type taskResp struct {
 // handleListTasks lists open user tasks — activatable jobs of the reserved
 // user-task type. Each entry carries the task's key, the instance it belongs to,
 // and the element's assignment metadata from the compiled process.
-func (s *Server) handleListTasks(w http.ResponseWriter, _ *http.Request) {
+// maxTaskListDefault and maxTaskListMax bound how many user tasks GET /api/v1/tasks
+// returns per call, so the inbox loads even when a definition has parked hundreds of
+// thousands of instances on a user task (the reported flood): the scan stops at the
+// cap instead of enriching and shipping every job. Raise per request with ?limit= (up
+// to the max); a capped page is flagged with X-Tasks-Truncated.
+const (
+	maxTaskListDefault = 500
+	maxTaskListMax     = 5000
+)
+
+func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
+	limit := maxTaskListDefault
+	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
+		n, err := strconv.Atoi(q)
+		if err != nil || n <= 0 {
+			writeError(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
+			return
+		}
+		limit = n
+	}
+	if limit > maxTaskListMax {
+		limit = maxTaskListMax
+	}
 	tasks := []taskResp{}
+	truncated := false
 	var scanErr error
 	s.do(func() {
-		scanErr = s.store.ActivatableJobs(compiler.UserTaskJobTypeIndex, func(jobKey uint64) error {
+		err := s.store.ActivatableJobs(compiler.UserTaskJobTypeIndex, func(jobKey uint64) error {
+			if len(tasks) >= limit {
+				truncated = true
+				return errListTruncated // page full: stop before enriching more jobs
+			}
 			jv, ok, err := s.store.GetJob(jobKey)
 			if err != nil || !ok {
 				return err
@@ -2189,12 +2224,18 @@ func (s *Server) handleListTasks(w http.ResponseWriter, _ *http.Request) {
 			tasks = append(tasks, tr)
 			return nil
 		})
+		scanErr = unlessTruncated(err)
 	})
 	if scanErr != nil {
 		writeError(w, http.StatusInternalServerError, "list tasks: "+scanErr.Error())
-	} else {
-		writeJSON(w, http.StatusOK, tasks)
+		return
 	}
+	if truncated {
+		// Signal a capped page so a client can narrow (by process/assignee) rather than
+		// assume it received every task.
+		w.Header().Set("X-Tasks-Truncated", "true")
+	}
+	writeJSON(w, http.StatusOK, tasks)
 }
 
 // handleCompleteTask completes a user task by its job key: it feeds the job
@@ -2335,11 +2376,27 @@ func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 
 // handleListIncidents lists the unresolved incidents — the operator "what's stuck"
 // view (ADR-0061).
-func (s *Server) handleListIncidents(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
+	limit := maxTaskListMax // incidents share the task list's ceiling; the default page is generous
+	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
+		n, err := strconv.Atoi(q)
+		if err != nil || n <= 0 {
+			writeError(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
+			return
+		}
+		if limit = n; limit > maxTaskListMax {
+			limit = maxTaskListMax
+		}
+	}
 	list := []incidentView{}
+	truncated := false
 	var scanErr error
 	s.do(func() {
-		scanErr = s.store.Incidents(func(elKey uint64, v *model.IncidentValue) error {
+		err := s.store.Incidents(func(elKey uint64, v *model.IncidentValue) error {
+			if len(list) >= limit {
+				truncated = true
+				return errListTruncated // page full: bound the response even under a flood of failures
+			}
 			list = append(list, incidentView{
 				ElementInstanceKey: elKey,
 				ProcessInstanceKey: v.ProcessInstanceKey,
@@ -2350,10 +2407,14 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, _ *http.Request) {
 			})
 			return nil
 		})
+		scanErr = unlessTruncated(err)
 	})
 	if scanErr != nil {
 		writeError(w, http.StatusInternalServerError, "list incidents: "+scanErr.Error())
 		return
+	}
+	if truncated {
+		w.Header().Set("X-Incidents-Truncated", "true")
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"incidents": list})
 }

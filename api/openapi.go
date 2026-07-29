@@ -192,14 +192,14 @@ func (s *Server) apiRoutes() []apiRoute {
 			})),
 			resp: jsonBody("Job key and stats", tObject())}},
 		{"GET", "/api/v1/incidents", s.handleListIncidents, apiOp{
-			summary: "List unresolved incidents", tag: "Incidents", resp: jsonBody("Incidents", tArray())}},
+			summary: "List unresolved incidents — capped per call (?limit=, max 5000); X-Incidents-Truncated: true marks a capped page", tag: "Incidents", resp: jsonBody("Incidents", tArray())}},
 		{"POST", "/api/v1/incidents/{key}/resolve", s.handleResolveIncident, apiOp{
 			summary: "Resolve the incident on an element instance and retry its job", tag: "Incidents",
 			req:  jsonBody("Retries to grant the resumed job (default 1)", schemaObj(map[string]any{"retries": tInteger()})),
 			resp: jsonBody("Element instance key and stats", tObject())}},
 
 		{"GET", "/api/v1/tasks", s.handleListTasks, apiOp{
-			summary: "List active user tasks", tag: "Tasks", resp: jsonBody("Tasks", tArray())}},
+			summary: "List active user tasks — capped per call (?limit=, default 500, max 5000); X-Tasks-Truncated: true marks a capped page", tag: "Tasks", resp: jsonBody("Tasks", tArray())}},
 		{"POST", "/api/v1/tasks/{key}/complete", s.handleCompleteTask, apiOp{
 			summary: "Complete a user task", tag: "Tasks",
 			req:  jsonBody("Completion variables", schemaObj(map[string]any{"variables": tObject()})),
