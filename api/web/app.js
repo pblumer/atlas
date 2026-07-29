@@ -1649,20 +1649,20 @@ async function deployProject(id, reload) {
   for (const r of rep.references || []) applyRefStatus(r.id, r);
 }
 
-// summarizeInstances rolls the flat instance list up per process id, so the
-// Instances view can show one row per process (not one per instance): how many
-// are running vs. finished, and the newest activity time, keyed by processId.
-function summarizeInstances(instances) {
+// summarizeFromServer builds the per-process running/finished rollup the Instances
+// overview renders from the server's lean instance summary (one row per definition,
+// GET /api/v1/instances/summary), so the page never fetches and enriches every
+// instance — the shape that made this page unreachable during a large-scale flood.
+// Rows share a processId across versions, so counts are summed per processId.
+function summarizeFromServer(rows) {
   const byProc = new Map();
-  for (const r of instances) {
+  for (const r of rows) {
     if (!r.processId) continue; // orphaned instance (its definition was deleted)
     let s = byProc.get(r.processId);
     if (!s) { s = { running: 0, finished: 0, latestCompletedAt: 0 }; byProc.set(r.processId, s); }
-    if (r.state === "active") s.running++;
-    else {
-      s.finished++;
-      if (r.completedAt > s.latestCompletedAt) s.latestCompletedAt = r.completedAt;
-    }
+    s.running += r.active;
+    s.finished += r.completed;
+    if (r.latestCompletedAt > s.latestCompletedAt) s.latestCompletedAt = r.latestCompletedAt;
   }
   return byProc;
 }
@@ -1758,12 +1758,12 @@ async function viewInstances() {
 
   const load = async () => {
     try {
-      const [procs, instances] = await Promise.all([
+      const [procs, rows] = await Promise.all([
         api("GET", "/api/v1/processes"),
-        api("GET", "/api/v1/instances"),
+        api("GET", "/api/v1/instances/summary"),
       ]);
       allGroups = groupByProcess(procs);
-      summary = summarizeInstances(instances);
+      summary = summarizeFromServer(rows);
       renderRows();
     } catch (e) {
       tbody.innerHTML = `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;

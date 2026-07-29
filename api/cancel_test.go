@@ -124,6 +124,9 @@ func TestCancelInstancesOfProcess(t *testing.T) {
 	if code, _ := doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/cancel-instances?limit=0", dep.Key), "", ""); code != http.StatusBadRequest {
 		t.Fatalf("cancel-instances bad limit: status=%d, want 400", code)
 	}
+	if code, _ := doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/cancel-instances?limit=nope", dep.Key), "", ""); code != http.StatusBadRequest {
+		t.Fatalf("cancel-instances non-numeric limit: status=%d, want 400", code)
+	}
 
 	// Drain in batches of two: 2, 2, 1 — the cap is honored and the last batch clears.
 	total, rounds := 0, 0
@@ -160,8 +163,9 @@ func TestCancelInstancesOfProcess(t *testing.T) {
 		t.Fatalf("total canceled=%d, want %d", total, n)
 	}
 
-	// A drain on a definition with no live instances is a clean no-op.
-	if code, body := doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/cancel-instances", dep.Key), "", ""); code != http.StatusOK || !strings.Contains(string(body), `"canceled":0`) {
-		t.Fatalf("empty drain: status=%d body=%s", code, body)
+	// A drain on a definition with no live instances is a clean no-op — and an
+	// over-ceiling limit is clamped rather than rejected.
+	if code, body := doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/cancel-instances?limit=999999", dep.Key), "", ""); code != http.StatusOK || !strings.Contains(string(body), `"canceled":0`) {
+		t.Fatalf("empty drain (clamped limit): status=%d body=%s", code, body)
 	}
 }

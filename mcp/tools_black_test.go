@@ -157,6 +157,13 @@ func TestCancelInstancesBulkViaTool(t *testing.T) {
 	if text, isErr := toolText(t, result(t, run(t, ts, callTool(6, "atlas_cancel_instances", map[string]any{"key": 999999}))[0])); !isErr || !strings.Contains(text, "no deployment") {
 		t.Fatalf("bulk cancel unknown def = (%q, isErr=%v), want a not-found tool error", text, isErr)
 	}
+	// A missing key and a non-integer limit are argument errors from the tool handler.
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(7, "atlas_cancel_instances", map[string]any{}))[0])); !isErr {
+		t.Fatal("bulk cancel without key: want a tool error")
+	}
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(8, "atlas_cancel_instances", map[string]any{"key": 1, "limit": "nope"}))[0])); !isErr {
+		t.Fatal("bulk cancel with non-integer limit: want a tool error")
+	}
 }
 
 // TestBadKeyArgumentIsToolError sends an out-of-range key so the tool handler's

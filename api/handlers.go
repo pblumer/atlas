@@ -1544,9 +1544,50 @@ func (s *Server) handleInstanceDecisions(w http.ResponseWriter, r *http.Request)
 // handleListInstances lists process instances — live ones (with their current
 // token count) followed by finished ones from the history index, most recently
 // completed first (ADR-0017). It is the operator "instances" view.
-func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
+// errListTruncated stops an instance-list scan once the page cap is reached. It is a
+// sentinel to break the scan early, not a failure.
+var errListTruncated = errors.New("instance list page full")
+
+const (
+	// maxInstanceListDefault and maxInstanceListMax bound how many active and how many
+	// completed instances GET /api/v1/instances returns (each capped independently),
+	// so the endpoint can never try to enrich and serialize hundreds of thousands of
+	// rows — the shape that made the operations page unreachable during the reported
+	// flood. Raise per request with ?limit= (up to the max); narrow to one definition
+	// with ?process=. The overview reads per-definition counts from
+	// /api/v1/instances/summary instead, so the cap does not skew its tallies.
+	maxInstanceListDefault = 1000
+	maxInstanceListMax     = 10000
+)
+
+func (s *Server) handleListInstances(w http.ResponseWriter, r *http.Request) {
+	limit := maxInstanceListDefault
+	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
+		n, err := strconv.Atoi(q)
+		if err != nil || n <= 0 {
+			writeError(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
+			return
+		}
+		limit = n
+	}
+	if limit > maxInstanceListMax {
+		limit = maxInstanceListMax
+	}
+	var (
+		filterDef uint64
+		hasFilter bool
+	)
+	if q := strings.TrimSpace(r.URL.Query().Get("process")); q != "" {
+		n, err := strconv.ParseUint(q, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid process key")
+			return
+		}
+		filterDef, hasFilter = n, true
+	}
 	active := []instanceResp{}
 	done := []instanceResp{}
+	truncated := false
 	var scanErr error
 	s.do(func() {
 		// Attach the definition's id/version and the scope's variables to a row.
@@ -1564,7 +1605,14 @@ func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
 			})
 		}
 
-		scanErr = s.store.ActiveProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
+		err := s.store.ActiveProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
+			if hasFilter && v.ProcessDefKey != filterDef {
+				return nil
+			}
+			if len(active) >= limit {
+				truncated = true
+				return errListTruncated // page full: stop enriching further rows
+			}
 			elements := 0
 			if err := s.store.ElementInstancesOfProcess(key, func(uint64) error {
 				elements++
@@ -1587,11 +1635,19 @@ func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
 			active = append(active, r)
 			return nil
 		})
-		if scanErr != nil {
+		if err != nil && !errors.Is(err, errListTruncated) {
+			scanErr = err
 			return
 		}
 
-		scanErr = s.store.CompletedProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
+		err = s.store.CompletedProcessInstances(func(key uint64, v *model.ProcessInstanceValue) error {
+			if hasFilter && v.ProcessDefKey != filterDef {
+				return nil
+			}
+			if len(done) >= limit {
+				truncated = true
+				return errListTruncated
+			}
 			r := instanceResp{
 				Key:            key,
 				ProcessDefKey:  v.ProcessDefKey,
@@ -1607,6 +1663,9 @@ func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
 			done = append(done, r)
 			return nil
 		})
+		if err != nil && !errors.Is(err, errListTruncated) {
+			scanErr = err
+		}
 	})
 	if scanErr != nil {
 		writeError(w, http.StatusInternalServerError, "list instances: "+scanErr.Error())
@@ -1614,7 +1673,71 @@ func (s *Server) handleListInstances(w http.ResponseWriter, _ *http.Request) {
 	}
 	// Finished instances: most recently completed first.
 	sort.Slice(done, func(i, j int) bool { return done[i].CompletedAt > done[j].CompletedAt })
+	if truncated {
+		// Signal that the page was capped so a client can page with ?process=/?limit=
+		// rather than assume it received every instance.
+		w.Header().Set("X-Instances-Truncated", "true")
+	}
 	writeJSON(w, http.StatusOK, append(active, done...))
+}
+
+type instanceSummaryRow struct {
+	ProcessDefKey     uint64 `json:"processDefKey"`
+	ProcessID         string `json:"processId"`
+	Version           int32  `json:"version"`
+	Active            int    `json:"active"`
+	Completed         int    `json:"completed"`
+	LatestCompletedAt int64  `json:"latestCompletedAt"`
+}
+
+// handleInstancesSummary returns per-definition instance counts (active and completed,
+// plus the newest completion time) via count-only scans — no per-instance element or
+// variable enrichment. It is what lets the operations overview show one running/finished
+// row per process without the list endpoint's cost of enriching and shipping every
+// instance, so the overview stays responsive even when one definition has a very large
+// number of instances (the reported flood).
+func (s *Server) handleInstancesSummary(w http.ResponseWriter, _ *http.Request) {
+	byDef := map[uint64]*instanceSummaryRow{}
+	var scanErr error
+	s.do(func() {
+		row := func(defKey uint64) *instanceSummaryRow {
+			r, ok := byDef[defKey]
+			if !ok {
+				r = &instanceSummaryRow{ProcessDefKey: defKey}
+				if d, ok := s.deployments[defKey]; ok {
+					r.ProcessID = d.ProcessID
+					r.Version = d.Version
+				}
+				byDef[defKey] = r
+			}
+			return r
+		}
+		scanErr = s.store.ActiveProcessInstances(func(_ uint64, v *model.ProcessInstanceValue) error {
+			row(v.ProcessDefKey).Active++
+			return nil
+		})
+		if scanErr != nil {
+			return
+		}
+		scanErr = s.store.CompletedProcessInstances(func(_ uint64, v *model.ProcessInstanceValue) error {
+			r := row(v.ProcessDefKey)
+			r.Completed++
+			if v.CompletedAt > r.LatestCompletedAt {
+				r.LatestCompletedAt = v.CompletedAt
+			}
+			return nil
+		})
+	})
+	if scanErr != nil {
+		writeError(w, http.StatusInternalServerError, "summarize instances: "+scanErr.Error())
+		return
+	}
+	out := make([]instanceSummaryRow, 0, len(byDef))
+	for _, r := range byDef {
+		out = append(out, *r)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ProcessDefKey < out[j].ProcessDefKey })
+	writeJSON(w, http.StatusOK, out)
 }
 
 // maxInstanceSearchResults caps a variable search so a single query can't return
@@ -1907,9 +2030,7 @@ func (s *Server) handleCancelInstancesOfProcess(w http.ResponseWriter, r *http.R
 		found     bool
 		remaining bool
 		keys      []uint64
-		scanErr   error
-		runErr    error
-		statErr   error
+		opErr     error // any scan / drive / stats failure inside the run loop
 		stats     statsResp
 	)
 	s.do(func() {
@@ -1927,29 +2048,24 @@ func (s *Server) handleCancelInstancesOfProcess(w http.ResponseWriter, r *http.R
 			}
 			return nil
 		})
-		if err != nil && err != errCancelBatchFull {
-			scanErr = err
+		if err != nil && !errors.Is(err, errCancelBatchFull) {
+			opErr = err
 			return
 		}
 		remaining = errors.Is(err, errCancelBatchFull) // hit the cap → more may remain
 		for _, k := range keys {
 			s.proc.CancelInstance(k)
 		}
-		if err := s.jobRunner.Drive(); err != nil {
-			runErr = err
+		if opErr = s.jobRunner.Drive(); opErr != nil {
 			return
 		}
-		stats, statErr = s.readStats()
+		stats, opErr = s.readStats()
 	})
 	switch {
 	case !found:
 		writeError(w, http.StatusNotFound, "no deployment with that key")
-	case scanErr != nil:
-		writeError(w, http.StatusInternalServerError, "scan instances: "+scanErr.Error())
-	case runErr != nil:
-		writeError(w, http.StatusInternalServerError, "cancel instances: "+runErr.Error())
-	case statErr != nil:
-		writeError(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
+	case opErr != nil:
+		writeError(w, http.StatusInternalServerError, "cancel instances: "+opErr.Error())
 	default:
 		writeJSON(w, http.StatusOK, cancelInstancesResp{DefinitionKey: key, Canceled: len(keys), Remaining: remaining, Stats: stats})
 	}
