@@ -545,6 +545,10 @@ func handleTimerTriggered(c *ProcessingContext) {
 		fireRecurringBoundary(c, timer, ei, sched)
 		return
 	}
+	if sched, ok := recurringEventSubSchedule(c, ei); ok {
+		fireRecurringEventSub(c, timer, ei, sched)
+		return
+	}
 	c.AppendElementCommand(timer.ElementInstanceKey, model.IntentCompleting, *ei)
 }
 
@@ -578,6 +582,50 @@ func fireRecurringBoundary(c *ProcessingContext, timer model.TimerValue, ei *mod
 	takeOutgoingFlows(c, ei)
 	if timer.Repetitions == 0 {
 		return // finite cycle exhausted: stop arming, leave the boundary idle
+	}
+	next, ok := sched.NextDue(c.Now())
+	if !ok {
+		return
+	}
+	reps := timer.Repetitions
+	if reps > 0 {
+		reps-- // count down a finite cycle; an infinite one (-1) stays -1
+	}
+	c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: timer.ElementInstanceKey,
+		TargetElementId:    ei.ElementId,
+		DueDate:            next,
+		Repetitions:        reps,
+	})
+}
+
+// recurringEventSubSchedule reports whether ei is a non-interrupting timer-triggered
+// event-subprocess trigger whose schedule recurs (a cycle), and returns the concrete
+// schedule to re-arm from — the event-subprocess analog of recurringBoundarySchedule
+// (ADR-0082). A one-shot (duration/date) or interrupting trigger fires once through the
+// generic Completing path instead; ok is false if the schedule can't resolve.
+func recurringEventSubSchedule(c *ProcessingContext, ei *model.ElementInstanceValue) (compiler.TimerSchedule, bool) {
+	if ei.BpmnElementType != uint8(compiler.TypeEventSubProcessStart) {
+		return compiler.TimerSchedule{}, false
+	}
+	cp := c.process(ei.ProcessDefKey)
+	d := cp.EventSubProcess(cp.Node(ei.ElementId).EventSub)
+	if d.Kind != compiler.BoundaryTimer || d.Interrupting || !d.Schedule.Repeats() {
+		return compiler.TimerSchedule{}, false
+	}
+	return resolveSchedule(c, d.Schedule, ei.ProcessInstanceKey)
+}
+
+// fireRecurringEventSub fires a recurring non-interrupting event-subprocess timer: it
+// activates a fresh handler run without completing the trigger (which stays armed), then
+// arms the next occurrence — re-anchored to the clock, frozen into the event (I6), and
+// counting a finite Rn cycle down. When the count runs out it stops arming; the idle
+// trigger is disarmed when its scope completes. It mirrors fireRecurringBoundary (ADR-0054).
+func fireRecurringEventSub(c *ProcessingContext, timer model.TimerValue, ei *model.ElementInstanceValue, sched compiler.TimerSchedule) {
+	activateEventSubHandler(c, ei, ei.FlowScopeKey)
+	if timer.Repetitions == 0 {
+		return // finite cycle exhausted: stop arming, leave the trigger idle
 	}
 	next, ok := sched.NextDue(c.Now())
 	if !ok {
@@ -1924,14 +1972,39 @@ func (subProcessBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *mod
 // a subprocess on its activation).
 func armEventSubprocesses(c *ProcessingContext, piKey, defKey, scopeKey uint64, handlers []int32) {
 	for _, handlerNode := range handlers {
-		c.AppendElementCommand(c.NewKey(), model.IntentActivating, model.ElementInstanceValue{
-			ProcessInstanceKey: piKey,
-			ProcessDefKey:      defKey,
-			ElementId:          handlerNode, // the handler container; its EventSub detail names the trigger
-			FlowScopeKey:       scopeKey,
-			BpmnElementType:    uint8(compiler.TypeEventSubProcessStart),
-		})
+		armEventSubTrigger(c, piKey, defKey, scopeKey, handlerNode)
 	}
+}
+
+// armEventSubTrigger activates one waiting event-subprocess trigger instance for a
+// handler, scoped by its parent (ADR-0082). It is used both to arm at scope entry and
+// to re-arm a non-interrupting message trigger after it fires, so a later message
+// triggers it again.
+func armEventSubTrigger(c *ProcessingContext, piKey, defKey, scopeKey uint64, handlerNode int32) {
+	c.AppendElementCommand(c.NewKey(), model.IntentActivating, model.ElementInstanceValue{
+		ProcessInstanceKey: piKey,
+		ProcessDefKey:      defKey,
+		ElementId:          handlerNode, // the handler container; its EventSub detail names the trigger
+		FlowScopeKey:       scopeKey,
+		BpmnElementType:    uint8(compiler.TypeEventSubProcessStart),
+	})
+}
+
+// activateEventSubHandler activates the handler subprocess of a fired event-subprocess
+// trigger, in the parent scope (ADR-0082). The handler seeds its inner start (which
+// flows straight on) and runs to its end; having no outgoing flow, its completion
+// drains the parent scope (subProcessBehavior.OnCompleting).
+func activateEventSubHandler(c *ProcessingContext, ei *model.ElementInstanceValue, parentScope uint64) {
+	k := c.NewKey()
+	c.AppendElementCommand(k, model.IntentActivating, model.ElementInstanceValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ProcessDefKey:      ei.ProcessDefKey,
+		ElementId:          ei.ElementId,
+		FlowScopeKey:       parentScope,
+		BpmnElementType:    uint8(c.process(ei.ProcessDefKey).Node(ei.ElementId).Type), // TypeSubProcess
+		TokenID:            k,
+		SourceFlowId:       -1,
+	})
 }
 
 // disarmEventSubprocesses terminates every still-armed event-subprocess trigger in a
@@ -1996,18 +2069,13 @@ func (eventSubProcessStartBehavior) OnCompleting(c *ProcessingContext, key uint6
 		// triggers live in the same scope, the sibling triggers — before the handler runs.
 		terminateScope(c, ei.ProcessInstanceKey, parentScope)
 	}
-	// Activate the handler subprocess in the parent scope; it seeds its inner start (which
-	// flows straight on) and runs to its end, draining its scope and completing.
-	k := c.NewKey()
-	c.AppendElementCommand(k, model.IntentActivating, model.ElementInstanceValue{
-		ProcessInstanceKey: ei.ProcessInstanceKey,
-		ProcessDefKey:      ei.ProcessDefKey,
-		ElementId:          handlerNode,
-		FlowScopeKey:       parentScope,
-		BpmnElementType:    uint8(cp.Node(handlerNode).Type), // TypeSubProcess
-		TokenID:            k,
-		SourceFlowId:       -1,
-	})
+	activateEventSubHandler(c, ei, parentScope)
+	// A non-interrupting message trigger re-arms a fresh subscription so a subsequent
+	// message fires it again (ADR-0082). A one-shot timer fires once (no re-arm); a
+	// recurring timer re-arms through the timer path (fireRecurringEventSub), not here.
+	if !d.Interrupting && d.Kind == compiler.BoundaryMessage {
+		armEventSubTrigger(c, ei.ProcessInstanceKey, ei.ProcessDefKey, parentScope, handlerNode)
+	}
 }
 
 // loopCounterVar is the standard multi-instance per-iteration counter variable

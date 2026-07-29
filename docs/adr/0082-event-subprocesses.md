@@ -4,7 +4,7 @@
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phases 1–2 delivered; Phases 3–5 pending. Each phase lands
+> **Implementation status.** Phases 1–3 delivered; Phases 4–5 pending. Each phase lands
 > test-first with a recovery test (ADR-0018). (Note: the ADR *number* 0082 collides with
 > `0082-singleton-message-start.md`, merged in parallel — a pre-existing collision like
 > ADR-0077; the documents are distinct files.) Event subprocesses build on the
@@ -49,6 +49,26 @@
 > (cancelling its job) and runs the handler to instance completion; a normal completion
 > disarms the trigger and a late message is inert; and a crash+replay rebuilds the armed
 > subscription so a post-restart message still interrupts and runs the handler.
+>
+> **Delivered (Phase 3, non-interrupting + timer triggers):** a **non-interrupting**
+> trigger activates its handler as a parallel (counted) child of the scope and leaves the
+> main flow running; a **message** trigger then re-arms a fresh subscription
+> (`armEventSubTrigger`) so a later message fires it again, while a **timer** re-arms only
+> if its schedule recurs. **Timer-triggered** event subprocesses run: the trigger's
+> `OnActivated` already armed a one-shot timer, and the firing path drives it to
+> `Completing` → the handler — so an interrupting duration/date timer works with no new
+> code. A **recurring** (cycle) non-interrupting timer fires the scheduled number of times
+> via `fireRecurringEventSub` — the event-subprocess analog of `fireRecurringBoundary`:
+> it activates a handler run without completing the (uncounted) trigger and arms the next
+> occurrence, counting an `Rn` cycle down and re-anchoring to the clock (I6);
+> `handleTimerTriggered` routes to it via `recurringEventSubSchedule`. The handler drains
+> the parent scope through the existing `subProcessBehavior.OnCompleting` event-sub branch,
+> and the scope completes only once the main flow *and* every handler run have drained.
+> Verified: a non-interrupting message fires twice (two handler runs, main flow untouched)
+> and the instance completes after the main flow does; an interrupting timer tears the main
+> flow down and runs the handler; a non-interrupting `R2` cycle timer fires exactly three
+> times then stops re-arming; and a crash+replay between a re-arm and the next message still
+> runs the handler after restart.
 
 ## Context and problem statement
 
