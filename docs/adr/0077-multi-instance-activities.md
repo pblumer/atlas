@@ -4,10 +4,10 @@
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phase 1 (compiler) delivered; Phases 2–5 pending. Each
-> phase lands test-first with a recovery test (ADR-0018). Multi-instance builds
-> directly on the embedded-subprocess scope lifecycle (ADR-0074) and the call-activity
-> child termination (ADR-0076); it introduces no new value type, record, counter, or
+> **Implementation status.** Phases 1–2 delivered; Phases 3–5 pending. Each phase
+> lands test-first with a recovery test (ADR-0018). Multi-instance builds directly on
+> the embedded-subprocess scope lifecycle (ADR-0074) and the call-activity child
+> termination (ADR-0076); it introduces no new value type, record, counter, or
 > recovery path.
 >
 > **Delivered (Phase 1, compiler):** a `MultiInstanceDetail` (input collection or
@@ -22,6 +22,27 @@
 > (sequential/parallel default, optional output and completion condition, cardinality
 > form), a multi-instance subprocess keeps its `TypeSubProcess` type and carries the
 > loop, and the deploy-refusal branches.
+>
+> **Delivered (Phase 2, parallel runtime):** an append-compatible
+> `ElementInstanceValue.MultiInstance uint8` role marker (0 none / 1 body / 2 inner).
+> A flow into a multi-instance activity activates its **body** (`activateElement` sets
+> the marker); `handleElementActivating` routes the body to `seedMultiInstance` instead
+> of the node's real behavior. The body evaluates the input collection (or cardinality)
+> once over its scope chain and seeds N **inner** element instances of the same node,
+> each scoped under the body (`FlowScopeKey = body key`) with its `loopCounter`
+> (1-based) and, when named, its input element written as variable events into the
+> inner's own scope. Each inner runs the node's real behavior (a service task parks on
+> its own job); `handleElementCompleting` routes an inner through
+> `finishMultiInstanceIteration` — drop the iteration's locals, `Completed` (which
+> decrements the body's `activeChildren`), then `completeScope(body)` — so an inner
+> never takes an outgoing flow. When the last iteration drains, the body completes like
+> any activity and takes its single outgoing flow. An empty collection / non-positive
+> cardinality seeds nothing and completes the body at once. Recovery is inherited: the
+> collection is evaluated only live, and the inner `Activated`/variable events plus the
+> merge counter rebuild the iterations on replay. Verified: parallel fan-out over a
+> three-element collection with per-iteration `item`/`loopCounter` bindings and a join;
+> the cardinality form; the empty and degenerate-collection edges; and a crash+replay
+> with every iteration parked on its job that still joins and finishes.
 
 ## Context and problem statement
 
