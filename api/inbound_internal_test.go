@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -85,6 +86,9 @@ func (f *fakeClioReader) ReadEvents(_ context.Context, r clio.ReadEventsRequest)
 	for _, e := range f.events {
 		if seen {
 			out = append(out, e)
+			if r.Limit > 0 && len(out) >= r.Limit {
+				break // honor clio's Limit: a poll reads at most this many events
+			}
 			continue
 		}
 		if e.ID == r.AfterID {
@@ -150,6 +154,53 @@ func TestInboundBridgeStartsAndDedupes(t *testing.T) {
 	srv.pollInbound(context.Background())
 	if n := activeInstances(t, srv); n != 2 {
 		t.Fatalf("after new event: active=%d, want 2", n)
+	}
+}
+
+// TestInboundBridgeBatchLimitBoundsCatchUp proves the per-poll ReadEvents cap
+// (WithInboundBatchLimit) bounds how many backlogged events one poll republishes, so
+// a watch pointed at a subject with a large backlog drains as bounded catch-up across
+// ticks instead of starting every backlogged event's process in one run-loop batch —
+// the reported /employees flood (ADR-0075).
+func TestInboundBridgeBatchLimitBoundsCatchUp(t *testing.T) {
+	srv, _ := newValidateServer(t, WithInboundPollInterval(0), WithInboundBatchLimit(2))
+	x := deployTestHarness{t, srv.Handler()}
+
+	pid := x.mkProject("Onboard")
+	x.saveDraft(pid, employeeStartBPMN)
+	if code, b := x.do(http.MethodPost, "/api/v1/projects/"+pid+"/deploy", ""); code != http.StatusOK {
+		t.Fatalf("deploy: %d %s", code, b)
+	}
+	code, cb := x.do(http.MethodPost, "/api/v1/connectors", `{"name":"events","kind":"clio","endpoint":"http://x"}`)
+	if code != http.StatusOK {
+		t.Fatalf("create connector: %d %s", code, cb)
+	}
+	var conn connector
+	_ = json.Unmarshal(cb, &conn)
+	if code, sb := x.do(http.MethodPost, "/api/v1/connectors/"+conn.ID+"/inbound-subscriptions",
+		`{"watchedSubject":"/employees","recursive":true,"messageName":"employee.created"}`); code != http.StatusOK {
+		t.Fatalf("create subscription: %d %s", code, sb)
+	}
+
+	// Five backlogged events on the watched subtree.
+	fake := &fakeClioReader{}
+	for i := 1; i <= 5; i++ {
+		fake.events = append(fake.events, clio.InboundEvent{
+			ID: strconv.Itoa(i), Subject: "/employees/E-" + strconv.Itoa(i), Type: "employee.created",
+		})
+	}
+	srv.do(func() { srv.clioRegistry.Replace(map[string]clio.Client{"events": fake}) })
+
+	// Each poll republishes at most the cap (2), advancing the cursor; the backlog
+	// drains 2, 2, 1 across ticks — never all five in one batch.
+	for _, want := range []int{2, 4, 5, 5} {
+		srv.pollInbound(context.Background())
+		if n := activeInstances(t, srv); n != want {
+			t.Fatalf("active after poll = %d, want %d (bounded catch-up)", n, want)
+		}
+	}
+	if fake.lastReq.Limit != 2 {
+		t.Fatalf("ReadEvents Limit = %d, want 2 (per-poll cap forwarded to clio)", fake.lastReq.Limit)
 	}
 }
 

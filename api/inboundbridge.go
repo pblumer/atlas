@@ -11,6 +11,16 @@ import (
 	"github.com/pblumer/atlas/model"
 )
 
+// defaultInboundBatch caps how many clio events a single poll of one subscription
+// reads and republishes as Atlas messages (ADR-0075). It exists so a watch pointed
+// at a subject with a large backlog cannot hand the single-writer run loop one
+// unbounded publish storm — every matching event starts a process, so an
+// N-event backlog is N instances in one batch without this bound. With the cap a
+// backlog drains as bounded catch-up: each tick advances the resume cursor by at
+// most this many events and the next tick continues. Overridable per server with
+// WithInboundBatchLimit (tests use a tiny value).
+const defaultInboundBatch = 256
+
 // inboundBridge polls the configured clio inbound subscriptions and republishes new
 // clio events as Atlas messages, so an external event both starts message-start
 // processes and wakes waiting message-catch instances (ADR-0075). It mirrors the
@@ -56,6 +66,7 @@ func (s *Server) pollInbound(ctx context.Context) {
 			Subject:   sb.rec.WatchedSubject,
 			AfterID:   sb.rec.LastEventID,
 			Recursive: sb.rec.Recursive,
+			Limit:     s.inboundBatch,
 		})
 		if err != nil || len(events) == 0 {
 			continue // transient read failure or nothing new; retry next tick
