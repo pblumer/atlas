@@ -71,6 +71,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeTimerStartEvent] = startEventBehavior{}
 	p.behaviors[compiler.TypeMessageEndEvent] = messageEndEventBehavior{}
 	p.behaviors[compiler.TypeSubProcess] = subProcessBehavior{}
+	p.behaviors[compiler.TypeCallActivity] = callActivityBehavior{}
 }
 
 // --- command handlers ---
@@ -84,8 +85,9 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 	// command so the instance records which message key it began with (ADR-0020);
 	// CreatedAt is stamped from the event timestamp in applyToState.
 	c.AppendProcessInstanceEvent(piKey, model.IntentActivated, model.ProcessInstanceValue{
-		ProcessDefKey:  defKey,
-		CorrelationKey: c.cmd.Value.process.CorrelationKey,
+		ProcessDefKey:            defKey,
+		CorrelationKey:           c.cmd.Value.process.CorrelationKey,
+		ParentElementInstanceKey: c.cmd.Value.process.ParentElementInstanceKey,
 	})
 
 	// Seed the instance's start variables under its scope before any element runs.
@@ -223,7 +225,13 @@ func handleElementCompleting(c *ProcessingContext) {
 	// dropped locals (ADR-0068). Gated so a mapping-free activity keeps the pre-0068
 	// behaviour with no scope-drop scan.
 	if hasIOMappings(c.process(ei.ProcessDefKey), ei.ElementId) {
-		applyOutputMappings(c, c.cmd.Key, ei)
+		// A call activity's output mappings are applied against the child instance's
+		// variables when the child completes (resumeCaller), not against this
+		// element's local scope, so the generic promotion is skipped for it — but its
+		// input-mapped local scope is still dropped (ADR-0076).
+		if c.process(ei.ProcessDefKey).Node(ei.ElementId).Type != compiler.TypeCallActivity {
+			applyOutputMappings(c, c.cmd.Key, ei)
+		}
 		dropLocalScope(c, c.cmd.Key)
 	}
 	c.p.behavior(ei.BpmnElementType).OnCompleting(c, c.cmd.Key, ei)
@@ -690,9 +698,13 @@ func completeScope(c *ProcessingContext, scope uint64) {
 		c.AppendElementCommand(scope, model.IntentCompleting, *ei)
 		return
 	}
-	// The process-instance root scope: the instance itself completes.
+	// The process-instance root scope: the instance itself completes. If it is a
+	// child of a call activity, its completion resumes the caller (ADR-0076).
 	if pi := c.GetProcessInstance(scope); pi != nil {
 		c.AppendProcessInstanceEvent(scope, model.IntentCompleted, *pi)
+		if pi.ParentElementInstanceKey != 0 {
+			resumeCaller(c, scope, pi.ParentElementInstanceKey)
+		}
 	}
 }
 
@@ -1771,6 +1783,75 @@ func (subProcessBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *mod
 	// one without mappings is drained here (ADR-0074).
 	dropLocalScope(c, key)
 	completeAndTakeFlows(c, key, ei)
+}
+
+// callActivityBehavior runs a call activity: on activation it starts a separate
+// process as a child instance (in this partition) seeded with the variables to
+// pass in, then parks — it does not complete until the child does. Variables in:
+// the input mappings (evaluated generically into this element's local scope on
+// activation) plus, when propagateAllParentVariables is on, all the caller's
+// instance variables; the mapped locals win on name clash. The child records this
+// element instance as its parent so its completion resumes the caller (see
+// completeScope / resumeCaller). Variables out are applied there, not here, so the
+// generic output-mapping path is skipped for a call activity in
+// handleElementCompleting (ADR-0076).
+type callActivityBehavior struct{}
+
+func (callActivityBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.CallActivity(cp.Node(ei.ElementId).Detail)
+	childDefKey, ok := c.latestDefKey(cp.Intern(detail.CalledProcessId))
+	if !ok {
+		// The called process is not deployed (yet). Park — the token stays on the
+		// call activity; a deploy-then-retry / incident is a follow-up (ADR-0076).
+		return
+	}
+	var startVars []model.VariableValue
+	if detail.PropagateAllParent {
+		c.VariablesOfScope(ei.ProcessInstanceKey, func(v model.VariableValue) {
+			startVars = append(startVars, v)
+		})
+	}
+	// The input-mapped locals are appended last so they override same-named
+	// propagated variables when re-applied to the child (last write wins).
+	c.VariablesOfScope(key, func(v model.VariableValue) {
+		startVars = append(startVars, v)
+	})
+	c.AppendCreateChildInstanceCommand(childDefKey, startVars, key)
+	// Stays Activated: no Completing until the child instance completes.
+}
+
+func (callActivityBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// resumeCaller promotes a completed child instance's variables into its caller and
+// resumes the caller's call-activity element (ADR-0076). It is called from
+// completeScope when a completing instance has a parent element instance, and is a
+// pure function of persisted state (the child's ParentElementInstanceKey, the
+// child's variables, the caller's compiled output mappings), so recovery
+// reconstructs it identically. A caller already gone (interrupted) is a no-op.
+func resumeCaller(c *ProcessingContext, childScope, callerKey uint64) {
+	caller := c.GetElementInstance(callerKey)
+	if caller == nil {
+		return
+	}
+	callerCp := c.process(caller.ProcessDefKey)
+	detail := callerCp.CallActivity(callerCp.Node(caller.ElementId).Detail)
+	if detail.PropagateAllChild {
+		// All child variables merge into the caller's instance scope.
+		c.VariablesOfScope(childScope, func(v model.VariableValue) {
+			v.ScopeKey = caller.ProcessInstanceKey
+			c.AppendVariableEvent(model.IntentVariableCreated, v)
+		})
+	} else {
+		// Only the output mappings escape: each source is FEEL over the child's
+		// variables, promoted to the caller's instance scope.
+		for _, m := range callerCp.IOOutputs(caller.ElementId) {
+			c.AppendVariableEvent(model.IntentVariableCreated, evalMapping(c, callerCp, m, childScope, caller.ProcessInstanceKey))
+		}
+	}
+	c.AppendElementCommand(callerKey, model.IntentCompleting, *caller)
 }
 
 type endEventBehavior struct{}

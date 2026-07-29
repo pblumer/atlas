@@ -4,13 +4,32 @@
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phase 1 delivered (compiler); Phases 2–3 pending. The
-> work is phased, each phase test-first with a recovery test (ADR-0018): compiler
-> parse of `<callActivity>` + `zeebe:calledElement` → runtime (spawn a child
-> instance, link it to the caller, pass variables in/out, resume the caller on
-> completion) → termination propagation and the Modeler editor. Cross-partition
-> call activities are **out of scope** (ADR-0006, Milestone 5); the child runs in
-> the caller's partition.
+> **Implementation status.** Phases 1–2 delivered — a call activity runs end to end:
+> it starts the called process as a child instance, passes variables in and out, and
+> resumes the caller on the child's completion. Phase 3 (termination propagation,
+> Modeler editor) pending. Each phase was test-first with a recovery test (ADR-0018).
+> Cross-partition call activities are **out of scope** (ADR-0006, Milestone 5); the
+> child runs in the caller's partition.
+>
+> **Delivered (Phase 1, compiler):** `TypeCallActivity` + `CallActivityDetail`
+> (called process id, binding, `propagateAll*` flags); parse of `<callActivity>` /
+> `<zeebe:calledElement>` and its I/O mappings; `processId` required.
+>
+> **Delivered (Phase 2, runtime):** `callActivityBehavior` — on activation it
+> resolves the called def key (a `processId → latest defKey` index maintained on the
+> `Processor` in `Deploy`, rebuilt oldest-first on recovery), builds the child's
+> start variables (all caller variables when `propagateAllParent`, plus the
+> input-mapped locals, which win on name clash — or *only* the input-mapped locals
+> when propagation is off, i.e. isolation), and spawns the child via
+> `AppendCreateChildInstanceCommand`, then parks. `model.ProcessInstanceValue` gains
+> an append-compatible `ParentElementInstanceKey`; the child records it. When the
+> child completes, `completeScope`'s root branch calls `resumeCaller`, which promotes
+> the child's variables to the caller (all when `propagateAllChild`, else the output
+> mappings evaluated over the child's variables) and resumes the caller's call-activity
+> element. The generic output-mapping promotion is skipped for a call activity (its
+> outputs come from the child, not a local scope). Verified: isolation both ways,
+> propagate-all both ways, and a child parked on a job that recovers across a crash
+> and still resumes its caller.
 
 ## Context and problem statement
 

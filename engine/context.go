@@ -19,6 +19,14 @@ type ProcessingContext struct {
 
 // process returns the immutable compiled definition (invariant I5: read by
 // index, never parsed).
+// latestDefKey resolves a bpmn process id to the newest deployed definition key
+// for a call activity's `latest` binding; ok is false if no such process is
+// deployed (ADR-0076).
+func (c *ProcessingContext) latestDefKey(processId string) (uint64, bool) {
+	k, ok := c.p.latestProcess[processId]
+	return k, ok
+}
+
 func (c *ProcessingContext) process(defKey uint64) *compiler.CompiledProcess {
 	return c.p.processes[defKey]
 }
@@ -305,6 +313,19 @@ func (c *ProcessingContext) AppendCreateInstanceCommand(defKey uint64, vars []mo
 		ValueType: model.VTProcessInstance,
 		Intent:    model.IntentActivating,
 		Value:     inflightValue{process: model.ProcessInstanceValue{ProcessDefKey: defKey, CorrelationKey: correlationKey}},
+		StartVars: vars,
+		SourcePos: c.lastPos,
+	})
+}
+
+// AppendCreateChildInstanceCommand is AppendCreateInstanceCommand for a call
+// activity: the created instance records the caller's call-activity element
+// instance as its parent, so on completion it resumes that element (ADR-0076).
+func (c *ProcessingContext) AppendCreateChildInstanceCommand(defKey uint64, vars []model.VariableValue, parentElementKey uint64) {
+	c.p.followups = append(c.p.followups, Command{
+		ValueType: model.VTProcessInstance,
+		Intent:    model.IntentActivating,
+		Value:     inflightValue{process: model.ProcessInstanceValue{ProcessDefKey: defKey, ParentElementInstanceKey: parentElementKey}},
 		StartVars: vars,
 		SourcePos: c.lastPos,
 	})
