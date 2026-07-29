@@ -207,7 +207,10 @@ const TOPNAV = {
     { name: "Logs", route: "#/console/logs" },
     { name: "Organization", route: "#/console/org" },
   ],
-  modeler: [{ name: "Home", route: "#/modeler" }],
+  modeler: [
+    { name: "Home", route: "#/modeler" },
+    { name: "Marketplace", route: "#/modeler/marketplace" },
+  ],
   operations: [
     { name: "Instances", route: "#/operations" },
     { name: "Decisions", route: "#/operations/decisions" },
@@ -1114,6 +1117,47 @@ async function shareProject(proj, reload) {
 // scope endpoints. It keeps a local copy of the project, updated from each
 // mutation's response so the dialog reflects server truth without a full refetch;
 // closing runs reload() once to refresh the underlying page (badges and gating).
+// confirmTerminateAll gates a bulk terminate behind a modal whose friction scales
+// with the blast radius: a plain confirm for a small count, and a type-the-count gate
+// above 50 so draining a flooded process can't be a single click. Resolves true only
+// when confirmed (and, when gated, the exact count was typed).
+function confirmTerminateAll(name, count) {
+  const TYPE_THRESHOLD = 50;
+  return new Promise((resolve) => {
+    const gated = count > TYPE_THRESHOLD;
+    const ov = document.createElement("div");
+    ov.className = "modal-ov";
+    ov.innerHTML = `
+      <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-label="Confirm termination">
+        <div class="modal-head"><h2>Terminate ${count} running instance${count === 1 ? "" : "s"}?</h2></div>
+        <div class="modal-body">
+          <p class="muted" style="margin:0 0 10px">This discards each token and moves every running instance of <b>${esc(name)}</b> (across all its versions) to the finished list as <b>terminated</b>. This can't be undone.</p>
+          ${gated ? `<label class="field"><span>Type <b>${count}</b> to confirm</span>
+            <input id="term-all-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="${count}"/></label>` : ""}
+        </div>
+        <div class="modal-foot">
+          <button class="btn neutral" data-cancel>Cancel</button>
+          <button class="btn danger" data-confirm ${gated ? "disabled" : ""}>Terminate ${count}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    const input = ov.querySelector("#term-all-input");
+    const confirmBtn = ov.querySelector("[data-confirm]");
+    const close = (ok) => { ov.remove(); document.removeEventListener("keydown", onKey); resolve(ok); };
+    const onKey = (e) => { if (e.key === "Escape") close(false); };
+    document.addEventListener("keydown", onKey);
+    if (input) {
+      input.addEventListener("input", () => { confirmBtn.disabled = input.value.trim() !== String(count); });
+      input.focus();
+    } else {
+      confirmBtn.focus();
+    }
+    ov.querySelector("[data-cancel]").addEventListener("click", () => close(false));
+    confirmBtn.addEventListener("click", () => { if (!confirmBtn.disabled) close(true); });
+    ov.addEventListener("click", (e) => { if (e.target === ov) close(false); });
+  });
+}
+
 function openShareModal(proj, users, degraded, reload) {
   let p = proj;
   const byId = new Map((users || []).map((u) => [u.id, u]));
@@ -1783,16 +1827,47 @@ async function viewInstances() {
       const collab = g.latest.collaborationKey
         ? `<a class="replay-link" href="#/operations/c/${g.latest.collaborationKey}" title="Replay the message flow between pools">⇄ Replay</a>`
         : "";
+      const termAll = s.running
+        ? `<button class="btn ghost danger sm" data-term-proc="${esc(g.processId)}" title="Terminate every running instance of this process">Terminate all running</button>`
+        : "";
       return `<tr>
         <td><a href="#/operations/p/${g.latest.key}"><b>${esc(label)}</b></a>${collab}${sub}</td>
         <td>${versions}</td>
         <td>${running}</td>
         <td>${s.finished || '<span class="muted">0</span>'}</td>
         <td class="muted">${esc(fmtNano(s.latestCompletedAt))}</td>
-        <td style="text-align:right">${s.running ? `<button class="btn ghost danger" data-act="cancelrun" data-pid="${esc(g.processId)}">Cancel running</button> ` : ""}<a class="btn ghost" href="#/operations/p/${g.latest.key}">Open</a></td>
+        <td style="text-align:right">${termAll}<a class="btn ghost" href="#/operations/p/${g.latest.key}">Open</a></td>
       </tr>`;
     }).join("");
   }
+
+  // Bulk-terminate every running instance of a process straight from the overview —
+  // the coarse "drain this process" action, no drilling into a version. It drains each
+  // deployed version in bounded batches (the server caps per call, reports remaining).
+  tbody.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-term-proc]");
+    if (!b) return;
+    const g = allGroups.find((x) => x.processId === b.dataset.termProc);
+    const s = summary.get(b.dataset.termProc) || { running: 0 };
+    if (!g || !s.running) return;
+    if (!(await confirmTerminateAll(g.latest.name || g.processId, s.running))) return;
+    b.disabled = true;
+    try {
+      let total = 0;
+      for (const v of g.versions) {
+        for (let guard = 0; guard < 1000; guard++) {
+          const res = await api("POST", `/api/v1/processes/${v.key}/cancel-instances`);
+          total += res.canceled || 0;
+          if (!res.remaining) break;
+        }
+      }
+      toast(`Terminated ${total} instance${total === 1 ? "" : "s"}`, "ok");
+      await load();
+    } catch (err) {
+      toast("terminate failed: " + err.message, "err");
+      b.disabled = false;
+    }
+  });
 
   const load = async () => {
     try {
@@ -1810,36 +1885,6 @@ async function viewInstances() {
   document.getElementById("refresh").addEventListener("click", load);
   document.getElementById("proc-filter").addEventListener("input", renderRows);
 
-  // Bulk-cancel every running instance of a process — all of its versions — by
-  // repeatedly draining each version's bounded cancel endpoint until nothing remains.
-  // This is the operator's one-click way to clear a runaway definition (the reported
-  // flood) without the API or CLI.
-  async function cancelAllRunning(processId) {
-    const group = allGroups.find((g) => g.processId === processId);
-    if (!group) return;
-    const total = (summary.get(processId) || {}).running || 0;
-    const name = group.latest.name || processId;
-    if (!window.confirm(`Cancel all running instances of “${name}”? This terminates ${total.toLocaleString()} instance(s) across ${group.versions.length} version(s) and cannot be undone.`)) return;
-    let canceled = 0;
-    try {
-      for (const v of group.versions) {
-        for (;;) {
-          const r = await api("POST", `/api/v1/processes/${v.key}/cancel-instances?limit=20000`);
-          canceled += r.canceled || 0;
-          toast(`Cancelling “${name}”… ${canceled.toLocaleString()} terminated`, "");
-          if (!r.remaining) break;
-        }
-      }
-      toast(`Cancelled ${canceled.toLocaleString()} instance(s) of “${name}”`, "ok");
-    } catch (e) {
-      toast(`Cancel failed after ${canceled.toLocaleString()}: ${e.message}`, "err");
-    }
-    await load();
-  }
-  tbody.addEventListener("click", (e) => {
-    const b = e.target.closest('[data-act="cancelrun"]');
-    if (b) cancelAllRunning(b.dataset.pid);
-  });
   document.getElementById("inst-jump").addEventListener("submit", (e) => {
     e.preventDefault();
     const key = (document.getElementById("inst-key").value || "").trim();
@@ -2591,8 +2636,19 @@ async function viewTasks(preselectKey) {
   async function load() {
     try {
       state.tasks = await api("GET", "/api/v1/tasks");
+      // A deep-linked task (…/tasks/t/{key}, e.g. from the Operations live view) can
+      // sit outside the capped task-list page during a flood. Rather than silently
+      // dropping the selection — which left the form unreachable — fetch that one task
+      // by key and fold it in, so it stays selectable and its form mounts. A 404 means
+      // there is no open task with that key (e.g. it was completed): clear it then.
+      if (state.selected != null && !state.tasks.some((t) => t.key === state.selected)) {
+        try {
+          state.tasks.push(await api("GET", "/api/v1/tasks/" + encodeURIComponent(state.selected)));
+        } catch {
+          state.selected = null;
+        }
+      }
       state.tasks.sort(taskOrder);
-      if (!state.tasks.some((t) => t.key === state.selected)) state.selected = null;
       renderAll();
     } catch (e) {
       listEl.innerHTML = `<li class="tasks-empty err">Failed to load tasks: ${esc(e.message)}</li>`;
@@ -3023,6 +3079,134 @@ function setTitle(label) {
 // routeTitle derives a tab title from the route alone (set immediately on navigation).
 // Views with a dynamic subject — a diagram, an instance, a decision — refine it once
 // their data loads (see setTitle calls in the editor/live/replay mounts).
+// viewMarketplace is the community marketplace gallery (ADR-0081): browse the
+// curated catalog of connectors, service tasks and script tasks and install one
+// into this server's template store. The trust split is the load-bearing UI
+// signal — a data-only connector/service task installs in one click ("Data only"),
+// while a script task carries code, so it reads "Runs code" and installs through a
+// review affordance (and is admin-gated server-side). No secret ever travels in a
+// shared package.
+async function viewMarketplace() {
+  view.innerHTML = `
+    <div class="between">
+      <h1>Marketplace</h1>
+      <button class="btn neutral" id="mkt-refresh">Refresh</button>
+    </div>
+    <p class="muted">Connectors, service tasks and scripts the community already built,
+    packaged as element templates. Install one and it lands in your palette ready to
+    configure. Data-only connectors install in a click; a script task carries code, so it
+    is imported for review. Credentials never travel in a shared package — you connect
+    those on your server.</p>
+    <div class="ops-toolbar">
+      <input id="mkt-q" class="filter-input" type="search" placeholder="Search connectors, tasks and scripts…" aria-label="Search the marketplace">
+      <div class="seg" id="mkt-kinds" role="tablist">
+        <button class="active" data-kind="" role="tab">All</button>
+        <button data-kind="connector" role="tab">Connectors</button>
+        <button data-kind="service-task" role="tab">Service tasks</button>
+        <button data-kind="script-task" role="tab">Script tasks</button>
+      </div>
+    </div>
+    <div id="mkt-grid" class="mkt-grid"><div class="card empty">Loading…</div></div>`;
+
+  const grid = document.getElementById("mkt-grid");
+  const kindLabel = { "connector": "Connector", "service-task": "Service task", "script-task": "Script task" };
+  let packages = [];
+  let installed = new Set();
+  let kind = "";
+
+  const render = () => {
+    const q = document.getElementById("mkt-q").value.trim().toLowerCase();
+    const list = packages.filter((p) => {
+      if (kind && p.kind !== kind) return false;
+      if (q && !(`${p.title} ${p.description} ${p.author}`).toLowerCase().includes(q)) return false;
+      return true;
+    });
+    if (!list.length) {
+      grid.innerHTML = `<div class="card empty">Nothing matches. Try another term or tab.</div>`;
+      return;
+    }
+    grid.innerHTML = list.map((p) => {
+      const isInstalled = installed.has(p.id);
+      const trust = p.carriesCode
+        ? '<span class="pill warn"><span class="dot"></span>Runs code</span>'
+        : '<span class="pill ok"><span class="dot"></span>Data only</span>';
+      const action = isInstalled
+        ? `<button class="btn ghost danger" data-act="uninstall" data-id="${esc(p.id)}">Remove</button>`
+        : p.carriesCode
+          ? `<button class="btn neutral" data-act="install" data-id="${esc(p.id)}">Review &amp; install</button>`
+          : `<button class="btn" data-act="install" data-id="${esc(p.id)}">Install</button>`;
+      const installedTag = isInstalled ? '<span class="pill ok"><span class="dot"></span>Installed</span>' : "";
+      return `<div class="mkt-card card">
+        <div class="mkt-head">
+          <div class="mkt-title">
+            <h3>${esc(p.title)}</h3>
+            <div class="muted mkt-author">${esc(p.author)}</div>
+          </div>
+          <span class="chip">${esc(kindLabel[p.kind] || p.kind)}</span>
+        </div>
+        <p class="mkt-desc">${esc(p.description)}</p>
+        <div class="mkt-meta">
+          <span class="chip">v${esc(p.version)}</span>
+          <span class="chip">Atlas ${esc(p.engineCompat)}</span>
+          ${trust}
+          ${installedTag}
+        </div>
+        <div class="mkt-foot">${action}</div>
+      </div>`;
+    }).join("");
+  };
+
+  const load = async () => {
+    grid.innerHTML = `<div class="card empty">Loading…</div>`;
+    try {
+      const [pkgs, inst] = await Promise.all([
+        api("GET", "/api/v1/marketplace/packages"),
+        api("GET", "/api/v1/marketplace/installed"),
+      ]);
+      packages = pkgs || [];
+      installed = new Set((inst || []).map((r) => r.id));
+      render();
+    } catch (e) {
+      grid.innerHTML = `<div class="card empty">${esc(e.message)}</div>`;
+    }
+  };
+
+  grid.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+    const id = btn.dataset.id;
+    const pkg = packages.find((p) => p.id === id);
+    const name = pkg ? pkg.title : "Package";
+    btn.disabled = true;
+    try {
+      if (btn.dataset.act === "install") {
+        const res = await api("POST", `/api/v1/marketplace/packages/${encodeURIComponent(id)}/install`);
+        installed.add(id);
+        toast(res && res.reviewRequired ? `${name} imported for review` : `${name} installed`, "ok");
+      } else {
+        await api("DELETE", `/api/v1/marketplace/installed/${encodeURIComponent(id)}`);
+        installed.delete(id);
+        toast(`${name} removed`, "ok");
+      }
+      render();
+    } catch (err) {
+      toast(err.message, "err");
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById("mkt-q").addEventListener("input", render);
+  document.getElementById("mkt-kinds").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-kind]");
+    if (!b) return;
+    kind = b.dataset.kind;
+    document.querySelectorAll("#mkt-kinds button").forEach((x) => x.classList.toggle("active", x === b));
+    render();
+  });
+  document.getElementById("mkt-refresh").addEventListener("click", load);
+  await load();
+}
+
 function routeTitle(path) {
   const opsInst = path.match(/^#\/operations\/i\/(\d+)$/);
   if (opsInst) return `Instance ${opsInst[1]} · Operations`;
@@ -3037,6 +3221,7 @@ function routeTitle(path) {
     [/^#\/modeler\/dmn\//, "Decision · Modeler"],
     [/^#\/modeler\/(d|draft)\//, "Diagram · Modeler"],
     [/^#\/modeler\/p\//, "Project · Modeler"],
+    [/^#\/modeler\/marketplace$/, "Marketplace · Modeler"],
     [/^#\/modeler$/, "Modeler"],
     [/^#\/tasks\/start$/, "Start a process · Tasks"],
     [/^#\/tasks\/t\//, "Task · Tasks"],
@@ -3087,6 +3272,7 @@ async function route() {
     if (path === "#/console/logs") return await viewConsoleLogs();
     if (path === "#/console/org") return await viewConsoleOrg();
     if (path === "#/modeler") return await viewModelerHome();
+    if (path === "#/modeler/marketplace") return await viewMarketplace();
     const pd = path.match(/^#\/modeler\/p\/(.+)$/);
     if (pd) return await viewProjectDetail(decodeURIComponent(pd[1]));
     const dnew = path.match(/^#\/modeler\/new(?:\/p\/(.+))?$/);

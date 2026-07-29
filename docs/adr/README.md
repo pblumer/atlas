@@ -90,7 +90,8 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0081](0081-community-marketplace-for-connectors-and-tasks.md) | A community marketplace for connectors, service tasks, and script tasks | Proposed |
 | [0082](0082-singleton-message-start.md) | Singleton message start — at most one live instance per correlation key | Accepted |
 | [0083](0083-o1-instance-summary.md) | An O(1) instances summary — per-definition finished-count and last-activity counters | Accepted |
-| [0084](0084-process-instance-ttl.md) | Process-instance TTL — self-cleaning expiry via the due-timer index | Proposed |
+| [0084](0084-csv-batch-validation.md) | CSV batch validation — upload a file, validate every row against business rules (DMN), correct the failures | Proposed |
+| [0085](0085-process-instance-ttl.md) | Process-instance TTL — self-cleaning expiry via the due-timer index | Proposed |
 
 ## Status values
 
