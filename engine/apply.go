@@ -20,6 +20,11 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err := tx.PutProcessInstance(h.Key, &v.process); err != nil {
 				return err
 			}
+			// Maintain the per-definition active-instance counter so the runtime view
+			// reads it in O(1) rather than scanning every instance (ADR-0080).
+			if err := tx.IncDefInstanceCount(v.process.ProcessDefKey); err != nil {
+				return err
+			}
 			// A message-start instance carries the correlation key it began with; count
 			// it as one live instance for that (definition, key) so a singleton message
 			// start can gate on it (ADR-0082). Event-driven, so replay rebuilds it (I4).
@@ -44,6 +49,9 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 				return err
 			}
 			if err := tx.DeleteProcessInstance(h.Key); err != nil {
+				return err
+			}
+			if err := tx.DecDefInstanceCount(v.process.ProcessDefKey); err != nil {
 				return err
 			}
 			// Releasing a message-start instance re-opens its correlation key so a
@@ -77,7 +85,16 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err := tx.RecordElementStep(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId); err != nil {
 				return err
 			}
-			return tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, 1)
+			if err := tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, 1); err != nil {
+				return err
+			}
+			// Maintain the per-(definition, element) live-token counter and the
+			// cumulative-visit counter so the runtime overlay reads them in
+			// O(elements) rather than scanning every instance (ADR-0080).
+			if err := tx.IncElementToken(v.element.ProcessDefKey, v.element.ElementId); err != nil {
+				return err
+			}
+			return tx.IncElementVisitAgg(v.element.ProcessDefKey, v.element.ElementId)
 		case model.IntentCompleted, model.IntentTerminated:
 			if err := tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, 2); err != nil {
 				return err
@@ -91,7 +108,10 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err := tx.DeleteElementInstance(h.Key, &v.element); err != nil {
 				return err
 			}
-			return tx.DecrementActiveChildren(v.element.FlowScopeKey)
+			if err := tx.DecrementActiveChildren(v.element.FlowScopeKey); err != nil {
+				return err
+			}
+			return tx.DecElementToken(v.element.ProcessDefKey, v.element.ElementId)
 		}
 
 	case model.VTJob:

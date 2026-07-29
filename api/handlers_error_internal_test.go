@@ -121,6 +121,9 @@ func TestScanHandlersReportDecodeErrors(t *testing.T) {
 		{http.MethodGet, "/api/v1/instances"},
 		{http.MethodGet, "/api/v1/instances/summary"},
 		{http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/cancel-instances", dep.Key)},
+		// The single-instance runtime overlay scans the process instances (ADR-0080),
+		// so the undecodable record surfaces as a 500 there too.
+		{http.MethodGet, fmt.Sprintf("/api/v1/processes/%d/runtime?instance=99", dep.Key)},
 	} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, nil))

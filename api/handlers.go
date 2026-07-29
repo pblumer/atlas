@@ -787,47 +787,67 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			return e
 		}
 
-		// Live tokens: element instances sitting on an element right now.
-		scanErr = s.store.ActiveElementInstances(func(_ uint64, v *model.ElementInstanceValue) error {
-			if v.ProcessDefKey != key {
+		if instanceFilter == 0 {
+			// Aggregate over the whole definition: read the maintained per-element
+			// and per-definition counters (ADR-0080). This is O(elements), never a
+			// scan over every instance, so the view stays responsive — and the run
+			// loop unblocked — at hundreds of thousands of instances. The reads nest
+			// so a failure short-circuits to the single error check below.
+			if scanErr = s.store.ElementLiveTokens(key, func(elementId int32, count int64) error {
+				if count == 0 {
+					return nil
+				}
+				if e := get(elementId); e != nil {
+					e.Tokens += int(count)
+					resp.Tokens += int(count)
+				}
 				return nil
+			}); scanErr == nil {
+				if scanErr = s.store.ElementVisitTotals(key, func(elementId int32, count int64) error {
+					if e := get(elementId); e != nil {
+						e.Visits += int(count)
+					}
+					return nil
+				}); scanErr == nil {
+					resp.Instances, scanErr = s.store.DefInstanceCount(key)
+				}
 			}
-			if instanceFilter != 0 && v.ProcessInstanceKey != instanceFilter {
+		} else {
+			// Isolating one instance on the diagram (a deliberate single-instance
+			// action, not the default view): the overlay walks instances filtered to
+			// this one. Making this path sublinear too is a follow-up to ADR-0080 (the
+			// aggregate default view above is what mattered for scale).
+			if scanErr = s.store.ActiveElementInstances(func(_ uint64, v *model.ElementInstanceValue) error {
+				if v.ProcessDefKey != key || v.ProcessInstanceKey != instanceFilter {
+					return nil
+				}
+				if e := get(v.ElementId); e != nil {
+					e.Tokens++
+					resp.Tokens++
+				}
 				return nil
+			}); scanErr == nil {
+				if scanErr = s.store.ElementVisitHistory(key, instanceFilter, func(elementId int32, count int64) error {
+					if e := get(elementId); e != nil {
+						e.Visits += int(count)
+					}
+					return nil
+				}); scanErr == nil {
+					scanErr = s.store.ActiveProcessInstances(func(piKey uint64, v *model.ProcessInstanceValue) error {
+						if v.ProcessDefKey == key && piKey == instanceFilter {
+							resp.Instances++
+						}
+						return nil
+					})
+				}
 			}
-			if e := get(v.ElementId); e != nil {
-				e.Tokens++
-				resp.Tokens++
-			}
-			return nil
-		})
-		if scanErr != nil {
-			return
 		}
-		// History: every token that has ever passed through an element, so the
-		// overlay shows the flow distribution even once instances have finished.
-		scanErr = s.store.ElementVisitHistory(key, instanceFilter, func(elementId int32, count int64) error {
-			if e := get(elementId); e != nil {
-				e.Visits += int(count)
-			}
-			return nil
-		})
 		if scanErr != nil {
 			return
 		}
 		for _, bid := range order {
 			resp.Elements = append(resp.Elements, *byElement[bid])
 		}
-		scanErr = s.store.ActiveProcessInstances(func(piKey uint64, v *model.ProcessInstanceValue) error {
-			if v.ProcessDefKey != key {
-				return nil
-			}
-			if instanceFilter != 0 && piKey != instanceFilter {
-				return nil
-			}
-			resp.Instances++
-			return nil
-		})
 	})
 	switch {
 	case !found:
