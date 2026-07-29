@@ -3784,13 +3784,23 @@ export async function mountLive(root, { api, toast, key, instance }) {
       const marker = live ? "atlas-active" : "atlas-visited";
       canvas.addMarker(e.elementId, marker);
       marked.push([e.elementId, marker]);
-      const count = live ? e.tokens : e.visits;
-      const title = live
-        ? `${e.tokens} live token(s)`
-        : `${e.visits} token(s) passed through`;
+      // Two badges per element: how many tokens have already passed through
+      // (gray) and how many are live here right now (green). A visit is recorded
+      // on activation, so e.visits already counts the live tokens — the number
+      // that has moved on is the difference. Gray sits left, green right, reading
+      // past → present. Each badge is drawn only when non-zero, so a purely
+      // historical element keeps a single gray badge and a just-entered one a
+      // single green badge (no "0", never a doubled count).
+      const passed = Math.max(0, e.visits - e.tokens);
+      const grayBadge = passed > 0
+        ? `<div class="token-badge history" title="${passed} token(s) passed through">${passed}</div>`
+        : "";
+      const greenBadge = e.tokens > 0
+        ? `<div class="token-badge" title="${e.tokens} live token(s)">${e.tokens}</div>`
+        : "";
       overlays.add(e.elementId, "tokens", {
         position: { bottom: 4, right: 4 },
-        html: `<div class="token-badge${live ? "" : " history"}" title="${title}">${count}</div>`,
+        html: `<div class="token-badges">${grayBadge}${greenBadge}</div>`,
       });
       // A user-task element with a waiting job gets a clickable "Open" badge that
       // jumps to its form. One waiting task → straight to it; several (only under
