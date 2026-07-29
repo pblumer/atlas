@@ -154,6 +154,57 @@ func registerScope(
 			}
 			continue
 		}
+		// A service task bearing an <atlas:mailConnector> extension is an outbound
+		// mail connector task: it sends a model-authored message through a
+		// server-registered mail provider via the job path (ADR-0078). The provider
+		// (host, credentials) is resolved server-side by connector name, like clio;
+		// only the message (recipients, subject, body) lives in the model.
+		if cn := st.Mail; cn != nil {
+			if strings.TrimSpace(cn.Connector) == "" {
+				return fmt.Errorf("compiler: mail connector task %q needs a connector", st.Id)
+			}
+			if strings.TrimSpace(cn.To) == "" {
+				return fmt.Errorf("compiler: mail connector task %q needs a to recipient", st.Id)
+			}
+			to, err := restValue(st.Id, "to", cn.To)
+			if err != nil {
+				return err
+			}
+			cc, err := restValue(st.Id, "cc", cn.Cc)
+			if err != nil {
+				return err
+			}
+			bcc, err := restValue(st.Id, "bcc", cn.Bcc)
+			if err != nil {
+				return err
+			}
+			from, err := restValue(st.Id, "from", cn.From)
+			if err != nil {
+				return err
+			}
+			subject, err := restValue(st.Id, "subject", cn.Subject)
+			if err != nil {
+				return err
+			}
+			body, err := restValue(st.Id, "body", cn.Body)
+			if err != nil {
+				return err
+			}
+			id := b.AddMailConnectorTask(MailConfig{
+				Connector: strings.TrimSpace(cn.Connector),
+				To:        to,
+				Cc:        cc,
+				Bcc:       bcc,
+				From:      from,
+				Subject:   subject,
+				Body:      body,
+				Retries:   retries,
+			})
+			if err := register(st.Id, id); err != nil {
+				return err
+			}
+			continue
+		}
 		if st.TaskDefinition.Type == "" {
 			return fmt.Errorf("compiler: service task %q has no task definition type", st.Id)
 		}

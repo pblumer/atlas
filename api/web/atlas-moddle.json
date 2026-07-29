@@ -79,6 +79,20 @@
       ]
     },
     {
+      "name": "MailConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "to", "type": "String", "isAttr": true },
+        { "name": "cc", "type": "String", "isAttr": true },
+        { "name": "bcc", "type": "String", "isAttr": true },
+        { "name": "from", "type": "String", "isAttr": true },
+        { "name": "subject", "type": "String", "isAttr": true },
+        { "name": "body", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "HttpHeader",
       "superClass": ["Element"],
       "properties": [

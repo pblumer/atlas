@@ -16,10 +16,21 @@ import (
 // either kind resolves to a live client with its token from the vault. The
 // http.rest kind is model-authored (its endpoint lives in the model, not a record),
 // so it is not a managed kind here.
+// connectorKindMail is the outbound mail connector kind (ADR-0078): a managed
+// record of this kind resolves to a live SMTP client whose credential is read from
+// the vault. Like clio, its provider host and secret are managed here, never in the
+// model; only the message (recipients, subject, body) is model-authored.
 const (
 	connectorKindTemis = "temis"
 	connectorKindClio  = "clio"
+	connectorKindMail  = "mail"
 )
+
+// mailProviderSMTP is the only mail provider wired today (ADR-0078). It reaches
+// Google, Microsoft 365, and any standards-compliant server via SMTP submission;
+// native Gmail / Microsoft Graph API providers are additive behind the same seam. A
+// mail connector with an empty provider defaults to SMTP.
+const mailProviderSMTP = "smtp"
 
 // connector is a managed connector instance: an operator-configured, durable
 // integration Atlas delegates to (ADR-0041). It holds a name a model refers to, an
@@ -34,6 +45,14 @@ type connector struct {
 	CredentialsRef string `json:"credentialsRef,omitempty"`
 	Enabled        bool   `json:"enabled"`
 	CreatedAt      int64  `json:"createdAt"`
+	// Provider and Sender apply to a mail connector (Kind == connectorKindMail,
+	// ADR-0078). Provider selects the transport (currently only "smtp"; empty
+	// defaults to it). Sender is the SMTP auth username and the default From address
+	// a mail task falls back to when it authors no sender. Both are empty for the
+	// other kinds. As with every kind, only a credential *reference* is stored here,
+	// never the secret (I6).
+	Provider string `json:"provider,omitempty"`
+	Sender   string `json:"sender,omitempty"`
 }
 
 // connectorStore is a durable store for managed connector instances, one JSON file

@@ -236,6 +236,11 @@ const CONNECTORS = [
     desc: "Calls a model-authored REST endpoint from a service task off the processor loop — method, URL, headers, query parameters, and basic/bearer/apiKey auth (secrets resolved server-side) — writing the JSON response into a result variable. Authored via the REST Outbound Connector service-task type.",
     refs: "ADR-0036 · ADR-0041 · ADR-0067", status: "active", statusLabel: "embedded",
   },
+  {
+    id: "mail", name: "Mail", kind: "Outbound e-mail",
+    desc: "Sends an e-mail from a service task off the processor loop via a managed SMTP provider (Google, Microsoft 365, or any server). Recipients, subject, and body are model-authored (FEEL-capable); the provider host, credentials, and default sender are managed below and resolved from the vault. Authored via the E-Mail Outbound Connector service-task type.",
+    refs: "ADR-0041 · ADR-0078", status: "active", statusLabel: "configurable",
+  },
 ];
 
 // ---------- Shell ----------
@@ -1309,13 +1314,27 @@ function wireConnectorManagement(connectors) {
     newBtn.addEventListener("click", () => {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
-      slot.innerHTML = `<form class="connector-form" style="display:grid;gap:8px;grid-template-columns:auto 1fr 1fr 1fr auto;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option></select></label>
+      slot.innerHTML = `<form class="connector-form" style="display:grid;gap:8px;grid-template-columns:auto 1fr 1fr 1fr 1fr auto;align-items:end;margin:4px 0 14px">
+        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option></select></label>
         <label class="field" style="margin:0"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field" style="margin:0"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
+        <label class="field" style="margin:0"><span>Sender (mail only)</span><input name="sender" placeholder="bot@example.com"/></label>
         <label class="field" style="margin:0"><span>Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
         <button class="btn" type="submit">Add</button></form>`;
-      slot.querySelector("form").addEventListener("submit", async (e) => {
+      // Nudge the operator toward the right endpoint/secret for a mail provider: an
+      // SMTP host:port for the endpoint (Google/Microsoft submission), and a sender
+      // that doubles as the SMTP username and default From.
+      const form = slot.querySelector("form");
+      const kindSel = form.querySelector('[name="kind"]');
+      const endpointIn = form.querySelector('[name="endpoint"]');
+      const senderIn = form.querySelector('[name="sender"]');
+      const syncKind = () => {
+        const mail = kindSel.value === "mail";
+        endpointIn.placeholder = mail ? "smtp.office365.com:587" : "https://temis.internal";
+        senderIn.required = mail;
+      };
+      kindSel.addEventListener("change", syncKind);
+      form.addEventListener("submit", async (e) => {
         e.preventDefault();
         const f = new FormData(e.target);
         try {
@@ -1323,6 +1342,7 @@ function wireConnectorManagement(connectors) {
             name: (f.get("name") || "").trim(),
             kind: (f.get("kind") || "temis").trim(),
             endpoint: (f.get("endpoint") || "").trim(),
+            sender: (f.get("sender") || "").trim(),
             credentialsRef: (f.get("credentialsRef") || "").trim(),
           });
           toast("Connector added", "ok");

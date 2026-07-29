@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/clio"
+	"github.com/pblumer/atlas/mail"
 	"github.com/pblumer/atlas/temis"
 )
 
@@ -111,11 +112,43 @@ func (s *Server) buildClioClients() (map[string]clio.Client, error) {
 	return clients, nil
 }
 
-// rebuildConnectorRegistries rebuilds every managed connector registry (temis and
-// clio) from the current connector store and swaps each live registry atomically, so
-// a task referencing a changed connector starts (or stops) resolving at once. Callers
-// run it on the run-loop goroutine, inside the same s.do closure that saved the
-// change, so the rebuild sees the write. A single helper keeps every CRUD handler
+// buildMailClients assembles the mail connector clients from the enabled managed
+// connector instances of kind "mail", resolving each instance's credential from its
+// credentialsRef via the vault (ADR-0078/0041). It reads the connector store, so
+// callers run it on the run-loop goroutine (the store's owner). It mirrors
+// buildClioClients; a mail connector has no environment base (its provider and
+// credentials are managed only). Only the SMTP provider is wired today; a record
+// naming an unknown provider is skipped (it parks its tasks) rather than failing the
+// whole rebuild.
+func (s *Server) buildMailClients() (map[string]mail.Client, error) {
+	clients := map[string]mail.Client{}
+	recs, err := s.connectors.loadAll()
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range recs {
+		if !c.Enabled || c.Kind != connectorKindMail || strings.TrimSpace(c.Endpoint) == "" {
+			continue
+		}
+		if provider := c.Provider; provider != "" && provider != mailProviderSMTP {
+			continue // only SMTP is wired today (ADR-0078); a future native provider is additive
+		}
+		sender := strings.TrimSpace(c.Sender)
+		clients[c.Name] = mail.NewSMTPClient(mail.Connector{
+			Endpoint: strings.TrimSpace(c.Endpoint),
+			Username: sender,
+			Password: s.resolveConnectorSecret(c.CredentialsRef),
+			From:     sender,
+		})
+	}
+	return clients, nil
+}
+
+// rebuildConnectorRegistries rebuilds every managed connector registry (temis, clio
+// and mail) from the current connector store and swaps each live registry atomically,
+// so a task referencing a changed connector starts (or stops) resolving at once.
+// Callers run it on the run-loop goroutine, inside the same s.do closure that saved
+// the change, so the rebuild sees the write. A single helper keeps every CRUD handler
 // from having to know which kinds exist.
 func (s *Server) rebuildConnectorRegistries() error {
 	temisClients, err := s.buildTemisClients()
@@ -126,8 +159,13 @@ func (s *Server) rebuildConnectorRegistries() error {
 	if err != nil {
 		return err
 	}
+	mailClients, err := s.buildMailClients()
+	if err != nil {
+		return err
+	}
 	s.temisRegistry.Replace(temisClients)
 	s.clioRegistry.Replace(clioClients)
+	s.mailRegistry.Replace(mailClients)
 	return nil
 }
 
@@ -163,6 +201,8 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		Kind           string `json:"kind"`
 		Endpoint       string `json:"endpoint"`
 		CredentialsRef string `json:"credentialsRef"`
+		Provider       string `json:"provider"`
+		Sender         string `json:"sender"`
 		Enabled        *bool  `json:"enabled"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
@@ -175,17 +215,35 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		kind = connectorKindTemis
 	}
 	endpoint := strings.TrimSpace(p.Endpoint)
+	provider := strings.TrimSpace(p.Provider)
+	sender := strings.TrimSpace(p.Sender)
 	if name == "" {
 		writeError(w, http.StatusBadRequest, "connector name is required")
 		return
 	}
-	if kind != connectorKindTemis && kind != connectorKindClio {
-		writeError(w, http.StatusBadRequest, "connector kind must be \"temis\" or \"clio\"")
+	if kind != connectorKindTemis && kind != connectorKindClio && kind != connectorKindMail {
+		writeError(w, http.StatusBadRequest, "connector kind must be \"temis\", \"clio\", or \"mail\"")
 		return
 	}
 	if endpoint == "" {
 		writeError(w, http.StatusBadRequest, "connector endpoint is required")
 		return
+	}
+	if kind == connectorKindMail {
+		if provider == "" {
+			provider = mailProviderSMTP
+		}
+		if provider != mailProviderSMTP {
+			writeError(w, http.StatusBadRequest, "mail connector provider must be \"smtp\" (native Gmail/Graph providers are not yet available)")
+			return
+		}
+		if sender == "" {
+			writeError(w, http.StatusBadRequest, "mail connector sender (default From / SMTP username) is required")
+			return
+		}
+	} else {
+		// Provider/Sender are mail-only; ignore them for the other kinds.
+		provider, sender = "", ""
 	}
 	id, err := newID()
 	if err != nil {
@@ -199,6 +257,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	rec := connector{
 		ID: id, Name: name, Kind: kind, Endpoint: endpoint,
 		CredentialsRef: strings.TrimSpace(p.CredentialsRef), Enabled: enabled,
+		Provider: provider, Sender: sender,
 		CreatedAt: time.Now().Unix(),
 	}
 
@@ -246,6 +305,7 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 	var p struct {
 		Endpoint       *string `json:"endpoint"`
 		CredentialsRef *string `json:"credentialsRef"`
+		Sender         *string `json:"sender"`
 		Enabled        *bool   `json:"enabled"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
@@ -272,6 +332,9 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		}
 		if p.CredentialsRef != nil {
 			rec.CredentialsRef = strings.TrimSpace(*p.CredentialsRef)
+		}
+		if p.Sender != nil {
+			rec.Sender = strings.TrimSpace(*p.Sender)
 		}
 		if p.Enabled != nil {
 			rec.Enabled = *p.Enabled
