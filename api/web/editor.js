@@ -7,6 +7,7 @@ import { attachCodeEditor } from "./code-editor.js";
 import { moduleFor } from "./powershell.js";
 import { attachJSONEditor } from "./json-editor.js";
 import { openDmnEditor } from "./dmn-editor.js";
+import { tokenSimulationModule } from "./token-simulation.js";
 
 // JOB_LANGS are the general-purpose script languages a script task can use besides
 // inline FEEL (ADR-0047). Each runs on a job worker off the engine's hot path; the
@@ -80,8 +81,10 @@ function loadBpmn() {
 
 // newModeler/newViewer construct a bpmn-js instance with the moddle extensions
 // (zeebe + atlas) wired.
-function newModeler(BpmnJS, moddle, container) {
-  return new BpmnJS({ container, moddleExtensions: moddle });
+function newModeler(BpmnJS, moddle, container, extraModules) {
+  const opts = { container, moddleExtensions: moddle };
+  if (extraModules && extraModules.length) opts.additionalModules = extraModules;
+  return new BpmnJS(opts);
 }
 
 // blankXML builds an empty diagram with a UNIQUE process id. The process id is
@@ -400,10 +403,27 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
           <button data-tab="implement">Implement</button>
         </div>
         <div style="flex:1"></div>
+        <button class="btn neutral sim-toggle" id="sim-toggle" title="Play tokens through the diagram to see how the control flow moves — no deploy, just a walkthrough" aria-pressed="false">&#9654; Token simulation</button>
         <button class="btn neutral" id="vars-toggle" title="Show the variables this diagram writes">Variables</button>
         <button class="btn neutral" id="save">Save</button>
         <button class="btn neutral" id="export">Export XML</button>
         <button class="btn" id="deploy">Deploy</button>
+      </div>
+      <div class="sim-bar" id="sim-bar" hidden>
+        <button class="btn play" id="sim-play">&#9654; Play</button>
+        <button class="btn neutral" id="sim-step" title="Advance one token by a single step">Step</button>
+        <button class="btn neutral" id="sim-reset" title="Clear all tokens">Reset</button>
+        <label class="sim-speed">Speed
+          <select class="speed" id="sim-speed" aria-label="Simulation speed">
+            <option value="0.5">0.5&times;</option>
+            <option value="1" selected>1&times;</option>
+            <option value="2">2&times;</option>
+            <option value="4">4&times;</option>
+          </select>
+        </label>
+        <span class="sim-hint" id="sim-hint"></span>
+        <span style="flex:1"></span>
+        <span class="sim-stats" id="sim-stats"></span>
       </div>
       <div class="start-panel" id="deploy-panel" hidden>
         <div id="deploy-body"></div>
@@ -447,7 +467,9 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
     return;
   }
 
-  const modeler = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
+  const modeler = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"), [
+    tokenSimulationModule(),
+  ]);
   current = modeler;
   window.__atlasModeler = modeler; // exposed for scripted/end-to-end testing
 
@@ -480,6 +502,54 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   wireActions(root, modeler, api, toast, projectId);
   wireEditorVars(root, modeler);
   wireResizer(root, modeler);
+  wireTokenSim(root, modeler);
+}
+
+// wireTokenSim drives the Design view's token simulation (ADR-0078): a toolbar toggle
+// enters a read-only "play" mode where tokens walk the diagram, and a control bar below
+// the toolbar plays/steps/resets the run. The simulation itself lives in the bpmn-js
+// `atlasTokenSimulation` module; this only translates button clicks into service calls
+// and reflects the service's `atlasSim.changed` events back into the controls.
+function wireTokenSim(root, modeler) {
+  let sim;
+  try { sim = modeler.get("atlasTokenSimulation"); } catch { return; } // module absent
+  const editor = root.querySelector(".editor");
+  const toggle = root.querySelector("#sim-toggle");
+  const bar = root.querySelector("#sim-bar");
+  const playBtn = root.querySelector("#sim-play");
+  const stepBtn = root.querySelector("#sim-step");
+  const resetBtn = root.querySelector("#sim-reset");
+  const speedSel = root.querySelector("#sim-speed");
+  const hintEl = root.querySelector("#sim-hint");
+  const statsEl = root.querySelector("#sim-stats");
+  if (!toggle || !bar) return;
+
+  const setActive = (on) => {
+    sim.setActive(on);
+    toggle.classList.toggle("active", on);
+    toggle.setAttribute("aria-pressed", on ? "true" : "false");
+    editor.classList.toggle("sim-active", on);
+    bar.hidden = !on;
+  };
+
+  toggle.addEventListener("click", () => setActive(!sim.isActive()));
+  playBtn.addEventListener("click", () => (sim.stats().playing ? sim.pause() : sim.play()));
+  stepBtn.addEventListener("click", () => sim.step());
+  resetBtn.addEventListener("click", () => sim.reset());
+  speedSel.addEventListener("change", () => sim.setSpeed(Number(speedSel.value)));
+
+  // Reflect the simulation's state in the controls whenever it changes.
+  modeler.get("eventBus").on("atlasSim.changed", (s) => {
+    playBtn.innerHTML = s.playing ? "&#9208; Pause" : "&#9654; Play";
+    statsEl.textContent = `${s.live} live · ${s.completed} completed`;
+    hintEl.textContent = s.waiting
+      ? "Pick a path: click one of the glowing flows out of the gateway."
+      : s.live === 0
+        ? "Click a start event ▶ to drop a token, then Play."
+        : "";
+  });
+  // Seed the initial control state (counts at zero, opening hint).
+  sim.setSpeed(Number(speedSel.value));
 }
 
 // wireResizer makes the properties panel width draggable, so authoring long FEEL
