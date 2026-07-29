@@ -132,21 +132,23 @@ type Server struct {
 
 	// The fields below are touched only on the run-loop goroutine (via do), so
 	// they need no locking — the same single-owner discipline as process state.
-	deployments  map[uint64]*deployment
-	order        []uint64 // deployment keys in registration order, for stable listing
-	nextKey      uint64
-	versions     map[string]int32 // bpmnProcessId → highest version deployed
-	deploys      *deployStore     // durable sidecar for deployments (ADR-0019)
-	drafts       *draftStore      // durable sidecar for saved-but-not-deployed diagrams
-	forms        *formStore       // durable sidecar for form definitions (ADR-0028)
-	publicLinks  *publicLinkStore // durable sidecar for public start links (ADR-0029)
-	publicRate   *rateLimiter     // throttles the unauthenticated public endpoints
-	projects     *projectStore    // durable sidecar for projects grouping artifacts (ADR-0034)
-	dmnrefs      *dmnRefStore     // durable sidecar for DMN reference artifacts (ADR-0034)
-	connectors   *connectorStore  // durable sidecar for managed connector instances (ADR-0041)
-	vault        *secretVault     // engine-internal encrypted secret store, nil when disabled (ADR-0069/0070)
-	vaultEnabled bool             // whether to build the vault; on by default, off via WithoutVault (ADR-0070)
-	users        *userStore       // durable sidecar for user accounts (ADR-0044)
+	deployments      map[uint64]*deployment
+	order            []uint64 // deployment keys in registration order, for stable listing
+	nextKey          uint64
+	versions         map[string]int32     // bpmnProcessId → highest version deployed
+	deploys          *deployStore         // durable sidecar for deployments (ADR-0019)
+	drafts           *draftStore          // durable sidecar for saved-but-not-deployed diagrams
+	forms            *formStore           // durable sidecar for form definitions (ADR-0028)
+	publicLinks      *publicLinkStore     // durable sidecar for public start links (ADR-0029)
+	publicRate       *rateLimiter         // throttles the unauthenticated public endpoints
+	projects         *projectStore        // durable sidecar for projects grouping artifacts (ADR-0034)
+	dmnrefs          *dmnRefStore         // durable sidecar for DMN reference artifacts (ADR-0034)
+	connectors       *connectorStore      // durable sidecar for managed connector instances (ADR-0041)
+	marketplace      []marketplacePackage // curated, bundled marketplace catalog, immutable after New (ADR-0081)
+	marketplaceStore *marketplaceStore    // durable sidecar for installed marketplace templates (ADR-0081)
+	vault            *secretVault         // engine-internal encrypted secret store, nil when disabled (ADR-0069/0070)
+	vaultEnabled     bool                 // whether to build the vault; on by default, off via WithoutVault (ADR-0070)
+	users            *userStore           // durable sidecar for user accounts (ADR-0044)
 
 	// sessions holds live login sessions in memory. Unlike the sidecar stores it
 	// is touched from concurrent handler goroutines, so it guards itself with a
@@ -305,6 +307,16 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	marketplaceStore, err := newMarketplaceStore(filepath.Join(dataDir, "marketplace"))
+	if err != nil {
+		return nil, err
+	}
+	// The marketplace catalog is curated and compiled into the binary (ADR-0081);
+	// an invalid bundled package is a build error, so it fails construction here.
+	marketplaceCatalog, err := loadBundledCatalog()
+	if err != nil {
+		return nil, err
+	}
 	inboundSubs, err := newInboundSubStore(filepath.Join(dataDir, "inbound-subscriptions"))
 	if err != nil {
 		return nil, err
@@ -327,19 +339,21 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		publicLinks: publicLinks,
 		// A public start link tolerates a modest burst then ~1 start/sec per IP;
 		// generous for a human intake form, throttling for a script (ADR-0029).
-		publicRate:   newRateLimiter(20, 1),
-		projects:     projects,
-		dmnrefs:      dmnrefs,
-		connectors:   connectors,
-		inboundSubs:  inboundSubs,
-		inboundPoll:  2 * time.Second, // default cadence; WithInboundPollInterval overrides, 0 disables
-		vaultEnabled: true,            // opt-out: built unless WithoutVault is passed (ADR-0070)
-		users:        users,
-		sessions:     newSessionStore(defaultSessionTTL),
-		dmnResolver:  resolver,
-		dmnValidator: dmn.NewValidator(resolver),
-		dmnRegistry:  dmn.NewRegistry(),
-		docsEnabled:  true, // opt-out: served unless WithoutDocs is passed (ADR-0043)
+		publicRate:       newRateLimiter(20, 1),
+		projects:         projects,
+		dmnrefs:          dmnrefs,
+		connectors:       connectors,
+		marketplace:      marketplaceCatalog,
+		marketplaceStore: marketplaceStore,
+		inboundSubs:      inboundSubs,
+		inboundPoll:      2 * time.Second, // default cadence; WithInboundPollInterval overrides, 0 disables
+		vaultEnabled:     true,            // opt-out: built unless WithoutVault is passed (ADR-0070)
+		users:            users,
+		sessions:         newSessionStore(defaultSessionTTL),
+		dmnResolver:      resolver,
+		dmnValidator:     dmn.NewValidator(resolver),
+		dmnRegistry:      dmn.NewRegistry(),
+		docsEnabled:      true, // opt-out: served unless WithoutDocs is passed (ADR-0043)
 	}
 	for _, opt := range opts {
 		opt(s)

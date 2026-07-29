@@ -295,6 +295,17 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"POST", "/api/v1/connectors/{id}/provision-clio-key", s.handleProvisionClioKey, apiOp{
 			summary: "Mint a scoped clio key (admin token supplied once) and seal it as this connector's credential", tag: "Connectors", req: jsonBody("Provision request", tObject()), resp: jsonBody("Provisioned credential", tObject())}},
 
+		{"GET", "/api/v1/marketplace/packages", s.handleListMarketplace, apiOp{
+			summary: "Browse the marketplace catalog (filter by ?kind and ?q)", tag: "Marketplace", resp: jsonBody("Catalog packages", tArray())}},
+		{"GET", "/api/v1/marketplace/packages/{id}", s.handleGetMarketplacePackage, apiOp{
+			summary: "Get one marketplace package with its element-template payload", tag: "Marketplace", resp: jsonBody("Package", tObject())}},
+		{"POST", "/api/v1/marketplace/packages/{id}/install", s.handleInstallMarketplacePackage, apiOp{
+			summary: "Install a package's template (script tasks are admin-gated and imported for review)", tag: "Marketplace", resp: jsonBody("Installed template", tObject())}},
+		{"GET", "/api/v1/marketplace/installed", s.handleListInstalled, apiOp{
+			summary: "List templates installed from the marketplace", tag: "Marketplace", resp: jsonBody("Installed templates", tArray())}},
+		{"DELETE", "/api/v1/marketplace/installed/{id}", s.handleUninstall, apiOp{
+			summary: "Uninstall a marketplace template", tag: "Marketplace", status: http.StatusNoContent}},
+
 		{"GET", "/api/v1/secrets", s.handleListSecrets, apiOp{
 			summary: "List secret names and metadata in the encrypted vault (never values)", tag: "Secrets", resp: jsonBody("Secrets", tArray())}},
 		{"PUT", "/api/v1/secrets/{name}", s.handleSetSecret, apiOp{
