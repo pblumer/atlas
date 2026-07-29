@@ -1789,7 +1789,7 @@ async function viewInstances() {
         <td>${running}</td>
         <td>${s.finished || '<span class="muted">0</span>'}</td>
         <td class="muted">${esc(fmtNano(s.latestCompletedAt))}</td>
-        <td style="text-align:right"><a class="btn ghost" href="#/operations/p/${g.latest.key}">Open</a></td>
+        <td style="text-align:right">${s.running ? `<button class="btn ghost danger" data-act="cancelrun" data-pid="${esc(g.processId)}">Cancel running</button> ` : ""}<a class="btn ghost" href="#/operations/p/${g.latest.key}">Open</a></td>
       </tr>`;
     }).join("");
   }
@@ -1809,6 +1809,37 @@ async function viewInstances() {
   };
   document.getElementById("refresh").addEventListener("click", load);
   document.getElementById("proc-filter").addEventListener("input", renderRows);
+
+  // Bulk-cancel every running instance of a process — all of its versions — by
+  // repeatedly draining each version's bounded cancel endpoint until nothing remains.
+  // This is the operator's one-click way to clear a runaway definition (the reported
+  // flood) without the API or CLI.
+  async function cancelAllRunning(processId) {
+    const group = allGroups.find((g) => g.processId === processId);
+    if (!group) return;
+    const total = (summary.get(processId) || {}).running || 0;
+    const name = group.latest.name || processId;
+    if (!window.confirm(`Cancel all running instances of “${name}”? This terminates ${total.toLocaleString()} instance(s) across ${group.versions.length} version(s) and cannot be undone.`)) return;
+    let canceled = 0;
+    try {
+      for (const v of group.versions) {
+        for (;;) {
+          const r = await api("POST", `/api/v1/processes/${v.key}/cancel-instances?limit=20000`);
+          canceled += r.canceled || 0;
+          toast(`Cancelling “${name}”… ${canceled.toLocaleString()} terminated`, "");
+          if (!r.remaining) break;
+        }
+      }
+      toast(`Cancelled ${canceled.toLocaleString()} instance(s) of “${name}”`, "ok");
+    } catch (e) {
+      toast(`Cancel failed after ${canceled.toLocaleString()}: ${e.message}`, "err");
+    }
+    await load();
+  }
+  tbody.addEventListener("click", (e) => {
+    const b = e.target.closest('[data-act="cancelrun"]');
+    if (b) cancelAllRunning(b.dataset.pid);
+  });
   document.getElementById("inst-jump").addEventListener("submit", (e) => {
     e.preventDefault();
     const key = (document.getElementById("inst-key").value || "").trim();
