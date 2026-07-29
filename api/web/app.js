@@ -1114,6 +1114,47 @@ async function shareProject(proj, reload) {
 // scope endpoints. It keeps a local copy of the project, updated from each
 // mutation's response so the dialog reflects server truth without a full refetch;
 // closing runs reload() once to refresh the underlying page (badges and gating).
+// confirmTerminateAll gates a bulk terminate behind a modal whose friction scales
+// with the blast radius: a plain confirm for a small count, and a type-the-count gate
+// above 50 so draining a flooded process can't be a single click. Resolves true only
+// when confirmed (and, when gated, the exact count was typed).
+function confirmTerminateAll(name, count) {
+  const TYPE_THRESHOLD = 50;
+  return new Promise((resolve) => {
+    const gated = count > TYPE_THRESHOLD;
+    const ov = document.createElement("div");
+    ov.className = "modal-ov";
+    ov.innerHTML = `
+      <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-label="Confirm termination">
+        <div class="modal-head"><h2>Terminate ${count} running instance${count === 1 ? "" : "s"}?</h2></div>
+        <div class="modal-body">
+          <p class="muted" style="margin:0 0 10px">This discards each token and moves every running instance of <b>${esc(name)}</b> (across all its versions) to the finished list as <b>terminated</b>. This can't be undone.</p>
+          ${gated ? `<label class="field"><span>Type <b>${count}</b> to confirm</span>
+            <input id="term-all-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="${count}"/></label>` : ""}
+        </div>
+        <div class="modal-foot">
+          <button class="btn neutral" data-cancel>Cancel</button>
+          <button class="btn danger" data-confirm ${gated ? "disabled" : ""}>Terminate ${count}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    const input = ov.querySelector("#term-all-input");
+    const confirmBtn = ov.querySelector("[data-confirm]");
+    const close = (ok) => { ov.remove(); document.removeEventListener("keydown", onKey); resolve(ok); };
+    const onKey = (e) => { if (e.key === "Escape") close(false); };
+    document.addEventListener("keydown", onKey);
+    if (input) {
+      input.addEventListener("input", () => { confirmBtn.disabled = input.value.trim() !== String(count); });
+      input.focus();
+    } else {
+      confirmBtn.focus();
+    }
+    ov.querySelector("[data-cancel]").addEventListener("click", () => close(false));
+    confirmBtn.addEventListener("click", () => { if (!confirmBtn.disabled) close(true); });
+    ov.addEventListener("click", (e) => { if (e.target === ov) close(false); });
+  });
+}
+
 function openShareModal(proj, users, degraded, reload) {
   let p = proj;
   const byId = new Map((users || []).map((u) => [u.id, u]));
@@ -1783,16 +1824,47 @@ async function viewInstances() {
       const collab = g.latest.collaborationKey
         ? `<a class="replay-link" href="#/operations/c/${g.latest.collaborationKey}" title="Replay the message flow between pools">⇄ Replay</a>`
         : "";
+      const termAll = s.running
+        ? `<button class="btn ghost danger sm" data-term-proc="${esc(g.processId)}" title="Terminate every running instance of this process">Terminate all running</button>`
+        : "";
       return `<tr>
         <td><a href="#/operations/p/${g.latest.key}"><b>${esc(label)}</b></a>${collab}${sub}</td>
         <td>${versions}</td>
         <td>${running}</td>
         <td>${s.finished || '<span class="muted">0</span>'}</td>
         <td class="muted">${esc(fmtNano(s.latestCompletedAt))}</td>
-        <td style="text-align:right"><a class="btn ghost" href="#/operations/p/${g.latest.key}">Open</a></td>
+        <td style="text-align:right">${termAll}<a class="btn ghost" href="#/operations/p/${g.latest.key}">Open</a></td>
       </tr>`;
     }).join("");
   }
+
+  // Bulk-terminate every running instance of a process straight from the overview —
+  // the coarse "drain this process" action, no drilling into a version. It drains each
+  // deployed version in bounded batches (the server caps per call, reports remaining).
+  tbody.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-term-proc]");
+    if (!b) return;
+    const g = allGroups.find((x) => x.processId === b.dataset.termProc);
+    const s = summary.get(b.dataset.termProc) || { running: 0 };
+    if (!g || !s.running) return;
+    if (!(await confirmTerminateAll(g.latest.name || g.processId, s.running))) return;
+    b.disabled = true;
+    try {
+      let total = 0;
+      for (const v of g.versions) {
+        for (let guard = 0; guard < 1000; guard++) {
+          const res = await api("POST", `/api/v1/processes/${v.key}/cancel-instances`);
+          total += res.canceled || 0;
+          if (!res.remaining) break;
+        }
+      }
+      toast(`Terminated ${total} instance${total === 1 ? "" : "s"}`, "ok");
+      await load();
+    } catch (err) {
+      toast("terminate failed: " + err.message, "err");
+      b.disabled = false;
+    }
+  });
 
   const load = async () => {
     try {
@@ -2560,8 +2632,19 @@ async function viewTasks(preselectKey) {
   async function load() {
     try {
       state.tasks = await api("GET", "/api/v1/tasks");
+      // A deep-linked task (…/tasks/t/{key}, e.g. from the Operations live view) can
+      // sit outside the capped task-list page during a flood. Rather than silently
+      // dropping the selection — which left the form unreachable — fetch that one task
+      // by key and fold it in, so it stays selectable and its form mounts. A 404 means
+      // there is no open task with that key (e.g. it was completed): clear it then.
+      if (state.selected != null && !state.tasks.some((t) => t.key === state.selected)) {
+        try {
+          state.tasks.push(await api("GET", "/api/v1/tasks/" + encodeURIComponent(state.selected)));
+        } catch {
+          state.selected = null;
+        }
+      }
       state.tasks.sort(taskOrder);
-      if (!state.tasks.some((t) => t.key === state.selected)) state.selected = null;
       renderAll();
     } catch (e) {
       listEl.innerHTML = `<li class="tasks-empty err">Failed to load tasks: ${esc(e.message)}</li>`;

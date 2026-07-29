@@ -3760,13 +3760,28 @@ export async function mountLive(root, { api, toast, key, instance }) {
   let instances = [];       // this version's instances, cached for the picker/variables
   let instSig = "";         // signature of the picker's current option set
   let liveTasks = [];       // open user-task jobs for this version, refreshed each poll
+  let runningCount = 0;     // active instances of this version (from runtime), may exceed the listed page
+  // Bulk-terminate selection over the "All instances" list. selectMode shows a
+  // checkbox on each active card; picked holds the ticked instance keys. Above
+  // TERMINATE_TYPE_THRESHOLD the confirm modal makes the operator type the count, so a
+  // large irreversible terminate can't be a single mis-click.
+  let selectMode = false;
+  let scopeAllActive = false; // "All active" chose the whole version (filter mode), not a hand-picked set
+  const picked = new Set();
+  const TERMINATE_TYPE_THRESHOLD = 50;
 
   // refreshInstances pulls this version's instances and, only when the set of
   // instances (or their state) actually changed, rebuilds the picker — so the
   // operator's current selection isn't reset on every poll. Newest activity first.
+  // Scope the fetch to this definition with ?process=: the list endpoint caps
+  // active and finished instances independently per call, so a global fetch can
+  // truncate this version's lone running instance out of the active page during a
+  // flood (its finished instances survive in the separate finished cap), leaving
+  // the picker showing only completed ones. Filtering server-side keeps the cap
+  // per-definition, so a running instance is never dropped.
   async function refreshInstances() {
     let all;
-    try { all = await api("GET", "/api/v1/instances"); }
+    try { all = await api("GET", "/api/v1/instances?process=" + encodeURIComponent(key)); }
     catch { return; } // transient; the picker just keeps its current options
     instances = all
       .filter((r) => r.processDefKey === key)
@@ -3927,16 +3942,43 @@ export async function mountLive(root, { api, toast, key, instance }) {
     }
     let html;
     if (selected === "all") {
+      // Prune ticks for instances that have since left the active set (finished or
+      // gone), so the "Terminate N" count and the request never carry stale keys.
+      const activeKeys = new Set(instances.filter((r) => r.state === "active").map((r) => r.key));
+      for (const k of [...picked]) if (!activeKeys.has(k)) picked.delete(k);
+      const activeInsts = instances.filter((r) => r.state === "active");
+      // "Select all active" targets every running instance of this version — including
+      // any beyond the listed page — so it uses the runtime count when it is larger.
+      const allActive = Math.max(runningCount, activeInsts.length);
+      const head = !activeInsts.length
+        ? `<div class="vp-head"><span class="vp-title">Variables · all instances (${instances.length})</span></div>`
+        : `<div class="vp-head">
+            <span class="vp-title">Variables · all instances (${instances.length})</span>
+            <span class="vp-actions">${selectMode
+              ? (() => {
+                  const n = scopeAllActive ? allActive : picked.size;
+                  return `<button class="btn ghost danger sm" data-term-go ${n ? "" : "disabled"} title="Terminate the selected instances">Terminate${n ? ` ${n}` : ""}</button>
+                 <button class="btn neutral sm${scopeAllActive ? " on" : ""}" data-term-all title="Select every running instance of this version">All active (${allActive})</button>
+                 <button class="btn neutral sm" data-term-off>Done</button>`;
+                })()
+              : `<button class="btn neutral sm" data-term-on title="Select running instances to terminate in bulk">&#9745; Select</button>`}
+            </span>
+          </div>`;
       html = !instances.length
         ? `<div class="vp-head"><span class="vp-title">Variables</span></div>
           <p class="muted" style="margin:0">No instances yet — start one to see its variables here.</p>`
-        : `<div class="vp-head"><span class="vp-title">Variables · all instances (${instances.length})</span></div>
-        <div class="vp-insts">${instances.map((r) => {
+        : `${head}
+        <div class="vp-insts${selectMode ? " picking" : ""}">${instances.map((r) => {
           const ts = tasksFor(r.key);
-          return `<div class="vp-inst">
+          const active = r.state === "active";
+          const on = scopeAllActive ? active : picked.has(r.key);
+          return `<div class="vp-inst${selectMode && on ? " picked" : ""}">
             <div class="vp-inst-head">
+              ${selectMode && active
+                ? `<label class="vp-pick" title="Select for termination"><input type="checkbox" data-pick="${r.key}"${on ? " checked" : ""}/></label>`
+                : ""}
               <b title="Select this instance">${r.key}</b>
-              ${r.state === "active"
+              ${active
                 ? '<span class="pill ok"><span class="dot"></span>active</span>'
                 : `<span class="pill">${esc(r.state)}</span>`}
               <span class="vp-inst-actions">${ts.length
@@ -4053,6 +4095,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
     }
     countEl.textContent = rt.instances;
     tokenEl.textContent = rt.tokens;
+    runningCount = rt.instances || 0;
     renderVariables();
   }
 
@@ -4115,6 +4158,117 @@ export async function mountLive(root, { api, toast, key, instance }) {
       cancelBtn.disabled = false;
     }
   });
+
+  // --- Bulk terminate over the "All instances" list ---
+  // Ticking, "All active", and the mode toggles all funnel through one delegated
+  // listener on the panel, since its innerHTML is rebuilt every poll.
+  varPanel.addEventListener("change", (e) => {
+    const cb = e.target.closest("input[data-pick]");
+    if (!cb) return;
+    const k = Number(cb.dataset.pick);
+    // A manual tick means the operator is hand-picking, so drop the whole-version
+    // scope and fall back to the explicit set (seeding it from what was shown ticked).
+    if (scopeAllActive) {
+      scopeAllActive = false;
+      for (const r of instances) if (r.state === "active") picked.add(r.key);
+    }
+    if (cb.checked) picked.add(k); else picked.delete(k);
+    renderVariables();
+  });
+  varPanel.addEventListener("click", async (e) => {
+    const t = e.target;
+    if (t.closest("[data-term-on]")) { selectMode = true; renderVariables(); return; }
+    if (t.closest("[data-term-off]")) { selectMode = false; scopeAllActive = false; picked.clear(); renderVariables(); return; }
+    if (t.closest("[data-term-all]")) {
+      // Toggle whole-version scope; ticks are implied by scopeAllActive, so clear the
+      // explicit set to avoid a stale count when it is turned off again.
+      scopeAllActive = !scopeAllActive;
+      picked.clear();
+      renderVariables();
+      return;
+    }
+    if (t.closest("[data-term-go]")) { await runTerminate(); return; }
+  });
+
+  // runTerminate confirms, then terminates either the whole version (filter mode,
+  // drained in batches while the server reports remaining) or the hand-picked set,
+  // and refreshes the view.
+  async function runTerminate() {
+    const activeInsts = instances.filter((r) => r.state === "active");
+    const allActive = Math.max(runningCount, activeInsts.length);
+    const count = scopeAllActive ? allActive : picked.size;
+    if (!count) return;
+    const scopeAll = scopeAllActive;
+    if (!(await confirmTerminate(count, scopeAll))) return;
+    const btn = varPanel.querySelector("[data-term-go]");
+    if (btn) btn.disabled = true;
+    try {
+      let terminated = 0;
+      if (scopeAll) {
+        // Drain the whole version in bounded batches (server caps per call).
+        for (let guard = 0; guard < 1000; guard++) {
+          const res = await api("POST", "/api/v1/instances/terminate", { processDefKey: key });
+          terminated += res.terminated || 0;
+          if (!res.remaining) break;
+        }
+      } else {
+        const res = await api("POST", "/api/v1/instances/terminate", { keys: [...picked] });
+        terminated = res.terminated || 0;
+      }
+      toast(`Terminated ${terminated} instance${terminated === 1 ? "" : "s"}`, "ok");
+      selectMode = false; scopeAllActive = false; picked.clear();
+      await refreshInstances();
+      await poll();
+    } catch (err) {
+      toast("terminate failed: " + err.message, "err");
+    } finally {
+      const b = varPanel.querySelector("[data-term-go]");
+      if (b) b.disabled = false;
+    }
+  }
+
+  // confirmTerminate shows a modal that scales its friction to the blast radius: a
+  // plain confirm for a small set, and — above TERMINATE_TYPE_THRESHOLD — a type-the-
+  // count gate so a large irreversible terminate can't be a single click. Resolves
+  // true only when the operator confirms (and, when gated, typed the exact count).
+  function confirmTerminate(count, scopeAll) {
+    return new Promise((resolve) => {
+      const gated = count > TERMINATE_TYPE_THRESHOLD;
+      const ov = document.createElement("div");
+      ov.className = "modal-ov";
+      const scopeText = scopeAll
+        ? `every running instance of this version`
+        : `${count} selected instance${count === 1 ? "" : "s"}`;
+      ov.innerHTML = `
+        <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-label="Confirm termination">
+          <div class="modal-head"><h2>Terminate ${count} instance${count === 1 ? "" : "s"}?</h2></div>
+          <div class="modal-body">
+            <p class="muted" style="margin:0 0 10px">This discards each token and moves ${scopeText} to the finished list as <b>terminated</b>. This can't be undone.</p>
+            ${gated ? `<label class="field"><span>Type <b>${count}</b> to confirm</span>
+              <input id="term-confirm-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="${count}"/></label>` : ""}
+          </div>
+          <div class="modal-foot">
+            <button class="btn neutral" data-term-cancel>Cancel</button>
+            <button class="btn danger" data-term-confirm ${gated ? "disabled" : ""}>Terminate ${count}</button>
+          </div>
+        </div>`;
+      document.body.appendChild(ov);
+      const input = ov.querySelector("#term-confirm-input");
+      const confirmBtn = ov.querySelector("[data-term-confirm]");
+      const close = (ok) => { ov.remove(); document.removeEventListener("keydown", onKey); resolve(ok); };
+      const onKey = (e) => { if (e.key === "Escape") close(false); };
+      document.addEventListener("keydown", onKey);
+      if (input) {
+        input.addEventListener("input", () => { confirmBtn.disabled = input.value.trim() !== String(count); });
+        input.focus();
+      } else {
+        confirmBtn.focus();
+      }
+      ov.querySelector("[data-term-cancel]").addEventListener("click", () => close(false));
+      confirmBtn.addEventListener("click", () => { if (!confirmBtn.disabled) close(true); });
+      ov.addEventListener("click", (e) => { if (e.target === ov) close(false); });
+    });
+  }
 
   root.querySelector("#refresh").addEventListener("click", poll);
   bindJsonCards(varPanel, jsonCollapsed, renderVariables);

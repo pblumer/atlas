@@ -173,6 +173,10 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"POST", "/api/v1/processes/{key}/cancel-instances", s.handleCancelInstancesOfProcess, apiOp{
 			summary: "Cancel a bounded batch of a definition's running instances (?limit=, default 5000, max 50000); repeat while the response reports remaining=true", tag: "Instances",
 			resp: jsonBody("Bulk cancellation result", tObject())}},
+		{"POST", "/api/v1/instances/terminate", s.handleTerminateInstances, apiOp{
+			summary: "Terminate a selected set of running instances — body {keys:[…]} for an explicit selection, or {processDefKey, q?, limit?} to terminate a definition's matching instances (repeat while remaining=true)", tag: "Instances",
+			req:  jsonBody("Selection", schemaObj(map[string]any{"keys": tArray(), "processDefKey": tInteger(), "q": tString(), "limit": tInteger()})),
+			resp: jsonBody("Termination result", tObject())}},
 
 		{"POST", "/api/v1/messages", s.handlePublishMessage, apiOp{
 			summary: "Publish a message for correlation", tag: "Messages",
@@ -200,6 +204,8 @@ func (s *Server) apiRoutes() []apiRoute {
 
 		{"GET", "/api/v1/tasks", s.handleListTasks, apiOp{
 			summary: "List active user tasks — capped per call (?limit=, default 500, max 5000); X-Tasks-Truncated: true marks a capped page", tag: "Tasks", resp: jsonBody("Tasks", tArray())}},
+		{"GET", "/api/v1/tasks/{key}", s.handleGetTask, apiOp{
+			summary: "Fetch one open user task by key — the deep-link primitive so a task stays reachable outside a capped list page", tag: "Tasks", resp: jsonBody("Task", tObject())}},
 		{"POST", "/api/v1/tasks/{key}/complete", s.handleCompleteTask, apiOp{
 			summary: "Complete a user task", tag: "Tasks",
 			req:  jsonBody("Completion variables", schemaObj(map[string]any{"variables": tObject()})),

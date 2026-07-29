@@ -2082,6 +2082,189 @@ func (s *Server) handleCancelInstancesOfProcess(w http.ResponseWriter, r *http.R
 	}
 }
 
+// terminateInstancesReq selects which running instances to terminate. Exactly one
+// mode is used per call: Keys picks an explicit, hand-selected set (the operator
+// ticked rows); ProcessDefKey (optionally narrowed by Query) terminates every active
+// instance of one definition that matches — the "select all N matching" scope. Limit
+// bounds a filter-mode call the way the bulk-drain endpoint does (repeat while the
+// response reports remaining=true); it is ignored in keys mode, where the request is
+// already the bound.
+type terminateInstancesReq struct {
+	Keys          []uint64 `json:"keys"`
+	ProcessDefKey uint64   `json:"processDefKey"`
+	Query         string   `json:"q"`
+	Limit         int      `json:"limit"`
+}
+
+// terminateInstancesResp reports what a terminate call did: how many instances it
+// terminated, how many requested keys had no active instance (keys mode only), and —
+// for a filter-mode call that hit its per-call cap — whether more may remain.
+type terminateInstancesResp struct {
+	Terminated int       `json:"terminated"`
+	NotFound   int       `json:"notFound"`
+	Remaining  bool      `json:"remaining"`
+	Stats      statsResp `json:"stats"`
+}
+
+// handleTerminateInstances terminates a selected set of running instances in one
+// call. Two mutually exclusive modes: an explicit set of instance keys, or every
+// active instance of a definition matching an optional variable query. It is the
+// operator's bulk-terminate surface over the instances list; single-instance cancel
+// (DELETE /instances/{key}) and the per-definition drain (cancel-instances) remain
+// for their narrower uses. All terminations for a call happen in one run-loop turn so
+// they are atomic with the scan/lookups; filter mode's Limit bounds that turn.
+func (s *Server) handleTerminateInstances(w http.ResponseWriter, r *http.Request) {
+	var req terminateInstancesReq
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	switch {
+	case len(req.Keys) > 0 && req.ProcessDefKey != 0:
+		writeError(w, http.StatusBadRequest, "specify either keys or processDefKey, not both")
+		return
+	case len(req.Keys) > 0:
+		s.terminateByKeys(w, req.Keys)
+	case req.ProcessDefKey != 0:
+		s.terminateByFilter(w, req)
+	default:
+		writeError(w, http.StatusBadRequest, "want keys or processDefKey")
+	}
+}
+
+// terminateByKeys terminates an explicit set of instance keys. Each key is checked
+// with an O(1) point lookup (not a scan over the whole active set), so a hand-picked
+// terminate stays cheap even under a flood; a key with no active instance — already
+// finished, or never valid — is counted as notFound rather than failing the call.
+// Duplicate keys in the request are collapsed. The request body limit already bounds
+// the batch (a few thousand keys at most), which keeps one call from holding the run
+// loop; the unbounded "drain everything" path is filter mode, which batches with
+// remaining.
+func (s *Server) terminateByKeys(w http.ResponseWriter, keys []uint64) {
+	uniq := make(map[uint64]struct{}, len(keys))
+	for _, k := range keys {
+		uniq[k] = struct{}{}
+	}
+	var (
+		terminated int
+		opErr      error
+		stats      statsResp
+	)
+	s.do(func() {
+		active := make([]uint64, 0, len(uniq))
+		for k := range uniq {
+			v, ok, err := s.store.ProcessInstance(k)
+			if err != nil {
+				opErr = err
+				return
+			}
+			// Only a record in the active keyspace (State PIActive) is terminable; a
+			// key found only in history is already finished → notFound.
+			if ok && v.State == model.PIActive {
+				active = append(active, k)
+			}
+		}
+		for _, k := range active {
+			s.proc.CancelInstance(k)
+		}
+		terminated = len(active)
+		if opErr = s.jobRunner.Drive(); opErr != nil {
+			return
+		}
+		stats, opErr = s.readStats()
+	})
+	if opErr != nil {
+		writeError(w, http.StatusInternalServerError, "terminate instances: "+opErr.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, terminateInstancesResp{
+		Terminated: terminated,
+		NotFound:   len(uniq) - terminated,
+		Stats:      stats,
+	})
+}
+
+// terminateByFilter terminates every active instance of one definition that matches
+// the request's optional variable query, up to a per-call cap. A blank query matches
+// all of the definition's active instances. Like the bulk-drain endpoint it reports
+// remaining=true when the cap was hit, so the caller repeats until it clears.
+func (s *Server) terminateByFilter(w http.ResponseWriter, req terminateInstancesReq) {
+	limit := bulkCancelBatchDefault
+	if req.Limit != 0 {
+		if req.Limit < 0 {
+			writeError(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
+			return
+		}
+		limit = req.Limit
+	}
+	if limit > bulkCancelBatchMax {
+		limit = bulkCancelBatchMax
+	}
+	// A blank query matches every active instance of the definition; otherwise only
+	// those with a variable satisfying it (same matcher as the instances search).
+	pred, hasQuery := parseVarQuery(req.Query)
+	var (
+		found     bool
+		remaining bool
+		keys      []uint64
+		opErr     error
+		stats     statsResp
+	)
+	s.do(func() {
+		if _, ok := s.deployments[req.ProcessDefKey]; !ok {
+			return
+		}
+		found = true
+		err := s.store.ActiveProcessInstances(func(k uint64, v *model.ProcessInstanceValue) error {
+			if v.ProcessDefKey != req.ProcessDefKey {
+				return nil
+			}
+			if hasQuery {
+				matched := false
+				if verr := s.store.VariablesOfScope(k, func(vv *model.VariableValue) error {
+					if pred.match(toVariableView(vv)) {
+						matched = true
+					}
+					return nil
+				}); verr != nil {
+					return verr
+				}
+				if !matched {
+					return nil
+				}
+			}
+			keys = append(keys, k)
+			if len(keys) >= limit {
+				return errCancelBatchFull // batch full: more may match, stop here
+			}
+			return nil
+		})
+		if err != nil && !errors.Is(err, errCancelBatchFull) {
+			opErr = err
+			return
+		}
+		remaining = errors.Is(err, errCancelBatchFull)
+		for _, k := range keys {
+			s.proc.CancelInstance(k)
+		}
+		if opErr = s.jobRunner.Drive(); opErr != nil {
+			return
+		}
+		stats, opErr = s.readStats()
+	})
+	switch {
+	case !found:
+		writeError(w, http.StatusNotFound, "no deployment with that key")
+	case opErr != nil:
+		writeError(w, http.StatusInternalServerError, "terminate instances: "+opErr.Error())
+	default:
+		writeJSON(w, http.StatusOK, terminateInstancesResp{
+			Terminated: len(keys),
+			Remaining:  remaining,
+			Stats:      stats,
+		})
+	}
+}
+
 // --- user tasks (ADR-0028) ---
 
 // jobResp is one activatable job an instance is parked on: its key (what
@@ -2193,35 +2376,7 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 			if err != nil || !ok {
 				return err
 			}
-			tr := taskResp{
-				Key:                jobKey,
-				ProcessInstanceKey: jv.ProcessInstanceKey,
-			}
-			if ei, ok, err := s.store.GetElementInstance(jv.ElementInstanceKey); err == nil && ok {
-				tr.ProcessDefKey = ei.ProcessDefKey
-				if d, dok := s.deployments[ei.ProcessDefKey]; dok {
-					tr.ProcessID = d.ProcessID
-					cp := d.cp
-					tr.ElementID = cp.ElementBpmnId(ei.ElementId)
-					if n := cp.Node(ei.ElementId); n.Type == compiler.TypeUserTask {
-						detail := cp.UserTask(n.Detail)
-						tr.Name = cp.Intern(detail.Name)
-						// The assignee is the job's runtime value (claim/unclaim
-						// rewrite it, ADR-0042); candidate groups stay the
-						// compile-time attribute.
-						tr.Assignee = jv.Assignee
-						tr.CandidateGroups = cp.Intern(detail.CandidateGroups)
-						tr.FormID = cp.Intern(detail.FormId)
-						tr.Priority = detail.Priority
-						// The due date is frozen on the job as an absolute instant
-						// (nanoseconds); expose it as Unix ms for the browser.
-						if jv.Deadline != 0 {
-							tr.DueDate = jv.Deadline / int64(time.Millisecond)
-						}
-					}
-				}
-			}
-			tasks = append(tasks, tr)
+			tasks = append(tasks, s.enrichTask(jobKey, jv))
 			return nil
 		})
 		scanErr = unlessTruncated(err)
@@ -2236,6 +2391,83 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Tasks-Truncated", "true")
 	}
 	writeJSON(w, http.StatusOK, tasks)
+}
+
+// enrichTask turns a user-task job into the response row the inbox and the
+// single-task lookup both return: the job's key and instance, plus the element's
+// name, assignment metadata, form, priority and due date from the compiled process.
+// It is the one place that shape is built, so the list and the by-key fetch can never
+// drift. Callers run it inside s.do (it reads the store and the deployments map).
+func (s *Server) enrichTask(jobKey uint64, jv *model.JobValue) taskResp {
+	tr := taskResp{
+		Key:                jobKey,
+		ProcessInstanceKey: jv.ProcessInstanceKey,
+	}
+	if ei, ok, err := s.store.GetElementInstance(jv.ElementInstanceKey); err == nil && ok {
+		tr.ProcessDefKey = ei.ProcessDefKey
+		if d, dok := s.deployments[ei.ProcessDefKey]; dok {
+			tr.ProcessID = d.ProcessID
+			cp := d.cp
+			tr.ElementID = cp.ElementBpmnId(ei.ElementId)
+			if n := cp.Node(ei.ElementId); n.Type == compiler.TypeUserTask {
+				detail := cp.UserTask(n.Detail)
+				tr.Name = cp.Intern(detail.Name)
+				// The assignee is the job's runtime value (claim/unclaim rewrite it,
+				// ADR-0042); candidate groups stay the compile-time attribute.
+				tr.Assignee = jv.Assignee
+				tr.CandidateGroups = cp.Intern(detail.CandidateGroups)
+				tr.FormID = cp.Intern(detail.FormId)
+				tr.Priority = detail.Priority
+				// The due date is frozen on the job as an absolute instant
+				// (nanoseconds); expose it as Unix ms for the browser.
+				if jv.Deadline != 0 {
+					tr.DueDate = jv.Deadline / int64(time.Millisecond)
+				}
+			}
+		}
+	}
+	return tr
+}
+
+// handleGetTask returns one open user task by its job key, enriched the same way as a
+// list row. It is what keeps a deep link (…/tasks/t/{key}, e.g. from the Operations
+// live view) working when the task falls outside the capped task-list page during a
+// flood: the client fetches the one task directly instead of scanning a bounded list
+// for it. 404 if no open job has that key (never existed, or already completed).
+func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid task key")
+		return
+	}
+	var (
+		task  taskResp
+		found bool
+		opErr error
+	)
+	s.do(func() {
+		jv, ok, err := s.store.GetJob(key)
+		if err != nil {
+			opErr = err
+			return
+		}
+		// A completed or unknown job leaves found=false → 404. Only genuine user-task
+		// jobs are addressable here; anything else (a service-task job) is treated as
+		// absent so this stays the inbox's read side, not a generic job peek.
+		if !ok || jv.JobType != compiler.UserTaskJobTypeIndex {
+			return
+		}
+		found = true
+		task = s.enrichTask(key, jv)
+	})
+	switch {
+	case opErr != nil:
+		writeError(w, http.StatusInternalServerError, "get task: "+opErr.Error())
+	case !found:
+		writeError(w, http.StatusNotFound, "no open task with that key")
+	default:
+		writeJSON(w, http.StatusOK, task)
+	}
 }
 
 // handleCompleteTask completes a user task by its job key: it feeds the job
