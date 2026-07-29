@@ -114,6 +114,11 @@ function blankXML() {
 let current; // active modeler/viewer, destroyed on remount
 let liveTimer; // active live-overlay poll, cleared on remount/leave
 
+// docTitle refines the browser tab title with a loaded subject (a diagram or
+// process name), matching app.js's "<subject> · Atlas" scheme so open tabs are
+// distinguishable. The router sets a route-based title first; this sharpens it.
+function docTitle(label) { document.title = label ? `${label} · Atlas` : "Atlas"; }
+
 // cleanup tears down the current modeler and any live poll. app.js calls it (via
 // window.__atlasCleanup) when navigating away so nothing keeps running.
 export function cleanup() {
@@ -459,7 +464,11 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
     }
     modeler.get("canvas").zoom("fit-viewport");
     const pbo = rootProcess(modeler);
-    if (pbo) root.querySelector(".crumb-current").textContent = pbo.name || pbo.id || "Diagram";
+    if (pbo) {
+      const nm = pbo.name || pbo.id || "Diagram";
+      root.querySelector(".crumb-current").textContent = nm;
+      docTitle(`${nm} · Modeler`);
+    }
   } catch (e) {
     toast("could not open diagram: " + e.message, "err");
   }
@@ -3203,6 +3212,7 @@ function wireActions(root, modeler, api, toast, projectId) {
       const path = "/api/v1/drafts" + (projectId ? "?projectId=" + encodeURIComponent(projectId) : "");
       const d = await api("POST", path, xml, true);
       root.querySelector(".crumb-current").textContent = d.name || d.processId || "Draft";
+      docTitle(`${d.name || d.processId || "Draft"} · Modeler`);
       toast(`Saved draft “${d.name || d.processId}”`, "ok");
     } catch (e) {
       toast("save failed: " + e.message, "err");
@@ -3363,6 +3373,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
     const here = procs.find((x) => x.key === key);
     if (here) {
       procName = here.name || here.processId;
+      docTitle(`${procName} · Operations`);
       versions = procs
         .filter((x) => x.processId === here.processId)
         .sort((a, b) => b.version - a.version);
@@ -4848,6 +4859,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
 
   function applyMeta(next) {
     titleEl.textContent = processName();
+    docTitle(`${processName()} · Instance ${key}`);
     root.querySelector("#m-version").textContent = next.version != null ? "v" + next.version : "—";
     const vtag = next.versionTag || "";
     const vtWrap = root.querySelector("#m-vtag-wrap");
