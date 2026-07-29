@@ -59,6 +59,13 @@ func Open(dir string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("state: backfill runtime counters: %w", err)
 	}
+	// The finished-count and last-activity summary counters (ADR-0083) are a later
+	// addition, so a store that already ran the ADR-0080 backfill still needs them
+	// seeded once from the current active instances and history.
+	if err := s.backfillSummaryCountersIfNeeded(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("state: backfill summary counters: %w", err)
+	}
 	return s, nil
 }
 
@@ -232,6 +239,27 @@ func (s *Store) DefInstanceCount(procDefKey uint64) (int, error) {
 	return int(decodeCounter(raw)), nil
 }
 
+// DefCompletedCount returns how many instances of one definition have finished
+// (completed or terminated), from the maintained counter in O(1) rather than scanning
+// the history (ADR-0083).
+func (s *Store) DefCompletedCount(procDefKey uint64) (int, error) {
+	raw, ok, err := getCopy(s.db, keyDefCompletedCount(procDefKey))
+	if err != nil || !ok {
+		return 0, err
+	}
+	return int(decodeCounter(raw)), nil
+}
+
+// DefLastActivity returns the unix-nano timestamp of a definition's most recent
+// instance lifecycle event (0 if it has had none), read in O(1) (ADR-0083).
+func (s *Store) DefLastActivity(procDefKey uint64) (int64, error) {
+	raw, ok, err := getCopy(s.db, keyDefLastActivity(procDefKey))
+	if err != nil || !ok {
+		return 0, err
+	}
+	return int64(binary.BigEndian.Uint64(raw)), nil
+}
+
 // ElementLiveTokens calls fn with each of a definition's elements that currently
 // holds live tokens and how many — one prefix scan over the per-element token
 // counters, so it is O(elements), not O(instances) (ADR-0080).
@@ -329,6 +357,75 @@ func (s *Store) backfillRuntimeCountersIfNeeded() error {
 		}
 	}
 	if err := b.Set(keyMeta(metaRuntimeCountersV1), []byte{1}, nil); err != nil {
+		return err
+	}
+	return b.Commit(pebble.Sync)
+}
+
+// metaSummaryCountersV1 marks that the ADR-0083 finished-count and last-activity
+// counters have been seeded from pre-existing state — a one-time migration, separate
+// from metaRuntimeCountersV1 so a store that already ran the ADR-0080 backfill still
+// seeds these.
+const metaSummaryCountersV1 = "summary_counters_v1"
+
+// backfillSummaryCountersIfNeeded seeds the per-definition finished-instance count and
+// last-activity timestamp from current state the first time a store gains them. It
+// scans the active process instances (for each definition's newest CreatedAt) and the
+// history (finished counts and newest CompletedAt), then writes the counts as merges
+// and the last-activity as a set, plus the marker, in one atomic synced batch — so a
+// crash mid-migration leaves nothing and the next open re-runs cleanly.
+func (s *Store) backfillSummaryCountersIfNeeded() error {
+	if _, ok, err := getCopy(s.db, keyMeta(metaSummaryCountersV1)); err != nil || ok {
+		return err
+	}
+
+	completed := map[uint64]int64{}
+	lastActivity := map[uint64]int64{}
+	bump := func(def uint64, ts int64) {
+		if ts > lastActivity[def] {
+			lastActivity[def] = ts
+		}
+	}
+	if err := s.scanPrefix([]byte{byte(cfProcessInstance)}, func(_, raw []byte) error {
+		v, err := model.DecodeValue(model.VTProcessInstance, raw)
+		if err != nil {
+			return err
+		}
+		pi := v.(*model.ProcessInstanceValue)
+		bump(pi.ProcessDefKey, pi.CreatedAt)
+		return nil
+	}); err != nil {
+		return err
+	}
+	if err := s.scanPrefix([]byte{byte(cfProcessInstanceHistory)}, func(_, raw []byte) error {
+		v, err := model.DecodeValue(model.VTProcessInstance, raw)
+		if err != nil {
+			return err
+		}
+		pi := v.(*model.ProcessInstanceValue)
+		completed[pi.ProcessDefKey]++
+		bump(pi.ProcessDefKey, pi.CompletedAt)
+		if pi.CreatedAt > lastActivity[pi.ProcessDefKey] {
+			lastActivity[pi.ProcessDefKey] = pi.CreatedAt
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	b := s.db.NewBatch()
+	defer b.Close()
+	for def, n := range completed {
+		if err := b.Merge(keyDefCompletedCount(def), encodeCounter(n), nil); err != nil {
+			return err
+		}
+	}
+	for def, ts := range lastActivity {
+		if err := b.Set(keyDefLastActivity(def), appendBE64(nil, uint64(ts)), nil); err != nil {
+			return err
+		}
+	}
+	if err := b.Set(keyMeta(metaSummaryCountersV1), []byte{1}, nil); err != nil {
 		return err
 	}
 	return b.Commit(pebble.Sync)

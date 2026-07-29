@@ -119,7 +119,9 @@ func TestScanHandlersReportDecodeErrors(t *testing.T) {
 		method, path string
 	}{
 		{http.MethodGet, "/api/v1/instances"},
-		{http.MethodGet, "/api/v1/instances/summary"},
+		// /api/v1/instances/summary is not listed: it reads O(1) per-definition counters
+		// (ADR-0083), not the instance records, so an undecodable instance does not
+		// affect it — that decoupling is the point of the change.
 		{http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/cancel-instances", dep.Key)},
 		// The single-instance runtime overlay scans the process instances (ADR-0080),
 		// so the undecodable record surfaces as a 500 there too.

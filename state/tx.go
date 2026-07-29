@@ -461,6 +461,24 @@ func (t *Tx) DecDefInstanceCount(procDefKey uint64) error {
 	return t.mergeCounter(keyDefInstanceCount(procDefKey), -1)
 }
 
+// IncDefCompletedCount bumps a definition's finished-instance count by one, on each
+// process-instance completion or termination. Monotonic (never decremented) — the
+// count of finished instances only grows — so the summary's "finished" column reads
+// in O(1) instead of scanning the history, which draining active instances only makes
+// larger (ADR-0083).
+func (t *Tx) IncDefCompletedCount(procDefKey uint64) error {
+	return t.mergeCounter(keyDefCompletedCount(procDefKey), 1)
+}
+
+// SetDefLastActivity records a definition's most recent instance-event timestamp by
+// overwrite (ADR-0083). The processor's event timestamps are non-decreasing in log
+// order, so the last write is the latest and replay rebuilds the identical value
+// (invariant I4). Write-only, no read.
+func (t *Tx) SetDefLastActivity(procDefKey uint64, unixNano int64) error {
+	t.scratch = appendBE64(t.scratch[:0], uint64(unixNano))
+	return t.b.Set(keyDefLastActivity(procDefKey), t.scratch, nil)
+}
+
 // IncElementToken and DecElementToken move a definition-element live-token count
 // by one, on element-instance activation and completion/termination.
 func (t *Tx) IncElementToken(procDefKey uint64, elementId int32) error {

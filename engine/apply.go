@@ -2,6 +2,19 @@ package engine
 
 import "github.com/pblumer/atlas/model"
 
+// firstErr returns the first non-nil error of a sequence, so a run of state
+// mutations that each already ran can be checked once instead of after every call.
+// The arguments are evaluated eagerly — correct in applyToState, where each step must
+// be applied regardless of an earlier one's (in practice unreachable) failure.
+func firstErr(errs ...error) error {
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // applyToState mutates state from a single event record. It is the one place
 // state changes from a record, and it runs identically live (in the processor)
 // and on recovery (replaying the log) — invariant I4. It must stay deterministic
@@ -17,21 +30,21 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// active record and is copied into the history record on completion below,
 			// so a finished instance still reports when it started.
 			v.process.CreatedAt = h.Timestamp
-			if err := tx.PutProcessInstance(h.Key, &v.process); err != nil {
-				return err
+			// One process-instance activation touches several derived indices:
+			// the instance record itself, the per-definition active counter and
+			// last-activity for the O(1) runtime view / instances summary (ADR-0080/0083),
+			// and — for a message-start instance — the per-key live counter a singleton
+			// message start gates on (ADR-0082). All are event-driven, so replay rebuilds
+			// them (I4/I6). firstErr applies them and reports the first failure.
+			err := firstErr(
+				tx.PutProcessInstance(h.Key, &v.process),
+				tx.IncDefInstanceCount(v.process.ProcessDefKey),
+				tx.SetDefLastActivity(v.process.ProcessDefKey, h.Timestamp),
+			)
+			if err == nil && v.process.CorrelationKey != "" {
+				err = tx.IncrementActiveStartKey(v.process.ProcessDefKey, v.process.CorrelationKey)
 			}
-			// Maintain the per-definition active-instance counter so the runtime view
-			// reads it in O(1) rather than scanning every instance (ADR-0080).
-			if err := tx.IncDefInstanceCount(v.process.ProcessDefKey); err != nil {
-				return err
-			}
-			// A message-start instance carries the correlation key it began with; count
-			// it as one live instance for that (definition, key) so a singleton message
-			// start can gate on it (ADR-0082). Event-driven, so replay rebuilds it (I4).
-			if v.process.CorrelationKey != "" {
-				return tx.IncrementActiveStartKey(v.process.ProcessDefKey, v.process.CorrelationKey)
-			}
-			return nil
+			return err
 		case model.IntentCompleted, model.IntentTerminated:
 			// Retain a history record so operators can inspect finished
 			// instances, then drop the active record. The terminal state and
@@ -45,22 +58,22 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 				hist.State = model.PICompleted
 			}
 			hist.CompletedAt = h.Timestamp
-			if err := tx.PutProcessInstanceHistory(h.Key, &hist); err != nil {
-				return err
+			// A finishing instance moves to the history, drops the active record, and
+			// updates the derived counters: the active count down, the finished count up,
+			// and last-activity stamped, so the summary reads both in O(1) (ADR-0083).
+			err := firstErr(
+				tx.PutProcessInstanceHistory(h.Key, &hist),
+				tx.DeleteProcessInstance(h.Key),
+				tx.DecDefInstanceCount(v.process.ProcessDefKey),
+				tx.IncDefCompletedCount(v.process.ProcessDefKey),
+				tx.SetDefLastActivity(v.process.ProcessDefKey, h.Timestamp),
+			)
+			// Releasing a message-start instance re-opens its correlation key so a later
+			// message can start a fresh one (ADR-0082).
+			if err == nil && v.process.CorrelationKey != "" {
+				err = tx.DecrementActiveStartKey(v.process.ProcessDefKey, v.process.CorrelationKey)
 			}
-			if err := tx.DeleteProcessInstance(h.Key); err != nil {
-				return err
-			}
-			if err := tx.DecDefInstanceCount(v.process.ProcessDefKey); err != nil {
-				return err
-			}
-			// Releasing a message-start instance re-opens its correlation key so a
-			// later message can start a fresh one (ADR-0082). Mirrors the increment on
-			// activation, keyed by the same fields the still-populated value carries.
-			if v.process.CorrelationKey != "" {
-				return tx.DecrementActiveStartKey(v.process.ProcessDefKey, v.process.CorrelationKey)
-			}
-			return nil
+			return err
 		}
 
 	case model.VTElementInstance:
