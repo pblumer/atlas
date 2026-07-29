@@ -63,7 +63,9 @@ func TestBackfillSummaryCounters(t *testing.T) {
 	// that predates them.
 	tx := s.NewTransaction()
 	_ = tx.PutProcessInstance(100, &model.ProcessInstanceValue{ProcessDefKey: 7, CreatedAt: 100})
-	_ = tx.PutProcessInstanceHistory(200, &model.ProcessInstanceValue{ProcessDefKey: 7, State: model.PICompleted, CreatedAt: 50, CompletedAt: 300})
+	// This finished record's start time (500) is later than any completion time, so it
+	// exercises the "last activity is a start, not a finish" branch of the backfill.
+	_ = tx.PutProcessInstanceHistory(200, &model.ProcessInstanceValue{ProcessDefKey: 7, State: model.PICompleted, CreatedAt: 500, CompletedAt: 300})
 	_ = tx.PutProcessInstanceHistory(201, &model.ProcessInstanceValue{ProcessDefKey: 7, State: model.PITerminated, CreatedAt: 60, CompletedAt: 250})
 	_ = tx.PutProcessInstance(101, &model.ProcessInstanceValue{ProcessDefKey: 8, CreatedAt: 400})
 	if err := tx.Commit(); err != nil {
@@ -83,8 +85,8 @@ func TestBackfillSummaryCounters(t *testing.T) {
 	if n, _ := s.DefCompletedCount(7); n != 2 {
 		t.Fatalf("def 7 completed = %d, want 2", n)
 	}
-	if ts, _ := s.DefLastActivity(7); ts != 300 { // max of created 100/50/60 and completed 300/250
-		t.Fatalf("def 7 last activity = %d, want 300", ts)
+	if ts, _ := s.DefLastActivity(7); ts != 500 { // the newest event is record 200's start (500)
+		t.Fatalf("def 7 last activity = %d, want 500", ts)
 	}
 	if n, _ := s.DefCompletedCount(8); n != 0 {
 		t.Fatalf("def 8 completed = %d, want 0", n)
