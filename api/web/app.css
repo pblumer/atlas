@@ -155,7 +155,22 @@ ol.steps li { margin: 6px 0; }
 .btn.neutral:hover { background: var(--bg); }
 .btn.ghost.danger { color: var(--danger); }
 .btn.ghost.danger:hover { background: #fdecea; }
+/* Solid danger button (modal confirm, bulk-terminate CTA). Scoped :not(.ghost) so it
+   never clobbers the transparent background of a .btn.ghost.danger row action — the
+   two share specificity, and without this the later rule would win and paint red text
+   on a red fill. */
+.btn.danger:not(.ghost) { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn.danger:not(.ghost):hover { background: #a5322a; border-color: #a5322a; }
+.btn.sm { padding: 4px 10px; font-size: 12px; border-radius: 5px; }
+.btn.neutral.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Bulk-terminate selection over the live "All instances" list */
+.var-panel .vp-inst.picked { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.var-panel .vp-pick { display: inline-flex; align-items: center; margin-right: 2px; cursor: pointer; }
+.var-panel .vp-pick input { width: 15px; height: 15px; margin: 0; cursor: pointer; accent-color: var(--danger); }
+.confirm-modal { width: min(440px, 92vw); }
+.confirm-modal .modal-foot { justify-content: flex-end; }
 
 /* Form fields (login + user management) */
 .field { display: block; margin: 10px 0; font-size: 13px; color: var(--muted); }
