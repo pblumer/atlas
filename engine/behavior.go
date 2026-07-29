@@ -142,6 +142,14 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 	c.ForEachElementInstance(piKey, func(elKey uint64) {
 		if ei := c.GetElementInstance(elKey); ei != nil {
 			terminateChildInstance(c, elKey, ei.BpmnElementType)
+			// Cancel any job the element left waiting, so a terminated instance leaves no
+			// orphan in the activatable index (the same teardown terminateScope does for a
+			// subprocess/multi-instance scope).
+			if jobKey, ok := c.JobOfElement(elKey); ok {
+				if job := c.GetJob(jobKey); job != nil {
+					c.AppendJobEvent(jobKey, model.IntentJobCanceled, *job)
+				}
+			}
 			c.AppendElementEvent(elKey, model.IntentTerminated, *ei)
 		}
 	})
@@ -1950,9 +1958,10 @@ func multiInstanceItems(c *ProcessingContext, d *compiler.MultiInstanceDetail, b
 // iteration's output element into the body's output collection (at its own index, so
 // the list preserves iteration order regardless of completion order), drops the
 // iteration's local scope, and emits Completed — which decrements the body's
-// active-child counter. For a sequential loop it then seeds the next iteration if one
-// remains; otherwise it asks the body to complete, which it does once the last
-// iteration has drained. An inner never takes an outgoing flow; the body owns it.
+// active-child counter. Then it decides how the loop proceeds: a satisfied completion
+// condition ends the loop early (cancelling any still-running iterations); otherwise a
+// sequential loop seeds the next iteration if one remains, and the body completes once
+// the last iteration has drained. An inner never takes an outgoing flow; the body owns it.
 func finishMultiInstanceIteration(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	d := cp.MultiInstance(cp.Node(ei.ElementId).MultiInstance)
@@ -1965,8 +1974,23 @@ func finishMultiInstanceIteration(c *ProcessingContext, key uint64, ei *model.El
 		}
 		setListElement(c, bodyKey, cp.Intern(d.OutputCollection), idx, val)
 	}
+	// The completion condition is evaluated over this iteration's scope chain (so it can
+	// read loopCounter, the item, and the accumulating output collection at the body)
+	// before the iteration's locals are dropped (ADR-0077).
+	done := false
+	if d.CompletionCondition != nil {
+		v, err := d.CompletionCondition.Eval(bindInputsChain(c, d.CompletionCondition.Inputs(), key))
+		done = err == nil && expr.IsTrue(v)
+	}
 	dropLocalScope(c, key)
 	c.AppendElementEvent(key, model.IntentCompleted, *ei)
+	if done {
+		// Early exit: cancel any iterations still running (a no-op for a sequential loop,
+		// where this was the only one live), then complete the body once its scope drains.
+		terminateScope(c, ei.ProcessInstanceKey, bodyKey)
+		completeScope(c, bodyKey)
+		return
+	}
 	if d.Sequential {
 		if items := multiInstanceItems(c, d, bodyKey); idx+1 < len(items) {
 			if body := c.GetElementInstance(bodyKey); body != nil {

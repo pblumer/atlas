@@ -4,11 +4,11 @@
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phases 1–3 delivered; Phases 4–5 pending. Each phase
-> lands test-first with a recovery test (ADR-0018). Multi-instance builds directly on
-> the embedded-subprocess scope lifecycle (ADR-0074) and the call-activity child
-> termination (ADR-0076); it introduces no new value type, record, counter, or
-> recovery path.
+> **Implementation status.** Phases 1–4 delivered; Phase 5 (Modeler) pending. Each
+> phase lands test-first with a recovery test (ADR-0018). Multi-instance builds directly
+> on the embedded-subprocess scope lifecycle (ADR-0074) and the call-activity child
+> termination (ADR-0076); it introduces no new value type, record, counter, or recovery
+> path.
 >
 > **Delivered (Phase 1, compiler):** a `MultiInstanceDetail` (input collection or
 > cardinality, input element, output collection/element, completion condition,
@@ -63,6 +63,26 @@
 > index order; the output collection is assembled in input order for both parallel and
 > sequential (`[1,2,3] → [10,20,30]`); and a sequential loop parked mid-sequence
 > recovers and finishes the remainder.
+>
+> **Delivered (Phase 4, completion condition, interruption, nesting):** a
+> **completion condition** is evaluated over each iteration's scope chain (so it reads
+> `loopCounter`, the item, and the accumulating output collection) after the iteration
+> completes; when it holds, the loop ends early — `terminateScope` cancels any
+> still-running iterations (a no-op for a sequential loop) and the body completes.
+> **Interruption** needed no new engine code: the body is a scope, so an interrupting
+> boundary on a multi-instance activity runs `interruptHost` → `terminateScope`, which
+> tears down every iteration; a fix hardened the sibling path so terminating a *process
+> instance* (`handleProcessInstanceTerminating`) now also cancels each element's job,
+> leaving no orphan in the activatable index — matching `terminateScope`. **Nesting**
+> also composed for free: a multi-instance **subprocess** runs each iteration as a full
+> subprocess instance (the inner dispatch runs `subProcessBehavior`), and a
+> multi-instance **call activity** starts one child per iteration, an interrupt tearing
+> each child down through the ADR-0076 `terminateChildInstance` that `terminateScope`
+> already calls per victim. Verified: sequential and parallel completion conditions
+> (early stop / cancel remaining); an interrupting boundary terminating all iterations
+> and routing out its flow; a multi-instance subprocess assembling an output collection;
+> and a multi-instance call activity fanning out children and, on interrupt, terminating
+> every child.
 
 ## Context and problem statement
 

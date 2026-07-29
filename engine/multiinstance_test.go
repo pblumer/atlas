@@ -457,3 +457,319 @@ func TestMultiInstanceSequentialRecovers(t *testing.T) {
 		t.Fatalf("after recovery completion: process=%d element=%d, want 0 and 0", pi, ei)
 	}
 }
+
+// jobByLoopCounter returns the activatable job whose iteration has the given
+// loopCounter, failing if there isn't exactly one.
+func jobByLoopCounter(t *testing.T, h *harness, jobType int32, want int) uint64 {
+	t.Helper()
+	for _, jk := range activatableJobs(t, h.store, jobType) {
+		job, ok, err := h.store.GetJob(jk)
+		if err != nil || !ok {
+			t.Fatalf("GetJob(%d): ok=%v err=%v", jk, ok, err)
+		}
+		if lc := readVar(t, h.store, job.ElementInstanceKey, "loopCounter"); lc != nil && atoi(t, lc.Text) == want {
+			return jk
+		}
+	}
+	t.Fatalf("no activatable job with loopCounter=%d", want)
+	return 0
+}
+
+// TestMultiInstanceSequentialCompletionCondition stops a sequential loop early when its
+// completion condition holds: with `loopCounter >= 2` the third iteration is never
+// seeded (ADR-0077 Phase 4).
+func TestMultiInstanceSequentialCompletionCondition(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	b := compiler.NewBuilder(1, "mi-seq-cc", 1)
+	start := b.AddStartEvent()
+	setup := b.AddScriptTask(mustCompile(t, "[1, 2, 3]"), "items")
+	work := b.AddServiceTask("ccwork", 3)
+	b.SetMultiInstance(work, true, "item", "", mustCompile(t, "items"), nil, nil, mustCompile(t, "loopCounter >= 2"))
+	end := b.AddEndEvent()
+	b.Connect(start, setup)
+	b.Connect(setup, work)
+	b.Connect(work, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ServiceTask(cp.Node(work).Detail).JobType
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	// Iteration 1 runs (condition false), then iteration 2 (condition true → stop).
+	p.CompleteJob(jobByLoopCounter(t, h, jobType, 1))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle after iter 1: %v", err)
+	}
+	p.CompleteJob(jobByLoopCounter(t, h, jobType, 2))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle after iter 2: %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after condition met: process=%d element=%d, want 0 and 0 (iteration 3 never ran)", pi, ei)
+	}
+	// The work node was visited by the body + exactly two iterations, never a third.
+	if v := elementVisits(t, h.store, cp.Key)[cp.Node(work).ElementId]; v != 3 {
+		t.Errorf("work node visits = %d, want 3 (body + 2 iterations)", v)
+	}
+}
+
+// TestMultiInstanceParallelCompletionCondition ends a parallel loop early: once an
+// iteration satisfies the condition, the still-running iterations are cancelled and the
+// body completes (ADR-0077 Phase 4).
+func TestMultiInstanceParallelCompletionCondition(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	b := compiler.NewBuilder(1, "mi-par-cc", 1)
+	start := b.AddStartEvent()
+	setup := b.AddScriptTask(mustCompile(t, "[1, 2, 3]"), "items")
+	work := b.AddServiceTask("pccwork", 3)
+	b.SetMultiInstance(work, false, "item", "", mustCompile(t, "items"), nil, nil, mustCompile(t, "loopCounter >= 2"))
+	end := b.AddEndEvent()
+	b.Connect(start, setup)
+	b.Connect(setup, work)
+	b.Connect(work, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ServiceTask(cp.Node(work).Detail).JobType
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if len(activatableJobs(t, h.store, jobType)) != 3 {
+		t.Fatalf("want 3 parallel jobs before the condition is met")
+	}
+	// Complete iteration 1 (condition false), then iteration 2 (condition true → cancel #3).
+	p.CompleteJob(jobByLoopCounter(t, h, jobType, 1))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle after iter 1: %v", err)
+	}
+	p.CompleteJob(jobByLoopCounter(t, h, jobType, 2))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle after iter 2: %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after condition met: process=%d element=%d, want 0 and 0 (iteration 3 cancelled)", pi, ei)
+	}
+	if !jobGone(t, h.store, jobType) {
+		t.Error("a job survived the early completion (iteration 3 should be cancelled)")
+	}
+}
+
+// TestMultiInstanceInterruptingBoundary tears down every iteration of a parallel loop
+// when an interrupting boundary timer on the multi-instance activity fires, and routes
+// out the boundary's flow (ADR-0077 Phase 4 — the body is a scope, so terminateScope
+// reaches the iterations).
+func TestMultiInstanceInterruptingBoundary(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	const dur = int64(30e9)
+	b := compiler.NewBuilder(1, "mi-boundary", 1)
+	start := b.AddStartEvent()
+	setup := b.AddScriptTask(mustCompile(t, "[1, 2, 3]"), "items")
+	work := b.AddServiceTask("bwork", 3)
+	b.SetMultiInstance(work, false, "item", "", mustCompile(t, "items"), nil, nil, nil)
+	timeout := b.AddBoundaryTimerEvent(work, true, dur)
+	done := b.AddEndEvent()
+	esc := b.AddEndEvent()
+	b.Connect(start, setup)
+	b.Connect(setup, work)
+	b.Connect(work, done)
+	b.Connect(timeout, esc)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ServiceTask(cp.Node(work).Detail).JobType
+	clk := &fixedClock{t: 1_000}
+
+	p := engine.New(1, h.log, h.store, clk)
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if len(activatableJobs(t, h.store, jobType)) != 3 {
+		t.Fatalf("want 3 iteration jobs before the interrupt")
+	}
+	clk.t = 1_000 + dur + 1
+	if err := p.TickTimers(); err != nil {
+		t.Fatalf("TickTimers: %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after interrupt: process=%d element=%d, want 0 and 0 (all iterations terminated)", pi, ei)
+	}
+	if !jobGone(t, h.store, jobType) {
+		t.Error("iteration jobs survived an interrupting boundary (should be canceled)")
+	}
+	if v := elementVisits(t, h.store, cp.Key); v[esc] != 1 || v[done] != 0 {
+		t.Errorf("end visits = {esc:%d done:%d}, want {1 0} (boundary flow taken)", v[esc], v[done])
+	}
+}
+
+// TestMultiInstanceOverSubProcess runs a multi-instance embedded subprocess: each
+// iteration is a full subprocess instance, and the loop assembles an output collection
+// over the iterations' variables (ADR-0077 Phase 4 — no engine change, the dispatch and
+// scope machinery compose).
+func TestMultiInstanceOverSubProcess(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	b := compiler.NewBuilder(1, "mi-over-sub", 1)
+	start := b.AddStartEvent()
+	setup := b.AddScriptTask(mustCompile(t, "[1, 2, 3]"), "items")
+	sub := b.AddSubProcess()
+	b.SetMultiInstance(sub, false, "item", "results", mustCompile(t, "items"), nil, mustCompile(t, "item * 10"), nil)
+	b.PushScope(sub)
+	istart := b.AddStartEvent()
+	iend := b.AddEndEvent()
+	b.Connect(istart, iend)
+	b.PopScope()
+	end := b.AddEndEvent()
+	b.Connect(start, setup)
+	b.Connect(setup, sub)
+	b.Connect(sub, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("process=%d element=%d, want 0 and 0 (all subprocess iterations completed)", pi, ei)
+	}
+	got := readVar(t, h.store, model.NewKey(1, 1), "results")
+	if got == nil || got.Text != "[10,20,30]" {
+		t.Errorf("results = %v, want [10,20,30]", got)
+	}
+}
+
+// callerWithMultiInstanceChild deploys a child (start → service task → end) and a caller
+// whose multi-instance call activity invokes it once per collection element. It returns
+// the processor and the child's job type.
+func callerWithMultiInstanceChild(t *testing.T, h *harness, clk engine.Clock, collection string, boundary func(b *compiler.Builder, call int32)) (*engine.Processor, int32) {
+	t.Helper()
+	cb := compiler.NewBuilder(8, "mi-child", 1)
+	cs := cb.AddStartEvent()
+	ct := cb.AddServiceTask("michildwork", 3)
+	ce := cb.AddEndEvent()
+	cb.Connect(cs, ct)
+	cb.Connect(ct, ce)
+	childCp, err := cb.Build()
+	if err != nil {
+		t.Fatalf("child Build: %v", err)
+	}
+	jobType := childCp.ServiceTask(childCp.Node(ct).Detail).JobType
+
+	b := compiler.NewBuilder(9, "mi-caller", 1)
+	start := b.AddStartEvent()
+	setup := b.AddScriptTask(mustCompile(t, collection), "items")
+	call := b.AddCallActivity("mi-child", compiler.BindingLatest, true, true)
+	b.SetMultiInstance(call, false, "item", "", mustCompile(t, "items"), nil, nil, nil)
+	b.Connect(start, setup)
+	b.Connect(setup, call)
+	b.Connect(call, b.AddEndEvent())
+	if boundary != nil {
+		boundary(b, call)
+	}
+	callerCp, err := b.Build()
+	if err != nil {
+		t.Fatalf("caller Build: %v", err)
+	}
+
+	p := engine.New(1, h.log, h.store, clk)
+	p.Deploy(childCp)
+	p.Deploy(callerCp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(callerCp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	return p, jobType
+}
+
+// TestMultiInstanceOverCallActivity fans out a call activity: each iteration starts a
+// child instance, and the body completes once every child finishes (ADR-0077 Phase 4).
+func TestMultiInstanceOverCallActivity(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	p, jobType := callerWithMultiInstanceChild(t, h, &manualClock{}, "[1, 2, 3]", nil)
+
+	// Three child instances (caller + 3 children) each parked on their service task.
+	if pi := func() int { pi, _ := counts(t, h.store); return pi }(); pi != 4 {
+		t.Fatalf("process instances = %d, want 4 (caller + 3 children)", pi)
+	}
+	jobs := activatableJobs(t, h.store, jobType)
+	if len(jobs) != 3 {
+		t.Fatalf("child jobs = %d, want 3", len(jobs))
+	}
+	for _, jk := range jobs {
+		p.CompleteJob(jk)
+	}
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after children complete: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+}
+
+// TestMultiInstanceOverCallActivityInterrupt tears down every iteration's child instance
+// when an interrupting boundary fires on the multi-instance call activity (ADR-0077
+// Phase 4 — terminateScope terminates each inner call activity, whose child is torn down
+// via terminateChildInstance, ADR-0076).
+func TestMultiInstanceOverCallActivityInterrupt(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	const dur = int64(30e9)
+	clk := &fixedClock{t: 1_000}
+	var escEnd int32
+	p, jobType := callerWithMultiInstanceChild(t, h, clk, "[1, 2, 3]", func(b *compiler.Builder, call int32) {
+		boundary := b.AddBoundaryTimerEvent(call, true, dur)
+		escEnd = b.AddEndEvent()
+		b.Connect(boundary, escEnd)
+	})
+	_ = escEnd
+	if pi, _ := counts(t, h.store); pi != 4 {
+		t.Fatalf("process instances = %d, want 4 (caller + 3 children)", pi)
+	}
+	clk.t = 1_000 + dur + 1
+	if err := p.TickTimers(); err != nil {
+		t.Fatalf("TickTimers: %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after interrupt: process=%d element=%d, want 0 and 0 (caller + all children terminated)", pi, ei)
+	}
+	if !jobGone(t, h.store, jobType) {
+		t.Error("child jobs survived the interrupt (should be canceled)")
+	}
+}
