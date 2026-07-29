@@ -15,18 +15,20 @@ import (
 )
 
 // TestEventVarsAndKeys covers the pure bridge helpers: payload conversion across
-// every value kind (and the empty case), correlation-key evaluation (keyless, a
-// missing field, and a present field), and the source-id format.
+// every value kind and the reserved envelope fields, correlation-key evaluation
+// (keyless, a missing field, a present body field, and a subject-derived key), the
+// event-id → dedup-seq parse, and the source-id format.
 func TestEventVarsAndKeys(t *testing.T) {
-	if eventVars(nil) != nil {
-		t.Error("eventVars(nil) should be nil")
-	}
-	vars := eventVars(map[string]any{
-		"s": "hi", "n": 42.0, "b": true, "obj": map[string]any{"a": 1}, "z": nil,
+	// eventVars seeds every body field plus the reserved envelope fields.
+	vars := eventVars(clio.InboundEvent{
+		ID: "7", Subject: "/employees/E-123456", Type: "employee.created",
+		Data: map[string]any{"s": "hi", "n": 42.0, "b": true, "obj": map[string]any{"a": 1}, "z": nil},
 	})
 	kinds := map[string]model.VarKind{}
+	text := map[string]string{}
 	for _, v := range vars {
 		kinds[v.Name] = v.Kind
+		text[v.Name] = v.Text
 	}
 	for name, want := range map[string]model.VarKind{
 		"s": model.VarString, "n": model.VarNumber, "b": model.VarBool, "obj": model.VarJSON, "z": model.VarNull,
@@ -35,19 +37,42 @@ func TestEventVarsAndKeys(t *testing.T) {
 			t.Errorf("var %q kind = %v, want %v", name, kinds[name], want)
 		}
 	}
+	if text["subject"] != "/employees/E-123456" || text["subjectTail"] != "E-123456" {
+		t.Errorf("envelope subject/subjectTail = %q/%q, want /employees/E-123456 and E-123456", text["subject"], text["subjectTail"])
+	}
+	if text["eventType"] != "employee.created" || text["eventId"] != "7" {
+		t.Errorf("envelope eventType/eventId = %q/%q, want employee.created and 7", text["eventType"], text["eventId"])
+	}
 
 	if got := correlationKeyOf(nil, clio.InboundEvent{}); got != "" {
 		t.Errorf("keyless correlationKeyOf = %q, want empty", got)
 	}
-	compiled, err := expr.CompileAuto("orderId")
+	orderKey, err := expr.CompileAuto("orderId")
 	if err != nil {
 		t.Fatalf("CompileAuto: %v", err)
 	}
-	if got := correlationKeyOf(compiled, clio.InboundEvent{Data: map[string]any{}}); got != "" {
+	if got := correlationKeyOf(orderKey, clio.InboundEvent{Data: map[string]any{}}); got != "" {
 		t.Errorf("missing-field correlationKeyOf = %q, want empty (null propagates)", got)
 	}
-	if got := correlationKeyOf(compiled, clio.InboundEvent{Data: map[string]any{"orderId": "o-9"}}); got != "o-9" {
+	if got := correlationKeyOf(orderKey, clio.InboundEvent{Data: map[string]any{"orderId": "o-9"}}); got != "o-9" {
 		t.Errorf("correlationKeyOf = %q, want o-9", got)
+	}
+	// The reported use case: a correlation key of subjectTail derives E-123456 from
+	// the subject /employees/E-123456, with no such field in the event body.
+	tailKey, err := expr.CompileAuto("subjectTail")
+	if err != nil {
+		t.Fatalf("CompileAuto: %v", err)
+	}
+	if got := correlationKeyOf(tailKey, clio.InboundEvent{Subject: "/employees/E-123456"}); got != "E-123456" {
+		t.Errorf("subjectTail correlationKeyOf = %q, want E-123456", got)
+	}
+
+	// A clio event id is a decimal per-partition sequence → the engine dedup seq.
+	if got := inboundSeq("42"); got != 42 {
+		t.Errorf("inboundSeq(42) = %d, want 42", got)
+	}
+	if got := inboundSeq("not-a-number"); got != 0 {
+		t.Errorf("inboundSeq(garbage) = %d, want 0 (skipped)", got)
 	}
 
 	sub := inboundSubscription{ConnectorID: "c1", WatchedSubject: "orders/new"}
@@ -124,7 +149,7 @@ func TestPollInboundReadError(t *testing.T) {
 // the bridge's transient-read-failure branch.
 func (errReader) WriteEvent(context.Context, clio.Event) error                     { return nil }
 func (errReader) GetState(context.Context, string, string) (map[string]any, error) { return nil, nil }
-func (errReader) Query(context.Context, string) (any, error)                       { return nil, nil }
+func (errReader) Query(context.Context, string, string) (any, error)               { return nil, nil }
 func (errReader) ReadEvents(context.Context, clio.ReadEventsRequest) ([]clio.InboundEvent, error) {
 	return nil, context.DeadlineExceeded
 }

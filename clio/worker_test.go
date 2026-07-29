@@ -22,10 +22,12 @@ func (c *fixedClock) Now() int64 { c.t++; return c.t }
 // recordingClient captures the events a connector task writes and serves canned
 // read/query results back.
 type recordingClient struct {
-	events   []clio.Event
-	state    map[string]any
-	queryOut any
-	readOut  []clio.InboundEvent
+	events     []clio.Event
+	state      map[string]any
+	queryOut   any
+	readOut    []clio.InboundEvent
+	querySubj  string
+	queryWhere string
 }
 
 func (r *recordingClient) WriteEvent(_ context.Context, e clio.Event) error {
@@ -37,7 +39,8 @@ func (r *recordingClient) GetState(_ context.Context, _, _ string) (map[string]a
 	return r.state, nil
 }
 
-func (r *recordingClient) Query(_ context.Context, _ string) (any, error) {
+func (r *recordingClient) Query(_ context.Context, subject, where string) (any, error) {
+	r.querySubj, r.queryWhere = subject, where
 	return r.queryOut, nil
 }
 
@@ -57,7 +60,7 @@ func (e *errClient) WriteEvent(context.Context, clio.Event) error { return e.err
 func (e *errClient) GetState(context.Context, string, string) (map[string]any, error) {
 	return nil, e.err
 }
-func (e *errClient) Query(context.Context, string) (any, error) { return nil, e.err }
+func (e *errClient) Query(context.Context, string, string) (any, error) { return nil, e.err }
 func (e *errClient) ReadEvents(context.Context, clio.ReadEventsRequest) ([]clio.InboundEvent, error) {
 	return nil, e.err
 }

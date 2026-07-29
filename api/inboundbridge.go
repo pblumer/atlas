@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"time"
 
@@ -67,7 +68,7 @@ func (s *Server) pollInbound(ctx context.Context) {
 		}
 		pubs := make([]pub, len(events))
 		for i, ev := range events {
-			pubs[i] = pub{seq: ev.Seq, key: correlationKeyOf(sb.key, ev), vars: eventVars(ev.Data)}
+			pubs[i] = pub{seq: inboundSeq(ev.ID), key: correlationKeyOf(sb.key, ev), vars: eventVars(ev)}
 		}
 		sourceID := inboundSourceID(sb.rec)
 		lastID := events[len(events)-1].ID
@@ -146,17 +147,60 @@ func inboundSourceID(r inboundSubscription) string {
 	return "clio:" + r.ConnectorID + ":" + r.WatchedSubject
 }
 
+// inboundSeq parses a clio event id — a per-partition monotonic sequence rendered
+// as a decimal string — into the uint64 the engine deduplicates on (ADR-0075).
+// clio events carry no separate `seq` field; the id itself is the order. A
+// non-numeric id (not a real clio event) yields 0, which the engine treats as
+// already-applied and skips, so a garbled line can never double-start a process.
+func inboundSeq(id string) uint64 {
+	n, err := strconv.ParseUint(id, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// eventFields is the binding environment a clio event exposes to correlation-key
+// expressions and as seeded process variables: the event body, plus four reserved
+// envelope fields the body cannot see on its own. subjectTail is the last
+// '/'-segment of the subject — "E-123456" for "/employees/E-123456" — so a watch
+// on a parent subject can key on the child id. The envelope fields take precedence
+// over a body field of the same name, so a subscription can always rely on them.
+func eventFields(ev clio.InboundEvent) map[string]any {
+	fields := make(map[string]any, len(ev.Data)+4)
+	for k, v := range ev.Data {
+		fields[k] = v
+	}
+	fields["subject"] = ev.Subject
+	fields["subjectTail"] = subjectTail(ev.Subject)
+	fields["eventType"] = ev.Type
+	fields["eventId"] = ev.ID
+	return fields
+}
+
+// subjectTail returns the last '/'-separated segment of a clio subject (trailing
+// slashes ignored): the leaf id an event is scoped to.
+func subjectTail(subject string) string {
+	trimmed := strings.TrimRight(subject, "/")
+	if i := strings.LastIndex(trimmed, "/"); i >= 0 {
+		return trimmed[i+1:]
+	}
+	return trimmed
+}
+
 // correlationKeyOf evaluates a subscription's compiled correlation key over a clio
-// event's data, returning the key as a string. A nil expression (keyless
-// subscription) yields ""; a failed evaluation (e.g. a missing field) also yields ""
-// so the message publishes keyless rather than being dropped.
+// event's fields (body plus reserved envelope fields), returning the key as a
+// string. A nil expression (keyless subscription) yields ""; a failed evaluation
+// (e.g. a missing field) also yields "" so the message publishes keyless rather
+// than being dropped.
 func correlationKeyOf(compiled *expr.Compiled, ev clio.InboundEvent) string {
 	if compiled == nil {
 		return ""
 	}
+	fields := eventFields(ev)
 	binds := make(map[string]expr.Value, len(compiled.Inputs()))
 	for _, name := range compiled.Inputs() {
-		if v, ok := ev.Data[name]; ok {
+		if v, ok := fields[name]; ok {
 			binds[name] = expr.FromJSON(v)
 		}
 	}
@@ -168,15 +212,16 @@ func correlationKeyOf(compiled *expr.Compiled, ev clio.InboundEvent) string {
 	return text
 }
 
-// eventVars turns a clio event's data into the payload variables carried into the
-// woken/started instances, canonicalized through expr so each round-trips on replay
-// exactly like any other variable.
-func eventVars(data map[string]any) []model.VariableValue {
-	if len(data) == 0 {
-		return nil
-	}
-	out := make([]model.VariableValue, 0, len(data))
-	for name, raw := range data {
+// eventVars turns a clio event's fields (body plus reserved envelope fields) into
+// the payload variables carried into the woken/started instances, canonicalized
+// through expr so each round-trips on replay exactly like any other variable. The
+// envelope fields (subject, subjectTail, eventType, eventId) let a process read the
+// event's subject and derive keys from it — e.g. a message-start correlation key of
+// subjectTail.
+func eventVars(ev clio.InboundEvent) []model.VariableValue {
+	fields := eventFields(ev)
+	out := make([]model.VariableValue, 0, len(fields))
+	for name, raw := range fields {
 		kind, b, text := expr.Classify(expr.FromJSON(raw))
 		out = append(out, model.VariableValue{Name: name, Kind: inboundVarKind(kind), Bool: b, Text: text})
 	}
