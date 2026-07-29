@@ -1,18 +1,21 @@
 # ADR-0074: Embedded subprocesses (scope lifecycle via child counters)
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-28
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phases 1–3 delivered (a plain embedded subprocess
-> compiles, *runs* end to end, and can be interrupted by a boundary event); Phase 4
-> pending. The work is phased, each phase test-first with a recovery test
-> (ADR-0018): compiler parse + `FlowScope` → runtime scope lifecycle (the happy path
-> that makes a plain embedded subprocess run) → termination/interruption and
-> boundary events on the subprocess → nesting depth and subprocess-level
-> variables/I/O mappings. Event subprocesses, multi-instance activities, and call
-> activities are **out of scope** here — they are separate ROADMAP Milestone-3 items
-> that build on this one.
+> **Implementation status.** Phases 1–4 delivered — a plain embedded subprocess
+> compiles, *runs* end to end, can be interrupted by a boundary event, nests, and
+> passes variables in and out via I/O mappings. Each phase was test-first with a
+> recovery test (ADR-0018): compiler parse + `FlowScope` → runtime scope lifecycle
+> (the happy path that makes a plain embedded subprocess run) →
+> termination/interruption and boundary events on the subprocess → nesting depth and
+> subprocess-level variables/I/O mappings. **Remaining (separate follow-up):** the
+> Modeler properties panel does not yet expose an I/O-mapping editor for a
+> subprocess — mappings authored in the model XML work, but the panel shows only
+> General (name/id); adding the editor reuses the existing ADR-0068 io-mapping UI.
+> Event subprocesses, multi-instance activities, and call activities are **out of
+> scope** here — they are separate ROADMAP Milestone-3 items that build on this one.
 >
 > **Delivered (Phase 1, compiler):** the `TypeSubProcess` element type; recursive
 > parsing of `<subProcess>` (a shared `xmlFlowContent` embedded in both the process
@@ -50,6 +53,19 @@
 > parked inner service task terminates the task and cancels its job, the
 > non-interrupting case runs both branches, and an interrupt fired *after* crash +
 > recovery still tears the recovered scope down cleanly.
+>
+> **Delivered (Phase 4, nesting & variables):** the compiler wires `zeebe:ioMapping`
+> on a `<subProcess>` (and on activities inside one) recursively over the scope tree.
+> No engine change was needed — the generic activity-local-scope machinery (ADR-0068)
+> already applies input mappings on activation and output mappings + scope-drop on
+> completion, and the scope keys line up exactly: a subprocess's input mapping writes
+> its own element-instance key, which *is* the scope its inner nodes resolve against,
+> so a mapped value becomes a subprocess-local variable the inner nodes inherit up the
+> chain; an output mapping promotes a selected value to the parent scope; and the
+> local scope is dropped on completion so scratch data never leaks. Verified: an input
+> mapping's value is visible to an inner script and does not leak to the process root,
+> an output mapping promotes a subprocess-local value out, and a subprocess nested
+> inside another runs to completion.
 
 ## Context and problem statement
 

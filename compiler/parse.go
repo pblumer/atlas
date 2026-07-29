@@ -497,20 +497,40 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		return nil
 	}
-	for _, st := range proc.ServiceTasks {
-		if err := wireIO(st.Id, st.IOMapping); err != nil {
-			return nil, err
+	// Wire I/O mappings for every scope, recursively: a subprocess's own ioMapping
+	// (input mappings write its scope on entry, output mappings promote to the
+	// parent on completion — the engine applies both generically) and the mappings
+	// on the activities inside it (ADR-0074 Phase 4).
+	var wireScopeIO func(c *xmlFlowContent) error
+	wireScopeIO = func(c *xmlFlowContent) error {
+		for _, st := range c.ServiceTasks {
+			if err := wireIO(st.Id, st.IOMapping); err != nil {
+				return err
+			}
 		}
+		for _, st := range c.ScriptTasks {
+			if err := wireIO(st.Id, st.IOMapping); err != nil {
+				return err
+			}
+		}
+		for _, ut := range c.UserTasks {
+			if err := wireIO(ut.Id, ut.IOMapping); err != nil {
+				return err
+			}
+		}
+		for i := range c.SubProcesses {
+			sub := &c.SubProcesses[i]
+			if err := wireIO(sub.Id, sub.IOMapping); err != nil {
+				return err
+			}
+			if err := wireScopeIO(&sub.xmlFlowContent); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
-	for _, st := range proc.ScriptTasks {
-		if err := wireIO(st.Id, st.IOMapping); err != nil {
-			return nil, err
-		}
-	}
-	for _, ut := range proc.UserTasks {
-		if err := wireIO(ut.Id, ut.IOMapping); err != nil {
-			return nil, err
-		}
+	if err := wireScopeIO(&proc.xmlFlowContent); err != nil {
+		return nil, err
 	}
 
 	cp, err := b.Build()
@@ -617,8 +637,9 @@ type xmlFlowContent struct {
 // sequence flows compile into the flat node array, linked back to it only by their
 // FlowScope (ADR-0074). It recurses — a subprocess may contain subprocesses.
 type xmlSubProcess struct {
-	Id   string `xml:"id,attr"`
-	Name string `xml:"name,attr"`
+	Id        string            `xml:"id,attr"`
+	Name      string            `xml:"name,attr"`
+	IOMapping xmlZeebeIOMapping `xml:"extensionElements>ioMapping"`
 	xmlFlowContent
 }
 

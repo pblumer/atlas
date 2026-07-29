@@ -5,6 +5,7 @@ import (
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/model"
 )
 
 // subProcessScriptProcess builds Start → subProcess{ iStart → script → iEnd } →
@@ -120,6 +121,118 @@ func TestSubProcessEmptyCompletesImmediately(t *testing.T) {
 	}
 	if v := elementVisits(t, h.store, cp.Key); v[sub] != 1 {
 		t.Errorf("subprocess visited %d times, want 1", v[sub])
+	}
+}
+
+// TestSubProcessIOMappingScopesVariables checks subprocess-level variable passing
+// (ADR-0074 Phase 4): an input mapping writes a computed value into the subprocess
+// scope (the inner nodes see it, up the chain), it does NOT leak to the process
+// root, and an output mapping promotes a subprocess-local value back out.
+func TestSubProcessIOMappingScopesVariables(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	b := compiler.NewBuilder(defKey, "subio", 1)
+	start := b.AddStartEvent()
+	setup := b.AddScriptTask(mustCompile(t, "5"), "outerVal") // seed a process variable
+	sub := b.AddSubProcess()
+	// input: innerVal = outerVal + 1  (written to the subprocess scope on entry)
+	b.AddInputMapping(sub, "innerVal", mustCompile(t, "outerVal + 1"))
+	// output: promoted = innerVal * 100 (promoted to the parent scope on completion)
+	b.AddOutputMapping(sub, "promoted", mustCompile(t, "innerVal * 100"))
+	b.PushScope(sub)
+	iStart := b.AddStartEvent()
+	iEcho := b.AddScriptTask(mustCompile(t, "innerVal"), "innerEcho") // reads the subprocess-local
+	iEnd := b.AddEndEvent()
+	b.Connect(iStart, iEcho)
+	b.Connect(iEcho, iEnd)
+	b.PopScope()
+	end := b.AddEndEvent()
+	b.Connect(start, setup)
+	b.Connect(setup, sub)
+	b.Connect(sub, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after run: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+
+	root := model.NewKey(1, 1)
+	// The inner script saw the input-mapped subprocess-local (innerVal = 6).
+	if got := readVar(t, h.store, root, "innerEcho"); got == nil || got.Text != "6" {
+		t.Errorf("innerEcho = %v, want 6 (inner node saw the input-mapped local)", got)
+	}
+	// The output mapping promoted a subprocess-local value to the process scope.
+	if got := readVar(t, h.store, root, "promoted"); got == nil || got.Text != "600" {
+		t.Errorf("promoted = %v, want 600 (output mapping promoted out)", got)
+	}
+	// The input-mapped local stayed inside the subprocess — dropped on completion,
+	// never leaked to the process root.
+	if got := readVar(t, h.store, root, "innerVal"); got != nil {
+		t.Errorf("innerVal = %v at root, want nil (subprocess-local, dropped)", got)
+	}
+}
+
+// TestNestedSubProcessRunsToCompletion runs a subprocess nested inside another
+// subprocess: entering the outer scope enters the inner scope, and draining the
+// inner completes the outer, which completes the instance (ADR-0074 Phase 4).
+func TestNestedSubProcessRunsToCompletion(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	b := compiler.NewBuilder(defKey, "nested", 1)
+	start := b.AddStartEvent()
+	outer := b.AddSubProcess()
+	b.PushScope(outer)
+	oStart := b.AddStartEvent()
+	inner := b.AddSubProcess()
+	b.PushScope(inner)
+	iStart := b.AddStartEvent()
+	iTask := b.AddScriptTask(mustCompile(t, `"deep"`), "reached")
+	iEnd := b.AddEndEvent()
+	b.Connect(iStart, iTask)
+	b.Connect(iTask, iEnd)
+	b.PopScope()
+	oEnd := b.AddEndEvent()
+	b.Connect(oStart, inner)
+	b.Connect(inner, oEnd)
+	b.PopScope()
+	end := b.AddEndEvent()
+	b.Connect(start, outer)
+	b.Connect(outer, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after run: process=%d element=%d, want 0 and 0 (nested subprocesses drained)", pi, ei)
+	}
+	for _, id := range []int32{outer, inner, iTask} {
+		if v := elementVisits(t, h.store, cp.Key); v[id] != 1 {
+			t.Errorf("element %d visited %d times, want 1", id, elementVisits(t, h.store, cp.Key)[id])
+		}
 	}
 }
 
