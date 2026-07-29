@@ -87,6 +87,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0078](0078-design-view-token-simulation.md) | Design-view token simulation — a client-side control-flow walkthrough | Accepted |
 | [0079](0079-outbound-mail-connector.md) | An outbound mail connector (SMTP first) — provider managed like clio, message model-authored like REST | Accepted |
 | [0080](0080-native-mail-providers.md) | Native Gmail and Microsoft Graph mail providers — OAuth2 (app-only + refresh-token) behind the mail.Client seam, credential bundle in the vault | Accepted |
+| [0081](0081-community-marketplace-for-connectors-and-tasks.md) | A community marketplace for connectors, service tasks, and script tasks | Proposed |
 
 ## Status values
 
