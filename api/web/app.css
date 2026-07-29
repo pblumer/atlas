@@ -732,6 +732,12 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   background: var(--surface); border: 1px solid var(--border); white-space: nowrap;
 }
 .vars .vv { font: 13px/1.5 ui-monospace, monospace; margin-top: 3px; word-break: break-word; }
+/* Scope chip on a subprocess-local variable in the replay variables table (ADR-0074). */
+.c-scope {
+  font: 600 9px/1.6 system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 0 5px; margin-left: 6px; border-radius: 4px; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--border); white-space: nowrap; vertical-align: middle;
+}
 .vars .vv.num  { color: #0a7c5a; }
 .vars .vv.str  { color: var(--text); }
 .vars .vv.bool { color: #b26a00; font-weight: 600; }

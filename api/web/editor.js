@@ -4496,8 +4496,14 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       ? `<span class="vtag obj">${esc(jsonTypeLabel(v.value))}</span>`
       : `<span class="vtag">${esc(v.kind)}</span>`;
     const copyData = complex ? prettyJSON(v.value) : v.value;
+    // A subprocess-local variable (an input mapping) carries the id of the
+    // subprocess it lives in; label it so it reads apart from a process variable
+    // (ADR-0074). A process-scope variable has no scope and no chip.
+    const scopeChip = v.scope
+      ? ` <span class="c-scope" title="Local to subprocess ${esc(v.scope)}">${esc(v.scope)}</span>`
+      : "";
     return `<tr>
-      <td class="c-name" title="${esc(v.name)}">${esc(v.name)}</td>
+      <td class="c-name" title="${esc(v.name)}${v.scope ? " — local to subprocess " + esc(v.scope) : ""}">${esc(v.name)}${scopeChip}</td>
       <td class="c-valcell">${valCell}</td>
       <td class="c-type">${typeBadge}</td>
       <td class="c-act">${copyBtn(copyData, complex ? "Copy JSON" : "Copy value")}</td>

@@ -1011,8 +1011,9 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			elementID int32
 		}
 		type varChange struct {
-			pos  uint64
-			view variableView
+			pos    uint64
+			endPos uint64 // last position the change's scope is live (^0 for the root scope)
+			view   variableView
 		}
 		var (
 			stepRows []stepRow
@@ -1034,9 +1035,46 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				return nil
 			})
 		}
+		// Variable snapshots are scope-aware: the process-instance (root) scope plus
+		// each embedded subprocess scope of this instance, so a subprocess's local
+		// variables (its input mappings) are visible in the replay, labeled by their
+		// subprocess. A local-scope drop is not snapshotted (ADR-0068), so a local is
+		// bounded to its subprocess's lifetime — shown only for steps at or before the
+		// subprocess completes (ADR-0074). endPos ^0 = never expires (the root scope).
+		const noEnd = ^uint64(0)
+		type scopeSpan struct {
+			scopeKey uint64
+			label    string
+			endPos   uint64
+		}
+		subScopes := map[uint64]*scopeSpan{}
+		var subScopeList []*scopeSpan
+		for _, rr := range replayRows {
+			if d.cp.Node(rr.v.ElementID).Type != compiler.TypeSubProcess {
+				continue
+			}
+			if rr.v.Action == 1 { // the subprocess scope opened
+				sp := &scopeSpan{scopeKey: rr.v.ElementInstanceKey, label: d.cp.ElementBpmnId(rr.v.ElementID), endPos: noEnd}
+				subScopes[rr.v.ElementInstanceKey] = sp
+				subScopeList = append(subScopeList, sp)
+			} else if sp := subScopes[rr.v.ElementInstanceKey]; sp != nil { // it completed/terminated
+				sp.endPos = rr.pos
+			}
+		}
 		if scanErr == nil {
 			scanErr = s.store.VariableSnapshotHistory(key, func(_ int64, pos uint64, v *model.VariableValue) error {
-				changes = append(changes, varChange{pos: pos, view: toVariableView(v)})
+				changes = append(changes, varChange{pos: pos, endPos: noEnd, view: toVariableView(v)})
+				return nil
+			})
+		}
+		for _, sp := range subScopeList {
+			if scanErr != nil {
+				break
+			}
+			scanErr = s.store.VariableSnapshotHistory(sp.scopeKey, func(_ int64, pos uint64, v *model.VariableValue) error {
+				view := toVariableView(v)
+				view.Scope = sp.label
+				changes = append(changes, varChange{pos: pos, endPos: sp.endPos, view: view})
 				return nil
 			})
 		}
@@ -1116,20 +1154,35 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 
 		// Walk the steps in order, advancing through every variable change at or
 		// before each step's position, so a step carries the variables as they stood
-		// when the token entered that element. A change to a name overwrites the
-		// previous value for that name (variables are instance-scoped).
-		running := map[string]variableView{}
+		// when the token entered that element. A change overwrites the previous value
+		// for the same (scope, name) — a subprocess-local shadows nothing here, it is a
+		// distinct entry keyed by its scope. A local is only surfaced while its
+		// subprocess is live (endPos), since its drop is not snapshotted (ADR-0074).
+		type varKey struct{ scope, name string }
+		type varEntry struct {
+			view   variableView
+			endPos uint64
+		}
+		running := map[varKey]varEntry{}
 		ci := 0
 		for _, sr := range stepRows {
 			for ci < len(changes) && changes[ci].pos <= sr.pos {
-				running[changes[ci].view.Name] = changes[ci].view
+				c := changes[ci]
+				running[varKey{c.view.Scope, c.view.Name}] = varEntry{view: c.view, endPos: c.endPos}
 				ci++
 			}
 			vars := make([]variableView, 0, len(running))
-			for _, vv := range running {
-				vars = append(vars, vv)
+			for _, e := range running {
+				if sr.pos <= e.endPos { // the variable's scope is still live at this step
+					vars = append(vars, e.view)
+				}
 			}
-			sort.Slice(vars, func(i, j int) bool { return vars[i].Name < vars[j].Name })
+			sort.Slice(vars, func(i, j int) bool {
+				if vars[i].Scope != vars[j].Scope {
+					return vars[i].Scope < vars[j].Scope // process (root) scope first
+				}
+				return vars[i].Name < vars[j].Name
+			})
 			// Every recorded step is a real activated node, so its diagram id is
 			// always present (unlike the shared runtime overlay's get, which guards
 			// synthetic elements).
@@ -1286,6 +1339,9 @@ type variableView struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
 	Kind  string `json:"kind"`
+	// Scope labels a subprocess-local variable with the id of the embedded
+	// subprocess it lives in; empty for a process (root) scope variable (ADR-0074).
+	Scope string `json:"scope,omitempty"`
 }
 
 func toVariableView(v *model.VariableValue) variableView {
