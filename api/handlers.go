@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -274,6 +275,13 @@ type cancelInstanceResp struct {
 	InstanceKey uint64    `json:"instanceKey"`
 	State       string    `json:"state"`
 	Stats       statsResp `json:"stats"`
+}
+
+type cancelInstancesResp struct {
+	DefinitionKey uint64    `json:"definitionKey"`
+	Canceled      int       `json:"canceled"`
+	Remaining     bool      `json:"remaining"` // the per-call cap was hit; call again to continue
+	Stats         statsResp `json:"stats"`
 }
 
 type failJobReq struct {
@@ -1853,6 +1861,97 @@ func (s *Server) handleCancelInstance(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
 	default:
 		writeJSON(w, http.StatusOK, cancelInstanceResp{InstanceKey: key, State: "terminated", Stats: stats})
+	}
+}
+
+// errCancelBatchFull stops the active-instance scan once a bulk cancel has collected
+// its per-call cap of instance keys. It is a sentinel to break the scan early, not a
+// failure — the handler treats it as success.
+var errCancelBatchFull = errors.New("cancel batch full")
+
+const (
+	// bulkCancelBatchDefault and bulkCancelBatchMax bound how many of a definition's
+	// instances one POST .../cancel-instances call terminates. The cap keeps a single
+	// call from holding the single-writer run loop while it terminates a runaway
+	// backlog of hundreds of thousands of instances; the caller repeats while the
+	// response reports remaining=true. This is the drain path for the reported
+	// /employees flood, where per-instance cancellation is infeasible.
+	bulkCancelBatchDefault = 5000
+	bulkCancelBatchMax     = 50000
+)
+
+// handleCancelInstancesOfProcess terminates a bounded batch of a definition's running
+// instances in one call: it scans the active process instances, cancels up to the
+// per-call cap that belong to the definition, and reports how many it cancelled and
+// whether the cap was hit (remaining=true → call again). All work happens in one run-
+// loop turn so the terminations are atomic with the scan; the cap bounds the turn.
+func (s *Server) handleCancelInstancesOfProcess(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid definition key")
+		return
+	}
+	limit := bulkCancelBatchDefault
+	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
+		n, err := strconv.Atoi(q)
+		if err != nil || n <= 0 {
+			writeError(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
+			return
+		}
+		limit = n
+	}
+	if limit > bulkCancelBatchMax {
+		limit = bulkCancelBatchMax
+	}
+	var (
+		found     bool
+		remaining bool
+		keys      []uint64
+		scanErr   error
+		runErr    error
+		statErr   error
+		stats     statsResp
+	)
+	s.do(func() {
+		if _, ok := s.deployments[key]; !ok {
+			return
+		}
+		found = true
+		err := s.store.ActiveProcessInstances(func(k uint64, v *model.ProcessInstanceValue) error {
+			if v.ProcessDefKey != key {
+				return nil
+			}
+			keys = append(keys, k)
+			if len(keys) >= limit {
+				return errCancelBatchFull // stop early: this batch is full
+			}
+			return nil
+		})
+		if err != nil && err != errCancelBatchFull {
+			scanErr = err
+			return
+		}
+		remaining = errors.Is(err, errCancelBatchFull) // hit the cap → more may remain
+		for _, k := range keys {
+			s.proc.CancelInstance(k)
+		}
+		if err := s.jobRunner.Drive(); err != nil {
+			runErr = err
+			return
+		}
+		stats, statErr = s.readStats()
+	})
+	switch {
+	case !found:
+		writeError(w, http.StatusNotFound, "no deployment with that key")
+	case scanErr != nil:
+		writeError(w, http.StatusInternalServerError, "scan instances: "+scanErr.Error())
+	case runErr != nil:
+		writeError(w, http.StatusInternalServerError, "cancel instances: "+runErr.Error())
+	case statErr != nil:
+		writeError(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
+	default:
+		writeJSON(w, http.StatusOK, cancelInstancesResp{DefinitionKey: key, Canceled: len(keys), Remaining: remaining, Stats: stats})
 	}
 }
 

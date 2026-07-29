@@ -168,6 +168,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Decision evaluations", tArray())}},
 		{"DELETE", "/api/v1/instances/{key}", s.handleCancelInstance, apiOp{
 			summary: "Cancel a running instance", tag: "Instances", resp: jsonBody("Cancellation result", tObject())}},
+		{"POST", "/api/v1/processes/{key}/cancel-instances", s.handleCancelInstancesOfProcess, apiOp{
+			summary: "Cancel a bounded batch of a definition's running instances (?limit=, default 5000, max 50000); repeat while the response reports remaining=true", tag: "Instances",
+			resp: jsonBody("Bulk cancellation result", tObject())}},
 
 		{"POST", "/api/v1/messages", s.handlePublishMessage, apiOp{
 			summary: "Publish a message for correlation", tag: "Messages",
