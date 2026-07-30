@@ -1196,6 +1196,17 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tasks-bulk .btn { padding: 4px 9px; font-size: 12px; }
 .tasks-bulk .tasks-assign { padding: 4px 8px; font-size: 12px; }
 
+/* Truncation banner: the list is capped and newest-first, so a full page means
+   more tasks exist. Offers the "load older" cursor page alongside the filter hint. */
+.tasks-trunc {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 14px; background: var(--warn-soft, var(--accent-soft));
+  border-bottom: 1px solid var(--border); font-size: 12.5px; color: var(--muted);
+}
+.tasks-trunc[hidden] { display: none; }
+.tasks-trunc span { margin-right: auto; }
+.tasks-trunc .btn { padding: 4px 9px; font-size: 12px; }
+
 /* Multi-select rows: a checkbox left of each item; whole row toggles it. */
 .tasks-item { display: flex; align-items: flex-start; gap: 10px; }
 .tasks-item-body { flex: 1; min-width: 0; }

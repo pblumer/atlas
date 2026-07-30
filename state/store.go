@@ -132,6 +132,38 @@ func (s *Store) ActivatableJobs(jobType int32, fn func(jobKey uint64) error) err
 	})
 }
 
+// ActivatableJobsDesc calls fn with the key of every open job of the given type in
+// DESCENDING key order (newest first), starting just below `before` — before == 0
+// starts from the newest key. It backs the task inbox's newest-first, cursor-paged
+// listing (GET /tasks?before=): a flood parks its oldest tasks at the low keys, so
+// paging from the newest downward surfaces the tasks an operator most likely wants
+// first while still bounding the scan. Worker polling keeps using ActivatableJobs
+// (oldest-first, FIFO) — this is a read-side ordering only.
+func (s *Store) ActivatableJobsDesc(jobType int32, before uint64, fn func(jobKey uint64) error) error {
+	lo := jobActivatablePrefix(jobType)
+	hi := prefixEnd(lo)
+	if before != 0 {
+		// UpperBound is exclusive, so this starts at the highest key strictly below
+		// `before` — the natural cursor for "the next older page".
+		hi = keyJobActivatable(jobType, before)
+	}
+	return s.scanRangeDesc(lo, hi, func(k, _ []byte) error {
+		return fn(trailingKey(k))
+	})
+}
+
+// JobOfElement returns the key of the job held by the given element instance, or
+// ok=false if it holds none. It is the read-side counterpart of Tx.JobOfElement,
+// used to resolve one instance's open jobs through the element→job reverse index
+// rather than scanning the global activatable index.
+func (s *Store) JobOfElement(elKey uint64) (uint64, bool, error) {
+	raw, ok, err := getCopy(s.db, keyJobByElement(elKey))
+	if err != nil || !ok {
+		return 0, false, err
+	}
+	return binary.BigEndian.Uint64(raw), true, nil
+}
+
 // AllActivatableJobs calls fn with the key of every open job of ANY type, via the
 // same jobActivatable index — the whole column family rather than one job type's
 // slice. It backs the read side of the operator complete/fail affordance (listing
@@ -700,6 +732,22 @@ func (s *Store) scanRange(lo, hi []byte, fn func(k, v []byte) error) error {
 	}
 	defer iter.Close()
 	for iter.First(); iter.Valid(); iter.Next() {
+		if err := fn(iter.Key(), iter.Value()); err != nil {
+			return err
+		}
+	}
+	return iter.Error()
+}
+
+// scanRangeDesc is scanRange in reverse — it walks [lo, hi) from the highest key
+// down to the lowest, so a caller can page a key-ordered index newest-first.
+func (s *Store) scanRangeDesc(lo, hi []byte, fn func(k, v []byte) error) error {
+	iter, err := s.db.NewIter(&pebble.IterOptions{LowerBound: lo, UpperBound: hi})
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+	for iter.Last(); iter.Valid(); iter.Prev() {
 		if err := fn(iter.Key(), iter.Value()); err != nil {
 			return err
 		}
