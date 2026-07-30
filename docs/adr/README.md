@@ -91,6 +91,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0082](0082-singleton-message-start.md) | Singleton message start — at most one live instance per correlation key | Accepted |
 | [0083](0083-o1-instance-summary.md) | An O(1) instances summary — per-definition finished-count and last-activity counters | Accepted |
 | [0084](0084-csv-batch-validation.md) | CSV batch validation — upload a file, validate every row against business rules (DMN), correct the failures | Proposed |
+| [0085](0085-gateway-conditions-resolve-over-scope-chain.md) | Gateway conditions resolve over the scope chain, so a gateway inside a subprocess branches on its scope's variables | Proposed |
 
 ## Status values
 

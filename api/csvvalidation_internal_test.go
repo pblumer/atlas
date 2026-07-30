@@ -36,19 +36,19 @@ func buildCSVMultipart(t *testing.T, fileName, csv, config string) (*bytes.Buffe
 	return &buf, mw.FormDataContentType()
 }
 
-// TestCSVUploadRunsRowValidation is the Slice-1 + Slice-2 end-to-end proof
-// (ADR-0084): the shipped example decision (pruefe-datensaetze.dmn) and process
-// (pruefe-datensaetze.bpmn) are deployed as-is, a CSV is uploaded through the
-// ingestion endpoint, and the multi-instance business rule task validates each
-// row against the DMN rules — collecting one structured verdict per row into the
-// `verdicts` process variable, in input order. This is the first test in the repo
-// to combine a business rule task inside a multi-instance subprocess with an
-// output collection, the exact composition Slice 2 introduces.
-func TestCSVUploadRunsRowValidation(t *testing.T) {
+// TestCSVUploadCorrectionLoop is the Slice-1 + Slice-2 + Slice-3 end-to-end proof
+// (ADR-0084): the shipped example decision, process, and correction form are
+// deployed as-is; a CSV with one clean and one invalid record is uploaded through
+// the ingestion endpoint; the invalid row parks on a correction user task while
+// the clean one passes straight through; and completing the task with corrected
+// data re-validates that row and drives the whole instance to completion with all
+// verdicts valid. It exercises the per-row correction loop that ADR-0085's
+// scope-aware gateways unlocked, and loads the example files verbatim so a drift
+// breaks the build.
+func TestCSVUploadCorrectionLoop(t *testing.T) {
 	srv, dir := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
 
-	// Ship the example files verbatim: the test deploys exactly what an operator
-	// would, so a drift in either example breaks the build.
 	dmnModel, err := os.ReadFile(filepath.Join("..", "examples", "pruefe-datensaetze.dmn"))
 	if err != nil {
 		t.Fatalf("read example DMN: %v", err)
@@ -57,15 +57,31 @@ func TestCSVUploadRunsRowValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read example BPMN: %v", err)
 	}
-	// Seed the model where the DirResolver reads it, then reference it by handle.
+	formSchema, err := os.ReadFile(filepath.Join("..", "examples", "row-correction-form.json"))
+	if err != nil {
+		t.Fatalf("read example form: %v", err)
+	}
+
+	// Seed the DMN model for the resolver and register it as a decision reference.
 	if err := os.WriteFile(filepath.Join(dir, "dmn-models", "rowvalid.dmn"), dmnModel, 0o644); err != nil {
 		t.Fatalf("seed rowvalid.dmn: %v", err)
 	}
-
-	x := deployTestHarness{t, srv.Handler()}
 	if code, b := x.do(http.MethodPost, "/api/v1/dmnrefs", `{"name":"RowValid","modelRef":"rowvalid"}`); code != http.StatusOK {
 		t.Fatalf("add ref: %d %s", code, b)
 	}
+	// Create the correction form the user task binds to (formId row-correction-form).
+	formBody, err := json.Marshal(map[string]any{
+		"id":     "row-correction-form",
+		"name":   "Datensatz korrigieren",
+		"schema": json.RawMessage(formSchema),
+	})
+	if err != nil {
+		t.Fatalf("marshal form: %v", err)
+	}
+	if code, b := x.do(http.MethodPost, "/api/v1/forms", string(formBody)); code != http.StatusOK {
+		t.Fatalf("save form: %d %s", code, b)
+	}
+
 	code, b := x.do(http.MethodPost, "/api/v1/deployments", string(bpmn))
 	if code != http.StatusOK {
 		t.Fatalf("deploy: %d %s", code, b)
@@ -90,8 +106,66 @@ func TestCSVUploadRunsRowValidation(t *testing.T) {
 		t.Fatalf("upload: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
-	// Find the instance and read its variables (it ran to completion in-process).
-	code, b = x.do(http.MethodGet, "/api/v1/instances", "")
+	// Exactly one row (the invalid bob) parked on a correction user task; the clean
+	// ada passed straight to the row end — proof the in-subprocess gateway routed on
+	// the per-iteration verdict (ADR-0085).
+	tasks := listTasks(t, x)
+	if len(tasks) != 1 {
+		t.Fatalf("active user tasks = %d, want 1 (only the invalid row parks)", len(tasks))
+	}
+	if tasks[0].Name != "Datensatz korrigieren" {
+		t.Fatalf("task name = %q, want \"Datensatz korrigieren\"", tasks[0].Name)
+	}
+
+	// The Quality Manager corrects the record; the output mapping rewrites `row`, the
+	// back-edge re-validates, and the whole instance runs to completion.
+	fix := `{"variables":{"email":"bob@x.io","group":"users","license":"BASIC"}}`
+	if code, cb := x.do(http.MethodPost, "/api/v1/tasks/"+strconv.FormatUint(tasks[0].Key, 10)+"/complete", fix); code != http.StatusOK {
+		t.Fatalf("complete task: %d %s", code, cb)
+	}
+	if rem := listTasks(t, x); len(rem) != 0 {
+		t.Fatalf("active user tasks after correction = %d, want 0", len(rem))
+	}
+
+	// Both verdicts are now valid, collected in input order at the process root.
+	instKey := singleInstanceKey(t, x)
+	verdicts := instanceVar(t, x, instKey, "verdicts")
+	arr, ok := verdicts.([]any)
+	if !ok || len(arr) != 2 {
+		t.Fatalf("verdicts = %v (%T), want an array of 2", verdicts, verdicts)
+	}
+	for i, v := range arr {
+		obj, ok := v.(map[string]any)
+		if !ok {
+			t.Fatalf("verdicts[%d] = %v (%T), want an object", i, v, v)
+		}
+		if valid, _ := obj["valid"].(bool); !valid {
+			t.Errorf("verdicts[%d].valid = %v, want true (row validated after correction)", i, obj["valid"])
+		}
+	}
+}
+
+type taskRow struct {
+	Key  uint64 `json:"key"`
+	Name string `json:"name"`
+}
+
+func listTasks(t *testing.T, x deployTestHarness) []taskRow {
+	t.Helper()
+	code, b := x.do(http.MethodGet, "/api/v1/tasks", "")
+	if code != http.StatusOK {
+		t.Fatalf("list tasks: %d %s", code, b)
+	}
+	var tasks []taskRow
+	if err := json.Unmarshal(b, &tasks); err != nil {
+		t.Fatalf("decode tasks: %v (%s)", err, b)
+	}
+	return tasks
+}
+
+func singleInstanceKey(t *testing.T, x deployTestHarness) uint64 {
+	t.Helper()
+	code, b := x.do(http.MethodGet, "/api/v1/instances", "")
 	if code != http.StatusOK {
 		t.Fatalf("list instances: %d %s", code, b)
 	}
@@ -104,8 +178,12 @@ func TestCSVUploadRunsRowValidation(t *testing.T) {
 	if len(instances) != 1 {
 		t.Fatalf("instances = %d, want 1", len(instances))
 	}
+	return instances[0].Key
+}
 
-	code, b = x.do(http.MethodGet, "/api/v1/instances/"+strconv.FormatUint(instances[0].Key, 10)+"/variables", "")
+func instanceVar(t *testing.T, x deployTestHarness, key uint64, name string) any {
+	t.Helper()
+	code, b := x.do(http.MethodGet, "/api/v1/instances/"+strconv.FormatUint(key, 10)+"/variables", "")
 	if code != http.StatusOK {
 		t.Fatalf("get variables: %d %s", code, b)
 	}
@@ -113,26 +191,5 @@ func TestCSVUploadRunsRowValidation(t *testing.T) {
 	if err := json.Unmarshal(b, &vars); err != nil {
 		t.Fatalf("decode variables: %v (%s)", err, b)
 	}
-	verdicts, ok := vars["verdicts"].([]any)
-	if !ok || len(verdicts) != 2 {
-		t.Fatalf("verdicts = %v (%T), want an array of 2 (per-row verdicts collected?)", vars["verdicts"], vars["verdicts"])
-	}
-
-	// Row order is preserved: verdict[0] is the clean record, verdict[1] the bad one.
-	want := []map[string]bool{
-		{"emailOk": true, "groupOk": true, "licenseOk": true, "valid": true},
-		{"emailOk": false, "groupOk": false, "licenseOk": false, "valid": false},
-	}
-	for i, w := range want {
-		v, ok := verdicts[i].(map[string]any)
-		if !ok {
-			t.Fatalf("verdicts[%d] = %v (%T), want an object", i, verdicts[i], verdicts[i])
-		}
-		for field, exp := range w {
-			got, isBool := v[field].(bool)
-			if !isBool || got != exp {
-				t.Errorf("verdicts[%d].%s = %v, want %v", i, field, v[field], exp)
-			}
-		}
-	}
+	return vars[name]
 }

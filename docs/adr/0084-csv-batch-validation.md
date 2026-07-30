@@ -123,10 +123,23 @@ Two facts shaped the implementation:
   off-processor read whose result still freezes into the job completion (I6), so
   replay is unaffected.
 
-**Slice 3 (follow-up) — the correction loop.** Rows whose verdict is invalid
-route to `userTask`s (multi-instance over the failing rows) that the Quality
-Manager claims in the Tasks app; the bound form is pre-filled from the row
-(`handleInstanceVariables`), and submitting re-validates.
+**Slice 3 — the correction loop (landed).** Inside the per-row iteration, an
+exclusive gateway branches on `=verdict.valid`: a valid row ends the iteration; an
+invalid one parks on a **user task** (`korrigiere`, bound to the `row-correction-form`)
+that the Quality Manager claims in the Tasks app. The task's output mapping
+reshapes the submitted fields back into `row` (`={email:email, group:group,
+license:license}`), and a **same-scope back-edge** re-enters the business rule task —
+re-validating until the row is valid. The whole instance completes only when every
+row passes; `verdicts` collects each row's final (valid) verdict.
+
+This required making **gateway conditions scope-aware**
+([ADR-0085](0085-gateway-conditions-resolve-over-scope-chain.md)): the in-subprocess
+gateway reads the per-iteration `verdict`, which lives in the iteration scope, not
+the process root. A business rule task cannot be multi-instanced directly, and the
+back-edge stays within the subprocess scope (its join is an exclusive gateway, which
+fires per arrival). Known gap deferred to Slice 4: `handleInstanceVariables` reads a
+single scope, so the correction form does not yet auto-fill from the iteration
+`row` — the loop itself is complete; the pre-fill is a UI concern.
 
 **Slice 4 (follow-up) — the upload UI** in the web app (a screen over the
 Slice-1 endpoint) and, later, promoting the column layout to a reusable,

@@ -1006,7 +1006,8 @@ func takeInclusiveOutgoing(c *ProcessingContext, ei *model.ElementInstanceValue)
 			took = true
 			continue
 		}
-		v, err := f.Condition.Eval(bindInputs(c, f.Condition.Inputs(), ei.ProcessInstanceKey))
+		// Over the gateway's scope chain, matching the exclusive gateway (ADR-0085).
+		v, err := f.Condition.Eval(bindInputsChain(c, f.Condition.Inputs(), ei.FlowScopeKey))
 		if err == nil && expr.IsTrue(v) {
 			activateElement(c, ei, flowID, true)
 			took = true
@@ -1699,7 +1700,11 @@ func selectExclusiveFlow(c *ProcessingContext, cp *compiler.CompiledProcess, ei 
 		if f.Condition == nil {
 			return flowID // an unconditional flow is taken whenever reached
 		}
-		v, err := f.Condition.Eval(bindInputs(c, f.Condition.Inputs(), ei.ProcessInstanceKey))
+		// Resolve the condition over the gateway's scope chain, so a gateway inside a
+		// subprocess or multi-instance body branches on that scope's variables, not
+		// only the process root (ADR-0085). For a top-level gateway FlowScopeKey is
+		// the process-instance key, so this reads exactly the root as before.
+		v, err := f.Condition.Eval(bindInputsChain(c, f.Condition.Inputs(), ei.FlowScopeKey))
 		if err == nil && expr.IsTrue(v) {
 			return flowID
 		}
