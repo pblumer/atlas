@@ -73,6 +73,28 @@ func authoringTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_delete_project",
+			Description: "Delete a design-time project by id. The operation is idempotent. It removes only " +
+				"the project folder; tagged drafts and decision references remain and become ungrouped. " +
+				"When authentication is enabled, the caller must have the project owner role.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"id": stringProp("The project id from atlas_create_project or atlas_list_projects.")},
+				"required":   []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				if _, err := c.del("/api/v1/projects/" + url.PathEscape(id)); err != nil {
+					return "", err
+				}
+				confirmation, _ := json.Marshal(map[string]any{"deleted": true, "id": id})
+				return string(confirmation), nil
+			},
+		},
+		{
 			Name: "atlas_save_draft",
 			Description: "Save a BPMN 2.0 XML diagram as a draft, optionally filed under a project " +
 				"(projectId). The process id and name are read from the diagram. A draft is design-time " +
