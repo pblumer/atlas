@@ -39,8 +39,15 @@ func keyArg(desc string) map[string]any {
 
 // defaultTools is the set of tools this server exposes. Each maps directly onto
 // an Atlas HTTP endpoint; the returned text is the endpoint's JSON (or XML) body
-// so a model receives the server's structured response verbatim.
+// so a model receives the server's structured response verbatim. The runtime
+// tools are listed here; the design-time and human-task tools (projects, drafts,
+// forms, decisions, task completion) are appended from authoringTools.
 func defaultTools() []Tool {
+	return append(runtimeTools(), authoringTools()...)
+}
+
+// runtimeTools are the deploy/instance/inspect tools.
+func runtimeTools() []Tool {
 	return []Tool{
 		{
 			Name:        "atlas_info",

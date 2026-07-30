@@ -41,7 +41,12 @@ step is needed.
 
 ## The tools
 
-All ten tools map one-to-one onto an Atlas HTTP endpoint.
+Every tool maps one-to-one onto an Atlas HTTP endpoint. The **runtime** tools
+deploy/run/inspect; the **authoring** tools set a scenario up end to end — a
+project (folder) holding a diagram, forms, and a decision — and drive its human
+tasks.
+
+### Runtime
 
 | Tool | Args | Returns |
 |------|------|---------|
@@ -53,8 +58,28 @@ All ten tools map one-to-one onto an Atlas HTTP endpoint.
 | `atlas_process_runtime` | `key` (int) | per-element token/visit counts for one definition |
 | `atlas_list_instances` | — | all instances: state (`active`/`completed`/`terminated`), tokens, variables |
 | `atlas_cancel_instance` | `key` (int) | terminates one running **instance**; returns `{instanceKey, state:"terminated", stats}` |
+| `atlas_cancel_instances` | `key` (int), `limit?` | bulk-terminate a definition's instances |
 | `atlas_delete_process` | `key` (int) | deletes one **definition** (engine + disk); returns `{"deleted":true,"key":N}` |
 | `atlas_stats` | — | engine-wide `activeProcessInstances`, `activeElementInstances` |
+
+### Authoring (design-time + human tasks)
+
+| Tool | Args | Returns |
+|------|------|---------|
+| `atlas_create_project` | `name` | a project (folder) `id` to file artifacts under |
+| `atlas_list_projects` | — | projects with id, name, metadata |
+| `atlas_save_draft` | `xml`, `projectId?` | saves a BPMN diagram as a draft (design-time) under a project |
+| `atlas_save_form` | `id`, `schema` (object), `name?`, `projectId?` | saves a form-js form a user task binds to by `formId` |
+| `atlas_upload_decision_model` | `handle`, `xml` | uploads a DMN model under a handle so a decision resolves at deploy |
+| `atlas_register_decision` | `name`, `modelRef`, `projectId?` | registers a decision reference (name → model handle) |
+| `atlas_deploy_project` | `id` | deploys a project: compiles its drafts, bundles its decisions; returns definitions |
+| `atlas_list_tasks` | — | active user tasks: task `key`, process, element, name, assignee, `formId` |
+| `atlas_complete_task` | `key`, `variables?` (object) | completes a user task with its form data, driving the instance forward |
+
+**Set up a whole scenario:** `atlas_create_project` → `atlas_upload_decision_model`
++ `atlas_register_decision` → `atlas_save_form` (×N) → `atlas_save_draft` →
+`atlas_deploy_project` → `atlas_create_instance` → `atlas_list_tasks` →
+`atlas_complete_task` (repeat until the instance completes).
 
 ## The normal flow
 
@@ -140,8 +165,10 @@ do not block deletion.
 - Authoring/validating BPMN offline, or engine internals (compiler, processor,
   WAL, state) — that is source-code work; read `AGENTS.md` and the docs, don't
   poke the running server.
-- DMN/FEEL decisions live in a *different* engine (temis), not Atlas. Boxed
-  logic and decision tables are not Atlas MCP tools.
+- Authoring a DMN model's *logic* (writing the decision table itself) — that is
+  temis/DMN modeling work. The authoring tools here only **register and bundle** an
+  existing DMN model (`atlas_upload_decision_model` + `atlas_register_decision`) so a
+  business rule task can resolve it; they do not edit decision tables.
 
 ## References
 
