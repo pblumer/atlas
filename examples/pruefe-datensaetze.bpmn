@@ -71,6 +71,9 @@
           <zeebe:assignmentDefinition candidateGroups="quality"/>
           <zeebe:formDefinition formId="row-correction-form"/>
           <zeebe:ioMapping>
+            <zeebe:input source="=row.email" target="email"/>
+            <zeebe:input source="=row.group" target="group"/>
+            <zeebe:input source="=row.license" target="license"/>
             <zeebe:output source="={email: email, group: group, license: license}" target="row"/>
           </zeebe:ioMapping>
         </extensionElements>

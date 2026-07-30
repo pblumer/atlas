@@ -2150,6 +2150,10 @@ func (s *Server) handleListInstanceJobs(w http.ResponseWriter, r *http.Request) 
 type taskResp struct {
 	Key                uint64 `json:"key"`
 	ProcessInstanceKey uint64 `json:"processInstanceKey"`
+	// ElementInstanceKey scopes the task's own variables — its input-mapped fields
+	// live here, so the Tasks app pre-fills a bound form by reading this scope's
+	// variables rather than the process root (ADR-0084 Slice 4).
+	ElementInstanceKey uint64 `json:"elementInstanceKey,omitempty"`
 	ProcessDefKey      uint64 `json:"processDefKey,omitempty"`
 	ProcessID          string `json:"processId,omitempty"`
 	ElementID          string `json:"elementId,omitempty"`
@@ -2206,6 +2210,7 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 			tr := taskResp{
 				Key:                jobKey,
 				ProcessInstanceKey: jv.ProcessInstanceKey,
+				ElementInstanceKey: jv.ElementInstanceKey,
 			}
 			if ei, ok, err := s.store.GetElementInstance(jv.ElementInstanceKey); err == nil && ok {
 				tr.ProcessDefKey = ei.ProcessDefKey

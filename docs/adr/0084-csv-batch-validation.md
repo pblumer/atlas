@@ -137,13 +137,20 @@ This required making **gateway conditions scope-aware**
 gateway reads the per-iteration `verdict`, which lives in the iteration scope, not
 the process root. A business rule task cannot be multi-instanced directly, and the
 back-edge stays within the subprocess scope (its join is an exclusive gateway, which
-fires per arrival). Known gap deferred to Slice 4: `handleInstanceVariables` reads a
-single scope, so the correction form does not yet auto-fill from the iteration
-`row` — the loop itself is complete; the pre-fill is a UI concern.
+fires per arrival).
 
-**Slice 4 (follow-up) — the upload UI** in the web app (a screen over the
-Slice-1 endpoint) and, later, promoting the column layout to a reusable,
-project-scoped **artifact** ([ADR-0034](0034-projects-and-artifacts.md)).
+**Slice 4 — the upload UI + form pre-fill.** The web app grows a **Datenprüfung**
+screen: pick a deployed process, choose a CSV, give the column layout, and upload
+it to the Slice-1 endpoint (`multipart/form-data`) — the first file upload in the
+buildless UI (ADR-0012). The **pre-fill gap is closed** by giving the correction
+task **input mappings** (`row.email → email`, …) that surface its per-row fields
+flat in the task's **own element-instance scope**, matching the form's field keys;
+its output mapping still reshapes the edits back into `row`. The task list now
+carries each task's `elementInstanceKey`, so the Tasks app pre-fills a bound form by
+reading that scope's variables (`GET /api/v1/instances/{elementInstanceKey}/variables`,
+the existing endpoint) instead of the process root. Later: promoting the column
+layout to a reusable, project-scoped **artifact**
+([ADR-0034](0034-projects-and-artifacts.md)).
 
 ### Consequences
 

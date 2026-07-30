@@ -117,6 +117,17 @@ func TestCSVUploadCorrectionLoop(t *testing.T) {
 		t.Fatalf("task name = %q, want \"Datensatz korrigieren\"", tasks[0].Name)
 	}
 
+	// The correction form pre-fills from the task's own element-instance scope (Slice
+	// 4): its input mappings expose the invalid row's original values flat there, so
+	// the Quality Manager sees and edits exactly what was wrong.
+	if tasks[0].ElementInstanceKey == 0 {
+		t.Fatal("task is missing its elementInstanceKey (needed for form pre-fill)")
+	}
+	prefill := instanceVars(t, x, tasks[0].ElementInstanceKey)
+	if prefill["email"] != "bob" || prefill["group"] != "ops" || prefill["license"] != "NONE" {
+		t.Fatalf("task pre-fill = %v, want email=bob group=ops license=NONE from the invalid row", prefill)
+	}
+
 	// The Quality Manager corrects the record; the output mapping rewrites `row`, the
 	// back-edge re-validates, and the whole instance runs to completion.
 	fix := `{"variables":{"email":"bob@x.io","group":"users","license":"BASIC"}}`
@@ -146,8 +157,9 @@ func TestCSVUploadCorrectionLoop(t *testing.T) {
 }
 
 type taskRow struct {
-	Key  uint64 `json:"key"`
-	Name string `json:"name"`
+	Key                uint64 `json:"key"`
+	Name               string `json:"name"`
+	ElementInstanceKey uint64 `json:"elementInstanceKey"`
 }
 
 func listTasks(t *testing.T, x deployTestHarness) []taskRow {
@@ -181,7 +193,9 @@ func singleInstanceKey(t *testing.T, x deployTestHarness) uint64 {
 	return instances[0].Key
 }
 
-func instanceVar(t *testing.T, x deployTestHarness, key uint64, name string) any {
+// instanceVars reads a scope's variables as a typed map — the process instance's
+// root scope, or (with an element-instance key) a task's own scope.
+func instanceVars(t *testing.T, x deployTestHarness, key uint64) map[string]any {
 	t.Helper()
 	code, b := x.do(http.MethodGet, "/api/v1/instances/"+strconv.FormatUint(key, 10)+"/variables", "")
 	if code != http.StatusOK {
@@ -191,5 +205,11 @@ func instanceVar(t *testing.T, x deployTestHarness, key uint64, name string) any
 	if err := json.Unmarshal(b, &vars); err != nil {
 		t.Fatalf("decode variables: %v (%s)", err, b)
 	}
+	return vars
+}
+
+func instanceVar(t *testing.T, x deployTestHarness, key uint64, name string) any {
+	t.Helper()
+	vars := instanceVars(t, x, key)
 	return vars[name]
 }
