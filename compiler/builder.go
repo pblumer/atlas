@@ -125,6 +125,20 @@ const MailJobType = "io.atlas.mail.send"
 // RestJobTypeIndex (ADR-0067/0078).
 const MailJobTypeIndex int32 = 10
 
+// CsvImportJobType is the reserved job type a CSV-import service task carries. An
+// in-process worker parses an uploaded CSV (a `csvText` variable) against a column
+// layout (a `columnConfig` variable, typically set by a preceding script task) into
+// a `rows` collection — so a process ingests and validates a batch of records
+// entirely on the engine, the upload arriving through a user-task form rather than a
+// side-channel endpoint (ADR-0087).
+const CsvImportJobType = "io.atlas.csv-import"
+
+// CsvImportJobTypeIndex is the interned index CsvImportJobType is guaranteed to
+// occupy: NewBuilder reserves it twelfth, so it is always 11. A single in-process
+// CSV worker subscribes by this global index across every deployed process, the same
+// way the mail worker uses MailJobTypeIndex.
+const CsvImportJobTypeIndex int32 = 11
+
 // TemisDecisionJobType is the reserved job type a *central* business rule task
 // carries — one whose decision is evaluated by a remote temis service rather than
 // the embedded temis library. The in-process temis decision connector worker
@@ -211,6 +225,7 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 	b.intern(ClioQueryJobType)     // reserve ClioQueryJobTypeIndex == 8
 	b.intern(ClioReadJobType)      // reserve ClioReadJobTypeIndex == 9
 	b.intern(MailJobType)          // reserve MailJobTypeIndex == 10
+	b.intern(CsvImportJobType)     // reserve CsvImportJobTypeIndex == 11
 	return b
 }
 

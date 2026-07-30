@@ -201,7 +201,6 @@ async function deployDemo() {
 const APPS = [
   { id: "console", name: "Console", route: "#/console", on: true },
   { id: "modeler", name: "Modeler", route: "#/modeler", on: true },
-  { id: "import", name: "Datenprüfung", route: "#/import", on: true },
   { id: "tasks", name: "Tasks", route: "#/tasks", on: true },
   { id: "operations", name: "Operations", route: "#/operations", on: true },
   { id: "insights", name: "Insights", route: "#/insights", on: false },
@@ -219,7 +218,6 @@ const TOPNAV = {
     { name: "Home", route: "#/modeler" },
     { name: "Marketplace", route: "#/modeler/marketplace" },
   ],
-  import: [{ name: "CSV-Upload", route: "#/import" }],
   operations: [
     { name: "Instances", route: "#/operations" },
     { name: "Decisions", route: "#/operations/decisions" },
@@ -2186,99 +2184,6 @@ async function viewDecisionDetail(id) {
   await load();
 }
 
-// ---------- Datenprüfung (CSV import → per-row validation, ADR-0084) ----------
-
-// The default column layout an upload is parsed against — the three fields the
-// example decision RowValid checks. An operator edits this JSON to match their CSV.
-const CSV_CONFIG_DEFAULT = JSON.stringify(
-  { hasHeader: true, columns: [{ name: "email" }, { name: "group" }, { name: "license" }] },
-  null,
-  2,
-);
-
-// uploadCsv posts a CSV file and its column layout to the Slice-1 ingestion
-// endpoint as multipart/form-data. The api() helper only speaks JSON, so this is a
-// raw fetch; the browser sets the multipart boundary, so no Content-Type is set.
-async function uploadCsv(processKey, file, configJSON) {
-  const fd = new FormData();
-  fd.append("file", file);
-  fd.append("config", configJSON);
-  const res = await fetch(`/api/v1/processes/${processKey}/instances-from-csv`, { method: "POST", body: fd });
-  const text = await res.text();
-  let data = null;
-  try { data = text ? JSON.parse(text) : null; } catch { /* non-JSON error body */ }
-  if (!res.ok) throw new Error((data && data.error) || res.statusText);
-  return data; // { definitionKey, rowCount, fileName, stats }
-}
-
-async function viewImport() {
-  view.innerHTML = `
-    <div class="card">
-      <h1>Datenprüfung — CSV importieren</h1>
-      <p class="muted">Laden Sie einen Datensatz als CSV hoch. Jede Zeile wird gemäß den
-      hinterlegten Geschäftsregeln geprüft; fehlerhafte Zeilen erscheinen als Aufgabe zur
-      Korrektur im <a href="#/tasks">Tasks</a>-Posteingang.</p>
-      <form id="csv-form">
-        <label class="field">Zielprozess
-          <select id="csv-proc" required></select></label>
-        <label class="field">CSV-Datei
-          <input type="file" id="csv-file" accept=".csv,text/csv" required></label>
-        <label class="field">Spaltenlayout (JSON)
-          <textarea id="csv-config" rows="8" spellcheck="false"></textarea></label>
-        <div class="row" style="margin-top:8px"><button class="btn" type="submit">Import starten</button></div>
-      </form>
-      <div id="csv-result" style="margin-top:12px"></div>
-    </div>`;
-
-  document.getElementById("csv-config").value = CSV_CONFIG_DEFAULT;
-
-  const sel = document.getElementById("csv-proc");
-  try {
-    const all = await api("GET", "/api/v1/processes");
-    const latest = new Map();
-    for (const p of all) {
-      if (p.executable === false) continue; // only startable processes
-      const cur = latest.get(p.processId);
-      if (!cur || p.version > cur.version) latest.set(p.processId, p);
-    }
-    const procs = [...latest.values()].sort((a, b) => (a.name || a.processId).localeCompare(b.name || b.processId));
-    if (!procs.length) {
-      sel.innerHTML = `<option value="">Kein ausführbarer Prozess deployt</option>`;
-    } else {
-      sel.innerHTML = procs.map((p) => `<option value="${p.key}">${esc(p.name || p.processId)} (v${p.version})</option>`).join("");
-    }
-  } catch (err) {
-    sel.innerHTML = `<option value="">Prozesse konnten nicht geladen werden</option>`;
-    toast("Prozesse laden fehlgeschlagen: " + err.message, "err");
-  }
-
-  document.getElementById("csv-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const key = Number(sel.value);
-    const fileEl = document.getElementById("csv-file");
-    const cfg = document.getElementById("csv-config").value;
-    if (!key) { toast("Bitte einen Zielprozess wählen", "err"); return; }
-    if (!fileEl.files.length) { toast("Bitte eine CSV-Datei wählen", "err"); return; }
-    try { JSON.parse(cfg); } catch { toast("Spaltenlayout ist kein gültiges JSON", "err"); return; }
-    const btn = e.submitter;
-    if (btn) btn.disabled = true;
-    try {
-      const r = await uploadCsv(key, fileEl.files[0], cfg);
-      document.getElementById("csv-result").innerHTML = `
-        <div class="card ok-panel">
-          <p><strong>${r.rowCount}</strong> Zeile(n) aus <em>${esc(r.fileName || "CSV")}</em> eingelesen und geprüft.</p>
-          <p class="muted">Fehlerhafte Zeilen warten als Korrektur-Aufgabe im
-          <a href="#/tasks">Tasks</a>-Posteingang.</p>
-        </div>`;
-      toast(`Import gestartet — ${r.rowCount} Zeile(n)`, "ok");
-    } catch (err) {
-      toast("Import fehlgeschlagen: " + err.message, "err");
-    } finally {
-      if (btn) btn.disabled = false;
-    }
-  });
-}
-
 // ---------- Tasks (Outlook-style inbox, ADR-0028) ----------
 
 // A task's display title: the user task's element name, falling back to its BPMN
@@ -2593,6 +2498,15 @@ async function viewTasks(preselectKey) {
     if (state.mountedForm) {
       const { data, errors } = state.mountedForm.submit();
       if (errors && Object.keys(errors).length > 0) { toast("Please fix the highlighted fields", "err"); return; }
+      // A file field (form-js filepicker) holds the picked File client-side, not its
+      // bytes — so read the selected file as text and submit it as the `csvText`
+      // variable a CSV-import service task parses (ADR-0087). This keeps the upload a
+      // normal user-task step rather than a side-channel endpoint.
+      const fileInput = document.querySelector("#task-form input[type=file]");
+      if (fileInput && fileInput.files && fileInput.files.length) {
+        try { data.csvText = await fileInput.files[0].text(); }
+        catch (err) { toast("Datei konnte nicht gelesen werden: " + err.message, "err"); return; }
+      }
       payload = { variables: data };
     }
     const btn = document.getElementById("task-complete");
@@ -3394,7 +3308,6 @@ async function route() {
   let appId = "console";
 
   if (path.startsWith("#/modeler")) appId = "modeler";
-  else if (path.startsWith("#/import")) appId = "import";
   else if (path.startsWith("#/tasks")) appId = "tasks";
   else if (path.startsWith("#/operations")) appId = "operations";
   else if (path.startsWith("#/insights")) appId = "insights";
@@ -3435,7 +3348,6 @@ async function route() {
     if (dv) return await viewDmnViewer(decodeURIComponent(dv[1]));
     const m = path.match(/^#\/modeler\/d\/(\d+)$/);
     if (m) return await viewEditor(Number(m[1]));
-    if (path === "#/import") return await viewImport();
     if (path === "#/tasks") return await viewTasks();
     if (path === "#/tasks/start") return await viewStartProcess();
     // A single task can be deep-linked (…/t/{jobKey}) — the Operations live view
@@ -3462,7 +3374,7 @@ async function route() {
     // token walks the diagram in activation order (ADR-0046).
     const im = path.match(/^#\/operations\/i\/(\d+)$/);
     if (im) return await viewInstanceReplay(Number(im[1]));
-    if (appId !== "console" && appId !== "modeler" && appId !== "tasks" && appId !== "import") return viewComingSoon(appId);
+    if (appId !== "console" && appId !== "modeler" && appId !== "tasks") return viewComingSoon(appId);
     // Unknown route → dashboard.
     location.hash = "#/console";
   } catch (e) {

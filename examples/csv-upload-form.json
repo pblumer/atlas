@@ -1,0 +1,12 @@
+{
+  "type": "default",
+  "id": "csv-upload-form",
+  "components": [
+    {
+      "key": "csvText",
+      "type": "filepicker",
+      "label": "CSV-Datei",
+      "accept": ".csv,text/csv"
+    }
+  ]
+}

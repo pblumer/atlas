@@ -1,51 +1,40 @@
 package api
 
 import (
-	"bytes"
 	"encoding/json"
-	"io"
-	"mime/multipart"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
 )
 
-// buildCSVMultipart assembles a multipart/form-data body carrying a CSV file and
-// a JSON column layout, for driving the Slice-1 ingestion endpoint from an
-// internal (package api) test.
-func buildCSVMultipart(t *testing.T, fileName, csv, config string) (*bytes.Buffer, string) {
+// saveForm stores a form-js schema under an id so a user task's formId resolves.
+func saveForm(t *testing.T, x deployTestHarness, id, name, schemaPath string) {
 	t.Helper()
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	if err := mw.WriteField("config", config); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	fw, err := mw.CreateFormFile("file", fileName)
+	schema, err := os.ReadFile(schemaPath)
 	if err != nil {
-		t.Fatalf("create file part: %v", err)
+		t.Fatalf("read form %s: %v", schemaPath, err)
 	}
-	if _, err := io.WriteString(fw, csv); err != nil {
-		t.Fatalf("write file part: %v", err)
+	body, err := json.Marshal(map[string]any{"id": id, "name": name, "schema": json.RawMessage(schema)})
+	if err != nil {
+		t.Fatalf("marshal form: %v", err)
 	}
-	if err := mw.Close(); err != nil {
-		t.Fatalf("close multipart: %v", err)
+	if code, b := x.do(http.MethodPost, "/api/v1/forms", string(body)); code != http.StatusOK {
+		t.Fatalf("save form %s: %d %s", id, code, b)
 	}
-	return &buf, mw.FormDataContentType()
 }
 
-// TestCSVUploadCorrectionLoop is the Slice-1 + Slice-2 + Slice-3 end-to-end proof
-// (ADR-0084): the shipped example decision, process, and correction form are
-// deployed as-is; a CSV with one clean and one invalid record is uploaded through
-// the ingestion endpoint; the invalid row parks on a correction user task while
-// the clean one passes straight through; and completing the task with corrected
-// data re-validates that row and drives the whole instance to completion with all
-// verdicts valid. It exercises the per-row correction loop that ADR-0085's
-// scope-aware gateways unlocked, and loads the example files verbatim so a drift
-// breaks the build.
-func TestCSVUploadCorrectionLoop(t *testing.T) {
+// TestCSVProcessUploadAndCorrection is the end-to-end proof of the process-driven
+// flow (ADR-0087): the shipped example decision, process, and forms are deployed
+// as-is; an instance starts and parks at a "CSV hochladen" user task; completing it
+// with the file content (as the Tasks app would from an uploaded file) drives the
+// in-process pipeline — a script task supplies the column layout, the CSV-import
+// service task parses it into rows, and the multi-instance subprocess validates each
+// row. The invalid row parks on a correction task; correcting it re-validates and
+// runs the instance to completion with all verdicts valid. Loads the example files
+// verbatim so a drift breaks the build.
+func TestCSVProcessUploadAndCorrection(t *testing.T) {
 	srv, dir := newValidateServer(t)
 	x := deployTestHarness{t, srv.Handler()}
 
@@ -57,10 +46,6 @@ func TestCSVUploadCorrectionLoop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read example BPMN: %v", err)
 	}
-	formSchema, err := os.ReadFile(filepath.Join("..", "examples", "row-correction-form.json"))
-	if err != nil {
-		t.Fatalf("read example form: %v", err)
-	}
 
 	// Seed the DMN model for the resolver and register it as a decision reference.
 	if err := os.WriteFile(filepath.Join(dir, "dmn-models", "rowvalid.dmn"), dmnModel, 0o644); err != nil {
@@ -69,18 +54,9 @@ func TestCSVUploadCorrectionLoop(t *testing.T) {
 	if code, b := x.do(http.MethodPost, "/api/v1/dmnrefs", `{"name":"RowValid","modelRef":"rowvalid"}`); code != http.StatusOK {
 		t.Fatalf("add ref: %d %s", code, b)
 	}
-	// Create the correction form the user task binds to (formId row-correction-form).
-	formBody, err := json.Marshal(map[string]any{
-		"id":     "row-correction-form",
-		"name":   "Datensatz korrigieren",
-		"schema": json.RawMessage(formSchema),
-	})
-	if err != nil {
-		t.Fatalf("marshal form: %v", err)
-	}
-	if code, b := x.do(http.MethodPost, "/api/v1/forms", string(formBody)); code != http.StatusOK {
-		t.Fatalf("save form: %d %s", code, b)
-	}
+	// Both forms the two user tasks bind to.
+	saveForm(t, x, "csv-upload-form", "CSV hochladen", filepath.Join("..", "examples", "csv-upload-form.json"))
+	saveForm(t, x, "row-correction-form", "Datensatz korrigieren", filepath.Join("..", "examples", "row-correction-form.json"))
 
 	code, b := x.do(http.MethodPost, "/api/v1/deployments", string(bpmn))
 	if code != http.StatusOK {
@@ -93,54 +69,53 @@ func TestCSVUploadCorrectionLoop(t *testing.T) {
 		t.Fatalf("decode deploy: %v (%s)", err, b)
 	}
 
-	// Upload a 2-row CSV: one clean record and one that violates every rule.
+	// Start the process; it parks at the "CSV hochladen" user task.
+	if code, ib := x.do(http.MethodPost, "/api/v1/processes/"+strconv.FormatUint(dep.Key, 10)+"/instances", "{}"); code != http.StatusOK {
+		t.Fatalf("create instance: %d %s", code, ib)
+	}
+	upload := listTasks(t, x)
+	if len(upload) != 1 || upload[0].Name != "CSV hochladen" {
+		t.Fatalf("tasks = %+v, want one \"CSV hochladen\"", upload)
+	}
+
+	// Complete the upload task with the file content — what the Tasks app submits
+	// from the picked file — as the csvText variable.
 	csv := "email,group,license\nada@x.io,users,PRO\nbob,ops,NONE\n"
-	config := `{"columns":[{"name":"email"},{"name":"group"},{"name":"license"}]}`
-	body, ct := buildCSVMultipart(t, "records.csv", csv, config)
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost,
-		"/api/v1/processes/"+strconv.FormatUint(dep.Key, 10)+"/instances-from-csv", body)
-	req.Header.Set("Content-Type", ct)
-	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("upload: status=%d body=%s", rec.Code, rec.Body.String())
+	uploadBody, err := json.Marshal(map[string]any{"variables": map[string]any{"csvText": csv}})
+	if err != nil {
+		t.Fatalf("marshal upload: %v", err)
+	}
+	if code, cb := x.do(http.MethodPost, "/api/v1/tasks/"+strconv.FormatUint(upload[0].Key, 10)+"/complete", string(uploadBody)); code != http.StatusOK {
+		t.Fatalf("complete upload: %d %s", code, cb)
 	}
 
-	// Exactly one row (the invalid bob) parked on a correction user task; the clean
-	// ada passed straight to the row end — proof the in-subprocess gateway routed on
-	// the per-iteration verdict (ADR-0085).
+	// The script task set the column layout, the CSV-import service task parsed the
+	// rows, and validation ran: exactly the invalid row (bob) parks on a correction
+	// task; the clean ada passed straight through.
 	tasks := listTasks(t, x)
-	if len(tasks) != 1 {
-		t.Fatalf("active user tasks = %d, want 1 (only the invalid row parks)", len(tasks))
+	if len(tasks) != 1 || tasks[0].Name != "Datensatz korrigieren" {
+		t.Fatalf("tasks after upload = %+v, want one \"Datensatz korrigieren\"", tasks)
 	}
-	if tasks[0].Name != "Datensatz korrigieren" {
-		t.Fatalf("task name = %q, want \"Datensatz korrigieren\"", tasks[0].Name)
-	}
-
-	// The correction form pre-fills from the task's own element-instance scope (Slice
-	// 4): its input mappings expose the invalid row's original values flat there, so
-	// the Quality Manager sees and edits exactly what was wrong.
 	if tasks[0].ElementInstanceKey == 0 {
-		t.Fatal("task is missing its elementInstanceKey (needed for form pre-fill)")
+		t.Fatal("correction task is missing its elementInstanceKey (needed for form pre-fill)")
 	}
 	prefill := instanceVars(t, x, tasks[0].ElementInstanceKey)
 	if prefill["email"] != "bob" || prefill["group"] != "ops" || prefill["license"] != "NONE" {
-		t.Fatalf("task pre-fill = %v, want email=bob group=ops license=NONE from the invalid row", prefill)
+		t.Fatalf("task pre-fill = %v, want email=bob group=ops license=NONE", prefill)
 	}
 
-	// The Quality Manager corrects the record; the output mapping rewrites `row`, the
-	// back-edge re-validates, and the whole instance runs to completion.
+	// Correct the record; the output mapping rewrites row, the back-edge re-validates,
+	// and the instance runs to completion.
 	fix := `{"variables":{"email":"bob@x.io","group":"users","license":"BASIC"}}`
 	if code, cb := x.do(http.MethodPost, "/api/v1/tasks/"+strconv.FormatUint(tasks[0].Key, 10)+"/complete", fix); code != http.StatusOK {
-		t.Fatalf("complete task: %d %s", code, cb)
+		t.Fatalf("complete correction: %d %s", code, cb)
 	}
 	if rem := listTasks(t, x); len(rem) != 0 {
-		t.Fatalf("active user tasks after correction = %d, want 0", len(rem))
+		t.Fatalf("tasks after correction = %d, want 0", len(rem))
 	}
 
-	// Both verdicts are now valid, collected in input order at the process root.
-	instKey := singleInstanceKey(t, x)
-	verdicts := instanceVar(t, x, instKey, "verdicts")
+	// Both verdicts are valid, collected in input order at the process root.
+	verdicts := instanceVar(t, x, singleInstanceKey(t, x), "verdicts")
 	arr, ok := verdicts.([]any)
 	if !ok || len(arr) != 2 {
 		t.Fatalf("verdicts = %v (%T), want an array of 2", verdicts, verdicts)
@@ -151,7 +126,7 @@ func TestCSVUploadCorrectionLoop(t *testing.T) {
 			t.Fatalf("verdicts[%d] = %v (%T), want an object", i, v, v)
 		}
 		if valid, _ := obj["valid"].(bool); !valid {
-			t.Errorf("verdicts[%d].valid = %v, want true (row validated after correction)", i, obj["valid"])
+			t.Errorf("verdicts[%d].valid = %v, want true", i, obj["valid"])
 		}
 	}
 }
@@ -210,6 +185,5 @@ func instanceVars(t *testing.T, x deployTestHarness, key uint64) map[string]any 
 
 func instanceVar(t *testing.T, x deployTestHarness, key uint64, name string) any {
 	t.Helper()
-	vars := instanceVars(t, x, key)
-	return vars[name]
+	return instanceVars(t, x, key)[name]
 }
