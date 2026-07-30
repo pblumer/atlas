@@ -436,11 +436,22 @@ TokenSimulation.prototype._drawStartAffordances = function () {
   this._clearStartAffordances();
   this._registry.forEach((el) => {
     if (!isStart(el)) return;
+    // The affordance is an HTML overlay sitting *above* the canvas, so a click on it
+    // never reaches bpmn-js as an `element.click`. It needs its own DOM listener —
+    // hand bpmn-js a real element (not a markup string) and wire the click here.
+    const btn = document.createElement("span");
+    btn.className = "atlas-sim-spawn";
+    btn.title = "Spawn a token here";
+    btn.innerHTML = "&#9654;";
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      this.spawnAt(el);
+    });
     try {
       this._startIds.push(
         this._overlays.add(el.id, "atlas-sim-spawn", {
           position: { top: -14, left: -14 },
-          html: `<span class="atlas-sim-spawn" title="Spawn a token here">&#9654;</span>`,
+          html: btn,
         }),
       );
     } catch {
