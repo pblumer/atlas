@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func callTool(t *testing.T, backend *httptest.Server, name string, args map[string]any) map[string]any {
+func callToolAgainstBackend(t *testing.T, backend *httptest.Server, name string, args map[string]any) map[string]any {
 	t.Helper()
 	payload, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
@@ -30,12 +30,10 @@ func callTool(t *testing.T, backend *httptest.Server, name string, args map[stri
 }
 
 func TestListTasksForwardsPaginationAndReturnsMetadata(t *testing.T) {
+	var gotMethod, gotPath string
 	var gotQuery url.Values
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/tasks" {
-			t.Fatalf("request = %s %s, want GET /api/v1/tasks", r.Method, r.URL.Path)
-		}
-		gotQuery = r.URL.Query()
+		gotMethod, gotPath, gotQuery = r.Method, r.URL.Path, r.URL.Query()
 		w.Header().Set("X-Tasks-Truncated", "true")
 		w.Header().Set("X-Tasks-Next-Cursor", "77")
 		w.Header().Set("Content-Type", "application/json")
@@ -43,7 +41,7 @@ func TestListTasksForwardsPaginationAndReturnsMetadata(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	response := callTool(t, backend, "atlas_list_tasks", map[string]any{
+	response := callToolAgainstBackend(t, backend, "atlas_list_tasks", map[string]any{
 		"limit":           25,
 		"before":          99,
 		"processInstance": 123,
@@ -53,6 +51,9 @@ func TestListTasksForwardsPaginationAndReturnsMetadata(t *testing.T) {
 		t.Fatalf("atlas_list_tasks returned tool error: %s", text)
 	}
 
+	if gotMethod != http.MethodGet || gotPath != "/api/v1/tasks" {
+		t.Fatalf("request = %s %s, want GET /api/v1/tasks", gotMethod, gotPath)
+	}
 	if got := gotQuery.Get("limit"); got != "25" {
 		t.Fatalf("limit query = %q, want 25", got)
 	}
@@ -82,13 +83,13 @@ func TestListTasksForwardsPaginationAndReturnsMetadata(t *testing.T) {
 }
 
 func TestListTasksOmitsCursorWhenAPIHasNone(t *testing.T) {
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`[]`))
 	}))
 	defer backend.Close()
 
-	response := callTool(t, backend, "atlas_list_tasks", map[string]any{})
+	response := callToolAgainstBackend(t, backend, "atlas_list_tasks", map[string]any{})
 	text, isErr := toolText(t, result(t, response))
 	if isErr {
 		t.Fatalf("atlas_list_tasks returned tool error: %s", text)
@@ -106,12 +107,17 @@ func TestListTasksOmitsCursorWhenAPIHasNone(t *testing.T) {
 }
 
 func TestListTasksAdvertisesPaginationArguments(t *testing.T) {
-	backend := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		t.Fatal("tools/list must not call the Atlas HTTP API")
+	called := false
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		http.Error(w, "unexpected request", http.StatusInternalServerError)
 	}))
 	defer backend.Close()
 
 	responses := run(t, backend, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
+	if called {
+		t.Fatal("tools/list called the Atlas HTTP API")
+	}
 	tools := result(t, responses[0])["tools"].([]any)
 	for _, raw := range tools {
 		tool := raw.(map[string]any)
