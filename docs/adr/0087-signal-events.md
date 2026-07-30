@@ -1,14 +1,28 @@
-# ADR-0086: Signal events (broadcast throw/catch)
+# ADR-0087: Signal events (broadcast throw/catch)
 
 - **Status:** Proposed
 - **Date:** 2026-07-30
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Not started. This ADR plans the work; each phase lands
-> test-first with a recovery test (ADR-0018). Signal events build on the message
+> **Implementation status.** Phase 1 (compiler) delivered; Phases 2–5 pending. Each phase
+> lands test-first with a recovery test (ADR-0018). Signal events build on the message
 > correlation/subscription substrate (ADR-0020), the boundary arm/fire machinery
 > (ADR-0040), message-start instantiation (ADR-0035), and event subprocesses
 > (ADR-0082). They introduce a parallel subscription family but no new recovery path.
+>
+> **Delivered (Phase 1, compiler):** `<signalEventDefinition signalRef="…">` (a `Signal`
+> pointer on the start/catch/throw/end/boundary structs) and top-level `<bpmn:signal id
+> name>` (`buildSignalResolver`, mirroring `buildMessageResolver`, returning the name — no
+> correlation key, no code) parse into four new `BpmnType`s
+> (`TypeSignalCatchEvent`/`ThrowEvent`/`EndEvent`/`StartEvent`, a `SignalDetail{SignalName}`
+> table shared by catch/throw/end/start; the end reuses the throw table) and a
+> `BoundarySignal` `BoundaryEventKind` with a `SignalName` on `BoundaryEventDetail` /
+> `EventSubProcessDetail` (so a signal boundary and a signal event subprocess reuse the
+> boundary/event-sub detail). A signal start is a process entry point (`isStartEvent`,
+> `SignalStartEvents()` mirroring `MessageStartEvents`). No "must be caught" validation —
+> a signal is fire-and-forget. Verified: a throw/catch/boundary/start/end and a signal
+> event subprocess compile with the resolved name; an unknown or unnamed signal ref is a
+> deploy error in every position. No runtime yet.
 
 ## Context and problem statement
 
@@ -241,5 +255,5 @@ which delegate to the existing message/boundary/event-sub lifecycles.
 - honors I1, I2, I4, I5, I6 and ADR-0018 (test-first, recovery tests up front)
 - ROADMAP Milestone 2 "Signal events (broadcast)"; cross-partition broadcast is deferred to
   Milestone 5 (ADR-0006) with cross-partition messaging
-- sibling to ADR-0087 (error events) — the other outstanding Milestone-2 event type, with the
+- sibling to ADR-0088 (error events) — the other outstanding Milestone-2 event type, with the
   opposite delivery model (scoped propagation to one handler, not broadcast)

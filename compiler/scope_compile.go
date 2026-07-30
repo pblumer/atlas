@@ -9,11 +9,11 @@ import (
 )
 
 // eventSubStart returns the event subprocess's triggering start event — the first
-// start event carrying a message or timer event definition — or nil if it has none
-// (ADR-0082).
+// start event carrying a message, timer, or signal event definition — or nil if it has
+// none (ADR-0082, ADR-0087).
 func eventSubStart(sub *xmlSubProcess) *xmlStartEvent {
 	for i := range sub.StartEvents {
-		if s := &sub.StartEvents[i]; s.Message != nil || s.Timer != nil {
+		if s := &sub.StartEvents[i]; s.Message != nil || s.Timer != nil || s.Signal != nil {
 			return s
 		}
 	}
@@ -35,6 +35,7 @@ func registerScope(
 	ids map[string]int32,
 	register func(id string, nodeID int32) error,
 	resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error),
+	resolveSignal func(ownerId, signalRef string) (string, error),
 	c *xmlFlowContent,
 ) error {
 	for _, s := range c.StartEvents {
@@ -44,6 +45,16 @@ func registerScope(
 				return err
 			}
 			if err := register(s.Id, b.AddMessageStartEvent(name, keyExpr, s.SingletonStart == "true")); err != nil {
+				return err
+			}
+			continue
+		}
+		if s.Signal != nil {
+			name, err := resolveSignal(s.Id, s.Signal.SignalRef)
+			if err != nil {
+				return err
+			}
+			if err := register(s.Id, b.AddSignalStartEvent(name)); err != nil {
 				return err
 			}
 			continue
@@ -380,13 +391,31 @@ func registerScope(
 			if err := register(ev.Id, b.AddMessageCatchEvent(name, keyExpr)); err != nil {
 				return err
 			}
+		case ev.Signal != nil:
+			name, err := resolveSignal(ev.Id, ev.Signal.SignalRef)
+			if err != nil {
+				return err
+			}
+			if err := register(ev.Id, b.AddSignalCatchEvent(name)); err != nil {
+				return err
+			}
 		default:
-			return fmt.Errorf("compiler: intermediate catch event %q: only timer and message events are supported yet", ev.Id)
+			return fmt.Errorf("compiler: intermediate catch event %q: only timer, message, and signal events are supported yet", ev.Id)
 		}
 	}
 	for _, ev := range c.IntermediateThrowEvents {
+		if ev.Signal != nil {
+			name, err := resolveSignal(ev.Id, ev.Signal.SignalRef)
+			if err != nil {
+				return err
+			}
+			if err := register(ev.Id, b.AddSignalThrowEvent(name)); err != nil {
+				return err
+			}
+			continue
+		}
 		if ev.Message == nil {
-			return fmt.Errorf("compiler: intermediate throw event %q: only message events are supported yet", ev.Id)
+			return fmt.Errorf("compiler: intermediate throw event %q: only message and signal events are supported yet", ev.Id)
 		}
 		name, keyExpr, err := resolveMessage(ev.Id, ev.Message.MessageRef)
 		if err != nil {
@@ -423,6 +452,16 @@ func registerScope(
 			}
 			continue
 		}
+		if e.Signal != nil {
+			name, err := resolveSignal(e.Id, e.Signal.SignalRef)
+			if err != nil {
+				return err
+			}
+			if err := register(e.Id, b.AddSignalEndEvent(name)); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := register(e.Id, b.AddEndEvent()); err != nil {
 			return err
 		}
@@ -438,7 +477,7 @@ func registerScope(
 			return err
 		}
 		b.PushScope(subID)
-		if err := registerScope(b, ids, register, resolveMessage, &sub.xmlFlowContent); err != nil {
+		if err := registerScope(b, ids, register, resolveMessage, resolveSignal, &sub.xmlFlowContent); err != nil {
 			return err
 		}
 		b.PopScope()
@@ -450,7 +489,7 @@ func registerScope(
 		if sub.TriggeredByEvent == "true" {
 			st := eventSubStart(sub)
 			if st == nil {
-				return fmt.Errorf("compiler: event subprocess %q must have a start event with a message or timer event definition", sub.Id)
+				return fmt.Errorf("compiler: event subprocess %q must have a start event with a message, timer, or signal event definition", sub.Id)
 			}
 			d := EventSubProcessDetail{StartNode: ids[st.Id], Interrupting: st.IsInterrupting != "false"}
 			switch {
@@ -460,6 +499,12 @@ func registerScope(
 					return err
 				}
 				d.Kind, d.MessageName, d.CorrelationKey = BoundaryMessage, name, keyExpr
+			case st.Signal != nil:
+				name, err := resolveSignal(st.Id, st.Signal.SignalRef)
+				if err != nil {
+					return err
+				}
+				d.Kind, d.SignalName = BoundarySignal, name
 			case st.Timer != nil:
 				schedule, err := parseTimerSchedule(st.Timer)
 				if err != nil {
@@ -501,8 +546,16 @@ func registerScope(
 			if err := register(ev.Id, b.AddBoundaryMessageEvent(host, interrupting, name, keyExpr)); err != nil {
 				return err
 			}
+		case ev.Signal != nil:
+			name, err := resolveSignal(ev.Id, ev.Signal.SignalRef)
+			if err != nil {
+				return err
+			}
+			if err := register(ev.Id, b.AddBoundarySignalEvent(host, interrupting, name)); err != nil {
+				return err
+			}
 		default:
-			return fmt.Errorf("compiler: boundary event %q: only timer and message boundary events are supported yet", ev.Id)
+			return fmt.Errorf("compiler: boundary event %q: only timer, message, and signal boundary events are supported yet", ev.Id)
 		}
 	}
 	// Report an unsupported element with a clear message rather than letting it

@@ -178,6 +178,9 @@ type Builder struct {
 	messageCatches    []MessageDetail
 	messageThrows     []MessageDetail
 	messageStarts     []MessageDetail
+	signalCatches     []SignalDetail
+	signalThrows      []SignalDetail // shared by signal throw and signal end events
+	signalStarts      []SignalDetail
 	timerStarts       []TimerStartDetail
 	dataObjects       []CompiledDataObject
 	dataOutAssocs     []pendingDataOut // data-output associations, grouped by node in Build
@@ -721,6 +724,20 @@ func (b *Builder) AddBoundaryMessageEvent(host int32, interrupting bool, message
 	return b.addNode(TypeBoundaryEvent, detail)
 }
 
+// AddBoundarySignalEvent adds a signal boundary event attached to host that fires when a
+// signal named signalName is broadcast (ADR-0087). interrupting mirrors BPMN cancelActivity.
+// Returns its element id.
+func (b *Builder) AddBoundarySignalEvent(host int32, interrupting bool, signalName string) int32 {
+	detail := int32(len(b.boundaryEventDets))
+	b.boundaryEventDets = append(b.boundaryEventDets, BoundaryEventDetail{
+		HostNode:     host,
+		Interrupting: interrupting,
+		Kind:         BoundarySignal,
+		SignalName:   signalName,
+	})
+	return b.addNode(TypeBoundaryEvent, detail)
+}
+
 // AddDataObject declares a data object on the process: a typed, named datum with
 // an optional declared structure (itemType) and initial data state, seeded under
 // each instance's scope at creation (ADR-0053). It is not a flow node, so it
@@ -889,6 +906,39 @@ func (b *Builder) AddMessageEndEvent(messageName string, correlationKey *expr.Co
 	detail := int32(len(b.messageThrows))
 	b.messageThrows = append(b.messageThrows, MessageDetail{MessageName: messageName, CorrelationKey: correlationKey})
 	return b.addNode(TypeMessageEndEvent, detail)
+}
+
+// AddSignalCatchEvent adds an intermediate signal catch event that waits for a broadcast
+// signal of the given name (ADR-0087). Returns its element id.
+func (b *Builder) AddSignalCatchEvent(signalName string) int32 {
+	detail := int32(len(b.signalCatches))
+	b.signalCatches = append(b.signalCatches, SignalDetail{SignalName: signalName})
+	return b.addNode(TypeSignalCatchEvent, detail)
+}
+
+// AddSignalThrowEvent adds an intermediate signal throw event that, on activation,
+// broadcasts the named signal to every waiting catch, then completes (ADR-0087).
+func (b *Builder) AddSignalThrowEvent(signalName string) int32 {
+	detail := int32(len(b.signalThrows))
+	b.signalThrows = append(b.signalThrows, SignalDetail{SignalName: signalName})
+	return b.addNode(TypeSignalThrowEvent, detail)
+}
+
+// AddSignalEndEvent adds an end event that broadcasts the named signal, then ends the
+// instance — the send-and-stop counterpart of a signal throw, reusing the throw detail
+// table like a message end event (ADR-0087).
+func (b *Builder) AddSignalEndEvent(signalName string) int32 {
+	detail := int32(len(b.signalThrows))
+	b.signalThrows = append(b.signalThrows, SignalDetail{SignalName: signalName})
+	return b.addNode(TypeSignalEndEvent, detail)
+}
+
+// AddSignalStartEvent adds a start event that a broadcast signal instantiates (ADR-0087);
+// at runtime it flows straight on like a message start.
+func (b *Builder) AddSignalStartEvent(signalName string) int32 {
+	detail := int32(len(b.signalStarts))
+	b.signalStarts = append(b.signalStarts, SignalDetail{SignalName: signalName})
+	return b.addNode(TypeSignalStartEvent, detail)
 }
 
 // Connect adds a sequence flow from source to target and returns its flow id, so
@@ -1101,6 +1151,9 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		messageCatches:    b.messageCatches,
 		messageThrows:     b.messageThrows,
 		messageStarts:     b.messageStarts,
+		signalCatches:     b.signalCatches,
+		signalThrows:      b.signalThrows,
+		signalStarts:      b.signalStarts,
 		timerStarts:       b.timerStarts,
 		dataObjects:       b.dataObjects,
 		dataOutAssocs:     dataOut,
@@ -1137,5 +1190,5 @@ func (b *Builder) hasStartEvent() bool {
 // plain create then activates it like a none start (ADR-0035). A timer start
 // event likewise: a due timer instantiates it, and it then flows on (ADR-0051).
 func isStartEvent(t BpmnType) bool {
-	return t == TypeStartEvent || t == TypeMessageStartEvent || t == TypeTimerStartEvent
+	return t == TypeStartEvent || t == TypeMessageStartEvent || t == TypeTimerStartEvent || t == TypeSignalStartEvent
 }
