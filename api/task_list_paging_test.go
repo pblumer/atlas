@@ -145,6 +145,117 @@ func TestListTasksByProcessInstanceExcludesIncident(t *testing.T) {
 	}
 }
 
+// twoParallelUserTasksBPMN forks on a parallel gateway into two user tasks, so a
+// single instance parks on both at once — used to exercise the per-instance list's
+// own page cap.
+const twoParallelUserTasksBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="twopar" isExecutable="true">
+    <startEvent id="s"/>
+    <parallelGateway id="fork"/>
+    <userTask id="ua" name="Task A"/>
+    <userTask id="ub" name="Task B"/>
+    <sequenceFlow id="f0" sourceRef="s" targetRef="fork"/>
+    <sequenceFlow id="f1" sourceRef="fork" targetRef="ua"/>
+    <sequenceFlow id="f2" sourceRef="fork" targetRef="ub"/>
+  </process>
+</definitions>`
+
+// userTaskAndTimerBPMN forks into a user task and a timer catch event, so the
+// instance parks on both: one active element carries a job (the user task), the
+// other is active with no job (the waiting timer). The per-instance scan must skip
+// the job-less element and return only the user task.
+const userTaskAndTimerBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="mix" isExecutable="true">
+    <startEvent id="s"/>
+    <parallelGateway id="fork"/>
+    <userTask id="ut" name="Human step"/>
+    <intermediateCatchEvent id="wait"><timerEventDefinition><timeDuration>PT3600S</timeDuration></timerEventDefinition></intermediateCatchEvent>
+    <sequenceFlow id="f0" sourceRef="s" targetRef="fork"/>
+    <sequenceFlow id="f1" sourceRef="fork" targetRef="ut"/>
+    <sequenceFlow id="f2" sourceRef="fork" targetRef="wait"/>
+  </process>
+</definitions>`
+
+// TestListTasksForInstanceSkipsJoblessElement proves the per-instance scan returns
+// only elements that hold an open user-task job: an instance parked on a user task
+// AND a waiting timer (an active element with no job) yields exactly the one task.
+func TestListTasksForInstanceSkipsJoblessElement(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", userTaskAndTimerBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	var deploy struct {
+		Key uint64 `json:"key"`
+	}
+	_ = json.Unmarshal(body, &deploy)
+	if c, b := doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", deploy.Key), "{}", "application/json"); c != http.StatusOK {
+		t.Fatalf("create instance: status=%d body=%s", c, b)
+	}
+
+	_, body = doReq(t, ts, http.MethodGet, "/api/v1/tasks", "", "")
+	var all []taskRow
+	if err := json.Unmarshal(body, &all); err != nil || len(all) != 1 {
+		t.Fatalf("want 1 user task (timer carries no job), got %d (err=%v)", len(all), err)
+	}
+	inst := all[0].ProcessInstanceKey
+
+	// Scoped to the instance: the job-less timer element is skipped; only the task.
+	_, body = doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/tasks?processInstance=%d", inst), "", "")
+	var scoped []taskRow
+	if err := json.Unmarshal(body, &scoped); err != nil || len(scoped) != 1 || scoped[0].Key != all[0].Key {
+		t.Fatalf("scoped list = %+v, want the single user task %d (err=%v)", scoped, all[0].Key, err)
+	}
+}
+
+// TestListTasksForInstanceCap proves the per-instance list is itself bounded: an
+// instance parked on two user tasks, queried with ?limit=1, returns one row and flags
+// X-Tasks-Truncated — so even a scoped query can't return an unbounded page.
+func TestListTasksForInstanceCap(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", twoParallelUserTasksBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	var deploy struct {
+		Key uint64 `json:"key"`
+	}
+	_ = json.Unmarshal(body, &deploy)
+	if c, b := doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", deploy.Key), "{}", "application/json"); c != http.StatusOK {
+		t.Fatalf("create instance: status=%d body=%s", c, b)
+	}
+
+	// Both user tasks are parked on the one instance.
+	_, body = doReq(t, ts, http.MethodGet, "/api/v1/tasks", "", "")
+	var all []taskRow
+	if err := json.Unmarshal(body, &all); err != nil || len(all) != 2 {
+		t.Fatalf("want 2 parked tasks, got %d (err=%v)", len(all), err)
+	}
+	inst := all[0].ProcessInstanceKey
+
+	// Scoped and capped at 1 → one row, flagged truncated.
+	res, err := http.Get(ts.URL + fmt.Sprintf("/api/v1/tasks?processInstance=%d&limit=1", inst))
+	if err != nil {
+		t.Fatalf("GET scoped?limit=1: %v", err)
+	}
+	var page []taskRow
+	_ = json.NewDecoder(res.Body).Decode(&page)
+	trunc := res.Header.Get("X-Tasks-Truncated")
+	res.Body.Close()
+	if len(page) != 1 || trunc != "true" {
+		t.Fatalf("scoped capped page = %d rows, truncated=%q; want 1 + true", len(page), trunc)
+	}
+
+	// Uncapped, the scoped list returns both tasks of the instance.
+	_, body = doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/tasks?processInstance=%d", inst), "", "")
+	var full []taskRow
+	if err := json.Unmarshal(body, &full); err != nil || len(full) != 2 {
+		t.Fatalf("scoped full list = %d, want 2 (err=%v)", len(full), err)
+	}
+}
+
 // TestListTasksNewestFirstPaging proves the list is newest-first and that the
 // X-Tasks-Next-Cursor / ?before= cursor pages through every task exactly once, in
 // strictly descending key order — the pagination the inbox's "Load older" uses.
