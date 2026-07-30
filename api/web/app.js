@@ -1884,6 +1884,7 @@ async function viewInstances() {
   };
   document.getElementById("refresh").addEventListener("click", load);
   document.getElementById("proc-filter").addEventListener("input", renderRows);
+
   document.getElementById("inst-jump").addEventListener("submit", (e) => {
     e.preventDefault();
     const key = (document.getElementById("inst-key").value || "").trim();
