@@ -4,7 +4,10 @@
 const view = document.getElementById("view");
 
 // ---------- API ----------
-export async function api(method, path, body, isXML) {
+// apiRaw is the fetch wrapper that also returns the response headers, for the few
+// endpoints whose headers carry pagination signals (X-Tasks-Truncated /
+// X-Tasks-Next-Cursor). Most callers want just the body — see api().
+export async function apiRaw(method, path, body, isXML) {
   const opts = { method };
   if (body !== undefined) {
     opts.body = isXML ? body : JSON.stringify(body);
@@ -15,7 +18,11 @@ export async function api(method, path, body, isXML) {
   let data = text;
   try { data = text ? JSON.parse(text) : null; } catch { /* keep text */ }
   if (!res.ok) throw new Error((data && data.error) || res.statusText);
-  return data;
+  return { data, headers: res.headers };
+}
+
+export async function api(method, path, body, isXML) {
+  return (await apiRaw(method, path, body, isXML)).data;
 }
 
 export function toast(msg, kind) {
@@ -2263,6 +2270,8 @@ async function viewTasks(preselectKey) {
     sort: localStorage.getItem("atlas.tasks.sort") || "smart", // sort key, see SORTS
     selectMode: false, // multi-select for bulk actions
     picked: new Set(), // job keys ticked for a bulk action
+    truncated: false, // the server returned a capped page (more tasks exist)
+    nextCursor: null, // job key to pass as ?before= for the next (older) page
   };
 
   // SORTS are the orderings the toolbar offers over the visible tasks. "smart" is
@@ -2305,6 +2314,7 @@ async function viewTasks(preselectKey) {
           </label>
         </div>
         <div class="tasks-bulk" id="task-bulk" hidden></div>
+        <div class="tasks-trunc" id="task-trunc" hidden></div>
         <ul class="tasks-list" id="task-list"><li class="tasks-empty muted">Loading&hellip;</li></ul>
       </section>
       <section class="tasks-detail" id="task-detail"></section>
@@ -2629,13 +2639,34 @@ async function viewTasks(preselectKey) {
 
   function renderAll() {
     renderFolders();
+    renderTrunc();
     renderList();
     renderDetail();
   }
 
+  // renderTrunc shows a banner when the server returned a capped page, so the count
+  // never reads as "these are all the tasks" when it isn't. It offers a "Load older"
+  // affordance (the cursor page) alongside the hint to narrow by filter.
+  function renderTrunc() {
+    const el = document.getElementById("task-trunc");
+    if (!el) return;
+    if (!state.truncated) { el.hidden = true; el.innerHTML = ""; return; }
+    el.hidden = false;
+    el.innerHTML =
+      `<span>Showing the newest ${state.tasks.length} tasks — more exist. Filter to narrow, or load older.</span>` +
+      `<button class="btn ghost small" id="task-older"${state.nextCursor ? "" : " disabled"}>Load older</button>`;
+    const older = document.getElementById("task-older");
+    if (older) older.addEventListener("click", loadOlder);
+  }
+
   async function load() {
     try {
-      state.tasks = await api("GET", "/api/v1/tasks");
+      // The list is capped and newest-first; a capped page flags X-Tasks-Truncated and
+      // hands back X-Tasks-Next-Cursor for paging to older tasks (see loadOlder).
+      const { data, headers } = await apiRaw("GET", "/api/v1/tasks");
+      state.tasks = data;
+      state.truncated = headers.get("X-Tasks-Truncated") === "true";
+      state.nextCursor = headers.get("X-Tasks-Next-Cursor") || null;
       // A deep-linked task (…/tasks/t/{key}, e.g. from the Operations live view) can
       // sit outside the capped task-list page during a flood. Rather than silently
       // dropping the selection — which left the form unreachable — fetch that one task
@@ -2652,6 +2683,24 @@ async function viewTasks(preselectKey) {
       renderAll();
     } catch (e) {
       listEl.innerHTML = `<li class="tasks-empty err">Failed to load tasks: ${esc(e.message)}</li>`;
+    }
+  }
+
+  // loadOlder pages to the next (older) slice of tasks using the cursor the last
+  // capped page handed back, and folds the new rows into the current set — so an
+  // operator can reach tasks beyond the newest page without narrowing by filter.
+  async function loadOlder() {
+    if (!state.nextCursor) return;
+    try {
+      const { data, headers } = await apiRaw("GET", "/api/v1/tasks?before=" + encodeURIComponent(state.nextCursor));
+      const seen = new Set(state.tasks.map((t) => t.key));
+      for (const t of data) if (!seen.has(t.key)) state.tasks.push(t);
+      state.truncated = headers.get("X-Tasks-Truncated") === "true";
+      state.nextCursor = headers.get("X-Tasks-Next-Cursor") || null;
+      state.tasks.sort(taskOrder);
+      renderAll();
+    } catch (e) {
+      toast("Load older failed: " + e.message, "err");
     }
   }
 

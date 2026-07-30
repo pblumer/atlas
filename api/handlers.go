@@ -2361,9 +2361,10 @@ const (
 )
 
 func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
 	limit := maxTaskListDefault
-	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
-		n, err := strconv.Atoi(q)
+	if v := strings.TrimSpace(q.Get("limit")); v != "" {
+		n, err := strconv.Atoi(v)
 		if err != nil || n <= 0 {
 			writeError(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
 			return
@@ -2373,11 +2374,39 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 	if limit > maxTaskListMax {
 		limit = maxTaskListMax
 	}
+
+	// ?processInstance= scopes the list to one instance's open user tasks, resolved
+	// through that instance's own element index rather than the global activatable
+	// scan — so a small embedded client (the order-to-cash demo, which asks only for
+	// its own instance's task) always finds it, even when a flood has pushed that
+	// task past the global page cap.
+	if v := strings.TrimSpace(q.Get("processInstance")); v != "" {
+		s.listTasksForInstance(w, v, limit)
+		return
+	}
+
+	// ?before= is the newest-first pagination cursor: the job key handed back as
+	// X-Tasks-Next-Cursor on the previous (truncated) page. Absent, the scan starts
+	// from the newest task.
+	var before uint64
+	if v := strings.TrimSpace(q.Get("before")); v != "" {
+		n, err := strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid before cursor (want a job key)")
+			return
+		}
+		before = n
+	}
+
 	tasks := []taskResp{}
 	truncated := false
+	var nextCursor uint64
 	var scanErr error
 	s.do(func() {
-		err := s.store.ActivatableJobs(compiler.UserTaskJobTypeIndex, func(jobKey uint64) error {
+		// Newest-first so a capped page shows the most recently created tasks — the
+		// ones a just-started instance is parked on — instead of the oldest backlog
+		// that a flood would otherwise pin to the front forever.
+		err := s.store.ActivatableJobsDesc(compiler.UserTaskJobTypeIndex, before, func(jobKey uint64) error {
 			if len(tasks) >= limit {
 				truncated = true
 				return errListTruncated // page full: stop before enriching more jobs
@@ -2385,6 +2414,58 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 			jv, ok, err := s.store.GetJob(jobKey)
 			if err != nil || !ok {
 				return err
+			}
+			tasks = append(tasks, s.enrichTask(jobKey, jv))
+			nextCursor = jobKey // desc scan: the last kept key is the smallest on the page
+			return nil
+		})
+		scanErr = unlessTruncated(err)
+	})
+	if scanErr != nil {
+		writeError(w, http.StatusInternalServerError, "list tasks: "+scanErr.Error())
+		return
+	}
+	if truncated {
+		// Signal a capped page and hand back the cursor for the next (older) page, so a
+		// client can page through or narrow rather than assume it received every task.
+		w.Header().Set("X-Tasks-Truncated", "true")
+		w.Header().Set("X-Tasks-Next-Cursor", strconv.FormatUint(nextCursor, 10))
+	}
+	writeJSON(w, http.StatusOK, tasks)
+}
+
+// listTasksForInstance writes one process instance's open user tasks, resolved
+// through that instance's own element index (bounded by the instance's size) rather
+// than the global activatable scan. This keeps a client that only cares about its
+// own instance — the order-to-cash demo — working under a flood that has pushed that
+// instance's task past the global /tasks page cap.
+func (s *Server) listTasksForInstance(w http.ResponseWriter, raw string, limit int) {
+	instKey, err := strconv.ParseUint(raw, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid processInstance (want an instance key)")
+		return
+	}
+	tasks := []taskResp{}
+	truncated := false
+	var scanErr error
+	s.do(func() {
+		err := s.store.ElementInstancesOfProcess(instKey, func(elKey uint64) error {
+			if len(tasks) >= limit {
+				truncated = true
+				return errListTruncated
+			}
+			jobKey, ok, err := s.store.JobOfElement(elKey)
+			if err != nil || !ok {
+				return err // no job on this element (or a read error)
+			}
+			jv, ok, err := s.store.GetJob(jobKey)
+			if err != nil || !ok {
+				return err
+			}
+			// Only open (activatable) user tasks — the same rows the global list
+			// returns. Retries == 0 means the job is parked behind an incident.
+			if jv.JobType != compiler.UserTaskJobTypeIndex || jv.Retries <= 0 {
+				return nil
 			}
 			tasks = append(tasks, s.enrichTask(jobKey, jv))
 			return nil
@@ -2396,8 +2477,6 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if truncated {
-		// Signal a capped page so a client can narrow (by process/assignee) rather than
-		// assume it received every task.
 		w.Header().Set("X-Tasks-Truncated", "true")
 	}
 	writeJSON(w, http.StatusOK, tasks)

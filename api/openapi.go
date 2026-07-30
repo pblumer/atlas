@@ -210,7 +210,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Element instance key and stats", tObject())}},
 
 		{"GET", "/api/v1/tasks", s.handleListTasks, apiOp{
-			summary: "List active user tasks — capped per call (?limit=, default 500, max 5000); X-Tasks-Truncated: true marks a capped page", tag: "Tasks", resp: jsonBody("Tasks", tArray())}},
+			summary: "List active user tasks, newest first — capped per call (?limit=, default 500, max 5000). A capped page sets X-Tasks-Truncated: true and X-Tasks-Next-Cursor: <jobKey>; pass it as ?before= to page to older tasks. ?processInstance=<key> scopes the list to one instance (flood-proof, for embedded clients)", tag: "Tasks", resp: jsonBody("Tasks", tArray())}},
 		{"GET", "/api/v1/tasks/{key}", s.handleGetTask, apiOp{
 			summary: "Fetch one open user task by key — the deep-link primitive so a task stays reachable outside a capped list page", tag: "Tasks", resp: jsonBody("Task", tObject())}},
 		{"POST", "/api/v1/tasks/{key}/complete", s.handleCompleteTask, apiOp{
