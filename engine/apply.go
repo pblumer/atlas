@@ -210,6 +210,17 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			return tx.DeleteMessageSubscription(&v.subscription)
 		}
 
+	case model.VTSignal:
+		// A signal subscription's lifecycle mirrors a message subscription's: opened
+		// when a signal catch activates, retired when a broadcast fires it. Same two
+		// intents, a separate column family (ADR-0088).
+		switch h.Intent {
+		case model.IntentSubscriptionCreated:
+			return tx.PutSignalSubscription(&v.signalSub)
+		case model.IntentSubscriptionCorrelated:
+			return tx.DeleteSignalSubscription(&v.signalSub)
+		}
+
 	case model.VTMessageFlow:
 		if h.Intent == model.IntentMessagePublished {
 			// Retain the delivered message flow so the Operations collaboration view

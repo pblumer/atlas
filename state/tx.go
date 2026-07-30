@@ -312,6 +312,45 @@ func (t *Tx) CorrelatableSubscriptions(name, correlationKey string, fn func(elKe
 	return iter.Error()
 }
 
+// --- SignalSubscription ---
+
+// PutSignalSubscription writes an open signal subscription, keyed by its signal
+// name plus its element-instance key. A signal has no correlation key — it
+// matches by name alone (ADR-0088).
+func (t *Tx) PutSignalSubscription(v *model.SignalSubscriptionValue) error {
+	return t.b.Set(keySignalSubscription(v.SignalName, v.ElementInstanceKey), t.encodeValue(v), nil)
+}
+
+// DeleteSignalSubscription removes a signal subscription. The value supplies the
+// name and element-instance key that locate its index entry; on recovery they
+// come from the event payload.
+func (t *Tx) DeleteSignalSubscription(v *model.SignalSubscriptionValue) error {
+	return t.b.Delete(keySignalSubscription(v.SignalName, v.ElementInstanceKey), nil)
+}
+
+// SubscribedSignals calls fn for every open subscription waiting on the given
+// signal name, via a name-only prefix scan — the broadcast access pattern. Like
+// CorrelatableSubscriptions it reads through the in-flight batch, so it observes
+// subscriptions created earlier in the same batch (ADR-0088).
+func (t *Tx) SubscribedSignals(name string, fn func(elKey uint64, v *model.SignalSubscriptionValue) error) error {
+	prefix := signalSubscriptionPrefix(name)
+	iter, err := t.b.NewIter(&pebble.IterOptions{LowerBound: prefix, UpperBound: prefixEnd(prefix)})
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+	for iter.First(); iter.Valid(); iter.Next() {
+		var v model.SignalSubscriptionValue
+		if err := model.DecodeValueInto(&v, iter.Value()); err != nil {
+			return err
+		}
+		if err := fn(trailingKey(iter.Key()), &v); err != nil {
+			return err
+		}
+	}
+	return iter.Error()
+}
+
 // --- Variable ---
 
 // PutVariable writes (upserts) a process variable under its scope and name.

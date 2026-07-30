@@ -58,6 +58,8 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeTimerCatchEvent] = timerCatchEventBehavior{}
 	p.behaviors[compiler.TypeMessageCatchEvent] = messageCatchEventBehavior{}
 	p.behaviors[compiler.TypeMessageThrowEvent] = messageThrowEventBehavior{}
+	p.behaviors[compiler.TypeSignalCatchEvent] = signalCatchEventBehavior{}
+	p.behaviors[compiler.TypeSignalThrowEvent] = signalThrowEventBehavior{}
 	p.behaviors[compiler.TypeTask] = passThroughBehavior{}
 	p.behaviors[compiler.TypeParallelGateway] = parallelGatewayBehavior{}
 	p.behaviors[compiler.TypeInclusiveGateway] = inclusiveGatewayBehavior{}
@@ -1542,6 +1544,83 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 			MessageName:              name,
 			CorrelationKey:           correlationKey,
 		})
+	}
+}
+
+// signalCatchEventBehavior: an intermediate signal catch event. On activation it
+// opens a name-only signal subscription and waits (stays Activated). A later
+// signal broadcast of the same name fires the subscription, driving the element
+// to complete and take its outgoing flows — the message-catch shape (ADR-0020)
+// minus the correlation key (ADR-0088).
+type signalCatchEventBehavior struct{}
+
+func (signalCatchEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.SignalCatch(cp.Node(ei.ElementId).Detail)
+	c.AppendSignalSubscriptionEvent(key, model.IntentSubscriptionCreated, model.SignalSubscriptionValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		SignalName:         detail.SignalName,
+		ProcessDefKey:      ei.ProcessDefKey,
+		ElementId:          ei.ElementId,
+	})
+	// Stays Activated: no Completing until a signal broadcasts.
+}
+
+func (signalCatchEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// signalThrowEventBehavior: an intermediate signal throw event. On activation it
+// broadcasts the signal to every waiting catch of the same name — across all
+// instances — then completes and takes its outgoing flows. The throw carries the
+// throwing instance's variables as the broadcast payload, so every catch it fires
+// is seeded with them (ADR-0088), mirroring messageThrowEventBehavior. Reading the
+// payload here (command processing) keeps applyToState pure (I4).
+type signalThrowEventBehavior struct{}
+
+func (signalThrowEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.SignalThrow(cp.Node(ei.ElementId).Detail)
+	payload := instanceVariables(c, ei.ProcessInstanceKey)
+	broadcastSignal(c, detail.SignalName, payload)
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (signalThrowEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// broadcastSignal delivers a signal with the given name to every open signal
+// subscription — a 1:n broadcast, across all instances, matching by name alone
+// (a signal has no correlation key). For each match it emits SubscriptionCorrelated
+// (which retires the subscription — a catch fires once), writes the broadcast
+// payload into that instance's scope, and commands the waiting element to
+// complete. Matches are collected before any mutation so retiring one can't
+// disturb the scan. A signal that matches nothing is a no-op — a broadcast is
+// fire-and-forget, with no buffering (ADR-0088). It mirrors correlateMessage;
+// signal-start instantiation lands in a later phase.
+func broadcastSignal(c *ProcessingContext, name string, vars []model.VariableValue) {
+	type match struct {
+		elKey uint64
+		sub   model.SignalSubscriptionValue
+	}
+	var matches []match
+	c.p.fail(c.tx.SubscribedSignals(name, func(elKey uint64, v *model.SignalSubscriptionValue) error {
+		matches = append(matches, match{elKey: elKey, sub: *v})
+		return nil
+	}))
+	for i := range matches {
+		m := matches[i]
+		c.AppendSignalSubscriptionEvent(m.elKey, model.IntentSubscriptionCorrelated, m.sub)
+		for j := range vars {
+			vv := vars[j]
+			vv.ScopeKey = m.sub.ProcessInstanceKey
+			c.AppendVariableEvent(model.IntentVariableCreated, vv)
+		}
+		if ei := c.GetElementInstance(m.elKey); ei != nil {
+			c.AppendElementCommand(m.elKey, model.IntentCompleting, *ei)
+		}
 	}
 }
 

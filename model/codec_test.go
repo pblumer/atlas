@@ -202,7 +202,7 @@ func TestRecordRoundTrip(t *testing.T) {
 		},
 		{
 			name:   "header only, no payload",
-			vt:     VTSignal, // a value type without a payload codec yet
+			vt:     VTError, // a value type without a payload codec yet (VTSignal gained one in ADR-0088)
 			intent: IntentActivating,
 			value:  nil,
 		},

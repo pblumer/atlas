@@ -309,6 +309,15 @@ func (c *ProcessingContext) AppendMessageSubscriptionEvent(key uint64, intent mo
 	c.appendEvent(key, model.VTMessageSubscription, intent, inflightValue{subscription: v})
 }
 
+// AppendSignalSubscriptionEvent records a signal-subscription fact (created or
+// correlated). The key is the waiting element instance's key, and the value
+// carries the signal name, so applyToState can locate the index entry from the
+// event alone (invariant I4). A signal reuses the message subscription intents
+// (SubscriptionCreated / SubscriptionCorrelated) over a separate family (ADR-0088).
+func (c *ProcessingContext) AppendSignalSubscriptionEvent(key uint64, intent model.Intent, v model.SignalSubscriptionValue) {
+	c.appendEvent(key, model.VTSignal, intent, inflightValue{signalSub: v})
+}
+
 // AppendMessageFlowEvent retains one delivered message flow as history for the
 // collaboration replay (ADR-0038). It is keyed by its receiving definition (the
 // state index leads with it); the event's header timestamp and position order it

@@ -506,6 +506,53 @@ func (v *MessageSubscriptionValue) decode(src []byte) error {
 	return nil
 }
 
+// SignalSubscriptionValue is an open subscription to a broadcast signal: an
+// element instance (a signal intermediate catch event, later a signal boundary
+// or event subprocess) waiting for a named signal. It is the
+// MessageSubscriptionValue shape (ADR-0020) minus the correlation key — a signal
+// matches by name alone and fans out 1:n, so there is nothing to correlate on
+// (ADR-0088). The SignalName is the sole match key a broadcast scans for.
+type SignalSubscriptionValue struct {
+	ProcessInstanceKey uint64
+	ElementInstanceKey uint64
+	SignalName         string
+	// ProcessDefKey and ElementId identify the waiting catch on its diagram; set at
+	// subscribe time from the element instance and carried so the record locates its
+	// own state index entry (invariant I4), mirroring MessageSubscriptionValue.
+	ProcessDefKey uint64
+	ElementId     int32
+}
+
+func (*SignalSubscriptionValue) ValueType() ValueType { return VTSignal }
+
+func (v *SignalSubscriptionValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ElementInstanceKey)
+	dst = appendString(dst, v.SignalName)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
+	return binary.LittleEndian.AppendUint32(dst, uint32(v.ElementId))
+}
+
+func (v *SignalSubscriptionValue) decode(src []byte) error {
+	if len(src) < 16 {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src[0:])
+	v.ElementInstanceKey = binary.LittleEndian.Uint64(src[8:])
+	rest := src[16:]
+	name, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.SignalName = name
+	if len(rest) < 12 {
+		return ErrShortBuffer
+	}
+	v.ProcessDefKey = binary.LittleEndian.Uint64(rest[0:])
+	v.ElementId = int32(binary.LittleEndian.Uint32(rest[8:]))
+	return nil
+}
+
 // MessageFlowValue is one delivered message flow, retained as history so the
 // collaboration replay can show which message crossed to which receiving element
 // and when (ADR-0038). It is produced when a message correlates a catch event or
@@ -665,6 +712,8 @@ func newValue(vt ValueType) Value {
 		return &VariableValue{}
 	case VTMessageSubscription:
 		return &MessageSubscriptionValue{}
+	case VTSignal:
+		return &SignalSubscriptionValue{}
 	case VTMessageFlow:
 		return &MessageFlowValue{}
 	case VTDataObject:
