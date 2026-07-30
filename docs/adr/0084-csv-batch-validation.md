@@ -133,7 +133,7 @@ re-validating until the row is valid. The whole instance completes only when eve
 row passes; `verdicts` collects each row's final (valid) verdict.
 
 This required making **gateway conditions scope-aware**
-([ADR-0085](0085-gateway-conditions-resolve-over-scope-chain.md)): the in-subprocess
+([ADR-0086](0086-gateway-conditions-resolve-over-scope-chain.md)): the in-subprocess
 gateway reads the per-iteration `verdict`, which lives in the iteration scope, not
 the process root. A business rule task cannot be multi-instanced directly, and the
 back-edge stays within the subprocess scope (its join is an exclusive gateway, which

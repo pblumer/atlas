@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -116,19 +117,27 @@ func TestScanHandlersReportDecodeErrors(t *testing.T) {
 	})
 
 	for _, tc := range []struct {
-		method, path string
+		method, path, body string
 	}{
-		{http.MethodGet, "/api/v1/instances"},
+		{http.MethodGet, "/api/v1/instances", ""},
 		// /api/v1/instances/summary is not listed: it reads O(1) per-definition counters
 		// (ADR-0083), not the instance records, so an undecodable instance does not
 		// affect it — that decoupling is the point of the change.
-		{http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/cancel-instances", dep.Key)},
+		{http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/cancel-instances", dep.Key), ""},
 		// The single-instance runtime overlay scans the process instances (ADR-0080),
 		// so the undecodable record surfaces as a 500 there too.
-		{http.MethodGet, fmt.Sprintf("/api/v1/processes/%d/runtime?instance=99", dep.Key)},
+		{http.MethodGet, fmt.Sprintf("/api/v1/processes/%d/runtime?instance=99", dep.Key), ""},
+		// Bulk terminate: filter mode scans the process instances, and keys mode point-
+		// reads one — both hit the undecodable record and surface a 500.
+		{http.MethodPost, "/api/v1/instances/terminate", fmt.Sprintf(`{"processDefKey":%d}`, dep.Key)},
+		{http.MethodPost, "/api/v1/instances/terminate", `{"keys":[99]}`},
 	} {
 		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, nil))
+		var body io.Reader
+		if tc.body != "" {
+			body = strings.NewReader(tc.body)
+		}
+		h.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, body))
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("%s %s status=%d, want 500 (undecodable record)", tc.method, tc.path, rec.Code)
 		}

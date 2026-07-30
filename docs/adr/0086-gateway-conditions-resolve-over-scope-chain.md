@@ -1,4 +1,4 @@
-# ADR-0085: Gateway conditions resolve over the scope chain
+# ADR-0086: Gateway conditions resolve over the scope chain
 
 - **Status:** Proposed
 - **Date:** 2026-07-29

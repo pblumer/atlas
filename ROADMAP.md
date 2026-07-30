@@ -67,7 +67,7 @@ The control-flow basics most real models use.
   The **DMN worker now resolves input mappings up the full scope chain**
   ([ADR-0084](docs/adr/0084-csv-batch-validation.md)), and **exclusive/inclusive
   gateway conditions resolve over the scope chain too**
-  ([ADR-0085](docs/adr/0085-gateway-conditions-resolve-over-scope-chain.md)), so a
+  ([ADR-0086](docs/adr/0086-gateway-conditions-resolve-over-scope-chain.md)), so a
   business rule task or a gateway nested in a subprocess or a multi-instance body
   reads its enclosing scope's variables (e.g. a per-row `inputElement` or a
   per-row `verdict`) rather than only the process root. Remaining: extend the same

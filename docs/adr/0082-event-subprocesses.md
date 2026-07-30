@@ -4,8 +4,10 @@
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phases 1–3 delivered; Phases 4–5 pending. Each phase lands
-> test-first with a recovery test (ADR-0018). (Note: the ADR *number* 0082 collides with
+> **Implementation status.** Phases 1–5 delivered — an event subprocess compiles, runs
+> (message/timer, interrupting/non-interrupting, at the root or nested in a subprocess), and
+> is authored in the Modeler. Each engine phase landed test-first with a recovery test
+> (ADR-0018). (Note: the ADR *number* 0082 collides with
 > `0082-singleton-message-start.md`, merged in parallel — a pre-existing collision like
 > ADR-0077; the documents are distinct files.) Event subprocesses build on the
 > embedded-subprocess scope lifecycle (ADR-0074), the boundary-event arming/firing/
@@ -69,6 +71,38 @@
 > flow down and runs the handler; a non-interrupting `R2` cycle timer fires exactly three
 > times then stops re-arming; and a crash+replay between a re-arm and the next message still
 > runs the handler after restart.
+>
+> **Delivered (Phase 4, nesting / subprocess-level / teardown):** an event subprocess nested
+> in an embedded subprocess is now armed on the **subprocess's** activation
+> (`subProcessBehavior.OnActivated` calls `armEventSubprocesses(cp.EventSubprocesses(node))`),
+> the analog of arming the root's at instance creation. Everything else composed for free:
+> `completeScope` already disarms a *subprocess* scope's triggers as it drains, and
+> `terminateScope` already terminates every element scoped under a subprocess — triggers
+> included — when an interrupting boundary tears the subprocess down. A subprocess-level
+> **interrupting** trigger fires `terminateScope(subprocessScope)`, runs its handler in the
+> subprocess, and the subprocess then completes and takes its **outgoing flow**, so the flow
+> after the subprocess continues and the instance is not aborted. Verified: a subprocess-
+> scoped event subprocess interrupts only its subprocess (the inner job is canceled, the
+> handler runs, and the flow *after* the subprocess continues to completion); an armed
+> trigger is disarmed on normal subprocess completion and a late message is inert; and a
+> crash+replay rebuilds the subprocess-scoped subscription so a message after restart still
+> interrupts only the subprocess.
+>
+> **Delivered (Phase 5, Modeler):** the Implement panel authors an event subprocess's start
+> event. bpmn-js already draws the dashed event-subprocess container (its native
+> `triggeredByEvent`) and the message/timer + interrupting/non-interrupting start-event
+> markers via the wrench menu; the panel adds what the compiler reads. When a start event
+> sits inside a `triggeredByEvent` subprocess (`isEventSubStart` — `element.parent`'s
+> business object is a subprocess with `triggeredByEvent`), an **Event subprocess trigger**
+> section replaces the process-entry form: an **On trigger** select writing the start's
+> `isInterrupting` (the scope-level analog of a boundary's `cancelActivity`, defaulting
+> interrupting), and — for a message or timer start — the same message-name/correlation-key
+> or timer-schedule editors the catch/boundary events use, with the **Cycle** kind offered
+> only for a non-interrupting timer (a re-arming reminder). Flipping interrupting re-renders
+> so the cycle option appears or drops. Verified end to end against the vendored bpmn-js +
+> moddle in a real (headless) browser: an imported event-subprocess start is detected (a
+> plain start elsewhere is not), and toggling interrupting round-trips to `isInterrupting`
+> in the exported XML.
 
 ## Context and problem statement
 
