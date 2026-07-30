@@ -260,7 +260,7 @@ func buildMessageResolver(defs xmlDefinitions) func(ownerId, messageRef string) 
 }
 
 // buildSignalResolver indexes a model's top-level <bpmn:signal> declarations by id and
-// returns a closure resolving a signalRef to the signal's name (ADR-0087). A signal is
+// returns a closure resolving a signalRef to the signal's name (ADR-0088). A signal is
 // broadcast by name, so — unlike a message — there is no correlation key to compile.
 func buildSignalResolver(defs xmlDefinitions) func(ownerId, signalRef string) (string, error) {
 	signals := make(map[string]xmlSignal, len(defs.Signals))
@@ -700,7 +700,7 @@ type xmlMessageEventDefinition struct {
 	MessageRef string `xml:"messageRef,attr"`
 }
 
-// A top-level signal declaration (ADR-0087). A signal is broadcast by name — it carries
+// A top-level signal declaration (ADR-0088). A signal is broadcast by name — it carries
 // no correlation key and no code — so it needs only an id and a name.
 type xmlSignal struct {
 	Id   string `xml:"id,attr"`
@@ -900,7 +900,7 @@ type xmlStartEvent struct {
 	// carries, armed at deploy time (ADR-0051). A pointer so an absent one is nil.
 	Timer *xmlTimerEventDefinition `xml:"timerEventDefinition"`
 	// Signal, when present, makes this a signal start event: a broadcast signal of the
-	// referenced name instantiates the process (ADR-0087). A pointer so an absent one is nil.
+	// referenced name instantiates the process (ADR-0088). A pointer so an absent one is nil.
 	Signal *xmlSignalEventDefinition `xml:"signalEventDefinition"`
 	// IsInterrupting is the event-subprocess start event's cancel flag (ADR-0082):
 	// absent or "true" interrupts the parent scope when the trigger fires, "false" runs
@@ -938,7 +938,7 @@ type xmlIntermediateThrowEvent struct {
 // An end event. A plain (none) end event just ends the instance; one bearing a
 // messageEventDefinition is a message end event, which publishes the message
 // then ends (ADR-0052); a signalEventDefinition is a signal end event, which
-// broadcasts the signal then ends (ADR-0087). Each is a pointer so an absent one is nil.
+// broadcasts the signal then ends (ADR-0088). Each is a pointer so an absent one is nil.
 type xmlEndEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`

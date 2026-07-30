@@ -1,4 +1,4 @@
-# ADR-0087: Signal events (broadcast throw/catch)
+# ADR-0088: Signal events (broadcast throw/catch)
 
 - **Status:** Proposed
 - **Date:** 2026-07-30
@@ -255,5 +255,5 @@ which delegate to the existing message/boundary/event-sub lifecycles.
 - honors I1, I2, I4, I5, I6 and ADR-0018 (test-first, recovery tests up front)
 - ROADMAP Milestone 2 "Signal events (broadcast)"; cross-partition broadcast is deferred to
   Milestone 5 (ADR-0006) with cross-partition messaging
-- sibling to ADR-0088 (error events) — the other outstanding Milestone-2 event type, with the
+- sibling to ADR-0089 (error events) — the other outstanding Milestone-2 event type, with the
   opposite delivery model (scoped propagation to one handler, not broadcast)

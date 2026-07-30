@@ -10,7 +10,7 @@ import (
 
 // eventSubStart returns the event subprocess's triggering start event — the first
 // start event carrying a message, timer, or signal event definition — or nil if it has
-// none (ADR-0082, ADR-0087).
+// none (ADR-0082, ADR-0088).
 func eventSubStart(sub *xmlSubProcess) *xmlStartEvent {
 	for i := range sub.StartEvents {
 		if s := &sub.StartEvents[i]; s.Message != nil || s.Timer != nil || s.Signal != nil {

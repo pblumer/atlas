@@ -1,4 +1,4 @@
-# ADR-0088: Error events (scoped propagation to the nearest handler)
+# ADR-0089: Error events (scoped propagation to the nearest handler)
 
 - **Status:** Proposed
 - **Date:** 2026-07-30
@@ -278,5 +278,5 @@ decision (I6); it runs only live (a throw is a command), never during replay.
 - honors I1, I2, I4, I5, I6 and ADR-0018 (test-first, recovery tests up front)
 - ROADMAP Milestone 2 "Error events and error propagation"; the substrate for a future
   compensation / BPMN-transaction story (Milestone 3)
-- sibling to ADR-0087 (signal events) — the other outstanding Milestone-2 event type, with the
+- sibling to ADR-0088 (signal events) — the other outstanding Milestone-2 event type, with the
   opposite delivery model (broadcast to all, not nearest-enclosing to one)

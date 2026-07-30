@@ -6,7 +6,7 @@ import (
 )
 
 // A model with a top-level <signal> and a signal throw + catch referencing it
-// (ADR-0087 Phase 1).
+// (ADR-0088 Phase 1).
 const signalThrowCatchXML = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
   <signal id="Sig_cancel" name="order-cancelled"/>
   <process id="p" isExecutable="true">
@@ -119,7 +119,7 @@ func TestParseSignalStartAndEnd(t *testing.T) {
 }
 
 // TestParseSignalEventSubprocess checks that an event subprocess triggered by a signal
-// start compiles with a BoundarySignal event-subprocess detail (ADR-0087, reusing ADR-0082).
+// start compiles with a BoundarySignal event-subprocess detail (ADR-0088, reusing ADR-0082).
 func TestParseSignalEventSubprocess(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
 	             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
@@ -170,7 +170,7 @@ func TestParseSignalUnknownRef(t *testing.T) {
 
 // TestParseSignalUnknownRefEverywhere rejects an unresolvable signalRef in every signal
 // position — start, catch, throw, end, boundary, and event-subprocess start — exercising
-// each resolveSignal error path (ADR-0087).
+// each resolveSignal error path (ADR-0088).
 func TestParseSignalUnknownRefEverywhere(t *testing.T) {
 	wrap := func(body string) string {
 		return `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
