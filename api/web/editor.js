@@ -1730,6 +1730,16 @@ function messageDefOf(bo) {
   return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:MessageEventDefinition") || null;
 }
 
+// isEventSubStart reports whether a start event is the trigger of an event subprocess —
+// i.e. it sits directly inside a subprocess whose triggeredByEvent is set (ADR-0082). Such
+// a start carries a message/timer trigger and an isInterrupting flag, not a process-entry
+// form. bpmn-js sets triggeredByEvent (and draws the dashed container) when the user makes
+// the subprocess an event subprocess.
+function isEventSubStart(element) {
+  const p = element && element.parent && element.parent.businessObject;
+  return !!(p && p.$type === "bpmn:SubProcess" && p.triggeredByEvent === true);
+}
+
 // definitionsOf returns the diagram's <bpmn:definitions> moddle element, where
 // top-level <bpmn:message> declarations live.
 function definitionsOf(modeler) {
@@ -2576,6 +2586,34 @@ function wireProperties(root, modeler, api, projectId, toast) {
         } else {
           html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b> or <b>Message</b> boundary event, then configure its trigger here.</p>`;
         }
+      } else if (bo.$type === "bpmn:StartEvent" && isEventSubStart(element)) {
+        // The start event of an event subprocess: it triggers the handler while the
+        // enclosing scope runs, interrupting it or not (ADR-0082). Its message/timer
+        // trigger reuses the same editors as a catch/boundary event; the isInterrupting
+        // flag is the scope-level analog of a boundary's cancelActivity.
+        const timer = timerDefOf(bo);
+        const msg = messageDefOf(bo);
+        const interrupting = bo.isInterrupting !== false;
+        html += `<h3>Event subprocess trigger</h3>
+          <label class="field"><span>On trigger</span>
+            <select id="f-interrupting">
+              <option value="true" ${interrupting ? "selected" : ""}>Interrupting — cancel the enclosing scope</option>
+              <option value="false" ${interrupting ? "" : "selected"}>Non-interrupting — run alongside</option>
+            </select></label>
+          <p class="muted" style="font-size:12px">This start event triggers the event subprocess while its enclosing scope (the process or subprocess) runs. <b>Interrupting</b> terminates the scope's other work, then runs this handler; <b>non-interrupting</b> runs it in parallel and can fire again.</p>`;
+        if (timer) {
+          const kinds = interrupting ? ["duration", "date"] : ["duration", "date", "cycle"];
+          const cycleNote = interrupting
+            ? "An interrupting timer fires once, so it has no cycle."
+            : "A non-interrupting timer may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R3/PT1H</b>) or cron (<b>0 * * * *</b>) — firing the handler each time.";
+          html += timerFieldsHTML(timer, kinds, `The event subprocess fires on this schedule while its scope runs (ADR-0082).
+            <b>Duration</b> fires that long after the scope is entered; <b>Date &amp; time</b> at a fixed instant.
+            ${cycleNote} A FEEL expression is allowed in any type.`);
+        } else if (msg) {
+          html += messageFieldsHTML(modeler, msg, "The event subprocess fires when this message is published with a matching correlation key, while its scope runs.");
+        } else {
+          html += `<p class="muted" style="font-size:12px">Use the wrench icon on this start event to give it a <b>Timer</b> or <b>Message</b> trigger, then configure it here.</p>`;
+        }
       } else if (bo.$type === "bpmn:StartEvent") {
         const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
@@ -3208,6 +3246,16 @@ function wireProperties(root, modeler, api, projectId, toast) {
       fcancel.addEventListener("change", () => {
         // Flipping cancelActivity also flips bpmn-js's solid/dashed boundary marker.
         try { modeling.updateProperties(element, { cancelActivity: fcancel.value === "true" }); } catch { /* stale */ }
+      });
+    }
+
+    const finterrupting = body.querySelector("#f-interrupting");
+    if (finterrupting) {
+      finterrupting.addEventListener("change", () => {
+        // isInterrupting flips bpmn-js's solid/dashed event-subprocess start marker, and
+        // re-renders so the timer editor can offer (or drop) the Cycle kind (ADR-0082).
+        try { modeling.updateProperties(element, { isInterrupting: finterrupting.value === "true" }); } catch { /* stale */ }
+        show(element);
       });
     }
 
