@@ -142,7 +142,7 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 	if len(defs.Processes) == 0 {
 		return nil, fmt.Errorf("compiler: no <process> element in definitions")
 	}
-	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs))
+	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs), buildSignalResolver(defs))
 }
 
 // Deployable is one executable process compiled from a model, plus the display
@@ -169,6 +169,7 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 		return nil, err
 	}
 	resolve := buildMessageResolver(defs)
+	resolveSig := buildSignalResolver(defs)
 	poolName := participantNames(defs)
 
 	var out []Deployable
@@ -176,7 +177,7 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 		if len(proc.StartEvents) == 0 {
 			continue // black-box pool: nothing to run
 		}
-		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve)
+		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig)
 		if err != nil {
 			return nil, err
 		}
@@ -199,7 +200,7 @@ func ParseNamed(key uint64, version int32, r io.Reader, processId string) (*Comp
 	}
 	for _, proc := range defs.Processes {
 		if proc.Id == processId {
-			return compileProcess(key, version, proc, buildMessageResolver(defs))
+			return compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs))
 		}
 	}
 	return nil, fmt.Errorf("compiler: no <process> with id %q in model", processId)
@@ -258,10 +259,32 @@ func buildMessageResolver(defs xmlDefinitions) func(ownerId, messageRef string) 
 	}
 }
 
+// buildSignalResolver indexes a model's top-level <bpmn:signal> declarations by id and
+// returns a closure resolving a signalRef to the signal's name (ADR-0088). A signal is
+// broadcast by name, so — unlike a message — there is no correlation key to compile.
+func buildSignalResolver(defs xmlDefinitions) func(ownerId, signalRef string) (string, error) {
+	signals := make(map[string]xmlSignal, len(defs.Signals))
+	for _, s := range defs.Signals {
+		if s.Id != "" {
+			signals[s.Id] = s
+		}
+	}
+	return func(ownerId, signalRef string) (string, error) {
+		s, ok := signals[signalRef]
+		if !ok {
+			return "", fmt.Errorf("compiler: signal event %q references unknown signal %q", ownerId, signalRef)
+		}
+		if s.Name == "" {
+			return "", fmt.Errorf("compiler: signal %q referenced by %q has no name", signalRef, ownerId)
+		}
+		return s.Name, nil
+	}
+}
+
 // compileProcess linearizes one <process> into an immutable CompiledProcess,
-// resolving message references through resolveMessage (shared across a
-// collaboration's processes).
-func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error)) (*CompiledProcess, error) {
+// resolving message and signal references through resolveMessage/resolveSignal (shared
+// across a collaboration's processes).
+func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error)) (*CompiledProcess, error) {
 	b := NewBuilder(key, proc.Id, version)
 	// isExecutable defaults to true when the attribute is absent (BPMN convention;
 	// Atlas has always run every deployed process), so an existing model without it
@@ -286,7 +309,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	// Register every flow node — the process root and, recursively, each embedded
 	// subprocess scope — then require a root-scope start event before wiring flows.
 	// Data objects and I/O mappings below stay process-scoped (ADR-0074).
-	if err := registerScope(b, ids, register, resolveMessage, &proc.xmlFlowContent); err != nil {
+	if err := registerScope(b, ids, register, resolveMessage, resolveSignal, &proc.xmlFlowContent); err != nil {
 		return nil, err
 	}
 
@@ -644,6 +667,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 type xmlDefinitions struct {
 	Processes     []xmlProcess      `xml:"process"`
 	Messages      []xmlMessage      `xml:"message"`
+	Signals       []xmlSignal       `xml:"signal"`
 	Collaboration *xmlCollaboration `xml:"collaboration"`
 }
 
@@ -674,6 +698,17 @@ type xmlZeebeSubscription struct {
 
 type xmlMessageEventDefinition struct {
 	MessageRef string `xml:"messageRef,attr"`
+}
+
+// A top-level signal declaration (ADR-0088). A signal is broadcast by name — it carries
+// no correlation key and no code — so it needs only an id and a name.
+type xmlSignal struct {
+	Id   string `xml:"id,attr"`
+	Name string `xml:"name,attr"`
+}
+
+type xmlSignalEventDefinition struct {
+	SignalRef string `xml:"signalRef,attr"`
 }
 
 type xmlProcess struct {
@@ -864,6 +899,9 @@ type xmlStartEvent struct {
 	// fresh instance on the schedule (duration/date/cycle/cron) the definition
 	// carries, armed at deploy time (ADR-0051). A pointer so an absent one is nil.
 	Timer *xmlTimerEventDefinition `xml:"timerEventDefinition"`
+	// Signal, when present, makes this a signal start event: a broadcast signal of the
+	// referenced name instantiates the process (ADR-0088). A pointer so an absent one is nil.
+	Signal *xmlSignalEventDefinition `xml:"signalEventDefinition"`
 	// IsInterrupting is the event-subprocess start event's cancel flag (ADR-0082):
 	// absent or "true" interrupts the parent scope when the trigger fires, "false" runs
 	// the handler alongside it. Empty for an ordinary start event.
@@ -887,20 +925,24 @@ type xmlIntermediateCatchEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Timer   *xmlTimerEventDefinition   `xml:"timerEventDefinition"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
+	Signal  *xmlSignalEventDefinition  `xml:"signalEventDefinition"`
 }
 
-// An intermediate throw event; only the message variant is executable so far.
+// An intermediate throw event; the message and signal variants are executable.
 type xmlIntermediateThrowEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
+	Signal  *xmlSignalEventDefinition  `xml:"signalEventDefinition"`
 }
 
 // An end event. A plain (none) end event just ends the instance; one bearing a
 // messageEventDefinition is a message end event, which publishes the message
-// then ends (ADR-0052). The definition is a pointer so an absent one is nil.
+// then ends (ADR-0052); a signalEventDefinition is a signal end event, which
+// broadcasts the signal then ends (ADR-0088). Each is a pointer so an absent one is nil.
 type xmlEndEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
+	Signal  *xmlSignalEventDefinition  `xml:"signalEventDefinition"`
 }
 
 // A boundary event is attached to a host activity (AttachedToRef) and arms while
@@ -914,6 +956,7 @@ type xmlBoundaryEvent struct {
 	CancelActivity string                     `xml:"cancelActivity,attr"`
 	Timer          *xmlTimerEventDefinition   `xml:"timerEventDefinition"`
 	Message        *xmlMessageEventDefinition `xml:"messageEventDefinition"`
+	Signal         *xmlSignalEventDefinition  `xml:"signalEventDefinition"`
 }
 
 type xmlTimerEventDefinition struct {

@@ -45,8 +45,13 @@ const (
 	// active-child counter so it never blocks scope completion.
 	TypeEventSubProcessStart
 
+	TypeSignalCatchEvent // an intermediate catch event that waits for a broadcast signal by name (ADR-0088)
+	TypeSignalThrowEvent // an intermediate throw event that broadcasts a signal by name to every waiting catch (ADR-0088)
+	TypeSignalEndEvent   // an end event that broadcasts a signal, then ends the instance (ADR-0088); reuses the throw detail table
+	TypeSignalStartEvent // a start event that a broadcast signal instantiates (ADR-0088); at runtime it flows straight on like a message start
+
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 23
+	numBpmnTypes = 27
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -98,6 +103,14 @@ func (t BpmnType) String() string {
 		return "CallActivity"
 	case TypeEventSubProcessStart:
 		return "EventSubProcessStart"
+	case TypeSignalCatchEvent:
+		return "SignalCatchEvent"
+	case TypeSignalThrowEvent:
+		return "SignalThrowEvent"
+	case TypeSignalEndEvent:
+		return "SignalEndEvent"
+	case TypeSignalStartEvent:
+		return "SignalStartEvent"
 	default:
 		return "Unspecified"
 	}
@@ -400,6 +413,14 @@ type MessageDetail struct {
 	SingletonStart bool
 }
 
+// SignalDetail is the per-signal-event data a behavior needs at runtime, shared by the
+// signal intermediate catch, throw, end, and start events (ADR-0088). A signal is
+// broadcast by name: it carries no correlation key and no code, so the name is all a
+// catch subscribes on and a throw broadcasts.
+type SignalDetail struct {
+	SignalName string
+}
+
 // EventSubProcessDetail is the per-event-subprocess data the runtime needs to arm its
 // trigger (ADR-0082). An event subprocess (`<subProcess triggeredByEvent="true">`) is
 // not entered by a sequence flow; instead its start event's event definition is armed
@@ -416,6 +437,7 @@ type EventSubProcessDetail struct {
 	Schedule       TimerSchedule  // BoundaryTimer: when the trigger fires
 	MessageName    string         // BoundaryMessage: the message it subscribes to
 	CorrelationKey *expr.Compiled // BoundaryMessage: correlation-key expression (ADR-0020)
+	SignalName     string         // BoundarySignal: the signal it subscribes to (ADR-0088)
 }
 
 // BoundaryEventKind discriminates what a boundary event waits on.
@@ -424,6 +446,7 @@ type BoundaryEventKind uint8
 const (
 	BoundaryTimer   BoundaryEventKind = iota // waits a fixed duration, then fires
 	BoundaryMessage                          // waits for a correlating message, then fires
+	BoundarySignal                           // waits for a broadcast signal by name, then fires (ADR-0088)
 )
 
 // BoundaryEventDetail is the per-boundary-event data a behavior needs at runtime.
@@ -438,6 +461,7 @@ type BoundaryEventDetail struct {
 	Schedule       TimerSchedule  // BoundaryTimer: when it fires; a cycle (non-interrupting only) recurs (ADR-0054)
 	MessageName    string         // BoundaryMessage: the message it subscribes to
 	CorrelationKey *expr.Compiled // BoundaryMessage: correlation-key expression (ADR-0020)
+	SignalName     string         // BoundarySignal: the signal it subscribes to (ADR-0088)
 }
 
 // CompiledDataObject is one BPMN data object declared by a process: a typed,
@@ -529,6 +553,9 @@ type CompiledProcess struct {
 	messageCatches    []MessageDetail
 	messageThrows     []MessageDetail
 	messageStarts     []MessageDetail
+	signalCatches     []SignalDetail
+	signalThrows      []SignalDetail // shared by signal throw and signal end events
+	signalStarts      []SignalDetail
 	timerStarts       []TimerStartDetail
 	dataObjects       []CompiledDataObject
 	dataOutAssocs     []DataOutputAssociation // shared: output associations grouped by activity node
@@ -693,6 +720,38 @@ func (p *CompiledProcess) MessageStartEvents() []MessageStartEvent {
 		}
 	}
 	return out
+}
+
+// SignalCatch returns the signal-catch detail at the given table index (ADR-0088).
+func (p *CompiledProcess) SignalCatch(detail int32) *SignalDetail { return &p.signalCatches[detail] }
+
+// SignalThrow returns the signal-throw detail at the given table index — shared by the
+// signal throw and signal end events (ADR-0088).
+func (p *CompiledProcess) SignalThrow(detail int32) *SignalDetail { return &p.signalThrows[detail] }
+
+// SignalStart returns the signal-start detail at the given table index (ADR-0088).
+func (p *CompiledProcess) SignalStart(detail int32) *SignalDetail { return &p.signalStarts[detail] }
+
+// SignalStartEvents returns each root-scope signal-start event's signal name and element
+// index. The engine indexes these at deploy time so a broadcast signal can instantiate the
+// process (ADR-0088), mirroring MessageStartEvents. A signal start nested in an event
+// subprocess is that scope's trigger, not a process entry point.
+func (p *CompiledProcess) SignalStartEvents() []SignalStartEvent {
+	var out []SignalStartEvent
+	for id := range p.nodes {
+		n := &p.nodes[id]
+		if n.Type == TypeSignalStartEvent && n.FlowScope == -1 {
+			out = append(out, SignalStartEvent{SignalName: p.signalStarts[n.Detail].SignalName, ElementId: int32(id)})
+		}
+	}
+	return out
+}
+
+// SignalStartEvent pairs a signal-start event's signal name with its element index, so the
+// engine can index which element a starting signal flows into (ADR-0088).
+type SignalStartEvent struct {
+	SignalName string
+	ElementId  int32
 }
 
 // TimerStart returns the timer-start detail at the given table index.
