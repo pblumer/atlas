@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 // optString returns a string argument, or "" when it is absent or not a string —
@@ -12,6 +13,21 @@ import (
 func optString(args map[string]any, name string) string {
 	s, _ := args[name].(string)
 	return s
+}
+
+// optPositiveUint extracts an optional positive integer argument.
+func optPositiveUint(args map[string]any, name string) (uint64, bool, error) {
+	if _, ok := args[name]; !ok {
+		return 0, false, nil
+	}
+	n, err := argUint(args, name)
+	if err != nil {
+		return 0, false, err
+	}
+	if n == 0 {
+		return 0, false, fmt.Errorf("argument %q must be a positive integer", name)
+	}
+	return n, true, nil
 }
 
 // argObjectJSON marshals a required object argument (a form schema, completion
@@ -36,6 +52,12 @@ func objectProp(desc string) map[string]any {
 
 func stringProp(desc string) map[string]any {
 	return map[string]any{"type": "string", "description": desc}
+}
+
+type taskListPage struct {
+	Items      []json.RawMessage `json:"items"`
+	Truncated  bool              `json:"truncated"`
+	NextCursor uint64            `json:"nextCursor,omitempty"`
 }
 
 // authoringTools are the design-time and human-task tools that let an agent set a
@@ -207,12 +229,69 @@ func authoringTools() []Tool {
 		},
 		{
 			Name: "atlas_list_tasks",
-			Description: "List active (open) user tasks across all instances — each with its task key, " +
-				"process, element, name, assignee, candidate groups, and bound formId. Use the task key " +
-				"with atlas_complete_task.",
-			InputSchema: noArgs(),
-			Handler: func(c *Client, _ map[string]any) (string, error) {
-				return asText(c.get("/api/v1/tasks"))
+			Description: "List active (open) user tasks with optional limit, newest-first cursor, or " +
+				"process-instance filter. Returns {items, truncated, nextCursor}; use nextCursor as before " +
+				"to fetch the next older global page. Use a task key from items with atlas_complete_task.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"limit": map[string]any{
+						"type":        "integer",
+						"minimum":     1,
+						"description": "Maximum tasks to return (API default 500, capped at 5000).",
+					},
+					"before": map[string]any{
+						"type":        "integer",
+						"minimum":     1,
+						"description": "Newest-first job-key cursor from nextCursor; use for global listing without processInstance.",
+					},
+					"processInstance": map[string]any{
+						"type":        "integer",
+						"minimum":     1,
+						"description": "Restrict tasks to one process instance key.",
+					},
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				query := url.Values{}
+				for _, name := range []string{"limit", "before", "processInstance"} {
+					value, present, err := optPositiveUint(args, name)
+					if err != nil {
+						return "", err
+					}
+					if present {
+						query.Set(name, strconv.FormatUint(value, 10))
+					}
+				}
+				path := "/api/v1/tasks"
+				if encoded := query.Encode(); encoded != "" {
+					path += "?" + encoded
+				}
+
+				body, headers, err := c.getWithHeaders(path)
+				if err != nil {
+					return "", err
+				}
+				var items []json.RawMessage
+				if err := json.Unmarshal(body, &items); err != nil {
+					return "", fmt.Errorf("decode Atlas task list: %w", err)
+				}
+				page := taskListPage{
+					Items:     items,
+					Truncated: strings.EqualFold(strings.TrimSpace(headers.Get("X-Tasks-Truncated")), "true"),
+				}
+				if raw := strings.TrimSpace(headers.Get("X-Tasks-Next-Cursor")); raw != "" {
+					cursor, err := parseUint(raw)
+					if err != nil {
+						return "", fmt.Errorf("decode Atlas task cursor %q: %w", raw, err)
+					}
+					page.NextCursor = cursor
+				}
+				encoded, err := json.Marshal(page)
+				if err != nil {
+					return "", err
+				}
+				return string(encoded), nil
 			},
 		},
 		{

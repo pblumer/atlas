@@ -45,17 +45,19 @@ func mustRead(t *testing.T, path string) string {
 // tasksWithName returns the keys of active tasks whose name matches.
 func tasksWithName(t *testing.T, listJSON, name string) []uint64 {
 	t.Helper()
-	var tasks []struct {
-		Key  uint64 `json:"key"`
-		Name string `json:"name"`
+	var page struct {
+		Items []struct {
+			Key  uint64 `json:"key"`
+			Name string `json:"name"`
+		} `json:"items"`
 	}
-	if err := json.Unmarshal([]byte(listJSON), &tasks); err != nil {
-		t.Fatalf("decode tasks %q: %v", listJSON, err)
+	if err := json.Unmarshal([]byte(listJSON), &page); err != nil {
+		t.Fatalf("decode task page %q: %v", listJSON, err)
 	}
 	var keys []uint64
-	for _, tk := range tasks {
-		if tk.Name == name {
-			keys = append(keys, tk.Key)
+	for _, task := range page.Items {
+		if task.Name == name {
+			keys = append(keys, task.Key)
 		}
 	}
 	return keys
