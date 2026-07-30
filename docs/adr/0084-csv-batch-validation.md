@@ -105,20 +105,52 @@ corrected* rather than rejected at the door — that is the whole point of the
 feature. Structural mismatch (a configured `header` absent from the file's header
 row) is a `400`, because the file does not match the declared layout.
 
-**Slice 2 (follow-up) — the validation process + decision.** An example BPMN
-whose multi-instance business rule task evaluates a DMN decision
-(`email valid? · correct group? · correct licence?`) once per row over
+**Slice 2 — the validation process + decision (landed).** The example decision
+`examples/pruefe-datensaetze.dmn` (`RowValid`: `emailOk · groupOk · licenseOk ·
+valid`) and process `examples/pruefe-datensaetze.bpmn` validate each row over
 `inputCollection="=rows"`, assembling an `outputCollection` of per-row verdicts.
-The decision is authored in temis; Atlas executes it via the existing worker.
+Two facts shaped the implementation:
 
-**Slice 3 (follow-up) — the correction loop.** Rows whose verdict is invalid
-route to `userTask`s (multi-instance over the failing rows) that the Quality
-Manager claims in the Tasks app; the bound form is pre-filled from the row
-(`handleInstanceVariables`), and submitting re-validates.
+- **A business rule task cannot be multi-instanced directly** — the compiler wires
+  multi-instance only onto service/script/user tasks, call activities, and
+  subprocesses (ADR-0077). So the row check is a business rule task **wrapped in an
+  embedded subprocess** that is multi-instanced (ADR-0074 + ADR-0077); the
+  subprocess's `outputElement="=verdict"` collects each iteration's decision result.
+- **The DMN worker had to learn the scope chain.** It read input mappings against
+  the process root only, so a per-iteration `inputElement` (`row`) resolved to null.
+  It now resolves up the element's full scope chain (nearest scope wins), mirroring
+  the script worker — the ADR-0068 follow-up the ROADMAP called out. This is an
+  off-processor read whose result still freezes into the job completion (I6), so
+  replay is unaffected.
 
-**Slice 4 (follow-up) — the upload UI** in the web app (a screen over the
-Slice-1 endpoint) and, later, promoting the column layout to a reusable,
-project-scoped **artifact** ([ADR-0034](0034-projects-and-artifacts.md)).
+**Slice 3 — the correction loop (landed).** Inside the per-row iteration, an
+exclusive gateway branches on `=verdict.valid`: a valid row ends the iteration; an
+invalid one parks on a **user task** (`korrigiere`, bound to the `row-correction-form`)
+that the Quality Manager claims in the Tasks app. The task's output mapping
+reshapes the submitted fields back into `row` (`={email:email, group:group,
+license:license}`), and a **same-scope back-edge** re-enters the business rule task —
+re-validating until the row is valid. The whole instance completes only when every
+row passes; `verdicts` collects each row's final (valid) verdict.
+
+This required making **gateway conditions scope-aware**
+([ADR-0086](0086-gateway-conditions-resolve-over-scope-chain.md)): the in-subprocess
+gateway reads the per-iteration `verdict`, which lives in the iteration scope, not
+the process root. A business rule task cannot be multi-instanced directly, and the
+back-edge stays within the subprocess scope (its join is an exclusive gateway, which
+fires per arrival).
+
+**Slice 4 — the upload UI + form pre-fill.** The web app grows a **Datenprüfung**
+screen: pick a deployed process, choose a CSV, give the column layout, and upload
+it to the Slice-1 endpoint (`multipart/form-data`) — the first file upload in the
+buildless UI (ADR-0012). The **pre-fill gap is closed** by giving the correction
+task **input mappings** (`row.email → email`, …) that surface its per-row fields
+flat in the task's **own element-instance scope**, matching the form's field keys;
+its output mapping still reshapes the edits back into `row`. The task list now
+carries each task's `elementInstanceKey`, so the Tasks app pre-fills a bound form by
+reading that scope's variables (`GET /api/v1/instances/{elementInstanceKey}/variables`,
+the existing endpoint) instead of the process root. Later: promoting the column
+layout to a reusable, project-scoped **artifact**
+([ADR-0034](0034-projects-and-artifacts.md)).
 
 ### Consequences
 
