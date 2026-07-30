@@ -201,6 +201,40 @@ func TestParseSignalUnknownRefEverywhere(t *testing.T) {
 	}
 }
 
+// TestParseSignalDuplicateId rejects a duplicate element id at every signal position,
+// exercising each signal register error path (ADR-0088). Each case has two signal
+// elements of the same kind sharing an id; registering the second fails.
+func TestParseSignalDuplicateId(t *testing.T) {
+	wrap := func(body string) string {
+		return `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+		         xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+		  <signal id="Sig" name="x"/>
+		  <process id="p" isExecutable="true">` + body + `</process></definitions>`
+	}
+	sig := `<signalEventDefinition signalRef="Sig"/>`
+	cases := map[string]string{
+		"start": `<startEvent id="dup">` + sig + `</startEvent><startEvent id="dup">` + sig + `</startEvent><endEvent id="e"/>`,
+		"catch": `<startEvent id="s"/>
+			<intermediateCatchEvent id="dup">` + sig + `</intermediateCatchEvent>
+			<intermediateCatchEvent id="dup">` + sig + `</intermediateCatchEvent>`,
+		"throw": `<startEvent id="s"/>
+			<intermediateThrowEvent id="dup">` + sig + `</intermediateThrowEvent>
+			<intermediateThrowEvent id="dup">` + sig + `</intermediateThrowEvent>`,
+		"end": `<startEvent id="s"/><endEvent id="dup">` + sig + `</endEvent><endEvent id="dup">` + sig + `</endEvent>`,
+		"boundary": `<startEvent id="s"/>
+			<serviceTask id="w"><extensionElements><zeebe:taskDefinition type="t"/></extensionElements></serviceTask>
+			<boundaryEvent id="dup" attachedToRef="w">` + sig + `</boundaryEvent>
+			<boundaryEvent id="dup" attachedToRef="w">` + sig + `</boundaryEvent>`,
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, err := Parse(1, 1, strings.NewReader(wrap(body))); err == nil {
+				t.Fatalf("Parse: want a duplicate-id error for a %s, got nil", name)
+			}
+		})
+	}
+}
+
 // TestParseSignalNoName fails deploy when a referenced signal declares no name — there is
 // nothing for a catch to subscribe on or a throw to broadcast.
 func TestParseSignalNoName(t *testing.T) {
