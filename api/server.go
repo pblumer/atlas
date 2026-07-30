@@ -485,6 +485,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// authentication secret is a *reference* the worker resolves at call time from the
 	// environment (resolveConnectorSecret, ADR-0041), so a token never lives in a model.
 	s.jobRunner.HandleWithOutput(compiler.RestJobTypeIndex, rest.Handler(store, s.processLookup, rest.NewHTTPClient(), s.resolveConnectorSecret))
+	// A CSV-import service task parses an uploaded CSV (a `csvText` variable) against
+	// a `columnConfig` layout into a `rows` collection, in-process, so a batch of
+	// records is ingested and validated on the engine with the file arriving through a
+	// user-task form rather than a side-channel endpoint (ADR-0087). One worker serves
+	// every process under the reserved CSV-import job type.
+	s.jobRunner.HandleWithOutput(compiler.CsvImportJobTypeIndex, csvImportHandler(store))
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
 	}

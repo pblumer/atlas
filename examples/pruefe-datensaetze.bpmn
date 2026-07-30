@@ -1,14 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   prüfe Datensätze — Massenprüfung von CSV-Datensätzen gegen Geschäftsregeln,
-  mit Korrektur-Loop je fehlerhafter Zeile (ADR-0084, Slice 2 + 3).
+  mit In-Prozess-Upload und Korrektur-Loop je fehlerhafter Zeile
+  (ADR-0084, ADR-0086, ADR-0087).
 
-  Start → (Multi-Instance-Subprozess "prüfe Datensatz") → Ende
+  Start
+   → User-Task "CSV hochladen"    (Formular csv-upload-form → Variable csvText)
+   → Script-Task "Spaltenkonfig"  (FEEL setzt columnConfig — die Config lebt im Prozess)
+   → Service-Task "CSV einlesen"  (parst csvText gemäß columnConfig → rows, rowCount)
+   → Multi-Instance-Subprozess "prüfe Datensatz"   (prüft + korrigiert je Zeile)
+   → Ende
 
-  Der Qualitätsmanager lädt ein CSV über den Endpoint
-  `POST /api/v1/processes/{key}/instances-from-csv` hoch (Slice 1). Der Server
-  parst es gegen die Spaltenkonfiguration und startet diese Instanz mit der
-  Variable `rows` (ein Array von Datensatz-Objekten).
+  Der Upload ist ein Prozessschritt: der Quality Manager lädt die Datei im
+  Formular des ersten User-Tasks hoch (die Tasks-App legt den Datei-Inhalt als
+  `csvText` ab). Ein Script-Task hält die vorgegebene Spaltenkonfiguration
+  (`columnConfig`) — die Daten werden im Prozess behandelt, nicht über einen
+  Seiten-Endpoint. Der CSV-Service-Task (`io.atlas.csv-import`) parst `csvText`
+  gegen `columnConfig` zu `rows`; danach läuft die Maschine an.
 
   Der eingebettete Subprozess ist multi-instanziert über `=rows`: er läuft
   einmal pro Datensatz, gebunden an `row`. Je Iteration:
@@ -18,15 +26,13 @@
       ── sonst   (Default) ──→ "Datensatz korrigieren" ──(zurück)── prüf_join
 
   Die Regelprüfung ruft die DMN-Entscheidung `RowValid` auf (siehe
-  pruefe-datensaetze.dmn) und schreibt den Verdict nach `verdict`. Das
-  exklusive Gateway verzweigt auf `= verdict.valid` — es liest die iterations-
-  lokale `verdict` über die Scope-Kette (ADR-0085). Ist der Datensatz gültig,
-  endet die Iteration und der Verdict wird in `verdicts` gesammelt. Ist er es
-  nicht, parkt der Token auf einem **User-Task** in der Tasks-App: der Quality
-  Manager korrigiert E-Mail/Gruppe/Lizenz im Formular `row-correction-form`;
-  das Output-Mapping schreibt die korrigierten Felder als `row` zurück in den
-  Iterations-Scope, und die Rückkante lässt den Datensatz erneut prüfen —
-  wiederhole bis gültig.
+  pruefe-datensaetze.dmn) und schreibt den Verdict nach `verdict`. Das exklusive
+  Gateway verzweigt auf `= verdict.valid` — es liest die iterationslokale
+  `verdict` über die Scope-Kette (ADR-0086). Gültig → Iteration endet, Verdict
+  wird in `verdicts` gesammelt. Ungültig → der Token parkt auf einem User-Task:
+  der Quality Manager korrigiert E-Mail/Gruppe/Lizenz im Formular
+  `row-correction-form`; das Output-Mapping schreibt die Felder als `row` zurück,
+  und die Rückkante lässt den Datensatz erneut prüfen — wiederhole bis gültig.
 
   Ein Business-Rule-Task kann nicht direkt multi-instanziert werden; deshalb
   wickelt ihn der eingebettete Subprozess ein (ADR-0074 + ADR-0077). Die
@@ -40,6 +46,26 @@
   <process id="proc_pruefe_datensaetze" name="prüfe Datensätze" isExecutable="true">
 
     <startEvent id="start" name="Start"/>
+
+    <userTask id="hochladen" name="CSV hochladen">
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="quality"/>
+        <zeebe:formDefinition formId="csv-upload-form"/>
+      </extensionElements>
+    </userTask>
+
+    <scriptTask id="spaltenkonfig" name="Spaltenkonfiguration">
+      <extensionElements>
+        <zeebe:script resultVariable="columnConfig"
+          expression="= {columns: [{name: &quot;email&quot;}, {name: &quot;group&quot;}, {name: &quot;license&quot;}], delimiter: &quot;,&quot;}"/>
+      </extensionElements>
+    </scriptTask>
+
+    <serviceTask id="einlesen" name="CSV einlesen">
+      <extensionElements>
+        <zeebe:taskDefinition type="io.atlas.csv-import" retries="3"/>
+      </extensionElements>
+    </serviceTask>
 
     <subProcess id="pruefe_datensatz" name="prüfe Datensatz">
       <multiInstanceLoopCharacteristics>
@@ -93,7 +119,10 @@
 
     <endEvent id="end" name="Ende"/>
 
-    <sequenceFlow id="f1" sourceRef="start" targetRef="pruefe_datensatz"/>
-    <sequenceFlow id="f2" sourceRef="pruefe_datensatz" targetRef="end"/>
+    <sequenceFlow id="f_start_upload" sourceRef="start" targetRef="hochladen"/>
+    <sequenceFlow id="f_upload_konfig" sourceRef="hochladen" targetRef="spaltenkonfig"/>
+    <sequenceFlow id="f_konfig_einlesen" sourceRef="spaltenkonfig" targetRef="einlesen"/>
+    <sequenceFlow id="f_einlesen_pruefe" sourceRef="einlesen" targetRef="pruefe_datensatz"/>
+    <sequenceFlow id="f_pruefe_end" sourceRef="pruefe_datensatz" targetRef="end"/>
   </process>
 </definitions>

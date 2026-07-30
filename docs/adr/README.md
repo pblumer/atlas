@@ -93,6 +93,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0084](0084-csv-batch-validation.md) | CSV batch validation — upload a file, validate every row against business rules (DMN), correct the failures | Proposed |
 | [0085](0085-process-instance-ttl.md) | Process-instance TTL — self-cleaning expiry via the due-timer index | Proposed |
 | [0086](0086-gateway-conditions-resolve-over-scope-chain.md) | Gateway conditions resolve over the scope chain, so a gateway inside a subprocess branches on its scope's variables | Proposed |
+| [0087](0087-in-process-csv-ingestion.md) | In-process CSV ingestion — upload in a user task, layout in a script task, parse in a service task | Accepted |
 
 ## Status values
 
