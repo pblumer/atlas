@@ -247,7 +247,7 @@ func (s *Server) principalFor(r *http.Request) *Principal {
 	if s.internalToken != "" {
 		if tok, ok := bearerToken(r); ok &&
 			subtle.ConstantTimeCompare([]byte(tok), []byte(s.internalToken)) == 1 {
-			return &Principal{Username: servicePrincipalName}
+			return &Principal{UserID: servicePrincipalName, Username: servicePrincipalName}
 		}
 	}
 	c, err := r.Cookie(sessionCookie)
