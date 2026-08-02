@@ -219,8 +219,8 @@ func TestInternalTokenServicePrincipal(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/v1/tasks", nil)
 	req.Header.Set("Authorization", "Bearer sekret")
 	p := s.principalFor(req)
-	if p == nil || p.Username != servicePrincipalName {
-		t.Fatalf("service principal not resolved: %+v", p)
+	if p == nil || p.UserID != servicePrincipalName || p.Username != servicePrincipalName {
+		t.Fatalf("service principal not resolved with stable identity: %+v", p)
 	}
 	if p.hasRole(RoleAdmin) {
 		t.Fatalf("service principal must not be admin")
