@@ -9,21 +9,23 @@
    → User-Task  "👋 Willkommen"        (Formular onb-welcome)
    → User-Task  "🧩 Grundbegriffe"      (Formular onb-concepts, kleine Wissensprüfung)
    → Script-Task "Begrüßung"            (FEEL baut personalisierten willkommensgruss)
-   → (X) Gateway "Auch entwickeln?"     (verzweigt auf track)
-        ── track = "nur_benutzen" ──────────────────────────→ Join
-        ── sonst (Default) ─→ "🏗️ Architektur" → "🔧 Setup & DoD" → Join
+   → (X) Gateway "Auch mitentwickeln?"  (verzweigt auf track)
+        ── Default ─→ "🏗️ Architektur" → "🔧 Setup & DoD" → Join   (Hauptpfad)
+        ── track = "nur_benutzen" ─────────────────────────→ Join  (Bypass darunter)
    → User-Task  "🎓 Dein erster Schritt" (Formular onb-finish)
    → Script-Task "Abschluss"            (setzt onboardingStatus)
    → Ende "🎉 Geschafft!"
 
   Der fachliche Teil (benutzen) läuft für alle; der technische Teil
-  (mitentwickeln) hängt am Gateway. Default ist der volle Weg inkl. Technik —
-  wer nur "nur_benutzen" wählt, überspringt ihn. So ist "beides kombiniert"
-  der Normalfall. Die Layout-Information (BPMN-DI) wird beim Deploy automatisch
-  erzeugt.
+  (mitentwickeln) liegt auf dem geraden Hauptpfad. Wer "nur_benutzen" wählt,
+  nimmt den Bypass-Bogen darunter. Das BPMN-DI ist bewusst von Hand gesetzt:
+  gerade Hauptachse, Verzweigung sauber getrennt, keine überlappenden Kanten.
 -->
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
              id="defs_onboarding_atlas" targetNamespace="http://atlas/examples">
   <process id="onboarding-atlas" name="Onboarding: Willkommen bei Atlas 🚀" isExecutable="true">
 
@@ -91,14 +93,94 @@
     <sequenceFlow id="f_willkommen_begriffe" sourceRef="willkommen" targetRef="grundbegriffe"/>
     <sequenceFlow id="f_begriffe_gruss" sourceRef="grundbegriffe" targetRef="begruessung"/>
     <sequenceFlow id="f_gruss_weg" sourceRef="begruessung" targetRef="weg"/>
-    <sequenceFlow id="f_skip" name="nur benutzen" sourceRef="weg" targetRef="join">
-      <conditionExpression>= track = "nur_benutzen"</conditionExpression>
-    </sequenceFlow>
     <sequenceFlow id="f_dev" name="auch entwickeln" sourceRef="weg" targetRef="architektur"/>
     <sequenceFlow id="f_arch_setup" sourceRef="architektur" targetRef="devsetup"/>
     <sequenceFlow id="f_setup_join" sourceRef="devsetup" targetRef="join"/>
+    <sequenceFlow id="f_skip" name="nur benutzen" sourceRef="weg" targetRef="join">
+      <conditionExpression>= track = "nur_benutzen"</conditionExpression>
+    </sequenceFlow>
     <sequenceFlow id="f_join_ersterschritt" sourceRef="join" targetRef="ersterschritt"/>
     <sequenceFlow id="f_ersterschritt_abschluss" sourceRef="ersterschritt" targetRef="abschluss"/>
     <sequenceFlow id="f_abschluss_ende" sourceRef="abschluss" targetRef="ende"/>
   </process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_onboarding">
+    <bpmndi:BPMNPlane id="BPMNPlane_onboarding" bpmnElement="onboarding-atlas">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <omgdc:Bounds x="152" y="102" width="36" height="36" />
+        <bpmndi:BPMNLabel><omgdc:Bounds x="138" y="145" width="66" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="willkommen_di" bpmnElement="willkommen">
+        <omgdc:Bounds x="240" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="grundbegriffe_di" bpmnElement="grundbegriffe">
+        <omgdc:Bounds x="390" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="begruessung_di" bpmnElement="begruessung">
+        <omgdc:Bounds x="540" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="weg_di" bpmnElement="weg" isMarkerVisible="true">
+        <omgdc:Bounds x="700" y="95" width="50" height="50" />
+        <bpmndi:BPMNLabel><omgdc:Bounds x="668" y="55" width="114" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="architektur_di" bpmnElement="architektur">
+        <omgdc:Bounds x="800" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="devsetup_di" bpmnElement="devsetup">
+        <omgdc:Bounds x="950" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="join_di" bpmnElement="join" isMarkerVisible="true">
+        <omgdc:Bounds x="1110" y="95" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ersterschritt_di" bpmnElement="ersterschritt">
+        <omgdc:Bounds x="1210" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="abschluss_di" bpmnElement="abschluss">
+        <omgdc:Bounds x="1360" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_di" bpmnElement="ende">
+        <omgdc:Bounds x="1520" y="102" width="36" height="36" />
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1508" y="145" width="62" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="f_start_willkommen_di" bpmnElement="f_start_willkommen">
+        <omgdi:waypoint x="188" y="120" /><omgdi:waypoint x="240" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_willkommen_begriffe_di" bpmnElement="f_willkommen_begriffe">
+        <omgdi:waypoint x="340" y="120" /><omgdi:waypoint x="390" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_begriffe_gruss_di" bpmnElement="f_begriffe_gruss">
+        <omgdi:waypoint x="490" y="120" /><omgdi:waypoint x="540" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gruss_weg_di" bpmnElement="f_gruss_weg">
+        <omgdi:waypoint x="640" y="120" /><omgdi:waypoint x="700" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_dev_di" bpmnElement="f_dev">
+        <omgdi:waypoint x="750" y="120" /><omgdi:waypoint x="800" y="120" />
+        <bpmndi:BPMNLabel><omgdc:Bounds x="748" y="96" width="86" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_arch_setup_di" bpmnElement="f_arch_setup">
+        <omgdi:waypoint x="900" y="120" /><omgdi:waypoint x="950" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_setup_join_di" bpmnElement="f_setup_join">
+        <omgdi:waypoint x="1050" y="120" /><omgdi:waypoint x="1110" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_skip_di" bpmnElement="f_skip">
+        <omgdi:waypoint x="725" y="145" />
+        <omgdi:waypoint x="725" y="260" />
+        <omgdi:waypoint x="1135" y="260" />
+        <omgdi:waypoint x="1135" y="145" />
+        <bpmndi:BPMNLabel><omgdc:Bounds x="885" y="266" width="90" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_join_ersterschritt_di" bpmnElement="f_join_ersterschritt">
+        <omgdi:waypoint x="1160" y="120" /><omgdi:waypoint x="1210" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ersterschritt_abschluss_di" bpmnElement="f_ersterschritt_abschluss">
+        <omgdi:waypoint x="1310" y="120" /><omgdi:waypoint x="1360" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_abschluss_ende_di" bpmnElement="f_abschluss_ende">
+        <omgdi:waypoint x="1460" y="120" /><omgdi:waypoint x="1520" y="120" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 </definitions>

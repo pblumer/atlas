@@ -59,6 +59,21 @@ A typical authoring flow is:
 `atlas_deploy_project` -> `atlas_create_instance` ->
 `atlas_list_tasks` -> `atlas_complete_task`.
 
+## Make the diagram readable, not just valid
+
+`atlas_save_draft` / `atlas_deploy` accept a model with no `<bpmndi:BPMNDiagram>`
+and auto-generate a layout. It always deploys, but the auto-layout routinely
+stacks branch and bypass edges on top of the main-axis nodes — fine for a
+throwaway probe, not for anything a human opens in Operations or the Modeler.
+
+For any model someone will look at, **author the BPMN-DI by hand**: one straight
+horizontal main axis at a constant `y`, even node pitch (≈150px; 100×80 tasks,
+50×50 gateways, 36×36 events), every branch/bypass on its own lane with clean
+orthogonal waypoints, and gateway-flow labels placed so they don't collide.
+Verify the render (Operations view or a preview), not just that the deploy
+succeeded. See `AGENTS.md` → "Authoring BPMN models" and
+`examples/onboarding/onboarding.bpmn` for a worked layout.
+
 ## Task pagination
 
 `atlas_list_tasks` returns:
