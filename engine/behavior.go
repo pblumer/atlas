@@ -60,6 +60,11 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeMessageThrowEvent] = messageThrowEventBehavior{}
 	p.behaviors[compiler.TypeSignalCatchEvent] = signalCatchEventBehavior{}
 	p.behaviors[compiler.TypeSignalThrowEvent] = signalThrowEventBehavior{}
+	p.behaviors[compiler.TypeSignalEndEvent] = signalEndEventBehavior{}
+	// A signal start event is a plain entry point once instantiated: a broadcast
+	// signal creates the instance (see broadcastSignal/Deploy) and it then flows
+	// straight on like a none start (ADR-0088), the same as a message start.
+	p.behaviors[compiler.TypeSignalStartEvent] = startEventBehavior{}
 	p.behaviors[compiler.TypeTask] = passThroughBehavior{}
 	p.behaviors[compiler.TypeParallelGateway] = parallelGatewayBehavior{}
 	p.behaviors[compiler.TypeInclusiveGateway] = inclusiveGatewayBehavior{}
@@ -1591,6 +1596,28 @@ func (signalThrowEventBehavior) OnCompleting(c *ProcessingContext, key uint64, e
 	completeAndTakeFlows(c, key, ei)
 }
 
+// signalEndEventBehavior: an end event that broadcasts a signal, then ends the
+// instance (ADR-0088). It is the send-and-stop union of a signal throw event and
+// a none end event: OnActivated broadcasts exactly like a throw (reusing the
+// throw detail table), and OnCompleting ends the instance exactly like a none end
+// event rather than taking outgoing flows. Broadcasting on the command path keeps
+// applyToState pure (I4/I6), the same reasoning as the throw event — and mirrors
+// messageEndEventBehavior.
+type signalEndEventBehavior struct{}
+
+func (signalEndEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.SignalThrow(cp.Node(ei.ElementId).Detail)
+	payload := instanceVariables(c, ei.ProcessInstanceKey)
+	broadcastSignal(c, detail.SignalName, payload)
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (signalEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendElementEvent(key, model.IntentCompleted, *ei) // decrements scope's active children
+	completeScope(c, ei.FlowScopeKey)                     // completes the scope owner if it drained
+}
+
 // broadcastSignal delivers a signal with the given name to every open signal
 // subscription — a 1:n broadcast, across all instances, matching by name alone
 // (a signal has no correlation key). For each match it emits SubscriptionCorrelated
@@ -1598,8 +1625,9 @@ func (signalThrowEventBehavior) OnCompleting(c *ProcessingContext, key uint64, e
 // payload into that instance's scope, and commands the waiting element to
 // complete. Matches are collected before any mutation so retiring one can't
 // disturb the scan. A signal that matches nothing is a no-op — a broadcast is
-// fire-and-forget, with no buffering (ADR-0088). It mirrors correlateMessage;
-// signal-start instantiation lands in a later phase.
+// fire-and-forget, with no buffering (ADR-0088). It mirrors correlateMessage,
+// and — like a correlating message — also instantiates every deployed process
+// with a matching signal start event (ADR-0088).
 func broadcastSignal(c *ProcessingContext, name string, vars []model.VariableValue) {
 	type match struct {
 		elKey uint64
@@ -1621,6 +1649,15 @@ func broadcastSignal(c *ProcessingContext, name string, vars []model.VariableVal
 		if ei := c.GetElementInstance(m.elKey); ei != nil {
 			c.AppendElementCommand(m.elKey, model.IntentCompleting, *ei)
 		}
+	}
+	// A broadcast also instantiates every deployed process with a matching signal
+	// start event, seeded with the payload (ADR-0088), mirroring message-start
+	// instantiation. A signal carries no correlation key, so the created instance
+	// records none. This runs after the subscription scan so one broadcast can both
+	// fire waiting catches and start fresh instances, all recovered from the events
+	// the created instances emit.
+	for _, defKey := range c.p.signalStarts[name] {
+		c.AppendCreateInstanceCommand(defKey, vars, "")
 	}
 }
 
@@ -1976,8 +2013,20 @@ func (boundaryEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *m
 			MessageName:        d.MessageName,
 			CorrelationKey:     evalCorrelationKey(c, d.CorrelationKey, ei.ProcessInstanceKey),
 		})
+	case compiler.BoundarySignal:
+		// A name-only subscription (no correlation key). A later broadcast of the
+		// name drives this boundary instance to Completing exactly as a correlating
+		// message does — the fire path (interrupt-or-take-flow) is shared (ADR-0088).
+		c.AppendSignalSubscriptionEvent(key, model.IntentSubscriptionCreated, model.SignalSubscriptionValue{
+			ProcessInstanceKey: ei.ProcessInstanceKey,
+			ElementInstanceKey: key,
+			SignalName:         d.SignalName,
+			ProcessDefKey:      ei.ProcessDefKey,
+			ElementId:          ei.ElementId,
+		})
 	}
-	// Stays Activated: waits until the timer fires or the message correlates.
+	// Stays Activated: waits until the timer fires, the message correlates, or the
+	// signal broadcasts.
 }
 
 func (boundaryEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
@@ -2117,11 +2166,12 @@ func disarmEventSubprocesses(c *ProcessingContext, procKey, scope uint64) {
 }
 
 // eventSubProcessStartBehavior is the armed trigger of an event subprocess (ADR-0082).
-// On activation it opens its trigger — a message subscription or a one-shot timer,
+// On activation it opens its trigger — a message/signal subscription or a one-shot timer,
 // exactly as a boundary event does — and waits. When the trigger fires, the existing
-// timer/message path drives it to Completing: it terminates the parent scope's other
-// work if interrupting, then activates the handler subprocess. The handler runs as an
-// ordinary subprocess scope; its inner start (a message/timer start) flows straight on.
+// timer/message/signal path drives it to Completing: it terminates the parent scope's
+// other work if interrupting, then activates the handler subprocess. The handler runs as
+// an ordinary subprocess scope; its inner start (a message/timer/signal start) flows
+// straight on.
 type eventSubProcessStartBehavior struct{}
 
 func (eventSubProcessStartBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
@@ -2136,6 +2186,17 @@ func (eventSubProcessStartBehavior) OnActivated(c *ProcessingContext, key uint64
 			ElementInstanceKey: key,
 			MessageName:        d.MessageName,
 			CorrelationKey:     evalCorrelationKey(c, d.CorrelationKey, ei.ProcessInstanceKey),
+		})
+	case compiler.BoundarySignal:
+		// A name-only subscription (no correlation key). A broadcast of the name drives
+		// this trigger to Completing through the shared fire path (ADR-0088), exactly as
+		// a boundary signal — then the handler runs and a non-interrupting trigger re-arms.
+		c.AppendSignalSubscriptionEvent(key, model.IntentSubscriptionCreated, model.SignalSubscriptionValue{
+			ProcessInstanceKey: ei.ProcessInstanceKey,
+			ElementInstanceKey: key,
+			SignalName:         d.SignalName,
+			ProcessDefKey:      ei.ProcessDefKey,
+			ElementId:          ei.ElementId,
 		})
 	}
 	// Stays Activated: waits until the trigger fires.
@@ -2159,10 +2220,11 @@ func (eventSubProcessStartBehavior) OnCompleting(c *ProcessingContext, key uint6
 		terminateScope(c, ei.ProcessInstanceKey, parentScope)
 	}
 	activateEventSubHandler(c, ei, parentScope)
-	// A non-interrupting message trigger re-arms a fresh subscription so a subsequent
-	// message fires it again (ADR-0082). A one-shot timer fires once (no re-arm); a
-	// recurring timer re-arms through the timer path (fireRecurringEventSub), not here.
-	if !d.Interrupting && d.Kind == compiler.BoundaryMessage {
+	// A non-interrupting message or signal trigger re-arms a fresh subscription so a
+	// subsequent message/broadcast fires it again (ADR-0082/ADR-0088). A one-shot timer
+	// fires once (no re-arm); a recurring timer re-arms through the timer path
+	// (fireRecurringEventSub), not here.
+	if !d.Interrupting && (d.Kind == compiler.BoundaryMessage || d.Kind == compiler.BoundarySignal) {
 		armEventSubTrigger(c, ei.ProcessInstanceKey, ei.ProcessDefKey, parentScope, handlerNode)
 	}
 }
