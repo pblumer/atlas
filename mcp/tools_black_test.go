@@ -3,6 +3,9 @@ package mcp_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -112,6 +115,87 @@ func TestCancelAndDeleteViaTools(t *testing.T) {
 	text, isErr = toolText(t, result(t, resps[0]))
 	if isErr || !strings.Contains(text, `"deleted":true`) {
 		t.Fatalf("delete_process = (%q, isErr=%v), want deleted:true", text, isErr)
+	}
+}
+
+// TestCreateInstanceForwardsStartVariables proves atlas_create_instance passes
+// its optional variables through to the start endpoint, exactly as a human
+// starting the instance with a JSON body would. Without the pass-through the
+// instance starts with an empty scope; here we start it with variables and read
+// them back from the API to confirm they landed in the instance's scope.
+func TestCreateInstanceForwardsStartVariables(t *testing.T) {
+	ts := newAtlas(t)
+
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN}))[0])); isErr {
+		t.Fatal("deploy failed")
+	}
+
+	// Start with a mix of scalar and structured variables; the service task parks
+	// the token, so the instance stays active and its scope is queryable.
+	vars := map[string]any{"amount": 42, "customer": "acme", "tags": []any{"x", "y"}}
+	text, isErr := toolText(t, result(t, run(t, ts, callTool(2, "atlas_create_instance", map[string]any{"key": 1, "variables": vars}))[0]))
+	if isErr {
+		t.Fatalf("create_instance with variables = (%q, isErr=%v)", text, isErr)
+	}
+
+	// Find the running instance's key, then read its variables back over the API.
+	listText, isErr := toolText(t, result(t, run(t, ts, callTool(3, "atlas_list_instances", map[string]any{}))[0]))
+	if isErr {
+		t.Fatal("list_instances failed")
+	}
+	var instances []struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal([]byte(listText), &instances); err != nil || len(instances) == 0 {
+		t.Fatalf("parse instances: err=%v, list=%q", err, listText)
+	}
+
+	resp, err := http.Get(fmt.Sprintf("%s/api/v1/instances/%d/variables", ts.URL, instances[0].Key))
+	if err != nil {
+		t.Fatalf("get variables: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	var got map[string]any
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode variables %q: %v", body, err)
+	}
+	if fmt.Sprint(got["amount"]) != "42" {
+		t.Errorf("amount = %v, want 42", got["amount"])
+	}
+	if got["customer"] != "acme" {
+		t.Errorf("customer = %v, want acme", got["customer"])
+	}
+	if tags, ok := got["tags"].([]any); !ok || len(tags) != 2 || tags[0] != "x" {
+		t.Errorf("tags = %v, want [x y]", got["tags"])
+	}
+}
+
+// TestCreateInstanceNoVariablesStartsEmpty confirms the pass-through is optional:
+// omitting variables still starts the instance (with an empty scope), so the
+// common no-argument start is unaffected.
+func TestCreateInstanceNoVariablesStartsEmpty(t *testing.T) {
+	ts := newAtlas(t)
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN}))[0])); isErr {
+		t.Fatal("deploy failed")
+	}
+	text, isErr := toolText(t, result(t, run(t, ts, callTool(2, "atlas_create_instance", map[string]any{"key": 1}))[0]))
+	if isErr || !strings.Contains(text, `"activeProcessInstances"`) {
+		t.Fatalf("create_instance without variables = (%q, isErr=%v), want live counts", text, isErr)
+	}
+}
+
+// TestCreateInstanceRejectsNonObjectVariables covers the argument-validation
+// branch: a variables argument that is not an object is a tool error, not a
+// silently ignored value.
+func TestCreateInstanceRejectsNonObjectVariables(t *testing.T) {
+	ts := newAtlas(t)
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": sampleBPMN}))[0])); isErr {
+		t.Fatal("deploy failed")
+	}
+	text, isErr := toolText(t, result(t, run(t, ts, callTool(2, "atlas_create_instance", map[string]any{"key": 1, "variables": "nope"}))[0]))
+	if !isErr || !strings.Contains(text, "must be an object") {
+		t.Fatalf("create_instance with non-object variables = (%q, isErr=%v), want a tool error", text, isErr)
 	}
 }
 
