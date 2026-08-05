@@ -4,7 +4,7 @@
 - **Date:** 2026-07-30
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phases 1–2 delivered; Phases 3–5 pending. Each phase
+> **Implementation status.** Phases 1–3 delivered; Phases 4–5 pending. Each phase
 > lands test-first with a recovery test (ADR-0018). Signal events build on the message
 > correlation/subscription substrate (ADR-0020), the boundary arm/fire machinery
 > (ADR-0040), message-start instantiation (ADR-0035), and event subprocesses
@@ -41,6 +41,25 @@
 > into every scope; a throw with no listener is a no-op; a parked catch's subscription
 > rebuilds on recovery so a throw after restart still fires it. Signal-start
 > instantiation, boundary, end, and event-subprocess catches remain for Phases 3–4.
+>
+> **Delivered (Phase 3, boundary + end + start):** the remaining plain-event catches and
+> the send-and-stop / instantiate throws. A `BoundarySignal` case in
+> `boundaryEventBehavior.OnActivated` opens a name-only signal subscription, so a later
+> broadcast drives the boundary instance to `Completing` through the shared boundary
+> fire path (interrupt-the-host-then-route, or take-the-flow when non-interrupting) —
+> no new fire logic. `signalEndEventBehavior` broadcasts inline exactly like the throw
+> (reusing the throw detail table) then ends the instance like a none end event, mirroring
+> `messageEndEventBehavior`. `broadcastSignal` now also instantiates every deployed
+> signal-start definition on the name (a `signalStarts` name→defKeys index the processor
+> maintains in `Deploy`/`Undeploy`, mirroring `messageStarts` but without a correlation
+> key or singleton state); `TypeSignalStartEvent` runs as a plain `startEventBehavior`
+> once instantiated, like a message start. Verified: an interrupting signal boundary
+> cancels its host (job canceled) and routes to escalation cross-instance; a
+> non-interrupting one escalates while the host keeps running; a signal end event fires a
+> waiting catch then stops its own instance; one broadcast both instantiates a fresh
+> signal-start instance and fires a waiting boundary in another; undeploy drops a
+> signal-start from the index; and an armed boundary subscription rebuilds on recovery so
+> a throw after restart still fires it. The signal event subprocess remains for Phase 4.
 
 ## Context and problem statement
 

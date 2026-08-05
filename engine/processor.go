@@ -46,6 +46,14 @@ type Processor struct {
 	// normal event path and recover from the log.
 	messageStarts map[string][]messageStartRef
 
+	// signalStarts indexes signal start events by signal name → the definition keys a
+	// broadcast signal instantiates (ADR-0088), mirroring messageStarts. A signal has
+	// no correlation key, so this needs only the definition key (no per-name flow or
+	// singleton state). Like messageStarts it is derived from the compiled definitions,
+	// rebuilt by Deploy on every start, so it needs no durable state of its own — the
+	// instances it creates go through the normal event path and recover from the log.
+	signalStarts map[string][]uint64
+
 	// latestProcess indexes bpmn process id → the newest deployed definition key, so
 	// a call activity with `latest` binding resolves the process to start as a child
 	// (ADR-0076). Like messageStarts it is derived from the compiled definitions and
@@ -100,6 +108,7 @@ func New(partition uint16, log *wal.Log, store *state.Store, clock Clock) *Proce
 		keygen:        &keyGen{partition: partition},
 		processes:     map[uint64]*compiler.CompiledProcess{},
 		messageStarts: map[string][]messageStartRef{},
+		signalStarts:  map[string][]uint64{},
 		latestProcess: map[string]uint64{},
 	}
 	p.registerHandlers()
@@ -119,6 +128,10 @@ func (p *Processor) Deploy(cp *compiler.CompiledProcess) {
 		p.messageStarts[ms.MessageName] = append(p.messageStarts[ms.MessageName],
 			messageStartRef{defKey: cp.Key, elementId: ms.ElementId, correlationKey: ms.CorrelationKey, singletonStart: ms.SingletonStart})
 	}
+	// Index signal start events too, so a broadcast signal instantiates them (ADR-0088).
+	for _, ss := range cp.SignalStartEvents() {
+		p.signalStarts[ss.SignalName] = append(p.signalStarts[ss.SignalName], cp.Key)
+	}
 }
 
 // Undeploy removes a definition so no new instances of it can be created,
@@ -129,6 +142,9 @@ func (p *Processor) Undeploy(defKey uint64) {
 	if cp := p.processes[defKey]; cp != nil {
 		for _, ms := range cp.MessageStartEvents() {
 			p.messageStarts[ms.MessageName] = removeStartRef(p.messageStarts[ms.MessageName], defKey)
+		}
+		for _, ss := range cp.SignalStartEvents() {
+			p.signalStarts[ss.SignalName] = removeSignalStart(p.signalStarts[ss.SignalName], defKey)
 		}
 	}
 	delete(p.processes, defKey)
@@ -159,6 +175,19 @@ func removeStartRef(refs []messageStartRef, defKey uint64) []messageStartRef {
 		}
 	}
 	return refs
+}
+
+// removeSignalStart returns keys with the first entry for defKey removed — the
+// signal-start counterpart of removeStartRef (ADR-0088). A name whose last
+// signal-start definition is undeployed keeps an empty slice, which instantiates
+// nothing; harmless and rare, so it is not pruned from the map.
+func removeSignalStart(keys []uint64, defKey uint64) []uint64 {
+	for i, k := range keys {
+		if k == defKey {
+			return append(keys[:i], keys[i+1:]...)
+		}
+	}
+	return keys
 }
 
 // SetJobNotifier installs the hook the service-task behavior triggers (after
