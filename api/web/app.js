@@ -257,13 +257,19 @@ const CONNECTORS = [
 // openSearchPalette is the global "jump to a process" command palette behind the
 // topbar search icon (and Ctrl/⌘-K, and "/"). It loads the deployed processes and the
 // design drafts once, filters them by process id or name as you type, and navigates to
-// the picked one — a deployed definition opens in the Modeler diagram, a draft in its
-// editor. Typing an exact process id and pressing Enter jumps straight there, since an
-// exact id match is ranked first.
+// the picked one. A deployed process offers two destinations — the Modeler diagram or
+// the live Operations view — pickable per row (click a pill, or ←/→ then Enter); the
+// last choice is remembered. A draft only has the Modeler editor. Typing an exact
+// process id and pressing Enter jumps straight there, since an exact id match ranks
+// first.
 let __searchOpen = false;
 async function openSearchPalette() {
   if (__searchOpen) { const i = document.getElementById("sp-input"); if (i) i.focus(); return; }
   __searchOpen = true;
+  // Remembered destination for deployed processes ("modeler" | "operations").
+  let target = localStorage.getItem("atlas.search.target") === "operations" ? "operations" : "modeler";
+  const setTarget = (t) => { target = t; try { localStorage.setItem("atlas.search.target", t); } catch { /* ignore */ } };
+
   const ov = document.createElement("div");
   ov.className = "sp-ov";
   ov.innerHTML = `
@@ -274,16 +280,19 @@ async function openSearchPalette() {
         <kbd class="sp-esc">Esc</kbd>
       </div>
       <div class="sp-results" id="sp-results"></div>
+      <div class="sp-foot"><span><kbd>↵</kbd> open</span><span><kbd>←</kbd><kbd>→</kbd> Modeler / Operations</span><span><kbd>↑</kbd><kbd>↓</kbd> move</span></div>
     </div>`;
   document.body.appendChild(ov);
   const input = ov.querySelector("#sp-input");
   const list = ov.querySelector("#sp-results");
-  let items = []; // {name, id, badge, kind, href, hay}
+  let items = []; // {name, id, kind, version, hrefModeler, hrefOps, href, hay}
   let view = [];  // current filtered slice
   let sel = 0;
 
   const close = () => { __searchOpen = false; document.removeEventListener("keydown", onKey, true); ov.remove(); };
-  const go = (href) => { if (!href) return; close(); location.hash = href; };
+  // Destination href for an item under the current (or an explicit) target.
+  const hrefFor = (it, t) => it.kind === "deployed" ? ((t || target) === "operations" ? it.hrefOps : it.hrefModeler) : it.href;
+  const go = (it, t) => { if (!it) return; const h = hrefFor(it, t); if (!h) return; close(); location.hash = h; };
 
   list.innerHTML = `<div class="sp-empty">Loading…</div>`;
   const [procs, drafts] = await Promise.all([
@@ -293,10 +302,11 @@ async function openSearchPalette() {
   if (!__searchOpen) return; // closed while loading
   for (const g of groupByProcess(procs || [])) {
     const l = g.latest;
-    items.push({ name: l.name || l.processId, id: l.processId, badge: `deployed · v${l.version}`, kind: "deployed", href: `#/modeler/d/${l.key}` });
+    items.push({ name: l.name || l.processId, id: l.processId, kind: "deployed", version: l.version,
+      hrefModeler: `#/modeler/d/${l.key}`, hrefOps: `#/operations/p/${l.key}` });
   }
   for (const d of (drafts || [])) {
-    items.push({ name: d.name || d.processId, id: d.processId, badge: "draft", kind: "draft", href: `#/modeler/draft/${encodeURIComponent(d.processId)}` });
+    items.push({ name: d.name || d.processId, id: d.processId, kind: "draft", href: `#/modeler/draft/${encodeURIComponent(d.processId)}` });
   }
   for (const it of items) it.hay = `${it.id} ${it.name}`.toLowerCase();
 
@@ -306,6 +316,20 @@ async function openSearchPalette() {
     if (id.startsWith(q)) return 1;
     if (name.startsWith(q)) return 2;
     return 3;
+  };
+  const rowHTML = (it, i) => {
+    const tail = it.kind === "deployed"
+      ? `<span class="sp-meta">v${it.version}</span>
+         <span class="sp-targets">
+           <span class="sp-tgt${target === "modeler" ? " on" : ""}" data-tgt="modeler" title="Open the diagram in the Modeler">Modeler</span>
+           <span class="sp-tgt${target === "operations" ? " on" : ""}" data-tgt="operations" title="Open the live Operations view">Operations</span>
+         </span>`
+      : `<span class="sp-badge draft">draft</span>`;
+    return `<div class="sp-item${i === sel ? " on" : ""}" role="option" data-i="${i}">
+      <span class="sp-name">${esc(it.name)}</span>
+      <span class="sp-id">${esc(it.id)}</span>
+      ${tail}
+    </div>`;
   };
   const render = () => {
     const q = input.value.trim().toLowerCase();
@@ -317,12 +341,7 @@ async function openSearchPalette() {
       list.innerHTML = `<div class="sp-empty">${items.length ? "No process matches." : "No processes or drafts yet."}</div>`;
       return;
     }
-    list.innerHTML = view.map((it, i) =>
-      `<button type="button" class="sp-item${i === sel ? " on" : ""}" data-i="${i}">
-        <span class="sp-name">${esc(it.name)}</span>
-        <span class="sp-id">${esc(it.id)}</span>
-        <span class="sp-badge ${it.kind}">${esc(it.badge)}</span>
-      </button>`).join("");
+    list.innerHTML = view.map(rowHTML).join("");
     const on = list.querySelector(".sp-item.on");
     if (on) on.scrollIntoView({ block: "nearest" });
   };
@@ -331,12 +350,17 @@ async function openSearchPalette() {
 
   input.addEventListener("input", () => { sel = 0; render(); });
   list.addEventListener("click", (e) => {
-    const b = e.target.closest(".sp-item"); if (!b) return;
-    const it = view[Number(b.dataset.i)]; go(it && it.href);
+    const row = e.target.closest(".sp-item"); if (!row) return;
+    const it = view[Number(row.dataset.i)]; if (!it) return;
+    // A target pill jumps to exactly that destination and remembers the choice; a
+    // click anywhere else on the row uses the current default.
+    const pill = e.target.closest("[data-tgt]");
+    if (pill && it.kind === "deployed") { setTarget(pill.dataset.tgt); go(it, pill.dataset.tgt); return; }
+    go(it);
   });
   list.addEventListener("mousemove", (e) => {
-    const b = e.target.closest(".sp-item"); if (!b) return;
-    const i = Number(b.dataset.i);
+    const row = e.target.closest(".sp-item"); if (!row) return;
+    const i = Number(row.dataset.i);
     if (i !== sel) { sel = i; list.querySelectorAll(".sp-item").forEach((el, j) => el.classList.toggle("on", j === sel)); }
   });
   ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(); });
@@ -344,7 +368,12 @@ async function openSearchPalette() {
     if (e.key === "Escape") { e.preventDefault(); close(); return; }
     if (e.key === "ArrowDown") { e.preventDefault(); if (view.length) { sel = (sel + 1) % view.length; render(); } return; }
     if (e.key === "ArrowUp") { e.preventDefault(); if (view.length) { sel = (sel - 1 + view.length) % view.length; render(); } return; }
-    if (e.key === "Enter") { e.preventDefault(); if (view[sel]) go(view[sel].href); return; }
+    // ←/→ flip the deployed destination (Modeler ↔ Operations) that Enter will use.
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+      if (view[sel] && view[sel].kind === "deployed") { e.preventDefault(); setTarget(target === "modeler" ? "operations" : "modeler"); render(); }
+      return;
+    }
+    if (e.key === "Enter") { e.preventDefault(); if (view[sel]) go(view[sel]); return; }
   }
   document.addEventListener("keydown", onKey, true);
 }
