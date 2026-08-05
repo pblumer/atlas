@@ -1,0 +1,19 @@
+{
+  "type": "default",
+  "id": "onb-finish",
+  "components": [
+    {
+      "type": "text",
+      "text": "# 🎓 Fast geschafft!\n\nDu hast die Kernkonzepte gesehen — und dabei *live* erlebt, wie sich ein Atlas-Prozess anfühlt: **Start → User-Tasks → Script-Task → Gateway → Ende**. Genau so wird in Atlas Arbeit orchestriert.\n\nEine letzte Frage, dann bist du durch:"
+    },
+    {
+      "key": "erstesZiel",
+      "type": "textarea",
+      "label": "Was möchtest du als Erstes mit Atlas bauen oder ausprobieren?"
+    },
+    {
+      "type": "text",
+      "text": "Willkommen im Team! 🎉 Nach dem **Absenden** ist dein Onboarding abgeschlossen — die Instanz läuft bis zum End-Event und schließt sauber ab."
+    }
+  ]
+}

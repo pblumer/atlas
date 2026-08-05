@@ -1,0 +1,32 @@
+{
+  "type": "default",
+  "id": "onb-start",
+  "components": [
+    {
+      "type": "text",
+      "text": "# 🚀 Willkommen bei Atlas!\n\nSchön, dass du da bist. Dieses Onboarding ist **selbst ein laufender Atlas-Prozess** — du lernst Atlas, indem du Atlas benutzt.\n\nSag uns kurz, wer du bist, dann geht's los:"
+    },
+    {
+      "key": "displayName",
+      "type": "textfield",
+      "label": "Dein Name",
+      "validate": { "required": true }
+    },
+    {
+      "key": "track",
+      "type": "radio",
+      "label": "Was möchtest du mit Atlas tun?",
+      "values": [
+        { "label": "Atlas benutzen – Prozesse starten, Aufgaben erledigen", "value": "nur_benutzen" },
+        { "label": "An Atlas mitentwickeln – am Engine-Code arbeiten", "value": "mitentwickeln" },
+        { "label": "Beides – erst benutzen, dann mitentwickeln", "value": "beides" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "key": "losGehts",
+      "type": "checkbox",
+      "label": "Los geht's! 🎉"
+    }
+  ]
+}
