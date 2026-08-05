@@ -38,6 +38,7 @@ const (
 	cfElementVisitAgg        columnFamily = 0x19 // elVisAgg:<procDefKey>:<elementId> → int64 cumulative visits (merge, ADR-0080)
 	cfDefCompletedCount      columnFamily = 0x1A // defDone:<procDefKey> → int64 finished-instance count (merge, ADR-0083)
 	cfDefLastActivity        columnFamily = 0x1B // defAct:<procDefKey> → int64 unix-nano of the latest instance event (set, ADR-0083)
+	cfSignalSubscription     columnFamily = 0x1C // sigSub:<name>:<elKey> → SignalSubscriptionValue (ADR-0088)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -401,6 +402,20 @@ func messageSubscriptionPrefix(name, correlationKey string) []byte {
 // instances can wait on the same message and key.
 func keyMessageSubscription(name, correlationKey string, elKey uint64) []byte {
 	return appendBE64(messageSubscriptionPrefix(name, correlationKey), elKey)
+}
+
+// signalSubscriptionPrefix is the exact-match scan prefix for all subscriptions
+// waiting on a signal name — the broadcast access pattern. A signal has no
+// correlation key, so the prefix is name alone (ADR-0088).
+func signalSubscriptionPrefix(name string) []byte {
+	return appendLenString([]byte{byte(cfSignalSubscription)}, name)
+}
+
+// keySignalSubscription keys a signal subscription by its name with the
+// element-instance key as the trailing disambiguator, so several instances can
+// wait on the same signal (a broadcast fans out to every one).
+func keySignalSubscription(name string, elKey uint64) []byte {
+	return appendBE64(signalSubscriptionPrefix(name), elKey)
 }
 
 // prefixEnd returns the smallest key strictly greater than every key beginning

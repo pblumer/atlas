@@ -4,7 +4,7 @@
 - **Date:** 2026-07-30
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phase 1 (compiler) delivered; Phases 2–5 pending. Each phase
+> **Implementation status.** Phases 1–2 delivered; Phases 3–5 pending. Each phase
 > lands test-first with a recovery test (ADR-0018). Signal events build on the message
 > correlation/subscription substrate (ADR-0020), the boundary arm/fire machinery
 > (ADR-0040), message-start instantiation (ADR-0035), and event subprocesses
@@ -23,6 +23,24 @@
 > a signal is fire-and-forget. Verified: a throw/catch/boundary/start/end and a signal
 > event subprocess compile with the resolved name; an unknown or unnamed signal ref is a
 > deploy error in every position. No runtime yet.
+>
+> **Delivered (Phase 2, broadcast core):** the runnable throw→catch path. A
+> `SignalSubscriptionValue` (the `MessageSubscriptionValue` shape minus the correlation
+> key) in a new `cfSignalSubscription` family keyed `signal-name:elementKey`, with
+> `PutSignalSubscription` / `DeleteSignalSubscription` / `SubscribedSignals(name, fn)` tx
+> methods (a name-only prefix scan). It reuses the message subscription intents
+> (`SubscriptionCreated` / `SubscriptionCorrelated`) over its own value type (`VTSignal`)
+> and `applyToState` arm. `broadcastSignal(c, name, vars)` mirrors `correlateMessage`:
+> collect every subscription on the name, then for each retire it, write the throw's
+> variables into that instance's scope, and enqueue its `Completing` — matches collected
+> before any mutation so retiring one cannot disturb the scan. `signalCatchEventBehavior`
+> opens the subscription and waits; `signalThrowEventBehavior` gathers the instance's
+> variables and broadcasts inline (keeping `applyToState` pure), then takes its outgoing
+> flow. Verified: one throw fires two intermediate catches in one instance (1:n via a
+> parallel split) and a catch in a second instance (cross-instance), carrying the payload
+> into every scope; a throw with no listener is a no-op; a parked catch's subscription
+> rebuilds on recovery so a throw after restart still fires it. Signal-start
+> instantiation, boundary, end, and event-subprocess catches remain for Phases 3–4.
 
 ## Context and problem statement
 

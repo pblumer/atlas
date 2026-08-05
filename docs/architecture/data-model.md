@@ -63,7 +63,7 @@ const (
     VTMessage                              // an incoming message (buffered)
     VTVariable                             // a process variable
     VTIncident                             // a fault state (job failed, expression error)
-    VTSignal
+    VTSignal                               // waiting for a broadcast signal by name (ADR-0088)
     VTError                                // error-event propagation
     VTProcessDefinition                    // a deployed definition
 )
