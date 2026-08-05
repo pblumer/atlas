@@ -293,6 +293,18 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	if proc.VersionTag != "" {
 		b.SetVersionTag(proc.VersionTag)
 	}
+	// A per-definition instance TTL (ADR-0085): parse the ISO-8601 duration up front so
+	// a malformed value fails the deploy rather than silently disabling the bound.
+	if ttl := strings.TrimSpace(proc.InstanceTtl); ttl != "" {
+		nanos, err := parseISO8601Duration(ttl)
+		if err != nil {
+			return nil, fmt.Errorf("compiler: process %q: invalid instanceTtl %q: %w", proc.Id, ttl, err)
+		}
+		if nanos <= 0 {
+			return nil, fmt.Errorf("compiler: process %q: instanceTtl %q must be a positive duration", proc.Id, ttl)
+		}
+		b.SetInstanceTtl(nanos)
+	}
 	ids := make(map[string]int32, len(proc.StartEvents)+len(proc.ServiceTasks)+len(proc.EndEvents))
 	register := func(id string, nodeID int32) error {
 		if id == "" {
@@ -716,6 +728,7 @@ type xmlProcess struct {
 	Name         string `xml:"name,attr"`
 	IsExecutable string `xml:"isExecutable,attr"`
 	VersionTag   string `xml:"versionTag,attr"`
+	InstanceTtl  string `xml:"instanceTtl,attr"` // ISO-8601 duration; self-cleaning TTL (ADR-0085), empty = off
 
 	xmlFlowContent // the process root's flow nodes and sequence flows
 

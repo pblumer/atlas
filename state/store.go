@@ -481,6 +481,15 @@ func (s *Store) InjectCorruptElementInstance(key uint64) error {
 	return s.db.Set(keyElementInstance(key), []byte{0x01}, pebble.NoSync)
 }
 
+// InjectCorruptIncident writes an undecodable record under an incident's key — the
+// incident-list counterpart of InjectCorruptProcessInstance. It lets a caller exercise
+// the decode-error branch of the incident scan (Incidents), which the operator "what's
+// stuck" list depends on to surface a 500 rather than silently drop rows. Test/tooling
+// only; production writes incidents through Tx.PutIncident.
+func (s *Store) InjectCorruptIncident(elKey uint64) error {
+	return s.db.Set(keyIncident(elKey), []byte{0x01}, pebble.NoSync)
+}
+
 // ActiveProcessInstances calls fn with the key and value of every live process
 // instance, via the process-instance column family — the operator "list running
 // instances" access pattern.

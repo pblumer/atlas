@@ -209,6 +209,10 @@ type ProcessInstanceValue struct {
 	// this instance as its child, 0 for a root instance (API/message/timer start).
 	// A completing child resumes its caller through it (ADR-0076).
 	ParentElementInstanceKey uint64
+	// ExpiryDueDate is the due date (unix nano) of this instance's TTL expiry timer,
+	// 0 when the definition has no TTL (ADR-0085). Stored so completion/termination can
+	// cancel that timer by key (the instance key) without scanning the timer index.
+	ExpiryDueDate int64
 }
 
 // processInstanceLegacySize is the original fixed layout (ProcessDefKey, State,
@@ -225,7 +229,8 @@ func (v *ProcessInstanceValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.CompletedAt))
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.CreatedAt))
 	dst = appendString(dst, v.CorrelationKey)
-	return binary.LittleEndian.AppendUint64(dst, v.ParentElementInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ParentElementInstanceKey)
+	return binary.LittleEndian.AppendUint64(dst, uint64(v.ExpiryDueDate))
 }
 
 func (v *ProcessInstanceValue) decode(src []byte) error {
@@ -251,6 +256,11 @@ func (v *ProcessInstanceValue) decode(src []byte) error {
 	// ends after the correlation key and leaves it zero (a root instance).
 	if len(tail) >= 8 {
 		v.ParentElementInstanceKey = binary.LittleEndian.Uint64(tail)
+	}
+	// ExpiryDueDate is the newest appended field: a record written before it ends after
+	// the parent key and leaves it zero (no TTL).
+	if len(tail) >= 16 {
+		v.ExpiryDueDate = int64(binary.LittleEndian.Uint64(tail[8:]))
 	}
 	return nil
 }
