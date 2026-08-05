@@ -220,7 +220,7 @@ const singletonMessageStartBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 </bpmn:definitions>`
 
 // TestParseSingletonMessageStart proves the singletonStart attribute compiles onto the
-// message-start detail, and that its absence defaults to false (ADR-0082).
+// message-start detail, and that its absence defaults to false (ADR-0094).
 func TestParseSingletonMessageStart(t *testing.T) {
 	cp, err := Parse(1, 1, strings.NewReader(singletonMessageStartBPMN))
 	if err != nil {

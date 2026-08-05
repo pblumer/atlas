@@ -2346,7 +2346,7 @@ type taskResp struct {
 	FormID             string `json:"formId,omitempty"`
 	// Priority is the task's importance from the model (default 50); the inbox
 	// sorts by it. DueDate is the absolute due instant in Unix milliseconds, or 0
-	// when the task has no due date (ADR-0051).
+	// when the task has no due date (ADR-0091).
 	Priority int32 `json:"priority"`
 	DueDate  int64 `json:"dueDate,omitempty"`
 }

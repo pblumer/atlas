@@ -1190,7 +1190,7 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tasks-item-sub { font-size: 12px; margin-top: 3px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .tasks-empty { padding: 16px 14px; }
 
-/* Priority & due date (ADR-0051) */
+/* Priority & due date (ADR-0091) */
 .prio-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #b26b00; margin-right: 6px; vertical-align: middle; flex: 0 0 auto; }
 .due-badge { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); color: var(--muted); white-space: nowrap; flex: 0 0 auto; }
 .due-badge.overdue { background: #fdecea; border-color: #f3c9c3; color: var(--danger); font-weight: 600; }
@@ -1418,7 +1418,7 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .filter-input { max-width: 280px; margin: 14px 0 12px; }
 tr[hidden] { display: none; }
 
-/* Embedded DMN editor overlay (ADR-0051) — a full-screen modal hosting the
+/* Embedded DMN editor overlay (ADR-0062) — a full-screen modal hosting the
    vendored dmn-js modeler over the current view (e.g. the BPMN editor). */
 .dmn-overlay {
   position: fixed; inset: 0; z-index: 60;

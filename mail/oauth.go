@@ -26,7 +26,7 @@ type TokenSource interface {
 	Token(ctx context.Context) (string, error)
 }
 
-// OAuth2 grant methods a native mail provider supports (ADR-0080). clientCredentials
+// OAuth2 grant methods a native mail provider supports (ADR-0093). clientCredentials
 // is app-only (a confidential client sends as a fixed mailbox); refreshToken exchanges
 // a pre-obtained refresh token (works with consumer accounts); serviceAccount is a
 // Google service account with domain-wide delegation (a signed JWT-bearer assertion,
@@ -38,7 +38,7 @@ const (
 )
 
 // credentialBundle is the JSON an operator stores in the vault under a mail
-// connector's credentialsRef (ADR-0080). method selects the OAuth2 grant; the
+// connector's credentialsRef (ADR-0093). method selects the OAuth2 grant; the
 // remaining fields configure it. Non-secret fields (ids, tenant) and secret fields
 // (clientSecret, refreshToken, privateKey) live together in this one vault secret, so
 // a model never carries any of them (I6). tokenUrl and scope are optional overrides;

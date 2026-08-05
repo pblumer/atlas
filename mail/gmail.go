@@ -12,7 +12,7 @@ import (
 // endpoint override.
 const gmailDefaultBase = "https://gmail.googleapis.com/gmail/v1"
 
-// GmailClient sends mail through the Gmail API (ADR-0080). It posts a base64url-encoded
+// GmailClient sends mail through the Gmail API (ADR-0093). It posts a base64url-encoded
 // RFC 5322 message to /users/me/messages/send with a bearer token from its
 // TokenSource; "me" resolves to the authenticated user (the impersonated subject under
 // a service account, or the refresh token's user). It frames the message with the same

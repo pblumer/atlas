@@ -1525,7 +1525,7 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 	// events the created instances emit.
 	for _, ref := range c.p.messageStarts[name] {
 		startKey := evalStartCorrelationKey(ref.correlationKey, vars)
-		// A singleton message start (ADR-0082) instantiates only if no instance of this
+		// A singleton message start (ADR-0094) instantiates only if no instance of this
 		// definition is already live for this correlation key. An empty key identifies
 		// no entity, so it is never singleton (it always starts).
 		if ref.singletonStart && startKey != "" {
@@ -1666,7 +1666,7 @@ func broadcastSignal(c *ProcessingContext, name string, vars []model.VariableVal
 // ActiveStartKey counter, maintained by applyToState) or already scheduled earlier in
 // this batch (the per-batch set, which closes the window before the durable counter
 // reflects a same-batch create). When it returns false it records the pair so a second
-// message for the same key in the same batch is skipped (ADR-0082).
+// message for the same key in the same batch is skipped (ADR-0094).
 func (c *ProcessingContext) singletonStartTaken(defKey uint64, key string) (bool, error) {
 	if c.p.startsThisBatch == nil {
 		c.p.startsThisBatch = make(map[startKeyIdent]struct{})

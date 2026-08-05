@@ -249,7 +249,7 @@ const CONNECTORS = [
   {
     id: "mail", name: "Mail", kind: "Outbound e-mail",
     desc: "Sends an e-mail from a service task off the processor loop via a managed provider — SMTP (any server, incl. Google/Microsoft 365 submission) or the native Gmail and Microsoft Graph APIs (OAuth2 app-only or refresh-token). Recipients, subject, and body are model-authored (FEEL-capable); the provider, default sender, and credentials are managed below and resolved from the vault. Authored via the E-Mail Outbound Connector service-task type.",
-    refs: "ADR-0041 · ADR-0079 · ADR-0080", status: "active", statusLabel: "configurable",
+    refs: "ADR-0041 · ADR-0079 · ADR-0093", status: "active", statusLabel: "configurable",
   },
 ];
 

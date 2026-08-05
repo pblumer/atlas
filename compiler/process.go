@@ -408,7 +408,7 @@ type MessageDetail struct {
 	CorrelationKey *expr.Compiled
 	// SingletonStart marks a message *start* event as one-per-correlation-key: while
 	// an instance started with a given key is live, another correlating message starts
-	// no duplicate (ADR-0082). Only meaningful on a message start event; ignored on
+	// no duplicate (ADR-0094). Only meaningful on a message start event; ignored on
 	// catch/throw/end. Default false keeps ADR-0035's start-per-message behavior.
 	SingletonStart bool
 }
@@ -698,7 +698,7 @@ type MessageStartEvent struct {
 	MessageName    string
 	ElementId      int32
 	CorrelationKey *expr.Compiled
-	SingletonStart bool // one live instance per correlation key (ADR-0082)
+	SingletonStart bool // one live instance per correlation key (ADR-0094)
 }
 
 // MessageStartEvents returns each message-start event with its element index and

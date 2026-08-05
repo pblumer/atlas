@@ -1,4 +1,4 @@
-# ADR-0082: Singleton message start — at most one live instance per correlation key
+# ADR-0094: Singleton message start — at most one live instance per correlation key
 
 - **Status:** Accepted
 - **Date:** 2026-07-29

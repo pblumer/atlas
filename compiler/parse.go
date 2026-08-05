@@ -13,7 +13,7 @@ import (
 // defaultRetries is used when a service task's task definition omits retries.
 const defaultRetries = 3
 
-// defaultUserTaskPriority mirrors Camunda's default task priority (ADR-0051): a
+// defaultUserTaskPriority mirrors Camunda's default task priority (ADR-0091): a
 // user task with no zeebe:priorityDefinition sorts as if priority 50.
 const defaultUserTaskPriority = 50
 
@@ -891,7 +891,7 @@ type xmlStartEvent struct {
 	Name    string                     `xml:"name,attr"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
 	// SingletonStart ("true") marks a message start event as one-per-correlation-key
-	// (ADR-0082): while an instance started with a key is live, a further correlating
+	// (ADR-0094): while an instance started with a key is live, a further correlating
 	// message starts no duplicate. A plain attribute (like versionTag on a process);
 	// absent = the default start-per-message behavior (ADR-0035).
 	SingletonStart string `xml:"singletonStart,attr"`
@@ -987,7 +987,7 @@ type xmlUserTask struct {
 }
 
 // xmlPriorityDefinition carries zeebe:priorityDefinition's static task priority
-// (ADR-0051). An empty value means the task uses the default priority.
+// (ADR-0091). An empty value means the task uses the default priority.
 type xmlPriorityDefinition struct {
 	Priority string `xml:"priority,attr"`
 }
