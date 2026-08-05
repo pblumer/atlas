@@ -254,6 +254,101 @@ const CONNECTORS = [
 ];
 
 // ---------- Shell ----------
+// openSearchPalette is the global "jump to a process" command palette behind the
+// topbar search icon (and Ctrl/⌘-K, and "/"). It loads the deployed processes and the
+// design drafts once, filters them by process id or name as you type, and navigates to
+// the picked one — a deployed definition opens in the Modeler diagram, a draft in its
+// editor. Typing an exact process id and pressing Enter jumps straight there, since an
+// exact id match is ranked first.
+let __searchOpen = false;
+async function openSearchPalette() {
+  if (__searchOpen) { const i = document.getElementById("sp-input"); if (i) i.focus(); return; }
+  __searchOpen = true;
+  const ov = document.createElement("div");
+  ov.className = "sp-ov";
+  ov.innerHTML = `
+    <div class="sp" role="dialog" aria-modal="true" aria-label="Search processes">
+      <div class="sp-head">
+        <svg class="sp-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="sp-input" type="text" placeholder="Jump to a process by id or name…" autocomplete="off" spellcheck="false" />
+        <kbd class="sp-esc">Esc</kbd>
+      </div>
+      <div class="sp-results" id="sp-results"></div>
+    </div>`;
+  document.body.appendChild(ov);
+  const input = ov.querySelector("#sp-input");
+  const list = ov.querySelector("#sp-results");
+  let items = []; // {name, id, badge, kind, href, hay}
+  let view = [];  // current filtered slice
+  let sel = 0;
+
+  const close = () => { __searchOpen = false; document.removeEventListener("keydown", onKey, true); ov.remove(); };
+  const go = (href) => { if (!href) return; close(); location.hash = href; };
+
+  list.innerHTML = `<div class="sp-empty">Loading…</div>`;
+  const [procs, drafts] = await Promise.all([
+    api("GET", "/api/v1/processes").catch(() => []),
+    api("GET", "/api/v1/drafts").catch(() => []),
+  ]);
+  if (!__searchOpen) return; // closed while loading
+  for (const g of groupByProcess(procs || [])) {
+    const l = g.latest;
+    items.push({ name: l.name || l.processId, id: l.processId, badge: `deployed · v${l.version}`, kind: "deployed", href: `#/modeler/d/${l.key}` });
+  }
+  for (const d of (drafts || [])) {
+    items.push({ name: d.name || d.processId, id: d.processId, badge: "draft", kind: "draft", href: `#/modeler/draft/${encodeURIComponent(d.processId)}` });
+  }
+  for (const it of items) it.hay = `${it.id} ${it.name}`.toLowerCase();
+
+  const rank = (it, q) => {
+    const id = it.id.toLowerCase(), name = it.name.toLowerCase();
+    if (id === q) return 0;
+    if (id.startsWith(q)) return 1;
+    if (name.startsWith(q)) return 2;
+    return 3;
+  };
+  const render = () => {
+    const q = input.value.trim().toLowerCase();
+    view = (q ? items.filter((it) => it.hay.includes(q)) : items.slice())
+      .sort((a, b) => (q ? rank(a, q) - rank(b, q) : 0) || a.name.localeCompare(b.name))
+      .slice(0, 50);
+    if (sel >= view.length) sel = view.length ? view.length - 1 : 0;
+    if (!view.length) {
+      list.innerHTML = `<div class="sp-empty">${items.length ? "No process matches." : "No processes or drafts yet."}</div>`;
+      return;
+    }
+    list.innerHTML = view.map((it, i) =>
+      `<button type="button" class="sp-item${i === sel ? " on" : ""}" data-i="${i}">
+        <span class="sp-name">${esc(it.name)}</span>
+        <span class="sp-id">${esc(it.id)}</span>
+        <span class="sp-badge ${it.kind}">${esc(it.badge)}</span>
+      </button>`).join("");
+    const on = list.querySelector(".sp-item.on");
+    if (on) on.scrollIntoView({ block: "nearest" });
+  };
+  render();
+  input.focus();
+
+  input.addEventListener("input", () => { sel = 0; render(); });
+  list.addEventListener("click", (e) => {
+    const b = e.target.closest(".sp-item"); if (!b) return;
+    const it = view[Number(b.dataset.i)]; go(it && it.href);
+  });
+  list.addEventListener("mousemove", (e) => {
+    const b = e.target.closest(".sp-item"); if (!b) return;
+    const i = Number(b.dataset.i);
+    if (i !== sel) { sel = i; list.querySelectorAll(".sp-item").forEach((el, j) => el.classList.toggle("on", j === sel)); }
+  });
+  ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(); });
+  function onKey(e) {
+    if (e.key === "Escape") { e.preventDefault(); close(); return; }
+    if (e.key === "ArrowDown") { e.preventDefault(); if (view.length) { sel = (sel + 1) % view.length; render(); } return; }
+    if (e.key === "ArrowUp") { e.preventDefault(); if (view.length) { sel = (sel - 1 + view.length) % view.length; render(); } return; }
+    if (e.key === "Enter") { e.preventDefault(); if (view[sel]) go(view[sel].href); return; }
+  }
+  document.addEventListener("keydown", onKey, true);
+}
+
 function initShell() {
   const drawer = document.getElementById("drawer");
   const scrim = document.getElementById("scrim");
@@ -262,6 +357,19 @@ function initShell() {
   document.getElementById("app-switcher").addEventListener("click", openDrawer);
   document.getElementById("drawer-close").addEventListener("click", closeDrawer);
   scrim.addEventListener("click", closeDrawer);
+
+  // Global "jump to a process" search: the topbar icon, Ctrl/⌘-K anywhere, and "/"
+  // when not already typing in a field.
+  const searchBtn = document.getElementById("global-search");
+  if (searchBtn) searchBtn.addEventListener("click", openSearchPalette);
+  document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) { e.preventDefault(); openSearchPalette(); return; }
+    if (e.key === "/" && !__searchOpen) {
+      const el = document.activeElement;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+      e.preventDefault(); openSearchPalette();
+    }
+  });
 
   const nav = document.getElementById("drawer-apps");
   nav.innerHTML = APPS.map((a) =>
