@@ -151,6 +151,47 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_instance_variables",
+			Description: "Read one process instance's variables as a typed JSON object (name → value). " +
+				"An instance with no variables (or an unknown key) returns an empty object.",
+			InputSchema: keyArg("The instance key (from atlas_list_instances) to read variables for."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/instances/" + strconv.FormatUint(key, 10) + "/variables"))
+			},
+		},
+		{
+			Name: "atlas_instance_jobs",
+			Description: "List one process instance's activatable jobs — a token parked on a service (or " +
+				"other job-backed) task exposes its job here with the job key, element, and type. Use a job key " +
+				"with atlas_complete_job or atlas_fail_job. An instance with no jobs (or an unknown key) returns [].",
+			InputSchema: keyArg("The instance key (from atlas_list_instances) whose jobs to list."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/instances/" + strconv.FormatUint(key, 10) + "/jobs"))
+			},
+		},
+		{
+			Name: "atlas_instance_timeline",
+			Description: "Read one process instance's step-by-step replay timeline: the activated elements " +
+				"in order with the variable values live at each step. Refused with a not-found error if no " +
+				"instance has that key.",
+			InputSchema: keyArg("The instance key (from atlas_list_instances) to build a timeline for."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/instances/" + strconv.FormatUint(key, 10) + "/timeline"))
+			},
+		},
+		{
 			Name: "atlas_cancel_instance",
 			Description: "Cancel (terminate) one running process instance by its instance key. All " +
 				"its tokens are discarded and the instance moves to the 'terminated' state. " +
