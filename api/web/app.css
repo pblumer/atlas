@@ -9,6 +9,9 @@
   --accent-hover: #0a4ad1;
   --accent-soft: #eaf0ff;
   --danger: #c0392b;
+  --danger-soft: #fdecea;
+  --warn: #b7791f;
+  --warn-soft: #fef6e7;
   --ok: #2d8a4e;
   --topbar-h: 48px;
   --radius: 8px;
@@ -278,8 +281,36 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .props .psec h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); margin: 0 0 10px; }
 .props .kv { font-size: 12px; color: var(--muted); }
 .props .kv b { color: var(--text); font-weight: 600; }
-.problems { height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); background: var(--bg); }
+.problems { height: 30px; flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 0 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); background: var(--bg); cursor: pointer; user-select: none; }
+.problems:hover { background: var(--surface); }
+.problems:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .problems .badge { background: var(--border); border-radius: 999px; padding: 0 7px; font-weight: 600; color: var(--text); }
+.problems.has-errors .badge { background: var(--danger); color: #fff; }
+.problems.has-warnings .badge { background: var(--warn); color: #fff; }
+.problems .prob-summary { color: var(--muted); }
+.problems .prob-caret { color: var(--muted); transition: transform 0.12s; }
+.problems.open .prob-caret { transform: rotate(180deg); }
+/* Filter chips live in the bar; a click on one toggles the view, not the drawer. */
+.prob-filters { display: inline-flex; gap: 2px; }
+.prob-filters button { font: inherit; font-size: 11px; padding: 1px 8px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--muted); border-radius: 999px; cursor: pointer; }
+.prob-filters button.active { background: var(--accent-soft); border-color: var(--accent-soft); color: var(--accent); font-weight: 600; }
+/* Drawer of findings, opening upward above the bar (it shares the editor's column
+   flex, so it pushes the canvas up rather than overlaying it). */
+.prob-list { flex: 0 0 auto; max-height: 240px; overflow: auto; border-top: 1px solid var(--border); background: var(--surface); }
+.prob-list .prob-empty { margin: 0; padding: 10px 14px; font-size: 12px; }
+.prob-row { display: flex; gap: 8px; align-items: flex-start; padding: 7px 14px; border-bottom: 1px solid var(--border); font-size: 12px; cursor: default; }
+.prob-row[data-el] { cursor: pointer; }
+.prob-row[data-el]:hover { background: var(--bg); }
+.prob-sev { flex: 0 0 16px; width: 16px; height: 16px; display: grid; place-items: center; border-radius: 999px; font-size: 10px; font-weight: 700; color: #fff; margin-top: 1px; }
+.prob-row.prob-error .prob-sev { background: var(--danger); }
+.prob-row.prob-warning .prob-sev { background: var(--warn); }
+.prob-msg { flex: 1 1 auto; color: var(--text); }
+.prob-el { flex: 0 0 auto; font: 600 11px/1.5 ui-monospace, monospace; color: var(--muted); background: var(--bg); border-radius: 4px; padding: 0 5px; }
+.prob-rule { flex: 0 0 auto; color: var(--muted); font-size: 11px; }
+/* Canvas highlight for the element a clicked problem points at. */
+.djs-element.atlas-problem .djs-visual > :is(rect, circle, polygon, path) {
+  stroke: var(--danger) !important; stroke-width: 2px !important;
+}
 .deploy-wrap { position: relative; }
 .coming { display: grid; place-items: center; height: 100%; color: var(--muted); text-align: center; }
 

@@ -451,10 +451,20 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
           </div>
         </aside>
       </div>
-      <div class="problems">
+      <div class="prob-list" id="prob-list" hidden></div>
+      <div class="problems" id="problems-bar" role="button" tabindex="0"
+           aria-expanded="false" aria-controls="prob-list"
+           title="Show validation problems">
         <span class="badge" id="prob-count">0</span> Problems
+        <span class="prob-summary" id="prob-summary"></span>
         <span style="flex:1"></span>
-        <span class="muted">Checked against the Atlas compiler</span>
+        <span class="prob-filters" id="prob-filters" hidden>
+          <button type="button" data-sev="all" class="active">All</button>
+          <button type="button" data-sev="error">Errors</button>
+          <button type="button" data-sev="warning">Warnings</button>
+        </span>
+        <span class="muted" id="prob-version">Checked against the Atlas compiler</span>
+        <span class="prob-caret" id="prob-caret" aria-hidden="true">▾</span>
       </div>
     </div>`;
 
@@ -501,8 +511,143 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   wireTabs(root, () => { rerender(); refreshBadges(); });
   wireActions(root, modeler, api, toast, projectId);
   wireEditorVars(root, modeler);
+  wireProblems(root, modeler, api);
   wireResizer(root, modeler);
   wireTokenSim(root, modeler);
+}
+
+// wireProblems drives the Problems panel (ADR-0026): the bottom bar becomes a
+// toggle that opens a filterable, element-linked list of the compiler's findings.
+// Validation is the real compiler run behind POST /api/v1/validate — never a
+// JS reimplementation of the rules (that is the interpret-don't-compile failure
+// mode the ADR rejects) — so the panel always tells the same truth as a deploy,
+// warnings included. It re-validates (debounced) as the diagram is edited, on
+// import, and on demand, so a modeling smell like a disconnected end event is
+// explained continuously rather than only at deploy time.
+function wireProblems(root, modeler, api) {
+  const bar = root.querySelector("#problems-bar");
+  const listEl = root.querySelector("#prob-list");
+  const countEl = root.querySelector("#prob-count");
+  const summaryEl = root.querySelector("#prob-summary");
+  const filtersEl = root.querySelector("#prob-filters");
+  const versionEl = root.querySelector("#prob-version");
+  const caretEl = root.querySelector("#prob-caret");
+  if (!bar || !listEl) return;
+
+  let problems = [];
+  let filter = "all"; // all | error | warning
+  let expanded = false;
+  let marked = null; // element id currently highlighted on the canvas
+  let seq = 0; // guards against a stale validate response overwriting a newer one
+
+  const SEV_LABEL = { error: "Error", warning: "Warning" };
+  const sevIcon = (s) => (s === "error" ? "✕" : s === "warning" ? "!" : "•");
+
+  const clearMark = () => {
+    if (marked == null) return;
+    try { modeler.get("canvas").removeMarker(marked, "atlas-problem"); } catch { /* gone */ }
+    marked = null;
+  };
+
+  // Jump to and highlight a problem's element — the same select + scroll pattern
+  // the variables panel uses, plus a persistent marker so the offending element
+  // stays visible after the click.
+  const focusElement = (id) => {
+    if (!id) return;
+    const el = modeler.get("elementRegistry").get(id);
+    if (!el) return;
+    clearMark();
+    try { modeler.get("selection").select(el); } catch { /* stale */ }
+    try { modeler.get("canvas").scrollToElement(el); } catch { /* older bpmn-js */ }
+    try { modeler.get("canvas").addMarker(id, "atlas-problem"); marked = id; } catch { /* no marker */ }
+  };
+
+  const render = () => {
+    const errors = problems.filter((p) => p.severity === "error").length;
+    const warnings = problems.filter((p) => p.severity === "warning").length;
+    const total = problems.length;
+
+    countEl.textContent = String(total);
+    bar.classList.toggle("has-errors", errors > 0);
+    bar.classList.toggle("has-warnings", errors === 0 && warnings > 0);
+    filtersEl.hidden = total === 0;
+    caretEl.style.visibility = total === 0 ? "hidden" : "";
+
+    if (total === 0) {
+      summaryEl.textContent = "No problems";
+    } else {
+      const parts = [];
+      if (errors) parts.push(`${errors} error${errors === 1 ? "" : "s"}`);
+      if (warnings) parts.push(`${warnings} warning${warnings === 1 ? "" : "s"}`);
+      summaryEl.textContent = parts.join(", ");
+    }
+
+    // A collapsed panel with nothing to show stays closed; nothing to list.
+    if (total === 0) { expand(false); }
+
+    const shown = problems.filter((p) => filter === "all" || p.severity === filter);
+    listEl.innerHTML = shown.length === 0
+      ? `<p class="prob-empty muted">No ${filter === "all" ? "" : filter + " "}problems.</p>`
+      : shown.map((p) => `<div class="prob-row prob-${esc(p.severity)}"${p.element ? ` data-el="${esc(p.element)}"` : ""}>
+          <span class="prob-sev" title="${esc(SEV_LABEL[p.severity] || p.severity)}">${sevIcon(p.severity)}</span>
+          <span class="prob-msg">${esc(p.message)}</span>
+          ${p.element ? `<span class="prob-el" title="Element id">${esc(p.element)}</span>` : ""}
+          <span class="prob-rule" title="Rule">${esc(p.rule)}</span>
+        </div>`).join("");
+  };
+
+  const expand = (open) => {
+    expanded = open && problems.length > 0;
+    listEl.hidden = !expanded;
+    bar.setAttribute("aria-expanded", String(expanded));
+    bar.classList.toggle("open", expanded);
+  };
+
+  // A full compile is cheap but not free; debounce so a burst of edits triggers
+  // one validate, not one per keystroke-equivalent modeling event (ADR-0026).
+  let timer = null;
+  const validate = async () => {
+    let xml;
+    try { ({ xml } = await modeler.saveXML({ format: true })); } catch { return; } // not imported yet
+    const mine = ++seq;
+    let res;
+    try { res = await api("POST", "/api/v1/validate", xml, true); } catch { return; }
+    if (mine !== seq) return; // a newer validate has superseded this one
+    problems = Array.isArray(res.problems) ? res.problems : [];
+    if (res.version) versionEl.textContent = `Checked against Atlas ${res.version}`;
+    render();
+  };
+  const scheduleValidate = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(validate, 500);
+  };
+
+  bar.addEventListener("click", (e) => {
+    if (e.target.closest("#prob-filters")) return; // a filter click is not a toggle
+    expand(!expanded);
+  });
+  bar.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); expand(!expanded); }
+  });
+  filtersEl.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-sev]");
+    if (!b) return;
+    filter = b.dataset.sev;
+    for (const btn of filtersEl.querySelectorAll("button")) {
+      btn.classList.toggle("active", btn === b);
+    }
+    if (!expanded) expand(true);
+    render();
+  });
+  listEl.addEventListener("click", (e) => {
+    const row = e.target.closest(".prob-row");
+    if (row && row.dataset.el) focusElement(row.dataset.el);
+  });
+
+  modeler.on("element.changed", scheduleValidate);
+  modeler.on("elements.changed", scheduleValidate);
+  modeler.on("import.done", scheduleValidate);
+  validate(); // check the diagram just imported
 }
 
 // wireTokenSim drives the Design view's token simulation (ADR-0078): a toolbar toggle
