@@ -9,6 +9,9 @@
   --accent-hover: #0a4ad1;
   --accent-soft: #eaf0ff;
   --danger: #c0392b;
+  --danger-soft: #fdecea;
+  --warn: #b7791f;
+  --warn-soft: #fef6e7;
   --ok: #2d8a4e;
   --topbar-h: 48px;
   --radius: 8px;
@@ -268,14 +271,46 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .props .msg-row { display: flex; gap: 6px; align-items: center; }
 .props .msg-row input { flex: 1 1 40%; min-width: 0; padding: 6px 8px; border: 1px solid var(--border-strong); border-radius: 5px; font: inherit; }
 .props .msg-row .msg-del { flex: 0 0 auto; padding: 4px 9px; line-height: 1; }
+.props .sig-list { display: flex; flex-direction: column; gap: 6px; }
+.props .sig-row { display: flex; gap: 6px; align-items: center; }
+.props .sig-row input { flex: 1 1 auto; min-width: 0; padding: 6px 8px; border: 1px solid var(--border-strong); border-radius: 5px; font: inherit; }
+.props .sig-row .sig-del { flex: 0 0 auto; padding: 4px 9px; line-height: 1; }
 .props .phead { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
 .props .ptype { width: 26px; height: 26px; border: 1px solid var(--border-strong); border-radius: 5px; display: grid; place-items: center; font-size: 11px; color: var(--muted); }
 .props .psec { padding: 14px 16px; border-bottom: 1px solid var(--border); }
 .props .psec h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); margin: 0 0 10px; }
 .props .kv { font-size: 12px; color: var(--muted); }
 .props .kv b { color: var(--text); font-weight: 600; }
-.problems { height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); background: var(--bg); }
+.problems { height: 30px; flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 0 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); background: var(--bg); cursor: pointer; user-select: none; }
+.problems:hover { background: var(--surface); }
+.problems:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .problems .badge { background: var(--border); border-radius: 999px; padding: 0 7px; font-weight: 600; color: var(--text); }
+.problems.has-errors .badge { background: var(--danger); color: #fff; }
+.problems.has-warnings .badge { background: var(--warn); color: #fff; }
+.problems .prob-summary { color: var(--muted); }
+.problems .prob-caret { color: var(--muted); transition: transform 0.12s; }
+.problems.open .prob-caret { transform: rotate(180deg); }
+/* Filter chips live in the bar; a click on one toggles the view, not the drawer. */
+.prob-filters { display: inline-flex; gap: 2px; }
+.prob-filters button { font: inherit; font-size: 11px; padding: 1px 8px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--muted); border-radius: 999px; cursor: pointer; }
+.prob-filters button.active { background: var(--accent-soft); border-color: var(--accent-soft); color: var(--accent); font-weight: 600; }
+/* Drawer of findings, opening upward above the bar (it shares the editor's column
+   flex, so it pushes the canvas up rather than overlaying it). */
+.prob-list { flex: 0 0 auto; max-height: 240px; overflow: auto; border-top: 1px solid var(--border); background: var(--surface); }
+.prob-list .prob-empty { margin: 0; padding: 10px 14px; font-size: 12px; }
+.prob-row { display: flex; gap: 8px; align-items: flex-start; padding: 7px 14px; border-bottom: 1px solid var(--border); font-size: 12px; cursor: default; }
+.prob-row[data-el] { cursor: pointer; }
+.prob-row[data-el]:hover { background: var(--bg); }
+.prob-sev { flex: 0 0 16px; width: 16px; height: 16px; display: grid; place-items: center; border-radius: 999px; font-size: 10px; font-weight: 700; color: #fff; margin-top: 1px; }
+.prob-row.prob-error .prob-sev { background: var(--danger); }
+.prob-row.prob-warning .prob-sev { background: var(--warn); }
+.prob-msg { flex: 1 1 auto; color: var(--text); }
+.prob-el { flex: 0 0 auto; font: 600 11px/1.5 ui-monospace, monospace; color: var(--muted); background: var(--bg); border-radius: 4px; padding: 0 5px; }
+.prob-rule { flex: 0 0 auto; color: var(--muted); font-size: 11px; }
+/* Canvas highlight for the element a clicked problem points at. */
+.djs-element.atlas-problem .djs-visual > :is(rect, circle, polygon, path) {
+  stroke: var(--danger) !important; stroke-width: 2px !important;
+}
 .deploy-wrap { position: relative; }
 .coming { display: grid; place-items: center; height: 100%; color: var(--muted); text-align: center; }
 
@@ -1697,3 +1732,26 @@ tr[hidden] { display: none; }
   stroke: var(--ok) !important;
 }
 @keyframes atlas-sim-glow { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* Global "jump to a process" search palette (topbar search / Ctrl-⌘-K / "/") */
+.sp-ov { position: fixed; inset: 0; z-index: 70; display: flex; justify-content: center; align-items: flex-start; padding: 12vh 16px 16px; background: rgba(20, 22, 26, 0.42); }
+.sp { width: min(620px, 96vw); max-height: 70vh; display: flex; flex-direction: column; overflow: hidden; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
+.sp-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.sp-icon { flex: 0 0 auto; color: var(--muted); }
+.sp-head input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: 15px; color: var(--text); }
+.sp-esc { flex: 0 0 auto; font: 600 11px system-ui; color: var(--muted); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; }
+.sp-results { overflow-y: auto; padding: 6px; }
+.sp-empty { padding: 18px 14px; color: var(--muted); font-size: 13px; }
+.sp-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; background: transparent; padding: 9px 10px; border-radius: 8px; cursor: pointer; font: inherit; color: var(--text); }
+.sp-item.on { background: var(--accent-soft); }
+.sp-name { flex: 0 1 auto; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-id { flex: 1 1 auto; min-width: 40px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-badge { flex: 0 0 auto; font-size: 11px; font-weight: 600; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; }
+.sp-badge.deployed { color: var(--accent); border-color: transparent; background: var(--accent-soft); }
+.sp-meta { flex: 0 0 auto; font-size: 11px; font-weight: 600; color: var(--muted); }
+.sp-targets { flex: 0 0 auto; display: inline-flex; gap: 4px; }
+.sp-tgt { font-size: 11px; font-weight: 600; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; cursor: pointer; }
+.sp-tgt:hover { border-color: var(--accent); color: var(--accent); }
+.sp-tgt.on { color: #fff; background: var(--accent); border-color: var(--accent); }
+.sp-foot { display: flex; gap: 16px; padding: 8px 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; }
+.sp-foot kbd { font: 600 11px system-ui; border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; margin-right: 2px; }

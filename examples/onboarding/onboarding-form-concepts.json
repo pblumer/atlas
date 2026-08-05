@@ -1,0 +1,21 @@
+{
+  "type": "default",
+  "id": "onb-concepts",
+  "components": [
+    {
+      "type": "text",
+      "text": "# 🧩 Die wichtigsten Begriffe\n\nEin paar Vokabeln, die dir überall in Atlas begegnen:\n\n- **Prozess (Definition)** — die Vorlage: das deployte, versionierte BPMN-Modell.\n- **Instanz** — eine konkrete Ausführung eines Prozesses (dieses Onboarding ist eine Instanz!).\n- **Token** — der Marker, der durch den Graphen wandert und den Fortschritt trägt.\n- **User-Task** — ein Schritt, der auf einen Menschen wartet (wie dieser hier).\n- **Formular** — die Eingabemaske eines User-Tasks (form-js), die du gerade ausfüllst.\n- **Script-/Service-Task** — automatische Schritte: ein FEEL-Ausdruck bzw. ein externer Worker.\n- **Gateway** — eine Verzweigung: hier entscheidet der Prozess, wie es weitergeht.\n\nKleine Wissensprüfung 👇 (kein Stress — es geht ums Verankern)"
+    },
+    {
+      "key": "quizInstanz",
+      "type": "radio",
+      "label": "Eine *Instanz* ist …",
+      "values": [
+        { "label": "eine konkrete Ausführung eines Prozesses", "value": "richtig" },
+        { "label": "die BPMN-Vorlage selbst", "value": "vorlage" },
+        { "label": "ein Fehlereintrag im Log", "value": "fehler" }
+      ],
+      "validate": { "required": true }
+    }
+  ]
+}

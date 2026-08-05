@@ -1,7 +1,9 @@
 package compiler
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -51,6 +53,19 @@ const (
 	RuleFlowCrossScope         = "flow.cross-scope"
 )
 
+// Rule slugs for whole-model dry-run findings that [ValidateModel] raises outside
+// the per-node graph checks — a fault that stops the compile before a linearized
+// graph exists, so it cannot be anchored the way the graph rules above are.
+const (
+	// RuleParse marks a document that will not decode at all, or a model with no
+	// executable process — a model-level failure with no single owning element.
+	RuleParse = "parse"
+	// RuleCompile marks a per-process failure in an earlier compile stage (an
+	// unknown flow reference, a bad FEEL expression) — the pool named nothing the
+	// graph checks could inspect, so its error is surfaced as one Problem instead.
+	RuleCompile = "compile"
+)
+
 // Problem is one structured validation finding on a compiled process, shaped for
 // ADR-0026's Problems panel and the future POST /api/v1/validate endpoint. Element
 // is the source BPMN element id it anchors to (the id bpmn-js uses, e.g.
@@ -91,6 +106,68 @@ func HasErrors(ps []Problem) bool {
 		}
 	}
 	return false
+}
+
+// ValidateModel runs the compiler's real parse → resolve → build → validate
+// pipeline over a BPMN model as a *dry run* — it mints no keys, registers no
+// definition, and starts no instance — and returns every validation Problem
+// (errors and warnings) across all of the model's executable pools. It is the
+// single source of validation truth behind ADR-0026's Problems panel and the
+// POST /api/v1/validate endpoint: the panel never re-implements these rules
+// (that would be the interpret-don't-compile failure mode I5 forbids), it renders
+// what this returns.
+//
+// Unlike ParseAll, which stops at the first fault so a deploy fails fast, the dry
+// run reports everything at once — that is what a Problems panel needs. Faults the
+// graph checks cannot anchor to a node still surface as Problems so the panel
+// renders them uniformly: a document that will not parse, or a model with no
+// executable process, becomes one RuleParse error; a pool that fails an earlier
+// compile stage becomes one RuleCompile error rather than aborting the whole run
+// and blinding the panel to the other pools.
+//
+// The returned error is always nil today — every modeling fault is reported as a
+// Problem, not an error — but the signature keeps an error so a future source
+// that does I/O can report a read failure distinctly from a modeling one.
+func ValidateModel(r io.Reader) ([]Problem, error) {
+	defs, err := decodeDefinitions(r)
+	if err != nil {
+		return []Problem{{Severity: SeverityError, Rule: RuleParse, Message: err.Error()}}, nil
+	}
+	resolveMsg := buildMessageResolver(defs)
+	resolveSig := buildSignalResolver(defs)
+	var ps []Problem
+	executable := 0
+	for _, proc := range defs.Processes {
+		if len(proc.StartEvents) == 0 {
+			continue // black-box pool: nothing to run, so nothing to validate (ParseAll skips it too)
+		}
+		// The key is irrelevant to a dry run — the compiled process is inspected and
+		// discarded, never registered — so a per-pool ordinal keeps it deterministic
+		// without touching the server's key counter.
+		cp, cerr := compileProcess(uint64(executable), 1, proc, resolveMsg, resolveSig)
+		executable++
+		if cerr != nil {
+			// A graph-level failure carries its element-anchored Problems; hand them
+			// through verbatim. Any other compile error stopped before the graph
+			// existed, so report it as one unanchored compile Problem.
+			var ve *ValidationError
+			if errors.As(cerr, &ve) {
+				ps = append(ps, ve.Problems...)
+				continue
+			}
+			ps = append(ps, Problem{Severity: SeverityError, Rule: RuleCompile, Message: cerr.Error()})
+			continue
+		}
+		ps = append(ps, Validate(cp)...)
+	}
+	if executable == 0 {
+		ps = append(ps, Problem{
+			Severity: SeverityError,
+			Rule:     RuleParse,
+			Message:  "no executable <process> (a process needs a start event)",
+		})
+	}
+	return ps, nil
 }
 
 // ValidationError is the fatal compile error compileProcess returns when
