@@ -50,23 +50,48 @@ func objectProp(desc string) map[string]any {
 	return map[string]any{"type": "object", "description": desc}
 }
 
-// optVariablesBody builds the JSON body {"variables": {...}} from an optional
-// "variables" object argument. An absent value yields an empty scope ({}); a
-// present value must be an object, mirroring the HTTP endpoints that decode
-// {"variables": ...} (parseStartVariables). It is shared by instance start and
-// task completion so both forward variables identically — the same {name: value}
-// shape a human's start or task form submits.
-func optVariablesBody(args map[string]any) ([]byte, error) {
-	vars := map[string]any{}
+// optVariablesMap returns the optional "variables" object argument as a map,
+// empty when absent. A present non-object value is an error, mirroring the HTTP
+// endpoints that decode {"variables": ...} (parseStartVariables).
+func optVariablesMap(args map[string]any) (map[string]any, error) {
 	if raw, ok := args["variables"]; ok {
 		m, isObject := raw.(map[string]any)
 		if !isObject {
 			return nil, fmt.Errorf("argument %q must be an object", "variables")
 		}
-		vars = m
+		return m, nil
+	}
+	return map[string]any{}, nil
+}
+
+// optVariablesBody builds the JSON body {"variables": {...}} from an optional
+// "variables" object argument. It is shared by instance start, task completion,
+// and job completion so all forward variables identically — the same {name: value}
+// shape a human's start or task form submits.
+func optVariablesBody(args map[string]any) ([]byte, error) {
+	vars, err := optVariablesMap(args)
+	if err != nil {
+		return nil, err
 	}
 	// Marshalling a map[string]any of JSON-decoded values cannot fail.
 	body, _ := json.Marshal(map[string]any{"variables": vars})
+	return body, nil
+}
+
+// messageBody builds the publish-message request body {name, correlationKey?,
+// variables} from the tool arguments. name is placed by the caller (already
+// validated non-empty); the optional variables object is validated here and the
+// server reads it from the same body via parseStartVariables.
+func messageBody(name string, args map[string]any) ([]byte, error) {
+	vars, err := optVariablesMap(args)
+	if err != nil {
+		return nil, err
+	}
+	payload := map[string]any{"name": name, "variables": vars}
+	if ck := optString(args, "correlationKey"); ck != "" {
+		payload["correlationKey"] = ck
+	}
+	body, _ := json.Marshal(payload)
 	return body, nil
 }
 

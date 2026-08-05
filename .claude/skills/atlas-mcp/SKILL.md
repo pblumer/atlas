@@ -37,6 +37,8 @@ endpoint behind an authenticating reverse proxy.
 | `atlas_cancel_instances` | `key`, `limit?` | bounded bulk termination |
 | `atlas_delete_process` | `key` | deletes one deployed definition |
 | `atlas_stats` | none | engine-wide active counts |
+| `atlas_publish_message` | `name`, `correlationKey?`, `variables?` | correlates a message to waiting instances; returns stats |
+| `atlas_complete_job` | `key`, `variables?` | completes a job by hand (operator counterpart to a worker) |
 
 ## Authoring and human-task tools
 

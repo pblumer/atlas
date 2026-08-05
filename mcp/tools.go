@@ -234,6 +234,60 @@ func runtimeTools() []Tool {
 				return asText(c.get("/api/v1/stats"))
 			},
 		},
+		{
+			Name: "atlas_publish_message",
+			Description: "Publish a message for correlation: any instance waiting at a message catch event " +
+				"whose correlation key matches is delivered the message and advances. Provide the message " +
+				"'name' and, when the catch event correlates on a key, the 'correlationKey' value to match. " +
+				"A message that matches no waiting instance is a legal no-op. Optional 'variables' are merged " +
+				"into a correlated instance's scope. Returns {name, correlationKey, stats}.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"name":           stringProp("The message name (matches the BPMN message's name)."),
+					"correlationKey": stringProp("The correlation key value to match against waiting instances. Omit for an unkeyed message."),
+					"variables":      objectProp("Optional variables merged into a correlated instance's scope, e.g. {\"approved\": true}. Omit for none."),
+				},
+				"required": []any{"name"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				name, err := argString(args, "name")
+				if err != nil {
+					return "", err
+				}
+				body, err := messageBody(name, args)
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/messages", "application/json", body))
+			},
+		},
+		{
+			Name: "atlas_complete_job",
+			Description: "Complete a job by hand by its job key — the operator counterpart to an external " +
+				"worker completing it, driving an instance parked on a service (or other job-backed) task " +
+				"forward. Optional 'variables' are written into the instance scope as the job's outputs. " +
+				"Refused with a not-found error if no job has that key. Returns {jobKey}.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":       map[string]any{"type": "integer", "description": "The job key to complete."},
+					"variables": objectProp("Optional job output variables, e.g. {\"paid\": true}. Omit for none."),
+				},
+				"required": []any{"key"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				body, err := optVariablesBody(args)
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/jobs/"+strconv.FormatUint(key, 10)+"/complete", "application/json", body))
+			},
+		},
 	}
 }
 
