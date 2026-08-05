@@ -4,7 +4,7 @@
 - **Date:** 2026-07-30
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phases 1–3 delivered; Phases 4–5 pending. Each phase
+> **Implementation status.** Phases 1–4 delivered; Phase 5 (Modeler) pending. Each phase
 > lands test-first with a recovery test (ADR-0018). Signal events build on the message
 > correlation/subscription substrate (ADR-0020), the boundary arm/fire machinery
 > (ADR-0040), message-start instantiation (ADR-0035), and event subprocesses
@@ -60,6 +60,21 @@
 > signal-start instance and fires a waiting boundary in another; undeploy drops a
 > signal-start from the index; and an armed boundary subscription rebuilds on recovery so
 > a throw after restart still fires it. The signal event subprocess remains for Phase 4.
+>
+> **Delivered (Phase 4, signal event subprocess):** the signal trigger for an event
+> subprocess (ADR-0082), interrupting and non-interrupting. A `BoundarySignal` case in
+> `eventSubProcessStartBehavior.OnActivated` opens a name-only signal subscription on the
+> armed trigger — the same subscription a signal boundary opens — so a broadcast drives
+> the trigger to `Completing` through the shared event-sub fire path (terminate the parent
+> scope's other work if interrupting, then activate the handler subprocess); a
+> non-interrupting trigger then re-arms a fresh subscription, extending the existing
+> message re-arm condition to signals. No new arming, teardown, or recovery path — the
+> compiler already records the trigger spec (`EventSubProcessDetail{Kind: BoundarySignal,
+> SignalName}`, Phase 1). Verified: an interrupting signal event subprocess tears down the
+> main flow (job canceled) and runs the handler cross-instance; a non-interrupting one
+> fires twice (re-arming between) while the main flow runs untouched, then disarms when the
+> flow completes; and the re-armed subscription rebuilds on recovery so a broadcast after
+> restart runs the handler again.
 
 ## Context and problem statement
 

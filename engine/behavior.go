@@ -2166,11 +2166,12 @@ func disarmEventSubprocesses(c *ProcessingContext, procKey, scope uint64) {
 }
 
 // eventSubProcessStartBehavior is the armed trigger of an event subprocess (ADR-0082).
-// On activation it opens its trigger — a message subscription or a one-shot timer,
+// On activation it opens its trigger — a message/signal subscription or a one-shot timer,
 // exactly as a boundary event does — and waits. When the trigger fires, the existing
-// timer/message path drives it to Completing: it terminates the parent scope's other
-// work if interrupting, then activates the handler subprocess. The handler runs as an
-// ordinary subprocess scope; its inner start (a message/timer start) flows straight on.
+// timer/message/signal path drives it to Completing: it terminates the parent scope's
+// other work if interrupting, then activates the handler subprocess. The handler runs as
+// an ordinary subprocess scope; its inner start (a message/timer/signal start) flows
+// straight on.
 type eventSubProcessStartBehavior struct{}
 
 func (eventSubProcessStartBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
@@ -2185,6 +2186,17 @@ func (eventSubProcessStartBehavior) OnActivated(c *ProcessingContext, key uint64
 			ElementInstanceKey: key,
 			MessageName:        d.MessageName,
 			CorrelationKey:     evalCorrelationKey(c, d.CorrelationKey, ei.ProcessInstanceKey),
+		})
+	case compiler.BoundarySignal:
+		// A name-only subscription (no correlation key). A broadcast of the name drives
+		// this trigger to Completing through the shared fire path (ADR-0088), exactly as
+		// a boundary signal — then the handler runs and a non-interrupting trigger re-arms.
+		c.AppendSignalSubscriptionEvent(key, model.IntentSubscriptionCreated, model.SignalSubscriptionValue{
+			ProcessInstanceKey: ei.ProcessInstanceKey,
+			ElementInstanceKey: key,
+			SignalName:         d.SignalName,
+			ProcessDefKey:      ei.ProcessDefKey,
+			ElementId:          ei.ElementId,
 		})
 	}
 	// Stays Activated: waits until the trigger fires.
@@ -2208,10 +2220,11 @@ func (eventSubProcessStartBehavior) OnCompleting(c *ProcessingContext, key uint6
 		terminateScope(c, ei.ProcessInstanceKey, parentScope)
 	}
 	activateEventSubHandler(c, ei, parentScope)
-	// A non-interrupting message trigger re-arms a fresh subscription so a subsequent
-	// message fires it again (ADR-0082). A one-shot timer fires once (no re-arm); a
-	// recurring timer re-arms through the timer path (fireRecurringEventSub), not here.
-	if !d.Interrupting && d.Kind == compiler.BoundaryMessage {
+	// A non-interrupting message or signal trigger re-arms a fresh subscription so a
+	// subsequent message/broadcast fires it again (ADR-0082/ADR-0088). A one-shot timer
+	// fires once (no re-arm); a recurring timer re-arms through the timer path
+	// (fireRecurringEventSub), not here.
+	if !d.Interrupting && (d.Kind == compiler.BoundaryMessage || d.Kind == compiler.BoundarySignal) {
 		armEventSubTrigger(c, ei.ProcessInstanceKey, ei.ProcessDefKey, parentScope, handlerNode)
 	}
 }
