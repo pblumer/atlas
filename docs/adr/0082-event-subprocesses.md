@@ -7,9 +7,7 @@
 > **Implementation status.** Phases 1–5 delivered — an event subprocess compiles, runs
 > (message/timer, interrupting/non-interrupting, at the root or nested in a subprocess), and
 > is authored in the Modeler. Each engine phase landed test-first with a recovery test
-> (ADR-0018). (Note: the ADR *number* 0082 collides with
-> `0082-singleton-message-start.md`, merged in parallel — a pre-existing collision like
-> ADR-0077; the documents are distinct files.) Event subprocesses build on the
+> (ADR-0018). Event subprocesses build on the
 > embedded-subprocess scope lifecycle (ADR-0074), the boundary-event arming/firing/
 > interruption machinery (ADR-0040), and message/timer correlation (ADR-0020, ADR-0051).
 > They introduce no new value type or recovery path — the trigger reuses the existing

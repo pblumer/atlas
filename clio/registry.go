@@ -142,7 +142,7 @@ type KeyRequest struct {
 // MintKey creates a new clio API key and returns its full, once-shown secret
 // (clio's "kid.secret"). It is a standalone call — not a [Client] method — because
 // it authenticates with a clio **admin** token, distinct from a connector's read
-// token, and exists only to provision a connector's credential (ADR-0077) without an operator
+// token, and exists only to provision a connector's credential (ADR-0092) without an operator
 // copy-pasting one. The caller must never persist adminToken; only the returned
 // scoped key is stored (sealed in the vault). Delivery is not idempotent, so a
 // caller should mint once per provisioning action.

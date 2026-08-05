@@ -42,7 +42,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// the instance record itself, the per-definition active counter and
 			// last-activity for the O(1) runtime view / instances summary (ADR-0080/0083),
 			// and — for a message-start instance — the per-key live counter a singleton
-			// message start gates on (ADR-0082). All are event-driven, so replay rebuilds
+			// message start gates on (ADR-0094). All are event-driven, so replay rebuilds
 			// them (I4/I6). firstErr applies them and reports the first failure.
 			err := firstErr(
 				tx.PutProcessInstance(h.Key, &v.process),
@@ -77,7 +77,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 				tx.SetDefLastActivity(v.process.ProcessDefKey, h.Timestamp),
 			)
 			// Releasing a message-start instance re-opens its correlation key so a later
-			// message can start a fresh one (ADR-0082).
+			// message can start a fresh one (ADR-0094).
 			if err == nil && v.process.CorrelationKey != "" {
 				err = tx.DecrementActiveStartKey(v.process.ProcessDefKey, v.process.CorrelationKey)
 			}

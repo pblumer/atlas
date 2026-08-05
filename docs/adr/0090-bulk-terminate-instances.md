@@ -103,7 +103,7 @@ be a single click.
   and the `POST /api/v1/processes/{key}/cancel-instances` drain; reuses the
   `GET /api/v1/instances/search` variable matcher for filter mode.
 - complements the ADR-0075 flood family: ADR-0080/0083 (survive — O(1) runtime and
-  summary), ADR-0082 (prevent runaway starts), ADR-0085 (prevent-standing via TTL); this
+  summary), ADR-0094 (prevent runaway starts), ADR-0085 (prevent-standing via TTL); this
   is the operator's **drain-a-subset** surface alongside the whole-definition drain.
 - honors I3 (one run-loop turn per call, single writer) and I2 (durable before visible —
   terminations commit through the normal event path, one `Drive`).

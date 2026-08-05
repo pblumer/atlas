@@ -169,7 +169,7 @@ func (s *Server) buildMailClients() (map[string]mail.Client, error) {
 			Secret:   s.resolveConnectorSecret(c.CredentialsRef),
 		})
 		if err != nil {
-			continue // misconfigured provider: its tasks park until it is fixed (ADR-0080)
+			continue // misconfigured provider: its tasks park until it is fixed (ADR-0093)
 		}
 		clients[c.Name] = client
 	}
@@ -420,7 +420,7 @@ func (s *Server) handleDeleteConnector(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleProvisionClioKey provisions a managed clio connector's credential in one
-// step (ADR-0077): it mints a scoped read key on the connector's clio instance (using an admin
+// step (ADR-0092): it mints a scoped read key on the connector's clio instance (using an admin
 // token the operator supplies once) and seals the returned key in the vault as the
 // connector's credential, then rebuilds the registries so the inbound bridge and
 // outbound tasks use it at once — no copy-pasting a token. The admin token is used
