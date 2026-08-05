@@ -30,7 +30,7 @@ endpoint behind an authenticating reverse proxy.
 | `atlas_deploy` | `xml` | deployed definitions and keys |
 | `atlas_list_processes` | none | deployed definitions |
 | `atlas_get_process_xml` | `key` | deployed BPMN XML |
-| `atlas_create_instance` | `key` | starts an instance and returns stats |
+| `atlas_create_instance` | `key`, `variables?` | starts an instance (optionally seeded with start variables) and returns stats |
 | `atlas_process_runtime` | `key` | per-element token and visit counts |
 | `atlas_list_instances` | none | bounded legacy instance list |
 | `atlas_cancel_instance` | `key` | terminates one active instance |

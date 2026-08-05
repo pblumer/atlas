@@ -116,14 +116,30 @@ func runtimeTools() []Tool {
 		{
 			Name: "atlas_create_instance",
 			Description: "Start a new instance of a deployed process definition by its key and run it " +
-				"until the engine goes idle. Returns the resulting live instance counts.",
-			InputSchema: keyArg("The process definition key to instantiate."),
+				"until the engine goes idle. Optionally seed the instance scope with start variables " +
+				"(the same {name: value} shape a human's start form submits). Returns the resulting " +
+				"live instance counts.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key": map[string]any{
+						"type":        "integer",
+						"description": "The process definition key to instantiate.",
+					},
+					"variables": objectProp("Optional start variables to seed the instance scope, e.g. {\"amount\": 42}. Omit for none."),
+				},
+				"required": []any{"key"},
+			},
 			Handler: func(c *Client, args map[string]any) (string, error) {
 				key, err := argUint(args, "key")
 				if err != nil {
 					return "", err
 				}
-				return asText(c.post("/api/v1/processes/"+strconv.FormatUint(key, 10)+"/instances", "application/json", []byte("{}")))
+				body, err := optVariablesBody(args)
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/processes/"+strconv.FormatUint(key, 10)+"/instances", "application/json", body))
 			},
 		},
 		{
