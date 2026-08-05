@@ -47,6 +47,8 @@ var mcpToolRoutes = map[string]string{
 	"atlas_deploy_project":        "POST /api/v1/projects/{id}/deploy",
 	"atlas_list_tasks":            "GET /api/v1/tasks",
 	"atlas_complete_task":         "POST /api/v1/tasks/{key}/complete",
+	"atlas_publish_message":       "POST /api/v1/messages",
+	"atlas_complete_job":          "POST /api/v1/jobs/{key}/complete",
 }
 
 // mcpOmittedRoutes lists HTTP operations intentionally not exposed as MCP tools,
@@ -82,11 +84,9 @@ var mcpOmittedRoutes = map[string]string{
 	// CSV batch start: driven from a user task inside the process (ADR-0084).
 	"POST /api/v1/processes/{key}/instances-from-csv": "in-process CSV ingestion, not a direct agent start",
 
-	// Worker/operations control plane: not yet exposed (candidate follow-ups).
+	// Worker/operations control plane: partially exposed (candidate follow-ups).
 	"POST /api/v1/instances/terminate":     "bulk filter-terminate not yet exposed",
-	"POST /api/v1/messages":                "message correlation not yet exposed",
-	"POST /api/v1/jobs/{key}/complete":     "external job worker protocol, not yet exposed",
-	"POST /api/v1/jobs/{key}/fail":         "external job worker protocol, not yet exposed",
+	"POST /api/v1/jobs/{key}/fail":         "operator job-fail not yet exposed (complete is)",
 	"GET /api/v1/incidents":                "incident ops not yet exposed",
 	"POST /api/v1/incidents/{key}/resolve": "incident ops not yet exposed",
 
