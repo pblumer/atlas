@@ -288,6 +288,34 @@ func runtimeTools() []Tool {
 				return asText(c.post("/api/v1/jobs/"+strconv.FormatUint(key, 10)+"/complete", "application/json", body))
 			},
 		},
+		{
+			Name: "atlas_fail_job",
+			Description: "Fail a job by its job key — the operator counterpart to atlas_complete_job. " +
+				"'retries' is how many attempts the job has left after this failure: a positive value " +
+				"re-activates the job for another try; 0 (the default) exhausts it and raises an incident " +
+				"that blocks the instance until resolved. An optional 'message' records why it failed. " +
+				"Refused with a not-found error if no job has that key. Returns {jobKey}.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":     map[string]any{"type": "integer", "description": "The job key to fail."},
+					"retries": map[string]any{"type": "integer", "minimum": 0, "description": "Attempts left after this failure. 0 (default) raises an incident; a positive value re-activates the job."},
+					"message": stringProp("Optional failure message recorded on the incident/job."),
+				},
+				"required": []any{"key"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				body, err := failJobBody(args)
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/jobs/"+strconv.FormatUint(key, 10)+"/fail", "application/json", body))
+			},
+		},
 	}
 }
 
