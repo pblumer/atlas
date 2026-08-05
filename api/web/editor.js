@@ -1818,6 +1818,121 @@ function deleteMessage(modeler, msgId) {
   });
 }
 
+// --- Signals (broadcast events, ADR-0088) ---
+//
+// A signal is a top-level <bpmn:signal> declaration shared by reference, exactly like a
+// message — except a signal has NO correlation key: it is a 1:n broadcast delivered by
+// name alone to every waiting catch (an intermediate catch, a signal boundary, a signal
+// event subprocess, a signal start). These helpers mirror the message ones, dropping the
+// correlation-key concept.
+
+// signalDefOf returns an event's bpmn:SignalEventDefinition, or null.
+function signalDefOf(bo) {
+  return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:SignalEventDefinition") || null;
+}
+
+// listSignals returns every <bpmn:signal> declared on the model's definitions.
+function listSignals(modeler) {
+  const defs = definitionsOf(modeler);
+  const out = [];
+  if (defs && defs.rootElements) {
+    for (const el of defs.rootElements) {
+      if (el.$type === "bpmn:Signal") out.push(el);
+    }
+  }
+  return out;
+}
+
+// createSignal adds a fresh <bpmn:signal> to the model and returns it.
+function createSignal(modeler, name) {
+  const moddle = modeler.get("moddle");
+  const sig = moddle.create("bpmn:Signal");
+  sig.id = "Signal_" + Math.random().toString(36).slice(2, 8);
+  sig.name = name || "";
+  const defs = definitionsOf(modeler);
+  if (defs) {
+    sig.$parent = defs;
+    defs.rootElements = [...(defs.rootElements || []), sig];
+  }
+  return sig;
+}
+
+// linkSignal points a signal event definition at a signal (undo/redo tracked).
+function linkSignal(modeler, element, sed, sig) {
+  try { modeler.get("modeling").updateModdleProperties(element, sed, { signalRef: sig || undefined }); } catch { /* stale */ }
+}
+
+// deleteSignal removes a signal and clears any event still referencing it, so a deleted
+// signal never leaves a dangling signalRef (which would fail to compile).
+function deleteSignal(modeler, sigId) {
+  const defs = definitionsOf(modeler);
+  if (defs && defs.rootElements) defs.rootElements = defs.rootElements.filter((e) => e.id !== sigId);
+  const modeling = modeler.get("modeling");
+  modeler.get("elementRegistry").getAll().forEach((el) => {
+    const sed = signalDefOf(el.businessObject);
+    if (sed && sed.signalRef && sed.signalRef.id === sigId) {
+      try { modeling.updateModdleProperties(el, sed, { signalRef: undefined }); } catch { /* stale */ }
+    }
+  });
+}
+
+// signalFieldsHTML renders the signal picker for a catch/throw/boundary/start/end event:
+// a dropdown of the model's shared signals (plus "new") and — once one is chosen — its
+// name, shared so every event using the signal stays in sync. Unlike a message there is
+// no correlation key: a signal broadcasts by name alone. sed is the
+// bpmn:SignalEventDefinition.
+function signalFieldsHTML(modeler, sed, hint) {
+  const current = sed.signalRef;
+  const options = listSignals(modeler).map((s) =>
+    `<option value="${esc(s.id)}"${current && current.id === s.id ? " selected" : ""}>${esc(s.name || s.id)}</option>`
+  ).join("");
+  const fields = current ? `
+    <label class="field"><span>Signal name</span>
+      <input type="text" id="f-signame" value="${esc(current.name || "")}" placeholder="order-cancelled"/></label>
+    <p class="muted" style="font-size:12px">Shared with every event that uses this signal — a broadcast reaches every catch, boundary, event subprocess, and start event of the same name.</p>` : "";
+  return `<h3>Signal</h3>
+    <label class="field"><span>Signal</span>
+      <select id="f-sigref">
+        <option value="">— none —</option>
+        ${options}
+        <option value="__new__">＋ New signal…</option>
+      </select></label>
+    ${fields}
+    <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
+// signalsManagerHTML lists the model's signals for central management (add, rename,
+// delete). Shown on the diagram/collaboration root alongside the messages manager.
+function signalsManagerHTML(modeler) {
+  const sigs = listSignals(modeler);
+  const rows = sigs.length
+    ? sigs.map((s) => `
+        <div class="sig-row" data-id="${esc(s.id)}">
+          <input class="sig-name" value="${esc(s.name || "")}" placeholder="signal name"/>
+          <button type="button" class="btn ghost danger sig-del" title="Delete signal">✕</button>
+        </div>`).join("")
+    : `<p class="muted" style="font-size:12px;margin:0 0 8px">No signals yet — add one, then reference it from a signal throw/catch/boundary/start event.</p>`;
+  return `<h3>Signals</h3>
+    <div class="sig-list">${rows}</div>
+    <button type="button" class="btn neutral" id="sig-add" style="margin-top:8px">＋ Add signal</button>
+    <p class="muted" style="font-size:12px">A signal is a broadcast by name: a <b>throw</b> reaches every <b>catch</b>, boundary, event subprocess, and start event using the same signal — with no correlation key.</p>`;
+}
+
+// wireSignalsManager binds the Signals management section's inputs and buttons.
+// rerenderRoot re-renders the root panel after add/delete so the list updates.
+function wireSignalsManager(body, modeler, rerenderRoot) {
+  const add = body.querySelector("#sig-add");
+  if (add) add.addEventListener("click", () => { createSignal(modeler, "signal"); rerenderRoot(); });
+  body.querySelectorAll(".sig-row").forEach((row) => {
+    const id = row.dataset.id;
+    const sig = () => listSignals(modeler).find((s) => s.id === id);
+    const nameIn = row.querySelector(".sig-name");
+    if (nameIn) nameIn.addEventListener("change", () => { const s = sig(); if (s) s.name = nameIn.value.trim(); });
+    const del = row.querySelector(".sig-del");
+    if (del) del.addEventListener("click", () => { deleteSignal(modeler, id); rerenderRoot(); });
+  });
+}
+
 // rootProcess returns the diagram's process business object, or null if the root
 // isn't a plain process (e.g. a collaboration with pools).
 function rootProcess(modeler) {
@@ -2237,7 +2352,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
           <label class="pcheck"><input type="checkbox" id="f-pexec"${rootBo.isExecutable !== false ? " checked" : ""}/> <span>Executable</span></label>
           <p class="muted" style="font-size:12px">An <b>executable</b> process can be started and offered in the start lists; leave it off for a descriptive-only diagram. <b>Version tag</b> is an optional label for this revision.</p>
           ${startVarsHTML}
-          ${messagesManagerHTML(modeler)}`;
+          ${messagesManagerHTML(modeler)}
+          ${signalsManagerHTML(modeler)}`;
         const rootEl = modeler.get("canvas").getRootElement();
         body.querySelector("#f-pname").addEventListener("change", (e) => {
           try { modeling.updateProperties(rootEl, { name: e.target.value }); } catch { /* ignore */ }
@@ -2255,6 +2371,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         });
         wireStartVars(body, modeler);
         wireMessagesManager(body, modeler, () => show(null));
+        wireSignalsManager(body, modeler, () => show(null));
         return;
       }
       // A collaboration root has no single process to rename; each pool
@@ -2264,8 +2381,10 @@ function wireProperties(root, modeler, api, projectId, toast) {
         body.innerHTML = `
           <h3>Collaboration</h3>
           <p class="muted" style="font-size:12px">This diagram has several <b>pools</b>. A pool is a <b>participant</b> that <i>executes a process</i> — the process holds the flow, the pool just names who runs it, and each deploys as its own process. Select a pool to name it and configure the process it runs, or an element inside a pool to configure it. Pools talk to each other through <b>message events</b>: a throw event in one pool and a catch event in another that reference the <b>same message</b> below.</p>
-          ${messagesManagerHTML(modeler)}`;
+          ${messagesManagerHTML(modeler)}
+          ${signalsManagerHTML(modeler)}`;
         wireMessagesManager(body, modeler, () => show(null));
+        wireSignalsManager(body, modeler, () => show(null));
         return;
       }
       icon.textContent = "–"; typename.textContent = "No selection"; nameEl.textContent = "—";
@@ -2542,21 +2661,27 @@ function wireProperties(root, modeler, api, projectId, toast) {
       } else if (bo.$type === "bpmn:IntermediateCatchEvent") {
         const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
+        const sig = signalDefOf(bo);
         if (timer) {
           html += timerFieldsHTML(timer, ["duration", "date"], `The event waits, then continues (ADR-0054).
             <b>Duration</b> waits that long (<b>PT30S</b>, <b>PT5M</b>, <b>P1DT2H</b>); <b>Date &amp; time</b> waits until that instant.
             A catch fires once, so it has no cycle. A FEEL expression is allowed in either.`);
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "The event waits until this message is published with a matching correlation key.");
+        } else if (sig) {
+          html += signalFieldsHTML(modeler, sig, "The event waits until a signal with this name is broadcast (by a throw or signal end event, in this or any other instance).");
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b> or <b>Message</b> intermediate catch event, then configure it here.</p>`;
+          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, or <b>Signal</b> intermediate catch event, then configure it here.</p>`;
         }
       } else if (bo.$type === "bpmn:IntermediateThrowEvent") {
         const msg = messageDefOf(bo);
+        const sig = signalDefOf(bo);
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "On reaching this event the message is published; any instance waiting on it with a matching correlation key continues.");
+        } else if (sig) {
+          html += signalFieldsHTML(modeler, sig, "On reaching this event the signal is broadcast to every event waiting on that signal name, across all instances. The token then continues.");
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Message</b> throw event, then configure it here.</p>`;
+          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Message</b> or <b>Signal</b> throw event, then configure it here.</p>`;
         }
       } else if (bo.$type === "bpmn:BoundaryEvent") {
         // A boundary event is attached to an activity and arms while it runs. Its
@@ -2565,6 +2690,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         // timer / message wiring as the intermediate catch event.
         const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
+        const sig = signalDefOf(bo);
         const interrupting = bo.cancelActivity !== false;
         html += `<h3>Behaviour</h3>
           <label class="field"><span>On trigger</span>
@@ -2583,8 +2709,10 @@ function wireProperties(root, modeler, api, projectId, toast) {
             ${cycleNote} A FEEL expression is allowed in any type.`);
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "The event fires when this message is published with a matching correlation key.");
+        } else if (sig) {
+          html += signalFieldsHTML(modeler, sig, "The event fires when a signal with this name is broadcast (in this or any other instance) while the activity runs.");
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b> or <b>Message</b> boundary event, then configure its trigger here.</p>`;
+          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, or <b>Signal</b> boundary event, then configure its trigger here.</p>`;
         }
       } else if (bo.$type === "bpmn:StartEvent" && isEventSubStart(element)) {
         // The start event of an event subprocess: it triggers the handler while the
@@ -2593,6 +2721,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         // flag is the scope-level analog of a boundary's cancelActivity.
         const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
+        const sig = signalDefOf(bo);
         const interrupting = bo.isInterrupting !== false;
         html += `<h3>Event subprocess trigger</h3>
           <label class="field"><span>On trigger</span>
@@ -2611,12 +2740,15 @@ function wireProperties(root, modeler, api, projectId, toast) {
             ${cycleNote} A FEEL expression is allowed in any type.`);
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "The event subprocess fires when this message is published with a matching correlation key, while its scope runs.");
+        } else if (sig) {
+          html += signalFieldsHTML(modeler, sig, "The event subprocess fires when a signal with this name is broadcast while its scope runs. A non-interrupting trigger re-arms and can fire again.");
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on this start event to give it a <b>Timer</b> or <b>Message</b> trigger, then configure it here.</p>`;
+          html += `<p class="muted" style="font-size:12px">Use the wrench icon on this start event to give it a <b>Timer</b>, <b>Message</b>, or <b>Signal</b> trigger, then configure it here.</p>`;
         }
       } else if (bo.$type === "bpmn:StartEvent") {
         const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
+        const sig = signalDefOf(bo);
         if (timer) {
           html += timerFieldsHTML(timer, ["duration", "date", "cycle"], `A timer start event fires on this schedule with no incoming token (ADR-0051).
             <b>Duration</b> and <b>Date &amp; time</b> fire once — that long after deploy, or at that instant;
@@ -2624,6 +2756,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
             A FEEL expression is allowed in any type.`);
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "A message start event: publishing this message starts a new instance of this process, matched by message name (the correlation key is shared with the throwing event but is not yet evaluated for starts).");
+        } else if (sig) {
+          html += signalFieldsHTML(modeler, sig, "A signal start event: broadcasting this signal starts a new instance of this process, matched by signal name. One broadcast starts every deployed process with a matching signal start.");
         } else {
           const fd = findExt(bo, "zeebe:FormDefinition") || {};
           const curForm = fd.formId || "";
@@ -2635,14 +2769,17 @@ function wireProperties(root, modeler, api, projectId, toast) {
               </select></label>
             <p class="muted" style="font-size:12px">Shown before the process starts — from the Tasks app's <b>Start</b> view — its data becomes the instance's start variables.
               <a href="#/modeler/form/new" target="_blank" rel="noopener">Create a new form</a>, then reopen this to link it.</p>
-            <p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Timer</b> or <b>Message</b> start event instead.</p>`;
+            <p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, or <b>Signal</b> start event instead.</p>`;
         }
       } else if (bo.$type === "bpmn:EndEvent") {
         const msg = messageDefOf(bo);
+        const sig = signalDefOf(bo);
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "On reaching this end event the message is published; any instance waiting on it with a matching correlation key continues. The instance then ends.");
+        } else if (sig) {
+          html += signalFieldsHTML(modeler, sig, "On reaching this end event the signal is broadcast to every event waiting on that signal name, across all instances. The instance then ends.");
         } else {
-          html += `<p class="muted" style="font-size:12px">A plain end event ends the instance. Use the wrench icon on the element to make this a <b>Message</b> end event, which publishes a message as the instance ends.</p>`;
+          html += `<p class="muted" style="font-size:12px">A plain end event ends the instance. Use the wrench icon on the element to make this a <b>Message</b> or <b>Signal</b> end event, which broadcasts as the instance ends.</p>`;
         }
       }
     } else if (isGatewayFlow && !isDefaultFlow) {
@@ -3329,6 +3466,31 @@ function wireProperties(root, modeler, api, projectId, toast) {
       fcorrkey.addEventListener("change", () => {
         const med = messageDefOf(element.businessObject);
         if (med && med.messageRef) setMessageCorrelationKey(modeler, med.messageRef, (fcorrkey.value || "").trim());
+      });
+    }
+    const fsigref = body.querySelector("#f-sigref");
+    if (fsigref) {
+      fsigref.addEventListener("change", () => {
+        const sed = signalDefOf(element.businessObject);
+        if (!sed) return;
+        const v = fsigref.value;
+        savePreservingPanel(() => {
+          if (v === "__new__") {
+            linkSignal(modeler, element, sed, createSignal(modeler, ""));
+          } else if (v === "") {
+            linkSignal(modeler, element, sed, null);
+          } else {
+            linkSignal(modeler, element, sed, listSignals(modeler).find((s) => s.id === v));
+          }
+        });
+        show(element); // re-render so the name field matches the chosen signal
+      });
+    }
+    const fsigname = body.querySelector("#f-signame");
+    if (fsigname) {
+      fsigname.addEventListener("change", () => {
+        const sed = signalDefOf(element.businessObject);
+        if (sed && sed.signalRef) sed.signalRef.name = (fsigname.value || "").trim();
       });
     }
 

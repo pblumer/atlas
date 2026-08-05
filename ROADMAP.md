@@ -241,7 +241,7 @@ Making processes wait, react, and time out.
   variables as the payload, and the reserved FEEL identifier `processInstanceKey`
   exposes an instance's own key so a reply can correlate back to the requester.
   Recovery-tested. A start-event correlation key and buffering remain (ADR-0035).
-- 🚧 **Signal events (broadcast)**: a `signalEventDefinition` is a **named broadcast**
+- ✅ **Signal events (broadcast)**: a `signalEventDefinition` is a **named broadcast**
   — no correlation key, delivered 1:n to **every** waiting catch of the same name across
   all instances (ADR-0088). A signal throw or signal end event broadcasts the throwing
   instance's variables as payload to every intermediate catch, signal boundary
@@ -249,7 +249,8 @@ Making processes wait, react, and time out.
   re-arming) of that name, and instantiates every deployed process with a matching signal
   start event. Built on the message delivery machinery over a parallel, name-keyed
   subscription family, so cross-instance reach and recovery are inherited; all phases
-  recovery-tested. The Modeler authoring panel (ADR-0088 Phase 5) remains.
+  recovery-tested. Authored in the Modeler's Implement panel (a signal picker on every
+  signal event, plus a central signals manager on the diagram root).
 - 🔲 Error events and error propagation
 - ✅ Boundary events: timer and message, interrupting and non-interrupting,
   attached to waiting activities. An interrupting boundary cancels the host (and

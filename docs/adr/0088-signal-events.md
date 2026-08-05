@@ -1,10 +1,10 @@
 # ADR-0088: Signal events (broadcast throw/catch)
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-30
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phases 1–4 delivered; Phase 5 (Modeler) pending. Each phase
+> **Implementation status.** All phases (1–5) delivered. Each phase
 > lands test-first with a recovery test (ADR-0018). Signal events build on the message
 > correlation/subscription substrate (ADR-0020), the boundary arm/fire machinery
 > (ADR-0040), message-start instantiation (ADR-0035), and event subprocesses
@@ -75,6 +75,22 @@
 > fires twice (re-arming between) while the main flow runs untouched, then disarms when the
 > flow completes; and the re-armed subscription rebuilds on recovery so a broadcast after
 > restart runs the handler again.
+>
+> **Delivered (Phase 5, Modeler):** signal authoring in the editor's Implement panel
+> (`api/web/editor.js`), mirroring message authoring minus the correlation key. A
+> `signalFieldsHTML` picker (a dropdown of the model's shared `<bpmn:signal>` declarations
+> plus "＋ New signal", and the chosen signal's name) appears on every signal event —
+> intermediate catch/throw, boundary, event-subprocess start, signal start, and signal end
+> — driven by a `signalDefOf` dispatch arm in each event type; a central "Signals" manager
+> on the process/collaboration root adds, renames, and deletes signals
+> (`signalsManagerHTML`/`wireSignalsManager`). Helpers `listSignals`/`createSignal`/
+> `linkSignal`/`deleteSignal` create `bpmn:Signal` root elements and set `signalRef` on the
+> `bpmn:SignalEventDefinition` (deleting a signal clears dangling refs), producing exactly
+> the `<bpmn:signal id name>` + `<signalEventDefinition signalRef>` shape the Phase-1
+> compiler parses. bpmn-js already draws the signal triangle marker and offers every signal
+> variant (start/end/throw/catch/boundary) via the wrench menu, so no diagram-rendering
+> change was needed; `atlas-moddle.json` needs none either (the signal moddle types are
+> native).
 
 ## Context and problem statement
 
