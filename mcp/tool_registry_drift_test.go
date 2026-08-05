@@ -58,6 +58,10 @@ var mcpOmittedRoutes = map[string]string{
 	// Server introspection / diagnostics an agent does not drive scenarios with.
 	"GET /api/v1/logs": "admin diagnostics, not an agent authoring/runtime action",
 
+	// Dry-run BPMN validation for the Modeler's Problems panel (ADR-0026): an MCP
+	// agent deploys directly via atlas_deploy, which already compiles and validates.
+	"POST /api/v1/validate": "modeler-time dry-run validation; atlas_deploy already compiles+validates",
+
 	// Expression/script sandboxes: authored inside BPMN, not called standalone.
 	"POST /api/v1/feel/validate": "modeler-time expression check, not a scenario action",
 	"POST /api/v1/feel/evaluate": "modeler-time expression check, not a scenario action",
