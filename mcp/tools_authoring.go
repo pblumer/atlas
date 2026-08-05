@@ -3,6 +3,7 @@ package mcp
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -97,6 +98,44 @@ func failJobBody(args map[string]any) ([]byte, error) {
 	}
 	body, _ := json.Marshal(payload)
 	return body, nil
+}
+
+// resolveIncidentBody builds the resolve request body {retries} from the tool
+// arguments. The /resolve endpoint requires a JSON body; the server coerces a
+// retries value below 1 up to 1, so an omitted argument (sending {"retries":0})
+// grants the default single retry.
+func resolveIncidentBody(args map[string]any) ([]byte, error) {
+	retries := uint64(0)
+	if _, ok := args["retries"]; ok {
+		r, err := argUint(args, "retries")
+		if err != nil {
+			return nil, err
+		}
+		retries = r
+	}
+	body, _ := json.Marshal(map[string]any{"retries": retries})
+	return body, nil
+}
+
+// incidentsPage folds the {incidents:[…]} body and the X-Incidents-Truncated
+// header the list endpoint returns into one JSON envelope {incidents, truncated},
+// so the truncation signal survives as data (ADR-0016). The list is capped, not
+// cursor-paged, so there is no continuation token.
+func incidentsPage(body []byte, headers http.Header) (string, error) {
+	var env struct {
+		Incidents []json.RawMessage `json:"incidents"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		return "", fmt.Errorf("decode Atlas incident list: %w", err)
+	}
+	out, err := json.Marshal(map[string]any{
+		"incidents": env.Incidents,
+		"truncated": strings.EqualFold(strings.TrimSpace(headers.Get("X-Incidents-Truncated")), "true"),
+	})
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }
 
 // messageBody builds the publish-message request body {name, correlationKey?,

@@ -50,6 +50,8 @@ var mcpToolRoutes = map[string]string{
 	"atlas_publish_message":       "POST /api/v1/messages",
 	"atlas_complete_job":          "POST /api/v1/jobs/{key}/complete",
 	"atlas_fail_job":              "POST /api/v1/jobs/{key}/fail",
+	"atlas_list_incidents":        "GET /api/v1/incidents",
+	"atlas_resolve_incident":      "POST /api/v1/incidents/{key}/resolve",
 }
 
 // mcpOmittedRoutes lists HTTP operations intentionally not exposed as MCP tools,
@@ -86,9 +88,7 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/processes/{key}/instances-from-csv": "in-process CSV ingestion, not a direct agent start",
 
 	// Worker/operations control plane: partially exposed (candidate follow-ups).
-	"POST /api/v1/instances/terminate":     "bulk filter-terminate not yet exposed",
-	"GET /api/v1/incidents":                "incident read/resolve not yet exposed (fail/complete are)",
-	"POST /api/v1/incidents/{key}/resolve": "incident read/resolve not yet exposed (fail/complete are)",
+	"POST /api/v1/instances/terminate": "bulk filter-terminate not yet exposed",
 
 	// Human-task lifecycle beyond list+complete: not yet exposed.
 	"GET /api/v1/tasks/{key}":          "single-task read not yet exposed",
