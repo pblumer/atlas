@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Onboarding: Willkommen bei Atlas 🚀
+
+  Ein selbst-referenzielles Onboarding: der neue Kollege lernt Atlas, indem er
+  eine echte Atlas-Instanz durchläuft. Atlas onboardet mit Atlas (Dogfooding).
+
+  Start (Start-Formular onb-start: displayName, track)
+   → User-Task  "👋 Willkommen"        (Formular onb-welcome)
+   → User-Task  "🧩 Grundbegriffe"      (Formular onb-concepts, kleine Wissensprüfung)
+   → Script-Task "Begrüßung"            (FEEL baut personalisierten willkommensgruss)
+   → (X) Gateway "Auch entwickeln?"     (verzweigt auf track)
+        ── track = "nur_benutzen" ──────────────────────────→ Join
+        ── sonst (Default) ─→ "🏗️ Architektur" → "🔧 Setup & DoD" → Join
+   → User-Task  "🎓 Dein erster Schritt" (Formular onb-finish)
+   → Script-Task "Abschluss"            (setzt onboardingStatus)
+   → Ende "🎉 Geschafft!"
+
+  Der fachliche Teil (benutzen) läuft für alle; der technische Teil
+  (mitentwickeln) hängt am Gateway. Default ist der volle Weg inkl. Technik —
+  wer nur "nur_benutzen" wählt, überspringt ihn. So ist "beides kombiniert"
+  der Normalfall. Die Layout-Information (BPMN-DI) wird beim Deploy automatisch
+  erzeugt.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_onboarding_atlas" targetNamespace="http://atlas/examples">
+  <process id="onboarding-atlas" name="Onboarding: Willkommen bei Atlas 🚀" isExecutable="true">
+
+    <startEvent id="start" name="Account erstellt">
+      <extensionElements>
+        <zeebe:formDefinition formId="onb-start"/>
+      </extensionElements>
+    </startEvent>
+
+    <userTask id="willkommen" name="👋 Willkommen an Bord">
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="onboarding"/>
+        <zeebe:formDefinition formId="onb-welcome"/>
+      </extensionElements>
+    </userTask>
+
+    <userTask id="grundbegriffe" name="🧩 Grundbegriffe verstehen">
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="onboarding"/>
+        <zeebe:formDefinition formId="onb-concepts"/>
+      </extensionElements>
+    </userTask>
+
+    <scriptTask id="begruessung" name="Begrüßung personalisieren">
+      <extensionElements>
+        <zeebe:script resultVariable="willkommensgruss"
+          expression="= &quot;Willkommen im Team, &quot; + (if displayName = null then &quot;Kollege&quot; else displayName) + &quot;!&quot;"/>
+      </extensionElements>
+    </scriptTask>
+
+    <exclusiveGateway id="weg" name="Auch mitentwickeln?" default="f_dev"/>
+
+    <userTask id="architektur" name="🏗️ Architektur &amp; Invarianten">
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="onboarding"/>
+        <zeebe:formDefinition formId="onb-architecture"/>
+      </extensionElements>
+    </userTask>
+
+    <userTask id="devsetup" name="🔧 Setup &amp; Definition of Done">
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="onboarding"/>
+        <zeebe:formDefinition formId="onb-devsetup"/>
+      </extensionElements>
+    </userTask>
+
+    <exclusiveGateway id="join"/>
+
+    <userTask id="ersterschritt" name="🎓 Dein erster Schritt">
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="onboarding"/>
+        <zeebe:formDefinition formId="onb-finish"/>
+      </extensionElements>
+    </userTask>
+
+    <scriptTask id="abschluss" name="Onboarding abschließen">
+      <extensionElements>
+        <zeebe:script resultVariable="onboardingStatus" expression="= &quot;abgeschlossen&quot;"/>
+      </extensionElements>
+    </scriptTask>
+
+    <endEvent id="ende" name="🎉 Geschafft!"/>
+
+    <sequenceFlow id="f_start_willkommen" sourceRef="start" targetRef="willkommen"/>
+    <sequenceFlow id="f_willkommen_begriffe" sourceRef="willkommen" targetRef="grundbegriffe"/>
+    <sequenceFlow id="f_begriffe_gruss" sourceRef="grundbegriffe" targetRef="begruessung"/>
+    <sequenceFlow id="f_gruss_weg" sourceRef="begruessung" targetRef="weg"/>
+    <sequenceFlow id="f_skip" name="nur benutzen" sourceRef="weg" targetRef="join">
+      <conditionExpression>= track = "nur_benutzen"</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_dev" name="auch entwickeln" sourceRef="weg" targetRef="architektur"/>
+    <sequenceFlow id="f_arch_setup" sourceRef="architektur" targetRef="devsetup"/>
+    <sequenceFlow id="f_setup_join" sourceRef="devsetup" targetRef="join"/>
+    <sequenceFlow id="f_join_ersterschritt" sourceRef="join" targetRef="ersterschritt"/>
+    <sequenceFlow id="f_ersterschritt_abschluss" sourceRef="ersterschritt" targetRef="abschluss"/>
+    <sequenceFlow id="f_abschluss_ende" sourceRef="abschluss" targetRef="ende"/>
+  </process>
+</definitions>
