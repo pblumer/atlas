@@ -77,7 +77,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
   root.innerHTML = `
     <div class="editor form-editor">
       <div class="editor-bar">
-        <a class="crumbs" href="#/modeler">&larr; Forms</a>
+        <a class="crumbs" id="form-back" href="#/modeler">&larr; Forms</a>
         <div class="etabs" id="form-tabs">
           <button type="button" data-ftab="design" class="active">Design</button>
           <button type="button" data-ftab="validate">Validate</button>
@@ -124,6 +124,23 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
   }
   nameInput.value = name;
   idChip.textContent = id;
+
+  // Point the back link at the owning project when the form belongs to one, so a form
+  // opened from inside a project returns there rather than dumping the operator on the
+  // Modeler home. The edit route (#/modeler/form/e/{id}) doesn't name the project, so
+  // this resolves from the loaded form's projectId (or, for a new form, the seeded one).
+  (async () => {
+    const backEl = root.querySelector("#form-back");
+    if (!backEl) return;
+    if (!project) return; // ungrouped/new: keep "← Forms" → Modeler home
+    backEl.href = `#/modeler/p/${encodeURIComponent(project)}`;
+    backEl.innerHTML = "&larr; Project"; // generic label until the name resolves
+    try {
+      const projects = await api("GET", "/api/v1/projects");
+      const p = projects.find((x) => x.id === project);
+      if (p && root.querySelector("#form-back") === backEl) backEl.innerHTML = `&larr; ${esc(p.name)}`;
+    } catch { /* best-effort: the generic "Project" label still links correctly */ }
+  })();
 
   // ---- Shared schema state -------------------------------------------------
   // `schema` is the single source of truth. `rev` bumps whenever it changes so
