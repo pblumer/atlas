@@ -316,6 +316,62 @@ func runtimeTools() []Tool {
 				return asText(c.post("/api/v1/jobs/"+strconv.FormatUint(key, 10)+"/fail", "application/json", body))
 			},
 		},
+		{
+			Name: "atlas_list_incidents",
+			Description: "List unresolved incidents — the operator \"what's stuck\" view. Each incident carries " +
+				"its elementInstanceKey (pass it to atlas_resolve_incident), processInstanceKey, jobKey, elementId, " +
+				"raisedAt, and message. Optional 'limit' bounds the page. Returns {incidents, truncated}; when " +
+				"'truncated' is true, more incidents exist than were returned — resolve some or raise the limit.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"limit": map[string]any{
+						"type":        "integer",
+						"minimum":     1,
+						"description": "Maximum incidents to return (API default is generous, capped at 5000).",
+					},
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				path := "/api/v1/incidents"
+				if limit, present, err := optPositiveUint(args, "limit"); err != nil {
+					return "", err
+				} else if present {
+					path += "?limit=" + strconv.FormatUint(limit, 10)
+				}
+				body, headers, err := c.getWithHeaders(path)
+				if err != nil {
+					return "", err
+				}
+				return incidentsPage(body, headers)
+			},
+		},
+		{
+			Name: "atlas_resolve_incident",
+			Description: "Resolve the incident on an element instance by its elementInstanceKey (from " +
+				"atlas_list_incidents) and retry its blocked job. Optional 'retries' sets how many attempts to " +
+				"grant (default 1). Refused with a not-found error if there is no incident on that element " +
+				"instance. Returns {elementInstanceKey, jobKey, retries}.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":     map[string]any{"type": "integer", "description": "The elementInstanceKey (from atlas_list_incidents) whose incident to resolve."},
+					"retries": map[string]any{"type": "integer", "minimum": 1, "description": "Attempts to grant the re-activated job (default 1)."},
+				},
+				"required": []any{"key"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				body, err := resolveIncidentBody(args)
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/incidents/"+strconv.FormatUint(key, 10)+"/resolve", "application/json", body))
+			},
+		},
 	}
 }
 
