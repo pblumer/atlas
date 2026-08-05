@@ -39,6 +39,7 @@ endpoint behind an authenticating reverse proxy.
 | `atlas_stats` | none | engine-wide active counts |
 | `atlas_publish_message` | `name`, `correlationKey?`, `variables?` | correlates a message to waiting instances; returns stats |
 | `atlas_complete_job` | `key`, `variables?` | completes a job by hand (operator counterpart to a worker) |
+| `atlas_fail_job` | `key`, `retries?`, `message?` | fails a job; `retries` 0 (default) raises an incident, positive re-activates |
 
 ## Authoring and human-task tools
 

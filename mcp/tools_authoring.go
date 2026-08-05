@@ -78,6 +78,27 @@ func optVariablesBody(args map[string]any) ([]byte, error) {
 	return body, nil
 }
 
+// failJobBody builds the fail-job request body {retries, message?} from the tool
+// arguments. retries defaults to 0 (which exhausts the job and raises an
+// incident). The /fail endpoint requires a JSON body — unlike /complete it does
+// not tolerate an empty one — so this always marshals a non-empty object.
+func failJobBody(args map[string]any) ([]byte, error) {
+	retries := uint64(0)
+	if _, ok := args["retries"]; ok {
+		r, err := argUint(args, "retries")
+		if err != nil {
+			return nil, err
+		}
+		retries = r
+	}
+	payload := map[string]any{"retries": retries}
+	if msg := optString(args, "message"); msg != "" {
+		payload["message"] = msg
+	}
+	body, _ := json.Marshal(payload)
+	return body, nil
+}
+
 // messageBody builds the publish-message request body {name, correlationKey?,
 // variables} from the tool arguments. name is placed by the caller (already
 // validated non-empty); the optional variables object is validated here and the
