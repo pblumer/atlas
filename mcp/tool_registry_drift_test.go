@@ -46,10 +46,21 @@ var mcpToolRoutes = map[string]string{
 	"atlas_register_decision":     "POST /api/v1/dmnrefs",
 	"atlas_deploy_project":        "POST /api/v1/projects/{id}/deploy",
 	"atlas_list_tasks":            "GET /api/v1/tasks",
+	"atlas_get_task":              "GET /api/v1/tasks/{key}",
 	"atlas_complete_task":         "POST /api/v1/tasks/{key}/complete",
+	"atlas_claim_task":            "POST /api/v1/tasks/{key}/claim",
+	"atlas_unclaim_task":          "POST /api/v1/tasks/{key}/unclaim",
 	"atlas_publish_message":       "POST /api/v1/messages",
 	"atlas_complete_job":          "POST /api/v1/jobs/{key}/complete",
 	"atlas_fail_job":              "POST /api/v1/jobs/{key}/fail",
+	"atlas_list_incidents":        "GET /api/v1/incidents",
+	"atlas_resolve_incident":      "POST /api/v1/incidents/{key}/resolve",
+	"atlas_instance_variables":    "GET /api/v1/instances/{key}/variables",
+	"atlas_instance_jobs":         "GET /api/v1/instances/{key}/jobs",
+	"atlas_instance_timeline":     "GET /api/v1/instances/{key}/timeline",
+	"atlas_instances_summary":     "GET /api/v1/instances/summary",
+	"atlas_search_instances":      "GET /api/v1/instances/search",
+	"atlas_instance_data_objects": "GET /api/v1/instances/{key}/data-objects",
 }
 
 // mcpOmittedRoutes lists HTTP operations intentionally not exposed as MCP tools,
@@ -70,17 +81,11 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/feel/evaluate": "modeler-time expression check, not a scenario action",
 	"POST /api/v1/scripts/run":   "modeler-time script check, not a scenario action",
 
-	// Read-side runtime introspection: not yet exposed (candidate follow-ups).
+	// Read-side runtime introspection: partially exposed (candidate follow-ups).
 	"GET /api/v1/collaborations/{key}/runtime": "runtime introspection not yet exposed",
-	"GET /api/v1/instances/summary":            "runtime introspection not yet exposed",
-	"GET /api/v1/instances/search":             "runtime introspection not yet exposed",
-	"GET /api/v1/instances/{key}/variables":    "runtime introspection not yet exposed",
-	"GET /api/v1/instances/{key}/data-objects": "runtime introspection not yet exposed",
-	"GET /api/v1/instances/{key}/timeline":     "runtime introspection not yet exposed",
-	"GET /api/v1/instances/{key}/decisions":    "runtime introspection not yet exposed",
-	"GET /api/v1/instances/{key}/jobs":         "runtime introspection not yet exposed",
-	"GET /api/v1/decisions/deployed":           "runtime introspection not yet exposed",
-	"GET /api/v1/decisions/{id}/evaluations":   "runtime introspection not yet exposed",
+	"GET /api/v1/instances/{key}/decisions":    "decision-evaluation introspection not yet exposed",
+	"GET /api/v1/decisions/deployed":           "decision introspection not yet exposed",
+	"GET /api/v1/decisions/{id}/evaluations":   "decision introspection not yet exposed",
 
 	// CSV batch start: driven from a user task inside the process (ADR-0084).
 	"POST /api/v1/processes/{key}/instances-from-csv": "in-process CSV ingestion, not a direct agent start",
@@ -88,13 +93,6 @@ var mcpOmittedRoutes = map[string]string{
 	// Worker/operations control plane: partially exposed (candidate follow-ups).
 	"POST /api/v1/instances/{key}/variables": "admin-gated operator correction to live state (ADR-0095); the MCP service principal is deliberately non-admin",
 	"POST /api/v1/instances/terminate":       "bulk filter-terminate not yet exposed",
-	"GET /api/v1/incidents":                  "incident read/resolve not yet exposed (fail/complete are)",
-	"POST /api/v1/incidents/{key}/resolve":   "incident read/resolve not yet exposed (fail/complete are)",
-
-	// Human-task lifecycle beyond list+complete: not yet exposed.
-	"GET /api/v1/tasks/{key}":          "single-task read not yet exposed",
-	"POST /api/v1/tasks/{key}/claim":   "task assignment not yet exposed",
-	"POST /api/v1/tasks/{key}/unclaim": "task assignment not yet exposed",
 
 	// Design-time read/edit: agents create artifacts; browsing/editing is the UI's.
 	"GET /api/v1/drafts":                 "artifact browsing is a UI concern",

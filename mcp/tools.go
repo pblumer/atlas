@@ -151,6 +151,89 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_instances_summary",
+			Description: "Per-definition instance counts — one row per deployed definition with its processId, " +
+				"version, active and completed instance counts, and last-activity time. The operations overview.",
+			InputSchema: noArgs(),
+			Handler: func(c *Client, _ map[string]any) (string, error) {
+				return asText(c.get("/api/v1/instances/summary"))
+			},
+		},
+		{
+			Name: "atlas_search_instances",
+			Description: "Search instances by variable content. 'q' is either \"name=value\" (variable name exact, " +
+				"value substring) or free text matched over variable names and values. Returns the matching instances " +
+				"(active first, then most-recently-completed), each with the variables that matched; the result is capped.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"q": stringProp("The query: \"name=value\" (name exact, value substring) or free text over variable names/values."),
+				},
+				"required": []any{"q"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				q, err := argString(args, "q")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get(searchInstancesPath(q)))
+			},
+		},
+		{
+			Name: "atlas_instance_variables",
+			Description: "Read one process instance's variables as a typed JSON object (name → value). " +
+				"An instance with no variables (or an unknown key) returns an empty object.",
+			InputSchema: keyArg("The instance key (from atlas_list_instances) to read variables for."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/instances/" + strconv.FormatUint(key, 10) + "/variables"))
+			},
+		},
+		{
+			Name: "atlas_instance_data_objects",
+			Description: "Read one process instance's BPMN data objects — each with its name, current data " +
+				"state, and typed value. An instance with no data objects (or an unknown key) returns [].",
+			InputSchema: keyArg("The instance key (from atlas_list_instances) whose data objects to read."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/instances/" + strconv.FormatUint(key, 10) + "/data-objects"))
+			},
+		},
+		{
+			Name: "atlas_instance_jobs",
+			Description: "List one process instance's activatable jobs — a token parked on a service (or " +
+				"other job-backed) task exposes its job here with the job key, element, and type. Use a job key " +
+				"with atlas_complete_job or atlas_fail_job. An instance with no jobs (or an unknown key) returns [].",
+			InputSchema: keyArg("The instance key (from atlas_list_instances) whose jobs to list."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/instances/" + strconv.FormatUint(key, 10) + "/jobs"))
+			},
+		},
+		{
+			Name: "atlas_instance_timeline",
+			Description: "Read one process instance's step-by-step replay timeline: the activated elements " +
+				"in order with the variable values live at each step. Refused with a not-found error if no " +
+				"instance has that key.",
+			InputSchema: keyArg("The instance key (from atlas_list_instances) to build a timeline for."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/instances/" + strconv.FormatUint(key, 10) + "/timeline"))
+			},
+		},
+		{
 			Name: "atlas_cancel_instance",
 			Description: "Cancel (terminate) one running process instance by its instance key. All " +
 				"its tokens are discarded and the instance moves to the 'terminated' state. " +
@@ -314,6 +397,62 @@ func runtimeTools() []Tool {
 					return "", err
 				}
 				return asText(c.post("/api/v1/jobs/"+strconv.FormatUint(key, 10)+"/fail", "application/json", body))
+			},
+		},
+		{
+			Name: "atlas_list_incidents",
+			Description: "List unresolved incidents — the operator \"what's stuck\" view. Each incident carries " +
+				"its elementInstanceKey (pass it to atlas_resolve_incident), processInstanceKey, jobKey, elementId, " +
+				"raisedAt, and message. Optional 'limit' bounds the page. Returns {incidents, truncated}; when " +
+				"'truncated' is true, more incidents exist than were returned — resolve some or raise the limit.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"limit": map[string]any{
+						"type":        "integer",
+						"minimum":     1,
+						"description": "Maximum incidents to return (API default is generous, capped at 5000).",
+					},
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				path := "/api/v1/incidents"
+				if limit, present, err := optPositiveUint(args, "limit"); err != nil {
+					return "", err
+				} else if present {
+					path += "?limit=" + strconv.FormatUint(limit, 10)
+				}
+				body, headers, err := c.getWithHeaders(path)
+				if err != nil {
+					return "", err
+				}
+				return incidentsPage(body, headers)
+			},
+		},
+		{
+			Name: "atlas_resolve_incident",
+			Description: "Resolve the incident on an element instance by its elementInstanceKey (from " +
+				"atlas_list_incidents) and retry its blocked job. Optional 'retries' sets how many attempts to " +
+				"grant (default 1). Refused with a not-found error if there is no incident on that element " +
+				"instance. Returns {elementInstanceKey, jobKey, retries}.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":     map[string]any{"type": "integer", "description": "The elementInstanceKey (from atlas_list_incidents) whose incident to resolve."},
+					"retries": map[string]any{"type": "integer", "minimum": 1, "description": "Attempts to grant the re-activated job (default 1)."},
+				},
+				"required": []any{"key"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				body, err := resolveIncidentBody(args)
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/incidents/"+strconv.FormatUint(key, 10)+"/resolve", "application/json", body))
 			},
 		},
 	}

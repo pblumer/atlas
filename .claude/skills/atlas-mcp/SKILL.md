@@ -33,6 +33,12 @@ endpoint behind an authenticating reverse proxy.
 | `atlas_create_instance` | `key`, `variables?` | starts an instance (optionally seeded with start variables) and returns stats |
 | `atlas_process_runtime` | `key` | per-element token and visit counts |
 | `atlas_list_instances` | none | bounded legacy instance list |
+| `atlas_instances_summary` | none | per-definition active/completed counts |
+| `atlas_search_instances` | `q` | instances matching a variable query (`name=value` or free text) |
+| `atlas_instance_variables` | `key` | one instance's variables as a typed object |
+| `atlas_instance_data_objects` | `key` | one instance's BPMN data objects (name, state, value) |
+| `atlas_instance_jobs` | `key` | one instance's activatable jobs (key, element, type) |
+| `atlas_instance_timeline` | `key` | one instance's step-by-step replay timeline |
 | `atlas_cancel_instance` | `key` | terminates one active instance |
 | `atlas_cancel_instances` | `key`, `limit?` | bounded bulk termination |
 | `atlas_delete_process` | `key` | deletes one deployed definition |
@@ -40,6 +46,8 @@ endpoint behind an authenticating reverse proxy.
 | `atlas_publish_message` | `name`, `correlationKey?`, `variables?` | correlates a message to waiting instances; returns stats |
 | `atlas_complete_job` | `key`, `variables?` | completes a job by hand (operator counterpart to a worker) |
 | `atlas_fail_job` | `key`, `retries?`, `message?` | fails a job; `retries` 0 (default) raises an incident, positive re-activates |
+| `atlas_list_incidents` | `limit?` | `{incidents, truncated}` — the operator "what's stuck" view |
+| `atlas_resolve_incident` | `key`, `retries?` | resolves an incident by elementInstanceKey and retries its job |
 
 ## Authoring and human-task tools
 
@@ -54,7 +62,10 @@ endpoint behind an authenticating reverse proxy.
 | `atlas_register_decision` | `name`, `modelRef`, `projectId?` | registered decision reference |
 | `atlas_deploy_project` | `id` | deployed project definitions |
 | `atlas_list_tasks` | `limit?`, `before?`, `processInstance?` | task page envelope |
+| `atlas_get_task` | `key` | one open user task (deep-link read) |
 | `atlas_complete_task` | `key`, `variables?` | completed user task |
+| `atlas_claim_task` | `key`, `assignee?` | claims/assigns a task (`assignee` required without auth) |
+| `atlas_unclaim_task` | `key` | releases a task's assignment |
 
 A typical authoring flow is:
 
