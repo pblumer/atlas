@@ -421,6 +421,9 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
             <option value="4">4&times;</option>
           </select>
         </label>
+        <label class="sim-auto" title="Let Play run end-to-end: gateways take their default (or every branch), and message/timer/signal events fire on their own — no clicking required.">
+          <input type="checkbox" id="sim-auto"/> Auto-decide
+        </label>
         <span class="sim-hint" id="sim-hint"></span>
         <span style="flex:1"></span>
         <span class="sim-stats" id="sim-stats"></span>
@@ -746,6 +749,7 @@ function wireTokenSim(root, modeler) {
   const stepBtn = root.querySelector("#sim-step");
   const resetBtn = root.querySelector("#sim-reset");
   const speedSel = root.querySelector("#sim-speed");
+  const autoBox = root.querySelector("#sim-auto");
   const hintEl = root.querySelector("#sim-hint");
   const statsEl = root.querySelector("#sim-stats");
   if (!toggle || !bar) return;
@@ -763,16 +767,21 @@ function wireTokenSim(root, modeler) {
   stepBtn.addEventListener("click", () => sim.step());
   resetBtn.addEventListener("click", () => sim.reset());
   speedSel.addEventListener("change", () => sim.setSpeed(Number(speedSel.value)));
+  if (autoBox) autoBox.addEventListener("change", () => sim.setAuto(autoBox.checked));
 
-  // Reflect the simulation's state in the controls whenever it changes.
+  // Reflect the simulation's state in the controls whenever it changes. `deciding` means a
+  // gateway is waiting for a path to be picked; `waiting` means a message/timer/signal
+  // event is parked, ready to be fired.
   modeler.get("eventBus").on("atlasSim.changed", (s) => {
     playBtn.innerHTML = s.playing ? "&#9208; Pause" : "&#9654; Play";
     statsEl.textContent = `${s.live} live · ${s.completed} completed`;
-    hintEl.textContent = s.waiting
-      ? "Pick a path: click one of the glowing flows out of the gateway."
-      : s.live === 0
-        ? "Click a start event ▶ to drop a token, then Play."
-        : "";
+    hintEl.textContent = s.deciding
+      ? "Pick a path: click a glowing flow (an inclusive gateway takes several — click the gateway to confirm)."
+      : s.waiting
+        ? "An event is waiting: click its ⚡ to fire it, or turn on Auto-decide."
+        : s.live === 0
+          ? "Click a start event ▶ to drop a token, then Play."
+          : "";
   });
   // Seed the initial control state (counts at zero, opening hint).
   sim.setSpeed(Number(speedSel.value));
