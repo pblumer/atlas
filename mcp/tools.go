@@ -114,6 +114,20 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_collaboration_runtime",
+			Description: "Get live runtime state for a collaboration (a multi-pool model) by one of its pool " +
+				"definition keys: the pools, the token counts on each element, and the message flows between pools. " +
+				"Refused with a not-found error if no deployment has that key.",
+			InputSchema: keyArg("A pool's process definition key (from atlas_list_processes) in the collaboration to inspect."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/collaborations/" + strconv.FormatUint(key, 10) + "/runtime"))
+			},
+		},
+		{
 			Name: "atlas_create_instance",
 			Description: "Start a new instance of a deployed process definition by its key and run it " +
 				"until the engine goes idle. Optionally seed the instance scope with start variables " +
