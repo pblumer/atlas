@@ -300,5 +300,6 @@ The seams between layers are where an ArchiMate model earns its keep.
 
 ---
 
-*See also: [Architecture overview](../ARCHITECTURE.md) · [Invariants](invariants.md)
+*See also: [ADR-0099](../adr/0099-archimate-enterprise-architecture-view.md) (why this
+view exists) · [Architecture overview](../ARCHITECTURE.md) · [Invariants](invariants.md)
 · [ADRs](../adr/) · [Glossary](glossary.md) · [Roadmap](../../ROADMAP.md)*

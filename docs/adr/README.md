@@ -106,6 +106,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0096](0096-token-simulation-events-and-inclusive-gateways.md) | Token simulation — event triggers, inclusive-gateway subset split / quiescence OR-join, and an auto-decide mode | Accepted |
 | [0097](0097-token-simulation-message-starts-event-subprocesses-multi-instance.md) | Token simulation — message starts spawn, event-subprocess triggers, and multi-instance | Accepted |
 | [0098](0098-external-variable-modification-audit.md) | Audit trail for external variable modifications — who changed a running instance's variables | Accepted |
+| [0099](0099-archimate-enterprise-architecture-view.md) | An ArchiMate 3.2 enterprise-architecture view — a layered, stakeholder-facing communication aid with reproducible SVG diagrams | Accepted |
 
 ## Status values
 
