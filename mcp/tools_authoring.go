@@ -159,6 +159,16 @@ func claimTaskBody(args map[string]any) []byte {
 	return body
 }
 
+// withProjectID appends an optional ?projectId= filter to a list path when the
+// tool arguments carry one, so the design-time list reads can be scoped to a
+// project exactly as the HTTP endpoints allow.
+func withProjectID(path string, args map[string]any) string {
+	if pid := optString(args, "projectId"); pid != "" {
+		return path + "?projectId=" + url.QueryEscape(pid)
+	}
+	return path
+}
+
 // searchInstancesPath builds the instance-search path for a variable query,
 // escaping the raw query string into the ?q= parameter the endpoint parses
 // (name=value, name exact and value substring, or free text over names/values).
@@ -464,6 +474,90 @@ func authoringTools() []Tool {
 					return "", err
 				}
 				return asText(c.post("/api/v1/projects/"+url.PathEscape(id)+"/deploy", "application/json", []byte("")))
+			},
+		},
+		{
+			Name: "atlas_list_drafts",
+			Description: "List saved BPMN diagram drafts (design-time), optionally filtered to one project. " +
+				"Each entry has the process id, name, project, and save time. Read a draft's XML with atlas_get_draft_xml.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"projectId": stringProp("Optional project id to filter by (from atlas_create_project).")},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return asText(c.get(withProjectID("/api/v1/drafts", args)))
+			},
+		},
+		{
+			Name: "atlas_get_draft_xml",
+			Description: "Get a saved draft's BPMN 2.0 XML by its process id (from atlas_list_drafts). Refused " +
+				"with a not-found error if no draft has that process id.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"id": stringProp("The draft's process id (from atlas_list_drafts).")},
+				"required":   []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/drafts/" + url.PathEscape(id) + "/xml"))
+			},
+		},
+		{
+			Name: "atlas_list_forms",
+			Description: "List saved form definitions (design-time), optionally filtered to one project. Each " +
+				"entry has the form id and name. Read a form's schema with atlas_get_form.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"projectId": stringProp("Optional project id to filter by (from atlas_create_project).")},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return asText(c.get(withProjectID("/api/v1/forms", args)))
+			},
+		},
+		{
+			Name: "atlas_get_form",
+			Description: "Get a form definition (its form-js schema) by its form id (from atlas_list_forms). " +
+				"Refused with a not-found error if no form has that id.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"id": stringProp("The form id (from atlas_list_forms).")},
+				"required":   []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/forms/" + url.PathEscape(id)))
+			},
+		},
+		{
+			Name: "atlas_list_decision_refs",
+			Description: "List registered DMN decision references (name + modelRef, from atlas_register_decision), " +
+				"optionally filtered to one project. These are the design-time artifacts; atlas_deployed_decisions " +
+				"is the runtime counterpart.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"projectId": stringProp("Optional project id to filter by (from atlas_create_project).")},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return asText(c.get(withProjectID("/api/v1/dmnrefs", args)))
+			},
+		},
+		{
+			Name: "atlas_list_decisions",
+			Description: "List the DMN decisions (with their inputs and outputs) discoverable from the registered " +
+				"decision references, optionally filtered to one project. Use a decision's id as a business rule " +
+				"task's calledDecision.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"projectId": stringProp("Optional project id to filter by (from atlas_create_project).")},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return asText(c.get(withProjectID("/api/v1/decisions", args)))
 			},
 		},
 		{
