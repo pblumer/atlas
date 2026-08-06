@@ -111,6 +111,21 @@ def draw_icon(kind, ix, iy):
     elif kind == "requirement":
         pts = f'{ix+4},{iy+5} {ix+16},{iy+5} {ix+13},{iy+13} {ix+1},{iy+13}'
         p.append(f'<polygon points="{pts}" {st}/>')
+    elif kind == "systemsoftware":
+        p.append(f'<circle cx="{ix+7.5}" cy="{iy+10.5}" r="6" {st}/>')
+        p.append(f'<circle cx="{ix+12.5}" cy="{iy+6.5}" r="3.6" {st}/>')
+    elif kind == "plateau":
+        p.append(f'<rect x="{ix+6}" y="{iy+3}" width="10" height="2.6" fill="{c}" stroke="none"/>')
+        p.append(f'<rect x="{ix+3.5}" y="{iy+7.7}" width="10" height="2.6" fill="{c}" stroke="none"/>')
+        p.append(f'<rect x="{ix+1}" y="{iy+12.4}" width="10" height="2.6" fill="{c}" stroke="none"/>')
+    elif kind == "gap":
+        p.append(f'<circle cx="{cx}" cy="{cy}" r="6.3" {st}/>')
+        p.append(f'<line x1="{ix+1.5}" y1="{iy+7}" x2="{ix+16.5}" y2="{iy+7}" {st}/>')
+        p.append(f'<line x1="{ix+1.5}" y1="{iy+11.5}" x2="{ix+16.5}" y2="{iy+11.5}" {st}/>')
+    elif kind == "deliverable":
+        p.append(f'<path d="M{ix+3},{iy+3} L{ix+15},{iy+3} L{ix+15},{iy+12} '
+                 f'C{ix+13},{iy+15} {ix+11},{iy+11} {ix+9},{iy+13} '
+                 f'C{ix+7},{iy+15} {ix+5},{iy+12} {ix+3},{iy+13} Z" {st}/>')
     return "".join(p)
 
 def render_box(x, y, w, h, box, layer):
@@ -311,6 +326,36 @@ gen_stack("technology", "Technology layer", [
         ("node", ["temis", "DMN/FEEL"]), ("node", ["clio", "event store"]),
         ("node", ["Gmail /", "MS Graph"]), ("node", ["polyglot", "job workers"])]),
 ], ["group commit", "gRPC / HTTPS"])
+
+gen_stack("deployment", "Deployment view — one binary, N partitions, local durability", [
+    ("tec", "DEPLOYMENT NODE  ·  the atlas host (single OS process)", [
+        ("node", ["Host / container", "Linux · one process"]),
+        ("systemsoftware", ["Go runtime", "goroutines · GC · no CGO"]),
+        ("artifact", ["atlas binary", "embeds the web UI assets"])]),
+    ("tec", "PARTITIONS  ·  single-writer execution environments", [
+        ("node", ["Partition 0", "queue · processor"]),
+        ("node", ["Partition 1", "queue · processor"]),
+        ("node", ["Partition N", "routed by instanceKey % N"])]),
+    ("tec", "LOCAL DURABLE STORE  ·  private to each partition", [
+        ("artifact", ["WAL segments", "append-only · one fsync/batch"]),
+        ("systemsoftware", ["Pebble (LSM-tree)", "column-family indexes"]),
+        ("artifact", ["SST files", "materialized state"])]),
+    ("ext", "SEPARATE NODES  ·  reached over the network", [
+        ("node", ["Job workers", "gRPC stream"]),
+        ("node", ["temis", "DMN / FEEL"]),
+        ("node", ["clio", "event store"]),
+        ("node", ["Gmail / Graph", "HTTPS"])]),
+], ["hosts", "each persists to", "integrate via gRPC / HTTPS"])
+
+gen_chain("implementation", "Implementation roadmap — plateaus from M0 to M6", [
+    ("plateau", ["M0 Foundations", "done"], "tec"),
+    ("plateau", ["M1 Core BPMN", "in progress"], "biz"),
+    ("plateau", ["M2 Events & timers", "in progress"], "biz"),
+    ("plateau", ["M3 Structure", "planned"], "ext"),
+    ("plateau", ["M4 Operability", "planned"], "ext"),
+    ("plateau", ["M5 Scale-out", "planned"], "ext"),
+    ("plateau", ["M6 Ecosystem", "planned"], "ext"),
+], ["", "", "", "", "", ""])
 
 if __name__ == "__main__":
     print("SVGs written to", OUT)

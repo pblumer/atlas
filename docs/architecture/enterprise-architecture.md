@@ -27,8 +27,9 @@ the detailed reference behind the boxes.
 3. [Business layer](#business-layer)
 4. [Application layer](#application-layer)
 5. [Technology layer](#technology-layer)
-6. [Cross-layer relationships](#cross-layer-relationships)
-7. [How to read and extend this model](#how-to-read-and-extend-this-model)
+6. [Implementation and deployment](#implementation-and-deployment)
+7. [Cross-layer relationships](#cross-layer-relationships)
+8. [How to read and extend this model](#how-to-read-and-extend-this-model)
 
 ---
 
@@ -267,6 +268,60 @@ gRPC streaming (job workers, [ADR-0007](../adr/0007-job-worker-protocol.md)) · 
 **temis** (deterministic DMN/FEEL decision engine) · **clio** (event store /
 streaming source) · **Gmail / Microsoft Graph** (email) · **external job workers**
 (polyglot processes such as PowerShell, gRPC-connected).
+
+---
+
+## Implementation and deployment
+
+ArchiMate's implementation & deployment layer answers two operational questions:
+*where the running system lives*, and *how it is built over time*.
+
+### Deployment
+
+![Deployment view: one atlas host process running N single-writer partitions, each with its own WAL and Pebble store on local disk, plus external nodes reached over the network](diagrams/deployment.svg)
+
+Atlas deploys as **one self-contained OS process** — no external database or runtime to
+provision ([ADR-0011](../adr/0011-single-binary-distribution-and-web-ui.md)). Inside it
+run **N partitions**, each a single-writer *execution environment* with its **own**
+command queue, processor, WAL, and Pebble state store; nothing is shared between
+partitions, and a process instance lives entirely within one — routed by
+`instanceKey % N`, with the partition baked into every 64-bit key
+([ADR-0002](../adr/0002-single-writer-partition-model.md),
+[ADR-0006](../adr/0006-partition-routing-and-cross-partition.md)). Durability is
+**local**: each partition appends to its own WAL segments and materializes state into
+its own Pebble column families on the local filesystem. Everything external — job
+workers, temis, clio, mail providers — is a **separate node** reached over the network
+(gRPC for workers, HTTPS for the rest), never linked in-process, so the single writer
+never blocks on a remote call.
+
+| Deployment fact | Consequence |
+|-----------------|-------------|
+| One binary, no CGO | Copy-and-run; nothing external to stand up first. |
+| Partition = queue + processor + WAL + state | Throughput scales ≈ linearly with partitions / cores. |
+| Store is local and per-partition | No shared-database contention; recovery is a local log replay. |
+| External work is out-of-process | The single writer is never blocked on the network. |
+
+### Implementation roadmap
+
+The roadmap is a sequence of **plateaus** — relatively stable states of the whole
+system — each closing the **gap** to the next. Colour marks status: green = done,
+amber = in progress, grey = planned.
+
+![Implementation roadmap: plateaus M0 Foundations through M6 Ecosystem, coloured by status](diagrams/implementation.svg)
+
+| Plateau | Delivers | Status |
+|---------|----------|--------|
+| **M0 Foundations** | The three pillars end to end, with crash recovery | ✅ done |
+| **M1 Core BPMN** | Gateways, process variables, FEEL, I/O mappings | 🚧 in progress |
+| **M2 Events & timers** | Timer / message / signal / error and boundary events | 🚧 in progress |
+| **M3 Structure** | Subprocesses, event subprocesses, call activities | 🔲 planned |
+| **M4 Operability** | Incidents, metrics, operational tooling | 🔲 planned |
+| **M5 Scale-out** | Cross-partition messaging and horizontal scale | 🔲 planned |
+| **M6 Ecosystem** | A broader connector / integration surface | 🔲 planned |
+
+Two workstreams run **in parallel** to the engine timeline: **Milestone S**
+(single-binary server & web UI) and **Milestone A** (Modeler & authoring experience).
+The [roadmap](../../ROADMAP.md) is the authoritative, detailed status.
 
 ---
 
