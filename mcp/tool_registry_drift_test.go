@@ -74,6 +74,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_list_decision_refs":    "GET /api/v1/dmnrefs",
 	"atlas_list_decisions":        "GET /api/v1/decisions",
 	"atlas_decision_evaluations":  "GET /api/v1/decisions/{id}/evaluations",
+	"atlas_variable_audit":        "GET /api/v1/instances/{key}/variable-audit",
 }
 
 // mcpOmittedRoutes lists HTTP operations intentionally not exposed as MCP tools,
@@ -93,9 +94,6 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/feel/validate": "modeler-time expression check, not a scenario action",
 	"POST /api/v1/feel/evaluate": "modeler-time expression check, not a scenario action",
 	"POST /api/v1/scripts/run":   "modeler-time script check, not a scenario action",
-
-	// Read-side runtime introspection: partially exposed (candidate follow-ups).
-	"GET /api/v1/instances/{key}/variable-audit": "operator-override audit trail (ADR-0098) not yet exposed",
 
 	// CSV batch start: driven from a user task inside the process (ADR-0084).
 	"POST /api/v1/processes/{key}/instances-from-csv": "in-process CSV ingestion, not a direct agent start",

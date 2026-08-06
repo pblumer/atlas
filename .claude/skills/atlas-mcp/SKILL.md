@@ -37,6 +37,7 @@ endpoint behind an authenticating reverse proxy.
 | `atlas_instances_summary` | none | per-definition active/completed counts |
 | `atlas_search_instances` | `q` | instances matching a variable query (`name=value` or free text) |
 | `atlas_instance_variables` | `key` | one instance's variables as a typed object |
+| `atlas_variable_audit` | `key` | one instance's operator-override audit trail (who changed what) |
 | `atlas_instance_data_objects` | `key` | one instance's BPMN data objects (name, state, value) |
 | `atlas_instance_jobs` | `key` | one instance's activatable jobs (key, element, type) |
 | `atlas_instance_timeline` | `key` | one instance's step-by-step replay timeline |

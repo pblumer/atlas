@@ -207,6 +207,20 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_variable_audit",
+			Description: "Read one process instance's variable-override audit trail — the \"who changed it\" " +
+				"history of external corrections to live state (ADR-0098): each entry has the actor, target scope, " +
+				"variable name, and typed new value. An instance with no overrides (or an unknown key) returns [].",
+			InputSchema: keyArg("The instance key (from atlas_list_instances) whose override audit trail to read."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/instances/" + strconv.FormatUint(key, 10) + "/variable-audit"))
+			},
+		},
+		{
 			Name: "atlas_instance_data_objects",
 			Description: "Read one process instance's BPMN data objects — each with its name, current data " +
 				"state, and typed value. An instance with no data objects (or an unknown key) returns [].",
