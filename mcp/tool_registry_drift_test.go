@@ -91,6 +91,11 @@ var mcpOmittedRoutes = map[string]string{
 	// CSV batch start: driven from a user task inside the process (ADR-0084).
 	"POST /api/v1/processes/{key}/instances-from-csv": "in-process CSV ingestion, not a direct agent start",
 
+	// Admin-gated operator correction to live state (ADR-0095): the MCP service
+	// principal is deliberately non-admin, so overwriting an instance's variables
+	// by hand is not an MCP capability. (terminate, in contrast, is exposed.)
+	"POST /api/v1/instances/{key}/variables": "admin-gated live-state correction; the MCP service principal is deliberately non-admin",
+
 	// Design-time read/edit: agents create artifacts; browsing/editing is the UI's.
 	"GET /api/v1/drafts":                 "artifact browsing is a UI concern",
 	"GET /api/v1/drafts/{id}/xml":        "artifact browsing is a UI concern",

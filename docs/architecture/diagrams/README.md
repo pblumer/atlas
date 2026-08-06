@@ -6,6 +6,10 @@ PNG and inline Mermaid because it keeps an exact, designed layout while staying 
 small, diffable, theme-aware text file — the embedded `prefers-color-scheme` style
 (with fallback colours) renders correctly in GitHub's light or dark theme.
 
+Every box carries the standard **ArchiMate element-type icon** in its top-right
+corner (service, process, object, application component, node, role/stakeholder,
+driver, goal, principle, requirement), following the notation convention.
+
 | File | Used for |
 |------|----------|
 | `overview.svg` | The four-layer map (motivation → business → application → technology) |

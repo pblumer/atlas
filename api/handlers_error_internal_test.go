@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
 )
@@ -67,6 +68,7 @@ func TestReadBodyErrors(t *testing.T) {
 		{"create instance", "/api/v1/processes/1/instances"},
 		{"publish message", "/api/v1/messages"},
 		{"complete job", "/api/v1/jobs/1/complete"},
+		{"set instance variables", "/api/v1/instances/1/variables"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -131,6 +133,10 @@ func TestScanHandlersReportDecodeErrors(t *testing.T) {
 		// reads one — both hit the undecodable record and surface a 500.
 		{http.MethodPost, "/api/v1/instances/terminate", fmt.Sprintf(`{"processDefKey":%d}`, dep.Key)},
 		{http.MethodPost, "/api/v1/instances/terminate", `{"keys":[99]}`},
+		// Setting variables point-reads the target instance to confirm it is running
+		// (ADR-0095); the undecodable record surfaces as a 500 rather than a silent
+		// success.
+		{http.MethodPost, "/api/v1/instances/99/variables", `{"variables":{"x":1}}`},
 	} {
 		rec := httptest.NewRecorder()
 		var body io.Reader
@@ -141,6 +147,70 @@ func TestScanHandlersReportDecodeErrors(t *testing.T) {
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("%s %s status=%d, want 500 (undecodable record)", tc.method, tc.path, rec.Code)
 		}
+	}
+}
+
+// TestSetInstanceVariablesScopeReadError covers the set-variables handler's
+// scope-validation error branch (ADR-0095): a valid running instance but an
+// undecodable element instance at the requested scopeKey surfaces as a 500 rather
+// than a silent success. It deploys and starts a waiting process for a real active
+// instance, then plants a corrupt element record and targets it as the scope.
+func TestSetInstanceVariablesScopeReadError(t *testing.T) {
+	srv := newServerForErrors(t)
+	h := srv.Handler()
+
+	const waitBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="wait" isExecutable="true">
+    <startEvent id="s"/>
+    <serviceTask id="t"><extensionElements><zeebe:taskDefinition type="work"/></extensionElements></serviceTask>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </process>
+</definitions>`
+	depRec := httptest.NewRecorder()
+	depReq := httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(waitBPMN))
+	depReq.Header.Set("Content-Type", "application/xml")
+	h.ServeHTTP(depRec, depReq)
+	if depRec.Code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", depRec.Code, depRec.Body.String())
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(depRec.Body.Bytes(), &dep); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+	startRec := httptest.NewRecorder()
+	h.ServeHTTP(startRec, httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key), nil))
+	if startRec.Code != http.StatusOK {
+		t.Fatalf("start status=%d body=%s", startRec.Code, startRec.Body.String())
+	}
+
+	var instKey uint64
+	srv.do(func() {
+		if err := srv.store.ActiveProcessInstances(func(k uint64, _ *model.ProcessInstanceValue) error {
+			instKey = k
+			return nil
+		}); err != nil {
+			t.Fatalf("scan instances: %v", err)
+		}
+		if err := srv.store.InjectCorruptElementInstance(777); err != nil {
+			t.Fatalf("inject corrupt element: %v", err)
+		}
+	})
+	if instKey == 0 {
+		t.Fatal("no active instance found")
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/instances/%d/variables", instKey),
+		strings.NewReader(`{"variables":{"x":1},"scopeKey":777}`))
+	req.Header.Set("Content-Type", "application/json")
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("corrupt scope: status=%d, want 500 (%s)", rec.Code, rec.Body.String())
 	}
 }
 

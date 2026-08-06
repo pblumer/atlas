@@ -102,6 +102,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0092](0092-clio-key-provisioning.md) | One-click clio credential provisioning | Accepted |
 | [0093](0093-native-mail-providers.md) | Native Gmail and Microsoft Graph mail providers — OAuth2 (app-only + refresh-token) behind the mail.Client seam, credential bundle in the vault | Accepted |
 | [0094](0094-singleton-message-start.md) | Singleton message start — at most one live instance per correlation key | Accepted |
+| [0095](0095-external-variable-modification.md) | External variable modification on a running instance | Accepted |
 
 ## Status values
 

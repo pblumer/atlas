@@ -472,6 +472,15 @@ func (s *Store) InjectCorruptProcessInstance(key uint64) error {
 	return s.db.Set(keyProcessInstance(key), []byte{0x01}, pebble.NoSync)
 }
 
+// InjectCorruptElementInstance writes an undecodable record under an element
+// instance's key. Like InjectCorruptProcessInstance it is a test/tooling affordance
+// only — it lets a caller in another package exercise the decode-error path of a
+// GetElementInstance read (e.g. the set-variables handler's scope validation).
+// Production code writes element instances through Tx.PutElementInstance, never this.
+func (s *Store) InjectCorruptElementInstance(key uint64) error {
+	return s.db.Set(keyElementInstance(key), []byte{0x01}, pebble.NoSync)
+}
+
 // ActiveProcessInstances calls fn with the key and value of every live process
 // instance, via the process-instance column family — the operator "list running
 // instances" access pattern.
