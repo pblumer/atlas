@@ -111,10 +111,14 @@ func TestScanHandlersReportDecodeErrors(t *testing.T) {
 		t.Fatalf("decode deploy: %v", err)
 	}
 
-	// Plant an undecodable record under the active process-instance column family.
+	// Plant an undecodable record under the active process-instance column family, and
+	// one under the incident column family, so both scans hit a decode error.
 	srv.do(func() {
 		if err := srv.store.InjectCorruptProcessInstance(99); err != nil {
 			t.Fatalf("inject corrupt record: %v", err)
+		}
+		if err := srv.store.InjectCorruptIncident(99); err != nil {
+			t.Fatalf("inject corrupt incident: %v", err)
 		}
 	})
 
@@ -137,6 +141,9 @@ func TestScanHandlersReportDecodeErrors(t *testing.T) {
 		// (ADR-0095); the undecodable record surfaces as a 500 rather than a silent
 		// success.
 		{http.MethodPost, "/api/v1/instances/99/variables", `{"variables":{"x":1}}`},
+		// The incident list scans the incident column family (ADR-0061), so the
+		// undecodable incident record surfaces as a 500 there too.
+		{http.MethodGet, "/api/v1/incidents", ""},
 	} {
 		rec := httptest.NewRecorder()
 		var body io.Reader

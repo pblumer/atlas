@@ -181,6 +181,17 @@ func TestRecordRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name:   "child process instance with a TTL expiry due date",
+			vt:     VTProcessInstance,
+			intent: IntentActivated,
+			value: &ProcessInstanceValue{
+				ProcessDefKey:            NewKey(3, 2),
+				CreatedAt:                1_699_999_999_000_000_000,
+				ParentElementInstanceKey: NewKey(2, 7),
+				ExpiryDueDate:            1_700_000_600_000_000_000,
+			},
+		},
+		{
 			name:   "message subscription",
 			vt:     VTMessageSubscription,
 			intent: IntentSubscriptionCreated,

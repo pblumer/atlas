@@ -565,6 +565,7 @@ type CompiledProcess struct {
 	startEvents       []int32
 	startFormId       int32    // interned start-form id (ADR-0028), -1 if none
 	versionTag        int32    // interned atlas:versionTag revision label, -1 if none
+	instanceTtlNanos  int64    // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
 	isExecutable      bool     // bpmn:isExecutable — a non-executable process can't be started
 	elementIds        []int32  // interned source BPMN id per node id (-1 if unset)
 	strings           []string // intern table (index → string), for debug/export
@@ -910,6 +911,11 @@ func (p *CompiledProcess) IsExecutable() bool { return p.isExecutable }
 // is design-time metadata Operations shows beside the deploy version; the engine
 // never reads it.
 func (p *CompiledProcess) VersionTag() string { return p.Intern(p.versionTag) }
+
+// InstanceTtlNanos returns the process's instance TTL in nanoseconds, or 0 when no TTL
+// is configured. A positive value is the self-cleaning expiry bound (ADR-0085): the
+// engine schedules a durable expiry timer at CreatedAt+TTL when an instance activates.
+func (p *CompiledProcess) InstanceTtlNanos() int64 { return p.instanceTtlNanos }
 
 // Intern returns the string for an interned index, or "" if out of range.
 func (p *CompiledProcess) Intern(idx int32) string {
