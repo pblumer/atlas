@@ -36,6 +36,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const p = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
     if (p === "/" || p === "/harness.html") file = join(here, "harness.html");
+    else if (p === "/replay-harness.html") file = join(here, "replay-harness.html");
     else if (p.endsWith(".bpmn")) {
       // Test models live here in e2e/ (never in api/web). Block path traversal.
       const rel = normalize(p).replace(/^([/\\])+/, "");
