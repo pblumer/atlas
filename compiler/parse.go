@@ -943,7 +943,15 @@ type xmlEndEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
 	Signal  *xmlSignalEventDefinition  `xml:"signalEventDefinition"`
+	// Terminate is present when the end event carries a <terminateEventDefinition>.
+	// Atlas can't execute a terminate end yet, so it is rejected at compile time rather
+	// than silently dropped to a plain end (which would abandon the terminate semantics).
+	Terminate *xmlTerminateEventDefinition `xml:"terminateEventDefinition"`
 }
+
+// xmlTerminateEventDefinition is the empty <terminateEventDefinition> element; only its
+// presence matters (a non-nil pointer once parsed).
+type xmlTerminateEventDefinition struct{}
 
 // A boundary event is attached to a host activity (AttachedToRef) and arms while
 // it runs. CancelActivity mirrors BPMN's attribute: absent or "true" is
