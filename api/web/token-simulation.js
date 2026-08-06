@@ -100,6 +100,36 @@ function defaultFlowId(el) {
 
 const centerOf = (el) => ({ x: el.x + (el.width || 0) / 2, y: el.y + (el.height || 0) / 2 });
 
+// isEventSubStart reports whether a start event is the trigger of an event subprocess — it
+// sits directly inside a subprocess whose triggeredByEvent flag is set (ADR-0082). Such a
+// start is fired by its event while the enclosing scope runs, not spawned by the user, so
+// it gets a "fire" affordance rather than the process-start spawn glyph.
+const isEventSubStart = (el) => {
+  const p = el.parent && el.parent.businessObject;
+  return !!(p && p.$type === "bpmn:SubProcess" && p.triggeredByEvent === true);
+};
+// A process start is a plain entry point the user spawns tokens from — every start event
+// except an event-subprocess trigger.
+const isProcessStart = (el) => isStart(el) && !isEventSubStart(el);
+// An interrupting event-subprocess start terminates its enclosing scope when it fires; a
+// non-interrupting one runs alongside (ADR-0082).
+const isInterruptingSub = (el) => el.businessObject && el.businessObject.isInterrupting !== false;
+
+// Multi-instance activities (ADR-0077) run their body several times — in parallel or in
+// sequence. The real multiplicity is data-driven (a collection size), which the simulation
+// deliberately does not evaluate; it visualises a fixed, clearly-labelled number of
+// instances so the marker's meaning is legible.
+const MI_INSTANCES = 3;
+const loopChars = (el) => el.businessObject && el.businessObject.loopCharacteristics;
+const isMultiInstance = (el) => {
+  const lc = loopChars(el);
+  return !!(lc && lc.$type === "bpmn:MultiInstanceLoopCharacteristics");
+};
+const isSequentialMI = (el) => {
+  const lc = loopChars(el);
+  return !!(lc && lc.isSequential === true);
+};
+
 // --- The simulation service --------------------------------------------------------
 
 export function TokenSimulation(eventBus, elementRegistry, canvas, overlays) {
@@ -127,6 +157,8 @@ export function TokenSimulation(eventBus, elementRegistry, canvas, overlays) {
   this._deciding = new Map();
   this._flowOwner = new Map(); // offered-flow id → owning gateway id, for click routing
   this._boundaries = new Map(); // host activity id → [boundary elements], indexed on import
+  this._eventSubStarts = []; // event-subprocess start events, indexed on import
+  this._miRemaining = new Map(); // multi-instance activity id → instances still to run
   this._reach = new Map(); // memoised "can `from` reach `to`?" over sequence flows
   this._completed = 0; // tokens that reached an end event / ran off the graph
 
@@ -268,6 +300,7 @@ TokenSimulation.prototype.reset = function () {
   this._resting.clear();
   this._joinWait.clear();
   this._inflight.clear();
+  this._miRemaining.clear();
   this._completed = 0;
   this._clearAllDeciding();
   this._render();
@@ -297,19 +330,33 @@ TokenSimulation.prototype._rest = function (id, delta) {
   else this._resting.delete(id);
 };
 
-// _indexDiagram builds the host→boundary-events lookup once, so rendering the boundary
-// fire affordances doesn't rescan the registry each frame.
+// _indexDiagram builds the host→boundary-events lookup and the event-subprocess-start list
+// once, so rendering their fire affordances doesn't rescan the registry each frame.
 TokenSimulation.prototype._indexDiagram = function () {
   this._boundaries.clear();
+  this._eventSubStarts = [];
   this._registry.forEach((el) => {
-    if (!isBoundary(el)) return;
-    const host = el.host || (el.businessObject && el.businessObject.attachedToRef);
-    const hostId = host && host.id;
-    if (!hostId) return;
-    const list = this._boundaries.get(hostId) || [];
-    list.push(el);
-    this._boundaries.set(hostId, list);
+    if (isBoundary(el)) {
+      const host = el.host || (el.businessObject && el.businessObject.attachedToRef);
+      const hostId = host && host.id;
+      if (!hostId) return;
+      const list = this._boundaries.get(hostId) || [];
+      list.push(el);
+      this._boundaries.set(hostId, list);
+    } else if (isStart(el) && isEventSubStart(el)) {
+      this._eventSubStarts.push(el);
+    }
   });
+};
+
+// _totalLive reports whether the process is "running" — any token resting, in flight, or
+// parked in a join. Event-subprocess triggers are only offered while the scope is live.
+TokenSimulation.prototype._totalLive = function () {
+  let n = 0;
+  for (const c of this._resting.values()) n += c;
+  for (const c of this._inflight.values()) n += c;
+  for (const w of this._joinWait.values()) for (const c of w.values()) n += c;
+  return n;
 };
 
 TokenSimulation.prototype._hasPendingTrigger = function () {
@@ -338,6 +385,11 @@ TokenSimulation.prototype._onClick = function (el) {
   // Fire a parked boundary event while its host holds a token.
   if (isBoundary(el)) {
     this._fireBoundary(el);
+    return;
+  }
+  if (isEventSubStart(el)) {
+    // Trigger the handler by clicking its start, but only while the scope is running.
+    if ((this._resting.get(el.id) || 0) <= 0 && this._totalLive() > 0) this._fireEventSub(el);
     return;
   }
   if (isStart(el)) {
@@ -390,6 +442,21 @@ TokenSimulation.prototype._land = function (el) {
 // single flow). No outgoing flow means the token leaves the graph (completed).
 TokenSimulation.prototype._emit = function (el) {
   if ((this._resting.get(el.id) || 0) <= 0) return;
+  // Multi-instance: consume one instance per move, keeping the token on the activity until
+  // the last instance is done — so a step / Play visibly counts the body running N times.
+  if (isMultiInstance(el)) {
+    let rem = this._miRemaining.get(el.id);
+    if (rem === undefined) rem = MI_INSTANCES; // seed for a token spawned straight onto it
+    if (rem > 1) {
+      this._miRemaining.set(el.id, rem - 1);
+      this._flash(el);
+      this._render();
+      this._notify();
+      if (this._playing) this._pump();
+      return;
+    }
+    this._miRemaining.delete(el.id); // last instance — fall through and leave the activity
+  }
   if (isThrow(el)) this._throwEvent(el);
   const outs = outFlows(el);
   this._rest(el.id, -1);
@@ -415,9 +482,14 @@ TokenSimulation.prototype._fireTrigger = function (el) {
 };
 
 // _throwEvent visualises a message/signal throw: a dot flies from the throwing element to
-// every catch-like element that names the same message (1:1) or signal (broadcast). It is
-// a teaching cue only — it never auto-fires the target; the user still decides when the
-// caught event "occurs", keeping the simulation engine-free.
+// every catch-like element that names the same message (1:1) or signal (broadcast). What
+// happens when the dot lands depends on the target:
+//   - a start event *begins a new instance* — a token spawns there (it has no waiting token
+//     to release, so the alternative would be an unintuitive manual click on the start);
+//   - an event-subprocess start *triggers its handler* while the enclosing scope runs;
+//   - a catch / boundary event is only *pinged* — a token must already be waiting there, and
+//     the user still fires it, keeping the engine-free "you decide when it occurs" model.
+// Matching is by message/signal name only; correlation keys are the engine's job.
 TokenSimulation.prototype._throwEvent = function (el) {
   const mName = messageName(el);
   const sName = signalName(el);
@@ -430,11 +502,27 @@ TokenSimulation.prototype._throwEvent = function (el) {
     const epoch = this._epoch;
     this._animateDot([from, centerOf(t)], () => this._epoch !== epoch, "atlas-sim-msg-dot").then(
       () => {
-        if (this._epoch !== epoch) return;
-        this._ping(t);
+        if (this._epoch !== epoch || !this._active) return;
+        this._deliverToCatch(t);
       },
     );
   });
+};
+
+// _deliverToCatch resolves a thrown message/signal that has reached a target element.
+TokenSimulation.prototype._deliverToCatch = function (t) {
+  if (isEventSubStart(t)) {
+    // Trigger the event subprocess, but only while its scope is actually running.
+    if (this._totalLive() > 0) this._fireEventSub(t);
+    else this._ping(t);
+    return;
+  }
+  if (isProcessStart(t)) {
+    this._flash(t);
+    this.spawnAt(t); // the message starts a new instance of this process
+    return;
+  }
+  this._ping(t); // a catch / boundary event: a token must be waiting; the user fires it
 };
 
 // _offerChoice highlights a diverging gateway's outgoing flows and waits for the user.
@@ -525,6 +613,25 @@ TokenSimulation.prototype._fireBoundary = function (b) {
   this._settleJoins();
 };
 
+// _fireEventSub triggers an event subprocess by dropping a token on its start event
+// (ADR-0082). An interrupting trigger first terminates the enclosing scope — every other
+// live token, join, and in-flight animation — because the handler pre-empts the process; a
+// non-interrupting trigger simply runs alongside. Note: the simulation is flat, so it
+// treats the scope as the whole process; a nested event subprocess reads as process-scoped.
+TokenSimulation.prototype._fireEventSub = function (start) {
+  if ((this._resting.get(start.id) || 0) > 0) return; // already running
+  if (isInterruptingSub(start)) {
+    this._epoch++; // abort in-flight dots — the scope is being torn down
+    this._resting.clear();
+    this._joinWait.clear();
+    this._inflight.clear();
+    this._miRemaining.clear();
+    this._clearAllDeciding();
+  }
+  this._flash(start);
+  this.spawnAt(start);
+};
+
 // _travel animates a dot along a sequence flow, then delivers the token to its target.
 TokenSimulation.prototype._travel = function (flow) {
   const target = flow.target;
@@ -580,6 +687,11 @@ TokenSimulation.prototype._arrive = function (target, viaFlow) {
     this._notify();
     this._settleJoins();
     return;
+  }
+  // A multi-instance activity runs its body several times before the token moves on; seed
+  // the instance counter so the badge shows the multiplicity from the moment it arrives.
+  if (isMultiInstance(target) && !this._miRemaining.has(target.id)) {
+    this._miRemaining.set(target.id, MI_INSTANCES);
   }
   this._rest(target.id, 1);
   this._land(target);
@@ -783,6 +895,31 @@ TokenSimulation.prototype._render = function () {
       /* skip */
     }
   }
+  // Multi-instance badge: how many instances are still to run (a simulated multiplicity).
+  for (const [id, rem] of this._miRemaining) {
+    if (rem <= 0) continue;
+    const el = this._registry.get(id);
+    if (!el) continue;
+    const seq = isSequentialMI(el);
+    try {
+      this._overlayIds.push(
+        this._overlays.add(id, "atlas-sim-mi", {
+          position: { bottom: 4, left: 4 },
+          html: `<span class="atlas-sim-mi" title="${seq ? "sequential" : "parallel"} multi-instance — ${rem} of ${MI_INSTANCES} left (simulated)">${seq ? "≡" : "‖"} ${rem}</span>`,
+        }),
+      );
+    } catch {
+      /* skip */
+    }
+  }
+  // Event-subprocess triggers: while the process is running, each event-sub start offers a
+  // fire affordance (unless it already holds a token — the handler is running).
+  if (this._totalLive() > 0) {
+    for (const start of this._eventSubStarts) {
+      if ((this._resting.get(start.id) || 0) > 0) continue;
+      this._drawFire(start, this._triggerGlyph(start), () => this._fireEventSub(start), this._eventSubTitle(start));
+    }
+  }
 };
 
 // _triggerGlyph picks an icon for a parked catch event, hinting at what fires it.
@@ -797,6 +934,12 @@ TokenSimulation.prototype._boundaryTitle = function (b) {
   const kind = isTimerEvent(b) ? "timer" : isMessageEvent(b) ? "message" : isSignalEvent(b) ? "signal" : "event";
   const mode = b.businessObject.cancelActivity !== false ? "interrupting" : "non-interrupting";
   return `Fire this ${mode} ${kind} boundary event`;
+};
+
+TokenSimulation.prototype._eventSubTitle = function (start) {
+  const kind = isTimerEvent(start) ? "timer" : isMessageEvent(start) ? "message" : isSignalEvent(start) ? "signal" : "event";
+  const mode = isInterruptingSub(start) ? "interrupting" : "non-interrupting";
+  return `Trigger this ${mode} ${kind} event subprocess`;
 };
 
 // _drawFire adds a clickable "fire this event" affordance on an element. Like the spawn
@@ -820,12 +963,13 @@ TokenSimulation.prototype._drawFire = function (el, glyph, onFire, title) {
   }
 };
 
-// _drawStartAffordances puts a "spawn a token here" play glyph on every start event, so
-// where to begin is obvious the moment simulation turns on.
+// _drawStartAffordances puts a "spawn a token here" play glyph on every process start
+// event, so where to begin is obvious the moment simulation turns on. Event-subprocess
+// starts are excluded — they are triggered by their event (a fire affordance), not spawned.
 TokenSimulation.prototype._drawStartAffordances = function () {
   this._clearStartAffordances();
   this._registry.forEach((el) => {
-    if (!isStart(el)) return;
+    if (!isProcessStart(el)) return;
     const btn = document.createElement("span");
     btn.className = "atlas-sim-spawn";
     btn.title = "Spawn a token here";
