@@ -1,4 +1,4 @@
-# ADR-0098: Token simulation — configurable multi-instance count, modelled cardinality wins
+# ADR-0099: Token simulation — configurable multi-instance count, modelled cardinality wins
 
 - **Status:** Accepted
 - **Date:** 2026-08-06

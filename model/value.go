@@ -451,6 +451,71 @@ func (v *DecisionEvaluationValue) decode(src []byte) error {
 	return nil
 }
 
+// VariableAuditValue records one external variable override for audit (ADR-0098):
+// who set which variable, to what value, on which scope. It is keyed under its
+// owning ProcessInstanceKey as append-only history — one record per variable an
+// operator sets — so the "who changed it" trail folds into the same instance
+// timeline as the variable snapshot at the same log position, and survives the
+// instance finishing. Actor is the acting principal's username, or "" when auth is
+// off (single-user) or the caller is unidentified. Name/Kind/Bool/Text mirror the
+// VariableValue that was written, so the audit row is self-contained. Like a variable
+// it carries genuine runtime data, so its encoding is length-prefixed.
+type VariableAuditValue struct {
+	ProcessInstanceKey uint64 // owning instance (the scope this record is keyed under)
+	ScopeKey           uint64 // the scope the variable was written to (root or a sub-scope)
+	Actor              string // who performed the override; "" when auth is off / unidentified
+	Name               string // the variable that was set
+	Kind               VarKind
+	Bool               bool
+	Text               string // number canonical string, string contents, or canonical JSON; empty otherwise
+}
+
+func (*VariableAuditValue) ValueType() ValueType { return VTVariableAudit }
+
+func (v *VariableAuditValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ScopeKey)
+	dst = appendString(dst, v.Actor)
+	dst = appendString(dst, v.Name)
+	dst = append(dst, byte(v.Kind))
+	if v.Bool {
+		dst = append(dst, 1)
+	} else {
+		dst = append(dst, 0)
+	}
+	return appendString(dst, v.Text)
+}
+
+func (v *VariableAuditValue) decode(src []byte) error {
+	if len(src) < 16 {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src)
+	v.ScopeKey = binary.LittleEndian.Uint64(src[8:])
+	rest := src[16:]
+	actor, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.Actor = actor
+	name, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.Name = name
+	if len(rest) < 2 {
+		return ErrShortBuffer
+	}
+	v.Kind = VarKind(rest[0])
+	v.Bool = rest[1] != 0
+	text, _, err := readString(rest[2:])
+	if err != nil {
+		return err
+	}
+	v.Text = text
+	return nil
+}
+
 // MessageSubscriptionValue is an open subscription: an element instance (a
 // message intermediate catch event) waiting for a named message whose
 // correlation key matches. Like a variable it carries genuine runtime data (the
@@ -724,6 +789,8 @@ func newValue(vt ValueType) Value {
 		return &DecisionEvaluationValue{}
 	case VTInboundDelivery:
 		return &InboundDeliveryValue{}
+	case VTVariableAudit:
+		return &VariableAuditValue{}
 	default:
 		return nil
 	}

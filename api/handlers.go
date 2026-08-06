@@ -1500,6 +1500,14 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	scopeKey := payload.ScopeKey
+	// Who is making the change, for the audit trail (ADR-0098): the authenticated
+	// principal's username, or "" when auth is off (single-user) or the caller is
+	// unidentified. Read off the request before the run loop, like every other
+	// principal read.
+	actor := ""
+	if p := principalFrom(r.Context()); p != nil {
+		actor = p.Username
+	}
 
 	var (
 		found    bool
@@ -1528,7 +1536,7 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 				return
 			}
 		}
-		s.proc.SetVariables(key, scopeKey, vars...)
+		s.proc.SetVariables(key, scopeKey, actor, vars...)
 		runErr = s.jobRunner.Drive()
 	})
 	switch {
@@ -1543,6 +1551,71 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 	default:
 		writeJSON(w, http.StatusOK, map[string]any{"instanceKey": key, "variablesSet": len(vars)})
 	}
+}
+
+// variableAuditView renders one external variable override for the audit view
+// (ADR-0098): when it happened, who made it, on which scope, and the variable name
+// and typed new value. It is the "who changed it" surface over the append-only audit
+// history — the read side of POST /instances/{key}/variables.
+type variableAuditView struct {
+	At    int64  `json:"at"`
+	Actor string `json:"actor"`
+	Scope uint64 `json:"scope"`
+	Name  string `json:"name"`
+	Value any    `json:"value"`
+	Kind  string `json:"kind"`
+}
+
+// varKindName maps a stored variable kind to the API's kind label, shared by the
+// variable-audit view (and available to any other typed-variable view).
+func varKindName(k model.VarKind) string {
+	switch k {
+	case model.VarBool:
+		return "boolean"
+	case model.VarNumber:
+		return "number"
+	case model.VarString:
+		return "string"
+	case model.VarJSON:
+		return "json"
+	default:
+		return "null"
+	}
+}
+
+// handleInstanceVariableAudit returns the external variable overrides a process
+// instance received, in the order they happened, each with who made it, on which
+// scope, and the variable name and typed new value (ADR-0098). It is the audit
+// counterpart to the read-only variables view: because the records are append-only
+// history, it works while the instance runs and after it has finished. An instance
+// with no overrides (or an unknown key) yields an empty array, not a 404 — like the
+// variables and decisions endpoints, it is a convenience read, not an existence check.
+func (s *Server) handleInstanceVariableAudit(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid instance key")
+		return
+	}
+	out := []variableAuditView{}
+	var scanErr error
+	s.do(func() {
+		scanErr = s.store.VariableAuditHistory(key, func(ts int64, _ uint64, v *model.VariableAuditValue) error {
+			out = append(out, variableAuditView{
+				At:    ts,
+				Actor: v.Actor,
+				Scope: v.ScopeKey,
+				Name:  v.Name,
+				Value: nativeVar(&model.VariableValue{Kind: v.Kind, Bool: v.Bool, Text: v.Text}),
+				Kind:  varKindName(v.Kind),
+			})
+			return nil
+		})
+	})
+	if scanErr != nil {
+		writeError(w, http.StatusInternalServerError, "read variable audit: "+scanErr.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // dataObjectView renders a data object for the operator UI: its name, its BPMN

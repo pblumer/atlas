@@ -262,14 +262,18 @@ func (p *Processor) CompleteJobWithDecision(jobKey uint64, decision *model.Decis
 // variable timeline as the audit trail. Setting variables on an instance that is
 // gone (finished or never existed), or on a scope that does not belong to it, is a
 // no-op. It does not re-evaluate any gateway a token has already passed — it only
-// changes the stored values. Call RunUntilIdle (or Drive) to process it.
-func (p *Processor) SetVariables(piKey, scopeKey uint64, vars ...model.VariableValue) {
+// changes the stored values. Each variable set is additionally recorded as an audit
+// event naming actor — who made the change (ADR-0098) — so the "who changed it" trail
+// is durable; pass "" when the caller is unidentified. Call RunUntilIdle (or Drive)
+// to process it.
+func (p *Processor) SetVariables(piKey, scopeKey uint64, actor string, vars ...model.VariableValue) {
 	p.queue = append(p.queue, Command{
 		Key:       piKey,
 		ValueType: model.VTVariable,
 		Intent:    model.IntentVariableModify,
 		Value:     inflightValue{variable: model.VariableValue{ScopeKey: scopeKey}},
 		StartVars: vars,
+		Actor:     actor,
 	})
 }
 

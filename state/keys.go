@@ -39,6 +39,7 @@ const (
 	cfDefCompletedCount      columnFamily = 0x1A // defDone:<procDefKey> → int64 finished-instance count (merge, ADR-0083)
 	cfDefLastActivity        columnFamily = 0x1B // defAct:<procDefKey> → int64 unix-nano of the latest instance event (set, ADR-0083)
 	cfSignalSubscription     columnFamily = 0x1C // sigSub:<name>:<elKey> → SignalSubscriptionValue (ADR-0088)
+	cfVariableAudit          columnFamily = 0x1D // varAudit:<piKey>:<ts>:<pos> → VariableAuditValue (ADR-0098)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -381,6 +382,34 @@ func positionFromDecisionEvalKey(k []byte) uint64 {
 // record's owning instance from the key itself.
 func scopeFromDecisionEvalKey(k []byte) uint64 {
 	return binary.BigEndian.Uint64(k[1:9])
+}
+
+// keyVariableAudit keys one external variable override under its owning process
+// instance, the same (instance, ts, pos) shape as the decision-evaluation and
+// variable-snapshot keys, so the "who changed it" trail folds into the same instance
+// timeline by log position (ADR-0098, mirroring ADR-0066/0048). Append-only: one
+// record per variable an operator sets, never overwritten.
+func keyVariableAudit(piKey uint64, ts int64, pos uint64) []byte {
+	b := appendOrderedInt64(variableAuditScopePrefix(piKey), ts)
+	return appendBE64(b, pos)
+}
+
+// variableAuditScopePrefix scans every external variable override recorded under one
+// process instance, in change order.
+func variableAuditScopePrefix(piKey uint64) []byte {
+	return appendBE64([]byte{byte(cfVariableAudit)}, piKey)
+}
+
+// timestampFromVariableAuditKey extracts the event timestamp from a variable-audit
+// key, inverting the sign-flip appendOrderedInt64 applied.
+func timestampFromVariableAuditKey(k []byte) int64 {
+	return int64(binary.BigEndian.Uint64(k[len(k)-16:]) ^ (1 << 63))
+}
+
+// positionFromVariableAuditKey extracts the trailing log position from a
+// variable-audit key.
+func positionFromVariableAuditKey(k []byte) uint64 {
+	return binary.BigEndian.Uint64(k[len(k)-8:])
 }
 
 // appendLenString appends a uint32 length prefix followed by s, so a
