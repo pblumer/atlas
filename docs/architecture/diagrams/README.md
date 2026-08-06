@@ -7,8 +7,9 @@ small, diffable, theme-aware text file — the embedded `prefers-color-scheme` s
 (with fallback colours) renders correctly in GitHub's light or dark theme.
 
 Every box carries the standard **ArchiMate element-type icon** in its top-right
-corner (service, process, object, application component, node, role/stakeholder,
-driver, goal, principle, requirement), following the notation convention.
+corner (service, process, object, application component, node, system software,
+artifact, role/stakeholder, driver, goal, principle, requirement, plateau),
+following the notation convention.
 
 | File | Used for |
 |------|----------|
@@ -17,6 +18,8 @@ driver, goal, principle, requirement), following the notation convention.
 | `business.svg` | Business layer detail |
 | `application.svg` | Application layer detail |
 | `technology.svg` | Technology layer detail |
+| `deployment.svg` | Deployment view — host, partitions, local durable store, external nodes |
+| `implementation.svg` | Implementation roadmap — plateaus M0–M6, coloured by status |
 
 ## Regenerating
 
