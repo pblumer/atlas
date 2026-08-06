@@ -20,9 +20,11 @@
     <script type="module">
       import { tokenSimulationModule } from "/token-simulation.js";
       (async () => {
+        // Which model to load is chosen by the test via ?model=… (default: throw→catch).
+        const model = new URLSearchParams(location.search).get("model") || "model.bpmn";
         const [zeebe, XML] = await Promise.all([
           fetch("/vendor/bpmn/zeebe.json").then((r) => r.json()),
-          fetch("/model.bpmn").then((r) => r.text()),
+          fetch("/" + model).then((r) => r.text()),
         ]);
         const modeler = new window.BpmnJS({
           container: "#canvas",
