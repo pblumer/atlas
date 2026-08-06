@@ -53,6 +53,14 @@ go test ./engine/...
 go test ./engine/ -run TestProcessorRecovery -v
 ```
 
+Browser end-to-end tests for the web UI (the Design-view token simulation) live in
+[`e2e/`](e2e/) and run on Playwright + Chromium — see [`e2e/README.md`](e2e/README.md).
+They are JS, not Go, so they are a separate CI job and are not part of the Go commands above.
+
+```bash
+cd e2e && npm ci && npx playwright install chromium && npm test
+```
+
 **Definition of done for any code change:** `go build ./...`, `go test -race ./...`, `go vet ./...` all pass, and `gofmt -l .` is empty. Do not report a task complete until these are green.
 
 ## Repository layout
