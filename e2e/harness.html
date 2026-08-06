@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas token-simulation e2e harness</title>
+    <!-- Loads the real vendored bpmn-js and the real api/web/token-simulation.js, served
+         from the repo's api/web at the server root, so the test exercises production code. -->
+    <link rel="stylesheet" href="/vendor/bpmn/assets/diagram-js.css" />
+    <link rel="stylesheet" href="/vendor/bpmn/assets/bpmn-js.css" />
+    <link rel="stylesheet" href="/vendor/bpmn/assets/bpmn-font/css/bpmn-embedded.css" />
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      body { margin: 0; background: #fff; }
+      #canvas { width: 760px; height: 460px; }
+    </style>
+  </head>
+  <body>
+    <div class="editor sim-active"><div id="canvas"></div></div>
+    <script src="/vendor/bpmn/bpmn-modeler.js"></script>
+    <script type="module">
+      import { tokenSimulationModule } from "/token-simulation.js";
+      (async () => {
+        const [zeebe, XML] = await Promise.all([
+          fetch("/vendor/bpmn/zeebe.json").then((r) => r.json()),
+          fetch("/model.bpmn").then((r) => r.text()),
+        ]);
+        const modeler = new window.BpmnJS({
+          container: "#canvas",
+          additionalModules: [tokenSimulationModule()],
+          moddleExtensions: { zeebe },
+        });
+        await modeler.importXML(XML);
+        modeler.get("canvas").zoom("fit-viewport");
+        // Exposed for the Playwright driver (the same handle the editor exposes in prod).
+        window.__modeler = modeler;
+        window.__sim = modeler.get("atlasTokenSimulation");
+        window.__reg = modeler.get("elementRegistry");
+        window.__ready = true;
+      })().catch((e) => {
+        window.__error = String((e && e.stack) || e);
+      });
+    </script>
+  </body>
+</html>

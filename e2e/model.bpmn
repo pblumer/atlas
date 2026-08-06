@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  id="Defs_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <!-- Two pools that talk by message: Pool A throws msgX, Pool B awaits it. The token
+       simulation must deliver a thrown message to a waiting catch (ADR-0101). -->
+  <bpmn:message id="Msg_1" name="msgX" />
+  <bpmn:collaboration id="Collaboration_1">
+    <bpmn:participant id="Part_A" name="Pool A" processRef="Process_A" />
+    <bpmn:participant id="Part_B" name="Pool B" processRef="Process_B" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_A" isExecutable="true">
+    <bpmn:startEvent id="StartA"><bpmn:outgoing>A1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:intermediateThrowEvent id="ThrowA" name="send msgX">
+      <bpmn:incoming>A1</bpmn:incoming><bpmn:outgoing>A2</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="med_a" messageRef="Msg_1" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:endEvent id="EndA"><bpmn:incoming>A2</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="A1" sourceRef="StartA" targetRef="ThrowA" />
+    <bpmn:sequenceFlow id="A2" sourceRef="ThrowA" targetRef="EndA" />
+  </bpmn:process>
+  <bpmn:process id="Process_B" isExecutable="true">
+    <bpmn:startEvent id="StartB"><bpmn:outgoing>B1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:intermediateCatchEvent id="CatchB" name="await msgX">
+      <bpmn:incoming>B1</bpmn:incoming><bpmn:outgoing>B2</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="med_b" messageRef="Msg_1" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:endEvent id="EndB"><bpmn:incoming>B2</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="B1" sourceRef="StartB" targetRef="CatchB" />
+    <bpmn:sequenceFlow id="B2" sourceRef="CatchB" targetRef="EndB" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diag_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Collaboration_1">
+      <bpmndi:BPMNShape id="Part_A_di" bpmnElement="Part_A" isHorizontal="true">
+        <dc:Bounds x="150" y="80" width="420" height="120" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="StartA_di" bpmnElement="StartA">
+        <dc:Bounds x="210" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ThrowA_di" bpmnElement="ThrowA">
+        <dc:Bounds x="342" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndA_di" bpmnElement="EndA">
+        <dc:Bounds x="472" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="A1_di" bpmnElement="A1">
+        <di:waypoint x="246" y="140" /><di:waypoint x="342" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="A2_di" bpmnElement="A2">
+        <di:waypoint x="378" y="140" /><di:waypoint x="472" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Part_B_di" bpmnElement="Part_B" isHorizontal="true">
+        <dc:Bounds x="150" y="240" width="420" height="120" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="StartB_di" bpmnElement="StartB">
+        <dc:Bounds x="210" y="282" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="CatchB_di" bpmnElement="CatchB">
+        <dc:Bounds x="342" y="282" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndB_di" bpmnElement="EndB">
+        <dc:Bounds x="472" y="282" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="B1_di" bpmnElement="B1">
+        <di:waypoint x="246" y="300" /><di:waypoint x="342" y="300" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="B2_di" bpmnElement="B2">
+        <di:waypoint x="378" y="300" /><di:waypoint x="472" y="300" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
