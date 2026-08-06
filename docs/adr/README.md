@@ -108,6 +108,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0098](0098-external-variable-modification-audit.md) | Audit trail for external variable modifications — who changed a running instance's variables | Accepted |
 | [0099](0099-archimate-enterprise-architecture-view.md) | An ArchiMate 3.2 enterprise-architecture view — a layered, stakeholder-facing communication aid with reproducible SVG diagrams | Accepted |
 | [0100](0100-token-simulation-configurable-multi-instance-count.md) | Token simulation — configurable multi-instance count, modelled cardinality wins | Accepted |
+| [0101](0101-token-simulation-throw-delivers-to-waiting-catch.md) | Token simulation — a thrown message/signal delivers to (fires) a waiting catch | Accepted |
 
 ## Status values
 
