@@ -151,6 +151,35 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_instances_summary",
+			Description: "Per-definition instance counts — one row per deployed definition with its processId, " +
+				"version, active and completed instance counts, and last-activity time. The operations overview.",
+			InputSchema: noArgs(),
+			Handler: func(c *Client, _ map[string]any) (string, error) {
+				return asText(c.get("/api/v1/instances/summary"))
+			},
+		},
+		{
+			Name: "atlas_search_instances",
+			Description: "Search instances by variable content. 'q' is either \"name=value\" (variable name exact, " +
+				"value substring) or free text matched over variable names and values. Returns the matching instances " +
+				"(active first, then most-recently-completed), each with the variables that matched; the result is capped.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"q": stringProp("The query: \"name=value\" (name exact, value substring) or free text over variable names/values."),
+				},
+				"required": []any{"q"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				q, err := argString(args, "q")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get(searchInstancesPath(q)))
+			},
+		},
+		{
 			Name: "atlas_instance_variables",
 			Description: "Read one process instance's variables as a typed JSON object (name → value). " +
 				"An instance with no variables (or an unknown key) returns an empty object.",
@@ -161,6 +190,19 @@ func runtimeTools() []Tool {
 					return "", err
 				}
 				return asText(c.get("/api/v1/instances/" + strconv.FormatUint(key, 10) + "/variables"))
+			},
+		},
+		{
+			Name: "atlas_instance_data_objects",
+			Description: "Read one process instance's BPMN data objects — each with its name, current data " +
+				"state, and typed value. An instance with no data objects (or an unknown key) returns [].",
+			InputSchema: keyArg("The instance key (from atlas_list_instances) whose data objects to read."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/instances/" + strconv.FormatUint(key, 10) + "/data-objects"))
 			},
 		},
 		{

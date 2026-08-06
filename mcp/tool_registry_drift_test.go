@@ -55,6 +55,9 @@ var mcpToolRoutes = map[string]string{
 	"atlas_instance_variables":    "GET /api/v1/instances/{key}/variables",
 	"atlas_instance_jobs":         "GET /api/v1/instances/{key}/jobs",
 	"atlas_instance_timeline":     "GET /api/v1/instances/{key}/timeline",
+	"atlas_instances_summary":     "GET /api/v1/instances/summary",
+	"atlas_search_instances":      "GET /api/v1/instances/search",
+	"atlas_instance_data_objects": "GET /api/v1/instances/{key}/data-objects",
 }
 
 // mcpOmittedRoutes lists HTTP operations intentionally not exposed as MCP tools,
@@ -77,12 +80,9 @@ var mcpOmittedRoutes = map[string]string{
 
 	// Read-side runtime introspection: partially exposed (candidate follow-ups).
 	"GET /api/v1/collaborations/{key}/runtime": "runtime introspection not yet exposed",
-	"GET /api/v1/instances/summary":            "runtime introspection not yet exposed",
-	"GET /api/v1/instances/search":             "runtime introspection not yet exposed",
-	"GET /api/v1/instances/{key}/data-objects": "runtime introspection not yet exposed",
-	"GET /api/v1/instances/{key}/decisions":    "runtime introspection not yet exposed",
-	"GET /api/v1/decisions/deployed":           "runtime introspection not yet exposed",
-	"GET /api/v1/decisions/{id}/evaluations":   "runtime introspection not yet exposed",
+	"GET /api/v1/instances/{key}/decisions":    "decision-evaluation introspection not yet exposed",
+	"GET /api/v1/decisions/deployed":           "decision introspection not yet exposed",
+	"GET /api/v1/decisions/{id}/evaluations":   "decision introspection not yet exposed",
 
 	// CSV batch start: driven from a user task inside the process (ADR-0084).
 	"POST /api/v1/processes/{key}/instances-from-csv": "in-process CSV ingestion, not a direct agent start",
