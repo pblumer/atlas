@@ -33,6 +33,9 @@ endpoint behind an authenticating reverse proxy.
 | `atlas_create_instance` | `key`, `variables?` | starts an instance (optionally seeded with start variables) and returns stats |
 | `atlas_process_runtime` | `key` | per-element token and visit counts |
 | `atlas_list_instances` | none | bounded legacy instance list |
+| `atlas_instance_variables` | `key` | one instance's variables as a typed object |
+| `atlas_instance_jobs` | `key` | one instance's activatable jobs (key, element, type) |
+| `atlas_instance_timeline` | `key` | one instance's step-by-step replay timeline |
 | `atlas_cancel_instance` | `key` | terminates one active instance |
 | `atlas_cancel_instances` | `key`, `limit?` | bounded bulk termination |
 | `atlas_delete_process` | `key` | deletes one deployed definition |

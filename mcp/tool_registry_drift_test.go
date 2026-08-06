@@ -52,6 +52,9 @@ var mcpToolRoutes = map[string]string{
 	"atlas_fail_job":              "POST /api/v1/jobs/{key}/fail",
 	"atlas_list_incidents":        "GET /api/v1/incidents",
 	"atlas_resolve_incident":      "POST /api/v1/incidents/{key}/resolve",
+	"atlas_instance_variables":    "GET /api/v1/instances/{key}/variables",
+	"atlas_instance_jobs":         "GET /api/v1/instances/{key}/jobs",
+	"atlas_instance_timeline":     "GET /api/v1/instances/{key}/timeline",
 }
 
 // mcpOmittedRoutes lists HTTP operations intentionally not exposed as MCP tools,
@@ -72,15 +75,12 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/feel/evaluate": "modeler-time expression check, not a scenario action",
 	"POST /api/v1/scripts/run":   "modeler-time script check, not a scenario action",
 
-	// Read-side runtime introspection: not yet exposed (candidate follow-ups).
+	// Read-side runtime introspection: partially exposed (candidate follow-ups).
 	"GET /api/v1/collaborations/{key}/runtime": "runtime introspection not yet exposed",
 	"GET /api/v1/instances/summary":            "runtime introspection not yet exposed",
 	"GET /api/v1/instances/search":             "runtime introspection not yet exposed",
-	"GET /api/v1/instances/{key}/variables":    "runtime introspection not yet exposed",
 	"GET /api/v1/instances/{key}/data-objects": "runtime introspection not yet exposed",
-	"GET /api/v1/instances/{key}/timeline":     "runtime introspection not yet exposed",
 	"GET /api/v1/instances/{key}/decisions":    "runtime introspection not yet exposed",
-	"GET /api/v1/instances/{key}/jobs":         "runtime introspection not yet exposed",
 	"GET /api/v1/decisions/deployed":           "runtime introspection not yet exposed",
 	"GET /api/v1/decisions/{id}/evaluations":   "runtime introspection not yet exposed",
 
