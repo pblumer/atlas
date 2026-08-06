@@ -60,8 +60,15 @@ function newFormId() {
 }
 
 let current; // active session handle, torn down on remount/leave
+// generation is bumped by cleanup() on every remount/navigation. mountFormEditor
+// captures it after cleanup() and re-checks after each await, so a mount a newer
+// navigation has superseded bails before it instantiates the form-js Playground
+// (and its timers) into a detached container and leaks them — the same guard
+// editor.js uses for the BPMN mounts.
+let generation = 0;
 
 export function cleanup() {
+  generation++;
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
 }
 
@@ -69,6 +76,7 @@ export function cleanup() {
 // existing form; without it creates a new one (optionally seeded into projectId).
 export async function mountFormEditor(root, { api, toast, formId, projectId }) {
   cleanup();
+  const gen = generation; // this mount's token; bail if a newer navigation supersedes it
   // Claim the shared cleanup slot so navigating away tears this editor down
   // (the BPMN editor reclaims it the same way when it mounts).
   window.__atlasCleanup = cleanup;
@@ -116,9 +124,11 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
       project = def.projectId || "";
       if (def.schema && typeof def.schema === "object") schema = def.schema;
     } catch (e) {
+      if (gen !== generation) return;
       container.innerHTML = `<p class="muted err" style="padding:20px">Failed to load form: ${esc(e.message)}</p>`;
       return;
     }
+    if (gen !== generation) return; // superseded while the form definition loaded
   } else {
     id = newFormId();
   }
@@ -155,9 +165,13 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
   try {
     ({ Playground } = await loadPlayground());
   } catch (e) {
+    if (gen !== generation) return;
     container.innerHTML = `<p class="muted err" style="padding:20px">Failed to load the form editor: ${esc(e.message)}</p>`;
     return;
   }
+  // Superseded while the form-js bundle loaded: don't build the Playground (and its
+  // timers) into a container the newer view has already replaced.
+  if (gen !== generation) return;
   container.innerHTML = "";
   let playground;
   try {
