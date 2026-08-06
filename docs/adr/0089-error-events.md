@@ -4,7 +4,7 @@
 - **Date:** 2026-07-30
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phases 1–2 delivered; Phases 3–5 pending. Each phase
+> **Implementation status.** Phases 1–3 delivered; Phases 4–5 pending. Each phase
 > lands test-first with a recovery test (ADR-0018). Error events build on the subprocess scope
 > lifecycle and `terminateScope`/`scopeContains` (ADR-0074), the boundary arm/fire
 > machinery (ADR-0040), event subprocesses (ADR-0082), the incident model (ADR-0061), and
@@ -56,6 +56,26 @@
 > raises an incident and parks; and an armed error boundary rebuilds on recovery so a throw
 > after crash+replay still finds it. Worker errors (`FailJobWithError`), error event
 > subprocesses, and call-activity caller propagation remain for Phases 3–4.
+>
+> **Delivered (Phase 3, worker errors + error event subprocess):** the two remaining throw
+> sources and catch targets. A `ThrowJobError(jobKey, code)` processor command (the "throw
+> BPMN error" verb, sibling of `FailJob`) rides a command-only `IntentJobErrorThrown`; its
+> handler cancels the job and calls `propagateError` from the job's element — so a service
+> task with an error boundary catches a worker-thrown error (the code rides in the command's
+> transient `incident.Message`, never persisted). `propagateError` now also checks each
+> scope's armed **error event subprocesses** (`findErrorEventSub`, a `TypeEventSubProcessStart`
+> scoped by the level, reusing ADR-0082): at each scope an error event subprocess is checked
+> *before* a boundary on that scope's activity (nearer — it catches within the scope, the
+> boundary catches on the way out), and the process root's event subprocesses are checked
+> after the element-scope walk (they key off the instance scope, not an element). A found
+> event-sub trigger is driven to `Completing` by the shared `fireErrorCatch`, running the
+> existing interrupting `eventSubProcessStartBehavior` path (`terminateScope` + activate the
+> handler); the `BoundaryError` trigger arms **inert** like the boundary. Verified: a worker
+> error caught by the task's boundary (job canceled, recovery flow taken); a worker error
+> with no handler raising an incident; an error event subprocess (in a subprocess, and at the
+> root) handling a scope error and running its handler; and the worker-error path surviving
+> crash+replay. Call-activity caller propagation and the code-matching / same-scope tie-break
+> tests remain for Phase 4.
 
 ## Context and problem statement
 

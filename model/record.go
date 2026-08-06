@@ -214,6 +214,14 @@ const (
 	// log. It rides in the same batch as the message publish it guards, so the
 	// dedup mark and the correlate/start effects it authorizes commit atomically.
 	IntentInboundDeliveryApplied
+
+	// IntentJobErrorThrown is a command-only intent (never persisted as an event): a
+	// worker reports that its job threw a BPMN error code (ADR-0089). Its handler cancels
+	// the job and propagates the error from the job's element to the nearest matching error
+	// handler — so, unlike IntentJobFailed, it is control flow, not a retry/incident.
+	// Because commands are not replayed (invariant I6), its numeric value never reaches the
+	// log. Appended at the end so every prior intent keeps its numeric value.
+	IntentJobErrorThrown
 )
 
 func (i Intent) String() string {
@@ -278,6 +286,8 @@ func (i Intent) String() string {
 		return "VariableDeleted"
 	case IntentInboundDeliveryApplied:
 		return "InboundDeliveryApplied"
+	case IntentJobErrorThrown:
+		return "JobErrorThrown"
 	default:
 		return "Intent(?)"
 	}
