@@ -979,6 +979,14 @@ function collectDiagramVariables(modeler) {
       if (cd && cd.resultVariable) push(cd.resultVariable, label, bo.id, "decision result");
       const io = findExt(bo, "zeebe:IoMapping");
       for (const p of (io && io.outputParameters) || []) push(p.target, label, bo.id, "output mapping");
+      // A data object is first-class per-instance state (ADR-0053): its name is the
+      // engine's variable-like identity, so surface it here too. The name lives on the
+      // underlying <dataObject>; the reference's shape id drives click-to-select.
+      if (bo.$type === "bpmn:DataObjectReference") {
+        const obj = bo.dataObjectRef;
+        const st = (bo.dataState && bo.dataState.name) || "";
+        push((obj && obj.name) || bo.name, "Data object", bo.id, st ? "data object · [" + st + "]" : "data object");
+      }
     });
   } catch { /* best-effort */ }
   return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -1004,14 +1012,21 @@ function wireEditorVars(root, modeler) {
       !q || v.name.toLowerCase().includes(q) || (v.origin || "").toLowerCase().includes(q));
     if (!vars.length) {
       list.innerHTML = `<p class="vars-empty">${q ? "No matching variables." :
-        "No variables yet. They appear as you add start variables, script or decision result variables, and output mappings."}</p>`;
+        "No variables yet. They appear as you add start variables, script or decision result variables, output mappings, and data objects."}</p>`;
       return;
     }
-    list.innerHTML = vars.map((v) => `<div class="var-row">
-      <div class="var-name">${esc(v.name)}</div>
-      <div class="var-meta">${esc(v.source)}${v.originId
-        ? ` · written by <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`
-        : ` · ${esc(v.origin)}`}</div></div>`).join("");
+    list.innerHTML = vars.map((v) => {
+      // A data object isn't "written by" an element — it *is* the element, so its source
+      // label itself is the click-to-select target; other sources name the writing element.
+      const meta = v.origin === "Data object"
+        ? `<span class="var-origin" data-el="${esc(v.originId)}">${esc(v.source)}</span>`
+        : `${esc(v.source)}${v.originId
+            ? ` · written by <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`
+            : ` · ${esc(v.origin)}`}`;
+      return `<div class="var-row">
+        <div class="var-name">${esc(v.name)}</div>
+        <div class="var-meta">${meta}</div></div>`;
+    }).join("");
   };
 
   toggle.addEventListener("click", () => {
@@ -2425,7 +2440,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
     const poolFields = `
       <h3>Pool</h3>
       <label class="field"><span>Name</span><input type="text" id="f-poolname" value="${esc(bo.name || "")}" placeholder="Teilnehmer"/></label>
-      <label class="field"><span>Pool ID</span><input type="text" value="${esc(bo.id || "")}" readonly/></label>`;
+      <label class="field"><span>Pool ID</span><input type="text" id="f-poolid" value="${esc(bo.id || "")}" spellcheck="false"/></label>`;
 
     if (!proc) {
       body.innerHTML = `${poolFields}
@@ -2436,6 +2451,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
       body.querySelector("#f-poolname").addEventListener("change", (e) => {
         try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
       });
+      wirePoolId(body, element);
       body.querySelector("#f-addproc").addEventListener("click", () => addProcessToPool(element));
       return;
     }
@@ -2459,6 +2475,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
     body.querySelector("#f-poolname").addEventListener("change", (e) => {
       try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
     });
+    wirePoolId(body, element);
     body.querySelector("#f-procname").addEventListener("change", (e) => {
       try { modeling.updateModdleProperties(element, proc, { name: e.target.value }); } catch { /* stale */ }
     });
@@ -2467,6 +2484,21 @@ function wireProperties(root, modeler, api, projectId, toast) {
       if (v) { try { modeling.updateModdleProperties(element, proc, { id: v }); } catch { toast("invalid process id", "err"); } }
     });
     if (activeTab(root) === "implement") wireStartVars(body, modeler, element, proc, savePreservingPanel);
+  }
+
+  // wirePoolId makes a pool's ID editable, the same way the element ID and Process ID
+  // fields are: bpmn-js validates the new id and rewrites references, throwing on an
+  // invalid or duplicate id, which we revert with a toast.
+  function wirePoolId(body, element) {
+    const f = body.querySelector("#f-poolid");
+    if (!f) return;
+    f.addEventListener("change", (e) => {
+      const v = (e.target.value || "").trim();
+      if (v === element.businessObject.id) return;
+      if (!v) { show(element); return; }
+      try { modeling.updateProperties(element, { id: v }); }
+      catch { toast("invalid id — must be unique and a valid identifier", "err"); show(element); }
+    });
   }
 
   function show(element) {
@@ -2578,7 +2610,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
     let html = `
       <h3>General</h3>
       <label class="field"><span>${isSeqFlow ? "Label" : "Name"}</span><input type="text" id="f-name" value="${esc(bo.name || "")}"${isSeqFlow ? ' placeholder="Großauftrag"' : ""}/></label>
-      <label class="field"><span>ID</span><input type="text" value="${esc(bo.id || "")}" readonly/></label>`;
+      <label class="field"><span>ID</span><input type="text" id="f-id" value="${esc(bo.id || "")}" spellcheck="false"/></label>`;
 
     // A data object is the data a process carries — first-class in Atlas, not just
     // decoration (ADR-0053). Its name is the engine's variable-like identity and its
@@ -2948,6 +2980,22 @@ function wireProperties(root, modeler, api, projectId, toast) {
         }
       } catch { /* stale */ }
     });
+
+    // Element IDs are editable, mirroring the Process ID field. bpmn-js validates the
+    // new id (unique, a valid identifier) and rewrites the references that point at this
+    // element — they are moddle object references, so links such as a data object's stay
+    // intact — throwing on an invalid or duplicate id, which we revert with a toast. This
+    // is how a data object's auto-generated id is renamed to something meaningful.
+    const fid = body.querySelector("#f-id");
+    if (fid) {
+      fid.addEventListener("change", (e) => {
+        const v = (e.target.value || "").trim();
+        if (v === bo.id) return;
+        if (!v) { show(element); return; } // empty is not a valid id → revert to the current one
+        try { modeling.updateProperties(element, { id: v }); }
+        catch { toast("invalid id — must be unique and a valid identifier", "err"); show(element); }
+      });
+    }
 
     const fdatastate = body.querySelector("#f-datastate");
     if (fdatastate) {
