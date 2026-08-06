@@ -516,6 +516,40 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   wireTokenSim(root, modeler);
 }
 
+// The BPMN elements the stock bpmn-js palette can draw but the Atlas engine can't run
+// yet, mapped to a plain-language reason. The Modeler uses these to flag such elements
+// at author time — a canvas badge and a Problems-bar warning — so the author isn't
+// surprised at Deploy/Validate. Keep in sync with the compiler's rejections and unrun
+// elements (compiler/scope_compile.go, compiler/parse.go).
+const UNSUPPORTED_TYPES = {
+  "bpmn:SendTask": "Send tasks can't run yet",
+  "bpmn:ReceiveTask": "Receive tasks can't run yet",
+  "bpmn:EventBasedGateway": "Event-based gateways aren't supported yet",
+  "bpmn:ComplexGateway": "Complex gateways aren't supported yet",
+  "bpmn:Transaction": "Transaction subprocesses aren't supported yet",
+  "bpmn:AdHocSubProcess": "Ad-hoc subprocesses aren't supported yet",
+  "bpmn:DataStoreReference": "Data stores aren't supported yet",
+};
+const UNSUPPORTED_EVENT_DEFS = {
+  "bpmn:TerminateEventDefinition": "Terminate end events can't run yet",
+  "bpmn:ErrorEventDefinition": "Error events aren't supported yet",
+  "bpmn:EscalationEventDefinition": "Escalation events aren't supported yet",
+  "bpmn:CompensateEventDefinition": "Compensation events aren't supported yet",
+  "bpmn:ConditionalEventDefinition": "Conditional events aren't supported yet",
+  "bpmn:LinkEventDefinition": "Link events aren't supported yet",
+};
+
+// unsupportedReason returns why a drawn element can't run on the Atlas engine yet, or
+// null if it can. It keys off the element type and any event definitions it carries.
+function unsupportedReason(bo) {
+  if (!bo || !bo.$type) return null;
+  if (UNSUPPORTED_TYPES[bo.$type]) return UNSUPPORTED_TYPES[bo.$type];
+  for (const d of (bo.eventDefinitions || [])) {
+    if (UNSUPPORTED_EVENT_DEFS[d.$type]) return UNSUPPORTED_EVENT_DEFS[d.$type];
+  }
+  return null;
+}
+
 // wireProblems drives the Problems panel (ADR-0026): the bottom bar becomes a
 // toggle that opens a filterable, element-linked list of the compiler's findings.
 // Validation is the real compiler run behind POST /api/v1/validate — never a
@@ -539,6 +573,39 @@ function wireProblems(root, modeler, api) {
   let expanded = false;
   let marked = null; // element id currently highlighted on the canvas
   let seq = 0; // guards against a stale validate response overwriting a newer one
+  let unsupIds = []; // overlay ids for the "can't run yet" badges we drew
+
+  // findUnsupported walks the live model for elements the engine can't run yet (see
+  // unsupportedReason) and returns them as Problems-bar warnings — author-time feedback
+  // that doesn't depend on a server round-trip and catches every offender at once (the
+  // compiler stops at its first rejection).
+  const findUnsupported = () => {
+    const out = [];
+    let registry;
+    try { registry = modeler.get("elementRegistry"); } catch { return out; }
+    registry.forEach((el) => {
+      if (el.labelTarget) return; // a label shares its target's businessObject — don't double-count
+      const why = unsupportedReason(el.businessObject);
+      if (why) out.push({ severity: "warning", message: why, element: el.id, rule: "unsupported-element" });
+    });
+    return out;
+  };
+  // redrawUnsupported puts a ⚠ badge on each unrunnable element (top-right, clear of the
+  // Implement type badge at top-left) and reaps the previous set first.
+  const redrawUnsupported = (findings) => {
+    let overlays;
+    try { overlays = modeler.get("overlays"); } catch { return; }
+    for (const id of unsupIds) { try { overlays.remove(id); } catch { /* gone */ } }
+    unsupIds = [];
+    for (const f of findings) {
+      try {
+        unsupIds.push(overlays.add(f.element, "atlas-unsupported", {
+          position: { top: -8, right: -8 },
+          html: `<span class="unsup-badge" title="${esc(f.message)} — remove it or the diagram won't run">⚠</span>`,
+        }));
+      } catch { /* shape without graphics (mid-import) — skip */ }
+    }
+  };
 
   const SEV_LABEL = { error: "Error", warning: "Warning" };
   const sevIcon = (s) => (s === "error" ? "✕" : s === "warning" ? "!" : "•");
@@ -607,13 +674,27 @@ function wireProblems(root, modeler, api) {
   // one validate, not one per keystroke-equivalent modeling event (ADR-0026).
   let timer = null;
   const validate = async () => {
+    // Client-side "can't run yet" findings first: instant canvas badges, and a fallback
+    // list if the server validate can't run (not imported / offline).
+    const unsupported = findUnsupported();
+    redrawUnsupported(unsupported);
     let xml;
-    try { ({ xml } = await modeler.saveXML({ format: true })); } catch { return; } // not imported yet
+    try { ({ xml } = await modeler.saveXML({ format: true })); } catch { problems = unsupported; render(); return; }
     const mine = ++seq;
     let res;
-    try { res = await api("POST", "/api/v1/validate", xml, true); } catch { return; }
+    try { res = await api("POST", "/api/v1/validate", xml, true); } catch { problems = unsupported; render(); return; }
     if (mine !== seq) return; // a newer validate has superseded this one
-    problems = Array.isArray(res.problems) ? res.problems : [];
+    const server = Array.isArray(res.problems) ? res.problems : [];
+    // Keep the compiler's authoritative findings and add a per-element warning for each
+    // unrunnable element the server didn't already flag — so a hard compile error on one
+    // element isn't doubled by a client warning, but the offenders the compiler never
+    // reached (it stops at the first) are still surfaced.
+    const flagged = new Set(server.map((p) => p.element).filter(Boolean));
+    // The compiler's hard rejections (send/receive/terminate) name the element in the
+    // message text rather than tagging it, so also drop a client warning when a server
+    // finding quotes that id — avoiding a doubled row for the same element.
+    problems = [...server, ...unsupported.filter((u) =>
+      !flagged.has(u.element) && !server.some((p) => (p.message || "").includes(`"${u.element}"`)))];
     if (res.version) versionEl.textContent = `Checked against Atlas ${res.version}`;
     render();
   };

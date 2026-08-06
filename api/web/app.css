@@ -1094,6 +1094,14 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 }
 .impl-badge svg { display: block; width: 16px; height: 16px; border-radius: 3px; }
 
+/* "Can't run yet" badge on a drawable-but-unsupported element (top-right corner),
+   so the author sees the gap while modeling, not only at Deploy/Validate. */
+.unsup-badge {
+  display: grid; place-items: center; width: 18px; height: 18px;
+  background: var(--warn); color: #fff; border-radius: 50%;
+  font-size: 11px; line-height: 1; box-shadow: 0 0 0 2px var(--surface); cursor: default;
+}
+
 /* Type icon in the service-task kind picker (serviceTaskKindHTML) — the same disc as
    the canvas marker so the picker and the diagram show the connector kind identically.
    Carries a `glyph` SVG when the kind has one (REST), else the kind's letter/emoji. */
