@@ -513,12 +513,9 @@ TokenSimulation.prototype._fireTrigger = function (el) {
 
 // _throwEvent visualises a message/signal throw: a dot flies from the throwing element to
 // every catch-like element that names the same message (1:1) or signal (broadcast). What
-// happens when the dot lands depends on the target:
-//   - a start event *begins a new instance* — a token spawns there (it has no waiting token
-//     to release, so the alternative would be an unintuitive manual click on the start);
-//   - an event-subprocess start *triggers its handler* while the enclosing scope runs;
-//   - a catch / boundary event is only *pinged* — a token must already be waiting there, and
-//     the user still fires it, keeping the engine-free "you decide when it occurs" model.
+// happens when the dot lands depends on the target (see _deliverToCatch): a modelled throw
+// that reaches a *waiting* catch delivers — it fires it — so throw→catch correlation
+// actually completes; a start event begins a new instance; nothing waiting is only pinged.
 // Matching is by message/signal name only; correlation keys are the engine's job.
 TokenSimulation.prototype._throwEvent = function (el) {
   const mName = messageName(el);
@@ -552,7 +549,20 @@ TokenSimulation.prototype._deliverToCatch = function (t) {
     this.spawnAt(t); // the message starts a new instance of this process
     return;
   }
-  this._ping(t); // a catch / boundary event: a token must be waiting; the user fires it
+  if (isBoundary(t)) {
+    // Fire the boundary if its host activity is holding a token; otherwise just show it.
+    const host = t.host || (t.businessObject && t.businessObject.attachedToRef);
+    if (host && (this._resting.get(host.id) || 0) > 0) this._fireBoundary(t);
+    else this._ping(t);
+    return;
+  }
+  // A catch / receive task with a token already waiting: the correlated message has arrived,
+  // so it delivers — fire it and let the token continue. This is what makes a throw in one
+  // pool actually complete a catch in another. With nothing waiting there is no token to
+  // release (the message finds no one home), so it is only pinged; a catch reached before
+  // its token, or a timer/external event, still waits for a manual fire or Auto-decide.
+  if (needsTrigger(t) && (this._resting.get(t.id) || 0) > 0) this._fireTrigger(t);
+  else this._ping(t);
 };
 
 // _offerChoice highlights a diverging gateway's outgoing flows and waits for the user.
