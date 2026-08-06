@@ -100,6 +100,13 @@ func failJobBody(args map[string]any) ([]byte, error) {
 	return body, nil
 }
 
+// searchInstancesPath builds the instance-search path for a variable query,
+// escaping the raw query string into the ?q= parameter the endpoint parses
+// (name=value, name exact and value substring, or free text over names/values).
+func searchInstancesPath(q string) string {
+	return "/api/v1/instances/search?q=" + url.QueryEscape(q)
+}
+
 // resolveIncidentBody builds the resolve request body {retries} from the tool
 // arguments. The /resolve endpoint requires a JSON body; the server coerces a
 // retries value below 1 up to 1, so an omitted argument (sending {"retries":0})
