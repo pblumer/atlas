@@ -46,7 +46,10 @@ var mcpToolRoutes = map[string]string{
 	"atlas_register_decision":     "POST /api/v1/dmnrefs",
 	"atlas_deploy_project":        "POST /api/v1/projects/{id}/deploy",
 	"atlas_list_tasks":            "GET /api/v1/tasks",
+	"atlas_get_task":              "GET /api/v1/tasks/{key}",
 	"atlas_complete_task":         "POST /api/v1/tasks/{key}/complete",
+	"atlas_claim_task":            "POST /api/v1/tasks/{key}/claim",
+	"atlas_unclaim_task":          "POST /api/v1/tasks/{key}/unclaim",
 	"atlas_publish_message":       "POST /api/v1/messages",
 	"atlas_complete_job":          "POST /api/v1/jobs/{key}/complete",
 	"atlas_fail_job":              "POST /api/v1/jobs/{key}/fail",
@@ -89,11 +92,6 @@ var mcpOmittedRoutes = map[string]string{
 
 	// Worker/operations control plane: partially exposed (candidate follow-ups).
 	"POST /api/v1/instances/terminate": "bulk filter-terminate not yet exposed",
-
-	// Human-task lifecycle beyond list+complete: not yet exposed.
-	"GET /api/v1/tasks/{key}":          "single-task read not yet exposed",
-	"POST /api/v1/tasks/{key}/claim":   "task assignment not yet exposed",
-	"POST /api/v1/tasks/{key}/unclaim": "task assignment not yet exposed",
 
 	// Design-time read/edit: agents create artifacts; browsing/editing is the UI's.
 	"GET /api/v1/drafts":                 "artifact browsing is a UI concern",
