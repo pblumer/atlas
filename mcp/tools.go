@@ -234,6 +234,20 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_instance_decisions",
+			Description: "Read the DMN decision evaluations one process instance made — each with the decision id, " +
+				"the business rule task that called it, and the inputs, outputs, and evaluation trace. An instance " +
+				"that evaluated no decisions (or an unknown key) returns [].",
+			InputSchema: keyArg("The instance key (from atlas_list_instances) whose decision evaluations to read."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/instances/" + strconv.FormatUint(key, 10) + "/decisions"))
+			},
+		},
+		{
 			Name: "atlas_cancel_instance",
 			Description: "Cancel (terminate) one running process instance by its instance key. All " +
 				"its tokens are discarded and the instance moves to the 'terminated' state. " +

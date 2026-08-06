@@ -62,6 +62,10 @@ var mcpToolRoutes = map[string]string{
 	"atlas_search_instances":      "GET /api/v1/instances/search",
 	"atlas_instance_data_objects": "GET /api/v1/instances/{key}/data-objects",
 	"atlas_terminate_instances":   "POST /api/v1/instances/terminate",
+	"atlas_instance_decisions":    "GET /api/v1/instances/{key}/decisions",
+	"atlas_deployed_decisions":    "GET /api/v1/decisions/deployed",
+	"atlas_dmnref_graph":          "GET /api/v1/dmnrefs/{id}/graph",
+	"atlas_get_decision_model":    "GET /api/v1/dmn-models/{ref}/xml",
 }
 
 // mcpOmittedRoutes lists HTTP operations intentionally not exposed as MCP tools,
@@ -84,9 +88,7 @@ var mcpOmittedRoutes = map[string]string{
 
 	// Read-side runtime introspection: partially exposed (candidate follow-ups).
 	"GET /api/v1/collaborations/{key}/runtime": "runtime introspection not yet exposed",
-	"GET /api/v1/instances/{key}/decisions":    "decision-evaluation introspection not yet exposed",
-	"GET /api/v1/decisions/deployed":           "decision introspection not yet exposed",
-	"GET /api/v1/decisions/{id}/evaluations":   "decision introspection not yet exposed",
+	"GET /api/v1/decisions/{id}/evaluations":   "cross-instance decision evaluation history not yet exposed",
 
 	// CSV batch start: driven from a user task inside the process (ADR-0084).
 	"POST /api/v1/processes/{key}/instances-from-csv": "in-process CSV ingestion, not a direct agent start",
@@ -109,8 +111,6 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/dmnrefs/{id}":        "artifact editing is a UI concern",
 	"POST /api/v1/dmnrefs/{id}/validate": "modeler-time validation is a UI concern",
 	"GET /api/v1/decisions":              "artifact browsing is a UI concern",
-	"GET /api/v1/dmnrefs/{id}/graph":     "artifact browsing is a UI concern",
-	"GET /api/v1/dmn-models/{ref}/xml":   "artifact browsing is a UI concern",
 
 	// Public start links: a human-sharing feature, not an agent action.
 	"POST /api/v1/public-links":           "human share links, not an agent action",
