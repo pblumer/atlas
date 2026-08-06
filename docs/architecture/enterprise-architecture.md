@@ -9,9 +9,9 @@ technology** — plus the **motivation** (stakeholders, drivers, goals, principl
 requirements) that shaped it.
 
 It is a *layered view*: a communication aid for architects and stakeholders, not a
-formal model export. Elements are grouped for readability rather than drawn as a
-full box-and-line diagram. A rendered, colour-coded version of the three core
-layers is easy to regenerate from the tables below.
+formal model export. The diagrams below are rendered directly by GitHub (Mermaid),
+colour-coded to the ArchiMate layer convention; the tables under each layer are the
+detailed reference behind the boxes.
 
 > **Notation cheat-sheet.** ArchiMate splits every layer into three *aspects* —
 > **active structure** (who/what acts: roles, components, nodes), **behaviour**
@@ -34,26 +34,51 @@ layers is easy to regenerate from the tables below.
 
 ## Layer map
 
-```
-   ┌───────────────────────────────────────────────────────────────────────┐
-   │  MOTIVATION   Stakeholders · Drivers · Goals · Principles · Requirements│  (purple)
-   │               "why Atlas is shaped the way it is"                       │
-   └───────────────────────────────┬───────────────────────────────────────┘
-                                    │ influences / realized by
-   ┌────────────────────────────────▼──────────────────────────────────────┐
-   │  BUSINESS     Roles · Business services · Processes · Business objects  │  (yellow)
-   │               "process automation as a business capability"            │
-   └───────────────────────────────┬───────────────────────────────────────┘
-                                    │ realized by
-   ┌────────────────────────────────▼──────────────────────────────────────┐
-   │  APPLICATION  Atlas Engine · Web UI · REST API · MCP · Connectors       │  (blue)
-   │               "the software that delivers the business services"       │
-   └───────────────────────────────┬───────────────────────────────────────┘
-                                    │ realized by / served by
-   ┌────────────────────────────────▼──────────────────────────────────────┐
-   │  TECHNOLOGY   Single binary · Go runtime · Partitions · Pebble · WAL    │  (green)
-   │               "the runtime, storage, and communication that host it"    │
-   └───────────────────────────────────────────────────────────────────────┘
+The four ArchiMate layers, top to bottom, each realized by the one beneath it.
+
+```mermaid
+flowchart TB
+    subgraph MOT["🟣 MOTIVATION — why Atlas is shaped this way"]
+        direction LR
+        m1["Drivers<br/>throughput · durability<br/>long-running · conformance"]
+        m2["Principles<br/>compile-don't-interpret · event sourcing<br/>group commit · single writer"]
+        m3["Requirements<br/>the six invariants"]
+        m1 --> m2 --> m3
+    end
+    subgraph BIZ["🟡 BUSINESS — process automation as a capability"]
+        direction LR
+        b1["Business services<br/>Automation · Human Tasks<br/>Decisions · Monitoring"]
+        b2["Processes<br/>lifecycle · order-to-cash"]
+        b3["Objects<br/>BPMN · DMN · Form · Instance"]
+    end
+    subgraph APP["🔵 APPLICATION — the software that delivers it"]
+        direction LR
+        a1["Atlas Engine<br/>Compiler · Processor · Data model"]
+        a2["Channels<br/>Web UI · REST API · MCP"]
+        a3["Connectors<br/>REST · Mail · Script · DMN · clio"]
+    end
+    subgraph TEC["🟢 TECHNOLOGY — the runtime that hosts it"]
+        direction LR
+        t1["Single binary<br/>Go runtime, no CGO"]
+        t2["Partitions<br/>single-writer"]
+        t3["Pebble + WAL<br/>filesystem, group commit"]
+    end
+    MOT -.->|shapes| BIZ
+    BIZ ==>|realized by| APP
+    APP ==>|realized by / served by| TEC
+
+    classDef mot fill:#E7DBF5,stroke:#7E5BB0,color:#1c2530;
+    classDef biz fill:#FBEFA8,stroke:#C9A227,color:#1c2530;
+    classDef app fill:#CBE4FA,stroke:#3D7FBF,color:#1c2530;
+    classDef tec fill:#CBEED7,stroke:#3E9E6A,color:#1c2530;
+    class m1,m2,m3 mot;
+    class b1,b2,b3 biz;
+    class a1,a2,a3 app;
+    class t1,t2,t3 tec;
+    style MOT fill:#F3ECFB,stroke:#7E5BB0,color:#4A2E6E;
+    style BIZ fill:#FDF8D9,stroke:#C9A227,color:#6a5600;
+    style APP fill:#E4F1FC,stroke:#3D7FBF,color:#0f4a75;
+    style TEC fill:#E2F5E9,stroke:#3E9E6A,color:#14603b;
 ```
 
 ---
@@ -134,13 +159,22 @@ enforced against the goals.
 | — | Single self-contained binary with embedded web UI | **Constraint** | [ADR-0011](../adr/0011-single-binary-distribution-and-web-ui.md) |
 | — | 95% repo-wide statement coverage; TDD by default | **Constraint** | [ADR-0018](../adr/0018-test-driven-development.md) |
 
-**Motivation trace (the through-line):**
+**Motivation trace (the through-line).** A worked example, reading a single concern
+all the way down into a concrete architecture element — purple motivation elements
+resolving into a blue application element:
 
-```
-Stakeholder ──has──► Driver ──influences──► Goal ──realized by──► Principle
-                                                        │
-                                                        ▼
-                                             Requirement (invariant) ──realized by──► Architecture element
+```mermaid
+flowchart LR
+    sh["Stakeholder<br/>Operations"] -->|has| dr["Driver<br/>durability"]
+    dr -->|influences| go["Goal<br/>survive crashes"]
+    go -->|realized by| pr["Principle<br/>event sourcing"]
+    pr -->|realized by| rq["Requirement<br/>durable before visible<br/>(invariant 2)"]
+    rq -->|realized by| el["Processor + WAL<br/>group commit"]
+
+    classDef mot fill:#E7DBF5,stroke:#7E5BB0,color:#1c2530;
+    classDef app fill:#CBE4FA,stroke:#3D7FBF,color:#1c2530;
+    class sh,dr,go,pr,rq mot;
+    class el app;
 ```
 
 ---
@@ -148,6 +182,40 @@ Stakeholder ──has──► Driver ──influences──► Goal ──reali
 ## Business layer
 
 *What Atlas offers as a business capability, and who consumes it.* Colour: yellow.
+
+```mermaid
+flowchart TB
+    subgraph roles["Roles"]
+        direction LR
+        pm["Process Modeler"]
+        tp["Task Performer"]
+        op["Operations"]
+    end
+    subgraph svcs["Business services"]
+        direction LR
+        s1["Process<br/>Automation"]
+        s2["Human-Task<br/>Handling"]
+        s3["Decision<br/>Making (DMN)"]
+        s4["Monitoring<br/>& Audit"]
+    end
+    subgraph objs["Business objects"]
+        direction LR
+        o1["BPMN model"]
+        o2["Process instance"]
+        o3["User task"]
+        o4["Incident"]
+    end
+    pm -->|assigned| svcs
+    tp -->|assigned| svcs
+    op -->|assigned| svcs
+    svcs -->|access| objs
+
+    classDef biz fill:#FBEFA8,stroke:#C9A227,color:#1c2530;
+    class pm,tp,op,s1,s2,s3,s4,o1,o2,o3,o4 biz;
+    style roles fill:#FDF8D9,stroke:#C9A227,color:#6a5600;
+    style svcs fill:#FDF8D9,stroke:#C9A227,color:#6a5600;
+    style objs fill:#FDF8D9,stroke:#C9A227,color:#6a5600;
+```
 
 ### Business roles and actors — *active structure*
 
@@ -189,6 +257,42 @@ visible"* is modeled as a **contract** the platform honours.
 ## Application layer
 
 *The software components that realize the business services.* Colour: blue.
+
+```mermaid
+flowchart TB
+    subgraph channels["Channels"]
+        direction LR
+        web["Web UI<br/>bpmn-js"]
+        rest["REST / HTTP API<br/>+ OpenAPI"]
+        mcp["MCP Server"]
+    end
+    subgraph engine["Atlas Engine (core)"]
+        direction LR
+        comp["Graph<br/>Compiler"]
+        proc["Processor<br/>single-writer"]
+        dm["Data model<br/>applyToState"]
+        wal["WAL<br/>manager"]
+        ss["State-store<br/>wrapper"]
+    end
+    subgraph connectors["Connectors / job workers"]
+        direction LR
+        c1["REST"]
+        c2["Mail"]
+        c3["Script"]
+        c4["DMN / temis"]
+        c5["clio bridge"]
+    end
+    channels -->|serve requests to| engine
+    engine -->|creates jobs for| connectors
+
+    classDef app fill:#CBE4FA,stroke:#3D7FBF,color:#1c2530;
+    classDef core fill:#AFD6F5,stroke:#2C6DAF,color:#0f3355;
+    class web,rest,mcp,c1,c2,c3,c4,c5 app;
+    class comp,proc,dm,wal,ss core;
+    style channels fill:#E4F1FC,stroke:#3D7FBF,color:#0f4a75;
+    style engine fill:#DCEBFA,stroke:#2C6DAF,color:#0f4a75;
+    style connectors fill:#E4F1FC,stroke:#3D7FBF,color:#0f4a75;
+```
 
 ### Application components — *active structure*
 
@@ -249,6 +353,33 @@ HTTP/REST · gRPC job stream · MCP · Web (browser).
 ## Technology layer
 
 *The runtime, storage, and communication that host the application.* Colour: green.
+
+```mermaid
+flowchart TB
+    subgraph binary["Atlas single binary — Go runtime, no CGO"]
+        direction LR
+        p0["Partition 0<br/>processor · WAL · state"]
+        p1["Partition 1<br/>processor · WAL · state"]
+        pn["Partition N<br/>…"]
+    end
+    fs["Filesystem<br/>WAL segments + Pebble SST · fsync"]
+    subgraph ext["External systems"]
+        direction LR
+        temis["temis<br/>DMN/FEEL"]
+        clio["clio<br/>event store"]
+        mail["Gmail /<br/>MS Graph"]
+        work["polyglot<br/>job workers"]
+    end
+    binary -->|group commit| fs
+    binary <-->|gRPC / HTTPS| ext
+
+    classDef tec fill:#CBEED7,stroke:#3E9E6A,color:#1c2530;
+    classDef extc fill:#DDE3EA,stroke:#8A97A6,color:#28313b;
+    class p0,p1,pn,fs tec;
+    class temis,clio,mail,work extc;
+    style binary fill:#E2F5E9,stroke:#3E9E6A,color:#14603b;
+    style ext fill:#EEF1F5,stroke:#8A97A6,color:#414d5b;
+```
 
 ### Nodes and system software — *active structure*
 
