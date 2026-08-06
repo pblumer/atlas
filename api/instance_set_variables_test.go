@@ -165,6 +165,18 @@ func TestSetInstanceVariablesInvalidScope(t *testing.T) {
 	}
 }
 
+// TestSetInstanceVariablesInvalidBody rejects a malformed JSON body with 400.
+func TestSetInstanceVariablesInvalidBody(t *testing.T) {
+	ts := newTestServer(t)
+	key := deployAndStartWaiting(t, ts, "")
+	code, _ := doReq(t, ts, http.MethodPost,
+		fmt.Sprintf("/api/v1/instances/%d/variables", key),
+		`{not json`, "application/json")
+	if code != http.StatusBadRequest {
+		t.Errorf("malformed JSON body: %d, want 400", code)
+	}
+}
+
 func TestSetInstanceVariablesInvalidKey(t *testing.T) {
 	ts := newTestServer(t)
 	code, _ := doReq(t, ts, http.MethodPost, "/api/v1/instances/not-a-number/variables",

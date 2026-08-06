@@ -1477,7 +1477,20 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
-	vars, err := parseStartVariables(body)
+	// Decode variables and the optional scopeKey in one pass (UseNumber so a
+	// number's exact textual form survives for FEEL's decimal semantics), then reuse
+	// the shared start-variable conversion.
+	var payload struct {
+		Variables map[string]any `json:"variables"`
+		ScopeKey  uint64         `json:"scopeKey"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	if err := dec.Decode(&payload); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return
+	}
+	vars, err := startVarsFromMap(payload.Variables)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -1486,17 +1499,7 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusBadRequest, "no variables to set (body must carry a non-empty \"variables\" object)")
 		return
 	}
-	var scopeKey uint64
-	if len(bytes.TrimSpace(body)) > 0 {
-		var sel struct {
-			ScopeKey uint64 `json:"scopeKey"`
-		}
-		if err := json.Unmarshal(body, &sel); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
-			return
-		}
-		scopeKey = sel.ScopeKey
-	}
+	scopeKey := payload.ScopeKey
 
 	var (
 		found    bool

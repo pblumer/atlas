@@ -59,6 +59,51 @@ func TestSetVariablesOnLiveInstance(t *testing.T) {
 	}
 }
 
+// TestSetVariablesOnElementScope covers the valid non-root scope path: a scopeKey
+// that is a live element instance of the instance is accepted, and the variable
+// lands under that scope, not the instance root — the targeting an operator uses to
+// correct a subprocess/multi-instance-body local variable.
+func TestSetVariablesOnElementScope(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	cp, _ := linearProcess(t) // parks at a service task, so an element instance is live
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	pi := model.NewKey(1, 1)
+
+	// The token is parked on the service task, so its element instance is live and is
+	// a valid scope target belonging to the instance.
+	var elemKey uint64
+	if err := h.store.ElementInstancesOfProcess(pi, func(k uint64) error {
+		elemKey = k
+		return nil
+	}); err != nil {
+		t.Fatalf("ElementInstancesOfProcess: %v", err)
+	}
+	if elemKey == 0 {
+		t.Fatal("no live element instance found")
+	}
+
+	p.SetVariables(pi, elemKey, model.VariableValue{Name: "local", Kind: model.VarString, Text: "scoped"})
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (after set): %v", err)
+	}
+	if got := readVar(t, h.store, elemKey, "local"); got == nil || got.Kind != model.VarString || got.Text != "scoped" {
+		t.Fatalf("local under element scope = %+v, want string scoped", got)
+	}
+	if got := readVar(t, h.store, pi, "local"); got != nil {
+		t.Fatalf("local under root scope = %+v, want nil (written to the element scope only)", got)
+	}
+}
+
 // TestSetVariablesNoOpOnFinishedInstance proves the guard: an instance that has
 // already finished cannot have variables set on it (there is nothing to correct),
 // so the write is a safe no-op and adds no variable to the lingering root scope.
