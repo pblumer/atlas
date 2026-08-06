@@ -39,6 +39,7 @@ endpoint behind an authenticating reverse proxy.
 | `atlas_instance_data_objects` | `key` | one instance's BPMN data objects (name, state, value) |
 | `atlas_instance_jobs` | `key` | one instance's activatable jobs (key, element, type) |
 | `atlas_instance_timeline` | `key` | one instance's step-by-step replay timeline |
+| `atlas_instance_decisions` | `key` | one instance's DMN decision evaluations (inputs, outputs, trace) |
 | `atlas_cancel_instance` | `key` | terminates one active instance |
 | `atlas_cancel_instances` | `key`, `limit?` | bounded bulk termination (by definition key) |
 | `atlas_terminate_instances` | `keys?` \| `processDefKey?`, `q?`, `limit?` | terminate an explicit key set, or a definition's matching instances |
@@ -61,6 +62,9 @@ endpoint behind an authenticating reverse proxy.
 | `atlas_save_form` | `id`, `schema`, `name?`, `projectId?` | saved form-js form |
 | `atlas_upload_decision_model` | `handle`, `xml` | stored DMN model |
 | `atlas_register_decision` | `name`, `modelRef`, `projectId?` | registered decision reference |
+| `atlas_deployed_decisions` | none | deployed DMN decisions with usage counts |
+| `atlas_dmnref_graph` | `id` | a decision reference's DRD (nodes and edges) |
+| `atlas_get_decision_model` | `ref` | raw DMN XML stored under a model handle |
 | `atlas_deploy_project` | `id` | deployed project definitions |
 | `atlas_list_tasks` | `limit?`, `before?`, `processInstance?` | task page envelope |
 | `atlas_get_task` | `key` | one open user task (deep-link read) |

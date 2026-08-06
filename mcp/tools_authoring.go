@@ -403,6 +403,52 @@ func authoringTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_deployed_decisions",
+			Description: "List deployed DMN decisions — one row per decision across all deployed definitions, " +
+				"with the processes that reference it and how many times it has been evaluated. The decisions " +
+				"overview, the counterpart to atlas_list_processes.",
+			InputSchema: noArgs(),
+			Handler: func(c *Client, _ map[string]any) (string, error) {
+				return asText(c.get("/api/v1/decisions/deployed"))
+			},
+		},
+		{
+			Name: "atlas_dmnref_graph",
+			Description: "Read a decision reference's decision requirements graph (DRD) — its decision nodes and " +
+				"the requirement edges between them — by the reference id from atlas_register_decision. Refused " +
+				"with a not-found error if no reference has that id.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"id": stringProp("The decision reference id (from atlas_register_decision or atlas_list_projects artifacts).")},
+				"required":   []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/dmnrefs/" + url.PathEscape(id) + "/graph"))
+			},
+		},
+		{
+			Name: "atlas_get_decision_model",
+			Description: "Get the raw DMN XML stored under a model handle — the handle used with " +
+				"atlas_upload_decision_model, i.e. a decision reference's modelRef. Refused with a not-found error " +
+				"if no model matches the handle.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"ref": stringProp("The model handle (from atlas_upload_decision_model).")},
+				"required":   []any{"ref"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				ref, err := argString(args, "ref")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/dmn-models/" + url.PathEscape(ref) + "/xml"))
+			},
+		},
+		{
 			Name: "atlas_deploy_project",
 			Description: "Deploy a project by id: compiles its diagram draft(s) and bundles the decisions " +
 				"its registered references resolve, so a deployed business rule task can evaluate them. " +
