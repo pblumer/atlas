@@ -27,11 +27,19 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 
 ## What's covered
 
-`token-simulation.spec.mjs` — message semantics across two pools (ADR-0101):
+- **`token-simulation.spec.mjs`** — message semantics across two pools (ADR-0101): a thrown
+  message **delivers to a waiting catch** (both pools complete), a message with **nothing
+  waiting is not buffered** (the later catch still parks), and a parked catch **still fires
+  manually** (the ⚡ / `step()` path).
+- **`gateways.spec.mjs`** (ADR-0096): the **exclusive** gateway pauses for a choice and routes
+  down the picked branch (and **auto-decide** runs it hands-free); the **parallel** gateway
+  forks both branches and the join merges to one completion; the **inclusive** gateway
+  activates a chosen subset and the **quiescence OR-join** still converges to one completion.
+- **`multi-instance.spec.mjs`** (ADR-0097 / ADR-0100): a modelled **loop cardinality** drives
+  the instance count and ticks down; a **data-driven** activity falls back to the
+  toolbar-configurable default.
 
-- a thrown message **delivers to a waiting catch**, so both pools complete;
-- a message with **nothing waiting is not buffered** (the later catch still parks);
-- a parked catch **still fires manually** (the ⚡ / `step()` path).
+Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
 
 ## CI
 

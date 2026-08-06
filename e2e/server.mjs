@@ -7,7 +7,7 @@ import { readFile } from "node:fs/promises";
 import { extname, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const here = fileURLToPath(new URL(".", import.meta.url));
+const here = fileURLToPath(new URL(".", import.meta.url)).replace(/[/\\]+$/, "");
 const WEB = join(here, "..", "api", "web");
 const PORT = Number(process.env.PORT) || 8199;
 
@@ -37,8 +37,12 @@ const server = http.createServer(async (req, res) => {
     const p = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
     if (p === "/" || p === "/harness.html") file = join(here, "harness.html");
     else if (p === "/replay-harness.html") file = join(here, "replay-harness.html");
-    else if (p === "/model.bpmn") file = join(here, "model.bpmn");
-    else {
+    else if (p.endsWith(".bpmn")) {
+      // Test models live here in e2e/ (never in api/web). Block path traversal.
+      const rel = normalize(p).replace(/^([/\\])+/, "");
+      file = join(here, rel);
+      if (file !== here && !file.startsWith(here + sep)) return send(res, 403, "forbidden");
+    } else {
       // Everything else resolves inside api/web; block path traversal.
       const rel = normalize(p).replace(/^([/\\])+/, "");
       file = join(WEB, rel);
