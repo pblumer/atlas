@@ -1500,7 +1500,7 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	scopeKey := payload.ScopeKey
-	// Who is making the change, for the audit trail (ADR-0097): the authenticated
+	// Who is making the change, for the audit trail (ADR-0098): the authenticated
 	// principal's username, or "" when auth is off (single-user) or the caller is
 	// unidentified. Read off the request before the run loop, like every other
 	// principal read.
@@ -1554,7 +1554,7 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 }
 
 // variableAuditView renders one external variable override for the audit view
-// (ADR-0097): when it happened, who made it, on which scope, and the variable name
+// (ADR-0098): when it happened, who made it, on which scope, and the variable name
 // and typed new value. It is the "who changed it" surface over the append-only audit
 // history — the read side of POST /instances/{key}/variables.
 type variableAuditView struct {
@@ -1585,7 +1585,7 @@ func varKindName(k model.VarKind) string {
 
 // handleInstanceVariableAudit returns the external variable overrides a process
 // instance received, in the order they happened, each with who made it, on which
-// scope, and the variable name and typed new value (ADR-0097). It is the audit
+// scope, and the variable name and typed new value (ADR-0098). It is the audit
 // counterpart to the read-only variables view: because the records are append-only
 // history, it works while the instance runs and after it has finished. An instance
 // with no overrides (or an unknown key) yields an empty array, not a 404 — like the

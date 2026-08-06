@@ -480,7 +480,7 @@ func handleVariablesModify(c *ProcessingContext) {
 		}
 		c.AppendVariableEvent(intent, v)
 		// Record who made this override, alongside the variable event, so the "who
-		// changed it" trail is durable and replayable (ADR-0097). The actor rides in on
+		// changed it" trail is durable and replayable (ADR-0098). The actor rides in on
 		// the command; the value mirrors what was written so the audit row is
 		// self-contained.
 		c.AppendVariableAuditEvent(model.VariableAuditValue{

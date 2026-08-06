@@ -641,7 +641,7 @@ func (s *Store) DecisionEvaluationHistory(scopeKey uint64, fn func(ts int64, pos
 // VariableAuditHistory folds the retained external variable overrides of one process
 // instance, calling fn with each override's event timestamp, log position, and its
 // frozen record (who set which variable, on which scope, to what value) in the order
-// they occurred (ADR-0097). Because the key sorts by timestamp then position, a
+// they occurred (ADR-0098). Because the key sorts by timestamp then position, a
 // scope-wide scan yields a monotonic sequence — the same ordering as the variable and
 // decision timelines — so the "who changed it" trail lines up with the step at which
 // each override happened. It surfaces to operators both live and after the instance

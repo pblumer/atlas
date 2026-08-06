@@ -1708,6 +1708,13 @@ tr[hidden] { display: none; }
   padding: 0 6px; height: 18px; font: 700 11px/18px system-ui, sans-serif;
   box-shadow: 0 1px 3px rgba(0,0,0,0.2); pointer-events: none;
 }
+/* Multi-instance activity: instances still to run (a simulated, fixed multiplicity). */
+.atlas-sim-mi {
+  display: inline-block; background: var(--surface); color: var(--accent);
+  border: 1px solid var(--accent); border-radius: 5px;
+  padding: 0 5px; height: 18px; font: 700 11px/18px ui-monospace, monospace;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2); pointer-events: none;
+}
 /* The "spawn a token here" affordance on every start event. */
 .atlas-sim-spawn {
   display: inline-flex; align-items: center; justify-content: center;

@@ -11,7 +11,7 @@ import (
 // TestVariableAuditHistory records an external-override audit trail for two
 // instances and checks that VariableAuditHistory returns one instance's overrides in
 // (timestamp, position) order, isolated from the other's — the "who changed it"
-// trail (ADR-0097). Written out of order to prove the scan sorts by (ts, pos).
+// trail (ADR-0098). Written out of order to prove the scan sorts by (ts, pos).
 func TestVariableAuditHistory(t *testing.T) {
 	s := openStore(t)
 	i1 := model.NewKey(1, 10)

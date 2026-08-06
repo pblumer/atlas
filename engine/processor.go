@@ -263,7 +263,7 @@ func (p *Processor) CompleteJobWithDecision(jobKey uint64, decision *model.Decis
 // gone (finished or never existed), or on a scope that does not belong to it, is a
 // no-op. It does not re-evaluate any gateway a token has already passed — it only
 // changes the stored values. Each variable set is additionally recorded as an audit
-// event naming actor — who made the change (ADR-0097) — so the "who changed it" trail
+// event naming actor — who made the change (ADR-0098) — so the "who changed it" trail
 // is durable; pass "" when the caller is unidentified. Call RunUntilIdle (or Drive)
 // to process it.
 func (p *Processor) SetVariables(piKey, scopeKey uint64, actor string, vars ...model.VariableValue) {

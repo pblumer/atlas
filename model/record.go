@@ -81,7 +81,7 @@ const (
 	// — the engine never interprets the opaque source id — and appended last so every
 	// prior value type keeps its numeric value on the log.
 	VTInboundDelivery
-	// VTVariableAudit is one external variable override retained for audit (ADR-0097):
+	// VTVariableAudit is one external variable override retained for audit (ADR-0098):
 	// who set which variable, to what value, on which scope, keyed under its process
 	// instance. Like VTMessageFlow and VTDecisionEvaluation it is append-only history
 	// (one record per variable an operator sets, never deleted), so the "who changed
@@ -237,7 +237,7 @@ const (
 	IntentVariableModify
 
 	// IntentVariableAudited records that an external actor set a variable on a running
-	// instance (ADR-0097). It is a pure history event, like IntentDecisionEvaluated:
+	// instance (ADR-0098). It is a pure history event, like IntentDecisionEvaluated:
 	// emitted alongside the VariableCreated/VariableUpdated the override produces, it
 	// freezes who made the change into the log so replay rebuilds the identical audit
 	// trail without re-running the command (invariant I6). Appended at the end so every

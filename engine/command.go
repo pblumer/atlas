@@ -36,7 +36,7 @@ type Command struct {
 	// so — like StartVars, on the same non-hot-path completion intent — it never
 	// touches the token-movement fast path.
 	Decision *model.DecisionEvaluationValue
-	// Actor identifies who submitted an external variable-modify command (ADR-0097):
+	// Actor identifies who submitted an external variable-modify command (ADR-0098):
 	// the acting principal's username, frozen into the audit event the modify emits so
 	// the "who changed it" trail is durable and replayable. Empty for every other
 	// command (and for a modify made with auth off / by an unidentified caller). It

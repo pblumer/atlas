@@ -66,6 +66,13 @@ var mcpToolRoutes = map[string]string{
 	"atlas_deployed_decisions":    "GET /api/v1/decisions/deployed",
 	"atlas_dmnref_graph":          "GET /api/v1/dmnrefs/{id}/graph",
 	"atlas_get_decision_model":    "GET /api/v1/dmn-models/{ref}/xml",
+	"atlas_collaboration_runtime": "GET /api/v1/collaborations/{key}/runtime",
+	"atlas_list_drafts":           "GET /api/v1/drafts",
+	"atlas_get_draft_xml":         "GET /api/v1/drafts/{id}/xml",
+	"atlas_list_forms":            "GET /api/v1/forms",
+	"atlas_get_form":              "GET /api/v1/forms/{id}",
+	"atlas_list_decision_refs":    "GET /api/v1/dmnrefs",
+	"atlas_list_decisions":        "GET /api/v1/decisions",
 }
 
 // mcpOmittedRoutes lists HTTP operations intentionally not exposed as MCP tools,
@@ -87,9 +94,8 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/scripts/run":   "modeler-time script check, not a scenario action",
 
 	// Read-side runtime introspection: partially exposed (candidate follow-ups).
-	"GET /api/v1/collaborations/{key}/runtime":   "runtime introspection not yet exposed",
 	"GET /api/v1/decisions/{id}/evaluations":     "cross-instance decision evaluation history not yet exposed",
-	"GET /api/v1/instances/{key}/variable-audit": "operator-override audit trail (ADR-0097) not yet exposed",
+	"GET /api/v1/instances/{key}/variable-audit": "operator-override audit trail (ADR-0098) not yet exposed",
 
 	// CSV batch start: driven from a user task inside the process (ADR-0084).
 	"POST /api/v1/processes/{key}/instances-from-csv": "in-process CSV ingestion, not a direct agent start",
@@ -99,19 +105,14 @@ var mcpOmittedRoutes = map[string]string{
 	// by hand is not an MCP capability. (terminate, in contrast, is exposed.)
 	"POST /api/v1/instances/{key}/variables": "admin-gated live-state correction; the MCP service principal is deliberately non-admin",
 
-	// Design-time read/edit: agents create artifacts; browsing/editing is the UI's.
-	"GET /api/v1/drafts":                 "artifact browsing is a UI concern",
-	"GET /api/v1/drafts/{id}/xml":        "artifact browsing is a UI concern",
+	// Design-time edit: agents create artifacts and can read them back (list/get
+	// are exposed), but mutating existing ones is the UI's job.
 	"PATCH /api/v1/drafts/{id}":          "artifact editing is a UI concern",
 	"DELETE /api/v1/drafts/{id}":         "artifact editing is a UI concern",
-	"GET /api/v1/forms":                  "artifact browsing is a UI concern",
-	"GET /api/v1/forms/{id}":             "artifact browsing is a UI concern",
 	"DELETE /api/v1/forms/{id}":          "artifact editing is a UI concern",
-	"GET /api/v1/dmnrefs":                "artifact browsing is a UI concern",
 	"PATCH /api/v1/dmnrefs/{id}":         "artifact editing is a UI concern",
 	"DELETE /api/v1/dmnrefs/{id}":        "artifact editing is a UI concern",
 	"POST /api/v1/dmnrefs/{id}/validate": "modeler-time validation is a UI concern",
-	"GET /api/v1/decisions":              "artifact browsing is a UI concern",
 
 	// Public start links: a human-sharing feature, not an agent action.
 	"POST /api/v1/public-links":           "human share links, not an agent action",

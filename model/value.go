@@ -451,7 +451,7 @@ func (v *DecisionEvaluationValue) decode(src []byte) error {
 	return nil
 }
 
-// VariableAuditValue records one external variable override for audit (ADR-0097):
+// VariableAuditValue records one external variable override for audit (ADR-0098):
 // who set which variable, to what value, on which scope. It is keyed under its
 // owning ProcessInstanceKey as append-only history — one record per variable an
 // operator sets — so the "who changed it" trail folds into the same instance

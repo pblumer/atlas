@@ -35,7 +35,7 @@ func TestInstanceVariableAuditEmpty(t *testing.T) {
 	}
 }
 
-// TestInstanceVariableAuditRecordsChanges covers the audit read (ADR-0097): after an
+// TestInstanceVariableAuditRecordsChanges covers the audit read (ADR-0098): after an
 // operator overrides variables on a running instance, the endpoint returns one row
 // per variable with its typed new value, in change order. With auth off the actor is
 // empty (single-user) — the "who" is meaningful only under auth, exercised separately.

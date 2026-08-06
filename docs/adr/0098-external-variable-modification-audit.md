@@ -1,4 +1,4 @@
-# ADR-0097: Audit trail for external variable modifications
+# ADR-0098: Audit trail for external variable modifications
 
 - **Status:** Accepted
 - **Date:** 2026-08-06

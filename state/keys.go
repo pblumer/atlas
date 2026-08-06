@@ -39,7 +39,7 @@ const (
 	cfDefCompletedCount      columnFamily = 0x1A // defDone:<procDefKey> → int64 finished-instance count (merge, ADR-0083)
 	cfDefLastActivity        columnFamily = 0x1B // defAct:<procDefKey> → int64 unix-nano of the latest instance event (set, ADR-0083)
 	cfSignalSubscription     columnFamily = 0x1C // sigSub:<name>:<elKey> → SignalSubscriptionValue (ADR-0088)
-	cfVariableAudit          columnFamily = 0x1D // varAudit:<piKey>:<ts>:<pos> → VariableAuditValue (ADR-0097)
+	cfVariableAudit          columnFamily = 0x1D // varAudit:<piKey>:<ts>:<pos> → VariableAuditValue (ADR-0098)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -387,7 +387,7 @@ func scopeFromDecisionEvalKey(k []byte) uint64 {
 // keyVariableAudit keys one external variable override under its owning process
 // instance, the same (instance, ts, pos) shape as the decision-evaluation and
 // variable-snapshot keys, so the "who changed it" trail folds into the same instance
-// timeline by log position (ADR-0097, mirroring ADR-0066/0048). Append-only: one
+// timeline by log position (ADR-0098, mirroring ADR-0066/0048). Append-only: one
 // record per variable an operator sets, never overwritten.
 func keyVariableAudit(piKey uint64, ts int64, pos uint64) []byte {
 	b := appendOrderedInt64(variableAuditScopePrefix(piKey), ts)

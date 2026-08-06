@@ -172,7 +172,7 @@ func (s *Server) apiRoutes() []apiRoute {
 				"instanceKey": tInteger(), "variablesSet": tInteger(),
 			}))}},
 		{"GET", "/api/v1/instances/{key}/variable-audit", s.handleInstanceVariableAudit, apiOp{
-			summary: "Read the external variable overrides a process instance received — the \"who changed it\" audit trail, each with actor, scope, variable name, and typed new value (ADR-0097)", tag: "Instances",
+			summary: "Read the external variable overrides a process instance received — the \"who changed it\" audit trail, each with actor, scope, variable name, and typed new value (ADR-0098)", tag: "Instances",
 			resp: jsonBody("Variable overrides", tArray())}},
 		{"GET", "/api/v1/instances/{key}/data-objects", s.handleInstanceDataObjects, apiOp{
 			summary: "Read a process instance's data objects — each with its name, data state, and typed value", tag: "Instances",

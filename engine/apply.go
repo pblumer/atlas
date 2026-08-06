@@ -242,7 +242,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 	case model.VTVariableAudit:
 		if h.Intent == model.IntentVariableAudited {
 			// Retain who set a variable from outside the model — an operator override —
-			// as append-only audit history (ADR-0097), the "who changed it" analogue of
+			// as append-only audit history (ADR-0098), the "who changed it" analogue of
 			// the decision-evaluation record. The record carries everything (actor, scope,
 			// name, value); the timestamp and position come from this event's header, so
 			// replay rebuilds identical history without re-running the modify command

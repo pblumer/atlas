@@ -21,7 +21,7 @@ type auditRow struct {
 }
 
 // variableAudit reads one instance's external-override audit trail into ordered
-// rows, oldest first (ADR-0097).
+// rows, oldest first (ADR-0098).
 func variableAudit(t *testing.T, s *state.Store, piKey uint64) []auditRow {
 	t.Helper()
 	var out []auditRow
@@ -34,7 +34,7 @@ func variableAudit(t *testing.T, s *state.Store, piKey uint64) []auditRow {
 	return out
 }
 
-// TestSetVariablesRecordsAudit covers the "who changed it" trail (ADR-0097): an
+// TestSetVariablesRecordsAudit covers the "who changed it" trail (ADR-0098): an
 // operator override records one audit row per variable set, naming the actor, the
 // scope, and the new value, in change order — alongside the variable write itself.
 func TestSetVariablesRecordsAudit(t *testing.T) {
@@ -74,7 +74,7 @@ func TestSetVariablesRecordsAudit(t *testing.T) {
 }
 
 // TestSetVariablesAuditRecovers is the recovery property for the audit trail
-// (invariants I4/I6, ADR-0097): the override is recorded as an ordinary event, so
+// (invariants I4/I6, ADR-0098): the override is recorded as an ordinary event, so
 // replaying the log into a fresh store rebuilds an identical audit trail — the actor
 // is a durable fact read back from the log, never re-derived by re-running the modify
 // command (commands are not replayed).

@@ -292,7 +292,7 @@ func (c *ProcessingContext) AppendDecisionEvaluationEvent(v model.DecisionEvalua
 }
 
 // AppendVariableAuditEvent records who set a variable from outside the model — an
-// operator override — as append-only audit history (ADR-0097). Like a variable it
+// operator override — as append-only audit history (ADR-0098). Like a variable it
 // carries genuine runtime data (an actor, a name, and contents), so it allocates for
 // its strings; it rides only on the non-hot-path variable-modify command, never token
 // movement. It is keyed by the owning process instance, so a scope-wide scan yields

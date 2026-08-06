@@ -32,6 +32,7 @@ endpoint behind an authenticating reverse proxy.
 | `atlas_get_process_xml` | `key` | deployed BPMN XML |
 | `atlas_create_instance` | `key`, `variables?` | starts an instance (optionally seeded with start variables) and returns stats |
 | `atlas_process_runtime` | `key` | per-element token and visit counts |
+| `atlas_collaboration_runtime` | `key` | a collaboration's live pools, tokens, and message flows |
 | `atlas_list_instances` | none | bounded legacy instance list |
 | `atlas_instances_summary` | none | per-definition active/completed counts |
 | `atlas_search_instances` | `q` | instances matching a variable query (`name=value` or free text) |
@@ -59,9 +60,15 @@ endpoint behind an authenticating reverse proxy.
 | `atlas_list_projects` | none | visible projects |
 | `atlas_delete_project` | `id` | `{deleted:true,id}` |
 | `atlas_save_draft` | `xml`, `projectId?` | saved BPMN draft |
+| `atlas_list_drafts` | `projectId?` | saved diagram drafts |
+| `atlas_get_draft_xml` | `id` | a draft's BPMN XML (by process id) |
 | `atlas_save_form` | `id`, `schema`, `name?`, `projectId?` | saved form-js form |
+| `atlas_list_forms` | `projectId?` | saved form definitions |
+| `atlas_get_form` | `id` | a form's schema |
 | `atlas_upload_decision_model` | `handle`, `xml` | stored DMN model |
 | `atlas_register_decision` | `name`, `modelRef`, `projectId?` | registered decision reference |
+| `atlas_list_decision_refs` | `projectId?` | registered DMN decision references |
+| `atlas_list_decisions` | `projectId?` | DMN decisions (with inputs/outputs) from references |
 | `atlas_deployed_decisions` | none | deployed DMN decisions with usage counts |
 | `atlas_dmnref_graph` | `id` | a decision reference's DRD (nodes and edges) |
 | `atlas_get_decision_model` | `ref` | raw DMN XML stored under a model handle |
