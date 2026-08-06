@@ -426,6 +426,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
         <button class="btn neutral" id="sim-reset" title="Clear all tokens">Reset</button>
         <label class="sim-speed">Speed
           <select class="speed" id="sim-speed" aria-label="Simulation speed">
+            <option value="0.25">0.25&times;</option>
             <option value="0.5">0.5&times;</option>
             <option value="1" selected>1&times;</option>
             <option value="2">2&times;</option>

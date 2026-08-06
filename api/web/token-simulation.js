@@ -240,7 +240,9 @@ TokenSimulation.prototype.isActive = function () {
   return this._active;
 };
 
-// setSpeed scales the animation and dwell timings (1 = normal).
+// setSpeed scales the animation and dwell timings. 1× is the normal (deliberately calm)
+// baseline — a ~1.3s dwell per step — and the selector offers two steps in each direction
+// (0.25× / 0.5× / 1× / 2× / 4×); higher/lower values divide that base tempo up or down.
 TokenSimulation.prototype.setSpeed = function (mult) {
   this._speed = Math.max(0.25, Number(mult) || 1);
 };
@@ -813,7 +815,7 @@ TokenSimulation.prototype._canReach = function (fromId, toId) {
 TokenSimulation.prototype._pump = function () {
   if (this._pumpTimer) return; // a tick is already scheduled
   if (!this._playing || !this._active) return;
-  const delay = 650 / this._speed;
+  const delay = 1300 / this._speed;
   this._pumpTimer = setTimeout(() => {
     this._pumpTimer = null;
     if (!this._playing || !this._active) return;
@@ -1104,7 +1106,7 @@ TokenSimulation.prototype._animateDot = function (waypoints, cancelled, cls) {
     segs.push({ a, b, len });
     total += len;
   }
-  const dur = Math.max(220, Math.min(1400, 40 + total * 2.2)) / this._speed;
+  const dur = Math.max(440, Math.min(2800, 80 + total * 4.4)) / this._speed;
 
   return new Promise((resolve) => {
     let start = null;
