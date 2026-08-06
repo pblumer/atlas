@@ -178,7 +178,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Read a process instance's data objects — each with its name, data state, and typed value", tag: "Instances",
 			resp: jsonBody("Instance data objects", tArray())}},
 		{"GET", "/api/v1/instances/{key}/timeline", s.handleInstanceTimeline, apiOp{
-			summary: "Read a process instance's step-by-step replay timeline", tag: "Instances",
+			summary: "Read a process instance's step-by-step replay timeline — each step's variables carry an actor when the value was set by an external operator override (ADR-0098)", tag: "Instances",
 			resp: jsonBody("Instance timeline", tObject())}},
 		{"GET", "/api/v1/instances/{key}/decisions", s.handleInstanceDecisions, apiOp{
 			summary: "Read the DMN decision evaluations a process instance made — each with its inputs, outputs, and trace", tag: "Instances",
