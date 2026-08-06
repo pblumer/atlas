@@ -161,3 +161,15 @@ func TestTerminateInstancesRejectsBadKeys(t *testing.T) {
 		t.Fatalf("terminate non-integer key = (%q, isErr=%v), want a tool error", text, isErr)
 	}
 }
+
+// TestTerminateInstancesRejectsBadFilterArgs covers the processDefKey and limit
+// argument-validation branches of the filter-mode selector.
+func TestTerminateInstancesRejectsBadFilterArgs(t *testing.T) {
+	atlas := newAtlas(t)
+	if text, isErr := toolText(t, result(t, run(t, atlas, callTool(1, "atlas_terminate_instances", map[string]any{"processDefKey": "x"}))[0])); !isErr || !strings.Contains(text, "integer") {
+		t.Fatalf("terminate bad processDefKey = (%q, isErr=%v), want a tool error", text, isErr)
+	}
+	if text, isErr := toolText(t, result(t, run(t, atlas, callTool(2, "atlas_terminate_instances", map[string]any{"limit": "x"}))[0])); !isErr || !strings.Contains(text, "integer") {
+		t.Fatalf("terminate bad limit = (%q, isErr=%v), want a tool error", text, isErr)
+	}
+}

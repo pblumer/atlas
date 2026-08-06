@@ -100,46 +100,6 @@ func failJobBody(args map[string]any) ([]byte, error) {
 	return body, nil
 }
 
-// toUint converts one JSON-decoded argument value to a non-negative integer. It
-// accepts the shapes a client sends (float64, json.Number, numeric string) plus
-// the native integer kinds, for array elements that argUint (which reads by name)
-// cannot reach.
-func toUint(v any) (uint64, error) {
-	switch n := v.(type) {
-	case float64:
-		if n < 0 || n != float64(uint64(n)) {
-			return 0, fmt.Errorf("must be a non-negative integer")
-		}
-		return uint64(n), nil
-	case json.Number:
-		u, err := parseUint(n.String())
-		if err != nil {
-			return 0, fmt.Errorf("must be a non-negative integer")
-		}
-		return u, nil
-	case string:
-		u, err := parseUint(n)
-		if err != nil {
-			return 0, fmt.Errorf("must be a non-negative integer")
-		}
-		return u, nil
-	case int:
-		if n < 0 {
-			return 0, fmt.Errorf("must be a non-negative integer")
-		}
-		return uint64(n), nil
-	case int64:
-		if n < 0 {
-			return 0, fmt.Errorf("must be a non-negative integer")
-		}
-		return uint64(n), nil
-	case uint64:
-		return n, nil
-	default:
-		return 0, fmt.Errorf("must be an integer")
-	}
-}
-
 // terminateInstancesBody builds the terminate request body from the tool
 // arguments. Two mutually exclusive selectors: an explicit "keys" array, or a
 // "processDefKey" with optional "q" (variable query) and "limit" (filter-mode
@@ -154,9 +114,11 @@ func terminateInstancesBody(args map[string]any) ([]byte, error) {
 		}
 		keys := make([]uint64, 0, len(arr))
 		for i, el := range arr {
-			k, err := toUint(el)
+			// Reuse the name-keyed integer coercion for each element so the array
+			// accepts the same JSON shapes a scalar key argument does.
+			k, err := argUint(map[string]any{"key": el}, "key")
 			if err != nil {
-				return nil, fmt.Errorf("keys[%d] %v", i, err)
+				return nil, fmt.Errorf("keys[%d] must be a non-negative integer", i)
 			}
 			keys = append(keys, k)
 		}
