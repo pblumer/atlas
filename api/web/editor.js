@@ -116,6 +116,15 @@ function blankXML() {
 
 let current; // active modeler/viewer, destroyed on remount
 let liveTimer; // active live-overlay poll, cleared on remount/leave
+// generation is bumped by cleanup() on every navigation/remount. A mount captures
+// it right after its own cleanup() and re-checks it after each await, so a slow
+// mount that a newer navigation has superseded bails out *before* it builds a
+// second viewer or writes into the live view's DOM. Without this, the router's
+// re-entrancy (hashchange fires route() again while a mount is still awaiting
+// bpmn assets or the timeline) let a stale mount create a second bpmn-js canvas
+// inside the current mount's #canvas and render another instance's data over it —
+// two overlaid diagrams, mismatched instance keys, a leaked poll timer.
+let generation = 0;
 
 // docTitle refines the browser tab title with a loaded subject (a diagram or
 // process name), matching app.js's "<subject> · Atlas" scheme so open tabs are
@@ -125,6 +134,7 @@ function docTitle(label) { document.title = label ? `${label} · Atlas` : "Atlas
 // cleanup tears down the current modeler and any live poll. app.js calls it (via
 // window.__atlasCleanup) when navigating away so nothing keeps running.
 export function cleanup() {
+  generation++; // supersede any in-flight mount (see `generation` above)
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
 }
@@ -392,6 +402,7 @@ function editorCrumbs(project, current) {
 
 export async function mountEditor(root, { api, toast, key, draftId, projectId, project }) {
   cleanup();
+  const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
   const crumb = draftId != null ? "Draft" : key == null ? "New diagram" : "Deployment " + key;
   root.innerHTML = `
@@ -482,6 +493,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
       `<div class="coming"><p>${esc(e.message)}</p></div>`;
     return;
   }
+  if (gen !== generation) return; // a newer navigation took over while assets loaded
 
   const modeler = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"), [
     tokenSimulationModule(),
@@ -4138,6 +4150,7 @@ function wireActions(root, modeler, api, toast, projectId) {
 // variables are listed below the diagram.
 export async function mountLive(root, { api, toast, key, instance }) {
   cleanup();
+  const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
   // Resolve the process this definition version belongs to, and all its versions,
   // so the version picker can offer them. One /processes call feeds both.
@@ -4154,6 +4167,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
         .sort((a, b) => b.version - a.version);
     }
   } catch { /* header/version picker are best-effort */ }
+  if (gen !== generation) return; // superseded before we wrote this view's shell
 
   const versionOptions = versions.length
     ? versions.map((v) =>
@@ -4216,6 +4230,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
     root.querySelector("#canvas").innerHTML = `<div class="coming"><p>${esc(e.message)}</p></div>`;
     return;
   }
+  if (gen !== generation) return; // a newer navigation took over while assets loaded
 
   const viewer = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
   current = viewer;
@@ -4947,6 +4962,7 @@ function runDotAnimation(layer, waypoints, dur, cancelled) {
 // the order it actually happened, so a finished collaboration replays its exchange.
 export async function mountCollaboration(root, { api, toast, key }) {
   cleanup();
+  const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
   root.innerHTML = `
     <div class="editor live">
@@ -4989,6 +5005,7 @@ export async function mountCollaboration(root, { api, toast, key }) {
     root.querySelector("#canvas").innerHTML = `<div class="coming"><p>${esc(e.message)}</p></div>`;
     return;
   }
+  if (gen !== generation) return; // a newer navigation took over while assets loaded
 
   const viewer = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
   current = viewer;
@@ -5190,6 +5207,7 @@ export async function mountCollaboration(root, { api, toast, key }) {
 // instance keeps gaining steps live.
 export async function mountInstanceReplay(root, { api, toast, key }) {
   cleanup();
+  const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
   root.innerHTML = `
     <div class="editor live ops-replay">
@@ -5263,6 +5281,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     root.querySelector("#canvas").innerHTML = `<div class="coming"><p>${esc(e.message)}</p></div>`;
     return;
   }
+  if (gen !== generation) return; // a newer navigation took over while assets loaded
 
   // The timeline resolves the instance's definition, which the diagram renders.
   let tl;
@@ -5274,6 +5293,9 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
        <p class="muted">${esc(e.message)}</p></div>`;
     return;
   }
+  // Superseded while the timeline was in flight — do NOT build a viewer or touch
+  // the DOM, which now belongs to the newer mount.
+  if (gen !== generation) return;
   root.querySelector("#rp-live").href = `#/operations/p/${tl.processDefKey}/i/${key}`;
 
   const viewer = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
@@ -5284,11 +5306,15 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     await viewer.importXML(typeof xml === "string" ? xml : String(xml));
     viewer.get("canvas").zoom("fit-viewport");
   } catch (e) {
+    // A newer navigation destroyed this viewer mid-import; the error is expected
+    // and the #canvas now belongs to that mount, so leave it untouched.
+    if (gen !== generation) return;
     root.querySelector("#canvas").innerHTML =
       `<div class="coming"><p>Could not render this instance's diagram.</p>
        <p class="muted">${esc(e.message)}</p></div>`;
     return;
   }
+  if (gen !== generation) return; // superseded while the diagram imported
 
   const canvas = viewer.get("canvas");
   const registry = viewer.get("elementRegistry");

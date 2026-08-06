@@ -36,6 +36,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const p = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
     if (p === "/" || p === "/harness.html") file = join(here, "harness.html");
+    else if (p === "/replay-harness.html") file = join(here, "replay-harness.html");
     else if (p === "/model.bpmn") file = join(here, "model.bpmn");
     else {
       // Everything else resolves inside api/web; block path traversal.
