@@ -1686,6 +1686,11 @@ tr[hidden] { display: none; }
 }
 .sim-bar .sim-auto { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }
 .sim-bar .sim-auto input { margin: 0; cursor: pointer; }
+.sim-bar .sim-mi { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.sim-bar .sim-mi input {
+  font: inherit; font-size: 13px; color: var(--text); background: var(--surface);
+  border: 1px solid var(--border-strong); border-radius: 6px; padding: 5px 6px; width: 52px;
+}
 .sim-bar .sim-hint { font-size: 12px; color: var(--accent); }
 .sim-bar .sim-stats { font: 12px ui-monospace, monospace; color: var(--muted); }
 

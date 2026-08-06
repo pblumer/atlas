@@ -116,10 +116,10 @@ const isProcessStart = (el) => isStart(el) && !isEventSubStart(el);
 const isInterruptingSub = (el) => el.businessObject && el.businessObject.isInterrupting !== false;
 
 // Multi-instance activities (ADR-0077) run their body several times — in parallel or in
-// sequence. The real multiplicity is data-driven (a collection size), which the simulation
-// deliberately does not evaluate; it visualises a fixed, clearly-labelled number of
-// instances so the marker's meaning is legible.
-const MI_INSTANCES = 3;
+// sequence. Data-driven multiplicity (a collection size) is not something the simulation
+// evaluates, so it visualises a clearly-labelled number of instances. That number is the
+// toolbar-configurable default, unless the model pins a fixed loop cardinality (below).
+const MI_DEFAULT_INSTANCES = 3;
 const loopChars = (el) => el.businessObject && el.businessObject.loopCharacteristics;
 const isMultiInstance = (el) => {
   const lc = loopChars(el);
@@ -128,6 +128,18 @@ const isMultiInstance = (el) => {
 const isSequentialMI = (el) => {
   const lc = loopChars(el);
   return !!(lc && lc.isSequential === true);
+};
+// literalCardinality reads a modelled fixed loop cardinality — a `<loopCardinality>` that is
+// a plain positive integer (optionally FEEL-prefixed `=3`). A data-driven or expression
+// cardinality returns null, so the caller falls back to the configurable default.
+const literalCardinality = (el) => {
+  const lc = loopChars(el);
+  const body = lc && lc.loopCardinality && lc.loopCardinality.body;
+  if (body == null) return null;
+  const m = String(body).replace(/^=\s*/, "").trim();
+  if (!/^\d+$/.test(m)) return null;
+  const n = parseInt(m, 10);
+  return n > 0 ? n : null;
 };
 
 // --- The simulation service --------------------------------------------------------
@@ -142,6 +154,7 @@ export function TokenSimulation(eventBus, elementRegistry, canvas, overlays) {
   this._playing = false;
   this._auto = false; // auto-decide: resolve choices and fire triggers without clicks
   this._speed = 1;
+  this._miCount = MI_DEFAULT_INSTANCES; // simulated instances for data-driven multi-instance
 
   // resting: how many tokens currently sit ON each element, keyed by element id. A token
   // "rests" between moves; the badge overlay shows the count.
@@ -158,7 +171,7 @@ export function TokenSimulation(eventBus, elementRegistry, canvas, overlays) {
   this._flowOwner = new Map(); // offered-flow id → owning gateway id, for click routing
   this._boundaries = new Map(); // host activity id → [boundary elements], indexed on import
   this._eventSubStarts = []; // event-subprocess start events, indexed on import
-  this._miRemaining = new Map(); // multi-instance activity id → instances still to run
+  this._miRemaining = new Map(); // multi-instance activity id → { left, total } instances
   this._reach = new Map(); // memoised "can `from` reach `to`?" over sequence flows
   this._completed = 0; // tokens that reached an end event / ran off the graph
 
@@ -230,6 +243,20 @@ TokenSimulation.prototype.isActive = function () {
 // setSpeed scales the animation and dwell timings (1 = normal).
 TokenSimulation.prototype.setSpeed = function (mult) {
   this._speed = Math.max(0.25, Number(mult) || 1);
+};
+
+// setMiCount sets how many instances a data-driven multi-instance activity runs in the
+// simulation (a model with a fixed loop cardinality still uses its own number). Clamped to a
+// legible range; it applies to activities entered from now on, not ones already counting.
+TokenSimulation.prototype.setMiCount = function (n) {
+  const v = Math.floor(Number(n));
+  this._miCount = Math.max(1, Math.min(20, Number.isFinite(v) ? v : MI_DEFAULT_INSTANCES));
+};
+
+// _miInstancesFor returns the instance count to run for a multi-instance activity: the
+// modelled fixed loop cardinality if there is one, otherwise the configurable default.
+TokenSimulation.prototype._miInstancesFor = function (el) {
+  return literalCardinality(el) || this._miCount;
 };
 
 // setAuto toggles auto-decide mode: while playing, choices resolve themselves (the default
@@ -445,10 +472,13 @@ TokenSimulation.prototype._emit = function (el) {
   // Multi-instance: consume one instance per move, keeping the token on the activity until
   // the last instance is done — so a step / Play visibly counts the body running N times.
   if (isMultiInstance(el)) {
-    let rem = this._miRemaining.get(el.id);
-    if (rem === undefined) rem = MI_INSTANCES; // seed for a token spawned straight onto it
-    if (rem > 1) {
-      this._miRemaining.set(el.id, rem - 1);
+    let mi = this._miRemaining.get(el.id);
+    if (mi === undefined) {
+      const total = this._miInstancesFor(el); // seed for a token spawned straight onto it
+      mi = { left: total, total };
+    }
+    if (mi.left > 1) {
+      this._miRemaining.set(el.id, { left: mi.left - 1, total: mi.total });
       this._flash(el);
       this._render();
       this._notify();
@@ -691,7 +721,8 @@ TokenSimulation.prototype._arrive = function (target, viaFlow) {
   // A multi-instance activity runs its body several times before the token moves on; seed
   // the instance counter so the badge shows the multiplicity from the moment it arrives.
   if (isMultiInstance(target) && !this._miRemaining.has(target.id)) {
-    this._miRemaining.set(target.id, MI_INSTANCES);
+    const total = this._miInstancesFor(target);
+    this._miRemaining.set(target.id, { left: total, total });
   }
   this._rest(target.id, 1);
   this._land(target);
@@ -895,17 +926,20 @@ TokenSimulation.prototype._render = function () {
       /* skip */
     }
   }
-  // Multi-instance badge: how many instances are still to run (a simulated multiplicity).
-  for (const [id, rem] of this._miRemaining) {
-    if (rem <= 0) continue;
+  // Multi-instance badge: how many instances are still to run of the total for this activity
+  // (from a modelled cardinality, else the configured default).
+  for (const [id, mi] of this._miRemaining) {
+    if (!mi || mi.left <= 0) continue;
     const el = this._registry.get(id);
     if (!el) continue;
     const seq = isSequentialMI(el);
+    const modelled = literalCardinality(el) != null;
+    const src = modelled ? "modelled cardinality" : "simulated";
     try {
       this._overlayIds.push(
         this._overlays.add(id, "atlas-sim-mi", {
           position: { bottom: 4, left: 4 },
-          html: `<span class="atlas-sim-mi" title="${seq ? "sequential" : "parallel"} multi-instance — ${rem} of ${MI_INSTANCES} left (simulated)">${seq ? "≡" : "‖"} ${rem}</span>`,
+          html: `<span class="atlas-sim-mi" title="${seq ? "sequential" : "parallel"} multi-instance — ${mi.left} of ${mi.total} left (${src})">${seq ? "≡" : "‖"} ${mi.left}/${mi.total}</span>`,
         }),
       );
     } catch {

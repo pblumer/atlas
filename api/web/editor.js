@@ -424,6 +424,9 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
         <label class="sim-auto" title="Let Play run end-to-end: gateways take their default (or every branch), and message/timer/signal events fire on their own — no clicking required.">
           <input type="checkbox" id="sim-auto"/> Auto-decide
         </label>
+        <label class="sim-mi" title="How many instances a multi-instance activity runs in the simulation. A modelled fixed loop cardinality overrides this.">Instances
+          <input type="number" id="sim-mi" min="1" max="20" step="1" value="3"/>
+        </label>
         <span class="sim-hint" id="sim-hint"></span>
         <span style="flex:1"></span>
         <span class="sim-stats" id="sim-stats"></span>
@@ -750,6 +753,7 @@ function wireTokenSim(root, modeler) {
   const resetBtn = root.querySelector("#sim-reset");
   const speedSel = root.querySelector("#sim-speed");
   const autoBox = root.querySelector("#sim-auto");
+  const miInput = root.querySelector("#sim-mi");
   const hintEl = root.querySelector("#sim-hint");
   const statsEl = root.querySelector("#sim-stats");
   if (!toggle || !bar) return;
@@ -768,6 +772,7 @@ function wireTokenSim(root, modeler) {
   resetBtn.addEventListener("click", () => sim.reset());
   speedSel.addEventListener("change", () => sim.setSpeed(Number(speedSel.value)));
   if (autoBox) autoBox.addEventListener("change", () => sim.setAuto(autoBox.checked));
+  if (miInput) miInput.addEventListener("change", () => sim.setMiCount(Number(miInput.value)));
 
   // Reflect the simulation's state in the controls whenever it changes. `deciding` means a
   // gateway is waiting for a path to be picked; `waiting` means a message/timer/signal
@@ -785,6 +790,7 @@ function wireTokenSim(root, modeler) {
   });
   // Seed the initial control state (counts at zero, opening hint).
   sim.setSpeed(Number(speedSel.value));
+  if (miInput) sim.setMiCount(Number(miInput.value));
 }
 
 // wireResizer makes the properties panel width draggable, so authoring long FEEL

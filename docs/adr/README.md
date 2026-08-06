@@ -105,6 +105,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0095](0095-external-variable-modification.md) | External variable modification on a running instance | Accepted |
 | [0096](0096-token-simulation-events-and-inclusive-gateways.md) | Token simulation — event triggers, inclusive-gateway subset split / quiescence OR-join, and an auto-decide mode | Accepted |
 | [0097](0097-token-simulation-message-starts-event-subprocesses-multi-instance.md) | Token simulation — message starts spawn, event-subprocess triggers, and multi-instance | Accepted |
+| [0098](0098-token-simulation-configurable-multi-instance-count.md) | Token simulation — configurable multi-instance count, modelled cardinality wins | Accepted |
 
 ## Status values
 
