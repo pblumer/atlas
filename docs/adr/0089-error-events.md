@@ -4,7 +4,7 @@
 - **Date:** 2026-07-30
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phase 1 (compiler) delivered; Phases 2–5 pending. Each phase
+> **Implementation status.** Phases 1–2 delivered; Phases 3–5 pending. Each phase
 > lands test-first with a recovery test (ADR-0018). Error events build on the subprocess scope
 > lifecycle and `terminateScope`/`scopeContains` (ADR-0074), the boundary arm/fire
 > machinery (ADR-0040), event subprocesses (ADR-0082), the incident model (ADR-0061), and
@@ -33,6 +33,29 @@
 > a matching-code, catch-all, boundary, or event-subprocess handler is in scope. No runtime
 > yet — `propagateError`, the error end / boundary behaviors, and `FailJobWithError` are
 > Phases 2–3.
+>
+> **Delivered (Phase 2, throw + catch core):** the runnable error-end → error-boundary path.
+> `propagateError(c, fromKey, code)` walks up the live `FlowScopeKey` chain (bounded by
+> `maxScopeDepth`); at each enclosing activity it scans that activity's armed error
+> boundaries (`findErrorBoundary`, the `AttachedToKey` lookup `interruptHost` uses) for a
+> code match (`errorCodeMatches`: equal code, or a code-less catch-all) and drives the first
+> match to `Completing` — the boundary is always interrupting, so the existing
+> `interruptHost` tears the activity and the scope below the throw down and the boundary
+> takes its recovery flow. It reads only committed state and the compiled codes (a pure
+> function of committed state, I6) and runs only on the command path. `errorEndEventBehavior`
+> hops to `Completing` like a none end, then throws via `propagateError` instead of completing
+> its scope (so the throwing element is torn down by the interrupt, never double-counted).
+> The `BoundaryError` boundary arms **inert** — a `case` in `boundaryEventBehavior.OnActivated`
+> that opens no subscription/timer, waiting only to be *found*. Reaching the process root with
+> no match raises an incident on the throwing element and parks — the ADR-0061 terminal,
+> pulled forward from Phase 3 because it is `propagateError`'s natural uncaught branch (its
+> dedicated worker-error and event-subprocess siblings remain in Phase 3). Verified: an error
+> end inside a subprocess caught by an error boundary on that subprocess routes to recovery
+> (the normal flow is not taken); a nested error propagates *past* an inner subprocess whose
+> boundary catches a different code to the outer boundary that matches; an uncaught error
+> raises an incident and parks; and an armed error boundary rebuilds on recovery so a throw
+> after crash+replay still finds it. Worker errors (`FailJobWithError`), error event
+> subprocesses, and call-activity caller propagation remain for Phases 3–4.
 
 ## Context and problem statement
 
