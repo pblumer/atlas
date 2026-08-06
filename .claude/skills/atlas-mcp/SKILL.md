@@ -70,6 +70,7 @@ endpoint behind an authenticating reverse proxy.
 | `atlas_list_decision_refs` | `projectId?` | registered DMN decision references |
 | `atlas_list_decisions` | `projectId?` | DMN decisions (with inputs/outputs) from references |
 | `atlas_deployed_decisions` | none | deployed DMN decisions with usage counts |
+| `atlas_decision_evaluations` | `id` | one decision's evaluation history across all instances |
 | `atlas_dmnref_graph` | `id` | a decision reference's DRD (nodes and edges) |
 | `atlas_get_decision_model` | `ref` | raw DMN XML stored under a model handle |
 | `atlas_deploy_project` | `id` | deployed project definitions |
