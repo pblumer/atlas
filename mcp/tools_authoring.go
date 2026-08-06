@@ -100,6 +100,15 @@ func failJobBody(args map[string]any) ([]byte, error) {
 	return body, nil
 }
 
+// claimTaskBody builds the claim request body {assignee} from the tool
+// arguments. The endpoint's body is optional; forwarding {"assignee":""} when no
+// assignee is given preserves the server's own semantics — with auth on that
+// self-claims for the caller, with auth off it is rejected as "assignee required".
+func claimTaskBody(args map[string]any) []byte {
+	body, _ := json.Marshal(map[string]any{"assignee": optString(args, "assignee")})
+	return body
+}
+
 // searchInstancesPath builds the instance-search path for a variable query,
 // escaping the raw query string into the ?q= parameter the endpoint parses
 // (name=value, name exact and value substring, or free text over names/values).
@@ -451,6 +460,57 @@ func authoringTools() []Tool {
 					return "", err
 				}
 				return asText(c.post("/api/v1/tasks/"+strconv.FormatUint(key, 10)+"/complete", "application/json", body))
+			},
+		},
+		{
+			Name: "atlas_get_task",
+			Description: "Fetch one open user task by its task key — the deep-link read primitive, so a task " +
+				"stays reachable outside a capped atlas_list_tasks page. Returns the task's process, element, " +
+				"assignee, form, priority, and due date. Refused with a not-found error if the key is not an open " +
+				"user task.",
+			InputSchema: keyArg("The task key (from atlas_list_tasks) to fetch."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/tasks/" + strconv.FormatUint(key, 10)))
+			},
+		},
+		{
+			Name: "atlas_claim_task",
+			Description: "Claim (assign) an open user task by its task key. 'assignee' names the user to assign " +
+				"it to; omit it only when the server has authentication enabled, where an empty assignee claims the " +
+				"task for the calling identity (without auth an assignee is required). Refused with a not-found error " +
+				"if the key is not an open task. Returns {taskKey, assignee}.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":      map[string]any{"type": "integer", "description": "The task key (from atlas_list_tasks) to claim."},
+					"assignee": stringProp("The user to assign the task to. Required unless the server authenticates the caller."),
+				},
+				"required": []any{"key"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/tasks/"+strconv.FormatUint(key, 10)+"/claim", "application/json", claimTaskBody(args)))
+			},
+		},
+		{
+			Name: "atlas_unclaim_task",
+			Description: "Release (unassign) an open user task by its task key, clearing its assignee so it is " +
+				"available again. Refused with a not-found error if the key is not an open task. Returns " +
+				"{taskKey, assignee} with an empty assignee.",
+			InputSchema: keyArg("The task key (from atlas_list_tasks) to release."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/tasks/"+strconv.FormatUint(key, 10)+"/unclaim", "application/json", []byte("{}")))
 			},
 		},
 	}

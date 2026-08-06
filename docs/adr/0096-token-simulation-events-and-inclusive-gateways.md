@@ -1,4 +1,4 @@
-# ADR-0095: Token simulation — event triggers, inclusive gateways, and an auto-decide mode
+# ADR-0096: Token simulation — event triggers, inclusive gateways, and an auto-decide mode
 
 - **Status:** Accepted
 - **Date:** 2026-08-06

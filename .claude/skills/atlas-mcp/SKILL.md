@@ -62,7 +62,10 @@ endpoint behind an authenticating reverse proxy.
 | `atlas_register_decision` | `name`, `modelRef`, `projectId?` | registered decision reference |
 | `atlas_deploy_project` | `id` | deployed project definitions |
 | `atlas_list_tasks` | `limit?`, `before?`, `processInstance?` | task page envelope |
+| `atlas_get_task` | `key` | one open user task (deep-link read) |
 | `atlas_complete_task` | `key`, `variables?` | completed user task |
+| `atlas_claim_task` | `key`, `assignee?` | claims/assigns a task (`assignee` required without auth) |
+| `atlas_unclaim_task` | `key` | releases a task's assignment |
 
 A typical authoring flow is:
 

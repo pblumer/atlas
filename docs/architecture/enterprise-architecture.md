@@ -9,9 +9,9 @@ technology** — plus the **motivation** (stakeholders, drivers, goals, principl
 requirements) that shaped it.
 
 It is a *layered view*: a communication aid for architects and stakeholders, not a
-formal model export. Elements are grouped for readability rather than drawn as a
-full box-and-line diagram. A rendered, colour-coded version of the three core
-layers is easy to regenerate from the tables below.
+formal model export. The diagrams below are colour-coded to the ArchiMate layer convention (SVG, so they
+stay sharp and adapt to GitHub's light/dark theme); the tables under each layer are
+the detailed reference behind the boxes.
 
 > **Notation cheat-sheet.** ArchiMate splits every layer into three *aspects* —
 > **active structure** (who/what acts: roles, components, nodes), **behaviour**
@@ -34,27 +34,9 @@ layers is easy to regenerate from the tables below.
 
 ## Layer map
 
-```
-   ┌───────────────────────────────────────────────────────────────────────┐
-   │  MOTIVATION   Stakeholders · Drivers · Goals · Principles · Requirements│  (purple)
-   │               "why Atlas is shaped the way it is"                       │
-   └───────────────────────────────┬───────────────────────────────────────┘
-                                    │ influences / realized by
-   ┌────────────────────────────────▼──────────────────────────────────────┐
-   │  BUSINESS     Roles · Business services · Processes · Business objects  │  (yellow)
-   │               "process automation as a business capability"            │
-   └───────────────────────────────┬───────────────────────────────────────┘
-                                    │ realized by
-   ┌────────────────────────────────▼──────────────────────────────────────┐
-   │  APPLICATION  Atlas Engine · Web UI · REST API · MCP · Connectors       │  (blue)
-   │               "the software that delivers the business services"       │
-   └───────────────────────────────┬───────────────────────────────────────┘
-                                    │ realized by / served by
-   ┌────────────────────────────────▼──────────────────────────────────────┐
-   │  TECHNOLOGY   Single binary · Go runtime · Partitions · Pebble · WAL    │  (green)
-   │               "the runtime, storage, and communication that host it"    │
-   └───────────────────────────────────────────────────────────────────────┘
-```
+The four ArchiMate layers, top to bottom, each realized by the one beneath it.
+
+![Atlas ArchiMate 3.2 layered view: motivation, business, application and technology layers, each realized by the one beneath it](diagrams/overview.svg)
 
 ---
 
@@ -134,20 +116,19 @@ enforced against the goals.
 | — | Single self-contained binary with embedded web UI | **Constraint** | [ADR-0011](../adr/0011-single-binary-distribution-and-web-ui.md) |
 | — | 95% repo-wide statement coverage; TDD by default | **Constraint** | [ADR-0018](../adr/0018-test-driven-development.md) |
 
-**Motivation trace (the through-line):**
+**Motivation trace (the through-line).** A worked example, reading a single concern
+all the way down into a concrete architecture element — purple motivation elements
+resolving into a blue application element:
 
-```
-Stakeholder ──has──► Driver ──influences──► Goal ──realized by──► Principle
-                                                        │
-                                                        ▼
-                                             Requirement (invariant) ──realized by──► Architecture element
-```
+![Motivation trace: Stakeholder to Driver to Goal to Principle to Requirement to the Processor and WAL architecture element](diagrams/motivation-trace.svg)
 
 ---
 
 ## Business layer
 
 *What Atlas offers as a business capability, and who consumes it.* Colour: yellow.
+
+![Business layer: roles assigned to business services, which access business objects](diagrams/business.svg)
 
 ### Business roles and actors — *active structure*
 
@@ -189,6 +170,8 @@ visible"* is modeled as a **contract** the platform honours.
 ## Application layer
 
 *The software components that realize the business services.* Colour: blue.
+
+![Application layer: channels serve the Atlas Engine core, which creates jobs for the connectors](diagrams/application.svg)
 
 ### Application components — *active structure*
 
@@ -249,6 +232,8 @@ HTTP/REST · gRPC job stream · MCP · Web (browser).
 ## Technology layer
 
 *The runtime, storage, and communication that host the application.* Colour: green.
+
+![Technology layer: partitions in the single binary, durable filesystem storage, and external systems](diagrams/technology.svg)
 
 ### Nodes and system software — *active structure*
 

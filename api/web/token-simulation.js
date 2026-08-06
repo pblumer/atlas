@@ -1,11 +1,11 @@
 // Token simulation for the Design view — a client-side, engine-free walk-through of a
 // BPMN diagram so newcomers can *see* how control flow moves (ADR-0078, extended by
-// ADR-0095). It is a teaching aid, not the engine: it never deploys, never talks to the
+// ADR-0096). It is a teaching aid, not the engine: it never deploys, never talks to the
 // server, and makes no claim to execute FEEL, conditions, or scripts. It animates the one
 // thing the Design view is about — the shape of the control flow — by moving "tokens"
 // along sequence flows, forking and joining at gateways, pausing at choices so the user
 // picks the path, and parking at message/timer/signal events so the user fires them and
-// watches what happens. ADR-0095 extends the original walkthrough with event triggers, the
+// watches what happens. ADR-0096 extends the original walkthrough with event triggers, the
 // inclusive-gateway subset split / quiescence OR-join, and an auto-decide mode.
 //
 // It ships as a bpmn-js additional module (like the rest of the vendored modeler, this

@@ -107,7 +107,7 @@ CSS, so a click means "spawn / choose a path", not "add a shape".
 
 ## Links
 
-- extended by ADR-0095 (event triggers, inclusive-gateway subset split / quiescence OR-join, auto-decide mode)
+- extended by ADR-0096 (event triggers, inclusive-gateway subset split / quiescence OR-join, auto-decide mode)
 - builds on ADR-0011 / ADR-0012 / ADR-0013 (embedded, buildless, self-contained modeler)
 - reuses the token-animation technique from ADR-0038 (collaboration replay)
 - complements the runtime token views: ADR-0046 (instance replay), ADR-0065 (multi-token
