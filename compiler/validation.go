@@ -51,6 +51,11 @@ const (
 	RuleBoundaryIncomingFlow   = "boundary.incoming-flow"
 	RuleBoundaryInvalidHost    = "boundary.invalid-host"
 	RuleFlowCrossScope         = "flow.cross-scope"
+	// RuleErrorUnhandled marks an error end event with no statically matching enclosing
+	// error boundary or error event subprocess in the same process (ADR-0089). A warning,
+	// not an error: the catch may live at a call-activity caller one process cannot see,
+	// and the runtime incident is the real terminal for a truly uncaught error.
+	RuleErrorUnhandled = "error.unhandled"
 )
 
 // Rule slugs for whole-model dry-run findings that [ValidateModel] raises outside
@@ -94,6 +99,7 @@ func Validate(cp *CompiledProcess) []Problem {
 	ps = append(ps, checkReachability(cp)...)
 	ps = append(ps, checkGateways(cp)...)
 	ps = append(ps, checkScopes(cp)...)
+	ps = append(ps, checkErrorHandling(cp)...)
 	return ps
 }
 
@@ -135,6 +141,7 @@ func ValidateModel(r io.Reader) ([]Problem, error) {
 	}
 	resolveMsg := buildMessageResolver(defs)
 	resolveSig := buildSignalResolver(defs)
+	resolveErr := buildErrorResolver(defs)
 	var ps []Problem
 	executable := 0
 	for _, proc := range defs.Processes {
@@ -144,7 +151,7 @@ func ValidateModel(r io.Reader) ([]Problem, error) {
 		// The key is irrelevant to a dry run — the compiled process is inspected and
 		// discarded, never registered — so a per-pool ordinal keeps it deterministic
 		// without touching the server's key counter.
-		cp, cerr := compileProcess(uint64(executable), 1, proc, resolveMsg, resolveSig)
+		cp, cerr := compileProcess(uint64(executable), 1, proc, resolveMsg, resolveSig, resolveErr)
 		executable++
 		if cerr != nil {
 			// A graph-level failure carries its element-anchored Problems; hand them
@@ -364,6 +371,73 @@ func checkScopes(cp *CompiledProcess) []Problem {
 		}
 	}
 	return ps
+}
+
+// checkErrorHandling warns for each error end event that no enclosing error handler in the
+// same process statically catches its code (ADR-0089) — the compile-time shadow of the
+// runtime propagateError walk. It is a warning, not an error, on purpose: an error
+// unhandled here may still be caught at a call-activity caller (ADR-0076), which one
+// process cannot see, and a genuinely uncaught error becomes a runtime incident, not a
+// deploy failure. Matching mirrors propagation: a catch matches when its code equals the
+// thrown code or the catch is code-less (a catch-all).
+func checkErrorHandling(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	for id := range cp.nodes {
+		n := &cp.nodes[id]
+		if n.Type != TypeErrorEndEvent {
+			continue
+		}
+		code := cp.errorEnds[n.Detail].ErrorCode
+		if errorCaught(cp, n.FlowScope, code) {
+			continue
+		}
+		msg := "error end event throws"
+		if code != "" {
+			msg += fmt.Sprintf(" %q", code)
+		}
+		msg += ", but no enclosing error boundary or error event subprocess in this process catches it"
+		ps = append(ps, Problem{Element: cp.ElementBpmnId(int32(id)), Severity: SeverityWarning, Rule: RuleErrorUnhandled, Message: msg})
+	}
+	return ps
+}
+
+// errorCaught reports whether an error with the given code, thrown in the scope rooted at
+// scope (a subprocess node id, or -1 for the process root), has a statically matching
+// enclosing error boundary or error event subprocess (ADR-0089). It walks up the FlowScope
+// chain; at each level it checks the scope's error event subprocesses and, for a subprocess
+// scope, the error boundaries on that subprocess — the static shadow of propagateError. A
+// catch matches by equal code or a code-less catch-all. Bounded by the node count (a scope
+// chain has no cycles), so a malformed FlowScope cannot loop forever.
+func errorCaught(cp *CompiledProcess, scope int32, code string) bool {
+	for steps := 0; steps <= len(cp.nodes); steps++ {
+		handlers := cp.RootEventSubprocesses()
+		if scope >= 0 {
+			handlers = cp.EventSubprocesses(scope)
+		}
+		for _, h := range handlers {
+			d := cp.EventSubProcess(cp.nodes[h].EventSub)
+			if d.Kind == BoundaryError && errorCodeMatches(d.ErrorCode, code) {
+				return true
+			}
+		}
+		if scope < 0 {
+			return false // reached the process root with no catch
+		}
+		for _, be := range cp.BoundaryEvents(scope) {
+			d := cp.BoundaryEvent(cp.nodes[be].Detail)
+			if d.Kind == BoundaryError && errorCodeMatches(d.ErrorCode, code) {
+				return true
+			}
+		}
+		scope = cp.nodes[scope].FlowScope
+	}
+	return false
+}
+
+// errorCodeMatches reports whether a catch with catchCode catches a thrown throwCode: an
+// equal code, or a code-less catch-all (ADR-0089).
+func errorCodeMatches(catchCode, throwCode string) bool {
+	return catchCode == "" || catchCode == throwCode
 }
 
 // problem builds a Problem anchored to node id, resolving its source BPMN id.

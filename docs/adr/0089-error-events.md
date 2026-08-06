@@ -4,13 +4,35 @@
 - **Date:** 2026-07-30
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Not started. This ADR plans the work; each phase lands
-> test-first with a recovery test (ADR-0018). Error events build on the subprocess scope
+> **Implementation status.** Phase 1 (compiler) delivered; Phases 2–5 pending. Each phase
+> lands test-first with a recovery test (ADR-0018). Error events build on the subprocess scope
 > lifecycle and `terminateScope`/`scopeContains` (ADR-0074), the boundary arm/fire
 > machinery (ADR-0040), event subprocesses (ADR-0082), the incident model (ADR-0061), and
 > the call-activity child→caller link (ADR-0076). They introduce no subscription, timer,
 > value type, or recovery path — an error is thrown synchronously and propagated
 > **structurally** up the scope chain, resolved from committed state.
+>
+> **Delivered (Phase 1, compiler):** `<errorEventDefinition errorRef="…">` (an `Error`
+> pointer on the end/boundary structs and the event-sub start) and top-level `<bpmn:error id
+> errorCode name>` (`buildErrorResolver`, mirroring `buildMessageResolver`, returning the
+> **error code** — matching is by code, not id or name; an empty/absent code is legal, a
+> non-empty ref naming no declared error is a deploy error) parse into a new
+> `TypeErrorEndEvent` (mirroring `TypeMessageEndEvent`, with an `ErrorEndDetail{ErrorCode}`
+> table) and a `BoundaryError` `BoundaryEventKind` with an `ErrorCode` on
+> `BoundaryEventDetail` / `EventSubProcessDetail` (so an error boundary and an error event
+> subprocess reuse the boundary/event-sub detail). An error boundary and an error event
+> subprocess are **forced interrupting** regardless of the XML `cancelActivity` /
+> `isInterrupting` attribute. A `checkErrorHandling` validation step raises a
+> `SeverityWarning` (never a deploy error) for an error end whose code no enclosing error
+> boundary or error event subprocess in the same process statically catches — the
+> compile-time shadow of the runtime `propagateError` walk (a matching code, or a code-less
+> catch-all). Verified: an error end's code and an error boundary's code + forced-
+> interrupting; a code-less catch-all; an error event subprocess trigger + forced-
+> interrupting; an unknown `errorRef` is a deploy error in every position (end, boundary,
+> event-sub start); the uncaught warning fires for an unhandled throw and stays silent when
+> a matching-code, catch-all, boundary, or event-subprocess handler is in scope. No runtime
+> yet — `propagateError`, the error end / boundary behaviors, and `FailJobWithError` are
+> Phases 2–3.
 
 ## Context and problem statement
 

@@ -9,11 +9,11 @@ import (
 )
 
 // eventSubStart returns the event subprocess's triggering start event — the first
-// start event carrying a message, timer, or signal event definition — or nil if it has
-// none (ADR-0082, ADR-0088).
+// start event carrying a message, timer, signal, or error event definition — or nil if it
+// has none (ADR-0082, ADR-0088, ADR-0089).
 func eventSubStart(sub *xmlSubProcess) *xmlStartEvent {
 	for i := range sub.StartEvents {
-		if s := &sub.StartEvents[i]; s.Message != nil || s.Timer != nil || s.Signal != nil {
+		if s := &sub.StartEvents[i]; s.Message != nil || s.Timer != nil || s.Signal != nil || s.Error != nil {
 			return s
 		}
 	}
@@ -36,6 +36,7 @@ func registerScope(
 	register func(id string, nodeID int32) error,
 	resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error),
 	resolveSignal func(ownerId, signalRef string) (string, error),
+	resolveError func(ownerId, errorRef string) (string, error),
 	c *xmlFlowContent,
 ) error {
 	for _, s := range c.StartEvents {
@@ -462,6 +463,18 @@ func registerScope(
 			}
 			continue
 		}
+		// An error end event throws its error code, ending its scope abnormally and
+		// propagating up to the nearest matching handler (ADR-0089).
+		if e.Error != nil {
+			code, err := resolveError(e.Id, e.Error.ErrorRef)
+			if err != nil {
+				return err
+			}
+			if err := register(e.Id, b.AddErrorEndEvent(code)); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := register(e.Id, b.AddEndEvent()); err != nil {
 			return err
 		}
@@ -477,7 +490,7 @@ func registerScope(
 			return err
 		}
 		b.PushScope(subID)
-		if err := registerScope(b, ids, register, resolveMessage, resolveSignal, &sub.xmlFlowContent); err != nil {
+		if err := registerScope(b, ids, register, resolveMessage, resolveSignal, resolveError, &sub.xmlFlowContent); err != nil {
 			return err
 		}
 		b.PopScope()
@@ -489,7 +502,7 @@ func registerScope(
 		if sub.TriggeredByEvent == "true" {
 			st := eventSubStart(sub)
 			if st == nil {
-				return fmt.Errorf("compiler: event subprocess %q must have a start event with a message, timer, or signal event definition", sub.Id)
+				return fmt.Errorf("compiler: event subprocess %q must have a start event with a message, timer, signal, or error event definition", sub.Id)
 			}
 			d := EventSubProcessDetail{StartNode: ids[st.Id], Interrupting: st.IsInterrupting != "false"}
 			switch {
@@ -505,6 +518,15 @@ func registerScope(
 					return err
 				}
 				d.Kind, d.SignalName = BoundarySignal, name
+			case st.Error != nil:
+				// An error event subprocess catches an error propagating in its scope by code
+				// (ADR-0089). Like an error boundary it is always interrupting — an error tears
+				// its scope down — so the isInterrupting attribute is overridden.
+				code, err := resolveError(st.Id, st.Error.ErrorRef)
+				if err != nil {
+					return err
+				}
+				d.Kind, d.ErrorCode, d.Interrupting = BoundaryError, code, true
 			case st.Timer != nil:
 				schedule, err := parseTimerSchedule(st.Timer)
 				if err != nil {
@@ -554,8 +576,18 @@ func registerScope(
 			if err := register(ev.Id, b.AddBoundarySignalEvent(host, interrupting, name)); err != nil {
 				return err
 			}
+		case ev.Error != nil:
+			// An error boundary catches an error propagating up to the host by code and is
+			// always interrupting — cancelActivity is ignored (ADR-0089).
+			code, err := resolveError(ev.Id, ev.Error.ErrorRef)
+			if err != nil {
+				return err
+			}
+			if err := register(ev.Id, b.AddBoundaryErrorEvent(host, code)); err != nil {
+				return err
+			}
 		default:
-			return fmt.Errorf("compiler: boundary event %q: only timer, message, and signal boundary events are supported yet", ev.Id)
+			return fmt.Errorf("compiler: boundary event %q: only timer, message, signal, and error boundary events are supported yet", ev.Id)
 		}
 	}
 	// Report an unsupported element with a clear message rather than letting it
