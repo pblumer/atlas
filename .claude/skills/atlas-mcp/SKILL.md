@@ -40,7 +40,8 @@ endpoint behind an authenticating reverse proxy.
 | `atlas_instance_jobs` | `key` | one instance's activatable jobs (key, element, type) |
 | `atlas_instance_timeline` | `key` | one instance's step-by-step replay timeline |
 | `atlas_cancel_instance` | `key` | terminates one active instance |
-| `atlas_cancel_instances` | `key`, `limit?` | bounded bulk termination |
+| `atlas_cancel_instances` | `key`, `limit?` | bounded bulk termination (by definition key) |
+| `atlas_terminate_instances` | `keys?` \| `processDefKey?`, `q?`, `limit?` | terminate an explicit key set, or a definition's matching instances |
 | `atlas_delete_process` | `key` | deletes one deployed definition |
 | `atlas_stats` | none | engine-wide active counts |
 | `atlas_publish_message` | `name`, `correlationKey?`, `variables?` | correlates a message to waiting instances; returns stats |

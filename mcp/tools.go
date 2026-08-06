@@ -287,6 +287,36 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_terminate_instances",
+			Description: "Terminate a selected set of running instances in one call. Two mutually exclusive " +
+				"modes: pass 'keys' — an explicit array of instance keys (from atlas_list_instances) — to " +
+				"terminate exactly those; or pass 'processDefKey' (from atlas_list_processes) to terminate that " +
+				"definition's active instances, optionally narrowed by 'q' (a variable query like \"name=value\" " +
+				"or free text) and bounded per call by 'limit'. Returns {terminated, notFound, remaining, stats}: " +
+				"in keys mode 'notFound' counts keys with no active instance; in filter mode 'remaining' true " +
+				"means the cap was hit — call again with the same arguments until it is false.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"keys": map[string]any{
+						"type":        "array",
+						"items":       map[string]any{"type": "integer"},
+						"description": "Explicit instance keys to terminate. Mutually exclusive with processDefKey.",
+					},
+					"processDefKey": map[string]any{"type": "integer", "description": "Terminate this definition's active instances (from atlas_list_processes). Mutually exclusive with keys."},
+					"q":             stringProp("Optional variable query to narrow filter mode (\"name=value\" or free text). Only with processDefKey."),
+					"limit":         map[string]any{"type": "integer", "minimum": 1, "description": "Filter-mode per-call cap (capped by the API). Repeat while remaining is true."},
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				body, err := terminateInstancesBody(args)
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/instances/terminate", "application/json", body))
+			},
+		},
+		{
 			Name: "atlas_delete_process",
 			Description: "Delete a deployed process definition by its key, removing it from the engine " +
 				"and from disk. Refused with a conflict error if the definition still has running " +

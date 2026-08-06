@@ -100,6 +100,94 @@ func failJobBody(args map[string]any) ([]byte, error) {
 	return body, nil
 }
 
+// toUint converts one JSON-decoded argument value to a non-negative integer. It
+// accepts the shapes a client sends (float64, json.Number, numeric string) plus
+// the native integer kinds, for array elements that argUint (which reads by name)
+// cannot reach.
+func toUint(v any) (uint64, error) {
+	switch n := v.(type) {
+	case float64:
+		if n < 0 || n != float64(uint64(n)) {
+			return 0, fmt.Errorf("must be a non-negative integer")
+		}
+		return uint64(n), nil
+	case json.Number:
+		u, err := parseUint(n.String())
+		if err != nil {
+			return 0, fmt.Errorf("must be a non-negative integer")
+		}
+		return u, nil
+	case string:
+		u, err := parseUint(n)
+		if err != nil {
+			return 0, fmt.Errorf("must be a non-negative integer")
+		}
+		return u, nil
+	case int:
+		if n < 0 {
+			return 0, fmt.Errorf("must be a non-negative integer")
+		}
+		return uint64(n), nil
+	case int64:
+		if n < 0 {
+			return 0, fmt.Errorf("must be a non-negative integer")
+		}
+		return uint64(n), nil
+	case uint64:
+		return n, nil
+	default:
+		return 0, fmt.Errorf("must be an integer")
+	}
+}
+
+// terminateInstancesBody builds the terminate request body from the tool
+// arguments. Two mutually exclusive selectors: an explicit "keys" array, or a
+// "processDefKey" with optional "q" (variable query) and "limit" (filter-mode
+// per-call cap). At least one selector is required here; the server rejects
+// supplying both.
+func terminateInstancesBody(args map[string]any) ([]byte, error) {
+	payload := map[string]any{}
+	if raw, ok := args["keys"]; ok {
+		arr, isArray := raw.([]any)
+		if !isArray {
+			return nil, fmt.Errorf("argument %q must be an array of instance keys", "keys")
+		}
+		keys := make([]uint64, 0, len(arr))
+		for i, el := range arr {
+			k, err := toUint(el)
+			if err != nil {
+				return nil, fmt.Errorf("keys[%d] %v", i, err)
+			}
+			keys = append(keys, k)
+		}
+		payload["keys"] = keys
+	}
+	if _, ok := args["processDefKey"]; ok {
+		k, err := argUint(args, "processDefKey")
+		if err != nil {
+			return nil, err
+		}
+		payload["processDefKey"] = k
+	}
+	if q := optString(args, "q"); q != "" {
+		payload["q"] = q
+	}
+	if _, ok := args["limit"]; ok {
+		limit, err := argUint(args, "limit")
+		if err != nil {
+			return nil, err
+		}
+		payload["limit"] = limit
+	}
+	_, hasKeys := payload["keys"]
+	_, hasDef := payload["processDefKey"]
+	if !hasKeys && !hasDef {
+		return nil, fmt.Errorf("provide either %q or %q", "keys", "processDefKey")
+	}
+	body, _ := json.Marshal(payload)
+	return body, nil
+}
+
 // claimTaskBody builds the claim request body {assignee} from the tool
 // arguments. The endpoint's body is optional; forwarding {"assignee":""} when no
 // assignee is given preserves the server's own semantics — with auth on that
