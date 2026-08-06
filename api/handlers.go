@@ -1089,9 +1089,27 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				sp.endPos = rr.pos
 			}
 		}
+		// External-override attribution (ADR-0098): an operator override emits a
+		// variable event immediately followed by its audit event, so the audit's log
+		// position is the variable change's position plus one. Map each override's actor
+		// back onto the variable change's position, keyed by the global log position so
+		// it matches whichever scope's snapshot fold carries that change. Overrides
+		// keyed by the process instance cover every scope. An audit with no identity
+		// (auth off) is skipped — there is no actor to surface.
+		actorByPos := map[uint64]string{}
+		if scanErr == nil {
+			scanErr = s.store.VariableAuditHistory(key, func(_ int64, pos uint64, v *model.VariableAuditValue) error {
+				if v.Actor != "" && pos > 0 {
+					actorByPos[pos-1] = v.Actor
+				}
+				return nil
+			})
+		}
 		if scanErr == nil {
 			scanErr = s.store.VariableSnapshotHistory(key, func(_ int64, pos uint64, v *model.VariableValue) error {
-				changes = append(changes, varChange{pos: pos, endPos: noEnd, view: toVariableView(v)})
+				view := toVariableView(v)
+				view.Actor = actorByPos[pos]
+				changes = append(changes, varChange{pos: pos, endPos: noEnd, view: view})
 				return nil
 			})
 		}
@@ -1102,6 +1120,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			scanErr = s.store.VariableSnapshotHistory(sp.scopeKey, func(_ int64, pos uint64, v *model.VariableValue) error {
 				view := toVariableView(v)
 				view.Scope = sp.label
+				view.Actor = actorByPos[pos]
 				changes = append(changes, varChange{pos: pos, endPos: sp.endPos, view: view})
 				return nil
 			})
@@ -1380,6 +1399,11 @@ type variableView struct {
 	// Scope labels a subprocess-local variable with the id of the embedded
 	// subprocess it lives in; empty for a process (root) scope variable (ADR-0074).
 	Scope string `json:"scope,omitempty"`
+	// Actor names the operator who last set this value via an external override
+	// (ADR-0098), so the timeline attributes a corrected value inline; empty when the
+	// value was written by the model itself or the override carried no identity (auth
+	// off). It is populated only by the timeline fold, which has the audit trail.
+	Actor string `json:"actor,omitempty"`
 }
 
 func toVariableView(v *model.VariableValue) variableView {
