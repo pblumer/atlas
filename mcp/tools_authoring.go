@@ -100,6 +100,56 @@ func failJobBody(args map[string]any) ([]byte, error) {
 	return body, nil
 }
 
+// terminateInstancesBody builds the terminate request body from the tool
+// arguments. Two mutually exclusive selectors: an explicit "keys" array, or a
+// "processDefKey" with optional "q" (variable query) and "limit" (filter-mode
+// per-call cap). At least one selector is required here; the server rejects
+// supplying both.
+func terminateInstancesBody(args map[string]any) ([]byte, error) {
+	payload := map[string]any{}
+	if raw, ok := args["keys"]; ok {
+		arr, isArray := raw.([]any)
+		if !isArray {
+			return nil, fmt.Errorf("argument %q must be an array of instance keys", "keys")
+		}
+		keys := make([]uint64, 0, len(arr))
+		for i, el := range arr {
+			// Reuse the name-keyed integer coercion for each element so the array
+			// accepts the same JSON shapes a scalar key argument does.
+			k, err := argUint(map[string]any{"key": el}, "key")
+			if err != nil {
+				return nil, fmt.Errorf("keys[%d] must be a non-negative integer", i)
+			}
+			keys = append(keys, k)
+		}
+		payload["keys"] = keys
+	}
+	if _, ok := args["processDefKey"]; ok {
+		k, err := argUint(args, "processDefKey")
+		if err != nil {
+			return nil, err
+		}
+		payload["processDefKey"] = k
+	}
+	if q := optString(args, "q"); q != "" {
+		payload["q"] = q
+	}
+	if _, ok := args["limit"]; ok {
+		limit, err := argUint(args, "limit")
+		if err != nil {
+			return nil, err
+		}
+		payload["limit"] = limit
+	}
+	_, hasKeys := payload["keys"]
+	_, hasDef := payload["processDefKey"]
+	if !hasKeys && !hasDef {
+		return nil, fmt.Errorf("provide either %q or %q", "keys", "processDefKey")
+	}
+	body, _ := json.Marshal(payload)
+	return body, nil
+}
+
 // claimTaskBody builds the claim request body {assignee} from the tool
 // arguments. The endpoint's body is optional; forwarding {"assignee":""} when no
 // assignee is given preserves the server's own semantics — with auth on that

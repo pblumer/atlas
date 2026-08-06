@@ -61,6 +61,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_instances_summary":     "GET /api/v1/instances/summary",
 	"atlas_search_instances":      "GET /api/v1/instances/search",
 	"atlas_instance_data_objects": "GET /api/v1/instances/{key}/data-objects",
+	"atlas_terminate_instances":   "POST /api/v1/instances/terminate",
 }
 
 // mcpOmittedRoutes lists HTTP operations intentionally not exposed as MCP tools,
@@ -90,9 +91,10 @@ var mcpOmittedRoutes = map[string]string{
 	// CSV batch start: driven from a user task inside the process (ADR-0084).
 	"POST /api/v1/processes/{key}/instances-from-csv": "in-process CSV ingestion, not a direct agent start",
 
-	// Worker/operations control plane: partially exposed (candidate follow-ups).
-	"POST /api/v1/instances/{key}/variables": "admin-gated operator correction to live state (ADR-0095); the MCP service principal is deliberately non-admin",
-	"POST /api/v1/instances/terminate":       "bulk filter-terminate not yet exposed",
+	// Admin-gated operator correction to live state (ADR-0095): the MCP service
+	// principal is deliberately non-admin, so overwriting an instance's variables
+	// by hand is not an MCP capability. (terminate, in contrast, is exposed.)
+	"POST /api/v1/instances/{key}/variables": "admin-gated live-state correction; the MCP service principal is deliberately non-admin",
 
 	// Design-time read/edit: agents create artifacts; browsing/editing is the UI's.
 	"GET /api/v1/drafts":                 "artifact browsing is a UI concern",
