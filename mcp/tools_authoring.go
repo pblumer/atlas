@@ -423,6 +423,25 @@ func authoringTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_decision_evaluations",
+			Description: "List every retained evaluation of one DMN decision by its decision id — newest first, " +
+				"each with the instance that made it, the inputs, outputs, and trace. Drill into a decision across " +
+				"all its instances (the cross-instance counterpart to atlas_instance_decisions). An unknown id has " +
+				"no evaluations and returns [].",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"id": stringProp("The decision id (from atlas_deployed_decisions or atlas_list_decisions).")},
+				"required":   []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/decisions/" + url.PathEscape(id) + "/evaluations"))
+			},
+		},
+		{
 			Name: "atlas_dmnref_graph",
 			Description: "Read a decision reference's decision requirements graph (DRD) — its decision nodes and " +
 				"the requirement edges between them — by the reference id from atlas_register_decision. Refused " +
