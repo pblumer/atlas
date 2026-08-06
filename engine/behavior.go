@@ -1706,16 +1706,39 @@ func (errorEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *
 // catch-all) and drives the first match to Completing — an error catch is always
 // interrupting, so a boundary's interruptHost tears the activity down and it takes its
 // recovery flow, while an event-subprocess trigger terminateScopes its scope and runs its
-// handler. Reaching the process root (checking its error event subprocesses last) with no
-// match raises an incident on the throwing element and parks (ADR-0061). It reads only
-// committed state and the compiled codes — a pure function of committed state (I6) — and
-// runs only on the command path (a throw is a command), never on replay. Bounded by
-// maxScopeDepth. Call-activity caller propagation lands in Phase 4.
+// handler. When the instance root is reached uncaught, the error crosses process boundaries:
+// if the instance is a call-activity child, the child is terminated (the error aborts it)
+// and propagation continues from the caller's call-activity element in the parent instance
+// (ADR-0076); a top-level instance instead raises an incident on the throwing element and
+// parks (ADR-0061). It reads only committed state and the compiled codes — a pure function
+// of committed state (I6) — and runs only on the command path (a throw is a command), never
+// on replay. Bounded by maxScopeDepth (both the scope-chain walk and the caller-hop count).
 func propagateError(c *ProcessingContext, fromKey uint64, code string) {
-	piKey := uint64(0)
-	if ei := c.GetElementInstance(fromKey); ei != nil {
-		piKey = ei.ProcessInstanceKey
+	for hop := 0; hop <= maxScopeDepth; hop++ {
+		ei := c.GetElementInstance(fromKey)
+		if ei == nil {
+			return // the throwing/caller element vanished (already torn down): nothing to do
+		}
+		if errorCaughtInInstance(c, ei.ProcessInstanceKey, fromKey, code) {
+			return
+		}
+		// Uncaught in this instance. A call-activity child's error propagates to its caller:
+		// terminate the child (the error aborts it), then continue from the caller's element.
+		pi := c.GetProcessInstance(ei.ProcessInstanceKey)
+		if pi != nil && pi.ParentElementInstanceKey != 0 {
+			c.AppendProcessInstanceCommand(ei.ProcessInstanceKey, model.IntentTerminating, *pi)
+			fromKey = pi.ParentElementInstanceKey
+			continue
+		}
+		raiseErrorIncident(c, fromKey, code)
+		return
 	}
+}
+
+// errorCaughtInInstance walks the scope chain of one instance from fromKey up to its root,
+// firing the nearest matching error catch (an event subprocess before a boundary at each
+// scope; the root's event subprocesses last), and reports whether one fired (ADR-0089).
+func errorCaughtInInstance(c *ProcessingContext, piKey, fromKey uint64, code string) bool {
 	for depth, scope := 0, fromKey; depth <= maxScopeDepth; depth++ {
 		ei := c.GetElementInstance(scope)
 		if ei == nil {
@@ -1724,19 +1747,16 @@ func propagateError(c *ProcessingContext, fromKey uint64, code string) {
 		// An error event subprocess declared in this scope catches errors thrown within it,
 		// nearer than a boundary on the scope's activity (which catches the error leaving it).
 		if fireErrorCatch(c, findErrorEventSub(c, piKey, scope, code)) {
-			return
+			return true
 		}
 		if fireErrorCatch(c, findErrorBoundary(c, piKey, scope, code)) {
-			return
+			return true
 		}
 		scope = ei.FlowScopeKey
 	}
 	// The process root's own error event subprocesses are keyed by the instance scope, which
 	// is not an element instance — so they are checked here, after the element-scope walk.
-	if fireErrorCatch(c, findErrorEventSub(c, piKey, piKey, code)) {
-		return
-	}
-	raiseErrorIncident(c, fromKey, code)
+	return fireErrorCatch(c, findErrorEventSub(c, piKey, piKey, code))
 }
 
 // fireErrorCatch drives a found error catch (a boundary or event-subprocess trigger element)

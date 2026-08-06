@@ -4,7 +4,7 @@
 - **Date:** 2026-07-30
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phases 1–3 delivered; Phases 4–5 pending. Each phase
+> **Implementation status.** Phases 1–4 delivered; Phase 5 (Modeler) pending. Each phase
 > lands test-first with a recovery test (ADR-0018). Error events build on the subprocess scope
 > lifecycle and `terminateScope`/`scopeContains` (ADR-0074), the boundary arm/fire
 > machinery (ADR-0040), event subprocesses (ADR-0082), the incident model (ADR-0061), and
@@ -76,6 +76,22 @@
 > root) handling a scope error and running its handler; and the worker-error path surviving
 > crash+replay. Call-activity caller propagation and the code-matching / same-scope tie-break
 > tests remain for Phase 4.
+>
+> **Delivered (Phase 4, call-activity propagation + code matching):** cross-process error
+> propagation. `propagateError` is split into a per-instance scope walk (`errorCaughtInInstance`)
+> and an outer caller-hop loop: when an error reaches an instance root uncaught and the instance
+> is a call-activity child (`ProcessInstanceValue.ParentElementInstanceKey != 0`), the child is
+> terminated (the error aborts it) and propagation continues from the caller's call-activity
+> element in the parent instance (ADR-0076); a top-level instance raises the incident. So an
+> error boundary on a call activity catches a child's unhandled error, and the caller takes its
+> recovery flow. Code matching (`errorCodeMatches`, delivered in Phase 2) is now exercised
+> directly: the nearest *matching* code wins and a code-less boundary is a catch-all. Verified:
+> two boundaries with different codes on one subprocess route a thrown code to the matching
+> one; a catch-all boundary catches a coded error; a child error caught by the caller's error
+> boundary (child aborted, caller recovered); a child error no caller catches raising an
+> incident at the caller with the child torn down; and the child→caller propagation surviving
+> crash+replay. The same-scope boundary-vs-event-subprocess tie-break stays as the ADR chose
+> (event subprocess nearer); only the Modeler (Phase 5) remains.
 
 ## Context and problem statement
 
