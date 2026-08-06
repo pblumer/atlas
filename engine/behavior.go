@@ -41,6 +41,7 @@ func (p *Processor) registerHandlers() {
 		handlerKey(model.VTTimer, model.IntentTimerTriggered):        handleTimerTriggered,
 		handlerKey(model.VTTimer, model.IntentTimerStartArm):         handleTimerStartArm,
 		handlerKey(model.VTMessage, model.IntentMessagePublished):    handleMessagePublished,
+		handlerKey(model.VTVariable, model.IntentVariableModify):     handleVariablesModify,
 	}
 }
 
@@ -433,6 +434,51 @@ func handleJobCompleted(c *ProcessingContext) {
 
 	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
 		c.AppendElementCommand(job.ElementInstanceKey, model.IntentCompleting, *ei)
+	}
+}
+
+// handleVariablesModify applies an operator's external variable write to a running
+// instance (ADR-0095). It is the manual counterpart to the variable writes a model
+// makes for itself — start variables, job outputs, io-mappings — reusing the same
+// VariableCreated/VariableUpdated events over the same applyToState, so the change
+// is durable, replayable (invariant I6), and recorded in the instance's variable
+// timeline as the audit trail, never a raw store write.
+//
+// The command carries the process instance in Key and the target scope in
+// Value.variable.ScopeKey (0 means the instance root). It writes only when the
+// instance is live and the scope belongs to it, so a correction to a finished
+// instance or a foreign scope is a safe no-op. It deliberately does not re-drive the
+// token: a variable a gateway has already routed on is not re-evaluated, only its
+// stored value changes.
+func handleVariablesModify(c *ProcessingContext) {
+	piKey := c.cmd.Key
+	if c.GetProcessInstance(piKey) == nil {
+		return // instance finished or never existed: nothing to modify
+	}
+	scope := c.cmd.Value.variable.ScopeKey
+	if scope == 0 {
+		scope = piKey
+	}
+	if scope != piKey {
+		// A non-root target must be a live element instance of this instance (a
+		// subprocess or multi-instance body local scope); anything else is rejected so
+		// a stray key cannot orphan variables under a scope no FEEL lookup reaches.
+		if ei := c.GetElementInstance(scope); ei == nil || ei.ProcessInstanceKey != piKey {
+			return
+		}
+	}
+	for i := range c.cmd.StartVars {
+		v := c.cmd.StartVars[i]
+		v.ScopeKey = scope
+		// Created for a name new to the scope, Updated for one already present — the
+		// honest intent for an operator override, though applyToState upserts either
+		// way. GetVariable reads through the in-flight transaction, so it sees a write
+		// made earlier in this same call.
+		intent := model.IntentVariableCreated
+		if c.GetVariable(scope, v.Name) != nil {
+			intent = model.IntentVariableUpdated
+		}
+		c.AppendVariableEvent(intent, v)
 	}
 }
 

@@ -91,7 +91,8 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/processes/{key}/instances-from-csv": "in-process CSV ingestion, not a direct agent start",
 
 	// Worker/operations control plane: partially exposed (candidate follow-ups).
-	"POST /api/v1/instances/terminate": "bulk filter-terminate not yet exposed",
+	"POST /api/v1/instances/{key}/variables": "admin-gated operator correction to live state (ADR-0095); the MCP service principal is deliberately non-admin",
+	"POST /api/v1/instances/terminate":       "bulk filter-terminate not yet exposed",
 
 	// Design-time read/edit: agents create artifacts; browsing/editing is the UI's.
 	"GET /api/v1/drafts":                 "artifact browsing is a UI concern",
