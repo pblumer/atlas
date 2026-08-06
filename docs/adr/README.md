@@ -104,6 +104,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0094](0094-singleton-message-start.md) | Singleton message start — at most one live instance per correlation key | Accepted |
 | [0095](0095-external-variable-modification.md) | External variable modification on a running instance | Accepted |
 | [0096](0096-token-simulation-events-and-inclusive-gateways.md) | Token simulation — event triggers, inclusive-gateway subset split / quiescence OR-join, and an auto-decide mode | Accepted |
+| [0097](0097-external-variable-modification-audit.md) | Audit trail for external variable modifications — who changed a running instance's variables | Accepted |
 
 ## Status values
 

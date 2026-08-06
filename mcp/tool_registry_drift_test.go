@@ -87,8 +87,9 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/scripts/run":   "modeler-time script check, not a scenario action",
 
 	// Read-side runtime introspection: partially exposed (candidate follow-ups).
-	"GET /api/v1/collaborations/{key}/runtime": "runtime introspection not yet exposed",
-	"GET /api/v1/decisions/{id}/evaluations":   "cross-instance decision evaluation history not yet exposed",
+	"GET /api/v1/collaborations/{key}/runtime":   "runtime introspection not yet exposed",
+	"GET /api/v1/decisions/{id}/evaluations":     "cross-instance decision evaluation history not yet exposed",
+	"GET /api/v1/instances/{key}/variable-audit": "operator-override audit trail (ADR-0097) not yet exposed",
 
 	// CSV batch start: driven from a user task inside the process (ADR-0084).
 	"POST /api/v1/processes/{key}/instances-from-csv": "in-process CSV ingestion, not a direct agent start",

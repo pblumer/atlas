@@ -643,6 +643,16 @@ func (t *Tx) RecordDecisionEvaluation(ts int64, pos uint64, v *model.DecisionEva
 	return t.b.Set(keyDecisionEvaluation(v.ProcessInstanceKey, ts, pos), t.encodeValue(v), nil)
 }
 
+// RecordVariableAudit retains one external variable override under its owning
+// process instance, keyed in change order (ADR-0097). ts and pos come from the event
+// header; the value carries who set the variable, on which scope, and to what value.
+// Written only from applyToState, from the event alone, so it rebuilds identically on
+// replay (invariant I4); a plain Set on a unique (position-bearing) key, never
+// overwritten.
+func (t *Tx) RecordVariableAudit(ts int64, pos uint64, v *model.VariableAuditValue) error {
+	return t.b.Set(keyVariableAudit(v.ProcessInstanceKey, ts, pos), t.encodeValue(v), nil)
+}
+
 // ActiveChildren returns the active-child count for scope (0 if none). This read
 // folds the merged deltas, so it is used only where the current count is needed
 // (e.g. detecting a finished scope), not on every increment.

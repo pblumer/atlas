@@ -33,7 +33,7 @@ func TestSetVariablesOnLiveInstance(t *testing.T) {
 
 	pi := model.NewKey(1, 1)
 	// 0 scope means the instance root; overwrite amount and add reviewer.
-	p.SetVariables(pi, 0,
+	p.SetVariables(pi, 0, "operator",
 		model.VariableValue{Name: "amount", Kind: model.VarNumber, Text: "200"},
 		model.VariableValue{Name: "reviewer", Kind: model.VarString, Text: "patrick"},
 	)
@@ -92,7 +92,7 @@ func TestSetVariablesOnElementScope(t *testing.T) {
 		t.Fatal("no live element instance found")
 	}
 
-	p.SetVariables(pi, elemKey, model.VariableValue{Name: "local", Kind: model.VarString, Text: "scoped"})
+	p.SetVariables(pi, elemKey, "operator", model.VariableValue{Name: "local", Kind: model.VarString, Text: "scoped"})
 	if err := p.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle (after set): %v", err)
 	}
@@ -130,7 +130,7 @@ func TestSetVariablesNoOpOnFinishedInstance(t *testing.T) {
 		t.Fatalf("instance still active = %d, want 0 (finished)", piN)
 	}
 
-	p.SetVariables(pi, 0, model.VariableValue{Name: "late", Kind: model.VarString, Text: "nope"})
+	p.SetVariables(pi, 0, "operator", model.VariableValue{Name: "late", Kind: model.VarString, Text: "nope"})
 	if err := p.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle (after set): %v", err)
 	}
@@ -159,7 +159,7 @@ func TestSetVariablesRejectsForeignScope(t *testing.T) {
 	pi := model.NewKey(1, 1)
 	bogus := model.NewKey(1, 9999) // no element instance has this key
 
-	p.SetVariables(pi, bogus, model.VariableValue{Name: "x", Kind: model.VarString, Text: "y"})
+	p.SetVariables(pi, bogus, "operator", model.VariableValue{Name: "x", Kind: model.VarString, Text: "y"})
 	if err := p.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle (after set): %v", err)
 	}
@@ -193,7 +193,7 @@ func TestSetVariablesRecovers(t *testing.T) {
 		t.Fatalf("RunUntilIdle 1: %v", err)
 	}
 	pi := model.NewKey(1, 1)
-	p1.SetVariables(pi, 0, model.VariableValue{Name: "amount", Kind: model.VarNumber, Text: "200"})
+	p1.SetVariables(pi, 0, "operator", model.VariableValue{Name: "amount", Kind: model.VarNumber, Text: "200"})
 	if err := p1.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle (set): %v", err)
 	}

@@ -36,6 +36,13 @@ type Command struct {
 	// so — like StartVars, on the same non-hot-path completion intent — it never
 	// touches the token-movement fast path.
 	Decision *model.DecisionEvaluationValue
+	// Actor identifies who submitted an external variable-modify command (ADR-0097):
+	// the acting principal's username, frozen into the audit event the modify emits so
+	// the "who changed it" trail is durable and replayable. Empty for every other
+	// command (and for a modify made with auth off / by an unidentified caller). It
+	// rides only on the non-hot-path IntentVariableModify command, so it never touches
+	// the token-movement fast path.
+	Actor string
 }
 
 // sideEffect is work to run after the batch's fsync (invariant I2). It is a

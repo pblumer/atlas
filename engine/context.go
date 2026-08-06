@@ -291,6 +291,16 @@ func (c *ProcessingContext) AppendDecisionEvaluationEvent(v model.DecisionEvalua
 	c.appendEvent(v.ProcessInstanceKey, model.VTDecisionEvaluation, model.IntentDecisionEvaluated, inflightValue{decisionEval: v})
 }
 
+// AppendVariableAuditEvent records who set a variable from outside the model — an
+// operator override — as append-only audit history (ADR-0097). Like a variable it
+// carries genuine runtime data (an actor, a name, and contents), so it allocates for
+// its strings; it rides only on the non-hot-path variable-modify command, never token
+// movement. It is keyed by the owning process instance, so a scope-wide scan yields
+// every override an instance received in order.
+func (c *ProcessingContext) AppendVariableAuditEvent(v model.VariableAuditValue) {
+	c.appendEvent(v.ProcessInstanceKey, model.VTVariableAudit, model.IntentVariableAudited, inflightValue{variableAudit: v})
+}
+
 // GetDataObject reads a scope's data object by name through the in-flight
 // transaction (sees writes from earlier in this batch). A data-output association
 // uses it to keep the object's current value or state when the write changes only

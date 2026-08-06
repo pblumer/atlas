@@ -81,6 +81,13 @@ const (
 	// — the engine never interprets the opaque source id — and appended last so every
 	// prior value type keeps its numeric value on the log.
 	VTInboundDelivery
+	// VTVariableAudit is one external variable override retained for audit (ADR-0097):
+	// who set which variable, to what value, on which scope, keyed under its process
+	// instance. Like VTMessageFlow and VTDecisionEvaluation it is append-only history
+	// (one record per variable an operator sets, never deleted), so the "who changed
+	// it" trail survives the instance and rebuilds from the log. Appended last so every
+	// prior value type keeps its numeric value on the log.
+	VTVariableAudit
 )
 
 func (t ValueType) String() string {
@@ -115,6 +122,8 @@ func (t ValueType) String() string {
 		return "DecisionEvaluation"
 	case VTInboundDelivery:
 		return "InboundDelivery"
+	case VTVariableAudit:
+		return "VariableAudit"
 	default:
 		return "ValueType(?)"
 	}
@@ -226,6 +235,14 @@ const (
 	// reaches the log, so it is appended at the end without disturbing the persisted
 	// intents' values.
 	IntentVariableModify
+
+	// IntentVariableAudited records that an external actor set a variable on a running
+	// instance (ADR-0097). It is a pure history event, like IntentDecisionEvaluated:
+	// emitted alongside the VariableCreated/VariableUpdated the override produces, it
+	// freezes who made the change into the log so replay rebuilds the identical audit
+	// trail without re-running the command (invariant I6). Appended at the end so every
+	// prior intent keeps its numeric value on the log.
+	IntentVariableAudited
 )
 
 func (i Intent) String() string {
@@ -292,6 +309,8 @@ func (i Intent) String() string {
 		return "InboundDeliveryApplied"
 	case IntentVariableModify:
 		return "VariableModify"
+	case IntentVariableAudited:
+		return "VariableAudited"
 	default:
 		return "Intent(?)"
 	}
