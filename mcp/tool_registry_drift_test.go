@@ -86,9 +86,10 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/processes/{key}/instances-from-csv": "in-process CSV ingestion, not a direct agent start",
 
 	// Worker/operations control plane: partially exposed (candidate follow-ups).
-	"POST /api/v1/instances/terminate":     "bulk filter-terminate not yet exposed",
-	"GET /api/v1/incidents":                "incident read/resolve not yet exposed (fail/complete are)",
-	"POST /api/v1/incidents/{key}/resolve": "incident read/resolve not yet exposed (fail/complete are)",
+	"POST /api/v1/instances/{key}/variables": "admin-gated operator correction to live state (ADR-0095); the MCP service principal is deliberately non-admin",
+	"POST /api/v1/instances/terminate":       "bulk filter-terminate not yet exposed",
+	"GET /api/v1/incidents":                  "incident read/resolve not yet exposed (fail/complete are)",
+	"POST /api/v1/incidents/{key}/resolve":   "incident read/resolve not yet exposed (fail/complete are)",
 
 	// Human-task lifecycle beyond list+complete: not yet exposed.
 	"GET /api/v1/tasks/{key}":          "single-task read not yet exposed",

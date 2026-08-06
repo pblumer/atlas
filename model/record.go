@@ -214,6 +214,18 @@ const (
 	// log. It rides in the same batch as the message publish it guards, so the
 	// dedup mark and the correlate/start effects it authorizes commit atomically.
 	IntentInboundDeliveryApplied
+
+	// IntentVariableModify is a command-only intent (never persisted as an event),
+	// like IntentTimerStartArm: it directs the processor to set or overwrite
+	// variables on a running instance's scope from outside the model — an operator
+	// correction to a live instance (ADR-0095). The handler validates the target
+	// scope, then emits a VariableCreated event for a new name or a VariableUpdated
+	// event for an existing one, so the change is a durable, replayable fact recorded
+	// in the instance's variable timeline (the audit trail), not a raw store write.
+	// Because commands are not replayed (invariant I6), its numeric value never
+	// reaches the log, so it is appended at the end without disturbing the persisted
+	// intents' values.
+	IntentVariableModify
 )
 
 func (i Intent) String() string {
@@ -278,6 +290,8 @@ func (i Intent) String() string {
 		return "VariableDeleted"
 	case IntentInboundDeliveryApplied:
 		return "InboundDeliveryApplied"
+	case IntentVariableModify:
+		return "VariableModify"
 	default:
 		return "Intent(?)"
 	}

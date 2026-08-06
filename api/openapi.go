@@ -163,6 +163,14 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/instances/{key}/variables", s.handleInstanceVariables, apiOp{
 			summary: "Read a process instance's variables as a typed JSON object", tag: "Instances",
 			resp: jsonBody("Instance variables", tObject())}},
+		{"POST", "/api/v1/instances/{key}/variables", s.handleSetInstanceVariables, apiOp{
+			summary: "Set or overwrite variables on a running instance — an operator correction to live process state (admin-only when auth is on); optional scopeKey targets a subprocess local scope; does not re-evaluate already-passed gateways", tag: "Instances",
+			req: jsonBody("Variables to set, and an optional target scope", schemaObj(map[string]any{
+				"variables": tObject(), "scopeKey": tInteger(),
+			}, "variables")),
+			resp: jsonBody("Set result", schemaObj(map[string]any{
+				"instanceKey": tInteger(), "variablesSet": tInteger(),
+			}))}},
 		{"GET", "/api/v1/instances/{key}/data-objects", s.handleInstanceDataObjects, apiOp{
 			summary: "Read a process instance's data objects — each with its name, data state, and typed value", tag: "Instances",
 			resp: jsonBody("Instance data objects", tArray())}},

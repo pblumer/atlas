@@ -251,6 +251,28 @@ func (p *Processor) CompleteJobWithDecision(jobKey uint64, decision *model.Decis
 	})
 }
 
+// SetVariables enqueues an external, operator-initiated write of variables onto a
+// running instance's scope (ADR-0095): each variable is created if its name is new
+// in the target scope or overwritten if it already exists. piKey is the process
+// instance; scopeKey is the scope the variables land in — pass piKey (or 0, which
+// the handler treats as piKey) for the instance root scope, or a live element
+// instance key belonging to piKey for a subprocess/multi-instance-body local scope.
+// The writes are frozen into VariableCreated/VariableUpdated events, so they replay
+// without re-running this command (invariant I6) and appear in the instance's
+// variable timeline as the audit trail. Setting variables on an instance that is
+// gone (finished or never existed), or on a scope that does not belong to it, is a
+// no-op. It does not re-evaluate any gateway a token has already passed — it only
+// changes the stored values. Call RunUntilIdle (or Drive) to process it.
+func (p *Processor) SetVariables(piKey, scopeKey uint64, vars ...model.VariableValue) {
+	p.queue = append(p.queue, Command{
+		Key:       piKey,
+		ValueType: model.VTVariable,
+		Intent:    model.IntentVariableModify,
+		Value:     inflightValue{variable: model.VariableValue{ScopeKey: scopeKey}},
+		StartVars: vars,
+	})
+}
+
 // FailJob enqueues a worker's failure report for a job (ADR-0061), carrying the
 // retries the worker leaves it and a failure message. With retries > 0 the job is
 // retried (back on the activatable index); with retries <= 0 an incident is raised

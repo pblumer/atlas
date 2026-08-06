@@ -1449,6 +1449,99 @@ func (s *Server) handleInstanceVariables(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, out)
 }
 
+// handleSetInstanceVariables sets or overwrites variables on a running instance
+// from outside the model (ADR-0095): an operator correction to a stuck or
+// misconfigured instance, the manual counterpart to the writes the model makes for
+// itself. Body: {"variables": {…}, "scopeKey": <optional>}. Variables land in the
+// instance root scope by default; a scopeKey (a live element instance key belonging
+// to the instance) targets a subprocess/multi-instance-body local scope instead.
+//
+// It is admin-gated when auth is on — a deliberately narrower right than starting an
+// instance, because it edits live process state — and open in single-user mode like
+// the rest of the runtime surface. 404 if the instance is not running (a finished
+// instance's state is history, not something to correct); 400 if the target scope
+// does not belong to the instance. The change is recorded in the instance's variable
+// timeline as the audit trail, and it does NOT re-evaluate any gateway a token has
+// already passed — only the stored values change.
+func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid instance key")
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	vars, err := parseStartVariables(body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(vars) == 0 {
+		writeError(w, http.StatusBadRequest, "no variables to set (body must carry a non-empty \"variables\" object)")
+		return
+	}
+	var scopeKey uint64
+	if len(bytes.TrimSpace(body)) > 0 {
+		var sel struct {
+			ScopeKey uint64 `json:"scopeKey"`
+		}
+		if err := json.Unmarshal(body, &sel); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+			return
+		}
+		scopeKey = sel.ScopeKey
+	}
+
+	var (
+		found    bool
+		scopeBad bool
+		scanErr  error
+		runErr   error
+	)
+	s.do(func() {
+		pi, ok, err := s.store.ProcessInstance(key)
+		if err != nil {
+			scanErr = err
+			return
+		}
+		if !ok || pi.State != model.PIActive {
+			return // not found stays 404: only a running instance can be corrected
+		}
+		found = true
+		if scopeKey != 0 && scopeKey != key {
+			ei, ok, err := s.store.GetElementInstance(scopeKey)
+			if err != nil {
+				scanErr = err
+				return
+			}
+			if !ok || ei.ProcessInstanceKey != key {
+				scopeBad = true
+				return
+			}
+		}
+		s.proc.SetVariables(key, scopeKey, vars...)
+		runErr = s.jobRunner.Drive()
+	})
+	switch {
+	case scanErr != nil:
+		writeError(w, http.StatusInternalServerError, "read instance: "+scanErr.Error())
+	case !found:
+		writeError(w, http.StatusNotFound, "no running instance with that key")
+	case scopeBad:
+		writeError(w, http.StatusBadRequest, "scopeKey is not an element instance of this process instance")
+	case runErr != nil:
+		writeError(w, http.StatusInternalServerError, "set variables: "+runErr.Error())
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"instanceKey": key, "variablesSet": len(vars)})
+	}
+}
+
 // dataObjectView renders a data object for the operator UI: its name, its BPMN
 // data state (the [received]/[approved] label), and its typed value. The value/kind
 // mirror a variable's; state is what a variable has not — the per-datum lifecycle
