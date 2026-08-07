@@ -77,6 +77,19 @@ func TestAppendValueRoundTrip(t *testing.T) {
 			vt:   VTVariableAudit,
 			v:    &VariableAuditValue{ProcessInstanceKey: NewKey(1, 1), ScopeKey: NewKey(1, 5), Name: "approved", Kind: VarBool, Bool: true},
 		},
+		{
+			name: "compensable",
+			vt:   VTCompensable,
+			v: &CompensableValue{
+				ProcessInstanceKey: NewKey(1, 1),
+				ProcessDefKey:      NewKey(1, 2),
+				ScopeKey:           NewKey(1, 3),
+				ElementInstanceKey: NewKey(1, 4),
+				Seq:                42,
+				ElementId:          7,
+				HandlerNode:        9,
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -119,7 +132,7 @@ func TestDecodeValueNoPayloadType(t *testing.T) {
 // TestDecodeValueShortBuffer covers the decode error propagation for each
 // payload type on a truncated buffer.
 func TestDecodeValueShortBuffer(t *testing.T) {
-	for _, vt := range []ValueType{VTElementInstance, VTJob, VTTimer, VTProcessInstance, VTVariable, VTMessageSubscription, VTSignal, VTMessageFlow, VTDataObject, VTIncident, VTInboundDelivery} {
+	for _, vt := range []ValueType{VTElementInstance, VTJob, VTTimer, VTProcessInstance, VTVariable, VTMessageSubscription, VTSignal, VTMessageFlow, VTDataObject, VTIncident, VTInboundDelivery, VTCompensable} {
 		if _, err := DecodeValue(vt, nil); !errors.Is(err, ErrShortBuffer) {
 			t.Errorf("DecodeValue(%v, nil) err = %v, want ErrShortBuffer", vt, err)
 		}
@@ -310,6 +323,7 @@ func TestValueTypeMethods(t *testing.T) {
 		{(&DataObjectValue{}), VTDataObject},
 		{(&DecisionEvaluationValue{}), VTDecisionEvaluation},
 		{(&InboundDeliveryValue{}), VTInboundDelivery},
+		{(&CompensableValue{}), VTCompensable},
 	}
 	for _, c := range cases {
 		if got := c.v.ValueType(); got != c.want {
@@ -332,7 +346,7 @@ func TestStringersExhaustive(t *testing.T) {
 		VTProcessInstance, VTElementInstance, VTJob, VTTimer, VTMessageSubscription,
 		VTMessage, VTVariable, VTIncident, VTSignal, VTError, VTProcessDefinition,
 		VTMessageFlow, VTDataObject, VTDecisionEvaluation, VTInboundDelivery,
-		VTVariableAudit,
+		VTVariableAudit, VTCompensable,
 	}
 	for _, vt := range valueTypes {
 		if s := vt.String(); s == "" || s == "ValueType(?)" {
@@ -351,6 +365,7 @@ func TestStringersExhaustive(t *testing.T) {
 		IntentDataObjectCreated, IntentDataObjectStateChanged,
 		IntentDecisionEvaluated, IntentVariableDeleted, IntentInboundDeliveryApplied,
 		IntentVariableModify, IntentVariableAudited,
+		IntentCompensableRecorded, IntentCompensableConsumed,
 		IntentJobErrorThrown,
 	}
 	for _, in := range intents {

@@ -259,3 +259,110 @@ func TestParseCompensationThrowUnknownActivityRejected(t *testing.T) {
 		t.Errorf("error = %v, want it to name the unknown activity", err)
 	}
 }
+
+// TestSetCompensationHandlerGuards covers the three guard returns in
+// SetCompensationHandler: an out-of-range node, a node that is not a boundary
+// event, and a boundary event that is not a compensation boundary (ADR-0103).
+func TestSetCompensationHandlerGuards(t *testing.T) {
+	b := NewBuilder(1, "p", 1)
+	b.AddStartEvent()
+	host := b.AddTask()
+	errBoundary := b.AddBoundaryErrorEvent(host, "E") // a boundary, but not compensation
+	handler := b.AddTask()
+
+	// None of these must panic or mutate a handler link; they hit the guard returns.
+	b.SetCompensationHandler(9999, handler)        // out-of-range node
+	b.SetCompensationHandler(host, handler)        // not a boundary event
+	b.SetCompensationHandler(errBoundary, handler) // boundary, but not compensation
+}
+
+// TestSetCompensationActivityRefGuards covers the two guard returns in
+// SetCompensationActivityRef: an out-of-range node and a node that is neither a
+// compensation throw nor a compensation end event (ADR-0103).
+func TestSetCompensationActivityRefGuards(t *testing.T) {
+	b := NewBuilder(1, "p", 1)
+	b.AddStartEvent()
+	task := b.AddTask()
+
+	b.SetCompensationActivityRef(9999, task) // out-of-range node
+	b.SetCompensationActivityRef(task, task) // not a compensation throw/end event
+}
+
+// TestCompensationAssociationTargetSideAndPlain covers the two association-scan
+// arms besides the source-side match: a compensation association whose boundary is
+// the association TARGET (handler is the source), and a plain association between
+// two non-compensation nodes, which the scan skips (ADR-0103).
+func TestCompensationAssociationTargetSideAndPlain(t *testing.T) {
+	const bpmn = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="p" isExecutable="true">
+    <startEvent id="s"/>
+    <serviceTask id="a"><extensionElements><zeebe:taskDefinition type="do"/></extensionElements></serviceTask>
+    <boundaryEvent id="ac" attachedToRef="a"><compensateEventDefinition/></boundaryEvent>
+    <serviceTask id="undo" isForCompensation="true"><extensionElements><zeebe:taskDefinition type="undo"/></extensionElements></serviceTask>
+    <endEvent id="e"/>
+    <association id="a1" sourceRef="undo" targetRef="ac"/>
+    <association id="a2" sourceRef="s" targetRef="a"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="a"/>
+    <sequenceFlow id="f2" sourceRef="a" targetRef="e"/>
+  </process></definitions>`
+	cp, err := Parse(1, 1, strings.NewReader(bpmn))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	// The boundary's handler resolved from the target-side association.
+	be := nodeByBpmnId(t, cp, "ac")
+	d := cp.BoundaryEvent(be.Detail)
+	undo := nodeByBpmnId(t, cp, "undo")
+	if d.CompensationHandler != undo.ElementId {
+		t.Errorf("CompensationHandler = %d, want undo %d", d.CompensationHandler, undo.ElementId)
+	}
+}
+
+// TestCompensationAssociationUnknownHandler: an association that links a compensation
+// boundary to an activity id that does not exist is a compile error (ADR-0103).
+func TestCompensationAssociationUnknownHandler(t *testing.T) {
+	const bpmn = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="p" isExecutable="true">
+    <startEvent id="s"/>
+    <serviceTask id="a"><extensionElements><zeebe:taskDefinition type="do"/></extensionElements></serviceTask>
+    <boundaryEvent id="ac" attachedToRef="a"><compensateEventDefinition/></boundaryEvent>
+    <endEvent id="e"/>
+    <association id="a1" sourceRef="ac" targetRef="ghost"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="a"/>
+    <sequenceFlow id="f2" sourceRef="a" targetRef="e"/>
+  </process></definitions>`
+	_, err := Parse(1, 1, strings.NewReader(bpmn))
+	if err == nil {
+		t.Fatal("expected a compile error for an association to an unknown handler")
+	}
+	if !strings.Contains(err.Error(), "ghost") {
+		t.Errorf("error = %v, want it to name the unknown handler", err)
+	}
+}
+
+// TestCompensationEndEventUnknownActivityRef: a compensation END event whose
+// activityRef names a non-existent activity is a compile error — the end-event arm
+// of the throw/end activityRef resolution (ADR-0103).
+func TestCompensationEndEventUnknownActivityRef(t *testing.T) {
+	const bpmn = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="p" isExecutable="true">
+    <startEvent id="s"/>
+    <serviceTask id="a"><extensionElements><zeebe:taskDefinition type="do"/></extensionElements></serviceTask>
+    <boundaryEvent id="ac" attachedToRef="a"><compensateEventDefinition/></boundaryEvent>
+    <serviceTask id="undo" isForCompensation="true"><extensionElements><zeebe:taskDefinition type="undo"/></extensionElements></serviceTask>
+    <endEvent id="ce"><compensateEventDefinition activityRef="ghost"/></endEvent>
+    <association id="a1" sourceRef="ac" targetRef="undo"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="a"/>
+    <sequenceFlow id="f2" sourceRef="a" targetRef="ce"/>
+  </process></definitions>`
+	_, err := Parse(1, 1, strings.NewReader(bpmn))
+	if err == nil {
+		t.Fatal("expected a compile error for a compensation end event with an unknown activityRef")
+	}
+	if !strings.Contains(err.Error(), "ghost") {
+		t.Errorf("error = %v, want it to name the unknown activity", err)
+	}
+}

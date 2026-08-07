@@ -130,6 +130,8 @@ func (t ValueType) String() string {
 		return "InboundDelivery"
 	case VTVariableAudit:
 		return "VariableAudit"
+	case VTCompensable:
+		return "Compensable"
 	default:
 		return "ValueType(?)"
 	}
