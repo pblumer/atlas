@@ -236,6 +236,7 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 }
 #toast.err { background: var(--danger); }
 #toast.ok { background: var(--ok); }
+#toast.warn { background: var(--warn); }
 
 /* ---------- Editor ---------- */
 .editor {
@@ -1097,6 +1098,33 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   cursor: default;
 }
 .impl-badge svg { display: block; width: 16px; height: 16px; border-radius: 3px; }
+
+/* ---------- Live collaboration sessions (ADR-0103) ---------- */
+/* A floating roster of co-editors, centered over the canvas, plus a lock badge on
+   each element another participant is editing and a brief pulse on a remote edit. */
+.editor-body { position: relative; }
+.collab-presence {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  z-index: 5; display: flex; gap: 4px; pointer-events: none;
+}
+.collab-avatar {
+  display: grid; place-items: center; width: 26px; height: 26px;
+  border-radius: 50%; font-size: 11px; font-weight: 700; color: #fff;
+  background: hsl(var(--h, 210), 55%, 45%);
+  box-shadow: 0 0 0 2px var(--surface), var(--shadow);
+  pointer-events: auto; cursor: default;
+}
+.collab-avatar.me { box-shadow: 0 0 0 2px var(--accent), var(--shadow); }
+.collab-lock {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 6px; border-radius: 10px; font-size: 11px; font-weight: 600;
+  color: #fff; background: hsl(var(--h, 210), 55%, 42%);
+  box-shadow: var(--shadow); white-space: nowrap; cursor: default;
+}
+.collab-touched .djs-visual > :first-child {
+  stroke: var(--accent) !important; stroke-width: 3px !important;
+  transition: stroke 0.2s ease;
+}
 
 /* "Can't run yet" badge on a drawable-but-unsupported element (top-right corner),
    so the author sees the gap while modeling, not only at Deploy/Validate. */

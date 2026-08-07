@@ -155,6 +155,13 @@ type Server struct {
 	// mutex; it is not engine state and does not persist (ADR-0044).
 	sessions *sessionStore
 
+	// collab holds live collaborative-editing sessions on drafts in memory
+	// (ADR-0103). Like sessions it is reached from concurrent handler goroutines
+	// (SSE streams and POSTs), guards itself with a mutex, and never persists or
+	// touches the engine — it is design-time coordination around a draft, not
+	// engine state.
+	collab *collabRegistry
+
 	// authEnabled gates authentication enforcement. Off by default: the server
 	// stays fully open (single-user) until an operator opts in with WithAuth,
 	// mirroring how docsEnabled gates the API explorer (ADR-0044/0043). Set once
@@ -368,6 +375,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		vaultEnabled:     true,                // opt-out: built unless WithoutVault is passed (ADR-0070)
 		users:            users,
 		sessions:         newSessionStore(defaultSessionTTL),
+		collab:           newCollabRegistry(),
 		dmnResolver:      resolver,
 		dmnValidator:     dmn.NewValidator(resolver),
 		dmnRegistry:      dmn.NewRegistry(),
