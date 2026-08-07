@@ -181,6 +181,59 @@ func TestParseCompensationBoundaryWithoutAssociationRejected(t *testing.T) {
 	}
 }
 
+// TestParseCompensationModelerRoundTrip parses a compensation model in the shape stock
+// bpmn-js exports — namespaced (bpmn:) elements, an <association associationDirection="One">
+// joining the compensation boundary to an isForCompensation handler, and incoming/outgoing
+// child elements — to confirm a hand-drawn model deploys without any Modeler changes (ADR-0103).
+func TestParseCompensationModelerRoundTrip(t *testing.T) {
+	const bpmn = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="Defs_1">
+  <bpmn:process id="order" isExecutable="true">
+    <bpmn:startEvent id="start"><bpmn:outgoing>f1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:serviceTask id="charge">
+      <bpmn:extensionElements><zeebe:taskDefinition type="charge-card"/></bpmn:extensionElements>
+      <bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:boundaryEvent id="chargeComp" attachedToRef="charge">
+      <bpmn:compensateEventDefinition/>
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="refund" isForCompensation="true">
+      <bpmn:extensionElements><zeebe:taskDefinition type="refund-card"/></bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:intermediateThrowEvent id="cancel">
+      <bpmn:incoming>f2</bpmn:incoming><bpmn:outgoing>f3</bpmn:outgoing>
+      <bpmn:compensateEventDefinition activityRef="charge"/>
+    </bpmn:intermediateThrowEvent>
+    <bpmn:endEvent id="done"><bpmn:incoming>f3</bpmn:incoming></bpmn:endEvent>
+    <bpmn:association id="a1" associationDirection="One" sourceRef="chargeComp" targetRef="refund"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="charge"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="charge" targetRef="cancel"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="cancel" targetRef="done"/>
+  </bpmn:process>
+</bpmn:definitions>`
+	cp, err := Parse(1, 1, strings.NewReader(bpmn))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	charge := nodeByBpmnId(t, cp, "charge")
+	refund := nodeByBpmnId(t, cp, "refund")
+	bevs := cp.BoundaryEvents(charge.ElementId)
+	if len(bevs) != 1 || cp.BoundaryEvent(cp.Node(bevs[0]).Detail).CompensationHandler != refund.ElementId {
+		t.Fatalf("compensation boundary did not resolve its handler from the namespaced association")
+	}
+	cancel := nodeByBpmnId(t, cp, "cancel")
+	if cancel.Type != TypeCompensationThrowEvent {
+		t.Fatalf("cancel type = %s, want CompensationThrowEvent", cancel.Type)
+	}
+	if got := cp.CompensationThrow(cancel.Detail).ActivityRef; got != charge.ElementId {
+		t.Errorf("throw ActivityRef = %d, want charge %d", got, charge.ElementId)
+	}
+	if ps := Validate(cp); len(ps) != 0 {
+		t.Errorf("Validate = %+v, want no problems (handler reached via its boundary)", ps)
+	}
+}
+
 // TestParseCompensationThrowUnknownActivityRejected: a compensation throw whose
 // activityRef names no element is a deploy error (ADR-0103).
 func TestParseCompensationThrowUnknownActivityRejected(t *testing.T) {

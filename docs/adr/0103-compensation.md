@@ -1,17 +1,30 @@
 # ADR-0103: Compensation and compensation handlers
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-07
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Not started. This ADR plans the work; each phase lands
-> test-first with a recovery test (ADR-0018). Compensation builds on the subprocess scope
-> lifecycle (ADR-0074), the boundary machinery (ADR-0040), the throw/end event precedent
+> **Implementation status.** Delivered (phases 1–5). Compensation builds on the subprocess
+> scope lifecycle (ADR-0074), the boundary machinery (ADR-0040), the throw/end event precedent
 > (ADR-0052/0088/0089), and the structural scope-walk of error propagation (ADR-0089). It
-> introduces one genuinely new durable record — a per-scope index of completed
-> **compensable** activities in completion order — and parses BPMN `<association>` links,
-> but no new recovery path: the throw is a command-path side effect, and the index is
-> derived purely from the `Completed` event in `applyToState`.
+> introduces one genuinely new durable record — `cfCompensable`, a per-scope index of completed
+> **compensable** activities keyed by the completion event's log position (so a reverse scan is
+> reverse completion order) — and parses BPMN `<association>` links, but no new recovery path:
+> the throw is a command-path side effect, and the index is derived purely from the completion
+> event in `applyToState`. Delivered: `<compensateEventDefinition>` on throw/end/boundary,
+> `<association>`, and `isForCompensation` parsing; the inert `BoundaryCompensation` kind;
+> `compensationThrowEventBehavior`/`compensationEndEventBehavior` running `compensate` (a
+> command-path scope walk that activates each matching handler newest-first and consumes the
+> record); single-activity (`activityRef`) and whole-scope (broadcast) compensation in reverse
+> completion order; scope confinement; and index cleanup on scope/instance teardown. A handler
+> runs against the instance's current variables. bpmn-js already authors compensation, so no
+> Modeler change was needed — a namespaced hand-drawn model round-trips (a compiler test proves
+> it). Every phase landed with a recovery test where relevant (ADR-0018); `go test -race ./...`
+> green. The chosen execution model activates handlers in reverse completion order (the
+> deterministic command-queue order — for inline handlers this is also their execution order);
+> strict sequential chaining and `waitForCompletion` are deferred. Follow-ups still open:
+> per-activity compensation **data** (a handler that needs the compensated activity's inputs),
+> compensation **across a call activity**, and BPMN **transactions** (which build on this).
 
 ## Context and problem statement
 
