@@ -54,8 +54,11 @@ const (
 
 	TypeReceiveTask // an activity that waits for a correlating message, then continues (ADR-0102); the message intermediate catch's semantics in task form, so it accepts boundary events, I/O mappings, and multi-instance
 
+	TypeCompensationThrowEvent // an intermediate throw event that triggers compensation — runs the handlers of completed compensable activities in its scope, or of one named activity (ADR-0103)
+	TypeCompensationEndEvent   // an end event that triggers compensation, then ends its scope (ADR-0103); the trigger-and-stop counterpart of a compensation throw, reusing the throw detail table
+
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 29
+	numBpmnTypes = 31
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -119,6 +122,10 @@ func (t BpmnType) String() string {
 		return "ErrorEndEvent"
 	case TypeReceiveTask:
 		return "ReceiveTask"
+	case TypeCompensationThrowEvent:
+		return "CompensationThrowEvent"
+	case TypeCompensationEndEvent:
+		return "CompensationEndEvent"
 	default:
 		return "Unspecified"
 	}
@@ -453,10 +460,11 @@ type EventSubProcessDetail struct {
 type BoundaryEventKind uint8
 
 const (
-	BoundaryTimer   BoundaryEventKind = iota // waits a fixed duration, then fires
-	BoundaryMessage                          // waits for a correlating message, then fires
-	BoundarySignal                           // waits for a broadcast signal by name, then fires (ADR-0088)
-	BoundaryError                            // catches an error propagating up to it by code, then fires; always interrupting (ADR-0089)
+	BoundaryTimer        BoundaryEventKind = iota // waits a fixed duration, then fires
+	BoundaryMessage                               // waits for a correlating message, then fires
+	BoundarySignal                                // waits for a broadcast signal by name, then fires (ADR-0088)
+	BoundaryError                                 // catches an error propagating up to it by code, then fires; always interrupting (ADR-0089)
+	BoundaryCompensation                          // links a host activity to its compensation handler; inert — never armed as an element instance, only read on host completion to record the activity as compensable (ADR-0103)
 )
 
 // BoundaryEventDetail is the per-boundary-event data a behavior needs at runtime.
@@ -473,6 +481,19 @@ type BoundaryEventDetail struct {
 	CorrelationKey *expr.Compiled // BoundaryMessage: correlation-key expression (ADR-0020)
 	SignalName     string         // BoundarySignal: the signal it subscribes to (ADR-0088)
 	ErrorCode      string         // BoundaryError: the error code it catches; "" is a catch-all (ADR-0089)
+	// CompensationHandler is the ElementId of the compensation handler activity this
+	// boundary links its host to (BoundaryCompensation, ADR-0103). It is resolved at
+	// compile time from the BPMN <association> joining the boundary to the handler;
+	// -1 means unresolved (a compensation boundary with no association — a deploy error).
+	CompensationHandler int32
+}
+
+// CompensationDetail is the per-compensation-throw data the runtime needs (ADR-0103),
+// shared by the compensation throw and end events like the message/signal throw table.
+// ActivityRef is the ElementId of the single activity to compensate, or -1 to compensate
+// every completed compensable activity in the throw's scope (reverse completion order).
+type CompensationDetail struct {
+	ActivityRef int32
 }
 
 // ErrorEndDetail is the per-error-end-event data the runtime needs: the code it throws
@@ -552,43 +573,44 @@ type CompiledProcess struct {
 	nodes []CompiledNode
 	flows []CompiledFlow
 
-	outgoingFlows     []int32 // shared topology: flow ids grouped by source node
-	boundaryEvents    []int32 // shared topology: boundary-event node ids grouped by host node
-	scopeStarts       []int32 // shared topology: nested start-event node ids grouped by subprocess node
-	serviceTasks      []ServiceTaskDetail
-	scriptTasks       []ScriptTaskDetail
-	callActivities    []CallActivityDetail
-	multiInstances    []MultiInstanceDetail
-	scriptJobTasks    []ScriptJobTaskDetail
-	businessRuleTasks []BusinessRuleTaskDetail
-	timerCatches      []TimerCatchDetail
-	connectorTasks    []ConnectorTaskDetail
-	userTasks         []UserTaskDetail
-	boundaryEventDets []BoundaryEventDetail
-	eventSubProcesses []EventSubProcessDetail
-	eventSubs         []int32 // shared topology: event-subprocess handler node ids grouped by parent scope node
-	rootEventSubs     []int32 // event-subprocess handler node ids whose parent scope is the process root
-	messageCatches    []MessageDetail
-	receiveTasks      []MessageDetail // receive tasks — the message-catch shape as an activity (ADR-0102)
-	messageThrows     []MessageDetail
-	messageStarts     []MessageDetail
-	signalCatches     []SignalDetail
-	signalThrows      []SignalDetail // shared by signal throw and signal end events
-	signalStarts      []SignalDetail
-	errorEnds         []ErrorEndDetail // error end events (ADR-0089)
-	timerStarts       []TimerStartDetail
-	dataObjects       []CompiledDataObject
-	dataOutAssocs     []DataOutputAssociation // shared: output associations grouped by activity node
-	dataInAssocs      []DataInputAssociation  // shared: input associations grouped by activity node
-	ioInputs          []IOMapping             // shared: zeebe:ioMapping inputs grouped by activity node
-	ioOutputs         []IOMapping             // shared: zeebe:ioMapping outputs grouped by activity node
-	startEvents       []int32
-	startFormId       int32    // interned start-form id (ADR-0028), -1 if none
-	versionTag        int32    // interned atlas:versionTag revision label, -1 if none
-	instanceTtlNanos  int64    // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
-	isExecutable      bool     // bpmn:isExecutable — a non-executable process can't be started
-	elementIds        []int32  // interned source BPMN id per node id (-1 if unset)
-	strings           []string // intern table (index → string), for debug/export
+	outgoingFlows      []int32 // shared topology: flow ids grouped by source node
+	boundaryEvents     []int32 // shared topology: boundary-event node ids grouped by host node
+	scopeStarts        []int32 // shared topology: nested start-event node ids grouped by subprocess node
+	serviceTasks       []ServiceTaskDetail
+	scriptTasks        []ScriptTaskDetail
+	callActivities     []CallActivityDetail
+	multiInstances     []MultiInstanceDetail
+	scriptJobTasks     []ScriptJobTaskDetail
+	businessRuleTasks  []BusinessRuleTaskDetail
+	timerCatches       []TimerCatchDetail
+	connectorTasks     []ConnectorTaskDetail
+	userTasks          []UserTaskDetail
+	boundaryEventDets  []BoundaryEventDetail
+	eventSubProcesses  []EventSubProcessDetail
+	eventSubs          []int32 // shared topology: event-subprocess handler node ids grouped by parent scope node
+	rootEventSubs      []int32 // event-subprocess handler node ids whose parent scope is the process root
+	messageCatches     []MessageDetail
+	receiveTasks       []MessageDetail // receive tasks — the message-catch shape as an activity (ADR-0102)
+	messageThrows      []MessageDetail
+	messageStarts      []MessageDetail
+	signalCatches      []SignalDetail
+	signalThrows       []SignalDetail // shared by signal throw and signal end events
+	signalStarts       []SignalDetail
+	errorEnds          []ErrorEndDetail     // error end events (ADR-0089)
+	compensationThrows []CompensationDetail // shared by compensation throw and end events (ADR-0103)
+	timerStarts        []TimerStartDetail
+	dataObjects        []CompiledDataObject
+	dataOutAssocs      []DataOutputAssociation // shared: output associations grouped by activity node
+	dataInAssocs       []DataInputAssociation  // shared: input associations grouped by activity node
+	ioInputs           []IOMapping             // shared: zeebe:ioMapping inputs grouped by activity node
+	ioOutputs          []IOMapping             // shared: zeebe:ioMapping outputs grouped by activity node
+	startEvents        []int32
+	startFormId        int32    // interned start-form id (ADR-0028), -1 if none
+	versionTag         int32    // interned atlas:versionTag revision label, -1 if none
+	instanceTtlNanos   int64    // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
+	isExecutable       bool     // bpmn:isExecutable — a non-executable process can't be started
+	elementIds         []int32  // interned source BPMN id per node id (-1 if unset)
+	strings            []string // intern table (index → string), for debug/export
 }
 
 // Node returns the node with the given ElementId.
@@ -759,6 +781,12 @@ func (p *CompiledProcess) SignalThrow(detail int32) *SignalDetail { return &p.si
 
 // ErrorEnd returns the error-end detail at the given table index (ADR-0089).
 func (p *CompiledProcess) ErrorEnd(detail int32) *ErrorEndDetail { return &p.errorEnds[detail] }
+
+// CompensationThrow returns the compensation-throw detail at the given table index —
+// shared by the compensation throw and end events (ADR-0103).
+func (p *CompiledProcess) CompensationThrow(detail int32) *CompensationDetail {
+	return &p.compensationThrows[detail]
+}
 
 // SignalStart returns the signal-start detail at the given table index (ADR-0088).
 func (p *CompiledProcess) SignalStart(detail int32) *SignalDetail { return &p.signalStarts[detail] }

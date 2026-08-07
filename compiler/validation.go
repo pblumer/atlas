@@ -228,6 +228,14 @@ func checkReachability(cp *CompiledProcess) []Problem {
 			push(int32(id))
 		}
 	}
+	// A compensation handler is reached when its compensation throw runs, not by a token
+	// flowing in (it sits off the normal flow, isForCompensation), so seed each handler —
+	// the activity a compensation boundary links to — as a reachability root (ADR-0103).
+	for i := range cp.boundaryEventDets {
+		if d := &cp.boundaryEventDets[i]; d.Kind == BoundaryCompensation && d.CompensationHandler >= 0 {
+			push(d.CompensationHandler)
+		}
+	}
 	for len(stack) > 0 {
 		n := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]

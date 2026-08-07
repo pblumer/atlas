@@ -360,6 +360,14 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		return nil, err
 	}
 
+	// Resolve compensation links now that every node is registered (ADR-0103): join each
+	// compensation boundary to its handler via a BPMN <association>, and narrow each
+	// compensation throw/end that names a single activity. Both endpoints resolve through
+	// the flat, process-wide id map, so this is a post-pass over the whole scope tree.
+	if err := resolveCompensation(b, ids, &proc.xmlFlowContent); err != nil {
+		return nil, err
+	}
+
 	// Data objects are not flow nodes (no token flows through them), so they are
 	// added as a separate collection, not registered as flow nodes (ADR-0053). A
 	// nameless data object falls back to its BPMN id so it stays addressable.
@@ -832,6 +840,10 @@ type xmlFlowContent struct {
 	// Captured only to give a clear "unsupported element" error (see Parse); not
 	// executable yet.
 	SendTasks []xmlNode `xml:"sendTask"`
+
+	// Associations are BPMN <association> artifacts declared in this scope. Atlas reads
+	// them only to link a compensation boundary event to its handler (ADR-0103).
+	Associations []xmlAssociation `xml:"association"`
 }
 
 // xmlReceiveTask is a <receiveTask messageRef="…">: an activity that waits for the
@@ -1021,11 +1033,36 @@ type xmlIntermediateCatchEvent struct {
 	Signal  *xmlSignalEventDefinition  `xml:"signalEventDefinition"`
 }
 
-// An intermediate throw event; the message and signal variants are executable.
+// An intermediate throw event; the message, signal, and compensation variants are executable.
 type xmlIntermediateThrowEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
 	Signal  *xmlSignalEventDefinition  `xml:"signalEventDefinition"`
+	// Compensation, when present, makes this a compensation throw event: it triggers
+	// compensation of completed compensable activities in its scope (or of the one named
+	// by activityRef), then flows on (ADR-0103). A pointer so an absent one is nil.
+	Compensation *xmlCompensateEventDefinition `xml:"compensateEventDefinition"`
+}
+
+// xmlCompensateEventDefinition is a <compensateEventDefinition> on a throw, end, or
+// boundary event. On a throw/end event, ActivityRef optionally names the single activity
+// to compensate — empty compensates every completed compensable activity in the scope
+// (ADR-0103). On a boundary event it has no attributes (the boundary just marks its host
+// compensable and links to a handler via a BPMN <association>). waitForCompletion is
+// accepted but not yet honored (compensation is synchronous).
+type xmlCompensateEventDefinition struct {
+	ActivityRef       string `xml:"activityRef,attr"`
+	WaitForCompletion string `xml:"waitForCompletion,attr"`
+}
+
+// xmlAssociation is a BPMN <association>: an undirected artifact link. Atlas parses it
+// only to join a compensation boundary event to its compensation handler activity — one
+// endpoint is the boundary, the other the handler (ADR-0103). Non-compensation
+// associations are ignored.
+type xmlAssociation struct {
+	Id        string `xml:"id,attr"`
+	SourceRef string `xml:"sourceRef,attr"`
+	TargetRef string `xml:"targetRef,attr"`
 }
 
 // An end event. A plain (none) end event just ends the instance; one bearing a
@@ -1044,6 +1081,10 @@ type xmlEndEvent struct {
 	// Atlas can't execute a terminate end yet, so it is rejected at compile time rather
 	// than silently dropped to a plain end (which would abandon the terminate semantics).
 	Terminate *xmlTerminateEventDefinition `xml:"terminateEventDefinition"`
+	// Compensation, when present, makes this a compensation end event: it triggers
+	// compensation, then ends its scope (ADR-0103); the trigger-and-stop counterpart of a
+	// compensation throw. A pointer so an absent one is nil.
+	Compensation *xmlCompensateEventDefinition `xml:"compensateEventDefinition"`
 }
 
 // xmlTerminateEventDefinition is the empty <terminateEventDefinition> element; only its
@@ -1066,6 +1107,10 @@ type xmlBoundaryEvent struct {
 	// by the host activity (or propagated up to it) whose code matches, and is always
 	// interrupting (ADR-0089). A pointer so an absent one is nil.
 	Error *xmlErrorEventDefinition `xml:"errorEventDefinition"`
+	// Compensation, when present, makes this a compensation boundary event: it is inert
+	// (never armed), marking its host activity compensable and linking — via a BPMN
+	// <association> — to the compensation handler (ADR-0103). A pointer so an absent one is nil.
+	Compensation *xmlCompensateEventDefinition `xml:"compensateEventDefinition"`
 }
 
 type xmlTimerEventDefinition struct {
