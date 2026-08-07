@@ -718,6 +718,20 @@ func (s *Store) VariablesOfScope(scope uint64, fn func(v *model.VariableValue) e
 	})
 }
 
+// CompensablesOfScope calls fn with every completed compensable activity retained
+// under the given scope, in completion order (ADR-0103). Used to surface a scope's
+// pending compensations to operators and by tests to assert the index is cleaned when
+// a scope tears down. Mirrors VariablesOfScope (committed reads only).
+func (s *Store) CompensablesOfScope(scope uint64, fn func(v *model.CompensableValue) error) error {
+	return s.scanPrefix(compensableScopePrefix(scope), func(_, raw []byte) error {
+		v, err := model.DecodeValue(model.VTCompensable, raw)
+		if err != nil {
+			return err
+		}
+		return fn(v.(*model.CompensableValue))
+	})
+}
+
 // DataObjectsOfScope calls fn with every data object owned by the given scope,
 // via the data-object column family — the current value of each. Used to surface
 // an instance's data to operators and, later, to build a FEEL scope for data

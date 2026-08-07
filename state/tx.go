@@ -368,6 +368,36 @@ func (t *Tx) DeleteCompensable(scopeKey, seq uint64) error {
 	return t.b.Delete(keyCompensable(scopeKey, seq), nil)
 }
 
+// DeleteCompensablesOfScope drops every compensable record held under a scope, called
+// when the scope tears down (its subprocess container or process instance completes or is
+// terminated) so uncompensated records never leak past the scope (ADR-0103). Keys are
+// collected before deleting so the scan is not disturbed. Idempotent — a scope with none
+// is a no-op.
+func (t *Tx) DeleteCompensablesOfScope(scopeKey uint64) error {
+	prefix := compensableScopePrefix(scopeKey)
+	iter, err := t.b.NewIter(&pebble.IterOptions{LowerBound: prefix, UpperBound: prefixEnd(prefix)})
+	if err != nil {
+		return err
+	}
+	var keys [][]byte
+	for iter.First(); iter.Valid(); iter.Next() {
+		keys = append(keys, append([]byte(nil), iter.Key()...))
+	}
+	err = iter.Error()
+	if cerr := iter.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return err
+	}
+	for _, k := range keys {
+		if e := t.b.Delete(k, nil); e != nil {
+			return e
+		}
+	}
+	return nil
+}
+
 // CompensablesOfScopeDesc calls fn for every completed compensable activity recorded
 // under scopeKey, newest first (reverse completion order) — the order a compensation
 // throw runs handlers in (ADR-0103). It reads through the in-flight batch, so it

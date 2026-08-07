@@ -81,6 +81,11 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err == nil && v.process.CorrelationKey != "" {
 				err = tx.DecrementActiveStartKey(v.process.ProcessDefKey, v.process.CorrelationKey)
 			}
+			// The instance's root scope tears down: drop any compensable records still held
+			// under it so they never leak past the instance (ADR-0103).
+			if err == nil {
+				err = tx.DeleteCompensablesOfScope(h.Key)
+			}
 			return err
 		}
 
@@ -133,6 +138,14 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			}
 			if v.element.BpmnElementType != eventSubTrigger {
 				if err := tx.DecrementActiveChildren(v.element.FlowScopeKey); err != nil {
+					return err
+				}
+			}
+			// A subprocess scope tearing down (normal completion or termination) drops any
+			// compensable records still held under it — its element key is its children's
+			// scope key — so they never leak past the scope (ADR-0103).
+			if v.element.BpmnElementType == uint8(compiler.TypeSubProcess) {
+				if err := tx.DeleteCompensablesOfScope(h.Key); err != nil {
 					return err
 				}
 			}

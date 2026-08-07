@@ -288,3 +288,158 @@ func TestCompensationEndEvent(t *testing.T) {
 		t.Errorf("compensation end visits = %d, want 1", v[rollback])
 	}
 }
+
+// TestCompensationScopedToSubprocess: a compensation throw inside a subprocess compensates
+// only its own scope — the subprocess's compensable activity runs its handler, while a
+// compensable activity in the enclosing root scope is left untouched (ADR-0103).
+func TestCompensationScopedToSubprocess(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	b := compiler.NewBuilder(74, "compsub", 1)
+	start := b.AddStartEvent()
+	r := b.AddScriptTask(mustCompile(t, `"r"`), "rOut") // compensable, in the ROOT scope
+	rComp := b.AddBoundaryCompensationEvent(r)
+	undoR := b.AddScriptTask(mustCompile(t, `"undoR"`), "undoR")
+	b.SetCompensationHandler(rComp, undoR)
+	sub := b.AddSubProcess()
+	b.PushScope(sub)
+	iStart := b.AddStartEvent()
+	a := b.AddScriptTask(mustCompile(t, `"a"`), "aOut") // compensable, in the SUB scope
+	aComp := b.AddBoundaryCompensationEvent(a)
+	undoA := b.AddScriptTask(mustCompile(t, `"undoA"`), "undoA")
+	b.SetCompensationHandler(aComp, undoA)
+	cancel := b.AddCompensationThrowEvent() // no activityRef → compensate the sub scope only
+	iEnd := b.AddEndEvent()
+	b.Connect(iStart, a)
+	b.Connect(a, cancel)
+	b.Connect(cancel, iEnd)
+	b.PopScope()
+	end := b.AddEndEvent()
+	b.Connect(start, r)
+	b.Connect(r, sub)
+	b.Connect(sub, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after run: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+	v := elementVisits(t, h.store, cp.Key)
+	if v[undoA] != 1 {
+		t.Errorf("sub handler visits = %d, want 1 (compensated within its scope)", v[undoA])
+	}
+	if v[undoR] != 0 {
+		t.Errorf("root handler visits = %d, want 0 (a sub-scoped throw must not compensate the root)", v[undoR])
+	}
+}
+
+// TestCompensableRecordsCleanedOnCompletion: an uncompensated compensable activity leaves no
+// record behind once its instance completes — the index is cleaned on scope teardown, so it
+// does not leak (ADR-0103).
+func TestCompensableRecordsCleanedOnCompletion(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	b := compiler.NewBuilder(75, "compclean", 1)
+	start := b.AddStartEvent()
+	a := b.AddScriptTask(mustCompile(t, `"a"`), "aOut")
+	aComp := b.AddBoundaryCompensationEvent(a)
+	undoA := b.AddScriptTask(mustCompile(t, `"undoA"`), "undoA")
+	b.SetCompensationHandler(aComp, undoA)
+	end := b.AddEndEvent()
+	b.Connect(start, a)
+	b.Connect(a, end) // no compensation throw: the record is written, never consumed
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	if pi, _ := counts(t, h.store); pi != 0 {
+		t.Fatalf("instances = %d, want 0 (instance completed)", pi)
+	}
+	n := 0
+	if err := h.store.CompensablesOfScope(model.NewKey(1, 1), func(*model.CompensableValue) error {
+		n++
+		return nil
+	}); err != nil {
+		t.Fatalf("CompensablesOfScope: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("leftover compensable records = %d, want 0 (cleaned on instance completion)", n)
+	}
+	if v := elementVisits(t, h.store, cp.Key); v[undoA] != 0 {
+		t.Errorf("handler visits = %d, want 0 (nothing triggered compensation)", v[undoA])
+	}
+}
+
+// TestCompensateMultipleRuns: a compensable activity that runs twice (a loop) records twice,
+// and a later broadcast compensates each completed instance — the handler runs twice (ADR-0103).
+func TestCompensateMultipleRuns(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	b := compiler.NewBuilder(76, "comploop", 1)
+	start := b.AddStartEvent()
+	initDone := b.AddScriptTask(mustCompile(t, `false`), "done")
+	a := b.AddScriptTask(mustCompile(t, `"a"`), "aOut")
+	aComp := b.AddBoundaryCompensationEvent(a)
+	undoA := b.AddScriptTask(mustCompile(t, `"undoA"`), "undoA")
+	b.SetCompensationHandler(aComp, undoA)
+	gw := b.AddExclusiveGateway()
+	setDone := b.AddScriptTask(mustCompile(t, `true`), "done")
+	cancel := b.AddCompensationThrowEvent() // no activityRef → compensate every run of a
+	end := b.AddEndEvent()
+	b.Connect(start, initDone)
+	b.Connect(initDone, a)
+	b.Connect(a, gw)
+	loop := b.Connect(gw, setDone) // taken on the first pass (done = false)
+	b.SetFlowCondition(loop, mustCompile(t, `done = false`))
+	b.Connect(setDone, a) // second pass through a
+	exit := b.Connect(gw, cancel)
+	b.SetFlowDefault(exit)
+	b.Connect(cancel, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after run: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+	if v := elementVisits(t, h.store, cp.Key); v[undoA] != 2 {
+		t.Errorf("handler visits = %d, want 2 (a ran twice, both runs compensated)", v[undoA])
+	}
+}
