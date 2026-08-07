@@ -1132,6 +1132,7 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   z-index: 5; display: flex; gap: 4px; pointer-events: none;
 }
 .collab-avatar {
+  position: relative;
   display: grid; place-items: center; width: 26px; height: 26px;
   border-radius: 50%; font-size: 11px; font-weight: 700; color: #fff;
   background: hsl(var(--h, 210), 55%, 45%);
@@ -1139,6 +1140,15 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   pointer-events: auto; cursor: default;
 }
 .collab-avatar.me { box-shadow: 0 0 0 2px var(--accent), var(--shadow); }
+/* ×N badge when one identity has several open streams (a second tab / reconnect). */
+.collab-count {
+  position: absolute; right: -3px; bottom: -3px;
+  min-width: 13px; height: 13px; padding: 0 2px;
+  display: grid; place-items: center;
+  font-size: 9px; font-style: normal; font-weight: 700; line-height: 1;
+  color: var(--text); background: var(--surface);
+  border-radius: 7px; box-shadow: 0 0 0 1px var(--border-strong);
+}
 .collab-lock {
   display: inline-flex; align-items: center; gap: 3px;
   padding: 1px 6px; border-radius: 10px; font-size: 11px; font-weight: 600;

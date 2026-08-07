@@ -137,6 +137,12 @@ const (
 	collabReapInterval   = 30 * time.Second
 )
 
+// collabKeepaliveInterval is how often an idle SSE session stream writes a
+// keepalive comment. It is the liveness backstop for a *streaming* (browser)
+// participant, which the TTL reaper deliberately exempts: a half-open connection
+// is detected when a keepalive write fails, letting the deferred leave() reap it.
+const collabKeepaliveInterval = 15 * time.Second
+
 // collabRegistry holds every live draft session in memory. It is mutex-guarded
 // because concurrent HTTP handlers (SSE streams and POSTs) reach it directly; it
 // is not engine state and never persists (ADR-0103).
