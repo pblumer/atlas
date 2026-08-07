@@ -310,6 +310,52 @@ func (reg *collabRegistry) change(draftID, participantID, elementID, xml string)
 	return true
 }
 
+// pollEvent is one buffered frame handed back by poll: the same shape as an SSE
+// frame, but delivered in a request/response batch for a participant that has no
+// live stream (an AI agent over MCP, ADR-0103 M2).
+type pollEvent struct {
+	Type string          `json:"type"`
+	Data json.RawMessage `json:"data"`
+	Seq  uint64          `json:"seq"`
+}
+
+// poll drains a participant's buffered frames and returns them together with the
+// current roster and lock set, marshaled as JSON. It is the non-streaming
+// counterpart of the SSE endpoint: an agent that cannot hold an event stream
+// calls this to see what changed (and it doubles as the agent's liveness signal).
+// The full roster/lock snapshot means a poll is self-correcting even if buffered
+// change frames were dropped under load. ok is false for an unknown session or
+// participant (a stale agent that should rejoin).
+func (reg *collabRegistry) poll(draftID, participantID string) ([]byte, bool) {
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+	sess := reg.sessions[draftID]
+	if sess == nil {
+		return nil, false
+	}
+	p, ok := sess.participants[participantID]
+	if !ok {
+		return nil, false
+	}
+	events := []pollEvent{}
+drain:
+	for {
+		select {
+		case ev := <-p.ch:
+			events = append(events, pollEvent{Type: ev.Type, Data: json.RawMessage(ev.Data), Seq: ev.Seq})
+		default:
+			break drain
+		}
+	}
+	out, _ := json.Marshal(struct {
+		Self         string           `json:"self"`
+		Participants []collabPresence `json:"participants"`
+		Locks        []collabLock     `json:"locks"`
+		Events       []pollEvent      `json:"events"`
+	}{Self: participantID, Participants: sess.rosterLocked(), Locks: sess.lockListLocked(), Events: events})
+	return out, true
+}
+
 // broadcastPresenceLocked emits the full roster as a presence frame to everyone.
 // Caller holds the mutex.
 func (reg *collabRegistry) broadcastPresenceLocked(sess *collabSession) {

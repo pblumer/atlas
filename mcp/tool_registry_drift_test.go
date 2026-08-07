@@ -69,6 +69,12 @@ var mcpToolRoutes = map[string]string{
 	"atlas_collaboration_runtime": "GET /api/v1/collaborations/{key}/runtime",
 	"atlas_list_drafts":           "GET /api/v1/drafts",
 	"atlas_get_draft_xml":         "GET /api/v1/drafts/{id}/xml",
+	"atlas_join_session":          "POST /api/v1/drafts/{id}/session/join",
+	"atlas_session_poll":          "POST /api/v1/drafts/{id}/session/poll",
+	"atlas_session_lock":          "POST /api/v1/drafts/{id}/session/lock",
+	"atlas_session_change":        "POST /api/v1/drafts/{id}/session/change",
+	"atlas_session_presence":      "POST /api/v1/drafts/{id}/session/presence",
+	"atlas_leave_session":         "POST /api/v1/drafts/{id}/session/leave",
 	"atlas_list_forms":            "GET /api/v1/forms",
 	"atlas_get_form":              "GET /api/v1/forms/{id}",
 	"atlas_list_decision_refs":    "GET /api/v1/dmnrefs",
@@ -113,15 +119,10 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/dmnrefs/{id}":        "artifact editing is a UI concern",
 	"POST /api/v1/dmnrefs/{id}/validate": "modeler-time validation is a UI concern",
 
-	// Live collaboration sessions (ADR-0103): a Server-Sent Events stream and its
-	// companion presence/lock/change POSTs are a real-time, connection-oriented
-	// transport, not a request/response scenario action. Exposing the AI agent as
-	// a live session participant over MCP (join/lock/apply) is the deliberately
-	// separate M2 slice of ADR-0103; until then these carry no MCP tool.
-	"GET /api/v1/drafts/{id}/session":           "live SSE co-editing transport; AI-as-participant is ADR-0103 M2, not this slice",
-	"POST /api/v1/drafts/{id}/session/presence": "live co-editing action; AI-as-participant is ADR-0103 M2, not this slice",
-	"POST /api/v1/drafts/{id}/session/lock":     "live co-editing action; AI-as-participant is ADR-0103 M2, not this slice",
-	"POST /api/v1/drafts/{id}/session/change":   "live co-editing action; AI-as-participant is ADR-0103 M2, not this slice",
+	// The SSE join stream is a browser transport: an MCP agent cannot hold an
+	// event stream, so it joins via the non-streaming atlas_join_session and reads
+	// with atlas_session_poll instead. The stream endpoint itself carries no tool.
+	"GET /api/v1/drafts/{id}/session": "live SSE co-editing transport for browsers; agents use atlas_join_session + atlas_session_poll (ADR-0103)",
 
 	// Public start links: a human-sharing feature, not an agent action.
 	"POST /api/v1/public-links":           "human share links, not an agent action",

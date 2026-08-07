@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -240,6 +241,61 @@ var errTest = &collabTestErr{}
 type collabTestErr struct{}
 
 func (*collabTestErr) Error() string { return "boom" }
+
+// TestCollabPoll covers the non-streaming read side (ADR-0103 M2): a detached
+// participant drains its buffered frames and reads the current roster and locks.
+func TestCollabPoll(t *testing.T) {
+	reg := newCollabRegistry()
+	p1, _, leave1 := reg.join("d", "u1", "Anja")
+	defer leave1()
+	p2, _, leave2 := reg.join("d", "u2", "Ben")
+	defer leave2()
+
+	// p2 acts; p1 polls and should see the buffered frames plus current state.
+	reg.acquireLock("d", p2.ID, "Task_1")
+	reg.change("d", p2.ID, "Task_1", "<t/>")
+
+	out, ok := reg.poll("d", p1.ID)
+	if !ok {
+		t.Fatal("poll returned ok=false for a live participant")
+	}
+	var got struct {
+		Self         string           `json:"self"`
+		Participants []collabPresence `json:"participants"`
+		Locks        []collabLock     `json:"locks"`
+		Events       []struct {
+			Type string `json:"type"`
+		} `json:"events"`
+	}
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("decode poll: %v", err)
+	}
+	if got.Self != p1.ID {
+		t.Fatalf("poll self = %q, want %q", got.Self, p1.ID)
+	}
+	if len(got.Participants) != 2 {
+		t.Fatalf("poll roster = %d, want 2", len(got.Participants))
+	}
+	if len(got.Locks) != 1 || got.Locks[0].ElementID != "Task_1" {
+		t.Fatalf("poll locks = %+v", got.Locks)
+	}
+	if len(got.Events) == 0 {
+		t.Fatal("poll returned no buffered events")
+	}
+	// A second poll with nothing new drains to an empty event list.
+	out2, _ := reg.poll("d", p1.ID)
+	if !strings.Contains(string(out2), `"events":[]`) {
+		t.Fatalf("second poll should have no events: %s", out2)
+	}
+
+	// Unknown participant / session.
+	if _, ok := reg.poll("d", "ghost"); ok {
+		t.Error("poll for an unknown participant reported ok")
+	}
+	if _, ok := reg.poll("nope", p1.ID); ok {
+		t.Error("poll on an unknown session reported ok")
+	}
+}
 
 // TestCollabLeaveUnknown covers the defensive early returns: leaving a session
 // or a participant that does not exist is a silent no-op.

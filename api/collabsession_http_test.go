@@ -183,6 +183,115 @@ func waitFor(t *testing.T, r *bufio.Reader, want string) bool {
 	}
 }
 
+// TestDraftSessionDetachedAgentFlow drives the M2 non-streaming path an AI agent
+// uses over MCP: join without an SSE stream, then poll / lock / change / leave.
+func TestDraftSessionDetachedAgentFlow(t *testing.T) {
+	ts := newTestServer(t)
+	saveDraft(t, ts)
+
+	// A browser participant on the SSE stream, to confirm the agent's edits reach
+	// live viewers. (waitFor below skips past the presence frame the agent's join
+	// pushes onto this stream.)
+	r, _, cancel := openSession(t, ts, "wip-order")
+	defer cancel()
+
+	// Agent joins without a stream.
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/drafts/wip-order/session/join", `{"name":"Claude"}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("join status=%d body=%s", code, body)
+	}
+	var snap struct {
+		Self         string `json:"self"`
+		Participants []struct {
+			Name string `json:"name"`
+		} `json:"participants"`
+	}
+	if err := json.Unmarshal(body, &snap); err != nil {
+		t.Fatalf("decode join: %v", err)
+	}
+	if snap.Self == "" {
+		t.Fatalf("join returned no self id: %s", body)
+	}
+	agent := snap.Self
+
+	// The agent takes a lock and edits; the browser sees it live.
+	lock := `{"participantId":"` + agent + `","elementId":"StartEvent_1","action":"acquire"}`
+	if code, _ := doReq(t, ts, http.MethodPost, "/api/v1/drafts/wip-order/session/lock", lock, "application/json"); code != http.StatusNoContent {
+		t.Fatalf("agent lock status=%d", code)
+	}
+	if !waitFor(t, r, "lock") {
+		t.Fatal("browser never saw the agent's lock")
+	}
+	change := `{"participantId":"` + agent + `","elementId":"StartEvent_1","xml":"<startEvent/>"}`
+	if code, _ := doReq(t, ts, http.MethodPost, "/api/v1/drafts/wip-order/session/change", change, "application/json"); code != http.StatusNoContent {
+		t.Fatalf("agent change status=%d", code)
+	}
+
+	// The agent polls and sees the current roster and its own lock.
+	code, pollBody := doReq(t, ts, http.MethodPost, "/api/v1/drafts/wip-order/session/poll", `{"participantId":"`+agent+`"}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("poll status=%d body=%s", code, pollBody)
+	}
+	var poll struct {
+		Locks []struct {
+			ElementID string `json:"elementId"`
+		} `json:"locks"`
+	}
+	if err := json.Unmarshal(pollBody, &poll); err != nil {
+		t.Fatalf("decode poll: %v", err)
+	}
+	if len(poll.Locks) != 1 || poll.Locks[0].ElementID != "StartEvent_1" {
+		t.Fatalf("poll locks = %+v", poll.Locks)
+	}
+
+	// The agent leaves; a second leave is idempotent.
+	leave := `{"participantId":"` + agent + `"}`
+	if code, _ := doReq(t, ts, http.MethodPost, "/api/v1/drafts/wip-order/session/leave", leave, "application/json"); code != http.StatusNoContent {
+		t.Fatalf("agent leave status=%d", code)
+	}
+	if code, _ := doReq(t, ts, http.MethodPost, "/api/v1/drafts/wip-order/session/leave", leave, "application/json"); code != http.StatusNoContent {
+		t.Fatalf("idempotent leave status=%d", code)
+	}
+}
+
+func TestDraftSessionDetachedValidation(t *testing.T) {
+	ts := newTestServer(t)
+	saveDraft(t, ts)
+
+	cases := []struct {
+		name, path, body string
+		want             int
+	}{
+		{"join missing draft", "/api/v1/drafts/ghost/session/join", `{}`, http.StatusNotFound},
+		{"join bad json", "/api/v1/drafts/wip-order/session/join", `{`, http.StatusBadRequest},
+		{"poll bad json", "/api/v1/drafts/wip-order/session/poll", `{`, http.StatusBadRequest},
+		{"poll no id", "/api/v1/drafts/wip-order/session/poll", `{}`, http.StatusBadRequest},
+		{"poll unknown", "/api/v1/drafts/wip-order/session/poll", `{"participantId":"ghost"}`, http.StatusNotFound},
+		{"leave no id", "/api/v1/drafts/wip-order/session/leave", `{}`, http.StatusBadRequest},
+		{"leave bad json", "/api/v1/drafts/wip-order/session/leave", `{`, http.StatusBadRequest},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if code, body := doReq(t, ts, http.MethodPost, tc.path, tc.body, "application/json"); code != tc.want {
+				t.Fatalf("%s = %d body=%s, want %d", tc.name, code, body, tc.want)
+			}
+		})
+	}
+}
+
+// TestDraftSessionJoinAnonymous confirms a join with no body defaults the name.
+func TestDraftSessionJoinAnonymous(t *testing.T) {
+	ts := newTestServer(t)
+	saveDraft(t, ts)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/drafts/wip-order/session/join", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("anonymous join status=%d body=%s", code, body)
+	}
+	if !strings.Contains(string(body), `"name":"agent"`) {
+		t.Fatalf("default name not applied: %s", body)
+	}
+}
+
 func TestDraftSessionMissingDraft(t *testing.T) {
 	ts := newTestServer(t)
 	code, body := doReq(t, ts, http.MethodGet, "/api/v1/drafts/ghost/session", "", "")

@@ -89,6 +89,101 @@ func (s *Server) handleDraftSession(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleDraftSessionJoin is the non-streaming way to join a session, for a
+// participant that cannot hold an SSE stream — an AI agent over MCP (ADR-0103
+// M2). It registers the participant and returns the same sync snapshot the SSE
+// stream sends first (self id, roster, locks); the agent then drives the session
+// with the presence / lock / change POSTs and reads what others did by polling.
+// The agent must call the leave endpoint when done — unlike an SSE client, there
+// is no disconnect to reap it (a TTL reaper is an ADR-0103 follow-up).
+func (s *Server) handleDraftSessionJoin(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	var (
+		ok      bool
+		readErr error
+	)
+	s.do(func() { _, ok, readErr = s.drafts.get(id) })
+	switch {
+	case readErr != nil:
+		writeError(w, http.StatusInternalServerError, "read draft: "+readErr.Error())
+		return
+	case !ok:
+		writeError(w, http.StatusNotFound, "no draft with that process id")
+		return
+	}
+
+	// An optional display name lets an agent introduce itself (e.g. "Claude") so
+	// humans see who joined; a resolved principal's name wins when present.
+	var body struct {
+		Name string `json:"name"`
+	}
+	if r.ContentLength != 0 {
+		if !decodeSessionBody(w, r, &body) {
+			return
+		}
+	}
+	userID, name := "", strings.TrimSpace(body.Name)
+	if name == "" {
+		name = "agent"
+	}
+	if p := principalFrom(r.Context()); p != nil {
+		userID = p.UserID
+		if p.Username != "" {
+			name = p.Username
+		}
+	}
+
+	_, sync, _ := s.collab.join(id, userID, name)
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(sync)
+}
+
+// handleDraftSessionPoll drains a participant's buffered frames and returns them
+// with the current roster and locks (ADR-0103 M2). It is the agent's read side —
+// the request/response substitute for the SSE stream — and its liveness signal.
+func (s *Server) handleDraftSessionPoll(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var body struct {
+		ParticipantID string `json:"participantId"`
+	}
+	if !decodeSessionBody(w, r, &body) {
+		return
+	}
+	if body.ParticipantID == "" {
+		writeError(w, http.StatusBadRequest, "participantId is required")
+		return
+	}
+	out, ok := s.collab.poll(id, body.ParticipantID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "no such participant in this draft's session")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(out)
+}
+
+// handleDraftSessionLeave removes a participant and releases its locks (ADR-0103
+// M2). It is idempotent: leaving a session you are not in still returns 204, so a
+// retrying agent never wedges on cleanup.
+func (s *Server) handleDraftSessionLeave(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var body struct {
+		ParticipantID string `json:"participantId"`
+	}
+	if !decodeSessionBody(w, r, &body) {
+		return
+	}
+	if body.ParticipantID == "" {
+		writeError(w, http.StatusBadRequest, "participantId is required")
+		return
+	}
+	s.collab.leave(id, body.ParticipantID)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // decodeSessionBody reads a small JSON action body. It caps the read and returns
 // false (writing 400) on a malformed body, so every POST handler shares one
 // parse-and-validate path.

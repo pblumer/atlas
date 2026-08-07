@@ -43,7 +43,8 @@ func keyArg(desc string) map[string]any {
 // tools are listed here; the design-time and human-task tools (projects, drafts,
 // forms, decisions, task completion) are appended from authoringTools.
 func defaultTools() []Tool {
-	return append(runtimeTools(), authoringTools()...)
+	tools := append(runtimeTools(), authoringTools()...)
+	return append(tools, collabTools()...)
 }
 
 // runtimeTools are the deploy/instance/inspect tools.

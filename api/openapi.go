@@ -262,6 +262,18 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/drafts/{id}/session", s.handleDraftSession, apiOp{
 			summary: "Join a draft's live collaboration session — a Server-Sent Events stream of sync, presence, lock, and change frames for real-time co-editing by people and AI agents (ADR-0103)", tag: "Live Sessions",
 			resp: eventStreamBody("SSE stream of session frames")}},
+		{"POST", "/api/v1/drafts/{id}/session/join", s.handleDraftSessionJoin, apiOp{
+			summary: "Join a draft's live session without an event stream — for an AI agent over MCP that cannot hold an SSE connection; returns the sync snapshot (self id, roster, locks) and is driven with poll/presence/lock/change (ADR-0103 M2)", tag: "Live Sessions",
+			req:  jsonBody("Optional display name", schemaObj(map[string]any{"name": tString()})),
+			resp: jsonBody("Sync snapshot with the joined participant's id", tObject())}},
+		{"POST", "/api/v1/drafts/{id}/session/poll", s.handleDraftSessionPoll, apiOp{
+			summary: "Drain a participant's buffered frames and read the current roster and locks — the request/response read side for an agent with no live stream, and its liveness signal (ADR-0103 M2)", tag: "Live Sessions",
+			req:  jsonBody("Polling participant", schemaObj(map[string]any{"participantId": tString()}, "participantId")),
+			resp: jsonBody("Roster, locks, and buffered events", tObject())}},
+		{"POST", "/api/v1/drafts/{id}/session/leave", s.handleDraftSessionLeave, apiOp{
+			summary: "Leave a draft's live session, releasing the participant's locks — idempotent (ADR-0103 M2)", tag: "Live Sessions",
+			req:    jsonBody("Leaving participant", schemaObj(map[string]any{"participantId": tString()}, "participantId")),
+			status: http.StatusNoContent}},
 		{"POST", "/api/v1/drafts/{id}/session/presence", s.handleDraftSessionPresence, apiOp{
 			summary: "Update a participant's presence (selected element) in a draft's live session (ADR-0103)", tag: "Live Sessions",
 			req: jsonBody("Presence update", schemaObj(map[string]any{
