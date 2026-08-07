@@ -1802,6 +1802,13 @@ tr[hidden] { display: none; }
 .djs-element.atlas-sim-deciding .djs-visual > :nth-child(1) {
   stroke: var(--accent) !important; stroke-width: 2.5px !important;
 }
+/* An embedded subprocess the flow has entered and is running its nested content inside. The
+   held token still gives it the accent "here" outline; this adds a faint tint so it reads as
+   an active *container*, not just an element holding a token. */
+.djs-element.atlas-sim-scope .djs-visual > :nth-child(1) {
+  fill: color-mix(in srgb, var(--accent) 8%, transparent) !important;
+  stroke: var(--accent) !important; stroke-width: 2.5px !important;
+}
 /* A token lands on / leaves an element (start / end pulse). */
 .djs-element.atlas-sim-hit .djs-visual > :nth-child(1) {
   stroke: var(--ok) !important; stroke-width: 3px !important;

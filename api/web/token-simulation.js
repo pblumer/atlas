@@ -115,6 +115,14 @@ const isProcessStart = (el) => isStart(el) && !isEventSubStart(el);
 // non-interrupting one runs alongside (ADR-0082).
 const isInterruptingSub = (el) => el.businessObject && el.businessObject.isInterrupting !== false;
 
+// An embedded subprocess (or transaction) holds a nested flow the token descends into. An
+// *event* subprocess is not one of these — it is a handler triggered by its event, not
+// entered along a sequence flow — so it is excluded here. Whether a given subprocess can
+// actually be walked also depends on it being expanded with a rendered inner start event;
+// that check lives in _isEnterableScope (it needs the element registry).
+const isSubProcessShape = (el) => el.type === "bpmn:SubProcess" || el.type === "bpmn:Transaction";
+const isEventSubProcess = (el) => !!(el.businessObject && el.businessObject.triggeredByEvent === true);
+
 // Multi-instance activities (ADR-0077) run their body several times — in parallel or in
 // sequence. Data-driven multiplicity (a collection size) is not something the simulation
 // evaluates, so it visualises a clearly-labelled number of instances. That number is the
@@ -172,6 +180,11 @@ export function TokenSimulation(eventBus, elementRegistry, canvas, overlays) {
   this._boundaries = new Map(); // host activity id → [boundary elements], indexed on import
   this._eventSubStarts = []; // event-subprocess start events, indexed on import
   this._miRemaining = new Map(); // multi-instance activity id → { left, total } instances
+  // scopes: embedded subprocesses the flow has entered, id → { count }. A held token rests
+  // on the subprocess shape (the badge shows the scope is running) and is excluded from the
+  // normal move/pump; the scope completes — releasing the held token onward — once no token
+  // remains inside it (quiescence, the same idea as the OR-join).
+  this._scopes = new Map();
   this._reach = new Map(); // memoised "can `from` reach `to`?" over sequence flows
   this._completed = 0; // tokens that reached an end event / ran off the graph
 
@@ -301,7 +314,7 @@ TokenSimulation.prototype.pause = function () {
 TokenSimulation.prototype.step = function () {
   if (!this._active) return;
   for (const [id, n] of this._resting) {
-    if (n <= 0) continue;
+    if (n <= 0 || this._scopes.has(id)) continue;
     const el = this._registry.get(id);
     if (el && !needsChoice(el) && !needsTrigger(el)) {
       this._emit(el);
@@ -309,7 +322,7 @@ TokenSimulation.prototype.step = function () {
     }
   }
   for (const [id, n] of this._resting) {
-    if (n <= 0) continue;
+    if (n <= 0 || this._scopes.has(id)) continue;
     const el = this._registry.get(id);
     if (el && needsTrigger(el)) {
       this._fireTrigger(el);
@@ -330,6 +343,7 @@ TokenSimulation.prototype.reset = function () {
   this._joinWait.clear();
   this._inflight.clear();
   this._miRemaining.clear();
+  this._scopes.clear();
   this._completed = 0;
   this._clearAllDeciding();
   this._render();
@@ -425,6 +439,9 @@ TokenSimulation.prototype._onClick = function (el) {
     this.spawnAt(el);
     return;
   }
+  // A running subprocess only advances when its inner flow quiesces — clicking it is a no-op
+  // (its held token must not be hand-advanced out).
+  if (this._scopes.has(el.id)) return;
   if ((this._resting.get(el.id) || 0) <= 0) return;
   // Fire a parked catch event, or hand-advance a token resting on a normal element.
   if (needsTrigger(el)) this._fireTrigger(el);
@@ -464,6 +481,7 @@ TokenSimulation.prototype._land = function (el) {
     if (this._playing) this._pump();
   }
   this._settleJoins();
+  this._settleScopes();
 };
 
 // _emit moves one token out of an element along its outgoing flow(s): a throw first fires
@@ -471,6 +489,7 @@ TokenSimulation.prototype._land = function (el) {
 // single flow). No outgoing flow means the token leaves the graph (completed).
 TokenSimulation.prototype._emit = function (el) {
   if ((this._resting.get(el.id) || 0) <= 0) return;
+  if (this._scopes.has(el.id)) return; // a running subprocess's held token waits for quiescence
   // Multi-instance: consume one instance per move, keeping the token on the activity until
   // the last instance is done — so a step / Play visibly counts the body running N times.
   if (isMultiInstance(el)) {
@@ -493,11 +512,12 @@ TokenSimulation.prototype._emit = function (el) {
   const outs = outFlows(el);
   this._rest(el.id, -1);
   if (outs.length === 0) {
-    this._completed++;
+    this._creditCompletion(el);
     this._flash(el);
     this._render();
     this._notify();
     this._settleJoins();
+    this._settleScopes();
     return;
   }
   this._render();
@@ -640,7 +660,14 @@ TokenSimulation.prototype._fireBoundary = function (b) {
   if (!host || (this._resting.get(host.id) || 0) <= 0) return;
   const interrupting = b.businessObject.cancelActivity !== false;
   if (interrupting) {
-    this._rest(host.id, -1);
+    if (this._scopes.has(host.id)) {
+      // Cancel the whole running subprocess: its inner tokens go with it. The epoch bump
+      // aborts in-flight dots (consistent with an interrupting event subprocess).
+      this._epoch++;
+      this._teardownScope(host);
+    } else {
+      this._rest(host.id, -1);
+    }
     this._clearDeciding(host.id);
   }
   this._flash(b);
@@ -648,11 +675,12 @@ TokenSimulation.prototype._fireBoundary = function (b) {
   this._render();
   this._notify();
   if (outs.length === 0) {
-    this._completed++;
+    this._creditCompletion(b);
   } else {
     for (const f of outs) this._travel(f);
   }
   this._settleJoins();
+  this._settleScopes();
 };
 
 // _fireEventSub triggers an event subprocess by dropping a token on its start event
@@ -668,6 +696,7 @@ TokenSimulation.prototype._fireEventSub = function (start) {
     this._joinWait.clear();
     this._inflight.clear();
     this._miRemaining.clear();
+    this._scopes.clear();
     this._clearAllDeciding();
   }
   this._flash(start);
@@ -723,11 +752,18 @@ TokenSimulation.prototype._arrive = function (target, viaFlow) {
   }
   if (isEnd(target)) {
     if (isThrow(target)) this._throwEvent(target);
-    this._completed++;
+    this._creditCompletion(target);
     this._flash(target);
     this._render();
     this._notify();
     this._settleJoins();
+    this._settleScopes(); // an inner end may have quiesced its subprocess
+    return;
+  }
+  // An embedded subprocess is *entered*, not passed over: a token spawns on each inner start
+  // and runs the nested flow; the outer token continues only once the subprocess completes.
+  if (this._isEnterableScope(target)) {
+    this._enterScope(target);
     return;
   }
   // A multi-instance activity runs its body several times before the token moves on; seed
@@ -808,6 +844,161 @@ TokenSimulation.prototype._canReach = function (fromId, toId) {
   return found;
 };
 
+// --- Embedded subprocess scopes ----------------------------------------------------
+
+// _isEnterableScope reports whether a token arriving at this element should descend into it
+// rather than pass over it. Only an *expanded* embedded subprocess with a rendered plain
+// start event can be walked: a collapsed one has no inner shapes in the registry (so
+// _innerStartsOf comes back empty) and a multi-instance subprocess keeps its instance-count
+// visualisation instead — both fall through to the pass-over path.
+TokenSimulation.prototype._isEnterableScope = function (el) {
+  if (!isSubProcessShape(el) || isEventSubProcess(el) || isMultiInstance(el)) return false;
+  return this._innerStartsOf(el).length > 0;
+};
+
+// _innerStartsOf returns the plain (non-event) start events that sit directly inside a
+// subprocess — where the flow begins when the token enters. A nested subprocess's own start
+// belongs to that nested scope, not this one, so only direct children count.
+TokenSimulation.prototype._innerStartsOf = function (sub) {
+  const out = [];
+  this._registry.forEach((el) => {
+    if (isStart(el) && !isEventSubStart(el) && el.parent && el.parent.id === sub.id) out.push(el);
+  });
+  return out;
+};
+
+// _within reports whether the element `elId` sits anywhere inside the subprocess `subId`
+// (any nesting depth), by walking its parent chain.
+TokenSimulation.prototype._within = function (elId, subId) {
+  let el = this._registry.get(elId);
+  el = el && el.parent;
+  while (el) {
+    if (el.id === subId) return true;
+    el = el.parent;
+  }
+  return false;
+};
+
+// _scopeOf returns the nearest ancestor subprocess of `el` that is currently a running
+// scope, or null. A token that runs off the graph inside such a scope retires an inner
+// token rather than completing the process.
+TokenSimulation.prototype._scopeOf = function (el) {
+  let p = el && el.parent;
+  while (p) {
+    if (this._scopes.has(p.id)) return p;
+    p = p.parent;
+  }
+  return null;
+};
+
+// _creditCompletion counts a token that ran off the graph as a process completion — unless
+// it did so inside a running subprocess, where it only retires an inner token (the scope
+// completes, and the outer token continues, once the whole subprocess quiesces).
+TokenSimulation.prototype._creditCompletion = function (el) {
+  if (this._scopeOf(el)) return;
+  this._completed++;
+};
+
+// _enterScope descends the token into an embedded subprocess: a held token rests on the
+// subprocess shape (marking it "running") and a fresh token spawns on each inner start. A
+// second token arriving while the scope already runs just adds another held token; they all
+// leave together when the subprocess completes.
+TokenSimulation.prototype._enterScope = function (sub) {
+  const existing = this._scopes.get(sub.id);
+  this._rest(sub.id, 1);
+  if (existing) {
+    existing.count++;
+    this._render();
+    this._notify();
+    return;
+  }
+  this._scopes.set(sub.id, { count: 1 });
+  this._addMarker(sub.id, "atlas-sim-scope");
+  this._flash(sub);
+  const starts = this._innerStartsOf(sub);
+  this._render();
+  this._notify();
+  for (const s of starts) this.spawnAt(s);
+};
+
+// _settleScopes completes every running subprocess whose inner flow has quiesced — no token
+// rests, animates, or waits in a join anywhere inside it. Completing one releases its held
+// token(s) onward, which may in turn quiesce an enclosing scope, so re-read the map each
+// pass (the same re-entrant pattern as _settleJoins).
+TokenSimulation.prototype._settleScopes = function () {
+  for (const sid of Array.from(this._scopes.keys())) {
+    if (!this._scopes.has(sid)) continue;
+    const sub = this._registry.get(sid);
+    if (!sub) {
+      this._scopes.delete(sid);
+      continue;
+    }
+    if (this._scopeLive(sub)) continue;
+    this._completeScope(sub);
+  }
+};
+
+// _scopeLive reports whether any token is still inside the subprocess `sub` — resting,
+// in flight toward an inner element, or parked in an inner join. The subprocess's own held
+// token (keyed by its id) is not "inside" and so does not keep the scope alive.
+TokenSimulation.prototype._scopeLive = function (sub) {
+  for (const [id, n] of this._resting) {
+    if (n > 0 && id !== sub.id && this._within(id, sub.id)) return true;
+  }
+  for (const [id, n] of this._inflight) {
+    if (n > 0 && this._within(id, sub.id)) return true;
+  }
+  for (const [gwId, w] of this._joinWait) {
+    let held = 0;
+    for (const c of w.values()) held += c;
+    if (held > 0 && this._within(gwId, sub.id)) return true;
+  }
+  return false;
+};
+
+// _completeScope ends a quiesced subprocess: it releases the held token(s) out of the
+// subprocess's outgoing flow(s), or — if it has none — credits their completion (respecting
+// a further enclosing scope). One token leaves for each that entered.
+TokenSimulation.prototype._completeScope = function (sub) {
+  const rec = this._scopes.get(sub.id);
+  const count = (rec && rec.count) || 1;
+  this._scopes.delete(sub.id);
+  this._removeMarker(sub.id, "atlas-sim-scope");
+  this._rest(sub.id, -count);
+  this._flash(sub);
+  const outs = outFlows(sub);
+  this._render();
+  this._notify();
+  if (outs.length === 0) {
+    for (let i = 0; i < count; i++) this._creditCompletion(sub);
+    this._settleScopes();
+    return;
+  }
+  for (let i = 0; i < count; i++) for (const f of outs) this._travel(f);
+};
+
+// _teardownScope cancels a running subprocess outright (an interrupting boundary fired):
+// every token inside it, its held token, inner joins, deciding gateways, and any nested
+// scope go away. In-flight dots are aborted by the caller's epoch bump.
+TokenSimulation.prototype._teardownScope = function (sub) {
+  for (const id of Array.from(this._resting.keys())) {
+    if (id === sub.id || this._within(id, sub.id)) this._resting.delete(id);
+  }
+  for (const gwId of Array.from(this._joinWait.keys())) {
+    if (this._within(gwId, sub.id)) this._joinWait.delete(gwId);
+  }
+  for (const gwId of Array.from(this._deciding.keys())) {
+    if (this._within(gwId, sub.id)) this._clearDeciding(gwId);
+  }
+  for (const sid of Array.from(this._scopes.keys())) {
+    if (sid === sub.id || this._within(sid, sub.id)) this._scopes.delete(sid);
+  }
+  for (const id of Array.from(this._miRemaining.keys())) {
+    if (this._within(id, sub.id)) this._miRemaining.delete(id);
+  }
+  this._removeMarker(sub.id, "atlas-sim-scope");
+};
+
 // _pump auto-advances the flow while playing: on each tick it moves one eligible token and
 // re-arms itself if work remains. In auto mode a "movable" token also includes a gateway
 // choice (resolved to the default / a branch) and a parked catch (fired), so Play runs
@@ -828,6 +1019,7 @@ TokenSimulation.prototype._pump = function () {
 TokenSimulation.prototype._advanceOne = function () {
   for (const [id, n] of Array.from(this._resting)) {
     if (n <= 0) continue;
+    if (this._scopes.has(id)) continue; // a running subprocess's held token never pumps
     const el = this._registry.get(id);
     if (!el) continue;
     if (needsChoice(el)) {
@@ -855,6 +1047,7 @@ TokenSimulation.prototype._advanceOne = function () {
 TokenSimulation.prototype._anyPumpable = function () {
   for (const [id, n] of this._resting) {
     if (n <= 0) continue;
+    if (this._scopes.has(id)) continue; // held subprocess token — not movable on its own
     const el = this._registry.get(id);
     if (!el) continue;
     if (needsChoice(el) || needsTrigger(el)) {
