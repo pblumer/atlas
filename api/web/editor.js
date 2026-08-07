@@ -551,7 +551,6 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
 // elements (compiler/scope_compile.go, compiler/parse.go).
 const UNSUPPORTED_TYPES = {
   "bpmn:SendTask": "Send tasks can't run yet",
-  "bpmn:ReceiveTask": "Receive tasks can't run yet",
   "bpmn:EventBasedGateway": "Event-based gateways aren't supported yet",
   "bpmn:ComplexGateway": "Complex gateways aren't supported yet",
   "bpmn:Transaction": "Transaction subprocesses aren't supported yet",
@@ -560,7 +559,6 @@ const UNSUPPORTED_TYPES = {
 };
 const UNSUPPORTED_EVENT_DEFS = {
   "bpmn:TerminateEventDefinition": "Terminate end events can't run yet",
-  "bpmn:ErrorEventDefinition": "Error events aren't supported yet",
   "bpmn:EscalationEventDefinition": "Escalation events aren't supported yet",
   "bpmn:CompensateEventDefinition": "Compensation events aren't supported yet",
   "bpmn:ConditionalEventDefinition": "Conditional events aren't supported yet",
