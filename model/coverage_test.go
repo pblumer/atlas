@@ -67,6 +67,16 @@ func TestAppendValueRoundTrip(t *testing.T) {
 				CorrelationKey:             "42",
 			},
 		},
+		{
+			name: "variable audit",
+			vt:   VTVariableAudit,
+			v:    &VariableAuditValue{ProcessInstanceKey: NewKey(1, 1), ScopeKey: NewKey(1, 1), Actor: "patrick", Name: "amount", Kind: VarNumber, Text: "200"},
+		},
+		{
+			name: "variable audit (empty actor, bool value)",
+			vt:   VTVariableAudit,
+			v:    &VariableAuditValue{ProcessInstanceKey: NewKey(1, 1), ScopeKey: NewKey(1, 5), Name: "approved", Kind: VarBool, Bool: true},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -322,6 +332,7 @@ func TestStringersExhaustive(t *testing.T) {
 		VTProcessInstance, VTElementInstance, VTJob, VTTimer, VTMessageSubscription,
 		VTMessage, VTVariable, VTIncident, VTSignal, VTError, VTProcessDefinition,
 		VTMessageFlow, VTDataObject, VTDecisionEvaluation, VTInboundDelivery,
+		VTVariableAudit,
 	}
 	for _, vt := range valueTypes {
 		if s := vt.String(); s == "" || s == "ValueType(?)" {
@@ -339,6 +350,7 @@ func TestStringersExhaustive(t *testing.T) {
 		IntentIncidentResolved, IntentJobCanceled,
 		IntentDataObjectCreated, IntentDataObjectStateChanged,
 		IntentDecisionEvaluated, IntentVariableDeleted, IntentInboundDeliveryApplied,
+		IntentVariableModify, IntentVariableAudited,
 		IntentJobErrorThrown,
 	}
 	for _, in := range intents {

@@ -42,7 +42,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// the instance record itself, the per-definition active counter and
 			// last-activity for the O(1) runtime view / instances summary (ADR-0080/0083),
 			// and — for a message-start instance — the per-key live counter a singleton
-			// message start gates on (ADR-0082). All are event-driven, so replay rebuilds
+			// message start gates on (ADR-0094). All are event-driven, so replay rebuilds
 			// them (I4/I6). firstErr applies them and reports the first failure.
 			err := firstErr(
 				tx.PutProcessInstance(h.Key, &v.process),
@@ -77,7 +77,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 				tx.SetDefLastActivity(v.process.ProcessDefKey, h.Timestamp),
 			)
 			// Releasing a message-start instance re-opens its correlation key so a later
-			// message can start a fresh one (ADR-0082).
+			// message can start a fresh one (ADR-0094).
 			if err == nil && v.process.CorrelationKey != "" {
 				err = tx.DecrementActiveStartKey(v.process.ProcessDefKey, v.process.CorrelationKey)
 			}
@@ -237,6 +237,17 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// identical mark (invariant I4) and a duplicate publish that a replay
 			// re-drives is skipped by handleMessagePublished's guard.
 			return tx.PutInboundHighWater(v.inbound.SourceID, v.inbound.SourceSeq)
+		}
+
+	case model.VTVariableAudit:
+		if h.Intent == model.IntentVariableAudited {
+			// Retain who set a variable from outside the model — an operator override —
+			// as append-only audit history (ADR-0098), the "who changed it" analogue of
+			// the decision-evaluation record. The record carries everything (actor, scope,
+			// name, value); the timestamp and position come from this event's header, so
+			// replay rebuilds identical history without re-running the modify command
+			// (invariants I4/I6).
+			return tx.RecordVariableAudit(h.Timestamp, h.Position, &v.variableAudit)
 		}
 
 	case model.VTDecisionEvaluation:

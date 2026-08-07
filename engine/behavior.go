@@ -42,6 +42,7 @@ func (p *Processor) registerHandlers() {
 		handlerKey(model.VTTimer, model.IntentTimerTriggered):        handleTimerTriggered,
 		handlerKey(model.VTTimer, model.IntentTimerStartArm):         handleTimerStartArm,
 		handlerKey(model.VTMessage, model.IntentMessagePublished):    handleMessagePublished,
+		handlerKey(model.VTVariable, model.IntentVariableModify):     handleVariablesModify,
 	}
 }
 
@@ -91,6 +92,18 @@ func (p *Processor) registerBehaviors() {
 func handleProcessInstanceActivating(c *ProcessingContext) {
 	defKey := c.cmd.Value.process.ProcessDefKey
 	piKey := c.NewKey()
+	cp := c.process(defKey)
+
+	// If the definition carries an instance TTL, schedule its self-cleaning expiry
+	// (ADR-0085): freeze a due date at command time and record it both on the instance
+	// and on a durable timer, so both rebuild identically on replay (I4/I6). The timer
+	// reuses the instance key — a globally unique id no other timer holds — so normal
+	// completion or an explicit cancel can retire it by key without scanning the index.
+	var expiryDue int64
+	if ttl := cp.InstanceTtlNanos(); ttl > 0 {
+		expiryDue = c.Now() + ttl
+	}
+
 	// The correlation key (empty for a timer or API start) rides in on the create
 	// command so the instance records which message key it began with (ADR-0020);
 	// CreatedAt is stamped from the event timestamp in applyToState.
@@ -98,7 +111,18 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 		ProcessDefKey:            defKey,
 		CorrelationKey:           c.cmd.Value.process.CorrelationKey,
 		ParentElementInstanceKey: c.cmd.Value.process.ParentElementInstanceKey,
+		ExpiryDueDate:            expiryDue,
 	})
+	if expiryDue > 0 {
+		// An expiry timer carries no owning element instance (ElementInstanceKey 0) — the
+		// shape handleTimerTriggered dispatches to instance termination (ADR-0085).
+		c.AppendTimerEvent(piKey, model.IntentTimerCreated, model.TimerValue{
+			ProcessInstanceKey: piKey,
+			ElementInstanceKey: 0,
+			TargetElementId:    -1,
+			DueDate:            expiryDue,
+		})
+	}
 
 	// Seed the instance's start variables under its scope before any element runs.
 	for i := range c.cmd.StartVars {
@@ -106,8 +130,6 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 		v.ScopeKey = piKey
 		c.AppendVariableEvent(model.IntentVariableCreated, v)
 	}
-
-	cp := c.process(defKey)
 
 	// Seed the process's declared data objects under the instance scope, each with
 	// its declared initial data state (value unset for now; data associations write
@@ -152,6 +174,7 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 	if pi == nil {
 		return
 	}
+	cancelExpiryTimer(c, piKey, pi.ExpiryDueDate)
 	c.ForEachElementInstance(piKey, func(elKey uint64) {
 		if ei := c.GetElementInstance(elKey); ei != nil {
 			terminateChildInstance(c, elKey, ei.BpmnElementType)
@@ -167,6 +190,22 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 		}
 	})
 	c.AppendProcessInstanceEvent(piKey, model.IntentTerminated, *pi)
+}
+
+// cancelExpiryTimer retires an instance's TTL expiry timer (ADR-0085) when the instance
+// ends before its TTL elapses. The timer key is the instance key and its due date is
+// stored on the instance record, so it deletes by key without scanning the timer index.
+// A zero due date means the instance had no TTL — nothing to retire. The delete is
+// idempotent, so this is also harmless when the expiry timer itself just terminated the
+// instance (it fired and deleted its own record first).
+func cancelExpiryTimer(c *ProcessingContext, piKey uint64, expiryDue int64) {
+	if expiryDue == 0 {
+		return
+	}
+	c.AppendTimerEvent(piKey, model.IntentTimerCanceled, model.TimerValue{
+		ProcessInstanceKey: piKey,
+		DueDate:            expiryDue,
+	})
 }
 
 // handleElementActivating emits the Activated lifecycle event, runs the
@@ -438,6 +477,64 @@ func handleJobCompleted(c *ProcessingContext) {
 	}
 }
 
+// handleVariablesModify applies an operator's external variable write to a running
+// instance (ADR-0095). It is the manual counterpart to the variable writes a model
+// makes for itself — start variables, job outputs, io-mappings — reusing the same
+// VariableCreated/VariableUpdated events over the same applyToState, so the change
+// is durable, replayable (invariant I6), and recorded in the instance's variable
+// timeline as the audit trail, never a raw store write.
+//
+// The command carries the process instance in Key and the target scope in
+// Value.variable.ScopeKey (0 means the instance root). It writes only when the
+// instance is live and the scope belongs to it, so a correction to a finished
+// instance or a foreign scope is a safe no-op. It deliberately does not re-drive the
+// token: a variable a gateway has already routed on is not re-evaluated, only its
+// stored value changes.
+func handleVariablesModify(c *ProcessingContext) {
+	piKey := c.cmd.Key
+	if c.GetProcessInstance(piKey) == nil {
+		return // instance finished or never existed: nothing to modify
+	}
+	scope := c.cmd.Value.variable.ScopeKey
+	if scope == 0 {
+		scope = piKey
+	}
+	if scope != piKey {
+		// A non-root target must be a live element instance of this instance (a
+		// subprocess or multi-instance body local scope); anything else is rejected so
+		// a stray key cannot orphan variables under a scope no FEEL lookup reaches.
+		if ei := c.GetElementInstance(scope); ei == nil || ei.ProcessInstanceKey != piKey {
+			return
+		}
+	}
+	for i := range c.cmd.StartVars {
+		v := c.cmd.StartVars[i]
+		v.ScopeKey = scope
+		// Created for a name new to the scope, Updated for one already present — the
+		// honest intent for an operator override, though applyToState upserts either
+		// way. GetVariable reads through the in-flight transaction, so it sees a write
+		// made earlier in this same call.
+		intent := model.IntentVariableCreated
+		if c.GetVariable(scope, v.Name) != nil {
+			intent = model.IntentVariableUpdated
+		}
+		c.AppendVariableEvent(intent, v)
+		// Record who made this override, alongside the variable event, so the "who
+		// changed it" trail is durable and replayable (ADR-0098). The actor rides in on
+		// the command; the value mirrors what was written so the audit row is
+		// self-contained.
+		c.AppendVariableAuditEvent(model.VariableAuditValue{
+			ProcessInstanceKey: piKey,
+			ScopeKey:           scope,
+			Actor:              c.cmd.Actor,
+			Name:               v.Name,
+			Kind:               v.Kind,
+			Bool:               v.Bool,
+			Text:               v.Text,
+		})
+	}
+}
+
 // handleJobFailed applies a worker's failure report for a job (ADR-0061). The
 // command carries the remaining retry count (in the job payload) and a failure
 // message (in the incident payload). The job's retries are set to that count and
@@ -559,6 +656,16 @@ func handleTimerTriggered(c *ProcessingContext) {
 	c.AppendTimerEvent(c.cmd.Key, model.IntentTimerTriggered, timer)
 	if timer.ProcessInstanceKey == 0 {
 		fireStartTimer(c, timer)
+		return
+	}
+	if timer.ElementInstanceKey == 0 {
+		// An instance-expiry (TTL) timer owns no element — its firing terminates the whole
+		// instance through the ordinary cancellation path (ADR-0085). Terminating an
+		// instance already gone (completed or cancelled first) is a no-op, so a race with
+		// normal completion is safe.
+		if pi := c.GetProcessInstance(timer.ProcessInstanceKey); pi != nil {
+			c.AppendProcessInstanceCommand(timer.ProcessInstanceKey, model.IntentTerminating, *pi)
+		}
 		return
 	}
 	ei := c.GetElementInstance(timer.ElementInstanceKey)
@@ -819,6 +926,9 @@ func completeScope(c *ProcessingContext, scope uint64) {
 	// child of a call activity, its completion resumes the caller (ADR-0076).
 	if pi := c.GetProcessInstance(scope); pi != nil {
 		disarmEventSubprocesses(c, scope, scope)
+		// Finishing before the TTL: retire the instance's expiry timer in the same batch
+		// so a completed instance leaves no armed timer behind (ADR-0085).
+		cancelExpiryTimer(c, scope, pi.ExpiryDueDate)
 		c.AppendProcessInstanceEvent(scope, model.IntentCompleted, *pi)
 		if pi.ParentElementInstanceKey != 0 {
 			resumeCaller(c, scope, pi.ParentElementInstanceKey)
@@ -1542,7 +1652,7 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 	// events the created instances emit.
 	for _, ref := range c.p.messageStarts[name] {
 		startKey := evalStartCorrelationKey(ref.correlationKey, vars)
-		// A singleton message start (ADR-0082) instantiates only if no instance of this
+		// A singleton message start (ADR-0094) instantiates only if no instance of this
 		// definition is already live for this correlation key. An empty key identifies
 		// no entity, so it is never singleton (it always starts).
 		if ref.singletonStart && startKey != "" {
@@ -1852,7 +1962,7 @@ func raiseErrorIncident(c *ProcessingContext, elKey uint64, code string) {
 // ActiveStartKey counter, maintained by applyToState) or already scheduled earlier in
 // this batch (the per-batch set, which closes the window before the durable counter
 // reflects a same-batch create). When it returns false it records the pair so a second
-// message for the same key in the same batch is skipped (ADR-0082).
+// message for the same key in the same batch is skipped (ADR-0094).
 func (c *ProcessingContext) singletonStartTaken(defKey uint64, key string) (bool, error) {
 	if c.p.startsThisBatch == nil {
 		c.p.startsThisBatch = make(map[startKeyIdent]struct{})

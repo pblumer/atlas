@@ -27,7 +27,7 @@ const (
 // ProviderConfig is the per-connector data the server resolves before building a
 // client: the provider, an optional endpoint override, the default sender, and the
 // resolved Secret — an SMTP password, or (for a native provider) the OAuth credential
-// JSON bundle held in the vault under the connector's credentialsRef (ADR-0080). The
+// JSON bundle held in the vault under the connector's credentialsRef (ADR-0093). The
 // secret lives only here at build time, never in a model or an event (I6).
 type ProviderConfig struct {
 	Provider string

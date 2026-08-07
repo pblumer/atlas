@@ -209,6 +209,10 @@ type ProcessInstanceValue struct {
 	// this instance as its child, 0 for a root instance (API/message/timer start).
 	// A completing child resumes its caller through it (ADR-0076).
 	ParentElementInstanceKey uint64
+	// ExpiryDueDate is the due date (unix nano) of this instance's TTL expiry timer,
+	// 0 when the definition has no TTL (ADR-0085). Stored so completion/termination can
+	// cancel that timer by key (the instance key) without scanning the timer index.
+	ExpiryDueDate int64
 }
 
 // processInstanceLegacySize is the original fixed layout (ProcessDefKey, State,
@@ -225,7 +229,8 @@ func (v *ProcessInstanceValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.CompletedAt))
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.CreatedAt))
 	dst = appendString(dst, v.CorrelationKey)
-	return binary.LittleEndian.AppendUint64(dst, v.ParentElementInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ParentElementInstanceKey)
+	return binary.LittleEndian.AppendUint64(dst, uint64(v.ExpiryDueDate))
 }
 
 func (v *ProcessInstanceValue) decode(src []byte) error {
@@ -251,6 +256,11 @@ func (v *ProcessInstanceValue) decode(src []byte) error {
 	// ends after the correlation key and leaves it zero (a root instance).
 	if len(tail) >= 8 {
 		v.ParentElementInstanceKey = binary.LittleEndian.Uint64(tail)
+	}
+	// ExpiryDueDate is the newest appended field: a record written before it ends after
+	// the parent key and leaves it zero (no TTL).
+	if len(tail) >= 16 {
+		v.ExpiryDueDate = int64(binary.LittleEndian.Uint64(tail[8:]))
 	}
 	return nil
 }
@@ -448,6 +458,71 @@ func (v *DecisionEvaluationValue) decode(src []byte) error {
 		return err
 	}
 	v.TraceJSON = trace
+	return nil
+}
+
+// VariableAuditValue records one external variable override for audit (ADR-0098):
+// who set which variable, to what value, on which scope. It is keyed under its
+// owning ProcessInstanceKey as append-only history — one record per variable an
+// operator sets — so the "who changed it" trail folds into the same instance
+// timeline as the variable snapshot at the same log position, and survives the
+// instance finishing. Actor is the acting principal's username, or "" when auth is
+// off (single-user) or the caller is unidentified. Name/Kind/Bool/Text mirror the
+// VariableValue that was written, so the audit row is self-contained. Like a variable
+// it carries genuine runtime data, so its encoding is length-prefixed.
+type VariableAuditValue struct {
+	ProcessInstanceKey uint64 // owning instance (the scope this record is keyed under)
+	ScopeKey           uint64 // the scope the variable was written to (root or a sub-scope)
+	Actor              string // who performed the override; "" when auth is off / unidentified
+	Name               string // the variable that was set
+	Kind               VarKind
+	Bool               bool
+	Text               string // number canonical string, string contents, or canonical JSON; empty otherwise
+}
+
+func (*VariableAuditValue) ValueType() ValueType { return VTVariableAudit }
+
+func (v *VariableAuditValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ScopeKey)
+	dst = appendString(dst, v.Actor)
+	dst = appendString(dst, v.Name)
+	dst = append(dst, byte(v.Kind))
+	if v.Bool {
+		dst = append(dst, 1)
+	} else {
+		dst = append(dst, 0)
+	}
+	return appendString(dst, v.Text)
+}
+
+func (v *VariableAuditValue) decode(src []byte) error {
+	if len(src) < 16 {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src)
+	v.ScopeKey = binary.LittleEndian.Uint64(src[8:])
+	rest := src[16:]
+	actor, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.Actor = actor
+	name, rest, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.Name = name
+	if len(rest) < 2 {
+		return ErrShortBuffer
+	}
+	v.Kind = VarKind(rest[0])
+	v.Bool = rest[1] != 0
+	text, _, err := readString(rest[2:])
+	if err != nil {
+		return err
+	}
+	v.Text = text
 	return nil
 }
 
@@ -724,6 +799,8 @@ func newValue(vt ValueType) Value {
 		return &DecisionEvaluationValue{}
 	case VTInboundDelivery:
 		return &InboundDeliveryValue{}
+	case VTVariableAudit:
+		return &VariableAuditValue{}
 	default:
 		return nil
 	}

@@ -378,6 +378,37 @@ func TestParseUnsupportedElementMessage(t *testing.T) {
 	}
 }
 
+// TestParseTerminateEndRejected guards the silent-drop: a <terminateEventDefinition>
+// on an end event used to parse as a plain none end (terminate semantics lost with no
+// error). It must now be rejected at compile time with a clear message, so a modeled
+// terminate can't deploy as a no-op.
+func TestParseTerminateEndRejected(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
+		<startEvent id="s"/>
+		<endEvent id="stop"><terminateEventDefinition/></endEvent>
+		<sequenceFlow id="f" sourceRef="s" targetRef="stop"/></process></definitions>`
+	_, err := Parse(1, 1, strings.NewReader(xml))
+	if err == nil {
+		t.Fatal("want error for a terminate end event (unsupported), got nil")
+	}
+	for _, want := range []string{"stop", "terminate"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q should mention %q", err.Error(), want)
+		}
+	}
+}
+
+// A plain end event (no definition) still compiles — the guard is specific to the
+// terminate definition, not end events in general.
+func TestParsePlainEndStillCompiles(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
+		<startEvent id="s"/><endEvent id="e"/>
+		<sequenceFlow id="f" sourceRef="s" targetRef="e"/></process></definitions>`
+	if _, err := Parse(1, 1, strings.NewReader(xml)); err != nil {
+		t.Fatalf("plain end event should compile: %v", err)
+	}
+}
+
 // TestParseParallelGateway parses a fork/join and checks the join's incoming
 // count (what a parallel join waits on) is compiled correctly.
 func TestParseParallelGateway(t *testing.T) {

@@ -78,7 +78,7 @@ type Processor struct {
 	fatalErr     error
 
 	// startsThisBatch remembers the (defKey, correlationKey) pairs a singleton message
-	// start has already scheduled a create for in the current batch (ADR-0082). The
+	// start has already scheduled a create for in the current batch (ADR-0094). The
 	// durable ActiveStartKey counter only reflects an instance once its Activated
 	// followup applies (a later batch), so within one batch several messages for the
 	// same key would all read zero; this set closes that same-batch window. Cleared
@@ -160,7 +160,7 @@ type messageStartRef struct {
 	elementId      int32
 	correlationKey *expr.Compiled
 	// singletonStart gates instantiation on there being no live instance of defKey
-	// already started with the same correlation key (ADR-0082); false = ADR-0035's
+	// already started with the same correlation key (ADR-0094); false = ADR-0035's
 	// start-per-message default.
 	singletonStart bool
 }
@@ -248,6 +248,32 @@ func (p *Processor) CompleteJobWithDecision(jobKey uint64, decision *model.Decis
 		Intent:    model.IntentJobCompleted,
 		StartVars: outputs,
 		Decision:  decision,
+	})
+}
+
+// SetVariables enqueues an external, operator-initiated write of variables onto a
+// running instance's scope (ADR-0095): each variable is created if its name is new
+// in the target scope or overwritten if it already exists. piKey is the process
+// instance; scopeKey is the scope the variables land in — pass piKey (or 0, which
+// the handler treats as piKey) for the instance root scope, or a live element
+// instance key belonging to piKey for a subprocess/multi-instance-body local scope.
+// The writes are frozen into VariableCreated/VariableUpdated events, so they replay
+// without re-running this command (invariant I6) and appear in the instance's
+// variable timeline as the audit trail. Setting variables on an instance that is
+// gone (finished or never existed), or on a scope that does not belong to it, is a
+// no-op. It does not re-evaluate any gateway a token has already passed — it only
+// changes the stored values. Each variable set is additionally recorded as an audit
+// event naming actor — who made the change (ADR-0098) — so the "who changed it" trail
+// is durable; pass "" when the caller is unidentified. Call RunUntilIdle (or Drive)
+// to process it.
+func (p *Processor) SetVariables(piKey, scopeKey uint64, actor string, vars ...model.VariableValue) {
+	p.queue = append(p.queue, Command{
+		Key:       piKey,
+		ValueType: model.VTVariable,
+		Intent:    model.IntentVariableModify,
+		Value:     inflightValue{variable: model.VariableValue{ScopeKey: scopeKey}},
+		StartVars: vars,
+		Actor:     actor,
 	})
 }
 
@@ -413,7 +439,7 @@ func (p *Processor) processBatch() error {
 	p.sideEffects = p.sideEffects[:0]
 	p.fatalErr = nil
 	for k := range p.startsThisBatch {
-		delete(p.startsThisBatch, k) // reuse the map; empty by the next batch (ADR-0082)
+		delete(p.startsThisBatch, k) // reuse the map; empty by the next batch (ADR-0094)
 	}
 
 	tx := p.store.NewTransaction()

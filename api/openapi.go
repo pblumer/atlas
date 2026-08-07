@@ -163,11 +163,22 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/instances/{key}/variables", s.handleInstanceVariables, apiOp{
 			summary: "Read a process instance's variables as a typed JSON object", tag: "Instances",
 			resp: jsonBody("Instance variables", tObject())}},
+		{"POST", "/api/v1/instances/{key}/variables", s.handleSetInstanceVariables, apiOp{
+			summary: "Set or overwrite variables on a running instance — an operator correction to live process state (admin-only when auth is on); optional scopeKey targets a subprocess local scope; does not re-evaluate already-passed gateways", tag: "Instances",
+			req: jsonBody("Variables to set, and an optional target scope", schemaObj(map[string]any{
+				"variables": tObject(), "scopeKey": tInteger(),
+			}, "variables")),
+			resp: jsonBody("Set result", schemaObj(map[string]any{
+				"instanceKey": tInteger(), "variablesSet": tInteger(),
+			}))}},
+		{"GET", "/api/v1/instances/{key}/variable-audit", s.handleInstanceVariableAudit, apiOp{
+			summary: "Read the external variable overrides a process instance received — the \"who changed it\" audit trail, each with actor, scope, variable name, and typed new value (ADR-0098)", tag: "Instances",
+			resp: jsonBody("Variable overrides", tArray())}},
 		{"GET", "/api/v1/instances/{key}/data-objects", s.handleInstanceDataObjects, apiOp{
 			summary: "Read a process instance's data objects — each with its name, data state, and typed value", tag: "Instances",
 			resp: jsonBody("Instance data objects", tArray())}},
 		{"GET", "/api/v1/instances/{key}/timeline", s.handleInstanceTimeline, apiOp{
-			summary: "Read a process instance's step-by-step replay timeline", tag: "Instances",
+			summary: "Read a process instance's step-by-step replay timeline — each step's variables carry an actor when the value was set by an external operator override (ADR-0098)", tag: "Instances",
 			resp: jsonBody("Instance timeline", tObject())}},
 		{"GET", "/api/v1/instances/{key}/decisions", s.handleInstanceDecisions, apiOp{
 			summary: "Read the DMN decision evaluations a process instance made — each with its inputs, outputs, and trace", tag: "Instances",

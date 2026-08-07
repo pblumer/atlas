@@ -441,6 +441,15 @@ func registerScope(
 		}
 	}
 	for _, e := range c.EndEvents {
+		// A terminate end event would end the whole instance at once — Atlas can't
+		// execute that yet, so reject it with a clear message instead of silently
+		// dropping the <terminateEventDefinition> and deploying a plain end that
+		// simply completes one token (the modeled abort would never happen).
+		if e.Terminate != nil {
+			return fmt.Errorf("compiler: end event %q has a <terminateEventDefinition>, "+
+				"which Atlas can't execute yet — a terminate end would abort the whole instance; "+
+				"remove it or use a plain end event", e.Id)
+		}
 		// A message end event publishes its message then ends; a plain end event
 		// just ends (ADR-0052).
 		if e.Message != nil {

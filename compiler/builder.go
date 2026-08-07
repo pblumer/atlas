@@ -191,6 +191,7 @@ type Builder struct {
 	elementIds        []int32          // interned source BPMN id per node, -1 if unset
 	startFormId       int32            // interned start-form id (ADR-0028), -1 if the process has none
 	versionTag        int32            // interned atlas:versionTag revision label, -1 if none
+	instanceTtlNanos  int64            // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
 	isExecutable      bool             // bpmn:isExecutable; defaults true (set in NewBuilder)
 
 	// flowScope is the enclosing scope every node added now lands in: -1 for the
@@ -360,6 +361,11 @@ func (b *Builder) SetExecutable(v bool) { b.isExecutable = v }
 // SetVersionTag records the process's atlas:versionTag — an optional revision label
 // (e.g. "1.4.0") shown in Operations beside the deploy version. Design-time metadata.
 func (b *Builder) SetVersionTag(s string) { b.versionTag = b.intern(s) }
+
+// SetInstanceTtl records the process's instance TTL in nanoseconds — the self-cleaning
+// expiry bound (ADR-0085). Zero (the default) means no TTL: instances never expire on
+// their own. The parser passes an already-validated positive duration.
+func (b *Builder) SetInstanceTtl(nanos int64) { b.instanceTtlNanos = nanos }
 
 // AddMessageStartEvent adds a message start event and returns its element id. It
 // is a process entry point like a none start event — at runtime it simply flows
@@ -1190,6 +1196,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		elementIds:        b.elementIds,
 		startFormId:       b.startFormId,
 		versionTag:        b.versionTag,
+		instanceTtlNanos:  b.instanceTtlNanos,
 		isExecutable:      b.isExecutable,
 		strings:           b.strings,
 	}, nil

@@ -116,6 +116,15 @@ function blankXML() {
 
 let current; // active modeler/viewer, destroyed on remount
 let liveTimer; // active live-overlay poll, cleared on remount/leave
+// generation is bumped by cleanup() on every navigation/remount. A mount captures
+// it right after its own cleanup() and re-checks it after each await, so a slow
+// mount that a newer navigation has superseded bails out *before* it builds a
+// second viewer or writes into the live view's DOM. Without this, the router's
+// re-entrancy (hashchange fires route() again while a mount is still awaiting
+// bpmn assets or the timeline) let a stale mount create a second bpmn-js canvas
+// inside the current mount's #canvas and render another instance's data over it —
+// two overlaid diagrams, mismatched instance keys, a leaked poll timer.
+let generation = 0;
 
 // docTitle refines the browser tab title with a loaded subject (a diagram or
 // process name), matching app.js's "<subject> · Atlas" scheme so open tabs are
@@ -125,6 +134,7 @@ function docTitle(label) { document.title = label ? `${label} · Atlas` : "Atlas
 // cleanup tears down the current modeler and any live poll. app.js calls it (via
 // window.__atlasCleanup) when navigating away so nothing keeps running.
 export function cleanup() {
+  generation++; // supersede any in-flight mount (see `generation` above)
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
 }
@@ -392,6 +402,7 @@ function editorCrumbs(project, current) {
 
 export async function mountEditor(root, { api, toast, key, draftId, projectId, project }) {
   cleanup();
+  const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
   const crumb = draftId != null ? "Draft" : key == null ? "New diagram" : "Deployment " + key;
   root.innerHTML = `
@@ -415,11 +426,18 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
         <button class="btn neutral" id="sim-reset" title="Clear all tokens">Reset</button>
         <label class="sim-speed">Speed
           <select class="speed" id="sim-speed" aria-label="Simulation speed">
+            <option value="0.25">0.25&times;</option>
             <option value="0.5">0.5&times;</option>
             <option value="1" selected>1&times;</option>
             <option value="2">2&times;</option>
             <option value="4">4&times;</option>
           </select>
+        </label>
+        <label class="sim-auto" title="Let Play run end-to-end: gateways take their default (or every branch), and message/timer/signal events fire on their own — no clicking required.">
+          <input type="checkbox" id="sim-auto"/> Auto-decide
+        </label>
+        <label class="sim-mi" title="How many instances a multi-instance activity runs in the simulation. A modelled fixed loop cardinality overrides this.">Instances
+          <input type="number" id="sim-mi" min="1" max="20" step="1" value="3"/>
         </label>
         <span class="sim-hint" id="sim-hint"></span>
         <span style="flex:1"></span>
@@ -476,6 +494,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
       `<div class="coming"><p>${esc(e.message)}</p></div>`;
     return;
   }
+  if (gen !== generation) return; // a newer navigation took over while assets loaded
 
   const modeler = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"), [
     tokenSimulationModule(),
@@ -516,6 +535,40 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   wireTokenSim(root, modeler);
 }
 
+// The BPMN elements the stock bpmn-js palette can draw but the Atlas engine can't run
+// yet, mapped to a plain-language reason. The Modeler uses these to flag such elements
+// at author time — a canvas badge and a Problems-bar warning — so the author isn't
+// surprised at Deploy/Validate. Keep in sync with the compiler's rejections and unrun
+// elements (compiler/scope_compile.go, compiler/parse.go).
+const UNSUPPORTED_TYPES = {
+  "bpmn:SendTask": "Send tasks can't run yet",
+  "bpmn:ReceiveTask": "Receive tasks can't run yet",
+  "bpmn:EventBasedGateway": "Event-based gateways aren't supported yet",
+  "bpmn:ComplexGateway": "Complex gateways aren't supported yet",
+  "bpmn:Transaction": "Transaction subprocesses aren't supported yet",
+  "bpmn:AdHocSubProcess": "Ad-hoc subprocesses aren't supported yet",
+  "bpmn:DataStoreReference": "Data stores aren't supported yet",
+};
+const UNSUPPORTED_EVENT_DEFS = {
+  "bpmn:TerminateEventDefinition": "Terminate end events can't run yet",
+  "bpmn:ErrorEventDefinition": "Error events aren't supported yet",
+  "bpmn:EscalationEventDefinition": "Escalation events aren't supported yet",
+  "bpmn:CompensateEventDefinition": "Compensation events aren't supported yet",
+  "bpmn:ConditionalEventDefinition": "Conditional events aren't supported yet",
+  "bpmn:LinkEventDefinition": "Link events aren't supported yet",
+};
+
+// unsupportedReason returns why a drawn element can't run on the Atlas engine yet, or
+// null if it can. It keys off the element type and any event definitions it carries.
+function unsupportedReason(bo) {
+  if (!bo || !bo.$type) return null;
+  if (UNSUPPORTED_TYPES[bo.$type]) return UNSUPPORTED_TYPES[bo.$type];
+  for (const d of (bo.eventDefinitions || [])) {
+    if (UNSUPPORTED_EVENT_DEFS[d.$type]) return UNSUPPORTED_EVENT_DEFS[d.$type];
+  }
+  return null;
+}
+
 // wireProblems drives the Problems panel (ADR-0026): the bottom bar becomes a
 // toggle that opens a filterable, element-linked list of the compiler's findings.
 // Validation is the real compiler run behind POST /api/v1/validate — never a
@@ -539,6 +592,39 @@ function wireProblems(root, modeler, api) {
   let expanded = false;
   let marked = null; // element id currently highlighted on the canvas
   let seq = 0; // guards against a stale validate response overwriting a newer one
+  let unsupIds = []; // overlay ids for the "can't run yet" badges we drew
+
+  // findUnsupported walks the live model for elements the engine can't run yet (see
+  // unsupportedReason) and returns them as Problems-bar warnings — author-time feedback
+  // that doesn't depend on a server round-trip and catches every offender at once (the
+  // compiler stops at its first rejection).
+  const findUnsupported = () => {
+    const out = [];
+    let registry;
+    try { registry = modeler.get("elementRegistry"); } catch { return out; }
+    registry.forEach((el) => {
+      if (el.labelTarget) return; // a label shares its target's businessObject — don't double-count
+      const why = unsupportedReason(el.businessObject);
+      if (why) out.push({ severity: "warning", message: why, element: el.id, rule: "unsupported-element" });
+    });
+    return out;
+  };
+  // redrawUnsupported puts a ⚠ badge on each unrunnable element (top-right, clear of the
+  // Implement type badge at top-left) and reaps the previous set first.
+  const redrawUnsupported = (findings) => {
+    let overlays;
+    try { overlays = modeler.get("overlays"); } catch { return; }
+    for (const id of unsupIds) { try { overlays.remove(id); } catch { /* gone */ } }
+    unsupIds = [];
+    for (const f of findings) {
+      try {
+        unsupIds.push(overlays.add(f.element, "atlas-unsupported", {
+          position: { top: -8, right: -8 },
+          html: `<span class="unsup-badge" title="${esc(f.message)} — remove it or the diagram won't run">⚠</span>`,
+        }));
+      } catch { /* shape without graphics (mid-import) — skip */ }
+    }
+  };
 
   const SEV_LABEL = { error: "Error", warning: "Warning" };
   const sevIcon = (s) => (s === "error" ? "✕" : s === "warning" ? "!" : "•");
@@ -607,13 +693,27 @@ function wireProblems(root, modeler, api) {
   // one validate, not one per keystroke-equivalent modeling event (ADR-0026).
   let timer = null;
   const validate = async () => {
+    // Client-side "can't run yet" findings first: instant canvas badges, and a fallback
+    // list if the server validate can't run (not imported / offline).
+    const unsupported = findUnsupported();
+    redrawUnsupported(unsupported);
     let xml;
-    try { ({ xml } = await modeler.saveXML({ format: true })); } catch { return; } // not imported yet
+    try { ({ xml } = await modeler.saveXML({ format: true })); } catch { problems = unsupported; render(); return; }
     const mine = ++seq;
     let res;
-    try { res = await api("POST", "/api/v1/validate", xml, true); } catch { return; }
+    try { res = await api("POST", "/api/v1/validate", xml, true); } catch { problems = unsupported; render(); return; }
     if (mine !== seq) return; // a newer validate has superseded this one
-    problems = Array.isArray(res.problems) ? res.problems : [];
+    const server = Array.isArray(res.problems) ? res.problems : [];
+    // Keep the compiler's authoritative findings and add a per-element warning for each
+    // unrunnable element the server didn't already flag — so a hard compile error on one
+    // element isn't doubled by a client warning, but the offenders the compiler never
+    // reached (it stops at the first) are still surfaced.
+    const flagged = new Set(server.map((p) => p.element).filter(Boolean));
+    // The compiler's hard rejections (send/receive/terminate) name the element in the
+    // message text rather than tagging it, so also drop a client warning when a server
+    // finding quotes that id — avoiding a doubled row for the same element.
+    problems = [...server, ...unsupported.filter((u) =>
+      !flagged.has(u.element) && !server.some((p) => (p.message || "").includes(`"${u.element}"`)))];
     if (res.version) versionEl.textContent = `Checked against Atlas ${res.version}`;
     render();
   };
@@ -665,6 +765,8 @@ function wireTokenSim(root, modeler) {
   const stepBtn = root.querySelector("#sim-step");
   const resetBtn = root.querySelector("#sim-reset");
   const speedSel = root.querySelector("#sim-speed");
+  const autoBox = root.querySelector("#sim-auto");
+  const miInput = root.querySelector("#sim-mi");
   const hintEl = root.querySelector("#sim-hint");
   const statsEl = root.querySelector("#sim-stats");
   if (!toggle || !bar) return;
@@ -682,19 +784,26 @@ function wireTokenSim(root, modeler) {
   stepBtn.addEventListener("click", () => sim.step());
   resetBtn.addEventListener("click", () => sim.reset());
   speedSel.addEventListener("change", () => sim.setSpeed(Number(speedSel.value)));
+  if (autoBox) autoBox.addEventListener("change", () => sim.setAuto(autoBox.checked));
+  if (miInput) miInput.addEventListener("change", () => sim.setMiCount(Number(miInput.value)));
 
-  // Reflect the simulation's state in the controls whenever it changes.
+  // Reflect the simulation's state in the controls whenever it changes. `deciding` means a
+  // gateway is waiting for a path to be picked; `waiting` means a message/timer/signal
+  // event is parked, ready to be fired.
   modeler.get("eventBus").on("atlasSim.changed", (s) => {
     playBtn.innerHTML = s.playing ? "&#9208; Pause" : "&#9654; Play";
     statsEl.textContent = `${s.live} live · ${s.completed} completed`;
-    hintEl.textContent = s.waiting
-      ? "Pick a path: click one of the glowing flows out of the gateway."
-      : s.live === 0
-        ? "Click a start event ▶ to drop a token, then Play."
-        : "";
+    hintEl.textContent = s.deciding
+      ? "Pick a path: click a glowing flow (an inclusive gateway takes several — click the gateway to confirm)."
+      : s.waiting
+        ? "An event is waiting: click its ⚡ to fire it, or turn on Auto-decide."
+        : s.live === 0
+          ? "Click a start event ▶ to drop a token, then Play."
+          : "";
   });
   // Seed the initial control state (counts at zero, opening hint).
   sim.setSpeed(Number(speedSel.value));
+  if (miInput) sim.setMiCount(Number(miInput.value));
 }
 
 // wireResizer makes the properties panel width draggable, so authoring long FEEL
@@ -979,6 +1088,14 @@ function collectDiagramVariables(modeler) {
       if (cd && cd.resultVariable) push(cd.resultVariable, label, bo.id, "decision result");
       const io = findExt(bo, "zeebe:IoMapping");
       for (const p of (io && io.outputParameters) || []) push(p.target, label, bo.id, "output mapping");
+      // A data object is first-class per-instance state (ADR-0053): its name is the
+      // engine's variable-like identity, so surface it here too. The name lives on the
+      // underlying <dataObject>; the reference's shape id drives click-to-select.
+      if (bo.$type === "bpmn:DataObjectReference") {
+        const obj = bo.dataObjectRef;
+        const st = (bo.dataState && bo.dataState.name) || "";
+        push((obj && obj.name) || bo.name, "Data object", bo.id, st ? "data object · [" + st + "]" : "data object");
+      }
     });
   } catch { /* best-effort */ }
   return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -1004,14 +1121,21 @@ function wireEditorVars(root, modeler) {
       !q || v.name.toLowerCase().includes(q) || (v.origin || "").toLowerCase().includes(q));
     if (!vars.length) {
       list.innerHTML = `<p class="vars-empty">${q ? "No matching variables." :
-        "No variables yet. They appear as you add start variables, script or decision result variables, and output mappings."}</p>`;
+        "No variables yet. They appear as you add start variables, script or decision result variables, output mappings, and data objects."}</p>`;
       return;
     }
-    list.innerHTML = vars.map((v) => `<div class="var-row">
-      <div class="var-name">${esc(v.name)}</div>
-      <div class="var-meta">${esc(v.source)}${v.originId
-        ? ` · written by <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`
-        : ` · ${esc(v.origin)}`}</div></div>`).join("");
+    list.innerHTML = vars.map((v) => {
+      // A data object isn't "written by" an element — it *is* the element, so its source
+      // label itself is the click-to-select target; other sources name the writing element.
+      const meta = v.origin === "Data object"
+        ? `<span class="var-origin" data-el="${esc(v.originId)}">${esc(v.source)}</span>`
+        : `${esc(v.source)}${v.originId
+            ? ` · written by <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`
+            : ` · ${esc(v.origin)}`}`;
+      return `<div class="var-row">
+        <div class="var-name">${esc(v.name)}</div>
+        <div class="var-meta">${meta}</div></div>`;
+    }).join("");
   };
 
   toggle.addEventListener("click", () => {
@@ -2539,7 +2663,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
     const poolFields = `
       <h3>Pool</h3>
       <label class="field"><span>Name</span><input type="text" id="f-poolname" value="${esc(bo.name || "")}" placeholder="Teilnehmer"/></label>
-      <label class="field"><span>Pool ID</span><input type="text" value="${esc(bo.id || "")}" readonly/></label>`;
+      <label class="field"><span>Pool ID</span><input type="text" id="f-poolid" value="${esc(bo.id || "")}" spellcheck="false"/></label>`;
 
     if (!proc) {
       body.innerHTML = `${poolFields}
@@ -2550,6 +2674,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
       body.querySelector("#f-poolname").addEventListener("change", (e) => {
         try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
       });
+      wirePoolId(body, element);
       body.querySelector("#f-addproc").addEventListener("click", () => addProcessToPool(element));
       return;
     }
@@ -2573,6 +2698,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
     body.querySelector("#f-poolname").addEventListener("change", (e) => {
       try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
     });
+    wirePoolId(body, element);
     body.querySelector("#f-procname").addEventListener("change", (e) => {
       try { modeling.updateModdleProperties(element, proc, { name: e.target.value }); } catch { /* stale */ }
     });
@@ -2581,6 +2707,21 @@ function wireProperties(root, modeler, api, projectId, toast) {
       if (v) { try { modeling.updateModdleProperties(element, proc, { id: v }); } catch { toast("invalid process id", "err"); } }
     });
     if (activeTab(root) === "implement") wireStartVars(body, modeler, element, proc, savePreservingPanel);
+  }
+
+  // wirePoolId makes a pool's ID editable, the same way the element ID and Process ID
+  // fields are: bpmn-js validates the new id and rewrites references, throwing on an
+  // invalid or duplicate id, which we revert with a toast.
+  function wirePoolId(body, element) {
+    const f = body.querySelector("#f-poolid");
+    if (!f) return;
+    f.addEventListener("change", (e) => {
+      const v = (e.target.value || "").trim();
+      if (v === element.businessObject.id) return;
+      if (!v) { show(element); return; }
+      try { modeling.updateProperties(element, { id: v }); }
+      catch { toast("invalid id — must be unique and a valid identifier", "err"); show(element); }
+    });
   }
 
   function show(element) {
@@ -2696,7 +2837,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
     let html = `
       <h3>General</h3>
       <label class="field"><span>${isSeqFlow ? "Label" : "Name"}</span><input type="text" id="f-name" value="${esc(bo.name || "")}"${isSeqFlow ? ' placeholder="Großauftrag"' : ""}/></label>
-      <label class="field"><span>ID</span><input type="text" value="${esc(bo.id || "")}" readonly/></label>`;
+      <label class="field"><span>ID</span><input type="text" id="f-id" value="${esc(bo.id || "")}" spellcheck="false"/></label>`;
 
     // A data object is the data a process carries — first-class in Atlas, not just
     // decoration (ADR-0053). Its name is the engine's variable-like identity and its
@@ -3085,6 +3226,22 @@ function wireProperties(root, modeler, api, projectId, toast) {
         }
       } catch { /* stale */ }
     });
+
+    // Element IDs are editable, mirroring the Process ID field. bpmn-js validates the
+    // new id (unique, a valid identifier) and rewrites the references that point at this
+    // element — they are moddle object references, so links such as a data object's stay
+    // intact — throwing on an invalid or duplicate id, which we revert with a toast. This
+    // is how a data object's auto-generated id is renamed to something meaningful.
+    const fid = body.querySelector("#f-id");
+    if (fid) {
+      fid.addEventListener("change", (e) => {
+        const v = (e.target.value || "").trim();
+        if (v === bo.id) return;
+        if (!v) { show(element); return; } // empty is not a valid id → revert to the current one
+        try { modeling.updateProperties(element, { id: v }); }
+        catch { toast("invalid id — must be unique and a valid identifier", "err"); show(element); }
+      });
+    }
 
     const fdatastate = body.querySelector("#f-datastate");
     if (fdatastate) {
@@ -4156,6 +4313,7 @@ function wireActions(root, modeler, api, toast, projectId) {
 // variables are listed below the diagram.
 export async function mountLive(root, { api, toast, key, instance }) {
   cleanup();
+  const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
   // Resolve the process this definition version belongs to, and all its versions,
   // so the version picker can offer them. One /processes call feeds both.
@@ -4172,6 +4330,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
         .sort((a, b) => b.version - a.version);
     }
   } catch { /* header/version picker are best-effort */ }
+  if (gen !== generation) return; // superseded before we wrote this view's shell
 
   const versionOptions = versions.length
     ? versions.map((v) =>
@@ -4234,6 +4393,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
     root.querySelector("#canvas").innerHTML = `<div class="coming"><p>${esc(e.message)}</p></div>`;
     return;
   }
+  if (gen !== generation) return; // a newer navigation took over while assets loaded
 
   const viewer = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
   current = viewer;
@@ -4965,6 +5125,7 @@ function runDotAnimation(layer, waypoints, dur, cancelled) {
 // the order it actually happened, so a finished collaboration replays its exchange.
 export async function mountCollaboration(root, { api, toast, key }) {
   cleanup();
+  const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
   root.innerHTML = `
     <div class="editor live">
@@ -5007,6 +5168,7 @@ export async function mountCollaboration(root, { api, toast, key }) {
     root.querySelector("#canvas").innerHTML = `<div class="coming"><p>${esc(e.message)}</p></div>`;
     return;
   }
+  if (gen !== generation) return; // a newer navigation took over while assets loaded
 
   const viewer = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
   current = viewer;
@@ -5208,6 +5370,7 @@ export async function mountCollaboration(root, { api, toast, key }) {
 // instance keeps gaining steps live.
 export async function mountInstanceReplay(root, { api, toast, key }) {
   cleanup();
+  const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
   root.innerHTML = `
     <div class="editor live ops-replay">
@@ -5281,6 +5444,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     root.querySelector("#canvas").innerHTML = `<div class="coming"><p>${esc(e.message)}</p></div>`;
     return;
   }
+  if (gen !== generation) return; // a newer navigation took over while assets loaded
 
   // The timeline resolves the instance's definition, which the diagram renders.
   let tl;
@@ -5292,6 +5456,9 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
        <p class="muted">${esc(e.message)}</p></div>`;
     return;
   }
+  // Superseded while the timeline was in flight — do NOT build a viewer or touch
+  // the DOM, which now belongs to the newer mount.
+  if (gen !== generation) return;
   root.querySelector("#rp-live").href = `#/operations/p/${tl.processDefKey}/i/${key}`;
 
   const viewer = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
@@ -5302,11 +5469,15 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     await viewer.importXML(typeof xml === "string" ? xml : String(xml));
     viewer.get("canvas").zoom("fit-viewport");
   } catch (e) {
+    // A newer navigation destroyed this viewer mid-import; the error is expected
+    // and the #canvas now belongs to that mount, so leave it untouched.
+    if (gen !== generation) return;
     root.querySelector("#canvas").innerHTML =
       `<div class="coming"><p>Could not render this instance's diagram.</p>
        <p class="muted">${esc(e.message)}</p></div>`;
     return;
   }
+  if (gen !== generation) return; // superseded while the diagram imported
 
   const canvas = viewer.get("canvas");
   const registry = viewer.get("elementRegistry");

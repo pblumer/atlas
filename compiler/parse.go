@@ -13,7 +13,7 @@ import (
 // defaultRetries is used when a service task's task definition omits retries.
 const defaultRetries = 3
 
-// defaultUserTaskPriority mirrors Camunda's default task priority (ADR-0051): a
+// defaultUserTaskPriority mirrors Camunda's default task priority (ADR-0091): a
 // user task with no zeebe:priorityDefinition sorts as if priority 50.
 const defaultUserTaskPriority = 50
 
@@ -319,6 +319,18 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	b.SetExecutable(proc.IsExecutable != "false")
 	if proc.VersionTag != "" {
 		b.SetVersionTag(proc.VersionTag)
+	}
+	// A per-definition instance TTL (ADR-0085): parse the ISO-8601 duration up front so
+	// a malformed value fails the deploy rather than silently disabling the bound.
+	if ttl := strings.TrimSpace(proc.InstanceTtl); ttl != "" {
+		nanos, err := parseISO8601Duration(ttl)
+		if err != nil {
+			return nil, fmt.Errorf("compiler: process %q: invalid instanceTtl %q: %w", proc.Id, ttl, err)
+		}
+		if nanos <= 0 {
+			return nil, fmt.Errorf("compiler: process %q: instanceTtl %q must be a positive duration", proc.Id, ttl)
+		}
+		b.SetInstanceTtl(nanos)
 	}
 	ids := make(map[string]int32, len(proc.StartEvents)+len(proc.ServiceTasks)+len(proc.EndEvents))
 	register := func(id string, nodeID int32) error {
@@ -758,6 +770,7 @@ type xmlProcess struct {
 	Name         string `xml:"name,attr"`
 	IsExecutable string `xml:"isExecutable,attr"`
 	VersionTag   string `xml:"versionTag,attr"`
+	InstanceTtl  string `xml:"instanceTtl,attr"` // ISO-8601 duration; self-cleaning TTL (ADR-0085), empty = off
 
 	xmlFlowContent // the process root's flow nodes and sequence flows
 
@@ -933,7 +946,7 @@ type xmlStartEvent struct {
 	Name    string                     `xml:"name,attr"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
 	// SingletonStart ("true") marks a message start event as one-per-correlation-key
-	// (ADR-0082): while an instance started with a key is live, a further correlating
+	// (ADR-0094): while an instance started with a key is live, a further correlating
 	// message starts no duplicate. A plain attribute (like versionTag on a process);
 	// absent = the default start-per-message behavior (ADR-0035).
 	SingletonStart string `xml:"singletonStart,attr"`
@@ -993,7 +1006,15 @@ type xmlEndEvent struct {
 	// ending its enclosing scope abnormally and propagating up to the nearest matching
 	// handler (ADR-0089). A pointer so an absent one is nil.
 	Error *xmlErrorEventDefinition `xml:"errorEventDefinition"`
+	// Terminate is present when the end event carries a <terminateEventDefinition>.
+	// Atlas can't execute a terminate end yet, so it is rejected at compile time rather
+	// than silently dropped to a plain end (which would abandon the terminate semantics).
+	Terminate *xmlTerminateEventDefinition `xml:"terminateEventDefinition"`
 }
+
+// xmlTerminateEventDefinition is the empty <terminateEventDefinition> element; only its
+// presence matters (a non-nil pointer once parsed).
+type xmlTerminateEventDefinition struct{}
 
 // A boundary event is attached to a host activity (AttachedToRef) and arms while
 // it runs. CancelActivity mirrors BPMN's attribute: absent or "true" is
@@ -1041,7 +1062,7 @@ type xmlUserTask struct {
 }
 
 // xmlPriorityDefinition carries zeebe:priorityDefinition's static task priority
-// (ADR-0051). An empty value means the task uses the default priority.
+// (ADR-0091). An empty value means the task uses the default priority.
 type xmlPriorityDefinition struct {
 	Priority string `xml:"priority,attr"`
 }

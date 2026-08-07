@@ -249,7 +249,7 @@ const CONNECTORS = [
   {
     id: "mail", name: "Mail", kind: "Outbound e-mail",
     desc: "Sends an e-mail from a service task off the processor loop via a managed provider — SMTP (any server, incl. Google/Microsoft 365 submission) or the native Gmail and Microsoft Graph APIs (OAuth2 app-only or refresh-token). Recipients, subject, and body are model-authored (FEEL-capable); the provider, default sender, and credentials are managed below and resolved from the vault. Authored via the E-Mail Outbound Connector service-task type.",
-    refs: "ADR-0041 · ADR-0079 · ADR-0080", status: "active", statusLabel: "configurable",
+    refs: "ADR-0041 · ADR-0079 · ADR-0093", status: "active", statusLabel: "configurable",
   },
 ];
 
@@ -902,6 +902,8 @@ async function viewModelerHome() {
         { header: "Blank resources" },
         { label: "BPMN diagram", icon: "⚙", href: "#/modeler/new" },
         { label: "Form", icon: "▤", href: "#/modeler/form/new" },
+        { sep: true },
+        { label: "Import file…", icon: "📥", act: "import" },
       ])}
     </div>
     <div class="card" style="padding:0; margin-top:14px">
@@ -971,7 +973,10 @@ async function viewModelerHome() {
       if (act === "share") { const pr = projects.find((x) => x.id === b.dataset.id); if (pr) shareProject(pr, renderProjects); }
     });
   };
-  onMenuAction(view, (act) => { if (act === "new-project") createProject(renderProjects); });
+  onMenuAction(view, (act) => {
+    if (act === "new-project") createProject(renderProjects);
+    if (act === "import") importArtifact("", renderProjects);
+  });
 
   const render = async () => {
     try {
@@ -1110,6 +1115,8 @@ async function viewProjectDetail(id) {
       { label: "BPMN diagram", icon: "⚙", href: newDiagramHref },
       { label: "DMN model (upload .dmn)", icon: "▦", act: "newref" },
       { label: "Form", icon: "▤", href: newFormHref },
+      { sep: true },
+      { label: "Import file…", icon: "📥", act: "import" },
     ];
 
     const projItems = ungrouped ? [] : [
@@ -1148,6 +1155,7 @@ async function viewProjectDetail(id) {
 
     onMenuAction(root, (act, b) => {
       switch (act) {
+        case "import": importArtifact(ungrouped ? "" : id, render); break;
         case "newref": createDmnRef(ungrouped ? "" : id, render); break;
         case "shareproj": shareProject(proj, render); break;
         case "renproj": renameProject(id, proj.name, render); break;
@@ -1489,7 +1497,55 @@ async function createDmnRef(projectId, reload) {
   await reload();
 }
 
-// wireConnectorManagement wires the Organization page's managed-connector section:
+// importArtifact imports a BPMN diagram, DMN model, or form from an uploaded file and
+// files it into the given project ("" = ungrouped). The kind is detected from the
+// extension and, for an ambiguous .xml, from the root element's namespace: a BPMN
+// diagram is saved as a draft (the backend derives its process id/name), a DMN model
+// is uploaded and referenced (the createDmnRef two-step), and a form-js .form/.json is
+// saved as a form. The list is refreshed on success.
+async function importArtifact(projectId, reload) {
+  const file = await pickFile(".bpmn,.dmn,.form,.xml,.json,application/xml,text/xml,application/json");
+  if (!file) return;
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  const base = file.name.replace(/\.[^.]+$/, "");
+  let text;
+  try { text = await file.text(); } catch (e) { toast("Import failed: " + e.message, "err"); return; }
+  try {
+    // Form — a form-js JSON schema (.form, or a .json whose object carries components).
+    if (ext === "form" || ext === "json") {
+      let schema;
+      try { schema = JSON.parse(text); } catch { throw new Error("not valid JSON"); }
+      if (!schema || typeof schema !== "object" || Array.isArray(schema)) throw new Error("not a form (expected a JSON object)");
+      if (!Array.isArray(schema.components)) throw new Error("not a form-js form (no components array)");
+      const id = (typeof schema.id === "string" && schema.id.trim()) || ("form-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+      const name = (typeof schema.name === "string" && schema.name.trim()) || base || id;
+      await api("POST", "/api/v1/forms", { id, name, schema, projectId });
+      toast(`Imported form “${name}”`, "ok");
+      await reload();
+      return;
+    }
+    // DMN — an explicit .dmn, or an .xml in the DMN namespace. Upload the model, then
+    // reference it (mirrors createDmnRef; the dedicated DMN item keeps the remote-temis
+    // fallback for setups with no local model store).
+    if (ext === "dmn" || (ext !== "bpmn" && /spec\/DMN\//i.test(text))) {
+      const up = await api("POST", "/api/v1/dmn-models?name=" + encodeURIComponent(file.name), text, true);
+      const name = (up.modelName || base || "Decision").trim();
+      await api("POST", "/api/v1/dmnrefs", { name, modelRef: up.modelRef, projectId });
+      const n = (up.decisions || []).length;
+      toast(`Imported DMN model “${name}” — ${n} decision${n === 1 ? "" : "s"}`, "ok");
+      await reload();
+      return;
+    }
+    // BPMN — save the diagram as a draft; the backend rejects XML with no <process id>.
+    const path = "/api/v1/drafts" + (projectId ? "?projectId=" + encodeURIComponent(projectId) : "");
+    const d = await api("POST", path, text, true);
+    toast(`Imported diagram “${d.name || d.processId}”`, "ok");
+    await reload();
+  } catch (e) {
+    toast("Import failed: " + e.message, "err");
+  }
+}
+
 // a "New connector" inline form and per-row Edit / Enable-Disable / Delete. Each
 // change hits the connector API, which rebuilds the runtime registry, then the page
 // re-renders. Only a token *reference* is ever entered — never a secret value

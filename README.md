@@ -41,6 +41,7 @@ The three core pillars:
   - [Graph compiler](docs/architecture/compiler.md)
   - [Processor](docs/architecture/processor.md)
   - [Data model](docs/architecture/data-model.md)
+  - [Enterprise architecture (ArchiMate 3.2)](docs/architecture/enterprise-architecture.md) — a layered view across the business, application, technology, and motivation layers
   - [Glossary](docs/architecture/glossary.md)
   - [Invariants](docs/architecture/invariants.md) — the rules the engine's correctness depends on
 - **[Architecture Decision Records](docs/adr/)** — *why* things are the way they are

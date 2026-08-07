@@ -30,13 +30,28 @@ endpoint behind an authenticating reverse proxy.
 | `atlas_deploy` | `xml` | deployed definitions and keys |
 | `atlas_list_processes` | none | deployed definitions |
 | `atlas_get_process_xml` | `key` | deployed BPMN XML |
-| `atlas_create_instance` | `key` | starts an instance and returns stats |
+| `atlas_create_instance` | `key`, `variables?` | starts an instance (optionally seeded with start variables) and returns stats |
 | `atlas_process_runtime` | `key` | per-element token and visit counts |
+| `atlas_collaboration_runtime` | `key` | a collaboration's live pools, tokens, and message flows |
 | `atlas_list_instances` | none | bounded legacy instance list |
+| `atlas_instances_summary` | none | per-definition active/completed counts |
+| `atlas_search_instances` | `q` | instances matching a variable query (`name=value` or free text) |
+| `atlas_instance_variables` | `key` | one instance's variables as a typed object |
+| `atlas_variable_audit` | `key` | one instance's operator-override audit trail (who changed what) |
+| `atlas_instance_data_objects` | `key` | one instance's BPMN data objects (name, state, value) |
+| `atlas_instance_jobs` | `key` | one instance's activatable jobs (key, element, type) |
+| `atlas_instance_timeline` | `key` | one instance's step-by-step replay timeline |
+| `atlas_instance_decisions` | `key` | one instance's DMN decision evaluations (inputs, outputs, trace) |
 | `atlas_cancel_instance` | `key` | terminates one active instance |
-| `atlas_cancel_instances` | `key`, `limit?` | bounded bulk termination |
+| `atlas_cancel_instances` | `key`, `limit?` | bounded bulk termination (by definition key) |
+| `atlas_terminate_instances` | `keys?` \| `processDefKey?`, `q?`, `limit?` | terminate an explicit key set, or a definition's matching instances |
 | `atlas_delete_process` | `key` | deletes one deployed definition |
 | `atlas_stats` | none | engine-wide active counts |
+| `atlas_publish_message` | `name`, `correlationKey?`, `variables?` | correlates a message to waiting instances; returns stats |
+| `atlas_complete_job` | `key`, `variables?` | completes a job by hand (operator counterpart to a worker) |
+| `atlas_fail_job` | `key`, `retries?`, `message?` | fails a job; `retries` 0 (default) raises an incident, positive re-activates |
+| `atlas_list_incidents` | `limit?` | `{incidents, truncated}` — the operator "what's stuck" view |
+| `atlas_resolve_incident` | `key`, `retries?` | resolves an incident by elementInstanceKey and retries its job |
 
 ## Authoring and human-task tools
 
@@ -46,12 +61,25 @@ endpoint behind an authenticating reverse proxy.
 | `atlas_list_projects` | none | visible projects |
 | `atlas_delete_project` | `id` | `{deleted:true,id}` |
 | `atlas_save_draft` | `xml`, `projectId?` | saved BPMN draft |
+| `atlas_list_drafts` | `projectId?` | saved diagram drafts |
+| `atlas_get_draft_xml` | `id` | a draft's BPMN XML (by process id) |
 | `atlas_save_form` | `id`, `schema`, `name?`, `projectId?` | saved form-js form |
+| `atlas_list_forms` | `projectId?` | saved form definitions |
+| `atlas_get_form` | `id` | a form's schema |
 | `atlas_upload_decision_model` | `handle`, `xml` | stored DMN model |
 | `atlas_register_decision` | `name`, `modelRef`, `projectId?` | registered decision reference |
+| `atlas_list_decision_refs` | `projectId?` | registered DMN decision references |
+| `atlas_list_decisions` | `projectId?` | DMN decisions (with inputs/outputs) from references |
+| `atlas_deployed_decisions` | none | deployed DMN decisions with usage counts |
+| `atlas_decision_evaluations` | `id` | one decision's evaluation history across all instances |
+| `atlas_dmnref_graph` | `id` | a decision reference's DRD (nodes and edges) |
+| `atlas_get_decision_model` | `ref` | raw DMN XML stored under a model handle |
 | `atlas_deploy_project` | `id` | deployed project definitions |
 | `atlas_list_tasks` | `limit?`, `before?`, `processInstance?` | task page envelope |
+| `atlas_get_task` | `key` | one open user task (deep-link read) |
 | `atlas_complete_task` | `key`, `variables?` | completed user task |
+| `atlas_claim_task` | `key`, `assignee?` | claims/assigns a task (`assignee` required without auth) |
+| `atlas_unclaim_task` | `key` | releases a task's assignment |
 
 A typical authoring flow is:
 

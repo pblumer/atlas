@@ -472,6 +472,24 @@ func (s *Store) InjectCorruptProcessInstance(key uint64) error {
 	return s.db.Set(keyProcessInstance(key), []byte{0x01}, pebble.NoSync)
 }
 
+// InjectCorruptElementInstance writes an undecodable record under an element
+// instance's key. Like InjectCorruptProcessInstance it is a test/tooling affordance
+// only — it lets a caller in another package exercise the decode-error path of a
+// GetElementInstance read (e.g. the set-variables handler's scope validation).
+// Production code writes element instances through Tx.PutElementInstance, never this.
+func (s *Store) InjectCorruptElementInstance(key uint64) error {
+	return s.db.Set(keyElementInstance(key), []byte{0x01}, pebble.NoSync)
+}
+
+// InjectCorruptIncident writes an undecodable record under an incident's key — the
+// incident-list counterpart of InjectCorruptProcessInstance. It lets a caller exercise
+// the decode-error branch of the incident scan (Incidents), which the operator "what's
+// stuck" list depends on to surface a 500 rather than silently drop rows. Test/tooling
+// only; production writes incidents through Tx.PutIncident.
+func (s *Store) InjectCorruptIncident(elKey uint64) error {
+	return s.db.Set(keyIncident(elKey), []byte{0x01}, pebble.NoSync)
+}
+
 // ActiveProcessInstances calls fn with the key and value of every live process
 // instance, via the process-instance column family — the operator "list running
 // instances" access pattern.
@@ -626,6 +644,24 @@ func (s *Store) DecisionEvaluationHistory(scopeKey uint64, fn func(ts int64, pos
 			return err
 		}
 		return fn(timestampFromDecisionEvalKey(k), positionFromDecisionEvalKey(k), v.(*model.DecisionEvaluationValue))
+	})
+}
+
+// VariableAuditHistory folds the retained external variable overrides of one process
+// instance, calling fn with each override's event timestamp, log position, and its
+// frozen record (who set which variable, on which scope, to what value) in the order
+// they occurred (ADR-0098). Because the key sorts by timestamp then position, a
+// scope-wide scan yields a monotonic sequence — the same ordering as the variable and
+// decision timelines — so the "who changed it" trail lines up with the step at which
+// each override happened. It surfaces to operators both live and after the instance
+// has finished, since the records are append-only history.
+func (s *Store) VariableAuditHistory(piKey uint64, fn func(ts int64, pos uint64, v *model.VariableAuditValue) error) error {
+	return s.scanPrefix(variableAuditScopePrefix(piKey), func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTVariableAudit, raw)
+		if err != nil {
+			return err
+		}
+		return fn(timestampFromVariableAuditKey(k), positionFromVariableAuditKey(k), v.(*model.VariableAuditValue))
 	})
 }
 

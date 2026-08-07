@@ -38,6 +38,7 @@ type timelineVar struct {
 	Value string `json:"value"`
 	Kind  string `json:"kind"`
 	Scope string `json:"scope"`
+	Actor string `json:"actor"`
 }
 
 type timelineStep struct {

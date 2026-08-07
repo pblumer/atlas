@@ -81,6 +81,13 @@ const (
 	// — the engine never interprets the opaque source id — and appended last so every
 	// prior value type keeps its numeric value on the log.
 	VTInboundDelivery
+	// VTVariableAudit is one external variable override retained for audit (ADR-0098):
+	// who set which variable, to what value, on which scope, keyed under its process
+	// instance. Like VTMessageFlow and VTDecisionEvaluation it is append-only history
+	// (one record per variable an operator sets, never deleted), so the "who changed
+	// it" trail survives the instance and rebuilds from the log. Appended last so every
+	// prior value type keeps its numeric value on the log.
+	VTVariableAudit
 )
 
 func (t ValueType) String() string {
@@ -115,6 +122,8 @@ func (t ValueType) String() string {
 		return "DecisionEvaluation"
 	case VTInboundDelivery:
 		return "InboundDelivery"
+	case VTVariableAudit:
+		return "VariableAudit"
 	default:
 		return "ValueType(?)"
 	}
@@ -215,6 +224,26 @@ const (
 	// dedup mark and the correlate/start effects it authorizes commit atomically.
 	IntentInboundDeliveryApplied
 
+	// IntentVariableModify is a command-only intent (never persisted as an event),
+	// like IntentTimerStartArm: it directs the processor to set or overwrite
+	// variables on a running instance's scope from outside the model — an operator
+	// correction to a live instance (ADR-0095). The handler validates the target
+	// scope, then emits a VariableCreated event for a new name or a VariableUpdated
+	// event for an existing one, so the change is a durable, replayable fact recorded
+	// in the instance's variable timeline (the audit trail), not a raw store write.
+	// Because commands are not replayed (invariant I6), its numeric value never
+	// reaches the log, so it is appended at the end without disturbing the persisted
+	// intents' values.
+	IntentVariableModify
+
+	// IntentVariableAudited records that an external actor set a variable on a running
+	// instance (ADR-0098). It is a pure history event, like IntentDecisionEvaluated:
+	// emitted alongside the VariableCreated/VariableUpdated the override produces, it
+	// freezes who made the change into the log so replay rebuilds the identical audit
+	// trail without re-running the command (invariant I6). Appended at the end so every
+	// prior intent keeps its numeric value on the log.
+	IntentVariableAudited
+
 	// IntentJobErrorThrown is a command-only intent (never persisted as an event): a
 	// worker reports that its job threw a BPMN error code (ADR-0089). Its handler cancels
 	// the job and propagates the error from the job's element to the nearest matching error
@@ -286,6 +315,10 @@ func (i Intent) String() string {
 		return "VariableDeleted"
 	case IntentInboundDeliveryApplied:
 		return "InboundDeliveryApplied"
+	case IntentVariableModify:
+		return "VariableModify"
+	case IntentVariableAudited:
+		return "VariableAudited"
 	case IntentJobErrorThrown:
 		return "JobErrorThrown"
 	default:

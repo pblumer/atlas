@@ -6,8 +6,6 @@ An ADR captures a decision, the context that forced it, the options considered, 
 
 ## Index
 
-> **Note on duplicate numbers.** Concurrent work assigned four numbers — **0051**, **0077**, **0080**, **0082** — to two distinct ADRs each. Both files are real and are listed here under the shared number (distinguished by title and link) rather than silently dropping one. A future cleanup may renumber one side of each pair; until then, cite ADRs by *filename* when the number is ambiguous.
-
 | ADR | Title | Status |
 |-----|-------|--------|
 | [0001](0001-event-sourcing-and-log-structured-state.md) | Event sourcing and log-structured state | Accepted |
@@ -61,7 +59,6 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0049](0049-internal-service-auth-for-mcp.md) | Internal service authentication for the in-process MCP adapter | Accepted |
 | [0050](0050-temis-decision-connector.md) | Central DMN decisions via a temis decision connector | Accepted |
 | [0051](0051-timer-start-events.md) | Timer start events (duration, date, cycle, cron) | Proposed |
-| [0051](0051-user-task-scheduling.md) | User-task scheduling — priority and due date | Accepted |
 | [0052](0052-message-end-events.md) | Message end events | Accepted |
 | [0053](0053-first-class-data-objects.md) | First-class data objects — typed, event-sourced state, and lineage | Accepted |
 | [0054](0054-date-cycle-timers-for-catch-and-boundary.md) | Date and cycle timers for catch and boundary events | Proposed |
@@ -88,22 +85,30 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0075](0075-clio-inbound-event-bridge.md) | A clio inbound event bridge with engine-side idempotent delivery | Accepted |
 | [0076](0076-call-activities.md) | Call activities (single-partition) — start a separate process as a child instance, linked by a caller key | Accepted |
 | [0077](0077-multi-instance-activities.md) | Multi-instance activities (parallel and sequential) | Accepted |
-| [0077](0077-clio-key-provisioning.md) | One-click clio credential provisioning | Accepted |
 | [0078](0078-design-view-token-simulation.md) | Design-view token simulation — a client-side control-flow walkthrough | Accepted |
 | [0079](0079-outbound-mail-connector.md) | An outbound mail connector (SMTP first) — provider managed like clio, message model-authored like REST | Accepted |
-| [0080](0080-native-mail-providers.md) | Native Gmail and Microsoft Graph mail providers — OAuth2 (app-only + refresh-token) behind the mail.Client seam, credential bundle in the vault | Accepted |
 | [0080](0080-runtime-aggregate-counters.md) | Sublinear runtime views via maintained aggregate counters | Accepted |
 | [0081](0081-community-marketplace-for-connectors-and-tasks.md) | A community marketplace for connectors, service tasks, and script tasks | Proposed |
-| [0082](0082-singleton-message-start.md) | Singleton message start — at most one live instance per correlation key | Accepted |
 | [0082](0082-event-subprocesses.md) | Event subprocesses (message- and timer-triggered, interrupting and non-interrupting) | Proposed |
 | [0083](0083-o1-instance-summary.md) | An O(1) instances summary — per-definition finished-count and last-activity counters | Accepted |
 | [0084](0084-csv-batch-validation.md) | CSV batch validation — upload a file, validate every row against business rules (DMN), correct the failures | Proposed |
-| [0085](0085-process-instance-ttl.md) | Process-instance TTL — self-cleaning expiry via the due-timer index | Proposed |
+| [0085](0085-process-instance-ttl.md) | Process-instance TTL — self-cleaning expiry via the due-timer index | Accepted |
 | [0086](0086-gateway-conditions-resolve-over-scope-chain.md) | Gateway conditions resolve over the scope chain, so a gateway inside a subprocess branches on its scope's variables | Proposed |
 | [0087](0087-in-process-csv-ingestion.md) | In-process CSV ingestion — upload in a user task, layout in a script task, parse in a service task | Accepted |
 | [0088](0088-signal-events.md) | Signal events (broadcast throw/catch) — named 1:n delivery reusing the message subscription machinery | Accepted |
 | [0089](0089-error-events.md) | Error events (scoped propagation to the nearest handler) | Accepted |
 | [0090](0090-bulk-terminate-instances.md) | Bulk-terminate running instances — an explicit selection and a filtered scope | Accepted |
+| [0091](0091-user-task-scheduling.md) | User-task scheduling — priority and due date | Accepted |
+| [0092](0092-clio-key-provisioning.md) | One-click clio credential provisioning | Accepted |
+| [0093](0093-native-mail-providers.md) | Native Gmail and Microsoft Graph mail providers — OAuth2 (app-only + refresh-token) behind the mail.Client seam, credential bundle in the vault | Accepted |
+| [0094](0094-singleton-message-start.md) | Singleton message start — at most one live instance per correlation key | Accepted |
+| [0095](0095-external-variable-modification.md) | External variable modification on a running instance | Accepted |
+| [0096](0096-token-simulation-events-and-inclusive-gateways.md) | Token simulation — event triggers, inclusive-gateway subset split / quiescence OR-join, and an auto-decide mode | Accepted |
+| [0097](0097-token-simulation-message-starts-event-subprocesses-multi-instance.md) | Token simulation — message starts spawn, event-subprocess triggers, and multi-instance | Accepted |
+| [0098](0098-external-variable-modification-audit.md) | Audit trail for external variable modifications — who changed a running instance's variables | Accepted |
+| [0099](0099-archimate-enterprise-architecture-view.md) | An ArchiMate 3.2 enterprise-architecture view — a layered, stakeholder-facing communication aid with reproducible SVG diagrams | Accepted |
+| [0100](0100-token-simulation-configurable-multi-instance-count.md) | Token simulation — configurable multi-instance count, modelled cardinality wins | Accepted |
+| [0101](0101-token-simulation-throw-delivers-to-waiting-catch.md) | Token simulation — a thrown message/signal delivers to (fires) a waiting catch | Accepted |
 
 ## Status values
 
