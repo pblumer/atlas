@@ -1108,25 +1108,19 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 }
 .impl-badge svg { display: block; width: 16px; height: 16px; border-radius: 3px; }
 
-/* Caption naming the process a collaboration pool runs (drawPoolProcessCaptions). A pool
-   is a participant; the canvas shows its name but not the process it executes, so this
-   pins that process's name (and id) at the pool's top-left, past the vertical name band.
-   Non-interactive so clicks fall through to the pool beneath it. */
-.pool-process-cap {
-  display: inline-flex; align-items: center; gap: 6px; max-width: 260px;
-  padding: 2px 8px; background: var(--surface);
-  border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow);
-  font-size: 11px; line-height: 1.25; pointer-events: none; cursor: default;
-}
-.pool-process-cap .ppc-glyph { flex: 0 0 auto; font-size: 12px; opacity: 0.7; }
-.pool-process-cap .ppc-text { display: flex; flex-direction: column; min-width: 0; }
-.pool-process-cap .ppc-name {
-  color: var(--text); font-weight: 600; white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis;
-}
-.pool-process-cap .ppc-id {
-  font: 10px ui-monospace, monospace; color: var(--muted); white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis;
+/* Label naming the process a collaboration pool runs (drawPoolProcessCaptions). A pool is a
+   participant; the canvas draws its name vertically in the left band but never the process it
+   executes. This writes the process name the same way — vertical, bottom-to-top — just inside
+   the pool body beside that band, centered on the pool's height, so it reads as the
+   participant's counterpart. The wrapper is a zero-size pin at the anchor; the text is
+   centered on it and rotated. Only the text is interactive (for its hover title); the pin
+   blocks nothing, so clicks fall through to the pool. */
+.pool-process-vlabel { position: relative; width: 0; height: 0; pointer-events: none; }
+.pool-process-vlabel .ppv-text {
+  position: absolute; left: 0; top: 0;
+  transform: translate(-50%, -50%) rotate(-90deg); transform-origin: center;
+  white-space: nowrap; font-size: 12px; color: var(--text);
+  pointer-events: auto; cursor: default;
 }
 
 /* ---------- Live collaboration sessions (ADR-0103) ---------- */

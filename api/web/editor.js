@@ -1037,13 +1037,15 @@ function makeImplementBadges(root, modeler) {
   return refresh;
 }
 
-// drawPoolProcessCaptions writes, on each collaboration pool, a small caption naming the
-// process that pool executes. A pool is a *participant*: the canvas draws its name (e.g.
-// "Teilnehmer 1") but not the process it runs, so which process a pool deploys as — its
-// name and id, the deploy identity instances group by — is invisible on the diagram and
-// only readable by selecting the pool. This surfaces it: a subtle caption pinned to the
-// pool's top-left, just past the vertical name band, tracking the pool like any overlay.
-// Only pools that carry a process (a processRef) get one; a black-box pool has none to name.
+// drawPoolProcessCaptions writes, on each collaboration pool, a label naming the process
+// that pool executes. A pool is a *participant*: the canvas draws its name (e.g. "Teilnehmer
+// 1") as a vertical label in the left band, but not the process it runs — so which process a
+// pool deploys as (its name, the deploy identity instances group by) is invisible on the
+// diagram and only readable by selecting the pool. This surfaces it the same way the
+// participant is drawn: a vertical, bottom-to-top label just inside the pool body beside the
+// name band, centered on the pool's height, so it reads as the participant's counterpart.
+// The Process ID rides along in the hover title. Only pools that carry a process (a
+// processRef) get a label; a black-box pool has none to name.
 function drawPoolProcessCaptions(modeler) {
   const ids = [];
   let overlays, registry;
@@ -1056,15 +1058,16 @@ function drawPoolProcessCaptions(modeler) {
     if (!proc) return; // black-box pool — no process to name
     const name = (proc.name || "").trim();
     const pid = (proc.id || "").trim();
-    if (!name && !pid) return;
     const main = name || pid; // name leads; a nameless process shows its id
-    const idLine = name && pid ? `<span class="ppc-id">${esc(pid)}</span>` : "";
+    if (!main) return;
     const title = name ? `Process: ${name}${pid ? ` (${pid})` : ""}` : `Process: ${pid}`;
     try {
       ids.push(overlays.add(el.id, "atlas-pool-process", {
-        position: { top: 4, left: 34 }, // clear the ~30px participant name band
-        html: `<span class="pool-process-cap" title="${esc(title)}"><span class="ppc-glyph">⚙</span>` +
-              `<span class="ppc-text"><span class="ppc-name">${esc(main)}</span>${idLine}</span></span>`,
+        // Centered on the pool's left edge, just inside the participant name band, so the
+        // process reads as a second vertical label beside the participant (the offset scales
+        // with zoom like any overlay). The label itself is rotated in CSS.
+        position: { top: (el.height || 0) / 2, left: 34 },
+        html: `<div class="pool-process-vlabel"><span class="ppv-text" title="${esc(title)}">${esc(main)}</span></div>`,
       }));
     } catch { /* shape without graphics (e.g. mid-import) — skip */ }
   });
