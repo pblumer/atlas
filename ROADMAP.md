@@ -312,8 +312,20 @@ Composition and reuse.
   authors pools, message flows, and pool names (ADR-0023). Atomic multi-pool
   deploy and message-flow validation still to come.
 - ✅ **Embedded subprocesses** (scope lifecycle via child counters): a `<subProcess>` runs its inner start→…→end in a child scope keyed by its element instance, completes when that scope drains, supports interrupting/non-interrupting boundary events (with scope-recursive termination), nests, and passes variables in/out via I/O mappings — including the Modeler's I/O-mapping editor for a subprocess ([ADR-0074](docs/adr/0074-embedded-subprocesses.md)).
-- 🔲 Event subprocesses (interrupting and non-interrupting)
-- 🚧 Call activities (single-partition): a `<callActivity>` starts a separate process as a child instance in the caller's partition, passes variables in/out (isolated or propagate-all), and resumes the caller on completion; recovery-tested ([ADR-0076](docs/adr/0076-call-activities.md)). Remaining: termination propagation (cancel → terminate child) and the Modeler editor.
+- ✅ **Event subprocesses** (interrupting and non-interrupting): a `<subProcess
+  triggeredByEvent="true">` arms its start event's trigger while its enclosing scope
+  runs; firing interrupts the scope (or runs alongside and re-arms, non-interrupting)
+  and runs the handler. Message and timer triggers ([ADR-0082](docs/adr/0082-event-subprocesses.md)),
+  plus **signal** ([ADR-0088](docs/adr/0088-signal-events.md)) and **error**
+  ([ADR-0089](docs/adr/0089-error-events.md)) triggers; nests in embedded subprocesses
+  and at the process root; recovery-tested; authored in the Modeler.
+- ✅ **Call activities** (single-partition): a `<callActivity>` starts a separate process
+  as a child instance in the caller's partition, passes variables in/out (isolated or
+  propagate-all), resumes the caller on completion, and tears the child down when the
+  caller is cancelled or interrupted (recursively, through a call chain) — including an
+  error unhandled in a child propagating to the caller's error boundary ([ADR-0089](docs/adr/0089-error-events.md)).
+  Recovery-tested; authored in the Modeler's Implement panel (called process id, binding,
+  propagation toggles, I/O mappings, and multi-instance) ([ADR-0076](docs/adr/0076-call-activities.md)).
 - ✅ **Multi-instance activities** (sequential and parallel): a `<multiInstanceLoopCharacteristics>` runs an activity — task, subprocess, or call activity — once per element of a FEEL input collection (or a fixed cardinality) as inner iterations scoped under a body, binding each iteration's `inputElement` and the standard `loopCounter`; parallel seeds all at once, sequential one at a time. It assembles an ordered `outputCollection` from each iteration's `outputElement`, honours a `completionCondition` (early exit, cancelling the rest), is interruptible (the body is a scope, so an interrupting boundary terminates every iteration and, for call-activity iterations, each child), and is authored in the Modeler's Implement panel. Reuses the ADR-0074 scope lifecycle wholesale — no new value type, counter, or recovery path; recovery-tested ([ADR-0077](docs/adr/0077-multi-instance-activities.md)).
 - 🔲 Compensation and compensation handlers
 - 🔲 BPMN transactions (with cancel/compensation)
