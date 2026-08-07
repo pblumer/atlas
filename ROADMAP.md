@@ -273,7 +273,14 @@ Making processes wait, react, and time out.
   FEEL cycle re-evaluated each occurrence (ADR-0055/0056). Recovery-tested
   (ADR-0040, ADR-0054). Signal boundaries are delivered (ADR-0088); error boundaries
   and boundaries on subprocesses remain.
-- 🔲 Receive tasks
+- ✅ **Receive tasks** ([ADR-0102](docs/adr/0102-receive-tasks.md)): a `<receiveTask
+  messageRef="…">` is the message intermediate catch event's wait-for-a-message semantics in
+  **task** form — so, unlike the catch event, it is an *activity* that accepts **boundary
+  events** (the "wait for a reply, else time out" pattern), I/O and data mappings, and
+  multi-instance. It opens a message subscription on activation and continues when a
+  correlating publish/throw arrives, reusing the ADR-0020 subscription/correlate path
+  wholesale — no new subscription, value type, or recovery path. Recovery-tested; authored in
+  the Modeler's Implement panel via the shared message picker.
 - 🚧 **Incident model**: a job whose retries a worker exhausts raises a durable
   **incident** on its element instead of hanging or retrying forever; the token
   parks off the activatable index until an operator resolves the incident, which

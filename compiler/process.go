@@ -52,8 +52,10 @@ const (
 
 	TypeErrorEndEvent // an end event that throws an error, ending its scope abnormally and propagating up to the nearest matching handler (ADR-0089); the send-and-stop counterpart of a BPMN error throw
 
+	TypeReceiveTask // an activity that waits for a correlating message, then continues (ADR-0102); the message intermediate catch's semantics in task form, so it accepts boundary events, I/O mappings, and multi-instance
+
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 28
+	numBpmnTypes = 29
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -115,6 +117,8 @@ func (t BpmnType) String() string {
 		return "SignalStartEvent"
 	case TypeErrorEndEvent:
 		return "ErrorEndEvent"
+	case TypeReceiveTask:
+		return "ReceiveTask"
 	default:
 		return "Unspecified"
 	}
@@ -565,6 +569,7 @@ type CompiledProcess struct {
 	eventSubs         []int32 // shared topology: event-subprocess handler node ids grouped by parent scope node
 	rootEventSubs     []int32 // event-subprocess handler node ids whose parent scope is the process root
 	messageCatches    []MessageDetail
+	receiveTasks      []MessageDetail // receive tasks — the message-catch shape as an activity (ADR-0102)
 	messageThrows     []MessageDetail
 	messageStarts     []MessageDetail
 	signalCatches     []SignalDetail
@@ -681,6 +686,13 @@ func (p *CompiledProcess) ServiceTask(detail int32) *ServiceTaskDetail {
 // TimerCatch returns the timer-catch detail at the given table index.
 func (p *CompiledProcess) TimerCatch(detail int32) *TimerCatchDetail {
 	return &p.timerCatches[detail]
+}
+
+// ReceiveTask returns the receive-task detail at the given table index (ADR-0102). A
+// receive task carries the same MessageDetail as a message catch — the message name and the
+// compiled correlation-key expression it waits on.
+func (p *CompiledProcess) ReceiveTask(detail int32) *MessageDetail {
+	return &p.receiveTasks[detail]
 }
 
 // MessageCatch returns the message-catch detail at the given table index.

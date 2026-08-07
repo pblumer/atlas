@@ -440,6 +440,18 @@ func registerScope(
 			return err
 		}
 	}
+	// A receive task waits for its referenced message to correlate, then continues — the
+	// message-catch semantics as an activity (ADR-0102). An empty or unknown messageRef is a
+	// deploy error, exactly like a message catch event.
+	for _, rt := range c.ReceiveTasks {
+		name, keyExpr, err := resolveMessage(rt.Id, rt.MessageRef)
+		if err != nil {
+			return err
+		}
+		if err := register(rt.Id, b.AddReceiveTask(name, keyExpr)); err != nil {
+			return err
+		}
+	}
 	for _, e := range c.EndEvents {
 		// A terminate end event would end the whole instance at once — Atlas can't
 		// execute that yet, so reject it with a clear message instead of silently
@@ -605,7 +617,7 @@ func registerScope(
 		label string
 		nodes []xmlNode
 	}{
-		{"sendTask", c.SendTasks}, {"receiveTask", c.ReceiveTasks},
+		{"sendTask", c.SendTasks},
 	} {
 		if len(u.nodes) > 0 {
 			return fmt.Errorf("compiler: element %q is a <%s>, which Atlas can't execute yet "+

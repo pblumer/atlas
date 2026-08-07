@@ -202,7 +202,9 @@ func TestParseErrors(t *testing.T) {
 				<startEvent id="s"/><endEvent id="s"/></process></definitions>`,
 		},
 		{
-			name: "unsupported receive task",
+			// A receive task is executable (ADR-0102), but one with no messageRef cannot
+			// resolve a message and is a deploy error, like a message catch with no ref.
+			name: "receive task without messageRef",
 			xml: `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
 				<startEvent id="s"/><receiveTask id="g"/></process></definitions>`,
 		},
