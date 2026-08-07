@@ -71,6 +71,13 @@ func xmlBody(desc string) *bodySpec {
 	return &bodySpec{mediaType: "application/xml", schema: tString(), desc: desc}
 }
 
+// eventStreamBody describes a Server-Sent Events response — a long-lived
+// text/event-stream of newline-delimited frames rather than a single JSON body
+// (ADR-0103's live collaboration transport).
+func eventStreamBody(desc string) *bodySpec {
+	return &bodySpec{mediaType: "text/event-stream", schema: tString(), desc: desc}
+}
+
 // apiRoutes is the single source of truth for the /api/v1 surface. Handler
 // iterates it to register handlers; openapiDoc iterates it to describe them.
 // Adding an endpoint means adding one entry here — nothing is registered off to
@@ -251,6 +258,28 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Move a draft to a project", tag: "Drafts", req: jsonBody("Move", tObject()), resp: jsonBody("Updated draft", tObject())}},
 		{"DELETE", "/api/v1/drafts/{id}", s.handleDeleteDraft, apiOp{
 			summary: "Delete a draft", tag: "Drafts", status: http.StatusNoContent}},
+
+		{"GET", "/api/v1/drafts/{id}/session", s.handleDraftSession, apiOp{
+			summary: "Join a draft's live collaboration session — a Server-Sent Events stream of sync, presence, lock, and change frames for real-time co-editing by people and AI agents (ADR-0103)", tag: "Live Sessions",
+			resp: eventStreamBody("SSE stream of session frames")}},
+		{"POST", "/api/v1/drafts/{id}/session/presence", s.handleDraftSessionPresence, apiOp{
+			summary: "Update a participant's presence (selected element) in a draft's live session (ADR-0103)", tag: "Live Sessions",
+			req: jsonBody("Presence update", schemaObj(map[string]any{
+				"participantId": tString(), "selection": tString(),
+			}, "participantId")),
+			status: http.StatusNoContent}},
+		{"POST", "/api/v1/drafts/{id}/session/lock", s.handleDraftSessionLock, apiOp{
+			summary: "Acquire or release a per-element edit lock in a draft's live session; acquiring an element another participant holds is a 409 (ADR-0103)", tag: "Live Sessions",
+			req: jsonBody("Lock action", schemaObj(map[string]any{
+				"participantId": tString(), "elementId": tString(), "action": tString(),
+			}, "participantId", "elementId", "action")),
+			status: http.StatusNoContent}},
+		{"POST", "/api/v1/drafts/{id}/session/change", s.handleDraftSessionChange, apiOp{
+			summary: "Broadcast an element change to a draft's live session participants — relayed live, not persisted (ADR-0103)", tag: "Live Sessions",
+			req: jsonBody("Element change", schemaObj(map[string]any{
+				"participantId": tString(), "elementId": tString(), "xml": tString(),
+			}, "participantId", "elementId")),
+			status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/forms", s.handleSaveForm, apiOp{
 			summary: "Save a form definition", tag: "Forms", req: jsonBody("Form", tObject()), resp: jsonBody("Saved form", tObject())}},

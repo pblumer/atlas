@@ -113,6 +113,16 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/dmnrefs/{id}":        "artifact editing is a UI concern",
 	"POST /api/v1/dmnrefs/{id}/validate": "modeler-time validation is a UI concern",
 
+	// Live collaboration sessions (ADR-0103): a Server-Sent Events stream and its
+	// companion presence/lock/change POSTs are a real-time, connection-oriented
+	// transport, not a request/response scenario action. Exposing the AI agent as
+	// a live session participant over MCP (join/lock/apply) is the deliberately
+	// separate M2 slice of ADR-0103; until then these carry no MCP tool.
+	"GET /api/v1/drafts/{id}/session":           "live SSE co-editing transport; AI-as-participant is ADR-0103 M2, not this slice",
+	"POST /api/v1/drafts/{id}/session/presence": "live co-editing action; AI-as-participant is ADR-0103 M2, not this slice",
+	"POST /api/v1/drafts/{id}/session/lock":     "live co-editing action; AI-as-participant is ADR-0103 M2, not this slice",
+	"POST /api/v1/drafts/{id}/session/change":   "live co-editing action; AI-as-participant is ADR-0103 M2, not this slice",
+
 	// Public start links: a human-sharing feature, not an agent action.
 	"POST /api/v1/public-links":           "human share links, not an agent action",
 	"GET /api/v1/public-links":            "human share links, not an agent action",
