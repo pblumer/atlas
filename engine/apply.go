@@ -261,6 +261,21 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// I4/I6.
 			return tx.RecordDecisionEvaluation(h.Timestamp, h.Position, &v.decisionEval)
 		}
+
+	case model.VTCompensable:
+		switch h.Intent {
+		case model.IntentCompensableRecorded:
+			// Retain a completed compensable activity under its scope, keyed by this
+			// event's log position so a scope scan yields completion order (ADR-0103).
+			// The record carries the scope, the activity, and its handler; the position
+			// comes from the header, so replay rebuilds the identical index (I4/I6).
+			return tx.RecordCompensable(h.Position, &v.compensable)
+		case model.IntentCompensableConsumed:
+			// The activity was compensated: drop its record so it compensates at most
+			// once. The scope and sequence ride on the event, so replay deletes the
+			// identical entry.
+			return tx.DeleteCompensable(v.compensable.ScopeKey, v.compensable.Seq)
+		}
 	}
 	return nil
 }

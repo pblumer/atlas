@@ -351,6 +351,47 @@ func (t *Tx) SubscribedSignals(name string, fn func(elKey uint64, v *model.Signa
 	return iter.Error()
 }
 
+// --- Compensable (ADR-0103) ---
+
+// RecordCompensable retains one completed compensable activity under its scope,
+// keyed by the completion event's log position so a scope scan yields completion
+// order. pos comes from the event header; the value carries the scope, the
+// compensated activity, and its compensation handler.
+func (t *Tx) RecordCompensable(pos uint64, v *model.CompensableValue) error {
+	return t.b.Set(keyCompensable(v.ScopeKey, pos), t.encodeValue(v), nil)
+}
+
+// DeleteCompensable removes one compensable record (its activity has been
+// compensated), located by its scope and sequence — both carried on the consume
+// event, so recovery deletes the identical entry. Idempotent.
+func (t *Tx) DeleteCompensable(scopeKey, seq uint64) error {
+	return t.b.Delete(keyCompensable(scopeKey, seq), nil)
+}
+
+// CompensablesOfScopeDesc calls fn for every completed compensable activity recorded
+// under scopeKey, newest first (reverse completion order) — the order a compensation
+// throw runs handlers in (ADR-0103). It reads through the in-flight batch, so it
+// observes records written earlier in the same batch. seq is the record's key
+// sequence (log position), which the caller carries on the consume event to delete it.
+func (t *Tx) CompensablesOfScopeDesc(scopeKey uint64, fn func(seq uint64, v *model.CompensableValue) error) error {
+	prefix := compensableScopePrefix(scopeKey)
+	iter, err := t.b.NewIter(&pebble.IterOptions{LowerBound: prefix, UpperBound: prefixEnd(prefix)})
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+	for iter.Last(); iter.Valid(); iter.Prev() {
+		var v model.CompensableValue
+		if err := model.DecodeValueInto(&v, iter.Value()); err != nil {
+			return err
+		}
+		if err := fn(trailingKey(iter.Key()), &v); err != nil {
+			return err
+		}
+	}
+	return iter.Error()
+}
+
 // --- Variable ---
 
 // PutVariable writes (upserts) a process variable under its scope and name.

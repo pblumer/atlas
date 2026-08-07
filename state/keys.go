@@ -40,6 +40,7 @@ const (
 	cfDefLastActivity        columnFamily = 0x1B // defAct:<procDefKey> → int64 unix-nano of the latest instance event (set, ADR-0083)
 	cfSignalSubscription     columnFamily = 0x1C // sigSub:<name>:<elKey> → SignalSubscriptionValue (ADR-0088)
 	cfVariableAudit          columnFamily = 0x1D // varAudit:<piKey>:<ts>:<pos> → VariableAuditValue (ADR-0098)
+	cfCompensable            columnFamily = 0x1E // comp:<scopeKey>:<seq> → CompensableValue (ADR-0103)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -404,6 +405,21 @@ func variableAuditScopePrefix(piKey uint64) []byte {
 // key, inverting the sign-flip appendOrderedInt64 applied.
 func timestampFromVariableAuditKey(k []byte) int64 {
 	return int64(binary.BigEndian.Uint64(k[len(k)-16:]) ^ (1 << 63))
+}
+
+// keyCompensable keys one completed compensable activity under its scope, ordered by
+// the completion event's log position (seq). Position is strictly increasing, so a
+// forward scan yields completion order and a reverse scan yields reverse completion
+// order — the order a compensation throw runs handlers in (ADR-0103). No timestamp
+// component is needed: position alone totally orders the log.
+func keyCompensable(scopeKey uint64, seq uint64) []byte {
+	return appendBE64(compensableScopePrefix(scopeKey), seq)
+}
+
+// compensableScopePrefix scans every completed compensable activity recorded under one
+// scope, in completion order.
+func compensableScopePrefix(scopeKey uint64) []byte {
+	return appendBE64([]byte{byte(cfCompensable)}, scopeKey)
 }
 
 // positionFromVariableAuditKey extracts the trailing log position from a

@@ -88,6 +88,12 @@ const (
 	// it" trail survives the instance and rebuilds from the log. Appended last so every
 	// prior value type keeps its numeric value on the log.
 	VTVariableAudit
+	// VTCompensable is one completed compensable activity retained so a later
+	// compensation throw can run its handler (ADR-0103). Written on the activity's
+	// successful completion, keyed under its scope in completion order, and deleted when
+	// compensated or when its scope tears down. Appended last so every prior value type
+	// keeps its numeric value on the log.
+	VTCompensable
 )
 
 func (t ValueType) String() string {
@@ -251,6 +257,18 @@ const (
 	// Because commands are not replayed (invariant I6), its numeric value never reaches the
 	// log. Appended at the end so every prior intent keeps its numeric value.
 	IntentJobErrorThrown
+
+	// IntentCompensableRecorded records that a compensable activity (one bearing a
+	// compensation boundary) completed successfully, so a later compensation throw can
+	// run its handler (ADR-0103). It is a pure state event, keyed under the activity's
+	// scope in completion order: applyToState writes it into the compensable index off
+	// the completion event, so recovery rebuilds the identical index (invariant I6).
+	// Appended at the end so every prior intent keeps its numeric value on the log.
+	IntentCompensableRecorded
+	// IntentCompensableConsumed removes a compensable record once its activity has been
+	// compensated (the handler was activated), so it is compensated at most once (ADR-0103).
+	// It carries the record's scope and sequence; applyToState deletes that index entry.
+	IntentCompensableConsumed
 )
 
 func (i Intent) String() string {
@@ -319,6 +337,10 @@ func (i Intent) String() string {
 		return "VariableModify"
 	case IntentVariableAudited:
 		return "VariableAudited"
+	case IntentCompensableRecorded:
+		return "CompensableRecorded"
+	case IntentCompensableConsumed:
+		return "CompensableConsumed"
 	case IntentJobErrorThrown:
 		return "JobErrorThrown"
 	default:

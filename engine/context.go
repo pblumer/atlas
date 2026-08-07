@@ -301,6 +301,16 @@ func (c *ProcessingContext) AppendVariableAuditEvent(v model.VariableAuditValue)
 	c.appendEvent(v.ProcessInstanceKey, model.VTVariableAudit, model.IntentVariableAudited, inflightValue{variableAudit: v})
 }
 
+// AppendCompensableEvent records a compensation-index change: IntentCompensableRecorded
+// retains a completed compensable activity (keyed under its scope in completion order),
+// and IntentCompensableConsumed drops one once it has been compensated (ADR-0103). Both
+// ride only on the command path (a completion or a compensation throw), never token
+// movement; applyToState folds them into the compensable index so recovery rebuilds it
+// (invariant I6). Keyed by the owning process instance, like the other history events.
+func (c *ProcessingContext) AppendCompensableEvent(intent model.Intent, v model.CompensableValue) {
+	c.appendEvent(v.ProcessInstanceKey, model.VTCompensable, intent, inflightValue{compensable: v})
+}
+
 // GetDataObject reads a scope's data object by name through the in-flight
 // transaction (sees writes from earlier in this batch). A data-output association
 // uses it to keep the object's current value or state when the write changes only
