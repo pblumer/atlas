@@ -554,7 +554,6 @@ const UNSUPPORTED_TYPES = {
   "bpmn:ReceiveTask": "Receive tasks can't run yet",
   "bpmn:EventBasedGateway": "Event-based gateways aren't supported yet",
   "bpmn:ComplexGateway": "Complex gateways aren't supported yet",
-  "bpmn:Transaction": "Transaction subprocesses aren't supported yet",
   "bpmn:AdHocSubProcess": "Ad-hoc subprocesses aren't supported yet",
   "bpmn:DataStoreReference": "Data stores aren't supported yet",
 };
@@ -562,7 +561,6 @@ const UNSUPPORTED_EVENT_DEFS = {
   "bpmn:TerminateEventDefinition": "Terminate end events can't run yet",
   "bpmn:ErrorEventDefinition": "Error events aren't supported yet",
   "bpmn:EscalationEventDefinition": "Escalation events aren't supported yet",
-  "bpmn:CompensateEventDefinition": "Compensation events aren't supported yet",
   "bpmn:ConditionalEventDefinition": "Conditional events aren't supported yet",
   "bpmn:LinkEventDefinition": "Link events aren't supported yet",
 };
@@ -2294,6 +2292,13 @@ function errorDefOf(bo) {
   return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:ErrorEventDefinition") || null;
 }
 
+// cancelDefOf returns the <cancelEventDefinition> of an element, or null. On a boundary event
+// it makes a cancel boundary (a transaction's cancellation catch); on an end event a cancel
+// end event (ADR-0105).
+function cancelDefOf(bo) {
+  return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:CancelEventDefinition") || null;
+}
+
 // listErrors returns every <bpmn:error> declared on the model's definitions.
 function listErrors(modeler) {
   const defs = definitionsOf(modeler);
@@ -3179,11 +3184,17 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
         const err = errorDefOf(bo);
+        const cancel = cancelDefOf(bo);
         if (err) {
           // An error boundary is always interrupting — no cancelActivity toggle (ADR-0089).
           html += `<h3>Behaviour</h3>
             <p class="muted" style="font-size:12px">An <b>error boundary</b> is always <b>interrupting</b>: a matching thrown error cancels the attached activity (and its job) and routes the token out this event.</p>`;
           html += errorFieldsHTML(modeler, err, "The event fires when the attached activity throws a matching error — an error end event inside it, a worker failing its job to the code, or an error propagating up from a called process.");
+        } else if (cancel) {
+          // A cancel boundary may attach only to a transaction and is always interrupting — no
+          // cancelActivity toggle and no trigger fields (ADR-0105).
+          html += `<h3>Behaviour</h3>
+            <p class="muted" style="font-size:12px">A <b>cancel boundary</b> attaches only to a <b>transaction</b> and is always <b>interrupting</b>: when a cancel end event inside the transaction fires, its completed activities are compensated (in reverse order) and the token is then routed out this event. Draw it on a transaction subprocess.</p>`;
         } else {
           const interrupting = bo.cancelActivity !== false;
           html += `<h3>Behaviour</h3>
@@ -3278,12 +3289,16 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
         const err = errorDefOf(bo);
+        const cancel = cancelDefOf(bo);
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "On reaching this end event the message is published; any instance waiting on it with a matching correlation key continues. The instance then ends.");
         } else if (sig) {
           html += signalFieldsHTML(modeler, sig, "On reaching this end event the signal is broadcast to every event waiting on that signal name, across all instances. The instance then ends.");
         } else if (err) {
           html += errorFieldsHTML(modeler, err, "On reaching this end event the error is thrown, aborting its scope and propagating up to the nearest matching error boundary or error event subprocess. Uncaught, it raises an incident.");
+        } else if (cancel) {
+          // A cancel end event is only meaningful inside a transaction (ADR-0105).
+          html += `<p class="muted" style="font-size:12px">A <b>cancel end event</b> cancels its enclosing <b>transaction</b>: its completed activities are compensated (in reverse order), then the token is routed out the transaction's <b>cancel boundary</b>. Use it only inside a transaction subprocess.</p>`;
         } else {
           html += `<p class="muted" style="font-size:12px">A plain end event ends the instance. Use the wrench icon on the element to make this a <b>Message</b>, <b>Signal</b>, or <b>Error</b> end event.</p>`;
         }

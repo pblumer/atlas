@@ -4,7 +4,8 @@
 - **Date:** 2026-08-07
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Proposed → in delivery. A BPMN **transaction subprocess**
+> **Implementation status.** Delivered (phases 1–3); `go test -race ./...` green, repo
+> coverage floor held. A BPMN **transaction subprocess**
 > (`<transaction>`) is an embedded subprocess (ADR-0074) with one added outcome: it can be
 > **cancelled**. A **cancel end event** (`<endEvent><cancelEventDefinition/>`) inside the
 > transaction rolls the transaction back — it **compensates** every completed compensable
