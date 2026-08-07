@@ -36,9 +36,9 @@ const server = http.createServer(async (req, res) => {
   try {
     const p = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
     if (p === "/" || p === "/harness.html") file = join(here, "harness.html");
-    else if (p === "/replay-harness.html") file = join(here, "replay-harness.html");
-    else if (p.endsWith(".bpmn")) {
-      // Test models live here in e2e/ (never in api/web). Block path traversal.
+    else if (p.endsWith("-harness.html") || p.endsWith(".bpmn")) {
+      // Test-only harness pages and models live here in e2e/ (never in api/web, which
+      // is go:embed'd into the binary). Block path traversal.
       const rel = normalize(p).replace(/^([/\\])+/, "");
       file = join(here, rel);
       if (file !== here && !file.startsWith(here + sep)) return send(res, 403, "forbidden");

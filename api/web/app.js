@@ -3,6 +3,17 @@
 
 const view = document.getElementById("view");
 
+// navGen guards the async router against re-entrancy. route() is async and
+// re-fires on every hashchange, so two navigations can be in flight at once. Each
+// bumps navGen; a view handler that renders (or installs a poll timer, or claims
+// window.__atlasCleanup) only *after* an await captures navGen at entry and bails
+// if a newer navigation has since landed — otherwise its late write clobbers the
+// newer view or leaks a timer. editor.js has its own equivalent guard for the
+// mounts it owns; this covers the plain view* handlers and the pre-mount awaits in
+// their app.js wrappers, which that guard can't see.
+let navGen = 0;
+const superseded = (gen) => gen !== navGen;
+
 // ---------- API ----------
 // apiRaw is the fetch wrapper that also returns the response headers, for the few
 // endpoints whose headers carry pagination signals (X-Tasks-Truncated /
@@ -558,6 +569,7 @@ function buildInfoHTML(i) {
 // script-worker startup lines. It auto-refreshes; the interval is cleared on route
 // change via __atlasCleanup.
 async function viewConsoleLogs() {
+  const gen = navGen;
   view.innerHTML = `
     <div class="card">
       <div class="between">
@@ -586,6 +598,9 @@ async function viewConsoleLogs() {
     }
   };
   await load();
+  // Navigated away while the first load was in flight: don't install a poll that
+  // now writes into a detached node, and don't overwrite the new view's cleanup.
+  if (superseded(gen)) return;
   document.getElementById("log-refresh").addEventListener("click", load);
   const timer = setInterval(() => { if (follow.checked) load(); }, 2000);
   window.__atlasCleanup = () => clearInterval(timer);
@@ -669,6 +684,7 @@ async function deleteUser(u, reload) {
 }
 
 async function viewConsoleOrg() {
+  const gen = navGen;
   const pill = (c) => c.status === "active"
     ? `<span class="pill ok"><span class="dot"></span>${esc(c.statusLabel)}</span>`
     : `<span class="pill warn"><span class="dot"></span>${esc(c.statusLabel)}</span>`;
@@ -690,7 +706,9 @@ async function viewConsoleOrg() {
     users = await api("GET", "/api/v1/users");
   } catch (e) {
     denied = /admin/i.test(e.message);
-    if (!denied) throw e;
+    // If a newer navigation superseded us, swallow the error rather than let it
+    // reach route()'s catch, which would render an error card over the new view.
+    if (!denied) { if (superseded(gen)) return; throw e; }
   }
 
   // Managed connector instances (ADR-0041): operator-configured integrations,
@@ -804,6 +822,7 @@ async function viewConsoleOrg() {
         </table>
       </div>`;
 
+  if (superseded(gen)) return; // navigated away while the roster/connectors/secrets loaded
   view.innerHTML = `
     <div class="card">
       <h1>Organization</h1>
@@ -3152,12 +3171,17 @@ async function resolveProject(projectId) {
 }
 
 async function viewEditor(key, projectId) {
+  const gen = navGen;
   const mod = await import("./editor.js");
   const project = await resolveProject(projectId);
+  // The mount's own generation guard can't see this wrapper's pre-mount awaits: a
+  // superseded wrapper would run the mount to completion and clobber the newer view.
+  if (superseded(gen)) return;
   await mod.mountEditor(view, { api, toast, key, projectId, project });
 }
 
 async function viewEditorDraft(id) {
+  const gen = navGen;
   const mod = await import("./editor.js");
   // An existing draft carries its own projectId; resolve it so the editor can
   // offer a "back to project" breadcrumb (the route alone doesn't name it).
@@ -3168,11 +3192,14 @@ async function viewEditorDraft(id) {
     projectId = (d && d.projectId) || "";
   } catch { /* best-effort: fall back to a Home-only crumb */ }
   const project = await resolveProject(projectId);
+  if (superseded(gen)) return; // a newer navigation landed during the pre-mount fetches
   await mod.mountEditor(view, { api, toast, draftId: id, projectId, project });
 }
 
 async function viewFormEditor(formId, projectId) {
+  const gen = navGen;
   const mod = await import("./form-editor.js");
+  if (superseded(gen)) return; // don't mount over a newer view after the dynamic import
   await mod.mountFormEditor(view, { api, toast, formId, projectId });
 }
 
@@ -3199,6 +3226,7 @@ async function viewInstanceReplay(key) {
 // picture, not an edit surface — editing happens in the modeler overlay, and on
 // save the view re-renders from the updated model.
 async function viewDmnViewer(refId) {
+  const gen = navGen;
   view.innerHTML = `<div class="card"><p class="muted">Loading decision model…</p></div>`;
   let g, ref = null;
   try {
@@ -3211,9 +3239,11 @@ async function viewDmnViewer(refId) {
     g = graph;
     ref = (refs || []).find((r) => r.id === refId) || null;
   } catch (e) {
+    if (superseded(gen)) return;
     view.innerHTML = `<div class="card empty"><h1>Could not load model</h1><p class="muted">${esc(e.message)}</p></div>`;
     return;
   }
+  if (superseded(gen)) return; // navigated away while the graph loaded
   const title = g.modelName || (ref && ref.name) || "DMN model";
   const back = `<a href="#/modeler">← Modeler</a>`;
   const editBtn = ref && ref.modelRef
@@ -3495,6 +3525,7 @@ async function route() {
   document.getElementById("drawer").hidden = true;
   document.getElementById("scrim").hidden = true;
   if (window.__atlasCleanup) { try { window.__atlasCleanup(); } catch { /* ignore */ } }
+  navGen++; // supersede any view handler still awaiting from a previous navigation
 
   const hash = location.hash || "#/console";
   const [path, arg] = [hash.replace(/\?.*$/, ""), hash];
