@@ -89,11 +89,27 @@ export function attachCollab(modeler, api, draftId, toast) {
   container.appendChild(bar);
 
   const renderPresence = () => {
-    bar.innerHTML = state.participants.map((p) => {
-      const me = p.id === state.self;
-      const where = p.selection ? ` · ${esc(p.selection)}` : "";
-      return `<span class="collab-avatar${me ? " me" : ""}" style="--h:${hueFor(p.id)}" ` +
-        `title="${esc(p.name)}${me ? " (you)" : ""}${where}">${esc(initials(p.name))}</span>`;
+    // Collapse multiple streams of the same signed-in identity into one avatar, so
+    // a second tab or a lingering reconnect never shows the same person twice.
+    // Each open editor stream is its own server-side participant; the roster keys
+    // by userId (when authenticated) so those streams fold into one, with a ×N
+    // count. Guests (no userId — e.g. auth off) stay distinct: they really are
+    // different people. Color and identity key off the group, not the stream id.
+    const groups = new Map();
+    for (const p of state.participants) {
+      const key = p.userId ? "u:" + p.userId : "p:" + p.id;
+      let g = groups.get(key);
+      if (!g) { g = { key, name: p.name, selection: p.selection, count: 0, me: false }; groups.set(key, g); }
+      g.count++;
+      if (p.id === state.self) { g.me = true; g.selection = p.selection; } // prefer my own stream's view
+      else if (!g.selection) { g.selection = p.selection; }
+    }
+    bar.innerHTML = Array.from(groups.values()).map((g) => {
+      const where = g.selection ? ` · ${esc(g.selection)}` : "";
+      const many = g.count > 1 ? ` (×${g.count})` : "";
+      const badge = g.count > 1 ? `<i class="collab-count">${g.count}</i>` : "";
+      return `<span class="collab-avatar${g.me ? " me" : ""}" style="--h:${hueFor(g.key)}" ` +
+        `title="${esc(g.name)}${g.me ? " (you)" : ""}${many}${where}">${esc(initials(g.name))}${badge}</span>`;
     }).join("");
   };
 
