@@ -1999,6 +1999,16 @@ function messageDefOf(bo) {
   return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:MessageEventDefinition") || null;
 }
 
+// messageRefHolder returns the moddle object that carries an element's messageRef: the
+// bpmn:MessageEventDefinition for a message event, or the receive task's own business object
+// (a receive task holds messageRef directly, not via an event definition — ADR-0102). It is
+// what the message picker reads and its handlers write, so a receive task reuses the same
+// picker as a message catch. null when the element references no message.
+function messageRefHolder(bo) {
+  if (bo && bo.$type === "bpmn:ReceiveTask") return bo;
+  return messageDefOf(bo);
+}
+
 // isEventSubStart reports whether a start event is the trigger of an event subprocess —
 // i.e. it sits directly inside a subprocess whose triggeredByEvent is set (ADR-0082). Such
 // a start carries a message/timer trigger and an isInterrupting flag, not a process-entry
@@ -2887,7 +2897,12 @@ function wireProperties(root, modeler, api, projectId, toast) {
     }
 
     if (tab === "implement") {
-      if (isActivity(bo)) {
+      if (bo.$type === "bpmn:ReceiveTask") {
+        // A receive task waits for a correlating message, then continues (ADR-0102). It is
+        // an activity, so it takes the shared message picker (the receive task holds its
+        // messageRef directly, which messageRefHolder resolves for the field handlers).
+        html += messageFieldsHTML(modeler, bo, "The receive task waits until this message is published (or thrown) with a matching correlation key, then continues. Attach a timer boundary event for a wait-or-time-out.");
+      } else if (isActivity(bo)) {
         const t = bo.$type;
         html += `
           <label class="field"><span>Task type</span>
@@ -3878,7 +3893,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
     const fmsgref = body.querySelector("#f-msgref");
     if (fmsgref) {
       fmsgref.addEventListener("change", () => {
-        const med = messageDefOf(element.businessObject);
+        const med = messageRefHolder(element.businessObject);
         if (!med) return;
         const v = fmsgref.value;
         savePreservingPanel(() => {
@@ -3896,14 +3911,14 @@ function wireProperties(root, modeler, api, projectId, toast) {
     const fmsgname = body.querySelector("#f-msgname");
     if (fmsgname) {
       fmsgname.addEventListener("change", () => {
-        const med = messageDefOf(element.businessObject);
+        const med = messageRefHolder(element.businessObject);
         if (med && med.messageRef) med.messageRef.name = (fmsgname.value || "").trim();
       });
     }
     const fcorrkey = body.querySelector("#f-corrkey");
     if (fcorrkey) {
       fcorrkey.addEventListener("change", () => {
-        const med = messageDefOf(element.businessObject);
+        const med = messageRefHolder(element.businessObject);
         if (med && med.messageRef) setMessageCorrelationKey(modeler, med.messageRef, (fcorrkey.value || "").trim());
       });
     }

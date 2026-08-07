@@ -176,6 +176,7 @@ type Builder struct {
 	boundaryEventDets []BoundaryEventDetail
 	eventSubProcesses []EventSubProcessDetail
 	messageCatches    []MessageDetail
+	receiveTasks      []MessageDetail // receive tasks (ADR-0102)
 	messageThrows     []MessageDetail
 	messageStarts     []MessageDetail
 	signalCatches     []SignalDetail
@@ -893,6 +894,16 @@ func (b *Builder) AddMessageCatchEvent(messageName string, correlationKey *expr.
 	return b.addNode(TypeMessageCatchEvent, detail)
 }
 
+// AddReceiveTask adds a receive task that, on activation, subscribes to the named message
+// with a correlation key produced by the given compiled FEEL expression, then waits until a
+// matching message is correlated — the message-catch semantics as an activity (ADR-0102).
+// Returns its element id.
+func (b *Builder) AddReceiveTask(messageName string, correlationKey *expr.Compiled) int32 {
+	detail := int32(len(b.receiveTasks))
+	b.receiveTasks = append(b.receiveTasks, MessageDetail{MessageName: messageName, CorrelationKey: correlationKey})
+	return b.addNode(TypeReceiveTask, detail)
+}
+
 // AddMessageThrowEvent adds an intermediate message throw event that, on
 // activation, publishes the named message with a correlation key produced by the
 // given compiled FEEL expression (evaluated over the throwing instance's
@@ -1180,6 +1191,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		eventSubs:         eventSubs,
 		rootEventSubs:     rootEventSubs,
 		messageCatches:    b.messageCatches,
+		receiveTasks:      b.receiveTasks,
 		messageThrows:     b.messageThrows,
 		messageStarts:     b.messageStarts,
 		signalCatches:     b.signalCatches,

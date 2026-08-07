@@ -31,6 +31,7 @@ func TestBpmnTypeString(t *testing.T) {
 		{TypeBoundaryEvent, "BoundaryEvent"},
 		{TypeTimerStartEvent, "TimerStartEvent"},
 		{TypeMessageEndEvent, "MessageEndEvent"},
+		{TypeReceiveTask, "ReceiveTask"},
 		{TypeUnspecified, "Unspecified"},
 		{BpmnType(200), "Unspecified"},
 	}

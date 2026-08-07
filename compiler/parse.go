@@ -455,6 +455,11 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			return nil, err
 		}
 	}
+	for _, rt := range proc.ReceiveTasks {
+		if err := wireDataOut(rt.Id, rt.DataOut); err != nil {
+			return nil, err
+		}
+	}
 
 	// Wire data-input associations: a sourceRef names the data object read (resolved
 	// like an output target, its state ignored on a read); a targetRef is the process
@@ -515,6 +520,11 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	}
 	for _, t := range proc.ManualTasks {
 		if err := wireDataIn(t.Id, t.DataIn); err != nil {
+			return nil, err
+		}
+	}
+	for _, rt := range proc.ReceiveTasks {
+		if err := wireDataIn(rt.Id, rt.DataIn); err != nil {
 			return nil, err
 		}
 	}
@@ -582,6 +592,11 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		for _, ca := range c.CallActivities {
 			if err := wireIO(ca.Id, ca.IOMapping); err != nil {
+				return err
+			}
+		}
+		for _, rt := range c.ReceiveTasks {
+			if err := wireIO(rt.Id, rt.IOMapping); err != nil {
 				return err
 			}
 		}
@@ -666,6 +681,11 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		for _, ca := range c.CallActivities {
 			if err := wireMI(ca.Id, ca.MultiInstance); err != nil {
+				return err
+			}
+		}
+		for _, rt := range c.ReceiveTasks {
+			if err := wireMI(rt.Id, rt.MultiInstance); err != nil {
 				return err
 			}
 		}
@@ -807,10 +827,24 @@ type xmlFlowContent struct {
 	SubProcesses   []xmlSubProcess   `xml:"subProcess"`
 	CallActivities []xmlCallActivity `xml:"callActivity"`
 
-	// Captured only to give a clear "unsupported element" error (see Parse); none
-	// of these are executable yet.
-	SendTasks    []xmlNode `xml:"sendTask"`
-	ReceiveTasks []xmlNode `xml:"receiveTask"`
+	ReceiveTasks []xmlReceiveTask `xml:"receiveTask"`
+
+	// Captured only to give a clear "unsupported element" error (see Parse); not
+	// executable yet.
+	SendTasks []xmlNode `xml:"sendTask"`
+}
+
+// xmlReceiveTask is a <receiveTask messageRef="…">: an activity that waits for the
+// referenced message to correlate, then continues (ADR-0102). It carries the same activity
+// sub-elements as a service task — I/O mappings, multi-instance, and data associations — so
+// it is a first-class activity.
+type xmlReceiveTask struct {
+	Id            string                     `xml:"id,attr"`
+	MessageRef    string                     `xml:"messageRef,attr"`
+	IOMapping     xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
+	MultiInstance *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
+	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
+	DataIn        []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
 
 // xmlCallActivity is a <callActivity>: it starts a separate process (named by

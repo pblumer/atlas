@@ -60,6 +60,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeTimerCatchEvent] = timerCatchEventBehavior{}
 	p.behaviors[compiler.TypeMessageCatchEvent] = messageCatchEventBehavior{}
 	p.behaviors[compiler.TypeMessageThrowEvent] = messageThrowEventBehavior{}
+	p.behaviors[compiler.TypeReceiveTask] = receiveTaskBehavior{}
 	p.behaviors[compiler.TypeSignalCatchEvent] = signalCatchEventBehavior{}
 	p.behaviors[compiler.TypeSignalThrowEvent] = signalThrowEventBehavior{}
 	p.behaviors[compiler.TypeSignalEndEvent] = signalEndEventBehavior{}
@@ -1515,6 +1516,34 @@ func (messageCatchEventBehavior) OnActivated(c *ProcessingContext, key uint64, e
 }
 
 func (messageCatchEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// receiveTaskBehavior: a receive task waits for a correlating message, then continues —
+// the message intermediate catch event's semantics in task form (ADR-0102). On activation
+// it opens a subscription on the task's (message name, correlation key) and stays Activated;
+// a correlating publish or throw drives it to Completing through the same correlateMessage
+// path a catch event uses, and it then completes and takes its outgoing flows (running any
+// I/O output mappings and data associations, since it is an activity). It reads the
+// receive-task detail table rather than the message-catch table; otherwise it is
+// messageCatchEventBehavior. An attached boundary event arms and fires unchanged.
+type receiveTaskBehavior struct{}
+
+func (receiveTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.ReceiveTask(cp.Node(ei.ElementId).Detail)
+	c.AppendMessageSubscriptionEvent(key, model.IntentSubscriptionCreated, model.MessageSubscriptionValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		MessageName:        detail.MessageName,
+		CorrelationKey:     evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey),
+		ProcessDefKey:      ei.ProcessDefKey,
+		ElementId:          ei.ElementId,
+	})
+	// Stays Activated: no Completing until a message correlates.
+}
+
+func (receiveTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	completeAndTakeFlows(c, key, ei)
 }
 
