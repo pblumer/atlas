@@ -102,7 +102,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0086](0086-gateway-conditions-resolve-over-scope-chain.md) | Gateway conditions resolve over the scope chain, so a gateway inside a subprocess branches on its scope's variables | Proposed |
 | [0087](0087-in-process-csv-ingestion.md) | In-process CSV ingestion — upload in a user task, layout in a script task, parse in a service task | Accepted |
 | [0088](0088-signal-events.md) | Signal events (broadcast throw/catch) — named 1:n delivery reusing the message subscription machinery | Accepted |
-| [0089](0089-error-events.md) | Error events (scoped propagation to the nearest handler) | Proposed |
+| [0089](0089-error-events.md) | Error events (scoped propagation to the nearest handler) | Accepted |
 | [0090](0090-bulk-terminate-instances.md) | Bulk-terminate running instances — an explicit selection and a filtered scope | Accepted |
 
 ## Status values

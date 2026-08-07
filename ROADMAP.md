@@ -251,7 +251,18 @@ Making processes wait, react, and time out.
   subscription family, so cross-instance reach and recovery are inherited; all phases
   recovery-tested. Authored in the Modeler's Implement panel (a signal picker on every
   signal event, plus a central signals manager on the diagram root).
-- 🔲 Error events and error propagation
+- ✅ **Error events and error propagation**: an `errorEventDefinition` is a **named, coded
+  failure** propagated **structurally** to the **nearest enclosing** matching handler — not
+  broadcast (ADR-0089). An error end event (or a worker failing a job to a code via
+  `ThrowJobError`) throws; it walks up the live scope chain to the first error boundary or
+  error event subprocess whose code matches (a code-less catch is a catch-all), always
+  interrupting: the caught scope is torn down and the handler's recovery flow runs. Uncaught,
+  it propagates to a call-activity caller (ADR-0076) or, at the top, raises an incident
+  (ADR-0061). Built on the scope chain, `interruptHost`/`terminateScope`, and the
+  boundary/event-subprocess lifecycle — no subscription, value type, or recovery path;
+  propagation is a pure function of committed scope state. Recovery-tested; authored in the
+  Modeler's Implement panel (an error-code picker on error end/boundary/event-subprocess
+  events, plus a central errors manager).
 - ✅ Boundary events: timer and message, interrupting and non-interrupting,
   attached to waiting activities. An interrupting boundary cancels the host (and
   its job) and routes out its flow; a non-interrupting one spawns a parallel

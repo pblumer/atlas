@@ -1,10 +1,10 @@
 # ADR-0089: Error events (scoped propagation to the nearest handler)
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-30
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phases 1–4 delivered; Phase 5 (Modeler) pending. Each phase
+> **Implementation status.** All phases (1–5) delivered. Each phase
 > lands test-first with a recovery test (ADR-0018). Error events build on the subprocess scope
 > lifecycle and `terminateScope`/`scopeContains` (ADR-0074), the boundary arm/fire
 > machinery (ADR-0040), event subprocesses (ADR-0082), the incident model (ADR-0061), and
@@ -92,6 +92,22 @@
 > incident at the caller with the child torn down; and the child→caller propagation surviving
 > crash+replay. The same-scope boundary-vs-event-subprocess tie-break stays as the ADR chose
 > (event subprocess nearer); only the Modeler (Phase 5) remains.
+>
+> **Delivered (Phase 5, Modeler):** error authoring in the editor's Implement panel
+> (`api/web/editor.js`), mirroring the message/signal pattern but keyed on the error **code**.
+> An `errorFieldsHTML` picker (a dropdown of the model's shared `<bpmn:error>` declarations
+> plus "＋ New error", and the chosen error's `errorCode`) appears on error end events, error
+> boundaries, and error event-subprocess start events — driven by an `errorDefOf` dispatch arm
+> in each. Because an error catch is always interrupting, the error boundary and error
+> event-subprocess arms drop the interrupting/`cancelActivity` toggle and show a fixed
+> "always interrupting" note. A central "Errors" manager on the process/collaboration root
+> adds, edits (code), and deletes errors (`errorsManagerHTML`/`wireErrorsManager`); helpers
+> `listErrors`/`createError`/`linkError`/`deleteError` create `bpmn:Error` root elements and
+> set `errorRef` (deleting clears dangling refs), producing exactly the `<bpmn:error id
+> errorCode>` + `<errorEventDefinition errorRef>` shape the Phase-1 compiler parses. bpmn-js
+> already draws the error marker and offers the error end/boundary/start variants via the
+> wrench menu, and the `bpmn:Error` / `bpmn:ErrorEventDefinition` moddle types are native, so
+> no diagram-rendering or moddle change was needed.
 
 ## Context and problem statement
 
