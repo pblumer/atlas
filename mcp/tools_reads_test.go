@@ -75,8 +75,18 @@ func TestListAndGetFormViaTool(t *testing.T) {
 	if all := callOne(t, atlas, "atlas_list_forms", map[string]any{}); !strings.Contains(all, "f1") || !strings.Contains(all, "f2") {
 		t.Fatalf("list_forms = %q, want both f1 and f2", all)
 	}
+	// Parse the filtered list rather than substring-matching the raw JSON: the
+	// project id is a random hash that can itself contain "f2" (e.g.
+	// "e1f2b4fe852fac60"), which would false-positive a Contains(filtered, "f2")
+	// check even when only f1 is returned.
 	filtered := callOne(t, atlas, "atlas_list_forms", map[string]any{"projectId": proj.ID})
-	if !strings.Contains(filtered, "f1") || strings.Contains(filtered, "f2") {
+	var filteredForms []struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(filtered), &filteredForms); err != nil {
+		t.Fatalf("list_forms filtered = %q, unmarshal err=%v", filtered, err)
+	}
+	if len(filteredForms) != 1 || filteredForms[0].ID != "f1" {
 		t.Fatalf("list_forms filtered = %q, want f1 only", filtered)
 	}
 	if form := callOne(t, atlas, "atlas_get_form", map[string]any{"id": "f1"}); !strings.Contains(form, "f1") {
