@@ -1063,10 +1063,11 @@ function drawPoolProcessCaptions(modeler) {
     const title = name ? `Process: ${name}${pid ? ` (${pid})` : ""}` : `Process: ${pid}`;
     try {
       ids.push(overlays.add(el.id, "atlas-pool-process", {
-        // Centered on the pool's left edge, just inside the participant name band, so the
-        // process reads as a second vertical label beside the participant (the offset scales
-        // with zoom like any overlay). The label itself is rotated in CSS.
-        position: { top: (el.height || 0) / 2, left: 34 },
+        // Centered on the pool's left edge, a clear gap right of the participant name band,
+        // so the process reads as a second vertical label beside the participant without
+        // crowding the band divider (the offset scales with zoom like any overlay). The
+        // label itself is rotated in CSS.
+        position: { top: (el.height || 0) / 2, left: 52 },
         html: `<div class="pool-process-vlabel"><span class="ppv-text" title="${esc(title)}">${esc(main)}</span></div>`,
       }));
     } catch { /* shape without graphics (e.g. mid-import) — skip */ }
