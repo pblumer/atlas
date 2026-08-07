@@ -149,7 +149,7 @@ func TestParseBoundaryErrors(t *testing.T) {
     <sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
   </process>
 </definitions>`,
-			want: "only timer, message, signal, error, and compensation",
+			want: "only timer, message, signal, error, compensation, and cancel",
 		},
 	}
 	for _, tc := range cases {

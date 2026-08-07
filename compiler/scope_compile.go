@@ -513,6 +513,14 @@ func registerScope(
 			}
 			continue
 		}
+		// A cancel end event cancels its enclosing transaction (ADR-0105); validation
+		// (checkTransactions) enforces that the enclosing scope really is a transaction.
+		if e.Cancel != nil {
+			if err := register(e.Id, b.AddCancelEndEvent()); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := register(e.Id, b.AddEndEvent()); err != nil {
 			return err
 		}
@@ -526,6 +534,11 @@ func registerScope(
 		subID := b.AddSubProcess()
 		if err := register(sub.Id, subID); err != nil {
 			return err
+		}
+		// A <transaction> is a subprocess with cancellation added; mark the node so the
+		// runtime and validation treat it as one (ADR-0105). It is never triggeredByEvent.
+		if sub.IsTransaction {
+			b.SetTransaction(subID)
 		}
 		b.PushScope(subID)
 		if err := registerScope(b, ids, register, resolveMessage, resolveSignal, resolveError, &sub.xmlFlowContent); err != nil {
@@ -632,8 +645,15 @@ func registerScope(
 			if err := register(ev.Id, b.AddBoundaryCompensationEvent(host)); err != nil {
 				return err
 			}
+		case ev.Cancel != nil:
+			// A cancel boundary catches its host transaction's cancellation and is always
+			// interrupting — cancelActivity is ignored (ADR-0105). validation (checkTransactions)
+			// enforces that the host really is a transaction.
+			if err := register(ev.Id, b.AddBoundaryCancelEvent(host)); err != nil {
+				return err
+			}
 		default:
-			return fmt.Errorf("compiler: boundary event %q: only timer, message, signal, error, and compensation boundary events are supported yet", ev.Id)
+			return fmt.Errorf("compiler: boundary event %q: only timer, message, signal, error, compensation, and cancel boundary events are supported yet", ev.Id)
 		}
 	}
 	// Report an unsupported element with a clear message rather than letting it
