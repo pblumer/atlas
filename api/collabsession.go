@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"sync"
+	"time"
 )
 
 // This file implements the first slice of ADR-0103: live collaborative modeling
@@ -62,12 +63,21 @@ type collabEvent struct {
 // collabParticipant is one connected editor — a person in the Modeler or an AI
 // agent joined over MCP. ch is its SSE outbox; selection is the element it
 // currently has selected (presence).
+//
+// detached marks a participant with no live SSE stream (an agent that joined over
+// MCP and reads by polling). Such a participant is not reaped on a disconnect the
+// way a browser stream is, so it carries lastSeen — refreshed on every action —
+// and the reaper evicts it once it goes silent past the TTL. A streaming (browser)
+// participant is exempt: it is reaped when its connection closes, and it would
+// otherwise be wrongly evicted while sitting idle just watching.
 type collabParticipant struct {
 	ID        string
 	UserID    string // resolved principal (ADR-0044); empty when auth is off
 	Name      string // display name
 	selection string
 	ch        chan collabEvent
+	detached  bool      // joined without an SSE stream (an MCP agent); subject to the TTL reaper
+	lastSeen  time.Time // last action time; only meaningful (and only checked) for a detached participant
 }
 
 // collabLock is a soft, per-element edit lock held by one participant.
@@ -117,6 +127,16 @@ type collabPresence struct {
 	Selection string `json:"selection,omitempty"`
 }
 
+// collabParticipantTTL is how long a detached (MCP agent) participant may go
+// without an action before the reaper evicts it and releases its locks. An agent
+// is told to poll periodically, which refreshes its lastSeen; a crashed or
+// forgotten one falls silent and is cleaned up so its locks never wedge an
+// element forever. collabReapInterval is how often the reaper sweeps.
+const (
+	collabParticipantTTL = 90 * time.Second
+	collabReapInterval   = 30 * time.Second
+)
+
 // collabRegistry holds every live draft session in memory. It is mutex-guarded
 // because concurrent HTTP handlers (SSE streams and POSTs) reach it directly; it
 // is not engine state and never persists (ADR-0103).
@@ -124,6 +144,8 @@ type collabRegistry struct {
 	mu       sync.Mutex
 	sessions map[string]*collabSession
 	newID    func() (string, error) // participant id minter; seam for tests
+	now      func() time.Time       // clock seam for the reaper (deterministic in tests)
+	ttl      time.Duration          // detached-participant idle TTL
 }
 
 // newCollabRegistry builds an empty registry whose participant ids are random
@@ -132,6 +154,8 @@ func newCollabRegistry() *collabRegistry {
 	return &collabRegistry{
 		sessions: map[string]*collabSession{},
 		newID:    func() (string, error) { return randomHex(12) },
+		now:      time.Now,
+		ttl:      collabParticipantTTL,
 	}
 }
 
@@ -153,15 +177,39 @@ func (sess *collabSession) lockListLocked() []collabLock {
 	return out
 }
 
-// join adds a participant to the draft's session (creating the session if this
-// is the first arrival) and returns the participant, the marshaled sync snapshot
-// it should receive first (self id, roster, locks), and a leave function the
-// caller defers to tear the participant down on disconnect. Other participants
-// receive a presence frame reflecting the arrival.
+// join adds a streaming (browser SSE) participant to the draft's session and
+// returns the participant, the marshaled sync snapshot it should receive first
+// (self id, roster, locks), and a leave function the caller defers to tear the
+// participant down on disconnect. Other participants receive a presence frame
+// reflecting the arrival.
 func (reg *collabRegistry) join(draftID, userID, name string) (*collabParticipant, []byte, func()) {
 	reg.mu.Lock()
 	defer reg.mu.Unlock()
+	p, sync := reg.joinLocked(draftID, userID, name, false)
+	return p, sync, func() { reg.leave(draftID, p.ID) }
+}
 
+// joinDetached adds a participant with no live stream (an AI agent over MCP,
+// ADR-0103 M2). It returns the participant and its sync snapshot but no leave
+// closure: such a participant leaves explicitly, or the reaper evicts it once it
+// falls silent past the TTL.
+func (reg *collabRegistry) joinDetached(draftID, userID, name string) (*collabParticipant, []byte) {
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+	return reg.joinLocked(draftID, userID, name, detachedParticipant)
+}
+
+// detachedParticipant / streamingParticipant name the joinLocked flag for
+// readability at the call sites.
+const (
+	streamingParticipant = false
+	detachedParticipant  = true
+)
+
+// joinLocked creates the session if needed, adds a participant, builds its sync
+// snapshot, and notifies the others (the newcomer already has the roster in its
+// snapshot, so it is excluded from its own join frame). Caller holds the mutex.
+func (reg *collabRegistry) joinLocked(draftID, userID, name string, detached bool) (*collabParticipant, []byte) {
 	sess := reg.sessions[draftID]
 	if sess == nil {
 		sess = &collabSession{participants: map[string]*collabParticipant{}, locks: map[string]collabLock{}}
@@ -173,7 +221,10 @@ func (reg *collabRegistry) join(draftID, userID, name string) (*collabParticipan
 		// to a sequence-derived id so a session can still form rather than panicking.
 		id = "p" + itoa(int(sess.seq)+len(sess.participants)+1)
 	}
-	p := &collabParticipant{ID: id, UserID: userID, Name: name, ch: make(chan collabEvent, collabBufferSize)}
+	p := &collabParticipant{
+		ID: id, UserID: userID, Name: name, detached: detached,
+		lastSeen: reg.now(), ch: make(chan collabEvent, collabBufferSize),
+	}
 	sess.participants[id] = p
 
 	sync, _ := json.Marshal(struct {
@@ -182,11 +233,28 @@ func (reg *collabRegistry) join(draftID, userID, name string) (*collabParticipan
 		Locks        []collabLock     `json:"locks"`
 	}{Self: id, Participants: sess.rosterLocked(), Locks: sess.lockListLocked()})
 
-	// Notify the others of the arrival; the newcomer already has the full roster
-	// from its sync snapshot, so it is excluded from its own join frame.
 	reg.broadcastPresenceExceptLocked(sess, id)
+	return p, sync
+}
 
-	return p, sync, func() { reg.leave(draftID, id) }
+// removeParticipantLocked deletes a participant, closes its outbox, and releases
+// any locks it held, reporting whether a lock was released. It performs no
+// broadcast and no empty-session cleanup — the caller (leave, reap) does that,
+// since a reap sweep batches those per session. Caller holds the mutex.
+func (reg *collabRegistry) removeParticipantLocked(sess *collabSession, participantID string) (released bool) {
+	p, ok := sess.participants[participantID]
+	if !ok {
+		return false
+	}
+	delete(sess.participants, participantID)
+	close(p.ch)
+	for elem, l := range sess.locks {
+		if l.HolderID == participantID {
+			delete(sess.locks, elem)
+			released = true
+		}
+	}
+	return released
 }
 
 // leave removes a participant, releasing any locks it held, and notifies the
@@ -200,20 +268,10 @@ func (reg *collabRegistry) leave(draftID, participantID string) {
 	if sess == nil {
 		return
 	}
-	p, ok := sess.participants[participantID]
-	if !ok {
+	if _, ok := sess.participants[participantID]; !ok {
 		return
 	}
-	delete(sess.participants, participantID)
-	close(p.ch)
-
-	released := false
-	for elem, l := range sess.locks {
-		if l.HolderID == participantID {
-			delete(sess.locks, elem)
-			released = true
-		}
-	}
+	released := reg.removeParticipantLocked(sess, participantID)
 	if len(sess.participants) == 0 {
 		delete(reg.sessions, draftID)
 		return
@@ -222,6 +280,47 @@ func (reg *collabRegistry) leave(draftID, participantID string) {
 	if released {
 		reg.broadcastLocksLocked(sess)
 	}
+}
+
+// reap evicts every detached participant that has gone silent past the TTL,
+// releasing its locks so a crashed or forgotten MCP agent never holds an element
+// forever. Streaming (browser) participants are exempt — they are reaped on
+// disconnect and would otherwise be wrongly evicted while idle-watching. It
+// broadcasts an updated roster (and lock set, if any changed) to each affected
+// session, discards any that empties, and returns how many participants it
+// removed.
+func (reg *collabRegistry) reap() int {
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+	cutoff := reg.now().Add(-reg.ttl)
+	reaped := 0
+	for draftID, sess := range reg.sessions {
+		var stale []string
+		for id, p := range sess.participants {
+			if p.detached && p.lastSeen.Before(cutoff) {
+				stale = append(stale, id)
+			}
+		}
+		if len(stale) == 0 {
+			continue
+		}
+		released := false
+		for _, id := range stale {
+			if reg.removeParticipantLocked(sess, id) {
+				released = true
+			}
+			reaped++
+		}
+		if len(sess.participants) == 0 {
+			delete(reg.sessions, draftID)
+			continue
+		}
+		reg.broadcastPresenceLocked(sess)
+		if released {
+			reg.broadcastLocksLocked(sess)
+		}
+	}
+	return reaped
 }
 
 // presence records a participant's new selection and broadcasts the roster. It
@@ -237,6 +336,7 @@ func (reg *collabRegistry) presence(draftID, participantID, selection string) bo
 	if !ok {
 		return false
 	}
+	p.lastSeen = reg.now()
 	p.selection = selection
 	reg.broadcastPresenceLocked(sess)
 	return true
@@ -257,6 +357,7 @@ func (reg *collabRegistry) acquireLock(draftID, participantID, elementID string)
 	if !exists {
 		return false, false
 	}
+	p.lastSeen = reg.now()
 	if l, held := sess.locks[elementID]; held && l.HolderID != participantID {
 		return false, true
 	}
@@ -275,9 +376,11 @@ func (reg *collabRegistry) releaseLock(draftID, participantID, elementID string)
 	if sess == nil {
 		return false
 	}
-	if _, exists := sess.participants[participantID]; !exists {
+	p, exists := sess.participants[participantID]
+	if !exists {
 		return false
 	}
+	p.lastSeen = reg.now()
 	if l, held := sess.locks[elementID]; held && l.HolderID == participantID {
 		delete(sess.locks, elementID)
 		reg.broadcastLocksLocked(sess)
@@ -300,6 +403,7 @@ func (reg *collabRegistry) change(draftID, participantID, elementID, xml string)
 	if !ok {
 		return false
 	}
+	p.lastSeen = reg.now()
 	data, _ := json.Marshal(struct {
 		By        string `json:"by"`
 		ByName    string `json:"byName"`
@@ -337,6 +441,7 @@ func (reg *collabRegistry) poll(draftID, participantID string) ([]byte, bool) {
 	if !ok {
 		return nil, false
 	}
+	p.lastSeen = reg.now() // the poll is a detached agent's liveness signal
 	events := []pollEvent{}
 drain:
 	for {

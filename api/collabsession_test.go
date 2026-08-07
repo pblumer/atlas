@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 // drainType reads frames off a participant's channel until it finds one of the
@@ -294,6 +295,84 @@ func TestCollabPoll(t *testing.T) {
 	}
 	if _, ok := reg.poll("nope", p1.ID); ok {
 		t.Error("poll on an unknown session reported ok")
+	}
+}
+
+// TestCollabReaper covers the TTL reaper (ADR-0103): a detached (MCP agent)
+// participant that falls silent past the TTL is evicted and its locks released,
+// while a streaming (browser) participant is exempt, and a recent poll keeps a
+// detached participant alive.
+func TestCollabReaper(t *testing.T) {
+	now := time.Unix(1000, 0)
+	reg := newCollabRegistry()
+	reg.now = func() time.Time { return now }
+
+	browser, _, _ := reg.join("d", "u1", "Anja")      // streaming: exempt
+	agent, _ := reg.joinDetached("d", "u2", "Claude") // detached: subject to TTL
+	reg.acquireLock("d", agent.ID, "Task_1")
+	drainType(t, browser.ch, collabEventLock) // clear frames seen so far
+
+	// Halfway to the TTL: nothing is stale yet.
+	now = now.Add(reg.ttl / 2)
+	if n := reg.reap(); n != 0 {
+		t.Fatalf("early reap removed %d, want 0", n)
+	}
+
+	// The agent polls, refreshing its lastSeen; it then survives a sweep that is
+	// past the *original* join time but within the TTL of the poll.
+	reg.poll("d", agent.ID)
+	now = now.Add(reg.ttl - time.Second)
+	if n := reg.reap(); n != 0 {
+		t.Fatalf("reap after a fresh poll removed %d, want 0", n)
+	}
+
+	// Now let the agent go silent well past the TTL.
+	now = now.Add(2 * reg.ttl)
+	if n := reg.reap(); n != 1 {
+		t.Fatalf("reap removed %d, want 1", n)
+	}
+
+	reg.mu.Lock()
+	sess := reg.sessions["d"]
+	_, agentThere := sess.participants[agent.ID]
+	_, browserThere := sess.participants[browser.ID]
+	lockCount := len(sess.locks)
+	reg.mu.Unlock()
+	if agentThere {
+		t.Error("idle detached agent was not reaped")
+	}
+	if !browserThere {
+		t.Error("streaming participant was wrongly reaped")
+	}
+	if lockCount != 0 {
+		t.Errorf("reaped agent's lock was not released: %d held", lockCount)
+	}
+	// The surviving browser was told (presence + lock frames) that the agent left.
+	if _, ok := drainType(t, browser.ch, collabEventLock); !ok {
+		t.Error("no lock frame reached the survivor after the reap")
+	}
+}
+
+// TestCollabReapDiscardsEmptySession confirms reaping the last participant of a
+// session drops the session, and that an empty registry reaps nothing.
+func TestCollabReapDiscardsEmptySession(t *testing.T) {
+	now := time.Unix(1000, 0)
+	reg := newCollabRegistry()
+	reg.now = func() time.Time { return now }
+
+	if n := reg.reap(); n != 0 {
+		t.Fatalf("reap of an empty registry removed %d, want 0", n)
+	}
+	reg.joinDetached("solo", "u1", "Claude")
+	now = now.Add(2 * reg.ttl)
+	if n := reg.reap(); n != 1 {
+		t.Fatalf("reap removed %d, want 1", n)
+	}
+	reg.mu.Lock()
+	_, exists := reg.sessions["solo"]
+	reg.mu.Unlock()
+	if exists {
+		t.Error("session was not discarded after reaping its last participant")
 	}
 }
 
