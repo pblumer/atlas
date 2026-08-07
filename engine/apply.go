@@ -141,11 +141,24 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 					return err
 				}
 			}
+			// A cancel end event completing marks its enclosing transaction scope cancelling, so
+			// when that scope drains the transaction routes out its cancel boundary rather than
+			// completing normally (ADR-0105). Derived from the committed Completed event, so replay
+			// rebuilds it identically (I4/I6).
+			if v.element.BpmnElementType == uint8(compiler.TypeCancelEndEvent) && h.Intent == model.IntentCompleted {
+				if err := tx.SetCanceling(v.element.FlowScopeKey); err != nil {
+					return err
+				}
+			}
 			// A subprocess scope tearing down (normal completion or termination) drops any
 			// compensable records still held under it — its element key is its children's
-			// scope key — so they never leak past the scope (ADR-0103).
+			// scope key — so they never leak past the scope (ADR-0103). A transaction is a
+			// TypeSubProcess, so its cancelling marker is dropped on the same teardown (ADR-0105).
 			if v.element.BpmnElementType == uint8(compiler.TypeSubProcess) {
 				if err := tx.DeleteCompensablesOfScope(h.Key); err != nil {
+					return err
+				}
+				if err := tx.DeleteCanceling(h.Key); err != nil {
 					return err
 				}
 			}

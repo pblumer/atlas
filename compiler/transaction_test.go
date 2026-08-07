@@ -187,6 +187,39 @@ func TestValidateTransactionNoCancelBoundaryWarns(t *testing.T) {
 	}
 }
 
+// TestValidateTransactionCancelBoundaryNoCancelEndOK: a transaction carrying a cancel
+// boundary but no cancel end event is structurally valid and raises no warning — the boundary
+// simply never fires, which is not a modeling error the compiler rejects (ADR-0105).
+func TestValidateTransactionCancelBoundaryNoCancelEndOK(t *testing.T) {
+	const bpmn = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="p" isExecutable="true">
+    <startEvent id="start"/>
+    <transaction id="book">
+      <startEvent id="ts"/>
+      <serviceTask id="reserve"><extensionElements><zeebe:taskDefinition type="reserve"/></extensionElements></serviceTask>
+      <endEvent id="ok"/>
+      <sequenceFlow id="tf1" sourceRef="ts" targetRef="reserve"/>
+      <sequenceFlow id="tf2" sourceRef="reserve" targetRef="ok"/>
+    </transaction>
+    <boundaryEvent id="bookCancelled" attachedToRef="book"><cancelEventDefinition/></boundaryEvent>
+    <serviceTask id="notify"><extensionElements><zeebe:taskDefinition type="notify"/></extensionElements></serviceTask>
+    <endEvent id="done"/>
+    <endEvent id="handled"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="book"/>
+    <sequenceFlow id="f2" sourceRef="book" targetRef="done"/>
+    <sequenceFlow id="f3" sourceRef="bookCancelled" targetRef="notify"/>
+    <sequenceFlow id="f4" sourceRef="notify" targetRef="handled"/>
+  </process></definitions>`
+	cp, err := Parse(1, 1, strings.NewReader(bpmn))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if ps := Validate(cp); len(ps) != 0 {
+		t.Errorf("Validate = %+v, want no problems (a cancel boundary without a cancel end is legal)", ps)
+	}
+}
+
 // TestParseTransactionModelerRoundTrip parses a transaction model in the shape stock
 // bpmn-js exports — namespaced (bpmn:) elements, a <transaction> with a cancel end event
 // and a cancel boundary, incoming/outgoing children — to confirm a hand-drawn model deploys

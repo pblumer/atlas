@@ -398,6 +398,30 @@ func (t *Tx) DeleteCompensablesOfScope(scopeKey uint64) error {
 	return nil
 }
 
+// SetCanceling marks the transaction scope txKey as cancelling: a cancel end event fired in
+// it, so when its scope drains the transaction routes out its cancel boundary rather than
+// completing normally (ADR-0105). It is derived in applyToState from the cancel end event's
+// committed Completed event, so it rebuilds identically on replay (I4/I6). The value is a
+// single non-empty byte; only presence is meaningful.
+func (t *Tx) SetCanceling(txKey uint64) error {
+	return t.b.Set(keyCanceling(txKey), []byte{1}, nil)
+}
+
+// IsCanceling reports whether the transaction scope txKey was marked cancelling by a cancel
+// end event (ADR-0105). It reads through the in-flight batch, so it observes a mark written
+// earlier in the same batch.
+func (t *Tx) IsCanceling(txKey uint64) (bool, error) {
+	_, ok, err := getCopy(t.b, keyCanceling(txKey))
+	return ok, err
+}
+
+// DeleteCanceling drops the cancelling marker for txKey when the transaction tears down
+// (ADR-0105). Idempotent — a transaction that was never cancelled, or a plain subprocess that
+// never carried a marker, is a no-op.
+func (t *Tx) DeleteCanceling(txKey uint64) error {
+	return t.b.Delete(keyCanceling(txKey), nil)
+}
+
 // CompensablesOfScopeDesc calls fn for every completed compensable activity recorded
 // under scopeKey, newest first (reverse completion order) — the order a compensation
 // throw runs handlers in (ADR-0103). It reads through the in-flight batch, so it

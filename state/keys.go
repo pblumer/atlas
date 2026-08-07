@@ -41,6 +41,7 @@ const (
 	cfSignalSubscription     columnFamily = 0x1C // sigSub:<name>:<elKey> → SignalSubscriptionValue (ADR-0088)
 	cfVariableAudit          columnFamily = 0x1D // varAudit:<piKey>:<ts>:<pos> → VariableAuditValue (ADR-0098)
 	cfCompensable            columnFamily = 0x1E // comp:<scopeKey>:<seq> → CompensableValue (ADR-0103)
+	cfCanceling              columnFamily = 0x1F // canceling:<txScopeKey> → 1: a transaction being cancelled (ADR-0105)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -420,6 +421,12 @@ func keyCompensable(scopeKey uint64, seq uint64) []byte {
 // scope, in completion order.
 func compensableScopePrefix(scopeKey uint64) []byte {
 	return appendBE64([]byte{byte(cfCompensable)}, scopeKey)
+}
+
+// keyCanceling keys the cancelling marker for a transaction scope (ADR-0105). A point key
+// (set/get/delete only), so the scope key follows the column-family byte directly.
+func keyCanceling(scopeKey uint64) []byte {
+	return appendBE64([]byte{byte(cfCanceling)}, scopeKey)
 }
 
 // positionFromVariableAuditKey extracts the trailing log position from a
