@@ -189,6 +189,15 @@ ol.steps li { margin: 6px 0; }
   font: inherit; color: var(--text); background: var(--surface);
 }
 .field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+
+/* Placeholders are suggestions, not values. Italic (real input never is) plus a lighter
+   tone so an example like `count(totals) > 2` reads at a glance as a hint, not an entry. */
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: 0.65;
+  font-style: italic;
+}
 .field.inline { display: flex; align-items: center; gap: 8px; color: var(--text); }
 .field.inline input { width: auto; margin: 0; }
 /* A labelled checkbox property (e.g. Executable) in the properties panel. */
