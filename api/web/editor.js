@@ -530,6 +530,8 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   const rerender = wireProperties(root, modeler, api, projectId, toast);
   const refreshBadges = makeImplementBadges(root, modeler);
   refreshBadges(); // reflect the initial tab for the diagram just imported
+  const refreshPoolCaptions = makePoolProcessCaptions(modeler);
+  refreshPoolCaptions(); // name the process each pool runs, on the diagram just imported
   wireTabs(root, () => { rerender(); refreshBadges(); });
   wireActions(root, modeler, api, toast, projectId);
   wireEditorVars(root, modeler);
@@ -1029,6 +1031,60 @@ function makeImplementBadges(root, modeler) {
 
   // Keep badges in step with edits (language switched, task added/removed) while the
   // Implement tab is showing; refresh() short-circuits when another tab is active.
+  modeler.on("element.changed", refresh);
+  modeler.on("elements.changed", refresh);
+  modeler.on("import.done", refresh);
+  return refresh;
+}
+
+// drawPoolProcessCaptions writes, on each collaboration pool, a small caption naming the
+// process that pool executes. A pool is a *participant*: the canvas draws its name (e.g.
+// "Teilnehmer 1") but not the process it runs, so which process a pool deploys as — its
+// name and id, the deploy identity instances group by — is invisible on the diagram and
+// only readable by selecting the pool. This surfaces it: a subtle caption pinned to the
+// pool's top-left, just past the vertical name band, tracking the pool like any overlay.
+// Only pools that carry a process (a processRef) get one; a black-box pool has none to name.
+function drawPoolProcessCaptions(modeler) {
+  const ids = [];
+  let overlays, registry;
+  try { overlays = modeler.get("overlays"); registry = modeler.get("elementRegistry"); }
+  catch { return ids; } // modeler torn down mid-flight
+  registry.forEach((el) => {
+    const bo = el.businessObject;
+    if (!bo || !/:Participant$/.test(bo.$type || "")) return;
+    const proc = bo.processRef;
+    if (!proc) return; // black-box pool — no process to name
+    const name = (proc.name || "").trim();
+    const pid = (proc.id || "").trim();
+    if (!name && !pid) return;
+    const main = name || pid; // name leads; a nameless process shows its id
+    const idLine = name && pid ? `<span class="ppc-id">${esc(pid)}</span>` : "";
+    const title = name ? `Process: ${name}${pid ? ` (${pid})` : ""}` : `Process: ${pid}`;
+    try {
+      ids.push(overlays.add(el.id, "atlas-pool-process", {
+        position: { top: 4, left: 34 }, // clear the ~30px participant name band
+        html: `<span class="pool-process-cap" title="${esc(title)}"><span class="ppc-glyph">⚙</span>` +
+              `<span class="ppc-text"><span class="ppc-name">${esc(main)}</span>${idLine}</span></span>`,
+      }));
+    } catch { /* shape without graphics (e.g. mid-import) — skip */ }
+  });
+  return ids;
+}
+
+// makePoolProcessCaptions keeps the pool→process captions in step with edits (process
+// renamed, a process added to a black-box pool, a pool deleted). Unlike the implementation
+// badges these are not tab-gated: which process a pool runs is structural — relevant when
+// reading the diagram at any level of detail — not an implementation nicety. Returns a
+// refresh function; the initial call reflects the just-imported diagram.
+function makePoolProcessCaptions(modeler) {
+  let ids = []; // overlay ids currently on the canvas, so we remove only ours
+  const clear = () => {
+    let overlays;
+    try { overlays = modeler.get("overlays"); } catch { ids = []; return; }
+    for (const id of ids) { try { overlays.remove(id); } catch { /* gone */ } }
+    ids = [];
+  };
+  const refresh = () => { clear(); ids = drawPoolProcessCaptions(modeler); };
   modeler.on("element.changed", refresh);
   modeler.on("elements.changed", refresh);
   modeler.on("import.done", refresh);

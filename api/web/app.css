@@ -1108,6 +1108,27 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 }
 .impl-badge svg { display: block; width: 16px; height: 16px; border-radius: 3px; }
 
+/* Caption naming the process a collaboration pool runs (drawPoolProcessCaptions). A pool
+   is a participant; the canvas shows its name but not the process it executes, so this
+   pins that process's name (and id) at the pool's top-left, past the vertical name band.
+   Non-interactive so clicks fall through to the pool beneath it. */
+.pool-process-cap {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 260px;
+  padding: 2px 8px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow);
+  font-size: 11px; line-height: 1.25; pointer-events: none; cursor: default;
+}
+.pool-process-cap .ppc-glyph { flex: 0 0 auto; font-size: 12px; opacity: 0.7; }
+.pool-process-cap .ppc-text { display: flex; flex-direction: column; min-width: 0; }
+.pool-process-cap .ppc-name {
+  color: var(--text); font-weight: 600; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.pool-process-cap .ppc-id {
+  font: 10px ui-monospace, monospace; color: var(--muted); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+
 /* ---------- Live collaboration sessions (ADR-0103) ---------- */
 /* A floating roster of co-editors, centered over the canvas, plus a lock badge on
    each element another participant is editing and a brief pulse on a remote edit. */
