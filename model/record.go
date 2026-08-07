@@ -243,6 +243,14 @@ const (
 	// trail without re-running the command (invariant I6). Appended at the end so every
 	// prior intent keeps its numeric value on the log.
 	IntentVariableAudited
+
+	// IntentJobErrorThrown is a command-only intent (never persisted as an event): a
+	// worker reports that its job threw a BPMN error code (ADR-0089). Its handler cancels
+	// the job and propagates the error from the job's element to the nearest matching error
+	// handler — so, unlike IntentJobFailed, it is control flow, not a retry/incident.
+	// Because commands are not replayed (invariant I6), its numeric value never reaches the
+	// log. Appended at the end so every prior intent keeps its numeric value.
+	IntentJobErrorThrown
 )
 
 func (i Intent) String() string {
@@ -311,6 +319,8 @@ func (i Intent) String() string {
 		return "VariableModify"
 	case IntentVariableAudited:
 		return "VariableAudited"
+	case IntentJobErrorThrown:
+		return "JobErrorThrown"
 	default:
 		return "Intent(?)"
 	}

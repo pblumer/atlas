@@ -142,7 +142,7 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 	if len(defs.Processes) == 0 {
 		return nil, fmt.Errorf("compiler: no <process> element in definitions")
 	}
-	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs), buildSignalResolver(defs))
+	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs))
 }
 
 // Deployable is one executable process compiled from a model, plus the display
@@ -170,6 +170,7 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 	}
 	resolve := buildMessageResolver(defs)
 	resolveSig := buildSignalResolver(defs)
+	resolveErr := buildErrorResolver(defs)
 	poolName := participantNames(defs)
 
 	var out []Deployable
@@ -177,7 +178,7 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 		if len(proc.StartEvents) == 0 {
 			continue // black-box pool: nothing to run
 		}
-		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig)
+		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig, resolveErr)
 		if err != nil {
 			return nil, err
 		}
@@ -200,7 +201,7 @@ func ParseNamed(key uint64, version int32, r io.Reader, processId string) (*Comp
 	}
 	for _, proc := range defs.Processes {
 		if proc.Id == processId {
-			return compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs))
+			return compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs))
 		}
 	}
 	return nil, fmt.Errorf("compiler: no <process> with id %q in model", processId)
@@ -281,10 +282,36 @@ func buildSignalResolver(defs xmlDefinitions) func(ownerId, signalRef string) (s
 	}
 }
 
+// buildErrorResolver indexes a model's top-level <bpmn:error> declarations by id and
+// returns a closure resolving an errorRef to the error's code (ADR-0089). Errors match by
+// code, not id or name, so the resolver returns the code. A code-less error — or an
+// errorEventDefinition with no errorRef at all — resolves to "": a catch-all on a
+// boundary/handler, and an uncoded throw on an error end event. Unlike a message or
+// signal, an empty code is therefore legal; only a non-empty errorRef that names no
+// declared error is a deploy error.
+func buildErrorResolver(defs xmlDefinitions) func(ownerId, errorRef string) (string, error) {
+	errs := make(map[string]xmlError, len(defs.Errors))
+	for _, e := range defs.Errors {
+		if e.Id != "" {
+			errs[e.Id] = e
+		}
+	}
+	return func(ownerId, errorRef string) (string, error) {
+		if errorRef == "" {
+			return "", nil // a code-less catch-all, or an uncoded error throw
+		}
+		e, ok := errs[errorRef]
+		if !ok {
+			return "", fmt.Errorf("compiler: error event %q references unknown error %q", ownerId, errorRef)
+		}
+		return e.ErrorCode, nil
+	}
+}
+
 // compileProcess linearizes one <process> into an immutable CompiledProcess,
-// resolving message and signal references through resolveMessage/resolveSignal (shared
-// across a collaboration's processes).
-func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error)) (*CompiledProcess, error) {
+// resolving message, signal, and error references through resolveMessage/resolveSignal/
+// resolveError (shared across a collaboration's processes).
+func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error), resolveError func(ownerId, errorRef string) (string, error)) (*CompiledProcess, error) {
 	b := NewBuilder(key, proc.Id, version)
 	// isExecutable defaults to true when the attribute is absent (BPMN convention;
 	// Atlas has always run every deployed process), so an existing model without it
@@ -321,7 +348,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	// Register every flow node — the process root and, recursively, each embedded
 	// subprocess scope — then require a root-scope start event before wiring flows.
 	// Data objects and I/O mappings below stay process-scoped (ADR-0074).
-	if err := registerScope(b, ids, register, resolveMessage, resolveSignal, &proc.xmlFlowContent); err != nil {
+	if err := registerScope(b, ids, register, resolveMessage, resolveSignal, resolveError, &proc.xmlFlowContent); err != nil {
 		return nil, err
 	}
 
@@ -680,6 +707,7 @@ type xmlDefinitions struct {
 	Processes     []xmlProcess      `xml:"process"`
 	Messages      []xmlMessage      `xml:"message"`
 	Signals       []xmlSignal       `xml:"signal"`
+	Errors        []xmlError        `xml:"error"`
 	Collaboration *xmlCollaboration `xml:"collaboration"`
 }
 
@@ -721,6 +749,20 @@ type xmlSignal struct {
 
 type xmlSignalEventDefinition struct {
 	SignalRef string `xml:"signalRef,attr"`
+}
+
+// A top-level error declaration (ADR-0089). An error is caught by its code — the
+// nearest enclosing handler whose error code matches, or a code-less catch-all — so the
+// errorCode, not the id or name, is what an error boundary/handler compares against. The
+// id is what an errorRef points at; the name is human-facing only.
+type xmlError struct {
+	Id        string `xml:"id,attr"`
+	ErrorCode string `xml:"errorCode,attr"`
+	Name      string `xml:"name,attr"`
+}
+
+type xmlErrorEventDefinition struct {
+	ErrorRef string `xml:"errorRef,attr"`
 }
 
 type xmlProcess struct {
@@ -915,6 +957,10 @@ type xmlStartEvent struct {
 	// Signal, when present, makes this a signal start event: a broadcast signal of the
 	// referenced name instantiates the process (ADR-0088). A pointer so an absent one is nil.
 	Signal *xmlSignalEventDefinition `xml:"signalEventDefinition"`
+	// Error, when present on an event-subprocess start event, makes it an error-triggered
+	// event subprocess: it catches an error propagating in its scope whose code matches
+	// (ADR-0089). A pointer so an absent one is nil.
+	Error *xmlErrorEventDefinition `xml:"errorEventDefinition"`
 	// IsInterrupting is the event-subprocess start event's cancel flag (ADR-0082):
 	// absent or "true" interrupts the parent scope when the trigger fires, "false" runs
 	// the handler alongside it. Empty for an ordinary start event.
@@ -956,6 +1002,10 @@ type xmlEndEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
 	Signal  *xmlSignalEventDefinition  `xml:"signalEventDefinition"`
+	// Error, when present, makes this an error end event: it throws the referenced error,
+	// ending its enclosing scope abnormally and propagating up to the nearest matching
+	// handler (ADR-0089). A pointer so an absent one is nil.
+	Error *xmlErrorEventDefinition `xml:"errorEventDefinition"`
 	// Terminate is present when the end event carries a <terminateEventDefinition>.
 	// Atlas can't execute a terminate end yet, so it is rejected at compile time rather
 	// than silently dropped to a plain end (which would abandon the terminate semantics).
@@ -978,6 +1028,10 @@ type xmlBoundaryEvent struct {
 	Timer          *xmlTimerEventDefinition   `xml:"timerEventDefinition"`
 	Message        *xmlMessageEventDefinition `xml:"messageEventDefinition"`
 	Signal         *xmlSignalEventDefinition  `xml:"signalEventDefinition"`
+	// Error, when present, makes this an error boundary event: it catches an error thrown
+	// by the host activity (or propagated up to it) whose code matches, and is always
+	// interrupting (ADR-0089). A pointer so an absent one is nil.
+	Error *xmlErrorEventDefinition `xml:"errorEventDefinition"`
 }
 
 type xmlTimerEventDefinition struct {

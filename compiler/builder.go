@@ -181,6 +181,7 @@ type Builder struct {
 	signalCatches     []SignalDetail
 	signalThrows      []SignalDetail // shared by signal throw and signal end events
 	signalStarts      []SignalDetail
+	errorEnds         []ErrorEndDetail // error end events (ADR-0089)
 	timerStarts       []TimerStartDetail
 	dataObjects       []CompiledDataObject
 	dataOutAssocs     []pendingDataOut // data-output associations, grouped by node in Build
@@ -947,6 +948,30 @@ func (b *Builder) AddSignalStartEvent(signalName string) int32 {
 	return b.addNode(TypeSignalStartEvent, detail)
 }
 
+// AddErrorEndEvent adds an end event that throws the given error code — ending its scope
+// abnormally and propagating up to the nearest matching handler rather than completing
+// normally (ADR-0089). A code-less error end throws "". Returns its element id.
+func (b *Builder) AddErrorEndEvent(errorCode string) int32 {
+	detail := int32(len(b.errorEnds))
+	b.errorEnds = append(b.errorEnds, ErrorEndDetail{ErrorCode: errorCode})
+	return b.addNode(TypeErrorEndEvent, detail)
+}
+
+// AddBoundaryErrorEvent adds an error boundary event attached to host that catches an
+// error propagating up to the host whose code matches errorCode ("" is a catch-all). An
+// error boundary is always interrupting (ADR-0089): it opens no subscription and waits
+// only to be found by propagation. Returns its element id.
+func (b *Builder) AddBoundaryErrorEvent(host int32, errorCode string) int32 {
+	detail := int32(len(b.boundaryEventDets))
+	b.boundaryEventDets = append(b.boundaryEventDets, BoundaryEventDetail{
+		HostNode:     host,
+		Interrupting: true, // an error boundary is always interrupting
+		Kind:         BoundaryError,
+		ErrorCode:    errorCode,
+	})
+	return b.addNode(TypeBoundaryEvent, detail)
+}
+
 // Connect adds a sequence flow from source to target and returns its flow id, so
 // the caller can attach a condition or mark it the default.
 func (b *Builder) Connect(source, target int32) int32 {
@@ -1160,6 +1185,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		signalCatches:     b.signalCatches,
 		signalThrows:      b.signalThrows,
 		signalStarts:      b.signalStarts,
+		errorEnds:         b.errorEnds,
 		timerStarts:       b.timerStarts,
 		dataObjects:       b.dataObjects,
 		dataOutAssocs:     dataOut,

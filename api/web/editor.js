@@ -2202,6 +2202,120 @@ function wireSignalsManager(body, modeler, rerenderRoot) {
   });
 }
 
+// --- Errors (scoped failures, ADR-0089) ---
+//
+// An error is a top-level <bpmn:error> declaration shared by reference, like a message or
+// signal — but matched by its errorCode (not a name or correlation key) and delivered to the
+// NEAREST enclosing handler (an error boundary or error event subprocess), not broadcast. An
+// error is thrown by an error end event (or a worker failing a job to a code); an error catch
+// is always interrupting. These helpers mirror the signal ones, authoring the error code — a
+// code-less error is a catch-all when caught, an uncoded throw when thrown.
+
+// errorDefOf returns an event's bpmn:ErrorEventDefinition, or null.
+function errorDefOf(bo) {
+  return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:ErrorEventDefinition") || null;
+}
+
+// listErrors returns every <bpmn:error> declared on the model's definitions.
+function listErrors(modeler) {
+  const defs = definitionsOf(modeler);
+  const out = [];
+  if (defs && defs.rootElements) {
+    for (const el of defs.rootElements) {
+      if (el.$type === "bpmn:Error") out.push(el);
+    }
+  }
+  return out;
+}
+
+// createError adds a fresh <bpmn:error> with the given code to the model and returns it.
+function createError(modeler, code) {
+  const moddle = modeler.get("moddle");
+  const err = moddle.create("bpmn:Error");
+  err.id = "Error_" + Math.random().toString(36).slice(2, 8);
+  err.errorCode = code || "";
+  const defs = definitionsOf(modeler);
+  if (defs) {
+    err.$parent = defs;
+    defs.rootElements = [...(defs.rootElements || []), err];
+  }
+  return err;
+}
+
+// linkError points an error event definition at an error (undo/redo tracked).
+function linkError(modeler, element, eed, err) {
+  try { modeler.get("modeling").updateModdleProperties(element, eed, { errorRef: err || undefined }); } catch { /* stale */ }
+}
+
+// deleteError removes an error and clears any event still referencing it, so a deleted error
+// never leaves a dangling errorRef (which would fail to compile).
+function deleteError(modeler, errId) {
+  const defs = definitionsOf(modeler);
+  if (defs && defs.rootElements) defs.rootElements = defs.rootElements.filter((e) => e.id !== errId);
+  const modeling = modeler.get("modeling");
+  modeler.get("elementRegistry").getAll().forEach((el) => {
+    const eed = errorDefOf(el.businessObject);
+    if (eed && eed.errorRef && eed.errorRef.id === errId) {
+      try { modeling.updateModdleProperties(el, eed, { errorRef: undefined }); } catch { /* stale */ }
+    }
+  });
+}
+
+// errorFieldsHTML renders the error picker for an error end event or an error boundary /
+// event subprocess: a dropdown of the model's shared errors (plus "new") and — once one is
+// chosen — its code, shared so a thrower and its catchers stay in sync. Matching is by code;
+// a code-less error is a catch-all. eed is the bpmn:ErrorEventDefinition.
+function errorFieldsHTML(modeler, eed, hint) {
+  const current = eed.errorRef;
+  const options = listErrors(modeler).map((e) =>
+    `<option value="${esc(e.id)}"${current && current.id === e.id ? " selected" : ""}>${esc(e.errorCode || e.id)}</option>`
+  ).join("");
+  const fields = current ? `
+    <label class="field"><span>Error code</span>
+      <input type="text" id="f-errcode" value="${esc(current.errorCode || "")}" placeholder="PAYMENT_FAILED"/></label>
+    <p class="muted" style="font-size:12px">Shared with every event that uses this error — a thrown code is caught by the nearest enclosing error boundary or error event subprocess with the same code (an empty code is a catch-all).</p>` : "";
+  return `<h3>Error</h3>
+    <label class="field"><span>Error</span>
+      <select id="f-errref">
+        <option value="">— none —</option>
+        ${options}
+        <option value="__new__">＋ New error…</option>
+      </select></label>
+    ${fields}
+    <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
+// errorsManagerHTML lists the model's errors for central management (add, edit code, delete).
+function errorsManagerHTML(modeler) {
+  const errs = listErrors(modeler);
+  const rows = errs.length
+    ? errs.map((e) => `
+        <div class="err-row" data-id="${esc(e.id)}">
+          <input class="err-code" value="${esc(e.errorCode || "")}" placeholder="error code"/>
+          <button type="button" class="btn ghost danger err-del" title="Delete error">✕</button>
+        </div>`).join("")
+    : `<p class="muted" style="font-size:12px;margin:0 0 8px">No errors yet — add one, then reference it from an error end event or error boundary.</p>`;
+  return `<h3>Errors</h3>
+    <div class="err-list">${rows}</div>
+    <button type="button" class="btn neutral" id="err-add" style="margin-top:8px">＋ Add error</button>
+    <p class="muted" style="font-size:12px">An error is a scoped failure caught by code: an <b>error end event</b> (or a worker) throws it, and the nearest enclosing <b>error boundary</b> or <b>error event subprocess</b> with the same code catches it — always interrupting.</p>`;
+}
+
+// wireErrorsManager binds the Errors management section's inputs and buttons.
+// rerenderRoot re-renders the root panel after add/delete so the list updates.
+function wireErrorsManager(body, modeler, rerenderRoot) {
+  const add = body.querySelector("#err-add");
+  if (add) add.addEventListener("click", () => { createError(modeler, "ERROR_CODE"); rerenderRoot(); });
+  body.querySelectorAll(".err-row").forEach((row) => {
+    const id = row.dataset.id;
+    const err = () => listErrors(modeler).find((e) => e.id === id);
+    const codeIn = row.querySelector(".err-code");
+    if (codeIn) codeIn.addEventListener("change", () => { const e = err(); if (e) e.errorCode = codeIn.value.trim(); });
+    const del = row.querySelector(".err-del");
+    if (del) del.addEventListener("click", () => { deleteError(modeler, id); rerenderRoot(); });
+  });
+}
+
 // rootProcess returns the diagram's process business object, or null if the root
 // isn't a plain process (e.g. a collaboration with pools).
 function rootProcess(modeler) {
@@ -2639,7 +2753,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
           <p class="muted" style="font-size:12px">An <b>executable</b> process can be started and offered in the start lists; leave it off for a descriptive-only diagram. <b>Version tag</b> is an optional label for this revision.</p>
           ${startVarsHTML}
           ${messagesManagerHTML(modeler)}
-          ${signalsManagerHTML(modeler)}`;
+          ${signalsManagerHTML(modeler)}
+          ${errorsManagerHTML(modeler)}`;
         const rootEl = modeler.get("canvas").getRootElement();
         body.querySelector("#f-pname").addEventListener("change", (e) => {
           try { modeling.updateProperties(rootEl, { name: e.target.value }); } catch { /* ignore */ }
@@ -2658,6 +2773,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         wireStartVars(body, modeler);
         wireMessagesManager(body, modeler, () => show(null));
         wireSignalsManager(body, modeler, () => show(null));
+        wireErrorsManager(body, modeler, () => show(null));
         return;
       }
       // A collaboration root has no single process to rename; each pool
@@ -2668,9 +2784,11 @@ function wireProperties(root, modeler, api, projectId, toast) {
           <h3>Collaboration</h3>
           <p class="muted" style="font-size:12px">This diagram has several <b>pools</b>. A pool is a <b>participant</b> that <i>executes a process</i> — the process holds the flow, the pool just names who runs it, and each deploys as its own process. Select a pool to name it and configure the process it runs, or an element inside a pool to configure it. Pools talk to each other through <b>message events</b>: a throw event in one pool and a catch event in another that reference the <b>same message</b> below.</p>
           ${messagesManagerHTML(modeler)}
-          ${signalsManagerHTML(modeler)}`;
+          ${signalsManagerHTML(modeler)}
+          ${errorsManagerHTML(modeler)}`;
         wireMessagesManager(body, modeler, () => show(null));
         wireSignalsManager(body, modeler, () => show(null));
+        wireErrorsManager(body, modeler, () => show(null));
         return;
       }
       icon.textContent = "–"; typename.textContent = "No selection"; nameEl.textContent = "—";
@@ -2977,28 +3095,36 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
-        const interrupting = bo.cancelActivity !== false;
-        html += `<h3>Behaviour</h3>
-          <label class="field"><span>On trigger</span>
-            <select id="f-cancelactivity">
-              <option value="true" ${interrupting ? "selected" : ""}>Interrupting — cancel the activity</option>
-              <option value="false" ${interrupting ? "" : "selected"}>Non-interrupting — run alongside</option>
-            </select></label>
-          <p class="muted" style="font-size:12px">Interrupting cancels the attached activity (and its job) and routes the token out this event; non-interrupting spawns a parallel token and lets the activity continue.</p>`;
-        if (timer) {
-          const kinds = interrupting ? ["duration", "date"] : ["duration", "date", "cycle"];
-          const cycleNote = interrupting
-            ? "An interrupting boundary fires once, so it has no cycle."
-            : "A non-interrupting boundary may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R/PT1H</b>) or cron (<b>0 * * * *</b>) — firing a fresh token each time.";
-          html += timerFieldsHTML(timer, kinds, `The event fires relative to the activity (ADR-0054).
-            <b>Duration</b> fires that long after it starts (<b>PT30S</b>, <b>PT5M</b>); <b>Date &amp; time</b> at a fixed instant.
-            ${cycleNote} A FEEL expression is allowed in any type.`);
-        } else if (msg) {
-          html += messageFieldsHTML(modeler, msg, "The event fires when this message is published with a matching correlation key.");
-        } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "The event fires when a signal with this name is broadcast (in this or any other instance) while the activity runs.");
+        const err = errorDefOf(bo);
+        if (err) {
+          // An error boundary is always interrupting — no cancelActivity toggle (ADR-0089).
+          html += `<h3>Behaviour</h3>
+            <p class="muted" style="font-size:12px">An <b>error boundary</b> is always <b>interrupting</b>: a matching thrown error cancels the attached activity (and its job) and routes the token out this event.</p>`;
+          html += errorFieldsHTML(modeler, err, "The event fires when the attached activity throws a matching error — an error end event inside it, a worker failing its job to the code, or an error propagating up from a called process.");
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, or <b>Signal</b> boundary event, then configure its trigger here.</p>`;
+          const interrupting = bo.cancelActivity !== false;
+          html += `<h3>Behaviour</h3>
+            <label class="field"><span>On trigger</span>
+              <select id="f-cancelactivity">
+                <option value="true" ${interrupting ? "selected" : ""}>Interrupting — cancel the activity</option>
+                <option value="false" ${interrupting ? "" : "selected"}>Non-interrupting — run alongside</option>
+              </select></label>
+            <p class="muted" style="font-size:12px">Interrupting cancels the attached activity (and its job) and routes the token out this event; non-interrupting spawns a parallel token and lets the activity continue.</p>`;
+          if (timer) {
+            const kinds = interrupting ? ["duration", "date"] : ["duration", "date", "cycle"];
+            const cycleNote = interrupting
+              ? "An interrupting boundary fires once, so it has no cycle."
+              : "A non-interrupting boundary may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R/PT1H</b>) or cron (<b>0 * * * *</b>) — firing a fresh token each time.";
+            html += timerFieldsHTML(timer, kinds, `The event fires relative to the activity (ADR-0054).
+              <b>Duration</b> fires that long after it starts (<b>PT30S</b>, <b>PT5M</b>); <b>Date &amp; time</b> at a fixed instant.
+              ${cycleNote} A FEEL expression is allowed in any type.`);
+          } else if (msg) {
+            html += messageFieldsHTML(modeler, msg, "The event fires when this message is published with a matching correlation key.");
+          } else if (sig) {
+            html += signalFieldsHTML(modeler, sig, "The event fires when a signal with this name is broadcast (in this or any other instance) while the activity runs.");
+          } else {
+            html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, or <b>Error</b> boundary event, then configure its trigger here.</p>`;
+          }
         }
       } else if (bo.$type === "bpmn:StartEvent" && isEventSubStart(element)) {
         // The start event of an event subprocess: it triggers the handler while the
@@ -3008,28 +3134,36 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
-        const interrupting = bo.isInterrupting !== false;
-        html += `<h3>Event subprocess trigger</h3>
-          <label class="field"><span>On trigger</span>
-            <select id="f-interrupting">
-              <option value="true" ${interrupting ? "selected" : ""}>Interrupting — cancel the enclosing scope</option>
-              <option value="false" ${interrupting ? "" : "selected"}>Non-interrupting — run alongside</option>
-            </select></label>
-          <p class="muted" style="font-size:12px">This start event triggers the event subprocess while its enclosing scope (the process or subprocess) runs. <b>Interrupting</b> terminates the scope's other work, then runs this handler; <b>non-interrupting</b> runs it in parallel and can fire again.</p>`;
-        if (timer) {
-          const kinds = interrupting ? ["duration", "date"] : ["duration", "date", "cycle"];
-          const cycleNote = interrupting
-            ? "An interrupting timer fires once, so it has no cycle."
-            : "A non-interrupting timer may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R3/PT1H</b>) or cron (<b>0 * * * *</b>) — firing the handler each time.";
-          html += timerFieldsHTML(timer, kinds, `The event subprocess fires on this schedule while its scope runs (ADR-0082).
-            <b>Duration</b> fires that long after the scope is entered; <b>Date &amp; time</b> at a fixed instant.
-            ${cycleNote} A FEEL expression is allowed in any type.`);
-        } else if (msg) {
-          html += messageFieldsHTML(modeler, msg, "The event subprocess fires when this message is published with a matching correlation key, while its scope runs.");
-        } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "The event subprocess fires when a signal with this name is broadcast while its scope runs. A non-interrupting trigger re-arms and can fire again.");
+        const err = errorDefOf(bo);
+        if (err) {
+          // An error event subprocess is always interrupting — no toggle (ADR-0089).
+          html += `<h3>Event subprocess trigger</h3>
+            <p class="muted" style="font-size:12px">An <b>error event subprocess</b> is always <b>interrupting</b>: a matching thrown error terminates the enclosing scope's other work, then runs this handler.</p>`;
+          html += errorFieldsHTML(modeler, err, "The event subprocess fires when its enclosing scope throws a matching error, terminating the scope's other work and running this handler.");
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on this start event to give it a <b>Timer</b>, <b>Message</b>, or <b>Signal</b> trigger, then configure it here.</p>`;
+          const interrupting = bo.isInterrupting !== false;
+          html += `<h3>Event subprocess trigger</h3>
+            <label class="field"><span>On trigger</span>
+              <select id="f-interrupting">
+                <option value="true" ${interrupting ? "selected" : ""}>Interrupting — cancel the enclosing scope</option>
+                <option value="false" ${interrupting ? "" : "selected"}>Non-interrupting — run alongside</option>
+              </select></label>
+            <p class="muted" style="font-size:12px">This start event triggers the event subprocess while its enclosing scope (the process or subprocess) runs. <b>Interrupting</b> terminates the scope's other work, then runs this handler; <b>non-interrupting</b> runs it in parallel and can fire again.</p>`;
+          if (timer) {
+            const kinds = interrupting ? ["duration", "date"] : ["duration", "date", "cycle"];
+            const cycleNote = interrupting
+              ? "An interrupting timer fires once, so it has no cycle."
+              : "A non-interrupting timer may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R3/PT1H</b>) or cron (<b>0 * * * *</b>) — firing the handler each time.";
+            html += timerFieldsHTML(timer, kinds, `The event subprocess fires on this schedule while its scope runs (ADR-0082).
+              <b>Duration</b> fires that long after the scope is entered; <b>Date &amp; time</b> at a fixed instant.
+              ${cycleNote} A FEEL expression is allowed in any type.`);
+          } else if (msg) {
+            html += messageFieldsHTML(modeler, msg, "The event subprocess fires when this message is published with a matching correlation key, while its scope runs.");
+          } else if (sig) {
+            html += signalFieldsHTML(modeler, sig, "The event subprocess fires when a signal with this name is broadcast while its scope runs. A non-interrupting trigger re-arms and can fire again.");
+          } else {
+            html += `<p class="muted" style="font-size:12px">Use the wrench icon on this start event to give it a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, or <b>Error</b> trigger, then configure it here.</p>`;
+          }
         }
       } else if (bo.$type === "bpmn:StartEvent") {
         const timer = timerDefOf(bo);
@@ -3060,12 +3194,15 @@ function wireProperties(root, modeler, api, projectId, toast) {
       } else if (bo.$type === "bpmn:EndEvent") {
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
+        const err = errorDefOf(bo);
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "On reaching this end event the message is published; any instance waiting on it with a matching correlation key continues. The instance then ends.");
         } else if (sig) {
           html += signalFieldsHTML(modeler, sig, "On reaching this end event the signal is broadcast to every event waiting on that signal name, across all instances. The instance then ends.");
+        } else if (err) {
+          html += errorFieldsHTML(modeler, err, "On reaching this end event the error is thrown, aborting its scope and propagating up to the nearest matching error boundary or error event subprocess. Uncaught, it raises an incident.");
         } else {
-          html += `<p class="muted" style="font-size:12px">A plain end event ends the instance. Use the wrench icon on the element to make this a <b>Message</b> or <b>Signal</b> end event, which broadcasts as the instance ends.</p>`;
+          html += `<p class="muted" style="font-size:12px">A plain end event ends the instance. Use the wrench icon on the element to make this a <b>Message</b>, <b>Signal</b>, or <b>Error</b> end event.</p>`;
         }
       }
     } else if (isGatewayFlow && !isDefaultFlow) {
@@ -3793,6 +3930,31 @@ function wireProperties(root, modeler, api, projectId, toast) {
       fsigname.addEventListener("change", () => {
         const sed = signalDefOf(element.businessObject);
         if (sed && sed.signalRef) sed.signalRef.name = (fsigname.value || "").trim();
+      });
+    }
+    const ferrref = body.querySelector("#f-errref");
+    if (ferrref) {
+      ferrref.addEventListener("change", () => {
+        const eed = errorDefOf(element.businessObject);
+        if (!eed) return;
+        const v = ferrref.value;
+        savePreservingPanel(() => {
+          if (v === "__new__") {
+            linkError(modeler, element, eed, createError(modeler, ""));
+          } else if (v === "") {
+            linkError(modeler, element, eed, null);
+          } else {
+            linkError(modeler, element, eed, listErrors(modeler).find((e) => e.id === v));
+          }
+        });
+        show(element); // re-render so the code field matches the chosen error
+      });
+    }
+    const ferrcode = body.querySelector("#f-errcode");
+    if (ferrcode) {
+      ferrcode.addEventListener("change", () => {
+        const eed = errorDefOf(element.businessObject);
+        if (eed && eed.errorRef) eed.errorRef.errorCode = (ferrcode.value || "").trim();
       });
     }
 

@@ -50,8 +50,10 @@ const (
 	TypeSignalEndEvent   // an end event that broadcasts a signal, then ends the instance (ADR-0088); reuses the throw detail table
 	TypeSignalStartEvent // a start event that a broadcast signal instantiates (ADR-0088); at runtime it flows straight on like a message start
 
+	TypeErrorEndEvent // an end event that throws an error, ending its scope abnormally and propagating up to the nearest matching handler (ADR-0089); the send-and-stop counterpart of a BPMN error throw
+
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 27
+	numBpmnTypes = 28
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -111,6 +113,8 @@ func (t BpmnType) String() string {
 		return "SignalEndEvent"
 	case TypeSignalStartEvent:
 		return "SignalStartEvent"
+	case TypeErrorEndEvent:
+		return "ErrorEndEvent"
 	default:
 		return "Unspecified"
 	}
@@ -438,6 +442,7 @@ type EventSubProcessDetail struct {
 	MessageName    string         // BoundaryMessage: the message it subscribes to
 	CorrelationKey *expr.Compiled // BoundaryMessage: correlation-key expression (ADR-0020)
 	SignalName     string         // BoundarySignal: the signal it subscribes to (ADR-0088)
+	ErrorCode      string         // BoundaryError: the error code it catches; "" is a catch-all (ADR-0089)
 }
 
 // BoundaryEventKind discriminates what a boundary event waits on.
@@ -447,6 +452,7 @@ const (
 	BoundaryTimer   BoundaryEventKind = iota // waits a fixed duration, then fires
 	BoundaryMessage                          // waits for a correlating message, then fires
 	BoundarySignal                           // waits for a broadcast signal by name, then fires (ADR-0088)
+	BoundaryError                            // catches an error propagating up to it by code, then fires; always interrupting (ADR-0089)
 )
 
 // BoundaryEventDetail is the per-boundary-event data a behavior needs at runtime.
@@ -462,6 +468,14 @@ type BoundaryEventDetail struct {
 	MessageName    string         // BoundaryMessage: the message it subscribes to
 	CorrelationKey *expr.Compiled // BoundaryMessage: correlation-key expression (ADR-0020)
 	SignalName     string         // BoundarySignal: the signal it subscribes to (ADR-0088)
+	ErrorCode      string         // BoundaryError: the error code it catches; "" is a catch-all (ADR-0089)
+}
+
+// ErrorEndDetail is the per-error-end-event data the runtime needs: the code it throws
+// (ADR-0089). A code-less error end throws "", which a code-less catch-all catches. It is
+// its own small table (an error end carries no name, correlation key, or schedule).
+type ErrorEndDetail struct {
+	ErrorCode string
 }
 
 // CompiledDataObject is one BPMN data object declared by a process: a typed,
@@ -556,6 +570,7 @@ type CompiledProcess struct {
 	signalCatches     []SignalDetail
 	signalThrows      []SignalDetail // shared by signal throw and signal end events
 	signalStarts      []SignalDetail
+	errorEnds         []ErrorEndDetail // error end events (ADR-0089)
 	timerStarts       []TimerStartDetail
 	dataObjects       []CompiledDataObject
 	dataOutAssocs     []DataOutputAssociation // shared: output associations grouped by activity node
@@ -729,6 +744,9 @@ func (p *CompiledProcess) SignalCatch(detail int32) *SignalDetail { return &p.si
 // SignalThrow returns the signal-throw detail at the given table index — shared by the
 // signal throw and signal end events (ADR-0088).
 func (p *CompiledProcess) SignalThrow(detail int32) *SignalDetail { return &p.signalThrows[detail] }
+
+// ErrorEnd returns the error-end detail at the given table index (ADR-0089).
+func (p *CompiledProcess) ErrorEnd(detail int32) *ErrorEndDetail { return &p.errorEnds[detail] }
 
 // SignalStart returns the signal-start detail at the given table index (ADR-0088).
 func (p *CompiledProcess) SignalStart(detail int32) *SignalDetail { return &p.signalStarts[detail] }

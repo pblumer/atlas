@@ -1,16 +1,113 @@
 # ADR-0089: Error events (scoped propagation to the nearest handler)
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-30
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Not started. This ADR plans the work; each phase lands
-> test-first with a recovery test (ADR-0018). Error events build on the subprocess scope
+> **Implementation status.** All phases (1–5) delivered. Each phase
+> lands test-first with a recovery test (ADR-0018). Error events build on the subprocess scope
 > lifecycle and `terminateScope`/`scopeContains` (ADR-0074), the boundary arm/fire
 > machinery (ADR-0040), event subprocesses (ADR-0082), the incident model (ADR-0061), and
 > the call-activity child→caller link (ADR-0076). They introduce no subscription, timer,
 > value type, or recovery path — an error is thrown synchronously and propagated
 > **structurally** up the scope chain, resolved from committed state.
+>
+> **Delivered (Phase 1, compiler):** `<errorEventDefinition errorRef="…">` (an `Error`
+> pointer on the end/boundary structs and the event-sub start) and top-level `<bpmn:error id
+> errorCode name>` (`buildErrorResolver`, mirroring `buildMessageResolver`, returning the
+> **error code** — matching is by code, not id or name; an empty/absent code is legal, a
+> non-empty ref naming no declared error is a deploy error) parse into a new
+> `TypeErrorEndEvent` (mirroring `TypeMessageEndEvent`, with an `ErrorEndDetail{ErrorCode}`
+> table) and a `BoundaryError` `BoundaryEventKind` with an `ErrorCode` on
+> `BoundaryEventDetail` / `EventSubProcessDetail` (so an error boundary and an error event
+> subprocess reuse the boundary/event-sub detail). An error boundary and an error event
+> subprocess are **forced interrupting** regardless of the XML `cancelActivity` /
+> `isInterrupting` attribute. A `checkErrorHandling` validation step raises a
+> `SeverityWarning` (never a deploy error) for an error end whose code no enclosing error
+> boundary or error event subprocess in the same process statically catches — the
+> compile-time shadow of the runtime `propagateError` walk (a matching code, or a code-less
+> catch-all). Verified: an error end's code and an error boundary's code + forced-
+> interrupting; a code-less catch-all; an error event subprocess trigger + forced-
+> interrupting; an unknown `errorRef` is a deploy error in every position (end, boundary,
+> event-sub start); the uncaught warning fires for an unhandled throw and stays silent when
+> a matching-code, catch-all, boundary, or event-subprocess handler is in scope. No runtime
+> yet — `propagateError`, the error end / boundary behaviors, and `FailJobWithError` are
+> Phases 2–3.
+>
+> **Delivered (Phase 2, throw + catch core):** the runnable error-end → error-boundary path.
+> `propagateError(c, fromKey, code)` walks up the live `FlowScopeKey` chain (bounded by
+> `maxScopeDepth`); at each enclosing activity it scans that activity's armed error
+> boundaries (`findErrorBoundary`, the `AttachedToKey` lookup `interruptHost` uses) for a
+> code match (`errorCodeMatches`: equal code, or a code-less catch-all) and drives the first
+> match to `Completing` — the boundary is always interrupting, so the existing
+> `interruptHost` tears the activity and the scope below the throw down and the boundary
+> takes its recovery flow. It reads only committed state and the compiled codes (a pure
+> function of committed state, I6) and runs only on the command path. `errorEndEventBehavior`
+> hops to `Completing` like a none end, then throws via `propagateError` instead of completing
+> its scope (so the throwing element is torn down by the interrupt, never double-counted).
+> The `BoundaryError` boundary arms **inert** — a `case` in `boundaryEventBehavior.OnActivated`
+> that opens no subscription/timer, waiting only to be *found*. Reaching the process root with
+> no match raises an incident on the throwing element and parks — the ADR-0061 terminal,
+> pulled forward from Phase 3 because it is `propagateError`'s natural uncaught branch (its
+> dedicated worker-error and event-subprocess siblings remain in Phase 3). Verified: an error
+> end inside a subprocess caught by an error boundary on that subprocess routes to recovery
+> (the normal flow is not taken); a nested error propagates *past* an inner subprocess whose
+> boundary catches a different code to the outer boundary that matches; an uncaught error
+> raises an incident and parks; and an armed error boundary rebuilds on recovery so a throw
+> after crash+replay still finds it. Worker errors (`FailJobWithError`), error event
+> subprocesses, and call-activity caller propagation remain for Phases 3–4.
+>
+> **Delivered (Phase 3, worker errors + error event subprocess):** the two remaining throw
+> sources and catch targets. A `ThrowJobError(jobKey, code)` processor command (the "throw
+> BPMN error" verb, sibling of `FailJob`) rides a command-only `IntentJobErrorThrown`; its
+> handler cancels the job and calls `propagateError` from the job's element — so a service
+> task with an error boundary catches a worker-thrown error (the code rides in the command's
+> transient `incident.Message`, never persisted). `propagateError` now also checks each
+> scope's armed **error event subprocesses** (`findErrorEventSub`, a `TypeEventSubProcessStart`
+> scoped by the level, reusing ADR-0082): at each scope an error event subprocess is checked
+> *before* a boundary on that scope's activity (nearer — it catches within the scope, the
+> boundary catches on the way out), and the process root's event subprocesses are checked
+> after the element-scope walk (they key off the instance scope, not an element). A found
+> event-sub trigger is driven to `Completing` by the shared `fireErrorCatch`, running the
+> existing interrupting `eventSubProcessStartBehavior` path (`terminateScope` + activate the
+> handler); the `BoundaryError` trigger arms **inert** like the boundary. Verified: a worker
+> error caught by the task's boundary (job canceled, recovery flow taken); a worker error
+> with no handler raising an incident; an error event subprocess (in a subprocess, and at the
+> root) handling a scope error and running its handler; and the worker-error path surviving
+> crash+replay. Call-activity caller propagation and the code-matching / same-scope tie-break
+> tests remain for Phase 4.
+>
+> **Delivered (Phase 4, call-activity propagation + code matching):** cross-process error
+> propagation. `propagateError` is split into a per-instance scope walk (`errorCaughtInInstance`)
+> and an outer caller-hop loop: when an error reaches an instance root uncaught and the instance
+> is a call-activity child (`ProcessInstanceValue.ParentElementInstanceKey != 0`), the child is
+> terminated (the error aborts it) and propagation continues from the caller's call-activity
+> element in the parent instance (ADR-0076); a top-level instance raises the incident. So an
+> error boundary on a call activity catches a child's unhandled error, and the caller takes its
+> recovery flow. Code matching (`errorCodeMatches`, delivered in Phase 2) is now exercised
+> directly: the nearest *matching* code wins and a code-less boundary is a catch-all. Verified:
+> two boundaries with different codes on one subprocess route a thrown code to the matching
+> one; a catch-all boundary catches a coded error; a child error caught by the caller's error
+> boundary (child aborted, caller recovered); a child error no caller catches raising an
+> incident at the caller with the child torn down; and the child→caller propagation surviving
+> crash+replay. The same-scope boundary-vs-event-subprocess tie-break stays as the ADR chose
+> (event subprocess nearer); only the Modeler (Phase 5) remains.
+>
+> **Delivered (Phase 5, Modeler):** error authoring in the editor's Implement panel
+> (`api/web/editor.js`), mirroring the message/signal pattern but keyed on the error **code**.
+> An `errorFieldsHTML` picker (a dropdown of the model's shared `<bpmn:error>` declarations
+> plus "＋ New error", and the chosen error's `errorCode`) appears on error end events, error
+> boundaries, and error event-subprocess start events — driven by an `errorDefOf` dispatch arm
+> in each. Because an error catch is always interrupting, the error boundary and error
+> event-subprocess arms drop the interrupting/`cancelActivity` toggle and show a fixed
+> "always interrupting" note. A central "Errors" manager on the process/collaboration root
+> adds, edits (code), and deletes errors (`errorsManagerHTML`/`wireErrorsManager`); helpers
+> `listErrors`/`createError`/`linkError`/`deleteError` create `bpmn:Error` root elements and
+> set `errorRef` (deleting clears dangling refs), producing exactly the `<bpmn:error id
+> errorCode>` + `<errorEventDefinition errorRef>` shape the Phase-1 compiler parses. bpmn-js
+> already draws the error marker and offers the error end/boundary/start variants via the
+> wrench menu, and the `bpmn:Error` / `bpmn:ErrorEventDefinition` moddle types are native, so
+> no diagram-rendering or moddle change was needed.
 
 ## Context and problem statement
 

@@ -36,6 +36,7 @@ func (p *Processor) registerHandlers() {
 		handlerKey(model.VTElementInstance, model.IntentCompleting):  handleElementCompleting,
 		handlerKey(model.VTJob, model.IntentJobCompleted):            handleJobCompleted,
 		handlerKey(model.VTJob, model.IntentJobFailed):               handleJobFailed,
+		handlerKey(model.VTJob, model.IntentJobErrorThrown):          handleJobError,
 		handlerKey(model.VTJob, model.IntentJobAssigned):             handleJobAssigned,
 		handlerKey(model.VTIncident, model.IntentIncidentResolved):   handleIncidentResolved,
 		handlerKey(model.VTTimer, model.IntentTimerTriggered):        handleTimerTriggered,
@@ -62,6 +63,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeSignalCatchEvent] = signalCatchEventBehavior{}
 	p.behaviors[compiler.TypeSignalThrowEvent] = signalThrowEventBehavior{}
 	p.behaviors[compiler.TypeSignalEndEvent] = signalEndEventBehavior{}
+	p.behaviors[compiler.TypeErrorEndEvent] = errorEndEventBehavior{}
 	// A signal start event is a plain entry point once instantiated: a broadcast
 	// signal creates the instance (see broadcastSignal/Deploy) and it then flows
 	// straight on like a none start (ADR-0088), the same as a message start.
@@ -561,6 +563,21 @@ func handleJobFailed(c *ProcessingContext) {
 			Message:            c.cmd.Value.incident.Message,
 		})
 	}
+}
+
+// handleJobError handles a worker throwing a BPMN error from its job (ADR-0089): it
+// cancels the job (the token neither retries nor completes) and propagates the error from
+// the job's element to the nearest matching error handler. A matching error boundary on the
+// service task — or an enclosing scope — catches it; uncaught, it raises an incident. The
+// thrown code rides in the command's incident.Message (a transient command carrier).
+// Throwing on a job that is gone is a no-op.
+func handleJobError(c *ProcessingContext) {
+	job := c.GetJob(c.cmd.Key)
+	if job == nil {
+		return
+	}
+	c.AppendJobEvent(c.cmd.Key, model.IntentJobCanceled, *job)
+	propagateError(c, job.ElementInstanceKey, c.cmd.Value.incident.Message)
 }
 
 // handleIncidentResolved clears an incident and resumes the work it blocked
@@ -1771,6 +1788,175 @@ func broadcastSignal(c *ProcessingContext, name string, vars []model.VariableVal
 	}
 }
 
+// errorEndEventBehavior: an end event that throws a BPMN error (ADR-0089). Unlike a none
+// end event it does not complete its scope; instead OnCompleting calls propagateError,
+// which routes the error up the live scope chain to the nearest matching error boundary —
+// aborting the scope below the catch and taking the boundary's recovery flow — or raises
+// an incident if nothing catches it. Throwing on the command path keeps applyToState pure
+// (I4/I6). OnActivated hops to Completing exactly like a none end.
+type errorEndEventBehavior struct{}
+
+func (errorEndEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (errorEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	code := cp.ErrorEnd(cp.Node(ei.ElementId).Detail).ErrorCode
+	// The error end does NOT emit Completed: propagation tears its scope down, and the
+	// throwing element instance is terminated by interruptHost's terminateScope (or, when
+	// unhandled, parked under the incident). Emitting Completed here would double-count.
+	propagateError(c, key, code)
+}
+
+// propagateError routes a thrown error up the live scope chain to the nearest matching
+// error handler (ADR-0089). Starting from the throwing element, it walks up FlowScopeKey;
+// at each enclosing scope it checks that scope's armed error event subprocesses and, for an
+// activity scope, its armed error boundaries for a code match (equal code, or a code-less
+// catch-all) and drives the first match to Completing — an error catch is always
+// interrupting, so a boundary's interruptHost tears the activity down and it takes its
+// recovery flow, while an event-subprocess trigger terminateScopes its scope and runs its
+// handler. When the instance root is reached uncaught, the error crosses process boundaries:
+// if the instance is a call-activity child, the child is terminated (the error aborts it)
+// and propagation continues from the caller's call-activity element in the parent instance
+// (ADR-0076); a top-level instance instead raises an incident on the throwing element and
+// parks (ADR-0061). It reads only committed state and the compiled codes — a pure function
+// of committed state (I6) — and runs only on the command path (a throw is a command), never
+// on replay. Bounded by maxScopeDepth (both the scope-chain walk and the caller-hop count).
+func propagateError(c *ProcessingContext, fromKey uint64, code string) {
+	for hop := 0; hop <= maxScopeDepth; hop++ {
+		ei := c.GetElementInstance(fromKey)
+		if ei == nil {
+			return // the throwing/caller element vanished (already torn down): nothing to do
+		}
+		if errorCaughtInInstance(c, ei.ProcessInstanceKey, fromKey, code) {
+			return
+		}
+		// Uncaught in this instance. A call-activity child's error propagates to its caller:
+		// terminate the child (the error aborts it), then continue from the caller's element.
+		pi := c.GetProcessInstance(ei.ProcessInstanceKey)
+		if pi != nil && pi.ParentElementInstanceKey != 0 {
+			c.AppendProcessInstanceCommand(ei.ProcessInstanceKey, model.IntentTerminating, *pi)
+			fromKey = pi.ParentElementInstanceKey
+			continue
+		}
+		raiseErrorIncident(c, fromKey, code)
+		return
+	}
+}
+
+// errorCaughtInInstance walks the scope chain of one instance from fromKey up to its root,
+// firing the nearest matching error catch (an event subprocess before a boundary at each
+// scope; the root's event subprocesses last), and reports whether one fired (ADR-0089).
+func errorCaughtInInstance(c *ProcessingContext, piKey, fromKey uint64, code string) bool {
+	for depth, scope := 0, fromKey; depth <= maxScopeDepth; depth++ {
+		ei := c.GetElementInstance(scope)
+		if ei == nil {
+			break // walked past the process root: no enclosing element scope left
+		}
+		// An error event subprocess declared in this scope catches errors thrown within it,
+		// nearer than a boundary on the scope's activity (which catches the error leaving it).
+		if fireErrorCatch(c, findErrorEventSub(c, piKey, scope, code)) {
+			return true
+		}
+		if fireErrorCatch(c, findErrorBoundary(c, piKey, scope, code)) {
+			return true
+		}
+		scope = ei.FlowScopeKey
+	}
+	// The process root's own error event subprocesses are keyed by the instance scope, which
+	// is not an element instance — so they are checked here, after the element-scope walk.
+	return fireErrorCatch(c, findErrorEventSub(c, piKey, piKey, code))
+}
+
+// fireErrorCatch drives a found error catch (a boundary or event-subprocess trigger element)
+// to Completing and reports whether it fired. A zero or vanished key is not a catch.
+func fireErrorCatch(c *ProcessingContext, catchKey uint64) bool {
+	if catchKey == 0 {
+		return false
+	}
+	catch := c.GetElementInstance(catchKey)
+	if catch == nil {
+		return false
+	}
+	c.AppendElementCommand(catchKey, model.IntentCompleting, *catch)
+	return true
+}
+
+// findErrorBoundary returns the element-instance key of an armed error boundary attached to
+// hostKey whose code catches the thrown code (equal, or a code-less catch-all), or 0 if the
+// host has none (ADR-0089). It scans the instance's element instances for a boundary whose
+// AttachedToKey is hostKey — the same lookup interruptHost/disarmBoundaryEvents use.
+func findErrorBoundary(c *ProcessingContext, piKey, hostKey uint64, code string) uint64 {
+	var found uint64
+	c.ForEachElementInstance(piKey, func(elKey uint64) {
+		if found != 0 {
+			return
+		}
+		b := c.GetElementInstance(elKey)
+		if b == nil || b.AttachedToKey != hostKey || b.BpmnElementType != uint8(compiler.TypeBoundaryEvent) {
+			return
+		}
+		cp := c.process(b.ProcessDefKey)
+		d := cp.BoundaryEvent(cp.Node(b.ElementId).Detail)
+		if d.Kind == compiler.BoundaryError && errorCodeMatches(d.ErrorCode, code) {
+			found = elKey
+		}
+	})
+	return found
+}
+
+// findErrorEventSub returns the element-instance key of an armed error event-subprocess
+// trigger in the scope scopeKey whose code catches the thrown code (equal, or a code-less
+// catch-all), or 0 if the scope hosts none (ADR-0089, reusing ADR-0082). A trigger is a
+// TypeEventSubProcessStart element scoped by scopeKey; driving it to Completing runs its
+// handler (always interrupting for an error).
+func findErrorEventSub(c *ProcessingContext, piKey, scopeKey uint64, code string) uint64 {
+	var found uint64
+	c.ForEachElementInstance(piKey, func(elKey uint64) {
+		if found != 0 {
+			return
+		}
+		t := c.GetElementInstance(elKey)
+		if t == nil || t.FlowScopeKey != scopeKey || t.BpmnElementType != uint8(compiler.TypeEventSubProcessStart) {
+			return
+		}
+		cp := c.process(t.ProcessDefKey)
+		d := cp.EventSubProcess(cp.Node(t.ElementId).EventSub)
+		if d.Kind == compiler.BoundaryError && errorCodeMatches(d.ErrorCode, code) {
+			found = elKey
+		}
+	})
+	return found
+}
+
+// errorCodeMatches reports whether a catch with catchCode catches a thrown code: an equal
+// code, or a code-less catch-all (ADR-0089) — the runtime twin of the compiler's
+// same-named check.
+func errorCodeMatches(catchCode, code string) bool {
+	return catchCode == "" || catchCode == code
+}
+
+// raiseErrorIncident records an incident on a throwing element whose error no enclosing
+// handler caught, and parks (ADR-0089/ADR-0061). A vanished element is a harmless no-op.
+func raiseErrorIncident(c *ProcessingContext, elKey uint64, code string) {
+	ei := c.GetElementInstance(elKey)
+	if ei == nil {
+		return
+	}
+	msg := "unhandled error"
+	if code != "" {
+		msg = "unhandled error '" + code + "'"
+	}
+	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: elKey,
+		ElementId:          ei.ElementId,
+		RaisedAt:           c.Now(),
+		Message:            msg,
+	})
+}
+
 // singletonStartTaken reports whether a singleton message start for (defKey, key)
 // should be skipped because a live instance already exists — either durably (the
 // ActiveStartKey counter, maintained by applyToState) or already scheduled earlier in
@@ -2134,9 +2320,13 @@ func (boundaryEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *m
 			ProcessDefKey:      ei.ProcessDefKey,
 			ElementId:          ei.ElementId,
 		})
+	case compiler.BoundaryError:
+		// An error boundary opens nothing — it is inert, armed only to be *found* by
+		// propagateError walking the scope chain when an error is thrown, then driven to
+		// Completing (ADR-0089). No subscription, timer, or record.
 	}
-	// Stays Activated: waits until the timer fires, the message correlates, or the
-	// signal broadcasts.
+	// Stays Activated: waits until the timer fires, the message correlates, the signal
+	// broadcasts, or (for an error boundary) an error propagates up to it.
 }
 
 func (boundaryEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
@@ -2308,6 +2498,10 @@ func (eventSubProcessStartBehavior) OnActivated(c *ProcessingContext, key uint64
 			ProcessDefKey:      ei.ProcessDefKey,
 			ElementId:          ei.ElementId,
 		})
+	case compiler.BoundaryError:
+		// An error event subprocess arms inert — it opens nothing, waiting only to be found
+		// by propagateError when an error is thrown in its scope, then driven to Completing
+		// (ADR-0089). Always interrupting, so firing terminates the scope and runs the handler.
 	}
 	// Stays Activated: waits until the trigger fires.
 }

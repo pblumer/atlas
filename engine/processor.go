@@ -294,6 +294,22 @@ func (p *Processor) FailJob(jobKey uint64, retries int32, message string) {
 	})
 }
 
+// ThrowJobError enqueues a worker's report that its job threw a BPMN error code
+// (ADR-0089) — the "throw BPMN error" verb, a sibling of FailJob. Instead of retrying or
+// raising an incident, the handler cancels the job and propagates the error from the job's
+// element to the nearest matching error boundary or error event subprocess (or, uncaught,
+// raises an incident). The code rides in the command's incident.Message field, a transient
+// command carrier that is never persisted. Throwing on a job that no longer exists is a
+// no-op. Call RunUntilIdle (or Drive) to process it.
+func (p *Processor) ThrowJobError(jobKey uint64, errorCode string) {
+	p.queue = append(p.queue, Command{
+		Key:       jobKey,
+		ValueType: model.VTJob,
+		Intent:    model.IntentJobErrorThrown,
+		Value:     inflightValue{incident: model.IncidentValue{Message: errorCode}},
+	})
+}
+
 // ResolveIncident enqueues an operator's resolution of the incident attached to
 // elementKey (ADR-0061): the incident is cleared and its job re-created with
 // retries (>= 1), returning it to the activatable index so a worker retries it.
