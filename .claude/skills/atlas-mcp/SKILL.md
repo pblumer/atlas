@@ -80,6 +80,7 @@ endpoint behind an authenticating reverse proxy.
 | `atlas_complete_task` | `key`, `variables?` | completed user task |
 | `atlas_claim_task` | `key`, `assignee?` | claims/assigns a task (`assignee` required without auth) |
 | `atlas_unclaim_task` | `key` | releases a task's assignment |
+| `atlas_assignable_users` | — | usernames a task can be assigned to (feeds `atlas_claim_task`) |
 
 A typical authoring flow is:
 

@@ -75,6 +75,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_list_decisions":        "GET /api/v1/decisions",
 	"atlas_decision_evaluations":  "GET /api/v1/decisions/{id}/evaluations",
 	"atlas_variable_audit":        "GET /api/v1/instances/{key}/variable-audit",
+	"atlas_assignable_users":      "GET /api/v1/users/assignable",
 }
 
 // mcpOmittedRoutes lists HTTP operations intentionally not exposed as MCP tools,
@@ -151,7 +152,6 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/auth/logout":         "auth flow is not an agent capability",
 	"GET /api/v1/auth/me":              "auth flow is not an agent capability",
 	"GET /api/v1/users":                "user administration is not an agent capability",
-	"GET /api/v1/users/assignable":     "user administration is not an agent capability",
 	"GET /api/v1/principals":           "user administration is not an agent capability",
 	"POST /api/v1/users":               "user administration is not an agent capability",
 	"GET /api/v1/users/{id}":           "user administration is not an agent capability",

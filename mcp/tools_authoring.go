@@ -687,6 +687,17 @@ func authoringTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_assignable_users",
+			Description: "List the users an open task can be assigned to — each with a username and optional " +
+				"display name. Feed a returned username as the 'assignee' for atlas_claim_task. Assigning work is " +
+				"an everyday Tasks action (ADR-0045), so this is available to any authenticated caller (and open when " +
+				"auth is off); disabled accounts are excluded. Returns [] when no enabled users exist.",
+			InputSchema: noArgs(),
+			Handler: func(c *Client, _ map[string]any) (string, error) {
+				return asText(c.get("/api/v1/users/assignable"))
+			},
+		},
+		{
 			Name: "atlas_claim_task",
 			Description: "Claim (assign) an open user task by its task key. 'assignee' names the user to assign " +
 				"it to; omit it only when the server has authentication enabled, where an empty assignee claims the " +
