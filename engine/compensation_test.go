@@ -5,6 +5,7 @@ import (
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/model"
 )
 
 // compensationProcess builds Start → charge(service) → wait(service) → cancel(compensation
@@ -159,5 +160,131 @@ func TestCompensableIndexSurvivesRecovery(t *testing.T) {
 	}
 	if pi, ei := counts(t, h2.store); pi != 0 || ei != 0 {
 		t.Fatalf("after recovered compensation: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+}
+
+// compensationBroadcastProcess builds Start → seed(trace=0) → a → b → cancel(broadcast
+// compensation throw, no activityRef) → park(service) → End, where a and b are compensable
+// inline script tasks whose handlers fold their marker into "trace": undoA does trace*10+1,
+// undoB does trace*10+2. a completes before b, so reverse completion order is [b, a] and a
+// correct broadcast leaves trace = 0→2→21. The trailing "park" task holds the instance open
+// so the result is observable (ADR-0103).
+func compensationBroadcastProcess(t testing.TB, key uint64) (cp *compiler.CompiledProcess, parkType int32) {
+	t.Helper()
+	b := compiler.NewBuilder(key, "compbc", 1)
+	start := b.AddStartEvent()
+	seed := b.AddScriptTask(mustCompile(t, "0"), "trace")
+	a := b.AddScriptTask(mustCompile(t, `"a-done"`), "aOut")
+	aComp := b.AddBoundaryCompensationEvent(a)
+	undoA := b.AddScriptTask(mustCompile(t, "trace * 10 + 1"), "trace")
+	b.SetCompensationHandler(aComp, undoA)
+	bb := b.AddScriptTask(mustCompile(t, `"b-done"`), "bOut")
+	bComp := b.AddBoundaryCompensationEvent(bb)
+	undoB := b.AddScriptTask(mustCompile(t, "trace * 10 + 2"), "trace")
+	b.SetCompensationHandler(bComp, undoB)
+	cancel := b.AddCompensationThrowEvent() // no activityRef → compensate the whole scope
+	park := b.AddServiceTask("park", 3)
+	end := b.AddEndEvent()
+	b.Connect(start, seed)
+	b.Connect(seed, a)
+	b.Connect(a, bb)
+	b.Connect(bb, cancel)
+	b.Connect(cancel, park)
+	b.Connect(park, end)
+	built, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return built, built.ServiceTask(built.Node(park).Detail).JobType
+}
+
+// TestCompensateBroadcastReverseOrder: a compensation throw with no activityRef compensates
+// every completed compensable activity in its scope, in reverse completion order (ADR-0103).
+func TestCompensateBroadcastReverseOrder(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	cp, parkType := compensationBroadcastProcess(t, 72)
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	// Parked at "park" after the broadcast throw fired: both handlers ran, reverse order.
+	if n := len(activatableJobs(t, h.store, parkType)); n != 1 {
+		t.Fatalf("park jobs = %d, want 1 (throw took its flow after compensating)", n)
+	}
+	scope := model.NewKey(1, 1) // the first (only) process instance's root scope
+	trace := readVar(t, h.store, scope, "trace")
+	if trace == nil {
+		t.Fatal("trace variable missing — no handler ran")
+	}
+	if trace.Text != "21" {
+		t.Errorf("trace = %q, want %q (reverse completion order b→a: 0→2→21)", trace.Text, "21")
+	}
+
+	// Draining the parked task completes the instance — nothing left hanging.
+	p.CompleteJob(activatableJobs(t, h.store, parkType)[0])
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after park drained: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+}
+
+// compensationEndProcess builds Start → a(compensable) → rollback(compensation END event),
+// where a's handler "undoA" records a visit. The end event compensates, then ends the scope
+// (ADR-0103) — the trigger-and-stop counterpart of a compensation throw.
+func compensationEndProcess(t testing.TB, key uint64) (cp *compiler.CompiledProcess, undoA, rollback int32) {
+	t.Helper()
+	b := compiler.NewBuilder(key, "compend", 1)
+	start := b.AddStartEvent()
+	a := b.AddScriptTask(mustCompile(t, `"a-done"`), "aOut")
+	aComp := b.AddBoundaryCompensationEvent(a)
+	undoA = b.AddScriptTask(mustCompile(t, `"undone"`), "undo")
+	b.SetCompensationHandler(aComp, undoA)
+	rollback = b.AddCompensationEndEvent()
+	b.Connect(start, a)
+	b.Connect(a, rollback)
+	built, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return built, undoA, rollback
+}
+
+// TestCompensationEndEvent: an end event bearing a <compensateEventDefinition> compensates
+// the scope, then ends it — the handler runs and the instance completes (ADR-0103).
+func TestCompensationEndEvent(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	cp, undoA, rollback := compensationEndProcess(t, 73)
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	// The compensation end compensated a, then ended the scope: the instance completed.
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after compensation end: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+	v := elementVisits(t, h.store, cp.Key)
+	if v[undoA] != 1 {
+		t.Errorf("handler visits = %d, want 1 (compensation end ran the handler)", v[undoA])
+	}
+	if v[rollback] != 1 {
+		t.Errorf("compensation end visits = %d, want 1", v[rollback])
 	}
 }
