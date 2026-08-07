@@ -10,9 +10,13 @@
 //
 // Concurrency follows the server's first cut (ADR-0103): selecting an element
 // acquires a soft lock on it; an element another participant holds is refused
-// (409) and surfaced as a hint, not enforced in the canvas. Applying a peer's
-// structural change into the local canvas is deliberately out of scope here (the
-// op-log/CRDT upgrade); a remote change is surfaced as a brief awareness pulse.
+// (409) and surfaced as a hint, not enforced in the canvas. A peer's change is
+// applied by re-importing the saved draft into the live canvas (viewport and
+// selection preserved) so co-editors stay in sync without a manual reload — the
+// durable draft is the source of truth (the server relays changes, it does not
+// merge them), so this reflects saved state; an unsaved in-flight peer edit and
+// true per-element merging await the op-log/CRDT upgrade. A re-import never runs
+// over unsaved local work: a dirty canvas defers the sync until the next save.
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -62,6 +66,10 @@ export function attachCollab(modeler, api, draftId, toast) {
     overlayIds: [],
     closed: false,
     es: null,
+    applyingRemote: false, // true while we re-import a peer's change (see reimport)
+    dirty: false,          // local canvas has unsaved edits — don't clobber them
+    pendingRemote: false,  // a peer change arrived while dirty; sync after next save
+    warnedPending: false,  // deferral hint already shown for the current pending sync
   };
 
   const base = `/api/v1/drafts/${encodeURIComponent(draftId)}/session`;
@@ -121,6 +129,61 @@ export function attachCollab(modeler, api, draftId, toast) {
     } catch { /* not on canvas */ }
   };
 
+  // --- Remote change → seamless re-import of the saved draft ---
+  // A `change` frame names the element a peer touched but is not a merge payload:
+  // the durable truth is the saved draft (the server relays changes, it does not
+  // persist them — api/collabsession.go). So on a peer's edit we re-fetch the draft
+  // and re-import it, preserving viewport and selection, instead of forcing a
+  // reload. It reflects *saved* state (an agent's saved edits, a collaborator's
+  // Save) and never overwrites unsaved local work — a dirty canvas defers the sync
+  // until the next save (markSaved), so a co-editor's arriving change can't discard
+  // what this editor has typed but not yet saved.
+  let reimportTimer = null;
+
+  const reimport = async () => {
+    if (state.closed || state.applyingRemote) return;
+    if (state.dirty) { // don't clobber unsaved local edits — sync after the next save
+      state.pendingRemote = true;
+      if (!state.warnedPending) {
+        state.warnedPending = true;
+        toast("A collaborator changed the diagram — save to merge their changes", "warn");
+      }
+      return;
+    }
+    let xml;
+    try { xml = await api("GET", `/api/v1/drafts/${encodeURIComponent(draftId)}/xml`); }
+    catch { return; } // transient fetch failure: the next change frame retries
+    if (state.closed || state.dirty) return; // a local edit landed while we fetched
+    let vb = null, sel = [];
+    try {
+      vb = modeler.get("canvas").viewbox();
+      sel = modeler.get("selection").get().map((el) => el.id);
+    } catch { /* modeler torn down mid-flight */ }
+    state.applyingRemote = true; // suppress our own change/selection broadcasts below
+    try {
+      await modeler.importXML(typeof xml === "string" ? xml : String(xml));
+      if (vb) { try { modeler.get("canvas").viewbox(vb); } catch { /* ignore */ } }
+      // Re-select what we had so our locks and presence are re-announced for the
+      // elements that survived the import (onSelection runs once we clear the flag).
+      try {
+        const reg = modeler.get("elementRegistry");
+        const still = sel.map((id) => reg.get(id)).filter(Boolean);
+        modeler.get("selection").select(still.length ? still : null);
+      } catch { /* ignore */ }
+    } catch { /* malformed draft: leave the current canvas untouched */ }
+    finally { state.applyingRemote = false; }
+    state.pendingRemote = false;
+    state.warnedPending = false;
+    renderLocks(); // importXML wiped the canvas overlays — redraw peers' lock badges
+  };
+
+  // scheduleReimport coalesces a burst of change frames (e.g. an agent rewiring
+  // several elements at once) into a single re-import shortly after they settle.
+  const scheduleReimport = () => {
+    if (reimportTimer) clearTimeout(reimportTimer);
+    reimportTimer = setTimeout(() => { reimportTimer = null; reimport(); }, 300);
+  };
+
   // --- Incoming stream ---
   const applySync = (d) => {
     state.self = d.self;
@@ -141,12 +204,15 @@ export function attachCollab(modeler, api, draftId, toast) {
   es.addEventListener("change", (e) => {
     try {
       const c = JSON.parse(e.data);
-      if (c.by !== state.self && c.elementId) pulse(c.elementId);
+      if (c.by === state.self) return; // our own edit, echoed back
+      if (c.elementId) pulse(c.elementId); // brief awareness flash on the touched shape
+      scheduleReimport();                  // then pull the saved draft into our canvas
     } catch { /* ignore */ }
   });
 
   // --- Outgoing: selection drives presence + locks ---
   const onSelection = (ev) => {
+    if (state.applyingRemote) return; // selection churn from our own re-import
     const sel = (ev && ev.newSelection) || [];
     const wanted = new Set(sel.filter(isLockable).map((el) => el.id));
 
@@ -169,16 +235,26 @@ export function attachCollab(modeler, api, draftId, toast) {
   };
   modeler.on("selection.changed", onSelection);
 
-  // --- Outgoing: relay element edits so peers get an awareness pulse ---
+  // --- Outgoing: relay this editor's edits and mark the canvas unsaved ---
   const onChange = (ev) => {
+    if (state.applyingRemote) return; // our own re-import, not a user edit — never echo it
     const el = ev && ev.element;
-    if (el && el.id) send("/change", { elementId: el.id });
+    if (el && el.id) { state.dirty = true; send("/change", { elementId: el.id }); }
   };
   modeler.on("element.changed", onChange);
 
   return {
+    // markSaved clears the unsaved-work guard after the editor persists the draft,
+    // so a peer change that was deferred (to avoid clobbering local edits) can now
+    // sync in. The editor's Save handler calls this on a successful save.
+    markSaved() {
+      state.dirty = false;
+      state.warnedPending = false;
+      if (state.pendingRemote) scheduleReimport();
+    },
     close() {
       state.closed = true;
+      if (reimportTimer) { clearTimeout(reimportTimer); reimportTimer = null; }
       try { modeler.off("selection.changed", onSelection); } catch { /* torn down */ }
       try { modeler.off("element.changed", onChange); } catch { /* torn down */ }
       try { es.close(); } catch { /* already closed */ }

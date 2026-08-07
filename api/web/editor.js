@@ -4186,6 +4186,9 @@ function wireActions(root, modeler, api, toast, projectId) {
       root.querySelector(".crumb-current").textContent = d.name || d.processId || "Draft";
       docTitle(`${d.name || d.processId || "Draft"} · Modeler`);
       toast(`Saved draft “${d.name || d.processId}”`, "ok");
+      // Draft is now persisted: clear the collab unsaved-work guard so a co-editor's
+      // deferred change (held back to protect these edits) can sync in (ADR-0103).
+      if (collab && collab.markSaved) collab.markSaved();
     } catch (e) {
       toast("save failed: " + e.message, "err");
     } finally {
