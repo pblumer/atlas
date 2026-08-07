@@ -8,6 +8,7 @@ import { moduleFor } from "./powershell.js";
 import { attachJSONEditor } from "./json-editor.js";
 import { openDmnEditor } from "./dmn-editor.js";
 import { tokenSimulationModule } from "./token-simulation.js";
+import { attachCollab } from "./collab.js";
 
 // JOB_LANGS are the general-purpose script languages a script task can use besides
 // inline FEEL (ADR-0047). Each runs on a job worker off the engine's hot path; the
@@ -116,6 +117,7 @@ function blankXML() {
 
 let current; // active modeler/viewer, destroyed on remount
 let liveTimer; // active live-overlay poll, cleared on remount/leave
+let collab; // active live collaboration session (ADR-0103), closed on remount
 // generation is bumped by cleanup() on every navigation/remount. A mount captures
 // it right after its own cleanup() and re-checks it after each await, so a slow
 // mount that a newer navigation has superseded bails out *before* it builds a
@@ -136,6 +138,7 @@ function docTitle(label) { document.title = label ? `${label} · Atlas` : "Atlas
 export function cleanup() {
   generation++; // supersede any in-flight mount (see `generation` above)
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+  if (collab) { try { collab.close(); } catch { /* ignore */ } collab = null; }
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
 }
 window.__atlasCleanup = cleanup;
@@ -533,6 +536,10 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   wireProblems(root, modeler, api);
   wireResizer(root, modeler);
   wireTokenSim(root, modeler);
+
+  // Only a saved draft has a stable id to key a live session on; a fresh unsaved
+  // diagram or a read-only deployment does not co-edit (ADR-0103).
+  if (draftId != null) collab = attachCollab(modeler, api, draftId, toast);
 }
 
 // The BPMN elements the stock bpmn-js palette can draw but the Atlas engine can't run
