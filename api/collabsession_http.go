@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // HTTP surface for live collaborative modeling sessions (ADR-0103). One SSE
@@ -75,10 +76,22 @@ func (s *Server) handleDraftSession(w http.ResponseWriter, r *http.Request) {
 	flusher.Flush()
 
 	ctx := r.Context()
+	keepalive := time.NewTicker(s.collabKeepalive)
+	defer keepalive.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-keepalive.C:
+			// net/http only learns a client vanished when a write fails, so an idle
+			// stream would never notice a half-open (zombie) connection. This periodic
+			// comment forces a write: if it errors the connection is dead — return so
+			// the deferred leave() reaps the participant and releases its locks. The
+			// ": " prefix is an SSE comment the browser's EventSource ignores.
+			if _, err := io.WriteString(w, ": keepalive\n\n"); err != nil {
+				return
+			}
+			flusher.Flush()
 		case ev, open := <-participant.ch:
 			if !open {
 				return // torn down (e.g. server shutdown); end the stream

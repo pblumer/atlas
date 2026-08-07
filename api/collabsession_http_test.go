@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pblumer/atlas/api"
 )
 
 // readSSEFrame reads one Server-Sent Events frame — lines until a blank line —
@@ -290,6 +292,39 @@ func TestDraftSessionJoinAnonymous(t *testing.T) {
 	if !strings.Contains(string(body), `"name":"agent"`) {
 		t.Fatalf("default name not applied: %s", body)
 	}
+}
+
+// TestDraftSessionKeepalive confirms an idle SSE stream emits periodic keepalive
+// comments — the write that lets the server detect a half-open (zombie) browser
+// connection and reap its participant (ADR-0103).
+func TestDraftSessionKeepalive(t *testing.T) {
+	ts := newTestServerWith(t, api.WithCollabKeepaliveInterval(15*time.Millisecond))
+	saveDraft(t, ts)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+"/api/v1/drafts/wip-order/session", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("open session: %v", err)
+	}
+	defer resp.Body.Close()
+
+	r := bufio.NewReader(resp.Body)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		line, err := r.ReadString('\n')
+		if err != nil {
+			t.Fatalf("read stream: %v", err)
+		}
+		if strings.HasPrefix(line, ": keepalive") {
+			return // observed a keepalive comment on an otherwise idle stream
+		}
+	}
+	t.Fatal("no keepalive comment observed on an idle stream")
 }
 
 func TestDraftSessionMissingDraft(t *testing.T) {

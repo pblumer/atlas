@@ -162,6 +162,13 @@ type Server struct {
 	// engine state.
 	collab *collabRegistry
 
+	// collabKeepalive is how often an idle SSE session stream writes a keepalive
+	// comment. net/http only learns a client vanished when a write fails, so these
+	// periodic writes are what detect a half-open (zombie) browser connection and
+	// let its participant be reaped; they also keep proxies from timing out an idle
+	// stream. WithCollabKeepaliveInterval overrides it (tests use a short value).
+	collabKeepalive time.Duration
+
 	// authEnabled gates authentication enforcement. Off by default: the server
 	// stays fully open (single-user) until an operator opts in with WithAuth,
 	// mirroring how docsEnabled gates the API explorer (ADR-0044/0043). Set once
@@ -255,6 +262,18 @@ func WithoutDocs() Option { return func(s *Server) { s.docsEnabled = false } }
 // directly). The default is 2s.
 func WithInboundPollInterval(d time.Duration) Option {
 	return func(s *Server) { s.inboundPoll = d }
+}
+
+// WithCollabKeepaliveInterval sets how often an idle collaboration SSE stream
+// writes a keepalive comment, the mechanism that detects a half-open browser
+// connection so its session participant is reaped (ADR-0103). A non-positive
+// value restores the default (15s). Tests pass a short interval to exercise it.
+func WithCollabKeepaliveInterval(d time.Duration) Option {
+	return func(s *Server) {
+		if d > 0 {
+			s.collabKeepalive = d
+		}
+	}
 }
 
 // WithInboundBatchLimit caps how many clio events one poll of a subscription reads
@@ -376,6 +395,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		users:            users,
 		sessions:         newSessionStore(defaultSessionTTL),
 		collab:           newCollabRegistry(),
+		collabKeepalive:  collabKeepaliveInterval,
 		dmnResolver:      resolver,
 		dmnValidator:     dmn.NewValidator(resolver),
 		dmnRegistry:      dmn.NewRegistry(),
