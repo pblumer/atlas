@@ -502,9 +502,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
 	}
-	s.wg.Add(2)
+	s.wg.Add(3)
 	go s.loop()
 	go s.timerScheduler(time.Second)
+	// The collaboration reaper evicts idle detached session participants (MCP
+	// agents that stopped polling) and releases their locks (ADR-0103). It runs off
+	// the run loop — the collab registry is its own mutex-guarded, engine-independent
+	// state — so it never touches the processor or the invariants.
+	go s.collabReaper(collabReapInterval)
 	// The clio inbound bridge polls configured subscriptions and republishes new
 	// clio events as Atlas messages (ADR-0075). It is a separate goroutine like the
 	// timer scheduler — it does its network reads off the run loop and hands only the
@@ -596,6 +601,28 @@ func (s *Server) timerScheduler(every time.Duration) {
 				}
 				_ = s.jobRunner.Drive()
 			})
+		}
+	}
+}
+
+// collabReaper periodically evicts detached collaboration-session participants
+// (AI agents that joined over MCP and stopped polling) that have gone silent past
+// the TTL, releasing their locks so a crashed or forgotten agent never holds an
+// element forever (ADR-0103). Browser SSE participants are reaped on disconnect
+// instead and are exempt. It runs off the run loop — the collab registry is its
+// own mutex-guarded, engine-independent state — so it never touches the processor.
+func (s *Server) collabReaper(every time.Duration) {
+	defer s.wg.Done()
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-s.quit:
+			return
+		case <-t.C:
+			if n := s.collab.reap(); n > 0 {
+				log.Printf("collab: reaped %d idle session participant(s) past the %s TTL (ADR-0103)", n, collabParticipantTTL)
+			}
 		}
 	}
 }

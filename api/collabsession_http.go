@@ -134,7 +134,10 @@ func (s *Server) handleDraftSessionJoin(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	_, sync, _ := s.collab.join(id, userID, name)
+	// A joined-over-MCP participant has no SSE stream to reap it on disconnect, so
+	// it joins detached and is kept alive by polling; the reaper evicts it if it
+	// falls silent (ADR-0103).
+	_, sync := s.collab.joinDetached(id, userID, name)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(sync)
