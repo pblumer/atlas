@@ -327,7 +327,20 @@ Composition and reuse.
   Recovery-tested; authored in the Modeler's Implement panel (called process id, binding,
   propagation toggles, I/O mappings, and multi-instance) ([ADR-0076](docs/adr/0076-call-activities.md)).
 - ✅ **Multi-instance activities** (sequential and parallel): a `<multiInstanceLoopCharacteristics>` runs an activity — task, subprocess, or call activity — once per element of a FEEL input collection (or a fixed cardinality) as inner iterations scoped under a body, binding each iteration's `inputElement` and the standard `loopCounter`; parallel seeds all at once, sequential one at a time. It assembles an ordered `outputCollection` from each iteration's `outputElement`, honours a `completionCondition` (early exit, cancelling the rest), is interruptible (the body is a scope, so an interrupting boundary terminates every iteration and, for call-activity iterations, each child), and is authored in the Modeler's Implement panel. Reuses the ADR-0074 scope lifecycle wholesale — no new value type, counter, or recovery path; recovery-tested ([ADR-0077](docs/adr/0077-multi-instance-activities.md)).
-- 🔲 Compensation and compensation handlers
+- ✅ **Compensation and compensation handlers**: a compensable activity carries a
+  compensation boundary event (`<compensateEventDefinition/>`) linked by a BPMN
+  `<association>` to an off-flow `isForCompensation` handler; the boundary is inert
+  (never armed), just marking the activity compensable. On successful completion the
+  activity is recorded in a durable per-scope index (`cfCompensable`), keyed by the
+  completion event's log position so a reverse scan is reverse completion order. A
+  compensation **throw** (intermediate) or **end** event triggers compensation — of one
+  named activity (`activityRef`) or, broadcast, every completed compensable activity in
+  its scope — running each handler newest-first (reverse completion order) and consuming
+  the record so it compensates at most once. Compensation is scope-confined, the index is
+  cleaned when a scope or instance tears down (no leak), and it survives recovery (the
+  index rebuilds from the log — no new recovery path; the throw is a command-path scope
+  walk, the twin of error propagation). bpmn-js already authors it, so no Modeler change
+  was needed. Recovery-tested ([ADR-0103](docs/adr/0103-compensation.md)).
 - 🔲 BPMN transactions (with cancel/compensation)
 
 ## Milestone 4 — Operability 🔲

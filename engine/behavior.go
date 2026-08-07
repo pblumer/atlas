@@ -65,6 +65,8 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeSignalThrowEvent] = signalThrowEventBehavior{}
 	p.behaviors[compiler.TypeSignalEndEvent] = signalEndEventBehavior{}
 	p.behaviors[compiler.TypeErrorEndEvent] = errorEndEventBehavior{}
+	p.behaviors[compiler.TypeCompensationThrowEvent] = compensationThrowEventBehavior{}
+	p.behaviors[compiler.TypeCompensationEndEvent] = compensationEndEventBehavior{}
 	// A signal start event is a plain entry point once instantiated: a broadcast
 	// signal creates the instance (see broadcastSignal/Deploy) and it then flows
 	// straight on like a none start (ADR-0088), the same as a message start.
@@ -900,6 +902,16 @@ func (p *Processor) behavior(bpmnType uint8) bpmnBehavior {
 // activate the targets of every outgoing flow.
 func completeAndTakeFlows(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	c.AppendElementEvent(key, model.IntentCompleted, *ei)
+	recordCompensable(c, key, ei)
+	cp := c.process(ei.ProcessDefKey)
+	if len(cp.Outgoing(ei.ElementId)) == 0 {
+		// A node that completes with no outgoing flow is a dead end — the token has left
+		// the scope like an implicit end, so check the scope for completion. Today this is
+		// only a compensation handler (ADR-0103): an off-flow activity a compensation throw
+		// activates, which must let its scope finish once it and its siblings drain.
+		completeScope(c, ei.FlowScopeKey)
+		return
+	}
 	takeOutgoingFlows(c, ei)
 }
 
@@ -975,6 +987,13 @@ func activateElement(c *ProcessingContext, ei *model.ElementInstanceValue, flowI
 func armBoundaryEvents(c *ProcessingContext, hostKey uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	for _, beID := range cp.BoundaryEvents(ei.ElementId) {
+		// A compensation boundary is inert: it is compile-time metadata linking the host
+		// to its compensation handler, never an armed waiting instance (ADR-0103). Arming
+		// it would create an instance that disarmBoundaryEvents retires exactly when the
+		// host completes — the moment compensation becomes available — so skip it.
+		if cp.BoundaryEvent(cp.Node(beID).Detail).Kind == compiler.BoundaryCompensation {
+			continue
+		}
 		c.AppendElementCommand(c.NewKey(), model.IntentActivating, model.ElementInstanceValue{
 			ProcessInstanceKey: ei.ProcessInstanceKey,
 			ProcessDefKey:      ei.ProcessDefKey,
@@ -1984,6 +2003,124 @@ func raiseErrorIncident(c *ProcessingContext, elKey uint64, code string) {
 		RaisedAt:           c.Now(),
 		Message:            msg,
 	})
+}
+
+// --- Compensation (ADR-0103) ---
+
+// compensationThrowEventBehavior triggers compensation, then flows on. OnActivated runs
+// the handlers of completed compensable activities in the throw's scope (or of the one
+// named by activityRef) via compensate — a command-path scope walk, the structural twin of
+// propagateError — then hops to Completing exactly like a signal throw. Running compensation
+// on the command path keeps applyToState pure (I4/I6).
+type compensationThrowEventBehavior struct{}
+
+func (compensationThrowEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	compensate(c, ei, cp.CompensationThrow(cp.Node(ei.ElementId).Detail).ActivityRef)
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (compensationThrowEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// compensationEndEventBehavior triggers compensation, then ends its scope — the
+// trigger-and-stop counterpart of a compensation throw, ending like a signal end rather
+// than taking outgoing flows (ADR-0103).
+type compensationEndEventBehavior struct{}
+
+func (compensationEndEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	compensate(c, ei, cp.CompensationThrow(cp.Node(ei.ElementId).Detail).ActivityRef)
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (compensationEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendElementEvent(key, model.IntentCompleted, *ei) // decrements scope's active children
+	completeScope(c, ei.FlowScopeKey)                     // completes the scope owner if it drained
+}
+
+// compensate runs the compensation handlers of the completed compensable activities in the
+// throwing element's scope, newest first (reverse completion order). When activityRef >= 0
+// it compensates only that activity's completed instances; otherwise the whole scope. For
+// each matching record it activates the handler in the scope and consumes the record so it
+// is compensated at most once. Records and handler links are read from committed state and
+// the compiled graph — a pure function of committed state (I6) — and this runs only on the
+// command path (a throw is a command). It collects matches before activating so consuming
+// one cannot disturb the scan.
+func compensate(c *ProcessingContext, ei *model.ElementInstanceValue, activityRef int32) {
+	type match struct {
+		seq uint64
+		v   model.CompensableValue
+	}
+	var matches []match
+	c.p.fail(c.tx.CompensablesOfScopeDesc(ei.FlowScopeKey, func(seq uint64, v *model.CompensableValue) error {
+		if activityRef < 0 || v.ElementId == activityRef {
+			matches = append(matches, match{seq: seq, v: *v})
+		}
+		return nil
+	}))
+	for i := range matches {
+		m := matches[i]
+		activateCompensationHandler(c, &m.v)
+		consumed := m.v
+		consumed.Seq = m.seq
+		c.AppendCompensableEvent(model.IntentCompensableConsumed, consumed)
+	}
+}
+
+// activateCompensationHandler activates a compensation handler activity in the scope of the
+// activity it compensates. The handler runs its ordinary behavior (a service task creates a
+// job, …) and, having no outgoing flow, completes without taking one; it is counted in the
+// scope's active children, so a compensation throw's scope does not finish until its handlers
+// do (ADR-0103).
+func activateCompensationHandler(c *ProcessingContext, v *model.CompensableValue) {
+	target := c.process(v.ProcessDefKey).Node(v.HandlerNode)
+	key := c.NewKey()
+	miRole := miNone
+	if target.MultiInstance >= 0 {
+		miRole = miBody
+	}
+	c.AppendElementCommand(key, model.IntentActivating, model.ElementInstanceValue{
+		ProcessInstanceKey: v.ProcessInstanceKey,
+		ProcessDefKey:      v.ProcessDefKey,
+		ElementId:          v.HandlerNode,
+		FlowScopeKey:       v.ScopeKey,
+		BpmnElementType:    uint8(target.Type),
+		MultiInstance:      miRole,
+		TokenID:            key,
+	})
+}
+
+// recordCompensable, when the just-completed element is a compensable activity (one bearing
+// a compensation boundary), appends a durable record so a later compensation throw can run
+// its handler (ADR-0103). It is called only on successful completion (completeAndTakeFlows),
+// never on termination — a terminated activity did not succeed and is not compensable.
+func recordCompensable(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	handler := compensationHandlerOf(c.process(ei.ProcessDefKey), ei.ElementId)
+	if handler < 0 {
+		return
+	}
+	c.AppendCompensableEvent(model.IntentCompensableRecorded, model.CompensableValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ProcessDefKey:      ei.ProcessDefKey,
+		ScopeKey:           ei.FlowScopeKey,
+		ElementInstanceKey: key,
+		ElementId:          ei.ElementId,
+		HandlerNode:        handler,
+	})
+}
+
+// compensationHandlerOf returns the compensation handler node linked to elementId by a
+// compensation boundary, or -1 if the element is not compensable. A bounded scan over the
+// element's (usually zero or one) boundary events, so it is cheap on the completion path.
+func compensationHandlerOf(cp *compiler.CompiledProcess, elementId int32) int32 {
+	for _, beID := range cp.BoundaryEvents(elementId) {
+		if d := cp.BoundaryEvent(cp.Node(beID).Detail); d.Kind == compiler.BoundaryCompensation {
+			return d.CompensationHandler
+		}
+	}
+	return -1
 }
 
 // singletonStartTaken reports whether a singleton message start for (defKey, key)

@@ -351,6 +351,77 @@ func (t *Tx) SubscribedSignals(name string, fn func(elKey uint64, v *model.Signa
 	return iter.Error()
 }
 
+// --- Compensable (ADR-0103) ---
+
+// RecordCompensable retains one completed compensable activity under its scope,
+// keyed by the completion event's log position so a scope scan yields completion
+// order. pos comes from the event header; the value carries the scope, the
+// compensated activity, and its compensation handler.
+func (t *Tx) RecordCompensable(pos uint64, v *model.CompensableValue) error {
+	return t.b.Set(keyCompensable(v.ScopeKey, pos), t.encodeValue(v), nil)
+}
+
+// DeleteCompensable removes one compensable record (its activity has been
+// compensated), located by its scope and sequence — both carried on the consume
+// event, so recovery deletes the identical entry. Idempotent.
+func (t *Tx) DeleteCompensable(scopeKey, seq uint64) error {
+	return t.b.Delete(keyCompensable(scopeKey, seq), nil)
+}
+
+// DeleteCompensablesOfScope drops every compensable record held under a scope, called
+// when the scope tears down (its subprocess container or process instance completes or is
+// terminated) so uncompensated records never leak past the scope (ADR-0103). Keys are
+// collected before deleting so the scan is not disturbed. Idempotent — a scope with none
+// is a no-op.
+func (t *Tx) DeleteCompensablesOfScope(scopeKey uint64) error {
+	prefix := compensableScopePrefix(scopeKey)
+	iter, err := t.b.NewIter(&pebble.IterOptions{LowerBound: prefix, UpperBound: prefixEnd(prefix)})
+	if err != nil {
+		return err
+	}
+	var keys [][]byte
+	for iter.First(); iter.Valid(); iter.Next() {
+		keys = append(keys, append([]byte(nil), iter.Key()...))
+	}
+	err = iter.Error()
+	if cerr := iter.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return err
+	}
+	for _, k := range keys {
+		if e := t.b.Delete(k, nil); e != nil {
+			return e
+		}
+	}
+	return nil
+}
+
+// CompensablesOfScopeDesc calls fn for every completed compensable activity recorded
+// under scopeKey, newest first (reverse completion order) — the order a compensation
+// throw runs handlers in (ADR-0103). It reads through the in-flight batch, so it
+// observes records written earlier in the same batch. seq is the record's key
+// sequence (log position), which the caller carries on the consume event to delete it.
+func (t *Tx) CompensablesOfScopeDesc(scopeKey uint64, fn func(seq uint64, v *model.CompensableValue) error) error {
+	prefix := compensableScopePrefix(scopeKey)
+	iter, err := t.b.NewIter(&pebble.IterOptions{LowerBound: prefix, UpperBound: prefixEnd(prefix)})
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+	for iter.Last(); iter.Valid(); iter.Prev() {
+		var v model.CompensableValue
+		if err := model.DecodeValueInto(&v, iter.Value()); err != nil {
+			return err
+		}
+		if err := fn(trailingKey(iter.Key()), &v); err != nil {
+			return err
+		}
+	}
+	return iter.Error()
+}
+
 // --- Variable ---
 
 // PutVariable writes (upserts) a process variable under its scope and name.

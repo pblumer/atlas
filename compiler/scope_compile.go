@@ -415,8 +415,17 @@ func registerScope(
 			}
 			continue
 		}
+		if ev.Compensation != nil {
+			// A compensation throw triggers compensation of completed activities in its
+			// scope (or of the one named by activityRef, resolved in a post-pass since the
+			// target may be registered later) — ADR-0103.
+			if err := register(ev.Id, b.AddCompensationThrowEvent()); err != nil {
+				return err
+			}
+			continue
+		}
 		if ev.Message == nil {
-			return fmt.Errorf("compiler: intermediate throw event %q: only message and signal events are supported yet", ev.Id)
+			return fmt.Errorf("compiler: intermediate throw event %q: only message, signal, and compensation events are supported yet", ev.Id)
 		}
 		name, keyExpr, err := resolveMessage(ev.Id, ev.Message.MessageRef)
 		if err != nil {
@@ -492,6 +501,14 @@ func registerScope(
 				return err
 			}
 			if err := register(e.Id, b.AddErrorEndEvent(code)); err != nil {
+				return err
+			}
+			continue
+		}
+		// A compensation end event triggers compensation, then ends its scope (ADR-0103);
+		// its optional activityRef is resolved in the post-pass, like a compensation throw.
+		if e.Compensation != nil {
+			if err := register(e.Id, b.AddCompensationEndEvent()); err != nil {
 				return err
 			}
 			continue
@@ -607,8 +624,16 @@ func registerScope(
 			if err := register(ev.Id, b.AddBoundaryErrorEvent(host, code)); err != nil {
 				return err
 			}
+		case ev.Compensation != nil:
+			// A compensation boundary is inert: it never arms, it only marks its host
+			// compensable and links to a handler (resolved from a BPMN <association> in the
+			// post-pass). cancelActivity is ignored — a compensation boundary never
+			// interrupts (ADR-0103).
+			if err := register(ev.Id, b.AddBoundaryCompensationEvent(host)); err != nil {
+				return err
+			}
 		default:
-			return fmt.Errorf("compiler: boundary event %q: only timer, message, signal, and error boundary events are supported yet", ev.Id)
+			return fmt.Errorf("compiler: boundary event %q: only timer, message, signal, error, and compensation boundary events are supported yet", ev.Id)
 		}
 	}
 	// Report an unsupported element with a clear message rather than letting it
@@ -623,6 +648,103 @@ func registerScope(
 			return fmt.Errorf("compiler: element %q is a <%s>, which Atlas can't execute yet "+
 				"(supported: start/end events, tasks (undefined/manual pass-through, service, script, "+
 				"business rule, user), embedded subprocesses, exclusive/parallel/inclusive gateways, and timer/message intermediate events)", u.nodes[0].Id, u.label)
+		}
+	}
+	return nil
+}
+
+// resolveCompensation wires compensation links after every node is registered (ADR-0103).
+// A compensation boundary event is joined to its handler activity by a BPMN <association>
+// (one endpoint the boundary, the other the handler); a compensation throw/end may name a
+// single activity to compensate via activityRef. Both endpoints resolve through the flat,
+// process-wide id map, so this walks the whole scope tree once. A compensation boundary
+// with no association, or a reference to an unknown activity, is a deploy error.
+func resolveCompensation(b *Builder, ids map[string]int32, root *xmlFlowContent) error {
+	// Gather every scope's flow content — the root and, recursively, each subprocess.
+	var scopes []*xmlFlowContent
+	var walk func(fc *xmlFlowContent)
+	walk = func(fc *xmlFlowContent) {
+		scopes = append(scopes, fc)
+		for i := range fc.SubProcesses {
+			walk(&fc.SubProcesses[i].xmlFlowContent)
+		}
+	}
+	walk(root)
+
+	// Which boundary-event ids are compensation boundaries.
+	compBoundary := make(map[string]bool)
+	for _, fc := range scopes {
+		for _, ev := range fc.BoundaryEvents {
+			if ev.Compensation != nil {
+				compBoundary[ev.Id] = true
+			}
+		}
+	}
+
+	// Link each compensation boundary to its handler via an <association>: one endpoint is
+	// the boundary, the other the handler activity.
+	resolved := make(map[string]bool)
+	for _, fc := range scopes {
+		for _, a := range fc.Associations {
+			var boundaryID, handlerID string
+			switch {
+			case compBoundary[a.SourceRef]:
+				boundaryID, handlerID = a.SourceRef, a.TargetRef
+			case compBoundary[a.TargetRef]:
+				boundaryID, handlerID = a.TargetRef, a.SourceRef
+			default:
+				continue // not a compensation association
+			}
+			bNode, ok := ids[boundaryID]
+			if !ok {
+				continue
+			}
+			hNode, ok := ids[handlerID]
+			if !ok {
+				return fmt.Errorf("compiler: compensation association %q links boundary %q to unknown activity %q", a.Id, boundaryID, handlerID)
+			}
+			b.SetCompensationHandler(bNode, hNode)
+			resolved[boundaryID] = true
+		}
+	}
+	// A compensation boundary with no association has no handler to run — fail the deploy
+	// rather than silently deploy a boundary that can never compensate anything.
+	for id := range compBoundary {
+		if !resolved[id] {
+			return fmt.Errorf("compiler: compensation boundary event %q has no <association> linking it to a compensation handler", id)
+		}
+	}
+
+	// Narrow each compensation throw/end that names a specific activity to compensate.
+	resolveRef := func(evID, activityRef string) error {
+		if activityRef == "" {
+			return nil // compensate the whole scope
+		}
+		node, ok := ids[evID]
+		if !ok {
+			return nil
+		}
+		target, ok := ids[activityRef]
+		if !ok {
+			return fmt.Errorf("compiler: compensation event %q references unknown activity %q", evID, activityRef)
+		}
+		b.SetCompensationActivityRef(node, target)
+		return nil
+	}
+	for _, fc := range scopes {
+		for _, ev := range fc.IntermediateThrowEvents {
+			if ev.Compensation != nil {
+				if err := resolveRef(ev.Id, ev.Compensation.ActivityRef); err != nil {
+					return err
+				}
+			}
+		}
+		for _, ev := range fc.EndEvents {
+			if ev.Compensation != nil {
+				if err := resolveRef(ev.Id, ev.Compensation.ActivityRef); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil

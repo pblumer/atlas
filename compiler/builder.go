@@ -162,38 +162,39 @@ type Builder struct {
 	bpmnProcessId string
 	version       int32
 
-	nodes             []CompiledNode
-	flows             []CompiledFlow
-	serviceTasks      []ServiceTaskDetail
-	scriptTasks       []ScriptTaskDetail
-	callActivities    []CallActivityDetail
-	multiInstances    []MultiInstanceDetail
-	scriptJobTasks    []ScriptJobTaskDetail
-	businessRuleTasks []BusinessRuleTaskDetail
-	timerCatches      []TimerCatchDetail
-	connectorTasks    []ConnectorTaskDetail
-	userTasks         []UserTaskDetail
-	boundaryEventDets []BoundaryEventDetail
-	eventSubProcesses []EventSubProcessDetail
-	messageCatches    []MessageDetail
-	receiveTasks      []MessageDetail // receive tasks (ADR-0102)
-	messageThrows     []MessageDetail
-	messageStarts     []MessageDetail
-	signalCatches     []SignalDetail
-	signalThrows      []SignalDetail // shared by signal throw and signal end events
-	signalStarts      []SignalDetail
-	errorEnds         []ErrorEndDetail // error end events (ADR-0089)
-	timerStarts       []TimerStartDetail
-	dataObjects       []CompiledDataObject
-	dataOutAssocs     []pendingDataOut // data-output associations, grouped by node in Build
-	dataInAssocs      []pendingDataIn  // data-input associations, grouped by node in Build
-	ioInputs          []pendingIO      // zeebe:ioMapping inputs, grouped by node in Build
-	ioOutputs         []pendingIO      // zeebe:ioMapping outputs, grouped by node in Build
-	elementIds        []int32          // interned source BPMN id per node, -1 if unset
-	startFormId       int32            // interned start-form id (ADR-0028), -1 if the process has none
-	versionTag        int32            // interned atlas:versionTag revision label, -1 if none
-	instanceTtlNanos  int64            // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
-	isExecutable      bool             // bpmn:isExecutable; defaults true (set in NewBuilder)
+	nodes              []CompiledNode
+	flows              []CompiledFlow
+	serviceTasks       []ServiceTaskDetail
+	scriptTasks        []ScriptTaskDetail
+	callActivities     []CallActivityDetail
+	multiInstances     []MultiInstanceDetail
+	scriptJobTasks     []ScriptJobTaskDetail
+	businessRuleTasks  []BusinessRuleTaskDetail
+	timerCatches       []TimerCatchDetail
+	connectorTasks     []ConnectorTaskDetail
+	userTasks          []UserTaskDetail
+	boundaryEventDets  []BoundaryEventDetail
+	eventSubProcesses  []EventSubProcessDetail
+	messageCatches     []MessageDetail
+	receiveTasks       []MessageDetail // receive tasks (ADR-0102)
+	messageThrows      []MessageDetail
+	messageStarts      []MessageDetail
+	signalCatches      []SignalDetail
+	signalThrows       []SignalDetail // shared by signal throw and signal end events
+	signalStarts       []SignalDetail
+	errorEnds          []ErrorEndDetail     // error end events (ADR-0089)
+	compensationThrows []CompensationDetail // shared by compensation throw and end events (ADR-0103)
+	timerStarts        []TimerStartDetail
+	dataObjects        []CompiledDataObject
+	dataOutAssocs      []pendingDataOut // data-output associations, grouped by node in Build
+	dataInAssocs       []pendingDataIn  // data-input associations, grouped by node in Build
+	ioInputs           []pendingIO      // zeebe:ioMapping inputs, grouped by node in Build
+	ioOutputs          []pendingIO      // zeebe:ioMapping outputs, grouped by node in Build
+	elementIds         []int32          // interned source BPMN id per node, -1 if unset
+	startFormId        int32            // interned start-form id (ADR-0028), -1 if the process has none
+	versionTag         int32            // interned atlas:versionTag revision label, -1 if none
+	instanceTtlNanos   int64            // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
+	isExecutable       bool             // bpmn:isExecutable; defaults true (set in NewBuilder)
 
 	// flowScope is the enclosing scope every node added now lands in: -1 for the
 	// process root, or a subprocess node's ElementId while its children are being
@@ -983,6 +984,72 @@ func (b *Builder) AddBoundaryErrorEvent(host int32, errorCode string) int32 {
 	return b.addNode(TypeBoundaryEvent, detail)
 }
 
+// AddCompensationThrowEvent adds an intermediate throw event that, on activation, triggers
+// compensation — running the handlers of completed compensable activities in its scope (or
+// of the single activity later set via SetCompensationActivityRef) — then flows on (ADR-0103).
+// ActivityRef defaults to -1 (compensate the whole scope). Returns its element id.
+func (b *Builder) AddCompensationThrowEvent() int32 {
+	detail := int32(len(b.compensationThrows))
+	b.compensationThrows = append(b.compensationThrows, CompensationDetail{ActivityRef: -1})
+	return b.addNode(TypeCompensationThrowEvent, detail)
+}
+
+// AddCompensationEndEvent adds an end event that triggers compensation, then ends its scope
+// — the trigger-and-stop counterpart of a compensation throw, reusing the throw detail table
+// like a signal end event (ADR-0103). Returns its element id.
+func (b *Builder) AddCompensationEndEvent() int32 {
+	detail := int32(len(b.compensationThrows))
+	b.compensationThrows = append(b.compensationThrows, CompensationDetail{ActivityRef: -1})
+	return b.addNode(TypeCompensationEndEvent, detail)
+}
+
+// AddBoundaryCompensationEvent adds a compensation boundary event attached to host: an inert
+// marker (never armed as an element instance) that makes the host compensable and links it to
+// a compensation handler, resolved later from a BPMN <association> via SetCompensationHandler
+// (ADR-0103). CompensationHandler starts unresolved (-1). Returns its element id.
+func (b *Builder) AddBoundaryCompensationEvent(host int32) int32 {
+	detail := int32(len(b.boundaryEventDets))
+	b.boundaryEventDets = append(b.boundaryEventDets, BoundaryEventDetail{
+		HostNode:            host,
+		Interrupting:        false, // a compensation boundary never interrupts; it is inert
+		Kind:                BoundaryCompensation,
+		CompensationHandler: -1,
+	})
+	return b.addNode(TypeBoundaryEvent, detail)
+}
+
+// SetCompensationHandler resolves a compensation boundary event's handler link: it points the
+// boundary node (a BoundaryCompensation) at the handler activity's element id (ADR-0103). The
+// boundary must be a compensation boundary; other kinds are left untouched.
+func (b *Builder) SetCompensationHandler(boundaryNodeID, handlerNodeID int32) {
+	if !b.validNode(boundaryNodeID) {
+		return
+	}
+	n := &b.nodes[boundaryNodeID]
+	if n.Type != TypeBoundaryEvent {
+		return
+	}
+	d := &b.boundaryEventDets[n.Detail]
+	if d.Kind != BoundaryCompensation {
+		return
+	}
+	d.CompensationHandler = handlerNodeID
+}
+
+// SetCompensationActivityRef narrows a compensation throw/end event to compensate a single
+// activity (by element id) rather than the whole scope (ADR-0103). The node must be a
+// compensation throw or end event.
+func (b *Builder) SetCompensationActivityRef(throwNodeID, activityRef int32) {
+	if !b.validNode(throwNodeID) {
+		return
+	}
+	n := &b.nodes[throwNodeID]
+	if n.Type != TypeCompensationThrowEvent && n.Type != TypeCompensationEndEvent {
+		return
+	}
+	b.compensationThrows[n.Detail].ActivityRef = activityRef
+}
+
 // Connect adds a sequence flow from source to target and returns its flow id, so
 // the caller can attach a condition or mark it the default.
 func (b *Builder) Connect(source, target int32) int32 {
@@ -1169,48 +1236,49 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 	}
 
 	return &CompiledProcess{
-		Key:               b.key,
-		BpmnProcessId:     b.intern(b.bpmnProcessId),
-		Version:           b.version,
-		nodes:             b.nodes,
-		flows:             b.flows,
-		outgoingFlows:     outgoing,
-		boundaryEvents:    boundary,
-		scopeStarts:       scopeStarts,
-		serviceTasks:      b.serviceTasks,
-		scriptTasks:       b.scriptTasks,
-		callActivities:    b.callActivities,
-		multiInstances:    b.multiInstances,
-		scriptJobTasks:    b.scriptJobTasks,
-		businessRuleTasks: b.businessRuleTasks,
-		timerCatches:      b.timerCatches,
-		connectorTasks:    b.connectorTasks,
-		userTasks:         b.userTasks,
-		boundaryEventDets: b.boundaryEventDets,
-		eventSubProcesses: b.eventSubProcesses,
-		eventSubs:         eventSubs,
-		rootEventSubs:     rootEventSubs,
-		messageCatches:    b.messageCatches,
-		receiveTasks:      b.receiveTasks,
-		messageThrows:     b.messageThrows,
-		messageStarts:     b.messageStarts,
-		signalCatches:     b.signalCatches,
-		signalThrows:      b.signalThrows,
-		signalStarts:      b.signalStarts,
-		errorEnds:         b.errorEnds,
-		timerStarts:       b.timerStarts,
-		dataObjects:       b.dataObjects,
-		dataOutAssocs:     dataOut,
-		dataInAssocs:      dataIn,
-		ioInputs:          ioIn,
-		ioOutputs:         ioOut,
-		startEvents:       startEvents,
-		elementIds:        b.elementIds,
-		startFormId:       b.startFormId,
-		versionTag:        b.versionTag,
-		instanceTtlNanos:  b.instanceTtlNanos,
-		isExecutable:      b.isExecutable,
-		strings:           b.strings,
+		Key:                b.key,
+		BpmnProcessId:      b.intern(b.bpmnProcessId),
+		Version:            b.version,
+		nodes:              b.nodes,
+		flows:              b.flows,
+		outgoingFlows:      outgoing,
+		boundaryEvents:     boundary,
+		scopeStarts:        scopeStarts,
+		serviceTasks:       b.serviceTasks,
+		scriptTasks:        b.scriptTasks,
+		callActivities:     b.callActivities,
+		multiInstances:     b.multiInstances,
+		scriptJobTasks:     b.scriptJobTasks,
+		businessRuleTasks:  b.businessRuleTasks,
+		timerCatches:       b.timerCatches,
+		connectorTasks:     b.connectorTasks,
+		userTasks:          b.userTasks,
+		boundaryEventDets:  b.boundaryEventDets,
+		eventSubProcesses:  b.eventSubProcesses,
+		eventSubs:          eventSubs,
+		rootEventSubs:      rootEventSubs,
+		messageCatches:     b.messageCatches,
+		receiveTasks:       b.receiveTasks,
+		messageThrows:      b.messageThrows,
+		messageStarts:      b.messageStarts,
+		signalCatches:      b.signalCatches,
+		signalThrows:       b.signalThrows,
+		signalStarts:       b.signalStarts,
+		errorEnds:          b.errorEnds,
+		compensationThrows: b.compensationThrows,
+		timerStarts:        b.timerStarts,
+		dataObjects:        b.dataObjects,
+		dataOutAssocs:      dataOut,
+		dataInAssocs:       dataIn,
+		ioInputs:           ioIn,
+		ioOutputs:          ioOut,
+		startEvents:        startEvents,
+		elementIds:         b.elementIds,
+		startFormId:        b.startFormId,
+		versionTag:         b.versionTag,
+		instanceTtlNanos:   b.instanceTtlNanos,
+		isExecutable:       b.isExecutable,
+		strings:            b.strings,
 	}, nil
 }
 

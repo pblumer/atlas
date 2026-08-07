@@ -81,6 +81,11 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err == nil && v.process.CorrelationKey != "" {
 				err = tx.DecrementActiveStartKey(v.process.ProcessDefKey, v.process.CorrelationKey)
 			}
+			// The instance's root scope tears down: drop any compensable records still held
+			// under it so they never leak past the instance (ADR-0103).
+			if err == nil {
+				err = tx.DeleteCompensablesOfScope(h.Key)
+			}
 			return err
 		}
 
@@ -133,6 +138,14 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			}
 			if v.element.BpmnElementType != eventSubTrigger {
 				if err := tx.DecrementActiveChildren(v.element.FlowScopeKey); err != nil {
+					return err
+				}
+			}
+			// A subprocess scope tearing down (normal completion or termination) drops any
+			// compensable records still held under it — its element key is its children's
+			// scope key — so they never leak past the scope (ADR-0103).
+			if v.element.BpmnElementType == uint8(compiler.TypeSubProcess) {
+				if err := tx.DeleteCompensablesOfScope(h.Key); err != nil {
 					return err
 				}
 			}
@@ -260,6 +273,21 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// evaluation), so replay rebuilds it without re-evaluating — invariants
 			// I4/I6.
 			return tx.RecordDecisionEvaluation(h.Timestamp, h.Position, &v.decisionEval)
+		}
+
+	case model.VTCompensable:
+		switch h.Intent {
+		case model.IntentCompensableRecorded:
+			// Retain a completed compensable activity under its scope, keyed by this
+			// event's log position so a scope scan yields completion order (ADR-0103).
+			// The record carries the scope, the activity, and its handler; the position
+			// comes from the header, so replay rebuilds the identical index (I4/I6).
+			return tx.RecordCompensable(h.Position, &v.compensable)
+		case model.IntentCompensableConsumed:
+			// The activity was compensated: drop its record so it compensates at most
+			// once. The scope and sequence ride on the event, so replay deletes the
+			// identical entry.
+			return tx.DeleteCompensable(v.compensable.ScopeKey, v.compensable.Seq)
 		}
 	}
 	return nil

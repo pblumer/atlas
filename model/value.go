@@ -771,6 +771,51 @@ func (v *IncidentValue) decode(src []byte) error {
 	return nil
 }
 
+// CompensableValue is one completed compensable activity: an activity that bore a
+// compensation boundary and finished successfully, retained so a later compensation
+// throw can run its handler (ADR-0103). It is keyed under ScopeKey in completion order
+// (by the event's log position), so a reverse scan yields reverse completion order.
+// ElementId identifies the compensated activity (for activityRef matching); HandlerNode
+// is the compensation handler to activate; Seq carries the record's key sequence back on
+// the consume event so its index entry can be deleted. All fields are fixed-width.
+type CompensableValue struct {
+	ProcessInstanceKey uint64
+	ProcessDefKey      uint64
+	ScopeKey           uint64 // FlowScopeKey the compensable activity lived in
+	ElementInstanceKey uint64 // the completed activity's element-instance key
+	Seq                uint64 // the record's key sequence (log position), set on consume
+	ElementId          int32  // the compensable activity's compiled node id
+	HandlerNode        int32  // the compensation handler's compiled node id
+}
+
+const compensableSize = 8 + 8 + 8 + 8 + 8 + 4 + 4
+
+func (*CompensableValue) ValueType() ValueType { return VTCompensable }
+
+func (v *CompensableValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ScopeKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.ElementInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.Seq)
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.ElementId))
+	return binary.LittleEndian.AppendUint32(dst, uint32(v.HandlerNode))
+}
+
+func (v *CompensableValue) decode(src []byte) error {
+	if len(src) < compensableSize {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src[0:])
+	v.ProcessDefKey = binary.LittleEndian.Uint64(src[8:])
+	v.ScopeKey = binary.LittleEndian.Uint64(src[16:])
+	v.ElementInstanceKey = binary.LittleEndian.Uint64(src[24:])
+	v.Seq = binary.LittleEndian.Uint64(src[32:])
+	v.ElementId = int32(binary.LittleEndian.Uint32(src[40:]))
+	v.HandlerNode = int32(binary.LittleEndian.Uint32(src[44:]))
+	return nil
+}
+
 // newValue returns a zero payload for the value types that have one. Value
 // types without a payload yet return nil; their records carry only a header.
 func newValue(vt ValueType) Value {
@@ -801,6 +846,8 @@ func newValue(vt ValueType) Value {
 		return &InboundDeliveryValue{}
 	case VTVariableAudit:
 		return &VariableAuditValue{}
+	case VTCompensable:
+		return &CompensableValue{}
 	default:
 		return nil
 	}
