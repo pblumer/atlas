@@ -59,6 +59,7 @@ export function attachCollab(modeler, api, draftId, toast) {
 
   const state = {
     self: null,
+    canEdit: true,         // project role permits editing; a viewer joins read-only (ADR-0071)
     name: guestName(),
     participants: [],
     locks: [],
@@ -78,6 +79,9 @@ export function attachCollab(modeler, api, draftId, toast) {
   // element is held by someone else) and surfaced as a hint rather than an error.
   const send = (suffix, body, onConflict) => {
     if (!state.self || state.closed) return;
+    // A viewer (read-only project role) never sends a mutating action — the
+    // server would 403 it; skipping keeps a viewer's canvas a clean watch view.
+    if (!state.canEdit) return;
     api("POST", base + suffix, { participantId: state.self, ...body })
       .catch((e) => { if (onConflict) onConflict(e); });
   };
@@ -203,6 +207,7 @@ export function attachCollab(modeler, api, draftId, toast) {
   // --- Incoming stream ---
   const applySync = (d) => {
     state.self = d.self;
+    state.canEdit = d.canEdit !== false; // absent (older server) defaults to editable
     state.participants = d.participants || [];
     state.locks = d.locks || [];
     renderPresence();

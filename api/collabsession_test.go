@@ -298,6 +298,32 @@ func TestCollabPoll(t *testing.T) {
 	}
 }
 
+// TestCollabCanEdit covers the per-participant edit capability snapshotted at
+// join from the project role (ADR-0103/0071).
+func TestCollabCanEdit(t *testing.T) {
+	reg := newCollabRegistry()
+	ed, _, _ := reg.joinStream("d", "u1", "Ed", true)
+	vw, _, _ := reg.joinStream("d", "u2", "Vi", false)
+
+	if ce, ok := reg.canEdit("d", ed.ID); !ok || !ce {
+		t.Errorf("editor canEdit = (%v, ok=%v), want (true, true)", ce, ok)
+	}
+	if ce, ok := reg.canEdit("d", vw.ID); !ok || ce {
+		t.Errorf("viewer canEdit = (%v, ok=%v), want (false, true)", ce, ok)
+	}
+	if _, ok := reg.canEdit("d", "ghost"); ok {
+		t.Error("canEdit for an unknown participant reported ok")
+	}
+	if _, ok := reg.canEdit("nope", ed.ID); ok {
+		t.Error("canEdit on an unknown session reported ok")
+	}
+	// A read-only detached agent carries canEdit=false too.
+	ag, _ := reg.joinDetachedAs("d", "u3", "Agent", false)
+	if ce, _ := reg.canEdit("d", ag.ID); ce {
+		t.Error("read-only agent reported canEdit=true")
+	}
+}
+
 // TestCollabReaper covers the TTL reaper (ADR-0103): a detached (MCP agent)
 // participant that falls silent past the TTL is evicted and its locks released,
 // while a streaming (browser) participant is exempt, and a recent poll keeps a

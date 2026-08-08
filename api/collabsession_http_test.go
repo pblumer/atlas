@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +13,114 @@ import (
 
 	"github.com/pblumer/atlas/api"
 )
+
+// saveXMLDraft posts a BPMN draft as XML with an authenticated client, optionally
+// filed under a project via the path's ?projectId= query.
+func saveXMLDraft(t *testing.T, c *http.Client, ts *httptest.Server, path, xml string) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, ts.URL+path, strings.NewReader(xml))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/xml")
+	res, err := c.Do(req)
+	if err != nil {
+		t.Fatalf("save draft: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("save draft status=%d body=%s", res.StatusCode, b)
+	}
+}
+
+// TestDraftSessionScopeEnforcement drives the full ADR-0071 gate end to end under
+// --auth: an editor may co-edit, a viewer may only watch (403 on mutating
+// actions), and a non-member cannot see the session at all (404).
+func TestDraftSessionScopeEnforcement(t *testing.T) {
+	ts, _ := newAuthServer(t, "admin", "adminpw123")
+	admin := newClient(t)
+	if code := login(t, admin, ts, "admin", "adminpw123"); code != http.StatusOK {
+		t.Fatalf("admin login: %d", code)
+	}
+
+	mkUser := func(name string) string {
+		_, b := cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"`+name+`","password":"password1"}`)
+		return idOf(t, b)
+	}
+	editorID := mkUser("editor")
+	viewerID := mkUser("viewer")
+	mkUser("stranger")
+
+	// Admin owns a project and shares it: editor as editor, viewer as viewer.
+	_, pb := cReq(t, admin, ts, "POST", "/api/v1/projects", `{"name":"Shared"}`)
+	pid := idOf(t, pb)
+	if code, _ := cReq(t, admin, ts, "PUT", "/api/v1/projects/"+pid+"/members/"+editorID, `{"role":"editor"}`); code != http.StatusOK {
+		t.Fatalf("share with editor: %d", code)
+	}
+	if code, _ := cReq(t, admin, ts, "PUT", "/api/v1/projects/"+pid+"/members/"+viewerID, `{"role":"viewer"}`); code != http.StatusOK {
+		t.Fatalf("share with viewer: %d", code)
+	}
+	// And files a draft into that project.
+	saveXMLDraft(t, admin, ts, "/api/v1/drafts?projectId="+pid, draftBPMN)
+
+	joinAs := func(name string) (*http.Client, string, bool) {
+		c := newClient(t)
+		if code := login(t, c, ts, name, "password1"); code != http.StatusOK {
+			t.Fatalf("%s login: %d", name, code)
+		}
+		code, b := cReq(t, c, ts, "POST", "/api/v1/drafts/wip-order/session/join", `{}`)
+		if code != http.StatusOK {
+			t.Fatalf("%s join: %d %s", name, code, b)
+		}
+		var j struct {
+			Self    string `json:"self"`
+			CanEdit bool   `json:"canEdit"`
+		}
+		if err := json.Unmarshal(b, &j); err != nil {
+			t.Fatalf("%s decode join: %v", name, err)
+		}
+		return c, j.Self, j.CanEdit
+	}
+
+	// Editor: canEdit true, may lock.
+	editor, edSelf, edCanEdit := joinAs("editor")
+	if !edCanEdit {
+		t.Fatal("editor joined with canEdit=false")
+	}
+	if code, b := cReq(t, editor, ts, "POST", "/api/v1/drafts/wip-order/session/lock",
+		`{"participantId":"`+edSelf+`","elementId":"StartEvent_1","action":"acquire"}`); code != http.StatusNoContent {
+		t.Fatalf("editor lock: %d %s", code, b)
+	}
+
+	// Viewer: canEdit false, may poll (watch) but is 403 on every mutating action.
+	viewer, vwSelf, vwCanEdit := joinAs("viewer")
+	if vwCanEdit {
+		t.Fatal("viewer joined with canEdit=true")
+	}
+	if code, _ := cReq(t, viewer, ts, "POST", "/api/v1/drafts/wip-order/session/poll",
+		`{"participantId":"`+vwSelf+`"}`); code != http.StatusOK {
+		t.Fatalf("viewer poll should be allowed: %d", code)
+	}
+	for _, m := range []struct{ path, body string }{
+		{"lock", `{"participantId":"` + vwSelf + `","elementId":"StartEvent_1","action":"acquire"}`},
+		{"change", `{"participantId":"` + vwSelf + `","elementId":"StartEvent_1"}`},
+		{"presence", `{"participantId":"` + vwSelf + `","selection":"StartEvent_1"}`},
+	} {
+		if code, b := cReq(t, viewer, ts, "POST", "/api/v1/drafts/wip-order/session/"+m.path, m.body); code != http.StatusForbidden {
+			t.Fatalf("viewer %s: got %d, want 403 (%s)", m.path, code, b)
+		}
+	}
+
+	// Stranger: not a member, cannot even see the session.
+	stranger := newClient(t)
+	if code := login(t, stranger, ts, "stranger", "password1"); code != http.StatusOK {
+		t.Fatalf("stranger login: %d", code)
+	}
+	if code, _ := cReq(t, stranger, ts, "POST", "/api/v1/drafts/wip-order/session/join", `{}`); code != http.StatusNotFound {
+		t.Fatalf("stranger join: got %d, want 404", code)
+	}
+}
 
 // readSSEFrame reads one Server-Sent Events frame — lines until a blank line —
 // returning its event name and data payload. It fails the test if the stream
