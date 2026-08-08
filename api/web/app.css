@@ -1418,10 +1418,23 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   font-size: 0.8em; line-height: 1; transition: transform 0.15s; vertical-align: middle;
 }
 #pane-design .fjs-pgl-section.fv-collapsed .fv-sec-caret { transform: rotate(-90deg); }
-/* Collapsed: keep only the header, pinned to the top of its grid cell. */
-#pane-design .fjs-pgl-section.fv-collapsed { align-self: start; }
+/* Collapsed: keep only the header (its flex basis shrinks it to that height). */
 #pane-design .fjs-pgl-section.fv-collapsed > :not(.header) { display: none; }
-/* Draggable gutters between the grid's columns and rows. */
+/* The two stacked regions the areas are re-parented into: editor + optional
+   preview on top, the decoupled Form Input/Output data region below. */
+#pane-design .fv-top { position: relative; display: flex; flex-direction: row; min-height: 0; overflow: hidden; }
+#pane-design .fv-bottom { display: flex; flex-direction: row; min-height: 0; overflow: hidden; }
+#pane-design .fv-top > .fjs-pgl-section,
+#pane-design .fv-bottom > .fjs-pgl-section { min-width: 0; min-height: 0; overflow: hidden; }
+/* Show/hide-preview toggle sitting in the editor's own header. */
+#pane-design .fv-preview-toggle {
+  margin-left: 8px; padding: 2px 9px; font: inherit; font-size: 12px; line-height: 1.5;
+  color: var(--muted); background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; cursor: pointer; white-space: nowrap;
+}
+#pane-design .fv-preview-toggle:hover { border-color: var(--accent); color: var(--accent); }
+#pane-design .fv-preview-toggle.on { color: var(--text); }
+/* Draggable gutters between the editor/preview and top/bottom regions. */
 #pane-design .fv-grid-cresizer {
   position: absolute; top: 0; bottom: 0; width: 9px; margin-left: -4px; z-index: 6; cursor: col-resize;
 }
@@ -1436,6 +1449,22 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 #pane-design .fv-side-resizer { flex: 0 0 6px; align-self: stretch; position: relative; z-index: 6; cursor: col-resize; }
 #pane-design .fv-side-resizer::before { content: ""; position: absolute; top: 0; bottom: 0; left: 2px; width: 2px; background: var(--border); transition: background 0.12s; }
 #pane-design .fv-side-resizer:hover::before, #pane-design .fv-side-resizer.dragging::before { background: var(--accent); }
+/* A side column (Components / Properties) collapses to nothing; the chevron on its
+   resizer stays put so it can be reopened. */
+#pane-design .fjs-pgl-palette-container,
+#pane-design .fjs-pgl-properties-container { position: relative; }
+#pane-design .fv-rail { width: 0 !important; min-width: 0 !important; overflow: hidden; }
+#pane-design .fv-railbtn {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 8;
+  width: 20px; height: 22px; padding: 0; display: grid; place-items: center;
+  font: 600 13px/1 system-ui, sans-serif; cursor: pointer; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+}
+#pane-design .fv-railbtn:hover { border-color: var(--accent); color: var(--accent); }
+/* form-js renders each property group header as a 32px grey bar, chunkier than the
+   BPMN modeler's lighter property-group headers; slim it so the panels read alike. */
+#pane-design .bio-properties-panel-group-header { height: 27px; }
+#pane-design .bio-properties-panel-group-header-button { height: 20px; line-height: 20px; }
 
 .tasks-form { margin-top: 22px; max-width: 640px; }
 .tasks-form .fjs-container { --color-background: var(--surface); }
