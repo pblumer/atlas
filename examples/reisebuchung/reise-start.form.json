@@ -1,0 +1,41 @@
+{
+  "type": "default",
+  "id": "reise-start",
+  "components": [
+    {
+      "type": "text",
+      "text": "# ✈️ Reisebuchung – Reisedaten\n\nWähle zuerst die **Reiseart**. Die **Zielliste** passt sich daraufhin automatisch an (kaskadierende Auswahl, rein im Formular). Für Fernreisen erscheint zusätzlich das Feld für die Reisepass-Nr. (bedingtes Feld)."
+    },
+    {
+      "key": "reiseart",
+      "type": "select",
+      "label": "Reiseart",
+      "values": [
+        { "label": "Inland", "value": "Inland" },
+        { "label": "EU-Ausland", "value": "EU" },
+        { "label": "Fernreise", "value": "Fernreise" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "key": "ziel",
+      "type": "select",
+      "label": "Ziel",
+      "valuesExpression": "=if reiseart = \"Fernreise\" then [{value: \"th\", label: \"Thailand\"}, {value: \"us\", label: \"USA\"}, {value: \"jp\", label: \"Japan\"}] else if reiseart = \"EU\" then [{value: \"es\", label: \"Spanien\"}, {value: \"fr\", label: \"Frankreich\"}, {value: \"it\", label: \"Italien\"}] else [{value: \"sylt\", label: \"Sylt\"}, {value: \"bayern\", label: \"Bayern\"}, {value: \"harz\", label: \"Harz\"}]",
+      "validate": { "required": true }
+    },
+    {
+      "key": "reisepassNr",
+      "type": "textfield",
+      "label": "Reisepass-Nr.",
+      "conditional": { "hide": "=reiseart != \"Fernreise\"" }
+    },
+    {
+      "key": "geburtsdatum",
+      "type": "datetime",
+      "subtype": "date",
+      "dateLabel": "Geburtsdatum",
+      "validate": { "required": true }
+    }
+  ]
+}

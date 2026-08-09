@@ -1,0 +1,16 @@
+{
+  "type": "default",
+  "id": "reise-bestaetigung",
+  "components": [
+    {
+      "type": "text",
+      "text": "# ✅ Buchung bestätigen\n\nAlle nötigen Nachweise liegen vor. Bestätige die verbindliche Buchung."
+    },
+    {
+      "key": "buchungBestaetigt",
+      "type": "checkbox",
+      "label": "Buchung verbindlich bestätigen",
+      "validate": { "required": true }
+    }
+  ]
+}
