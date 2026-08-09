@@ -134,6 +134,41 @@ geöffneten** Zweige — der `sonst`-Default wurde korrekt unterdrückt.
 *Buchung bestätigen*. Genau dieselbe Prozessdefinition, anderes Verhalten —
 gesteuert allein durch die Daten und die Entscheidungstabelle.
 
+## Kunden-Assistent: Mehrschritt ohne Aufgabenliste
+
+Jeder Schritt ist unter der Haube ein eigener `userTask` (durabler Checkpoint) —
+aber ein Endkunde soll **keine** Aufgabenliste sehen und nicht spürbar „auf den
+nächsten Task wechseln". Genau das zeigt
+[`../../api/web/reisebuchung-kunde.html`](../../api/web/reisebuchung-kunde.html):
+ein schlanker, same-origin **Assistent**, der nach jedem Absenden sofort den
+nächsten Task derselben Instanz holt und dessen Formular **an derselben Stelle**
+rendert. Der Effekt ist ein nahtloser Wizard über durable Prozessschritte; selbst
+die zwei *parallel* geöffneten Zweige (Visum + Einverständnis) erscheinen dem
+einen Nutzer einfach als zwei aufeinanderfolgende Schritte.
+
+Der Vertrag zum Server sind vier Aufrufe — `start instance` · `get next task` ·
+`get form` · `complete task`; **welches** Formular als Nächstes kommt, entscheidet
+die Engine (DMN + Gateways). Die Seite rendert die echten form-js-Formulare, also
+funktionieren die kaskadierende Zielauswahl und das bedingte Reisepass-Feld darin
+live.
+
+Weil `api/web/` in die Server-Binary **einkompiliert** wird (`//go:embed web`),
+muss der Server **neu gebaut und gestartet** werden; danach unter
+`/reisebuchung-kunde.html` öffnen. Voraussetzung: der Prozess `proc_reisebuchung`
+ist deployed (dieses Beispiel).
+
+> **Grenze der Öffentlichkeit:** `/api/v1/tasks` liegt hinter der (optionalen)
+> Auth des Servers — der Assistent ist also das Muster für einen *angemeldeten*
+> Kundenbereich. Ein völlig unauthentifizierter Erstkontakt läuft über das
+> **öffentliche Startformular** (ADR-0029, `/public/forms/{token}`); ein rein
+> öffentlicher Mehrschritt-Flow braucht dann entweder **ein** reiches
+> Startformular (Fall A unten) oder korrelierte öffentliche Schritte.
+
+Die zwei „Ebene A"-Verhalten des Startformulars (kaskadierende Auswahl +
+bedingtes Feld) sind gegen das echte form-js-Bundle durch einen Browser-Test
+abgesichert: [`../../e2e/reise-form.spec.mjs`](../../e2e/reise-form.spec.mjs)
+(Harness: `e2e/reise-form-harness.html`) — `cd e2e && npm ci && npx playwright test reise-form.spec.mjs`.
+
 ## Wann welche Ebene?
 
 - Hängt die Auswahl/Sichtbarkeit **nur von anderen Feldern desselben
