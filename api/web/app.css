@@ -1339,22 +1339,20 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   border-radius: var(--radius); background: var(--bg);
 }
 .tasks-form-placeholder p { margin: 0; max-width: 60ch; }
-/* Process view inside a task's detail (mountTaskProcess): a collapsible, read-only
+/* The task detail's Form / Process tabs: the form to complete and a read-only
    diagram of the task's instance with progress overlaid, so the assignee sees what
    has already run (gray), where the tokens are now (green), and their own task
-   (blue) — and, by what's left plain, what is still ahead. */
-.tasks-process { margin-top: 20px; border-top: 1px solid var(--border); max-width: 900px; }
-.tasks-process-toggle {
-  display: flex; align-items: center; gap: 8px; width: 100%; padding: 12px 2px;
-  background: none; border: none; cursor: pointer; text-align: left; color: var(--text);
-  font-size: 13px; font-weight: 600;
+   (blue) — and, by what's left plain, what is still ahead. Underline tabs, matching
+   the Operations inspector. */
+.tasks-detail-tabs { display: flex; gap: 2px; margin-top: 22px; border-bottom: 1px solid var(--border); }
+.tasks-detail-tabs button {
+  border: none; background: transparent; padding: 9px 12px; font: inherit; font-size: 13px; color: var(--muted);
+  cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
 }
-.tasks-process-toggle:hover { color: var(--accent); }
-.tasks-process-toggle .tp-caret { color: var(--muted); font-size: 10px; width: 12px; transition: transform 0.12s ease; }
-.tasks-process-toggle[aria-expanded="true"] .tp-caret { transform: rotate(90deg); }
-.tasks-process-toggle .tp-sub { font-weight: 400; font-size: 12px; }
-.tasks-process-body { padding: 0 0 8px; }
-.tp-legend { display: flex; flex-wrap: wrap; gap: 16px; margin: 2px 0 10px; font-size: 12px; color: var(--muted); }
+.tasks-detail-tabs button:hover { color: var(--text); }
+.tasks-detail-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.tasks-tab-body { padding-top: 16px; }
+.tp-legend { display: flex; flex-wrap: wrap; gap: 16px; margin: 0 0 10px; font-size: 12px; color: var(--muted); }
 .tp-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .tp-legend .tp-sw { width: 12px; height: 12px; border-radius: 3px; border: 2px solid var(--border); }
 .tp-legend .tp-sw.here { border-color: var(--accent); background: var(--accent-soft); }
