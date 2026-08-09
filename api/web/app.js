@@ -2478,6 +2478,8 @@ async function viewTasks(preselectKey) {
     me: authOn ? ((AUTH.user && AUTH.user.username) || "") : (localStorage.getItem("atlas.tasks.me") || ""),
     assignable: [], // enabled users a task can be assigned to, for the picker
     mountedForm: null, // the live form-js viewer instance for the selected task, if any
+    mountedProc: null, // the read-only process-view handle for the selected task, if mounted
+    detailTab: "form", // which detail tab shows — "form" | "process" (kept across selections)
     query: "", // free-text filter over the visible tasks (name/process/assignee/…)
     sort: localStorage.getItem("atlas.tasks.sort") || "smart", // sort key, see SORTS
     selectMode: false, // multi-select for bulk actions
@@ -2776,8 +2778,36 @@ async function viewTasks(preselectKey) {
     }
   }
 
+  // destroyProc tears down the read-only process viewer before the detail pane is
+  // re-rendered or the selection changes, so no bpmn-js viewer leaks.
+  function destroyProc() {
+    if (state.mountedProc) {
+      try { state.mountedProc.destroy(); } catch { /* already gone */ }
+      state.mountedProc = null;
+    }
+  }
+
+  // mountProc lazily loads the read-only process view — the BPMN diagram of the
+  // task's instance with its progress overlaid — into the expanded panel. Guards
+  // against the selection changing while the (async) import/mount is in flight.
+  async function mountProc(t) {
+    const host = document.getElementById("tp-canvas");
+    if (!host) return;
+    destroyProc();
+    try {
+      const mod = await import("./editor.js");
+      if (state.selected !== t.key || !document.getElementById("tp-canvas")) return;
+      state.mountedProc = await mod.mountTaskProcess(host, {
+        api, instanceKey: t.processInstanceKey, activeElementId: t.elementId,
+      });
+    } catch (err) {
+      host.innerHTML = `<p class="muted err" style="padding:16px">Could not load the process view: ${esc(err.message)}</p>`;
+    }
+  }
+
   function renderDetail() {
     destroyForm();
+    destroyProc();
     const t = state.tasks.find((x) => x.key === state.selected);
     if (!t) {
       detailEl.innerHTML = `<div class="tasks-detail-empty muted">Select a task to see its details.</div>`;
@@ -2803,6 +2833,24 @@ async function viewTasks(preselectKey) {
       ? `<div class="tasks-form" id="task-form"><p class="muted">Loading form&hellip;</p></div>`
       : `<div class="tasks-form-placeholder"><p class="muted">This task has no form; completing it
          records no variables.</p></div>`;
+    // The form and a read-only view of the whole process instance sit side by side
+    // as tabs, so the assignee can flip to "what has run and what's still ahead"
+    // without the form scrolling away below.
+    const tab = state.detailTab === "process" ? "process" : "form";
+    const tabBar = `
+      <div class="tasks-detail-tabs" id="task-dtabs" role="tablist">
+        <button type="button" role="tab" data-dtab="form"${tab === "form" ? ' class="active" aria-selected="true"' : ' aria-selected="false"'}>Form</button>
+        <button type="button" role="tab" data-dtab="process"${tab === "process" ? ' class="active" aria-selected="true"' : ' aria-selected="false"'}>Process</button>
+      </div>`;
+    const procPane = `
+      <div class="tasks-tabpane" id="pane-process"${tab === "process" ? "" : " hidden"}>
+        <div class="tp-legend">
+          <span><i class="tp-sw here"></i> This task</span>
+          <span><i class="tp-sw active"></i> Active</span>
+          <span><i class="tp-sw done"></i> Completed</span>
+        </div>
+        <div class="tp-canvas" id="tp-canvas"><p class="tp-msg muted">Loading&hellip;</p></div>
+      </div>`;
     detailEl.innerHTML = `
       <header class="tasks-detail-head">
         <h1>${esc(taskTitle(t))}</h1>
@@ -2822,7 +2870,11 @@ async function viewTasks(preselectKey) {
         ${row("Instance", `<span class="chip">${t.processInstanceKey}</span>`)}
         ${row("Task key", `<span class="chip">${t.key}</span>`)}
       </div>
-      ${formArea}`;
+      ${tabBar}
+      <div class="tasks-tab-body">
+        <div class="tasks-tabpane" id="pane-form"${tab === "form" ? "" : " hidden"}>${formArea}</div>
+        ${procPane}
+      </div>`;
     document.getElementById("task-complete").addEventListener("click", () => completeCurrent());
     document.getElementById("task-claim").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
@@ -2858,7 +2910,29 @@ async function viewTasks(preselectKey) {
         }
       });
     }
+    // Always mount the form (when the task has one) so Complete has its data even
+    // while the Process tab is showing. The process diagram mounts lazily the first
+    // time its tab is opened; the chosen tab is kept across task selections.
     if (t.formId) mountForm(t);
+    const dtabs = document.getElementById("task-dtabs");
+    const paneForm = document.getElementById("pane-form");
+    const paneProc = document.getElementById("pane-process");
+    dtabs.addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-dtab]");
+      if (!b) return;
+      const next = b.dataset.dtab;
+      if (next === state.detailTab) return;
+      state.detailTab = next;
+      for (const btn of dtabs.querySelectorAll("button")) {
+        const on = btn.dataset.dtab === next;
+        btn.classList.toggle("active", on);
+        btn.setAttribute("aria-selected", on ? "true" : "false");
+      }
+      paneForm.hidden = next !== "form";
+      paneProc.hidden = next !== "process";
+      if (next === "process" && !state.mountedProc) mountProc(t);
+    });
+    if (tab === "process") mountProc(t);
   }
 
   function renderAll() {

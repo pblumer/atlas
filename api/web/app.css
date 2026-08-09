@@ -1339,6 +1339,35 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   border-radius: var(--radius); background: var(--bg);
 }
 .tasks-form-placeholder p { margin: 0; max-width: 60ch; }
+/* The task detail's Form / Process tabs: the form to complete and a read-only
+   diagram of the task's instance with progress overlaid, so the assignee sees what
+   has already run (gray), where the tokens are now (green), and their own task
+   (blue) — and, by what's left plain, what is still ahead. Underline tabs, matching
+   the Operations inspector. */
+.tasks-detail-tabs { display: flex; gap: 2px; margin-top: 22px; border-bottom: 1px solid var(--border); }
+.tasks-detail-tabs button {
+  border: none; background: transparent; padding: 9px 12px; font: inherit; font-size: 13px; color: var(--muted);
+  cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.tasks-detail-tabs button:hover { color: var(--text); }
+.tasks-detail-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.tasks-tab-body { padding-top: 16px; }
+.tp-legend { display: flex; flex-wrap: wrap; gap: 16px; margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+.tp-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.tp-legend .tp-sw { width: 12px; height: 12px; border-radius: 3px; border: 2px solid var(--border); }
+.tp-legend .tp-sw.here { border-color: var(--accent); background: var(--accent-soft); }
+.tp-legend .tp-sw.active { border-color: var(--ok); }
+.tp-legend .tp-sw.done { border-color: var(--muted); border-style: dashed; }
+.tp-canvas {
+  position: relative; height: 360px; border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden; background: var(--surface);
+}
+.tp-canvas .tp-msg { padding: 16px; }
+/* Read-only: hide the editing palette, context pad and inline editor (as the live
+   and replay views do) so the process view reads as a diagram, not an editor. */
+.tp-canvas .djs-palette,
+.tp-canvas .djs-context-pad,
+.tp-canvas .djs-direct-editing-parent { display: none !important; }
 /* Form editor (form-js Playground, ADR-0028) — the split editor+preview surface
    renders itself into this container, which just needs to fill the body. */
 .form-playground { flex: 1; min-height: 0; overflow: hidden; }
