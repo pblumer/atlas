@@ -5443,6 +5443,77 @@ export async function mountCollaboration(root, { api, toast, key }) {
   liveTimer = setInterval(poll, 1500);
 }
 
+// mountTaskProcess renders a compact, read-only process view for a single instance,
+// meant to sit inside the Tasks detail pane so a task assignee can see, at a glance,
+// what has already run and what is still ahead. It overlays the instance's progress
+// on the definition diagram: elements walked so far are grayed (atlas-visited), live
+// tokens are highlighted (atlas-active / atlas-token-waiting), and the task's own
+// element is outlined in blue (atlas-selected) as "you are here". Unlike the full
+// Operations replay it is a static snapshot with no transport bar, and — crucially —
+// it owns its own viewer and does NOT touch the shared navigation lifecycle
+// (cleanup/current/generation), so it can live alongside the Tasks view. Returns a
+// handle with destroy(); the caller tears it down when the selection changes.
+export async function mountTaskProcess(container, { api, instanceKey, activeElementId }) {
+  let viewer = null;
+  let destroyed = false;
+  const handle = {
+    destroy() {
+      destroyed = true;
+      if (viewer) { try { viewer.destroy(); } catch { /* already gone */ } viewer = null; }
+    },
+  };
+  const fail = (msg) => { if (!destroyed && container) container.innerHTML = `<p class="tp-msg muted">${esc(msg)}</p>`; };
+
+  let lib;
+  try { lib = await loadBpmn(); } catch (e) { fail("Could not load the diagram viewer: " + e.message); return handle; }
+  if (destroyed) return handle;
+
+  // The timeline resolves the instance's definition (for the diagram) and carries
+  // its progress (steps walked + the current token frame).
+  let tl;
+  try { tl = await api("GET", `/api/v1/instances/${instanceKey}/timeline`); }
+  catch (e) { fail("Could not load the process progress: " + e.message); return handle; }
+  if (destroyed) return handle;
+  if (!tl || !tl.processDefKey) { fail("No process diagram is available for this task."); return handle; }
+
+  container.innerHTML = "";
+  viewer = newModeler(lib.BpmnJS, lib.moddle, container);
+  try {
+    const xml = await api("GET", `/api/v1/processes/${tl.processDefKey}/xml`);
+    if (destroyed) return handle;
+    await viewer.importXML(typeof xml === "string" ? xml : String(xml));
+    viewer.get("canvas").zoom("fit-viewport");
+  } catch (e) {
+    if (destroyed) return handle;
+    fail("Could not render the process diagram: " + e.message);
+    return handle;
+  }
+  if (destroyed) return handle;
+
+  const canvas = viewer.get("canvas");
+  const registry = viewer.get("elementRegistry");
+  try { drawImplBadges(viewer); } catch { /* best-effort type icons */ }
+
+  const frames = tl.frames || [];
+  const steps = tl.steps || [];
+  const tokens = frames.length ? (frames[frames.length - 1].tokens || []) : [];
+  const liveOn = new Set(tokens.map((t) => t.elementId));
+  // Everything walked so far, grayed — except where a token lives now (that must
+  // read as active, not history) and the task's own element (shown as "you are here").
+  for (const s of steps) {
+    if (!s.elementId || liveOn.has(s.elementId) || s.elementId === activeElementId) continue;
+    if (registry.get(s.elementId)) canvas.addMarker(s.elementId, "atlas-visited");
+  }
+  // Live tokens on other branches, highlighted green (or orange while waiting at a join).
+  for (const token of tokens) {
+    if (token.elementId === activeElementId || !registry.get(token.elementId)) continue;
+    canvas.addMarker(token.elementId, token.state === "waiting" ? "atlas-token-waiting" : "atlas-active");
+  }
+  // The task's own element: "you are here".
+  if (activeElementId && registry.get(activeElementId)) canvas.addMarker(activeElementId, "atlas-selected");
+  return handle;
+}
+
 // mountInstanceReplay renders one process instance read-only and replays it step
 // by step (ADR-0046), in a Camunda-Operate-style layout: a metadata header, the
 // definition diagram with per-element execution-count badges and a play/step/scrub

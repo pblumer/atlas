@@ -2478,6 +2478,8 @@ async function viewTasks(preselectKey) {
     me: authOn ? ((AUTH.user && AUTH.user.username) || "") : (localStorage.getItem("atlas.tasks.me") || ""),
     assignable: [], // enabled users a task can be assigned to, for the picker
     mountedForm: null, // the live form-js viewer instance for the selected task, if any
+    mountedProc: null, // the read-only process-view handle for the selected task, if open
+    procOpen: false, // whether the "Process view" panel is expanded (kept across selections)
     query: "", // free-text filter over the visible tasks (name/process/assignee/…)
     sort: localStorage.getItem("atlas.tasks.sort") || "smart", // sort key, see SORTS
     selectMode: false, // multi-select for bulk actions
@@ -2776,8 +2778,36 @@ async function viewTasks(preselectKey) {
     }
   }
 
+  // destroyProc tears down the read-only process viewer before the detail pane is
+  // re-rendered or the selection changes, so no bpmn-js viewer leaks.
+  function destroyProc() {
+    if (state.mountedProc) {
+      try { state.mountedProc.destroy(); } catch { /* already gone */ }
+      state.mountedProc = null;
+    }
+  }
+
+  // mountProc lazily loads the read-only process view — the BPMN diagram of the
+  // task's instance with its progress overlaid — into the expanded panel. Guards
+  // against the selection changing while the (async) import/mount is in flight.
+  async function mountProc(t) {
+    const host = document.getElementById("tp-canvas");
+    if (!host) return;
+    destroyProc();
+    try {
+      const mod = await import("./editor.js");
+      if (state.selected !== t.key || !document.getElementById("tp-canvas")) return;
+      state.mountedProc = await mod.mountTaskProcess(host, {
+        api, instanceKey: t.processInstanceKey, activeElementId: t.elementId,
+      });
+    } catch (err) {
+      host.innerHTML = `<p class="muted err" style="padding:16px">Could not load the process view: ${esc(err.message)}</p>`;
+    }
+  }
+
   function renderDetail() {
     destroyForm();
+    destroyProc();
     const t = state.tasks.find((x) => x.key === state.selected);
     if (!t) {
       detailEl.innerHTML = `<div class="tasks-detail-empty muted">Select a task to see its details.</div>`;
@@ -2803,6 +2833,24 @@ async function viewTasks(preselectKey) {
       ? `<div class="tasks-form" id="task-form"><p class="muted">Loading form&hellip;</p></div>`
       : `<div class="tasks-form-placeholder"><p class="muted">This task has no form; completing it
          records no variables.</p></div>`;
+    // A collapsible read-only view of the whole process instance, so the assignee
+    // can see what has already run and what is still ahead before completing.
+    const procPanel = `
+      <section class="tasks-process">
+        <button type="button" class="tasks-process-toggle" id="tp-toggle" aria-expanded="${state.procOpen ? "true" : "false"}">
+          <span class="tp-caret" aria-hidden="true">&#9656;</span>
+          <span class="tp-label">Process view</span>
+          <span class="tp-sub muted">See what has run and what's still ahead</span>
+        </button>
+        <div class="tasks-process-body" id="tp-body"${state.procOpen ? "" : " hidden"}>
+          <div class="tp-legend">
+            <span><i class="tp-sw here"></i> This task</span>
+            <span><i class="tp-sw active"></i> Active</span>
+            <span><i class="tp-sw done"></i> Completed</span>
+          </div>
+          <div class="tp-canvas" id="tp-canvas"><p class="tp-msg muted">Loading&hellip;</p></div>
+        </div>
+      </section>`;
     detailEl.innerHTML = `
       <header class="tasks-detail-head">
         <h1>${esc(taskTitle(t))}</h1>
@@ -2822,6 +2870,7 @@ async function viewTasks(preselectKey) {
         ${row("Instance", `<span class="chip">${t.processInstanceKey}</span>`)}
         ${row("Task key", `<span class="chip">${t.key}</span>`)}
       </div>
+      ${procPanel}
       ${formArea}`;
     document.getElementById("task-complete").addEventListener("click", () => completeCurrent());
     document.getElementById("task-claim").addEventListener("click", async (e) => {
@@ -2859,6 +2908,17 @@ async function viewTasks(preselectKey) {
       });
     }
     if (t.formId) mountForm(t);
+    // Process view: toggle expands/collapses (state kept across selections) and
+    // lazily mounts the read-only diagram the first time it's opened.
+    const tpToggle = document.getElementById("tp-toggle");
+    const tpBody = document.getElementById("tp-body");
+    tpToggle.addEventListener("click", () => {
+      state.procOpen = !state.procOpen;
+      tpToggle.setAttribute("aria-expanded", state.procOpen ? "true" : "false");
+      tpBody.hidden = !state.procOpen;
+      if (state.procOpen) mountProc(t); else destroyProc();
+    });
+    if (state.procOpen) mountProc(t);
   }
 
   function renderAll() {
