@@ -183,3 +183,9 @@ abgesichert: [`../../e2e/reise-form.spec.mjs`](../../e2e/reise-form.spec.mjs)
 
 Die Kunst ist, beides **nicht** zu vermischen: Anzeigelogik ins Formular,
 Ablauflogik in den Prozess, Fachregeln in DMN.
+
+Dieses Beispiel modelliert den **Fall B** (echte Prozessschritte). Die
+**Fall-A**-Variante — dieselbe Fachlichkeit, aber als *ein* Formular in *einem*
+Prozessschritt, im Client geblättert — liegt daneben in
+[`fall-a/`](fall-a/), inklusive eigenem Kunden-Assistenten
+(`api/web/reisebuchung-einschritt-kunde.html`, „ein start, ein complete").

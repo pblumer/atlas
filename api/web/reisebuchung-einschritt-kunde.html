@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Atlas · Reiseantrag (Fall A · ein Schritt)</title>
+<link rel="stylesheet" href="vendor/form-js/form-js.css"/>
+</head>
+<body>
+<!--
+  Reiseantrag — FALL A: EIN User-Task, im Client geblättert, EINE complete.
+
+  Gegenstück zu reisebuchung-kunde.html (Fall B), wo jeder Schritt ein eigener
+  User-Task ist und die Engine (DMN + Gateways) entscheidet, welches Formular als
+  Nächstes kommt. Hier ist die Mehrstufigkeit reine UI: der Prozess
+  proc_reise_antrag hat EINEN User-Task mit EINEM Formular (reise-antrag). Diese
+  Seite lädt dieses eine Schema und teilt es clientseitig in Seiten auf — die
+  Seiten-Reihenfolge (Fernreise-Nachweise nur bei Fernreise, Begleitung nur bei
+  Minderjährigen) lebt HIER im Client, nicht im Prozess. Am Ende: genau EIN
+  POST /tasks/{key}/complete mit allen gesammelten Daten.
+
+  Sieh dir den HTTP-Log unten an: ein start, ein complete. Das ist der ganze
+  Unterschied zu Fall B (dort vier complete).
+-->
+<style>
+  :root{
+    --bg:#f5f7f5;--panel:#fff;--panel-2:#f0f3f1;--ink:#17201c;--muted:#5d6b64;--faint:#8a9690;
+    --line:#e2e8e4;--accent:#0d7a63;--accent-ink:#0a5f4d;--accent-soft:#e2f1ec;--amber:#9a6a15;
+    --amber-soft:#f6ecd8;--shadow:0 1px 2px rgba(20,40,32,.04),0 8px 30px rgba(20,40,32,.06);
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;--sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#0e1310;--panel:#161d19;--panel-2:#1b241f;--ink:#e8efea;--muted:#9aa8a1;--faint:#6f7d76;
+    --line:#26302a;--accent:#34b498;--accent-ink:#56c9af;--accent-soft:#14261f;--amber:#d6a24a;
+    --amber-soft:#2a2113;--shadow:0 1px 2px rgba(0,0,0,.3),0 10px 34px rgba(0,0,0,.4);}}
+  :root[data-theme="dark"]{--bg:#0e1310;--panel:#161d19;--panel-2:#1b241f;--ink:#e8efea;--muted:#9aa8a1;--faint:#6f7d76;--line:#26302a;--accent:#34b498;--accent-ink:#56c9af;--accent-soft:#14261f;--amber:#d6a24a;--amber-soft:#2a2113;--shadow:0 1px 2px rgba(0,0,0,.3),0 10px 34px rgba(0,0,0,.4);}
+  :root[data-theme="light"]{--bg:#f5f7f5;--panel:#fff;--panel-2:#f0f3f1;--ink:#17201c;--muted:#5d6b64;--faint:#8a9690;--line:#e2e8e4;--accent:#0d7a63;--accent-ink:#0a5f4d;--accent-soft:#e2f1ec;--amber:#9a6a15;--amber-soft:#f6ecd8;--shadow:0 1px 2px rgba(20,40,32,.04),0 8px 30px rgba(20,40,32,.06);}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:900px;margin:0 auto;padding:40px 20px 72px}
+  .eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-ink);font-weight:600;margin:0 0 6px}
+  h1{font-size:clamp(24px,4vw,32px);margin:0;letter-spacing:-.02em;font-weight:680}
+  .lede{color:var(--muted);margin:8px 0 0;max-width:64ch}
+  .lede code{font-family:var(--mono);font-size:.92em}
+  .callout{margin:18px 0 0;padding:13px 16px;border-radius:12px;background:var(--accent-soft);color:var(--accent-ink);font-size:14px;font-weight:520}
+  .callout b{font-weight:700}
+  .account{margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px}
+  .account input{padding:7px 10px;font:inherit;color:inherit;background:var(--panel-2);border:1px solid var(--line);border-radius:8px}
+  .account input[type="text"],.account input[type="password"]{width:150px}
+  .account .who{color:var(--muted)}.account .who b{color:var(--ink)}
+  .account .err{color:#b23a3a;font-size:13px}
+  .account .lock{font-size:12px;color:var(--faint);font-family:var(--mono)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:22px;margin-top:18px}
+  .card h2{font-size:13px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);font-weight:600;margin:0 0 14px;display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .card h2 .hint{letter-spacing:0;text-transform:none;color:var(--muted);font-weight:500;font-size:12px;font-family:var(--mono)}
+  .btn{font:inherit;font-weight:600;cursor:pointer;border-radius:10px;padding:10px 18px;border:1px solid transparent}
+  .btn.primary{background:var(--accent);color:#fff}.btn.primary:hover{background:var(--accent-ink)}
+  .btn.ghost{background:var(--panel-2);color:var(--ink);border-color:var(--line)}.btn.ghost:hover{border-color:var(--accent)}
+  .btn.small{padding:6px 12px;font-size:13px}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .muted{color:var(--muted);font-size:13px}
+  .steps{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px;padding:0;list-style:none}
+  .steps li{font-size:12px;font-weight:600;padding:4px 11px;border-radius:999px;background:var(--panel-2);color:var(--faint);border:1px solid var(--line)}
+  .steps li.done{background:var(--accent-soft);color:var(--accent-ink);border-color:transparent}
+  .steps li.current{background:var(--accent);color:#fff;border-color:transparent}
+  .steptitle{font-size:19px;font-weight:680;letter-spacing:-.01em;margin:0 0 2px}
+  .stepsub{color:var(--muted);font-size:13px;margin:0 0 16px}
+  .fj-host{margin:6px 0 4px}
+  .actions{display:flex;align-items:center;gap:12px;margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+  .spacer{flex:1}
+  .banner{margin-top:6px;padding:18px;border-radius:12px;background:var(--accent-soft);color:var(--accent-ink);font-weight:600;text-align:center;font-size:16px}
+  .why{margin-top:14px;font-size:13px;color:var(--muted);background:var(--panel-2);border:1px dashed var(--line);border-radius:10px;padding:11px 13px}
+  .why b{color:var(--ink)}
+  .log{font-family:var(--mono);font-size:12px;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;max-height:200px;overflow:auto}
+  .log div{padding:2px 0;border-bottom:1px dashed var(--line);white-space:pre-wrap}
+  .log .m{font-weight:700;color:var(--accent-ink)}.log .s2{color:var(--faint)}.log .err{color:#b23a3a}
+  footer{margin-top:26px;color:var(--faint);font-size:12px;text-align:center}
+  footer code{font-family:var(--mono)}
+  footer input{font:inherit;color:inherit;background:var(--panel-2);border:1px solid var(--line);border-radius:8px}
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Atlas · Reiseantrag · Fall A</p>
+    <h1>Ein Formular, im Client geblättert — ein Prozessschritt.</h1>
+    <p class="lede">Der Prozess <code>proc_reise_antrag</code> hat <b>einen</b>
+      <code>userTask</code> mit <b>einem</b> Formular (<code>reise-antrag</code>).
+      Diese Seite lädt dieses eine Schema und teilt es <b>im Browser</b> in Seiten
+      auf. Welche Seite als Nächstes kommt, entscheidet der <b>Client</b> — nicht
+      der Prozess. Am Ende geht <b>eine</b> Abgabe an Atlas.</p>
+    <div class="callout">Der Kontrast zu Fall B steht im HTTP-Log unten:
+      <b>ein</b> <code>start</code> · <b>ein</b> <code>complete</code>. Fall B
+      (verschiedene User-Tasks) hätte hier vier <code>complete</code>.</div>
+    <div class="account" id="account"></div>
+  </header>
+
+  <section class="card" id="stage">
+    <h2><span>Reiseantrag</span><span class="hint" id="instHint">—</span></h2>
+    <div id="body">
+      <p class="muted">Starte einen neuen Antrag — Atlas legt eine echte Instanz an und parkt auf
+        dem einen Erfassungs-Task. Diese Seite führt dich durch das Formular; abgeschickt wird
+        erst am Ende, in einem Rutsch.</p>
+      <div class="actions" style="border-top:0;padding-top:4px">
+        <button class="btn primary" id="startBtn">Antrag beginnen →</button>
+        <span class="muted" id="startHint"></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2><span>HTTP-Aufrufe an Atlas</span><span class="hint">ein start, ein complete</span></h2>
+    <div class="log" id="log"><div class="s2">Wartet auf den ersten Aufruf …</div></div>
+  </section>
+
+  <footer>
+    Wird von Atlas unter <code>/reisebuchung-einschritt-kunde.html</code> ausgeliefert · Prozess:
+    <code>examples/reisebuchung/fall-a/reise-antrag-einschritt.bpmn</code> · Basis-URL:
+    <input id="base" value="/api/v1" style="width:150px;font-family:var(--mono);font-size:11px" title="Same-origin per Default."/>
+  </footer>
+</div>
+
+<script type="module">
+"use strict";
+import { Form } from "./vendor/form-js/form-viewer.js";
+
+const PROCESS_ID = "proc_reise_antrag";
+const $ = s => document.querySelector(s);
+const base = () => $("#base").value.replace(/\/$/,"");
+
+// —— CLIENT-OWNED page flow (Fall A: the multi-step logic lives here, not in the
+// process). Each page picks fields (by key) out of the ONE server-side schema;
+// show() decides whether the page applies, from what's been entered so far. ——
+const isMinor = d => !!d.geburtsdatum && String(d.geburtsdatum).slice(0,10) > "2008-08-08";
+const PAGES = [
+  { title:"Reise",       keys:["reiseart","ziel"],                       show:()=>true,
+    why:"Die <b>Zielliste</b> passt sich der Reiseart an — rein im Formular (form-js valuesExpression)." },
+  { title:"Person",      keys:["geburtsdatum"],                          show:()=>true,
+    why:"Das Geburtsdatum steuert clientseitig, ob später die Begleitungs-Seite erscheint." },
+  { title:"Fernreise-Nachweise", keys:["reisepassNr","staatsangehoerigkeit"], show:d=>d.reiseart==="Fernreise",
+    why:"Diese Seite blendet der <b>Client</b> nur bei einer Fernreise ein." },
+  { title:"Begleitung Minderjähriger", keys:["vertreterName","einverstaendnis"], show:d=>isMinor(d),
+    why:"Diese Seite blendet der <b>Client</b> nur ein, wenn das Geburtsdatum auf eine minderjährige Person zeigt." },
+  { title:"Bestätigung", keys:["buchungBestaetigt"],                     show:()=>true,
+    why:"Erst der Klick hier löst die <b>eine</b> complete an Atlas aus." },
+];
+
+// ————— fetch wrapper + call log —————
+async function api(method, path, body, quiet){
+  const opts = {method, credentials:"same-origin", headers:{}};
+  if (body !== undefined){ opts.headers["Content-Type"]="application/json"; opts.body=JSON.stringify(body); }
+  let res, text;
+  try { res = await fetch(base()+path, opts); text = await res.text(); }
+  catch(e){ if(!quiet) logLine(method, path, "ERR", e.message); throw e; }
+  if(!quiet) logLine(method, path, res.status);
+  if (res.status === 401){ showLogin(); throw new Error("401 — bitte anmelden"); }
+  if (!res.ok) throw new Error(method+" "+path+" → "+res.status+" "+text);
+  return text ? JSON.parse(text) : null;
+}
+function logLine(method, path, status, extra){
+  const el = document.createElement("div");
+  const cls = (typeof status === "number" && status < 400) ? "s2" : "err";
+  el.innerHTML = `<span class="m">${method}</span> ${path} <span class="${cls}">→ ${status}${extra?" "+extra:""}</span>`;
+  const log = $("#log"); if (log.firstChild && log.firstChild.classList?.contains("s2") && log.children.length===1) log.innerHTML="";
+  log.appendChild(el); log.scrollTop = log.scrollHeight;
+}
+
+// ————— optional auth —————
+async function whoami(){ try { return await api("GET","/auth/me", undefined, true); } catch { return null; } }
+function showLogin(){ if (!document.getElementById("loginBtn")) renderAccount(null); }
+function renderAccount(user){
+  const el = $("#account");
+  if (user){
+    el.innerHTML = `<span class="who">Angemeldet als <b>${(user.username||user.name||"?")}</b></span>`+
+                   `<button class="btn ghost small" id="logoutBtn">Abmelden</button>`;
+    $("#logoutBtn").onclick = async ()=>{ try{ await api("POST","/auth/logout",{}); }catch{} renderAccount(null); };
+  } else {
+    el.innerHTML = `<span class="lock">🔒 API erfordert Login</span>`+
+      `<input type="text" id="lu" placeholder="Benutzer" autocomplete="username"/>`+
+      `<input type="password" id="lp" placeholder="Passwort" autocomplete="current-password"/>`+
+      `<button class="btn primary small" id="loginBtn">Anmelden</button><span class="err" id="loginErr"></span>`;
+    const submit = async ()=>{ $("#loginErr").textContent="";
+      try{ await api("POST","/auth/login", {username:$("#lu").value.trim(), password:$("#lp").value}); renderAccount(await whoami()); }
+      catch(e){ $("#loginErr").textContent="Login fehlgeschlagen"; } };
+    $("#loginBtn").onclick = submit;
+    $("#lp").addEventListener("keydown", e=>{ if(e.key==="Enter") submit(); });
+  }
+}
+
+// ————— the single-task wizard —————
+let instanceKey = null, taskKey = null, unionComponents = [], data = {}, pageIdx = 0, currentForm = null;
+
+async function findProcess(){
+  const procs = await api("GET","/processes");
+  const mine = procs.filter(p => p.processId === PROCESS_ID).sort((a,b)=> b.version - a.version);
+  if (!mine.length) throw new Error(`Prozess "${PROCESS_ID}" ist nicht deployed. Bitte examples/reisebuchung/fall-a zuerst deployen (siehe README).`);
+  return mine[0].key;
+}
+async function startInstance(defKey){
+  const before = new Set((await api("GET","/instances")).filter(i=>i.processDefKey===defKey).map(i=>i.key));
+  await api("POST",`/processes/${defKey}/instances`, {variables:{}});
+  const after = (await api("GET","/instances")).filter(i=>i.processDefKey===defKey);
+  return (after.find(i=>!before.has(i.key)) || after.sort((a,b)=>b.key-a.key)[0]).key;
+}
+async function firstTask(){
+  const raw = await api("GET",`/tasks?processInstance=${instanceKey}`);
+  const list = (Array.isArray(raw) ? raw : (raw.items||[])).filter(t=>t.processInstanceKey===instanceKey);
+  return list[0];
+}
+
+// build a single-page sub-schema from the union form: pick this page's fields by
+// key and strip their conditional (the client, not form-js, gates whole pages).
+function pageSchema(page){
+  const comps = unionComponents.filter(c => page.keys.includes(c.key)).map(c => { const {conditional, ...rest}=c; return rest; });
+  return { type:"default", id:"page-"+page.title, components: comps };
+}
+function visiblePages(){ return PAGES.filter(p => p.show(data)); }
+
+async function renderPage(){
+  const page = PAGES[pageIdx];
+  const vis = visiblePages();
+  const posInVis = vis.indexOf(page);
+  const isLast = posInVis === vis.length - 1;
+  $("#instHint").textContent = "#"+instanceKey+" · Schritt "+(posInVis+1)+" / "+vis.length;
+  $("#body").innerHTML =
+    `<ul class="steps">${vis.map((p,i)=>`<li class="${i<posInVis?"done":(i===posInVis?"current":"")}">${p.title}</li>`).join("")}</ul>`+
+    `<p class="steptitle">${page.title}</p>`+
+    `<p class="stepsub">Seite ${posInVis+1} von ${vis.length} · alles Teil <em>einer</em> Abgabe</p>`+
+    `<div class="fj-host" id="fjhost"></div>`+
+    (page.why ? `<div class="why">${page.why}</div>` : "")+
+    `<div class="actions">`+
+      (posInVis>0 ? `<button class="btn ghost" id="back">← Zurück</button>` : ``)+
+      `<span class="spacer"></span>`+
+      `<button class="btn primary" id="next">${isLast ? "Antrag absenden ✓" : "Weiter →"}</button>`+
+      `<span class="muted" id="stepHint"></span></div>`;
+  if (currentForm){ currentForm.destroy?.(); currentForm=null; }
+  currentForm = new Form({ container: $("#fjhost") });
+  await currentForm.importSchema(pageSchema(page), data);  // pass accumulated data so fields prefill
+  if ($("#back")) $("#back").onclick = goBack;
+  $("#next").onclick = () => goNext(isLast);
+}
+
+function normalize(d){ const o={}; for (const [k,v] of Object.entries(d)) o[k]=(typeof v==="string"&&/^\d{4}-\d{2}-\d{2}T/.test(v))?v.slice(0,10):v; return o; }
+
+async function goNext(isLast){
+  const { data:pd, errors } = currentForm.submit();
+  if (errors && Object.keys(errors).length){ $("#stepHint").textContent="Bitte die markierten Felder prüfen."; return; }
+  Object.assign(data, normalize(pd));
+  if (isLast) return submitAll();
+  let i = pageIdx + 1;
+  while (i < PAGES.length && !PAGES[i].show(data)) i++;
+  if (i >= PAGES.length) return submitAll();
+  pageIdx = i; renderPage();
+}
+function goBack(){
+  // keep whatever was typed on the current page, then step to the previous visible page
+  try { Object.assign(data, normalize(currentForm.submit().data)); } catch {}
+  let i = pageIdx - 1;
+  while (i >= 0 && !PAGES[i].show(data)) i--;
+  if (i < 0) return;
+  pageIdx = i; renderPage();
+}
+
+// THE one write. All pages collected → a single complete advances the one task.
+async function submitAll(){
+  const btn=$("#next"); if(btn){ btn.disabled=true; } $("#stepHint") && ($("#stepHint").textContent="Sende Antrag …");
+  try{
+    await api("POST",`/tasks/${taskKey}/complete`, { variables: data });
+    renderDone();
+  }catch(e){ if($("#stepHint")) $("#stepHint").innerHTML=`<span style="color:#b23a3a">Fehler: ${e.message}</span>`; if(btn) btn.disabled=false; }
+}
+function renderDone(){
+  if (currentForm){ currentForm.destroy?.(); currentForm=null; }
+  $("#instHint").textContent = "#"+instanceKey+" · abgeschlossen";
+  $("#body").innerHTML =
+    `<div class="banner">✅ Antrag eingereicht — mit <b>einer</b> complete. Die Instanz läuft weiter (Script → Ende).</div>`+
+    `<div class="why" style="margin-top:14px"><b>Gesendete Variablen:</b> <code>${Object.keys(data).join(", ")||"—"}</code></div>`+
+    `<div class="actions"><button class="btn ghost" id="restart">Neuer Antrag</button></div>`;
+  $("#restart").onclick = ()=>location.reload();
+}
+
+$("#startBtn").onclick = async ()=>{
+  const btn=$("#startBtn"); btn.disabled=true; $("#startHint").textContent="Starte Instanz …";
+  try{
+    const defKey = await findProcess();
+    instanceKey = await startInstance(defKey);
+    const task = await firstTask();
+    if (!task) throw new Error("Kein Erfassungs-Task gefunden.");
+    taskKey = task.key;
+    const { schema } = await api("GET",`/forms/${task.formId}`);   // the ONE form
+    unionComponents = schema.components || [];
+    data = {}; pageIdx = 0;
+    renderPage();
+  }catch(e){ $("#startHint").innerHTML=`<span style="color:#b23a3a">${e.message}</span>`; btn.disabled=false; }
+};
+
+whoami().then(renderAccount);
+</script>
+</body>
+</html>
