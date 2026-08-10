@@ -115,6 +115,34 @@ function blankXML() {
 </bpmn:definitions>`;
 }
 
+// calleeXML builds a starter diagram for a *called* process a call activity refers
+// to (ADR-0076): a single start event, keyed by the caller-chosen process id (the
+// deploy/route identity), so the "＋ create new" affordance in the call-activity
+// panel scaffolds the callee the caller already points at. Whitespace in the id is
+// collapsed to underscores so it stays a valid BPMN id; an empty id falls back to a
+// unique one, like blankXML.
+function calleeXML(pid, name) {
+  const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const id = (pid || "").trim().replace(/\s+/g, "_") || `Process_${suffix}`;
+  const nm = (name || id).trim();
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  id="Definitions_${suffix}" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="${esc(id)}" name="${esc(nm)}" isExecutable="true">
+    <bpmn:startEvent id="StartEvent_1" name="Start"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="${esc(id)}">
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+        <dc:Bounds x="180" y="160" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+}
+
 let current; // active modeler/viewer, destroyed on remount
 let liveTimer; // active live-overlay poll, cleared on remount/leave
 let collab; // active live collaboration session (ADR-0103), closed on remount
@@ -3159,7 +3187,9 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const propChild = ce.propagateAllChildVariables !== false;   // default true (Zeebe)
         html += `<h3>Called process</h3>
           <label class="field"><span>Process ID</span>
-            <input type="text" id="f-call-processid" value="${esc(ce.processId || "")}" placeholder="pruefe-auftrag"/></label>
+            <input type="text" id="f-call-processid" list="f-call-proc-list" autocomplete="off" value="${esc(ce.processId || "")}" placeholder="pruefe-auftrag"/>
+            <datalist id="f-call-proc-list"></datalist></label>
+          <div class="field-actions"><button type="button" class="btn ghost small" id="f-call-newproc">&#43; Create new process</button></div>
           <label class="field"><span>Binding</span>
             <select id="f-call-binding">
               <option value="latest" ${binding === "latest" ? "selected" : ""}>Latest — newest deployed version</option>
@@ -3855,6 +3885,77 @@ function wireProperties(root, modeler, api, projectId, toast) {
       fcallbind.addEventListener("change", saveCall);
       fcallpp.addEventListener("change", saveCall);
       fcallpc.addEventListener("change", saveCall);
+
+      // Suggest existing callees — deployed processes and saved drafts — so the
+      // Process ID is a pick, not blind typing; free text stays allowed for a callee
+      // that doesn't exist yet (ADR-0076). Best-effort: a load failure just leaves an
+      // empty suggestion list.
+      const proclist = body.querySelector("#f-call-proc-list");
+      if (proclist) {
+        (async () => {
+          try {
+            const [procs, drafts] = await Promise.all([
+              api("GET", "/api/v1/processes").catch(() => []),
+              api("GET", "/api/v1/drafts").catch(() => []),
+            ]);
+            const seen = new Set();
+            const opts = [];
+            const add = (id, label) => {
+              id = (id || "").trim();
+              if (!id || seen.has(id)) return;
+              seen.add(id);
+              opts.push(`<option value="${esc(id)}">${esc(label)}</option>`);
+            };
+            (procs || []).forEach((p) => add(p.processId,
+              (p.name && p.name !== p.processId ? p.name + " · " : "") + "deployed" + (p.version ? " v" + p.version : "")));
+            (drafts || []).forEach((d) => add(d.processId,
+              (d.name && d.name !== d.processId ? d.name + " · " : "") + "draft"));
+            proclist.innerHTML = opts.join("");
+          } catch { /* suggestions are best-effort */ }
+        })();
+      }
+
+      // "＋ Create new process" scaffolds the called process the caller points at and
+      // opens it (ADR-0076): it saves this caller first (drafts persist only on save,
+      // so navigating away would otherwise drop its edits), then creates a starter
+      // draft keyed by the process id and navigates to it in the modeler.
+      const newbtn = body.querySelector("#f-call-newproc");
+      if (newbtn) {
+        newbtn.addEventListener("click", async () => {
+          let pid = (fcallpid.value || "").trim();
+          if (!pid) {
+            const typed = prompt("Process ID for the new called process:", "");
+            if (typed == null) return;
+            pid = typed.trim();
+            if (!pid) return;
+          }
+          pid = pid.replace(/\s+/g, "_");
+          newbtn.disabled = true;
+          try {
+            // Point the caller at this child, then persist the caller so its unsaved
+            // edits survive the navigation.
+            fcallpid.value = pid;
+            saveCall();
+            const savePath = "/api/v1/drafts" + (projectId ? "?projectId=" + encodeURIComponent(projectId) : "");
+            const { xml: callerXml } = await modeler.saveXML({ format: true });
+            await api("POST", savePath, callerXml, true);
+            if (collab && collab.markSaved) collab.markSaved();
+            // Scaffold the child only if no draft already holds that id — never clobber
+            // existing work; just open it in that case.
+            const existing = await api("GET", "/api/v1/drafts").catch(() => []);
+            if ((existing || []).some((d) => (d.processId || "") === pid)) {
+              toast(`Opening existing draft “${pid}”`, "ok");
+            } else {
+              await api("POST", savePath, calleeXML(pid, pid), true);
+              toast(`Created called process “${pid}”`, "ok");
+            }
+            location.hash = `#/modeler/draft/${encodeURIComponent(pid)}`;
+          } catch (e) {
+            toast("Could not create the process: " + e.message, "err");
+            newbtn.disabled = false;
+          }
+        });
+      }
     }
 
     // Multi-instance (ADR-0077): the whole bpmn:MultiInstanceLoopCharacteristics is
@@ -5767,6 +5868,27 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const stepsForElement = (elId) => steps.filter((s) => s.elementId === elId);
   const stepByEik = (eik) => steps.find((s) => s.elementInstanceKey === eik) || null;
 
+  // drawCallActivityLinks puts a clickable overlay on each call activity that
+  // started a child instance, so a single click on the diagram jumps into the
+  // child's replay (same window). It complements the Details panel's link and is
+  // rebuilt whenever the step set grows. One badge per element (the first child);
+  // a multi-instance call activity's per-iteration children are reachable by
+  // selecting each iteration in the history (its Details link).
+  const caLinkIds = [];
+  function drawCallActivityLinks() {
+    for (const id of caLinkIds.splice(0)) { try { overlays.remove(id); } catch { /* gone */ } }
+    const seen = new Set();
+    for (const s of steps) {
+      if (!s.childInstanceKey || seen.has(s.elementId)) continue;
+      seen.add(s.elementId);
+      if (!registry.get(s.elementId)) continue; // element not on this diagram
+      caLinkIds.push(overlays.add(s.elementId, "atlas-callchild", {
+        position: { bottom: 4, left: 4 },
+        html: `<a class="ca-child-link" href="#/operations/i/${s.childInstanceKey}" title="Open the called process's instance replay">&#8627; child</a>`,
+      }));
+    }
+  }
+
   // renderDetail fills the Details tab for the selected element instance (or the
   // process instance when nothing is selected), mirroring Operate's element panel.
   function renderDetail() {
@@ -5784,6 +5906,11 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     if (!s) { detailEl.innerHTML = `<p class="ops-empty">No details for this element.</p>`; return; }
     const rel = s.relation ? `<dt>Concurrency</dt><dd>${s.relation === "fork" ? "Parallel branch (fork)" : "Join arrival"}</dd>` : "";
     const from = s.sourceElementId ? `<dt>Entered from</dt><dd>${esc(stepLabel({ elementId: s.sourceElementId }))}</dd>` : "";
+    // A call activity links to the child instance it started (ADR-0076), so an
+    // operator drills from caller to child in one click, same window.
+    const child = s.childInstanceKey
+      ? `<dt>Called process</dt><dd><a class="ca-child-link" href="#/operations/i/${s.childInstanceKey}" title="Open the called process's instance replay">&#8627; Instance ${esc(String(s.childInstanceKey))}</a></dd>`
+      : "";
     detailEl.innerHTML = `<dl class="ops-props">
       <dt>Element</dt><dd>${esc(stepLabel(s))}</dd>
       <dt>Type</dt><dd>${esc(typeLabel(s.type))}</dd>
@@ -5792,7 +5919,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       <dt>Token</dt><dd class="mono">${s.tokenId ? esc(String(s.tokenId)) : "—"}</dd>
       <dt>Start Date</dt><dd>${esc(fmtDateTime(s.at))}</dd>
       <dt>End Date</dt><dd>${s.endAt ? esc(fmtDateTime(s.endAt)) : '<span class="ops-live">active</span>'}</dd>
-      ${from}${rel}
+      ${from}${rel}${child}
     </dl>`;
   }
 
@@ -6214,6 +6341,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       scrub.max = String(frames.length);
       renderHistory();
       loadBadges();
+      drawCallActivityLinks();
       if (!playing && wasAtEnd) setPlayhead(frames.length); // follow new frames live
       else { scrub.value = String(playhead); updateClock(); renderOverlay(); highlightHistory(); }
       renderInspector();

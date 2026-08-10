@@ -180,6 +180,9 @@ ol.steps li { margin: 6px 0; }
 
 /* Form fields (login + user management) */
 .field { display: block; margin: 10px 0; font-size: 13px; color: var(--muted); }
+/* A row of secondary actions under a field (e.g. the call-activity "create new
+   process" button); nudged up so it reads as attached to the field above. */
+.field-actions { margin: -4px 0 10px; }
 .field input[type="text"],
 .field input[type="email"],
 .field input[type="password"],
@@ -603,6 +606,21 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   box-shadow: 0 1px 4px rgba(0,0,0,0.3); cursor: pointer;
 }
 .task-open:hover { filter: brightness(1.08); }
+/* "child" badge on a call activity that started a child instance (ADR-0076/0105):
+   a single click drills from the caller's replay into the child's replay. Neutral
+   slate so it reads as navigation, distinct from the accent-blue task-open badge. */
+.ca-child-link {
+  display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;
+  background: #475569; color: #fff; border-radius: 999px;
+  height: 20px; padding: 0 9px; text-decoration: none;
+  font: 700 11px/20px system-ui, sans-serif;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3); cursor: pointer;
+}
+.ca-child-link:hover { filter: brightness(1.12); }
+/* The same drill-down link inside the Details panel reads as a text link, not a
+   floating badge. */
+dd .ca-child-link { background: none; color: var(--accent, #2563eb); box-shadow: none; height: auto; padding: 0; font-weight: 600; }
+dd .ca-child-link:hover { text-decoration: underline; filter: none; }
 /* "Decision" badge on a business rule task that has been evaluated: opens the
    decision-inspection panel (inputs, outputs, and how it was decided; ADR-0064). */
 .decision-badge {
