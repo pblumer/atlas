@@ -2920,10 +2920,12 @@ type callActivityBehavior struct{}
 func (callActivityBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.CallActivity(cp.Node(ei.ElementId).Detail)
-	childDefKey, ok := c.latestDefKey(cp.Intern(detail.CalledProcessId))
+	childDefKey, ok := c.resolveCallTarget(cp.Intern(detail.CalledProcessId))
 	if !ok {
-		// The called process is not deployed (yet). Park — the token stays on the
-		// call activity; a deploy-then-retry / incident is a follow-up (ADR-0076).
+		// The called process is not deployed (yet), or a per-server override
+		// disabled it or pinned/redirected to a target that is not deployed
+		// (ADR-0105). Park — the token stays on the call activity; a
+		// deploy-then-retry / incident is a follow-up (ADR-0076).
 		return
 	}
 	var startVars []model.VariableValue
