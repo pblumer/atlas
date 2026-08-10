@@ -33,6 +33,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_get_process_xml":       "GET /api/v1/processes/{key}/xml",
 	"atlas_delete_process":        "DELETE /api/v1/processes/{key}",
 	"atlas_process_runtime":       "GET /api/v1/processes/{key}/runtime",
+	"atlas_call_activities":       "GET /api/v1/call-activities",
 	"atlas_create_instance":       "POST /api/v1/processes/{key}/instances",
 	"atlas_list_instances":        "GET /api/v1/instances",
 	"atlas_cancel_instance":       "DELETE /api/v1/instances/{key}",

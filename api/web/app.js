@@ -232,6 +232,7 @@ const TOPNAV = {
   operations: [
     { name: "Instances", route: "#/operations" },
     { name: "Decisions", route: "#/operations/decisions" },
+    { name: "Call activities", route: "#/operations/call-activities" },
   ],
   tasks: [{ name: "Inbox", route: "#/tasks" }, { name: "Start", route: "#/tasks/start" }], insights: [],
 };
@@ -2262,6 +2263,73 @@ async function viewDecisions() {
   await load();
 }
 
+// viewCallActivities is the per-server management view for call activities: one
+// row per call activity across every deployed process, showing which process it
+// calls, its version binding and variable propagation, and — the operational
+// point — whether the called process is currently deployed here. A caller may be
+// deployed before its callee, so a call activity can sit "unresolved" (it would
+// park at runtime); this view makes those gaps visible per server so an operator
+// can deploy the missing target (ADR-0076). Read-only: it changes no state.
+async function viewCallActivities() {
+  view.innerHTML = `
+    <div class="between">
+      <h1>Call activities</h1>
+      <button class="btn neutral" id="refresh">Refresh</button>
+    </div>
+    <p class="muted">One row per call activity across the processes deployed on this
+    server. A call activity starts another deployed process as a child instance; it
+    <b>resolves</b> only when a process with the called id is deployed here. A caller
+    deployed before its callee shows as <b>not deployed</b> — it would wait at the call
+    activity until the target lands. Manage the gaps per server: deploy the missing
+    process in the <a href="#/modeler">Modeler</a>.</p>
+    <div class="card" style="padding:0">
+      <table>
+        <thead><tr><th>Caller</th><th>Element</th><th>Calls</th><th>Binding</th><th>Variables</th><th>Resolves to</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>`;
+  const tbody = document.getElementById("rows");
+
+  const load = async () => {
+    try {
+      const rows = await api("GET", "/api/v1/call-activities");
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="empty">
+          No call activities deployed. Add a call activity to a process in the
+          <a href="#/modeler">Modeler</a> and deploy it.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = rows.map((r) => {
+        const caller = `<a href="#/operations/p/${r.callerKey}">${esc(r.callerName || r.callerProcessId)}</a>`
+          + ` <span class="muted">v${r.callerVersion}</span>`;
+        const binding = `<span class="pill">${esc(r.binding)}</span>`
+          + (r.multiInstance ? ' <span class="pill muted">multi-instance</span>' : "");
+        // Propagation: "all" both ways is the Zeebe default; call it out only where a
+        // direction is isolated (off), since that changes what crosses the boundary.
+        const vars = (r.propagateAllParent && r.propagateAllChild)
+          ? '<span class="muted">all in · all out</span>'
+          : `${r.propagateAllParent ? "all in" : "mapped in"} · ${r.propagateAllChild ? "all out" : "mapped out"}`;
+        const target = r.resolved
+          ? `<a href="#/operations/p/${r.targetKey}"><span class="pill ok"><span class="dot"></span>${esc(r.targetName || r.calledProcessId)}</span></a>`
+            + ` <span class="muted">v${r.targetVersion}</span>`
+          : `<span class="pill warn"><span class="dot"></span>not deployed</span>`;
+        return `<tr>
+          <td>${caller}</td>
+          <td style="font-family:ui-monospace,monospace">${esc(r.elementId)}</td>
+          <td style="font-family:ui-monospace,monospace">${esc(r.calledProcessId)}</td>
+          <td>${binding}</td>
+          <td>${vars}</td>
+          <td>${target}</td>
+        </tr>`;
+      }).join("");
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;
+    }
+  };
+  document.getElementById("refresh").addEventListener("click", load);
+  await load();
+}
+
 // viewDecisionDetail lists every evaluation of one decision — its "instances" —
 // newest first, each showing the exact inputs it saw, the outputs it produced, and
 // (expandable) the temis trace of which rules fired (ADR-0066). This is the
@@ -3655,6 +3723,7 @@ async function route() {
     if (tk) return await viewTasks(Number(tk[1]));
     if (path === "#/operations") return await viewInstances();
     if (path === "#/operations/decisions") return await viewDecisions();
+    if (path === "#/operations/call-activities") return await viewCallActivities();
     // Drill into one decision's evaluations (its "instances"). The id is URL-encoded
     // because a DMN decision id may contain spaces or other reserved characters.
     const dd = path.match(/^#\/operations\/decisions\/(.+)$/);

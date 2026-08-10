@@ -146,6 +146,8 @@ func (s *Server) apiRoutes() []apiRoute {
 			status: http.StatusNoContent}},
 		{"GET", "/api/v1/processes/{key}/runtime", s.handleProcessRuntime, apiOp{
 			summary: "Read a process's live runtime state", tag: "Processes", resp: jsonBody("Runtime state", tObject())}},
+		{"GET", "/api/v1/call-activities", s.handleCallActivities, apiOp{
+			summary: "List every call activity across deployed processes with its per-server resolution status", tag: "Processes", resp: jsonBody("Call activities", tArray())}},
 		{"GET", "/api/v1/collaborations/{key}/runtime", s.handleCollaborationRuntime, apiOp{
 			summary: "Read a collaboration's live runtime state", tag: "Collaborations", resp: jsonBody("Runtime state", tObject())}},
 
