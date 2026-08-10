@@ -1180,8 +1180,12 @@ type xmlServiceTask struct {
 	// (ADR-0079). The pointer is nil when the <atlas:mailConnector> extension is
 	// absent.
 	Mail *xmlMailConnector `xml:"extensionElements>mailConnector"`
+	// SharePoint, when present, marks this service task a SharePoint connector task
+	// (ADR-0105). The pointer is nil when the <atlas:sharepointConnector> extension is
+	// absent.
+	SharePoint *xmlSharePointConnector `xml:"extensionElements>sharepointConnector"`
 	// Remedy, when present, marks this service task a BMC Remedy connector task
-	// (ADR-0105). The pointer is nil when the <atlas:remedyConnector> extension is
+	// (ADR-0106). The pointer is nil when the <atlas:remedyConnector> extension is
 	// absent.
 	Remedy        *xmlRemedyConnector        `xml:"extensionElements>remedyConnector"`
 	IOMapping     xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
@@ -1256,9 +1260,26 @@ type xmlMailConnector struct {
 	Body      string `xml:"body,attr"`
 }
 
+// A SharePoint connector task's parameters, carried on a service task as an
+// <atlas:sharepointConnector connector="..." site="..." list="..."> extension
+// element (ADR-0105). connector names a server-registered SharePoint provider (its
+// Graph base and OAuth credential live on the server, never in the model). site
+// (required) addresses the SharePoint site ("host,/sites/path" or a site id); list
+// (required) is the list name or id the item is created in; resultVariable, if set,
+// receives the created item's JSON. Each ItemField child is one column value of the
+// created item. Every value is literal or, with a leading '=', a FEEL expression
+// evaluated over the instance's variables at call time (the fx toggle, ADR-0067).
+type xmlSharePointConnector struct {
+	Connector      string      `xml:"connector,attr"`
+	Site           string      `xml:"site,attr"`
+	List           string      `xml:"list,attr"`
+	ResultVariable string      `xml:"resultVariable,attr"`
+	Fields         []xmlHTTPKV `xml:"itemField"`
+}
+
 // A BMC Remedy connector task's parameters, carried on a service task as an
 // <atlas:remedyConnector connector="..." form="..." resultVariable="..."> extension
-// element with <atlas:remedyField name="..." value="..."/> children (ADR-0105).
+// element with <atlas:remedyField name="..." value="..."/> children (ADR-0106).
 // connector names a server-registered Remedy instance (its base URL and credentials
 // live on the server, never in the model). form is the Remedy form the entry is
 // created in (e.g. "HPD:IncidentInterface_Create"); each field is one entry value;

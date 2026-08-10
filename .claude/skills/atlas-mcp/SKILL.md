@@ -32,6 +32,7 @@ endpoint behind an authenticating reverse proxy.
 | `atlas_get_process_xml` | `key` | deployed BPMN XML |
 | `atlas_create_instance` | `key`, `variables?` | starts an instance (optionally seeded with start variables) and returns stats |
 | `atlas_process_runtime` | `key` | per-element token and visit counts |
+| `atlas_call_activities` | none | every call activity across deployed processes, with its called process id, binding, propagation, and whether the target is deployed here (resolved) |
 | `atlas_collaboration_runtime` | `key` | a collaboration's live pools, tokens, and message flows |
 | `atlas_list_instances` | none | bounded legacy instance list |
 | `atlas_instances_summary` | none | per-definition active/completed counts |

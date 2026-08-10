@@ -9,7 +9,11 @@
 // milestone; the linearized result here is the shape the engine consumes.
 package compiler
 
-import "github.com/pblumer/atlas/expr"
+import (
+	"fmt"
+
+	"github.com/pblumer/atlas/expr"
+)
 
 // BpmnType is the kind of a BPMN element. It is stored in element-instance state
 // (as uint8) for O(1) behavior dispatch.
@@ -274,6 +278,20 @@ const (
 	BindingDeployment
 )
 
+// String renders a binding as the lower-case token used on the wire and in the
+// Modeler (`bindingType`): "latest" or "deployment". Any unknown value is
+// reported verbatim so a drift is visible rather than silently mapped to latest.
+func (b DecisionBinding) String() string {
+	switch b {
+	case BindingLatest:
+		return "latest"
+	case BindingDeployment:
+		return "deployment"
+	default:
+		return fmt.Sprintf("DecisionBinding(%d)", int32(b))
+	}
+}
+
 // UserTaskDetail is the per-user-task data a behavior needs at runtime. A user
 // task parks a token and creates a job like a service task; the "worker" is a
 // person using the Tasks app (ADR-0028). Assignee and CandidateGroups are
@@ -319,10 +337,14 @@ type UserTaskDetail struct {
 //     method (e.g. "POST") and the full endpoint URL authored in the model
 //     (ADR-0067, revising ADR-0036 for REST); ResultVar, if set, is the process
 //     variable the JSON response is written back into on completion.
+//   - SharePoint (JobType == SharePointJobType): Connector names the
+//     server-registered SharePoint provider; Site and List address the target list
+//     and Fields are the created item's column values (all literal-or-FEEL); the
+//     created item's JSON is written into ResultVar when set (ADR-0105).
 //   - BMC Remedy (JobType == RemedyJobType): Connector names the server-registered
 //     Remedy instance; RemedyForm and RemedyFields are the form and the entry's field
 //     values (literal-or-FEEL) an incident/entry is created with through the AR System
-//     REST API; ResultVar, if set, receives the created entry's id (ADR-0105).
+//     REST API; ResultVar, if set, receives the created entry's id (ADR-0106).
 //
 // Unused fields for a given kind are -1 (Intern maps that back to ""); Limit is 0
 // when unset. The write and REST kinds send the instance's variables as the
@@ -364,7 +386,17 @@ type ConnectorTaskDetail struct {
 	From        RestExpr
 	MailSubject RestExpr
 	Body        RestExpr
-	// Remedy connector fields (JobType == RemedyJobType, ADR-0105). Connector (above)
+	// SharePoint connector fields (JobType == SharePointJobType, ADR-0105). Connector
+	// (above) names the server-registered SharePoint provider (its Graph base and
+	// OAuth credential live server-side). Site and List address the target list (a
+	// site host/path or id, and a list name or id); Fields are the created item's
+	// column values. Each is a literal-or-FEEL value evaluated over the instance's
+	// variables at call time; Site/List are the zero RestExpr and Fields is nil for a
+	// non-SharePoint task. ResultVar (above), if set, receives the created item's JSON.
+	Site   RestExpr
+	List   RestExpr
+	Fields []RestKV
+	// Remedy connector fields (JobType == RemedyJobType, ADR-0106). Connector (above)
 	// names the server-registered BMC Remedy instance; ResultVar (above), if set,
 	// receives the created entry's id. RemedyForm is the Remedy form the entry is
 	// created in (literal-or-FEEL, the zero RestExpr for a non-remedy task);
@@ -867,6 +899,45 @@ func (p *CompiledProcess) ScriptTask(detail int32) *ScriptTaskDetail {
 // CallActivity returns the call-activity detail at the given table index.
 func (p *CompiledProcess) CallActivity(detail int32) *CallActivityDetail {
 	return &p.callActivities[detail]
+}
+
+// CallActivityRef is the static, read-only view of one call activity: the BPMN
+// element that hosts it, the process id it calls, the version binding, whether
+// variables propagate wholesale in/out, and whether it is a multi-instance loop
+// (spawning one child per collection element). It carries no resolved def key —
+// which deployed definition the call reaches is a per-server, deploy-time fact
+// the server layer computes on top of this (ADR-0076).
+type CallActivityRef struct {
+	ElementId          string
+	CalledProcessId    string
+	Binding            DecisionBinding
+	PropagateAllParent bool
+	PropagateAllChild  bool
+	MultiInstance      bool
+}
+
+// CallActivities returns every call activity in this process, in node order —
+// empty if it has none. It mirrors BusinessRuleDecisions: a static enumeration of
+// an outbound reference (here the called process id) that the server surfaces so
+// operators can see and manage the call activities deployed on a server — which
+// process calls which, and whether the target resolves (ADR-0076).
+func (p *CompiledProcess) CallActivities() []CallActivityRef {
+	var out []CallActivityRef
+	for i := range p.nodes {
+		if p.nodes[i].Type != TypeCallActivity {
+			continue
+		}
+		d := p.CallActivity(p.nodes[i].Detail)
+		out = append(out, CallActivityRef{
+			ElementId:          p.ElementBpmnId(int32(i)),
+			CalledProcessId:    p.Intern(d.CalledProcessId),
+			Binding:            d.Binding,
+			PropagateAllParent: d.PropagateAllParent,
+			PropagateAllChild:  d.PropagateAllChild,
+			MultiInstance:      p.nodes[i].MultiInstance >= 0,
+		})
+	}
+	return out
 }
 
 // MultiInstance returns the loop characteristics at the given table index — the

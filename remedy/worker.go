@@ -24,7 +24,7 @@ type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 // evaluating any FEEL field over the instance's variables (the fx toggle, ADR-0067) —
 // resolves the named connector's AR System client from reg, and creates the entry
 // keyed by the job key so an at-least-once retry carries the same X-Request-ID
-// (ADR-0105). When the task names a result variable, the created entry's id is
+// (ADR-0106). When the task names a result variable, the created entry's id is
 // returned as that variable to be written back into the instance on completion.
 // Returning an error leaves the job pending (retry, then an incident, ADR-0061); the
 // runner completes it only on success.

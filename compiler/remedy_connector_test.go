@@ -6,7 +6,7 @@ import (
 )
 
 // A service task bearing an <atlas:remedyConnector> extension is a BMC Remedy
-// connector task (ADR-0105): it creates an entry (e.g. an incident) in a Remedy form
+// connector task (ADR-0106): it creates an entry (e.g. an incident) in a Remedy form
 // through the AR System REST API via the job path, mirroring clio's and mail's
 // registry-managed endpoint (the Remedy base URL and credentials live server-side,
 // never in the model) while the form and its field values are model-authored like

@@ -356,7 +356,7 @@ func TestBuildMailClientsLoadError(t *testing.T) {
 }
 
 // TestRemedyConnectorValidationAndCreate covers the create-handler validation for the
-// Remedy kind (ADR-0105): the kind is accepted, an endpoint and a credentialsRef are
+// Remedy kind (ADR-0106): the kind is accepted, an endpoint and a credentialsRef are
 // both required, and a valid create stores the record with only the credential
 // reference (never a secret).
 func TestRemedyConnectorValidationAndCreate(t *testing.T) {

@@ -1,4 +1,4 @@
-# ADR-0105: A BMC Remedy connector — server-registered ITSM entry creation
+# ADR-0106: A BMC Remedy connector — server-registered ITSM entry creation
 
 - **Status:** Accepted
 - **Date:** 2026-08-10

@@ -229,9 +229,50 @@ func registerScope(
 			}
 			continue
 		}
+		// A service task bearing an <atlas:sharepointConnector> extension is a
+		// SharePoint connector task: it creates a list item in a model-authored
+		// site/list through a server-registered SharePoint provider (Microsoft Graph)
+		// via the job path (ADR-0105). The provider (Graph base, OAuth credential) is
+		// resolved server-side by connector name, like mail; only the target
+		// (site, list, item fields) lives in the model.
+		if cn := st.SharePoint; cn != nil {
+			if strings.TrimSpace(cn.Connector) == "" {
+				return fmt.Errorf("compiler: sharepoint connector task %q needs a connector", st.Id)
+			}
+			if strings.TrimSpace(cn.Site) == "" {
+				return fmt.Errorf("compiler: sharepoint connector task %q needs a site", st.Id)
+			}
+			if strings.TrimSpace(cn.List) == "" {
+				return fmt.Errorf("compiler: sharepoint connector task %q needs a list", st.Id)
+			}
+			site, err := restValue(st.Id, "site", cn.Site)
+			if err != nil {
+				return err
+			}
+			list, err := restValue(st.Id, "list", cn.List)
+			if err != nil {
+				return err
+			}
+			fields, err := httpKVList(st.Id, "item field", cn.Fields)
+			if err != nil {
+				return err
+			}
+			id := b.AddSharePointConnectorTask(SharePointConfig{
+				Connector: strings.TrimSpace(cn.Connector),
+				Site:      site,
+				List:      list,
+				Fields:    fields,
+				ResultVar: strings.TrimSpace(cn.ResultVariable),
+				Retries:   retries,
+			})
+			if err := register(st.Id, id); err != nil {
+				return err
+			}
+			continue
+		}
 		// A service task bearing an <atlas:remedyConnector> extension is a BMC Remedy
 		// connector task: it creates an entry (e.g. an incident) in a Remedy form
-		// through the AR System REST API via the job path (ADR-0105). The Remedy base
+		// through the AR System REST API via the job path (ADR-0106). The Remedy base
 		// URL and credentials are resolved server-side by connector name, like clio and
 		// mail; only the form and its field values live in the model.
 		if cn := st.Remedy; cn != nil {

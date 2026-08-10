@@ -232,6 +232,7 @@ const TOPNAV = {
   operations: [
     { name: "Instances", route: "#/operations" },
     { name: "Decisions", route: "#/operations/decisions" },
+    { name: "Call activities", route: "#/operations/call-activities" },
   ],
   tasks: [{ name: "Inbox", route: "#/tasks" }, { name: "Start", route: "#/tasks/start" }], insights: [],
 };
@@ -263,9 +264,14 @@ const CONNECTORS = [
     refs: "ADR-0041 · ADR-0079 · ADR-0093", status: "active", statusLabel: "configurable",
   },
   {
+    id: "sharepoint", name: "SharePoint", kind: "List item",
+    desc: "Creates a list item in a Microsoft SharePoint site from a service task off the processor loop via the Graph API (OAuth2 app-only or refresh-token). The site, list, and item fields are model-authored (FEEL-capable) and the created item's JSON is written into a result variable; the Graph base and credentials are managed below and resolved from the vault. Authored via the SharePoint Connector service-task type.",
+    refs: "ADR-0041 · ADR-0093 · ADR-0105", status: "active", statusLabel: "configurable",
+  },
+  {
     id: "remedy", name: "BMC Remedy", kind: "ITSM",
     desc: "Creates an entry (e.g. an incident) in a BMC Remedy / Helix ITSM form from a service task off the processor loop via the AR System REST API. The form and its field values are model-authored (FEEL-capable) and the created entry's id is written into a result variable; the base URL and the {username,password} credential bundle are managed below and resolved from the vault. Authored via the BMC Remedy Connector service-task type.",
-    refs: "ADR-0041 · ADR-0105", status: "active", statusLabel: "configurable",
+    refs: "ADR-0041 · ADR-0106", status: "active", statusLabel: "configurable",
   },
 ];
 
@@ -1583,7 +1589,7 @@ function wireConnectorManagement(connectors) {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="connector-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="remedy">remedy</option></select></label>
+        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option></select></label>
         <label class="field mail-only" style="margin:0"><span>Provider</span><select name="provider"><option value="smtp">SMTP</option><option value="gmail">Gmail API</option><option value="microsoft">Microsoft Graph</option></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
@@ -1593,7 +1599,9 @@ function wireConnectorManagement(connectors) {
       // Adapt the form to the kind and mail provider: SMTP needs a host:port endpoint
       // and (optionally) a password reference; a native provider (Gmail/Graph) needs no
       // endpoint but a credentialsRef naming a vault JSON auth bundle, and sends as the
-      // sender mailbox. The mail-only fields hide for temis/clio.
+      // sender mailbox. A SharePoint connector likewise defaults its Graph API base
+      // (no endpoint) and needs a credentialsRef naming a vault OAuth bundle. The
+      // mail-only fields hide for temis/clio/sharepoint.
       const form = slot.querySelector("form");
       const kindSel = form.querySelector('[name="kind"]');
       const providerSel = form.querySelector('[name="provider"]');
@@ -1604,19 +1612,25 @@ function wireConnectorManagement(connectors) {
       const endpointField = form.querySelector(".endpoint-field");
       const sync = () => {
         const mail = kindSel.value === "mail";
+        const sharepoint = kindSel.value === "sharepoint";
         const remedy = kindSel.value === "remedy";
         const native = mail && providerSel.value !== "smtp";
+        // Kinds that default their API base and authenticate with a vault credential
+        // bundle instead of a host:port endpoint. Remedy is not one of these — it needs
+        // both a base URL and a credential bundle.
+        const bundle = native || sharepoint;
         form.querySelectorAll(".mail-only").forEach((el) => { el.style.display = mail ? "" : "none"; });
         senderIn.required = mail;
-        // A native provider needs no endpoint; SMTP and the other kinds do.
-        endpointField.style.display = native ? "none" : "";
-        endpointIn.required = !native;
+        // A native mail provider and SharePoint default their API base — no endpoint;
+        // SMTP, temis, clio, and remedy need one.
+        endpointField.style.display = bundle ? "none" : "";
+        endpointIn.required = !bundle;
         endpointIn.placeholder = mail ? "smtp.office365.com:587" : (remedy ? "https://helix.example.com:8008" : "https://temis.internal");
-        // A native mail provider and a Remedy instance both need a vault credential
+        // A native mail provider, SharePoint, and Remedy all need a vault credential
         // bundle; the other kinds take an optional token reference.
-        credRefIn.required = native || remedy;
-        credRefIn.placeholder = remedy ? "remedy_creds (vault {username,password})" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token");
-        credRefLabel.textContent = remedy ? "Credential reference (vault {username,password})" : (native ? "Credential reference (vault auth bundle)" : "Token reference (optional)");
+        credRefIn.required = bundle || remedy;
+        credRefIn.placeholder = remedy ? "remedy_creds (vault {username,password})" : (sharepoint ? "sharepoint_auth (vault JSON bundle)" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token"));
+        credRefLabel.textContent = remedy ? "Credential reference (vault {username,password})" : ((bundle) ? "Credential reference (vault auth bundle)" : "Token reference (optional)");
       };
       kindSel.addEventListener("change", sync);
       providerSel.addEventListener("change", sync);
@@ -2264,6 +2278,73 @@ async function viewDecisions() {
       }).join("");
     } catch (e) {
       tbody.innerHTML = `<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`;
+    }
+  };
+  document.getElementById("refresh").addEventListener("click", load);
+  await load();
+}
+
+// viewCallActivities is the per-server management view for call activities: one
+// row per call activity across every deployed process, showing which process it
+// calls, its version binding and variable propagation, and — the operational
+// point — whether the called process is currently deployed here. A caller may be
+// deployed before its callee, so a call activity can sit "unresolved" (it would
+// park at runtime); this view makes those gaps visible per server so an operator
+// can deploy the missing target (ADR-0076). Read-only: it changes no state.
+async function viewCallActivities() {
+  view.innerHTML = `
+    <div class="between">
+      <h1>Call activities</h1>
+      <button class="btn neutral" id="refresh">Refresh</button>
+    </div>
+    <p class="muted">One row per call activity across the processes deployed on this
+    server. A call activity starts another deployed process as a child instance; it
+    <b>resolves</b> only when a process with the called id is deployed here. A caller
+    deployed before its callee shows as <b>not deployed</b> — it would wait at the call
+    activity until the target lands. Manage the gaps per server: deploy the missing
+    process in the <a href="#/modeler">Modeler</a>.</p>
+    <div class="card" style="padding:0">
+      <table>
+        <thead><tr><th>Caller</th><th>Element</th><th>Calls</th><th>Binding</th><th>Variables</th><th>Resolves to</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>`;
+  const tbody = document.getElementById("rows");
+
+  const load = async () => {
+    try {
+      const rows = await api("GET", "/api/v1/call-activities");
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="empty">
+          No call activities deployed. Add a call activity to a process in the
+          <a href="#/modeler">Modeler</a> and deploy it.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = rows.map((r) => {
+        const caller = `<a href="#/operations/p/${r.callerKey}">${esc(r.callerName || r.callerProcessId)}</a>`
+          + ` <span class="muted">v${r.callerVersion}</span>`;
+        const binding = `<span class="pill">${esc(r.binding)}</span>`
+          + (r.multiInstance ? ' <span class="pill muted">multi-instance</span>' : "");
+        // Propagation: "all" both ways is the Zeebe default; call it out only where a
+        // direction is isolated (off), since that changes what crosses the boundary.
+        const vars = (r.propagateAllParent && r.propagateAllChild)
+          ? '<span class="muted">all in · all out</span>'
+          : `${r.propagateAllParent ? "all in" : "mapped in"} · ${r.propagateAllChild ? "all out" : "mapped out"}`;
+        const target = r.resolved
+          ? `<a href="#/operations/p/${r.targetKey}"><span class="pill ok"><span class="dot"></span>${esc(r.targetName || r.calledProcessId)}</span></a>`
+            + ` <span class="muted">v${r.targetVersion}</span>`
+          : `<span class="pill warn"><span class="dot"></span>not deployed</span>`;
+        return `<tr>
+          <td>${caller}</td>
+          <td style="font-family:ui-monospace,monospace">${esc(r.elementId)}</td>
+          <td style="font-family:ui-monospace,monospace">${esc(r.calledProcessId)}</td>
+          <td>${binding}</td>
+          <td>${vars}</td>
+          <td>${target}</td>
+        </tr>`;
+      }).join("");
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;
     }
   };
   document.getElementById("refresh").addEventListener("click", load);
@@ -3663,6 +3744,7 @@ async function route() {
     if (tk) return await viewTasks(Number(tk[1]));
     if (path === "#/operations") return await viewInstances();
     if (path === "#/operations/decisions") return await viewDecisions();
+    if (path === "#/operations/call-activities") return await viewCallActivities();
     // Drill into one decision's evaluations (its "instances"). The id is URL-encoded
     // because a DMN decision id may contain spaces or other reserved characters.
     const dd = path.match(/^#\/operations\/decisions\/(.+)$/);

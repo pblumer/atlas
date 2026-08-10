@@ -115,6 +115,17 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_call_activities",
+			Description: "List every call activity across all deployed processes on this server, with " +
+				"its caller, the process id it calls, its version binding and propagation flags, whether " +
+				"it is a multi-instance loop, and whether the called process is currently deployed here " +
+				"(resolved) or not (would park at runtime). The per-server call-activity management view.",
+			InputSchema: noArgs(),
+			Handler: func(c *Client, _ map[string]any) (string, error) {
+				return asText(c.get("/api/v1/call-activities"))
+			},
+		},
+		{
 			Name: "atlas_collaboration_runtime",
 			Description: "Get live runtime state for a collaboration (a multi-pool model) by one of its pool " +
 				"definition keys: the pools, the token counts on each element, and the message flows between pools. " +

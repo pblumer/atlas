@@ -1,7 +1,7 @@
 // Package remedy integrates BMC Remedy (BMC Helix ITSM / the AR System) as a
 // server-registered Atlas connector: a BPMN Remedy connector task creates an entry
 // (e.g. an incident) in a model-authored Remedy form through the AR System REST API
-// via the job path (ADR-0105), mirroring how the mail package delegates a send to a
+// via the job path (ADR-0106), mirroring how the mail package delegates a send to a
 // registry-managed provider (ADR-0079) and clio an append to a registry-managed
 // endpoint (ADR-0036). The integration inherits the job protocol's durability and
 // non-blocking properties (ADR-0007):
@@ -26,7 +26,7 @@
 // Delivery is at-least-once (a crash between "Remedy created the entry" and "job
 // completed" replays the create). The AR System has no idempotency-key header, so a
 // replay can create a duplicate entry; the job key rides along as an X-Request-ID for
-// a downstream de-duplicator, and a Remedy-side dedup field is a follow-up (ADR-0105).
+// a downstream de-duplicator, and a Remedy-side dedup field is a follow-up (ADR-0106).
 package remedy
 
 import (
@@ -110,14 +110,14 @@ type Connector struct {
 
 // HTTPClient calls a real Remedy AR System over its REST API. It authenticates per
 // call (login → create → logout), which keeps the client stateless and safe for
-// concurrent use; token caching is a follow-up (ADR-0105).
+// concurrent use; token caching is a follow-up (ADR-0106).
 type HTTPClient struct {
 	conn Connector
 	http *http.Client
 }
 
 // NewHTTPClient builds a Remedy REST client for a configured connector, backed by
-// http.DefaultClient. A configurable timeout is a follow-up (ADR-0105).
+// http.DefaultClient. A configurable timeout is a follow-up (ADR-0106).
 func NewHTTPClient(conn Connector) *HTTPClient {
 	return &HTTPClient{conn: conn, http: http.DefaultClient}
 }

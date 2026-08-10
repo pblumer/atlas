@@ -198,8 +198,8 @@ The control-flow basics most real models use.
   registry-only); credentials are still never authored in a model — an auth type
   plus a server-registered credential reference is a follow-up, alongside
   headers/query maps and FEEL-in-fields.
-  **A BMC Remedy connector is the next catalog kind**
-  ([ADR-0105](docs/adr/0105-bmc-remedy-connector.md)): a service task marked
+  **A BMC Remedy connector is another catalog kind**
+  ([ADR-0106](docs/adr/0106-bmc-remedy-connector.md)): a service task marked
   `<atlas:remedyConnector connector form>` creates an entry (e.g. an incident on
   `HPD:IncidentInterface_Create`) in a Remedy form through the BMC AR System REST API on
   the job path — the form and its field values are model-authored (literal-or-FEEL), the

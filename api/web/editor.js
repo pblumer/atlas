@@ -1571,6 +1571,26 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
+    id: "sharepoint", name: "SharePoint Connector", desc: "Create a list item in a SharePoint site", icon: "S",
+    // A list/grid mark on a Microsoft-teal tile reads "SharePoint list" at a glance —
+    // this connector's counterpart to REST's globe and mail's envelope. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white list rows.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#038387"/><rect x="3" y="3.6" width="10" height="8.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 6.2h9.2M6 3.9v8.2" stroke="#fff" stroke-width="1.1"/></svg>`,
+    ext: "atlas:SharePointConnector",
+    fields: [
+      { group: "SharePoint provider" },
+      { key: "connector", label: "Connector", placeholder: "contoso", hint: "Names a server-registered SharePoint provider (its Graph base and OAuth credential live on the server, never in the model)." },
+      { group: "Target" },
+      { key: "site", label: "Site", placeholder: "contoso.sharepoint.com,<siteId>,<webId>", fx: true, hint: "The Microsoft Graph site identifier. A value may be a FEEL expression (fx)." },
+      { key: "list", label: "List", placeholder: "Incidents", fx: true, hint: "The list name or id the item is created in." },
+      { group: "Item" },
+      { key: "fields", label: "Item fields", type: "map", childType: "atlas:ItemField", fx: true, hint: "Column values of the created list item. A value may be a FEEL expression (fx) over the instance's variables." },
+      { group: "Output" },
+      { key: "resultVariable", label: "Result variable", placeholder: "createdItem", hint: "The created item's JSON is written into this process variable (leave empty to discard it)." },
+    ],
+  },
+  {
     id: "remedy", name: "BMC Remedy Connector", desc: "Create an incident/entry in BMC Remedy (Helix ITSM)", icon: "B",
     // A ticket/incident mark on a BMC-orange tile reads "ITSM ticket" at a glance — the
     // Remedy connector's counterpart to REST's globe and mail's envelope. The
