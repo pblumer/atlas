@@ -113,8 +113,27 @@ function viewLogin() {
         <div class="row" style="margin-top:6px"><button class="btn" type="submit">Sign in</button></div>
         <p id="login-error" class="muted" hidden></p>
       </form>
+      <div style="margin-top:10px">
+        <button type="button" id="forgot-password" class="linklike">Forgot password?</button>
+        <p id="forgot-help" class="muted" style="margin-top:6px" hidden>
+          Atlas doesn't send password-reset emails. An administrator resets
+          passwords for this instance &mdash; ask yours to set a new one for your
+          account, then sign in with it.
+        </p>
+      </div>
     </div>`;
   const f = document.getElementById("login-form");
+  // Password recovery on a self-hosted, admin-managed instance is an admin
+  // action (POST /users/{id}/password), not a self-service email flow — there is
+  // no transactional mail sender and email is optional per user (ADR-0044). So
+  // this affordance points the user at the recovery path that actually exists
+  // rather than a dead-end "invalid password" error.
+  const forgot = document.getElementById("forgot-password");
+  forgot.addEventListener("click", () => {
+    const help = document.getElementById("forgot-help");
+    help.hidden = !help.hidden;
+    forgot.setAttribute("aria-expanded", String(!help.hidden));
+  });
   f.addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = new FormData(f);
