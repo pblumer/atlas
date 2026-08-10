@@ -60,22 +60,6 @@ func (s *callOverrideStore) save(rec callOverride) error {
 	return atomicWriteJSON(s.dir, s.fileFor(rec.CalledProcessID), rec)
 }
 
-// get returns the override for a called process id, or ok=false if none exists.
-func (s *callOverrideStore) get(processID string) (callOverride, bool, error) {
-	data, err := os.ReadFile(s.fileFor(processID))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return callOverride{}, false, nil
-		}
-		return callOverride{}, false, fmt.Errorf("calloverridestore: read: %w", err)
-	}
-	var rec callOverride
-	if err := json.Unmarshal(data, &rec); err != nil {
-		return callOverride{}, false, fmt.Errorf("calloverridestore: decode: %w", err)
-	}
-	return rec, true, nil
-}
-
 // delete removes an override. A missing override is not an error (idempotent).
 func (s *callOverrideStore) delete(processID string) error {
 	if err := os.Remove(s.fileFor(processID)); err != nil && !os.IsNotExist(err) {

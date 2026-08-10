@@ -111,6 +111,7 @@ func TestCallActivityOverrides(t *testing.T) {
 	for _, tc := range []struct {
 		name, body string
 	}{
+		{"malformed json", `{not json`},
 		{"redirect without target", `{"action":"redirect"}`},
 		{"pin to missing version", `{"action":"pin","targetVersion":99}`},
 		{"unknown action", `{"action":"teleport"}`},
