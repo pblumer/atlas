@@ -355,6 +355,79 @@ func TestBuildMailClientsLoadError(t *testing.T) {
 	}
 }
 
+// TestRemedyConnectorValidationAndCreate covers the create-handler validation for the
+// Remedy kind (ADR-0106): the kind is accepted, an endpoint and a credentialsRef are
+// both required, and a valid create stores the record with only the credential
+// reference (never a secret).
+func TestRemedyConnectorValidationAndCreate(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	h := srv.Handler()
+	post := func(body string) (int, connector) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/connectors", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		var c connector
+		_ = json.Unmarshal(rec.Body.Bytes(), &c)
+		return rec.Code, c
+	}
+	// No endpoint → 400 (every non-mail kind needs one).
+	if code, _ := post(`{"name":"r0","kind":"remedy","credentialsRef":"remedy_creds"}`); code != http.StatusBadRequest {
+		t.Error("remedy without endpoint: want 400")
+	}
+	// Endpoint but no credentialsRef → 400 (Remedy must authenticate).
+	if code, _ := post(`{"name":"r1","kind":"remedy","endpoint":"https://helix.example.com"}`); code != http.StatusBadRequest {
+		t.Error("remedy without credentialsRef: want 400")
+	}
+	code, c := post(`{"name":"helix","kind":"remedy","endpoint":"https://helix.example.com","credentialsRef":"remedy_creds"}`)
+	if code != http.StatusOK {
+		t.Fatalf("valid remedy create: want 200, got %d", code)
+	}
+	if c.Kind != connectorKindRemedy || c.Endpoint != "https://helix.example.com" || c.CredentialsRef != "remedy_creds" {
+		t.Errorf("remedy record = %+v, want kind remedy with endpoint and credential reference", c)
+	}
+}
+
+// TestBuildRemedyClients covers the managed-connector → Remedy client build: only an
+// enabled record of kind "remedy" with a non-empty endpoint and a credentialsRef that
+// resolves to a valid {username,password} bundle becomes a client; a disabled,
+// non-remedy, endpoint-less, credential-less, or malformed-bundle record is skipped
+// (its tasks park) rather than failing the whole rebuild.
+func TestBuildRemedyClients(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	// The credential bundle lives in the vault; here it resolves from the env fallback
+	// (ATLAS_CONNECTOR_<REF>_TOKEN), never in the record itself.
+	t.Setenv("ATLAS_CONNECTOR_HELIX_CREDS_TOKEN", `{"username":"svc","password":"pw"}`)
+	t.Setenv("ATLAS_CONNECTOR_BAD_CREDS_TOKEN", `not valid json`)
+
+	_ = srv.connectors.save(connector{ID: "1", Name: "on", Kind: "remedy", Endpoint: "https://helix", CredentialsRef: "helix_creds", Enabled: true, CreatedAt: 1})
+	_ = srv.connectors.save(connector{ID: "2", Name: "off", Kind: "remedy", Endpoint: "https://helix", CredentialsRef: "helix_creds", Enabled: false, CreatedAt: 2})
+	_ = srv.connectors.save(connector{ID: "3", Name: "mail", Kind: "mail", Endpoint: "smtp:587", Sender: "a@x", Enabled: true, CreatedAt: 3})
+	_ = srv.connectors.save(connector{ID: "4", Name: "noendpoint", Kind: "remedy", Endpoint: "", CredentialsRef: "helix_creds", Enabled: true, CreatedAt: 4})
+	_ = srv.connectors.save(connector{ID: "5", Name: "nocreds", Kind: "remedy", Endpoint: "https://helix", CredentialsRef: "", Enabled: true, CreatedAt: 5})
+	_ = srv.connectors.save(connector{ID: "6", Name: "broken", Kind: "remedy", Endpoint: "https://helix", CredentialsRef: "bad_creds", Enabled: true, CreatedAt: 6})
+
+	clients, err := srv.buildRemedyClients()
+	if err != nil {
+		t.Fatalf("buildRemedyClients: %v", err)
+	}
+	if len(clients) != 1 {
+		t.Fatalf("clients = %d, want 1 (only the enabled, credentialed remedy record)", len(clients))
+	}
+	if _, ok := clients["on"]; !ok {
+		t.Errorf("clients = %v, want the 'on' connector", clients)
+	}
+}
+
+// TestBuildRemedyClientsLoadError covers buildRemedyClients' store-read failure.
+func TestBuildRemedyClientsLoadError(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	srv.connectors = &connectorStore{dir: filepath.Join(t.TempDir(), "gone")}
+	if _, err := srv.buildRemedyClients(); err == nil {
+		t.Error("buildRemedyClients with a broken store: want error")
+	}
+}
+
 // TestConnectorStoreLoadAllOrdering exercises loadAll's sort comparator with
 // records that both differ in and share CreatedAt (the tie-break by id).
 func TestConnectorStoreLoadAllOrdering(t *testing.T) {

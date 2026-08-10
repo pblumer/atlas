@@ -341,6 +341,10 @@ type UserTaskDetail struct {
 //     server-registered SharePoint provider; Site and List address the target list
 //     and Fields are the created item's column values (all literal-or-FEEL); the
 //     created item's JSON is written into ResultVar when set (ADR-0105).
+//   - BMC Remedy (JobType == RemedyJobType): Connector names the server-registered
+//     Remedy instance; RemedyForm and RemedyFields are the form and the entry's field
+//     values (literal-or-FEEL) an incident/entry is created with through the AR System
+//     REST API; ResultVar, if set, receives the created entry's id (ADR-0106).
 //
 // Unused fields for a given kind are -1 (Intern maps that back to ""); Limit is 0
 // when unset. The write and REST kinds send the instance's variables as the
@@ -392,6 +396,14 @@ type ConnectorTaskDetail struct {
 	Site   RestExpr
 	List   RestExpr
 	Fields []RestKV
+	// Remedy connector fields (JobType == RemedyJobType, ADR-0106). Connector (above)
+	// names the server-registered BMC Remedy instance; ResultVar (above), if set,
+	// receives the created entry's id. RemedyForm is the Remedy form the entry is
+	// created in (literal-or-FEEL, the zero RestExpr for a non-remedy task);
+	// RemedyFields are the entry's field values as name/literal-or-FEEL pairs, evaluated
+	// over the instance's variables at call time (nil for a non-remedy task).
+	RemedyForm   RestExpr
+	RemedyFields []RestKV
 }
 
 // RestExpr is a REST connector field value that is either a literal string

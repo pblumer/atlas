@@ -1590,6 +1590,24 @@ const SERVICE_TASK_KINDS = [
       { key: "resultVariable", label: "Result variable", placeholder: "createdItem", hint: "The created item's JSON is written into this process variable (leave empty to discard it)." },
     ],
   },
+  {
+    id: "remedy", name: "BMC Remedy Connector", desc: "Create an incident/entry in BMC Remedy (Helix ITSM)", icon: "B",
+    // A ticket/incident mark on a BMC-orange tile reads "ITSM ticket" at a glance — the
+    // Remedy connector's counterpart to REST's globe and mail's envelope. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white ticket strokes.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#f76808"/><rect x="3" y="4.4" width="10" height="7.2" rx="1.2" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M5.4 7h5.2M5.4 9h3.2" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/></svg>`,
+    ext: "atlas:RemedyConnector",
+    fields: [
+      { group: "Remedy instance" },
+      { key: "connector", label: "Connector", placeholder: "helix-itsm", hint: "Names a server-registered Remedy instance (its base URL and credentials live on the server, never in the model)." },
+      { group: "Entry" },
+      { key: "form", label: "Form", placeholder: "HPD:IncidentInterface_Create", fx: true, hint: "The Remedy form the entry is created in. May be a FEEL expression (fx)." },
+      { key: "fields", label: "Fields", type: "map", childType: "atlas:RemedyField", fx: true, hint: "The entry's field values, keyed by Remedy field name. A value may be a FEEL expression (fx)." },
+      { group: "Output" },
+      { key: "resultVariable", label: "Result variable", placeholder: "incidentNumber", hint: "The created entry's id is written into this process variable (leave empty to discard it)." },
+    ],
+  },
 ];
 
 // serviceTaskKind returns the catalog entry a service task currently represents,
@@ -3524,7 +3542,12 @@ function wireProperties(root, modeler, api, projectId, toast) {
     const stFeelVars = variablesForCompletion(modeler, element);
     const stValidate = api ? (expression) => api("POST", "/api/v1/feel/validate", { expression }) : null;
     const stAttachFx = (el) => { if (el) attachExpressionToggle(el, { variables: stFeelVars, validate: stValidate }); };
-    if (stKind.fields.some((f) => f.key === "url" && f.fx)) stAttachFx(body.querySelector("#f-st-url"));
+    // Every fx-capable text field (REST url, mail recipients/subject/body, the Remedy
+    // form, …) gets the value-or-expression toggle; map value cells are handled below.
+    for (const f of stKind.fields) {
+      if (f.group || f.type === "map" || !f.fx) continue;
+      stAttachFx(body.querySelector("#f-st-" + f.key));
+    }
 
     // Map editors: a name/value row list with add/remove. Edits and removals save;
     // adding inserts an empty row (it saves once the author types a name). When the

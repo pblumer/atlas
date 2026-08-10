@@ -113,6 +113,25 @@
       ]
     },
     {
+      "name": "RemedyConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "form", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "fields", "type": "RemedyField", "isMany": true }
+      ]
+    },
+    {
+      "name": "RemedyField",
+      "superClass": ["Element"],
+      "properties": [
+        { "name": "name", "type": "String", "isAttr": true },
+        { "name": "value", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "HttpHeader",
       "superClass": ["Element"],
       "properties": [
