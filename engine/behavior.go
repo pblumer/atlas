@@ -553,6 +553,20 @@ func handleJobFailed(c *ProcessingContext) {
 		return
 	}
 	job.Retries = c.cmd.Value.job.Retries
+	// A worker-requested retry backoff (ADR-0111): with retries left and a positive delay,
+	// hold the job off the activatable index (RetryDueDate keeps PutJob from indexing it) and
+	// arm a retry timer that re-activates it when the backoff elapses. The due date is read
+	// from the clock here and frozen into the event (I6). A zero backoff is the pre-0111 path.
+	if job.Retries > 0 && c.cmd.RetryBackoff > 0 {
+		job.RetryDueDate = c.Now() + c.cmd.RetryBackoff
+		c.AppendJobEvent(c.cmd.Key, model.IntentJobFailed, *job)
+		c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
+			ProcessInstanceKey: job.ProcessInstanceKey,
+			JobKey:             c.cmd.Key,
+			DueDate:            job.RetryDueDate,
+		})
+		return
+	}
 	c.AppendJobEvent(c.cmd.Key, model.IntentJobFailed, *job)
 	if job.Retries <= 0 {
 		var elementId int32
@@ -568,6 +582,20 @@ func handleJobFailed(c *ProcessingContext) {
 			Message:            c.cmd.Value.incident.Message,
 		})
 	}
+}
+
+// reactivateJobAfterBackoff re-activates a job whose retry-backoff timer just fired (ADR-0111):
+// it clears the job's RetryDueDate and re-emits it, so PutJob returns it to the activatable
+// index, then notifies workers. A job that is gone (its instance was cancelled during the
+// backoff) is a no-op — the timer self-retires.
+func reactivateJobAfterBackoff(c *ProcessingContext, jobKey uint64) {
+	job := c.GetJob(jobKey)
+	if job == nil {
+		return
+	}
+	job.RetryDueDate = 0
+	c.AppendJobEvent(jobKey, model.IntentJobCreated, *job)
+	c.NotifyJobAvailable(job.JobType)
 }
 
 // handleJobError handles a worker throwing a BPMN error from its job (ADR-0089): it
@@ -659,6 +687,12 @@ func handleJobAssigned(c *ProcessingContext) {
 func handleTimerTriggered(c *ProcessingContext) {
 	timer := c.cmd.Value.timer
 	c.AppendTimerEvent(c.cmd.Key, model.IntentTimerTriggered, timer)
+	if timer.JobKey != 0 {
+		// A retry-backoff timer (ADR-0111): its backoff has elapsed, so re-activate the failed
+		// job rather than firing an element. Checked first — a retry timer carries no element.
+		reactivateJobAfterBackoff(c, timer.JobKey)
+		return
+	}
 	if timer.ProcessInstanceKey == 0 {
 		fireStartTimer(c, timer)
 		return
