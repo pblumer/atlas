@@ -83,6 +83,93 @@ func TestParseCallActivityDefaults(t *testing.T) {
 	}
 }
 
+// TestCallActivities checks the static, server-facing enumeration a per-server
+// call-activity management view is built on: every call activity in node order,
+// each with its element id, called process id, binding, propagation flags, and
+// whether it is a multi-instance loop (ADR-0076).
+func TestCallActivities(t *testing.T) {
+	cp, err := Parse(1, 1, strings.NewReader(callActivityXML))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	refs := cp.CallActivities()
+	if len(refs) != 1 {
+		t.Fatalf("CallActivities() = %d refs, want 1", len(refs))
+	}
+	r := refs[0]
+	if r.ElementId != "call" {
+		t.Errorf("ElementId = %q, want call", r.ElementId)
+	}
+	if r.CalledProcessId != "child-proc" {
+		t.Errorf("CalledProcessId = %q, want child-proc", r.CalledProcessId)
+	}
+	if r.Binding != BindingDeployment {
+		t.Errorf("Binding = %v, want deployment", r.Binding)
+	}
+	if got := r.Binding.String(); got != "deployment" {
+		t.Errorf("Binding.String() = %q, want deployment", got)
+	}
+	if r.PropagateAllParent {
+		t.Errorf("PropagateAllParent = true, want false (isolated in)")
+	}
+	if !r.PropagateAllChild {
+		t.Errorf("PropagateAllChild = false, want true (default)")
+	}
+	if r.MultiInstance {
+		t.Errorf("MultiInstance = true, want false")
+	}
+}
+
+// TestCallActivitiesNone returns an empty slice for a process with no call
+// activities, and BindingLatest stringifies to "latest".
+func TestCallActivitiesNone(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="p" isExecutable="true">
+	    <startEvent id="s"/><endEvent id="e"/>
+	    <sequenceFlow id="f" sourceRef="s" targetRef="e"/>
+	  </process>
+	</definitions>`
+	cp, err := Parse(1, 1, strings.NewReader(xml))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if refs := cp.CallActivities(); len(refs) != 0 {
+		t.Errorf("CallActivities() = %d refs, want 0", len(refs))
+	}
+	if got := BindingLatest.String(); got != "latest" {
+		t.Errorf("BindingLatest.String() = %q, want latest", got)
+	}
+}
+
+// TestCallActivitiesMultiInstance flags a call activity that runs once per
+// element of a collection — the server view marks it so an operator sees the
+// called process may spawn many children per caller (ADR-0077).
+func TestCallActivitiesMultiInstance(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+	             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+	  <process id="p" isExecutable="true">
+	    <startEvent id="s"/>
+	    <callActivity id="call">
+	      <extensionElements><zeebe:calledElement processId="child"/></extensionElements>
+	      <multiInstanceLoopCharacteristics>
+	        <extensionElements><zeebe:loopCharacteristics inputCollection="=items"/></extensionElements>
+	      </multiInstanceLoopCharacteristics>
+	    </callActivity>
+	    <endEvent id="e"/>
+	    <sequenceFlow id="f1" sourceRef="s" targetRef="call"/>
+	    <sequenceFlow id="f2" sourceRef="call" targetRef="e"/>
+	  </process>
+	</definitions>`
+	cp, err := Parse(1, 1, strings.NewReader(xml))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	refs := cp.CallActivities()
+	if len(refs) != 1 || !refs[0].MultiInstance {
+		t.Fatalf("CallActivities() = %+v, want one ref with MultiInstance=true", refs)
+	}
+}
+
 // TestParseCallActivityRequiresProcessId fails deploy when the called process id
 // is missing — a call activity that references nothing cannot run.
 func TestParseCallActivityRequiresProcessId(t *testing.T) {

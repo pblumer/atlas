@@ -9,7 +9,11 @@
 // milestone; the linearized result here is the shape the engine consumes.
 package compiler
 
-import "github.com/pblumer/atlas/expr"
+import (
+	"fmt"
+
+	"github.com/pblumer/atlas/expr"
+)
 
 // BpmnType is the kind of a BPMN element. It is stored in element-instance state
 // (as uint8) for O(1) behavior dispatch.
@@ -273,6 +277,20 @@ const (
 	// deployment (the ADR-0014 behavior): pinned and reproducible.
 	BindingDeployment
 )
+
+// String renders a binding as the lower-case token used on the wire and in the
+// Modeler (`bindingType`): "latest" or "deployment". Any unknown value is
+// reported verbatim so a drift is visible rather than silently mapped to latest.
+func (b DecisionBinding) String() string {
+	switch b {
+	case BindingLatest:
+		return "latest"
+	case BindingDeployment:
+		return "deployment"
+	default:
+		return fmt.Sprintf("DecisionBinding(%d)", int32(b))
+	}
+}
 
 // UserTaskDetail is the per-user-task data a behavior needs at runtime. A user
 // task parks a token and creates a job like a service task; the "worker" is a
@@ -855,6 +873,45 @@ func (p *CompiledProcess) ScriptTask(detail int32) *ScriptTaskDetail {
 // CallActivity returns the call-activity detail at the given table index.
 func (p *CompiledProcess) CallActivity(detail int32) *CallActivityDetail {
 	return &p.callActivities[detail]
+}
+
+// CallActivityRef is the static, read-only view of one call activity: the BPMN
+// element that hosts it, the process id it calls, the version binding, whether
+// variables propagate wholesale in/out, and whether it is a multi-instance loop
+// (spawning one child per collection element). It carries no resolved def key —
+// which deployed definition the call reaches is a per-server, deploy-time fact
+// the server layer computes on top of this (ADR-0076).
+type CallActivityRef struct {
+	ElementId          string
+	CalledProcessId    string
+	Binding            DecisionBinding
+	PropagateAllParent bool
+	PropagateAllChild  bool
+	MultiInstance      bool
+}
+
+// CallActivities returns every call activity in this process, in node order —
+// empty if it has none. It mirrors BusinessRuleDecisions: a static enumeration of
+// an outbound reference (here the called process id) that the server surfaces so
+// operators can see and manage the call activities deployed on a server — which
+// process calls which, and whether the target resolves (ADR-0076).
+func (p *CompiledProcess) CallActivities() []CallActivityRef {
+	var out []CallActivityRef
+	for i := range p.nodes {
+		if p.nodes[i].Type != TypeCallActivity {
+			continue
+		}
+		d := p.CallActivity(p.nodes[i].Detail)
+		out = append(out, CallActivityRef{
+			ElementId:          p.ElementBpmnId(int32(i)),
+			CalledProcessId:    p.Intern(d.CalledProcessId),
+			Binding:            d.Binding,
+			PropagateAllParent: d.PropagateAllParent,
+			PropagateAllChild:  d.PropagateAllChild,
+			MultiInstance:      p.nodes[i].MultiInstance >= 0,
+		})
+	}
+	return out
 }
 
 // MultiInstance returns the loop characteristics at the given table index — the
