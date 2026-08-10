@@ -54,7 +54,10 @@ func Handler(store *state.Store, lookup ProcessLookup, client Client, secret Sec
 		if cp == nil {
 			return nil, fmt.Errorf("rest: no compiled process for def %d", ei.ProcessDefKey)
 		}
-		detail := cp.ConnectorTask(cp.Node(ei.ElementId).Detail)
+		detail, err := cp.ConnectorTaskOf(ei.ElementId)
+		if err != nil {
+			return nil, fmt.Errorf("rest: %w", err)
+		}
 		method := cp.Intern(detail.Method)
 		scope := ei.ProcessInstanceKey
 		// Read the instance's variables once: the url/header/query FEEL values and
