@@ -189,3 +189,8 @@ Dieses Beispiel modelliert den **Fall B** (echte Prozessschritte). Die
 Prozessschritt, im Client geblättert — liegt daneben in
 [`fall-a/`](fall-a/), inklusive eigenem Kunden-Assistenten
 (`api/web/reisebuchung-einschritt-kunde.html`, „ein start, ein complete").
+
+Für den **unauthentifizierten Erstkontakt** gibt es die öffentliche Variante in
+[`public/`](public/): dasselbe Intake-Formular am **Start-Event**, veröffentlicht
+über `/public/forms/{token}` (ADR-0029) — ein Besucher ohne Account startet damit
+eine Instanz, die Formulardaten werden zu Start-Variablen.

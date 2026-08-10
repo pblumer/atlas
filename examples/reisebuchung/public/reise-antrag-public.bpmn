@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Reiseantrag (öffentlich) — Fall A, aber als PUBLIC START FORM (ADR-0029).
+
+  Statt eines User-Tasks trägt hier das START-EVENT das Intake-Formular
+  (formId="reise-antrag", dasselbe Formular wie in ../fall-a/). Ein
+  unauthentifizierter Besucher öffnet die veröffentlichte URL, füllt das Formular
+  aus (Kaskade + bedingte Felder laufen im Browser) und startet damit eine echte
+  Instanz — die Formulardaten werden zu START-VARIABLEN.
+
+    Start (Formular reise-antrag)  →  Script "Antrag aufnehmen"  →  Ende
+
+  Veröffentlichen (vertraut, einmalig):
+    POST /api/v1/public-links {"processId":"proc_reise_antrag_public"}
+      → { token, url: "/public/forms/<token>" }
+  Öffentlich (unauthentifiziert):
+    GET  /public/forms/<token>           → die eingebaute Seite (web/public-form.html)
+    GET  /public/forms/<token>/schema    → das Formular-Schema
+    POST /public/forms/<token>/start     → { "variables": { …Formulardaten… } }
+
+  Sicherheitshaltung (ADR-0029): der Token ist auf GENAU diesen Prozess + dieses
+  Formular beschränkt, liest nichts anderes, ist widerrufbar
+  (DELETE /api/v1/public-links/<token>), rate-limitiert und gehört hinter einen
+  Reverse-Proxy. Deckt den unauthentifizierten Erstkontakt ab; Folgeschritte
+  (falls nötig) laufen über die authentifizierte /api/v1-Fläche.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_reise_antrag_public" targetNamespace="http://atlas/examples">
+  <process id="proc_reise_antrag_public" name="Reiseantrag (öffentlich)" isExecutable="true">
+
+    <startEvent id="start" name="Antrag eingegangen">
+      <extensionElements>
+        <zeebe:formDefinition formId="reise-antrag"/>
+      </extensionElements>
+      <outgoing>f_start_aufnehmen</outgoing>
+    </startEvent>
+
+    <scriptTask id="aufnehmen" name="Antrag aufnehmen">
+      <extensionElements>
+        <zeebe:script resultVariable="aufnahme"
+          expression="= {reiseart: reiseart, ziel: ziel, minderjaehrig: (geburtsdatum != null) and (date(geburtsdatum) &gt; date(&quot;2008-08-08&quot;))}"/>
+      </extensionElements>
+      <incoming>f_start_aufnehmen</incoming>
+      <outgoing>f_aufnehmen_end</outgoing>
+    </scriptTask>
+
+    <endEvent id="end" name="Antrag aufgenommen">
+      <incoming>f_aufnehmen_end</incoming>
+    </endEvent>
+
+    <sequenceFlow id="f_start_aufnehmen" sourceRef="start" targetRef="aufnehmen"/>
+    <sequenceFlow id="f_aufnehmen_end" sourceRef="aufnehmen" targetRef="end"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_reise_antrag_public">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="160" y="122" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="144" y="162" width="70" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_aufnehmen" bpmnElement="aufnehmen">
+        <dc:Bounds x="240" y="100" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end">
+        <dc:Bounds x="390" y="122" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="372" y="162" width="72" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f_start_aufnehmen" bpmnElement="f_start_aufnehmen">
+        <di:waypoint x="196" y="140"/><di:waypoint x="240" y="140"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_aufnehmen_end" bpmnElement="f_aufnehmen_end">
+        <di:waypoint x="340" y="140"/><di:waypoint x="390" y="140"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
