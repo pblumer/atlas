@@ -9,11 +9,14 @@ import { test, expect } from "@playwright/test";
 // installMock answers /auth/me as single-user so the app never gates, fulfils
 // POST /restore with a configurable summary, and returns a benign [] for every
 // other /api/v1 call the shell makes on boot.
-function installMock(page, { restore } = {}) {
+function installMock(page, { restore, restoreFull } = {}) {
   page.route("**/api/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith("/auth/me")) {
       return route.fulfill({ json: { authEnabled: false, user: null } });
+    }
+    if (path.endsWith("/restore/full")) {
+      return route.fulfill(restoreFull || { json: { restored: 0, restartRequired: true } });
     }
     if (path.endsWith("/restore")) {
       return route.fulfill(restore || { json: { restored: 0, restartRequired: true } });
@@ -44,7 +47,7 @@ test("the Console nav exposes a Backup entry that opens the backup view", async 
   const backupNav = page.locator("#topnav a", { hasText: "Backup" });
   await expect(backupNav).toHaveAttribute("href", "#/console/backup");
   await backupNav.click();
-  await expect(page.locator("#view h1")).toHaveText("Backup & restore");
+  await expect(page.locator("#view h1").first()).toHaveText("Backup & restore");
 });
 
 test("the backup view offers a gzip download link and restore controls", async ({ page }) => {
@@ -71,6 +74,37 @@ test("restoring without choosing a file is rejected before any upload", async ({
   await expect(page.locator("#toast")).toContainText("Choose a backup file first");
   // The handler returns before touching the status line, so no upload was attempted.
   await expect(page.locator("#restore-status")).toBeHidden();
+});
+
+test("the full-snapshot section offers its own download link and restore controls", async ({ page }) => {
+  installMock(page);
+  await bootApp(page);
+  await gotoBackup(page);
+
+  await expect(page.locator("#view")).toContainText("Full snapshot");
+  const download = page.locator('#view a[href="/api/v1/backup/full"]');
+  await expect(download).toBeVisible();
+  await expect(download).toHaveAttribute("download", "");
+  await expect(page.locator("#restore-full-file")).toBeVisible();
+  await expect(page.locator("#restore-full-btn")).toBeVisible();
+});
+
+test("a staged full restore reports the file count and the restart requirement", async ({ page }) => {
+  installMock(page, { restoreFull: { json: { restored: 7, restartRequired: true } } });
+  await bootApp(page);
+  await gotoBackup(page);
+
+  page.on("dialog", (d) => d.accept());
+  await page.locator("#restore-full-file").setInputFiles({
+    name: "atlas-full-snapshot.tar.gz",
+    mimeType: "application/gzip",
+    buffer: Buffer.from("dummy snapshot bytes"),
+  });
+  await page.locator("#restore-full-btn").click();
+
+  const status = page.locator("#restore-full-status");
+  await expect(status).toContainText("Staged 7 file(s)");
+  await expect(status).toContainText("Restart");
 });
 
 test("a successful restore reports the file count and the restart note", async ({ page }) => {
