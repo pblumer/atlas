@@ -311,7 +311,7 @@ Making processes wait, react, and time out.
   re-arm failures, start-event timer FEEL, retry backoff, and an operator UI still
   to come.
 
-## Milestone 3 — Structure 🔲
+## Milestone 3 — Structure ✅
 
 Composition and reuse.
 
@@ -353,7 +353,21 @@ Composition and reuse.
   index rebuilds from the log — no new recovery path; the throw is a command-path scope
   walk, the twin of error propagation). bpmn-js already authors it, so no Modeler change
   was needed. Recovery-tested ([ADR-0103](docs/adr/0103-compensation.md)).
-- 🔲 BPMN transactions (with cancel/compensation)
+- ✅ **BPMN transactions** (with cancel/compensation): a `<transaction>` is an
+  embedded subprocess with one added outcome — it can be **cancelled**. A **cancel
+  end event** (`<endEvent><cancelEventDefinition/>`) inside it rolls the transaction
+  back: it terminates the transaction's other running work, **compensates** every
+  completed compensable activity in the transaction scope (ADR-0103, reverse
+  completion order), then — once compensation drains the scope — routes the token out
+  an always-interrupting **cancel boundary** (`<boundaryEvent><cancelEventDefinition/>`,
+  valid only on a transaction). A committing transaction takes its normal flow and does
+  not compensate. Built on the subprocess scope (ADR-0074), the `compensate` walk, and
+  `interruptHost`, reusing `TypeSubProcess` (marked `IsTransaction`) so every scope
+  site is inherited; the compensate-then-continue ordering rides the existing
+  scope-drain through a small event-derived canceling marker, so recovery rebuilds it
+  with no new recovery path. Recovery-tested; authored in the Modeler (bpmn-js draws
+  transactions and cancel events; the cancel boundary/end panels are wired)
+  ([ADR-0108](docs/adr/0108-bpmn-transactions.md)). **Closes Milestone 3.**
 
 ## Milestone 4 — Operability 🔲
 

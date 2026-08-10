@@ -61,8 +61,10 @@ const (
 	TypeCompensationThrowEvent // an intermediate throw event that triggers compensation — runs the handlers of completed compensable activities in its scope, or of one named activity (ADR-0103)
 	TypeCompensationEndEvent   // an end event that triggers compensation, then ends its scope (ADR-0103); the trigger-and-stop counterpart of a compensation throw, reusing the throw detail table
 
+	TypeCancelEndEvent // an end event inside a transaction that cancels it: compensates the transaction's completed activities in reverse order, then routes out the transaction's cancel boundary (ADR-0108)
+
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 31
+	numBpmnTypes = 32
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -130,6 +132,8 @@ func (t BpmnType) String() string {
 		return "CompensationThrowEvent"
 	case TypeCompensationEndEvent:
 		return "CompensationEndEvent"
+	case TypeCancelEndEvent:
+		return "CancelEndEvent"
 	default:
 		return "Unspecified"
 	}
@@ -161,6 +165,7 @@ type CompiledNode struct {
 	EventSub        int32 // index into eventSubProcesses, -1 if this subprocess is not event-triggered (ADR-0082)
 	EventSubStart   int32 // offset into eventSubs (the event-subprocess handler nodes nested directly in this scope)
 	EventSubCount   int32 // number of event subprocesses in this scope (0 for a node that hosts none)
+	Transaction     bool  // this subprocess is a <transaction>: it may hold a cancel end event and host a cancel boundary (ADR-0108)
 }
 
 // CompiledFlow is a sequence flow between two nodes. Condition is the compiled
@@ -509,6 +514,7 @@ const (
 	BoundarySignal                                // waits for a broadcast signal by name, then fires (ADR-0088)
 	BoundaryError                                 // catches an error propagating up to it by code, then fires; always interrupting (ADR-0089)
 	BoundaryCompensation                          // links a host activity to its compensation handler; inert — never armed as an element instance, only read on host completion to record the activity as compensable (ADR-0103)
+	BoundaryCancel                                // on a transaction only: catches the transaction's cancellation and routes its recovery flow; armed inert like an error boundary, and always interrupting (ADR-0108)
 )
 
 // BoundaryEventDetail is the per-boundary-event data a behavior needs at runtime.
@@ -659,6 +665,10 @@ type CompiledProcess struct {
 
 // Node returns the node with the given ElementId.
 func (p *CompiledProcess) Node(id int32) *CompiledNode { return &p.nodes[id] }
+
+// IsTransaction reports whether node id is a <transaction> subprocess — a subprocess
+// that may hold a cancel end event and host a cancel boundary (ADR-0108).
+func (p *CompiledProcess) IsTransaction(id int32) bool { return p.nodes[id].Transaction }
 
 // Flow returns the flow with the given id.
 func (p *CompiledProcess) Flow(id int32) *CompiledFlow { return &p.flows[id] }

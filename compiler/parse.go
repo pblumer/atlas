@@ -345,6 +345,11 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		return nil
 	}
 
+	// Fold <transaction> subprocesses into SubProcesses (marked IsTransaction) before any
+	// scope walk, so a transaction is registered, wired, and validated as the subprocess it
+	// structurally is (ADR-0108).
+	foldTransactions(&proc.xmlFlowContent)
+
 	// Register every flow node — the process root and, recursively, each embedded
 	// subprocess scope — then require a root-scope start event before wiring flows.
 	// Data objects and I/O mappings below stay process-scoped (ADR-0074).
@@ -835,6 +840,12 @@ type xmlFlowContent struct {
 	SubProcesses   []xmlSubProcess   `xml:"subProcess"`
 	CallActivities []xmlCallActivity `xml:"callActivity"`
 
+	// Transactions are <transaction> subprocesses — structurally an embedded subprocess with
+	// one added outcome, cancellation (ADR-0108). They share xmlSubProcess's shape; foldTransactions
+	// merges them into SubProcesses (marked IsTransaction) right after parse, so every scope walk
+	// that already handles subprocesses handles transactions unchanged.
+	Transactions []xmlSubProcess `xml:"transaction"`
+
 	ReceiveTasks []xmlReceiveTask `xml:"receiveTask"`
 
 	// Captured only to give a clear "unsupported element" error (see Parse); not
@@ -914,7 +925,29 @@ type xmlSubProcess struct {
 	// scope runs. "true" makes it an event subprocess; empty/absent is an ordinary one.
 	TriggeredByEvent string            `xml:"triggeredByEvent,attr"`
 	MultiInstance    *xmlMultiInstance `xml:"multiInstanceLoopCharacteristics"`
+	// IsTransaction marks a subprocess that was parsed from a <transaction> element (never from
+	// XML — set by foldTransactions). The compiler marks its compiled node so the runtime and
+	// validation know it may host a cancel boundary and hold a cancel end event (ADR-0108).
+	IsTransaction bool `xml:"-"`
 	xmlFlowContent
+}
+
+// foldTransactions merges each scope's <transaction> subprocesses into its SubProcesses
+// slice, marked IsTransaction, recursively down the scope tree. A transaction is
+// structurally an embedded subprocess with cancellation added (ADR-0108); folding it into
+// SubProcesses means every existing walk (registration, flow wiring, compensation
+// resolution, I/O and multi-instance) treats it as a subprocess with no special-casing, and
+// only the two genuinely new sites — marking the compiled node, and dispatching a cancel
+// end/boundary — need to look at IsTransaction / the cancel event definition.
+func foldTransactions(fc *xmlFlowContent) {
+	for i := range fc.Transactions {
+		fc.Transactions[i].IsTransaction = true
+	}
+	fc.SubProcesses = append(fc.SubProcesses, fc.Transactions...)
+	fc.Transactions = nil
+	for i := range fc.SubProcesses {
+		foldTransactions(&fc.SubProcesses[i].xmlFlowContent)
+	}
 }
 
 // A BPMN data object. It is not a flow node — no token flows through it — so it
@@ -1085,11 +1118,21 @@ type xmlEndEvent struct {
 	// compensation, then ends its scope (ADR-0103); the trigger-and-stop counterpart of a
 	// compensation throw. A pointer so an absent one is nil.
 	Compensation *xmlCompensateEventDefinition `xml:"compensateEventDefinition"`
+	// Cancel, when present, makes this a cancel end event: it cancels the enclosing
+	// transaction — compensating its completed activities, then routing out the transaction's
+	// cancel boundary (ADR-0108). Valid only inside a transaction. A pointer so an absent one is nil.
+	Cancel *xmlCancelEventDefinition `xml:"cancelEventDefinition"`
 }
 
 // xmlTerminateEventDefinition is the empty <terminateEventDefinition> element; only its
 // presence matters (a non-nil pointer once parsed).
 type xmlTerminateEventDefinition struct{}
+
+// xmlCancelEventDefinition is the empty <cancelEventDefinition> element; only its presence
+// matters. On an end event it makes a cancel end event (cancels the enclosing transaction);
+// on a boundary event it makes a cancel boundary (catches a transaction's cancellation),
+// which may attach only to a transaction and is always interrupting (ADR-0108).
+type xmlCancelEventDefinition struct{}
 
 // A boundary event is attached to a host activity (AttachedToRef) and arms while
 // it runs. CancelActivity mirrors BPMN's attribute: absent or "true" is
@@ -1111,6 +1154,10 @@ type xmlBoundaryEvent struct {
 	// (never armed), marking its host activity compensable and linking — via a BPMN
 	// <association> — to the compensation handler (ADR-0103). A pointer so an absent one is nil.
 	Compensation *xmlCompensateEventDefinition `xml:"compensateEventDefinition"`
+	// Cancel, when present, makes this a cancel boundary event: it catches its host
+	// transaction's cancellation and routes the recovery flow. Valid only on a transaction,
+	// and always interrupting (ADR-0108). A pointer so an absent one is nil.
+	Cancel *xmlCancelEventDefinition `xml:"cancelEventDefinition"`
 }
 
 type xmlTimerEventDefinition struct {

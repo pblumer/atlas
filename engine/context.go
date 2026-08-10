@@ -250,6 +250,14 @@ func (c *ProcessingContext) ActiveChildren(scope uint64) int32 {
 	return n
 }
 
+// IsCanceling reports whether the transaction scope txKey was marked cancelling by a cancel
+// end event (ADR-0108).
+func (c *ProcessingContext) IsCanceling(txKey uint64) bool {
+	ok, err := c.tx.IsCanceling(txKey)
+	c.p.fail(err)
+	return ok
+}
+
 // AppendProcessInstanceEvent records a process-instance lifecycle fact.
 func (c *ProcessingContext) AppendProcessInstanceEvent(key uint64, intent model.Intent, v model.ProcessInstanceValue) {
 	c.appendEvent(key, model.VTProcessInstance, intent, inflightValue{process: v})

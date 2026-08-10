@@ -56,6 +56,16 @@ const (
 	// not an error: the catch may live at a call-activity caller one process cannot see,
 	// and the runtime incident is the real terminal for a truly uncaught error.
 	RuleErrorUnhandled = "error.unhandled"
+	// RuleCancelEndOutsideTransaction marks a cancel end event whose enclosing scope is not a
+	// transaction — an error, since BPMN allows a cancel end only within a <transaction> (ADR-0108).
+	RuleCancelEndOutsideTransaction = "cancel.end-outside-transaction"
+	// RuleCancelBoundaryInvalidHost marks a cancel boundary attached to something other than a
+	// transaction — an error, since a cancel boundary may attach only to a <transaction> (ADR-0108).
+	RuleCancelBoundaryInvalidHost = "cancel.boundary-invalid-host"
+	// RuleTransactionNoCancelBoundary marks a transaction that has a cancel end event but no
+	// cancel boundary (ADR-0108). A warning: the cancellation tears the transaction down with
+	// no recovery route, usually a modeling mistake, but not structurally invalid.
+	RuleTransactionNoCancelBoundary = "transaction.no-cancel-boundary"
 )
 
 // Rule slugs for whole-model dry-run findings that [ValidateModel] raises outside
@@ -100,6 +110,7 @@ func Validate(cp *CompiledProcess) []Problem {
 	ps = append(ps, checkGateways(cp)...)
 	ps = append(ps, checkScopes(cp)...)
 	ps = append(ps, checkErrorHandling(cp)...)
+	ps = append(ps, checkTransactions(cp)...)
 	return ps
 }
 
@@ -438,6 +449,59 @@ func errorCaught(cp *CompiledProcess, scope int32, code string) bool {
 			}
 		}
 		scope = cp.nodes[scope].FlowScope
+	}
+	return false
+}
+
+// checkTransactions validates the transaction constructs (ADR-0108). A cancel end event must
+// sit directly inside a transaction, and a cancel boundary may attach only to a transaction —
+// both errors (BPMN restricts them so, and the runtime relies on it). A transaction that has a
+// cancel end event but no cancel boundary is a warning: the cancellation runs, but the token
+// leaves the transaction with no recovery route, usually a modeling mistake.
+func checkTransactions(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	for id := range cp.nodes {
+		n := &cp.nodes[id]
+		switch {
+		case n.Type == TypeCancelEndEvent:
+			if n.FlowScope < 0 || !cp.IsTransaction(n.FlowScope) {
+				ps = append(ps, problem(cp, int32(id), SeverityError, RuleCancelEndOutsideTransaction,
+					"cancel end event is not directly inside a transaction — a cancel end event may appear only within a <transaction>"))
+			}
+		case n.Type == TypeBoundaryEvent && cp.boundaryEventDets[n.Detail].Kind == BoundaryCancel:
+			if !cp.IsTransaction(cp.boundaryEventDets[n.Detail].HostNode) {
+				ps = append(ps, problem(cp, int32(id), SeverityError, RuleCancelBoundaryInvalidHost,
+					"cancel boundary event is not attached to a transaction — a cancel boundary may attach only to a <transaction>"))
+			}
+		}
+	}
+	// A transaction with a cancel end event but no cancel boundary: warn.
+	for id := range cp.nodes {
+		if !cp.nodes[id].Transaction || !scopeHasCancelEnd(cp, int32(id)) {
+			continue
+		}
+		hasCancelBoundary := false
+		for _, be := range cp.BoundaryEvents(int32(id)) {
+			if cp.BoundaryEvent(cp.Node(be).Detail).Kind == BoundaryCancel {
+				hasCancelBoundary = true
+				break
+			}
+		}
+		if !hasCancelBoundary {
+			ps = append(ps, problem(cp, int32(id), SeverityWarning, RuleTransactionNoCancelBoundary,
+				"transaction has a cancel end event but no cancel boundary — the cancellation would tear the transaction down with no recovery route"))
+		}
+	}
+	return ps
+}
+
+// scopeHasCancelEnd reports whether any cancel end event sits directly in the scope rooted at
+// the transaction node id.
+func scopeHasCancelEnd(cp *CompiledProcess, txID int32) bool {
+	for j := range cp.nodes {
+		if cp.nodes[j].Type == TypeCancelEndEvent && cp.nodes[j].FlowScope == txID {
+			return true
+		}
 	}
 	return false
 }

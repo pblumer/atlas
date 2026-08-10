@@ -67,6 +67,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeErrorEndEvent] = errorEndEventBehavior{}
 	p.behaviors[compiler.TypeCompensationThrowEvent] = compensationThrowEventBehavior{}
 	p.behaviors[compiler.TypeCompensationEndEvent] = compensationEndEventBehavior{}
+	p.behaviors[compiler.TypeCancelEndEvent] = cancelEndEventBehavior{}
 	// A signal start event is a plain entry point once instantiated: a broadcast
 	// signal creates the instance (see broadcastSignal/Deploy) and it then flows
 	// straight on like a none start (ADR-0088), the same as a message start.
@@ -1068,9 +1069,19 @@ func terminateChildInstance(c *ProcessingContext, callElKey uint64, elemType uin
 // (apply.go). Victims are collected before any termination so the scope-chain walk
 // sees an intact tree. A no-op for a plain activity — nothing is scoped under it.
 func terminateScope(c *ProcessingContext, procKey, scopeKey uint64) {
+	terminateScopeExcept(c, procKey, scopeKey, 0)
+}
+
+// terminateScopeExcept is terminateScope but spares one element instance (exceptKey). A cancel
+// end event uses it to terminate the transaction's other live tokens while it is itself still
+// being processed — so the scope drains to just the compensation handlers it then starts
+// (ADR-0108). exceptKey == 0 spares nothing (the plain terminateScope). Completed compensable
+// activities are not live instances, so their compensable records are untouched here; they are
+// dropped only when the transaction element itself tears down (apply.go).
+func terminateScopeExcept(c *ProcessingContext, procKey, scopeKey, exceptKey uint64) {
 	var victims []uint64
 	c.ForEachElementInstance(procKey, func(elKey uint64) {
-		if scopeContains(c, scopeKey, elKey) {
+		if elKey != exceptKey && scopeContains(c, scopeKey, elKey) {
 			victims = append(victims, elKey)
 		}
 	})
@@ -2123,6 +2134,66 @@ func compensationHandlerOf(cp *compiler.CompiledProcess, elementId int32) int32 
 	return -1
 }
 
+// cancelEndEventBehavior cancels the enclosing transaction (ADR-0108). Its FlowScopeKey is the
+// transaction (the compiler requires a cancel end directly inside one). On activation it
+// terminates the transaction's other live tokens — sparing itself — so the scope drains to just
+// the compensation handlers it then starts, compensates every completed compensable activity in
+// the transaction (newest first, reverse completion order) via the same command-path walk a
+// compensation end event uses, and hops to Completing. Its Completed event marks the transaction
+// scope cancelling (applyToState); completeScope then fires the transaction's Completing once
+// the handlers drain, where subProcessBehavior's cancel branch routes out the cancel boundary.
+type cancelEndEventBehavior struct{}
+
+func (cancelEndEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	terminateScopeExcept(c, ei.ProcessInstanceKey, ei.FlowScopeKey, key)
+	compensate(c, ei, -1) // compensate the whole transaction scope, reverse completion order
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (cancelEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendElementEvent(key, model.IntentCompleted, *ei) // decrements the transaction scope; applyToState marks it cancelling
+	completeScope(c, ei.FlowScopeKey)                     // fires the transaction's Completing once compensation drains
+}
+
+// cancelTransaction completes a cancelled transaction whose scope has drained (compensation
+// finished): it retires the transaction element and fires its inert cancel boundary to take the
+// recovery flow (ADR-0108). Retiring the transaction first drops its compensable records and the
+// cancelling marker (apply.go) and decrements the parent scope; completing the cancel boundary
+// then takes the recovery flow, and the boundary being gone makes the subsequent
+// disarmBoundaryEvents (handleElementCompleting) skip it while still disarming the transaction's
+// other boundaries. With no cancel boundary (a compile warning), the transaction is simply torn
+// down and the parent scope drained.
+func cancelTransaction(c *ProcessingContext, txKey uint64, ei *model.ElementInstanceValue) {
+	c.AppendElementEvent(txKey, model.IntentTerminated, *ei)
+	if bKey := findCancelBoundary(c, ei.ProcessInstanceKey, txKey); bKey != 0 {
+		if b := c.GetElementInstance(bKey); b != nil {
+			completeAndTakeFlows(c, bKey, b)
+			return
+		}
+	}
+	completeScope(c, ei.FlowScopeKey)
+}
+
+// findCancelBoundary returns the armed cancel-boundary element instance attached to the
+// transaction txKey, or 0 if none (ADR-0108).
+func findCancelBoundary(c *ProcessingContext, procKey, txKey uint64) uint64 {
+	var found uint64
+	c.ForEachElementInstance(procKey, func(elKey uint64) {
+		if found != 0 {
+			return
+		}
+		b := c.GetElementInstance(elKey)
+		if b == nil || b.AttachedToKey != txKey {
+			return
+		}
+		cp := c.process(b.ProcessDefKey)
+		if cp.BoundaryEvent(cp.Node(b.ElementId).Detail).Kind == compiler.BoundaryCancel {
+			found = elKey
+		}
+	})
+	return found
+}
+
 // singletonStartTaken reports whether a singleton message start for (defKey, key)
 // should be skipped because a live instance already exists — either durably (the
 // ActiveStartKey counter, maintained by applyToState) or already scheduled earlier in
@@ -2490,6 +2561,10 @@ func (boundaryEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *m
 		// An error boundary opens nothing — it is inert, armed only to be *found* by
 		// propagateError walking the scope chain when an error is thrown, then driven to
 		// Completing (ADR-0089). No subscription, timer, or record.
+	case compiler.BoundaryCancel:
+		// A cancel boundary opens nothing either — it is inert, armed only to be *found* when
+		// its host transaction is cancelled (its scope has drained after compensation), then
+		// driven to Completing to take the recovery flow (ADR-0108).
 	}
 	// Stays Activated: waits until the timer fires, the message correlates, the signal
 	// broadcasts, or (for an error boundary) an error propagates up to it.
@@ -2557,6 +2632,13 @@ func (subProcessBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *mod
 	// drained by handleElementCompleting (after promoting), so this is a no-op there;
 	// one without mappings is drained here (ADR-0074).
 	dropLocalScope(c, key)
+	// A cancelled transaction: its scope drained after compensation, so route the
+	// cancellation out its cancel boundary instead of taking the transaction's normal
+	// outgoing flow (ADR-0108).
+	if c.process(ei.ProcessDefKey).IsTransaction(ei.ElementId) && c.IsCanceling(key) {
+		cancelTransaction(c, key, ei)
+		return
+	}
 	// An event-subprocess handler has no outgoing flow; its completion instead drains
 	// the parent scope it ran in, which may in turn complete that scope (ADR-0082).
 	if c.process(ei.ProcessDefKey).IsEventSubProcess(ei.ElementId) {

@@ -1120,6 +1120,34 @@ func (b *Builder) AddCompensationEndEvent() int32 {
 	return b.addNode(TypeCompensationEndEvent, detail)
 }
 
+// AddCancelEndEvent adds a cancel end event: an end event inside a transaction that cancels
+// it — compensating the transaction's completed activities in reverse order, then routing out
+// the transaction's cancel boundary (ADR-0108). It carries no detail (a cancel always
+// compensates the whole transaction). Returns its element id.
+func (b *Builder) AddCancelEndEvent() int32 { return b.addNode(TypeCancelEndEvent, -1) }
+
+// AddBoundaryCancelEvent adds a cancel boundary event attached to host (a transaction): it
+// catches the transaction's cancellation and routes its recovery flow. Armed inert like an
+// error boundary and always interrupting (ADR-0108). Returns its element id.
+func (b *Builder) AddBoundaryCancelEvent(host int32) int32 {
+	detail := int32(len(b.boundaryEventDets))
+	b.boundaryEventDets = append(b.boundaryEventDets, BoundaryEventDetail{
+		HostNode:     host,
+		Interrupting: true, // a cancel boundary is always interrupting
+		Kind:         BoundaryCancel,
+	})
+	return b.addNode(TypeBoundaryEvent, detail)
+}
+
+// SetTransaction marks an already-added subprocess node as a <transaction> (ADR-0108), so the
+// runtime and validation know it may host a cancel boundary and hold a cancel end event. A
+// no-op for an out-of-range node.
+func (b *Builder) SetTransaction(nodeID int32) {
+	if b.validNode(nodeID) {
+		b.nodes[nodeID].Transaction = true
+	}
+}
+
 // AddBoundaryCompensationEvent adds a compensation boundary event attached to host: an inert
 // marker (never armed as an element instance) that makes the host compensable and links it to
 // a compensation handler, resolved later from a BPMN <association> via SetCompensationHandler

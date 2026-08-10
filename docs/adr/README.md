@@ -116,6 +116,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0105](0105-sharepoint-connector.md) | SharePoint connector — create a list item via Microsoft Graph, provider managed and OAuth credential in the vault | Accepted |
 | [0106](0106-bmc-remedy-connector.md) | A BMC Remedy connector — server-registered ITSM entry creation via the AR System REST API | Accepted |
 | [0107](0107-backup-and-restore.md) | Backup and restore — a one-file gzip-tar download of the design-time data directory, secrets excluded | Accepted |
+| [0108](0108-bpmn-transactions.md) | BPMN transactions — a transaction subprocess whose cancel end event compensates completed work in reverse order, then routes out an always-interrupting cancel boundary | Accepted |
 
 ## Status values
 
