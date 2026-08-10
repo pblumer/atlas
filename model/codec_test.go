@@ -41,7 +41,7 @@ func TestRecordRoundTrip(t *testing.T) {
 				ParentTokenID:      NewKey(3, 5),
 				SourceFlowId:       9,
 				MultiInstance:      2,            // an inner multi-instance iteration (ADR-0077)
-				EventGatewayKey:    NewKey(3, 6), // armed by an event-based gateway (ADR-0109)
+				EventGatewayKey:    NewKey(3, 6), // armed by an event-based gateway (ADR-0110)
 			},
 		},
 		{

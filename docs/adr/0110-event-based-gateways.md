@@ -1,4 +1,4 @@
-# ADR-0109: Event-based gateways (deferred choice)
+# ADR-0110: Event-based gateways (deferred choice)
 
 - **Status:** Accepted
 - **Date:** 2026-08-10

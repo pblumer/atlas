@@ -3352,7 +3352,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         }
       } else if (bo.$type === "bpmn:EventBasedGateway") {
         // A deferred choice: no configuration of its own — the branches are the
-        // catch events it points at (ADR-0109).
+        // catch events it points at (ADR-0110).
         html += `<p class="muted" style="font-size:12px">An <b>event-based gateway</b> is a <b>deferred choice</b>: reaching it arms every branch's catch event at once (each outgoing flow must lead to a <b>message</b>, <b>timer</b>, or <b>signal</b> intermediate catch event), and the branch whose event fires <b>first</b> is taken — the others are cancelled. The classic use is a request with a timeout (a message catch raced against a timer catch).</p>`;
       } else if (bo.$type === "bpmn:EndEvent") {
         const msg = messageDefOf(bo);
@@ -5886,12 +5886,13 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const stepsForElement = (elId) => steps.filter((s) => s.elementId === elId);
   const stepByEik = (eik) => steps.find((s) => s.elementInstanceKey === eik) || null;
 
-  // drawCallActivityLinks puts a clickable overlay on each call activity that
-  // started a child instance, so a single click on the diagram jumps into the
-  // child's replay (same window). It complements the Details panel's link and is
-  // rebuilt whenever the step set grows. One badge per element (the first child);
-  // a multi-instance call activity's per-iteration children are reachable by
-  // selecting each iteration in the history (its Details link).
+  // drawCallActivityLinks puts a transparent, clickable hotspot directly over each
+  // call activity's "+" marker (bpmn-js draws it at the shape's bottom centre) whose
+  // child instance is known, so a single click on the marker itself jumps into the
+  // child's replay (same window) — no extra badge, the marker is the target. It
+  // complements the Details panel's link and is rebuilt whenever the step set grows.
+  // One hotspot per element (the first child); a multi-instance call activity's
+  // per-iteration children are reachable by selecting each iteration in the history.
   const caLinkIds = [];
   function drawCallActivityLinks() {
     for (const id of caLinkIds.splice(0)) { try { overlays.remove(id); } catch { /* gone */ } }
@@ -5899,10 +5900,13 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     for (const s of steps) {
       if (!s.childInstanceKey || seen.has(s.elementId)) continue;
       seen.add(s.elementId);
-      if (!registry.get(s.elementId)) continue; // element not on this diagram
+      const el = registry.get(s.elementId);
+      if (!el) continue; // element not on this diagram
+      // Centre a small hotspot (sized in CSS) horizontally on the bottom marker.
+      const left = Math.max(0, Math.round((el.width || 100) / 2) - 11);
       caLinkIds.push(overlays.add(s.elementId, "atlas-callchild", {
-        position: { bottom: 4, left: 4 },
-        html: `<a class="ca-child-link" href="#/operations/i/${s.childInstanceKey}" title="Open the called process's instance replay">&#8627; child</a>`,
+        position: { bottom: 1, left },
+        html: `<a class="ca-child-hotspot" href="#/operations/i/${s.childInstanceKey}" title="Open the called process's instance replay" aria-label="Open the called process"></a>`,
       }));
     }
   }

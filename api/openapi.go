@@ -108,6 +108,15 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Restore summary", schemaObj(map[string]any{
 				"restored": tInteger(), "restartRequired": tBool(), "note": tString(),
 			}))}},
+		{"GET", "/api/v1/backup/full", s.handleBackupFull, apiOp{
+			summary: "Download a whole-instance snapshot (design-time data plus the WAL — running instances — the user accounts and the vault key) as a gzip tar; excludes only the derivable state store (admin-only when auth is on) (ADR-0109)", tag: "System",
+			resp: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip-compressed tar archive of the whole-instance snapshot"}}},
+		{"POST", "/api/v1/restore/full", s.handleRestoreFull, apiOp{
+			summary: "Stage a whole-instance snapshot for restore; it is applied on the next server restart, which replaces the WAL, running instances, design-time data, users and vault key, then rebuilds state from the restored WAL (admin-only when auth is on) (ADR-0109)", tag: "System",
+			req: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip tar archive produced by GET /api/v1/backup/full"},
+			resp: jsonBody("Restore staging summary", schemaObj(map[string]any{
+				"restored": tInteger(), "restartRequired": tBool(), "note": tString(),
+			}))}},
 
 		{"POST", "/api/v1/feel/validate", s.handleValidateFeel, apiOp{
 			summary: "Validate a FEEL expression compiles", tag: "FEEL",

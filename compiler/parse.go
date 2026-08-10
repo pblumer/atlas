@@ -834,7 +834,7 @@ type xmlFlowContent struct {
 	ManualTasks        []xmlNode             `xml:"manualTask"`
 	ParallelGateways   []xmlNode             `xml:"parallelGateway"`
 	InclusiveGateways  []xmlInclusiveGateway `xml:"inclusiveGateway"`
-	EventBasedGateways []xmlNode             `xml:"eventBasedGateway"` // deferred choice; only its id matters (ADR-0109)
+	EventBasedGateways []xmlNode             `xml:"eventBasedGateway"` // deferred choice; only its id matters (ADR-0110)
 
 	UserTasks []xmlUserTask `xml:"userTask"`
 

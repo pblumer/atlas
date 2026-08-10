@@ -905,7 +905,7 @@ func (p *Processor) behavior(bpmnType uint8) bpmnBehavior {
 func completeAndTakeFlows(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	// A catch event armed by an event-based gateway wins the deferred choice when it fires:
 	// before it continues, it cancels every other armed catch in its race group, so only this
-	// branch proceeds (ADR-0109). A loser whose Completing was already queued when a sibling
+	// branch proceeds (ADR-0110). A loser whose Completing was already queued when a sibling
 	// cancelled it finds itself gone and drops out (a same-event double-fire). The guard is a
 	// no-op for every element not armed by an event gateway (EventGatewayKey == 0).
 	if ei.EventGatewayKey != 0 {
@@ -2347,7 +2347,7 @@ func (inclusiveGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, e
 	takeInclusiveOutgoing(c, ei)
 }
 
-// eventBasedGatewayBehavior is a deferred choice (ADR-0109): on activation it arms every
+// eventBasedGatewayBehavior is a deferred choice (ADR-0110): on activation it arms every
 // target catch event at once — each outgoing flow's target, a message/timer/signal
 // intermediate catch — stamping each with this gateway's key as its race group, then
 // completes. The armed catches open their own subscriptions/timers and wait unchanged;
@@ -2382,7 +2382,7 @@ func (eventBasedGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, 
 
 // cancelEventGatewaySiblings terminates every live element instance in the same event-gateway
 // race group as the winner (groupKey), except the winner itself (selfKey) — the deferred
-// choice's losing branches (ADR-0109). Each loser's message subscription or timer self-retires
+// choice's losing branches (ADR-0110). Each loser's message subscription or timer self-retires
 // (a later correlate/fire finds no element and drops the stale entry), the same lazy cleanup a
 // disarmed boundary uses. Mirrors interruptHost's sibling-terminate loop, keyed by the
 // event-gateway group instead of a boundary host. Victims are collected before any termination

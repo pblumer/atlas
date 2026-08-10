@@ -42,7 +42,7 @@ type ElementInstanceValue struct {
 	// under the body). Append-compatible: an old record without it decodes to 0.
 	MultiInstance uint8
 	// EventGatewayKey labels a catch event armed by an event-based gateway with the
-	// gateway's element-instance key — its race group (ADR-0109). The first armed catch to
+	// gateway's element-instance key — its race group (ADR-0110). The first armed catch to
 	// fire cancels every other live instance sharing this key. 0 for every element not armed
 	// by an event gateway. Append-compatible: an old record without it decodes to 0.
 	EventGatewayKey uint64

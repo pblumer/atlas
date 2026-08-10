@@ -7,7 +7,7 @@ import (
 
 // eventGatewayBPMN is the request/timeout pattern: after a token reaches the event-based
 // gateway "wait", it arms a message catch ("reply") and a timer catch ("timeout") at once;
-// whichever fires first wins (ADR-0109).
+// whichever fires first wins (ADR-0110).
 const eventGatewayBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs">
@@ -34,7 +34,7 @@ const eventGatewayBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 </bpmn:definitions>`
 
 // TestParseEventBasedGateway: an <eventBasedGateway> compiles to TypeEventBasedGateway, its
-// outgoing flows lead to the two catch events, and the model validates clean (ADR-0109).
+// outgoing flows lead to the two catch events, and the model validates clean (ADR-0110).
 func TestParseEventBasedGateway(t *testing.T) {
 	cp, err := Parse(1, 1, strings.NewReader(eventGatewayBPMN))
 	if err != nil {
@@ -59,7 +59,7 @@ func TestParseEventBasedGateway(t *testing.T) {
 
 // TestParseEventGatewayNonCatchTargetRejected: an event-based gateway whose outgoing flow
 // leads to a non-catch element (here a pass-through task) is a deploy error — a deferred
-// choice can only race catch events (ADR-0109).
+// choice can only race catch events (ADR-0110).
 func TestParseEventGatewayNonCatchTargetRejected(t *testing.T) {
 	const bpmn = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
   <process id="p" isExecutable="true">
@@ -88,7 +88,7 @@ func TestParseEventGatewayNonCatchTargetRejected(t *testing.T) {
 
 // TestValidateEventGatewayTargetRule checks the structured Problem: the rule slug and
 // severity for a non-catch target, via the Builder (which bypasses the deploy gate) so the
-// Problem is observable rather than folded into a fatal ValidationError (ADR-0109).
+// Problem is observable rather than folded into a fatal ValidationError (ADR-0110).
 func TestValidateEventGatewayTargetRule(t *testing.T) {
 	b := NewBuilder(1, "p", 1)
 	start := b.AddStartEvent()

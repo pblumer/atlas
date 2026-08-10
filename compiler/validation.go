@@ -68,7 +68,7 @@ const (
 	RuleTransactionNoCancelBoundary = "transaction.no-cancel-boundary"
 	// RuleEventGatewayTarget marks an event-based gateway whose outgoing flow leads to a
 	// non-catch element — an error, since a deferred choice can only race catch events
-	// (message/timer/signal intermediate catch); a task or gateway cannot participate (ADR-0109).
+	// (message/timer/signal intermediate catch); a task or gateway cannot participate (ADR-0110).
 	RuleEventGatewayTarget = "event-gateway.invalid-target"
 )
 
@@ -319,7 +319,7 @@ func checkGateways(cp *CompiledProcess) []Problem {
 }
 
 // checkEventGatewayTargets validates that every outgoing flow of an event-based gateway
-// leads to a catch event (ADR-0109). A deferred choice races catch events; a target that is
+// leads to a catch event (ADR-0110). A deferred choice races catch events; a target that is
 // a task, a gateway, or an end event cannot participate, so it is a deploy error — the
 // runtime would arm nothing on that branch and the token would deadlock.
 func checkEventGatewayTargets(cp *CompiledProcess, id int32) []Problem {
@@ -558,7 +558,7 @@ func isGateway(t BpmnType) bool {
 }
 
 // isCatchEvent reports whether a node type is an intermediate catch event — a valid
-// target of an event-based gateway's deferred choice (ADR-0109).
+// target of an event-based gateway's deferred choice (ADR-0110).
 func isCatchEvent(t BpmnType) bool {
 	return t == TypeMessageCatchEvent || t == TypeTimerCatchEvent || t == TypeSignalCatchEvent
 }

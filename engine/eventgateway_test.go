@@ -9,7 +9,7 @@ import (
 
 // eventGatewayProcess builds the request/timeout pattern: Start → event gateway "wait" that
 // races a message catch ("reply", no correlation key) against a timer catch (30s). Each
-// branch runs to its own end event so a test can tell which won by element visits (ADR-0109).
+// branch runs to its own end event so a test can tell which won by element visits (ADR-0110).
 func eventGatewayProcess(t testing.TB, key uint64) (cp *compiler.CompiledProcess, replyEnd, timeoutEnd int32) {
 	t.Helper()
 	b := compiler.NewBuilder(key, "req", 1)
@@ -32,7 +32,7 @@ func eventGatewayProcess(t testing.TB, key uint64) (cp *compiler.CompiledProcess
 }
 
 // TestEventGatewayMessageWins: the message arrives before the timer — the message branch
-// continues and the timer branch is cancelled; a later timer tick is a no-op (ADR-0109).
+// continues and the timer branch is cancelled; a later timer tick is a no-op (ADR-0110).
 func TestEventGatewayMessageWins(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -84,7 +84,7 @@ func TestEventGatewayMessageWins(t *testing.T) {
 }
 
 // TestEventGatewayTimerWins: the timer elapses before any message — the timer branch
-// continues and the message branch is cancelled; a later publish is a no-op (ADR-0109).
+// continues and the message branch is cancelled; a later publish is a no-op (ADR-0110).
 func TestEventGatewayTimerWins(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -135,7 +135,7 @@ func TestEventGatewayTimerWins(t *testing.T) {
 
 // TestEventGatewayDoubleFireGuard: two branches waiting on the SAME message both correlate on
 // one publish, in one batch — exactly one wins and the other, cancelled before its queued
-// Completing runs, drops out cleanly (no double-fire, no counter corruption) (ADR-0109).
+// Completing runs, drops out cleanly (no double-fire, no counter corruption) (ADR-0110).
 func TestEventGatewayDoubleFireGuard(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -183,7 +183,7 @@ func TestEventGatewayDoubleFireGuard(t *testing.T) {
 
 // TestEventGatewayRecovers: the armed race survives a crash — the two catches, their
 // subscription and timer, and their race-group label all rebuild from the log, so the first
-// event to fire after restart still wins and cancels the loser (ADR-0109, invariant I4/I6).
+// event to fire after restart still wins and cancels the loser (ADR-0110, invariant I4/I6).
 func TestEventGatewayRecovers(t *testing.T) {
 	dir := t.TempDir()
 	cp, replyEnd, timeoutEnd := eventGatewayProcess(t, 92)

@@ -989,7 +989,7 @@ func (b *Builder) AddExclusiveGateway() int32 { return b.addNode(TypeExclusiveGa
 // AddEventBasedGateway adds an event-based gateway (deferred choice) and returns its
 // element id. It carries no detail: at runtime it arms every target catch event (each
 // outgoing flow must lead to a message/timer/signal intermediate catch) and takes the
-// branch whose event fires first, cancelling the rest (ADR-0109).
+// branch whose event fires first, cancelling the rest (ADR-0110).
 func (b *Builder) AddEventBasedGateway() int32 { return b.addNode(TypeEventBasedGateway, -1) }
 
 // AddTimerCatchEvent adds an intermediate timer catch event that waits the given
