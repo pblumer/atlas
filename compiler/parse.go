@@ -1179,7 +1179,11 @@ type xmlServiceTask struct {
 	// Mail, when present, marks this service task an outbound mail connector task
 	// (ADR-0079). The pointer is nil when the <atlas:mailConnector> extension is
 	// absent.
-	Mail          *xmlMailConnector          `xml:"extensionElements>mailConnector"`
+	Mail *xmlMailConnector `xml:"extensionElements>mailConnector"`
+	// SharePoint, when present, marks this service task a SharePoint connector task
+	// (ADR-0105). The pointer is nil when the <atlas:sharepointConnector> extension is
+	// absent.
+	SharePoint    *xmlSharePointConnector    `xml:"extensionElements>sharepointConnector"`
 	IOMapping     xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
 	MultiInstance *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
 	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
@@ -1250,6 +1254,23 @@ type xmlMailConnector struct {
 	From      string `xml:"from,attr"`
 	Subject   string `xml:"subject,attr"`
 	Body      string `xml:"body,attr"`
+}
+
+// A SharePoint connector task's parameters, carried on a service task as an
+// <atlas:sharepointConnector connector="..." site="..." list="..."> extension
+// element (ADR-0105). connector names a server-registered SharePoint provider (its
+// Graph base and OAuth credential live on the server, never in the model). site
+// (required) addresses the SharePoint site ("host,/sites/path" or a site id); list
+// (required) is the list name or id the item is created in; resultVariable, if set,
+// receives the created item's JSON. Each ItemField child is one column value of the
+// created item. Every value is literal or, with a leading '=', a FEEL expression
+// evaluated over the instance's variables at call time (the fx toggle, ADR-0067).
+type xmlSharePointConnector struct {
+	Connector      string      `xml:"connector,attr"`
+	Site           string      `xml:"site,attr"`
+	List           string      `xml:"list,attr"`
+	ResultVariable string      `xml:"resultVariable,attr"`
+	Fields         []xmlHTTPKV `xml:"itemField"`
 }
 
 type xmlTaskDefinition struct {

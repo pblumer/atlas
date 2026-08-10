@@ -319,6 +319,10 @@ type UserTaskDetail struct {
 //     method (e.g. "POST") and the full endpoint URL authored in the model
 //     (ADR-0067, revising ADR-0036 for REST); ResultVar, if set, is the process
 //     variable the JSON response is written back into on completion.
+//   - SharePoint (JobType == SharePointJobType): Connector names the
+//     server-registered SharePoint provider; Site and List address the target list
+//     and Fields are the created item's column values (all literal-or-FEEL); the
+//     created item's JSON is written into ResultVar when set (ADR-0105).
 //
 // Unused fields for a given kind are -1 (Intern maps that back to ""); Limit is 0
 // when unset. The write and REST kinds send the instance's variables as the
@@ -360,6 +364,16 @@ type ConnectorTaskDetail struct {
 	From        RestExpr
 	MailSubject RestExpr
 	Body        RestExpr
+	// SharePoint connector fields (JobType == SharePointJobType, ADR-0105). Connector
+	// (above) names the server-registered SharePoint provider (its Graph base and
+	// OAuth credential live server-side). Site and List address the target list (a
+	// site host/path or id, and a list name or id); Fields are the created item's
+	// column values. Each is a literal-or-FEEL value evaluated over the instance's
+	// variables at call time; Site/List are the zero RestExpr and Fields is nil for a
+	// non-SharePoint task. ResultVar (above), if set, receives the created item's JSON.
+	Site   RestExpr
+	List   RestExpr
+	Fields []RestKV
 }
 
 // RestExpr is a REST connector field value that is either a literal string

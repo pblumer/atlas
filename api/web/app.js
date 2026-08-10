@@ -262,6 +262,11 @@ const CONNECTORS = [
     desc: "Sends an e-mail from a service task off the processor loop via a managed provider — SMTP (any server, incl. Google/Microsoft 365 submission) or the native Gmail and Microsoft Graph APIs (OAuth2 app-only or refresh-token). Recipients, subject, and body are model-authored (FEEL-capable); the provider, default sender, and credentials are managed below and resolved from the vault. Authored via the E-Mail Outbound Connector service-task type.",
     refs: "ADR-0041 · ADR-0079 · ADR-0093", status: "active", statusLabel: "configurable",
   },
+  {
+    id: "sharepoint", name: "SharePoint", kind: "List item",
+    desc: "Creates a list item in a Microsoft SharePoint site from a service task off the processor loop via the Graph API (OAuth2 app-only or refresh-token). The site, list, and item fields are model-authored (FEEL-capable) and the created item's JSON is written into a result variable; the Graph base and credentials are managed below and resolved from the vault. Authored via the SharePoint Connector service-task type.",
+    refs: "ADR-0041 · ADR-0093 · ADR-0105", status: "active", statusLabel: "configurable",
+  },
 ];
 
 // ---------- Shell ----------
@@ -1578,7 +1583,7 @@ function wireConnectorManagement(connectors) {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="connector-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option></select></label>
+        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option></select></label>
         <label class="field mail-only" style="margin:0"><span>Provider</span><select name="provider"><option value="smtp">SMTP</option><option value="gmail">Gmail API</option><option value="microsoft">Microsoft Graph</option></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
@@ -1588,7 +1593,9 @@ function wireConnectorManagement(connectors) {
       // Adapt the form to the kind and mail provider: SMTP needs a host:port endpoint
       // and (optionally) a password reference; a native provider (Gmail/Graph) needs no
       // endpoint but a credentialsRef naming a vault JSON auth bundle, and sends as the
-      // sender mailbox. The mail-only fields hide for temis/clio.
+      // sender mailbox. A SharePoint connector likewise defaults its Graph API base
+      // (no endpoint) and needs a credentialsRef naming a vault OAuth bundle. The
+      // mail-only fields hide for temis/clio/sharepoint.
       const form = slot.querySelector("form");
       const kindSel = form.querySelector('[name="kind"]');
       const providerSel = form.querySelector('[name="provider"]');
@@ -1599,16 +1606,20 @@ function wireConnectorManagement(connectors) {
       const endpointField = form.querySelector(".endpoint-field");
       const sync = () => {
         const mail = kindSel.value === "mail";
+        const sharepoint = kindSel.value === "sharepoint";
         const native = mail && providerSel.value !== "smtp";
+        // Kinds that authenticate with a vault credential bundle instead of a host:port.
+        const bundle = native || sharepoint;
         form.querySelectorAll(".mail-only").forEach((el) => { el.style.display = mail ? "" : "none"; });
         senderIn.required = mail;
-        // A native provider needs no endpoint; SMTP and the other kinds do.
-        endpointField.style.display = native ? "none" : "";
-        endpointIn.required = !native;
+        // A native mail provider and SharePoint default their API base — no endpoint;
+        // SMTP, temis, and clio need one.
+        endpointField.style.display = bundle ? "none" : "";
+        endpointIn.required = !bundle;
         endpointIn.placeholder = mail ? "smtp.office365.com:587" : "https://temis.internal";
-        credRefIn.required = native;
-        credRefIn.placeholder = native ? "gmail_auth (vault JSON bundle)" : "risk_token";
-        credRefLabel.textContent = native ? "Credential reference (vault auth bundle)" : "Token reference (optional)";
+        credRefIn.required = bundle;
+        credRefIn.placeholder = bundle ? "sharepoint_auth (vault JSON bundle)" : "risk_token";
+        credRefLabel.textContent = bundle ? "Credential reference (vault auth bundle)" : "Token reference (optional)";
       };
       kindSel.addEventListener("change", sync);
       providerSel.addEventListener("change", sync);
