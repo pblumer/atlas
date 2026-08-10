@@ -444,6 +444,11 @@ func registerScope(
 			return err
 		}
 	}
+	for _, g := range c.EventBasedGateways {
+		if err := register(g.Id, b.AddEventBasedGateway()); err != nil {
+			return err
+		}
+	}
 	for _, ev := range c.IntermediateCatchEvents {
 		switch {
 		case ev.Timer != nil:

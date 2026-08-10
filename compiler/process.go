@@ -63,8 +63,10 @@ const (
 
 	TypeCancelEndEvent // an end event inside a transaction that cancels it: compensates the transaction's completed activities in reverse order, then routes out the transaction's cancel boundary (ADR-0108)
 
+	TypeEventBasedGateway // a deferred choice: arms every target catch event (message/timer/signal) at once and takes the branch whose event fires first, cancelling the rest (ADR-0109)
+
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 32
+	numBpmnTypes = 33
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -96,6 +98,8 @@ func (t BpmnType) String() string {
 		return "ParallelGateway"
 	case TypeInclusiveGateway:
 		return "InclusiveGateway"
+	case TypeEventBasedGateway:
+		return "EventBasedGateway"
 	case TypeMessageStartEvent:
 		return "MessageStartEvent"
 	case TypeConnectorTask:

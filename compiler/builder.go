@@ -986,6 +986,12 @@ func (b *Builder) AddParallelGateway() int32 { return b.addNode(TypeParallelGate
 // and SetFlowDefault.
 func (b *Builder) AddExclusiveGateway() int32 { return b.addNode(TypeExclusiveGateway, -1) }
 
+// AddEventBasedGateway adds an event-based gateway (deferred choice) and returns its
+// element id. It carries no detail: at runtime it arms every target catch event (each
+// outgoing flow must lead to a message/timer/signal intermediate catch) and takes the
+// branch whose event fires first, cancelling the rest (ADR-0109).
+func (b *Builder) AddEventBasedGateway() int32 { return b.addNode(TypeEventBasedGateway, -1) }
+
 // AddTimerCatchEvent adds an intermediate timer catch event that waits the given
 // fixed duration (nanoseconds) before continuing, and returns its element id. It
 // is the duration convenience over AddTimerCatchSchedule.
