@@ -115,6 +115,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0105](0105-per-server-call-activity-target-overrides.md) | Per-server call-activity target overrides — route, pin, or disable a call activity's target on one server | Proposed |
 | [0105](0105-sharepoint-connector.md) | SharePoint connector — create a list item via Microsoft Graph, provider managed and OAuth credential in the vault | Accepted |
 | [0106](0106-bmc-remedy-connector.md) | A BMC Remedy connector — server-registered ITSM entry creation via the AR System REST API | Accepted |
+| [0107](0107-backup-and-restore.md) | Backup and restore — a one-file gzip-tar download of the design-time data directory, secrets excluded | Accepted |
 
 ## Status values
 
