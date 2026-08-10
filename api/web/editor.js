@@ -579,7 +579,6 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
 // elements (compiler/scope_compile.go, compiler/parse.go).
 const UNSUPPORTED_TYPES = {
   "bpmn:SendTask": "Send tasks can't run yet",
-  "bpmn:EventBasedGateway": "Event-based gateways aren't supported yet",
   "bpmn:ComplexGateway": "Complex gateways aren't supported yet",
   "bpmn:AdHocSubProcess": "Ad-hoc subprocesses aren't supported yet",
   "bpmn:DataStoreReference": "Data stores aren't supported yet",
@@ -3351,6 +3350,10 @@ function wireProperties(root, modeler, api, projectId, toast) {
               <a href="#/modeler/form/new" target="_blank" rel="noopener">Create a new form</a>, then reopen this to link it.</p>
             <p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, or <b>Signal</b> start event instead.</p>`;
         }
+      } else if (bo.$type === "bpmn:EventBasedGateway") {
+        // A deferred choice: no configuration of its own — the branches are the
+        // catch events it points at (ADR-0109).
+        html += `<p class="muted" style="font-size:12px">An <b>event-based gateway</b> is a <b>deferred choice</b>: reaching it arms every branch's catch event at once (each outgoing flow must lead to a <b>message</b>, <b>timer</b>, or <b>signal</b> intermediate catch event), and the branch whose event fires <b>first</b> is taken — the others are cancelled. The classic use is a request with a timeout (a message catch raced against a timer catch).</p>`;
       } else if (bo.$type === "bpmn:EndEvent") {
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);

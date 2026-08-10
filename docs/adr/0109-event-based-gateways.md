@@ -4,7 +4,8 @@
 - **Date:** 2026-08-10
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Proposed → in delivery. An **event-based gateway**
+> **Implementation status.** Delivered (phases 1–3); `go test -race ./...` green, repo
+> coverage floor held. An **event-based gateway**
 > (`<eventBasedGateway>`) is a **deferred choice**: a token reaching it does not pick a branch
 > on data (that is the exclusive gateway) — it **arms every target catch event at once**
 > (message / timer / signal intermediate catch), waits, and the **first event to fire wins**.

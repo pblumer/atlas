@@ -293,6 +293,17 @@ Making processes wait, react, and time out.
   correlating publish/throw arrives, reusing the ADR-0020 subscription/correlate path
   wholesale — no new subscription, value type, or recovery path. Recovery-tested; authored in
   the Modeler's Implement panel via the shared message picker.
+- ✅ **Event-based gateways** (deferred choice): an `<eventBasedGateway>` arms **every**
+  target catch event at once — each outgoing flow leads to a message/timer/signal
+  intermediate catch — and takes the branch whose event fires **first**, cancelling the rest
+  (the classic request-with-timeout: a message catch raced against a timer catch). It reuses
+  the catch-event, subscription, timer, and correlate/fire machinery wholesale; the gateway
+  labels its armed catches with a **race group** (a new `EventGatewayKey` on the element
+  instance), and the winner runs an `interruptHost`-shaped sibling loop to terminate the
+  losers (their subscriptions/timers self-retire). The compiler validates every target is a
+  catch event; recovery rebuilds the armed race and its group from the log, so the first fire
+  after a restart still wins — no new recovery path. Authored in the Modeler (bpmn-js draws
+  it natively) ([ADR-0109](docs/adr/0109-event-based-gateways.md)).
 - 🚧 **Incident model**: a job whose retries a worker exhausts raises a durable
   **incident** on its element instead of hanging or retrying forever; the token
   parks off the activatable index until an operator resolves the incident, which
