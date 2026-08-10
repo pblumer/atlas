@@ -45,9 +45,9 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   harness doesn't run).
 - **`call-activity-replay.spec.mjs`** (ADR-0076): the **call-activity drill-down** in the
   Operations instance replay — a call activity whose timeline step carries a `childInstanceKey`
-  shows a clickable "child" badge on the diagram (single click → the child's replay, same
-  window) and a "Called process" link in its Details panel; a plain element carries neither.
-  Drives the real `mountInstanceReplay` against a mock `api`.
+  turns its "+" marker into an invisible click hotspot (single click → the child's replay, same
+  window) and shows a "Called process" link in its Details panel; a plain element carries
+  neither. Drives the real `mountInstanceReplay` against a mock `api`.
 - **`call-activity-modeler.spec.mjs`** (ADR-0076): the **Process ID picker + create-new** in
   the Modeler's call-activity Implement panel — selecting the call activity offers a datalist of
   existing callees (deployed processes and drafts), and "＋ Create new process" saves the caller,
