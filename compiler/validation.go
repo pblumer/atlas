@@ -66,6 +66,10 @@ const (
 	// cancel boundary (ADR-0108). A warning: the cancellation tears the transaction down with
 	// no recovery route, usually a modeling mistake, but not structurally invalid.
 	RuleTransactionNoCancelBoundary = "transaction.no-cancel-boundary"
+	// RuleEventGatewayTarget marks an event-based gateway whose outgoing flow leads to a
+	// non-catch element — an error, since a deferred choice can only race catch events
+	// (message/timer/signal intermediate catch); a task or gateway cannot participate (ADR-0110).
+	RuleEventGatewayTarget = "event-gateway.invalid-target"
 )
 
 // Rule slugs for whole-model dry-run findings that [ValidateModel] raises outside
@@ -307,6 +311,25 @@ func checkGateways(cp *CompiledProcess) []Problem {
 		if n.Type == TypeExclusiveGateway || n.Type == TypeInclusiveGateway {
 			ps = append(ps, checkDataGatewayCoverage(cp, int32(id))...)
 		}
+		if n.Type == TypeEventBasedGateway {
+			ps = append(ps, checkEventGatewayTargets(cp, int32(id))...)
+		}
+	}
+	return ps
+}
+
+// checkEventGatewayTargets validates that every outgoing flow of an event-based gateway
+// leads to a catch event (ADR-0110). A deferred choice races catch events; a target that is
+// a task, a gateway, or an end event cannot participate, so it is a deploy error — the
+// runtime would arm nothing on that branch and the token would deadlock.
+func checkEventGatewayTargets(cp *CompiledProcess, id int32) []Problem {
+	var ps []Problem
+	for _, fid := range cp.Outgoing(id) {
+		target := cp.Flow(fid).Target
+		if !isCatchEvent(cp.nodes[target].Type) {
+			ps = append(ps, problem(cp, id, SeverityError, RuleEventGatewayTarget,
+				fmt.Sprintf("%s targets %s, which is not a message/timer/signal intermediate catch event — an event-based gateway can only race catch events", describeNode(cp, id), describeNode(cp, target))))
+		}
 	}
 	return ps
 }
@@ -530,7 +553,14 @@ func describeNode(cp *CompiledProcess, id int32) string {
 // isGateway reports whether a node type is a gateway — the elements the gateway
 // coverage checks apply to.
 func isGateway(t BpmnType) bool {
-	return t == TypeExclusiveGateway || t == TypeInclusiveGateway || t == TypeParallelGateway
+	return t == TypeExclusiveGateway || t == TypeInclusiveGateway || t == TypeParallelGateway ||
+		t == TypeEventBasedGateway
+}
+
+// isCatchEvent reports whether a node type is an intermediate catch event — a valid
+// target of an event-based gateway's deferred choice (ADR-0110).
+func isCatchEvent(t BpmnType) bool {
+	return t == TypeMessageCatchEvent || t == TypeTimerCatchEvent || t == TypeSignalCatchEvent
 }
 
 // isActivity reports whether a node type is an activity — an element a token

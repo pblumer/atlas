@@ -41,11 +41,17 @@ type ElementInstanceValue struct {
 	// iterations), 2 = an inner iteration (running the node's real behavior, scoped
 	// under the body). Append-compatible: an old record without it decodes to 0.
 	MultiInstance uint8
+	// EventGatewayKey labels a catch event armed by an event-based gateway with the
+	// gateway's element-instance key — its race group (ADR-0110). The first armed catch to
+	// fire cancels every other live instance sharing this key. 0 for every element not armed
+	// by an event gateway. Append-compatible: an old record without it decodes to 0.
+	EventGatewayKey uint64
 }
 
 const elementInstanceLegacySize = 8 + 8 + 4 + 8 + 1 + 8
 const elementInstanceSize = elementInstanceLegacySize + 8 + 8 + 4
 const elementInstanceMISize = elementInstanceSize + 1
+const elementInstanceEGSize = elementInstanceMISize + 8
 
 func (*ElementInstanceValue) ValueType() ValueType { return VTElementInstance }
 
@@ -59,7 +65,8 @@ func (v *ElementInstanceValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.TokenID)
 	dst = binary.LittleEndian.AppendUint64(dst, v.ParentTokenID)
 	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.SourceFlowId))
-	return append(dst, v.MultiInstance)
+	dst = append(dst, v.MultiInstance)
+	return binary.LittleEndian.AppendUint64(dst, v.EventGatewayKey)
 }
 
 func (v *ElementInstanceValue) decode(src []byte) error {
@@ -79,6 +86,9 @@ func (v *ElementInstanceValue) decode(src []byte) error {
 	}
 	if len(src) >= elementInstanceMISize {
 		v.MultiInstance = src[57]
+	}
+	if len(src) >= elementInstanceEGSize {
+		v.EventGatewayKey = binary.LittleEndian.Uint64(src[58:])
 	}
 	return nil
 }

@@ -118,6 +118,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0107](0107-backup-and-restore.md) | Backup and restore — a one-file gzip-tar download of the design-time data directory, secrets excluded | Accepted |
 | [0108](0108-bpmn-transactions.md) | BPMN transactions — a transaction subprocess whose cancel end event compensates completed work in reverse order, then routes out an always-interrupting cancel boundary | Accepted |
 | [0109](0109-full-instance-snapshot.md) | Whole-instance snapshot — a full backup including the WAL (running instances), users and vault key; restore staged and applied on restart | Accepted |
+| [0110](0110-event-based-gateways.md) | Event-based gateways — a deferred choice that arms several catch events at once; the first to fire wins and the rest are cancelled | Accepted |
 
 ## Status values
 
