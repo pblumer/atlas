@@ -663,6 +663,12 @@ func rearmTimerElement(c *ProcessingContext, elKey uint64) {
 		if d := cp.BoundaryEvent(node.Detail); d.Kind == compiler.BoundaryTimer {
 			armOneShotTimer(c, elKey, ei, d.Schedule)
 		}
+	case compiler.TypeEventSubProcessStart:
+		// A recurring event-subprocess timer trigger whose FEEL cycle failed to re-arm
+		// (ADR-0111): re-run its arm, which re-resolves against current variables.
+		if d := cp.EventSubProcess(node.EventSub); d.Kind == compiler.BoundaryTimer {
+			armOneShotTimer(c, elKey, ei, d.Schedule)
+		}
 	}
 }
 
@@ -711,23 +717,36 @@ func handleTimerTriggered(c *ProcessingContext) {
 	if ei == nil {
 		return // element gone (cancelled/completed/host-interrupted): self-retire
 	}
-	if sched, ok := recurringBoundarySchedule(c, ei); ok {
-		fireRecurringBoundary(c, timer, ei, sched)
+	if raw, ok := recurringBoundarySchedule(c, ei); ok {
+		fireRecurringOrIncident(c, timer, ei, raw, fireRecurringBoundary)
 		return
 	}
-	if sched, ok := recurringEventSubSchedule(c, ei); ok {
-		fireRecurringEventSub(c, timer, ei, sched)
+	if raw, ok := recurringEventSubSchedule(c, ei); ok {
+		fireRecurringOrIncident(c, timer, ei, raw, fireRecurringEventSub)
 		return
 	}
 	c.AppendElementCommand(timer.ElementInstanceKey, model.IntentCompleting, *ei)
 }
 
-// recurringBoundarySchedule reports whether ei is a non-interrupting boundary
-// timer whose schedule recurs, and returns the concrete cycle to re-arm from
-// (ADR-0054). For a FEEL cycle the expression is re-evaluated here — on each
-// occurrence — against the instance's current variables (ADR-0056), so a data-
-// driven cadence can change as the process runs; ok is false if it can't resolve
-// (the boundary then stops recurring).
+// fireRecurringOrIncident resolves a recurring timer's (possibly FEEL) schedule on the
+// occurrence that just fired and either fires it (arming the next occurrence) or, if the FEEL
+// can't be re-evaluated against the instance's current variables, raises the ADR-0064 job-less
+// incident and parks — instead of silently ceasing to recur (ADR-0111). Resolving the incident
+// re-arms the element (rearmTimerElement).
+func fireRecurringOrIncident(c *ProcessingContext, timer model.TimerValue, ei *model.ElementInstanceValue, raw compiler.TimerSchedule, fire func(*ProcessingContext, model.TimerValue, *model.ElementInstanceValue, compiler.TimerSchedule)) {
+	sched, err := resolveScheduleErr(c, raw, ei.ProcessInstanceKey)
+	if err != nil {
+		raiseTimerScheduleIncident(c, timer.ElementInstanceKey, ei, err)
+		return
+	}
+	fire(c, timer, ei, sched)
+}
+
+// recurringBoundarySchedule reports whether ei is a non-interrupting boundary timer whose
+// schedule recurs, and returns its *unresolved* schedule to re-arm from (ADR-0054). This is a
+// pure compiled-type check; the caller (fireRecurringOrIncident) resolves the schedule — a FEEL
+// cycle is re-evaluated on each occurrence against the instance's current variables (ADR-0056),
+// and a failure raises an incident rather than silently stopping (ADR-0111).
 func recurringBoundarySchedule(c *ProcessingContext, ei *model.ElementInstanceValue) (compiler.TimerSchedule, bool) {
 	cp := c.process(ei.ProcessDefKey)
 	node := cp.Node(ei.ElementId)
@@ -738,7 +757,7 @@ func recurringBoundarySchedule(c *ProcessingContext, ei *model.ElementInstanceVa
 	if d.Kind != compiler.BoundaryTimer || d.Interrupting || !d.Schedule.Repeats() {
 		return compiler.TimerSchedule{}, false
 	}
-	return resolveSchedule(c, d.Schedule, ei.ProcessInstanceKey)
+	return d.Schedule, true
 }
 
 // fireRecurringBoundary spawns the boundary's outgoing (reminder) token without
@@ -784,7 +803,7 @@ func recurringEventSubSchedule(c *ProcessingContext, ei *model.ElementInstanceVa
 	if d.Kind != compiler.BoundaryTimer || d.Interrupting || !d.Schedule.Repeats() {
 		return compiler.TimerSchedule{}, false
 	}
-	return resolveSchedule(c, d.Schedule, ei.ProcessInstanceKey)
+	return d.Schedule, true
 }
 
 // fireRecurringEventSub fires a recurring non-interrupting event-subprocess timer: it
@@ -1294,13 +1313,7 @@ func feelKindName(k compiler.TimerScheduleKind) string {
 func armOneShotTimer(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue, s compiler.TimerSchedule) {
 	sched, err := resolveScheduleErr(c, s, ei.ProcessInstanceKey)
 	if err != nil {
-		c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
-			ProcessInstanceKey: ei.ProcessInstanceKey,
-			ElementInstanceKey: key,
-			ElementId:          ei.ElementId,
-			RaisedAt:           c.Now(),
-			Message:            "timer schedule: " + err.Error(),
-		})
+		raiseTimerScheduleIncident(c, key, ei, err)
 		return
 	}
 	now := c.Now()
@@ -1310,6 +1323,21 @@ func armOneShotTimer(c *ProcessingContext, key uint64, ei *model.ElementInstance
 		TargetElementId:    ei.ElementId,
 		DueDate:            sched.FirstDue(now),
 		Repetitions:        sched.Repetitions,
+	})
+}
+
+// raiseTimerScheduleIncident raises a job-less incident on a timer-bearing element whose FEEL
+// schedule could not be evaluated (ADR-0064/0111): the initial arm (armOneShotTimer) and a
+// recurring re-arm (handleTimerTriggered) share it, so a failure at either point parks the
+// element visibly with the same operator-resolvable incident (JobKey stays zero — the marker
+// that routes resolution back to rearmTimerElement).
+func raiseTimerScheduleIncident(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue, err error) {
+	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		ElementId:          ei.ElementId,
+		RaisedAt:           c.Now(),
+		Message:            "timer schedule: " + err.Error(),
 	})
 }
 

@@ -70,6 +70,12 @@ const (
 	// non-catch element — an error, since a deferred choice can only race catch events
 	// (message/timer/signal intermediate catch); a task or gateway cannot participate (ADR-0110).
 	RuleEventGatewayTarget = "event-gateway.invalid-target"
+	// RuleTimerStartSchedule marks a timer start event whose constant FEEL schedule cannot be
+	// resolved to a valid duration/date/cycle at deploy (ADR-0111). It is an error: a start
+	// schedule that will not resolve arms nothing, so the process would silently never trigger.
+	// A start-event FEEL schedule is compiler-constant (references no variables, ADR-0056), so it
+	// evaluates the same way at deploy as at arm and can be checked without an instance.
+	RuleTimerStartSchedule = "timer.start-schedule"
 )
 
 // Rule slugs for whole-model dry-run findings that [ValidateModel] raises outside
@@ -115,6 +121,7 @@ func Validate(cp *CompiledProcess) []Problem {
 	ps = append(ps, checkScopes(cp)...)
 	ps = append(ps, checkErrorHandling(cp)...)
 	ps = append(ps, checkTransactions(cp)...)
+	ps = append(ps, checkTimerStartSchedules(cp)...)
 	return ps
 }
 
@@ -513,6 +520,28 @@ func checkTransactions(cp *CompiledProcess) []Problem {
 		if !hasCancelBoundary {
 			ps = append(ps, problem(cp, int32(id), SeverityWarning, RuleTransactionNoCancelBoundary,
 				"transaction has a cancel end event but no cancel boundary — the cancellation would tear the transaction down with no recovery route"))
+		}
+	}
+	return ps
+}
+
+// checkTimerStartSchedules validates that every timer start event's FEEL schedule actually
+// resolves (ADR-0111). A start-event FEEL schedule is compiler-constant — it references no
+// variables (ADR-0056), enforced at parse — so it evaluates at deploy exactly as it will at
+// arm, against an empty scope. A constant that compiles but does not resolve to a valid
+// duration/date/cycle (e.g. ="not-a-duration") would arm no timer and the process would
+// silently never trigger, so it is a deploy error rather than a runtime surprise. A literal
+// (non-FEEL) schedule is validated at parse and always resolves here.
+func checkTimerStartSchedules(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	for _, s := range cp.TimerStartEvents() {
+		if !s.Schedule.IsFeel() {
+			continue
+		}
+		if _, err := s.Schedule.ResolveConstant(); err != nil {
+			ps = append(ps, problem(cp, s.ElementId, SeverityError, RuleTimerStartSchedule,
+				fmt.Sprintf("%s has a constant FEEL timer schedule that does not resolve: %s",
+					describeNode(cp, s.ElementId), err)))
 		}
 	}
 	return ps

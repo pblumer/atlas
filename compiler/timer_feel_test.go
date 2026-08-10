@@ -125,6 +125,51 @@ func TestParseTimerFeelConstantOnStart(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "constant") {
 		t.Fatalf("err = %v, want a 'must be constant' error", err)
 	}
+	// A constant FEEL that compiles but does not resolve to a valid schedule would
+	// arm nothing and never fire; it is refused at deploy, not silently dropped
+	// (ADR-0111).
+	_, err = Parse(1, 1, strings.NewReader(timerStartBPMN(`<timeDuration>="not-a-duration"</timeDuration>`)))
+	if err == nil || !strings.Contains(err.Error(), "duration") {
+		t.Fatalf("err = %v, want an error that the constant FEEL is not a valid duration", err)
+	}
+}
+
+// TestValidateTimerStartScheduleRule proves the deploy-time validation rule fires for
+// a timer start event whose constant FEEL schedule cannot resolve, and stays silent
+// for one that resolves fine (ADR-0111).
+func TestValidateTimerStartScheduleRule(t *testing.T) {
+	broken, err := expr.CompileAuto(`"not-a-duration"`)
+	if err != nil {
+		t.Fatalf("CompileAuto (broken): %v", err)
+	}
+	b := NewBuilder(1, "p", 1)
+	st := b.AddTimerStartEvent(TimerSchedule{Kind: TimerFeelDuration, Expr: broken})
+	end := b.AddEndEvent()
+	b.Connect(st, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if ps := Validate(cp); !hasProblem(ps, RuleTimerStartSchedule, SeverityError, "") {
+		t.Errorf("Validate = %+v, want a timer.start-schedule error", ps)
+	}
+
+	// A constant FEEL that does resolve raises no schedule error.
+	ok, err := expr.CompileAuto(`"PT1H"`)
+	if err != nil {
+		t.Fatalf("CompileAuto (ok): %v", err)
+	}
+	b2 := NewBuilder(2, "p2", 1)
+	st2 := b2.AddTimerStartEvent(TimerSchedule{Kind: TimerFeelDuration, Expr: ok})
+	end2 := b2.AddEndEvent()
+	b2.Connect(st2, end2)
+	cp2, err := b2.Build()
+	if err != nil {
+		t.Fatalf("Build 2: %v", err)
+	}
+	if ps := Validate(cp2); hasProblem(ps, RuleTimerStartSchedule, SeverityError, "") {
+		t.Errorf("Validate = %+v, want no schedule error for a resolvable constant", ps)
+	}
 }
 
 func catchTimerBPMN(child string) string {
