@@ -139,6 +139,20 @@ const CsvImportJobType = "io.atlas.csv-import"
 // way the mail worker uses MailJobTypeIndex.
 const CsvImportJobTypeIndex int32 = 11
 
+// SharePointJobType is the reserved job type a SharePoint connector task carries.
+// The in-process SharePoint connector worker subscribes to it to create a list item
+// in a model-authored SharePoint site/list through a server-registered SharePoint
+// provider (Microsoft Graph) off the hot path (ADR-0105), the same way the mail
+// worker subscribes to MailJobType.
+const SharePointJobType = "io.atlas.sharepoint.createitem"
+
+// SharePointJobTypeIndex is the interned index SharePointJobType is guaranteed to
+// occupy in every compiled process: NewBuilder reserves it thirteenth (after the
+// twelve job types above), so it is always 12. This lets a single in-process
+// SharePoint worker subscribe by one global index across every deployed process, the
+// same way the mail worker uses MailJobTypeIndex (ADR-0105).
+const SharePointJobTypeIndex int32 = 12
+
 // TemisDecisionJobType is the reserved job type a *central* business rule task
 // carries — one whose decision is evaluated by a remote temis service rather than
 // the embedded temis library. The in-process temis decision connector worker
@@ -233,6 +247,7 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 	b.intern(ClioReadJobType)      // reserve ClioReadJobTypeIndex == 9
 	b.intern(MailJobType)          // reserve MailJobTypeIndex == 10
 	b.intern(CsvImportJobType)     // reserve CsvImportJobTypeIndex == 11
+	b.intern(SharePointJobType)    // reserve SharePointJobTypeIndex == 12
 	return b
 }
 
@@ -674,6 +689,50 @@ func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
 		MailSubject: cfg.Subject,
 		Body:        cfg.Body,
 		Retries:     cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// SharePointConfig is the deploy-time configuration of a SharePoint connector task
+// (ADR-0105). Connector names the server-registered SharePoint provider (its Graph
+// base and OAuth credential live server-side, never in the model); Site and List
+// address the target list, and Fields are the created item's column values — all
+// literal-or-FEEL values (the parser compiles the FEEL ones) evaluated over the
+// instance's variables at call time. ResultVar, if set, is the process variable the
+// created item's JSON is written back into (empty = discard it).
+type SharePointConfig struct {
+	Connector string
+	Site      RestExpr
+	List      RestExpr
+	Fields    []RestKV
+	ResultVar string
+	Retries   int32
+}
+
+// AddSharePointConnectorTask adds a SharePoint connector task and returns its element
+// id. Like a service task it creates a job on activation and waits; the job carries
+// the reserved SharePointJobType so the in-process SharePoint worker picks it up,
+// evaluates any FEEL site/list/field values over the instance's variables, resolves
+// the named connector's Graph client, creates the list item, writes the created
+// item's JSON into ResultVar, and completes the job (ADR-0105). The Graph base and
+// credentials are resolved server-side from the named connector, never authored in
+// the model — mirroring the mail connector (ADR-0079).
+func (b *Builder) AddSharePointConnectorTask(cfg SharePointConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:    b.intern(SharePointJobType),
+		Connector:  b.intern(cfg.Connector),
+		Subject:    -1, // not a clio task
+		EventType:  -1,
+		ClioQuery:  -1,
+		ReduceSpec: -1,
+		Method:     -1, // not a REST task
+		ResultVar:  b.intern(cfg.ResultVar),
+		Auth:       -1,
+		Site:       cfg.Site,
+		List:       cfg.List,
+		Fields:     cfg.Fields,
+		Retries:    cfg.Retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

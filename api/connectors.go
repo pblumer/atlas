@@ -10,6 +10,7 @@ import (
 
 	"github.com/pblumer/atlas/clio"
 	"github.com/pblumer/atlas/mail"
+	"github.com/pblumer/atlas/sharepoint"
 	"github.com/pblumer/atlas/temis"
 )
 
@@ -176,6 +177,37 @@ func (s *Server) buildMailClients() (map[string]mail.Client, error) {
 	return clients, nil
 }
 
+// buildSharePointClients assembles the SharePoint connector clients from the enabled
+// managed connector instances of kind "sharepoint", resolving each instance's OAuth
+// credential bundle from its credentialsRef via the vault (ADR-0105/0041). It reads
+// the connector store, so callers run it on the run-loop goroutine (the store's
+// owner). It mirrors buildMailClients; provider construction (Graph base + token
+// source) lives in sharepoint.NewProviderClient, and a record whose credential bundle
+// is misconfigured — unparseable, a missing field — is skipped (its tasks park)
+// rather than failing the whole rebuild. The resolved secret is the OAuth credential
+// JSON bundle held in the vault (I6), never a value in a model.
+func (s *Server) buildSharePointClients() (map[string]sharepoint.Client, error) {
+	clients := map[string]sharepoint.Client{}
+	recs, err := s.connectors.loadAll()
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range recs {
+		if !c.Enabled || c.Kind != connectorKindSharePoint {
+			continue
+		}
+		client, err := sharepoint.NewProviderClient(sharepoint.ProviderConfig{
+			Endpoint: strings.TrimSpace(c.Endpoint),
+			Secret:   s.resolveConnectorSecret(c.CredentialsRef),
+		})
+		if err != nil {
+			continue // misconfigured credential: its tasks park until it is fixed (ADR-0105)
+		}
+		clients[c.Name] = client
+	}
+	return clients, nil
+}
+
 // rebuildConnectorRegistries rebuilds every managed connector registry (temis, clio
 // and mail) from the current connector store and swaps each live registry atomically,
 // so a task referencing a changed connector starts (or stops) resolving at once.
@@ -195,9 +227,14 @@ func (s *Server) rebuildConnectorRegistries() error {
 	if err != nil {
 		return err
 	}
+	sharePointClients, err := s.buildSharePointClients()
+	if err != nil {
+		return err
+	}
 	s.temisRegistry.Replace(temisClients)
 	s.clioRegistry.Replace(clioClients)
 	s.mailRegistry.Replace(mailClients)
+	s.sharePointRegistry.Replace(sharePointClients)
 	return nil
 }
 
@@ -253,11 +290,12 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "connector name is required")
 		return
 	}
-	if kind != connectorKindTemis && kind != connectorKindClio && kind != connectorKindMail {
-		writeError(w, http.StatusBadRequest, "connector kind must be \"temis\", \"clio\", or \"mail\"")
+	if kind != connectorKindTemis && kind != connectorKindClio && kind != connectorKindMail && kind != connectorKindSharePoint {
+		writeError(w, http.StatusBadRequest, "connector kind must be \"temis\", \"clio\", \"mail\", or \"sharepoint\"")
 		return
 	}
-	if kind == connectorKindMail {
+	switch kind {
+	case connectorKindMail:
 		if provider == "" {
 			provider = mail.ProviderSMTP
 		}
@@ -282,9 +320,17 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "a "+provider+" mail connector requires a credentialsRef naming a vault auth bundle")
 			return
 		}
-	} else {
-		// Provider/Sender are mail-only; ignore them for the other kinds, which all
-		// require an endpoint.
+	case connectorKindSharePoint:
+		// Provider/Sender are mail-only. A SharePoint connector defaults its Graph API
+		// base (endpoint is an optional override) and needs a credentialsRef pointing
+		// at a vault OAuth auth bundle (client secret / refresh token, ADR-0105).
+		provider, sender = "", ""
+		if strings.TrimSpace(p.CredentialsRef) == "" {
+			writeError(w, http.StatusBadRequest, "a sharepoint connector requires a credentialsRef naming a vault auth bundle")
+			return
+		}
+	default:
+		// temis/clio: Provider/Sender are mail-only; both kinds require an endpoint.
 		provider, sender = "", ""
 		if endpoint == "" {
 			writeError(w, http.StatusBadRequest, "connector endpoint is required")

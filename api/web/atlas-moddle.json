@@ -93,6 +93,26 @@
       ]
     },
     {
+      "name": "SharePointConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "site", "type": "String", "isAttr": true },
+        { "name": "list", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "fields", "type": "ItemField", "isMany": true }
+      ]
+    },
+    {
+      "name": "ItemField",
+      "superClass": ["Element"],
+      "properties": [
+        { "name": "name", "type": "String", "isAttr": true },
+        { "name": "value", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "HttpHeader",
       "superClass": ["Element"],
       "properties": [

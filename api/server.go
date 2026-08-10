@@ -48,6 +48,7 @@ import (
 	"github.com/pblumer/atlas/mail"
 	"github.com/pblumer/atlas/rest"
 	"github.com/pblumer/atlas/script"
+	"github.com/pblumer/atlas/sharepoint"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/temis"
 )
@@ -216,6 +217,13 @@ type Server struct {
 	// resolved from the vault (ADR-0041). Read only while driving jobs on the run
 	// loop, so it needs no lock.
 	mailRegistry *mail.Registry
+
+	// sharePointRegistry resolves a connector name to the Microsoft Graph client for
+	// SharePoint connector tasks (ADR-0105), built from the managed connector store at
+	// startup and rebuilt on every connector change, with each connector's OAuth
+	// credential resolved from the vault (ADR-0041). Read only while driving jobs on
+	// the run loop, so it needs no lock.
+	sharePointRegistry *sharepoint.Registry
 
 	// inboundSubs holds the operator-configured clio inbound subscriptions the
 	// inbound bridge polls (ADR-0075). Owned by the run-loop goroutine. inboundPoll
@@ -505,6 +513,23 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	}
 	s.mailRegistry.Replace(mailClients)
 	s.jobRunner.Handle(compiler.MailJobTypeIndex, mail.Handler(store, s.processLookup, s.mailRegistry))
+	// A SharePoint connector task creates a list item in a model-authored site/list
+	// through a server-registered Microsoft Graph provider (ADR-0105). One worker
+	// serves every process under the reserved SharePoint job type; it resolves each
+	// job's connector name and site/list/fields from the compiled process, creates the
+	// item off the run loop and after fsync, and writes the created item's JSON into
+	// the task's result variable. The Graph base and OAuth credential live in the
+	// managed connector store like mail's; the credential is resolved from the vault at
+	// build time (ADR-0041), so a secret never lives in a model. The registry is built
+	// here and rebuilt on every connector change; a task whose connector is not
+	// configured parks until it is.
+	s.sharePointRegistry = sharepoint.NewRegistry()
+	sharePointClients, err := s.buildSharePointClients()
+	if err != nil {
+		return nil, err
+	}
+	s.sharePointRegistry.Replace(sharePointClients)
+	s.jobRunner.HandleWithOutput(compiler.SharePointJobTypeIndex, sharepoint.Handler(store, s.processLookup, s.sharePointRegistry))
 	// An HTTP-REST connector task calls a model-authored endpoint (ADR-0067). One
 	// worker serves every process under the reserved REST job type; it resolves each
 	// job's method/url/headers/query/result-variable from the compiled process, calls
