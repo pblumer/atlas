@@ -31,6 +31,7 @@ import (
 	"github.com/pblumer/atlas/api"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/mcp"
+	remedymock "github.com/pblumer/atlas/remedy/mock"
 	"github.com/pblumer/atlas/script"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
@@ -58,6 +59,10 @@ func main() {
 	case "reset-password":
 		if err := runResetPassword(args); err != nil {
 			log.Fatalf("atlas reset-password: %v", err)
+		}
+	case "mock-remedy":
+		if err := runMockRemedy(args); err != nil {
+			log.Fatalf("atlas mock-remedy: %v", err)
 		}
 	case "help", "-h", "--help":
 		usage()
@@ -92,6 +97,7 @@ Usage:
   atlas serve          [flags]      Run the engine, HTTP API, and web UI (default)
   atlas mcp            [flags]      Run the Model Context Protocol adapter on stdio
   atlas reset-password [flags] USER Reset a local user's password from the shell
+  atlas mock-remedy    [flags]      Run a mock BMC Remedy AR System for the Remedy connector
 
 Run "atlas <command> -h" for the flags of a command.
 `)
@@ -256,6 +262,59 @@ func runMCP(args []string) error {
 
 	s := mcp.NewServer(mcp.NewClient(*server))
 	return s.Serve(os.Stdin, os.Stdout)
+}
+
+// runMockRemedy runs an in-memory mock BMC Remedy AR System REST API (ADR-0106), so a
+// Remedy connector can be exercised end to end without a real Remedy / Helix ITSM
+// instance. Point a managed Remedy connector's base URL at the address it prints, put
+// the connector's {"username","password"} bundle in the vault, and a Remedy connector
+// task creates entries against the mock; GET /mock/entries shows what was created.
+func runMockRemedy(args []string) error {
+	fs := flag.NewFlagSet("mock-remedy", flag.ExitOnError)
+	addr := fs.String("addr", ":8008", "HTTP listen address for the mock AR System")
+	user := fs.String("user", "", "required login username (empty accepts any non-empty credentials)")
+	password := fs.String("password", "", "required login password (empty accepts any non-empty credentials)")
+	idPrefix := fs.String("id-prefix", "INC", "prefix for generated entry ids (e.g. INC for incidents, CRQ for changes)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	opts := []remedymock.Option{remedymock.WithIDPrefix(*idPrefix)}
+	if *user != "" || *password != "" {
+		opts = append(opts, remedymock.WithCredentials(*user, *password))
+	}
+	mock := remedymock.New(opts...)
+
+	log.SetOutput(os.Stderr)
+	base := loopbackURL(*addr)
+	log.Printf("atlas mock-remedy: mock BMC Remedy AR System listening on %s", *addr)
+	log.Printf("  login:   POST %s/api/jwt/login", base)
+	log.Printf("  create:  POST %s/api/arsys/v1/entry/{form}", base)
+	log.Printf("  inspect: GET  %s/mock/entries", base)
+	if *user == "" && *password == "" {
+		log.Printf("  credentials: any non-empty username/password is accepted (set --user/--password to require a match)")
+	}
+	log.Printf("wire it up: set a Remedy connector's endpoint to %s and store its {\"username\":…,\"password\":…} bundle in the vault", base)
+
+	httpSrv := &http.Server{Addr: *addr, Handler: mock.Handler()}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	errCh := make(chan error, 1)
+	go func() {
+		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- err
+			return
+		}
+		errCh <- nil
+	}()
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+		log.Printf("shutting down")
+		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return httpSrv.Shutdown(shutCtx)
+	}
 }
 
 // runResetPassword sets a local user's password directly against the on-disk user

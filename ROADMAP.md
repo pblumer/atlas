@@ -209,7 +209,10 @@ The control-flow basics most real models use.
   is wired into the single-binary server run loop under the reserved Remedy job type and
   authored via a first-class **BMC Remedy Connector** service-task type in the modeler.
   Create-entry is the first operation; update/query, JWT caching, typed field values, and
-  a Remedy-side dedup field are follow-ups.
+  a Remedy-side dedup field are follow-ups. For local development without a real
+  Remedy instance, `atlas mock-remedy` serves an in-memory AR System REST mock
+  (login → create-entry → logout, plus a `GET /mock/entries` inspection endpoint) the
+  connector runs against unmodified (package `remedy/mock`).
 
 ## Milestone 2 — Events and timers 🚧
 
