@@ -126,6 +126,12 @@ type Server struct {
 	proc  *engine.Processor
 	store *state.Store
 
+	// dataDir is the root under which every durable store lives (the WAL, the
+	// state store, and the design-time sidecar directories). The backup/restore
+	// endpoints (ADR-0107) read and write the design-time subtree of it; nothing
+	// else needs it, so it is set once at construction and read-only thereafter.
+	dataDir string
+
 	// tasks carries closures to the single run-loop goroutine that owns the
 	// processor; quit stops that goroutine.
 	tasks chan func()
@@ -387,6 +393,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s := &Server{
 		proc:        proc,
 		store:       store,
+		dataDir:     dataDir,
 		tasks:       make(chan func()),
 		quit:        make(chan struct{}),
 		deployments: map[uint64]*deployment{},

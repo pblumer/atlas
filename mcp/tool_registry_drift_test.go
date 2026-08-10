@@ -94,6 +94,11 @@ var mcpOmittedRoutes = map[string]string{
 	// Server introspection / diagnostics an agent does not drive scenarios with.
 	"GET /api/v1/logs": "admin diagnostics, not an agent authoring/runtime action",
 
+	// Whole-instance backup/restore: an admin file-transfer of the design-time
+	// data directory (ADR-0107), not an agent authoring/runtime action.
+	"GET /api/v1/backup":   "admin data backup download, not an agent action",
+	"POST /api/v1/restore": "admin data restore upload, not an agent action",
+
 	// Dry-run BPMN validation for the Modeler's Problems panel (ADR-0026): an MCP
 	// agent deploys directly via atlas_deploy, which already compiles and validates.
 	"POST /api/v1/validate": "modeler-time dry-run validation; atlas_deploy already compiles+validates",

@@ -242,6 +242,7 @@ const TOPNAV = {
     { name: "Dashboard", route: "#/console" },
     { name: "Engine", route: "#/console/engine" },
     { name: "Logs", route: "#/console/logs" },
+    { name: "Backup", route: "#/console/backup" },
     { name: "Organization", route: "#/console/org" },
   ],
   modeler: [
@@ -634,6 +635,59 @@ async function viewConsoleLogs() {
   document.getElementById("log-refresh").addEventListener("click", load);
   const timer = setInterval(() => { if (follow.checked) load(); }, 2000);
   window.__atlasCleanup = () => clearInterval(timer);
+}
+
+// viewConsoleBackup is the one-file backup/restore of design-time data (ADR-0107):
+// Download streams GET /api/v1/backup as a .tar.gz (a plain same-origin anchor, so
+// the session cookie authenticates it); Restore POSTs the chosen file to
+// /api/v1/restore. User accounts and the vault key are never in the archive; with
+// authentication enabled both endpoints are admin-only.
+async function viewConsoleBackup() {
+  const gen = navGen;
+  view.innerHTML = `
+    <div class="card">
+      <h1>Backup &amp; restore</h1>
+      <p class="muted">Download a single archive of your design-time data — projects, drafts,
+      deployments, forms, decisions, connectors — to keep or move to another instance.
+      User accounts and the secret vault key are never included. With authentication enabled this is admin-only.</p>
+      <div class="row" style="gap:12px; align-items:center; margin-top:8px">
+        <a class="btn" href="/api/v1/backup" download>Download backup (.tar.gz)</a>
+      </div>
+
+      <h3 style="margin:22px 0 6px">Restore</h3>
+      <p class="muted">Uploading a backup overwrites artifacts that share an id. Restored drafts,
+      projects, forms and decisions appear immediately; <strong>deployed processes take effect after the
+      next server restart</strong>. Connectors keep their configuration but need their secrets re-entered.</p>
+      <div class="row" style="gap:12px; align-items:center">
+        <input type="file" id="restore-file" accept=".gz,.tgz,application/gzip">
+        <button class="btn neutral" id="restore-btn">Restore from file</button>
+      </div>
+      <p id="restore-status" class="muted" style="margin-top:10px" hidden></p>
+    </div>`;
+  if (superseded(gen)) return;
+  const status = document.getElementById("restore-status");
+  document.getElementById("restore-btn").addEventListener("click", async () => {
+    const file = document.getElementById("restore-file").files[0];
+    if (!file) { toast("Choose a backup file first", "error"); return; }
+    if (!window.confirm("Restore from this file? Artifacts sharing an id will be overwritten.")) return;
+    status.hidden = false;
+    status.textContent = "Restoring…";
+    try {
+      const res = await fetch("/api/v1/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/gzip" },
+        body: file,
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error((data && data.error) || res.statusText);
+      const restart = data && data.restartRequired ? " Restart the server to activate restored deployments." : "";
+      status.textContent = `Restored ${data ? data.restored : 0} file(s).${restart}`;
+      toast("Restore complete", "ok");
+    } catch (e) {
+      status.textContent = "Restore failed: " + (e && e.message || e);
+      toast("Restore failed", "error");
+    }
+  });
 }
 
 // userForm renders the create or edit form for a user. In edit mode the username
@@ -3680,6 +3734,7 @@ function routeTitle(path) {
     [/^#\/(console)?$/, "Console"],
     [/^#\/console\/engine$/, "Engine · Console"],
     [/^#\/console\/logs$/, "Logs · Console"],
+    [/^#\/console\/backup$/, "Backup · Console"],
     [/^#\/console\/org$/, "Organization · Console"],
     [/^#\/modeler\/new/, "New diagram · Modeler"],
     [/^#\/modeler\/form\/new/, "New form · Modeler"],
@@ -3737,6 +3792,7 @@ async function route() {
     if (path === "#/" || path === "#/console") return await viewConsoleDashboard();
     if (path === "#/console/engine") return await viewConsoleEngine();
     if (path === "#/console/logs") return await viewConsoleLogs();
+    if (path === "#/console/backup") return await viewConsoleBackup();
     if (path === "#/console/org") return await viewConsoleOrg();
     if (path === "#/modeler") return await viewModelerHome();
     if (path === "#/modeler/marketplace") return await viewMarketplace();
