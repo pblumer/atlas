@@ -2359,11 +2359,14 @@ async function viewDecisions() {
 
 // viewCallActivities is the per-server management view for call activities: one
 // row per call activity across every deployed process, showing which process it
-// calls, its version binding and variable propagation, and — the operational
-// point — whether the called process is currently deployed here. A caller may be
-// deployed before its callee, so a call activity can sit "unresolved" (it would
-// park at runtime); this view makes those gaps visible per server so an operator
-// can deploy the missing target (ADR-0076). Read-only: it changes no state.
+// calls, its version binding and variable propagation, whether the target is
+// deployed here, and — the active part — a per-server target Override an operator
+// edits inline (ADR-0076/0105). A caller may be deployed before its callee, so a
+// call activity can sit "not deployed" (it would park at runtime); and an operator
+// can redirect the target to another process, pin it to a version, or disable it on
+// this server without touching the model. Overrides key on the called process id, so
+// editing one affects every caller of that target — the Caller column shows exactly
+// who that is.
 async function viewCallActivities() {
   view.innerHTML = `
     <div class="between">
@@ -2372,14 +2375,15 @@ async function viewCallActivities() {
     </div>
     <p class="muted">One row per call activity across the processes deployed on this
     server. A call activity starts another deployed process as a child instance; it
-    <b>resolves</b> only when a process with the called id is deployed here. A caller
-    deployed before its callee shows as <b>not deployed</b> — it would wait at the call
-    activity until the target lands. Manage the gaps per server: deploy the missing
-    process in the <a href="#/modeler">Modeler</a>.</p>
+    <b>resolves</b> only when a process with the called id is deployed here. The
+    <b>Override</b> reshapes resolution <b>on this server only</b>: <b>redirect</b> to
+    another process, <b>pin</b> to a version, or <b>disable</b> (the call then waits).
+    An override keys on the called process id, so it applies to every caller of that
+    target listed here.</p>
     <div class="card" style="padding:0">
       <table>
-        <thead><tr><th>Caller</th><th>Element</th><th>Calls</th><th>Binding</th><th>Variables</th><th>Resolves to</th></tr></thead>
-        <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+        <thead><tr><th>Caller</th><th>Element</th><th>Calls</th><th>Binding</th><th>Variables</th><th>Resolves to</th><th>Override</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>`;
   const tbody = document.getElementById("rows");
@@ -2388,7 +2392,7 @@ async function viewCallActivities() {
     try {
       const rows = await api("GET", "/api/v1/call-activities");
       if (!rows.length) {
-        tbody.innerHTML = `<tr><td colspan="6" class="empty">
+        tbody.innerHTML = `<tr><td colspan="7" class="empty">
           No call activities deployed. Add a call activity to a process in the
           <a href="#/modeler">Modeler</a> and deploy it.</td></tr>`;
         return;
@@ -2414,14 +2418,74 @@ async function viewCallActivities() {
           <td>${binding}</td>
           <td>${vars}</td>
           <td>${target}</td>
+          <td>${overrideCell(r)}</td>
         </tr>`;
       }).join("");
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">${esc(e.message)}</td></tr>`;
     }
   };
+
+  // One delegated handler for every row's override picker (the tbody persists across
+  // reloads; the rows inside it do not, so a per-row listener would leak). Redirect
+  // and pin need a value, so they prompt; default clears the override.
+  tbody.addEventListener("change", async (e) => {
+    const sel = e.target.closest("select.ca-ov");
+    if (!sel) return;
+    const pid = sel.dataset.pid;
+    const path = `/api/v1/call-activities/overrides/${encodeURIComponent(pid)}`;
+    try {
+      if (sel.value === "default") {
+        await api("DELETE", path);
+        toast(`Override cleared for ${pid}`, "ok");
+      } else if (sel.value === "disable") {
+        await api("PUT", path, { action: "disable" });
+        toast(`Calls to ${pid} disabled on this server`, "ok");
+      } else if (sel.value === "redirect") {
+        const t = prompt(`Redirect all calls to “${pid}” to which process id?`, sel.dataset.target || "");
+        if (t === null || !t.trim()) { await load(); return; }
+        await api("PUT", path, { action: "redirect", targetProcessId: t.trim() });
+        toast(`Calls to ${pid} → ${t.trim()}`, "ok");
+      } else if (sel.value === "pin") {
+        const v = prompt(`Pin calls to “${pid}” to which deployed version number?`, sel.dataset.version || "");
+        if (v === null || !v.trim()) { await load(); return; }
+        const n = parseInt(v, 10);
+        if (!Number.isInteger(n) || n <= 0) { toast("Enter a positive version number", "warn"); await load(); return; }
+        await api("PUT", path, { action: "pin", targetVersion: n });
+        toast(`Pinned ${pid} to v${n}`, "ok");
+      }
+    } catch (err) {
+      toast(err.message || "Override failed", "warn");
+    }
+    await load();
+  });
+
   document.getElementById("refresh").addEventListener("click", load);
   await load();
+}
+
+// overrideCell renders a row's per-server target-override picker plus a pill
+// describing the active override, if any (ADR-0105). The picker's data-* carry the
+// current target/version so the redirect/pin prompts pre-fill sensibly.
+function overrideCell(r) {
+  const ov = r.override;
+  const act = ov ? ov.action : "default";
+  const opt = (val, label) => `<option value="${val}" ${act === val ? "selected" : ""}>${label}</option>`;
+  const sel = `<select class="ca-ov" data-pid="${esc(r.calledProcessId)}"`
+    + ` data-target="${esc((ov && ov.targetProcessId) || "")}" data-version="${(ov && ov.targetVersion) || ""}">`
+    + opt("default", "Default (latest)")
+    + opt("redirect", "Redirect…")
+    + opt("pin", "Pin version…")
+    + opt("disable", "Disabled")
+    + `</select>`;
+  let note = "";
+  if (ov) {
+    const label = ov.action === "redirect" ? `→ ${esc(ov.targetProcessId)}`
+      : ov.action === "pin" ? `pin v${ov.targetVersion}`
+        : "disabled";
+    note = ` <span class="pill warn"><span class="dot"></span>${label}</span>`;
+  }
+  return sel + note;
 }
 
 // viewDecisionDetail lists every evaluation of one decision — its "instances" —

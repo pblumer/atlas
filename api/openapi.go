@@ -157,6 +157,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Read a process's live runtime state", tag: "Processes", resp: jsonBody("Runtime state", tObject())}},
 		{"GET", "/api/v1/call-activities", s.handleCallActivities, apiOp{
 			summary: "List every call activity across deployed processes with its per-server resolution status", tag: "Processes", resp: jsonBody("Call activities", tArray())}},
+		{"PUT", "/api/v1/call-activities/overrides/{processId}", s.handleSetCallOverride, apiOp{
+			summary: "Set a per-server call-activity target override (redirect/pin/disable) for a called process id", tag: "Processes",
+			req: jsonBody("Override", tObject()), resp: jsonBody("Stored override", tObject())}},
+		{"DELETE", "/api/v1/call-activities/overrides/{processId}", s.handleDeleteCallOverride, apiOp{
+			summary: "Clear a called process id's per-server target override", tag: "Processes", status: http.StatusNoContent}},
 		{"GET", "/api/v1/collaborations/{key}/runtime", s.handleCollaborationRuntime, apiOp{
 			summary: "Read a collaboration's live runtime state", tag: "Collaborations", resp: jsonBody("Runtime state", tObject())}},
 
