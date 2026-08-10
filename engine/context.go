@@ -27,6 +27,27 @@ func (c *ProcessingContext) latestDefKey(processId string) (uint64, bool) {
 	return k, ok
 }
 
+// resolveCallTarget resolves the definition a call activity starts as a child,
+// consulting the per-server override first and falling back to the default `latest`
+// resolution (ADR-0105). Precedence for an override: disabled parks; a pinned key
+// wins if still deployed; a redirect resolves the target's latest (one hop, so no
+// cycle). ok is false when nothing resolves (park), identical to an undeployed
+// callee (ADR-0076). A pure read of run-loop-owned maps — no allocation (I1).
+func (c *ProcessingContext) resolveCallTarget(processId string) (uint64, bool) {
+	if ov, has := c.p.callOverrides[processId]; has {
+		switch {
+		case ov.Disabled:
+			return 0, false
+		case ov.PinnedDefKey != 0:
+			_, deployed := c.p.processes[ov.PinnedDefKey]
+			return ov.PinnedDefKey, deployed
+		case ov.RedirectProcessId != "":
+			return c.latestDefKey(ov.RedirectProcessId)
+		}
+	}
+	return c.latestDefKey(processId)
+}
+
 func (c *ProcessingContext) process(defKey uint64) *compiler.CompiledProcess {
 	return c.p.processes[defKey]
 }

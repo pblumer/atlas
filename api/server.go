@@ -146,6 +146,7 @@ type Server struct {
 	projects         *projectStore        // durable sidecar for projects grouping artifacts (ADR-0034)
 	dmnrefs          *dmnRefStore         // durable sidecar for DMN reference artifacts (ADR-0034)
 	connectors       *connectorStore      // durable sidecar for managed connector instances (ADR-0041)
+	callOverrides    *callOverrideStore   // durable sidecar for per-server call-activity target overrides (ADR-0105)
 	marketplace      []marketplacePackage // curated, bundled marketplace catalog, immutable after New (ADR-0081)
 	marketplaceStore *marketplaceStore    // durable sidecar for installed marketplace templates (ADR-0081)
 	vault            *secretVault         // engine-internal encrypted secret store, nil when disabled (ADR-0069/0070)
@@ -366,6 +367,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	callOverrides, err := newCallOverrideStore(filepath.Join(dataDir, "call-overrides"))
+	if err != nil {
+		return nil, err
+	}
 	marketplaceStore, err := newMarketplaceStore(filepath.Join(dataDir, "marketplace"))
 	if err != nil {
 		return nil, err
@@ -402,6 +407,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		projects:         projects,
 		dmnrefs:          dmnrefs,
 		connectors:       connectors,
+		callOverrides:    callOverrides,
 		marketplace:      marketplaceCatalog,
 		marketplaceStore: marketplaceStore,
 		inboundSubs:      inboundSubs,
@@ -570,6 +576,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// every process under the reserved CSV-import job type.
 	s.jobRunner.HandleWithOutput(compiler.CsvImportJobTypeIndex, csvImportHandler(store))
 	if err := s.loadDeployments(); err != nil {
+		return nil, err
+	}
+	// Push per-server call-activity overrides into the processor. Runs after
+	// loadDeployments so a pin's version resolves to a definition key, and before the
+	// loop serves traffic so touching the processor directly is single-writer-safe
+	// (ADR-0105).
+	if err := s.loadCallOverrides(); err != nil {
 		return nil, err
 	}
 	s.wg.Add(3)
