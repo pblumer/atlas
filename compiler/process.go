@@ -994,6 +994,26 @@ func (p *CompiledProcess) ConnectorTask(detail int32) *ConnectorTaskDetail {
 	return &p.connectorTasks[detail]
 }
 
+// ConnectorTaskOf returns the connector-task detail for element node id, or an
+// error if id is not a connector task in this compiled process. It is the
+// bounds-checked accessor for the job-worker path: a persisted job can outlive
+// the process definition that compiled its element as a connector task (e.g. a
+// job created before a redeploy that recompiled the element into something else,
+// or dropped its connector-task table), and resolving such a stale job must fail
+// it into an incident (ADR-0061) rather than index out of range and panic the
+// job-runner goroutine — an unrecovered panic there crashes the whole server. A
+// worker that gets an error returns it, and FailJob retries then parks the token.
+func (p *CompiledProcess) ConnectorTaskOf(id int32) (*ConnectorTaskDetail, error) {
+	if id < 0 || int(id) >= len(p.nodes) {
+		return nil, fmt.Errorf("element %d out of range (%d nodes)", id, len(p.nodes))
+	}
+	detail := p.nodes[id].Detail
+	if detail < 0 || int(detail) >= len(p.connectorTasks) {
+		return nil, fmt.Errorf("element %d is not a connector task (detail index %d, %d connector tasks)", id, detail, len(p.connectorTasks))
+	}
+	return &p.connectorTasks[detail], nil
+}
+
 // StartEvents returns the process's entry-point element ids.
 func (p *CompiledProcess) StartEvents() []int32 { return p.startEvents }
 

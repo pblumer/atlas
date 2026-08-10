@@ -130,7 +130,10 @@ func resolveConnector(store *state.Store, lookup ProcessLookup, reg *Registry, j
 	if cp == nil {
 		return nil, nil, nil, nil, false, fmt.Errorf("clio: no compiled process for def %d", ei.ProcessDefKey)
 	}
-	detail := cp.ConnectorTask(cp.Node(ei.ElementId).Detail)
+	detail, err := cp.ConnectorTaskOf(ei.ElementId)
+	if err != nil {
+		return nil, nil, nil, nil, false, fmt.Errorf("clio: %w", err)
+	}
 	name := cp.Intern(detail.Connector)
 	client, ok := reg.Client(name)
 	if !ok {
