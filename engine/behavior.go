@@ -75,6 +75,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeTask] = passThroughBehavior{}
 	p.behaviors[compiler.TypeParallelGateway] = parallelGatewayBehavior{}
 	p.behaviors[compiler.TypeInclusiveGateway] = inclusiveGatewayBehavior{}
+	p.behaviors[compiler.TypeEventBasedGateway] = eventBasedGatewayBehavior{}
 	// A message start event is a plain entry point once instantiated: it flows
 	// straight on like a none start (ADR-0035). What makes it a start is the
 	// deploy-time subscription (see Deploy), not a distinct runtime behavior.
@@ -902,6 +903,17 @@ func (p *Processor) behavior(bpmnType uint8) bpmnBehavior {
 // completeAndTakeFlows is the default OnCompleting: emit Completed, then
 // activate the targets of every outgoing flow.
 func completeAndTakeFlows(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	// A catch event armed by an event-based gateway wins the deferred choice when it fires:
+	// before it continues, it cancels every other armed catch in its race group, so only this
+	// branch proceeds (ADR-0109). A loser whose Completing was already queued when a sibling
+	// cancelled it finds itself gone and drops out (a same-event double-fire). The guard is a
+	// no-op for every element not armed by an event gateway (EventGatewayKey == 0).
+	if ei.EventGatewayKey != 0 {
+		if c.GetElementInstance(key) == nil {
+			return
+		}
+		cancelEventGatewaySiblings(c, ei.ProcessInstanceKey, ei.EventGatewayKey, key)
+	}
 	c.AppendElementEvent(key, model.IntentCompleted, *ei)
 	recordCompensable(c, key, ei)
 	cp := c.process(ei.ProcessDefKey)
@@ -2333,6 +2345,63 @@ func (inclusiveGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei
 func (inclusiveGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	c.AppendElementEvent(key, model.IntentCompleted, *ei)
 	takeInclusiveOutgoing(c, ei)
+}
+
+// eventBasedGatewayBehavior is a deferred choice (ADR-0109): on activation it arms every
+// target catch event at once — each outgoing flow's target, a message/timer/signal
+// intermediate catch — stamping each with this gateway's key as its race group, then
+// completes. The armed catches open their own subscriptions/timers and wait unchanged;
+// whichever fires first cancels the rest (the group prologue in completeAndTakeFlows). The
+// gateway itself takes no outgoing flow — the targets were armed on activation.
+type eventBasedGatewayBehavior struct{}
+
+func (eventBasedGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	for _, flowID := range cp.Outgoing(ei.ElementId) {
+		targetId := cp.Flow(flowID).Target
+		target := cp.Node(targetId)
+		k := c.NewKey()
+		c.AppendElementCommand(k, model.IntentActivating, model.ElementInstanceValue{
+			ProcessInstanceKey: ei.ProcessInstanceKey,
+			ProcessDefKey:      ei.ProcessDefKey,
+			ElementId:          targetId,
+			FlowScopeKey:       ei.FlowScopeKey,
+			BpmnElementType:    uint8(target.Type),
+			TokenID:            k,
+			ParentTokenID:      ei.TokenID,
+			SourceFlowId:       flowID,
+			EventGatewayKey:    key, // the race group: this gateway's element-instance key
+		})
+	}
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (eventBasedGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendElementEvent(key, model.IntentCompleted, *ei)
+}
+
+// cancelEventGatewaySiblings terminates every live element instance in the same event-gateway
+// race group as the winner (groupKey), except the winner itself (selfKey) — the deferred
+// choice's losing branches (ADR-0109). Each loser's message subscription or timer self-retires
+// (a later correlate/fire finds no element and drops the stale entry), the same lazy cleanup a
+// disarmed boundary uses. Mirrors interruptHost's sibling-terminate loop, keyed by the
+// event-gateway group instead of a boundary host. Victims are collected before any termination
+// so the scan sees an intact set.
+func cancelEventGatewaySiblings(c *ProcessingContext, procKey, groupKey, selfKey uint64) {
+	var losers []uint64
+	c.ForEachElementInstance(procKey, func(elKey uint64) {
+		if elKey == selfKey {
+			return
+		}
+		if s := c.GetElementInstance(elKey); s != nil && s.EventGatewayKey == groupKey {
+			losers = append(losers, elKey)
+		}
+	})
+	for _, lk := range losers {
+		if s := c.GetElementInstance(lk); s != nil {
+			c.AppendElementEvent(lk, model.IntentTerminated, *s)
+		}
+	}
 }
 
 // selectExclusiveFlow returns the outgoing flow an exclusive gateway takes: the

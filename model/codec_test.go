@@ -40,7 +40,8 @@ func TestRecordRoundTrip(t *testing.T) {
 				TokenID:            NewKey(3, 4),
 				ParentTokenID:      NewKey(3, 5),
 				SourceFlowId:       9,
-				MultiInstance:      2, // an inner multi-instance iteration (ADR-0077)
+				MultiInstance:      2,            // an inner multi-instance iteration (ADR-0077)
+				EventGatewayKey:    NewKey(3, 6), // armed by an event-based gateway (ADR-0109)
 			},
 		},
 		{
@@ -337,7 +338,7 @@ func TestReadRecordUnknownVersion(t *testing.T) {
 func TestEncodedSize(t *testing.T) {
 	r := Record{Header: sampleHeader(), Value: &ElementInstanceValue{}}
 	buf := AppendRecord(nil, &r)
-	if want := HeaderSize + elementInstanceMISize; len(buf) != want {
+	if want := HeaderSize + elementInstanceEGSize; len(buf) != want {
 		t.Errorf("encoded size = %d, want %d", len(buf), want)
 	}
 }
