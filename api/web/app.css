@@ -180,6 +180,9 @@ ol.steps li { margin: 6px 0; }
 
 /* Form fields (login + user management) */
 .field { display: block; margin: 10px 0; font-size: 13px; color: var(--muted); }
+/* A row of secondary actions under a field (e.g. the call-activity "create new
+   process" button); nudged up so it reads as attached to the field above. */
+.field-actions { margin: -4px 0 10px; }
 .field input[type="text"],
 .field input[type="email"],
 .field input[type="password"],
@@ -603,6 +606,21 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   box-shadow: 0 1px 4px rgba(0,0,0,0.3); cursor: pointer;
 }
 .task-open:hover { filter: brightness(1.08); }
+/* "child" badge on a call activity that started a child instance (ADR-0076/0105):
+   a single click drills from the caller's replay into the child's replay. Neutral
+   slate so it reads as navigation, distinct from the accent-blue task-open badge. */
+.ca-child-link {
+  display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;
+  background: #475569; color: #fff; border-radius: 999px;
+  height: 20px; padding: 0 9px; text-decoration: none;
+  font: 700 11px/20px system-ui, sans-serif;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3); cursor: pointer;
+}
+.ca-child-link:hover { filter: brightness(1.12); }
+/* The same drill-down link inside the Details panel reads as a text link, not a
+   floating badge. */
+dd .ca-child-link { background: none; color: var(--accent, #2563eb); box-shadow: none; height: auto; padding: 0; font-weight: 600; }
+dd .ca-child-link:hover { text-decoration: underline; filter: none; }
 /* "Decision" badge on a business rule task that has been evaluated: opens the
    decision-inspection panel (inputs, outputs, and how it was decided; ADR-0064). */
 .decision-badge {
@@ -1339,6 +1357,35 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   border-radius: var(--radius); background: var(--bg);
 }
 .tasks-form-placeholder p { margin: 0; max-width: 60ch; }
+/* The task detail's Form / Process tabs: the form to complete and a read-only
+   diagram of the task's instance with progress overlaid, so the assignee sees what
+   has already run (gray), where the tokens are now (green), and their own task
+   (blue) — and, by what's left plain, what is still ahead. Underline tabs, matching
+   the Operations inspector. */
+.tasks-detail-tabs { display: flex; gap: 2px; margin-top: 22px; border-bottom: 1px solid var(--border); }
+.tasks-detail-tabs button {
+  border: none; background: transparent; padding: 9px 12px; font: inherit; font-size: 13px; color: var(--muted);
+  cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.tasks-detail-tabs button:hover { color: var(--text); }
+.tasks-detail-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.tasks-tab-body { padding-top: 16px; }
+.tp-legend { display: flex; flex-wrap: wrap; gap: 16px; margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+.tp-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.tp-legend .tp-sw { width: 12px; height: 12px; border-radius: 3px; border: 2px solid var(--border); }
+.tp-legend .tp-sw.here { border-color: var(--accent); background: var(--accent-soft); }
+.tp-legend .tp-sw.active { border-color: var(--ok); }
+.tp-legend .tp-sw.done { border-color: var(--muted); border-style: dashed; }
+.tp-canvas {
+  position: relative; height: 360px; border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden; background: var(--surface);
+}
+.tp-canvas .tp-msg { padding: 16px; }
+/* Read-only: hide the editing palette, context pad and inline editor (as the live
+   and replay views do) so the process view reads as a diagram, not an editor. */
+.tp-canvas .djs-palette,
+.tp-canvas .djs-context-pad,
+.tp-canvas .djs-direct-editing-parent { display: none !important; }
 /* Form editor (form-js Playground, ADR-0028) — the split editor+preview surface
    renders itself into this container, which just needs to fill the body. */
 .form-playground { flex: 1; min-height: 0; overflow: hidden; }
@@ -1418,10 +1465,23 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   font-size: 0.8em; line-height: 1; transition: transform 0.15s; vertical-align: middle;
 }
 #pane-design .fjs-pgl-section.fv-collapsed .fv-sec-caret { transform: rotate(-90deg); }
-/* Collapsed: keep only the header, pinned to the top of its grid cell. */
-#pane-design .fjs-pgl-section.fv-collapsed { align-self: start; }
+/* Collapsed: keep only the header (its flex basis shrinks it to that height). */
 #pane-design .fjs-pgl-section.fv-collapsed > :not(.header) { display: none; }
-/* Draggable gutters between the grid's columns and rows. */
+/* The two stacked regions the areas are re-parented into: editor + optional
+   preview on top, the decoupled Form Input/Output data region below. */
+#pane-design .fv-top { position: relative; display: flex; flex-direction: row; min-height: 0; overflow: hidden; }
+#pane-design .fv-bottom { display: flex; flex-direction: row; min-height: 0; overflow: hidden; }
+#pane-design .fv-top > .fjs-pgl-section,
+#pane-design .fv-bottom > .fjs-pgl-section { min-width: 0; min-height: 0; overflow: hidden; }
+/* Show/hide-preview toggle sitting in the editor's own header. */
+#pane-design .fv-preview-toggle {
+  margin-left: 8px; padding: 2px 9px; font: inherit; font-size: 12px; line-height: 1.5;
+  color: var(--muted); background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; cursor: pointer; white-space: nowrap;
+}
+#pane-design .fv-preview-toggle:hover { border-color: var(--accent); color: var(--accent); }
+#pane-design .fv-preview-toggle.on { color: var(--text); }
+/* Draggable gutters between the editor/preview and top/bottom regions. */
 #pane-design .fv-grid-cresizer {
   position: absolute; top: 0; bottom: 0; width: 9px; margin-left: -4px; z-index: 6; cursor: col-resize;
 }
@@ -1436,6 +1496,22 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 #pane-design .fv-side-resizer { flex: 0 0 6px; align-self: stretch; position: relative; z-index: 6; cursor: col-resize; }
 #pane-design .fv-side-resizer::before { content: ""; position: absolute; top: 0; bottom: 0; left: 2px; width: 2px; background: var(--border); transition: background 0.12s; }
 #pane-design .fv-side-resizer:hover::before, #pane-design .fv-side-resizer.dragging::before { background: var(--accent); }
+/* A side column (Components / Properties) collapses to nothing; the chevron on its
+   resizer stays put so it can be reopened. */
+#pane-design .fjs-pgl-palette-container,
+#pane-design .fjs-pgl-properties-container { position: relative; }
+#pane-design .fv-rail { width: 0 !important; min-width: 0 !important; overflow: hidden; }
+#pane-design .fv-railbtn {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 8;
+  width: 20px; height: 22px; padding: 0; display: grid; place-items: center;
+  font: 600 13px/1 system-ui, sans-serif; cursor: pointer; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+}
+#pane-design .fv-railbtn:hover { border-color: var(--accent); color: var(--accent); }
+/* form-js renders each property group header as a 32px grey bar, chunkier than the
+   BPMN modeler's lighter property-group headers; slim it so the panels read alike. */
+#pane-design .bio-properties-panel-group-header { height: 27px; }
+#pane-design .bio-properties-panel-group-header-button { height: 20px; line-height: 20px; }
 
 .tasks-form { margin-top: 22px; max-width: 640px; }
 .tasks-form .fjs-container { --color-background: var(--surface); }

@@ -22,6 +22,66 @@ func sseFrame(w io.Writer, event string, seq uint64, data []byte) {
 	fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", seq, event, data)
 }
 
+// draftSessionAccess authorizes a request to join a draft's live session and
+// reports whether it may edit (ADR-0103/0071). A session inherits the sharing
+// scope of the draft's project: at least viewer to watch, editor/owner to
+// co-edit. A draft with no project (Ungrouped), or whose project no longer
+// exists, stays open — exactly as the draft-content handlers are today, so
+// session enforcement adds no new lock there. With --auth off, effectiveRole
+// resolves to owner, so everything is open. It returns canEdit plus an HTTP
+// (status, message); status 0 means access is granted. A principal with no
+// access at all gets 404, so a scoped draft's existence never leaks.
+func (s *Server) draftSessionAccess(r *http.Request, draftID string) (canEdit bool, status int, msg string) {
+	var (
+		rec     draft
+		draftOK bool
+		proj    project
+		projOK  bool
+		readErr error
+	)
+	s.do(func() {
+		if rec, draftOK, readErr = s.drafts.get(draftID); readErr != nil || !draftOK {
+			return
+		}
+		if rec.ProjectID != "" {
+			proj, projOK, readErr = s.projects.get(rec.ProjectID)
+		}
+	})
+	switch {
+	case readErr != nil:
+		return false, http.StatusInternalServerError, "read draft: " + readErr.Error()
+	case !draftOK:
+		return false, http.StatusNotFound, "no draft with that process id"
+	}
+	// Ungrouped or legacy draft (no project, or a project that no longer exists):
+	// open, matching the draft-content handlers — no new lock introduced here.
+	if rec.ProjectID == "" || !projOK {
+		return true, 0, ""
+	}
+	rank := scopeRank(proj.effectiveRole(principalFrom(r.Context()), s.authEnabled))
+	if rank == 0 {
+		return false, http.StatusNotFound, "no draft with that process id" // hide existence
+	}
+	return rank >= scopeRank(ScopeRoleEditor), 0, ""
+}
+
+// requireSessionEditor gates a mutating session action (lock/change/presence) on
+// the participant's edit capability, snapshotted at join from its project role
+// (ADR-0071). It writes 404 for an unknown participant and 403 for a viewer, and
+// returns false in both cases; true means the caller may proceed.
+func (s *Server) requireSessionEditor(w http.ResponseWriter, draftID, participantID string) bool {
+	canEdit, ok := s.collab.canEdit(draftID, participantID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "no such participant in this draft's session")
+		return false
+	}
+	if !canEdit {
+		writeError(w, http.StatusForbidden, "viewer access is read-only; an editor role is required to change the model")
+		return false
+	}
+	return true
+}
+
 // handleDraftSession is the SSE endpoint a participant joins to co-edit a draft.
 // It streams the initial sync snapshot, then every presence / lock / change
 // frame until the client disconnects, at which point the participant leaves and
@@ -30,19 +90,12 @@ func sseFrame(w io.Writer, event string, seq uint64, data []byte) {
 func (s *Server) handleDraftSession(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
-	// A session only makes sense for a draft that exists; mirror the other draft
-	// handlers' 404 rather than opening a phantom session.
-	var (
-		ok      bool
-		readErr error
-	)
-	s.do(func() { _, ok, readErr = s.drafts.get(id) })
-	switch {
-	case readErr != nil:
-		writeError(w, http.StatusInternalServerError, "read draft: "+readErr.Error())
-		return
-	case !ok:
-		writeError(w, http.StatusNotFound, "no draft with that process id")
+	// A session inherits the draft's project scope (ADR-0071): at least viewer to
+	// watch, editor to co-edit. This also 404s a non-existent (or unreachable)
+	// draft rather than opening a phantom session.
+	canEdit, status, msg := s.draftSessionAccess(r, id)
+	if status != 0 {
+		writeError(w, status, msg)
 		return
 	}
 
@@ -64,7 +117,7 @@ func (s *Server) handleDraftSession(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	participant, sync, leave := s.collab.join(id, userID, name)
+	participant, sync, leave := s.collab.joinStream(id, userID, name, canEdit)
 	defer leave()
 
 	h := w.Header()
@@ -112,17 +165,11 @@ func (s *Server) handleDraftSession(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDraftSessionJoin(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
-	var (
-		ok      bool
-		readErr error
-	)
-	s.do(func() { _, ok, readErr = s.drafts.get(id) })
-	switch {
-	case readErr != nil:
-		writeError(w, http.StatusInternalServerError, "read draft: "+readErr.Error())
-		return
-	case !ok:
-		writeError(w, http.StatusNotFound, "no draft with that process id")
+	// Same scope gate as the SSE join: at least viewer to join, editor to co-edit
+	// (ADR-0071); an unreachable or missing draft 404s.
+	canEdit, status, msg := s.draftSessionAccess(r, id)
+	if status != 0 {
+		writeError(w, status, msg)
 		return
 	}
 
@@ -149,8 +196,8 @@ func (s *Server) handleDraftSessionJoin(w http.ResponseWriter, r *http.Request) 
 
 	// A joined-over-MCP participant has no SSE stream to reap it on disconnect, so
 	// it joins detached and is kept alive by polling; the reaper evicts it if it
-	// falls silent (ADR-0103).
-	_, sync := s.collab.joinDetached(id, userID, name)
+	// falls silent (ADR-0103). Its project role decides whether it may edit.
+	_, sync := s.collab.joinDetachedAs(id, userID, name, canEdit)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(sync)
@@ -232,6 +279,9 @@ func (s *Server) handleDraftSessionPresence(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusBadRequest, "participantId is required")
 		return
 	}
+	if !s.requireSessionEditor(w, id, body.ParticipantID) {
+		return
+	}
 	if !s.collab.presence(id, body.ParticipantID, body.Selection) {
 		writeError(w, http.StatusNotFound, "no such participant in this draft's session")
 		return
@@ -256,6 +306,15 @@ func (s *Server) handleDraftSessionLock(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "participantId and elementId are required")
 		return
 	}
+	// Validate the action before the edit gate so a malformed request is a 400
+	// regardless of who sends it.
+	if body.Action != collabLockAcquire && body.Action != collabLockRelease {
+		writeError(w, http.StatusBadRequest, `action must be "acquire" or "release"`)
+		return
+	}
+	if !s.requireSessionEditor(w, id, body.ParticipantID) {
+		return
+	}
 	switch body.Action {
 	case collabLockAcquire:
 		granted, ok := s.collab.acquireLock(id, body.ParticipantID, body.ElementID)
@@ -273,8 +332,6 @@ func (s *Server) handleDraftSessionLock(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
-	default:
-		writeError(w, http.StatusBadRequest, `action must be "acquire" or "release"`)
 	}
 }
 
@@ -293,6 +350,9 @@ func (s *Server) handleDraftSessionChange(w http.ResponseWriter, r *http.Request
 	}
 	if body.ParticipantID == "" || body.ElementID == "" {
 		writeError(w, http.StatusBadRequest, "participantId and elementId are required")
+		return
+	}
+	if !s.requireSessionEditor(w, id, body.ParticipantID) {
 		return
 	}
 	if !s.collab.change(id, body.ParticipantID, body.ElementID, body.XML) {

@@ -78,6 +78,25 @@ type collabParticipant struct {
 	ch        chan collabEvent
 	detached  bool      // joined without an SSE stream (an MCP agent); subject to the TTL reaper
 	lastSeen  time.Time // last action time; only meaningful (and only checked) for a detached participant
+	canEdit   bool      // project role permits editing (editor/owner); a viewer joins read-only (ADR-0071)
+}
+
+// canEdit reports whether a participant may mutate the session (lock/change/
+// presence), snapshotted from its project role at join time (ADR-0103/0071). ok
+// is false when the session or participant is unknown. Like ADR-0044's role
+// snapshot, a role change takes effect on the participant's next join.
+func (reg *collabRegistry) canEdit(draftID, participantID string) (canEdit, ok bool) {
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+	sess := reg.sessions[draftID]
+	if sess == nil {
+		return false, false
+	}
+	p, exists := sess.participants[participantID]
+	if !exists {
+		return false, false
+	}
+	return p.canEdit, true
 }
 
 // collabLock is a soft, per-element edit lock held by one participant.
@@ -183,26 +202,40 @@ func (sess *collabSession) lockListLocked() []collabLock {
 	return out
 }
 
-// join adds a streaming (browser SSE) participant to the draft's session and
-// returns the participant, the marshaled sync snapshot it should receive first
-// (self id, roster, locks), and a leave function the caller defers to tear the
-// participant down on disconnect. Other participants receive a presence frame
-// reflecting the arrival.
+// join adds a streaming (browser SSE) participant that may edit — the default for
+// an open (auth-off) session. joinStream is the scope-aware variant the HTTP
+// handler uses to pass the draft's project role (ADR-0103/0071).
 func (reg *collabRegistry) join(draftID, userID, name string) (*collabParticipant, []byte, func()) {
+	return reg.joinStream(draftID, userID, name, true)
+}
+
+// joinStream adds a streaming (browser SSE) participant and returns the
+// participant, the marshaled sync snapshot it should receive first (self id,
+// roster, locks), and a leave function the caller defers to tear the participant
+// down on disconnect. canEdit records whether the participant's project role lets
+// it change the model (editor/owner) or only watch (viewer). Other participants
+// receive a presence frame reflecting the arrival.
+func (reg *collabRegistry) joinStream(draftID, userID, name string, canEdit bool) (*collabParticipant, []byte, func()) {
 	reg.mu.Lock()
 	defer reg.mu.Unlock()
-	p, sync := reg.joinLocked(draftID, userID, name, false)
+	p, sync := reg.joinLocked(draftID, userID, name, streamingParticipant, canEdit)
 	return p, sync, func() { reg.leave(draftID, p.ID) }
 }
 
-// joinDetached adds a participant with no live stream (an AI agent over MCP,
-// ADR-0103 M2). It returns the participant and its sync snapshot but no leave
-// closure: such a participant leaves explicitly, or the reaper evicts it once it
-// falls silent past the TTL.
+// joinDetached adds an edit-capable participant with no live stream — the default
+// for an open session. joinDetachedAs is the scope-aware variant.
 func (reg *collabRegistry) joinDetached(draftID, userID, name string) (*collabParticipant, []byte) {
+	return reg.joinDetachedAs(draftID, userID, name, true)
+}
+
+// joinDetachedAs adds a participant with no live stream (an AI agent over MCP,
+// ADR-0103 M2), carrying its edit capability. It returns the participant and its
+// sync snapshot but no leave closure: such a participant leaves explicitly, or
+// the reaper evicts it once it falls silent past the TTL.
+func (reg *collabRegistry) joinDetachedAs(draftID, userID, name string, canEdit bool) (*collabParticipant, []byte) {
 	reg.mu.Lock()
 	defer reg.mu.Unlock()
-	return reg.joinLocked(draftID, userID, name, detachedParticipant)
+	return reg.joinLocked(draftID, userID, name, detachedParticipant, canEdit)
 }
 
 // detachedParticipant / streamingParticipant name the joinLocked flag for
@@ -215,7 +248,7 @@ const (
 // joinLocked creates the session if needed, adds a participant, builds its sync
 // snapshot, and notifies the others (the newcomer already has the roster in its
 // snapshot, so it is excluded from its own join frame). Caller holds the mutex.
-func (reg *collabRegistry) joinLocked(draftID, userID, name string, detached bool) (*collabParticipant, []byte) {
+func (reg *collabRegistry) joinLocked(draftID, userID, name string, detached, canEdit bool) (*collabParticipant, []byte) {
 	sess := reg.sessions[draftID]
 	if sess == nil {
 		sess = &collabSession{participants: map[string]*collabParticipant{}, locks: map[string]collabLock{}}
@@ -228,16 +261,17 @@ func (reg *collabRegistry) joinLocked(draftID, userID, name string, detached boo
 		id = "p" + itoa(int(sess.seq)+len(sess.participants)+1)
 	}
 	p := &collabParticipant{
-		ID: id, UserID: userID, Name: name, detached: detached,
+		ID: id, UserID: userID, Name: name, detached: detached, canEdit: canEdit,
 		lastSeen: reg.now(), ch: make(chan collabEvent, collabBufferSize),
 	}
 	sess.participants[id] = p
 
 	sync, _ := json.Marshal(struct {
 		Self         string           `json:"self"`
+		CanEdit      bool             `json:"canEdit"`
 		Participants []collabPresence `json:"participants"`
 		Locks        []collabLock     `json:"locks"`
-	}{Self: id, Participants: sess.rosterLocked(), Locks: sess.lockListLocked()})
+	}{Self: id, CanEdit: canEdit, Participants: sess.rosterLocked(), Locks: sess.lockListLocked()})
 
 	reg.broadcastPresenceExceptLocked(sess, id)
 	return p, sync

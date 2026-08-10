@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ReisePflichten — die Geschäftsregeln, WELCHE Nachweise eine Reise erfordert.
+
+  Eine echte Entscheidungstabelle (hitPolicy UNIQUE): je Kombination aus
+  Reiseart und Alter trifft genau eine Zeile zu und liefert zwei benannte
+  boolesche Ausgaben:
+
+    * brauchtVisum            — nur bei Fernreisen
+    * brauchtEinverstaendnis  — nur bei Minderjährigen (Alter < 18)
+
+  Die Eingabespalten sind echte Unary-Tests ("Fernreise", not("Fernreise"),
+  < 18, >= 18) — genau das, wofür DMN-Eingabezellen gedacht sind. Die Regeln
+  leben hier, nicht im Prozessmodell: Fachleute können die Tabelle ändern
+  (z. B. Visumpflicht auch für EU) ohne ein Redeploy der Engine.
+
+  Der Business-Rule-Task ruft die Entscheidung als decisionId="ReisePflichten"
+  auf und legt das Ergebnis (einen Kontext {brauchtVisum, brauchtEinverstaendnis})
+  in der Variablen `pflichten` ab; die Inclusive-Gateways verzweigen darauf.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="defs_reisepflichten" name="reisepflichten" namespace="http://atlas/dmn">
+  <inputData id="id_reiseart" name="reiseart"/>
+  <inputData id="id_alter" name="alter"/>
+  <decision id="ReisePflichten" name="ReisePflichten">
+    <informationRequirement><requiredInput href="#id_reiseart"/></informationRequirement>
+    <informationRequirement><requiredInput href="#id_alter"/></informationRequirement>
+    <decisionTable id="dt" hitPolicy="UNIQUE">
+      <input id="in_art" label="reiseart">
+        <inputExpression id="ie_art" typeRef="string"><text>reiseart</text></inputExpression>
+      </input>
+      <input id="in_alter" label="alter">
+        <inputExpression id="ie_alter" typeRef="number"><text>alter</text></inputExpression>
+      </input>
+      <output id="o_visum" label="brauchtVisum" name="brauchtVisum" typeRef="boolean"/>
+      <output id="o_einv" label="brauchtEinverstaendnis" name="brauchtEinverstaendnis" typeRef="boolean"/>
+      <rule id="r_fern_minor">
+        <inputEntry id="e_a1"><text>"Fernreise"</text></inputEntry>
+        <inputEntry id="e_b1"><text>&lt; 18</text></inputEntry>
+        <outputEntry id="ov1"><text>true</text></outputEntry>
+        <outputEntry id="oe1"><text>true</text></outputEntry>
+      </rule>
+      <rule id="r_fern_adult">
+        <inputEntry id="e_a2"><text>"Fernreise"</text></inputEntry>
+        <inputEntry id="e_b2"><text>&gt;= 18</text></inputEntry>
+        <outputEntry id="ov2"><text>true</text></outputEntry>
+        <outputEntry id="oe2"><text>false</text></outputEntry>
+      </rule>
+      <rule id="r_near_minor">
+        <inputEntry id="e_a3"><text>not("Fernreise")</text></inputEntry>
+        <inputEntry id="e_b3"><text>&lt; 18</text></inputEntry>
+        <outputEntry id="ov3"><text>false</text></outputEntry>
+        <outputEntry id="oe3"><text>true</text></outputEntry>
+      </rule>
+      <rule id="r_near_adult">
+        <inputEntry id="e_a4"><text>not("Fernreise")</text></inputEntry>
+        <inputEntry id="e_b4"><text>&gt;= 18</text></inputEntry>
+        <outputEntry id="ov4"><text>false</text></outputEntry>
+        <outputEntry id="oe4"><text>false</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

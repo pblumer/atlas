@@ -1,0 +1,22 @@
+{
+  "type": "default",
+  "id": "reise-einverstaendnis",
+  "components": [
+    {
+      "type": "text",
+      "text": "# ✍️ Einverständniserklärung\n\nDieses Formular erscheint **nur**, wenn die reisende Person minderjährig ist (Alter < 18). Ein Erziehungsberechtigter bestätigt die Reise."
+    },
+    {
+      "key": "vertreterName",
+      "type": "textfield",
+      "label": "Name des Erziehungsberechtigten",
+      "validate": { "required": true }
+    },
+    {
+      "key": "einverstaendnis",
+      "type": "checkbox",
+      "label": "Ich bin einverstanden und erteile die Reiseerlaubnis",
+      "validate": { "required": true }
+    }
+  ]
+}

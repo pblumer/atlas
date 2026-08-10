@@ -57,13 +57,13 @@ const (
 	// and the runtime incident is the real terminal for a truly uncaught error.
 	RuleErrorUnhandled = "error.unhandled"
 	// RuleCancelEndOutsideTransaction marks a cancel end event whose enclosing scope is not a
-	// transaction — an error, since BPMN allows a cancel end only within a <transaction> (ADR-0105).
+	// transaction — an error, since BPMN allows a cancel end only within a <transaction> (ADR-0108).
 	RuleCancelEndOutsideTransaction = "cancel.end-outside-transaction"
 	// RuleCancelBoundaryInvalidHost marks a cancel boundary attached to something other than a
-	// transaction — an error, since a cancel boundary may attach only to a <transaction> (ADR-0105).
+	// transaction — an error, since a cancel boundary may attach only to a <transaction> (ADR-0108).
 	RuleCancelBoundaryInvalidHost = "cancel.boundary-invalid-host"
 	// RuleTransactionNoCancelBoundary marks a transaction that has a cancel end event but no
-	// cancel boundary (ADR-0105). A warning: the cancellation tears the transaction down with
+	// cancel boundary (ADR-0108). A warning: the cancellation tears the transaction down with
 	// no recovery route, usually a modeling mistake, but not structurally invalid.
 	RuleTransactionNoCancelBoundary = "transaction.no-cancel-boundary"
 )
@@ -453,7 +453,7 @@ func errorCaught(cp *CompiledProcess, scope int32, code string) bool {
 	return false
 }
 
-// checkTransactions validates the transaction constructs (ADR-0105). A cancel end event must
+// checkTransactions validates the transaction constructs (ADR-0108). A cancel end event must
 // sit directly inside a transaction, and a cancel boundary may attach only to a transaction —
 // both errors (BPMN restricts them so, and the runtime relies on it). A transaction that has a
 // cancel end event but no cancel boundary is a warning: the cancellation runs, but the token

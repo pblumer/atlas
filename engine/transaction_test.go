@@ -11,7 +11,7 @@ import (
 // body is ts(start) → reserve(script, compensable) → cancel(cancel end). The "reserve"
 // activity's compensation handler "unreserve" and the transaction's cancel-boundary target
 // "recover" are service tasks, so a test can step them and observe that compensation runs
-// before the cancel boundary fires (ADR-0105). Returns the job types and the node ids the
+// before the cancel boundary fires (ADR-0108). Returns the job types and the node ids the
 // visit assertions need.
 func transactionProcess(t testing.TB, key uint64) (cp *compiler.CompiledProcess, unreserveType, recoverType int32, done, recover, handled int32) {
 	t.Helper()
@@ -49,7 +49,7 @@ func transactionProcess(t testing.TB, key uint64) (cp *compiler.CompiledProcess,
 // TestTransactionCancelCompensatesThenRoutesBoundary: a cancel end event compensates the
 // transaction's completed activities, and only after compensation finishes does the cancel
 // boundary fire and route the recovery flow — the transaction's normal outgoing flow is never
-// taken (ADR-0105).
+// taken (ADR-0108).
 func TestTransactionCancelCompensatesThenRoutesBoundary(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -104,7 +104,7 @@ func TestTransactionCancelCompensatesThenRoutesBoundary(t *testing.T) {
 
 // TestTransactionCommitTakesNormalFlow: a transaction that reaches a normal end commits — it
 // takes its normal outgoing flow, does not compensate, and its cancel boundary is disarmed
-// (ADR-0105).
+// (ADR-0108).
 func TestTransactionCommitTakesNormalFlow(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -165,7 +165,7 @@ func TestTransactionCommitTakesNormalFlow(t *testing.T) {
 
 // TestTransactionCancelTerminatesRunningSiblings: when a cancel end event fires, the
 // transaction's other still-running activities are terminated, so the transaction drains to
-// its compensation and cancel-boundary flow rather than hanging on the parked sibling (ADR-0105).
+// its compensation and cancel-boundary flow rather than hanging on the parked sibling (ADR-0108).
 func TestTransactionCancelTerminatesRunningSiblings(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -235,7 +235,7 @@ func TestTransactionCancelTerminatesRunningSiblings(t *testing.T) {
 }
 
 // TestTransactionCancelBroadcastCompensatesAll: a cancel end compensates every completed
-// compensable activity in the transaction, then routes out the cancel boundary (ADR-0105).
+// compensable activity in the transaction, then routes out the cancel boundary (ADR-0108).
 func TestTransactionCancelBroadcastCompensatesAll(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -299,7 +299,7 @@ func TestTransactionCancelBroadcastCompensatesAll(t *testing.T) {
 
 // TestTransactionCancelNoBoundaryTearsDown: a transaction cancelled with no cancel boundary
 // compensates its completed work, then simply tears the transaction down (no recovery route)
-// and the enclosing scope drains — the instance completes rather than hanging (ADR-0105).
+// and the enclosing scope drains — the instance completes rather than hanging (ADR-0108).
 func TestTransactionCancelNoBoundaryTearsDown(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -352,7 +352,7 @@ func TestTransactionCancelNoBoundaryTearsDown(t *testing.T) {
 // TestTransactionCancelRecovers: the cancellation spans batches (compensate → worker completes
 // → boundary fires). A crash while the compensation handler's job waits recovers from the log
 // — the canceling marker and the compensable index rebuild — and completing the handler after
-// restart still fires the cancel boundary (ADR-0105, invariant I4/I6).
+// restart still fires the cancel boundary (ADR-0108, invariant I4/I6).
 func TestTransactionCancelRecovers(t *testing.T) {
 	dir := t.TempDir()
 	cp, unreserveType, recoverType, _, _, _ := transactionProcess(t, 84)

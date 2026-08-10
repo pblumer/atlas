@@ -1075,7 +1075,7 @@ func terminateScope(c *ProcessingContext, procKey, scopeKey uint64) {
 // terminateScopeExcept is terminateScope but spares one element instance (exceptKey). A cancel
 // end event uses it to terminate the transaction's other live tokens while it is itself still
 // being processed — so the scope drains to just the compensation handlers it then starts
-// (ADR-0105). exceptKey == 0 spares nothing (the plain terminateScope). Completed compensable
+// (ADR-0108). exceptKey == 0 spares nothing (the plain terminateScope). Completed compensable
 // activities are not live instances, so their compensable records are untouched here; they are
 // dropped only when the transaction element itself tears down (apply.go).
 func terminateScopeExcept(c *ProcessingContext, procKey, scopeKey, exceptKey uint64) {
@@ -2134,7 +2134,7 @@ func compensationHandlerOf(cp *compiler.CompiledProcess, elementId int32) int32 
 	return -1
 }
 
-// cancelEndEventBehavior cancels the enclosing transaction (ADR-0105). Its FlowScopeKey is the
+// cancelEndEventBehavior cancels the enclosing transaction (ADR-0108). Its FlowScopeKey is the
 // transaction (the compiler requires a cancel end directly inside one). On activation it
 // terminates the transaction's other live tokens — sparing itself — so the scope drains to just
 // the compensation handlers it then starts, compensates every completed compensable activity in
@@ -2157,7 +2157,7 @@ func (cancelEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei 
 
 // cancelTransaction completes a cancelled transaction whose scope has drained (compensation
 // finished): it retires the transaction element and fires its inert cancel boundary to take the
-// recovery flow (ADR-0105). Retiring the transaction first drops its compensable records and the
+// recovery flow (ADR-0108). Retiring the transaction first drops its compensable records and the
 // cancelling marker (apply.go) and decrements the parent scope; completing the cancel boundary
 // then takes the recovery flow, and the boundary being gone makes the subsequent
 // disarmBoundaryEvents (handleElementCompleting) skip it while still disarming the transaction's
@@ -2175,7 +2175,7 @@ func cancelTransaction(c *ProcessingContext, txKey uint64, ei *model.ElementInst
 }
 
 // findCancelBoundary returns the armed cancel-boundary element instance attached to the
-// transaction txKey, or 0 if none (ADR-0105).
+// transaction txKey, or 0 if none (ADR-0108).
 func findCancelBoundary(c *ProcessingContext, procKey, txKey uint64) uint64 {
 	var found uint64
 	c.ForEachElementInstance(procKey, func(elKey uint64) {
@@ -2564,7 +2564,7 @@ func (boundaryEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *m
 	case compiler.BoundaryCancel:
 		// A cancel boundary opens nothing either — it is inert, armed only to be *found* when
 		// its host transaction is cancelled (its scope has drained after compensation), then
-		// driven to Completing to take the recovery flow (ADR-0105).
+		// driven to Completing to take the recovery flow (ADR-0108).
 	}
 	// Stays Activated: waits until the timer fires, the message correlates, the signal
 	// broadcasts, or (for an error boundary) an error propagates up to it.
@@ -2634,7 +2634,7 @@ func (subProcessBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *mod
 	dropLocalScope(c, key)
 	// A cancelled transaction: its scope drained after compensation, so route the
 	// cancellation out its cancel boundary instead of taking the transaction's normal
-	// outgoing flow (ADR-0105).
+	// outgoing flow (ADR-0108).
 	if c.process(ei.ProcessDefKey).IsTransaction(ei.ElementId) && c.IsCanceling(key) {
 		cancelTransaction(c, key, ei)
 		return
@@ -3002,10 +3002,12 @@ type callActivityBehavior struct{}
 func (callActivityBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.CallActivity(cp.Node(ei.ElementId).Detail)
-	childDefKey, ok := c.latestDefKey(cp.Intern(detail.CalledProcessId))
+	childDefKey, ok := c.resolveCallTarget(cp.Intern(detail.CalledProcessId))
 	if !ok {
-		// The called process is not deployed (yet). Park — the token stays on the
-		// call activity; a deploy-then-retry / incident is a follow-up (ADR-0076).
+		// The called process is not deployed (yet), or a per-server override
+		// disabled it or pinned/redirected to a target that is not deployed
+		// (ADR-0105). Park — the token stays on the call activity; a
+		// deploy-then-retry / incident is a follow-up (ADR-0076).
 		return
 	}
 	var startVars []model.VariableValue

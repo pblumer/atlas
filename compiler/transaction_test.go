@@ -9,7 +9,7 @@ import (
 // The transaction's "reserve" activity is compensable (a compensation boundary links it to
 // the off-flow "unreserve" handler); a cancel end event inside the transaction rolls it
 // back, and a cancel boundary on the transaction routes the cancellation to "notify"
-// (ADR-0105).
+// (ADR-0108).
 const transactionBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
                     xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
   <process id="booking" isExecutable="true">
@@ -38,7 +38,7 @@ const transactionBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/201005
 // TestParseTransactionCancelBoundaryAndEnd: a <transaction> compiles to an IsTransaction
 // subprocess scope; its cancel end event is a TypeCancelEndEvent; and a cancel boundary on
 // the transaction is a BoundaryCancel that is always interrupting and hosts on the
-// transaction (ADR-0105).
+// transaction (ADR-0108).
 func TestParseTransactionCancelBoundaryAndEnd(t *testing.T) {
 	cp, err := Parse(1, 1, strings.NewReader(transactionBPMN))
 	if err != nil {
@@ -92,7 +92,7 @@ func TestParseTransactionCancelBoundaryAndEnd(t *testing.T) {
 
 // TestParseCancelEndOutsideTransactionRejected: a cancel end event that is not directly
 // inside a transaction is a deploy error — BPMN allows it only within a transaction
-// subprocess (ADR-0105).
+// subprocess (ADR-0108).
 func TestParseCancelEndOutsideTransactionRejected(t *testing.T) {
 	const bpmn = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
   <process id="p" isExecutable="true">
@@ -111,7 +111,7 @@ func TestParseCancelEndOutsideTransactionRejected(t *testing.T) {
 
 // TestParseCancelEndInPlainSubProcessRejected: a cancel end event nested in a plain
 // (non-transaction) subprocess is still a deploy error — the enclosing scope must be a
-// transaction (ADR-0105).
+// transaction (ADR-0108).
 func TestParseCancelEndInPlainSubProcessRejected(t *testing.T) {
 	const bpmn = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
   <process id="p" isExecutable="true">
@@ -135,7 +135,7 @@ func TestParseCancelEndInPlainSubProcessRejected(t *testing.T) {
 }
 
 // TestParseCancelBoundaryOnNonTransactionRejected: a cancel boundary may attach only to a
-// transaction; on a plain activity it is a deploy error (ADR-0105).
+// transaction; on a plain activity it is a deploy error (ADR-0108).
 func TestParseCancelBoundaryOnNonTransactionRejected(t *testing.T) {
 	const bpmn = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
                     xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
@@ -160,7 +160,7 @@ func TestParseCancelBoundaryOnNonTransactionRejected(t *testing.T) {
 
 // TestValidateTransactionNoCancelBoundaryWarns: a transaction with a cancel end but no
 // cancel boundary is deployable but raises a warning — the cancellation tears the
-// transaction down with no recovery route (ADR-0105).
+// transaction down with no recovery route (ADR-0108).
 func TestValidateTransactionNoCancelBoundaryWarns(t *testing.T) {
 	const bpmn = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
                     xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
@@ -189,7 +189,7 @@ func TestValidateTransactionNoCancelBoundaryWarns(t *testing.T) {
 
 // TestValidateTransactionCancelBoundaryNoCancelEndOK: a transaction carrying a cancel
 // boundary but no cancel end event is structurally valid and raises no warning — the boundary
-// simply never fires, which is not a modeling error the compiler rejects (ADR-0105).
+// simply never fires, which is not a modeling error the compiler rejects (ADR-0108).
 func TestValidateTransactionCancelBoundaryNoCancelEndOK(t *testing.T) {
 	const bpmn = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
                     xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
@@ -223,7 +223,7 @@ func TestValidateTransactionCancelBoundaryNoCancelEndOK(t *testing.T) {
 // TestParseTransactionModelerRoundTrip parses a transaction model in the shape stock
 // bpmn-js exports — namespaced (bpmn:) elements, a <transaction> with a cancel end event
 // and a cancel boundary, incoming/outgoing children — to confirm a hand-drawn model deploys
-// (ADR-0105).
+// (ADR-0108).
 func TestParseTransactionModelerRoundTrip(t *testing.T) {
 	const bpmn = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"

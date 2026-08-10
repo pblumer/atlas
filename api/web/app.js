@@ -113,8 +113,27 @@ function viewLogin() {
         <div class="row" style="margin-top:6px"><button class="btn" type="submit">Sign in</button></div>
         <p id="login-error" class="muted" hidden></p>
       </form>
+      <div style="margin-top:10px">
+        <button type="button" id="forgot-password" class="linklike">Forgot password?</button>
+        <p id="forgot-help" class="muted" style="margin-top:6px" hidden>
+          Atlas doesn't send password-reset emails. An administrator resets
+          passwords for this instance &mdash; ask yours to set a new one for your
+          account, then sign in with it.
+        </p>
+      </div>
     </div>`;
   const f = document.getElementById("login-form");
+  // Password recovery on a self-hosted, admin-managed instance is an admin
+  // action (POST /users/{id}/password), not a self-service email flow — there is
+  // no transactional mail sender and email is optional per user (ADR-0044). So
+  // this affordance points the user at the recovery path that actually exists
+  // rather than a dead-end "invalid password" error.
+  const forgot = document.getElementById("forgot-password");
+  forgot.addEventListener("click", () => {
+    const help = document.getElementById("forgot-help");
+    help.hidden = !help.hidden;
+    forgot.setAttribute("aria-expanded", String(!help.hidden));
+  });
   f.addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = new FormData(f);
@@ -223,6 +242,7 @@ const TOPNAV = {
     { name: "Dashboard", route: "#/console" },
     { name: "Engine", route: "#/console/engine" },
     { name: "Logs", route: "#/console/logs" },
+    { name: "Backup", route: "#/console/backup" },
     { name: "Organization", route: "#/console/org" },
   ],
   modeler: [
@@ -232,6 +252,7 @@ const TOPNAV = {
   operations: [
     { name: "Instances", route: "#/operations" },
     { name: "Decisions", route: "#/operations/decisions" },
+    { name: "Call activities", route: "#/operations/call-activities" },
   ],
   tasks: [{ name: "Inbox", route: "#/tasks" }, { name: "Start", route: "#/tasks/start" }], insights: [],
 };
@@ -261,6 +282,16 @@ const CONNECTORS = [
     id: "mail", name: "Mail", kind: "Outbound e-mail",
     desc: "Sends an e-mail from a service task off the processor loop via a managed provider — SMTP (any server, incl. Google/Microsoft 365 submission) or the native Gmail and Microsoft Graph APIs (OAuth2 app-only or refresh-token). Recipients, subject, and body are model-authored (FEEL-capable); the provider, default sender, and credentials are managed below and resolved from the vault. Authored via the E-Mail Outbound Connector service-task type.",
     refs: "ADR-0041 · ADR-0079 · ADR-0093", status: "active", statusLabel: "configurable",
+  },
+  {
+    id: "sharepoint", name: "SharePoint", kind: "List item",
+    desc: "Creates a list item in a Microsoft SharePoint site from a service task off the processor loop via the Graph API (OAuth2 app-only or refresh-token). The site, list, and item fields are model-authored (FEEL-capable) and the created item's JSON is written into a result variable; the Graph base and credentials are managed below and resolved from the vault. Authored via the SharePoint Connector service-task type.",
+    refs: "ADR-0041 · ADR-0093 · ADR-0105", status: "active", statusLabel: "configurable",
+  },
+  {
+    id: "remedy", name: "BMC Remedy", kind: "ITSM",
+    desc: "Creates an entry (e.g. an incident) in a BMC Remedy / Helix ITSM form from a service task off the processor loop via the AR System REST API. The form and its field values are model-authored (FEEL-capable) and the created entry's id is written into a result variable; the base URL and the {username,password} credential bundle are managed below and resolved from the vault. Authored via the BMC Remedy Connector service-task type.",
+    refs: "ADR-0041 · ADR-0106", status: "active", statusLabel: "configurable",
   },
 ];
 
@@ -604,6 +635,59 @@ async function viewConsoleLogs() {
   document.getElementById("log-refresh").addEventListener("click", load);
   const timer = setInterval(() => { if (follow.checked) load(); }, 2000);
   window.__atlasCleanup = () => clearInterval(timer);
+}
+
+// viewConsoleBackup is the one-file backup/restore of design-time data (ADR-0107):
+// Download streams GET /api/v1/backup as a .tar.gz (a plain same-origin anchor, so
+// the session cookie authenticates it); Restore POSTs the chosen file to
+// /api/v1/restore. User accounts and the vault key are never in the archive; with
+// authentication enabled both endpoints are admin-only.
+async function viewConsoleBackup() {
+  const gen = navGen;
+  view.innerHTML = `
+    <div class="card">
+      <h1>Backup &amp; restore</h1>
+      <p class="muted">Download a single archive of your design-time data — projects, drafts,
+      deployments, forms, decisions, connectors — to keep or move to another instance.
+      User accounts and the secret vault key are never included. With authentication enabled this is admin-only.</p>
+      <div class="row" style="gap:12px; align-items:center; margin-top:8px">
+        <a class="btn" href="/api/v1/backup" download>Download backup (.tar.gz)</a>
+      </div>
+
+      <h3 style="margin:22px 0 6px">Restore</h3>
+      <p class="muted">Uploading a backup overwrites artifacts that share an id. Restored drafts,
+      projects, forms and decisions appear immediately; <strong>deployed processes take effect after the
+      next server restart</strong>. Connectors keep their configuration but need their secrets re-entered.</p>
+      <div class="row" style="gap:12px; align-items:center">
+        <input type="file" id="restore-file" accept=".gz,.tgz,application/gzip">
+        <button class="btn neutral" id="restore-btn">Restore from file</button>
+      </div>
+      <p id="restore-status" class="muted" style="margin-top:10px" hidden></p>
+    </div>`;
+  if (superseded(gen)) return;
+  const status = document.getElementById("restore-status");
+  document.getElementById("restore-btn").addEventListener("click", async () => {
+    const file = document.getElementById("restore-file").files[0];
+    if (!file) { toast("Choose a backup file first", "error"); return; }
+    if (!window.confirm("Restore from this file? Artifacts sharing an id will be overwritten.")) return;
+    status.hidden = false;
+    status.textContent = "Restoring…";
+    try {
+      const res = await fetch("/api/v1/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/gzip" },
+        body: file,
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error((data && data.error) || res.statusText);
+      const restart = data && data.restartRequired ? " Restart the server to activate restored deployments." : "";
+      status.textContent = `Restored ${data ? data.restored : 0} file(s).${restart}`;
+      toast("Restore complete", "ok");
+    } catch (e) {
+      status.textContent = "Restore failed: " + (e && e.message || e);
+      toast("Restore failed", "error");
+    }
+  });
 }
 
 // userForm renders the create or edit form for a user. In edit mode the username
@@ -1578,7 +1662,7 @@ function wireConnectorManagement(connectors) {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="connector-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option></select></label>
+        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option></select></label>
         <label class="field mail-only" style="margin:0"><span>Provider</span><select name="provider"><option value="smtp">SMTP</option><option value="gmail">Gmail API</option><option value="microsoft">Microsoft Graph</option></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
@@ -1588,7 +1672,9 @@ function wireConnectorManagement(connectors) {
       // Adapt the form to the kind and mail provider: SMTP needs a host:port endpoint
       // and (optionally) a password reference; a native provider (Gmail/Graph) needs no
       // endpoint but a credentialsRef naming a vault JSON auth bundle, and sends as the
-      // sender mailbox. The mail-only fields hide for temis/clio.
+      // sender mailbox. A SharePoint connector likewise defaults its Graph API base
+      // (no endpoint) and needs a credentialsRef naming a vault OAuth bundle. The
+      // mail-only fields hide for temis/clio/sharepoint.
       const form = slot.querySelector("form");
       const kindSel = form.querySelector('[name="kind"]');
       const providerSel = form.querySelector('[name="provider"]');
@@ -1599,16 +1685,25 @@ function wireConnectorManagement(connectors) {
       const endpointField = form.querySelector(".endpoint-field");
       const sync = () => {
         const mail = kindSel.value === "mail";
+        const sharepoint = kindSel.value === "sharepoint";
+        const remedy = kindSel.value === "remedy";
         const native = mail && providerSel.value !== "smtp";
+        // Kinds that default their API base and authenticate with a vault credential
+        // bundle instead of a host:port endpoint. Remedy is not one of these — it needs
+        // both a base URL and a credential bundle.
+        const bundle = native || sharepoint;
         form.querySelectorAll(".mail-only").forEach((el) => { el.style.display = mail ? "" : "none"; });
         senderIn.required = mail;
-        // A native provider needs no endpoint; SMTP and the other kinds do.
-        endpointField.style.display = native ? "none" : "";
-        endpointIn.required = !native;
-        endpointIn.placeholder = mail ? "smtp.office365.com:587" : "https://temis.internal";
-        credRefIn.required = native;
-        credRefIn.placeholder = native ? "gmail_auth (vault JSON bundle)" : "risk_token";
-        credRefLabel.textContent = native ? "Credential reference (vault auth bundle)" : "Token reference (optional)";
+        // A native mail provider and SharePoint default their API base — no endpoint;
+        // SMTP, temis, clio, and remedy need one.
+        endpointField.style.display = bundle ? "none" : "";
+        endpointIn.required = !bundle;
+        endpointIn.placeholder = mail ? "smtp.office365.com:587" : (remedy ? "https://helix.example.com:8008" : "https://temis.internal");
+        // A native mail provider, SharePoint, and Remedy all need a vault credential
+        // bundle; the other kinds take an optional token reference.
+        credRefIn.required = bundle || remedy;
+        credRefIn.placeholder = remedy ? "remedy_creds (vault {username,password})" : (sharepoint ? "sharepoint_auth (vault JSON bundle)" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token"));
+        credRefLabel.textContent = remedy ? "Credential reference (vault {username,password})" : ((bundle) ? "Credential reference (vault auth bundle)" : "Token reference (optional)");
       };
       kindSel.addEventListener("change", sync);
       providerSel.addEventListener("change", sync);
@@ -2262,6 +2357,137 @@ async function viewDecisions() {
   await load();
 }
 
+// viewCallActivities is the per-server management view for call activities: one
+// row per call activity across every deployed process, showing which process it
+// calls, its version binding and variable propagation, whether the target is
+// deployed here, and — the active part — a per-server target Override an operator
+// edits inline (ADR-0076/0105). A caller may be deployed before its callee, so a
+// call activity can sit "not deployed" (it would park at runtime); and an operator
+// can redirect the target to another process, pin it to a version, or disable it on
+// this server without touching the model. Overrides key on the called process id, so
+// editing one affects every caller of that target — the Caller column shows exactly
+// who that is.
+async function viewCallActivities() {
+  view.innerHTML = `
+    <div class="between">
+      <h1>Call activities</h1>
+      <button class="btn neutral" id="refresh">Refresh</button>
+    </div>
+    <p class="muted">One row per call activity across the processes deployed on this
+    server. A call activity starts another deployed process as a child instance; it
+    <b>resolves</b> only when a process with the called id is deployed here. The
+    <b>Override</b> reshapes resolution <b>on this server only</b>: <b>redirect</b> to
+    another process, <b>pin</b> to a version, or <b>disable</b> (the call then waits).
+    An override keys on the called process id, so it applies to every caller of that
+    target listed here.</p>
+    <div class="card" style="padding:0">
+      <table>
+        <thead><tr><th>Caller</th><th>Element</th><th>Calls</th><th>Binding</th><th>Variables</th><th>Resolves to</th><th>Override</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>`;
+  const tbody = document.getElementById("rows");
+
+  const load = async () => {
+    try {
+      const rows = await api("GET", "/api/v1/call-activities");
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="7" class="empty">
+          No call activities deployed. Add a call activity to a process in the
+          <a href="#/modeler">Modeler</a> and deploy it.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = rows.map((r) => {
+        const caller = `<a href="#/operations/p/${r.callerKey}">${esc(r.callerName || r.callerProcessId)}</a>`
+          + ` <span class="muted">v${r.callerVersion}</span>`;
+        const binding = `<span class="pill">${esc(r.binding)}</span>`
+          + (r.multiInstance ? ' <span class="pill muted">multi-instance</span>' : "");
+        // Propagation: "all" both ways is the Zeebe default; call it out only where a
+        // direction is isolated (off), since that changes what crosses the boundary.
+        const vars = (r.propagateAllParent && r.propagateAllChild)
+          ? '<span class="muted">all in · all out</span>'
+          : `${r.propagateAllParent ? "all in" : "mapped in"} · ${r.propagateAllChild ? "all out" : "mapped out"}`;
+        const target = r.resolved
+          ? `<a href="#/operations/p/${r.targetKey}"><span class="pill ok"><span class="dot"></span>${esc(r.targetName || r.calledProcessId)}</span></a>`
+            + ` <span class="muted">v${r.targetVersion}</span>`
+          : `<span class="pill warn"><span class="dot"></span>not deployed</span>`;
+        return `<tr>
+          <td>${caller}</td>
+          <td style="font-family:ui-monospace,monospace">${esc(r.elementId)}</td>
+          <td style="font-family:ui-monospace,monospace">${esc(r.calledProcessId)}</td>
+          <td>${binding}</td>
+          <td>${vars}</td>
+          <td>${target}</td>
+          <td>${overrideCell(r)}</td>
+        </tr>`;
+      }).join("");
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">${esc(e.message)}</td></tr>`;
+    }
+  };
+
+  // One delegated handler for every row's override picker (the tbody persists across
+  // reloads; the rows inside it do not, so a per-row listener would leak). Redirect
+  // and pin need a value, so they prompt; default clears the override.
+  tbody.addEventListener("change", async (e) => {
+    const sel = e.target.closest("select.ca-ov");
+    if (!sel) return;
+    const pid = sel.dataset.pid;
+    const path = `/api/v1/call-activities/overrides/${encodeURIComponent(pid)}`;
+    try {
+      if (sel.value === "default") {
+        await api("DELETE", path);
+        toast(`Override cleared for ${pid}`, "ok");
+      } else if (sel.value === "disable") {
+        await api("PUT", path, { action: "disable" });
+        toast(`Calls to ${pid} disabled on this server`, "ok");
+      } else if (sel.value === "redirect") {
+        const t = prompt(`Redirect all calls to “${pid}” to which process id?`, sel.dataset.target || "");
+        if (t === null || !t.trim()) { await load(); return; }
+        await api("PUT", path, { action: "redirect", targetProcessId: t.trim() });
+        toast(`Calls to ${pid} → ${t.trim()}`, "ok");
+      } else if (sel.value === "pin") {
+        const v = prompt(`Pin calls to “${pid}” to which deployed version number?`, sel.dataset.version || "");
+        if (v === null || !v.trim()) { await load(); return; }
+        const n = parseInt(v, 10);
+        if (!Number.isInteger(n) || n <= 0) { toast("Enter a positive version number", "warn"); await load(); return; }
+        await api("PUT", path, { action: "pin", targetVersion: n });
+        toast(`Pinned ${pid} to v${n}`, "ok");
+      }
+    } catch (err) {
+      toast(err.message || "Override failed", "warn");
+    }
+    await load();
+  });
+
+  document.getElementById("refresh").addEventListener("click", load);
+  await load();
+}
+
+// overrideCell renders a row's per-server target-override picker plus a pill
+// describing the active override, if any (ADR-0105). The picker's data-* carry the
+// current target/version so the redirect/pin prompts pre-fill sensibly.
+function overrideCell(r) {
+  const ov = r.override;
+  const act = ov ? ov.action : "default";
+  const opt = (val, label) => `<option value="${val}" ${act === val ? "selected" : ""}>${label}</option>`;
+  const sel = `<select class="ca-ov" data-pid="${esc(r.calledProcessId)}"`
+    + ` data-target="${esc((ov && ov.targetProcessId) || "")}" data-version="${(ov && ov.targetVersion) || ""}">`
+    + opt("default", "Default (latest)")
+    + opt("redirect", "Redirect…")
+    + opt("pin", "Pin version…")
+    + opt("disable", "Disabled")
+    + `</select>`;
+  let note = "";
+  if (ov) {
+    const label = ov.action === "redirect" ? `→ ${esc(ov.targetProcessId)}`
+      : ov.action === "pin" ? `pin v${ov.targetVersion}`
+        : "disabled";
+    note = ` <span class="pill warn"><span class="dot"></span>${label}</span>`;
+  }
+  return sel + note;
+}
+
 // viewDecisionDetail lists every evaluation of one decision — its "instances" —
 // newest first, each showing the exact inputs it saw, the outputs it produced, and
 // (expandable) the temis trace of which rules fired (ADR-0066). This is the
@@ -2478,6 +2704,8 @@ async function viewTasks(preselectKey) {
     me: authOn ? ((AUTH.user && AUTH.user.username) || "") : (localStorage.getItem("atlas.tasks.me") || ""),
     assignable: [], // enabled users a task can be assigned to, for the picker
     mountedForm: null, // the live form-js viewer instance for the selected task, if any
+    mountedProc: null, // the read-only process-view handle for the selected task, if mounted
+    detailTab: "form", // which detail tab shows — "form" | "process" (kept across selections)
     query: "", // free-text filter over the visible tasks (name/process/assignee/…)
     sort: localStorage.getItem("atlas.tasks.sort") || "smart", // sort key, see SORTS
     selectMode: false, // multi-select for bulk actions
@@ -2776,8 +3004,36 @@ async function viewTasks(preselectKey) {
     }
   }
 
+  // destroyProc tears down the read-only process viewer before the detail pane is
+  // re-rendered or the selection changes, so no bpmn-js viewer leaks.
+  function destroyProc() {
+    if (state.mountedProc) {
+      try { state.mountedProc.destroy(); } catch { /* already gone */ }
+      state.mountedProc = null;
+    }
+  }
+
+  // mountProc lazily loads the read-only process view — the BPMN diagram of the
+  // task's instance with its progress overlaid — into the expanded panel. Guards
+  // against the selection changing while the (async) import/mount is in flight.
+  async function mountProc(t) {
+    const host = document.getElementById("tp-canvas");
+    if (!host) return;
+    destroyProc();
+    try {
+      const mod = await import("./editor.js");
+      if (state.selected !== t.key || !document.getElementById("tp-canvas")) return;
+      state.mountedProc = await mod.mountTaskProcess(host, {
+        api, instanceKey: t.processInstanceKey, activeElementId: t.elementId,
+      });
+    } catch (err) {
+      host.innerHTML = `<p class="muted err" style="padding:16px">Could not load the process view: ${esc(err.message)}</p>`;
+    }
+  }
+
   function renderDetail() {
     destroyForm();
+    destroyProc();
     const t = state.tasks.find((x) => x.key === state.selected);
     if (!t) {
       detailEl.innerHTML = `<div class="tasks-detail-empty muted">Select a task to see its details.</div>`;
@@ -2803,6 +3059,24 @@ async function viewTasks(preselectKey) {
       ? `<div class="tasks-form" id="task-form"><p class="muted">Loading form&hellip;</p></div>`
       : `<div class="tasks-form-placeholder"><p class="muted">This task has no form; completing it
          records no variables.</p></div>`;
+    // The form and a read-only view of the whole process instance sit side by side
+    // as tabs, so the assignee can flip to "what has run and what's still ahead"
+    // without the form scrolling away below.
+    const tab = state.detailTab === "process" ? "process" : "form";
+    const tabBar = `
+      <div class="tasks-detail-tabs" id="task-dtabs" role="tablist">
+        <button type="button" role="tab" data-dtab="form"${tab === "form" ? ' class="active" aria-selected="true"' : ' aria-selected="false"'}>Form</button>
+        <button type="button" role="tab" data-dtab="process"${tab === "process" ? ' class="active" aria-selected="true"' : ' aria-selected="false"'}>Process</button>
+      </div>`;
+    const procPane = `
+      <div class="tasks-tabpane" id="pane-process"${tab === "process" ? "" : " hidden"}>
+        <div class="tp-legend">
+          <span><i class="tp-sw here"></i> This task</span>
+          <span><i class="tp-sw active"></i> Active</span>
+          <span><i class="tp-sw done"></i> Completed</span>
+        </div>
+        <div class="tp-canvas" id="tp-canvas"><p class="tp-msg muted">Loading&hellip;</p></div>
+      </div>`;
     detailEl.innerHTML = `
       <header class="tasks-detail-head">
         <h1>${esc(taskTitle(t))}</h1>
@@ -2822,7 +3096,11 @@ async function viewTasks(preselectKey) {
         ${row("Instance", `<span class="chip">${t.processInstanceKey}</span>`)}
         ${row("Task key", `<span class="chip">${t.key}</span>`)}
       </div>
-      ${formArea}`;
+      ${tabBar}
+      <div class="tasks-tab-body">
+        <div class="tasks-tabpane" id="pane-form"${tab === "form" ? "" : " hidden"}>${formArea}</div>
+        ${procPane}
+      </div>`;
     document.getElementById("task-complete").addEventListener("click", () => completeCurrent());
     document.getElementById("task-claim").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
@@ -2858,7 +3136,29 @@ async function viewTasks(preselectKey) {
         }
       });
     }
+    // Always mount the form (when the task has one) so Complete has its data even
+    // while the Process tab is showing. The process diagram mounts lazily the first
+    // time its tab is opened; the chosen tab is kept across task selections.
     if (t.formId) mountForm(t);
+    const dtabs = document.getElementById("task-dtabs");
+    const paneForm = document.getElementById("pane-form");
+    const paneProc = document.getElementById("pane-process");
+    dtabs.addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-dtab]");
+      if (!b) return;
+      const next = b.dataset.dtab;
+      if (next === state.detailTab) return;
+      state.detailTab = next;
+      for (const btn of dtabs.querySelectorAll("button")) {
+        const on = btn.dataset.dtab === next;
+        btn.classList.toggle("active", on);
+        btn.setAttribute("aria-selected", on ? "true" : "false");
+      }
+      paneForm.hidden = next !== "form";
+      paneProc.hidden = next !== "process";
+      if (next === "process" && !state.mountedProc) mountProc(t);
+    });
+    if (tab === "process") mountProc(t);
   }
 
   function renderAll() {
@@ -3498,6 +3798,7 @@ function routeTitle(path) {
     [/^#\/(console)?$/, "Console"],
     [/^#\/console\/engine$/, "Engine · Console"],
     [/^#\/console\/logs$/, "Logs · Console"],
+    [/^#\/console\/backup$/, "Backup · Console"],
     [/^#\/console\/org$/, "Organization · Console"],
     [/^#\/modeler\/new/, "New diagram · Modeler"],
     [/^#\/modeler\/form\/new/, "New form · Modeler"],
@@ -3555,6 +3856,7 @@ async function route() {
     if (path === "#/" || path === "#/console") return await viewConsoleDashboard();
     if (path === "#/console/engine") return await viewConsoleEngine();
     if (path === "#/console/logs") return await viewConsoleLogs();
+    if (path === "#/console/backup") return await viewConsoleBackup();
     if (path === "#/console/org") return await viewConsoleOrg();
     if (path === "#/modeler") return await viewModelerHome();
     if (path === "#/modeler/marketplace") return await viewMarketplace();
@@ -3581,6 +3883,7 @@ async function route() {
     if (tk) return await viewTasks(Number(tk[1]));
     if (path === "#/operations") return await viewInstances();
     if (path === "#/operations/decisions") return await viewDecisions();
+    if (path === "#/operations/call-activities") return await viewCallActivities();
     // Drill into one decision's evaluations (its "instances"). The id is URL-encoded
     // because a DMN decision id may contain spaces or other reserved characters.
     const dd = path.match(/^#\/operations\/decisions\/(.+)$/);

@@ -99,6 +99,15 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Recent log lines, oldest first", schemaObj(map[string]any{
 				"lines": tArray(),
 			}))}},
+		{"GET", "/api/v1/backup", s.handleBackup, apiOp{
+			summary: "Download a backup of all design-time data (projects, drafts, deployments, forms, decisions, connectors) as a gzip tar; excludes user accounts, the vault key, and runtime state (admin-only when auth is on) (ADR-0107)", tag: "System",
+			resp: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip-compressed tar archive of the design-time data directory"}}},
+		{"POST", "/api/v1/restore", s.handleRestore, apiOp{
+			summary: "Restore design-time data from an uploaded backup archive; overwrites matching artifacts, skips anything outside the design-time allowlist, and needs a restart for deployed processes to take effect (admin-only when auth is on) (ADR-0107)", tag: "System",
+			req: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip tar archive produced by GET /api/v1/backup"},
+			resp: jsonBody("Restore summary", schemaObj(map[string]any{
+				"restored": tInteger(), "restartRequired": tBool(), "note": tString(),
+			}))}},
 
 		{"POST", "/api/v1/feel/validate", s.handleValidateFeel, apiOp{
 			summary: "Validate a FEEL expression compiles", tag: "FEEL",
@@ -146,6 +155,13 @@ func (s *Server) apiRoutes() []apiRoute {
 			status: http.StatusNoContent}},
 		{"GET", "/api/v1/processes/{key}/runtime", s.handleProcessRuntime, apiOp{
 			summary: "Read a process's live runtime state", tag: "Processes", resp: jsonBody("Runtime state", tObject())}},
+		{"GET", "/api/v1/call-activities", s.handleCallActivities, apiOp{
+			summary: "List every call activity across deployed processes with its per-server resolution status", tag: "Processes", resp: jsonBody("Call activities", tArray())}},
+		{"PUT", "/api/v1/call-activities/overrides/{processId}", s.handleSetCallOverride, apiOp{
+			summary: "Set a per-server call-activity target override (redirect/pin/disable) for a called process id", tag: "Processes",
+			req: jsonBody("Override", tObject()), resp: jsonBody("Stored override", tObject())}},
+		{"DELETE", "/api/v1/call-activities/overrides/{processId}", s.handleDeleteCallOverride, apiOp{
+			summary: "Clear a called process id's per-server target override", tag: "Processes", status: http.StatusNoContent}},
 		{"GET", "/api/v1/collaborations/{key}/runtime", s.handleCollaborationRuntime, apiOp{
 			summary: "Read a collaboration's live runtime state", tag: "Collaborations", resp: jsonBody("Runtime state", tObject())}},
 

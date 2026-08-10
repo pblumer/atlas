@@ -6,7 +6,7 @@ import (
 	"github.com/pblumer/atlas/state"
 )
 
-// TestCancelingMarker covers the transaction canceling marker (ADR-0105): an unset scope
+// TestCancelingMarker covers the transaction canceling marker (ADR-0108): an unset scope
 // reads false, setting it reads true (through the committed batch), and deleting it reads
 // false again — the pure-presence marker that routes a drained transaction out its cancel
 // boundary. Delete is idempotent.

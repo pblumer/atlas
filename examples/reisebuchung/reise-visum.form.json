@@ -1,0 +1,28 @@
+{
+  "type": "default",
+  "id": "reise-visum",
+  "components": [
+    {
+      "type": "text",
+      "text": "# 🛂 Visum-Angaben\n\nDieses Formular erscheint **nur**, wenn der Prozess entschieden hat, dass ein Visum nötig ist (Fernreise)."
+    },
+    {
+      "key": "staatsangehoerigkeit",
+      "type": "textfield",
+      "label": "Staatsangehörigkeit",
+      "validate": { "required": true }
+    },
+    {
+      "key": "passGueltigBis",
+      "type": "datetime",
+      "subtype": "date",
+      "dateLabel": "Reisepass gültig bis"
+    },
+    {
+      "key": "visumBestaetigt",
+      "type": "checkbox",
+      "label": "Angaben sind vollständig und korrekt",
+      "validate": { "required": true }
+    }
+  ]
+}

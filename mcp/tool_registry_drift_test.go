@@ -33,6 +33,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_get_process_xml":       "GET /api/v1/processes/{key}/xml",
 	"atlas_delete_process":        "DELETE /api/v1/processes/{key}",
 	"atlas_process_runtime":       "GET /api/v1/processes/{key}/runtime",
+	"atlas_call_activities":       "GET /api/v1/call-activities",
 	"atlas_create_instance":       "POST /api/v1/processes/{key}/instances",
 	"atlas_list_instances":        "GET /api/v1/instances",
 	"atlas_cancel_instance":       "DELETE /api/v1/instances/{key}",
@@ -92,6 +93,17 @@ var mcpToolRoutes = map[string]string{
 var mcpOmittedRoutes = map[string]string{
 	// Server introspection / diagnostics an agent does not drive scenarios with.
 	"GET /api/v1/logs": "admin diagnostics, not an agent authoring/runtime action",
+
+	// Whole-instance backup/restore: an admin file-transfer of the design-time
+	// data directory (ADR-0107), not an agent authoring/runtime action.
+	"GET /api/v1/backup":   "admin data backup download, not an agent action",
+	"POST /api/v1/restore": "admin data restore upload, not an agent action",
+
+	// Per-server call-activity target overrides (ADR-0105): admin operator config,
+	// like connectors — an agent reads the resolution via atlas_call_activities but
+	// does not set server-local routing. requireAdmin-gated.
+	"PUT /api/v1/call-activities/overrides/{processId}":    "per-server call-activity override is admin config, not an agent action",
+	"DELETE /api/v1/call-activities/overrides/{processId}": "per-server call-activity override is admin config, not an agent action",
 
 	// Dry-run BPMN validation for the Modeler's Problems panel (ADR-0026): an MCP
 	// agent deploys directly via atlas_deploy, which already compiles and validates.

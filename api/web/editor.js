@@ -115,6 +115,34 @@ function blankXML() {
 </bpmn:definitions>`;
 }
 
+// calleeXML builds a starter diagram for a *called* process a call activity refers
+// to (ADR-0076): a single start event, keyed by the caller-chosen process id (the
+// deploy/route identity), so the "＋ create new" affordance in the call-activity
+// panel scaffolds the callee the caller already points at. Whitespace in the id is
+// collapsed to underscores so it stays a valid BPMN id; an empty id falls back to a
+// unique one, like blankXML.
+function calleeXML(pid, name) {
+  const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const id = (pid || "").trim().replace(/\s+/g, "_") || `Process_${suffix}`;
+  const nm = (name || id).trim();
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  id="Definitions_${suffix}" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="${esc(id)}" name="${esc(nm)}" isExecutable="true">
+    <bpmn:startEvent id="StartEvent_1" name="Start"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="${esc(id)}">
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+        <dc:Bounds x="180" y="160" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+}
+
 let current; // active modeler/viewer, destroyed on remount
 let liveTimer; // active live-overlay poll, cleared on remount/leave
 let collab; // active live collaboration session (ADR-0103), closed on remount
@@ -551,7 +579,6 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
 // elements (compiler/scope_compile.go, compiler/parse.go).
 const UNSUPPORTED_TYPES = {
   "bpmn:SendTask": "Send tasks can't run yet",
-  "bpmn:ReceiveTask": "Receive tasks can't run yet",
   "bpmn:EventBasedGateway": "Event-based gateways aren't supported yet",
   "bpmn:ComplexGateway": "Complex gateways aren't supported yet",
   "bpmn:AdHocSubProcess": "Ad-hoc subprocesses aren't supported yet",
@@ -559,7 +586,6 @@ const UNSUPPORTED_TYPES = {
 };
 const UNSUPPORTED_EVENT_DEFS = {
   "bpmn:TerminateEventDefinition": "Terminate end events can't run yet",
-  "bpmn:ErrorEventDefinition": "Error events aren't supported yet",
   "bpmn:EscalationEventDefinition": "Escalation events aren't supported yet",
   "bpmn:ConditionalEventDefinition": "Conditional events aren't supported yet",
   "bpmn:LinkEventDefinition": "Link events aren't supported yet",
@@ -1570,6 +1596,44 @@ const SERVICE_TASK_KINDS = [
       { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, hint: "Plain-text body. A value may be a FEEL expression (fx) composed over the instance's variables." },
     ],
   },
+  {
+    id: "sharepoint", name: "SharePoint Connector", desc: "Create a list item in a SharePoint site", icon: "S",
+    // A list/grid mark on a Microsoft-teal tile reads "SharePoint list" at a glance —
+    // this connector's counterpart to REST's globe and mail's envelope. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white list rows.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#038387"/><rect x="3" y="3.6" width="10" height="8.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 6.2h9.2M6 3.9v8.2" stroke="#fff" stroke-width="1.1"/></svg>`,
+    ext: "atlas:SharePointConnector",
+    fields: [
+      { group: "SharePoint provider" },
+      { key: "connector", label: "Connector", placeholder: "contoso", hint: "Names a server-registered SharePoint provider (its Graph base and OAuth credential live on the server, never in the model)." },
+      { group: "Target" },
+      { key: "site", label: "Site", placeholder: "contoso.sharepoint.com,<siteId>,<webId>", fx: true, hint: "The Microsoft Graph site identifier. A value may be a FEEL expression (fx)." },
+      { key: "list", label: "List", placeholder: "Incidents", fx: true, hint: "The list name or id the item is created in." },
+      { group: "Item" },
+      { key: "fields", label: "Item fields", type: "map", childType: "atlas:ItemField", fx: true, hint: "Column values of the created list item. A value may be a FEEL expression (fx) over the instance's variables." },
+      { group: "Output" },
+      { key: "resultVariable", label: "Result variable", placeholder: "createdItem", hint: "The created item's JSON is written into this process variable (leave empty to discard it)." },
+    ],
+  },
+  {
+    id: "remedy", name: "BMC Remedy Connector", desc: "Create an incident/entry in BMC Remedy (Helix ITSM)", icon: "B",
+    // A ticket/incident mark on a BMC-orange tile reads "ITSM ticket" at a glance — the
+    // Remedy connector's counterpart to REST's globe and mail's envelope. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white ticket strokes.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#f76808"/><rect x="3" y="4.4" width="10" height="7.2" rx="1.2" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M5.4 7h5.2M5.4 9h3.2" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/></svg>`,
+    ext: "atlas:RemedyConnector",
+    fields: [
+      { group: "Remedy instance" },
+      { key: "connector", label: "Connector", placeholder: "helix-itsm", hint: "Names a server-registered Remedy instance (its base URL and credentials live on the server, never in the model)." },
+      { group: "Entry" },
+      { key: "form", label: "Form", placeholder: "HPD:IncidentInterface_Create", fx: true, hint: "The Remedy form the entry is created in. May be a FEEL expression (fx)." },
+      { key: "fields", label: "Fields", type: "map", childType: "atlas:RemedyField", fx: true, hint: "The entry's field values, keyed by Remedy field name. A value may be a FEEL expression (fx)." },
+      { group: "Output" },
+      { key: "resultVariable", label: "Result variable", placeholder: "incidentNumber", hint: "The created entry's id is written into this process variable (leave empty to discard it)." },
+    ],
+  },
 ];
 
 // serviceTaskKind returns the catalog entry a service task currently represents,
@@ -2294,7 +2358,7 @@ function errorDefOf(bo) {
 
 // cancelDefOf returns the <cancelEventDefinition> of an element, or null. On a boundary event
 // it makes a cancel boundary (a transaction's cancellation catch); on an end event a cancel
-// end event (ADR-0105).
+// end event (ADR-0108).
 function cancelDefOf(bo) {
   return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:CancelEventDefinition") || null;
 }
@@ -3128,7 +3192,9 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const propChild = ce.propagateAllChildVariables !== false;   // default true (Zeebe)
         html += `<h3>Called process</h3>
           <label class="field"><span>Process ID</span>
-            <input type="text" id="f-call-processid" value="${esc(ce.processId || "")}" placeholder="pruefe-auftrag"/></label>
+            <input type="text" id="f-call-processid" list="f-call-proc-list" autocomplete="off" value="${esc(ce.processId || "")}" placeholder="pruefe-auftrag"/>
+            <datalist id="f-call-proc-list"></datalist></label>
+          <div class="field-actions"><button type="button" class="btn ghost small" id="f-call-newproc">&#43; Create new process</button></div>
           <label class="field"><span>Binding</span>
             <select id="f-call-binding">
               <option value="latest" ${binding === "latest" ? "selected" : ""}>Latest — newest deployed version</option>
@@ -3192,7 +3258,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
           html += errorFieldsHTML(modeler, err, "The event fires when the attached activity throws a matching error — an error end event inside it, a worker failing its job to the code, or an error propagating up from a called process.");
         } else if (cancel) {
           // A cancel boundary may attach only to a transaction and is always interrupting — no
-          // cancelActivity toggle and no trigger fields (ADR-0105).
+          // cancelActivity toggle and no trigger fields (ADR-0108).
           html += `<h3>Behaviour</h3>
             <p class="muted" style="font-size:12px">A <b>cancel boundary</b> attaches only to a <b>transaction</b> and is always <b>interrupting</b>: when a cancel end event inside the transaction fires, its completed activities are compensated (in reverse order) and the token is then routed out this event. Draw it on a transaction subprocess.</p>`;
         } else {
@@ -3297,7 +3363,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         } else if (err) {
           html += errorFieldsHTML(modeler, err, "On reaching this end event the error is thrown, aborting its scope and propagating up to the nearest matching error boundary or error event subprocess. Uncaught, it raises an incident.");
         } else if (cancel) {
-          // A cancel end event is only meaningful inside a transaction (ADR-0105).
+          // A cancel end event is only meaningful inside a transaction (ADR-0108).
           html += `<p class="muted" style="font-size:12px">A <b>cancel end event</b> cancels its enclosing <b>transaction</b>: its completed activities are compensated (in reverse order), then the token is routed out the transaction's <b>cancel boundary</b>. Use it only inside a transaction subprocess.</p>`;
         } else {
           html += `<p class="muted" style="font-size:12px">A plain end event ends the instance. Use the wrench icon on the element to make this a <b>Message</b>, <b>Signal</b>, or <b>Error</b> end event.</p>`;
@@ -3521,7 +3587,12 @@ function wireProperties(root, modeler, api, projectId, toast) {
     const stFeelVars = variablesForCompletion(modeler, element);
     const stValidate = api ? (expression) => api("POST", "/api/v1/feel/validate", { expression }) : null;
     const stAttachFx = (el) => { if (el) attachExpressionToggle(el, { variables: stFeelVars, validate: stValidate }); };
-    if (stKind.fields.some((f) => f.key === "url" && f.fx)) stAttachFx(body.querySelector("#f-st-url"));
+    // Every fx-capable text field (REST url, mail recipients/subject/body, the Remedy
+    // form, …) gets the value-or-expression toggle; map value cells are handled below.
+    for (const f of stKind.fields) {
+      if (f.group || f.type === "map" || !f.fx) continue;
+      stAttachFx(body.querySelector("#f-st-" + f.key));
+    }
 
     // Map editors: a name/value row list with add/remove. Edits and removals save;
     // adding inserts an empty row (it saves once the author types a name). When the
@@ -3829,6 +3900,77 @@ function wireProperties(root, modeler, api, projectId, toast) {
       fcallbind.addEventListener("change", saveCall);
       fcallpp.addEventListener("change", saveCall);
       fcallpc.addEventListener("change", saveCall);
+
+      // Suggest existing callees — deployed processes and saved drafts — so the
+      // Process ID is a pick, not blind typing; free text stays allowed for a callee
+      // that doesn't exist yet (ADR-0076). Best-effort: a load failure just leaves an
+      // empty suggestion list.
+      const proclist = body.querySelector("#f-call-proc-list");
+      if (proclist) {
+        (async () => {
+          try {
+            const [procs, drafts] = await Promise.all([
+              api("GET", "/api/v1/processes").catch(() => []),
+              api("GET", "/api/v1/drafts").catch(() => []),
+            ]);
+            const seen = new Set();
+            const opts = [];
+            const add = (id, label) => {
+              id = (id || "").trim();
+              if (!id || seen.has(id)) return;
+              seen.add(id);
+              opts.push(`<option value="${esc(id)}">${esc(label)}</option>`);
+            };
+            (procs || []).forEach((p) => add(p.processId,
+              (p.name && p.name !== p.processId ? p.name + " · " : "") + "deployed" + (p.version ? " v" + p.version : "")));
+            (drafts || []).forEach((d) => add(d.processId,
+              (d.name && d.name !== d.processId ? d.name + " · " : "") + "draft"));
+            proclist.innerHTML = opts.join("");
+          } catch { /* suggestions are best-effort */ }
+        })();
+      }
+
+      // "＋ Create new process" scaffolds the called process the caller points at and
+      // opens it (ADR-0076): it saves this caller first (drafts persist only on save,
+      // so navigating away would otherwise drop its edits), then creates a starter
+      // draft keyed by the process id and navigates to it in the modeler.
+      const newbtn = body.querySelector("#f-call-newproc");
+      if (newbtn) {
+        newbtn.addEventListener("click", async () => {
+          let pid = (fcallpid.value || "").trim();
+          if (!pid) {
+            const typed = prompt("Process ID for the new called process:", "");
+            if (typed == null) return;
+            pid = typed.trim();
+            if (!pid) return;
+          }
+          pid = pid.replace(/\s+/g, "_");
+          newbtn.disabled = true;
+          try {
+            // Point the caller at this child, then persist the caller so its unsaved
+            // edits survive the navigation.
+            fcallpid.value = pid;
+            saveCall();
+            const savePath = "/api/v1/drafts" + (projectId ? "?projectId=" + encodeURIComponent(projectId) : "");
+            const { xml: callerXml } = await modeler.saveXML({ format: true });
+            await api("POST", savePath, callerXml, true);
+            if (collab && collab.markSaved) collab.markSaved();
+            // Scaffold the child only if no draft already holds that id — never clobber
+            // existing work; just open it in that case.
+            const existing = await api("GET", "/api/v1/drafts").catch(() => []);
+            if ((existing || []).some((d) => (d.processId || "") === pid)) {
+              toast(`Opening existing draft “${pid}”`, "ok");
+            } else {
+              await api("POST", savePath, calleeXML(pid, pid), true);
+              toast(`Created called process “${pid}”`, "ok");
+            }
+            location.hash = `#/modeler/draft/${encodeURIComponent(pid)}`;
+          } catch (e) {
+            toast("Could not create the process: " + e.message, "err");
+            newbtn.disabled = false;
+          }
+        });
+      }
     }
 
     // Multi-instance (ADR-0077): the whole bpmn:MultiInstanceLoopCharacteristics is
@@ -5460,6 +5602,77 @@ export async function mountCollaboration(root, { api, toast, key }) {
   liveTimer = setInterval(poll, 1500);
 }
 
+// mountTaskProcess renders a compact, read-only process view for a single instance,
+// meant to sit inside the Tasks detail pane so a task assignee can see, at a glance,
+// what has already run and what is still ahead. It overlays the instance's progress
+// on the definition diagram: elements walked so far are grayed (atlas-visited), live
+// tokens are highlighted (atlas-active / atlas-token-waiting), and the task's own
+// element is outlined in blue (atlas-selected) as "you are here". Unlike the full
+// Operations replay it is a static snapshot with no transport bar, and — crucially —
+// it owns its own viewer and does NOT touch the shared navigation lifecycle
+// (cleanup/current/generation), so it can live alongside the Tasks view. Returns a
+// handle with destroy(); the caller tears it down when the selection changes.
+export async function mountTaskProcess(container, { api, instanceKey, activeElementId }) {
+  let viewer = null;
+  let destroyed = false;
+  const handle = {
+    destroy() {
+      destroyed = true;
+      if (viewer) { try { viewer.destroy(); } catch { /* already gone */ } viewer = null; }
+    },
+  };
+  const fail = (msg) => { if (!destroyed && container) container.innerHTML = `<p class="tp-msg muted">${esc(msg)}</p>`; };
+
+  let lib;
+  try { lib = await loadBpmn(); } catch (e) { fail("Could not load the diagram viewer: " + e.message); return handle; }
+  if (destroyed) return handle;
+
+  // The timeline resolves the instance's definition (for the diagram) and carries
+  // its progress (steps walked + the current token frame).
+  let tl;
+  try { tl = await api("GET", `/api/v1/instances/${instanceKey}/timeline`); }
+  catch (e) { fail("Could not load the process progress: " + e.message); return handle; }
+  if (destroyed) return handle;
+  if (!tl || !tl.processDefKey) { fail("No process diagram is available for this task."); return handle; }
+
+  container.innerHTML = "";
+  viewer = newModeler(lib.BpmnJS, lib.moddle, container);
+  try {
+    const xml = await api("GET", `/api/v1/processes/${tl.processDefKey}/xml`);
+    if (destroyed) return handle;
+    await viewer.importXML(typeof xml === "string" ? xml : String(xml));
+    viewer.get("canvas").zoom("fit-viewport");
+  } catch (e) {
+    if (destroyed) return handle;
+    fail("Could not render the process diagram: " + e.message);
+    return handle;
+  }
+  if (destroyed) return handle;
+
+  const canvas = viewer.get("canvas");
+  const registry = viewer.get("elementRegistry");
+  try { drawImplBadges(viewer); } catch { /* best-effort type icons */ }
+
+  const frames = tl.frames || [];
+  const steps = tl.steps || [];
+  const tokens = frames.length ? (frames[frames.length - 1].tokens || []) : [];
+  const liveOn = new Set(tokens.map((t) => t.elementId));
+  // Everything walked so far, grayed — except where a token lives now (that must
+  // read as active, not history) and the task's own element (shown as "you are here").
+  for (const s of steps) {
+    if (!s.elementId || liveOn.has(s.elementId) || s.elementId === activeElementId) continue;
+    if (registry.get(s.elementId)) canvas.addMarker(s.elementId, "atlas-visited");
+  }
+  // Live tokens on other branches, highlighted green (or orange while waiting at a join).
+  for (const token of tokens) {
+    if (token.elementId === activeElementId || !registry.get(token.elementId)) continue;
+    canvas.addMarker(token.elementId, token.state === "waiting" ? "atlas-token-waiting" : "atlas-active");
+  }
+  // The task's own element: "you are here".
+  if (activeElementId && registry.get(activeElementId)) canvas.addMarker(activeElementId, "atlas-selected");
+  return handle;
+}
+
 // mountInstanceReplay renders one process instance read-only and replays it step
 // by step (ADR-0046), in a Camunda-Operate-style layout: a metadata header, the
 // definition diagram with per-element execution-count badges and a play/step/scrub
@@ -5670,6 +5883,27 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const stepsForElement = (elId) => steps.filter((s) => s.elementId === elId);
   const stepByEik = (eik) => steps.find((s) => s.elementInstanceKey === eik) || null;
 
+  // drawCallActivityLinks puts a clickable overlay on each call activity that
+  // started a child instance, so a single click on the diagram jumps into the
+  // child's replay (same window). It complements the Details panel's link and is
+  // rebuilt whenever the step set grows. One badge per element (the first child);
+  // a multi-instance call activity's per-iteration children are reachable by
+  // selecting each iteration in the history (its Details link).
+  const caLinkIds = [];
+  function drawCallActivityLinks() {
+    for (const id of caLinkIds.splice(0)) { try { overlays.remove(id); } catch { /* gone */ } }
+    const seen = new Set();
+    for (const s of steps) {
+      if (!s.childInstanceKey || seen.has(s.elementId)) continue;
+      seen.add(s.elementId);
+      if (!registry.get(s.elementId)) continue; // element not on this diagram
+      caLinkIds.push(overlays.add(s.elementId, "atlas-callchild", {
+        position: { bottom: 4, left: 4 },
+        html: `<a class="ca-child-link" href="#/operations/i/${s.childInstanceKey}" title="Open the called process's instance replay">&#8627; child</a>`,
+      }));
+    }
+  }
+
   // renderDetail fills the Details tab for the selected element instance (or the
   // process instance when nothing is selected), mirroring Operate's element panel.
   function renderDetail() {
@@ -5687,6 +5921,11 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     if (!s) { detailEl.innerHTML = `<p class="ops-empty">No details for this element.</p>`; return; }
     const rel = s.relation ? `<dt>Concurrency</dt><dd>${s.relation === "fork" ? "Parallel branch (fork)" : "Join arrival"}</dd>` : "";
     const from = s.sourceElementId ? `<dt>Entered from</dt><dd>${esc(stepLabel({ elementId: s.sourceElementId }))}</dd>` : "";
+    // A call activity links to the child instance it started (ADR-0076), so an
+    // operator drills from caller to child in one click, same window.
+    const child = s.childInstanceKey
+      ? `<dt>Called process</dt><dd><a class="ca-child-link" href="#/operations/i/${s.childInstanceKey}" title="Open the called process's instance replay">&#8627; Instance ${esc(String(s.childInstanceKey))}</a></dd>`
+      : "";
     detailEl.innerHTML = `<dl class="ops-props">
       <dt>Element</dt><dd>${esc(stepLabel(s))}</dd>
       <dt>Type</dt><dd>${esc(typeLabel(s.type))}</dd>
@@ -5695,7 +5934,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       <dt>Token</dt><dd class="mono">${s.tokenId ? esc(String(s.tokenId)) : "—"}</dd>
       <dt>Start Date</dt><dd>${esc(fmtDateTime(s.at))}</dd>
       <dt>End Date</dt><dd>${s.endAt ? esc(fmtDateTime(s.endAt)) : '<span class="ops-live">active</span>'}</dd>
-      ${from}${rel}
+      ${from}${rel}${child}
     </dl>`;
   }
 
@@ -6117,6 +6356,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       scrub.max = String(frames.length);
       renderHistory();
       loadBadges();
+      drawCallActivityLinks();
       if (!playing && wasAtEnd) setPlayhead(frames.length); // follow new frames live
       else { scrub.value = String(playhead); updateClock(); renderOverlay(); highlightHistory(); }
       renderInspector();
