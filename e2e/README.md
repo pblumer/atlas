@@ -38,6 +38,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 - **`multi-instance.spec.mjs`** (ADR-0097 / ADR-0100): a modelled **loop cardinality** drives
   the instance count and ticks down; a **data-driven** activity falls back to the
   toolbar-configurable default.
+- **`backup.spec.mjs`** (ADR-0107): the **Console → Backup** view — the nav entry opens it,
+  the `.tar.gz` download link is present, and the restore flow validates an empty selection,
+  then reports the file count and restart note on a (mocked) successful upload. Drives the
+  real app shell against a mocked `/api/v1` (backup/restore hit the Go API, which the static
+  harness doesn't run).
 
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
 
