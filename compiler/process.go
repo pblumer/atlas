@@ -319,6 +319,10 @@ type UserTaskDetail struct {
 //     method (e.g. "POST") and the full endpoint URL authored in the model
 //     (ADR-0067, revising ADR-0036 for REST); ResultVar, if set, is the process
 //     variable the JSON response is written back into on completion.
+//   - BMC Remedy (JobType == RemedyJobType): Connector names the server-registered
+//     Remedy instance; RemedyForm and RemedyFields are the form and the entry's field
+//     values (literal-or-FEEL) an incident/entry is created with through the AR System
+//     REST API; ResultVar, if set, receives the created entry's id (ADR-0105).
 //
 // Unused fields for a given kind are -1 (Intern maps that back to ""); Limit is 0
 // when unset. The write and REST kinds send the instance's variables as the
@@ -360,6 +364,14 @@ type ConnectorTaskDetail struct {
 	From        RestExpr
 	MailSubject RestExpr
 	Body        RestExpr
+	// Remedy connector fields (JobType == RemedyJobType, ADR-0105). Connector (above)
+	// names the server-registered BMC Remedy instance; ResultVar (above), if set,
+	// receives the created entry's id. RemedyForm is the Remedy form the entry is
+	// created in (literal-or-FEEL, the zero RestExpr for a non-remedy task);
+	// RemedyFields are the entry's field values as name/literal-or-FEEL pairs, evaluated
+	// over the instance's variables at call time (nil for a non-remedy task).
+	RemedyForm   RestExpr
+	RemedyFields []RestKV
 }
 
 // RestExpr is a REST connector field value that is either a literal string

@@ -229,6 +229,38 @@ func registerScope(
 			}
 			continue
 		}
+		// A service task bearing an <atlas:remedyConnector> extension is a BMC Remedy
+		// connector task: it creates an entry (e.g. an incident) in a Remedy form
+		// through the AR System REST API via the job path (ADR-0105). The Remedy base
+		// URL and credentials are resolved server-side by connector name, like clio and
+		// mail; only the form and its field values live in the model.
+		if cn := st.Remedy; cn != nil {
+			if strings.TrimSpace(cn.Connector) == "" {
+				return fmt.Errorf("compiler: remedy connector task %q needs a connector", st.Id)
+			}
+			if strings.TrimSpace(cn.Form) == "" {
+				return fmt.Errorf("compiler: remedy connector task %q needs a form", st.Id)
+			}
+			form, err := restValue(st.Id, "form", cn.Form)
+			if err != nil {
+				return err
+			}
+			fields, err := httpKVList(st.Id, "field", cn.Fields)
+			if err != nil {
+				return err
+			}
+			id := b.AddRemedyConnectorTask(RemedyConfig{
+				Connector: strings.TrimSpace(cn.Connector),
+				Form:      form,
+				Fields:    fields,
+				ResultVar: strings.TrimSpace(cn.ResultVariable),
+				Retries:   retries,
+			})
+			if err := register(st.Id, id); err != nil {
+				return err
+			}
+			continue
+		}
 		if st.TaskDefinition.Type == "" {
 			return fmt.Errorf("compiler: service task %q has no task definition type", st.Id)
 		}

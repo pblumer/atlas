@@ -22,10 +22,16 @@ import (
 // only the message (recipients, subject, body) is model-authored. The provider is
 // SMTP (the default), Gmail, or Microsoft Graph — see mail.Provider* and
 // mail.NewProviderClient, which own provider dispatch.
+// connectorKindRemedy is the BMC Remedy connector kind (ADR-0105): a managed record
+// of this kind resolves to a live Remedy AR System client whose credential bundle
+// (username/password JSON) is read from the vault. Like clio and mail, its base URL
+// and credentials are managed here, never in the model; only the form and its field
+// values are model-authored.
 const (
-	connectorKindTemis = "temis"
-	connectorKindClio  = "clio"
-	connectorKindMail  = "mail"
+	connectorKindTemis  = "temis"
+	connectorKindClio   = "clio"
+	connectorKindMail   = "mail"
+	connectorKindRemedy = "remedy"
 )
 
 // connector is a managed connector instance: an operator-configured, durable

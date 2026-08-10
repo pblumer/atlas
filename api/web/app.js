@@ -262,6 +262,11 @@ const CONNECTORS = [
     desc: "Sends an e-mail from a service task off the processor loop via a managed provider — SMTP (any server, incl. Google/Microsoft 365 submission) or the native Gmail and Microsoft Graph APIs (OAuth2 app-only or refresh-token). Recipients, subject, and body are model-authored (FEEL-capable); the provider, default sender, and credentials are managed below and resolved from the vault. Authored via the E-Mail Outbound Connector service-task type.",
     refs: "ADR-0041 · ADR-0079 · ADR-0093", status: "active", statusLabel: "configurable",
   },
+  {
+    id: "remedy", name: "BMC Remedy", kind: "ITSM",
+    desc: "Creates an entry (e.g. an incident) in a BMC Remedy / Helix ITSM form from a service task off the processor loop via the AR System REST API. The form and its field values are model-authored (FEEL-capable) and the created entry's id is written into a result variable; the base URL and the {username,password} credential bundle are managed below and resolved from the vault. Authored via the BMC Remedy Connector service-task type.",
+    refs: "ADR-0041 · ADR-0105", status: "active", statusLabel: "configurable",
+  },
 ];
 
 // ---------- Shell ----------
@@ -1578,7 +1583,7 @@ function wireConnectorManagement(connectors) {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="connector-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option></select></label>
+        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="remedy">remedy</option></select></label>
         <label class="field mail-only" style="margin:0"><span>Provider</span><select name="provider"><option value="smtp">SMTP</option><option value="gmail">Gmail API</option><option value="microsoft">Microsoft Graph</option></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
@@ -1599,16 +1604,19 @@ function wireConnectorManagement(connectors) {
       const endpointField = form.querySelector(".endpoint-field");
       const sync = () => {
         const mail = kindSel.value === "mail";
+        const remedy = kindSel.value === "remedy";
         const native = mail && providerSel.value !== "smtp";
         form.querySelectorAll(".mail-only").forEach((el) => { el.style.display = mail ? "" : "none"; });
         senderIn.required = mail;
         // A native provider needs no endpoint; SMTP and the other kinds do.
         endpointField.style.display = native ? "none" : "";
         endpointIn.required = !native;
-        endpointIn.placeholder = mail ? "smtp.office365.com:587" : "https://temis.internal";
-        credRefIn.required = native;
-        credRefIn.placeholder = native ? "gmail_auth (vault JSON bundle)" : "risk_token";
-        credRefLabel.textContent = native ? "Credential reference (vault auth bundle)" : "Token reference (optional)";
+        endpointIn.placeholder = mail ? "smtp.office365.com:587" : (remedy ? "https://helix.example.com:8008" : "https://temis.internal");
+        // A native mail provider and a Remedy instance both need a vault credential
+        // bundle; the other kinds take an optional token reference.
+        credRefIn.required = native || remedy;
+        credRefIn.placeholder = remedy ? "remedy_creds (vault {username,password})" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token");
+        credRefLabel.textContent = remedy ? "Credential reference (vault {username,password})" : (native ? "Credential reference (vault auth bundle)" : "Token reference (optional)");
       };
       kindSel.addEventListener("change", sync);
       providerSel.addEventListener("change", sync);

@@ -10,6 +10,7 @@ import (
 
 	"github.com/pblumer/atlas/clio"
 	"github.com/pblumer/atlas/mail"
+	"github.com/pblumer/atlas/remedy"
 	"github.com/pblumer/atlas/temis"
 )
 
@@ -176,8 +177,53 @@ func (s *Server) buildMailClients() (map[string]mail.Client, error) {
 	return clients, nil
 }
 
-// rebuildConnectorRegistries rebuilds every managed connector registry (temis, clio
-// and mail) from the current connector store and swaps each live registry atomically,
+// remedyCredentials is the shape of a Remedy connector's credential bundle held in
+// the vault under its credentialsRef (ADR-0105): the AR System username and password
+// used to obtain a JWT. Only a *reference* to this bundle is stored in the connector
+// record; the values live in the vault, never in a model or the record (I6).
+type remedyCredentials struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// buildRemedyClients assembles the Remedy connector clients from the enabled managed
+// connector instances of kind "remedy", resolving each instance's credential bundle
+// from its credentialsRef via the vault (ADR-0105/0041). It reads the connector store,
+// so callers run it on the run-loop goroutine (the store's owner). It mirrors
+// buildMailClients: a record with no endpoint, or whose credential bundle is missing
+// or not valid JSON, is skipped (its tasks park) rather than failing the whole
+// rebuild. The resolved secret is the {username,password} JSON bundle held in the
+// vault (I6).
+func (s *Server) buildRemedyClients() (map[string]remedy.Client, error) {
+	clients := map[string]remedy.Client{}
+	recs, err := s.connectors.loadAll()
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range recs {
+		if !c.Enabled || c.Kind != connectorKindRemedy || strings.TrimSpace(c.Endpoint) == "" {
+			continue
+		}
+		raw := strings.TrimSpace(s.resolveConnectorSecret(c.CredentialsRef))
+		if raw == "" {
+			continue // no credential configured yet: its tasks park until it is
+		}
+		var creds remedyCredentials
+		if err := json.Unmarshal([]byte(raw), &creds); err != nil {
+			continue // a malformed bundle: skip rather than call Remedy wrongly
+		}
+		clients[c.Name] = remedy.NewHTTPClient(remedy.Connector{
+			BaseURL:  strings.TrimSpace(c.Endpoint),
+			Username: creds.Username,
+			Password: creds.Password,
+		})
+	}
+	return clients, nil
+}
+
+// rebuildConnectorRegistries rebuilds every managed connector registry (temis, clio,
+// mail and remedy) from the current connector store and swaps each live registry
+// atomically,
 // so a task referencing a changed connector starts (or stops) resolving at once.
 // Callers run it on the run-loop goroutine, inside the same s.do closure that saved
 // the change, so the rebuild sees the write. A single helper keeps every CRUD handler
@@ -195,9 +241,14 @@ func (s *Server) rebuildConnectorRegistries() error {
 	if err != nil {
 		return err
 	}
+	remedyClients, err := s.buildRemedyClients()
+	if err != nil {
+		return err
+	}
 	s.temisRegistry.Replace(temisClients)
 	s.clioRegistry.Replace(clioClients)
 	s.mailRegistry.Replace(mailClients)
+	s.remedyRegistry.Replace(remedyClients)
 	return nil
 }
 
@@ -253,8 +304,8 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "connector name is required")
 		return
 	}
-	if kind != connectorKindTemis && kind != connectorKindClio && kind != connectorKindMail {
-		writeError(w, http.StatusBadRequest, "connector kind must be \"temis\", \"clio\", or \"mail\"")
+	if kind != connectorKindTemis && kind != connectorKindClio && kind != connectorKindMail && kind != connectorKindRemedy {
+		writeError(w, http.StatusBadRequest, "connector kind must be \"temis\", \"clio\", \"mail\", or \"remedy\"")
 		return
 	}
 	if kind == connectorKindMail {
@@ -288,6 +339,13 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		provider, sender = "", ""
 		if endpoint == "" {
 			writeError(w, http.StatusBadRequest, "connector endpoint is required")
+			return
+		}
+		// A Remedy connector authenticates against the AR System, so it needs a
+		// credentialsRef naming a vault {username,password} bundle (ADR-0105); the
+		// secret itself never lives in the record or a model.
+		if kind == connectorKindRemedy && strings.TrimSpace(p.CredentialsRef) == "" {
+			writeError(w, http.StatusBadRequest, "a remedy connector requires a credentialsRef naming a vault {username,password} bundle")
 			return
 		}
 	}

@@ -139,6 +139,21 @@ const CsvImportJobType = "io.atlas.csv-import"
 // way the mail worker uses MailJobTypeIndex.
 const CsvImportJobTypeIndex int32 = 11
 
+// RemedyJobType is the reserved job type a BMC Remedy connector task carries. The
+// in-process Remedy connector worker subscribes to it to create an entry (e.g. an
+// incident) in a Remedy form through the BMC AR System REST API off the hot path
+// (ADR-0105), the same way the mail worker subscribes to MailJobType. The provider
+// host and credentials live in a server-registered connector, like clio/mail; only
+// the form name and its field values are model-authored.
+const RemedyJobType = "io.atlas.remedy.entry"
+
+// RemedyJobTypeIndex is the interned index RemedyJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it thirteenth (after the twelve job
+// types above), so it is always 12. This lets a single in-process Remedy worker
+// subscribe by one global index across every deployed process, the same way the mail
+// worker uses MailJobTypeIndex (ADR-0079/0105).
+const RemedyJobTypeIndex int32 = 12
+
 // TemisDecisionJobType is the reserved job type a *central* business rule task
 // carries — one whose decision is evaluated by a remote temis service rather than
 // the embedded temis library. The in-process temis decision connector worker
@@ -233,6 +248,7 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 	b.intern(ClioReadJobType)      // reserve ClioReadJobTypeIndex == 9
 	b.intern(MailJobType)          // reserve MailJobTypeIndex == 10
 	b.intern(CsvImportJobType)     // reserve CsvImportJobTypeIndex == 11
+	b.intern(RemedyJobType)        // reserve RemedyJobTypeIndex == 12
 	return b
 }
 
@@ -674,6 +690,48 @@ func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
 		MailSubject: cfg.Subject,
 		Body:        cfg.Body,
 		Retries:     cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// RemedyConfig is the deploy-time configuration of a BMC Remedy connector task
+// (ADR-0105). Connector names the server-registered Remedy instance (its base URL
+// and credentials live server-side, never in the model). Form is the Remedy form
+// the entry is created in (e.g. "HPD:IncidentInterface_Create"); Fields carries the
+// entry's field values as name/literal-or-FEEL pairs evaluated over the instance's
+// variables at call time (the fx toggle, ADR-0067). ResultVar, if set, is the
+// process variable the created entry's id is written back into.
+type RemedyConfig struct {
+	Connector string
+	Form      RestExpr
+	Fields    []RestKV
+	ResultVar string
+	Retries   int32
+}
+
+// AddRemedyConnectorTask adds a BMC Remedy connector task and returns its element
+// id. Like a service task it creates a job on activation and waits; the job carries
+// the reserved RemedyJobType so the in-process Remedy worker picks it up, evaluates
+// any FEEL form/field values over the instance's variables, resolves the named
+// connector's AR System REST client, creates the entry, writes the new entry id into
+// ResultVar (empty = discard it), and completes the job (ADR-0105). The Remedy base
+// URL and credentials are resolved server-side from the named connector, never
+// authored in the model — mirroring clio and mail (ADR-0036/0079).
+func (b *Builder) AddRemedyConnectorTask(cfg RemedyConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:      b.intern(RemedyJobType),
+		Connector:    b.intern(cfg.Connector),
+		Subject:      -1, // not a clio task
+		EventType:    -1,
+		ClioQuery:    -1,
+		ReduceSpec:   -1,
+		Method:       -1, // not a REST task
+		ResultVar:    b.intern(cfg.ResultVar),
+		Auth:         -1,
+		RemedyForm:   cfg.Form,
+		RemedyFields: cfg.Fields,
+		Retries:      cfg.Retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

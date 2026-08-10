@@ -46,6 +46,7 @@ import (
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/mail"
+	"github.com/pblumer/atlas/remedy"
 	"github.com/pblumer/atlas/rest"
 	"github.com/pblumer/atlas/script"
 	"github.com/pblumer/atlas/state"
@@ -216,6 +217,13 @@ type Server struct {
 	// resolved from the vault (ADR-0041). Read only while driving jobs on the run
 	// loop, so it needs no lock.
 	mailRegistry *mail.Registry
+
+	// remedyRegistry resolves a connector name to a BMC Remedy AR System client for
+	// Remedy connector tasks (ADR-0105), built from the managed connector store at
+	// startup and rebuilt on every connector change, with each instance's credential
+	// bundle resolved from the vault (ADR-0041). Read only while driving jobs on the
+	// run loop, so it needs no lock.
+	remedyRegistry *remedy.Registry
 
 	// inboundSubs holds the operator-configured clio inbound subscriptions the
 	// inbound bridge polls (ADR-0075). Owned by the run-loop goroutine. inboundPoll
@@ -505,6 +513,23 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	}
 	s.mailRegistry.Replace(mailClients)
 	s.jobRunner.Handle(compiler.MailJobTypeIndex, mail.Handler(store, s.processLookup, s.mailRegistry))
+	// A BMC Remedy connector task creates an entry (e.g. an incident) in a Remedy form
+	// through the AR System REST API (ADR-0105). One worker serves every process under
+	// the reserved Remedy job type; it resolves each job's connector/form/fields from
+	// the compiled process, creates the entry off the run loop and after fsync, writes
+	// the new entry id into the task's result variable, and completes the job. The
+	// Remedy base URL and credentials live in the managed connector store like mail's;
+	// the credential bundle (username/password) is resolved from the vault at build
+	// time (ADR-0041), so a secret never lives in a model. The registry is built here
+	// and rebuilt on every connector change; a task whose connector is not configured
+	// parks until it is.
+	s.remedyRegistry = remedy.NewRegistry()
+	remedyClients, err := s.buildRemedyClients()
+	if err != nil {
+		return nil, err
+	}
+	s.remedyRegistry.Replace(remedyClients)
+	s.jobRunner.HandleWithOutput(compiler.RemedyJobTypeIndex, remedy.Handler(store, s.processLookup, s.remedyRegistry))
 	// An HTTP-REST connector task calls a model-authored endpoint (ADR-0067). One
 	// worker serves every process under the reserved REST job type; it resolves each
 	// job's method/url/headers/query/result-variable from the compiled process, calls

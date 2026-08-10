@@ -1179,7 +1179,11 @@ type xmlServiceTask struct {
 	// Mail, when present, marks this service task an outbound mail connector task
 	// (ADR-0079). The pointer is nil when the <atlas:mailConnector> extension is
 	// absent.
-	Mail          *xmlMailConnector          `xml:"extensionElements>mailConnector"`
+	Mail *xmlMailConnector `xml:"extensionElements>mailConnector"`
+	// Remedy, when present, marks this service task a BMC Remedy connector task
+	// (ADR-0105). The pointer is nil when the <atlas:remedyConnector> extension is
+	// absent.
+	Remedy        *xmlRemedyConnector        `xml:"extensionElements>remedyConnector"`
 	IOMapping     xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
 	MultiInstance *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
 	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
@@ -1250,6 +1254,22 @@ type xmlMailConnector struct {
 	From      string `xml:"from,attr"`
 	Subject   string `xml:"subject,attr"`
 	Body      string `xml:"body,attr"`
+}
+
+// A BMC Remedy connector task's parameters, carried on a service task as an
+// <atlas:remedyConnector connector="..." form="..." resultVariable="..."> extension
+// element with <atlas:remedyField name="..." value="..."/> children (ADR-0105).
+// connector names a server-registered Remedy instance (its base URL and credentials
+// live on the server, never in the model). form is the Remedy form the entry is
+// created in (e.g. "HPD:IncidentInterface_Create"); each field is one entry value;
+// resultVariable, if set, receives the created entry's id. form and every field value
+// is literal or, with a leading '=', a FEEL expression over the instance's variables
+// at call time (the fx toggle, ADR-0067).
+type xmlRemedyConnector struct {
+	Connector      string      `xml:"connector,attr"`
+	Form           string      `xml:"form,attr"`
+	ResultVariable string      `xml:"resultVariable,attr"`
+	Fields         []xmlHTTPKV `xml:"remedyField"`
 }
 
 type xmlTaskDefinition struct {
