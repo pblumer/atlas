@@ -163,6 +163,7 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/auth/login":          "auth flow is not an agent capability",
 	"POST /api/v1/auth/logout":         "auth flow is not an agent capability",
 	"GET /api/v1/auth/me":              "auth flow is not an agent capability",
+	"POST /api/v1/auth/password":       "auth flow is not an agent capability",
 	"GET /api/v1/users":                "user administration is not an agent capability",
 	"GET /api/v1/principals":           "user administration is not an agent capability",
 	"POST /api/v1/users":               "user administration is not an agent capability",

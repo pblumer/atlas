@@ -83,6 +83,7 @@ function updateAccount() {
     btn.title = label;
     if (menu) menu.innerHTML =
       `<div class="mlabel">Signed in as <b>${esc(AUTH.user.username)}</b></div>` +
+      `<button type="button" data-act="change-password">Change password</button>` +
       `<button type="button" data-act="logout">Log out</button>`;
   } else {
     btn.textContent = "A";
@@ -96,6 +97,63 @@ async function logout() {
   await loadAuth();
   location.hash = "#/console";
   route();
+}
+
+// changeMyPassword opens a modal for the signed-in user to set a new password.
+// The server verifies the current password (POST /api/v1/auth/password), so an
+// open session alone can't take the account over; the session stays valid on
+// success. Reuses the .modal-ov pattern used elsewhere (confirmTerminateAll).
+function changeMyPassword() {
+  const ov = document.createElement("div");
+  ov.className = "modal-ov";
+  ov.innerHTML = `
+    <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-label="Change password">
+      <div class="modal-head"><h2>Change password</h2></div>
+      <div class="modal-body">
+        <label class="field">Current password
+          <input id="cp-current" type="password" autocomplete="current-password" required></label>
+        <label class="field">New password
+          <input id="cp-new" type="password" autocomplete="new-password" required></label>
+        <label class="field">Confirm new password
+          <input id="cp-confirm" type="password" autocomplete="new-password" required></label>
+        <p id="cp-error" class="muted" hidden></p>
+      </div>
+      <div class="modal-foot">
+        <button class="btn neutral" data-cancel>Cancel</button>
+        <button class="btn" data-confirm>Change password</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  const cur = ov.querySelector("#cp-current");
+  const nw = ov.querySelector("#cp-new");
+  const cf = ov.querySelector("#cp-confirm");
+  const err = ov.querySelector("#cp-error");
+  const confirmBtn = ov.querySelector("[data-confirm]");
+  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  const showErr = (msg) => { err.textContent = msg; err.style.color = "var(--danger)"; err.hidden = false; };
+  const submit = async () => {
+    err.hidden = true;
+    if (nw.value.length < 8) { showErr("New password must be at least 8 characters."); nw.focus(); return; }
+    if (nw.value !== cf.value) { showErr("The new passwords don't match."); cf.focus(); return; }
+    confirmBtn.disabled = true;
+    try {
+      await api("POST", "/api/v1/auth/password", { currentPassword: cur.value, newPassword: nw.value });
+      close();
+      toast("Password changed", "ok");
+    } catch (e) {
+      confirmBtn.disabled = false;
+      showErr(/incorrect/i.test(e.message)
+        ? "Your current password is incorrect."
+        : ("Could not change password: " + e.message));
+    }
+  };
+  ov.querySelector("[data-cancel]").addEventListener("click", close);
+  confirmBtn.addEventListener("click", submit);
+  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+  ov.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } });
+  cur.focus();
 }
 
 // viewLogin is the sign-in screen shown whenever enforcement is on and no session
@@ -462,7 +520,8 @@ function initShell() {
     wrap.appendChild(menu);
     window.__acctMenu = menu;
     menu.addEventListener("click", (e) => {
-      if (e.target.closest("[data-act=logout]")) { closeAllMenus(); logout(); }
+      if (e.target.closest("[data-act=change-password]")) { closeAllMenus(); changeMyPassword(); }
+      else if (e.target.closest("[data-act=logout]")) { closeAllMenus(); logout(); }
     });
   }
 

@@ -3,6 +3,7 @@ package api
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -183,6 +184,39 @@ func TestResetPasswordBadDataDir(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected an error when the user store cannot be opened")
+	}
+}
+
+func TestResetPasswordOverLong(t *testing.T) {
+	// bcrypt refuses inputs longer than 72 bytes; ResetPassword surfaces that as
+	// an error rather than silently truncating.
+	dir := t.TempDir()
+	seedUser(t, dir, User{ID: "usr_abc", Username: "patrick", Source: SourceLocal})
+	_, err := ResetPassword(ResetPasswordOptions{
+		DataDir: dir, Username: "patrick", NewPassword: strings.Repeat("a", 73), Now: 200,
+	})
+	if err == nil {
+		t.Fatal("expected an error for a password past bcrypt's 72-byte limit")
+	}
+}
+
+func TestResetPasswordCorruptRecord(t *testing.T) {
+	// A hex-named but unparseable record makes the username lookup fail; the error
+	// must propagate, not be mistaken for "user not found".
+	dir := t.TempDir()
+	usersDir := filepath.Join(dir, "users")
+	if err := os.MkdirAll(usersDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// Filename must be valid hex (else loadAll skips it); contents are garbage.
+	if err := os.WriteFile(filepath.Join(usersDir, "6162.json"), []byte("{not json"), 0o644); err != nil {
+		t.Fatalf("seed corrupt record: %v", err)
+	}
+	_, err := ResetPassword(ResetPasswordOptions{
+		DataDir: dir, Username: "patrick", NewPassword: "s3cret-pw", Now: 200,
+	})
+	if err == nil {
+		t.Fatal("expected an error when a stored record can't be decoded")
 	}
 }
 

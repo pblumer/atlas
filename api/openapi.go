@@ -404,6 +404,12 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Auth status", schemaObj(map[string]any{
 				"authEnabled": tBool(), "user": tObject(),
 			}))}},
+		{"POST", "/api/v1/auth/password", s.handleChangePassword, apiOp{
+			summary: "Change the signed-in user's own password", tag: "Auth",
+			req: jsonBody("Current and new password", schemaObj(map[string]any{
+				"currentPassword": tString(), "newPassword": tString(),
+			}, "currentPassword", "newPassword")),
+			resp: jsonBody("Change result", tObject())}},
 
 		{"GET", "/api/v1/users", s.handleListUsers, apiOp{
 			summary: "List user accounts", tag: "Users", resp: jsonBody("Users", tArray())}},

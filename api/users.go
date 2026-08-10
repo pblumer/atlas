@@ -147,6 +147,72 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"authEnabled": s.authEnabled, "user": u.toPublic()})
 }
 
+// handleChangePassword lets the signed-in user change their own password. Body:
+// {"currentPassword":"...","newPassword":"..."}. Unlike handleSetUserPassword
+// (admin-only, any user) this is self-service — no admin role — but it verifies
+// the caller's current password first, so a merely-open session cannot silently
+// take over the account. It enforces the same minimum length as everywhere else
+// and touches only the caller's own record. Sessions are token-based and hold no
+// password material, so the current session stays valid after the change.
+func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
+	p := principalFrom(r.Context())
+	if p == nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+	var payload struct {
+		CurrentPassword string `json:"currentPassword"`
+		NewPassword     string `json:"newPassword"`
+	}
+	if !decodeJSONBody(w, r, &payload) {
+		return
+	}
+	if len(payload.NewPassword) < minPasswordLen {
+		writeError(w, http.StatusBadRequest, "password must be at least 8 characters")
+		return
+	}
+	hash, err := hashPassword(payload.NewPassword)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "change password: "+err.Error())
+		return
+	}
+	var (
+		found      bool
+		badCurrent bool
+		opErr      error
+	)
+	s.do(func() {
+		u, ok, e := s.users.get(p.UserID)
+		if e != nil {
+			opErr = e
+			return
+		}
+		if !ok {
+			return
+		}
+		found = true
+		// checkPassword fails on an empty hash too, so an external-identity user
+		// with no local password is simply rejected here — no special case.
+		if !checkPassword(u.PasswordHash, payload.CurrentPassword) {
+			badCurrent = true
+			return
+		}
+		u.PasswordHash = hash
+		u.UpdatedAt = time.Now().Unix()
+		opErr = s.users.save(u)
+	})
+	switch {
+	case opErr != nil:
+		writeError(w, http.StatusInternalServerError, "change password: "+opErr.Error())
+	case !found:
+		writeError(w, http.StatusNotFound, "no such user")
+	case badCurrent:
+		writeError(w, http.StatusForbidden, "current password is incorrect")
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	}
+}
+
 // handleListUsers returns every account (public projection), oldest first.
 func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	if !s.requireAdmin(w, r) {

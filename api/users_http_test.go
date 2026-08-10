@@ -306,6 +306,78 @@ func TestUserCRUDAndAuthorization(t *testing.T) {
 	}
 }
 
+func TestChangeOwnPassword(t *testing.T) {
+	ts, _ := newAuthServer(t, "root", "rootpassword")
+	admin := newClient(t)
+	if login(t, admin, ts, "root", "rootpassword") != http.StatusOK {
+		t.Fatalf("admin login failed")
+	}
+	// Admin creates a regular user whose password that user will change itself.
+	code, cu := cReq(t, admin, ts, "POST", "/api/v1/users",
+		`{"username":"alice","password":"password1","roles":["user"]}`)
+	if code != http.StatusCreated {
+		t.Fatalf("create alice: %d (%s)", code, cu)
+	}
+
+	const path = "/api/v1/auth/password"
+
+	// Unauthenticated callers cannot change a password.
+	if code, _ := cReq(t, newClient(t), ts, "POST", path, `{"currentPassword":"password1","newPassword":"password2"}`); code != http.StatusUnauthorized {
+		t.Fatalf("change password without session: want 401, got %d", code)
+	}
+
+	alice := newClient(t)
+	if login(t, alice, ts, "alice", "password1") != http.StatusOK {
+		t.Fatalf("alice login failed")
+	}
+
+	// Wrong current password is refused (an open session alone must not suffice).
+	if code, _ := cReq(t, alice, ts, "POST", path, `{"currentPassword":"nope","newPassword":"password2"}`); code != http.StatusForbidden {
+		t.Fatalf("wrong current password: want 403, got %d", code)
+	}
+	// New password must meet the minimum length.
+	if code, _ := cReq(t, alice, ts, "POST", path, `{"currentPassword":"password1","newPassword":"short"}`); code != http.StatusBadRequest {
+		t.Fatalf("short new password: want 400, got %d", code)
+	}
+	// Malformed body is a 400.
+	if code, _ := cReq(t, alice, ts, "POST", path, `not json`); code != http.StatusBadRequest {
+		t.Fatalf("bad json: want 400, got %d", code)
+	}
+
+	// A password over bcrypt's 72-byte input limit can't be hashed → 500, and the
+	// hashing happens before the current-password check so it surfaces regardless.
+	if code, _ := cReq(t, alice, ts, "POST", path,
+		`{"currentPassword":"password1","newPassword":"`+strings.Repeat("a", 73)+`"}`); code != http.StatusInternalServerError {
+		t.Fatalf("over-long password: want 500, got %d", code)
+	}
+
+	// A valid change succeeds and keeps the current session alive.
+	if code, _ := cReq(t, alice, ts, "POST", path, `{"currentPassword":"password1","newPassword":"password2"}`); code != http.StatusOK {
+		t.Fatalf("valid change: want 200, got %d", code)
+	}
+	if code, _ := cReq(t, alice, ts, "GET", "/api/v1/auth/me", ""); code != http.StatusOK {
+		t.Fatalf("session should survive a password change: got %d", code)
+	}
+
+	// The old password no longer works; the new one does.
+	if login(t, newClient(t), ts, "alice", "password1") != http.StatusUnauthorized {
+		t.Fatalf("old password should no longer log in")
+	}
+	if login(t, newClient(t), ts, "alice", "password2") != http.StatusOK {
+		t.Fatalf("new password should log in")
+	}
+}
+
+func TestChangePasswordAuthOff(t *testing.T) {
+	// In single-user mode (auth off) the route is reachable but there is no
+	// principal, so changing a password is meaningless: expect 401.
+	ts := newTestServer(t)
+	if code, _ := cReq(t, newClient(t), ts, "POST", "/api/v1/auth/password",
+		`{"currentPassword":"x","newPassword":"password2"}`); code != http.StatusUnauthorized {
+		t.Fatalf("change password with auth off: want 401, got %d", code)
+	}
+}
+
 func TestLastAdminGuards(t *testing.T) {
 	ts, _ := newAuthServer(t, "root", "rootpassword")
 	admin := newClient(t)
