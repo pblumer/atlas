@@ -128,6 +128,16 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 		return err
 	}
 
+	// Apply a staged whole-instance snapshot restore, if one was uploaded before this
+	// restart (ADR-0108). This MUST happen before the WAL and state stores are opened:
+	// it replaces the WAL (and drops the state store so recovery rebuilds it), which
+	// cannot be done while the engine holds them open under the single-writer invariant.
+	if applied, err := api.ApplyPendingRestore(dataDir); err != nil {
+		return fmt.Errorf("apply pending restore: %w", err)
+	} else if applied {
+		log.Printf("applied a staged full-snapshot restore; state will be rebuilt from the restored WAL")
+	}
+
 	// Open durable stores. The wal is the source of truth; the store is its
 	// materialization, caught up on Recover below.
 	log.Printf("opening data directory %s", dataDir)

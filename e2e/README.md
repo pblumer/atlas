@@ -38,11 +38,12 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 - **`multi-instance.spec.mjs`** (ADR-0097 / ADR-0100): a modelled **loop cardinality** drives
   the instance count and ticks down; a **data-driven** activity falls back to the
   toolbar-configurable default.
-- **`backup.spec.mjs`** (ADR-0107): the **Console → Backup** view — the nav entry opens it,
-  the `.tar.gz` download link is present, and the restore flow validates an empty selection,
-  then reports the file count and restart note on a (mocked) successful upload. Drives the
-  real app shell against a mocked `/api/v1` (backup/restore hit the Go API, which the static
-  harness doesn't run).
+- **`backup.spec.mjs`** (ADR-0107 / ADR-0109): the **Console → Backup** view — the nav entry
+  opens it, both the design-time backup and the whole-instance **full snapshot** expose their
+  `.tar.gz` download links and restore controls, and each restore flow validates an empty
+  selection, then reports the file count and restart note on a (mocked) successful upload.
+  Drives the real app shell against a mocked `/api/v1` (backup/restore hit the Go API, which
+  the static harness doesn't run).
 - **`call-activity-replay.spec.mjs`** (ADR-0076): the **call-activity drill-down** in the
   Operations instance replay — a call activity whose timeline step carries a `childInstanceKey`
   turns its "+" marker into an invisible click hotspot (single click → the child's replay, same

@@ -84,32 +84,13 @@ func streamBackup(w io.Writer, fsys fs.FS) error {
 	return errors.Join(tw.Close(), gz.Close())
 }
 
-// writeBackup walks each allowlisted directory in fsys and copies its regular
-// files into tw, named relative to the data-dir root so restore places them back
-// exactly. A directory that was never created is simply absent and skipped.
+// writeBackup walks each allowlisted design-time directory in fsys and copies its
+// regular files into tw, named relative to the data-dir root so restore places them
+// back exactly. A directory that was never created is simply absent and skipped. The
+// per-directory walk is shared with the full snapshot (walkDirInto, ADR-0109).
 func writeBackup(tw *tar.Writer, fsys fs.FS) error {
 	for _, name := range backupDirs {
-		err := fs.WalkDir(fsys, name, func(path string, d fs.DirEntry, err error) error {
-			switch {
-			case err != nil:
-				if errors.Is(err, fs.ErrNotExist) {
-					return nil // a store whose directory was never created
-				}
-				return err
-			case !d.Type().IsRegular(), strings.HasSuffix(path, ".tmp"):
-				return nil // directories are implied by their files; skip specials and in-flight temps
-			}
-			data, err := fs.ReadFile(fsys, path)
-			if err != nil {
-				return err
-			}
-			if err := tw.WriteHeader(&tar.Header{Name: path, Mode: 0o644, Size: int64(len(data))}); err != nil {
-				return err
-			}
-			_, err = tw.Write(data)
-			return err
-		})
-		if err != nil {
+		if err := walkDirInto(tw, fsys, name); err != nil {
 			return err
 		}
 	}

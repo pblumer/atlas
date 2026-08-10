@@ -94,10 +94,12 @@ var mcpOmittedRoutes = map[string]string{
 	// Server introspection / diagnostics an agent does not drive scenarios with.
 	"GET /api/v1/logs": "admin diagnostics, not an agent authoring/runtime action",
 
-	// Whole-instance backup/restore: an admin file-transfer of the design-time
-	// data directory (ADR-0107), not an agent authoring/runtime action.
-	"GET /api/v1/backup":   "admin data backup download, not an agent action",
-	"POST /api/v1/restore": "admin data restore upload, not an agent action",
+	// Backup/restore: an admin file-transfer of the data directory (ADR-0107 design-
+	// time, ADR-0109 whole-instance snapshot), not an agent authoring/runtime action.
+	"GET /api/v1/backup":        "admin data backup download, not an agent action",
+	"POST /api/v1/restore":      "admin data restore upload, not an agent action",
+	"GET /api/v1/backup/full":   "admin whole-instance snapshot download, not an agent action",
+	"POST /api/v1/restore/full": "admin whole-instance snapshot upload, not an agent action",
 
 	// Per-server call-activity target overrides (ADR-0105): admin operator config,
 	// like connectors — an agent reads the resolution via atlas_call_activities but

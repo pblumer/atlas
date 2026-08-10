@@ -663,31 +663,64 @@ async function viewConsoleBackup() {
         <button class="btn neutral" id="restore-btn">Restore from file</button>
       </div>
       <p id="restore-status" class="muted" style="margin-top:10px" hidden></p>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h1>Full snapshot</h1>
+      <p class="muted">A whole-instance snapshot for disaster recovery or migration: it also captures the
+      <strong>WAL — every running instance</strong> — plus user accounts and the vault key, so a restore
+      reconstitutes a complete, immediately-usable engine elsewhere. The derivable state store is rebuilt
+      from the WAL on restore. The file carries secrets — treat it like the server itself. Admin-only when
+      authentication is enabled.</p>
+      <div class="row" style="gap:12px; align-items:center; margin-top:8px">
+        <a class="btn" href="/api/v1/backup/full" download>Download full snapshot (.tar.gz)</a>
+      </div>
+
+      <h3 style="margin:22px 0 6px">Restore full snapshot</h3>
+      <p class="muted"><strong>This replaces the entire engine</strong> — running instances, design-time data,
+      users and the vault key. It cannot be applied live: the upload is staged and applied on the
+      <strong>next server restart</strong>, which then rebuilds state from the restored WAL.</p>
+      <div class="row" style="gap:12px; align-items:center">
+        <input type="file" id="restore-full-file" accept=".gz,.tgz,application/gzip">
+        <button class="btn neutral" id="restore-full-btn">Stage full restore</button>
+      </div>
+      <p id="restore-full-status" class="muted" style="margin-top:10px" hidden></p>
     </div>`;
   if (superseded(gen)) return;
-  const status = document.getElementById("restore-status");
-  document.getElementById("restore-btn").addEventListener("click", async () => {
-    const file = document.getElementById("restore-file").files[0];
-    if (!file) { toast("Choose a backup file first", "error"); return; }
-    if (!window.confirm("Restore from this file? Artifacts sharing an id will be overwritten.")) return;
-    status.hidden = false;
-    status.textContent = "Restoring…";
-    try {
-      const res = await fetch("/api/v1/restore", {
-        method: "POST",
-        headers: { "Content-Type": "application/gzip" },
-        body: file,
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error((data && data.error) || res.statusText);
-      const restart = data && data.restartRequired ? " Restart the server to activate restored deployments." : "";
-      status.textContent = `Restored ${data ? data.restored : 0} file(s).${restart}`;
-      toast("Restore complete", "ok");
-    } catch (e) {
-      status.textContent = "Restore failed: " + (e && e.message || e);
-      toast("Restore failed", "error");
-    }
-  });
+
+  // wireRestore binds a file picker + button to an upload endpoint, reporting into a
+  // status line. onOk builds the success message from the JSON response.
+  const wireRestore = (fileId, btnId, statusId, url, confirmMsg, onOk) => {
+    const status = document.getElementById(statusId);
+    document.getElementById(btnId).addEventListener("click", async () => {
+      const file = document.getElementById(fileId).files[0];
+      if (!file) { toast("Choose a backup file first", "error"); return; }
+      if (!window.confirm(confirmMsg)) return;
+      status.hidden = false;
+      status.textContent = "Uploading…";
+      try {
+        const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/gzip" }, body: file });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error((data && data.error) || res.statusText);
+        status.textContent = onOk(data || {});
+        toast("Restore complete", "ok");
+      } catch (e) {
+        status.textContent = "Restore failed: " + (e && e.message || e);
+        toast("Restore failed", "error");
+      }
+    });
+  };
+
+  wireRestore(
+    "restore-file", "restore-btn", "restore-status", "/api/v1/restore",
+    "Restore from this file? Artifacts sharing an id will be overwritten.",
+    (d) => `Restored ${d.restored || 0} file(s).` + (d.restartRequired ? " Restart the server to activate restored deployments." : ""),
+  );
+  wireRestore(
+    "restore-full-file", "restore-full-btn", "restore-full-status", "/api/v1/restore/full",
+    "Restore a FULL snapshot? This replaces the entire engine — running instances, design-time data, users and the vault key — and is applied on the next server restart.",
+    (d) => `Staged ${d.restored || 0} file(s). Restart the server to apply the full restore.`,
+  );
 }
 
 // userForm renders the create or edit form for a user. In edit mode the username
