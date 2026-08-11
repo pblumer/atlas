@@ -1,0 +1,26 @@
+# Keep the build context small and the image reproducible: only the Go sources
+# and module files are needed (the web UI is embedded via go:embed).
+.git
+.github
+.idea
+.vscode
+
+# Local engine data / build output (also in .gitignore, repeated for bind builds)
+/bin/
+/dist/
+/coverage/
+/data/
+/atlas-data/
+*.wal
+*.test
+*.out
+*.prof
+*.pprof
+
+# Node / e2e — not part of the Go binary
+e2e/node_modules
+
+# Ops artifacts that don't belong in the image build context
+deploy/
+Dockerfile
+.dockerignore

@@ -247,7 +247,7 @@ func (s *Server) principalFor(r *http.Request) *Principal {
 	if s.internalToken != "" {
 		if tok, ok := bearerToken(r); ok &&
 			subtle.ConstantTimeCompare([]byte(tok), []byte(s.internalToken)) == 1 {
-			return &Principal{Username: servicePrincipalName}
+			return &Principal{UserID: servicePrincipalName, Username: servicePrincipalName}
 		}
 	}
 	c, err := r.Cookie(sessionCookie)
@@ -283,6 +283,11 @@ func requiresAuth(path string) bool {
 	}
 	switch path {
 	case "/api/v1/auth/login", "/api/v1/info", "/api/v1/openapi.json":
+		return false
+	case "/api/v1/settings/theme":
+		// The brand accent is applied on the login screen, before authentication.
+		// Only GET is served pre-auth; PUT/DELETE re-check the admin role in the
+		// handler, so writes stay gated even though the path is public here.
 		return false
 	}
 	return true

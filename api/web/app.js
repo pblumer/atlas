@@ -1,7 +1,23 @@
 // Atlas web UI — buildless app shell (ADR-0012). A tiny hash router swaps views
 // into #view; heavy widgets (the BPMN modeler) are loaded on demand by editor.js.
 
+import {
+  PRESETS, normalizeHex, currentAccent, applyAccent, applyCurrent,
+  setServerAccent, resetServerAccent, syncFromServer,
+} from "./theme.js";
+
 const view = document.getElementById("view");
+
+// navGen guards the async router against re-entrancy. route() is async and
+// re-fires on every hashchange, so two navigations can be in flight at once. Each
+// bumps navGen; a view handler that renders (or installs a poll timer, or claims
+// window.__atlasCleanup) only *after* an await captures navGen at entry and bails
+// if a newer navigation has since landed — otherwise its late write clobbers the
+// newer view or leaks a timer. editor.js has its own equivalent guard for the
+// mounts it owns; this covers the plain view* handlers and the pre-mount awaits in
+// their app.js wrappers, which that guard can't see.
+let navGen = 0;
+const superseded = (gen) => gen !== navGen;
 
 // ---------- API ----------
 // apiRaw is the fetch wrapper that also returns the response headers, for the few
@@ -102,8 +118,27 @@ function viewLogin() {
         <div class="row" style="margin-top:6px"><button class="btn" type="submit">Sign in</button></div>
         <p id="login-error" class="muted" hidden></p>
       </form>
+      <div style="margin-top:10px">
+        <button type="button" id="forgot-password" class="linklike">Forgot password?</button>
+        <p id="forgot-help" class="muted" style="margin-top:6px" hidden>
+          Atlas doesn't send password-reset emails. An administrator resets
+          passwords for this instance &mdash; ask yours to set a new one for your
+          account, then sign in with it.
+        </p>
+      </div>
     </div>`;
   const f = document.getElementById("login-form");
+  // Password recovery on a self-hosted, admin-managed instance is an admin
+  // action (POST /users/{id}/password), not a self-service email flow — there is
+  // no transactional mail sender and email is optional per user (ADR-0044). So
+  // this affordance points the user at the recovery path that actually exists
+  // rather than a dead-end "invalid password" error.
+  const forgot = document.getElementById("forgot-password");
+  forgot.addEventListener("click", () => {
+    const help = document.getElementById("forgot-help");
+    help.hidden = !help.hidden;
+    forgot.setAttribute("aria-expanded", String(!help.hidden));
+  });
   f.addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = new FormData(f);
@@ -212,6 +247,7 @@ const TOPNAV = {
     { name: "Dashboard", route: "#/console" },
     { name: "Engine", route: "#/console/engine" },
     { name: "Logs", route: "#/console/logs" },
+    { name: "Backup", route: "#/console/backup" },
     { name: "Organization", route: "#/console/org" },
   ],
   modeler: [
@@ -220,7 +256,9 @@ const TOPNAV = {
   ],
   operations: [
     { name: "Instances", route: "#/operations" },
+    { name: "Incidents", route: "#/operations/incidents" },
     { name: "Decisions", route: "#/operations/decisions" },
+    { name: "Call activities", route: "#/operations/call-activities" },
   ],
   tasks: [{ name: "Inbox", route: "#/tasks" }, { name: "Start", route: "#/tasks/start" }], insights: [],
 };
@@ -249,11 +287,145 @@ const CONNECTORS = [
   {
     id: "mail", name: "Mail", kind: "Outbound e-mail",
     desc: "Sends an e-mail from a service task off the processor loop via a managed provider — SMTP (any server, incl. Google/Microsoft 365 submission) or the native Gmail and Microsoft Graph APIs (OAuth2 app-only or refresh-token). Recipients, subject, and body are model-authored (FEEL-capable); the provider, default sender, and credentials are managed below and resolved from the vault. Authored via the E-Mail Outbound Connector service-task type.",
-    refs: "ADR-0041 · ADR-0079 · ADR-0080", status: "active", statusLabel: "configurable",
+    refs: "ADR-0041 · ADR-0079 · ADR-0093", status: "active", statusLabel: "configurable",
+  },
+  {
+    id: "sharepoint", name: "SharePoint", kind: "List item",
+    desc: "Creates a list item in a Microsoft SharePoint site from a service task off the processor loop via the Graph API (OAuth2 app-only or refresh-token). The site, list, and item fields are model-authored (FEEL-capable) and the created item's JSON is written into a result variable; the Graph base and credentials are managed below and resolved from the vault. Authored via the SharePoint Connector service-task type.",
+    refs: "ADR-0041 · ADR-0093 · ADR-0105", status: "active", statusLabel: "configurable",
+  },
+  {
+    id: "remedy", name: "BMC Remedy", kind: "ITSM",
+    desc: "Creates an entry (e.g. an incident) in a BMC Remedy / Helix ITSM form from a service task off the processor loop via the AR System REST API. The form and its field values are model-authored (FEEL-capable) and the created entry's id is written into a result variable; the base URL and the {username,password} credential bundle are managed below and resolved from the vault. Authored via the BMC Remedy Connector service-task type.",
+    refs: "ADR-0041 · ADR-0106", status: "active", statusLabel: "configurable",
   },
 ];
 
 // ---------- Shell ----------
+// openSearchPalette is the global "jump to a process" command palette behind the
+// topbar search icon (and Ctrl/⌘-K, and "/"). It loads the deployed processes and the
+// design drafts once, filters them by process id or name as you type, and navigates to
+// the picked one. A deployed process offers two destinations — the Modeler diagram or
+// the live Operations view — pickable per row (click a pill, or ←/→ then Enter); the
+// last choice is remembered. A draft only has the Modeler editor. Typing an exact
+// process id and pressing Enter jumps straight there, since an exact id match ranks
+// first.
+let __searchOpen = false;
+async function openSearchPalette() {
+  if (__searchOpen) { const i = document.getElementById("sp-input"); if (i) i.focus(); return; }
+  __searchOpen = true;
+  // Remembered destination for deployed processes ("modeler" | "operations").
+  let target = localStorage.getItem("atlas.search.target") === "operations" ? "operations" : "modeler";
+  const setTarget = (t) => { target = t; try { localStorage.setItem("atlas.search.target", t); } catch { /* ignore */ } };
+
+  const ov = document.createElement("div");
+  ov.className = "sp-ov";
+  ov.innerHTML = `
+    <div class="sp" role="dialog" aria-modal="true" aria-label="Search processes">
+      <div class="sp-head">
+        <svg class="sp-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="sp-input" type="text" placeholder="Jump to a process by id or name…" autocomplete="off" spellcheck="false" />
+        <kbd class="sp-esc">Esc</kbd>
+      </div>
+      <div class="sp-results" id="sp-results"></div>
+      <div class="sp-foot"><span><kbd>↵</kbd> open</span><span><kbd>←</kbd><kbd>→</kbd> Modeler / Operations</span><span><kbd>↑</kbd><kbd>↓</kbd> move</span></div>
+    </div>`;
+  document.body.appendChild(ov);
+  const input = ov.querySelector("#sp-input");
+  const list = ov.querySelector("#sp-results");
+  let items = []; // {name, id, kind, version, hrefModeler, hrefOps, href, hay}
+  let view = [];  // current filtered slice
+  let sel = 0;
+
+  const close = () => { __searchOpen = false; document.removeEventListener("keydown", onKey, true); ov.remove(); };
+  // Destination href for an item under the current (or an explicit) target.
+  const hrefFor = (it, t) => it.kind === "deployed" ? ((t || target) === "operations" ? it.hrefOps : it.hrefModeler) : it.href;
+  const go = (it, t) => { if (!it) return; const h = hrefFor(it, t); if (!h) return; close(); location.hash = h; };
+
+  list.innerHTML = `<div class="sp-empty">Loading…</div>`;
+  const [procs, drafts] = await Promise.all([
+    api("GET", "/api/v1/processes").catch(() => []),
+    api("GET", "/api/v1/drafts").catch(() => []),
+  ]);
+  if (!__searchOpen) return; // closed while loading
+  for (const g of groupByProcess(procs || [])) {
+    const l = g.latest;
+    items.push({ name: l.name || l.processId, id: l.processId, kind: "deployed", version: l.version,
+      hrefModeler: `#/modeler/d/${l.key}`, hrefOps: `#/operations/p/${l.key}` });
+  }
+  for (const d of (drafts || [])) {
+    items.push({ name: d.name || d.processId, id: d.processId, kind: "draft", href: `#/modeler/draft/${encodeURIComponent(d.processId)}` });
+  }
+  for (const it of items) it.hay = `${it.id} ${it.name}`.toLowerCase();
+
+  const rank = (it, q) => {
+    const id = it.id.toLowerCase(), name = it.name.toLowerCase();
+    if (id === q) return 0;
+    if (id.startsWith(q)) return 1;
+    if (name.startsWith(q)) return 2;
+    return 3;
+  };
+  const rowHTML = (it, i) => {
+    const tail = it.kind === "deployed"
+      ? `<span class="sp-meta">v${it.version}</span>
+         <span class="sp-targets">
+           <span class="sp-tgt${target === "modeler" ? " on" : ""}" data-tgt="modeler" title="Open the diagram in the Modeler">Modeler</span>
+           <span class="sp-tgt${target === "operations" ? " on" : ""}" data-tgt="operations" title="Open the live Operations view">Operations</span>
+         </span>`
+      : `<span class="sp-badge draft">draft</span>`;
+    return `<div class="sp-item${i === sel ? " on" : ""}" role="option" data-i="${i}">
+      <span class="sp-name">${esc(it.name)}</span>
+      <span class="sp-id">${esc(it.id)}</span>
+      ${tail}
+    </div>`;
+  };
+  const render = () => {
+    const q = input.value.trim().toLowerCase();
+    view = (q ? items.filter((it) => it.hay.includes(q)) : items.slice())
+      .sort((a, b) => (q ? rank(a, q) - rank(b, q) : 0) || a.name.localeCompare(b.name))
+      .slice(0, 50);
+    if (sel >= view.length) sel = view.length ? view.length - 1 : 0;
+    if (!view.length) {
+      list.innerHTML = `<div class="sp-empty">${items.length ? "No process matches." : "No processes or drafts yet."}</div>`;
+      return;
+    }
+    list.innerHTML = view.map(rowHTML).join("");
+    const on = list.querySelector(".sp-item.on");
+    if (on) on.scrollIntoView({ block: "nearest" });
+  };
+  render();
+  input.focus();
+
+  input.addEventListener("input", () => { sel = 0; render(); });
+  list.addEventListener("click", (e) => {
+    const row = e.target.closest(".sp-item"); if (!row) return;
+    const it = view[Number(row.dataset.i)]; if (!it) return;
+    // A target pill jumps to exactly that destination and remembers the choice; a
+    // click anywhere else on the row uses the current default.
+    const pill = e.target.closest("[data-tgt]");
+    if (pill && it.kind === "deployed") { setTarget(pill.dataset.tgt); go(it, pill.dataset.tgt); return; }
+    go(it);
+  });
+  list.addEventListener("mousemove", (e) => {
+    const row = e.target.closest(".sp-item"); if (!row) return;
+    const i = Number(row.dataset.i);
+    if (i !== sel) { sel = i; list.querySelectorAll(".sp-item").forEach((el, j) => el.classList.toggle("on", j === sel)); }
+  });
+  ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(); });
+  function onKey(e) {
+    if (e.key === "Escape") { e.preventDefault(); close(); return; }
+    if (e.key === "ArrowDown") { e.preventDefault(); if (view.length) { sel = (sel + 1) % view.length; render(); } return; }
+    if (e.key === "ArrowUp") { e.preventDefault(); if (view.length) { sel = (sel - 1 + view.length) % view.length; render(); } return; }
+    // ←/→ flip the deployed destination (Modeler ↔ Operations) that Enter will use.
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+      if (view[sel] && view[sel].kind === "deployed") { e.preventDefault(); setTarget(target === "modeler" ? "operations" : "modeler"); render(); }
+      return;
+    }
+    if (e.key === "Enter") { e.preventDefault(); if (view[sel]) go(view[sel]); return; }
+  }
+  document.addEventListener("keydown", onKey, true);
+}
+
 function initShell() {
   const drawer = document.getElementById("drawer");
   const scrim = document.getElementById("scrim");
@@ -262,6 +434,19 @@ function initShell() {
   document.getElementById("app-switcher").addEventListener("click", openDrawer);
   document.getElementById("drawer-close").addEventListener("click", closeDrawer);
   scrim.addEventListener("click", closeDrawer);
+
+  // Global "jump to a process" search: the topbar icon, Ctrl/⌘-K anywhere, and "/"
+  // when not already typing in a field.
+  const searchBtn = document.getElementById("global-search");
+  if (searchBtn) searchBtn.addEventListener("click", openSearchPalette);
+  document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) { e.preventDefault(); openSearchPalette(); return; }
+    if (e.key === "/" && !__searchOpen) {
+      const el = document.activeElement;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+      e.preventDefault(); openSearchPalette();
+    }
+  });
 
   const nav = document.getElementById("drawer-apps");
   nav.innerHTML = APPS.map((a) =>
@@ -421,6 +606,7 @@ function buildInfoHTML(i) {
 // script-worker startup lines. It auto-refreshes; the interval is cleared on route
 // change via __atlasCleanup.
 async function viewConsoleLogs() {
+  const gen = navGen;
   view.innerHTML = `
     <div class="card">
       <div class="between">
@@ -449,9 +635,98 @@ async function viewConsoleLogs() {
     }
   };
   await load();
+  // Navigated away while the first load was in flight: don't install a poll that
+  // now writes into a detached node, and don't overwrite the new view's cleanup.
+  if (superseded(gen)) return;
   document.getElementById("log-refresh").addEventListener("click", load);
   const timer = setInterval(() => { if (follow.checked) load(); }, 2000);
   window.__atlasCleanup = () => clearInterval(timer);
+}
+
+// viewConsoleBackup is the one-file backup/restore of design-time data (ADR-0107):
+// Download streams GET /api/v1/backup as a .tar.gz (a plain same-origin anchor, so
+// the session cookie authenticates it); Restore POSTs the chosen file to
+// /api/v1/restore. User accounts and the vault key are never in the archive; with
+// authentication enabled both endpoints are admin-only.
+async function viewConsoleBackup() {
+  const gen = navGen;
+  view.innerHTML = `
+    <div class="card">
+      <h1>Backup &amp; restore</h1>
+      <p class="muted">Download a single archive of your design-time data — projects, drafts,
+      deployments, forms, decisions, connectors — to keep or move to another instance.
+      User accounts and the secret vault key are never included. With authentication enabled this is admin-only.</p>
+      <div class="row" style="gap:12px; align-items:center; margin-top:8px">
+        <a class="btn" href="/api/v1/backup" download>Download backup (.tar.gz)</a>
+      </div>
+
+      <h3 style="margin:22px 0 6px">Restore</h3>
+      <p class="muted">Uploading a backup overwrites artifacts that share an id. Restored drafts,
+      projects, forms and decisions appear immediately; <strong>deployed processes take effect after the
+      next server restart</strong>. Connectors keep their configuration but need their secrets re-entered.</p>
+      <div class="row" style="gap:12px; align-items:center">
+        <input type="file" id="restore-file" accept=".gz,.tgz,application/gzip">
+        <button class="btn neutral" id="restore-btn">Restore from file</button>
+      </div>
+      <p id="restore-status" class="muted" style="margin-top:10px" hidden></p>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h1>Full snapshot</h1>
+      <p class="muted">A whole-instance snapshot for disaster recovery or migration: it also captures the
+      <strong>WAL — every running instance</strong> — plus user accounts and the vault key, so a restore
+      reconstitutes a complete, immediately-usable engine elsewhere. The derivable state store is rebuilt
+      from the WAL on restore. The file carries secrets — treat it like the server itself. Admin-only when
+      authentication is enabled.</p>
+      <div class="row" style="gap:12px; align-items:center; margin-top:8px">
+        <a class="btn" href="/api/v1/backup/full" download>Download full snapshot (.tar.gz)</a>
+      </div>
+
+      <h3 style="margin:22px 0 6px">Restore full snapshot</h3>
+      <p class="muted"><strong>This replaces the entire engine</strong> — running instances, design-time data,
+      users and the vault key. It cannot be applied live: the upload is staged and applied on the
+      <strong>next server restart</strong>, which then rebuilds state from the restored WAL.</p>
+      <div class="row" style="gap:12px; align-items:center">
+        <input type="file" id="restore-full-file" accept=".gz,.tgz,application/gzip">
+        <button class="btn neutral" id="restore-full-btn">Stage full restore</button>
+      </div>
+      <p id="restore-full-status" class="muted" style="margin-top:10px" hidden></p>
+    </div>`;
+  if (superseded(gen)) return;
+
+  // wireRestore binds a file picker + button to an upload endpoint, reporting into a
+  // status line. onOk builds the success message from the JSON response.
+  const wireRestore = (fileId, btnId, statusId, url, confirmMsg, onOk) => {
+    const status = document.getElementById(statusId);
+    document.getElementById(btnId).addEventListener("click", async () => {
+      const file = document.getElementById(fileId).files[0];
+      if (!file) { toast("Choose a backup file first", "error"); return; }
+      if (!window.confirm(confirmMsg)) return;
+      status.hidden = false;
+      status.textContent = "Uploading…";
+      try {
+        const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/gzip" }, body: file });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error((data && data.error) || res.statusText);
+        status.textContent = onOk(data || {});
+        toast("Restore complete", "ok");
+      } catch (e) {
+        status.textContent = "Restore failed: " + (e && e.message || e);
+        toast("Restore failed", "error");
+      }
+    });
+  };
+
+  wireRestore(
+    "restore-file", "restore-btn", "restore-status", "/api/v1/restore",
+    "Restore from this file? Artifacts sharing an id will be overwritten.",
+    (d) => `Restored ${d.restored || 0} file(s).` + (d.restartRequired ? " Restart the server to activate restored deployments." : ""),
+  );
+  wireRestore(
+    "restore-full-file", "restore-full-btn", "restore-full-status", "/api/v1/restore/full",
+    "Restore a FULL snapshot? This replaces the entire engine — running instances, design-time data, users and the vault key — and is applied on the next server restart.",
+    (d) => `Staged ${d.restored || 0} file(s). Restart the server to apply the full restore.`,
+  );
 }
 
 // userForm renders the create or edit form for a user. In edit mode the username
@@ -532,6 +807,7 @@ async function deleteUser(u, reload) {
 }
 
 async function viewConsoleOrg() {
+  const gen = navGen;
   const pill = (c) => c.status === "active"
     ? `<span class="pill ok"><span class="dot"></span>${esc(c.statusLabel)}</span>`
     : `<span class="pill warn"><span class="dot"></span>${esc(c.statusLabel)}</span>`;
@@ -553,7 +829,9 @@ async function viewConsoleOrg() {
     users = await api("GET", "/api/v1/users");
   } catch (e) {
     denied = /admin/i.test(e.message);
-    if (!denied) throw e;
+    // If a newer navigation superseded us, swallow the error rather than let it
+    // reach route()'s catch, which would render an error card over the new view.
+    if (!denied) { if (superseded(gen)) return; throw e; }
   }
 
   // Managed connector instances (ADR-0041): operator-configured integrations,
@@ -667,6 +945,7 @@ async function viewConsoleOrg() {
         </table>
       </div>`;
 
+  if (superseded(gen)) return; // navigated away while the roster/connectors/secrets loaded
   view.innerHTML = `
     <div class="card">
       <h1>Organization</h1>
@@ -675,6 +954,7 @@ async function viewConsoleOrg() {
         : "Single-user mode: the API and UI are open. Enable login with <code>--auth</code> to enforce the accounts below."}</p>
     </div>
     ${usersCard}
+    ${appearanceCard()}
     <div class="card" style="padding:0; margin-top:18px">
       <div class="between" style="padding:16px 18px 0"><h2>Connectors</h2></div>
       <p class="muted" style="padding:0 18px; margin:6px 0 12px">Sibling engines Atlas
@@ -688,6 +968,7 @@ async function viewConsoleOrg() {
   // works even when the user roster is denied to a non-admin.
   wireConnectorManagement(connectors);
   wireSecretsManagement(secrets, secretsState);
+  wireAppearance();
 
   if (denied) return;
   const reload = () => viewConsoleOrg();
@@ -719,6 +1000,114 @@ async function viewConsoleOrg() {
       case "password": resetUserPassword(u, reload); break;
       case "toggle": toggleUserDisabled(u, reload); break;
       case "delete": deleteUser(u, reload); break;
+    }
+  });
+}
+
+// appearanceCard renders the "Appearance" panel in Organization: a row of brand
+// presets plus a custom colour picker that re-tints the whole UI to a company
+// colour (theme.js). The choice is org-wide — persisted on the server and applied
+// for every user of the instance; setting it needs the admin role when auth is on.
+function appearanceCard() {
+  const active = currentAccent();
+  const swatch = (p) => {
+    const on = normalizeHex(p.color) === active;
+    return `<button type="button" class="theme-swatch${on ? " active" : ""}" data-color="${esc(p.color)}"
+        title="${esc(p.name)}" aria-pressed="${on}">
+        <span class="theme-dot" style="background:${esc(p.color)}"></span>${esc(p.name)}</button>`;
+  };
+  return `
+    <div class="card" style="margin-top:18px">
+      <div class="between"><h2>Appearance</h2>
+        <button type="button" class="btn ghost sm" id="theme-reset">Reset to default</button></div>
+      <p class="muted" style="margin:6px 0 14px">Tint the interface with your organisation's brand
+      colour. The accent recolours buttons, links, the active navigation and highlights across every
+      view — applied for everyone on this instance.</p>
+      <div class="theme-swatches" id="theme-presets">${PRESETS.map(swatch).join("")}</div>
+      <div class="theme-custom">
+        <label class="field inline" style="margin:0">
+          <input type="color" id="theme-color" value="${esc(active)}" aria-label="Custom brand colour" />
+          <span>Custom colour</span>
+        </label>
+        <input type="text" id="theme-hex" class="theme-hex" value="${esc(active)}"
+          spellcheck="false" aria-label="Brand colour hex" />
+        <span class="theme-preview">
+          <button type="button" class="btn sm" tabindex="-1">Primary</button>
+          <a href="#" onclick="return false" class="theme-link">Link</a>
+          <span class="pill">Accent</span>
+        </span>
+      </div>
+    </div>`;
+}
+
+// wireAppearance connects the preset swatches, the colour picker and the hex box
+// to theme.js. Picking a colour previews it instantly (a local root re-tint), then
+// persists it org-wide on the server; a failed write (e.g. a non-admin) is surfaced
+// and the preview reverts. Reset clears the org-wide override.
+function wireAppearance() {
+  const presets = document.getElementById("theme-presets");
+  const picker = document.getElementById("theme-color");
+  const hex = document.getElementById("theme-hex");
+  const reset = document.getElementById("theme-reset");
+  if (!presets || !picker || !hex || !reset) return;
+
+  // reflectActive re-syncs the controls to the accent now in effect: the picker,
+  // the hex text, and which preset (if any) reads as selected.
+  const reflectActive = () => {
+    const active = currentAccent();
+    picker.value = active;
+    hex.value = active;
+    presets.querySelectorAll(".theme-swatch").forEach((b) => {
+      const on = normalizeHex(b.dataset.color) === active;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  };
+
+  // preview re-tints the UI locally for immediate feedback (e.g. while dragging the
+  // picker) without persisting — commit() is what saves.
+  const preview = (color) => { const n = normalizeHex(color); if (n) applyAccent(n); };
+
+  // commit persists the chosen colour org-wide, then reflects it; on failure it
+  // reverts the preview and the controls to whatever is actually in effect.
+  const commit = async (color) => {
+    const norm = normalizeHex(color);
+    if (!norm) { reflectActive(); applyCurrent(); return; }
+    try {
+      await setServerAccent(norm);
+      reflectActive();
+      toast("Theme updated for everyone", "ok");
+    } catch (e) {
+      applyCurrent();
+      reflectActive();
+      toast(e.message || "Couldn't save theme", "err");
+    }
+  };
+
+  presets.addEventListener("click", (e) => {
+    const btn = e.target.closest(".theme-swatch");
+    if (btn) { preview(btn.dataset.color); commit(btn.dataset.color); }
+  });
+  // The native picker fires input continuously while dragging — preview live and
+  // persist once, on change (drag end).
+  picker.addEventListener("input", () => preview(picker.value));
+  picker.addEventListener("change", () => commit(picker.value));
+  // The hex box commits on Enter or blur, reverting the field if it doesn't parse.
+  const commitHex = () => {
+    if (normalizeHex(hex.value)) { preview(hex.value); commit(hex.value); }
+    else { hex.value = currentAccent(); }
+  };
+  hex.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); commitHex(); } });
+  hex.addEventListener("blur", commitHex);
+
+  reset.addEventListener("click", async () => {
+    try {
+      await resetServerAccent();
+      applyAccent(null);
+      reflectActive();
+      toast("Theme reset for everyone", "ok");
+    } catch (e) {
+      toast(e.message || "Couldn't reset theme", "err");
     }
   });
 }
@@ -765,6 +1154,8 @@ async function viewModelerHome() {
         { header: "Blank resources" },
         { label: "BPMN diagram", icon: "⚙", href: "#/modeler/new" },
         { label: "Form", icon: "▤", href: "#/modeler/form/new" },
+        { sep: true },
+        { label: "Import file…", icon: "📥", act: "import" },
       ])}
     </div>
     <div class="card" style="padding:0; margin-top:14px">
@@ -834,7 +1225,10 @@ async function viewModelerHome() {
       if (act === "share") { const pr = projects.find((x) => x.id === b.dataset.id); if (pr) shareProject(pr, renderProjects); }
     });
   };
-  onMenuAction(view, (act) => { if (act === "new-project") createProject(renderProjects); });
+  onMenuAction(view, (act) => {
+    if (act === "new-project") createProject(renderProjects);
+    if (act === "import") importArtifact("", renderProjects);
+  });
 
   const render = async () => {
     try {
@@ -973,6 +1367,8 @@ async function viewProjectDetail(id) {
       { label: "BPMN diagram", icon: "⚙", href: newDiagramHref },
       { label: "DMN model (upload .dmn)", icon: "▦", act: "newref" },
       { label: "Form", icon: "▤", href: newFormHref },
+      { sep: true },
+      { label: "Import file…", icon: "📥", act: "import" },
     ];
 
     const projItems = ungrouped ? [] : [
@@ -1011,6 +1407,7 @@ async function viewProjectDetail(id) {
 
     onMenuAction(root, (act, b) => {
       switch (act) {
+        case "import": importArtifact(ungrouped ? "" : id, render); break;
         case "newref": createDmnRef(ungrouped ? "" : id, render); break;
         case "shareproj": shareProject(proj, render); break;
         case "renproj": renameProject(id, proj.name, render); break;
@@ -1352,7 +1749,55 @@ async function createDmnRef(projectId, reload) {
   await reload();
 }
 
-// wireConnectorManagement wires the Organization page's managed-connector section:
+// importArtifact imports a BPMN diagram, DMN model, or form from an uploaded file and
+// files it into the given project ("" = ungrouped). The kind is detected from the
+// extension and, for an ambiguous .xml, from the root element's namespace: a BPMN
+// diagram is saved as a draft (the backend derives its process id/name), a DMN model
+// is uploaded and referenced (the createDmnRef two-step), and a form-js .form/.json is
+// saved as a form. The list is refreshed on success.
+async function importArtifact(projectId, reload) {
+  const file = await pickFile(".bpmn,.dmn,.form,.xml,.json,application/xml,text/xml,application/json");
+  if (!file) return;
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  const base = file.name.replace(/\.[^.]+$/, "");
+  let text;
+  try { text = await file.text(); } catch (e) { toast("Import failed: " + e.message, "err"); return; }
+  try {
+    // Form — a form-js JSON schema (.form, or a .json whose object carries components).
+    if (ext === "form" || ext === "json") {
+      let schema;
+      try { schema = JSON.parse(text); } catch { throw new Error("not valid JSON"); }
+      if (!schema || typeof schema !== "object" || Array.isArray(schema)) throw new Error("not a form (expected a JSON object)");
+      if (!Array.isArray(schema.components)) throw new Error("not a form-js form (no components array)");
+      const id = (typeof schema.id === "string" && schema.id.trim()) || ("form-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+      const name = (typeof schema.name === "string" && schema.name.trim()) || base || id;
+      await api("POST", "/api/v1/forms", { id, name, schema, projectId });
+      toast(`Imported form “${name}”`, "ok");
+      await reload();
+      return;
+    }
+    // DMN — an explicit .dmn, or an .xml in the DMN namespace. Upload the model, then
+    // reference it (mirrors createDmnRef; the dedicated DMN item keeps the remote-temis
+    // fallback for setups with no local model store).
+    if (ext === "dmn" || (ext !== "bpmn" && /spec\/DMN\//i.test(text))) {
+      const up = await api("POST", "/api/v1/dmn-models?name=" + encodeURIComponent(file.name), text, true);
+      const name = (up.modelName || base || "Decision").trim();
+      await api("POST", "/api/v1/dmnrefs", { name, modelRef: up.modelRef, projectId });
+      const n = (up.decisions || []).length;
+      toast(`Imported DMN model “${name}” — ${n} decision${n === 1 ? "" : "s"}`, "ok");
+      await reload();
+      return;
+    }
+    // BPMN — save the diagram as a draft; the backend rejects XML with no <process id>.
+    const path = "/api/v1/drafts" + (projectId ? "?projectId=" + encodeURIComponent(projectId) : "");
+    const d = await api("POST", path, text, true);
+    toast(`Imported diagram “${d.name || d.processId}”`, "ok");
+    await reload();
+  } catch (e) {
+    toast("Import failed: " + e.message, "err");
+  }
+}
+
 // a "New connector" inline form and per-row Edit / Enable-Disable / Delete. Each
 // change hits the connector API, which rebuilds the runtime registry, then the page
 // re-renders. Only a token *reference* is ever entered — never a secret value
@@ -1366,7 +1811,7 @@ function wireConnectorManagement(connectors) {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="connector-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option></select></label>
+        <label class="field" style="margin:0"><span>Kind</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option></select></label>
         <label class="field mail-only" style="margin:0"><span>Provider</span><select name="provider"><option value="smtp">SMTP</option><option value="gmail">Gmail API</option><option value="microsoft">Microsoft Graph</option></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
@@ -1376,7 +1821,9 @@ function wireConnectorManagement(connectors) {
       // Adapt the form to the kind and mail provider: SMTP needs a host:port endpoint
       // and (optionally) a password reference; a native provider (Gmail/Graph) needs no
       // endpoint but a credentialsRef naming a vault JSON auth bundle, and sends as the
-      // sender mailbox. The mail-only fields hide for temis/clio.
+      // sender mailbox. A SharePoint connector likewise defaults its Graph API base
+      // (no endpoint) and needs a credentialsRef naming a vault OAuth bundle. The
+      // mail-only fields hide for temis/clio/sharepoint.
       const form = slot.querySelector("form");
       const kindSel = form.querySelector('[name="kind"]');
       const providerSel = form.querySelector('[name="provider"]');
@@ -1387,16 +1834,25 @@ function wireConnectorManagement(connectors) {
       const endpointField = form.querySelector(".endpoint-field");
       const sync = () => {
         const mail = kindSel.value === "mail";
+        const sharepoint = kindSel.value === "sharepoint";
+        const remedy = kindSel.value === "remedy";
         const native = mail && providerSel.value !== "smtp";
+        // Kinds that default their API base and authenticate with a vault credential
+        // bundle instead of a host:port endpoint. Remedy is not one of these — it needs
+        // both a base URL and a credential bundle.
+        const bundle = native || sharepoint;
         form.querySelectorAll(".mail-only").forEach((el) => { el.style.display = mail ? "" : "none"; });
         senderIn.required = mail;
-        // A native provider needs no endpoint; SMTP and the other kinds do.
-        endpointField.style.display = native ? "none" : "";
-        endpointIn.required = !native;
-        endpointIn.placeholder = mail ? "smtp.office365.com:587" : "https://temis.internal";
-        credRefIn.required = native;
-        credRefIn.placeholder = native ? "gmail_auth (vault JSON bundle)" : "risk_token";
-        credRefLabel.textContent = native ? "Credential reference (vault auth bundle)" : "Token reference (optional)";
+        // A native mail provider and SharePoint default their API base — no endpoint;
+        // SMTP, temis, clio, and remedy need one.
+        endpointField.style.display = bundle ? "none" : "";
+        endpointIn.required = !bundle;
+        endpointIn.placeholder = mail ? "smtp.office365.com:587" : (remedy ? "https://helix.example.com:8008" : "https://temis.internal");
+        // A native mail provider, SharePoint, and Remedy all need a vault credential
+        // bundle; the other kinds take an optional token reference.
+        credRefIn.required = bundle || remedy;
+        credRefIn.placeholder = remedy ? "remedy_creds (vault {username,password})" : (sharepoint ? "sharepoint_auth (vault JSON bundle)" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token"));
+        credRefLabel.textContent = remedy ? "Credential reference (vault {username,password})" : ((bundle) ? "Credential reference (vault auth bundle)" : "Token reference (optional)");
       };
       kindSel.addEventListener("change", sync);
       providerSel.addEventListener("change", sync);
@@ -2050,6 +2506,229 @@ async function viewDecisions() {
   await load();
 }
 
+// viewCallActivities is the per-server management view for call activities: one
+// row per call activity across every deployed process, showing which process it
+// calls, its version binding and variable propagation, whether the target is
+// deployed here, and — the active part — a per-server target Override an operator
+// edits inline (ADR-0076/0105). A caller may be deployed before its callee, so a
+// call activity can sit "not deployed" (it would park at runtime); and an operator
+// can redirect the target to another process, pin it to a version, or disable it on
+// this server without touching the model. Overrides key on the called process id, so
+// editing one affects every caller of that target — the Caller column shows exactly
+// who that is.
+async function viewCallActivities() {
+  view.innerHTML = `
+    <div class="between">
+      <h1>Call activities</h1>
+      <button class="btn neutral" id="refresh">Refresh</button>
+    </div>
+    <p class="muted">One row per call activity across the processes deployed on this
+    server. A call activity starts another deployed process as a child instance; it
+    <b>resolves</b> only when a process with the called id is deployed here. The
+    <b>Override</b> reshapes resolution <b>on this server only</b>: <b>redirect</b> to
+    another process, <b>pin</b> to a version, or <b>disable</b> (the call then waits).
+    An override keys on the called process id, so it applies to every caller of that
+    target listed here.</p>
+    <div class="card" style="padding:0">
+      <table>
+        <thead><tr><th>Caller</th><th>Element</th><th>Calls</th><th>Binding</th><th>Variables</th><th>Resolves to</th><th>Override</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>`;
+  const tbody = document.getElementById("rows");
+
+  const load = async () => {
+    try {
+      const rows = await api("GET", "/api/v1/call-activities");
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="7" class="empty">
+          No call activities deployed. Add a call activity to a process in the
+          <a href="#/modeler">Modeler</a> and deploy it.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = rows.map((r) => {
+        const caller = `<a href="#/operations/p/${r.callerKey}">${esc(r.callerName || r.callerProcessId)}</a>`
+          + ` <span class="muted">v${r.callerVersion}</span>`;
+        const binding = `<span class="pill">${esc(r.binding)}</span>`
+          + (r.multiInstance ? ' <span class="pill muted">multi-instance</span>' : "");
+        // Propagation: "all" both ways is the Zeebe default; call it out only where a
+        // direction is isolated (off), since that changes what crosses the boundary.
+        const vars = (r.propagateAllParent && r.propagateAllChild)
+          ? '<span class="muted">all in · all out</span>'
+          : `${r.propagateAllParent ? "all in" : "mapped in"} · ${r.propagateAllChild ? "all out" : "mapped out"}`;
+        const target = r.resolved
+          ? `<a href="#/operations/p/${r.targetKey}"><span class="pill ok"><span class="dot"></span>${esc(r.targetName || r.calledProcessId)}</span></a>`
+            + ` <span class="muted">v${r.targetVersion}</span>`
+          : `<span class="pill warn"><span class="dot"></span>not deployed</span>`;
+        return `<tr>
+          <td>${caller}</td>
+          <td style="font-family:ui-monospace,monospace">${esc(r.elementId)}</td>
+          <td style="font-family:ui-monospace,monospace">${esc(r.calledProcessId)}</td>
+          <td>${binding}</td>
+          <td>${vars}</td>
+          <td>${target}</td>
+          <td>${overrideCell(r)}</td>
+        </tr>`;
+      }).join("");
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">${esc(e.message)}</td></tr>`;
+    }
+  };
+
+  // One delegated handler for every row's override picker (the tbody persists across
+  // reloads; the rows inside it do not, so a per-row listener would leak). Redirect
+  // and pin need a value, so they prompt; default clears the override.
+  tbody.addEventListener("change", async (e) => {
+    const sel = e.target.closest("select.ca-ov");
+    if (!sel) return;
+    const pid = sel.dataset.pid;
+    const path = `/api/v1/call-activities/overrides/${encodeURIComponent(pid)}`;
+    try {
+      if (sel.value === "default") {
+        await api("DELETE", path);
+        toast(`Override cleared for ${pid}`, "ok");
+      } else if (sel.value === "disable") {
+        await api("PUT", path, { action: "disable" });
+        toast(`Calls to ${pid} disabled on this server`, "ok");
+      } else if (sel.value === "redirect") {
+        const t = prompt(`Redirect all calls to “${pid}” to which process id?`, sel.dataset.target || "");
+        if (t === null || !t.trim()) { await load(); return; }
+        await api("PUT", path, { action: "redirect", targetProcessId: t.trim() });
+        toast(`Calls to ${pid} → ${t.trim()}`, "ok");
+      } else if (sel.value === "pin") {
+        const v = prompt(`Pin calls to “${pid}” to which deployed version number?`, sel.dataset.version || "");
+        if (v === null || !v.trim()) { await load(); return; }
+        const n = parseInt(v, 10);
+        if (!Number.isInteger(n) || n <= 0) { toast("Enter a positive version number", "warn"); await load(); return; }
+        await api("PUT", path, { action: "pin", targetVersion: n });
+        toast(`Pinned ${pid} to v${n}`, "ok");
+      }
+    } catch (err) {
+      toast(err.message || "Override failed", "warn");
+    }
+    await load();
+  });
+
+  document.getElementById("refresh").addEventListener("click", load);
+  await load();
+}
+
+// overrideCell renders a row's per-server target-override picker plus a pill
+// describing the active override, if any (ADR-0105). The picker's data-* carry the
+// current target/version so the redirect/pin prompts pre-fill sensibly.
+function overrideCell(r) {
+  const ov = r.override;
+  const act = ov ? ov.action : "default";
+  const opt = (val, label) => `<option value="${val}" ${act === val ? "selected" : ""}>${label}</option>`;
+  const sel = `<select class="ca-ov" data-pid="${esc(r.calledProcessId)}"`
+    + ` data-target="${esc((ov && ov.targetProcessId) || "")}" data-version="${(ov && ov.targetVersion) || ""}">`
+    + opt("default", "Default (latest)")
+    + opt("redirect", "Redirect…")
+    + opt("pin", "Pin version…")
+    + opt("disable", "Disabled")
+    + `</select>`;
+  let note = "";
+  if (ov) {
+    const label = ov.action === "redirect" ? `→ ${esc(ov.targetProcessId)}`
+      : ov.action === "pin" ? `pin v${ov.targetVersion}`
+        : "disabled";
+    note = ` <span class="pill warn"><span class="dot"></span>${label}</span>`;
+  }
+  return sel + note;
+}
+
+// viewIncidents is the Operations "Incidents" view: every unresolved incident on
+// this server — the operator "what's stuck" list (ADR-0061). Two shapes land here:
+// a *job* incident (a service-task job whose retries ran out and parked) and a
+// job-less *timer* incident (a boundary / event-subprocess timer whose FEEL schedule
+// stopped resolving, ADR-0064/0111). Each row links to the live instance and
+// resolves in place over POST /incidents/{elementInstanceKey}/resolve: a job incident
+// re-activates its job with a fresh retry budget; a timer incident re-arms the element
+// against the instance's current variables (re-raising if it still fails). The list
+// shares the task list's ceiling and flags a capped page the same way (X-Incidents-
+// Truncated), newest scan order.
+async function viewIncidents() {
+  view.innerHTML = `
+    <div class="between">
+      <h1>Incidents</h1>
+      <button class="btn neutral" id="refresh">Refresh</button>
+    </div>
+    <p class="muted">Every unresolved incident on this server — where a token is
+    stuck waiting for an operator (ADR-0061). A <b>job</b> incident is a service task
+    whose retries ran out and parked; a <b>timer</b> incident is a recurring boundary
+    or event-subprocess timer whose FEEL schedule stopped resolving (ADR-0111).
+    <b>Resolve</b> re-activates the work: a parked job retries with the budget you
+    grant, a timer re-arms against the instance's current variables — re-raising if it
+    still fails.</p>
+    <div id="inc-note"></div>
+    <div class="card" style="padding:0">
+      <table>
+        <thead><tr><th>Instance</th><th>Element</th><th>Cause</th><th>Raised</th><th>Message</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>`;
+  const tbody = document.getElementById("rows");
+  const note = document.getElementById("inc-note");
+  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—"; // raisedAt is ns
+
+  const load = async () => {
+    try {
+      const { data, headers } = await apiRaw("GET", "/api/v1/incidents");
+      const rows = (data && data.incidents) || [];
+      note.innerHTML = headers.get("X-Incidents-Truncated") === "true"
+        ? `<p class="muted">Showing the first ${rows.length}. Resolve some and refresh to see the rest.</p>`
+        : "";
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="empty">No incidents — nothing is stuck.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = rows.map((r) => {
+        const inst = `<a href="#/operations/p/${r.processInstanceKey}">${r.processInstanceKey}</a>`;
+        // The element instance key (the resolve key) is the row's identity; the compiled
+        // element index rides along as a title for anyone cross-referencing the graph.
+        const el = `<span style="font-family:ui-monospace,monospace" title="Compiled element index #${r.elementId}">${r.elementInstanceKey}</span>`;
+        const cause = r.jobKey
+          ? `<span class="pill err"><span class="dot"></span>job</span> <span class="muted" style="font-family:ui-monospace,monospace">${r.jobKey}</span>`
+          : `<span class="pill warn"><span class="dot"></span>timer</span>`;
+        return `<tr>
+          <td>${inst}</td>
+          <td>${el}</td>
+          <td>${cause}</td>
+          <td>${fmtNano(r.raisedAt)}</td>
+          <td>${esc(r.message || "—")}</td>
+          <td style="text-align:right"><button class="btn sm" data-resolve="${r.elementInstanceKey}">Resolve…</button></td>
+        </tr>`;
+      }).join("");
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;
+    }
+  };
+
+  // One delegated handler for every row's Resolve button (the tbody persists across
+  // reloads; the rows inside it do not, so a per-row listener would leak). Resolving
+  // prompts for the retry budget the re-activated job gets (default 1); a timer
+  // incident re-arms and ignores the count.
+  tbody.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-resolve]");
+    if (!btn) return;
+    const key = btn.dataset.resolve;
+    const v = prompt("Resume with how many retries? (a timer incident re-arms and ignores this)", "1");
+    if (v === null) return;
+    const n = parseInt(v, 10);
+    if (!Number.isInteger(n) || n <= 0) { toast("Enter a positive number of retries", "warn"); return; }
+    try {
+      await api("POST", `/api/v1/incidents/${encodeURIComponent(key)}/resolve`, { retries: n });
+      toast("Incident resolved", "ok");
+    } catch (err) {
+      toast(err.message || "Resolve failed", "warn");
+    }
+    await load();
+  });
+
+  document.getElementById("refresh").addEventListener("click", load);
+  await load();
+}
+
 // viewDecisionDetail lists every evaluation of one decision — its "instances" —
 // newest first, each showing the exact inputs it saw, the outputs it produced, and
 // (expandable) the temis trace of which rules fired (ADR-0066). This is the
@@ -2266,6 +2945,8 @@ async function viewTasks(preselectKey) {
     me: authOn ? ((AUTH.user && AUTH.user.username) || "") : (localStorage.getItem("atlas.tasks.me") || ""),
     assignable: [], // enabled users a task can be assigned to, for the picker
     mountedForm: null, // the live form-js viewer instance for the selected task, if any
+    mountedProc: null, // the read-only process-view handle for the selected task, if mounted
+    detailTab: "form", // which detail tab shows — "form" | "process" (kept across selections)
     query: "", // free-text filter over the visible tasks (name/process/assignee/…)
     sort: localStorage.getItem("atlas.tasks.sort") || "smart", // sort key, see SORTS
     selectMode: false, // multi-select for bulk actions
@@ -2316,6 +2997,7 @@ async function viewTasks(preselectKey) {
         <div class="tasks-bulk" id="task-bulk" hidden></div>
         <div class="tasks-trunc" id="task-trunc" hidden></div>
         <ul class="tasks-list" id="task-list"><li class="tasks-empty muted">Loading&hellip;</li></ul>
+        <div class="tasks-col-resizer" id="tasks-col-resizer" title="Drag to resize" role="separator" aria-orientation="vertical"></div>
       </section>
       <section class="tasks-detail" id="task-detail"></section>
     </div>`;
@@ -2324,6 +3006,39 @@ async function viewTasks(preselectKey) {
   const listEl = document.getElementById("task-list");
   const detailEl = document.getElementById("task-detail");
   const titleEl = document.getElementById("task-list-title");
+
+  // Make the list | detail divider draggable, so the detail (and its form) can be
+  // widened or narrowed by resizing the list column. The width persists across
+  // sessions. Folders stay fixed; the detail is the flexible remainder (1fr).
+  (function wireDetailResize() {
+    const grid = view.querySelector(".tasks");
+    const listPane = view.querySelector(".tasks-list-pane");
+    const rez = document.getElementById("tasks-col-resizer");
+    if (!grid || !listPane || !rez) return;
+    const MINW = 240, MAXW = 760;
+    const foldersW = Math.round((view.querySelector(".tasks-folders") || {}).getBoundingClientRect
+      ? view.querySelector(".tasks-folders").getBoundingClientRect().width : 210) || 210;
+    const clamp = (w) => Math.min(MAXW, Math.max(MINW, w));
+    const saved = parseInt(localStorage.getItem("atlas.tasks.listW"), 10);
+    let listW = Number.isFinite(saved) ? clamp(saved) : 340;
+    const apply = () => { grid.style.gridTemplateColumns = `${foldersW}px ${listW}px 1fr`; };
+    apply();
+    const move = (e) => { listW = clamp(Math.round(e.clientX - listPane.getBoundingClientRect().left)); apply(); };
+    const up = () => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      rez.classList.remove("dragging");
+      document.body.style.userSelect = "";
+      localStorage.setItem("atlas.tasks.listW", String(listW));
+    };
+    rez.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      rez.classList.add("dragging");
+      document.body.style.userSelect = "none";
+      document.addEventListener("pointermove", move);
+      document.addEventListener("pointerup", up);
+    });
+  })();
 
   // visible applies the folder, then the free-text query, then the chosen sort.
   const matchesQuery = (t, q) =>
@@ -2564,8 +3279,62 @@ async function viewTasks(preselectKey) {
     }
   }
 
+  // destroyProc tears down the read-only process viewer before the detail pane is
+  // re-rendered or the selection changes, so no bpmn-js viewer leaks.
+  function destroyProc() {
+    if (state.mountedProc) {
+      try { state.mountedProc.destroy(); } catch { /* already gone */ }
+      state.mountedProc = null;
+    }
+  }
+
+  // mountProc lazily loads the read-only process view — the BPMN diagram of the
+  // task's instance with its progress overlaid — into the expanded panel. Guards
+  // against the selection changing while the (async) import/mount is in flight.
+  async function mountProc(t) {
+    const host = document.getElementById("tp-canvas");
+    if (!host) return;
+    destroyProc();
+    try {
+      const mod = await import("./editor.js");
+      if (state.selected !== t.key || !document.getElementById("tp-canvas")) return;
+      state.mountedProc = await mod.mountTaskProcess(host, {
+        api, instanceKey: t.processInstanceKey, activeElementId: t.elementId,
+      });
+    } catch (err) {
+      host.innerHTML = `<p class="muted err" style="padding:16px">Could not load the process view: ${esc(err.message)}</p>`;
+    }
+    renderProcVars(t); // the instance's current variables, beneath the diagram
+  }
+
+  // renderProcVars fills the Process tab's Variables list with the instance's
+  // current process variables, so the assignee sees the data the process carries,
+  // not just where the token is. Guards against the selection moving on mid-fetch.
+  async function renderProcVars(t) {
+    if (!document.getElementById("tp-vars-body")) return;
+    let vars;
+    try {
+      vars = await api("GET", "/api/v1/instances/" + t.processInstanceKey + "/variables");
+    } catch (err) {
+      const b = document.getElementById("tp-vars-body");
+      if (b && state.selected === t.key) b.innerHTML = `<p class="muted err">Could not load variables: ${esc(err.message)}</p>`;
+      return;
+    }
+    if (state.selected !== t.key) return;
+    const b = document.getElementById("tp-vars-body");
+    if (!b) return;
+    const entries = vars && typeof vars === "object" ? Object.entries(vars) : [];
+    if (!entries.length) { b.innerHTML = `<p class="muted">No variables set yet.</p>`; return; }
+    const fmt = (v) => (v === null || v === undefined ? "null" : typeof v === "object" ? JSON.stringify(v) : String(v));
+    b.innerHTML = `<table class="tp-vars-table"><tbody>${entries
+      .sort((a, c) => a[0].localeCompare(c[0]))
+      .map(([k, v]) => `<tr><td class="tp-var-k">${esc(k)}</td><td class="tp-var-v"><code>${esc(fmt(v))}</code></td></tr>`)
+      .join("")}</tbody></table>`;
+  }
+
   function renderDetail() {
     destroyForm();
+    destroyProc();
     const t = state.tasks.find((x) => x.key === state.selected);
     if (!t) {
       detailEl.innerHTML = `<div class="tasks-detail-empty muted">Select a task to see its details.</div>`;
@@ -2591,6 +3360,28 @@ async function viewTasks(preselectKey) {
       ? `<div class="tasks-form" id="task-form"><p class="muted">Loading form&hellip;</p></div>`
       : `<div class="tasks-form-placeholder"><p class="muted">This task has no form; completing it
          records no variables.</p></div>`;
+    // The form and a read-only view of the whole process instance sit side by side
+    // as tabs, so the assignee can flip to "what has run and what's still ahead"
+    // without the form scrolling away below.
+    const tab = state.detailTab === "process" ? "process" : "form";
+    const tabBar = `
+      <div class="tasks-detail-tabs" id="task-dtabs" role="tablist">
+        <button type="button" role="tab" data-dtab="form"${tab === "form" ? ' class="active" aria-selected="true"' : ' aria-selected="false"'}>Form</button>
+        <button type="button" role="tab" data-dtab="process"${tab === "process" ? ' class="active" aria-selected="true"' : ' aria-selected="false"'}>Process</button>
+      </div>`;
+    const procPane = `
+      <div class="tasks-tabpane" id="pane-process"${tab === "process" ? "" : " hidden"}>
+        <div class="tp-legend">
+          <span><i class="tp-sw here"></i> This task</span>
+          <span><i class="tp-sw active"></i> Active</span>
+          <span><i class="tp-sw done"></i> Completed</span>
+        </div>
+        <div class="tp-canvas" id="tp-canvas"><p class="tp-msg muted">Loading&hellip;</p></div>
+        <div class="tp-vars" id="tp-vars">
+          <h3 class="tp-vars-head">Variables</h3>
+          <div id="tp-vars-body"><p class="tp-msg muted">Loading&hellip;</p></div>
+        </div>
+      </div>`;
     detailEl.innerHTML = `
       <header class="tasks-detail-head">
         <h1>${esc(taskTitle(t))}</h1>
@@ -2610,7 +3401,11 @@ async function viewTasks(preselectKey) {
         ${row("Instance", `<span class="chip">${t.processInstanceKey}</span>`)}
         ${row("Task key", `<span class="chip">${t.key}</span>`)}
       </div>
-      ${formArea}`;
+      ${tabBar}
+      <div class="tasks-tab-body">
+        <div class="tasks-tabpane" id="pane-form"${tab === "form" ? "" : " hidden"}>${formArea}</div>
+        ${procPane}
+      </div>`;
     document.getElementById("task-complete").addEventListener("click", () => completeCurrent());
     document.getElementById("task-claim").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
@@ -2646,7 +3441,29 @@ async function viewTasks(preselectKey) {
         }
       });
     }
+    // Always mount the form (when the task has one) so Complete has its data even
+    // while the Process tab is showing. The process diagram mounts lazily the first
+    // time its tab is opened; the chosen tab is kept across task selections.
     if (t.formId) mountForm(t);
+    const dtabs = document.getElementById("task-dtabs");
+    const paneForm = document.getElementById("pane-form");
+    const paneProc = document.getElementById("pane-process");
+    dtabs.addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-dtab]");
+      if (!b) return;
+      const next = b.dataset.dtab;
+      if (next === state.detailTab) return;
+      state.detailTab = next;
+      for (const btn of dtabs.querySelectorAll("button")) {
+        const on = btn.dataset.dtab === next;
+        btn.classList.toggle("active", on);
+        btn.setAttribute("aria-selected", on ? "true" : "false");
+      }
+      paneForm.hidden = next !== "form";
+      paneProc.hidden = next !== "process";
+      if (next === "process" && !state.mountedProc) mountProc(t);
+    });
+    if (tab === "process") mountProc(t);
   }
 
   function renderAll() {
@@ -2959,12 +3776,17 @@ async function resolveProject(projectId) {
 }
 
 async function viewEditor(key, projectId) {
+  const gen = navGen;
   const mod = await import("./editor.js");
   const project = await resolveProject(projectId);
+  // The mount's own generation guard can't see this wrapper's pre-mount awaits: a
+  // superseded wrapper would run the mount to completion and clobber the newer view.
+  if (superseded(gen)) return;
   await mod.mountEditor(view, { api, toast, key, projectId, project });
 }
 
 async function viewEditorDraft(id) {
+  const gen = navGen;
   const mod = await import("./editor.js");
   // An existing draft carries its own projectId; resolve it so the editor can
   // offer a "back to project" breadcrumb (the route alone doesn't name it).
@@ -2975,11 +3797,14 @@ async function viewEditorDraft(id) {
     projectId = (d && d.projectId) || "";
   } catch { /* best-effort: fall back to a Home-only crumb */ }
   const project = await resolveProject(projectId);
+  if (superseded(gen)) return; // a newer navigation landed during the pre-mount fetches
   await mod.mountEditor(view, { api, toast, draftId: id, projectId, project });
 }
 
 async function viewFormEditor(formId, projectId) {
+  const gen = navGen;
   const mod = await import("./form-editor.js");
+  if (superseded(gen)) return; // don't mount over a newer view after the dynamic import
   await mod.mountFormEditor(view, { api, toast, formId, projectId });
 }
 
@@ -3006,6 +3831,7 @@ async function viewInstanceReplay(key) {
 // picture, not an edit surface — editing happens in the modeler overlay, and on
 // save the view re-renders from the updated model.
 async function viewDmnViewer(refId) {
+  const gen = navGen;
   view.innerHTML = `<div class="card"><p class="muted">Loading decision model…</p></div>`;
   let g, ref = null;
   try {
@@ -3018,9 +3844,11 @@ async function viewDmnViewer(refId) {
     g = graph;
     ref = (refs || []).find((r) => r.id === refId) || null;
   } catch (e) {
+    if (superseded(gen)) return;
     view.innerHTML = `<div class="card empty"><h1>Could not load model</h1><p class="muted">${esc(e.message)}</p></div>`;
     return;
   }
+  if (superseded(gen)) return; // navigated away while the graph loaded
   const title = g.modelName || (ref && ref.name) || "DMN model";
   const back = `<a href="#/modeler">← Modeler</a>`;
   const editBtn = ref && ref.modelRef
@@ -3275,6 +4103,7 @@ function routeTitle(path) {
     [/^#\/(console)?$/, "Console"],
     [/^#\/console\/engine$/, "Engine · Console"],
     [/^#\/console\/logs$/, "Logs · Console"],
+    [/^#\/console\/backup$/, "Backup · Console"],
     [/^#\/console\/org$/, "Organization · Console"],
     [/^#\/modeler\/new/, "New diagram · Modeler"],
     [/^#\/modeler\/form\/new/, "New form · Modeler"],
@@ -3302,6 +4131,7 @@ async function route() {
   document.getElementById("drawer").hidden = true;
   document.getElementById("scrim").hidden = true;
   if (window.__atlasCleanup) { try { window.__atlasCleanup(); } catch { /* ignore */ } }
+  navGen++; // supersede any view handler still awaiting from a previous navigation
 
   const hash = location.hash || "#/console";
   const [path, arg] = [hash.replace(/\?.*$/, ""), hash];
@@ -3331,6 +4161,7 @@ async function route() {
     if (path === "#/" || path === "#/console") return await viewConsoleDashboard();
     if (path === "#/console/engine") return await viewConsoleEngine();
     if (path === "#/console/logs") return await viewConsoleLogs();
+    if (path === "#/console/backup") return await viewConsoleBackup();
     if (path === "#/console/org") return await viewConsoleOrg();
     if (path === "#/modeler") return await viewModelerHome();
     if (path === "#/modeler/marketplace") return await viewMarketplace();
@@ -3356,7 +4187,9 @@ async function route() {
     const tk = path.match(/^#\/tasks\/t\/(\d+)$/);
     if (tk) return await viewTasks(Number(tk[1]));
     if (path === "#/operations") return await viewInstances();
+    if (path === "#/operations/incidents") return await viewIncidents();
     if (path === "#/operations/decisions") return await viewDecisions();
+    if (path === "#/operations/call-activities") return await viewCallActivities();
     // Drill into one decision's evaluations (its "instances"). The id is URL-encoded
     // because a DMN decision id may contain spaces or other reserved characters.
     const dd = path.match(/^#\/operations\/decisions\/(.+)$/);
@@ -3385,3 +4218,8 @@ async function route() {
 initShell();
 window.addEventListener("hashchange", route);
 loadAuth().then(route);
+// Reconcile the org-wide brand colour with the server. The inline bootstrap in
+// index.html has already applied the cached palette (no flash); this confirms or
+// updates it once the network responds, and is the first paint of the accent for a
+// browser that has no cache yet.
+syncFromServer();

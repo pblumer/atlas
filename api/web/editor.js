@@ -8,6 +8,7 @@ import { moduleFor } from "./powershell.js";
 import { attachJSONEditor } from "./json-editor.js";
 import { openDmnEditor } from "./dmn-editor.js";
 import { tokenSimulationModule } from "./token-simulation.js";
+import { attachCollab } from "./collab.js";
 
 // JOB_LANGS are the general-purpose script languages a script task can use besides
 // inline FEEL (ADR-0047). Each runs on a job worker off the engine's hot path; the
@@ -114,8 +115,46 @@ function blankXML() {
 </bpmn:definitions>`;
 }
 
+// calleeXML builds a starter diagram for a *called* process a call activity refers
+// to (ADR-0076): a single start event, keyed by the caller-chosen process id (the
+// deploy/route identity), so the "＋ create new" affordance in the call-activity
+// panel scaffolds the callee the caller already points at. Whitespace in the id is
+// collapsed to underscores so it stays a valid BPMN id; an empty id falls back to a
+// unique one, like blankXML.
+function calleeXML(pid, name) {
+  const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const id = (pid || "").trim().replace(/\s+/g, "_") || `Process_${suffix}`;
+  const nm = (name || id).trim();
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  id="Definitions_${suffix}" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="${esc(id)}" name="${esc(nm)}" isExecutable="true">
+    <bpmn:startEvent id="StartEvent_1" name="Start"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="${esc(id)}">
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+        <dc:Bounds x="180" y="160" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+}
+
 let current; // active modeler/viewer, destroyed on remount
 let liveTimer; // active live-overlay poll, cleared on remount/leave
+let collab; // active live collaboration session (ADR-0103), closed on remount
+// generation is bumped by cleanup() on every navigation/remount. A mount captures
+// it right after its own cleanup() and re-checks it after each await, so a slow
+// mount that a newer navigation has superseded bails out *before* it builds a
+// second viewer or writes into the live view's DOM. Without this, the router's
+// re-entrancy (hashchange fires route() again while a mount is still awaiting
+// bpmn assets or the timeline) let a stale mount create a second bpmn-js canvas
+// inside the current mount's #canvas and render another instance's data over it —
+// two overlaid diagrams, mismatched instance keys, a leaked poll timer.
+let generation = 0;
 
 // docTitle refines the browser tab title with a loaded subject (a diagram or
 // process name), matching app.js's "<subject> · Atlas" scheme so open tabs are
@@ -125,7 +164,9 @@ function docTitle(label) { document.title = label ? `${label} · Atlas` : "Atlas
 // cleanup tears down the current modeler and any live poll. app.js calls it (via
 // window.__atlasCleanup) when navigating away so nothing keeps running.
 export function cleanup() {
+  generation++; // supersede any in-flight mount (see `generation` above)
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+  if (collab) { try { collab.close(); } catch { /* ignore */ } collab = null; }
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
 }
 window.__atlasCleanup = cleanup;
@@ -392,6 +433,7 @@ function editorCrumbs(project, current) {
 
 export async function mountEditor(root, { api, toast, key, draftId, projectId, project }) {
   cleanup();
+  const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
   const crumb = draftId != null ? "Draft" : key == null ? "New diagram" : "Deployment " + key;
   root.innerHTML = `
@@ -415,11 +457,18 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
         <button class="btn neutral" id="sim-reset" title="Clear all tokens">Reset</button>
         <label class="sim-speed">Speed
           <select class="speed" id="sim-speed" aria-label="Simulation speed">
+            <option value="0.25">0.25&times;</option>
             <option value="0.5">0.5&times;</option>
             <option value="1" selected>1&times;</option>
             <option value="2">2&times;</option>
             <option value="4">4&times;</option>
           </select>
+        </label>
+        <label class="sim-auto" title="Let Play run end-to-end: gateways take their default (or every branch), and message/timer/signal events fire on their own — no clicking required.">
+          <input type="checkbox" id="sim-auto"/> Auto-decide
+        </label>
+        <label class="sim-mi" title="How many instances a multi-instance activity runs in the simulation. A modelled fixed loop cardinality overrides this.">Instances
+          <input type="number" id="sim-mi" min="1" max="20" step="1" value="3"/>
         </label>
         <span class="sim-hint" id="sim-hint"></span>
         <span style="flex:1"></span>
@@ -451,10 +500,20 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
           </div>
         </aside>
       </div>
-      <div class="problems">
+      <div class="prob-list" id="prob-list" hidden></div>
+      <div class="problems" id="problems-bar" role="button" tabindex="0"
+           aria-expanded="false" aria-controls="prob-list"
+           title="Show validation problems">
         <span class="badge" id="prob-count">0</span> Problems
+        <span class="prob-summary" id="prob-summary"></span>
         <span style="flex:1"></span>
-        <span class="muted">Checked against the Atlas compiler</span>
+        <span class="prob-filters" id="prob-filters" hidden>
+          <button type="button" data-sev="all" class="active">All</button>
+          <button type="button" data-sev="error">Errors</button>
+          <button type="button" data-sev="warning">Warnings</button>
+        </span>
+        <span class="muted" id="prob-version">Checked against the Atlas compiler</span>
+        <span class="prob-caret" id="prob-caret" aria-hidden="true">▾</span>
       </div>
     </div>`;
 
@@ -466,6 +525,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
       `<div class="coming"><p>${esc(e.message)}</p></div>`;
     return;
   }
+  if (gen !== generation) return; // a newer navigation took over while assets loaded
 
   const modeler = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"), [
     tokenSimulationModule(),
@@ -498,11 +558,227 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   const rerender = wireProperties(root, modeler, api, projectId, toast);
   const refreshBadges = makeImplementBadges(root, modeler);
   refreshBadges(); // reflect the initial tab for the diagram just imported
+  const refreshPoolCaptions = makePoolProcessCaptions(modeler);
+  refreshPoolCaptions(); // name the process each pool runs, on the diagram just imported
   wireTabs(root, () => { rerender(); refreshBadges(); });
   wireActions(root, modeler, api, toast, projectId);
   wireEditorVars(root, modeler);
+  wireProblems(root, modeler, api);
   wireResizer(root, modeler);
   wireTokenSim(root, modeler);
+
+  // Only a saved draft has a stable id to key a live session on; a fresh unsaved
+  // diagram or a read-only deployment does not co-edit (ADR-0103).
+  if (draftId != null) collab = attachCollab(modeler, api, draftId, toast);
+}
+
+// The BPMN elements the stock bpmn-js palette can draw but the Atlas engine can't run
+// yet, mapped to a plain-language reason. The Modeler uses these to flag such elements
+// at author time — a canvas badge and a Problems-bar warning — so the author isn't
+// surprised at Deploy/Validate. Keep in sync with the compiler's rejections and unrun
+// elements (compiler/scope_compile.go, compiler/parse.go).
+const UNSUPPORTED_TYPES = {
+  "bpmn:ComplexGateway": "Complex gateways aren't supported yet",
+  "bpmn:AdHocSubProcess": "Ad-hoc subprocesses aren't supported yet",
+  "bpmn:DataStoreReference": "Data stores aren't supported yet",
+};
+const UNSUPPORTED_EVENT_DEFS = {
+  "bpmn:TerminateEventDefinition": "Terminate end events can't run yet",
+  "bpmn:EscalationEventDefinition": "Escalation events aren't supported yet",
+  "bpmn:ConditionalEventDefinition": "Conditional events aren't supported yet",
+  "bpmn:LinkEventDefinition": "Link events aren't supported yet",
+};
+
+// unsupportedReason returns why a drawn element can't run on the Atlas engine yet, or
+// null if it can. It keys off the element type and any event definitions it carries.
+function unsupportedReason(bo) {
+  if (!bo || !bo.$type) return null;
+  if (UNSUPPORTED_TYPES[bo.$type]) return UNSUPPORTED_TYPES[bo.$type];
+  for (const d of (bo.eventDefinitions || [])) {
+    if (UNSUPPORTED_EVENT_DEFS[d.$type]) return UNSUPPORTED_EVENT_DEFS[d.$type];
+  }
+  return null;
+}
+
+// wireProblems drives the Problems panel (ADR-0026): the bottom bar becomes a
+// toggle that opens a filterable, element-linked list of the compiler's findings.
+// Validation is the real compiler run behind POST /api/v1/validate — never a
+// JS reimplementation of the rules (that is the interpret-don't-compile failure
+// mode the ADR rejects) — so the panel always tells the same truth as a deploy,
+// warnings included. It re-validates (debounced) as the diagram is edited, on
+// import, and on demand, so a modeling smell like a disconnected end event is
+// explained continuously rather than only at deploy time.
+function wireProblems(root, modeler, api) {
+  const bar = root.querySelector("#problems-bar");
+  const listEl = root.querySelector("#prob-list");
+  const countEl = root.querySelector("#prob-count");
+  const summaryEl = root.querySelector("#prob-summary");
+  const filtersEl = root.querySelector("#prob-filters");
+  const versionEl = root.querySelector("#prob-version");
+  const caretEl = root.querySelector("#prob-caret");
+  if (!bar || !listEl) return;
+
+  let problems = [];
+  let filter = "all"; // all | error | warning
+  let expanded = false;
+  let marked = null; // element id currently highlighted on the canvas
+  let seq = 0; // guards against a stale validate response overwriting a newer one
+  let unsupIds = []; // overlay ids for the "can't run yet" badges we drew
+
+  // findUnsupported walks the live model for elements the engine can't run yet (see
+  // unsupportedReason) and returns them as Problems-bar warnings — author-time feedback
+  // that doesn't depend on a server round-trip and catches every offender at once (the
+  // compiler stops at its first rejection).
+  const findUnsupported = () => {
+    const out = [];
+    let registry;
+    try { registry = modeler.get("elementRegistry"); } catch { return out; }
+    registry.forEach((el) => {
+      if (el.labelTarget) return; // a label shares its target's businessObject — don't double-count
+      const why = unsupportedReason(el.businessObject);
+      if (why) out.push({ severity: "warning", message: why, element: el.id, rule: "unsupported-element" });
+    });
+    return out;
+  };
+  // redrawUnsupported puts a ⚠ badge on each unrunnable element (top-right, clear of the
+  // Implement type badge at top-left) and reaps the previous set first.
+  const redrawUnsupported = (findings) => {
+    let overlays;
+    try { overlays = modeler.get("overlays"); } catch { return; }
+    for (const id of unsupIds) { try { overlays.remove(id); } catch { /* gone */ } }
+    unsupIds = [];
+    for (const f of findings) {
+      try {
+        unsupIds.push(overlays.add(f.element, "atlas-unsupported", {
+          position: { top: -8, right: -8 },
+          html: `<span class="unsup-badge" title="${esc(f.message)} — remove it or the diagram won't run">⚠</span>`,
+        }));
+      } catch { /* shape without graphics (mid-import) — skip */ }
+    }
+  };
+
+  const SEV_LABEL = { error: "Error", warning: "Warning" };
+  const sevIcon = (s) => (s === "error" ? "✕" : s === "warning" ? "!" : "•");
+
+  const clearMark = () => {
+    if (marked == null) return;
+    try { modeler.get("canvas").removeMarker(marked, "atlas-problem"); } catch { /* gone */ }
+    marked = null;
+  };
+
+  // Jump to and highlight a problem's element — the same select + scroll pattern
+  // the variables panel uses, plus a persistent marker so the offending element
+  // stays visible after the click.
+  const focusElement = (id) => {
+    if (!id) return;
+    const el = modeler.get("elementRegistry").get(id);
+    if (!el) return;
+    clearMark();
+    try { modeler.get("selection").select(el); } catch { /* stale */ }
+    try { modeler.get("canvas").scrollToElement(el); } catch { /* older bpmn-js */ }
+    try { modeler.get("canvas").addMarker(id, "atlas-problem"); marked = id; } catch { /* no marker */ }
+  };
+
+  const render = () => {
+    const errors = problems.filter((p) => p.severity === "error").length;
+    const warnings = problems.filter((p) => p.severity === "warning").length;
+    const total = problems.length;
+
+    countEl.textContent = String(total);
+    bar.classList.toggle("has-errors", errors > 0);
+    bar.classList.toggle("has-warnings", errors === 0 && warnings > 0);
+    filtersEl.hidden = total === 0;
+    caretEl.style.visibility = total === 0 ? "hidden" : "";
+
+    if (total === 0) {
+      summaryEl.textContent = "No problems";
+    } else {
+      const parts = [];
+      if (errors) parts.push(`${errors} error${errors === 1 ? "" : "s"}`);
+      if (warnings) parts.push(`${warnings} warning${warnings === 1 ? "" : "s"}`);
+      summaryEl.textContent = parts.join(", ");
+    }
+
+    // A collapsed panel with nothing to show stays closed; nothing to list.
+    if (total === 0) { expand(false); }
+
+    const shown = problems.filter((p) => filter === "all" || p.severity === filter);
+    listEl.innerHTML = shown.length === 0
+      ? `<p class="prob-empty muted">No ${filter === "all" ? "" : filter + " "}problems.</p>`
+      : shown.map((p) => `<div class="prob-row prob-${esc(p.severity)}"${p.element ? ` data-el="${esc(p.element)}"` : ""}>
+          <span class="prob-sev" title="${esc(SEV_LABEL[p.severity] || p.severity)}">${sevIcon(p.severity)}</span>
+          <span class="prob-msg">${esc(p.message)}</span>
+          ${p.element ? `<span class="prob-el" title="Element id">${esc(p.element)}</span>` : ""}
+          <span class="prob-rule" title="Rule">${esc(p.rule)}</span>
+        </div>`).join("");
+  };
+
+  const expand = (open) => {
+    expanded = open && problems.length > 0;
+    listEl.hidden = !expanded;
+    bar.setAttribute("aria-expanded", String(expanded));
+    bar.classList.toggle("open", expanded);
+  };
+
+  // A full compile is cheap but not free; debounce so a burst of edits triggers
+  // one validate, not one per keystroke-equivalent modeling event (ADR-0026).
+  let timer = null;
+  const validate = async () => {
+    // Client-side "can't run yet" findings first: instant canvas badges, and a fallback
+    // list if the server validate can't run (not imported / offline).
+    const unsupported = findUnsupported();
+    redrawUnsupported(unsupported);
+    let xml;
+    try { ({ xml } = await modeler.saveXML({ format: true })); } catch { problems = unsupported; render(); return; }
+    const mine = ++seq;
+    let res;
+    try { res = await api("POST", "/api/v1/validate", xml, true); } catch { problems = unsupported; render(); return; }
+    if (mine !== seq) return; // a newer validate has superseded this one
+    const server = Array.isArray(res.problems) ? res.problems : [];
+    // Keep the compiler's authoritative findings and add a per-element warning for each
+    // unrunnable element the server didn't already flag — so a hard compile error on one
+    // element isn't doubled by a client warning, but the offenders the compiler never
+    // reached (it stops at the first) are still surfaced.
+    const flagged = new Set(server.map((p) => p.element).filter(Boolean));
+    // The compiler's hard rejections (send/receive/terminate) name the element in the
+    // message text rather than tagging it, so also drop a client warning when a server
+    // finding quotes that id — avoiding a doubled row for the same element.
+    problems = [...server, ...unsupported.filter((u) =>
+      !flagged.has(u.element) && !server.some((p) => (p.message || "").includes(`"${u.element}"`)))];
+    if (res.version) versionEl.textContent = `Checked against Atlas ${res.version}`;
+    render();
+  };
+  const scheduleValidate = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(validate, 500);
+  };
+
+  bar.addEventListener("click", (e) => {
+    if (e.target.closest("#prob-filters")) return; // a filter click is not a toggle
+    expand(!expanded);
+  });
+  bar.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); expand(!expanded); }
+  });
+  filtersEl.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-sev]");
+    if (!b) return;
+    filter = b.dataset.sev;
+    for (const btn of filtersEl.querySelectorAll("button")) {
+      btn.classList.toggle("active", btn === b);
+    }
+    if (!expanded) expand(true);
+    render();
+  });
+  listEl.addEventListener("click", (e) => {
+    const row = e.target.closest(".prob-row");
+    if (row && row.dataset.el) focusElement(row.dataset.el);
+  });
+
+  modeler.on("element.changed", scheduleValidate);
+  modeler.on("elements.changed", scheduleValidate);
+  modeler.on("import.done", scheduleValidate);
+  validate(); // check the diagram just imported
 }
 
 // wireTokenSim drives the Design view's token simulation (ADR-0078): a toolbar toggle
@@ -520,6 +796,8 @@ function wireTokenSim(root, modeler) {
   const stepBtn = root.querySelector("#sim-step");
   const resetBtn = root.querySelector("#sim-reset");
   const speedSel = root.querySelector("#sim-speed");
+  const autoBox = root.querySelector("#sim-auto");
+  const miInput = root.querySelector("#sim-mi");
   const hintEl = root.querySelector("#sim-hint");
   const statsEl = root.querySelector("#sim-stats");
   if (!toggle || !bar) return;
@@ -537,19 +815,26 @@ function wireTokenSim(root, modeler) {
   stepBtn.addEventListener("click", () => sim.step());
   resetBtn.addEventListener("click", () => sim.reset());
   speedSel.addEventListener("change", () => sim.setSpeed(Number(speedSel.value)));
+  if (autoBox) autoBox.addEventListener("change", () => sim.setAuto(autoBox.checked));
+  if (miInput) miInput.addEventListener("change", () => sim.setMiCount(Number(miInput.value)));
 
-  // Reflect the simulation's state in the controls whenever it changes.
+  // Reflect the simulation's state in the controls whenever it changes. `deciding` means a
+  // gateway is waiting for a path to be picked; `waiting` means a message/timer/signal
+  // event is parked, ready to be fired.
   modeler.get("eventBus").on("atlasSim.changed", (s) => {
     playBtn.innerHTML = s.playing ? "&#9208; Pause" : "&#9654; Play";
     statsEl.textContent = `${s.live} live · ${s.completed} completed`;
-    hintEl.textContent = s.waiting
-      ? "Pick a path: click one of the glowing flows out of the gateway."
-      : s.live === 0
-        ? "Click a start event ▶ to drop a token, then Play."
-        : "";
+    hintEl.textContent = s.deciding
+      ? "Pick a path: click a glowing flow (an inclusive gateway takes several — click the gateway to confirm)."
+      : s.waiting
+        ? "An event is waiting: click its ⚡ to fire it, or turn on Auto-decide."
+        : s.live === 0
+          ? "Click a start event ▶ to drop a token, then Play."
+          : "";
   });
   // Seed the initial control state (counts at zero, opening hint).
   sim.setSpeed(Number(speedSel.value));
+  if (miInput) sim.setMiCount(Number(miInput.value));
 }
 
 // wireResizer makes the properties panel width draggable, so authoring long FEEL
@@ -708,6 +993,14 @@ function implMarker(bo) {
     if (!kind.glyph) return null; // plain job worker — the default gear is its symbol
     return { label: kind.name, icon: kind.glyph };
   }
+  if (bo.$type === "bpmn:SendTask") {
+    // The send task's kind badge (ADR-0112): a message throw, a connector, or (plain job
+    // worker) nothing — the filled send-task arrow bpmn-js draws is that kind's own symbol.
+    if (bo.messageRef) return { label: SEND_MESSAGE_KIND.name, icon: SEND_MESSAGE_KIND.glyph };
+    const kind = serviceTaskKind(bo);
+    if (!kind.glyph) return null;
+    return { label: kind.name, icon: kind.glyph };
+  }
   return null;
 }
 
@@ -774,6 +1067,65 @@ function makeImplementBadges(root, modeler) {
   return refresh;
 }
 
+// drawPoolProcessCaptions writes, on each collaboration pool, a label naming the process
+// that pool executes. A pool is a *participant*: the canvas draws its name (e.g. "Teilnehmer
+// 1") as a vertical label in the left band, but not the process it runs — so which process a
+// pool deploys as (its name, the deploy identity instances group by) is invisible on the
+// diagram and only readable by selecting the pool. This surfaces it the same way the
+// participant is drawn: a vertical, bottom-to-top label just inside the pool body beside the
+// name band, centered on the pool's height, so it reads as the participant's counterpart.
+// The Process ID rides along in the hover title. Only pools that carry a process (a
+// processRef) get a label; a black-box pool has none to name.
+function drawPoolProcessCaptions(modeler) {
+  const ids = [];
+  let overlays, registry;
+  try { overlays = modeler.get("overlays"); registry = modeler.get("elementRegistry"); }
+  catch { return ids; } // modeler torn down mid-flight
+  registry.forEach((el) => {
+    const bo = el.businessObject;
+    if (!bo || !/:Participant$/.test(bo.$type || "")) return;
+    const proc = bo.processRef;
+    if (!proc) return; // black-box pool — no process to name
+    const name = (proc.name || "").trim();
+    const pid = (proc.id || "").trim();
+    const main = name || pid; // name leads; a nameless process shows its id
+    if (!main) return;
+    const title = name ? `Process: ${name}${pid ? ` (${pid})` : ""}` : `Process: ${pid}`;
+    try {
+      ids.push(overlays.add(el.id, "atlas-pool-process", {
+        // Centered ~46px from the pool's left edge so the label's near edge clears the ~30px
+        // participant band divider by the same ~8px the participant name sits from the outer
+        // frame — matching whitespace on both. (Measured against the participant label; the
+        // offset accounts for this label rendering a touch thicker than the participant's.)
+        // The offset scales with zoom like any overlay; the label is rotated in CSS.
+        position: { top: (el.height || 0) / 2, left: 46 },
+        html: `<div class="pool-process-vlabel"><span class="ppv-text" title="${esc(title)}">${esc(main)}</span></div>`,
+      }));
+    } catch { /* shape without graphics (e.g. mid-import) — skip */ }
+  });
+  return ids;
+}
+
+// makePoolProcessCaptions keeps the pool→process captions in step with edits (process
+// renamed, a process added to a black-box pool, a pool deleted). Unlike the implementation
+// badges these are not tab-gated: which process a pool runs is structural — relevant when
+// reading the diagram at any level of detail — not an implementation nicety. Returns a
+// refresh function; the initial call reflects the just-imported diagram.
+function makePoolProcessCaptions(modeler) {
+  let ids = []; // overlay ids currently on the canvas, so we remove only ours
+  const clear = () => {
+    let overlays;
+    try { overlays = modeler.get("overlays"); } catch { ids = []; return; }
+    for (const id of ids) { try { overlays.remove(id); } catch { /* gone */ } }
+    ids = [];
+  };
+  const refresh = () => { clear(); ids = drawPoolProcessCaptions(modeler); };
+  modeler.on("element.changed", refresh);
+  modeler.on("elements.changed", refresh);
+  modeler.on("import.done", refresh);
+  return refresh;
+}
+
 // variablesForCompletion returns the variables to offer in an element's expression
 // and script fields, each tagged with where it comes from so the completion popup
 // can show its origin. Process-scope variables (start variables, script/decision
@@ -834,6 +1186,14 @@ function collectDiagramVariables(modeler) {
       if (cd && cd.resultVariable) push(cd.resultVariable, label, bo.id, "decision result");
       const io = findExt(bo, "zeebe:IoMapping");
       for (const p of (io && io.outputParameters) || []) push(p.target, label, bo.id, "output mapping");
+      // A data object is first-class per-instance state (ADR-0053): its name is the
+      // engine's variable-like identity, so surface it here too. The name lives on the
+      // underlying <dataObject>; the reference's shape id drives click-to-select.
+      if (bo.$type === "bpmn:DataObjectReference") {
+        const obj = bo.dataObjectRef;
+        const st = (bo.dataState && bo.dataState.name) || "";
+        push((obj && obj.name) || bo.name, "Data object", bo.id, st ? "data object · [" + st + "]" : "data object");
+      }
     });
   } catch { /* best-effort */ }
   return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -859,14 +1219,21 @@ function wireEditorVars(root, modeler) {
       !q || v.name.toLowerCase().includes(q) || (v.origin || "").toLowerCase().includes(q));
     if (!vars.length) {
       list.innerHTML = `<p class="vars-empty">${q ? "No matching variables." :
-        "No variables yet. They appear as you add start variables, script or decision result variables, and output mappings."}</p>`;
+        "No variables yet. They appear as you add start variables, script or decision result variables, output mappings, and data objects."}</p>`;
       return;
     }
-    list.innerHTML = vars.map((v) => `<div class="var-row">
-      <div class="var-name">${esc(v.name)}</div>
-      <div class="var-meta">${esc(v.source)}${v.originId
-        ? ` · written by <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`
-        : ` · ${esc(v.origin)}`}</div></div>`).join("");
+    list.innerHTML = vars.map((v) => {
+      // A data object isn't "written by" an element — it *is* the element, so its source
+      // label itself is the click-to-select target; other sources name the writing element.
+      const meta = v.origin === "Data object"
+        ? `<span class="var-origin" data-el="${esc(v.originId)}">${esc(v.source)}</span>`
+        : `${esc(v.source)}${v.originId
+            ? ` · written by <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`
+            : ` · ${esc(v.origin)}`}`;
+      return `<div class="var-row">
+        <div class="var-name">${esc(v.name)}</div>
+        <div class="var-meta">${meta}</div></div>`;
+    }).join("");
   };
 
   toggle.addEventListener("click", () => {
@@ -1254,6 +1621,44 @@ const SERVICE_TASK_KINDS = [
       { key: "resultVariable", label: "Result variable", placeholder: "rows", hint: "The parsed JSON array of rows is written into this process variable (rowCount is also set)." },
     ],
   },
+  {
+    id: "sharepoint", name: "SharePoint Connector", desc: "Create a list item in a SharePoint site", icon: "S",
+    // A list/grid mark on a Microsoft-teal tile reads "SharePoint list" at a glance —
+    // this connector's counterpart to REST's globe and mail's envelope. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white list rows.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#038387"/><rect x="3" y="3.6" width="10" height="8.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 6.2h9.2M6 3.9v8.2" stroke="#fff" stroke-width="1.1"/></svg>`,
+    ext: "atlas:SharePointConnector",
+    fields: [
+      { group: "SharePoint provider" },
+      { key: "connector", label: "Connector", placeholder: "contoso", hint: "Names a server-registered SharePoint provider (its Graph base and OAuth credential live on the server, never in the model)." },
+      { group: "Target" },
+      { key: "site", label: "Site", placeholder: "contoso.sharepoint.com,<siteId>,<webId>", fx: true, hint: "The Microsoft Graph site identifier. A value may be a FEEL expression (fx)." },
+      { key: "list", label: "List", placeholder: "Incidents", fx: true, hint: "The list name or id the item is created in." },
+      { group: "Item" },
+      { key: "fields", label: "Item fields", type: "map", childType: "atlas:ItemField", fx: true, hint: "Column values of the created list item. A value may be a FEEL expression (fx) over the instance's variables." },
+      { group: "Output" },
+      { key: "resultVariable", label: "Result variable", placeholder: "createdItem", hint: "The created item's JSON is written into this process variable (leave empty to discard it)." },
+    ],
+  },
+  {
+    id: "remedy", name: "BMC Remedy Connector", desc: "Create an incident/entry in BMC Remedy (Helix ITSM)", icon: "B",
+    // A ticket/incident mark on a BMC-orange tile reads "ITSM ticket" at a glance — the
+    // Remedy connector's counterpart to REST's globe and mail's envelope. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white ticket strokes.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#f76808"/><rect x="3" y="4.4" width="10" height="7.2" rx="1.2" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M5.4 7h5.2M5.4 9h3.2" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/></svg>`,
+    ext: "atlas:RemedyConnector",
+    fields: [
+      { group: "Remedy instance" },
+      { key: "connector", label: "Connector", placeholder: "helix-itsm", hint: "Names a server-registered Remedy instance (its base URL and credentials live on the server, never in the model)." },
+      { group: "Entry" },
+      { key: "form", label: "Form", placeholder: "HPD:IncidentInterface_Create", fx: true, hint: "The Remedy form the entry is created in. May be a FEEL expression (fx)." },
+      { key: "fields", label: "Fields", type: "map", childType: "atlas:RemedyField", fx: true, hint: "The entry's field values, keyed by Remedy field name. A value may be a FEEL expression (fx)." },
+      { group: "Output" },
+      { key: "resultVariable", label: "Result variable", placeholder: "incidentNumber", hint: "The created entry's id is written into this process variable (leave empty to discard it)." },
+    ],
+  },
 ];
 
 // serviceTaskKind returns the catalog entry a service task currently represents,
@@ -1288,15 +1693,21 @@ function stMapRowHTML(fieldKey, name, value) {
 // tooling's template chooser within the buildless panel (ADR-0067/0012); the field
 // form is generic over text/select/map fields, section groups, and showIf
 // visibility so a new connector kind needs no bespoke panel code.
-function serviceTaskKindHTML(bo) {
-  const cur = serviceTaskKind(bo);
-  const ext = findExt(bo, cur.ext) || {};
-  const rows = SERVICE_TASK_KINDS.map((k) => `
+// stKindRowsHTML renders the searchable kind-picker rows for a list of kinds, highlighting
+// curId. Shared by the service task (SERVICE_TASK_KINDS) and the send task, which prepends a
+// Message kind (ADR-0112); the click/filter handlers key off the .stkind-row markup.
+function stKindRowsHTML(kinds, curId) {
+  return kinds.map((k) => `
     <div class="stkind-row" data-kind="${k.id}" data-match="${esc((k.name + " " + k.desc).toLowerCase())}"
-         style="display:flex;gap:8px;align-items:center;padding:8px;border:1px solid #d7d7d7;border-radius:6px;margin-bottom:6px;cursor:pointer;${k.id === cur.id ? "background:#eef2ff;border-color:#9aa8ff" : ""}">
+         style="display:flex;gap:8px;align-items:center;padding:8px;border:1px solid #d7d7d7;border-radius:6px;margin-bottom:6px;cursor:pointer;${k.id === curId ? "background:#eef2ff;border-color:#9aa8ff" : ""}">
       <span class="stkind-icon">${k.glyph || esc(k.icon)}</span>
       <span style="line-height:1.25"><b>${esc(k.name)}</b><br><span class="muted" style="font-size:12px">${esc(k.desc)}</span></span>
     </div>`).join("");
+}
+
+// stKindFieldsHTML renders the typed field form for one catalog kind over its stored
+// extension, generic over text/select/map fields, section groups, and showIf visibility.
+function stKindFieldsHTML(cur, ext) {
   let fields = "";
   for (const f of cur.fields) {
     if (f.group) {
@@ -1330,10 +1741,60 @@ function serviceTaskKindHTML(bo) {
     }
     if (f.hint) fields += `<p class="muted" style="font-size:12px">${esc(f.hint)}</p>`;
   }
+  return fields;
+}
+
+// serviceTaskKindHTML renders the searchable kind picker plus the current kind's fields,
+// both from SERVICE_TASK_KINDS (ADR-0067). A new connector kind needs no bespoke panel code.
+function serviceTaskKindHTML(bo) {
+  const cur = serviceTaskKind(bo);
+  const ext = findExt(bo, cur.ext) || {};
   return `<h3>Type</h3>
     <input type="text" id="f-stkind-filter" placeholder="Search type… (e.g. rest)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
-    <div id="f-stkind-list">${rows}</div>
-    <h3>${esc(cur.name)}</h3>${fields}`;
+    <div id="f-stkind-list">${stKindRowsHTML(SERVICE_TASK_KINDS, cur.id)}</div>
+    <h3>${esc(cur.name)}</h3>${stKindFieldsHTML(cur, ext)}`;
+}
+
+// SEND_MESSAGE_KIND is the send task's Message kind (ADR-0112): a correlating throw in task
+// form. It is not a connector (no ext / fields form) — it is configured by the shared message
+// picker and detected by a messageRef — so it lives outside SERVICE_TASK_KINDS and is prepended
+// to the send task's picker.
+const SEND_MESSAGE_KIND = {
+  id: "message", name: "Message", icon: "✉",
+  desc: "Publish a BPMN message; a waiting receive task or message catch with a matching key continues",
+  glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#4666ff"/><rect x="3" y="4.6" width="10" height="6.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 5.2L8 8.6l4.6-3.4" fill="none" stroke="#fff" stroke-width="1.1"/></svg>`,
+};
+
+// sendTaskKind returns the kind a send task currently represents (ADR-0112). It is detected by
+// what the task carries: a messageRef → Message; a connector extension → that connector; a
+// taskDefinition → Job worker. With none of those, the send task is the Message kind by default —
+// so selecting Message (which clears the other kinds' extensions) keeps the message picker visible
+// until a message is chosen, and a fresh send task starts as a plain message send. Without this
+// default, the Message kind would be undetectable while messageRef is still empty.
+function sendTaskKind(bo) {
+  if (bo && bo.messageRef) return SEND_MESSAGE_KIND;
+  for (const k of SERVICE_TASK_KINDS) {
+    if (k.id !== "worker" && findExt(bo, k.ext)) return k;
+  }
+  if (findExt(bo, "zeebe:TaskDefinition")) return SERVICE_TASK_KINDS[0]; // Job worker
+  return SEND_MESSAGE_KIND;
+}
+
+// sendTaskKindHTML renders the send task's kind picker: the Message kind plus the service
+// task's connector/job-worker catalog, then either the shared message picker (Message kind)
+// or the chosen connector's field form (ADR-0112). The picker reuses the .stkind-row markup,
+// so the existing filter/click wiring drives it.
+function sendTaskKindHTML(modeler, bo) {
+  const cur = sendTaskKind(bo);
+  const picker = `<h3>Type</h3>
+    <input type="text" id="f-stkind-filter" placeholder="Search type… (e.g. message, mail)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
+    <div id="f-stkind-list">${stKindRowsHTML([SEND_MESSAGE_KIND, ...SERVICE_TASK_KINDS], cur.id)}</div>`;
+  if (cur.id === "message") {
+    return picker + messageFieldsHTML(modeler, bo,
+      "On reaching this send task the message is published; any instance waiting on it (a receive task or message catch) with a matching correlation key continues. The token then flows straight on.");
+  }
+  const ext = findExt(bo, cur.ext) || {};
+  return picker + `<h3>${esc(cur.name)}</h3>${stKindFieldsHTML(cur, ext)}`;
 }
 
 // applyServiceTaskKind switches a service task to a catalog kind by writing that
@@ -1352,6 +1813,20 @@ function applyServiceTaskKind(modeler, element, kindId) {
     }
   }
   upsertExt(modeler, element, kind.ext, defaults);
+}
+
+// applySendTaskKind switches a send task between its Message kind and the connector/job-worker
+// kinds (ADR-0112). The three kinds are mutually exclusive at compile time, so switching to
+// Message drops every connector/taskDefinition extension (the message picker then sets the
+// messageRef), and switching to a connector/worker clears any messageRef first.
+function applySendTaskKind(modeler, element, kindId) {
+  if (kindId === "message") {
+    for (const k of SERVICE_TASK_KINDS) removeExt(modeler, element, k.ext);
+    return;
+  }
+  const bo = element.businessObject;
+  if (bo && bo.messageRef) linkMessage(modeler, element, bo, null);
+  applyServiceTaskKind(modeler, element, kindId);
 }
 
 // decisionInputRowHTML renders one editable business-rule-task input mapping: a
@@ -1749,6 +2224,19 @@ function messageDefOf(bo) {
   return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:MessageEventDefinition") || null;
 }
 
+// messageRefHolder returns the moddle object that carries an element's messageRef: the
+// bpmn:MessageEventDefinition for a message event, or the receive task's own business object
+// (a receive task holds messageRef directly, not via an event definition — ADR-0102). It is
+// what the message picker reads and its handlers write, so a receive task reuses the same
+// picker as a message catch. null when the element references no message.
+function messageRefHolder(bo) {
+  // A receive task (ADR-0102) and a message-kind send task (ADR-0112) both hold messageRef
+  // directly on their own business object, not via an event definition, so the shared
+  // message picker reads and writes them the same way it does a message event.
+  if (bo && (bo.$type === "bpmn:ReceiveTask" || bo.$type === "bpmn:SendTask")) return bo;
+  return messageDefOf(bo);
+}
+
 // isEventSubStart reports whether a start event is the trigger of an event subprocess —
 // i.e. it sits directly inside a subprocess whose triggeredByEvent is set (ADR-0082). Such
 // a start carries a message/timer trigger and an isInterrupting flag, not a process-entry
@@ -1834,6 +2322,242 @@ function deleteMessage(modeler, msgId) {
     if (med && med.messageRef && med.messageRef.id === msgId) {
       try { modeling.updateModdleProperties(el, med, { messageRef: undefined }); } catch { /* stale */ }
     }
+  });
+}
+
+// --- Signals (broadcast events, ADR-0088) ---
+//
+// A signal is a top-level <bpmn:signal> declaration shared by reference, exactly like a
+// message — except a signal has NO correlation key: it is a 1:n broadcast delivered by
+// name alone to every waiting catch (an intermediate catch, a signal boundary, a signal
+// event subprocess, a signal start). These helpers mirror the message ones, dropping the
+// correlation-key concept.
+
+// signalDefOf returns an event's bpmn:SignalEventDefinition, or null.
+function signalDefOf(bo) {
+  return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:SignalEventDefinition") || null;
+}
+
+// listSignals returns every <bpmn:signal> declared on the model's definitions.
+function listSignals(modeler) {
+  const defs = definitionsOf(modeler);
+  const out = [];
+  if (defs && defs.rootElements) {
+    for (const el of defs.rootElements) {
+      if (el.$type === "bpmn:Signal") out.push(el);
+    }
+  }
+  return out;
+}
+
+// createSignal adds a fresh <bpmn:signal> to the model and returns it.
+function createSignal(modeler, name) {
+  const moddle = modeler.get("moddle");
+  const sig = moddle.create("bpmn:Signal");
+  sig.id = "Signal_" + Math.random().toString(36).slice(2, 8);
+  sig.name = name || "";
+  const defs = definitionsOf(modeler);
+  if (defs) {
+    sig.$parent = defs;
+    defs.rootElements = [...(defs.rootElements || []), sig];
+  }
+  return sig;
+}
+
+// linkSignal points a signal event definition at a signal (undo/redo tracked).
+function linkSignal(modeler, element, sed, sig) {
+  try { modeler.get("modeling").updateModdleProperties(element, sed, { signalRef: sig || undefined }); } catch { /* stale */ }
+}
+
+// deleteSignal removes a signal and clears any event still referencing it, so a deleted
+// signal never leaves a dangling signalRef (which would fail to compile).
+function deleteSignal(modeler, sigId) {
+  const defs = definitionsOf(modeler);
+  if (defs && defs.rootElements) defs.rootElements = defs.rootElements.filter((e) => e.id !== sigId);
+  const modeling = modeler.get("modeling");
+  modeler.get("elementRegistry").getAll().forEach((el) => {
+    const sed = signalDefOf(el.businessObject);
+    if (sed && sed.signalRef && sed.signalRef.id === sigId) {
+      try { modeling.updateModdleProperties(el, sed, { signalRef: undefined }); } catch { /* stale */ }
+    }
+  });
+}
+
+// signalFieldsHTML renders the signal picker for a catch/throw/boundary/start/end event:
+// a dropdown of the model's shared signals (plus "new") and — once one is chosen — its
+// name, shared so every event using the signal stays in sync. Unlike a message there is
+// no correlation key: a signal broadcasts by name alone. sed is the
+// bpmn:SignalEventDefinition.
+function signalFieldsHTML(modeler, sed, hint) {
+  const current = sed.signalRef;
+  const options = listSignals(modeler).map((s) =>
+    `<option value="${esc(s.id)}"${current && current.id === s.id ? " selected" : ""}>${esc(s.name || s.id)}</option>`
+  ).join("");
+  const fields = current ? `
+    <label class="field"><span>Signal name</span>
+      <input type="text" id="f-signame" value="${esc(current.name || "")}" placeholder="order-cancelled"/></label>
+    <p class="muted" style="font-size:12px">Shared with every event that uses this signal — a broadcast reaches every catch, boundary, event subprocess, and start event of the same name.</p>` : "";
+  return `<h3>Signal</h3>
+    <label class="field"><span>Signal</span>
+      <select id="f-sigref">
+        <option value="">— none —</option>
+        ${options}
+        <option value="__new__">＋ New signal…</option>
+      </select></label>
+    ${fields}
+    <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
+// signalsManagerHTML lists the model's signals for central management (add, rename,
+// delete). Shown on the diagram/collaboration root alongside the messages manager.
+function signalsManagerHTML(modeler) {
+  const sigs = listSignals(modeler);
+  const rows = sigs.length
+    ? sigs.map((s) => `
+        <div class="sig-row" data-id="${esc(s.id)}">
+          <input class="sig-name" value="${esc(s.name || "")}" placeholder="signal name"/>
+          <button type="button" class="btn ghost danger sig-del" title="Delete signal">✕</button>
+        </div>`).join("")
+    : `<p class="muted" style="font-size:12px;margin:0 0 8px">No signals yet — add one, then reference it from a signal throw/catch/boundary/start event.</p>`;
+  return `<h3>Signals</h3>
+    <div class="sig-list">${rows}</div>
+    <button type="button" class="btn neutral" id="sig-add" style="margin-top:8px">＋ Add signal</button>
+    <p class="muted" style="font-size:12px">A signal is a broadcast by name: a <b>throw</b> reaches every <b>catch</b>, boundary, event subprocess, and start event using the same signal — with no correlation key.</p>`;
+}
+
+// wireSignalsManager binds the Signals management section's inputs and buttons.
+// rerenderRoot re-renders the root panel after add/delete so the list updates.
+function wireSignalsManager(body, modeler, rerenderRoot) {
+  const add = body.querySelector("#sig-add");
+  if (add) add.addEventListener("click", () => { createSignal(modeler, "signal"); rerenderRoot(); });
+  body.querySelectorAll(".sig-row").forEach((row) => {
+    const id = row.dataset.id;
+    const sig = () => listSignals(modeler).find((s) => s.id === id);
+    const nameIn = row.querySelector(".sig-name");
+    if (nameIn) nameIn.addEventListener("change", () => { const s = sig(); if (s) s.name = nameIn.value.trim(); });
+    const del = row.querySelector(".sig-del");
+    if (del) del.addEventListener("click", () => { deleteSignal(modeler, id); rerenderRoot(); });
+  });
+}
+
+// --- Errors (scoped failures, ADR-0089) ---
+//
+// An error is a top-level <bpmn:error> declaration shared by reference, like a message or
+// signal — but matched by its errorCode (not a name or correlation key) and delivered to the
+// NEAREST enclosing handler (an error boundary or error event subprocess), not broadcast. An
+// error is thrown by an error end event (or a worker failing a job to a code); an error catch
+// is always interrupting. These helpers mirror the signal ones, authoring the error code — a
+// code-less error is a catch-all when caught, an uncoded throw when thrown.
+
+// errorDefOf returns an event's bpmn:ErrorEventDefinition, or null.
+function errorDefOf(bo) {
+  return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:ErrorEventDefinition") || null;
+}
+
+// cancelDefOf returns the <cancelEventDefinition> of an element, or null. On a boundary event
+// it makes a cancel boundary (a transaction's cancellation catch); on an end event a cancel
+// end event (ADR-0108).
+function cancelDefOf(bo) {
+  return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:CancelEventDefinition") || null;
+}
+
+// listErrors returns every <bpmn:error> declared on the model's definitions.
+function listErrors(modeler) {
+  const defs = definitionsOf(modeler);
+  const out = [];
+  if (defs && defs.rootElements) {
+    for (const el of defs.rootElements) {
+      if (el.$type === "bpmn:Error") out.push(el);
+    }
+  }
+  return out;
+}
+
+// createError adds a fresh <bpmn:error> with the given code to the model and returns it.
+function createError(modeler, code) {
+  const moddle = modeler.get("moddle");
+  const err = moddle.create("bpmn:Error");
+  err.id = "Error_" + Math.random().toString(36).slice(2, 8);
+  err.errorCode = code || "";
+  const defs = definitionsOf(modeler);
+  if (defs) {
+    err.$parent = defs;
+    defs.rootElements = [...(defs.rootElements || []), err];
+  }
+  return err;
+}
+
+// linkError points an error event definition at an error (undo/redo tracked).
+function linkError(modeler, element, eed, err) {
+  try { modeler.get("modeling").updateModdleProperties(element, eed, { errorRef: err || undefined }); } catch { /* stale */ }
+}
+
+// deleteError removes an error and clears any event still referencing it, so a deleted error
+// never leaves a dangling errorRef (which would fail to compile).
+function deleteError(modeler, errId) {
+  const defs = definitionsOf(modeler);
+  if (defs && defs.rootElements) defs.rootElements = defs.rootElements.filter((e) => e.id !== errId);
+  const modeling = modeler.get("modeling");
+  modeler.get("elementRegistry").getAll().forEach((el) => {
+    const eed = errorDefOf(el.businessObject);
+    if (eed && eed.errorRef && eed.errorRef.id === errId) {
+      try { modeling.updateModdleProperties(el, eed, { errorRef: undefined }); } catch { /* stale */ }
+    }
+  });
+}
+
+// errorFieldsHTML renders the error picker for an error end event or an error boundary /
+// event subprocess: a dropdown of the model's shared errors (plus "new") and — once one is
+// chosen — its code, shared so a thrower and its catchers stay in sync. Matching is by code;
+// a code-less error is a catch-all. eed is the bpmn:ErrorEventDefinition.
+function errorFieldsHTML(modeler, eed, hint) {
+  const current = eed.errorRef;
+  const options = listErrors(modeler).map((e) =>
+    `<option value="${esc(e.id)}"${current && current.id === e.id ? " selected" : ""}>${esc(e.errorCode || e.id)}</option>`
+  ).join("");
+  const fields = current ? `
+    <label class="field"><span>Error code</span>
+      <input type="text" id="f-errcode" value="${esc(current.errorCode || "")}" placeholder="PAYMENT_FAILED"/></label>
+    <p class="muted" style="font-size:12px">Shared with every event that uses this error — a thrown code is caught by the nearest enclosing error boundary or error event subprocess with the same code (an empty code is a catch-all).</p>` : "";
+  return `<h3>Error</h3>
+    <label class="field"><span>Error</span>
+      <select id="f-errref">
+        <option value="">— none —</option>
+        ${options}
+        <option value="__new__">＋ New error…</option>
+      </select></label>
+    ${fields}
+    <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
+// errorsManagerHTML lists the model's errors for central management (add, edit code, delete).
+function errorsManagerHTML(modeler) {
+  const errs = listErrors(modeler);
+  const rows = errs.length
+    ? errs.map((e) => `
+        <div class="err-row" data-id="${esc(e.id)}">
+          <input class="err-code" value="${esc(e.errorCode || "")}" placeholder="error code"/>
+          <button type="button" class="btn ghost danger err-del" title="Delete error">✕</button>
+        </div>`).join("")
+    : `<p class="muted" style="font-size:12px;margin:0 0 8px">No errors yet — add one, then reference it from an error end event or error boundary.</p>`;
+  return `<h3>Errors</h3>
+    <div class="err-list">${rows}</div>
+    <button type="button" class="btn neutral" id="err-add" style="margin-top:8px">＋ Add error</button>
+    <p class="muted" style="font-size:12px">An error is a scoped failure caught by code: an <b>error end event</b> (or a worker) throws it, and the nearest enclosing <b>error boundary</b> or <b>error event subprocess</b> with the same code catches it — always interrupting.</p>`;
+}
+
+// wireErrorsManager binds the Errors management section's inputs and buttons.
+// rerenderRoot re-renders the root panel after add/delete so the list updates.
+function wireErrorsManager(body, modeler, rerenderRoot) {
+  const add = body.querySelector("#err-add");
+  if (add) add.addEventListener("click", () => { createError(modeler, "ERROR_CODE"); rerenderRoot(); });
+  body.querySelectorAll(".err-row").forEach((row) => {
+    const id = row.dataset.id;
+    const err = () => listErrors(modeler).find((e) => e.id === id);
+    const codeIn = row.querySelector(".err-code");
+    if (codeIn) codeIn.addEventListener("change", () => { const e = err(); if (e) e.errorCode = codeIn.value.trim(); });
+    const del = row.querySelector(".err-del");
+    if (del) del.addEventListener("click", () => { deleteError(modeler, id); rerenderRoot(); });
   });
 }
 
@@ -2184,7 +2908,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
     const poolFields = `
       <h3>Pool</h3>
       <label class="field"><span>Name</span><input type="text" id="f-poolname" value="${esc(bo.name || "")}" placeholder="Teilnehmer"/></label>
-      <label class="field"><span>Pool ID</span><input type="text" value="${esc(bo.id || "")}" readonly/></label>`;
+      <label class="field"><span>Pool ID</span><input type="text" id="f-poolid" value="${esc(bo.id || "")}" spellcheck="false"/></label>`;
 
     if (!proc) {
       body.innerHTML = `${poolFields}
@@ -2195,6 +2919,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
       body.querySelector("#f-poolname").addEventListener("change", (e) => {
         try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
       });
+      wirePoolId(body, element);
       body.querySelector("#f-addproc").addEventListener("click", () => addProcessToPool(element));
       return;
     }
@@ -2218,6 +2943,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
     body.querySelector("#f-poolname").addEventListener("change", (e) => {
       try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
     });
+    wirePoolId(body, element);
     body.querySelector("#f-procname").addEventListener("change", (e) => {
       try { modeling.updateModdleProperties(element, proc, { name: e.target.value }); } catch { /* stale */ }
     });
@@ -2226,6 +2952,21 @@ function wireProperties(root, modeler, api, projectId, toast) {
       if (v) { try { modeling.updateModdleProperties(element, proc, { id: v }); } catch { toast("invalid process id", "err"); } }
     });
     if (activeTab(root) === "implement") wireStartVars(body, modeler, element, proc, savePreservingPanel);
+  }
+
+  // wirePoolId makes a pool's ID editable, the same way the element ID and Process ID
+  // fields are: bpmn-js validates the new id and rewrites references, throwing on an
+  // invalid or duplicate id, which we revert with a toast.
+  function wirePoolId(body, element) {
+    const f = body.querySelector("#f-poolid");
+    if (!f) return;
+    f.addEventListener("change", (e) => {
+      const v = (e.target.value || "").trim();
+      if (v === element.businessObject.id) return;
+      if (!v) { show(element); return; }
+      try { modeling.updateProperties(element, { id: v }); }
+      catch { toast("invalid id — must be unique and a valid identifier", "err"); show(element); }
+    });
   }
 
   function show(element) {
@@ -2256,7 +2997,9 @@ function wireProperties(root, modeler, api, projectId, toast) {
           <label class="pcheck"><input type="checkbox" id="f-pexec"${rootBo.isExecutable !== false ? " checked" : ""}/> <span>Executable</span></label>
           <p class="muted" style="font-size:12px">An <b>executable</b> process can be started and offered in the start lists; leave it off for a descriptive-only diagram. <b>Version tag</b> is an optional label for this revision.</p>
           ${startVarsHTML}
-          ${messagesManagerHTML(modeler)}`;
+          ${messagesManagerHTML(modeler)}
+          ${signalsManagerHTML(modeler)}
+          ${errorsManagerHTML(modeler)}`;
         const rootEl = modeler.get("canvas").getRootElement();
         body.querySelector("#f-pname").addEventListener("change", (e) => {
           try { modeling.updateProperties(rootEl, { name: e.target.value }); } catch { /* ignore */ }
@@ -2274,6 +3017,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
         });
         wireStartVars(body, modeler);
         wireMessagesManager(body, modeler, () => show(null));
+        wireSignalsManager(body, modeler, () => show(null));
+        wireErrorsManager(body, modeler, () => show(null));
         return;
       }
       // A collaboration root has no single process to rename; each pool
@@ -2283,8 +3028,12 @@ function wireProperties(root, modeler, api, projectId, toast) {
         body.innerHTML = `
           <h3>Collaboration</h3>
           <p class="muted" style="font-size:12px">This diagram has several <b>pools</b>. A pool is a <b>participant</b> that <i>executes a process</i> — the process holds the flow, the pool just names who runs it, and each deploys as its own process. Select a pool to name it and configure the process it runs, or an element inside a pool to configure it. Pools talk to each other through <b>message events</b>: a throw event in one pool and a catch event in another that reference the <b>same message</b> below.</p>
-          ${messagesManagerHTML(modeler)}`;
+          ${messagesManagerHTML(modeler)}
+          ${signalsManagerHTML(modeler)}
+          ${errorsManagerHTML(modeler)}`;
         wireMessagesManager(body, modeler, () => show(null));
+        wireSignalsManager(body, modeler, () => show(null));
+        wireErrorsManager(body, modeler, () => show(null));
         return;
       }
       icon.textContent = "–"; typename.textContent = "No selection"; nameEl.textContent = "—";
@@ -2333,7 +3082,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
     let html = `
       <h3>General</h3>
       <label class="field"><span>${isSeqFlow ? "Label" : "Name"}</span><input type="text" id="f-name" value="${esc(bo.name || "")}"${isSeqFlow ? ' placeholder="Großauftrag"' : ""}/></label>
-      <label class="field"><span>ID</span><input type="text" value="${esc(bo.id || "")}" readonly/></label>`;
+      <label class="field"><span>ID</span><input type="text" id="f-id" value="${esc(bo.id || "")}" spellcheck="false"/></label>`;
 
     // A data object is the data a process carries — first-class in Atlas, not just
     // decoration (ADR-0053). Its name is the engine's variable-like identity and its
@@ -2383,7 +3132,16 @@ function wireProperties(root, modeler, api, projectId, toast) {
     }
 
     if (tab === "implement") {
-      if (isActivity(bo)) {
+      if (bo.$type === "bpmn:ReceiveTask") {
+        // A receive task waits for a correlating message, then continues (ADR-0102). It is
+        // an activity, so it takes the shared message picker (the receive task holds its
+        // messageRef directly, which messageRefHolder resolves for the field handlers).
+        html += messageFieldsHTML(modeler, bo, "The receive task waits until this message is published (or thrown) with a matching correlation key, then continues. Attach a timer boundary event for a wait-or-time-out.");
+      } else if (bo.$type === "bpmn:SendTask") {
+        // The single outbound element (ADR-0112): a kind picker chooses what it sends —
+        // Message (a correlating throw), or a connector / job worker (a job it waits on).
+        html += sendTaskKindHTML(modeler, bo);
+      } else if (isActivity(bo)) {
         const t = bo.$type;
         html += `
           <label class="field"><span>Task type</span>
@@ -2536,7 +3294,9 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const propChild = ce.propagateAllChildVariables !== false;   // default true (Zeebe)
         html += `<h3>Called process</h3>
           <label class="field"><span>Process ID</span>
-            <input type="text" id="f-call-processid" value="${esc(ce.processId || "")}" placeholder="pruefe-auftrag"/></label>
+            <input type="text" id="f-call-processid" list="f-call-proc-list" autocomplete="off" value="${esc(ce.processId || "")}" placeholder="pruefe-auftrag"/>
+            <datalist id="f-call-proc-list"></datalist></label>
+          <div class="field-actions"><button type="button" class="btn ghost small" id="f-call-newproc">&#43; Create new process</button></div>
           <label class="field"><span>Binding</span>
             <select id="f-call-binding">
               <option value="latest" ${binding === "latest" ? "selected" : ""}>Latest — newest deployed version</option>
@@ -2561,21 +3321,27 @@ function wireProperties(root, modeler, api, projectId, toast) {
       } else if (bo.$type === "bpmn:IntermediateCatchEvent") {
         const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
+        const sig = signalDefOf(bo);
         if (timer) {
           html += timerFieldsHTML(timer, ["duration", "date"], `The event waits, then continues (ADR-0054).
             <b>Duration</b> waits that long (<b>PT30S</b>, <b>PT5M</b>, <b>P1DT2H</b>); <b>Date &amp; time</b> waits until that instant.
             A catch fires once, so it has no cycle. A FEEL expression is allowed in either.`);
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "The event waits until this message is published with a matching correlation key.");
+        } else if (sig) {
+          html += signalFieldsHTML(modeler, sig, "The event waits until a signal with this name is broadcast (by a throw or signal end event, in this or any other instance).");
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b> or <b>Message</b> intermediate catch event, then configure it here.</p>`;
+          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, or <b>Signal</b> intermediate catch event, then configure it here.</p>`;
         }
       } else if (bo.$type === "bpmn:IntermediateThrowEvent") {
         const msg = messageDefOf(bo);
+        const sig = signalDefOf(bo);
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "On reaching this event the message is published; any instance waiting on it with a matching correlation key continues.");
+        } else if (sig) {
+          html += signalFieldsHTML(modeler, sig, "On reaching this event the signal is broadcast to every event waiting on that signal name, across all instances. The token then continues.");
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Message</b> throw event, then configure it here.</p>`;
+          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Message</b> or <b>Signal</b> throw event, then configure it here.</p>`;
         }
       } else if (bo.$type === "bpmn:BoundaryEvent") {
         // A boundary event is attached to an activity and arms while it runs. Its
@@ -2584,26 +3350,43 @@ function wireProperties(root, modeler, api, projectId, toast) {
         // timer / message wiring as the intermediate catch event.
         const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
-        const interrupting = bo.cancelActivity !== false;
-        html += `<h3>Behaviour</h3>
-          <label class="field"><span>On trigger</span>
-            <select id="f-cancelactivity">
-              <option value="true" ${interrupting ? "selected" : ""}>Interrupting — cancel the activity</option>
-              <option value="false" ${interrupting ? "" : "selected"}>Non-interrupting — run alongside</option>
-            </select></label>
-          <p class="muted" style="font-size:12px">Interrupting cancels the attached activity (and its job) and routes the token out this event; non-interrupting spawns a parallel token and lets the activity continue.</p>`;
-        if (timer) {
-          const kinds = interrupting ? ["duration", "date"] : ["duration", "date", "cycle"];
-          const cycleNote = interrupting
-            ? "An interrupting boundary fires once, so it has no cycle."
-            : "A non-interrupting boundary may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R/PT1H</b>) or cron (<b>0 * * * *</b>) — firing a fresh token each time.";
-          html += timerFieldsHTML(timer, kinds, `The event fires relative to the activity (ADR-0054).
-            <b>Duration</b> fires that long after it starts (<b>PT30S</b>, <b>PT5M</b>); <b>Date &amp; time</b> at a fixed instant.
-            ${cycleNote} A FEEL expression is allowed in any type.`);
-        } else if (msg) {
-          html += messageFieldsHTML(modeler, msg, "The event fires when this message is published with a matching correlation key.");
+        const sig = signalDefOf(bo);
+        const err = errorDefOf(bo);
+        const cancel = cancelDefOf(bo);
+        if (err) {
+          // An error boundary is always interrupting — no cancelActivity toggle (ADR-0089).
+          html += `<h3>Behaviour</h3>
+            <p class="muted" style="font-size:12px">An <b>error boundary</b> is always <b>interrupting</b>: a matching thrown error cancels the attached activity (and its job) and routes the token out this event.</p>`;
+          html += errorFieldsHTML(modeler, err, "The event fires when the attached activity throws a matching error — an error end event inside it, a worker failing its job to the code, or an error propagating up from a called process.");
+        } else if (cancel) {
+          // A cancel boundary may attach only to a transaction and is always interrupting — no
+          // cancelActivity toggle and no trigger fields (ADR-0108).
+          html += `<h3>Behaviour</h3>
+            <p class="muted" style="font-size:12px">A <b>cancel boundary</b> attaches only to a <b>transaction</b> and is always <b>interrupting</b>: when a cancel end event inside the transaction fires, its completed activities are compensated (in reverse order) and the token is then routed out this event. Draw it on a transaction subprocess.</p>`;
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b> or <b>Message</b> boundary event, then configure its trigger here.</p>`;
+          const interrupting = bo.cancelActivity !== false;
+          html += `<h3>Behaviour</h3>
+            <label class="field"><span>On trigger</span>
+              <select id="f-cancelactivity">
+                <option value="true" ${interrupting ? "selected" : ""}>Interrupting — cancel the activity</option>
+                <option value="false" ${interrupting ? "" : "selected"}>Non-interrupting — run alongside</option>
+              </select></label>
+            <p class="muted" style="font-size:12px">Interrupting cancels the attached activity (and its job) and routes the token out this event; non-interrupting spawns a parallel token and lets the activity continue.</p>`;
+          if (timer) {
+            const kinds = interrupting ? ["duration", "date"] : ["duration", "date", "cycle"];
+            const cycleNote = interrupting
+              ? "An interrupting boundary fires once, so it has no cycle."
+              : "A non-interrupting boundary may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R/PT1H</b>) or cron (<b>0 * * * *</b>) — firing a fresh token each time.";
+            html += timerFieldsHTML(timer, kinds, `The event fires relative to the activity (ADR-0054).
+              <b>Duration</b> fires that long after it starts (<b>PT30S</b>, <b>PT5M</b>); <b>Date &amp; time</b> at a fixed instant.
+              ${cycleNote} A FEEL expression is allowed in any type.`);
+          } else if (msg) {
+            html += messageFieldsHTML(modeler, msg, "The event fires when this message is published with a matching correlation key.");
+          } else if (sig) {
+            html += signalFieldsHTML(modeler, sig, "The event fires when a signal with this name is broadcast (in this or any other instance) while the activity runs.");
+          } else {
+            html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, or <b>Error</b> boundary event, then configure its trigger here.</p>`;
+          }
         }
       } else if (bo.$type === "bpmn:StartEvent" && isEventSubStart(element)) {
         // The start event of an event subprocess: it triggers the handler while the
@@ -2612,30 +3395,42 @@ function wireProperties(root, modeler, api, projectId, toast) {
         // flag is the scope-level analog of a boundary's cancelActivity.
         const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
-        const interrupting = bo.isInterrupting !== false;
-        html += `<h3>Event subprocess trigger</h3>
-          <label class="field"><span>On trigger</span>
-            <select id="f-interrupting">
-              <option value="true" ${interrupting ? "selected" : ""}>Interrupting — cancel the enclosing scope</option>
-              <option value="false" ${interrupting ? "" : "selected"}>Non-interrupting — run alongside</option>
-            </select></label>
-          <p class="muted" style="font-size:12px">This start event triggers the event subprocess while its enclosing scope (the process or subprocess) runs. <b>Interrupting</b> terminates the scope's other work, then runs this handler; <b>non-interrupting</b> runs it in parallel and can fire again.</p>`;
-        if (timer) {
-          const kinds = interrupting ? ["duration", "date"] : ["duration", "date", "cycle"];
-          const cycleNote = interrupting
-            ? "An interrupting timer fires once, so it has no cycle."
-            : "A non-interrupting timer may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R3/PT1H</b>) or cron (<b>0 * * * *</b>) — firing the handler each time.";
-          html += timerFieldsHTML(timer, kinds, `The event subprocess fires on this schedule while its scope runs (ADR-0082).
-            <b>Duration</b> fires that long after the scope is entered; <b>Date &amp; time</b> at a fixed instant.
-            ${cycleNote} A FEEL expression is allowed in any type.`);
-        } else if (msg) {
-          html += messageFieldsHTML(modeler, msg, "The event subprocess fires when this message is published with a matching correlation key, while its scope runs.");
+        const sig = signalDefOf(bo);
+        const err = errorDefOf(bo);
+        if (err) {
+          // An error event subprocess is always interrupting — no toggle (ADR-0089).
+          html += `<h3>Event subprocess trigger</h3>
+            <p class="muted" style="font-size:12px">An <b>error event subprocess</b> is always <b>interrupting</b>: a matching thrown error terminates the enclosing scope's other work, then runs this handler.</p>`;
+          html += errorFieldsHTML(modeler, err, "The event subprocess fires when its enclosing scope throws a matching error, terminating the scope's other work and running this handler.");
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on this start event to give it a <b>Timer</b> or <b>Message</b> trigger, then configure it here.</p>`;
+          const interrupting = bo.isInterrupting !== false;
+          html += `<h3>Event subprocess trigger</h3>
+            <label class="field"><span>On trigger</span>
+              <select id="f-interrupting">
+                <option value="true" ${interrupting ? "selected" : ""}>Interrupting — cancel the enclosing scope</option>
+                <option value="false" ${interrupting ? "" : "selected"}>Non-interrupting — run alongside</option>
+              </select></label>
+            <p class="muted" style="font-size:12px">This start event triggers the event subprocess while its enclosing scope (the process or subprocess) runs. <b>Interrupting</b> terminates the scope's other work, then runs this handler; <b>non-interrupting</b> runs it in parallel and can fire again.</p>`;
+          if (timer) {
+            const kinds = interrupting ? ["duration", "date"] : ["duration", "date", "cycle"];
+            const cycleNote = interrupting
+              ? "An interrupting timer fires once, so it has no cycle."
+              : "A non-interrupting timer may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R3/PT1H</b>) or cron (<b>0 * * * *</b>) — firing the handler each time.";
+            html += timerFieldsHTML(timer, kinds, `The event subprocess fires on this schedule while its scope runs (ADR-0082).
+              <b>Duration</b> fires that long after the scope is entered; <b>Date &amp; time</b> at a fixed instant.
+              ${cycleNote} A FEEL expression is allowed in any type.`);
+          } else if (msg) {
+            html += messageFieldsHTML(modeler, msg, "The event subprocess fires when this message is published with a matching correlation key, while its scope runs.");
+          } else if (sig) {
+            html += signalFieldsHTML(modeler, sig, "The event subprocess fires when a signal with this name is broadcast while its scope runs. A non-interrupting trigger re-arms and can fire again.");
+          } else {
+            html += `<p class="muted" style="font-size:12px">Use the wrench icon on this start event to give it a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, or <b>Error</b> trigger, then configure it here.</p>`;
+          }
         }
       } else if (bo.$type === "bpmn:StartEvent") {
         const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
+        const sig = signalDefOf(bo);
         if (timer) {
           html += timerFieldsHTML(timer, ["duration", "date", "cycle"], `A timer start event fires on this schedule with no incoming token (ADR-0051).
             <b>Duration</b> and <b>Date &amp; time</b> fire once — that long after deploy, or at that instant;
@@ -2643,6 +3438,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
             A FEEL expression is allowed in any type.`);
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "A message start event: publishing this message starts a new instance of this process, matched by message name (the correlation key is shared with the throwing event but is not yet evaluated for starts).");
+        } else if (sig) {
+          html += signalFieldsHTML(modeler, sig, "A signal start event: broadcasting this signal starts a new instance of this process, matched by signal name. One broadcast starts every deployed process with a matching signal start.");
         } else {
           const fd = findExt(bo, "zeebe:FormDefinition") || {};
           const curForm = fd.formId || "";
@@ -2654,14 +3451,28 @@ function wireProperties(root, modeler, api, projectId, toast) {
               </select></label>
             <p class="muted" style="font-size:12px">Shown before the process starts — from the Tasks app's <b>Start</b> view — its data becomes the instance's start variables.
               <a href="#/modeler/form/new" target="_blank" rel="noopener">Create a new form</a>, then reopen this to link it.</p>
-            <p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Timer</b> or <b>Message</b> start event instead.</p>`;
+            <p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, or <b>Signal</b> start event instead.</p>`;
         }
+      } else if (bo.$type === "bpmn:EventBasedGateway") {
+        // A deferred choice: no configuration of its own — the branches are the
+        // catch events it points at (ADR-0110).
+        html += `<p class="muted" style="font-size:12px">An <b>event-based gateway</b> is a <b>deferred choice</b>: reaching it arms every branch's catch event at once (each outgoing flow must lead to a <b>message</b>, <b>timer</b>, or <b>signal</b> intermediate catch event), and the branch whose event fires <b>first</b> is taken — the others are cancelled. The classic use is a request with a timeout (a message catch raced against a timer catch).</p>`;
       } else if (bo.$type === "bpmn:EndEvent") {
         const msg = messageDefOf(bo);
+        const sig = signalDefOf(bo);
+        const err = errorDefOf(bo);
+        const cancel = cancelDefOf(bo);
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "On reaching this end event the message is published; any instance waiting on it with a matching correlation key continues. The instance then ends.");
+        } else if (sig) {
+          html += signalFieldsHTML(modeler, sig, "On reaching this end event the signal is broadcast to every event waiting on that signal name, across all instances. The instance then ends.");
+        } else if (err) {
+          html += errorFieldsHTML(modeler, err, "On reaching this end event the error is thrown, aborting its scope and propagating up to the nearest matching error boundary or error event subprocess. Uncaught, it raises an incident.");
+        } else if (cancel) {
+          // A cancel end event is only meaningful inside a transaction (ADR-0108).
+          html += `<p class="muted" style="font-size:12px">A <b>cancel end event</b> cancels its enclosing <b>transaction</b>: its completed activities are compensated (in reverse order), then the token is routed out the transaction's <b>cancel boundary</b>. Use it only inside a transaction subprocess.</p>`;
         } else {
-          html += `<p class="muted" style="font-size:12px">A plain end event ends the instance. Use the wrench icon on the element to make this a <b>Message</b> end event, which publishes a message as the instance ends.</p>`;
+          html += `<p class="muted" style="font-size:12px">A plain end event ends the instance. Use the wrench icon on the element to make this a <b>Message</b>, <b>Signal</b>, or <b>Error</b> end event.</p>`;
         }
       }
     } else if (isGatewayFlow && !isDefaultFlow) {
@@ -2685,6 +3496,22 @@ function wireProperties(root, modeler, api, projectId, toast) {
         }
       } catch { /* stale */ }
     });
+
+    // Element IDs are editable, mirroring the Process ID field. bpmn-js validates the
+    // new id (unique, a valid identifier) and rewrites the references that point at this
+    // element — they are moddle object references, so links such as a data object's stay
+    // intact — throwing on an invalid or duplicate id, which we revert with a toast. This
+    // is how a data object's auto-generated id is renamed to something meaningful.
+    const fid = body.querySelector("#f-id");
+    if (fid) {
+      fid.addEventListener("change", (e) => {
+        const v = (e.target.value || "").trim();
+        if (v === bo.id) return;
+        if (!v) { show(element); return; } // empty is not a valid id → revert to the current one
+        try { modeling.updateProperties(element, { id: v }); }
+        catch { toast("invalid id — must be unique and a valid identifier", "err"); show(element); }
+      });
+    }
 
     const fdatastate = body.querySelector("#f-datastate");
     if (fdatastate) {
@@ -2821,7 +3648,9 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const row = e.target.closest(".stkind-row");
         if (!row) return;
         try {
-          applyServiceTaskKind(modeler, element, row.dataset.kind);
+          // A send task's picker includes the Message kind (ADR-0112); a service task's does not.
+          if (bo.$type === "bpmn:SendTask") applySendTaskKind(modeler, element, row.dataset.kind);
+          else applyServiceTaskKind(modeler, element, row.dataset.kind);
           show(element);
         } catch { /* stale */ }
       });
@@ -2866,7 +3695,12 @@ function wireProperties(root, modeler, api, projectId, toast) {
     const stFeelVars = variablesForCompletion(modeler, element);
     const stValidate = api ? (expression) => api("POST", "/api/v1/feel/validate", { expression }) : null;
     const stAttachFx = (el) => { if (el) attachExpressionToggle(el, { variables: stFeelVars, validate: stValidate }); };
-    if (stKind.fields.some((f) => f.key === "url" && f.fx)) stAttachFx(body.querySelector("#f-st-url"));
+    // Every fx-capable text field (REST url, mail recipients/subject/body, the Remedy
+    // form, …) gets the value-or-expression toggle; map value cells are handled below.
+    for (const f of stKind.fields) {
+      if (f.group || f.type === "map" || !f.fx) continue;
+      stAttachFx(body.querySelector("#f-st-" + f.key));
+    }
 
     // Map editors: a name/value row list with add/remove. Edits and removals save;
     // adding inserts an empty row (it saves once the author types a name). When the
@@ -3174,6 +4008,77 @@ function wireProperties(root, modeler, api, projectId, toast) {
       fcallbind.addEventListener("change", saveCall);
       fcallpp.addEventListener("change", saveCall);
       fcallpc.addEventListener("change", saveCall);
+
+      // Suggest existing callees — deployed processes and saved drafts — so the
+      // Process ID is a pick, not blind typing; free text stays allowed for a callee
+      // that doesn't exist yet (ADR-0076). Best-effort: a load failure just leaves an
+      // empty suggestion list.
+      const proclist = body.querySelector("#f-call-proc-list");
+      if (proclist) {
+        (async () => {
+          try {
+            const [procs, drafts] = await Promise.all([
+              api("GET", "/api/v1/processes").catch(() => []),
+              api("GET", "/api/v1/drafts").catch(() => []),
+            ]);
+            const seen = new Set();
+            const opts = [];
+            const add = (id, label) => {
+              id = (id || "").trim();
+              if (!id || seen.has(id)) return;
+              seen.add(id);
+              opts.push(`<option value="${esc(id)}">${esc(label)}</option>`);
+            };
+            (procs || []).forEach((p) => add(p.processId,
+              (p.name && p.name !== p.processId ? p.name + " · " : "") + "deployed" + (p.version ? " v" + p.version : "")));
+            (drafts || []).forEach((d) => add(d.processId,
+              (d.name && d.name !== d.processId ? d.name + " · " : "") + "draft"));
+            proclist.innerHTML = opts.join("");
+          } catch { /* suggestions are best-effort */ }
+        })();
+      }
+
+      // "＋ Create new process" scaffolds the called process the caller points at and
+      // opens it (ADR-0076): it saves this caller first (drafts persist only on save,
+      // so navigating away would otherwise drop its edits), then creates a starter
+      // draft keyed by the process id and navigates to it in the modeler.
+      const newbtn = body.querySelector("#f-call-newproc");
+      if (newbtn) {
+        newbtn.addEventListener("click", async () => {
+          let pid = (fcallpid.value || "").trim();
+          if (!pid) {
+            const typed = prompt("Process ID for the new called process:", "");
+            if (typed == null) return;
+            pid = typed.trim();
+            if (!pid) return;
+          }
+          pid = pid.replace(/\s+/g, "_");
+          newbtn.disabled = true;
+          try {
+            // Point the caller at this child, then persist the caller so its unsaved
+            // edits survive the navigation.
+            fcallpid.value = pid;
+            saveCall();
+            const savePath = "/api/v1/drafts" + (projectId ? "?projectId=" + encodeURIComponent(projectId) : "");
+            const { xml: callerXml } = await modeler.saveXML({ format: true });
+            await api("POST", savePath, callerXml, true);
+            if (collab && collab.markSaved) collab.markSaved();
+            // Scaffold the child only if no draft already holds that id — never clobber
+            // existing work; just open it in that case.
+            const existing = await api("GET", "/api/v1/drafts").catch(() => []);
+            if ((existing || []).some((d) => (d.processId || "") === pid)) {
+              toast(`Opening existing draft “${pid}”`, "ok");
+            } else {
+              await api("POST", savePath, calleeXML(pid, pid), true);
+              toast(`Created called process “${pid}”`, "ok");
+            }
+            location.hash = `#/modeler/draft/${encodeURIComponent(pid)}`;
+          } catch (e) {
+            toast("Could not create the process: " + e.message, "err");
+            newbtn.disabled = false;
+          }
+        });
+      }
     }
 
     // Multi-instance (ADR-0077): the whole bpmn:MultiInstanceLoopCharacteristics is
@@ -3321,7 +4226,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
     const fmsgref = body.querySelector("#f-msgref");
     if (fmsgref) {
       fmsgref.addEventListener("change", () => {
-        const med = messageDefOf(element.businessObject);
+        const med = messageRefHolder(element.businessObject);
         if (!med) return;
         const v = fmsgref.value;
         savePreservingPanel(() => {
@@ -3339,15 +4244,65 @@ function wireProperties(root, modeler, api, projectId, toast) {
     const fmsgname = body.querySelector("#f-msgname");
     if (fmsgname) {
       fmsgname.addEventListener("change", () => {
-        const med = messageDefOf(element.businessObject);
+        const med = messageRefHolder(element.businessObject);
         if (med && med.messageRef) med.messageRef.name = (fmsgname.value || "").trim();
       });
     }
     const fcorrkey = body.querySelector("#f-corrkey");
     if (fcorrkey) {
       fcorrkey.addEventListener("change", () => {
-        const med = messageDefOf(element.businessObject);
+        const med = messageRefHolder(element.businessObject);
         if (med && med.messageRef) setMessageCorrelationKey(modeler, med.messageRef, (fcorrkey.value || "").trim());
+      });
+    }
+    const fsigref = body.querySelector("#f-sigref");
+    if (fsigref) {
+      fsigref.addEventListener("change", () => {
+        const sed = signalDefOf(element.businessObject);
+        if (!sed) return;
+        const v = fsigref.value;
+        savePreservingPanel(() => {
+          if (v === "__new__") {
+            linkSignal(modeler, element, sed, createSignal(modeler, ""));
+          } else if (v === "") {
+            linkSignal(modeler, element, sed, null);
+          } else {
+            linkSignal(modeler, element, sed, listSignals(modeler).find((s) => s.id === v));
+          }
+        });
+        show(element); // re-render so the name field matches the chosen signal
+      });
+    }
+    const fsigname = body.querySelector("#f-signame");
+    if (fsigname) {
+      fsigname.addEventListener("change", () => {
+        const sed = signalDefOf(element.businessObject);
+        if (sed && sed.signalRef) sed.signalRef.name = (fsigname.value || "").trim();
+      });
+    }
+    const ferrref = body.querySelector("#f-errref");
+    if (ferrref) {
+      ferrref.addEventListener("change", () => {
+        const eed = errorDefOf(element.businessObject);
+        if (!eed) return;
+        const v = ferrref.value;
+        savePreservingPanel(() => {
+          if (v === "__new__") {
+            linkError(modeler, element, eed, createError(modeler, ""));
+          } else if (v === "") {
+            linkError(modeler, element, eed, null);
+          } else {
+            linkError(modeler, element, eed, listErrors(modeler).find((e) => e.id === v));
+          }
+        });
+        show(element); // re-render so the code field matches the chosen error
+      });
+    }
+    const ferrcode = body.querySelector("#f-errcode");
+    if (ferrcode) {
+      ferrcode.addEventListener("change", () => {
+        const eed = errorDefOf(element.businessObject);
+        if (eed && eed.errorRef) eed.errorRef.errorCode = (ferrcode.value || "").trim();
       });
     }
 
@@ -3557,6 +4512,9 @@ function wireActions(root, modeler, api, toast, projectId) {
       root.querySelector(".crumb-current").textContent = d.name || d.processId || "Draft";
       docTitle(`${d.name || d.processId || "Draft"} · Modeler`);
       toast(`Saved draft “${d.name || d.processId}”`, "ok");
+      // Draft is now persisted: clear the collab unsaved-work guard so a co-editor's
+      // deferred change (held back to protect these edits) can sync in (ADR-0103).
+      if (collab && collab.markSaved) collab.markSaved();
     } catch (e) {
       toast("save failed: " + e.message, "err");
     } finally {
@@ -3706,6 +4664,7 @@ function wireActions(root, modeler, api, toast, projectId) {
 // variables are listed below the diagram.
 export async function mountLive(root, { api, toast, key, instance }) {
   cleanup();
+  const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
   // Resolve the process this definition version belongs to, and all its versions,
   // so the version picker can offer them. One /processes call feeds both.
@@ -3722,6 +4681,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
         .sort((a, b) => b.version - a.version);
     }
   } catch { /* header/version picker are best-effort */ }
+  if (gen !== generation) return; // superseded before we wrote this view's shell
 
   const versionOptions = versions.length
     ? versions.map((v) =>
@@ -3784,6 +4744,7 @@ export async function mountLive(root, { api, toast, key, instance }) {
     root.querySelector("#canvas").innerHTML = `<div class="coming"><p>${esc(e.message)}</p></div>`;
     return;
   }
+  if (gen !== generation) return; // a newer navigation took over while assets loaded
 
   const viewer = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
   current = viewer;
@@ -4515,6 +5476,7 @@ function runDotAnimation(layer, waypoints, dur, cancelled) {
 // the order it actually happened, so a finished collaboration replays its exchange.
 export async function mountCollaboration(root, { api, toast, key }) {
   cleanup();
+  const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
   root.innerHTML = `
     <div class="editor live">
@@ -4557,6 +5519,7 @@ export async function mountCollaboration(root, { api, toast, key }) {
     root.querySelector("#canvas").innerHTML = `<div class="coming"><p>${esc(e.message)}</p></div>`;
     return;
   }
+  if (gen !== generation) return; // a newer navigation took over while assets loaded
 
   const viewer = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
   current = viewer;
@@ -4747,6 +5710,77 @@ export async function mountCollaboration(root, { api, toast, key }) {
   liveTimer = setInterval(poll, 1500);
 }
 
+// mountTaskProcess renders a compact, read-only process view for a single instance,
+// meant to sit inside the Tasks detail pane so a task assignee can see, at a glance,
+// what has already run and what is still ahead. It overlays the instance's progress
+// on the definition diagram: elements walked so far are grayed (atlas-visited), live
+// tokens are highlighted (atlas-active / atlas-token-waiting), and the task's own
+// element is outlined in blue (atlas-selected) as "you are here". Unlike the full
+// Operations replay it is a static snapshot with no transport bar, and — crucially —
+// it owns its own viewer and does NOT touch the shared navigation lifecycle
+// (cleanup/current/generation), so it can live alongside the Tasks view. Returns a
+// handle with destroy(); the caller tears it down when the selection changes.
+export async function mountTaskProcess(container, { api, instanceKey, activeElementId }) {
+  let viewer = null;
+  let destroyed = false;
+  const handle = {
+    destroy() {
+      destroyed = true;
+      if (viewer) { try { viewer.destroy(); } catch { /* already gone */ } viewer = null; }
+    },
+  };
+  const fail = (msg) => { if (!destroyed && container) container.innerHTML = `<p class="tp-msg muted">${esc(msg)}</p>`; };
+
+  let lib;
+  try { lib = await loadBpmn(); } catch (e) { fail("Could not load the diagram viewer: " + e.message); return handle; }
+  if (destroyed) return handle;
+
+  // The timeline resolves the instance's definition (for the diagram) and carries
+  // its progress (steps walked + the current token frame).
+  let tl;
+  try { tl = await api("GET", `/api/v1/instances/${instanceKey}/timeline`); }
+  catch (e) { fail("Could not load the process progress: " + e.message); return handle; }
+  if (destroyed) return handle;
+  if (!tl || !tl.processDefKey) { fail("No process diagram is available for this task."); return handle; }
+
+  container.innerHTML = "";
+  viewer = newModeler(lib.BpmnJS, lib.moddle, container);
+  try {
+    const xml = await api("GET", `/api/v1/processes/${tl.processDefKey}/xml`);
+    if (destroyed) return handle;
+    await viewer.importXML(typeof xml === "string" ? xml : String(xml));
+    viewer.get("canvas").zoom("fit-viewport");
+  } catch (e) {
+    if (destroyed) return handle;
+    fail("Could not render the process diagram: " + e.message);
+    return handle;
+  }
+  if (destroyed) return handle;
+
+  const canvas = viewer.get("canvas");
+  const registry = viewer.get("elementRegistry");
+  try { drawImplBadges(viewer); } catch { /* best-effort type icons */ }
+
+  const frames = tl.frames || [];
+  const steps = tl.steps || [];
+  const tokens = frames.length ? (frames[frames.length - 1].tokens || []) : [];
+  const liveOn = new Set(tokens.map((t) => t.elementId));
+  // Everything walked so far, grayed — except where a token lives now (that must
+  // read as active, not history) and the task's own element (shown as "you are here").
+  for (const s of steps) {
+    if (!s.elementId || liveOn.has(s.elementId) || s.elementId === activeElementId) continue;
+    if (registry.get(s.elementId)) canvas.addMarker(s.elementId, "atlas-visited");
+  }
+  // Live tokens on other branches, highlighted green (or orange while waiting at a join).
+  for (const token of tokens) {
+    if (token.elementId === activeElementId || !registry.get(token.elementId)) continue;
+    canvas.addMarker(token.elementId, token.state === "waiting" ? "atlas-token-waiting" : "atlas-active");
+  }
+  // The task's own element: "you are here".
+  if (activeElementId && registry.get(activeElementId)) canvas.addMarker(activeElementId, "atlas-selected");
+  return handle;
+}
+
 // mountInstanceReplay renders one process instance read-only and replays it step
 // by step (ADR-0046), in a Camunda-Operate-style layout: a metadata header, the
 // definition diagram with per-element execution-count badges and a play/step/scrub
@@ -4758,6 +5792,7 @@ export async function mountCollaboration(root, { api, toast, key }) {
 // instance keeps gaining steps live.
 export async function mountInstanceReplay(root, { api, toast, key }) {
   cleanup();
+  const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
   root.innerHTML = `
     <div class="editor live ops-replay">
@@ -4831,6 +5866,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     root.querySelector("#canvas").innerHTML = `<div class="coming"><p>${esc(e.message)}</p></div>`;
     return;
   }
+  if (gen !== generation) return; // a newer navigation took over while assets loaded
 
   // The timeline resolves the instance's definition, which the diagram renders.
   let tl;
@@ -4842,6 +5878,9 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
        <p class="muted">${esc(e.message)}</p></div>`;
     return;
   }
+  // Superseded while the timeline was in flight — do NOT build a viewer or touch
+  // the DOM, which now belongs to the newer mount.
+  if (gen !== generation) return;
   root.querySelector("#rp-live").href = `#/operations/p/${tl.processDefKey}/i/${key}`;
 
   const viewer = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
@@ -4852,11 +5891,15 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     await viewer.importXML(typeof xml === "string" ? xml : String(xml));
     viewer.get("canvas").zoom("fit-viewport");
   } catch (e) {
+    // A newer navigation destroyed this viewer mid-import; the error is expected
+    // and the #canvas now belongs to that mount, so leave it untouched.
+    if (gen !== generation) return;
     root.querySelector("#canvas").innerHTML =
       `<div class="coming"><p>Could not render this instance's diagram.</p>
        <p class="muted">${esc(e.message)}</p></div>`;
     return;
   }
+  if (gen !== generation) return; // superseded while the diagram imported
 
   const canvas = viewer.get("canvas");
   const registry = viewer.get("elementRegistry");
@@ -4948,6 +5991,31 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const stepsForElement = (elId) => steps.filter((s) => s.elementId === elId);
   const stepByEik = (eik) => steps.find((s) => s.elementInstanceKey === eik) || null;
 
+  // drawCallActivityLinks puts a transparent, clickable hotspot directly over each
+  // call activity's "+" marker (bpmn-js draws it at the shape's bottom centre) whose
+  // child instance is known, so a single click on the marker itself jumps into the
+  // child's replay (same window) — no extra badge, the marker is the target. It
+  // complements the Details panel's link and is rebuilt whenever the step set grows.
+  // One hotspot per element (the first child); a multi-instance call activity's
+  // per-iteration children are reachable by selecting each iteration in the history.
+  const caLinkIds = [];
+  function drawCallActivityLinks() {
+    for (const id of caLinkIds.splice(0)) { try { overlays.remove(id); } catch { /* gone */ } }
+    const seen = new Set();
+    for (const s of steps) {
+      if (!s.childInstanceKey || seen.has(s.elementId)) continue;
+      seen.add(s.elementId);
+      const el = registry.get(s.elementId);
+      if (!el) continue; // element not on this diagram
+      // Centre a small hotspot (sized in CSS) horizontally on the bottom marker.
+      const left = Math.max(0, Math.round((el.width || 100) / 2) - 11);
+      caLinkIds.push(overlays.add(s.elementId, "atlas-callchild", {
+        position: { bottom: 1, left },
+        html: `<a class="ca-child-hotspot" href="#/operations/i/${s.childInstanceKey}" title="Open the called process's instance replay" aria-label="Open the called process"></a>`,
+      }));
+    }
+  }
+
   // renderDetail fills the Details tab for the selected element instance (or the
   // process instance when nothing is selected), mirroring Operate's element panel.
   function renderDetail() {
@@ -4965,6 +6033,11 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     if (!s) { detailEl.innerHTML = `<p class="ops-empty">No details for this element.</p>`; return; }
     const rel = s.relation ? `<dt>Concurrency</dt><dd>${s.relation === "fork" ? "Parallel branch (fork)" : "Join arrival"}</dd>` : "";
     const from = s.sourceElementId ? `<dt>Entered from</dt><dd>${esc(stepLabel({ elementId: s.sourceElementId }))}</dd>` : "";
+    // A call activity links to the child instance it started (ADR-0076), so an
+    // operator drills from caller to child in one click, same window.
+    const child = s.childInstanceKey
+      ? `<dt>Called process</dt><dd><a class="ca-child-link" href="#/operations/i/${s.childInstanceKey}" title="Open the called process's instance replay">&#8627; Instance ${esc(String(s.childInstanceKey))}</a></dd>`
+      : "";
     detailEl.innerHTML = `<dl class="ops-props">
       <dt>Element</dt><dd>${esc(stepLabel(s))}</dd>
       <dt>Type</dt><dd>${esc(typeLabel(s.type))}</dd>
@@ -4973,7 +6046,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       <dt>Token</dt><dd class="mono">${s.tokenId ? esc(String(s.tokenId)) : "—"}</dd>
       <dt>Start Date</dt><dd>${esc(fmtDateTime(s.at))}</dd>
       <dt>End Date</dt><dd>${s.endAt ? esc(fmtDateTime(s.endAt)) : '<span class="ops-live">active</span>'}</dd>
-      ${from}${rel}
+      ${from}${rel}${child}
     </dl>`;
   }
 
@@ -5395,6 +6468,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       scrub.max = String(frames.length);
       renderHistory();
       loadBadges();
+      drawCallActivityLinks();
       if (!playing && wasAtEnd) setPlayhead(frames.length); // follow new frames live
       else { scrub.value = String(playhead); updateClock(); renderOverlay(); highlightHistory(); }
       renderInspector();

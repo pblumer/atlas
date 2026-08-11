@@ -53,6 +53,14 @@ go test ./engine/...
 go test ./engine/ -run TestProcessorRecovery -v
 ```
 
+Browser end-to-end tests for the web UI (the Design-view token simulation) live in
+[`e2e/`](e2e/) and run on Playwright + Chromium — see [`e2e/README.md`](e2e/README.md).
+They are JS, not Go, so they are a separate CI job and are not part of the Go commands above.
+
+```bash
+cd e2e && npm ci && npx playwright install chromium && npm test
+```
+
 **Definition of done for any code change:** `go build ./...`, `go test -race ./...`, `go vet ./...` all pass, and `gofmt -l .` is empty. Do not report a task complete until these are green.
 
 ## Repository layout
@@ -105,6 +113,30 @@ Packages may not all exist yet — the project is at Milestone 0 (see [`ROADMAP.
 - Comments explain *why*, not *what*.
 - Public APIs get doc comments.
 - Small, focused changes over large ones.
+
+## Authoring BPMN models (examples, onboarding, anything deployed)
+
+When you create or edit a BPMN diagram — the `examples/` scenarios, onboarding
+flows, anything you deploy through the MCP authoring tools — the model must be
+**readable**, not merely valid. A process that compiles but renders as a tangle
+of overlapping edges and labels is *not done*. Treat the diagram like the code:
+it will be read by humans.
+
+- **Ship hand-authored BPMN-DI.** If you omit `<bpmndi:BPMNDiagram>`, Atlas
+  auto-generates a layout — it always deploys, but routinely stacks branch
+  edges on top of the main-axis nodes (see the first onboarding cut). For
+  anything a human will open, lay it out yourself.
+- **One straight main axis.** Keep the happy path on a single horizontal line at
+  a constant `y`. Space nodes on an even pitch (≈150px), with the standard sizes:
+  100×80 tasks, 50×50 gateways, 36×36 events.
+- **Branches get their own lane.** Route an alternate or bypass flow above or
+  below the spine with clean orthogonal waypoints — never through the main-axis
+  boxes. A join gateway makes parallel/optional paths reconverge tidily.
+- **Label the gateway's outgoing flows** and position each label where it
+  doesn't collide with an edge or node.
+- **Check the render, not just the deploy.** Open the model in the
+  Operations/Modeler view (or a rendered preview) and confirm there are no
+  overlaps before calling it done.
 
 ## Pointers
 

@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Atlas · Reisebuchung (Kunden-Assistent)</title>
+<link rel="stylesheet" href="vendor/form-js/form-js.css"/>
+</head>
+<body>
+<!--
+  Reisebuchung — ein KUNDEN-Assistent (Wizard) über durable User-Tasks.
+
+  Serviert von Atlas selbst (api/web/), also ist fetch("/api/v1/…") same-origin —
+  kein CORS, kein SDK, kein Build. Der Zweck dieser Seite: zeigen, dass ein
+  Mehrschritt-Formular für Endkunden KEIN ruckeliger "wechsle zum nächsten Task"
+  sein muss.
+
+  Unter der Haube ist jeder Schritt ein eigener <userTask> im Prozess
+  proc_reisebuchung (examples/reisebuchung) — der durable Checkpoint. Diese App
+  macht daraus einen nahtlosen Assistenten, indem sie nach jedem Absenden sofort
+  den nächsten Task derselben Instanz lädt und dessen Formular an DERSELBEN
+  Stelle rendert. Der Nutzer "navigiert" nie in eine Aufgabenliste.
+
+  Der Vertrag zum Server sind nur vier Aufrufe:
+      1) GET  /api/v1/processes                      Prozess finden
+      2) POST /api/v1/processes/{key}/instances      Instanz starten
+      3) GET  /api/v1/tasks?processInstance={key}     nächsten Task holen
+         GET  /api/v1/forms/{formId}                  sein Formular holen
+      4) POST /api/v1/tasks/{key}/complete            Schritt abschließen → weiter
+
+  Die kaskadierende Zielauswahl und das bedingte Reisepass-Feld im ersten
+  Formular laufen komplett IM Browser (form-js) — die Engine sieht davon nichts.
+  WELCHE Folgeformulare erscheinen (Visum? Einverständnis?), entscheidet dagegen
+  die Engine (DMN + Gateways). Beide "Abhängigkeiten" an einem Stück erlebbar.
+
+  Hinweis zur Grenze: /api/v1/tasks liegt hinter der (optionalen) Auth des
+  Servers — dieser Assistent ist also das Muster für einen ANGEMELDETEN
+  Kundenbereich. Ein völlig unauthentifizierter Erstkontakt läuft über das
+  öffentliche Startformular (ADR-0029, /public/forms/{token}); ein rein
+  öffentlicher Mehrschritt-Flow braucht dann entweder EIN reiches Startformular
+  oder korrelierte öffentliche Schritte.
+-->
+<style>
+  :root{
+    --bg:#f5f7f5;--panel:#fff;--panel-2:#f0f3f1;--ink:#17201c;--muted:#5d6b64;--faint:#8a9690;
+    --line:#e2e8e4;--accent:#0d7a63;--accent-ink:#0a5f4d;--accent-soft:#e2f1ec;--amber:#9a6a15;
+    --amber-soft:#f6ecd8;--shadow:0 1px 2px rgba(20,40,32,.04),0 8px 30px rgba(20,40,32,.06);
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;--sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#0e1310;--panel:#161d19;--panel-2:#1b241f;--ink:#e8efea;--muted:#9aa8a1;--faint:#6f7d76;
+    --line:#26302a;--accent:#34b498;--accent-ink:#56c9af;--accent-soft:#14261f;--amber:#d6a24a;
+    --amber-soft:#2a2113;--shadow:0 1px 2px rgba(0,0,0,.3),0 10px 34px rgba(0,0,0,.4);}}
+  :root[data-theme="dark"]{--bg:#0e1310;--panel:#161d19;--panel-2:#1b241f;--ink:#e8efea;--muted:#9aa8a1;--faint:#6f7d76;--line:#26302a;--accent:#34b498;--accent-ink:#56c9af;--accent-soft:#14261f;--amber:#d6a24a;--amber-soft:#2a2113;--shadow:0 1px 2px rgba(0,0,0,.3),0 10px 34px rgba(0,0,0,.4);}
+  :root[data-theme="light"]{--bg:#f5f7f5;--panel:#fff;--panel-2:#f0f3f1;--ink:#17201c;--muted:#5d6b64;--faint:#8a9690;--line:#e2e8e4;--accent:#0d7a63;--accent-ink:#0a5f4d;--accent-soft:#e2f1ec;--amber:#9a6a15;--amber-soft:#f6ecd8;--shadow:0 1px 2px rgba(20,40,32,.04),0 8px 30px rgba(20,40,32,.06);}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:900px;margin:0 auto;padding:40px 20px 72px}
+  .eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-ink);font-weight:600;margin:0 0 6px}
+  h1{font-size:clamp(24px,4vw,32px);margin:0;letter-spacing:-.02em;font-weight:680}
+  .lede{color:var(--muted);margin:8px 0 0;max-width:64ch}
+  .lede code{font-family:var(--mono);font-size:.92em}
+  .callout{margin:18px 0 0;padding:13px 16px;border-radius:12px;background:var(--accent-soft);color:var(--accent-ink);font-size:14px;font-weight:520}
+  .callout b{font-weight:700}
+  .account{margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px}
+  .account input{padding:7px 10px;font:inherit;color:inherit;background:var(--panel-2);border:1px solid var(--line);border-radius:8px}
+  .account input[type="text"],.account input[type="password"]{width:150px}
+  .account .who{color:var(--muted)}.account .who b{color:var(--ink)}
+  .account .err{color:#b23a3a;font-size:13px}
+  .account .lock{font-size:12px;color:var(--faint);font-family:var(--mono)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:22px;margin-top:18px}
+  .card h2{font-size:13px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);font-weight:600;margin:0 0 14px;display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .card h2 .hint{letter-spacing:0;text-transform:none;color:var(--muted);font-weight:500;font-size:12px;font-family:var(--mono)}
+  .btn{font:inherit;font-weight:600;cursor:pointer;border-radius:10px;padding:10px 18px;border:1px solid transparent}
+  .btn.primary{background:var(--accent);color:#fff}.btn.primary:hover{background:var(--accent-ink)}
+  .btn.ghost{background:var(--panel-2);color:var(--ink);border-color:var(--line)}.btn.ghost:hover{border-color:var(--accent)}
+  .btn.small{padding:6px 12px;font-size:13px}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .muted{color:var(--muted);font-size:13px}
+  .steps{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px;padding:0;list-style:none}
+  .steps li{font-size:12px;font-weight:600;padding:4px 11px;border-radius:999px;background:var(--panel-2);color:var(--faint);border:1px solid var(--line)}
+  .steps li.done{background:var(--accent-soft);color:var(--accent-ink);border-color:transparent}
+  .steps li.current{background:var(--accent);color:#fff;border-color:transparent}
+  .steptitle{font-size:19px;font-weight:680;letter-spacing:-.01em;margin:0 0 2px}
+  .stepsub{color:var(--muted);font-size:13px;margin:0 0 16px}
+  .fj-host{margin:6px 0 4px}
+  .actions{display:flex;align-items:center;gap:12px;margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+  .banner{margin-top:6px;padding:18px;border-radius:12px;background:var(--accent-soft);color:var(--accent-ink);font-weight:600;text-align:center;font-size:16px}
+  .waiting{padding:16px;border-radius:12px;background:var(--amber-soft);color:var(--amber);font-weight:560;text-align:center}
+  .why{margin-top:14px;font-size:13px;color:var(--muted);background:var(--panel-2);border:1px dashed var(--line);border-radius:10px;padding:11px 13px}
+  .why b{color:var(--ink)}
+  .log{font-family:var(--mono);font-size:12px;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;max-height:200px;overflow:auto}
+  .log div{padding:2px 0;border-bottom:1px dashed var(--line);white-space:pre-wrap}
+  .log .m{font-weight:700;color:var(--accent-ink)}.log .s2{color:var(--faint)}.log .err{color:#b23a3a}
+  footer{margin-top:26px;color:var(--faint);font-size:12px;text-align:center}
+  footer code{font-family:var(--mono)}
+  footer input{font:inherit;color:inherit;background:var(--panel-2);border:1px solid var(--line);border-radius:8px}
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Atlas · Reisebuchung · Kunden-Assistent</p>
+    <h1>Ein Formular nach dem anderen — ohne Aufgabenliste.</h1>
+    <p class="lede">Jeder Schritt ist unter der Haube ein eigener <code>userTask</code>
+      der Instanz <code>proc_reisebuchung</code> (durable Checkpoint). Diese Seite
+      macht daraus einen <b>nahtlosen Assistenten</b>: absenden → der nächste Task
+      derselben Instanz wird sofort an dieser Stelle geladen. Welche Folgeformulare
+      erscheinen, entscheidet die <b>Engine</b> (DMN + Gateways) — die kaskadierende
+      Zielauswahl im ersten Formular dagegen der <b>Browser</b> (form-js).</p>
+    <div class="callout">Keine Geschäftslogik im Client. Der Assistent ruft nur:
+      <b>start instance</b> · <b>get next task + form</b> · <b>complete task</b>.
+      Die Verzweigung „welches Formular als Nächstes“ macht Atlas.</div>
+    <div class="account" id="account"></div>
+  </header>
+
+  <section class="card" id="stage">
+    <h2><span>Reisebuchung</span><span class="hint" id="instHint">—</span></h2>
+    <div id="body">
+      <p class="muted" id="intro">Starte eine neue Buchung — Atlas legt eine echte Prozessinstanz an
+        und schickt dir Schritt für Schritt die Formulare, die für <em>deine</em> Angaben nötig sind.</p>
+      <div class="actions" style="border-top:0;padding-top:4px">
+        <button class="btn primary" id="startBtn">Reise buchen →</button>
+        <span class="muted" id="startHint"></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2><span>HTTP-Aufrufe an Atlas</span><span class="hint">das ist die gesamte Integration</span></h2>
+    <div class="log" id="log"><div class="s2">Wartet auf den ersten Aufruf …</div></div>
+  </section>
+
+  <footer>
+    Wird von Atlas unter <code>/reisebuchung-kunde.html</code> ausgeliefert · Prozess:
+    <code>examples/reisebuchung/reisebuchung.bpmn</code> · Basis-URL:
+    <input id="base" value="/api/v1" style="width:150px;font-family:var(--mono);font-size:11px" title="Same-origin per Default."/>
+  </footer>
+</div>
+
+<script type="module">
+"use strict";
+import { Form } from "./vendor/form-js/form-viewer.js";
+
+const PROCESS_ID = "proc_reisebuchung";
+const $ = s => document.querySelector(s);
+const base = () => $("#base").value.replace(/\/$/,"");
+
+// Per-step context shown above each form: what the step is, and — crucially —
+// WHY the engine is asking for it, to make the process visible behind the wizard.
+const STEP_INFO = {
+  erfassen:        { title:"Reisedaten",      why:"Startformular. Die <b>Zielliste</b> passt sich der Reiseart an und die <b>Reisepass-Nr.</b> erscheint nur bei Fernreise — beides rein im Browser (form-js), ohne Prozess-Roundtrip." },
+  visum:           { title:"Visum-Angaben",   why:"Dieser Schritt erscheint, weil die <b>DMN-Tabelle</b> aus deiner Reiseart <code>brauchtVisum = true</code> abgeleitet und ein Gateway den Zweig geöffnet hat." },
+  einverstaendnis: { title:"Einverständnis",  why:"Dieser Schritt erscheint, weil dein berechnetes Alter <code>&lt; 18</code> ist → <b>DMN</b> <code>brauchtEinverstaendnis = true</code>." },
+  bestaetigen:     { title:"Buchung bestätigen", why:"Abschluss-Schritt, immer nötig. Danach synchronisiert der Inclusive-Join die geöffneten Zweige und der Prozess endet." },
+};
+
+// ————— fetch wrapper + on-screen call log —————
+async function api(method, path, body, quiet){
+  const opts = {method, credentials:"same-origin", headers:{}};
+  if (body !== undefined){ opts.headers["Content-Type"]="application/json"; opts.body=JSON.stringify(body); }
+  let res, text;
+  try { res = await fetch(base()+path, opts); text = await res.text(); }
+  catch(e){ if(!quiet) logLine(method, path, "ERR", e.message); throw e; }
+  if(!quiet) logLine(method, path, res.status);
+  if (res.status === 401){ showLogin(); throw new Error("401 — bitte anmelden"); }
+  if (!res.ok) throw new Error(method+" "+path+" → "+res.status+" "+text);
+  return text ? JSON.parse(text) : null;
+}
+function logLine(method, path, status, extra){
+  const el = document.createElement("div");
+  const cls = (typeof status === "number" && status < 400) ? "s2" : "err";
+  el.innerHTML = `<span class="m">${method}</span> ${path} <span class="${cls}">→ ${status}${extra?" "+extra:""}</span>`;
+  const log = $("#log"); if (log.firstChild && log.firstChild.classList?.contains("s2") && log.children.length===1) log.innerHTML="";
+  log.appendChild(el); log.scrollTop = log.scrollHeight;
+}
+
+// ————— optional auth (mirrors order-to-cash-live.html) —————
+async function whoami(){ try { return await api("GET","/auth/me", undefined, true); } catch { return null; } }
+function showLogin(){ if (!document.getElementById("loginBtn")) renderAccount(null); }
+function renderAccount(user){
+  const el = $("#account");
+  if (user){
+    el.innerHTML = `<span class="who">Angemeldet als <b>${(user.username||user.name||"?")}</b></span>`+
+                   `<button class="btn ghost small" id="logoutBtn">Abmelden</button>`;
+    $("#logoutBtn").onclick = async ()=>{ try{ await api("POST","/auth/logout",{}); }catch{} renderAccount(null); };
+  } else {
+    el.innerHTML = `<span class="lock">🔒 API erfordert Login</span>`+
+      `<input type="text" id="lu" placeholder="Benutzer" autocomplete="username"/>`+
+      `<input type="password" id="lp" placeholder="Passwort" autocomplete="current-password"/>`+
+      `<button class="btn primary small" id="loginBtn">Anmelden</button>`+
+      `<span class="err" id="loginErr"></span>`;
+    const submit = async ()=>{
+      $("#loginErr").textContent = "";
+      try{ await api("POST","/auth/login", {username:$("#lu").value.trim(), password:$("#lp").value});
+           renderAccount(await whoami()); }
+      catch(e){ $("#loginErr").textContent = "Login fehlgeschlagen"; }
+    };
+    $("#loginBtn").onclick = submit;
+    $("#lp").addEventListener("keydown", e=>{ if(e.key==="Enter") submit(); });
+  }
+}
+
+// ————— the wizard —————
+let instanceKey = null, currentForm = null, doneSteps = [];
+
+// find the deployed process by id (highest version)
+async function findProcess(){
+  const procs = await api("GET","/processes");
+  const mine = procs.filter(p => p.processId === PROCESS_ID).sort((a,b)=> b.version - a.version);
+  if (!mine.length) throw new Error(`Prozess "${PROCESS_ID}" ist nicht deployed. Bitte das Beispiel examples/reisebuchung zuerst deployen (siehe dessen README).`);
+  return mine[0].key;
+}
+
+// START — the create response carries no instance key, so diff /instances.
+async function startInstance(defKey){
+  const before = new Set((await api("GET","/instances")).filter(i=>i.processDefKey===defKey).map(i=>i.key));
+  await api("POST",`/processes/${defKey}/instances`, {variables:{}});
+  const after = (await api("GET","/instances")).filter(i=>i.processDefKey===defKey);
+  const fresh = after.find(i=>!before.has(i.key)) || after.sort((a,b)=>b.key-a.key)[0];
+  return fresh.key;
+}
+
+// the tasks endpoint returns a bare array over HTTP (an {items} envelope via MCP);
+// accept both, and always scope to THIS instance.
+async function openTasks(){
+  const raw = await api("GET",`/tasks?processInstance=${instanceKey}`);
+  const list = Array.isArray(raw) ? raw : (raw.items || []);
+  return list.filter(t => t.processInstanceKey === instanceKey);
+}
+
+// ADVANCE — the heart of the "no jarring switch" UX: after each completion we
+// immediately look for the next open task of the SAME instance and render its
+// form in place. Two parallel tasks (Visum + Einverständnis both open) simply
+// present as two sequential steps to the one person.
+async function advance(){
+  const tasks = await openTasks();
+  if (tasks.length){ renderStep(tasks[0]); return; }
+  // no open task: either the engine is still computing, or the instance ended.
+  const inst = (await api("GET","/instances")).find(i=>i.key===instanceKey);
+  if (inst && inst.state !== "active") renderDone();
+  else renderWaiting();
+}
+
+async function renderStep(task){
+  const info = STEP_INFO[task.elementId] || { title: task.name || task.elementId, why:"" };
+  const { schema } = await api("GET",`/forms/${task.formId}`);
+  $("#instHint").textContent = "#"+instanceKey+" · Schritt "+(doneSteps.length+1);
+  $("#body").innerHTML =
+    stepsBar(task) +
+    `<p class="steptitle">${info.title}</p>`+
+    `<p class="stepsub">Task <code>${task.elementId}</code> · form <code>${task.formId}</code></p>`+
+    `<div class="fj-host" id="fjhost"></div>`+
+    (info.why ? `<div class="why">${info.why}</div>` : "")+
+    `<div class="actions"><button class="btn primary" id="next">Weiter →</button>`+
+    `<span class="muted" id="stepHint"></span></div>`;
+  if (currentForm){ currentForm.destroy?.(); currentForm = null; }
+  currentForm = new Form({ container: $("#fjhost") });
+  await currentForm.importSchema(schema);
+  $("#next").onclick = ()=> submitStep(task, info.title);
+}
+
+function stepsBar(task){
+  const past = doneSteps.map(s=>`<li class="done">${s}</li>`).join("");
+  const cur = `<li class="current">${(STEP_INFO[task.elementId]||{}).title || task.name}</li>`;
+  return `<ul class="steps">${past}${cur}<li>…</li></ul>`;
+}
+
+// form-js date fields (subtype "date") should serialize to yyyy-MM-dd; be
+// defensive if a datetime slips through, since the FEEL date() call wants a date.
+function normalize(data){
+  const out = {};
+  for (const [k,v] of Object.entries(data)){
+    out[k] = (typeof v === "string" && /^\d{4}-\d{2}-\d{2}T/.test(v)) ? v.slice(0,10) : v;
+  }
+  return out;
+}
+
+async function submitStep(task, title){
+  const { data, errors } = currentForm.submit();
+  if (errors && Object.keys(errors).length){ $("#stepHint").textContent = "Bitte die markierten Felder prüfen."; return; }
+  const btn = $("#next"); btn.disabled = true; $("#stepHint").textContent = "Wird gespeichert …";
+  try{
+    await api("POST",`/tasks/${task.key}/complete`, { variables: normalize(data) });
+    doneSteps.push(title);
+    await advance();   // ← next form appears in place; no navigation, no task list
+  }catch(e){ $("#stepHint").innerHTML = `<span style="color:#b23a3a">Fehler: ${e.message}</span>`; btn.disabled=false; }
+}
+
+function renderWaiting(){
+  $("#body").innerHTML = `<div class="waiting">Die Engine rechnet/routet … <button class="btn ghost small" id="again">Aktualisieren</button></div>`;
+  $("#again").onclick = advance;
+}
+function renderDone(){
+  if (currentForm){ currentForm.destroy?.(); currentForm = null; }
+  $("#instHint").textContent = "#"+instanceKey+" · abgeschlossen";
+  $("#body").innerHTML =
+    `<ul class="steps">${doneSteps.map(s=>`<li class="done">${s}</li>`).join("")}<li class="done">✓ fertig</li></ul>`+
+    `<div class="banner">✅ Buchung abgeschlossen — die Prozessinstanz ist beendet.</div>`+
+    `<div class="actions"><button class="btn ghost" id="restart">Neue Buchung</button></div>`;
+  $("#restart").onclick = ()=>location.reload();
+}
+
+$("#startBtn").onclick = async ()=>{
+  const btn=$("#startBtn"); btn.disabled=true; $("#startHint").textContent="Starte Instanz …";
+  try{
+    const defKey = await findProcess();
+    instanceKey = await startInstance(defKey);
+    doneSteps = [];
+    await advance();  // renders the first user task (Reisedaten)
+  }catch(e){ $("#startHint").innerHTML = `<span style="color:#b23a3a">${e.message}</span>`; btn.disabled=false; }
+};
+
+whoami().then(renderAccount);  // greet, or reveal the login bar if the API is gated
+</script>
+</body>
+</html>

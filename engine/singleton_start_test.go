@@ -52,7 +52,7 @@ func publishRequest(t *testing.T, p *engine.Processor, orderId string) {
 
 // TestSingletonMessageStartDedupesByKey proves a singleton message start starts at
 // most one live instance per correlation key: a second message for the same key
-// starts nothing, while a different key starts another (ADR-0082).
+// starts nothing, while a different key starts another (ADR-0094).
 func TestSingletonMessageStartDedupesByKey(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -102,7 +102,7 @@ func TestSingletonMessageStartEmptyKeyAlwaysStarts(t *testing.T) {
 
 // TestSingletonMessageStartReopensOnTerminate proves terminating the live instance
 // re-opens its key, so the next message starts a fresh one (the counter returned to
-// zero via applyToState's decrement, ADR-0082).
+// zero via applyToState's decrement, ADR-0094).
 func TestSingletonMessageStartReopensOnTerminate(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)

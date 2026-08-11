@@ -46,12 +46,29 @@ type Processor struct {
 	// normal event path and recover from the log.
 	messageStarts map[string][]messageStartRef
 
+	// signalStarts indexes signal start events by signal name → the definition keys a
+	// broadcast signal instantiates (ADR-0088), mirroring messageStarts. A signal has
+	// no correlation key, so this needs only the definition key (no per-name flow or
+	// singleton state). Like messageStarts it is derived from the compiled definitions,
+	// rebuilt by Deploy on every start, so it needs no durable state of its own — the
+	// instances it creates go through the normal event path and recover from the log.
+	signalStarts map[string][]uint64
+
 	// latestProcess indexes bpmn process id → the newest deployed definition key, so
 	// a call activity with `latest` binding resolves the process to start as a child
 	// (ADR-0076). Like messageStarts it is derived from the compiled definitions and
 	// rebuilt by Deploy on every start; deployments reload oldest-first on recovery,
 	// so the last write wins deterministically (the ADR-0063 binding argument, I6).
 	latestProcess map[string]uint64
+
+	// callOverrides redirects, pins, or disables a call activity's target resolution
+	// per server, keyed by called bpmn process id (ADR-0105). Unlike latestProcess it
+	// is NOT derived from deployments — it is operator config the server layer loads
+	// from a sidecar at startup and pushes here via SetCallTargetOverride, owned by
+	// this run-loop goroutine (I3). It affects only LIVE resolution: a child's chosen
+	// def key is frozen into its create event (ADR-0076), so replay is unaffected and
+	// this map need not live in the log (I6).
+	callOverrides map[string]CallTargetOverride
 
 	jobNotifier func(jobType int32)
 
@@ -70,7 +87,7 @@ type Processor struct {
 	fatalErr     error
 
 	// startsThisBatch remembers the (defKey, correlationKey) pairs a singleton message
-	// start has already scheduled a create for in the current batch (ADR-0082). The
+	// start has already scheduled a create for in the current batch (ADR-0094). The
 	// durable ActiveStartKey counter only reflects an instance once its Activated
 	// followup applies (a later batch), so within one batch several messages for the
 	// same key would all read zero; this set closes that same-batch window. Cleared
@@ -100,7 +117,9 @@ func New(partition uint16, log *wal.Log, store *state.Store, clock Clock) *Proce
 		keygen:        &keyGen{partition: partition},
 		processes:     map[uint64]*compiler.CompiledProcess{},
 		messageStarts: map[string][]messageStartRef{},
+		signalStarts:  map[string][]uint64{},
 		latestProcess: map[string]uint64{},
+		callOverrides: map[string]CallTargetOverride{},
 	}
 	p.registerHandlers()
 	p.registerBehaviors()
@@ -119,6 +138,43 @@ func (p *Processor) Deploy(cp *compiler.CompiledProcess) {
 		p.messageStarts[ms.MessageName] = append(p.messageStarts[ms.MessageName],
 			messageStartRef{defKey: cp.Key, elementId: ms.ElementId, correlationKey: ms.CorrelationKey, singletonStart: ms.SingletonStart})
 	}
+	// Index signal start events too, so a broadcast signal instantiates them (ADR-0088).
+	for _, ss := range cp.SignalStartEvents() {
+		p.signalStarts[ss.SignalName] = append(p.signalStarts[ss.SignalName], cp.Key)
+	}
+}
+
+// CallTargetOverride redirects, pins, or disables a call activity's target on this
+// server (ADR-0105). Exactly one shape is meaningful per record; the resolution
+// precedence (see ProcessingContext.resolveCallTarget) is Disabled, then
+// PinnedDefKey, then RedirectProcessId, else the default `latest` resolution. It is
+// operator config, not derived from deployments and not event-sourced — it changes
+// only future resolutions; a child already created carries its frozen def key, so
+// replay is unaffected (I6).
+type CallTargetOverride struct {
+	// Disabled parks the call (as an undeployed callee does) instead of resolving.
+	Disabled bool
+	// PinnedDefKey resolves to exactly this definition key (0 = not pinned). The
+	// server layer picks the key from an operator-named version; the engine is
+	// version-agnostic and simply uses it, parking if it is no longer deployed.
+	PinnedDefKey uint64
+	// RedirectProcessId resolves the newest deployment of this process id instead of
+	// the called one ("" = no redirect). A redirect uses the default `latest`
+	// resolution for its target (no chaining), so overrides cannot form a cycle.
+	RedirectProcessId string
+}
+
+// SetCallTargetOverride installs (or replaces) the per-server override for a called
+// process id. Must be called on the run-loop goroutine (the map's single owner):
+// the server layer calls it at startup and on an admin change (ADR-0105).
+func (p *Processor) SetCallTargetOverride(calledProcessId string, ov CallTargetOverride) {
+	p.callOverrides[calledProcessId] = ov
+}
+
+// ClearCallTargetOverride removes a called process id's override, restoring the
+// default `latest` resolution. Idempotent. Run-loop goroutine only.
+func (p *Processor) ClearCallTargetOverride(calledProcessId string) {
+	delete(p.callOverrides, calledProcessId)
 }
 
 // Undeploy removes a definition so no new instances of it can be created,
@@ -129,6 +185,9 @@ func (p *Processor) Undeploy(defKey uint64) {
 	if cp := p.processes[defKey]; cp != nil {
 		for _, ms := range cp.MessageStartEvents() {
 			p.messageStarts[ms.MessageName] = removeStartRef(p.messageStarts[ms.MessageName], defKey)
+		}
+		for _, ss := range cp.SignalStartEvents() {
+			p.signalStarts[ss.SignalName] = removeSignalStart(p.signalStarts[ss.SignalName], defKey)
 		}
 	}
 	delete(p.processes, defKey)
@@ -144,7 +203,7 @@ type messageStartRef struct {
 	elementId      int32
 	correlationKey *expr.Compiled
 	// singletonStart gates instantiation on there being no live instance of defKey
-	// already started with the same correlation key (ADR-0082); false = ADR-0035's
+	// already started with the same correlation key (ADR-0094); false = ADR-0035's
 	// start-per-message default.
 	singletonStart bool
 }
@@ -159,6 +218,19 @@ func removeStartRef(refs []messageStartRef, defKey uint64) []messageStartRef {
 		}
 	}
 	return refs
+}
+
+// removeSignalStart returns keys with the first entry for defKey removed — the
+// signal-start counterpart of removeStartRef (ADR-0088). A name whose last
+// signal-start definition is undeployed keeps an empty slice, which instantiates
+// nothing; harmless and rare, so it is not pruned from the map.
+func removeSignalStart(keys []uint64, defKey uint64) []uint64 {
+	for i, k := range keys {
+		if k == defKey {
+			return append(keys[:i], keys[i+1:]...)
+		}
+	}
+	return keys
 }
 
 // SetJobNotifier installs the hook the service-task behavior triggers (after
@@ -222,12 +294,40 @@ func (p *Processor) CompleteJobWithDecision(jobKey uint64, decision *model.Decis
 	})
 }
 
+// SetVariables enqueues an external, operator-initiated write of variables onto a
+// running instance's scope (ADR-0095): each variable is created if its name is new
+// in the target scope or overwritten if it already exists. piKey is the process
+// instance; scopeKey is the scope the variables land in — pass piKey (or 0, which
+// the handler treats as piKey) for the instance root scope, or a live element
+// instance key belonging to piKey for a subprocess/multi-instance-body local scope.
+// The writes are frozen into VariableCreated/VariableUpdated events, so they replay
+// without re-running this command (invariant I6) and appear in the instance's
+// variable timeline as the audit trail. Setting variables on an instance that is
+// gone (finished or never existed), or on a scope that does not belong to it, is a
+// no-op. It does not re-evaluate any gateway a token has already passed — it only
+// changes the stored values. Each variable set is additionally recorded as an audit
+// event naming actor — who made the change (ADR-0098) — so the "who changed it" trail
+// is durable; pass "" when the caller is unidentified. Call RunUntilIdle (or Drive)
+// to process it.
+func (p *Processor) SetVariables(piKey, scopeKey uint64, actor string, vars ...model.VariableValue) {
+	p.queue = append(p.queue, Command{
+		Key:       piKey,
+		ValueType: model.VTVariable,
+		Intent:    model.IntentVariableModify,
+		Value:     inflightValue{variable: model.VariableValue{ScopeKey: scopeKey}},
+		StartVars: vars,
+		Actor:     actor,
+	})
+}
+
 // FailJob enqueues a worker's failure report for a job (ADR-0061), carrying the
-// retries the worker leaves it and a failure message. With retries > 0 the job is
-// retried (back on the activatable index); with retries <= 0 an incident is raised
-// on the job's element and the token parks there. Failing a job that no longer
-// exists is a no-op. Call RunUntilIdle (or Drive) to process it.
-func (p *Processor) FailJob(jobKey uint64, retries int32, message string) {
+// retries the worker leaves it, a failure message, and a retry backoff (unix-nanoseconds;
+// 0 = retry immediately, ADR-0111). With retries > 0 the job is retried — immediately if
+// backoff is 0, otherwise held off the activatable index until a retry timer fires backoff
+// nanoseconds later; with retries <= 0 an incident is raised on the job's element and the
+// token parks there. Failing a job that no longer exists is a no-op. Call RunUntilIdle (or
+// Drive) to process it.
+func (p *Processor) FailJob(jobKey uint64, retries int32, message string, backoff int64) {
 	p.queue = append(p.queue, Command{
 		Key:       jobKey,
 		ValueType: model.VTJob,
@@ -236,6 +336,23 @@ func (p *Processor) FailJob(jobKey uint64, retries int32, message string) {
 			job:      model.JobValue{Retries: retries},
 			incident: model.IncidentValue{Message: message},
 		},
+		RetryBackoff: backoff,
+	})
+}
+
+// ThrowJobError enqueues a worker's report that its job threw a BPMN error code
+// (ADR-0089) — the "throw BPMN error" verb, a sibling of FailJob. Instead of retrying or
+// raising an incident, the handler cancels the job and propagates the error from the job's
+// element to the nearest matching error boundary or error event subprocess (or, uncaught,
+// raises an incident). The code rides in the command's incident.Message field, a transient
+// command carrier that is never persisted. Throwing on a job that no longer exists is a
+// no-op. Call RunUntilIdle (or Drive) to process it.
+func (p *Processor) ThrowJobError(jobKey uint64, errorCode string) {
+	p.queue = append(p.queue, Command{
+		Key:       jobKey,
+		ValueType: model.VTJob,
+		Intent:    model.IntentJobErrorThrown,
+		Value:     inflightValue{incident: model.IncidentValue{Message: errorCode}},
 	})
 }
 
@@ -368,7 +485,7 @@ func (p *Processor) processBatch() error {
 	p.sideEffects = p.sideEffects[:0]
 	p.fatalErr = nil
 	for k := range p.startsThisBatch {
-		delete(p.startsThisBatch, k) // reuse the map; empty by the next batch (ADR-0082)
+		delete(p.startsThisBatch, k) // reuse the map; empty by the next batch (ADR-0094)
 	}
 
 	tx := p.store.NewTransaction()

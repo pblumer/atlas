@@ -36,6 +36,18 @@ type Command struct {
 	// so — like StartVars, on the same non-hot-path completion intent — it never
 	// touches the token-movement fast path.
 	Decision *model.DecisionEvaluationValue
+	// Actor identifies who submitted an external variable-modify command (ADR-0098):
+	// the acting principal's username, frozen into the audit event the modify emits so
+	// the "who changed it" trail is durable and replayable. Empty for every other
+	// command (and for a modify made with auth off / by an unidentified caller). It
+	// rides only on the non-hot-path IntentVariableModify command, so it never touches
+	// the token-movement fast path.
+	Actor string
+	// RetryBackoff is the delay (unix-nanoseconds) a worker asked to wait before its failed
+	// job may be retried (ADR-0111). It rides only on the non-hot-path IntentJobFailed command;
+	// the handler reads the clock at command time and freezes now+RetryBackoff into the job's
+	// RetryDueDate (invariant I6). 0 means retry immediately (the pre-0111 behavior).
+	RetryBackoff int64
 }
 
 // sideEffect is work to run after the batch's fsync (invariant I2). It is a

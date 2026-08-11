@@ -60,8 +60,15 @@ function newFormId() {
 }
 
 let current; // active session handle, torn down on remount/leave
+// generation is bumped by cleanup() on every remount/navigation. mountFormEditor
+// captures it after cleanup() and re-checks after each await, so a mount a newer
+// navigation has superseded bails before it instantiates the form-js Playground
+// (and its timers) into a detached container and leaks them — the same guard
+// editor.js uses for the BPMN mounts.
+let generation = 0;
 
 export function cleanup() {
+  generation++;
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
 }
 
@@ -69,6 +76,7 @@ export function cleanup() {
 // existing form; without it creates a new one (optionally seeded into projectId).
 export async function mountFormEditor(root, { api, toast, formId, projectId }) {
   cleanup();
+  const gen = generation; // this mount's token; bail if a newer navigation supersedes it
   // Claim the shared cleanup slot so navigating away tears this editor down
   // (the BPMN editor reclaims it the same way when it mounts).
   window.__atlasCleanup = cleanup;
@@ -77,7 +85,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
   root.innerHTML = `
     <div class="editor form-editor">
       <div class="editor-bar">
-        <a class="crumbs" href="#/modeler">&larr; Forms</a>
+        <a class="crumbs" id="form-back" href="#/modeler">&larr; Forms</a>
         <div class="etabs" id="form-tabs">
           <button type="button" data-ftab="design" class="active">Design</button>
           <button type="button" data-ftab="validate">Validate</button>
@@ -116,14 +124,33 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
       project = def.projectId || "";
       if (def.schema && typeof def.schema === "object") schema = def.schema;
     } catch (e) {
+      if (gen !== generation) return;
       container.innerHTML = `<p class="muted err" style="padding:20px">Failed to load form: ${esc(e.message)}</p>`;
       return;
     }
+    if (gen !== generation) return; // superseded while the form definition loaded
   } else {
     id = newFormId();
   }
   nameInput.value = name;
   idChip.textContent = id;
+
+  // Point the back link at the owning project when the form belongs to one, so a form
+  // opened from inside a project returns there rather than dumping the operator on the
+  // Modeler home. The edit route (#/modeler/form/e/{id}) doesn't name the project, so
+  // this resolves from the loaded form's projectId (or, for a new form, the seeded one).
+  (async () => {
+    const backEl = root.querySelector("#form-back");
+    if (!backEl) return;
+    if (!project) return; // ungrouped/new: keep "← Forms" → Modeler home
+    backEl.href = `#/modeler/p/${encodeURIComponent(project)}`;
+    backEl.innerHTML = "&larr; Project"; // generic label until the name resolves
+    try {
+      const projects = await api("GET", "/api/v1/projects");
+      const p = projects.find((x) => x.id === project);
+      if (p && root.querySelector("#form-back") === backEl) backEl.innerHTML = `&larr; ${esc(p.name)}`;
+    } catch { /* best-effort: the generic "Project" label still links correctly */ }
+  })();
 
   // ---- Shared schema state -------------------------------------------------
   // `schema` is the single source of truth. `rev` bumps whenever it changes so
@@ -138,9 +165,13 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
   try {
     ({ Playground } = await loadPlayground());
   } catch (e) {
+    if (gen !== generation) return;
     container.innerHTML = `<p class="muted err" style="padding:20px">Failed to load the form editor: ${esc(e.message)}</p>`;
     return;
   }
+  // Superseded while the form-js bundle loaded: don't build the Playground (and its
+  // timers) into a container the newer view has already replaced.
+  if (gen !== generation) return;
   container.innerHTML = "";
   let playground;
   try {
@@ -447,18 +478,18 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
 }
 
 // ---- Design pane layout enhancement ---------------------------------------
-// The Design tab hosts the form-js Playground, which renders its own 2x2 grid
-// of areas (Form Definition | Form Preview / Form Input | Form Output) flanked
-// by a Components palette and a properties panel. enhanceDesignLayout gives
-// those areas the same affordances as the Validate pane: each area collapses to
-// its header, the grid's column/row gutters are draggable, and the two side
-// columns are width-resizable. Choices persist across sessions (localStorage).
+// The Design tab hosts the form-js Playground, which ships its four areas
+// (Form Definition | Form Preview / Form Input | Form Output) as a 2x2 grid
+// flanked by a Components palette and a properties panel. enhanceDesignLayout
+// re-lays them the way an author reads the tool: the editor is the main field
+// with an optional, resizable Form Preview beside it; the Form Input/Output data
+// region is decoupled below and toggles as a whole; and the Components and
+// Properties columns flank both, each collapsible. Choices persist (localStorage).
 //
 // It reaches into the Playground's rendered DOM (vendored/pinned, ADR-0013), so
 // it is written defensively: every lookup is guarded and it is idempotent, and
 // it re-applies cleanly if the Playground ever rebuilds its chrome.
 const DKEY = "atlas.form.design.";
-const COLLAPSED_H = "2.4em"; // track size for a fully-collapsed row/column
 
 function enhanceDesignLayout(container) {
   if (!container) return;
@@ -466,109 +497,170 @@ function enhanceDesignLayout(container) {
   const rootEl = container.querySelector(".fjs-pgl-root");
   if (!main || !rootEl) return; // Playground not rendered yet
   // Idempotent: if this exact element is already wired, nothing to do.
-  if (main.__fvWired && main.querySelector(".fv-grid-cresizer")) return;
+  if (main.__fvWired && main.querySelector(".fv-top")) return;
   main.__fvWired = true;
 
   const sections = [...main.querySelectorAll(":scope > .fjs-pgl-section")];
   if (sections.length < 4) return; // unexpected layout — leave the Playground as-is
+  const [editor, preview, input, output] = sections;
 
   const num = (k, d) => { const v = parseFloat(localStorage.getItem(DKEY + k)); return Number.isFinite(v) ? v : d; };
+  const bool = (k, d) => { const v = localStorage.getItem(DKEY + k); return v == null ? d : v === "1"; };
+  const setBool = (k, v) => localStorage.setItem(DKEY + k, v ? "1" : "0");
   const state = {
-    colPct: Math.min(85, Math.max(15, num("colPct", 50))),
-    rowPct: Math.min(85, Math.max(15, num("rowPct", 70))),
+    edPct: Math.min(85, Math.max(15, num("edPct", 60))),   // editor width within the top region
+    topPct: Math.min(85, Math.max(15, num("topPct", 68))), // top region height within main
   };
-  let collapsed;
-  try { collapsed = JSON.parse(localStorage.getItem(DKEY + "collapsed") || "null"); } catch { collapsed = null; }
-  if (!Array.isArray(collapsed) || collapsed.length !== 4) collapsed = [false, false, false, false];
+  let previewOpen = bool("previewOpen", true);
+  let bottomOpen = bool("bottomOpen", true);
 
-  // Capture the side columns' natural widths BEFORE reflowing the grid — the
-  // palette has no explicit CSS width, so it would collapse the instant `main`
-  // starts flexing and any later measurement would read that squeezed value.
+  // Capture the side columns' natural widths BEFORE reflowing (used by the width
+  // resizers below); the palette has no explicit CSS width and would collapse the
+  // instant `main` starts flexing.
   const palette = rootEl.querySelector(":scope > .fjs-pgl-palette-container");
   const props = rootEl.querySelector(":scope > .fjs-pgl-properties-container");
-  // The palette is the layout's flex-remainder and hasn't settled to its real
-  // width yet, so a live measurement can read a collapsed value — fall back to
-  // the Playground's natural defaults (palette ~200px, properties 250px).
   const sane = (el, def) => { const w = el ? Math.round(el.getBoundingClientRect().width) : 0; return w > 50 ? w : def; };
   const paletteW0 = sane(palette, 200);
   const propsW0 = sane(props, 250);
 
-  // Let the middle grid flex between fixed-width side columns so resizing the
-  // palette/properties reflows the layout (the Playground hard-codes its width).
+  // Reshape main into a vertical stack of two regions: the editor with an optional
+  // preview on top, and the decoupled Form Input/Output data region below (toggled
+  // as a whole). form-js ships these four as a 2x2 grid with shared rows; splitting
+  // it this way lets the preview and the data region come and go without holes.
   main.style.position = "relative";
+  main.style.display = "flex";
+  main.style.flexDirection = "column";
   main.style.flex = "1 1 auto";
   main.style.width = "auto";
   main.style.minWidth = "0";
 
-  // --- Per-section collapse -------------------------------------------------
-  sections.forEach((sec, i) => {
-    if (collapsed[i]) sec.classList.add("fv-collapsed");
+  const topRegion = document.createElement("div");
+  topRegion.className = "fv-top";
+  const bottomRegion = document.createElement("div");
+  bottomRegion.className = "fv-bottom";
+  topRegion.append(editor, preview);
+  bottomRegion.append(input, output);
+  main.append(topRegion, bottomRegion);
+
+  // Dividers: editor|preview (within the top region) and top|bottom (over main).
+  const vsplit = document.createElement("div");
+  vsplit.className = "fv-grid-cresizer";
+  vsplit.title = "Drag to resize the preview";
+  topRegion.appendChild(vsplit);
+  const hsplit = document.createElement("div");
+  hsplit.className = "fv-grid-rresizer";
+  hsplit.title = "Drag to resize the data region";
+  main.appendChild(hsplit);
+
+  // A header's caret toggles its region; the click ignores the header's own
+  // buttons (Download/Embed). The editor has no caret — it is the main field.
+  function addCaret(sec, onToggle) {
     const header = sec.querySelector(":scope > .header");
     if (!header || header.querySelector(".fv-sec-caret")) return;
     const caret = document.createElement("span");
     caret.className = "fv-sec-caret";
-    caret.textContent = "▾"; // ▾
+    caret.textContent = "▾";
     header.insertBefore(caret, header.firstChild);
     header.classList.add("fv-sec-head");
     header.addEventListener("click", (e) => {
-      // Don't collapse when clicking the header's own controls (Download/Embed).
       if (e.target !== caret && e.target.closest("button, a, input, select, .fjs-pgl-button, .header-items")) return;
-      sec.classList.toggle("fv-collapsed");
-      collapsed[i] = sec.classList.contains("fv-collapsed");
-      localStorage.setItem(DKEY + "collapsed", JSON.stringify(collapsed));
+      onToggle();
+    });
+  }
+  // Preview closes from its own caret and reopens from the editor-header button.
+  addCaret(preview, () => { previewOpen = false; setBool("previewOpen", previewOpen); recompute(); });
+  // Form Input and Form Output are one region: either caret toggles both.
+  const toggleBottom = () => { bottomOpen = !bottomOpen; setBool("bottomOpen", bottomOpen); recompute(); };
+  addCaret(input, toggleBottom);
+  addCaret(output, toggleBottom);
+
+  // Preview is optional; a toggle in the editor's own header brings it back once
+  // its caret has closed it (a hidden section can't hold its own reopen control).
+  const edHeader = editor.querySelector(":scope > .header");
+  if (edHeader && !edHeader.querySelector(".fv-preview-toggle")) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "fv-preview-toggle";
+    (edHeader.querySelector(".header-items") || edHeader).appendChild(btn);
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      previewOpen = !previewOpen;
+      setBool("previewOpen", previewOpen);
       recompute();
     });
-  });
-
-  // --- Grid gutter resizers (absolute-positioned over the grid) --------------
-  const cresizer = document.createElement("div");
-  cresizer.className = "fv-grid-cresizer";
-  cresizer.title = "Drag to resize columns";
-  const rresizer = document.createElement("div");
-  rresizer.className = "fv-grid-rresizer";
-  rresizer.title = "Drag to resize rows";
-  main.appendChild(cresizer);
-  main.appendChild(rresizer);
+  }
 
   function recompute() {
-    const c = sections.map((s) => s.classList.contains("fv-collapsed"));
-    const leftCol = c[0] && c[2], rightCol = c[1] && c[3];
-    const topRow = c[0] && c[1], botRow = c[2] && c[3];
-    main.style.gridTemplateColumns = leftCol && !rightCol ? `${COLLAPSED_H} minmax(0,1fr)`
-      : !leftCol && rightCol ? `minmax(0,1fr) ${COLLAPSED_H}`
-      : `${state.colPct}% ${100 - state.colPct}%`;
-    main.style.gridTemplateRows = topRow && !botRow ? `${COLLAPSED_H} minmax(0,1fr)`
-      : !topRow && botRow ? `minmax(0,1fr) ${COLLAPSED_H}`
-      : `${state.rowPct}% ${100 - state.rowPct}%`;
-    cresizer.style.left = state.colPct + "%";
-    cresizer.style.display = leftCol || rightCol ? "none" : "";
-    rresizer.style.top = state.rowPct + "%";
-    rresizer.style.display = topRow || botRow ? "none" : "";
+    // Bottom (Form Input/Output) toggles as a whole; when off it collapses to its
+    // header bar so it can be reopened, rather than vanishing.
+    input.classList.toggle("fv-collapsed", !bottomOpen);
+    output.classList.toggle("fv-collapsed", !bottomOpen);
+    topRegion.style.flex = bottomOpen ? `1 1 ${state.topPct}%` : "1 1 auto";
+    bottomRegion.style.flex = bottomOpen ? `1 1 ${100 - state.topPct}%` : "0 0 auto";
+    hsplit.style.display = bottomOpen ? "" : "none";
+    hsplit.style.top = state.topPct + "%";
+    input.style.flex = "1 1 50%";
+    output.style.flex = "1 1 50%";
+    // Preview is optional; when off it is fully hidden and the editor fills the row.
+    preview.style.display = previewOpen ? "" : "none";
+    vsplit.style.display = previewOpen ? "" : "none";
+    editor.style.flex = previewOpen ? `0 0 ${state.edPct}%` : "1 1 auto";
+    preview.style.flex = previewOpen ? "1 1 auto" : "0 0 0";
+    vsplit.style.left = state.edPct + "%";
+    const btn = edHeader && edHeader.querySelector(".fv-preview-toggle");
+    if (btn) { btn.textContent = previewOpen ? "Hide preview" : "Show preview"; btn.classList.toggle("on", previewOpen); }
   }
 
-  dragPct(cresizer, "x", main, (pct) => { state.colPct = pct; recompute(); },
-    () => localStorage.setItem(DKEY + "colPct", String(Math.round(state.colPct))));
-  dragPct(rresizer, "y", main, (pct) => { state.rowPct = pct; recompute(); },
-    () => localStorage.setItem(DKEY + "rowPct", String(Math.round(state.rowPct))));
+  dragPct(vsplit, "x", topRegion, (pct) => { state.edPct = pct; recompute(); },
+    () => localStorage.setItem(DKEY + "edPct", String(Math.round(state.edPct))));
+  dragPct(hsplit, "y", main, (pct) => { state.topPct = pct; recompute(); },
+    () => localStorage.setItem(DKEY + "topPct", String(Math.round(state.topPct))));
 
-  // --- Side-column width resizers (palette left, properties right) ----------
-  if (palette && !palette.__fvWired) {
-    palette.__fvWired = true;
-    palette.style.flex = "0 0 auto";
-    palette.style.width = num("paletteW", paletteW0) + "px";
+  // --- Side columns (Components palette left, Properties right): each is
+  // width-resizable and collapses to nothing via a chevron on its resizer. The
+  // chevron lives on the resizer (not inside the column) so it stays reachable
+  // when the column is collapsed away.
+  setupSide(palette, "left", "paletteW", paletteW0, "paletteOpen");
+  setupSide(props, "right", "propsW", propsW0, "propsOpen");
+
+  function setupSide(col, side, wKey, w0, openKey) {
+    if (!col || col.__fvWired) return;
+    col.__fvWired = true;
+    col.style.flex = "0 0 auto";
+    let savedW = num(wKey, w0);
+    col.style.width = savedW + "px";
+    let open = bool(openKey, true);
+
     const r = document.createElement("div");
     r.className = "fv-side-resizer";
-    rootEl.insertBefore(r, main);
-    dragWidth(r, palette, "left", () => localStorage.setItem(DKEY + "paletteW", String(parseInt(palette.style.width, 10) || 200)));
-  }
-  if (props && !props.__fvWired) {
-    props.__fvWired = true;
-    props.style.flex = "0 0 auto";
-    props.style.width = num("propsW", propsW0) + "px";
-    const r = document.createElement("div");
-    r.className = "fv-side-resizer";
-    rootEl.insertBefore(r, props);
-    dragWidth(r, props, "right", () => localStorage.setItem(DKEY + "propsW", String(parseInt(props.style.width, 10) || 250)));
+    if (side === "left") rootEl.insertBefore(r, main); else rootEl.insertBefore(r, col);
+    dragWidth(r, col, side, () => {
+      if (col.classList.contains("fv-rail")) return; // collapsed — width is pinned
+      savedW = parseInt(col.style.width, 10) || w0;
+      localStorage.setItem(DKEY + wKey, String(savedW));
+    });
+
+    const t = document.createElement("button");
+    t.type = "button";
+    t.className = "fv-railbtn";
+    t.title = "Collapse / expand";
+    r.appendChild(t);
+    t.addEventListener("pointerdown", (e) => e.stopPropagation()); // click, don't drag
+    t.addEventListener("click", (e) => { e.stopPropagation(); open = !open; setBool(openKey, open); apply(); });
+
+    function apply() {
+      if (open) {
+        col.classList.remove("fv-rail");
+        col.style.width = savedW + "px";
+      } else {
+        if (!col.classList.contains("fv-rail")) savedW = parseInt(col.style.width, 10) || savedW;
+        col.classList.add("fv-rail");
+        col.style.width = "";
+      }
+      // Chevron points the way the panel moves: outward to collapse, inward to reopen.
+      t.textContent = ((side === "left") === open) ? "‹" : "›";
+    }
+    apply();
   }
 
   recompute();

@@ -32,12 +32,16 @@ const (
 	cfIncident               columnFamily = 0x12 // incident:<elKey> → IncidentValue (ADR-0061)
 	cfDecisionEvaluation     columnFamily = 0x14 // decEval:<scopeKey>:<ts>:<pos> → DecisionEvaluationValue (ADR-0066)
 	cfInboundHighWater       columnFamily = 0x15 // inboundHW:<sourceID> → uint64 last-applied sequence (ADR-0075)
-	cfActiveStartKey         columnFamily = 0x16 // activeStartKey:<defKey>:<corrKey> → int32 live message-start instances (ADR-0082)
+	cfActiveStartKey         columnFamily = 0x16 // activeStartKey:<defKey>:<corrKey> → int32 live message-start instances (ADR-0094)
 	cfDefInstanceCount       columnFamily = 0x17 // defInst:<procDefKey> → int64 active-instance count (merge, ADR-0080)
 	cfElementTokenCount      columnFamily = 0x18 // elTok:<procDefKey>:<elementId> → int64 live-token count (merge, ADR-0080)
 	cfElementVisitAgg        columnFamily = 0x19 // elVisAgg:<procDefKey>:<elementId> → int64 cumulative visits (merge, ADR-0080)
 	cfDefCompletedCount      columnFamily = 0x1A // defDone:<procDefKey> → int64 finished-instance count (merge, ADR-0083)
 	cfDefLastActivity        columnFamily = 0x1B // defAct:<procDefKey> → int64 unix-nano of the latest instance event (set, ADR-0083)
+	cfSignalSubscription     columnFamily = 0x1C // sigSub:<name>:<elKey> → SignalSubscriptionValue (ADR-0088)
+	cfVariableAudit          columnFamily = 0x1D // varAudit:<piKey>:<ts>:<pos> → VariableAuditValue (ADR-0098)
+	cfCompensable            columnFamily = 0x1E // comp:<scopeKey>:<seq> → CompensableValue (ADR-0103)
+	cfCanceling              columnFamily = 0x1F // canceling:<txScopeKey> → 1: a transaction being cancelled (ADR-0108)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -165,7 +169,7 @@ func keyActiveChildren(scope uint64) []byte {
 }
 
 // keyActiveStartKey keys the count of live message-start instances of one definition
-// that began with a given correlation key (ADR-0082). The definition key is fixed-
+// that began with a given correlation key (ADR-0094). The definition key is fixed-
 // width big-endian so a variable-length correlation key can follow unambiguously.
 func keyActiveStartKey(defKey uint64, correlationKey string) []byte {
 	return append(appendBE64([]byte{byte(cfActiveStartKey)}, defKey), correlationKey...)
@@ -382,6 +386,55 @@ func scopeFromDecisionEvalKey(k []byte) uint64 {
 	return binary.BigEndian.Uint64(k[1:9])
 }
 
+// keyVariableAudit keys one external variable override under its owning process
+// instance, the same (instance, ts, pos) shape as the decision-evaluation and
+// variable-snapshot keys, so the "who changed it" trail folds into the same instance
+// timeline by log position (ADR-0098, mirroring ADR-0066/0048). Append-only: one
+// record per variable an operator sets, never overwritten.
+func keyVariableAudit(piKey uint64, ts int64, pos uint64) []byte {
+	b := appendOrderedInt64(variableAuditScopePrefix(piKey), ts)
+	return appendBE64(b, pos)
+}
+
+// variableAuditScopePrefix scans every external variable override recorded under one
+// process instance, in change order.
+func variableAuditScopePrefix(piKey uint64) []byte {
+	return appendBE64([]byte{byte(cfVariableAudit)}, piKey)
+}
+
+// timestampFromVariableAuditKey extracts the event timestamp from a variable-audit
+// key, inverting the sign-flip appendOrderedInt64 applied.
+func timestampFromVariableAuditKey(k []byte) int64 {
+	return int64(binary.BigEndian.Uint64(k[len(k)-16:]) ^ (1 << 63))
+}
+
+// keyCompensable keys one completed compensable activity under its scope, ordered by
+// the completion event's log position (seq). Position is strictly increasing, so a
+// forward scan yields completion order and a reverse scan yields reverse completion
+// order — the order a compensation throw runs handlers in (ADR-0103). No timestamp
+// component is needed: position alone totally orders the log.
+func keyCompensable(scopeKey uint64, seq uint64) []byte {
+	return appendBE64(compensableScopePrefix(scopeKey), seq)
+}
+
+// compensableScopePrefix scans every completed compensable activity recorded under one
+// scope, in completion order.
+func compensableScopePrefix(scopeKey uint64) []byte {
+	return appendBE64([]byte{byte(cfCompensable)}, scopeKey)
+}
+
+// keyCanceling keys the cancelling marker for a transaction scope (ADR-0108). A point key
+// (set/get/delete only), so the scope key follows the column-family byte directly.
+func keyCanceling(scopeKey uint64) []byte {
+	return appendBE64([]byte{byte(cfCanceling)}, scopeKey)
+}
+
+// positionFromVariableAuditKey extracts the trailing log position from a
+// variable-audit key.
+func positionFromVariableAuditKey(k []byte) uint64 {
+	return binary.BigEndian.Uint64(k[len(k)-8:])
+}
+
 // appendLenString appends a uint32 length prefix followed by s, so a
 // variable-length string can be an unambiguous key component (the length marks
 // where it ends, letting a later component follow).
@@ -401,6 +454,20 @@ func messageSubscriptionPrefix(name, correlationKey string) []byte {
 // instances can wait on the same message and key.
 func keyMessageSubscription(name, correlationKey string, elKey uint64) []byte {
 	return appendBE64(messageSubscriptionPrefix(name, correlationKey), elKey)
+}
+
+// signalSubscriptionPrefix is the exact-match scan prefix for all subscriptions
+// waiting on a signal name — the broadcast access pattern. A signal has no
+// correlation key, so the prefix is name alone (ADR-0088).
+func signalSubscriptionPrefix(name string) []byte {
+	return appendLenString([]byte{byte(cfSignalSubscription)}, name)
+}
+
+// keySignalSubscription keys a signal subscription by its name with the
+// element-instance key as the trailing disambiguator, so several instances can
+// wait on the same signal (a broadcast fans out to every one).
+func keySignalSubscription(name string, elKey uint64) []byte {
+	return appendBE64(signalSubscriptionPrefix(name), elKey)
 }
 
 // prefixEnd returns the smallest key strictly greater than every key beginning

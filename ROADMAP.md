@@ -198,6 +198,18 @@ The control-flow basics most real models use.
   registry-only); credentials are still never authored in a model — an auth type
   plus a server-registered credential reference is a follow-up, alongside
   headers/query maps and FEEL-in-fields.
+  **A BMC Remedy connector is another catalog kind**
+  ([ADR-0106](docs/adr/0106-bmc-remedy-connector.md)): a service task marked
+  `<atlas:remedyConnector connector form>` creates an entry (e.g. an incident on
+  `HPD:IncidentInterface_Create`) in a Remedy form through the BMC AR System REST API on
+  the job path — the form and its field values are model-authored (literal-or-FEEL), the
+  created entry's id is written into a result variable, and the AR System base URL plus
+  the `{username,password}` credential bundle are server-registered and vault-resolved
+  like mail/clio, never in the model. The `remedy` connector trio (registry/client/worker)
+  is wired into the single-binary server run loop under the reserved Remedy job type and
+  authored via a first-class **BMC Remedy Connector** service-task type in the modeler.
+  Create-entry is the first operation; update/query, JWT caching, typed field values, and
+  a Remedy-side dedup field are follow-ups.
 
 ## Milestone 2 — Events and timers 🚧
 
@@ -241,8 +253,28 @@ Making processes wait, react, and time out.
   variables as the payload, and the reserved FEEL identifier `processInstanceKey`
   exposes an instance's own key so a reply can correlate back to the requester.
   Recovery-tested. A start-event correlation key and buffering remain (ADR-0035).
-- 🔲 Signal events (broadcast)
-- 🔲 Error events and error propagation
+- ✅ **Signal events (broadcast)**: a `signalEventDefinition` is a **named broadcast**
+  — no correlation key, delivered 1:n to **every** waiting catch of the same name across
+  all instances (ADR-0088). A signal throw or signal end event broadcasts the throwing
+  instance's variables as payload to every intermediate catch, signal boundary
+  (interrupting and non-interrupting), and signal event subprocess (interrupting and
+  re-arming) of that name, and instantiates every deployed process with a matching signal
+  start event. Built on the message delivery machinery over a parallel, name-keyed
+  subscription family, so cross-instance reach and recovery are inherited; all phases
+  recovery-tested. Authored in the Modeler's Implement panel (a signal picker on every
+  signal event, plus a central signals manager on the diagram root).
+- ✅ **Error events and error propagation**: an `errorEventDefinition` is a **named, coded
+  failure** propagated **structurally** to the **nearest enclosing** matching handler — not
+  broadcast (ADR-0089). An error end event (or a worker failing a job to a code via
+  `ThrowJobError`) throws; it walks up the live scope chain to the first error boundary or
+  error event subprocess whose code matches (a code-less catch is a catch-all), always
+  interrupting: the caught scope is torn down and the handler's recovery flow runs. Uncaught,
+  it propagates to a call-activity caller (ADR-0076) or, at the top, raises an incident
+  (ADR-0061). Built on the scope chain, `interruptHost`/`terminateScope`, and the
+  boundary/event-subprocess lifecycle — no subscription, value type, or recovery path;
+  propagation is a pure function of committed scope state. Recovery-tested; authored in the
+  Modeler's Implement panel (an error-code picker on error end/boundary/event-subprocess
+  events, plus a central errors manager).
 - ✅ Boundary events: timer and message, interrupting and non-interrupting,
   attached to waiting activities. An interrupting boundary cancels the host (and
   its job) and routes out its flow; a non-interrupting one spawns a parallel
@@ -251,9 +283,38 @@ Making processes wait, react, and time out.
   a repeating reminder that fires while the host runs (ADR-0054); each field may be
   a literal or a **FEEL expression** over the instance's variables, including a
   FEEL cycle re-evaluated each occurrence (ADR-0055/0056). Recovery-tested
-  (ADR-0040, ADR-0054). Error/signal boundaries and boundaries on subprocesses
-  remain.
-- 🔲 Receive tasks
+  (ADR-0040, ADR-0054). Signal boundaries are delivered (ADR-0088); error boundaries
+  and boundaries on subprocesses remain.
+- ✅ **Receive tasks** ([ADR-0102](docs/adr/0102-receive-tasks.md)): a `<receiveTask
+  messageRef="…">` is the message intermediate catch event's wait-for-a-message semantics in
+  **task** form — so, unlike the catch event, it is an *activity* that accepts **boundary
+  events** (the "wait for a reply, else time out" pattern), I/O and data mappings, and
+  multi-instance. It opens a message subscription on activation and continues when a
+  correlating publish/throw arrives, reusing the ADR-0020 subscription/correlate path
+  wholesale — no new subscription, value type, or recovery path. Recovery-tested; authored in
+  the Modeler's Implement panel via the shared message picker.
+- ✅ **Send tasks** ([ADR-0112](docs/adr/0112-send-tasks.md)): a `<sendTask>` is the **single
+  outbound element**, its kind chosen in the Implement panel. A **job/connector** kind
+  (`zeebe:taskDefinition` or an `atlas:*Connector`) is a job-creating *activity* identical in
+  execution to a service task — it reuses `serviceTaskBehavior`, so connectors (e-mail, REST, …),
+  boundary timeouts, I/O/data/multi-instance, retry backoff, and incidents all apply. A **message**
+  kind (`messageRef`, or an `operationRef` naming a `<bpmn:operation>` whose `inMessageRef` is
+  resolved to that message) is a correlating throw in task form: it compiles to the message throw
+  path (`TypeMessageThrowEvent`) and flows straight on, with no new runtime. `operationRef` is a
+  deploy-time compatibility path for imported WSDL-style models (its `outMessageRef` response is
+  not supported). Recovery-tested; the Modeler offers the connector/job-worker catalog plus a
+  Message entry on the send task.
+- ✅ **Event-based gateways** (deferred choice): an `<eventBasedGateway>` arms **every**
+  target catch event at once — each outgoing flow leads to a message/timer/signal
+  intermediate catch — and takes the branch whose event fires **first**, cancelling the rest
+  (the classic request-with-timeout: a message catch raced against a timer catch). It reuses
+  the catch-event, subscription, timer, and correlate/fire machinery wholesale; the gateway
+  labels its armed catches with a **race group** (a new `EventGatewayKey` on the element
+  instance), and the winner runs an `interruptHost`-shaped sibling loop to terminate the
+  losers (their subscriptions/timers self-retire). The compiler validates every target is a
+  catch event; recovery rebuilds the armed race and its group from the log, so the first fire
+  after a restart still wins — no new recovery path. Authored in the Modeler (bpmn-js draws
+  it natively) ([ADR-0110](docs/adr/0110-event-based-gateways.md)).
 - 🚧 **Incident model**: a job whose retries a worker exhausts raises a durable
   **incident** on its element instead of hanging or retrying forever; the token
   parks off the activatable index until an operator resolves the incident, which
@@ -268,11 +329,18 @@ Making processes wait, react, and time out.
   catch or boundary timer whose FEEL schedule can't be evaluated parks its token
   and raises a job-less incident (the failing field in its message) instead of
   firing immediately; resolving re-arms the timer against the instance's current
-  variables (re-raising if it still fails). Recovery-tested. Recurring-boundary
-  re-arm failures, start-event timer FEEL, retry backoff, and an operator UI still
-  to come.
+  variables (re-raising if it still fails). Recovery-tested. **Retry backoff and the
+  remaining FEEL-failure gaps now closed** ([ADR-0111](docs/adr/0111-incident-model-completion.md)):
+  a worker can fail a job with a **backoff** — the job is held off the activatable
+  index until a retry timer re-activates it (durable across a crash), instead of
+  hammering immediately; a **recurring** boundary or event-subprocess timer whose
+  FEEL cadence stops resolving mid-cycle raises the same job-less incident and parks
+  rather than silently ceasing to recur; and a **timer start** event's constant FEEL
+  schedule that can't resolve is now a deploy-time validation error
+  (`timer.start-schedule`) instead of a start timer that silently never arms. An
+  operator UI for incidents is the last piece still to come.
 
-## Milestone 3 — Structure 🔲
+## Milestone 3 — Structure ✅
 
 Composition and reuse.
 
@@ -285,11 +353,50 @@ Composition and reuse.
   authors pools, message flows, and pool names (ADR-0023). Atomic multi-pool
   deploy and message-flow validation still to come.
 - ✅ **Embedded subprocesses** (scope lifecycle via child counters): a `<subProcess>` runs its inner start→…→end in a child scope keyed by its element instance, completes when that scope drains, supports interrupting/non-interrupting boundary events (with scope-recursive termination), nests, and passes variables in/out via I/O mappings — including the Modeler's I/O-mapping editor for a subprocess ([ADR-0074](docs/adr/0074-embedded-subprocesses.md)).
-- 🔲 Event subprocesses (interrupting and non-interrupting)
-- 🚧 Call activities (single-partition): a `<callActivity>` starts a separate process as a child instance in the caller's partition, passes variables in/out (isolated or propagate-all), and resumes the caller on completion; recovery-tested ([ADR-0076](docs/adr/0076-call-activities.md)). Remaining: termination propagation (cancel → terminate child) and the Modeler editor.
+- ✅ **Event subprocesses** (interrupting and non-interrupting): a `<subProcess
+  triggeredByEvent="true">` arms its start event's trigger while its enclosing scope
+  runs; firing interrupts the scope (or runs alongside and re-arms, non-interrupting)
+  and runs the handler. Message and timer triggers ([ADR-0082](docs/adr/0082-event-subprocesses.md)),
+  plus **signal** ([ADR-0088](docs/adr/0088-signal-events.md)) and **error**
+  ([ADR-0089](docs/adr/0089-error-events.md)) triggers; nests in embedded subprocesses
+  and at the process root; recovery-tested; authored in the Modeler.
+- ✅ **Call activities** (single-partition): a `<callActivity>` starts a separate process
+  as a child instance in the caller's partition, passes variables in/out (isolated or
+  propagate-all), resumes the caller on completion, and tears the child down when the
+  caller is cancelled or interrupted (recursively, through a call chain) — including an
+  error unhandled in a child propagating to the caller's error boundary ([ADR-0089](docs/adr/0089-error-events.md)).
+  Recovery-tested; authored in the Modeler's Implement panel (called process id, binding,
+  propagation toggles, I/O mappings, and multi-instance) ([ADR-0076](docs/adr/0076-call-activities.md)).
 - ✅ **Multi-instance activities** (sequential and parallel): a `<multiInstanceLoopCharacteristics>` runs an activity — task, subprocess, or call activity — once per element of a FEEL input collection (or a fixed cardinality) as inner iterations scoped under a body, binding each iteration's `inputElement` and the standard `loopCounter`; parallel seeds all at once, sequential one at a time. It assembles an ordered `outputCollection` from each iteration's `outputElement`, honours a `completionCondition` (early exit, cancelling the rest), is interruptible (the body is a scope, so an interrupting boundary terminates every iteration and, for call-activity iterations, each child), and is authored in the Modeler's Implement panel. Reuses the ADR-0074 scope lifecycle wholesale — no new value type, counter, or recovery path; recovery-tested ([ADR-0077](docs/adr/0077-multi-instance-activities.md)).
-- 🔲 Compensation and compensation handlers
-- 🔲 BPMN transactions (with cancel/compensation)
+- ✅ **Compensation and compensation handlers**: a compensable activity carries a
+  compensation boundary event (`<compensateEventDefinition/>`) linked by a BPMN
+  `<association>` to an off-flow `isForCompensation` handler; the boundary is inert
+  (never armed), just marking the activity compensable. On successful completion the
+  activity is recorded in a durable per-scope index (`cfCompensable`), keyed by the
+  completion event's log position so a reverse scan is reverse completion order. A
+  compensation **throw** (intermediate) or **end** event triggers compensation — of one
+  named activity (`activityRef`) or, broadcast, every completed compensable activity in
+  its scope — running each handler newest-first (reverse completion order) and consuming
+  the record so it compensates at most once. Compensation is scope-confined, the index is
+  cleaned when a scope or instance tears down (no leak), and it survives recovery (the
+  index rebuilds from the log — no new recovery path; the throw is a command-path scope
+  walk, the twin of error propagation). bpmn-js already authors it, so no Modeler change
+  was needed. Recovery-tested ([ADR-0103](docs/adr/0103-compensation.md)).
+- ✅ **BPMN transactions** (with cancel/compensation): a `<transaction>` is an
+  embedded subprocess with one added outcome — it can be **cancelled**. A **cancel
+  end event** (`<endEvent><cancelEventDefinition/>`) inside it rolls the transaction
+  back: it terminates the transaction's other running work, **compensates** every
+  completed compensable activity in the transaction scope (ADR-0103, reverse
+  completion order), then — once compensation drains the scope — routes the token out
+  an always-interrupting **cancel boundary** (`<boundaryEvent><cancelEventDefinition/>`,
+  valid only on a transaction). A committing transaction takes its normal flow and does
+  not compensate. Built on the subprocess scope (ADR-0074), the `compensate` walk, and
+  `interruptHost`, reusing `TypeSubProcess` (marked `IsTransaction`) so every scope
+  site is inherited; the compensate-then-continue ordering rides the existing
+  scope-drain through a small event-derived canceling marker, so recovery rebuilds it
+  with no new recovery path. Recovery-tested; authored in the Modeler (bpmn-js draws
+  transactions and cancel events; the cancel boundary/end panels are wired)
+  ([ADR-0108](docs/adr/0108-bpmn-transactions.md)). **Closes Milestone 3.**
 
 ## Milestone 4 — Operability 🔲
 

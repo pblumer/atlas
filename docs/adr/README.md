@@ -82,18 +82,46 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0072](0072-multiple-dmn-models-per-process.md) | Multiple DMN models per process deployment | Accepted |
 | [0073](0073-principals-directory.md) | A principals directory for member and assignee pickers | Accepted |
 | [0074](0074-embedded-subprocesses.md) | Embedded subprocesses — scope lifecycle via child counters, reusing the ADR-0068 scope substrate | Accepted |
-| [0076](0076-call-activities.md) | Call activities (single-partition) — start a separate process as a child instance, linked by a caller key | Proposed |
 | [0075](0075-clio-inbound-event-bridge.md) | A clio inbound event bridge with engine-side idempotent delivery | Accepted |
+| [0076](0076-call-activities.md) | Call activities (single-partition) — start a separate process as a child instance, linked by a caller key | Accepted |
+| [0077](0077-multi-instance-activities.md) | Multi-instance activities (parallel and sequential) | Accepted |
 | [0078](0078-design-view-token-simulation.md) | Design-view token simulation — a client-side control-flow walkthrough | Accepted |
 | [0079](0079-outbound-mail-connector.md) | An outbound mail connector (SMTP first) — provider managed like clio, message model-authored like REST | Accepted |
-| [0080](0080-native-mail-providers.md) | Native Gmail and Microsoft Graph mail providers — OAuth2 (app-only + refresh-token) behind the mail.Client seam, credential bundle in the vault | Accepted |
+| [0080](0080-runtime-aggregate-counters.md) | Sublinear runtime views via maintained aggregate counters | Accepted |
 | [0081](0081-community-marketplace-for-connectors-and-tasks.md) | A community marketplace for connectors, service tasks, and script tasks | Proposed |
-| [0082](0082-singleton-message-start.md) | Singleton message start — at most one live instance per correlation key | Accepted |
+| [0082](0082-event-subprocesses.md) | Event subprocesses (message- and timer-triggered, interrupting and non-interrupting) | Proposed |
 | [0083](0083-o1-instance-summary.md) | An O(1) instances summary — per-definition finished-count and last-activity counters | Accepted |
 | [0084](0084-csv-batch-validation.md) | CSV batch validation — upload a file, validate every row against business rules (DMN), correct the failures | Proposed |
-| [0085](0085-process-instance-ttl.md) | Process-instance TTL — self-cleaning expiry via the due-timer index | Proposed |
+| [0085](0085-process-instance-ttl.md) | Process-instance TTL — self-cleaning expiry via the due-timer index | Accepted |
 | [0086](0086-gateway-conditions-resolve-over-scope-chain.md) | Gateway conditions resolve over the scope chain, so a gateway inside a subprocess branches on its scope's variables | Proposed |
 | [0087](0087-in-process-csv-ingestion.md) | In-process CSV ingestion — upload in a user task, layout in a script task, parse in a service task | Accepted |
+| [0088](0088-signal-events.md) | Signal events (broadcast throw/catch) — named 1:n delivery reusing the message subscription machinery | Accepted |
+| [0089](0089-error-events.md) | Error events (scoped propagation to the nearest handler) | Accepted |
+| [0090](0090-bulk-terminate-instances.md) | Bulk-terminate running instances — an explicit selection and a filtered scope | Accepted |
+| [0091](0091-user-task-scheduling.md) | User-task scheduling — priority and due date | Accepted |
+| [0092](0092-clio-key-provisioning.md) | One-click clio credential provisioning | Accepted |
+| [0093](0093-native-mail-providers.md) | Native Gmail and Microsoft Graph mail providers — OAuth2 (app-only + refresh-token) behind the mail.Client seam, credential bundle in the vault | Accepted |
+| [0094](0094-singleton-message-start.md) | Singleton message start — at most one live instance per correlation key | Accepted |
+| [0095](0095-external-variable-modification.md) | External variable modification on a running instance | Accepted |
+| [0096](0096-token-simulation-events-and-inclusive-gateways.md) | Token simulation — event triggers, inclusive-gateway subset split / quiescence OR-join, and an auto-decide mode | Accepted |
+| [0097](0097-token-simulation-message-starts-event-subprocesses-multi-instance.md) | Token simulation — message starts spawn, event-subprocess triggers, and multi-instance | Accepted |
+| [0098](0098-external-variable-modification-audit.md) | Audit trail for external variable modifications — who changed a running instance's variables | Accepted |
+| [0099](0099-archimate-enterprise-architecture-view.md) | An ArchiMate 3.2 enterprise-architecture view — a layered, stakeholder-facing communication aid with reproducible SVG diagrams | Accepted |
+| [0100](0100-token-simulation-configurable-multi-instance-count.md) | Token simulation — configurable multi-instance count, modelled cardinality wins | Accepted |
+| [0101](0101-token-simulation-throw-delivers-to-waiting-catch.md) | Token simulation — a thrown message/signal delivers to (fires) a waiting catch | Accepted |
+| [0102](0102-receive-tasks.md) | Receive tasks — an activity that waits for a correlating message, reusing the message-catch machinery | Accepted |
+| [0103](0103-live-collaborative-modeling-sessions.md) | Live collaborative modeling sessions — real-time co-editing of drafts by people and AI agents | Proposed |
+| [0104](0104-token-simulation-embedded-subprocesses.md) | Token simulation — entering and running expanded embedded subprocesses as scopes | Accepted |
+| [0105](0105-per-server-call-activity-target-overrides.md) | Per-server call-activity target overrides — route, pin, or disable a call activity's target on one server | Proposed |
+| [0105](0105-sharepoint-connector.md) | SharePoint connector — create a list item via Microsoft Graph, provider managed and OAuth credential in the vault | Accepted |
+| [0106](0106-bmc-remedy-connector.md) | A BMC Remedy connector — server-registered ITSM entry creation via the AR System REST API | Accepted |
+| [0107](0107-backup-and-restore.md) | Backup and restore — a one-file gzip-tar download of the design-time data directory, secrets excluded | Accepted |
+| [0108](0108-bpmn-transactions.md) | BPMN transactions — a transaction subprocess whose cancel end event compensates completed work in reverse order, then routes out an always-interrupting cancel boundary | Accepted |
+| [0109](0109-full-instance-snapshot.md) | Whole-instance snapshot — a full backup including the WAL (running instances), users and vault key; restore staged and applied on restart | Accepted |
+| [0110](0110-event-based-gateways.md) | Event-based gateways — a deferred choice that arms several catch events at once; the first to fire wins and the rest are cancelled | Accepted |
+| [0111](0111-incident-model-completion.md) | Completing the incident model — job retry backoff (a retry timer holds the job off the index until due), recurring-timer re-arm FEEL-failure incidents, and start-timer FEEL failures caught at deploy | Accepted |
+| [0112](0112-send-tasks.md) | Send tasks — the single outbound element, kind chosen at author time: job/connector kinds are a distinct `TypeSendTask` reusing `serviceTaskBehavior` (the `TypeConnectorTask` precedent) with connectors/boundaries/I/O/incidents inherited; a `messageRef` kind compiles to `TypeMessageThrowEvent` (correlate, then flow on) with no new runtime | Accepted |
+| [0113](0113-org-wide-ui-theme.md) | Org-wide UI brand theme — the Console accent colour stored on the server (public read, admin-gated write) and applied for every user; the browser caches it only to avoid a flash | Accepted |
 
 ## Status values
 

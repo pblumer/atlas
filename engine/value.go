@@ -8,17 +8,20 @@ import "github.com/pblumer/atlas/model"
 // interface — means commands and events never box a value or allocate one per
 // record on the processor path (invariant I1).
 type inflightValue struct {
-	process      model.ProcessInstanceValue
-	element      model.ElementInstanceValue
-	job          model.JobValue
-	variable     model.VariableValue
-	timer        model.TimerValue
-	subscription model.MessageSubscriptionValue
-	messageFlow  model.MessageFlowValue
-	dataObject   model.DataObjectValue
-	incident     model.IncidentValue
-	decisionEval model.DecisionEvaluationValue
-	inbound      model.InboundDeliveryValue
+	process       model.ProcessInstanceValue
+	element       model.ElementInstanceValue
+	job           model.JobValue
+	variable      model.VariableValue
+	timer         model.TimerValue
+	subscription  model.MessageSubscriptionValue
+	signalSub     model.SignalSubscriptionValue
+	messageFlow   model.MessageFlowValue
+	dataObject    model.DataObjectValue
+	incident      model.IncidentValue
+	decisionEval  model.DecisionEvaluationValue
+	inbound       model.InboundDeliveryValue
+	variableAudit model.VariableAuditValue
+	compensable   model.CompensableValue
 }
 
 // asValue returns a model.Value pointing at the active field, for encoding. The
@@ -38,6 +41,8 @@ func (v *inflightValue) asValue(vt model.ValueType) model.Value {
 		return &v.timer
 	case model.VTMessageSubscription:
 		return &v.subscription
+	case model.VTSignal:
+		return &v.signalSub
 	case model.VTMessageFlow:
 		return &v.messageFlow
 	case model.VTDataObject:
@@ -48,6 +53,10 @@ func (v *inflightValue) asValue(vt model.ValueType) model.Value {
 		return &v.decisionEval
 	case model.VTInboundDelivery:
 		return &v.inbound
+	case model.VTVariableAudit:
+		return &v.variableAudit
+	case model.VTCompensable:
+		return &v.compensable
 	}
 	return nil
 }
@@ -89,6 +98,10 @@ func inflightFromRecord(rec model.Record) inflightValue {
 		if v, ok := rec.Value.(*model.MessageSubscriptionValue); ok {
 			iv.subscription = *v
 		}
+	case model.VTSignal:
+		if v, ok := rec.Value.(*model.SignalSubscriptionValue); ok {
+			iv.signalSub = *v
+		}
 	case model.VTMessageFlow:
 		if v, ok := rec.Value.(*model.MessageFlowValue); ok {
 			iv.messageFlow = *v
@@ -108,6 +121,14 @@ func inflightFromRecord(rec model.Record) inflightValue {
 	case model.VTInboundDelivery:
 		if v, ok := rec.Value.(*model.InboundDeliveryValue); ok {
 			iv.inbound = *v
+		}
+	case model.VTVariableAudit:
+		if v, ok := rec.Value.(*model.VariableAuditValue); ok {
+			iv.variableAudit = *v
+		}
+	case model.VTCompensable:
+		if v, ok := rec.Value.(*model.CompensableValue); ok {
+			iv.compensable = *v
 		}
 	}
 	return iv

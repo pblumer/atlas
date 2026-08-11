@@ -1,4 +1,4 @@
-# ADR-0077: One-click clio credential provisioning
+# ADR-0092: One-click clio credential provisioning
 
 - **Status:** Accepted
 - **Date:** 2026-07-29

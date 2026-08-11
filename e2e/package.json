@@ -1,0 +1,13 @@
+{
+  "name": "atlas-e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser end-to-end tests for the Atlas web UI (token simulation).",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
+  }
+}

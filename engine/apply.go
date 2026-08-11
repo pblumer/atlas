@@ -42,7 +42,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// the instance record itself, the per-definition active counter and
 			// last-activity for the O(1) runtime view / instances summary (ADR-0080/0083),
 			// and — for a message-start instance — the per-key live counter a singleton
-			// message start gates on (ADR-0082). All are event-driven, so replay rebuilds
+			// message start gates on (ADR-0094). All are event-driven, so replay rebuilds
 			// them (I4/I6). firstErr applies them and reports the first failure.
 			err := firstErr(
 				tx.PutProcessInstance(h.Key, &v.process),
@@ -77,9 +77,14 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 				tx.SetDefLastActivity(v.process.ProcessDefKey, h.Timestamp),
 			)
 			// Releasing a message-start instance re-opens its correlation key so a later
-			// message can start a fresh one (ADR-0082).
+			// message can start a fresh one (ADR-0094).
 			if err == nil && v.process.CorrelationKey != "" {
 				err = tx.DecrementActiveStartKey(v.process.ProcessDefKey, v.process.CorrelationKey)
+			}
+			// The instance's root scope tears down: drop any compensable records still held
+			// under it so they never leak past the instance (ADR-0103).
+			if err == nil {
+				err = tx.DeleteCompensablesOfScope(h.Key)
 			}
 			return err
 		}
@@ -133,6 +138,27 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			}
 			if v.element.BpmnElementType != eventSubTrigger {
 				if err := tx.DecrementActiveChildren(v.element.FlowScopeKey); err != nil {
+					return err
+				}
+			}
+			// A cancel end event completing marks its enclosing transaction scope cancelling, so
+			// when that scope drains the transaction routes out its cancel boundary rather than
+			// completing normally (ADR-0108). Derived from the committed Completed event, so replay
+			// rebuilds it identically (I4/I6).
+			if v.element.BpmnElementType == uint8(compiler.TypeCancelEndEvent) && h.Intent == model.IntentCompleted {
+				if err := tx.SetCanceling(v.element.FlowScopeKey); err != nil {
+					return err
+				}
+			}
+			// A subprocess scope tearing down (normal completion or termination) drops any
+			// compensable records still held under it — its element key is its children's
+			// scope key — so they never leak past the scope (ADR-0103). A transaction is a
+			// TypeSubProcess, so its cancelling marker is dropped on the same teardown (ADR-0108).
+			if v.element.BpmnElementType == uint8(compiler.TypeSubProcess) {
+				if err := tx.DeleteCompensablesOfScope(h.Key); err != nil {
+					return err
+				}
+				if err := tx.DeleteCanceling(h.Key); err != nil {
 					return err
 				}
 			}
@@ -210,6 +236,17 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			return tx.DeleteMessageSubscription(&v.subscription)
 		}
 
+	case model.VTSignal:
+		// A signal subscription's lifecycle mirrors a message subscription's: opened
+		// when a signal catch activates, retired when a broadcast fires it. Same two
+		// intents, a separate column family (ADR-0088).
+		switch h.Intent {
+		case model.IntentSubscriptionCreated:
+			return tx.PutSignalSubscription(&v.signalSub)
+		case model.IntentSubscriptionCorrelated:
+			return tx.DeleteSignalSubscription(&v.signalSub)
+		}
+
 	case model.VTMessageFlow:
 		if h.Intent == model.IntentMessagePublished {
 			// Retain the delivered message flow so the Operations collaboration view
@@ -228,6 +265,17 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			return tx.PutInboundHighWater(v.inbound.SourceID, v.inbound.SourceSeq)
 		}
 
+	case model.VTVariableAudit:
+		if h.Intent == model.IntentVariableAudited {
+			// Retain who set a variable from outside the model — an operator override —
+			// as append-only audit history (ADR-0098), the "who changed it" analogue of
+			// the decision-evaluation record. The record carries everything (actor, scope,
+			// name, value); the timestamp and position come from this event's header, so
+			// replay rebuilds identical history without re-running the modify command
+			// (invariants I4/I6).
+			return tx.RecordVariableAudit(h.Timestamp, h.Position, &v.variableAudit)
+		}
+
 	case model.VTDecisionEvaluation:
 		if h.Intent == model.IntentDecisionEvaluated {
 			// Retain how a business rule task's decision was made — its inputs, outputs
@@ -238,6 +286,21 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// evaluation), so replay rebuilds it without re-evaluating — invariants
 			// I4/I6.
 			return tx.RecordDecisionEvaluation(h.Timestamp, h.Position, &v.decisionEval)
+		}
+
+	case model.VTCompensable:
+		switch h.Intent {
+		case model.IntentCompensableRecorded:
+			// Retain a completed compensable activity under its scope, keyed by this
+			// event's log position so a scope scan yields completion order (ADR-0103).
+			// The record carries the scope, the activity, and its handler; the position
+			// comes from the header, so replay rebuilds the identical index (I4/I6).
+			return tx.RecordCompensable(h.Position, &v.compensable)
+		case model.IntentCompensableConsumed:
+			// The activity was compensated: drop its record so it compensates at most
+			// once. The scope and sequence ride on the event, so replay deletes the
+			// identical entry.
+			return tx.DeleteCompensable(v.compensable.ScopeKey, v.compensable.Seq)
 		}
 	}
 	return nil

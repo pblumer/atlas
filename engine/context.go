@@ -27,6 +27,27 @@ func (c *ProcessingContext) latestDefKey(processId string) (uint64, bool) {
 	return k, ok
 }
 
+// resolveCallTarget resolves the definition a call activity starts as a child,
+// consulting the per-server override first and falling back to the default `latest`
+// resolution (ADR-0105). Precedence for an override: disabled parks; a pinned key
+// wins if still deployed; a redirect resolves the target's latest (one hop, so no
+// cycle). ok is false when nothing resolves (park), identical to an undeployed
+// callee (ADR-0076). A pure read of run-loop-owned maps — no allocation (I1).
+func (c *ProcessingContext) resolveCallTarget(processId string) (uint64, bool) {
+	if ov, has := c.p.callOverrides[processId]; has {
+		switch {
+		case ov.Disabled:
+			return 0, false
+		case ov.PinnedDefKey != 0:
+			_, deployed := c.p.processes[ov.PinnedDefKey]
+			return ov.PinnedDefKey, deployed
+		case ov.RedirectProcessId != "":
+			return c.latestDefKey(ov.RedirectProcessId)
+		}
+	}
+	return c.latestDefKey(processId)
+}
+
 func (c *ProcessingContext) process(defKey uint64) *compiler.CompiledProcess {
 	return c.p.processes[defKey]
 }
@@ -229,6 +250,14 @@ func (c *ProcessingContext) ActiveChildren(scope uint64) int32 {
 	return n
 }
 
+// IsCanceling reports whether the transaction scope txKey was marked cancelling by a cancel
+// end event (ADR-0108).
+func (c *ProcessingContext) IsCanceling(txKey uint64) bool {
+	ok, err := c.tx.IsCanceling(txKey)
+	c.p.fail(err)
+	return ok
+}
+
 // AppendProcessInstanceEvent records a process-instance lifecycle fact.
 func (c *ProcessingContext) AppendProcessInstanceEvent(key uint64, intent model.Intent, v model.ProcessInstanceValue) {
 	c.appendEvent(key, model.VTProcessInstance, intent, inflightValue{process: v})
@@ -291,6 +320,26 @@ func (c *ProcessingContext) AppendDecisionEvaluationEvent(v model.DecisionEvalua
 	c.appendEvent(v.ProcessInstanceKey, model.VTDecisionEvaluation, model.IntentDecisionEvaluated, inflightValue{decisionEval: v})
 }
 
+// AppendVariableAuditEvent records who set a variable from outside the model — an
+// operator override — as append-only audit history (ADR-0098). Like a variable it
+// carries genuine runtime data (an actor, a name, and contents), so it allocates for
+// its strings; it rides only on the non-hot-path variable-modify command, never token
+// movement. It is keyed by the owning process instance, so a scope-wide scan yields
+// every override an instance received in order.
+func (c *ProcessingContext) AppendVariableAuditEvent(v model.VariableAuditValue) {
+	c.appendEvent(v.ProcessInstanceKey, model.VTVariableAudit, model.IntentVariableAudited, inflightValue{variableAudit: v})
+}
+
+// AppendCompensableEvent records a compensation-index change: IntentCompensableRecorded
+// retains a completed compensable activity (keyed under its scope in completion order),
+// and IntentCompensableConsumed drops one once it has been compensated (ADR-0103). Both
+// ride only on the command path (a completion or a compensation throw), never token
+// movement; applyToState folds them into the compensable index so recovery rebuilds it
+// (invariant I6). Keyed by the owning process instance, like the other history events.
+func (c *ProcessingContext) AppendCompensableEvent(intent model.Intent, v model.CompensableValue) {
+	c.appendEvent(v.ProcessInstanceKey, model.VTCompensable, intent, inflightValue{compensable: v})
+}
+
 // GetDataObject reads a scope's data object by name through the in-flight
 // transaction (sees writes from earlier in this batch). A data-output association
 // uses it to keep the object's current value or state when the write changes only
@@ -307,6 +356,15 @@ func (c *ProcessingContext) GetDataObject(scope uint64, name string) *model.Data
 // event alone (invariant I4).
 func (c *ProcessingContext) AppendMessageSubscriptionEvent(key uint64, intent model.Intent, v model.MessageSubscriptionValue) {
 	c.appendEvent(key, model.VTMessageSubscription, intent, inflightValue{subscription: v})
+}
+
+// AppendSignalSubscriptionEvent records a signal-subscription fact (created or
+// correlated). The key is the waiting element instance's key, and the value
+// carries the signal name, so applyToState can locate the index entry from the
+// event alone (invariant I4). A signal reuses the message subscription intents
+// (SubscriptionCreated / SubscriptionCorrelated) over a separate family (ADR-0088).
+func (c *ProcessingContext) AppendSignalSubscriptionEvent(key uint64, intent model.Intent, v model.SignalSubscriptionValue) {
+	c.appendEvent(key, model.VTSignal, intent, inflightValue{signalSub: v})
 }
 
 // AppendMessageFlowEvent retains one delivered message flow as history for the

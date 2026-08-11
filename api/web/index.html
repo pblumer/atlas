@@ -6,6 +6,18 @@
 <title>Atlas</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2314161a'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='20' font-weight='700' fill='white' text-anchor='middle'%3EA%3C/text%3E%3C/svg%3E" />
 <link rel="stylesheet" href="app.css" />
+<!-- Apply the saved company-colour theme before first paint, so the UI never
+     flashes the default accent. Logic-free on purpose: it applies the already
+     derived variable map that theme.js stored; see theme.js for the derivation. -->
+<script>
+  try {
+    var t = JSON.parse(localStorage.getItem("atlas.theme"));
+    if (t && t.vars) {
+      var r = document.documentElement;
+      for (var k in t.vars) if (k.indexOf("--accent") === 0) r.style.setProperty(k, t.vars[k]);
+    }
+  } catch (e) { /* no/!invalid theme — fall back to the CSS default */ }
+</script>
 </head>
 <body>
   <!-- App-switcher drawer (hidden until the grid button is pressed) -->
@@ -39,7 +51,7 @@
     <div class="spacer"></div>
 
     <span id="org" class="org">Atlas Org</span>
-    <button class="icon-btn" title="Search" aria-label="Search"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></button>
+    <button id="global-search" class="icon-btn" title="Search processes (Ctrl/⌘ K)" aria-label="Search processes"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></button>
     <button class="icon-btn" title="Notifications" aria-label="Notifications"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/></svg></button>
     <div class="dropdown">
       <button id="help-btn" class="icon-btn dropdown-toggle" title="Help" aria-label="Help" aria-haspopup="menu"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 013.9-2c1.3.9 1.1 2.3 0 3.2-.7.6-1.4 1-1.4 2M12 17h.01"/></svg></button>

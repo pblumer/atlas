@@ -4,7 +4,7 @@
 
 **Atlas** is named after the Titan who bears an immense load without ever letting it drop. That's exactly what it does: it carries millions of process instances, batch after batch, and never drops a token.
 
-> 🚧 **Early development.** APIs are unstable and changing fast. Not ready for production use. See the [roadmap](ROADMAP.md).
+> 🚧 **Developer preview (`0.x`).** Atlas already runs a broad slice of BPMN 2.x durably on a single node, but it is not ready for production use — the pre-1.0 API and on-disk formats are unstable and changing fast. See the [changelog](CHANGELOG.md) for what's in each release and the [roadmap](ROADMAP.md) for what's next.
 
 ---
 
@@ -41,11 +41,13 @@ The three core pillars:
   - [Graph compiler](docs/architecture/compiler.md)
   - [Processor](docs/architecture/processor.md)
   - [Data model](docs/architecture/data-model.md)
+  - [Enterprise architecture (ArchiMate 3.2)](docs/architecture/enterprise-architecture.md) — a layered view across the business, application, technology, and motivation layers
   - [Glossary](docs/architecture/glossary.md)
   - [Invariants](docs/architecture/invariants.md) — the rules the engine's correctness depends on
 - **[Architecture Decision Records](docs/adr/)** — *why* things are the way they are
 - **[Postman onboarding kit](postman/)** — import the collection + environment and drive the HTTP API (deploy, run instances, work user tasks) in five minutes
-- **[Roadmap](ROADMAP.md)** — where this is going
+- **[Deploying Atlas](deploy/)** — the container image ([`Dockerfile`](Dockerfile)) and a [Helm chart](deploy/helm/atlas) for running the server on Kubernetes
+- **[Roadmap](ROADMAP.md)** — where this is going · **[Changelog](CHANGELOG.md)** — what changed in each release
 - **[Contributing](CONTRIBUTING.md)** · **[Development](DEVELOPMENT.md)** · **[Security](SECURITY.md)**
 
 **Working on this with an AI coding agent?** Start at **[`AGENTS.md`](AGENTS.md)** (Claude Code: [`CLAUDE.md`](CLAUDE.md)). It carries the invariants, the exact build/test commands, and how to approach a task.
@@ -64,7 +66,7 @@ The three core pillars:
 
 ## License
 
-[Apache License 2.0](LICENSE). *(Proposed default — chosen for its explicit patent grant, which suits an infrastructure component others build on. Change it if you prefer MIT or another license before the first release.)*
+[GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`). Strong copyleft with a network-use clause: anyone who runs a modified Atlas as a network service must make their modified source available to its users. Contributions are accepted under the same license (see [`CONTRIBUTING.md`](CONTRIBUTING.md)).
 
 ---
 

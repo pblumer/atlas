@@ -9,11 +9,11 @@ import (
 )
 
 // eventSubStart returns the event subprocess's triggering start event — the first
-// start event carrying a message, timer, or signal event definition — or nil if it has
-// none (ADR-0082, ADR-0088).
+// start event carrying a message, timer, signal, or error event definition — or nil if it
+// has none (ADR-0082, ADR-0088, ADR-0089).
 func eventSubStart(sub *xmlSubProcess) *xmlStartEvent {
 	for i := range sub.StartEvents {
-		if s := &sub.StartEvents[i]; s.Message != nil || s.Timer != nil || s.Signal != nil {
+		if s := &sub.StartEvents[i]; s.Message != nil || s.Timer != nil || s.Signal != nil || s.Error != nil {
 			return s
 		}
 	}
@@ -36,6 +36,7 @@ func registerScope(
 	register func(id string, nodeID int32) error,
 	resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error),
 	resolveSignal func(ownerId, signalRef string) (string, error),
+	resolveError func(ownerId, errorRef string) (string, error),
 	c *xmlFlowContent,
 ) error {
 	for _, s := range c.StartEvents {
@@ -82,12 +83,16 @@ func registerScope(
 			b.SetStartFormId(s.Form.FormId)
 		}
 	}
-	for _, st := range c.ServiceTasks {
+	// A send task is a service task under a different BPMN label (ADR-0112): it creates a
+	// job and waits, and a connector extension on it takes the connector path exactly as on
+	// a service task. registerJobWorkerTask compiles both — only the plain-worker node type
+	// (AddServiceTask vs AddSendTask, passed as plain) and the diagnostic label differ.
+	registerJobWorkerTask := func(st xmlServiceTask, label string, plain func(jobType string, retries int32) int32) error {
 		retries := int32(defaultRetries)
 		if r := st.TaskDefinition.Retries; r != "" {
 			n, err := strconv.Atoi(r)
 			if err != nil {
-				return fmt.Errorf("compiler: service task %q has invalid retries %q: %w", st.Id, r, err)
+				return fmt.Errorf("compiler: %s %q has invalid retries %q: %w", label, st.Id, r, err)
 			}
 			retries = int32(n)
 		}
@@ -130,10 +135,7 @@ func registerScope(
 			default:
 				return fmt.Errorf("compiler: clio connector task %q has unknown operation %q (want write, query, or read)", st.Id, op)
 			}
-			if err := register(st.Id, id); err != nil {
-				return err
-			}
-			continue
+			return register(st.Id, id)
 		}
 		// A service task bearing an <atlas:restConnector> extension is an HTTP-REST
 		// connector task: it calls the model-authored URL via the job path
@@ -172,10 +174,7 @@ func registerScope(
 				Auth:      auth,
 				Retries:   retries,
 			})
-			if err := register(st.Id, id); err != nil {
-				return err
-			}
-			continue
+			return register(st.Id, id)
 		}
 		// A service task bearing an <atlas:mailConnector> extension is an outbound
 		// mail connector task: it sends a model-authored message through a
@@ -223,10 +222,74 @@ func registerScope(
 				Body:      body,
 				Retries:   retries,
 			})
-			if err := register(st.Id, id); err != nil {
+			return register(st.Id, id)
+		}
+		// A service task bearing an <atlas:sharepointConnector> extension is a
+		// SharePoint connector task: it creates a list item in a model-authored
+		// site/list through a server-registered SharePoint provider (Microsoft Graph)
+		// via the job path (ADR-0105). The provider (Graph base, OAuth credential) is
+		// resolved server-side by connector name, like mail; only the target
+		// (site, list, item fields) lives in the model.
+		if cn := st.SharePoint; cn != nil {
+			if strings.TrimSpace(cn.Connector) == "" {
+				return fmt.Errorf("compiler: sharepoint connector task %q needs a connector", st.Id)
+			}
+			if strings.TrimSpace(cn.Site) == "" {
+				return fmt.Errorf("compiler: sharepoint connector task %q needs a site", st.Id)
+			}
+			if strings.TrimSpace(cn.List) == "" {
+				return fmt.Errorf("compiler: sharepoint connector task %q needs a list", st.Id)
+			}
+			site, err := restValue(st.Id, "site", cn.Site)
+			if err != nil {
 				return err
 			}
-			continue
+			list, err := restValue(st.Id, "list", cn.List)
+			if err != nil {
+				return err
+			}
+			fields, err := httpKVList(st.Id, "item field", cn.Fields)
+			if err != nil {
+				return err
+			}
+			id := b.AddSharePointConnectorTask(SharePointConfig{
+				Connector: strings.TrimSpace(cn.Connector),
+				Site:      site,
+				List:      list,
+				Fields:    fields,
+				ResultVar: strings.TrimSpace(cn.ResultVariable),
+				Retries:   retries,
+			})
+			return register(st.Id, id)
+		}
+		// A service task bearing an <atlas:remedyConnector> extension is a BMC Remedy
+		// connector task: it creates an entry (e.g. an incident) in a Remedy form
+		// through the AR System REST API via the job path (ADR-0106). The Remedy base
+		// URL and credentials are resolved server-side by connector name, like clio and
+		// mail; only the form and its field values live in the model.
+		if cn := st.Remedy; cn != nil {
+			if strings.TrimSpace(cn.Connector) == "" {
+				return fmt.Errorf("compiler: remedy connector task %q needs a connector", st.Id)
+			}
+			if strings.TrimSpace(cn.Form) == "" {
+				return fmt.Errorf("compiler: remedy connector task %q needs a form", st.Id)
+			}
+			form, err := restValue(st.Id, "form", cn.Form)
+			if err != nil {
+				return err
+			}
+			fields, err := httpKVList(st.Id, "field", cn.Fields)
+			if err != nil {
+				return err
+			}
+			id := b.AddRemedyConnectorTask(RemedyConfig{
+				Connector: strings.TrimSpace(cn.Connector),
+				Form:      form,
+				Fields:    fields,
+				ResultVar: strings.TrimSpace(cn.ResultVariable),
+				Retries:   retries,
+			})
+			return register(st.Id, id)
 		}
 		// A service task bearing an <atlas:csvConnector> extension is a CSV-to-JSON
 		// connector task: the in-process CSV worker parses the named source variable's
@@ -256,15 +319,46 @@ func registerScope(
 				Columns:   cols,
 				Retries:   retries,
 			})
-			if err := register(st.Id, id); err != nil {
+			return register(st.Id, id)
+		}
+		if st.TaskDefinition.Type == "" {
+			// A send task reaching here has no message kind either (its messageRef/operationRef
+			// were resolved earlier), so name every kind it could take rather than only the task
+			// definition (ADR-0112) — this is the "Message selected but no message chosen yet" state.
+			if label == "send task" {
+				return fmt.Errorf("compiler: send task %q has no kind: choose a message (messageRef/operationRef), a task definition, or a connector", st.Id)
+			}
+			return fmt.Errorf("compiler: %s %q has no task definition type", label, st.Id)
+		}
+		return register(st.Id, plain(st.TaskDefinition.Type, retries))
+	}
+	for _, st := range c.ServiceTasks {
+		if err := registerJobWorkerTask(st, "service task", b.AddServiceTask); err != nil {
+			return err
+		}
+	}
+	// Message-kind send tasks compile to a throw (ADR-0112) — instantaneous, so not an
+	// activity. Record them so a boundary drawn on one gets a targeted error below rather
+	// than the generic "attaches to a non-activity".
+	messageSendIDs := map[string]bool{}
+	for _, st := range c.SendTasks {
+		// The message kind: a <sendTask messageRef> is a correlating throw in task form
+		// (ADR-0112). It reuses the intermediate message throw's compile path — resolve the
+		// message, then register a TypeMessageThrowEvent, which correlates and flows straight
+		// on. A throw is instantaneous, so unlike the job/connector kinds it is not an activity
+		// (no boundary/I/O/MI — those loops skip it, keyed on the same MessageRef).
+		if strings.TrimSpace(st.MessageRef) != "" {
+			messageSendIDs[st.Id] = true
+			name, keyExpr, err := resolveMessage(st.Id, st.MessageRef)
+			if err != nil {
+				return err
+			}
+			if err := register(st.Id, b.AddMessageThrowEvent(name, keyExpr)); err != nil {
 				return err
 			}
 			continue
 		}
-		if st.TaskDefinition.Type == "" {
-			return fmt.Errorf("compiler: service task %q has no task definition type", st.Id)
-		}
-		if err := register(st.Id, b.AddServiceTask(st.TaskDefinition.Type, retries)); err != nil {
+		if err := registerJobWorkerTask(st, "send task", b.AddSendTask); err != nil {
 			return err
 		}
 	}
@@ -403,6 +497,11 @@ func registerScope(
 			return err
 		}
 	}
+	for _, g := range c.EventBasedGateways {
+		if err := register(g.Id, b.AddEventBasedGateway()); err != nil {
+			return err
+		}
+	}
 	for _, ev := range c.IntermediateCatchEvents {
 		switch {
 		case ev.Timer != nil:
@@ -447,8 +546,17 @@ func registerScope(
 			}
 			continue
 		}
+		if ev.Compensation != nil {
+			// A compensation throw triggers compensation of completed activities in its
+			// scope (or of the one named by activityRef, resolved in a post-pass since the
+			// target may be registered later) — ADR-0103.
+			if err := register(ev.Id, b.AddCompensationThrowEvent()); err != nil {
+				return err
+			}
+			continue
+		}
 		if ev.Message == nil {
-			return fmt.Errorf("compiler: intermediate throw event %q: only message and signal events are supported yet", ev.Id)
+			return fmt.Errorf("compiler: intermediate throw event %q: only message, signal, and compensation events are supported yet", ev.Id)
 		}
 		name, keyExpr, err := resolveMessage(ev.Id, ev.Message.MessageRef)
 		if err != nil {
@@ -472,7 +580,28 @@ func registerScope(
 			return err
 		}
 	}
+	// A receive task waits for its referenced message to correlate, then continues — the
+	// message-catch semantics as an activity (ADR-0102). An empty or unknown messageRef is a
+	// deploy error, exactly like a message catch event.
+	for _, rt := range c.ReceiveTasks {
+		name, keyExpr, err := resolveMessage(rt.Id, rt.MessageRef)
+		if err != nil {
+			return err
+		}
+		if err := register(rt.Id, b.AddReceiveTask(name, keyExpr)); err != nil {
+			return err
+		}
+	}
 	for _, e := range c.EndEvents {
+		// A terminate end event would end the whole instance at once — Atlas can't
+		// execute that yet, so reject it with a clear message instead of silently
+		// dropping the <terminateEventDefinition> and deploying a plain end that
+		// simply completes one token (the modeled abort would never happen).
+		if e.Terminate != nil {
+			return fmt.Errorf("compiler: end event %q has a <terminateEventDefinition>, "+
+				"which Atlas can't execute yet — a terminate end would abort the whole instance; "+
+				"remove it or use a plain end event", e.Id)
+		}
 		// A message end event publishes its message then ends; a plain end event
 		// just ends (ADR-0052).
 		if e.Message != nil {
@@ -495,6 +624,34 @@ func registerScope(
 			}
 			continue
 		}
+		// An error end event throws its error code, ending its scope abnormally and
+		// propagating up to the nearest matching handler (ADR-0089).
+		if e.Error != nil {
+			code, err := resolveError(e.Id, e.Error.ErrorRef)
+			if err != nil {
+				return err
+			}
+			if err := register(e.Id, b.AddErrorEndEvent(code)); err != nil {
+				return err
+			}
+			continue
+		}
+		// A compensation end event triggers compensation, then ends its scope (ADR-0103);
+		// its optional activityRef is resolved in the post-pass, like a compensation throw.
+		if e.Compensation != nil {
+			if err := register(e.Id, b.AddCompensationEndEvent()); err != nil {
+				return err
+			}
+			continue
+		}
+		// A cancel end event cancels its enclosing transaction (ADR-0108); validation
+		// (checkTransactions) enforces that the enclosing scope really is a transaction.
+		if e.Cancel != nil {
+			if err := register(e.Id, b.AddCancelEndEvent()); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := register(e.Id, b.AddEndEvent()); err != nil {
 			return err
 		}
@@ -509,8 +666,13 @@ func registerScope(
 		if err := register(sub.Id, subID); err != nil {
 			return err
 		}
+		// A <transaction> is a subprocess with cancellation added; mark the node so the
+		// runtime and validation treat it as one (ADR-0108). It is never triggeredByEvent.
+		if sub.IsTransaction {
+			b.SetTransaction(subID)
+		}
 		b.PushScope(subID)
-		if err := registerScope(b, ids, register, resolveMessage, resolveSignal, &sub.xmlFlowContent); err != nil {
+		if err := registerScope(b, ids, register, resolveMessage, resolveSignal, resolveError, &sub.xmlFlowContent); err != nil {
 			return err
 		}
 		b.PopScope()
@@ -522,7 +684,7 @@ func registerScope(
 		if sub.TriggeredByEvent == "true" {
 			st := eventSubStart(sub)
 			if st == nil {
-				return fmt.Errorf("compiler: event subprocess %q must have a start event with a message, timer, or signal event definition", sub.Id)
+				return fmt.Errorf("compiler: event subprocess %q must have a start event with a message, timer, signal, or error event definition", sub.Id)
 			}
 			d := EventSubProcessDetail{StartNode: ids[st.Id], Interrupting: st.IsInterrupting != "false"}
 			switch {
@@ -538,6 +700,15 @@ func registerScope(
 					return err
 				}
 				d.Kind, d.SignalName = BoundarySignal, name
+			case st.Error != nil:
+				// An error event subprocess catches an error propagating in its scope by code
+				// (ADR-0089). Like an error boundary it is always interrupting — an error tears
+				// its scope down — so the isInterrupting attribute is overridden.
+				code, err := resolveError(st.Id, st.Error.ErrorRef)
+				if err != nil {
+					return err
+				}
+				d.Kind, d.ErrorCode, d.Interrupting = BoundaryError, code, true
 			case st.Timer != nil:
 				schedule, err := parseTimerSchedule(st.Timer)
 				if err != nil {
@@ -557,6 +728,9 @@ func registerScope(
 		host, ok := ids[ev.AttachedToRef]
 		if !ok {
 			return fmt.Errorf("compiler: boundary event %q attaches to unknown activity %q", ev.Id, ev.AttachedToRef)
+		}
+		if messageSendIDs[ev.AttachedToRef] {
+			return fmt.Errorf("compiler: boundary event %q attaches to send task %q, but a message-kind send task is an instantaneous throw (it publishes the message and continues) and cannot host a boundary event; switch the send task to a job or connector kind, which waits so a boundary can fire, or model a wait-and-time-out with a receive task and a boundary timer", ev.Id, ev.AttachedToRef)
 		}
 		interrupting := ev.CancelActivity != "false"
 		switch {
@@ -587,8 +761,33 @@ func registerScope(
 			if err := register(ev.Id, b.AddBoundarySignalEvent(host, interrupting, name)); err != nil {
 				return err
 			}
+		case ev.Error != nil:
+			// An error boundary catches an error propagating up to the host by code and is
+			// always interrupting — cancelActivity is ignored (ADR-0089).
+			code, err := resolveError(ev.Id, ev.Error.ErrorRef)
+			if err != nil {
+				return err
+			}
+			if err := register(ev.Id, b.AddBoundaryErrorEvent(host, code)); err != nil {
+				return err
+			}
+		case ev.Compensation != nil:
+			// A compensation boundary is inert: it never arms, it only marks its host
+			// compensable and links to a handler (resolved from a BPMN <association> in the
+			// post-pass). cancelActivity is ignored — a compensation boundary never
+			// interrupts (ADR-0103).
+			if err := register(ev.Id, b.AddBoundaryCompensationEvent(host)); err != nil {
+				return err
+			}
+		case ev.Cancel != nil:
+			// A cancel boundary catches its host transaction's cancellation and is always
+			// interrupting — cancelActivity is ignored (ADR-0108). validation (checkTransactions)
+			// enforces that the host really is a transaction.
+			if err := register(ev.Id, b.AddBoundaryCancelEvent(host)); err != nil {
+				return err
+			}
 		default:
-			return fmt.Errorf("compiler: boundary event %q: only timer, message, and signal boundary events are supported yet", ev.Id)
+			return fmt.Errorf("compiler: boundary event %q: only timer, message, signal, error, compensation, and cancel boundary events are supported yet", ev.Id)
 		}
 	}
 	// Report an unsupported element with a clear message rather than letting it
@@ -597,12 +796,109 @@ func registerScope(
 		label string
 		nodes []xmlNode
 	}{
-		{"sendTask", c.SendTasks}, {"receiveTask", c.ReceiveTasks},
+		{"adHocSubProcess", c.AdHocSubProcesses},
 	} {
 		if len(u.nodes) > 0 {
 			return fmt.Errorf("compiler: element %q is a <%s>, which Atlas can't execute yet "+
 				"(supported: start/end events, tasks (undefined/manual pass-through, service, script, "+
 				"business rule, user), embedded subprocesses, exclusive/parallel/inclusive gateways, and timer/message intermediate events)", u.nodes[0].Id, u.label)
+		}
+	}
+	return nil
+}
+
+// resolveCompensation wires compensation links after every node is registered (ADR-0103).
+// A compensation boundary event is joined to its handler activity by a BPMN <association>
+// (one endpoint the boundary, the other the handler); a compensation throw/end may name a
+// single activity to compensate via activityRef. Both endpoints resolve through the flat,
+// process-wide id map, so this walks the whole scope tree once. A compensation boundary
+// with no association, or a reference to an unknown activity, is a deploy error.
+func resolveCompensation(b *Builder, ids map[string]int32, root *xmlFlowContent) error {
+	// Gather every scope's flow content — the root and, recursively, each subprocess.
+	var scopes []*xmlFlowContent
+	var walk func(fc *xmlFlowContent)
+	walk = func(fc *xmlFlowContent) {
+		scopes = append(scopes, fc)
+		for i := range fc.SubProcesses {
+			walk(&fc.SubProcesses[i].xmlFlowContent)
+		}
+	}
+	walk(root)
+
+	// Which boundary-event ids are compensation boundaries.
+	compBoundary := make(map[string]bool)
+	for _, fc := range scopes {
+		for _, ev := range fc.BoundaryEvents {
+			if ev.Compensation != nil {
+				compBoundary[ev.Id] = true
+			}
+		}
+	}
+
+	// Link each compensation boundary to its handler via an <association>: one endpoint is
+	// the boundary, the other the handler activity.
+	resolved := make(map[string]bool)
+	for _, fc := range scopes {
+		for _, a := range fc.Associations {
+			var boundaryID, handlerID string
+			switch {
+			case compBoundary[a.SourceRef]:
+				boundaryID, handlerID = a.SourceRef, a.TargetRef
+			case compBoundary[a.TargetRef]:
+				boundaryID, handlerID = a.TargetRef, a.SourceRef
+			default:
+				continue // not a compensation association
+			}
+			bNode, ok := ids[boundaryID]
+			if !ok {
+				continue
+			}
+			hNode, ok := ids[handlerID]
+			if !ok {
+				return fmt.Errorf("compiler: compensation association %q links boundary %q to unknown activity %q", a.Id, boundaryID, handlerID)
+			}
+			b.SetCompensationHandler(bNode, hNode)
+			resolved[boundaryID] = true
+		}
+	}
+	// A compensation boundary with no association has no handler to run — fail the deploy
+	// rather than silently deploy a boundary that can never compensate anything.
+	for id := range compBoundary {
+		if !resolved[id] {
+			return fmt.Errorf("compiler: compensation boundary event %q has no <association> linking it to a compensation handler", id)
+		}
+	}
+
+	// Narrow each compensation throw/end that names a specific activity to compensate.
+	resolveRef := func(evID, activityRef string) error {
+		if activityRef == "" {
+			return nil // compensate the whole scope
+		}
+		node, ok := ids[evID]
+		if !ok {
+			return nil
+		}
+		target, ok := ids[activityRef]
+		if !ok {
+			return fmt.Errorf("compiler: compensation event %q references unknown activity %q", evID, activityRef)
+		}
+		b.SetCompensationActivityRef(node, target)
+		return nil
+	}
+	for _, fc := range scopes {
+		for _, ev := range fc.IntermediateThrowEvents {
+			if ev.Compensation != nil {
+				if err := resolveRef(ev.Id, ev.Compensation.ActivityRef); err != nil {
+					return err
+				}
+			}
+		}
+		for _, ev := range fc.EndEvents {
+			if ev.Compensation != nil {
+				if err := resolveRef(ev.Id, ev.Compensation.ActivityRef); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil

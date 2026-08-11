@@ -287,4 +287,4 @@ atlas/
 
 ---
 
-*See also: [Roadmap](../ROADMAP.md) · [ADRs](adr/) · [Invariants](architecture/invariants.md) · [Glossary](architecture/glossary.md) · [Contributing](../CONTRIBUTING.md) · [Agent guide](../AGENTS.md)*
+*See also: [Enterprise architecture (ArchiMate 3.2)](architecture/enterprise-architecture.md) · [Roadmap](../ROADMAP.md) · [ADRs](adr/) · [Invariants](architecture/invariants.md) · [Glossary](architecture/glossary.md) · [Contributing](../CONTRIBUTING.md) · [Agent guide](../AGENTS.md)*

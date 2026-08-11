@@ -64,11 +64,18 @@ server needs just four methods — `initialize`, `tools/list`, `tools/call`,
 JSON on stdio). That is a few hundred lines with no new dependency, consistent
 with how the rest of Atlas is built.
 
-Eight tools map one-to-one onto existing endpoints: `atlas_info`,
-`atlas_deploy`, `atlas_list_processes`, `atlas_get_process_xml`,
-`atlas_process_runtime`, `atlas_create_instance`, `atlas_list_instances`,
-`atlas_stats`. Each returns the endpoint's own JSON (or XML) body as the tool's
-text content, so a model receives the server's structured response verbatim.
+The initial eight tools mapped one-to-one onto existing endpoints:
+`atlas_info`, `atlas_deploy`, `atlas_list_processes`, `atlas_get_process_xml`,
+`atlas_process_runtime`, `atlas_create_instance`, `atlas_list_instances`, and
+`atlas_stats`. The tool set may grow with the public HTTP API while preserving
+the same adapter boundary.
+
+Most tools return the endpoint's own JSON (or XML) body as their text content.
+A bounded list endpoint may also expose continuation metadata in HTTP headers;
+in that case the adapter may combine the body and those headers into one JSON
+page envelope. This is transport adaptation, not engine interpretation: the
+ordering, cursor, filtering, and truncation semantics remain defined by the
+HTTP API.
 
 ### Consequences
 
@@ -81,7 +88,7 @@ text content, so a model receives the server's structured response verbatim.
   ethos, though it is exactly how MCP clients expect to spawn a server. Every
   tool call pays one loopback HTTP round-trip; negligible for this control-plane
   traffic. The MCP surface is only as capable as the HTTP API, so it inherits
-  that API's current limits (in-memory deployments, no job-worker surface yet).
+  that API's limits.
 - **Follow-ups / risks to watch:** As the HTTP API grows (durable deployments,
   message publication, job completion, queries — Milestone 4), add matching
   tools. If an embedded, engine-local MCP server is ever wanted (e.g. an
@@ -92,7 +99,7 @@ text content, so a model receives the server's structured response verbatim.
 ## Pros and cons of the options
 
 ### Option 1 — embed the engine in the MCP process
-- Good: one process; no HTTP hop.
+- Good: one process.
 - Bad: re-solves the single-writer concurrency problem in a second place;
   gives the agent a private engine that diverges from what the web UI shows;
   more surface for an invariant bug.

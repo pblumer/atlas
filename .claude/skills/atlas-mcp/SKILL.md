@@ -1,179 +1,160 @@
 ---
 name: atlas-mcp
 description: >-
-  Drive a running Atlas BPMN workflow engine over its Model Context Protocol
-  (MCP) server. Use whenever an agent needs to deploy a BPMN 2.0 model, start a
-  process instance, or inspect live runtime state (tokens, active instances,
-  engine stats) of Atlas — the tools are named atlas_* (atlas_deploy,
-  atlas_create_instance, atlas_process_runtime, ...). Read this before calling
-  any atlas_* tool so you understand keys, the deploy→instance→inspect flow, and
-  why a token can park on a service task.
+  Drive a running Atlas BPMN workflow engine over MCP. Use for atlas_* tools
+  that manage design-time projects, deploy BPMN, start and inspect instances,
+  paginate user tasks, complete human tasks, and clean up test resources.
 ---
 
 # Working with Atlas over MCP
 
-Atlas is a durable, high-throughput **BPMN 2.x workflow engine** in Go. Its MCP
-server (`mcp/` package, [ADR-0016](../../../docs/adr/0016-mcp-server-over-http-api.md))
-lets an agent deploy models, start instances, and read live state.
+Atlas is a durable BPMN 2.x workflow engine. Its MCP server is a thin adapter
+around the public Atlas HTTP API (ADR-0016): it owns no processor or partition
+state and never bypasses the API run loop.
 
-**The MCP server is a pure adapter.** It holds no engine state — every tool call
-is translated into an HTTP request against a running Atlas server (`/api/v1/*`)
-and the endpoint's JSON/XML body is returned to you verbatim. It therefore
-cannot violate an engine invariant; it only ever makes HTTP calls. Do not expect
-it to cache, transform, or reason about results — that is your job.
+## Transports
 
-## How Atlas is reached
+The same tool registry and dispatch path serve both transports:
 
-Two transports front the *same* tools (see `mcp/doc.go`):
+- Streamable HTTP: `atlas serve --addr :8080` mounts `/mcp`.
+- stdio: `atlas mcp --server http://localhost:8080`.
 
-- **Remote (Streamable HTTP)** — `atlas serve --addr :8080` mounts the transport
-  at `/mcp`. A claude.ai custom connector or any remote MCP client points here.
-- **Local (stdio)** — `atlas mcp --server http://localhost:8080` is a short-lived
-  per-agent adapter an MCP client (Claude Desktop, Claude Code) spawns.
+The `/mcp` transport is not an authentication boundary. Put a publicly reachable
+endpoint behind an authenticating reverse proxy.
 
-> ⚠️ **The `/mcp` endpoint performs no authentication.** Front it with a reverse
-> proxy before exposing it publicly. Never assume the transport is a trust
-> boundary.
+## Runtime tools
 
-In a Claude Code session where the `atlas` MCP server is configured, the tools
-appear as `mcp__atlas__atlas_*` and are called directly — no `atlas serve`/`atlas mcp`
-step is needed.
+| Tool | Arguments | Result |
+|---|---|---|
+| `atlas_info` | none | product and build metadata |
+| `atlas_deploy` | `xml` | deployed definitions and keys |
+| `atlas_list_processes` | none | deployed definitions |
+| `atlas_get_process_xml` | `key` | deployed BPMN XML |
+| `atlas_create_instance` | `key`, `variables?` | starts an instance (optionally seeded with start variables) and returns stats |
+| `atlas_process_runtime` | `key` | per-element token and visit counts |
+| `atlas_call_activities` | none | every call activity across deployed processes, with its called process id, binding, propagation, any per-server target override (redirect/pin/disable, ADR-0105), and how it currently resolves here |
+| `atlas_collaboration_runtime` | `key` | a collaboration's live pools, tokens, and message flows |
+| `atlas_list_instances` | none | bounded legacy instance list |
+| `atlas_instances_summary` | none | per-definition active/completed counts |
+| `atlas_search_instances` | `q` | instances matching a variable query (`name=value` or free text) |
+| `atlas_instance_variables` | `key` | one instance's variables as a typed object |
+| `atlas_variable_audit` | `key` | one instance's operator-override audit trail (who changed what) |
+| `atlas_instance_data_objects` | `key` | one instance's BPMN data objects (name, state, value) |
+| `atlas_instance_jobs` | `key` | one instance's activatable jobs (key, element, type) |
+| `atlas_instance_timeline` | `key` | one instance's step-by-step replay timeline |
+| `atlas_instance_decisions` | `key` | one instance's DMN decision evaluations (inputs, outputs, trace) |
+| `atlas_cancel_instance` | `key` | terminates one active instance |
+| `atlas_cancel_instances` | `key`, `limit?` | bounded bulk termination (by definition key) |
+| `atlas_terminate_instances` | `keys?` \| `processDefKey?`, `q?`, `limit?` | terminate an explicit key set, or a definition's matching instances |
+| `atlas_delete_process` | `key` | deletes one deployed definition |
+| `atlas_stats` | none | engine-wide active counts |
+| `atlas_publish_message` | `name`, `correlationKey?`, `variables?` | correlates a message to waiting instances; returns stats |
+| `atlas_complete_job` | `key`, `variables?` | completes a job by hand (operator counterpart to a worker) |
+| `atlas_fail_job` | `key`, `retries?`, `message?` | fails a job; `retries` 0 (default) raises an incident, positive re-activates |
+| `atlas_list_incidents` | `limit?` | `{incidents, truncated}` — the operator "what's stuck" view |
+| `atlas_resolve_incident` | `key`, `retries?` | resolves an incident by elementInstanceKey and retries its job |
 
-## The tools
+## Authoring and human-task tools
 
-Every tool maps one-to-one onto an Atlas HTTP endpoint. The **runtime** tools
-deploy/run/inspect; the **authoring** tools set a scenario up end to end — a
-project (folder) holding a diagram, forms, and a decision — and drive its human
-tasks.
+| Tool | Arguments | Result |
+|---|---|---|
+| `atlas_create_project` | `name` | project id and metadata |
+| `atlas_list_projects` | none | visible projects |
+| `atlas_delete_project` | `id` | `{deleted:true,id}` |
+| `atlas_save_draft` | `xml`, `projectId?` | saved BPMN draft |
+| `atlas_list_drafts` | `projectId?` | saved diagram drafts |
+| `atlas_get_draft_xml` | `id` | a draft's BPMN XML (by process id) |
+| `atlas_save_form` | `id`, `schema`, `name?`, `projectId?` | saved form-js form |
+| `atlas_list_forms` | `projectId?` | saved form definitions |
+| `atlas_get_form` | `id` | a form's schema |
+| `atlas_upload_decision_model` | `handle`, `xml` | stored DMN model |
+| `atlas_register_decision` | `name`, `modelRef`, `projectId?` | registered decision reference |
+| `atlas_list_decision_refs` | `projectId?` | registered DMN decision references |
+| `atlas_list_decisions` | `projectId?` | DMN decisions (with inputs/outputs) from references |
+| `atlas_deployed_decisions` | none | deployed DMN decisions with usage counts |
+| `atlas_decision_evaluations` | `id` | one decision's evaluation history across all instances |
+| `atlas_dmnref_graph` | `id` | a decision reference's DRD (nodes and edges) |
+| `atlas_get_decision_model` | `ref` | raw DMN XML stored under a model handle |
+| `atlas_deploy_project` | `id` | deployed project definitions |
+| `atlas_list_tasks` | `limit?`, `before?`, `processInstance?` | task page envelope |
+| `atlas_get_task` | `key` | one open user task (deep-link read) |
+| `atlas_complete_task` | `key`, `variables?` | completed user task |
+| `atlas_claim_task` | `key`, `assignee?` | claims/assigns a task (`assignee` required without auth) |
+| `atlas_unclaim_task` | `key` | releases a task's assignment |
+| `atlas_assignable_users` | — | usernames a task can be assigned to (feeds `atlas_claim_task`) |
 
-### Runtime
+A typical authoring flow is:
 
-| Tool | Args | Returns |
-|------|------|---------|
-| `atlas_info` | — | product + version, e.g. `{"product":"Atlas","version":"0.1.0-dev"}` |
-| `atlas_deploy` | `xml` (string) | assigned `key`, `processId`, `version` |
-| `atlas_list_processes` | — | every deployed definition: `key`, `processId`, `version`, `deployedAt` |
-| `atlas_get_process_xml` | `key` (int) | the deployed BPMN XML (with generated diagram DI) |
-| `atlas_create_instance` | `key` (int) | starts an instance, runs until the engine goes idle, returns live `stats` |
-| `atlas_process_runtime` | `key` (int) | per-element token/visit counts for one definition |
-| `atlas_list_instances` | — | all instances: state (`active`/`completed`/`terminated`), tokens, variables |
-| `atlas_cancel_instance` | `key` (int) | terminates one running **instance**; returns `{instanceKey, state:"terminated", stats}` |
-| `atlas_cancel_instances` | `key` (int), `limit?` | bulk-terminate a definition's instances |
-| `atlas_delete_process` | `key` (int) | deletes one **definition** (engine + disk); returns `{"deleted":true,"key":N}` |
-| `atlas_stats` | — | engine-wide `activeProcessInstances`, `activeElementInstances` |
+`atlas_create_project` -> save forms/decision/draft ->
+`atlas_deploy_project` -> `atlas_create_instance` ->
+`atlas_list_tasks` -> `atlas_complete_task`.
 
-### Authoring (design-time + human tasks)
+## Make the diagram readable, not just valid
 
-| Tool | Args | Returns |
-|------|------|---------|
-| `atlas_create_project` | `name` | a project (folder) `id` to file artifacts under |
-| `atlas_list_projects` | — | projects with id, name, metadata |
-| `atlas_save_draft` | `xml`, `projectId?` | saves a BPMN diagram as a draft (design-time) under a project |
-| `atlas_save_form` | `id`, `schema` (object), `name?`, `projectId?` | saves a form-js form a user task binds to by `formId` |
-| `atlas_upload_decision_model` | `handle`, `xml` | uploads a DMN model under a handle so a decision resolves at deploy |
-| `atlas_register_decision` | `name`, `modelRef`, `projectId?` | registers a decision reference (name → model handle) |
-| `atlas_deploy_project` | `id` | deploys a project: compiles its drafts, bundles its decisions; returns definitions |
-| `atlas_list_tasks` | — | active user tasks: task `key`, process, element, name, assignee, `formId` |
-| `atlas_complete_task` | `key`, `variables?` (object) | completes a user task with its form data, driving the instance forward |
+`atlas_save_draft` / `atlas_deploy` accept a model with no `<bpmndi:BPMNDiagram>`
+and auto-generate a layout. It always deploys, but the auto-layout routinely
+stacks branch and bypass edges on top of the main-axis nodes — fine for a
+throwaway probe, not for anything a human opens in Operations or the Modeler.
 
-**Set up a whole scenario:** `atlas_create_project` → `atlas_upload_decision_model`
-+ `atlas_register_decision` → `atlas_save_form` (×N) → `atlas_save_draft` →
-`atlas_deploy_project` → `atlas_create_instance` → `atlas_list_tasks` →
-`atlas_complete_task` (repeat until the instance completes).
+For any model someone will look at, **author the BPMN-DI by hand**: one straight
+horizontal main axis at a constant `y`, even node pitch (≈150px; 100×80 tasks,
+50×50 gateways, 36×36 events), every branch/bypass on its own lane with clean
+orthogonal waypoints, and gateway-flow labels placed so they don't collide.
+Verify the render (Operations view or a preview), not just that the deploy
+succeeded. See `AGENTS.md` → "Authoring BPMN models" and
+`examples/onboarding/onboarding.bpmn` for a worked layout.
 
-## The normal flow
+## Task pagination
 
-1. **`atlas_deploy`** a BPMN 2.0 XML document. Atlas compiles and validates it;
-   **only elements Atlas can execute are accepted** — an unsupported or malformed
-   model is rejected with an error, not silently deployed. Deploy returns the
-   integer **`key`** — this is the handle for every later call. Deploy is
-   idempotent per content but each deploy of a changed model yields a new
-   `version` (and key).
-2. **`atlas_create_instance`** with that `key`. The engine runs the token until
-   it goes idle, then returns current stats.
-3. **`atlas_process_runtime`** (per definition) or **`atlas_list_instances`**
-   (per instance) to see where tokens sit and which variables are set.
+`atlas_list_tasks` returns:
 
-### Worked example (verified against Atlas 0.1.0-dev)
-
-Deploy a minimal process — start → service task → end:
-
-```xml
-<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
-             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
-  <process id="order" isExecutable="true">
-    <startEvent id="start"/>
-    <serviceTask id="task">
-      <extensionElements><zeebe:taskDefinition type="payment" retries="5"/></extensionElements>
-    </serviceTask>
-    <endEvent id="end"/>
-    <sequenceFlow id="f1" sourceRef="start" targetRef="task"/>
-    <sequenceFlow id="f2" sourceRef="task" targetRef="end"/>
-  </process>
-</definitions>
+```json
+{
+  "items": [],
+  "truncated": true,
+  "nextCursor": 281474976710744
+}
 ```
 
-- `atlas_deploy` → `{"key":7,"processId":"order","version":1,...}`
-- `atlas_create_instance {key: 7}` → `{"definitionKey":7,"stats":{...}}`
-- `atlas_process_runtime {key: 7}` →
-  `{"instances":1,"tokens":1,"elements":[{"elementId":"task","type":"ServiceTask","tokens":1,...}]}`
+The global task list is newest-first. When `truncated` is true and
+`nextCursor` is present, pass that value as `before` to fetch the next older
+page. `limit` defaults to 500 and is capped by the HTTP API at 5000.
 
-## Deleting and cleaning up
+`processInstance` restricts the lookup to one instance. A scoped lookup may be
+truncated but has no continuation cursor. Do not invent one.
 
-Two levels of deletion, and **order matters** — a definition will not delete
-while any of its instances still run:
+## Project deletion is not process deletion
 
-1. **`atlas_cancel_instance {key: <instanceKey>}`** — terminate a running
-   instance. Pass the *large* instance key from `atlas_list_instances`, not the
-   definition key. All tokens are discarded; the instance becomes `terminated`.
-2. **`atlas_delete_process {key: <definitionKey>}`** — remove a deployed
-   definition from the engine and disk. **Refused with a conflict error if the
-   definition still has running instances** (`cannot delete: N running
-   instance(s); cancel them first`). Cancel every active instance of that
-   definition, then delete.
+`atlas_delete_project {id}` deletes only the design-time grouping folder. It is
+idempotent. Drafts and decision references remain and become ungrouped.
+Deployed definitions and process instances are unaffected. With API
+authentication enabled, the caller must satisfy the project owner rule.
 
-So to fully remove a definition and everything it spawned: `atlas_list_instances`
-→ `atlas_cancel_instance` each active instance of that definition →
-`atlas_delete_process`. This is exactly how you clean up a test model whose token
-parked on an unworked service task. Deletion follows "durable before visible"
-(ADR-0019/I2): the on-disk record is removed first, so an acknowledged deletion
-never reappears on restart. `completed`/`terminated` instances are historical and
-do not block deletion.
+To delete a deployed process definition, first terminate every active instance
+of that definition and then call `atlas_delete_process`. The API rejects process
+deletion while active instances remain.
 
-## Gotchas — read these before diagnosing "a hang"
+## Keys and execution behaviour
 
-- **A token parking on a service task is normal, not a bug.** A `serviceTask`
-  needs an external job worker to complete its work. With no worker attached, the
-  token sits on the task and the instance stays `active` forever (see the example
-  above — the `payment` task holds one token). This is correct engine behavior.
-  To see a process run to completion via MCP alone, deploy a model whose path is
-  automatic (e.g. start → gateway → end, no external tasks).
-- **Keys are integers.** Definition keys are small (`7`); instance keys are large
-  (`281474976710744`). Pass the *definition* key to the `key`-taking tools.
-- **Deploy generates diagram layout.** `atlas_get_process_xml` returns your model
-  plus an auto-generated `<bpmndi:BPMNDiagram>` block even if you deployed none —
-  don't treat the extra DI as corruption.
-- **Instance state vocabulary:** `active` (tokens still moving/parked),
-  `completed` (reached an end state), `terminated` (cancelled). `atlas_stats` and
-  the `stats` in a create-instance reply count only *active* instances/tokens.
-- **The server is stateless per call.** There is no session or transaction across
-  tool calls; each call is an independent HTTP request. Re-list to get fresh
-  state; never assume a cached key is still the latest version.
+- Definition keys identify deployed process versions.
+- Instance keys identify one process execution and are usually much larger.
+- Task keys identify user-task jobs and are accepted by `atlas_complete_task`.
+- A token parked on a service task is normal when no worker completes its job.
+- Deploy-time compilation rejects unsupported or malformed BPMN rather than
+  interpreting it dynamically at runtime.
+- Each tool call is independent. Re-list state instead of relying on cached
+  results.
 
-## When NOT to use these tools
+## Boundaries
 
-- Authoring/validating BPMN offline, or engine internals (compiler, processor,
-  WAL, state) — that is source-code work; read `AGENTS.md` and the docs, don't
-  poke the running server.
-- Authoring a DMN model's *logic* (writing the decision table itself) — that is
-  temis/DMN modeling work. The authoring tools here only **register and bundle** an
-  existing DMN model (`atlas_upload_decision_model` + `atlas_register_decision`) so a
-  business rule task can resolve it; they do not edit decision tables.
+Use these tools to operate a running Atlas server. Do not use them to modify
+processor, WAL, state, compiler, FEEL, DMN, or recovery internals. Source-code
+changes must follow `AGENTS.md`, the architecture documents, and the repository
+Definition of Done.
 
 ## References
 
-- `mcp/doc.go` — package overview, transports, how to run it.
-- `mcp/tools.go` — the authoritative tool list and argument schemas.
-- [ADR-0016](../../../docs/adr/0016-mcp-server-over-http-api.md) — why MCP is an
-  adapter over the HTTP API rather than an engine embedding.
-- `docs/ARCHITECTURE.md` and `AGENTS.md` — the engine itself and its invariants.
+- `mcp/tools.go` and `mcp/tools_authoring.go`: authoritative tool schemas
+- `mcp/doc.go`: package and transport overview
+- `docs/adr/0016-mcp-server-over-http-api.md`: MCP adapter decision
+- `docs/ARCHITECTURE.md` and `AGENTS.md`: engine invariants and development rules

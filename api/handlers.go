@@ -217,6 +217,12 @@ type timelineStep struct {
 	SourceElementID    string         `json:"sourceElementId,omitempty"`
 	Action             string         `json:"action,omitempty"`
 	Relation           string         `json:"relation,omitempty"`
+	// ChildInstanceKey is the process instance a call activity started as its child
+	// (ADR-0076), so the replay view can drill from the caller's call activity into
+	// the child's own replay. Zero for a non-call-activity step, or a call activity
+	// whose child was never created (it parked). Resolved by the reverse
+	// ParentElementInstanceKey link, covering active and completed children.
+	ChildInstanceKey uint64 `json:"childInstanceKey,omitempty"`
 }
 
 type timelineToken struct {
@@ -287,6 +293,9 @@ type cancelInstancesResp struct {
 type failJobReq struct {
 	Retries int32  `json:"retries"`
 	Message string `json:"message"`
+	// RetryBackoff is the delay in milliseconds a worker asks to wait before its failed job
+	// may be retried (ADR-0111). 0 (or absent) retries immediately, the pre-0111 behavior.
+	RetryBackoff int64 `json:"retryBackoff"`
 }
 
 type resolveIncidentReq struct {
@@ -1063,6 +1072,25 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				return nil
 			})
 		}
+		// Reverse call-activity link: a child instance records the call-activity element
+		// instance that started it (ParentElementInstanceKey, ADR-0076). Build the map
+		// once — only if this definition actually has call activities — so a call
+		// activity's step can carry its childInstanceKey and the replay can drill in.
+		// Covers active and completed children (the child usually outlives the caller's
+		// step but may already be done).
+		var childByParent map[uint64]uint64
+		if scanErr == nil && len(d.cp.CallActivities()) > 0 {
+			childByParent = map[uint64]uint64{}
+			link := func(childKey uint64, v *model.ProcessInstanceValue) error {
+				if v.ParentElementInstanceKey != 0 {
+					childByParent[v.ParentElementInstanceKey] = childKey
+				}
+				return nil
+			}
+			if scanErr = s.store.ActiveProcessInstances(link); scanErr == nil {
+				scanErr = s.store.CompletedProcessInstances(link)
+			}
+		}
 		// Variable snapshots are scope-aware: the process-instance (root) scope plus
 		// each embedded subprocess scope of this instance, so a subprocess's local
 		// variables (its input mappings) are visible in the replay, labeled by their
@@ -1089,9 +1117,27 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				sp.endPos = rr.pos
 			}
 		}
+		// External-override attribution (ADR-0098): an operator override emits a
+		// variable event immediately followed by its audit event, so the audit's log
+		// position is the variable change's position plus one. Map each override's actor
+		// back onto the variable change's position, keyed by the global log position so
+		// it matches whichever scope's snapshot fold carries that change. Overrides
+		// keyed by the process instance cover every scope. An audit with no identity
+		// (auth off) is skipped — there is no actor to surface.
+		actorByPos := map[uint64]string{}
+		if scanErr == nil {
+			scanErr = s.store.VariableAuditHistory(key, func(_ int64, pos uint64, v *model.VariableAuditValue) error {
+				if v.Actor != "" && pos > 0 {
+					actorByPos[pos-1] = v.Actor
+				}
+				return nil
+			})
+		}
 		if scanErr == nil {
 			scanErr = s.store.VariableSnapshotHistory(key, func(_ int64, pos uint64, v *model.VariableValue) error {
-				changes = append(changes, varChange{pos: pos, endPos: noEnd, view: toVariableView(v)})
+				view := toVariableView(v)
+				view.Actor = actorByPos[pos]
+				changes = append(changes, varChange{pos: pos, endPos: noEnd, view: view})
 				return nil
 			})
 		}
@@ -1102,6 +1148,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			scanErr = s.store.VariableSnapshotHistory(sp.scopeKey, func(_ int64, pos uint64, v *model.VariableValue) error {
 				view := toVariableView(v)
 				view.Scope = sp.label
+				view.Actor = actorByPos[pos]
 				changes = append(changes, varChange{pos: pos, endPos: sp.endPos, view: view})
 				return nil
 			})
@@ -1224,6 +1271,11 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			}
 			if rv, ok := activations[sr.pos]; ok {
 				step.TokenID, step.ElementInstanceKey = rv.TokenID, rv.ElementInstanceKey
+				// A call activity carries the child instance it started, so the replay
+				// can drill from the caller into the child (ADR-0076).
+				if childByParent != nil && d.cp.Node(sr.elementID).Type == compiler.TypeCallActivity {
+					step.ChildInstanceKey = childByParent[rv.ElementInstanceKey]
+				}
 				// The completion of this same element instance (Action==2) gives the
 				// element's end time, so the history can show start → end per element
 				// like Operate. Absent (still active / parked), endAt stays zero.
@@ -1380,6 +1432,11 @@ type variableView struct {
 	// Scope labels a subprocess-local variable with the id of the embedded
 	// subprocess it lives in; empty for a process (root) scope variable (ADR-0074).
 	Scope string `json:"scope,omitempty"`
+	// Actor names the operator who last set this value via an external override
+	// (ADR-0098), so the timeline attributes a corrected value inline; empty when the
+	// value was written by the model itself or the override carried no identity (auth
+	// off). It is populated only by the timeline fold, which has the audit trail.
+	Actor string `json:"actor,omitempty"`
 }
 
 func toVariableView(v *model.VariableValue) variableView {
@@ -1444,6 +1501,175 @@ func (s *Server) handleInstanceVariables(w http.ResponseWriter, r *http.Request)
 	})
 	if scanErr != nil {
 		writeError(w, http.StatusInternalServerError, "read variables: "+scanErr.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// handleSetInstanceVariables sets or overwrites variables on a running instance
+// from outside the model (ADR-0095): an operator correction to a stuck or
+// misconfigured instance, the manual counterpart to the writes the model makes for
+// itself. Body: {"variables": {…}, "scopeKey": <optional>}. Variables land in the
+// instance root scope by default; a scopeKey (a live element instance key belonging
+// to the instance) targets a subprocess/multi-instance-body local scope instead.
+//
+// It is admin-gated when auth is on — a deliberately narrower right than starting an
+// instance, because it edits live process state — and open in single-user mode like
+// the rest of the runtime surface. 404 if the instance is not running (a finished
+// instance's state is history, not something to correct); 400 if the target scope
+// does not belong to the instance. The change is recorded in the instance's variable
+// timeline as the audit trail, and it does NOT re-evaluate any gateway a token has
+// already passed — only the stored values change.
+func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid instance key")
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	// Decode variables and the optional scopeKey in one pass (UseNumber so a
+	// number's exact textual form survives for FEEL's decimal semantics), then reuse
+	// the shared start-variable conversion.
+	var payload struct {
+		Variables map[string]any `json:"variables"`
+		ScopeKey  uint64         `json:"scopeKey"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	if err := dec.Decode(&payload); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return
+	}
+	vars, err := startVarsFromMap(payload.Variables)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(vars) == 0 {
+		writeError(w, http.StatusBadRequest, "no variables to set (body must carry a non-empty \"variables\" object)")
+		return
+	}
+	scopeKey := payload.ScopeKey
+	// Who is making the change, for the audit trail (ADR-0098): the authenticated
+	// principal's username, or "" when auth is off (single-user) or the caller is
+	// unidentified. Read off the request before the run loop, like every other
+	// principal read.
+	actor := ""
+	if p := principalFrom(r.Context()); p != nil {
+		actor = p.Username
+	}
+
+	var (
+		found    bool
+		scopeBad bool
+		scanErr  error
+		runErr   error
+	)
+	s.do(func() {
+		pi, ok, err := s.store.ProcessInstance(key)
+		if err != nil {
+			scanErr = err
+			return
+		}
+		if !ok || pi.State != model.PIActive {
+			return // not found stays 404: only a running instance can be corrected
+		}
+		found = true
+		if scopeKey != 0 && scopeKey != key {
+			ei, ok, err := s.store.GetElementInstance(scopeKey)
+			if err != nil {
+				scanErr = err
+				return
+			}
+			if !ok || ei.ProcessInstanceKey != key {
+				scopeBad = true
+				return
+			}
+		}
+		s.proc.SetVariables(key, scopeKey, actor, vars...)
+		runErr = s.jobRunner.Drive()
+	})
+	switch {
+	case scanErr != nil:
+		writeError(w, http.StatusInternalServerError, "read instance: "+scanErr.Error())
+	case !found:
+		writeError(w, http.StatusNotFound, "no running instance with that key")
+	case scopeBad:
+		writeError(w, http.StatusBadRequest, "scopeKey is not an element instance of this process instance")
+	case runErr != nil:
+		writeError(w, http.StatusInternalServerError, "set variables: "+runErr.Error())
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"instanceKey": key, "variablesSet": len(vars)})
+	}
+}
+
+// variableAuditView renders one external variable override for the audit view
+// (ADR-0098): when it happened, who made it, on which scope, and the variable name
+// and typed new value. It is the "who changed it" surface over the append-only audit
+// history — the read side of POST /instances/{key}/variables.
+type variableAuditView struct {
+	At    int64  `json:"at"`
+	Actor string `json:"actor"`
+	Scope uint64 `json:"scope"`
+	Name  string `json:"name"`
+	Value any    `json:"value"`
+	Kind  string `json:"kind"`
+}
+
+// varKindName maps a stored variable kind to the API's kind label, shared by the
+// variable-audit view (and available to any other typed-variable view).
+func varKindName(k model.VarKind) string {
+	switch k {
+	case model.VarBool:
+		return "boolean"
+	case model.VarNumber:
+		return "number"
+	case model.VarString:
+		return "string"
+	case model.VarJSON:
+		return "json"
+	default:
+		return "null"
+	}
+}
+
+// handleInstanceVariableAudit returns the external variable overrides a process
+// instance received, in the order they happened, each with who made it, on which
+// scope, and the variable name and typed new value (ADR-0098). It is the audit
+// counterpart to the read-only variables view: because the records are append-only
+// history, it works while the instance runs and after it has finished. An instance
+// with no overrides (or an unknown key) yields an empty array, not a 404 — like the
+// variables and decisions endpoints, it is a convenience read, not an existence check.
+func (s *Server) handleInstanceVariableAudit(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid instance key")
+		return
+	}
+	out := []variableAuditView{}
+	var scanErr error
+	s.do(func() {
+		scanErr = s.store.VariableAuditHistory(key, func(ts int64, _ uint64, v *model.VariableAuditValue) error {
+			out = append(out, variableAuditView{
+				At:    ts,
+				Actor: v.Actor,
+				Scope: v.ScopeKey,
+				Name:  v.Name,
+				Value: nativeVar(&model.VariableValue{Kind: v.Kind, Bool: v.Bool, Text: v.Text}),
+				Kind:  varKindName(v.Kind),
+			})
+			return nil
+		})
+	})
+	if scanErr != nil {
+		writeError(w, http.StatusInternalServerError, "read variable audit: "+scanErr.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -2346,7 +2572,7 @@ type taskResp struct {
 	FormID             string `json:"formId,omitempty"`
 	// Priority is the task's importance from the model (default 50); the inbox
 	// sorts by it. DueDate is the absolute due instant in Unix milliseconds, or 0
-	// when the task has no due date (ADR-0051).
+	// when the task has no due date (ADR-0091).
 	Priority int32 `json:"priority"`
 	DueDate  int64 `json:"dueDate,omitempty"`
 }
@@ -2590,7 +2816,7 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
-		s.proc.FailJob(key, req.Retries, req.Message)
+		s.proc.FailJob(key, req.Retries, req.Message, req.RetryBackoff*int64(time.Millisecond))
 		runErr = s.jobRunner.Drive()
 	})
 	switch {

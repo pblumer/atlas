@@ -27,7 +27,7 @@ func userTaskProcess(t testing.TB) (*compiler.CompiledProcess, int32) {
 }
 
 // TestUserTaskDueDate proves a due date authored as a duration is frozen into the
-// job as an absolute instant, computed from the command-time clock (ADR-0051).
+// job as an absolute instant, computed from the command-time clock (ADR-0091).
 func TestUserTaskDueDate(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)

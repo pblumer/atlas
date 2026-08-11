@@ -1,10 +1,10 @@
 # ADR-0088: Signal events (broadcast throw/catch)
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-30
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Phase 1 (compiler) delivered; Phases 2–5 pending. Each phase
+> **Implementation status.** All phases (1–5) delivered. Each phase
 > lands test-first with a recovery test (ADR-0018). Signal events build on the message
 > correlation/subscription substrate (ADR-0020), the boundary arm/fire machinery
 > (ADR-0040), message-start instantiation (ADR-0035), and event subprocesses
@@ -23,6 +23,74 @@
 > a signal is fire-and-forget. Verified: a throw/catch/boundary/start/end and a signal
 > event subprocess compile with the resolved name; an unknown or unnamed signal ref is a
 > deploy error in every position. No runtime yet.
+>
+> **Delivered (Phase 2, broadcast core):** the runnable throw→catch path. A
+> `SignalSubscriptionValue` (the `MessageSubscriptionValue` shape minus the correlation
+> key) in a new `cfSignalSubscription` family keyed `signal-name:elementKey`, with
+> `PutSignalSubscription` / `DeleteSignalSubscription` / `SubscribedSignals(name, fn)` tx
+> methods (a name-only prefix scan). It reuses the message subscription intents
+> (`SubscriptionCreated` / `SubscriptionCorrelated`) over its own value type (`VTSignal`)
+> and `applyToState` arm. `broadcastSignal(c, name, vars)` mirrors `correlateMessage`:
+> collect every subscription on the name, then for each retire it, write the throw's
+> variables into that instance's scope, and enqueue its `Completing` — matches collected
+> before any mutation so retiring one cannot disturb the scan. `signalCatchEventBehavior`
+> opens the subscription and waits; `signalThrowEventBehavior` gathers the instance's
+> variables and broadcasts inline (keeping `applyToState` pure), then takes its outgoing
+> flow. Verified: one throw fires two intermediate catches in one instance (1:n via a
+> parallel split) and a catch in a second instance (cross-instance), carrying the payload
+> into every scope; a throw with no listener is a no-op; a parked catch's subscription
+> rebuilds on recovery so a throw after restart still fires it. Signal-start
+> instantiation, boundary, end, and event-subprocess catches remain for Phases 3–4.
+>
+> **Delivered (Phase 3, boundary + end + start):** the remaining plain-event catches and
+> the send-and-stop / instantiate throws. A `BoundarySignal` case in
+> `boundaryEventBehavior.OnActivated` opens a name-only signal subscription, so a later
+> broadcast drives the boundary instance to `Completing` through the shared boundary
+> fire path (interrupt-the-host-then-route, or take-the-flow when non-interrupting) —
+> no new fire logic. `signalEndEventBehavior` broadcasts inline exactly like the throw
+> (reusing the throw detail table) then ends the instance like a none end event, mirroring
+> `messageEndEventBehavior`. `broadcastSignal` now also instantiates every deployed
+> signal-start definition on the name (a `signalStarts` name→defKeys index the processor
+> maintains in `Deploy`/`Undeploy`, mirroring `messageStarts` but without a correlation
+> key or singleton state); `TypeSignalStartEvent` runs as a plain `startEventBehavior`
+> once instantiated, like a message start. Verified: an interrupting signal boundary
+> cancels its host (job canceled) and routes to escalation cross-instance; a
+> non-interrupting one escalates while the host keeps running; a signal end event fires a
+> waiting catch then stops its own instance; one broadcast both instantiates a fresh
+> signal-start instance and fires a waiting boundary in another; undeploy drops a
+> signal-start from the index; and an armed boundary subscription rebuilds on recovery so
+> a throw after restart still fires it. The signal event subprocess remains for Phase 4.
+>
+> **Delivered (Phase 4, signal event subprocess):** the signal trigger for an event
+> subprocess (ADR-0082), interrupting and non-interrupting. A `BoundarySignal` case in
+> `eventSubProcessStartBehavior.OnActivated` opens a name-only signal subscription on the
+> armed trigger — the same subscription a signal boundary opens — so a broadcast drives
+> the trigger to `Completing` through the shared event-sub fire path (terminate the parent
+> scope's other work if interrupting, then activate the handler subprocess); a
+> non-interrupting trigger then re-arms a fresh subscription, extending the existing
+> message re-arm condition to signals. No new arming, teardown, or recovery path — the
+> compiler already records the trigger spec (`EventSubProcessDetail{Kind: BoundarySignal,
+> SignalName}`, Phase 1). Verified: an interrupting signal event subprocess tears down the
+> main flow (job canceled) and runs the handler cross-instance; a non-interrupting one
+> fires twice (re-arming between) while the main flow runs untouched, then disarms when the
+> flow completes; and the re-armed subscription rebuilds on recovery so a broadcast after
+> restart runs the handler again.
+>
+> **Delivered (Phase 5, Modeler):** signal authoring in the editor's Implement panel
+> (`api/web/editor.js`), mirroring message authoring minus the correlation key. A
+> `signalFieldsHTML` picker (a dropdown of the model's shared `<bpmn:signal>` declarations
+> plus "＋ New signal", and the chosen signal's name) appears on every signal event —
+> intermediate catch/throw, boundary, event-subprocess start, signal start, and signal end
+> — driven by a `signalDefOf` dispatch arm in each event type; a central "Signals" manager
+> on the process/collaboration root adds, renames, and deletes signals
+> (`signalsManagerHTML`/`wireSignalsManager`). Helpers `listSignals`/`createSignal`/
+> `linkSignal`/`deleteSignal` create `bpmn:Signal` root elements and set `signalRef` on the
+> `bpmn:SignalEventDefinition` (deleting a signal clears dangling refs), producing exactly
+> the `<bpmn:signal id name>` + `<signalEventDefinition signalRef>` shape the Phase-1
+> compiler parses. bpmn-js already draws the signal triangle marker and offers every signal
+> variant (start/end/throw/catch/boundary) via the wrench menu, so no diagram-rendering
+> change was needed; `atlas-moddle.json` needs none either (the signal moddle types are
+> native).
 
 ## Context and problem statement
 

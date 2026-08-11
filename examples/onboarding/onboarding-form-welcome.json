@@ -1,0 +1,15 @@
+{
+  "type": "default",
+  "id": "onb-welcome",
+  "components": [
+    {
+      "type": "text",
+      "text": "# 👋 Willkommen an Bord\n\nDas hier ist deine erste **Aufgabe (User-Task)** in Atlas. Dass du dieses Formular überhaupt siehst, bedeutet: ein Prozess läuft *genau jetzt*, und ein **Token** wartet an dieser Stelle auf dich.\n\n## Was ist Atlas?\n\nAtlas ist eine **durable, hochperformante BPMN 2.x Workflow-Engine** in Go. Sie führt Geschäftsprozesse aus, indem sie Tokens durch einen kompilierten Graphen bewegt und **jeden Zustandsübergang als Event in einem append-only Log** festhält. Nichts wird sichtbar, bevor es sicher auf der Platte liegt.\n\n## Die drei Säulen\n\n- **Compiler** — BPMN-XML wird zu einem unveränderlichen, integer-indizierten Prozess kompiliert.\n- **Processor** — ein Single-Writer-Loop faltet Kommandos zu durablen Events.\n- **Datenmodell** — jeder Übergang ist ein Record `(ValueType, Intent)`.\n\nKlick unten auf **Absenden** — damit rückt der Token zum nächsten Schritt weiter. ✅"
+    },
+    {
+      "key": "welcomeAck",
+      "type": "checkbox",
+      "label": "Alles klar, weiter geht's"
+    }
+  ]
+}

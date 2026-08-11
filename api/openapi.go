@@ -71,6 +71,13 @@ func xmlBody(desc string) *bodySpec {
 	return &bodySpec{mediaType: "application/xml", schema: tString(), desc: desc}
 }
 
+// eventStreamBody describes a Server-Sent Events response — a long-lived
+// text/event-stream of newline-delimited frames rather than a single JSON body
+// (ADR-0103's live collaboration transport).
+func eventStreamBody(desc string) *bodySpec {
+	return &bodySpec{mediaType: "text/event-stream", schema: tString(), desc: desc}
+}
+
 // apiRoutes is the single source of truth for the /api/v1 surface. Handler
 // iterates it to register handlers; openapiDoc iterates it to describe them.
 // Adding an endpoint means adding one entry here — nothing is registered off to
@@ -91,6 +98,24 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Recent server log lines (admin-only when auth is on)", tag: "System",
 			resp: jsonBody("Recent log lines, oldest first", schemaObj(map[string]any{
 				"lines": tArray(),
+			}))}},
+		{"GET", "/api/v1/backup", s.handleBackup, apiOp{
+			summary: "Download a backup of all design-time data (projects, drafts, deployments, forms, decisions, connectors) as a gzip tar; excludes user accounts, the vault key, and runtime state (admin-only when auth is on) (ADR-0107)", tag: "System",
+			resp: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip-compressed tar archive of the design-time data directory"}}},
+		{"POST", "/api/v1/restore", s.handleRestore, apiOp{
+			summary: "Restore design-time data from an uploaded backup archive; overwrites matching artifacts, skips anything outside the design-time allowlist, and needs a restart for deployed processes to take effect (admin-only when auth is on) (ADR-0107)", tag: "System",
+			req: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip tar archive produced by GET /api/v1/backup"},
+			resp: jsonBody("Restore summary", schemaObj(map[string]any{
+				"restored": tInteger(), "restartRequired": tBool(), "note": tString(),
+			}))}},
+		{"GET", "/api/v1/backup/full", s.handleBackupFull, apiOp{
+			summary: "Download a whole-instance snapshot (design-time data plus the WAL — running instances — the user accounts and the vault key) as a gzip tar; excludes only the derivable state store (admin-only when auth is on) (ADR-0109)", tag: "System",
+			resp: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip-compressed tar archive of the whole-instance snapshot"}}},
+		{"POST", "/api/v1/restore/full", s.handleRestoreFull, apiOp{
+			summary: "Stage a whole-instance snapshot for restore; it is applied on the next server restart, which replaces the WAL, running instances, design-time data, users and vault key, then rebuilds state from the restored WAL (admin-only when auth is on) (ADR-0109)", tag: "System",
+			req: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip tar archive produced by GET /api/v1/backup/full"},
+			resp: jsonBody("Restore staging summary", schemaObj(map[string]any{
+				"restored": tInteger(), "restartRequired": tBool(), "note": tString(),
 			}))}},
 
 		{"POST", "/api/v1/feel/validate", s.handleValidateFeel, apiOp{
@@ -122,6 +147,12 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Deployed processes", schemaObj(map[string]any{
 				"key": tInteger(), "processId": tString(), "version": tInteger(), "deployments": tArray(),
 			}))}},
+		{"POST", "/api/v1/validate", s.handleValidate, apiOp{
+			summary: "Validate a BPMN model without deploying — a dry-run compile returning structured problems (errors and warnings) and the engine version, for the Modeler's Problems panel (ADR-0026)", tag: "Deployments",
+			req: xmlBody("BPMN 2.0 XML"),
+			resp: jsonBody("Validation problems and the engine version that produced them", schemaObj(map[string]any{
+				"version": tString(), "problems": tArray(),
+			}))}},
 
 		{"GET", "/api/v1/processes", s.handleListProcesses, apiOp{
 			summary: "List deployed processes", tag: "Processes", resp: jsonBody("Processes", tArray())}},
@@ -133,6 +164,13 @@ func (s *Server) apiRoutes() []apiRoute {
 			status: http.StatusNoContent}},
 		{"GET", "/api/v1/processes/{key}/runtime", s.handleProcessRuntime, apiOp{
 			summary: "Read a process's live runtime state", tag: "Processes", resp: jsonBody("Runtime state", tObject())}},
+		{"GET", "/api/v1/call-activities", s.handleCallActivities, apiOp{
+			summary: "List every call activity across deployed processes with its per-server resolution status", tag: "Processes", resp: jsonBody("Call activities", tArray())}},
+		{"PUT", "/api/v1/call-activities/overrides/{processId}", s.handleSetCallOverride, apiOp{
+			summary: "Set a per-server call-activity target override (redirect/pin/disable) for a called process id", tag: "Processes",
+			req: jsonBody("Override", tObject()), resp: jsonBody("Stored override", tObject())}},
+		{"DELETE", "/api/v1/call-activities/overrides/{processId}", s.handleDeleteCallOverride, apiOp{
+			summary: "Clear a called process id's per-server target override", tag: "Processes", status: http.StatusNoContent}},
 		{"GET", "/api/v1/collaborations/{key}/runtime", s.handleCollaborationRuntime, apiOp{
 			summary: "Read a collaboration's live runtime state", tag: "Collaborations", resp: jsonBody("Runtime state", tObject())}},
 
@@ -157,11 +195,22 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/instances/{key}/variables", s.handleInstanceVariables, apiOp{
 			summary: "Read a process instance's variables as a typed JSON object", tag: "Instances",
 			resp: jsonBody("Instance variables", tObject())}},
+		{"POST", "/api/v1/instances/{key}/variables", s.handleSetInstanceVariables, apiOp{
+			summary: "Set or overwrite variables on a running instance — an operator correction to live process state (admin-only when auth is on); optional scopeKey targets a subprocess local scope; does not re-evaluate already-passed gateways", tag: "Instances",
+			req: jsonBody("Variables to set, and an optional target scope", schemaObj(map[string]any{
+				"variables": tObject(), "scopeKey": tInteger(),
+			}, "variables")),
+			resp: jsonBody("Set result", schemaObj(map[string]any{
+				"instanceKey": tInteger(), "variablesSet": tInteger(),
+			}))}},
+		{"GET", "/api/v1/instances/{key}/variable-audit", s.handleInstanceVariableAudit, apiOp{
+			summary: "Read the external variable overrides a process instance received — the \"who changed it\" audit trail, each with actor, scope, variable name, and typed new value (ADR-0098)", tag: "Instances",
+			resp: jsonBody("Variable overrides", tArray())}},
 		{"GET", "/api/v1/instances/{key}/data-objects", s.handleInstanceDataObjects, apiOp{
 			summary: "Read a process instance's data objects — each with its name, data state, and typed value", tag: "Instances",
 			resp: jsonBody("Instance data objects", tArray())}},
 		{"GET", "/api/v1/instances/{key}/timeline", s.handleInstanceTimeline, apiOp{
-			summary: "Read a process instance's step-by-step replay timeline", tag: "Instances",
+			summary: "Read a process instance's step-by-step replay timeline — each step's variables carry an actor when the value was set by an external operator override (ADR-0098)", tag: "Instances",
 			resp: jsonBody("Instance timeline", tObject())}},
 		{"GET", "/api/v1/instances/{key}/decisions", s.handleInstanceDecisions, apiOp{
 			summary: "Read the DMN decision evaluations a process instance made — each with its inputs, outputs, and trace", tag: "Instances",
@@ -234,6 +283,40 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Move a draft to a project", tag: "Drafts", req: jsonBody("Move", tObject()), resp: jsonBody("Updated draft", tObject())}},
 		{"DELETE", "/api/v1/drafts/{id}", s.handleDeleteDraft, apiOp{
 			summary: "Delete a draft", tag: "Drafts", status: http.StatusNoContent}},
+
+		{"GET", "/api/v1/drafts/{id}/session", s.handleDraftSession, apiOp{
+			summary: "Join a draft's live collaboration session — a Server-Sent Events stream of sync, presence, lock, and change frames for real-time co-editing by people and AI agents (ADR-0103)", tag: "Live Sessions",
+			resp: eventStreamBody("SSE stream of session frames")}},
+		{"POST", "/api/v1/drafts/{id}/session/join", s.handleDraftSessionJoin, apiOp{
+			summary: "Join a draft's live session without an event stream — for an AI agent over MCP that cannot hold an SSE connection; returns the sync snapshot (self id, roster, locks) and is driven with poll/presence/lock/change (ADR-0103 M2)", tag: "Live Sessions",
+			req:  jsonBody("Optional display name", schemaObj(map[string]any{"name": tString()})),
+			resp: jsonBody("Sync snapshot with the joined participant's id", tObject())}},
+		{"POST", "/api/v1/drafts/{id}/session/poll", s.handleDraftSessionPoll, apiOp{
+			summary: "Drain a participant's buffered frames and read the current roster and locks — the request/response read side for an agent with no live stream, and its liveness signal (ADR-0103 M2)", tag: "Live Sessions",
+			req:  jsonBody("Polling participant", schemaObj(map[string]any{"participantId": tString()}, "participantId")),
+			resp: jsonBody("Roster, locks, and buffered events", tObject())}},
+		{"POST", "/api/v1/drafts/{id}/session/leave", s.handleDraftSessionLeave, apiOp{
+			summary: "Leave a draft's live session, releasing the participant's locks — idempotent (ADR-0103 M2)", tag: "Live Sessions",
+			req:    jsonBody("Leaving participant", schemaObj(map[string]any{"participantId": tString()}, "participantId")),
+			status: http.StatusNoContent}},
+		{"POST", "/api/v1/drafts/{id}/session/presence", s.handleDraftSessionPresence, apiOp{
+			summary: "Update a participant's presence (selected element) in a draft's live session (ADR-0103)", tag: "Live Sessions",
+			req: jsonBody("Presence update", schemaObj(map[string]any{
+				"participantId": tString(), "selection": tString(),
+			}, "participantId")),
+			status: http.StatusNoContent}},
+		{"POST", "/api/v1/drafts/{id}/session/lock", s.handleDraftSessionLock, apiOp{
+			summary: "Acquire or release a per-element edit lock in a draft's live session; acquiring an element another participant holds is a 409 (ADR-0103)", tag: "Live Sessions",
+			req: jsonBody("Lock action", schemaObj(map[string]any{
+				"participantId": tString(), "elementId": tString(), "action": tString(),
+			}, "participantId", "elementId", "action")),
+			status: http.StatusNoContent}},
+		{"POST", "/api/v1/drafts/{id}/session/change", s.handleDraftSessionChange, apiOp{
+			summary: "Broadcast an element change to a draft's live session participants — relayed live, not persisted (ADR-0103)", tag: "Live Sessions",
+			req: jsonBody("Element change", schemaObj(map[string]any{
+				"participantId": tString(), "elementId": tString(), "xml": tString(),
+			}, "participantId", "elementId")),
+			status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/forms", s.handleSaveForm, apiOp{
 			summary: "Save a form definition", tag: "Forms", req: jsonBody("Form", tObject()), resp: jsonBody("Saved form", tObject())}},
@@ -330,6 +413,16 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Store or overwrite a secret value in the encrypted vault", tag: "Secrets", req: jsonBody("Secret value", schemaObj(map[string]any{"value": tString()}, "value")), resp: jsonBody("Secret metadata", tObject())}},
 		{"DELETE", "/api/v1/secrets/{name}", s.handleDeleteSecret, apiOp{
 			summary: "Delete a secret from the encrypted vault", tag: "Secrets", status: http.StatusNoContent}},
+
+		{"GET", "/api/v1/settings/theme", s.handleGetTheme, apiOp{
+			summary: "Get the org-wide UI brand accent colour (public; applied before login)", tag: "System",
+			resp: jsonBody("Theme", schemaObj(map[string]any{"accent": tString()}))}},
+		{"PUT", "/api/v1/settings/theme", s.handleSetTheme, apiOp{
+			summary: "Set the org-wide UI brand accent colour (admin-only when auth is on) (ADR-0113)", tag: "System",
+			req:  jsonBody("Theme", schemaObj(map[string]any{"accent": tString()}, "accent")),
+			resp: jsonBody("Theme", schemaObj(map[string]any{"accent": tString()}))}},
+		{"DELETE", "/api/v1/settings/theme", s.handleDeleteTheme, apiOp{
+			summary: "Reset the org-wide UI theme to the built-in default (admin-only when auth is on) (ADR-0113)", tag: "System", status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/auth/login", s.handleLogin, apiOp{
 			summary: "Log in with a username and password", tag: "Auth",

@@ -1,7 +1,9 @@
 package compiler
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -49,6 +51,44 @@ const (
 	RuleBoundaryIncomingFlow   = "boundary.incoming-flow"
 	RuleBoundaryInvalidHost    = "boundary.invalid-host"
 	RuleFlowCrossScope         = "flow.cross-scope"
+	// RuleErrorUnhandled marks an error end event with no statically matching enclosing
+	// error boundary or error event subprocess in the same process (ADR-0089). A warning,
+	// not an error: the catch may live at a call-activity caller one process cannot see,
+	// and the runtime incident is the real terminal for a truly uncaught error.
+	RuleErrorUnhandled = "error.unhandled"
+	// RuleCancelEndOutsideTransaction marks a cancel end event whose enclosing scope is not a
+	// transaction — an error, since BPMN allows a cancel end only within a <transaction> (ADR-0108).
+	RuleCancelEndOutsideTransaction = "cancel.end-outside-transaction"
+	// RuleCancelBoundaryInvalidHost marks a cancel boundary attached to something other than a
+	// transaction — an error, since a cancel boundary may attach only to a <transaction> (ADR-0108).
+	RuleCancelBoundaryInvalidHost = "cancel.boundary-invalid-host"
+	// RuleTransactionNoCancelBoundary marks a transaction that has a cancel end event but no
+	// cancel boundary (ADR-0108). A warning: the cancellation tears the transaction down with
+	// no recovery route, usually a modeling mistake, but not structurally invalid.
+	RuleTransactionNoCancelBoundary = "transaction.no-cancel-boundary"
+	// RuleEventGatewayTarget marks an event-based gateway whose outgoing flow leads to a
+	// non-catch element — an error, since a deferred choice can only race catch events
+	// (message/timer/signal intermediate catch); a task or gateway cannot participate (ADR-0110).
+	RuleEventGatewayTarget = "event-gateway.invalid-target"
+	// RuleTimerStartSchedule marks a timer start event whose constant FEEL schedule cannot be
+	// resolved to a valid duration/date/cycle at deploy (ADR-0111). It is an error: a start
+	// schedule that will not resolve arms nothing, so the process would silently never trigger.
+	// A start-event FEEL schedule is compiler-constant (references no variables, ADR-0056), so it
+	// evaluates the same way at deploy as at arm and can be checked without an instance.
+	RuleTimerStartSchedule = "timer.start-schedule"
+)
+
+// Rule slugs for whole-model dry-run findings that [ValidateModel] raises outside
+// the per-node graph checks — a fault that stops the compile before a linearized
+// graph exists, so it cannot be anchored the way the graph rules above are.
+const (
+	// RuleParse marks a document that will not decode at all, or a model with no
+	// executable process — a model-level failure with no single owning element.
+	RuleParse = "parse"
+	// RuleCompile marks a per-process failure in an earlier compile stage (an
+	// unknown flow reference, a bad FEEL expression) — the pool named nothing the
+	// graph checks could inspect, so its error is surfaced as one Problem instead.
+	RuleCompile = "compile"
 )
 
 // Problem is one structured validation finding on a compiled process, shaped for
@@ -79,6 +119,9 @@ func Validate(cp *CompiledProcess) []Problem {
 	ps = append(ps, checkReachability(cp)...)
 	ps = append(ps, checkGateways(cp)...)
 	ps = append(ps, checkScopes(cp)...)
+	ps = append(ps, checkErrorHandling(cp)...)
+	ps = append(ps, checkTransactions(cp)...)
+	ps = append(ps, checkTimerStartSchedules(cp)...)
 	return ps
 }
 
@@ -91,6 +134,70 @@ func HasErrors(ps []Problem) bool {
 		}
 	}
 	return false
+}
+
+// ValidateModel runs the compiler's real parse → resolve → build → validate
+// pipeline over a BPMN model as a *dry run* — it mints no keys, registers no
+// definition, and starts no instance — and returns every validation Problem
+// (errors and warnings) across all of the model's executable pools. It is the
+// single source of validation truth behind ADR-0026's Problems panel and the
+// POST /api/v1/validate endpoint: the panel never re-implements these rules
+// (that would be the interpret-don't-compile failure mode I5 forbids), it renders
+// what this returns.
+//
+// Unlike ParseAll, which stops at the first fault so a deploy fails fast, the dry
+// run reports everything at once — that is what a Problems panel needs. Faults the
+// graph checks cannot anchor to a node still surface as Problems so the panel
+// renders them uniformly: a document that will not parse, or a model with no
+// executable process, becomes one RuleParse error; a pool that fails an earlier
+// compile stage becomes one RuleCompile error rather than aborting the whole run
+// and blinding the panel to the other pools.
+//
+// The returned error is always nil today — every modeling fault is reported as a
+// Problem, not an error — but the signature keeps an error so a future source
+// that does I/O can report a read failure distinctly from a modeling one.
+func ValidateModel(r io.Reader) ([]Problem, error) {
+	defs, err := decodeDefinitions(r)
+	if err != nil {
+		return []Problem{{Severity: SeverityError, Rule: RuleParse, Message: err.Error()}}, nil
+	}
+	resolveMsg := buildMessageResolver(defs)
+	resolveSig := buildSignalResolver(defs)
+	resolveErr := buildErrorResolver(defs)
+	resolveOp := buildOperationResolver(defs)
+	var ps []Problem
+	executable := 0
+	for _, proc := range defs.Processes {
+		if len(proc.StartEvents) == 0 {
+			continue // black-box pool: nothing to run, so nothing to validate (ParseAll skips it too)
+		}
+		// The key is irrelevant to a dry run — the compiled process is inspected and
+		// discarded, never registered — so a per-pool ordinal keeps it deterministic
+		// without touching the server's key counter.
+		cp, cerr := compileProcess(uint64(executable), 1, proc, resolveMsg, resolveSig, resolveErr, resolveOp)
+		executable++
+		if cerr != nil {
+			// A graph-level failure carries its element-anchored Problems; hand them
+			// through verbatim. Any other compile error stopped before the graph
+			// existed, so report it as one unanchored compile Problem.
+			var ve *ValidationError
+			if errors.As(cerr, &ve) {
+				ps = append(ps, ve.Problems...)
+				continue
+			}
+			ps = append(ps, Problem{Severity: SeverityError, Rule: RuleCompile, Message: cerr.Error()})
+			continue
+		}
+		ps = append(ps, Validate(cp)...)
+	}
+	if executable == 0 {
+		ps = append(ps, Problem{
+			Severity: SeverityError,
+			Rule:     RuleParse,
+			Message:  "no executable <process> (a process needs a start event)",
+		})
+	}
+	return ps, nil
 }
 
 // ValidationError is the fatal compile error compileProcess returns when
@@ -142,6 +249,14 @@ func checkReachability(cp *CompiledProcess) []Problem {
 	for id := range cp.nodes {
 		if cp.nodes[id].EventSub >= 0 {
 			push(int32(id))
+		}
+	}
+	// A compensation handler is reached when its compensation throw runs, not by a token
+	// flowing in (it sits off the normal flow, isForCompensation), so seed each handler —
+	// the activity a compensation boundary links to — as a reachability root (ADR-0103).
+	for i := range cp.boundaryEventDets {
+		if d := &cp.boundaryEventDets[i]; d.Kind == BoundaryCompensation && d.CompensationHandler >= 0 {
+			push(d.CompensationHandler)
 		}
 	}
 	for len(stack) > 0 {
@@ -203,6 +318,25 @@ func checkGateways(cp *CompiledProcess) []Problem {
 		}
 		if n.Type == TypeExclusiveGateway || n.Type == TypeInclusiveGateway {
 			ps = append(ps, checkDataGatewayCoverage(cp, int32(id))...)
+		}
+		if n.Type == TypeEventBasedGateway {
+			ps = append(ps, checkEventGatewayTargets(cp, int32(id))...)
+		}
+	}
+	return ps
+}
+
+// checkEventGatewayTargets validates that every outgoing flow of an event-based gateway
+// leads to a catch event (ADR-0110). A deferred choice races catch events; a target that is
+// a task, a gateway, or an end event cannot participate, so it is a deploy error — the
+// runtime would arm nothing on that branch and the token would deadlock.
+func checkEventGatewayTargets(cp *CompiledProcess, id int32) []Problem {
+	var ps []Problem
+	for _, fid := range cp.Outgoing(id) {
+		target := cp.Flow(fid).Target
+		if !isCatchEvent(cp.nodes[target].Type) {
+			ps = append(ps, problem(cp, id, SeverityError, RuleEventGatewayTarget,
+				fmt.Sprintf("%s targets %s, which is not a message/timer/signal intermediate catch event — an event-based gateway can only race catch events", describeNode(cp, id), describeNode(cp, target))))
 		}
 	}
 	return ps
@@ -289,6 +423,148 @@ func checkScopes(cp *CompiledProcess) []Problem {
 	return ps
 }
 
+// checkErrorHandling warns for each error end event that no enclosing error handler in the
+// same process statically catches its code (ADR-0089) — the compile-time shadow of the
+// runtime propagateError walk. It is a warning, not an error, on purpose: an error
+// unhandled here may still be caught at a call-activity caller (ADR-0076), which one
+// process cannot see, and a genuinely uncaught error becomes a runtime incident, not a
+// deploy failure. Matching mirrors propagation: a catch matches when its code equals the
+// thrown code or the catch is code-less (a catch-all).
+func checkErrorHandling(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	for id := range cp.nodes {
+		n := &cp.nodes[id]
+		if n.Type != TypeErrorEndEvent {
+			continue
+		}
+		code := cp.errorEnds[n.Detail].ErrorCode
+		if errorCaught(cp, n.FlowScope, code) {
+			continue
+		}
+		msg := "error end event throws"
+		if code != "" {
+			msg += fmt.Sprintf(" %q", code)
+		}
+		msg += ", but no enclosing error boundary or error event subprocess in this process catches it"
+		ps = append(ps, Problem{Element: cp.ElementBpmnId(int32(id)), Severity: SeverityWarning, Rule: RuleErrorUnhandled, Message: msg})
+	}
+	return ps
+}
+
+// errorCaught reports whether an error with the given code, thrown in the scope rooted at
+// scope (a subprocess node id, or -1 for the process root), has a statically matching
+// enclosing error boundary or error event subprocess (ADR-0089). It walks up the FlowScope
+// chain; at each level it checks the scope's error event subprocesses and, for a subprocess
+// scope, the error boundaries on that subprocess — the static shadow of propagateError. A
+// catch matches by equal code or a code-less catch-all. Bounded by the node count (a scope
+// chain has no cycles), so a malformed FlowScope cannot loop forever.
+func errorCaught(cp *CompiledProcess, scope int32, code string) bool {
+	for steps := 0; steps <= len(cp.nodes); steps++ {
+		handlers := cp.RootEventSubprocesses()
+		if scope >= 0 {
+			handlers = cp.EventSubprocesses(scope)
+		}
+		for _, h := range handlers {
+			d := cp.EventSubProcess(cp.nodes[h].EventSub)
+			if d.Kind == BoundaryError && errorCodeMatches(d.ErrorCode, code) {
+				return true
+			}
+		}
+		if scope < 0 {
+			return false // reached the process root with no catch
+		}
+		for _, be := range cp.BoundaryEvents(scope) {
+			d := cp.BoundaryEvent(cp.nodes[be].Detail)
+			if d.Kind == BoundaryError && errorCodeMatches(d.ErrorCode, code) {
+				return true
+			}
+		}
+		scope = cp.nodes[scope].FlowScope
+	}
+	return false
+}
+
+// checkTransactions validates the transaction constructs (ADR-0108). A cancel end event must
+// sit directly inside a transaction, and a cancel boundary may attach only to a transaction —
+// both errors (BPMN restricts them so, and the runtime relies on it). A transaction that has a
+// cancel end event but no cancel boundary is a warning: the cancellation runs, but the token
+// leaves the transaction with no recovery route, usually a modeling mistake.
+func checkTransactions(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	for id := range cp.nodes {
+		n := &cp.nodes[id]
+		switch {
+		case n.Type == TypeCancelEndEvent:
+			if n.FlowScope < 0 || !cp.IsTransaction(n.FlowScope) {
+				ps = append(ps, problem(cp, int32(id), SeverityError, RuleCancelEndOutsideTransaction,
+					"cancel end event is not directly inside a transaction — a cancel end event may appear only within a <transaction>"))
+			}
+		case n.Type == TypeBoundaryEvent && cp.boundaryEventDets[n.Detail].Kind == BoundaryCancel:
+			if !cp.IsTransaction(cp.boundaryEventDets[n.Detail].HostNode) {
+				ps = append(ps, problem(cp, int32(id), SeverityError, RuleCancelBoundaryInvalidHost,
+					"cancel boundary event is not attached to a transaction — a cancel boundary may attach only to a <transaction>"))
+			}
+		}
+	}
+	// A transaction with a cancel end event but no cancel boundary: warn.
+	for id := range cp.nodes {
+		if !cp.nodes[id].Transaction || !scopeHasCancelEnd(cp, int32(id)) {
+			continue
+		}
+		hasCancelBoundary := false
+		for _, be := range cp.BoundaryEvents(int32(id)) {
+			if cp.BoundaryEvent(cp.Node(be).Detail).Kind == BoundaryCancel {
+				hasCancelBoundary = true
+				break
+			}
+		}
+		if !hasCancelBoundary {
+			ps = append(ps, problem(cp, int32(id), SeverityWarning, RuleTransactionNoCancelBoundary,
+				"transaction has a cancel end event but no cancel boundary — the cancellation would tear the transaction down with no recovery route"))
+		}
+	}
+	return ps
+}
+
+// checkTimerStartSchedules validates that every timer start event's FEEL schedule actually
+// resolves (ADR-0111). A start-event FEEL schedule is compiler-constant — it references no
+// variables (ADR-0056), enforced at parse — so it evaluates at deploy exactly as it will at
+// arm, against an empty scope. A constant that compiles but does not resolve to a valid
+// duration/date/cycle (e.g. ="not-a-duration") would arm no timer and the process would
+// silently never trigger, so it is a deploy error rather than a runtime surprise. A literal
+// (non-FEEL) schedule is validated at parse and always resolves here.
+func checkTimerStartSchedules(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	for _, s := range cp.TimerStartEvents() {
+		if !s.Schedule.IsFeel() {
+			continue
+		}
+		if _, err := s.Schedule.ResolveConstant(); err != nil {
+			ps = append(ps, problem(cp, s.ElementId, SeverityError, RuleTimerStartSchedule,
+				fmt.Sprintf("%s has a constant FEEL timer schedule that does not resolve: %s",
+					describeNode(cp, s.ElementId), err)))
+		}
+	}
+	return ps
+}
+
+// scopeHasCancelEnd reports whether any cancel end event sits directly in the scope rooted at
+// the transaction node id.
+func scopeHasCancelEnd(cp *CompiledProcess, txID int32) bool {
+	for j := range cp.nodes {
+		if cp.nodes[j].Type == TypeCancelEndEvent && cp.nodes[j].FlowScope == txID {
+			return true
+		}
+	}
+	return false
+}
+
+// errorCodeMatches reports whether a catch with catchCode catches a thrown throwCode: an
+// equal code, or a code-less catch-all (ADR-0089).
+func errorCodeMatches(catchCode, throwCode string) bool {
+	return catchCode == "" || catchCode == throwCode
+}
+
 // problem builds a Problem anchored to node id, resolving its source BPMN id.
 func problem(cp *CompiledProcess, id int32, sev Severity, rule, msg string) Problem {
 	return Problem{Element: cp.ElementBpmnId(id), Severity: sev, Rule: rule, Message: msg}
@@ -307,7 +583,14 @@ func describeNode(cp *CompiledProcess, id int32) string {
 // isGateway reports whether a node type is a gateway — the elements the gateway
 // coverage checks apply to.
 func isGateway(t BpmnType) bool {
-	return t == TypeExclusiveGateway || t == TypeInclusiveGateway || t == TypeParallelGateway
+	return t == TypeExclusiveGateway || t == TypeInclusiveGateway || t == TypeParallelGateway ||
+		t == TypeEventBasedGateway
+}
+
+// isCatchEvent reports whether a node type is an intermediate catch event — a valid
+// target of an event-based gateway's deferred choice (ADR-0110).
+func isCatchEvent(t BpmnType) bool {
+	return t == TypeMessageCatchEvent || t == TypeTimerCatchEvent || t == TypeSignalCatchEvent
 }
 
 // isActivity reports whether a node type is an activity — an element a token
@@ -317,7 +600,8 @@ func isGateway(t BpmnType) bool {
 func isActivity(t BpmnType) bool {
 	switch t {
 	case TypeServiceTask, TypeScriptTask, TypeScriptJobTask, TypeBusinessRuleTask,
-		TypeUserTask, TypeConnectorTask, TypeTask, TypeSubProcess, TypeCallActivity:
+		TypeUserTask, TypeConnectorTask, TypeTask, TypeReceiveTask, TypeSendTask,
+		TypeSubProcess, TypeCallActivity:
 		return true
 	default:
 		return false

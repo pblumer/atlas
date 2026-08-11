@@ -141,7 +141,10 @@ func (t *Tx) ElementInstancesOfProcess(procKey uint64, fn func(elKey uint64, v *
 // positive retry count (ADR-0061).
 func (t *Tx) PutJob(key uint64, v *model.JobValue) error {
 	err := t.b.Set(keyJob(key), t.encodeValue(v), nil)
-	if v.Retries > 0 {
+	// A job is pullable iff it has retries left AND is not currently backing off from a
+	// failure (RetryDueDate == 0): a backing-off job stays stored, off the worker-visible
+	// index, until its retry timer clears RetryDueDate and re-emits it (ADR-0111).
+	if v.Retries > 0 && v.RetryDueDate == 0 {
 		if e := t.b.Set(keyJobActivatable(v.JobType, key), nil, nil); err == nil {
 			err = e
 		}
@@ -302,6 +305,140 @@ func (t *Tx) CorrelatableSubscriptions(name, correlationKey string, fn func(elKe
 	defer iter.Close()
 	for iter.First(); iter.Valid(); iter.Next() {
 		var v model.MessageSubscriptionValue
+		if err := model.DecodeValueInto(&v, iter.Value()); err != nil {
+			return err
+		}
+		if err := fn(trailingKey(iter.Key()), &v); err != nil {
+			return err
+		}
+	}
+	return iter.Error()
+}
+
+// --- SignalSubscription ---
+
+// PutSignalSubscription writes an open signal subscription, keyed by its signal
+// name plus its element-instance key. A signal has no correlation key — it
+// matches by name alone (ADR-0088).
+func (t *Tx) PutSignalSubscription(v *model.SignalSubscriptionValue) error {
+	return t.b.Set(keySignalSubscription(v.SignalName, v.ElementInstanceKey), t.encodeValue(v), nil)
+}
+
+// DeleteSignalSubscription removes a signal subscription. The value supplies the
+// name and element-instance key that locate its index entry; on recovery they
+// come from the event payload.
+func (t *Tx) DeleteSignalSubscription(v *model.SignalSubscriptionValue) error {
+	return t.b.Delete(keySignalSubscription(v.SignalName, v.ElementInstanceKey), nil)
+}
+
+// SubscribedSignals calls fn for every open subscription waiting on the given
+// signal name, via a name-only prefix scan — the broadcast access pattern. Like
+// CorrelatableSubscriptions it reads through the in-flight batch, so it observes
+// subscriptions created earlier in the same batch (ADR-0088).
+func (t *Tx) SubscribedSignals(name string, fn func(elKey uint64, v *model.SignalSubscriptionValue) error) error {
+	prefix := signalSubscriptionPrefix(name)
+	iter, err := t.b.NewIter(&pebble.IterOptions{LowerBound: prefix, UpperBound: prefixEnd(prefix)})
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+	for iter.First(); iter.Valid(); iter.Next() {
+		var v model.SignalSubscriptionValue
+		if err := model.DecodeValueInto(&v, iter.Value()); err != nil {
+			return err
+		}
+		if err := fn(trailingKey(iter.Key()), &v); err != nil {
+			return err
+		}
+	}
+	return iter.Error()
+}
+
+// --- Compensable (ADR-0103) ---
+
+// RecordCompensable retains one completed compensable activity under its scope,
+// keyed by the completion event's log position so a scope scan yields completion
+// order. pos comes from the event header; the value carries the scope, the
+// compensated activity, and its compensation handler.
+func (t *Tx) RecordCompensable(pos uint64, v *model.CompensableValue) error {
+	return t.b.Set(keyCompensable(v.ScopeKey, pos), t.encodeValue(v), nil)
+}
+
+// DeleteCompensable removes one compensable record (its activity has been
+// compensated), located by its scope and sequence — both carried on the consume
+// event, so recovery deletes the identical entry. Idempotent.
+func (t *Tx) DeleteCompensable(scopeKey, seq uint64) error {
+	return t.b.Delete(keyCompensable(scopeKey, seq), nil)
+}
+
+// DeleteCompensablesOfScope drops every compensable record held under a scope, called
+// when the scope tears down (its subprocess container or process instance completes or is
+// terminated) so uncompensated records never leak past the scope (ADR-0103). Keys are
+// collected before deleting so the scan is not disturbed. Idempotent — a scope with none
+// is a no-op.
+func (t *Tx) DeleteCompensablesOfScope(scopeKey uint64) error {
+	prefix := compensableScopePrefix(scopeKey)
+	iter, err := t.b.NewIter(&pebble.IterOptions{LowerBound: prefix, UpperBound: prefixEnd(prefix)})
+	if err != nil {
+		return err
+	}
+	var keys [][]byte
+	for iter.First(); iter.Valid(); iter.Next() {
+		keys = append(keys, append([]byte(nil), iter.Key()...))
+	}
+	err = iter.Error()
+	if cerr := iter.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return err
+	}
+	for _, k := range keys {
+		if e := t.b.Delete(k, nil); e != nil {
+			return e
+		}
+	}
+	return nil
+}
+
+// SetCanceling marks the transaction scope txKey as cancelling: a cancel end event fired in
+// it, so when its scope drains the transaction routes out its cancel boundary rather than
+// completing normally (ADR-0108). It is derived in applyToState from the cancel end event's
+// committed Completed event, so it rebuilds identically on replay (I4/I6). The value is a
+// single non-empty byte; only presence is meaningful.
+func (t *Tx) SetCanceling(txKey uint64) error {
+	return t.b.Set(keyCanceling(txKey), []byte{1}, nil)
+}
+
+// IsCanceling reports whether the transaction scope txKey was marked cancelling by a cancel
+// end event (ADR-0108). It reads through the in-flight batch, so it observes a mark written
+// earlier in the same batch.
+func (t *Tx) IsCanceling(txKey uint64) (bool, error) {
+	_, ok, err := getCopy(t.b, keyCanceling(txKey))
+	return ok, err
+}
+
+// DeleteCanceling drops the cancelling marker for txKey when the transaction tears down
+// (ADR-0108). Idempotent — a transaction that was never cancelled, or a plain subprocess that
+// never carried a marker, is a no-op.
+func (t *Tx) DeleteCanceling(txKey uint64) error {
+	return t.b.Delete(keyCanceling(txKey), nil)
+}
+
+// CompensablesOfScopeDesc calls fn for every completed compensable activity recorded
+// under scopeKey, newest first (reverse completion order) — the order a compensation
+// throw runs handlers in (ADR-0103). It reads through the in-flight batch, so it
+// observes records written earlier in the same batch. seq is the record's key
+// sequence (log position), which the caller carries on the consume event to delete it.
+func (t *Tx) CompensablesOfScopeDesc(scopeKey uint64, fn func(seq uint64, v *model.CompensableValue) error) error {
+	prefix := compensableScopePrefix(scopeKey)
+	iter, err := t.b.NewIter(&pebble.IterOptions{LowerBound: prefix, UpperBound: prefixEnd(prefix)})
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+	for iter.Last(); iter.Valid(); iter.Prev() {
+		var v model.CompensableValue
 		if err := model.DecodeValueInto(&v, iter.Value()); err != nil {
 			return err
 		}
@@ -604,6 +741,16 @@ func (t *Tx) RecordDecisionEvaluation(ts int64, pos uint64, v *model.DecisionEva
 	return t.b.Set(keyDecisionEvaluation(v.ProcessInstanceKey, ts, pos), t.encodeValue(v), nil)
 }
 
+// RecordVariableAudit retains one external variable override under its owning
+// process instance, keyed in change order (ADR-0098). ts and pos come from the event
+// header; the value carries who set the variable, on which scope, and to what value.
+// Written only from applyToState, from the event alone, so it rebuilds identically on
+// replay (invariant I4); a plain Set on a unique (position-bearing) key, never
+// overwritten.
+func (t *Tx) RecordVariableAudit(ts int64, pos uint64, v *model.VariableAuditValue) error {
+	return t.b.Set(keyVariableAudit(v.ProcessInstanceKey, ts, pos), t.encodeValue(v), nil)
+}
+
 // ActiveChildren returns the active-child count for scope (0 if none). This read
 // folds the merged deltas, so it is used only where the current count is needed
 // (e.g. detecting a finished scope), not on every increment.
@@ -617,7 +764,7 @@ func (t *Tx) ActiveChildren(scope uint64) (int32, error) {
 
 // IncrementActiveStartKey / DecrementActiveStartKey maintain the count of live
 // message-start instances of a definition that began with a correlation key
-// (ADR-0082). Like the active-children counter they are write-only composing merges,
+// (ADR-0094). Like the active-children counter they are write-only composing merges,
 // so they neither read nor allocate beyond the reused scratch buffer, and rebuild
 // identically on replay (I4/I6).
 func (t *Tx) IncrementActiveStartKey(defKey uint64, correlationKey string) error {
@@ -635,7 +782,7 @@ func (t *Tx) mergeActiveStartKey(defKey uint64, correlationKey string, delta int
 
 // ActiveStartKeyCount returns how many live instances of defKey began with
 // correlationKey (0 if none). It folds the merged deltas, so it is read only where the
-// current count is needed — the singleton-start gate (ADR-0082), not on every merge.
+// current count is needed — the singleton-start gate (ADR-0094), not on every merge.
 func (t *Tx) ActiveStartKeyCount(defKey uint64, correlationKey string) (int32, error) {
 	raw, ok, err := getCopy(t.b, keyActiveStartKey(defKey, correlationKey))
 	if err != nil || !ok {

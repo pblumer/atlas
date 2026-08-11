@@ -15,7 +15,7 @@ import (
 // authors no endpoint override.
 const graphDefaultBase = "https://graph.microsoft.com/v1.0"
 
-// GraphClient sends mail through the Microsoft Graph sendMail API (ADR-0080). It
+// GraphClient sends mail through the Microsoft Graph sendMail API (ADR-0093). It
 // posts a structured message to /users/{mailbox}/sendMail with a bearer token from
 // its TokenSource; the mailbox is the message's From or the connector's default
 // sender. It reaches Microsoft 365 mailboxes with an app-only or refresh-token grant.

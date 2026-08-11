@@ -40,7 +40,10 @@ func Handler(store *state.Store, lookup ProcessLookup, reg *Registry) job.Handle
 		if cp == nil {
 			return fmt.Errorf("mail: no compiled process for def %d", ei.ProcessDefKey)
 		}
-		detail := cp.ConnectorTask(cp.Node(ei.ElementId).Detail)
+		detail, err := cp.ConnectorTaskOf(ei.ElementId)
+		if err != nil {
+			return fmt.Errorf("mail: %w", err)
+		}
 		name := cp.Intern(detail.Connector)
 		client, ok := reg.Client(name)
 		if !ok {

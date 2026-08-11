@@ -51,6 +51,11 @@ func TestAppendValueRoundTrip(t *testing.T) {
 			v:    &MessageSubscriptionValue{ProcessInstanceKey: NewKey(1, 1), ElementInstanceKey: NewKey(1, 2), MessageName: "order", CorrelationKey: "42", ProcessDefKey: NewKey(1, 3), ElementId: 7},
 		},
 		{
+			name: "signal subscription",
+			vt:   VTSignal,
+			v:    &SignalSubscriptionValue{ProcessInstanceKey: NewKey(1, 1), ElementInstanceKey: NewKey(1, 2), SignalName: "cancelled", ProcessDefKey: NewKey(1, 3), ElementId: 5},
+		},
+		{
 			name: "message flow",
 			vt:   VTMessageFlow,
 			v: &MessageFlowValue{
@@ -60,6 +65,29 @@ func TestAppendValueRoundTrip(t *testing.T) {
 				ReceiverElementId:          4,
 				MessageName:                "order",
 				CorrelationKey:             "42",
+			},
+		},
+		{
+			name: "variable audit",
+			vt:   VTVariableAudit,
+			v:    &VariableAuditValue{ProcessInstanceKey: NewKey(1, 1), ScopeKey: NewKey(1, 1), Actor: "patrick", Name: "amount", Kind: VarNumber, Text: "200"},
+		},
+		{
+			name: "variable audit (empty actor, bool value)",
+			vt:   VTVariableAudit,
+			v:    &VariableAuditValue{ProcessInstanceKey: NewKey(1, 1), ScopeKey: NewKey(1, 5), Name: "approved", Kind: VarBool, Bool: true},
+		},
+		{
+			name: "compensable",
+			vt:   VTCompensable,
+			v: &CompensableValue{
+				ProcessInstanceKey: NewKey(1, 1),
+				ProcessDefKey:      NewKey(1, 2),
+				ScopeKey:           NewKey(1, 3),
+				ElementInstanceKey: NewKey(1, 4),
+				Seq:                42,
+				ElementId:          7,
+				HandlerNode:        9,
 			},
 		},
 	}
@@ -93,17 +121,18 @@ func TestAppendValueRoundTrip(t *testing.T) {
 }
 
 // TestDecodeValueNoPayloadType covers the branch where the value type has no
-// payload codec.
+// payload codec. VTSignal gained a payload with ADR-0088, so this uses VTError,
+// which is still a reserved type without a codec.
 func TestDecodeValueNoPayloadType(t *testing.T) {
-	if _, err := DecodeValue(VTSignal, []byte{1, 2, 3}); err == nil {
-		t.Errorf("DecodeValue(VTSignal) err = nil, want error")
+	if _, err := DecodeValue(VTError, []byte{1, 2, 3}); err == nil {
+		t.Errorf("DecodeValue(VTError) err = nil, want error")
 	}
 }
 
 // TestDecodeValueShortBuffer covers the decode error propagation for each
 // payload type on a truncated buffer.
 func TestDecodeValueShortBuffer(t *testing.T) {
-	for _, vt := range []ValueType{VTElementInstance, VTJob, VTTimer, VTProcessInstance, VTVariable, VTMessageSubscription, VTMessageFlow, VTDataObject, VTIncident, VTInboundDelivery} {
+	for _, vt := range []ValueType{VTElementInstance, VTJob, VTTimer, VTProcessInstance, VTVariable, VTMessageSubscription, VTSignal, VTMessageFlow, VTDataObject, VTIncident, VTInboundDelivery, VTCompensable} {
 		if _, err := DecodeValue(vt, nil); !errors.Is(err, ErrShortBuffer) {
 			t.Errorf("DecodeValue(%v, nil) err = %v, want ErrShortBuffer", vt, err)
 		}
@@ -289,10 +318,12 @@ func TestValueTypeMethods(t *testing.T) {
 		{(&ProcessInstanceValue{}), VTProcessInstance},
 		{(&VariableValue{}), VTVariable},
 		{(&MessageSubscriptionValue{}), VTMessageSubscription},
+		{(&SignalSubscriptionValue{}), VTSignal},
 		{(&MessageFlowValue{}), VTMessageFlow},
 		{(&DataObjectValue{}), VTDataObject},
 		{(&DecisionEvaluationValue{}), VTDecisionEvaluation},
 		{(&InboundDeliveryValue{}), VTInboundDelivery},
+		{(&CompensableValue{}), VTCompensable},
 	}
 	for _, c := range cases {
 		if got := c.v.ValueType(); got != c.want {
@@ -315,6 +346,7 @@ func TestStringersExhaustive(t *testing.T) {
 		VTProcessInstance, VTElementInstance, VTJob, VTTimer, VTMessageSubscription,
 		VTMessage, VTVariable, VTIncident, VTSignal, VTError, VTProcessDefinition,
 		VTMessageFlow, VTDataObject, VTDecisionEvaluation, VTInboundDelivery,
+		VTVariableAudit, VTCompensable,
 	}
 	for _, vt := range valueTypes {
 		if s := vt.String(); s == "" || s == "ValueType(?)" {
@@ -332,6 +364,9 @@ func TestStringersExhaustive(t *testing.T) {
 		IntentIncidentResolved, IntentJobCanceled,
 		IntentDataObjectCreated, IntentDataObjectStateChanged,
 		IntentDecisionEvaluated, IntentVariableDeleted, IntentInboundDeliveryApplied,
+		IntentVariableModify, IntentVariableAudited,
+		IntentCompensableRecorded, IntentCompensableConsumed,
+		IntentJobErrorThrown,
 	}
 	for _, in := range intents {
 		if s := in.String(); s == "" || s == "Intent(?)" {

@@ -1,6 +1,6 @@
 # ADR-0085: Process-instance TTL — self-cleaning via the due-timer index
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 
@@ -101,6 +101,32 @@ is deterministic on replay and adds **no** background scan.
     redeploy). Start with the compiled attribute; a runtime override can layer on later.
   - **Granularity.** A single process-level TTL to begin with; a per-activity "max time
     parked here" (a implicit timer boundary) is a richer, separate feature.
+
+### Implementation
+
+As built, with the concrete choices the design left open:
+
+- **Config surface.** A plain `instanceTtl` attribute on `<process>` (an ISO-8601
+  duration, e.g. `instanceTtl="P7D"`), parsed at compile time to nanoseconds and carried
+  on `CompiledProcess` (`InstanceTtlNanos()`), mirroring `versionTag`. A malformed or
+  non-positive value fails the deploy rather than silently disabling the bound. Absent =
+  off (opt-in). The server-level default is deferred to the follow-up below.
+- **The expiry timer needs no new `TimerValue` field.** It is identified by a value
+  *shape* no other timer produces: `ProcessInstanceKey != 0 && ElementInstanceKey == 0`
+  (a start timer has `ProcessInstanceKey == 0`; a catch/boundary/event-sub timer always
+  owns an element instance). `handleTimerTriggered` dispatches that shape to instance
+  termination, before the element-instance lookup.
+- **The timer reuses the instance key.** Rather than mint a fresh timer key, the expiry
+  timer's key *is* the process-instance key — globally unique, so it collides with no
+  other timer — and its due date is stored on the instance record
+  (`ProcessInstanceValue.ExpiryDueDate`, an append-compatible field). That lets normal
+  completion (`completeScope`) and an explicit cancel/terminate
+  (`handleProcessInstanceTerminating`) retire the timer by key in O(1), no scan. The
+  delete is idempotent, so it is also harmless when the expiry timer itself just fired
+  (it deleted its own record first).
+- **Termination reuses the cancellation path.** Firing enqueues the same
+  `IntentTerminating` command `CancelInstance` uses; a race with normal completion is
+  safe because terminating an already-gone instance is a no-op.
 
 ## Links
 

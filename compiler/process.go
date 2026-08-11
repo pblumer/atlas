@@ -9,7 +9,11 @@
 // milestone; the linearized result here is the shape the engine consumes.
 package compiler
 
-import "github.com/pblumer/atlas/expr"
+import (
+	"fmt"
+
+	"github.com/pblumer/atlas/expr"
+)
 
 // BpmnType is the kind of a BPMN element. It is stored in element-instance state
 // (as uint8) for O(1) behavior dispatch.
@@ -50,8 +54,21 @@ const (
 	TypeSignalEndEvent   // an end event that broadcasts a signal, then ends the instance (ADR-0088); reuses the throw detail table
 	TypeSignalStartEvent // a start event that a broadcast signal instantiates (ADR-0088); at runtime it flows straight on like a message start
 
+	TypeErrorEndEvent // an end event that throws an error, ending its scope abnormally and propagating up to the nearest matching handler (ADR-0089); the send-and-stop counterpart of a BPMN error throw
+
+	TypeReceiveTask // an activity that waits for a correlating message, then continues (ADR-0102); the message intermediate catch's semantics in task form, so it accepts boundary events, I/O mappings, and multi-instance
+
+	TypeCompensationThrowEvent // an intermediate throw event that triggers compensation — runs the handlers of completed compensable activities in its scope, or of one named activity (ADR-0103)
+	TypeCompensationEndEvent   // an end event that triggers compensation, then ends its scope (ADR-0103); the trigger-and-stop counterpart of a compensation throw, reusing the throw detail table
+
+	TypeCancelEndEvent // an end event inside a transaction that cancels it: compensates the transaction's completed activities in reverse order, then routes out the transaction's cancel boundary (ADR-0108)
+
+	TypeEventBasedGateway // a deferred choice: arms every target catch event (message/timer/signal) at once and takes the branch whose event fires first, cancelling the rest (ADR-0110)
+
+	TypeSendTask // a send task: a job-creating activity identical in execution to a service task (ADR-0112) — it creates a job and waits, reusing ServiceTaskDetail and serviceTaskBehavior; a distinct type only to preserve the send-task identity, like TypeConnectorTask
+
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 27
+	numBpmnTypes = 34
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -83,6 +100,8 @@ func (t BpmnType) String() string {
 		return "ParallelGateway"
 	case TypeInclusiveGateway:
 		return "InclusiveGateway"
+	case TypeEventBasedGateway:
+		return "EventBasedGateway"
 	case TypeMessageStartEvent:
 		return "MessageStartEvent"
 	case TypeConnectorTask:
@@ -111,6 +130,18 @@ func (t BpmnType) String() string {
 		return "SignalEndEvent"
 	case TypeSignalStartEvent:
 		return "SignalStartEvent"
+	case TypeErrorEndEvent:
+		return "ErrorEndEvent"
+	case TypeReceiveTask:
+		return "ReceiveTask"
+	case TypeSendTask:
+		return "SendTask"
+	case TypeCompensationThrowEvent:
+		return "CompensationThrowEvent"
+	case TypeCompensationEndEvent:
+		return "CompensationEndEvent"
+	case TypeCancelEndEvent:
+		return "CancelEndEvent"
 	default:
 		return "Unspecified"
 	}
@@ -142,6 +173,7 @@ type CompiledNode struct {
 	EventSub        int32 // index into eventSubProcesses, -1 if this subprocess is not event-triggered (ADR-0082)
 	EventSubStart   int32 // offset into eventSubs (the event-subprocess handler nodes nested directly in this scope)
 	EventSubCount   int32 // number of event subprocesses in this scope (0 for a node that hosts none)
+	Transaction     bool  // this subprocess is a <transaction>: it may hold a cancel end event and host a cancel boundary (ADR-0108)
 }
 
 // CompiledFlow is a sequence flow between two nodes. Condition is the compiled
@@ -259,6 +291,20 @@ const (
 	BindingDeployment
 )
 
+// String renders a binding as the lower-case token used on the wire and in the
+// Modeler (`bindingType`): "latest" or "deployment". Any unknown value is
+// reported verbatim so a drift is visible rather than silently mapped to latest.
+func (b DecisionBinding) String() string {
+	switch b {
+	case BindingLatest:
+		return "latest"
+	case BindingDeployment:
+		return "deployment"
+	default:
+		return fmt.Sprintf("DecisionBinding(%d)", int32(b))
+	}
+}
+
 // UserTaskDetail is the per-user-task data a behavior needs at runtime. A user
 // task parks a token and creates a job like a service task; the "worker" is a
 // person using the Tasks app (ADR-0028). Assignee and CandidateGroups are
@@ -304,6 +350,14 @@ type UserTaskDetail struct {
 //     method (e.g. "POST") and the full endpoint URL authored in the model
 //     (ADR-0067, revising ADR-0036 for REST); ResultVar, if set, is the process
 //     variable the JSON response is written back into on completion.
+//   - SharePoint (JobType == SharePointJobType): Connector names the
+//     server-registered SharePoint provider; Site and List address the target list
+//     and Fields are the created item's column values (all literal-or-FEEL); the
+//     created item's JSON is written into ResultVar when set (ADR-0105).
+//   - BMC Remedy (JobType == RemedyJobType): Connector names the server-registered
+//     Remedy instance; RemedyForm and RemedyFields are the form and the entry's field
+//     values (literal-or-FEEL) an incident/entry is created with through the AR System
+//     REST API; ResultVar, if set, receives the created entry's id (ADR-0106).
 //
 // Unused fields for a given kind are -1 (Intern maps that back to ""); Limit is 0
 // when unset. The write and REST kinds send the instance's variables as the
@@ -358,6 +412,24 @@ type ConnectorTaskDetail struct {
 	CsvDelimiter int32
 	CsvHasHeader bool
 	CsvColumns   []int32
+	// SharePoint connector fields (JobType == SharePointJobType, ADR-0105). Connector
+	// (above) names the server-registered SharePoint provider (its Graph base and
+	// OAuth credential live server-side). Site and List address the target list (a
+	// site host/path or id, and a list name or id); Fields are the created item's
+	// column values. Each is a literal-or-FEEL value evaluated over the instance's
+	// variables at call time; Site/List are the zero RestExpr and Fields is nil for a
+	// non-SharePoint task. ResultVar (above), if set, receives the created item's JSON.
+	Site   RestExpr
+	List   RestExpr
+	Fields []RestKV
+	// Remedy connector fields (JobType == RemedyJobType, ADR-0106). Connector (above)
+	// names the server-registered BMC Remedy instance; ResultVar (above), if set,
+	// receives the created entry's id. RemedyForm is the Remedy form the entry is
+	// created in (literal-or-FEEL, the zero RestExpr for a non-remedy task);
+	// RemedyFields are the entry's field values as name/literal-or-FEEL pairs, evaluated
+	// over the instance's variables at call time (nil for a non-remedy task).
+	RemedyForm   RestExpr
+	RemedyFields []RestKV
 }
 
 // RestExpr is a REST connector field value that is either a literal string
@@ -421,7 +493,7 @@ type MessageDetail struct {
 	CorrelationKey *expr.Compiled
 	// SingletonStart marks a message *start* event as one-per-correlation-key: while
 	// an instance started with a given key is live, another correlating message starts
-	// no duplicate (ADR-0082). Only meaningful on a message start event; ignored on
+	// no duplicate (ADR-0094). Only meaningful on a message start event; ignored on
 	// catch/throw/end. Default false keeps ADR-0035's start-per-message behavior.
 	SingletonStart bool
 }
@@ -451,15 +523,19 @@ type EventSubProcessDetail struct {
 	MessageName    string         // BoundaryMessage: the message it subscribes to
 	CorrelationKey *expr.Compiled // BoundaryMessage: correlation-key expression (ADR-0020)
 	SignalName     string         // BoundarySignal: the signal it subscribes to (ADR-0088)
+	ErrorCode      string         // BoundaryError: the error code it catches; "" is a catch-all (ADR-0089)
 }
 
 // BoundaryEventKind discriminates what a boundary event waits on.
 type BoundaryEventKind uint8
 
 const (
-	BoundaryTimer   BoundaryEventKind = iota // waits a fixed duration, then fires
-	BoundaryMessage                          // waits for a correlating message, then fires
-	BoundarySignal                           // waits for a broadcast signal by name, then fires (ADR-0088)
+	BoundaryTimer        BoundaryEventKind = iota // waits a fixed duration, then fires
+	BoundaryMessage                               // waits for a correlating message, then fires
+	BoundarySignal                                // waits for a broadcast signal by name, then fires (ADR-0088)
+	BoundaryError                                 // catches an error propagating up to it by code, then fires; always interrupting (ADR-0089)
+	BoundaryCompensation                          // links a host activity to its compensation handler; inert — never armed as an element instance, only read on host completion to record the activity as compensable (ADR-0103)
+	BoundaryCancel                                // on a transaction only: catches the transaction's cancellation and routes its recovery flow; armed inert like an error boundary, and always interrupting (ADR-0108)
 )
 
 // BoundaryEventDetail is the per-boundary-event data a behavior needs at runtime.
@@ -475,6 +551,27 @@ type BoundaryEventDetail struct {
 	MessageName    string         // BoundaryMessage: the message it subscribes to
 	CorrelationKey *expr.Compiled // BoundaryMessage: correlation-key expression (ADR-0020)
 	SignalName     string         // BoundarySignal: the signal it subscribes to (ADR-0088)
+	ErrorCode      string         // BoundaryError: the error code it catches; "" is a catch-all (ADR-0089)
+	// CompensationHandler is the ElementId of the compensation handler activity this
+	// boundary links its host to (BoundaryCompensation, ADR-0103). It is resolved at
+	// compile time from the BPMN <association> joining the boundary to the handler;
+	// -1 means unresolved (a compensation boundary with no association — a deploy error).
+	CompensationHandler int32
+}
+
+// CompensationDetail is the per-compensation-throw data the runtime needs (ADR-0103),
+// shared by the compensation throw and end events like the message/signal throw table.
+// ActivityRef is the ElementId of the single activity to compensate, or -1 to compensate
+// every completed compensable activity in the throw's scope (reverse completion order).
+type CompensationDetail struct {
+	ActivityRef int32
+}
+
+// ErrorEndDetail is the per-error-end-event data the runtime needs: the code it throws
+// (ADR-0089). A code-less error end throws "", which a code-less catch-all catches. It is
+// its own small table (an error end carries no name, correlation key, or schedule).
+type ErrorEndDetail struct {
+	ErrorCode string
 }
 
 // CompiledDataObject is one BPMN data object declared by a process: a typed,
@@ -547,44 +644,52 @@ type CompiledProcess struct {
 	nodes []CompiledNode
 	flows []CompiledFlow
 
-	outgoingFlows     []int32 // shared topology: flow ids grouped by source node
-	boundaryEvents    []int32 // shared topology: boundary-event node ids grouped by host node
-	scopeStarts       []int32 // shared topology: nested start-event node ids grouped by subprocess node
-	serviceTasks      []ServiceTaskDetail
-	scriptTasks       []ScriptTaskDetail
-	callActivities    []CallActivityDetail
-	multiInstances    []MultiInstanceDetail
-	scriptJobTasks    []ScriptJobTaskDetail
-	businessRuleTasks []BusinessRuleTaskDetail
-	timerCatches      []TimerCatchDetail
-	connectorTasks    []ConnectorTaskDetail
-	userTasks         []UserTaskDetail
-	boundaryEventDets []BoundaryEventDetail
-	eventSubProcesses []EventSubProcessDetail
-	eventSubs         []int32 // shared topology: event-subprocess handler node ids grouped by parent scope node
-	rootEventSubs     []int32 // event-subprocess handler node ids whose parent scope is the process root
-	messageCatches    []MessageDetail
-	messageThrows     []MessageDetail
-	messageStarts     []MessageDetail
-	signalCatches     []SignalDetail
-	signalThrows      []SignalDetail // shared by signal throw and signal end events
-	signalStarts      []SignalDetail
-	timerStarts       []TimerStartDetail
-	dataObjects       []CompiledDataObject
-	dataOutAssocs     []DataOutputAssociation // shared: output associations grouped by activity node
-	dataInAssocs      []DataInputAssociation  // shared: input associations grouped by activity node
-	ioInputs          []IOMapping             // shared: zeebe:ioMapping inputs grouped by activity node
-	ioOutputs         []IOMapping             // shared: zeebe:ioMapping outputs grouped by activity node
-	startEvents       []int32
-	startFormId       int32    // interned start-form id (ADR-0028), -1 if none
-	versionTag        int32    // interned atlas:versionTag revision label, -1 if none
-	isExecutable      bool     // bpmn:isExecutable — a non-executable process can't be started
-	elementIds        []int32  // interned source BPMN id per node id (-1 if unset)
-	strings           []string // intern table (index → string), for debug/export
+	outgoingFlows      []int32 // shared topology: flow ids grouped by source node
+	boundaryEvents     []int32 // shared topology: boundary-event node ids grouped by host node
+	scopeStarts        []int32 // shared topology: nested start-event node ids grouped by subprocess node
+	serviceTasks       []ServiceTaskDetail
+	scriptTasks        []ScriptTaskDetail
+	callActivities     []CallActivityDetail
+	multiInstances     []MultiInstanceDetail
+	scriptJobTasks     []ScriptJobTaskDetail
+	businessRuleTasks  []BusinessRuleTaskDetail
+	timerCatches       []TimerCatchDetail
+	connectorTasks     []ConnectorTaskDetail
+	userTasks          []UserTaskDetail
+	boundaryEventDets  []BoundaryEventDetail
+	eventSubProcesses  []EventSubProcessDetail
+	eventSubs          []int32 // shared topology: event-subprocess handler node ids grouped by parent scope node
+	rootEventSubs      []int32 // event-subprocess handler node ids whose parent scope is the process root
+	messageCatches     []MessageDetail
+	receiveTasks       []MessageDetail // receive tasks — the message-catch shape as an activity (ADR-0102)
+	messageThrows      []MessageDetail
+	messageStarts      []MessageDetail
+	signalCatches      []SignalDetail
+	signalThrows       []SignalDetail // shared by signal throw and signal end events
+	signalStarts       []SignalDetail
+	errorEnds          []ErrorEndDetail     // error end events (ADR-0089)
+	compensationThrows []CompensationDetail // shared by compensation throw and end events (ADR-0103)
+	timerStarts        []TimerStartDetail
+	dataObjects        []CompiledDataObject
+	dataOutAssocs      []DataOutputAssociation // shared: output associations grouped by activity node
+	dataInAssocs       []DataInputAssociation  // shared: input associations grouped by activity node
+	ioInputs           []IOMapping             // shared: zeebe:ioMapping inputs grouped by activity node
+	ioOutputs          []IOMapping             // shared: zeebe:ioMapping outputs grouped by activity node
+	startEvents        []int32
+	startFormId        int32    // interned start-form id (ADR-0028), -1 if none
+	versionTag         int32    // interned atlas:versionTag revision label, -1 if none
+	instanceTtlNanos   int64    // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
+	isExecutable       bool     // bpmn:isExecutable — a non-executable process can't be started
+	elementIds         []int32  // interned source BPMN id per node id (-1 if unset)
+	strings            []string // intern table (index → string), for debug/export
 }
 
 // Node returns the node with the given ElementId.
 func (p *CompiledProcess) Node(id int32) *CompiledNode { return &p.nodes[id] }
+
+// IsTransaction reports whether node id is a <transaction> subprocess — a subprocess
+// that may hold a cancel end event and host a cancel boundary (ADR-0108).
+func (p *CompiledProcess) IsTransaction(id int32) bool { return p.nodes[id].Transaction }
 
 // Flow returns the flow with the given id.
 func (p *CompiledProcess) Flow(id int32) *CompiledFlow { return &p.flows[id] }
@@ -675,9 +780,23 @@ func (p *CompiledProcess) ServiceTask(detail int32) *ServiceTaskDetail {
 	return &p.serviceTasks[detail]
 }
 
+// SendTask returns the detail at the given table index (ADR-0112). A send task is a
+// service task under a different label — it reuses ServiceTaskDetail and the same detail
+// table, so this is ServiceTask by another name, kept for call-site clarity.
+func (p *CompiledProcess) SendTask(detail int32) *ServiceTaskDetail {
+	return &p.serviceTasks[detail]
+}
+
 // TimerCatch returns the timer-catch detail at the given table index.
 func (p *CompiledProcess) TimerCatch(detail int32) *TimerCatchDetail {
 	return &p.timerCatches[detail]
+}
+
+// ReceiveTask returns the receive-task detail at the given table index (ADR-0102). A
+// receive task carries the same MessageDetail as a message catch — the message name and the
+// compiled correlation-key expression it waits on.
+func (p *CompiledProcess) ReceiveTask(detail int32) *MessageDetail {
+	return &p.receiveTasks[detail]
 }
 
 // MessageCatch returns the message-catch detail at the given table index.
@@ -711,7 +830,7 @@ type MessageStartEvent struct {
 	MessageName    string
 	ElementId      int32
 	CorrelationKey *expr.Compiled
-	SingletonStart bool // one live instance per correlation key (ADR-0082)
+	SingletonStart bool // one live instance per correlation key (ADR-0094)
 }
 
 // MessageStartEvents returns each message-start event with its element index and
@@ -741,6 +860,15 @@ func (p *CompiledProcess) SignalCatch(detail int32) *SignalDetail { return &p.si
 // SignalThrow returns the signal-throw detail at the given table index — shared by the
 // signal throw and signal end events (ADR-0088).
 func (p *CompiledProcess) SignalThrow(detail int32) *SignalDetail { return &p.signalThrows[detail] }
+
+// ErrorEnd returns the error-end detail at the given table index (ADR-0089).
+func (p *CompiledProcess) ErrorEnd(detail int32) *ErrorEndDetail { return &p.errorEnds[detail] }
+
+// CompensationThrow returns the compensation-throw detail at the given table index —
+// shared by the compensation throw and end events (ADR-0103).
+func (p *CompiledProcess) CompensationThrow(detail int32) *CompensationDetail {
+	return &p.compensationThrows[detail]
+}
 
 // SignalStart returns the signal-start detail at the given table index (ADR-0088).
 func (p *CompiledProcess) SignalStart(detail int32) *SignalDetail { return &p.signalStarts[detail] }
@@ -811,6 +939,45 @@ func (p *CompiledProcess) CallActivity(detail int32) *CallActivityDetail {
 	return &p.callActivities[detail]
 }
 
+// CallActivityRef is the static, read-only view of one call activity: the BPMN
+// element that hosts it, the process id it calls, the version binding, whether
+// variables propagate wholesale in/out, and whether it is a multi-instance loop
+// (spawning one child per collection element). It carries no resolved def key —
+// which deployed definition the call reaches is a per-server, deploy-time fact
+// the server layer computes on top of this (ADR-0076).
+type CallActivityRef struct {
+	ElementId          string
+	CalledProcessId    string
+	Binding            DecisionBinding
+	PropagateAllParent bool
+	PropagateAllChild  bool
+	MultiInstance      bool
+}
+
+// CallActivities returns every call activity in this process, in node order —
+// empty if it has none. It mirrors BusinessRuleDecisions: a static enumeration of
+// an outbound reference (here the called process id) that the server surfaces so
+// operators can see and manage the call activities deployed on a server — which
+// process calls which, and whether the target resolves (ADR-0076).
+func (p *CompiledProcess) CallActivities() []CallActivityRef {
+	var out []CallActivityRef
+	for i := range p.nodes {
+		if p.nodes[i].Type != TypeCallActivity {
+			continue
+		}
+		d := p.CallActivity(p.nodes[i].Detail)
+		out = append(out, CallActivityRef{
+			ElementId:          p.ElementBpmnId(int32(i)),
+			CalledProcessId:    p.Intern(d.CalledProcessId),
+			Binding:            d.Binding,
+			PropagateAllParent: d.PropagateAllParent,
+			PropagateAllChild:  d.PropagateAllChild,
+			MultiInstance:      p.nodes[i].MultiInstance >= 0,
+		})
+	}
+	return out
+}
+
 // MultiInstance returns the loop characteristics at the given table index — the
 // per-activity multi-instance detail a node's MultiInstance field points at
 // (ADR-0077).
@@ -863,6 +1030,26 @@ func (p *CompiledProcess) UserTask(detail int32) *UserTaskDetail {
 // ConnectorTask returns the connector-task detail at the given table index.
 func (p *CompiledProcess) ConnectorTask(detail int32) *ConnectorTaskDetail {
 	return &p.connectorTasks[detail]
+}
+
+// ConnectorTaskOf returns the connector-task detail for element node id, or an
+// error if id is not a connector task in this compiled process. It is the
+// bounds-checked accessor for the job-worker path: a persisted job can outlive
+// the process definition that compiled its element as a connector task (e.g. a
+// job created before a redeploy that recompiled the element into something else,
+// or dropped its connector-task table), and resolving such a stale job must fail
+// it into an incident (ADR-0061) rather than index out of range and panic the
+// job-runner goroutine — an unrecovered panic there crashes the whole server. A
+// worker that gets an error returns it, and FailJob retries then parks the token.
+func (p *CompiledProcess) ConnectorTaskOf(id int32) (*ConnectorTaskDetail, error) {
+	if id < 0 || int(id) >= len(p.nodes) {
+		return nil, fmt.Errorf("element %d out of range (%d nodes)", id, len(p.nodes))
+	}
+	detail := p.nodes[id].Detail
+	if detail < 0 || int(detail) >= len(p.connectorTasks) {
+		return nil, fmt.Errorf("element %d is not a connector task (detail index %d, %d connector tasks)", id, detail, len(p.connectorTasks))
+	}
+	return &p.connectorTasks[detail], nil
 }
 
 // StartEvents returns the process's entry-point element ids.
@@ -923,6 +1110,11 @@ func (p *CompiledProcess) IsExecutable() bool { return p.isExecutable }
 // is design-time metadata Operations shows beside the deploy version; the engine
 // never reads it.
 func (p *CompiledProcess) VersionTag() string { return p.Intern(p.versionTag) }
+
+// InstanceTtlNanos returns the process's instance TTL in nanoseconds, or 0 when no TTL
+// is configured. A positive value is the self-cleaning expiry bound (ADR-0085): the
+// engine schedules a durable expiry timer at CreatedAt+TTL when an instance activates.
+func (p *CompiledProcess) InstanceTtlNanos() int64 { return p.instanceTtlNanos }
 
 // Intern returns the string for an interned index, or "" if out of range.
 func (p *CompiledProcess) Intern(idx int32) string {

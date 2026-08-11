@@ -202,7 +202,9 @@ func TestParseErrors(t *testing.T) {
 				<startEvent id="s"/><endEvent id="s"/></process></definitions>`,
 		},
 		{
-			name: "unsupported receive task",
+			// A receive task is executable (ADR-0102), but one with no messageRef cannot
+			// resolve a message and is a deploy error, like a message catch with no ref.
+			name: "receive task without messageRef",
 			xml: `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
 				<startEvent id="s"/><receiveTask id="g"/></process></definitions>`,
 		},
@@ -360,21 +362,54 @@ func TestParseTimerCatchEventErrors(t *testing.T) {
 	}
 }
 
-// TestParseUnsupportedElementMessage locks in the actionable error text for an
-// unsupported element (a user task) rather than a confusing "unknown targetRef".
+// TestParseUnsupportedElementMessage locks in the actionable error text for an element
+// Atlas can't run yet (an ad-hoc subprocess) rather than a confusing "unknown targetRef".
+// Send tasks were the original stand-in here; they compile now (ADR-0112), so this uses a
+// still-unsupported element to keep the safety net — and its message — under test.
 func TestParseUnsupportedElementMessage(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
-		<startEvent id="s"/><sendTask id="Activity_1"/><endEvent id="e"/>
+		<startEvent id="s"/><adHocSubProcess id="Activity_1"/><endEvent id="e"/>
 		<sequenceFlow id="f1" sourceRef="s" targetRef="Activity_1"/>
 		<sequenceFlow id="f2" sourceRef="Activity_1" targetRef="e"/></process></definitions>`
 	_, err := Parse(1, 1, strings.NewReader(xml))
 	if err == nil {
-		t.Fatal("want error for a <sendTask>")
+		t.Fatal("want error for an <adHocSubProcess>")
 	}
-	for _, want := range []string{"Activity_1", "sendTask", "service"} {
+	for _, want := range []string{"Activity_1", "adHocSubProcess", "service"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q should mention %q", err.Error(), want)
 		}
+	}
+}
+
+// TestParseTerminateEndRejected guards the silent-drop: a <terminateEventDefinition>
+// on an end event used to parse as a plain none end (terminate semantics lost with no
+// error). It must now be rejected at compile time with a clear message, so a modeled
+// terminate can't deploy as a no-op.
+func TestParseTerminateEndRejected(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
+		<startEvent id="s"/>
+		<endEvent id="stop"><terminateEventDefinition/></endEvent>
+		<sequenceFlow id="f" sourceRef="s" targetRef="stop"/></process></definitions>`
+	_, err := Parse(1, 1, strings.NewReader(xml))
+	if err == nil {
+		t.Fatal("want error for a terminate end event (unsupported), got nil")
+	}
+	for _, want := range []string{"stop", "terminate"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q should mention %q", err.Error(), want)
+		}
+	}
+}
+
+// A plain end event (no definition) still compiles — the guard is specific to the
+// terminate definition, not end events in general.
+func TestParsePlainEndStillCompiles(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
+		<startEvent id="s"/><endEvent id="e"/>
+		<sequenceFlow id="f" sourceRef="s" targetRef="e"/></process></definitions>`
+	if _, err := Parse(1, 1, strings.NewReader(xml)); err != nil {
+		t.Fatalf("plain end event should compile: %v", err)
 	}
 }
 

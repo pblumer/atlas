@@ -3,8 +3,10 @@ package mcp
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 // optString returns a string argument, or "" when it is absent or not a string —
@@ -12,6 +14,21 @@ import (
 func optString(args map[string]any, name string) string {
 	s, _ := args[name].(string)
 	return s
+}
+
+// optPositiveUint extracts an optional positive integer argument.
+func optPositiveUint(args map[string]any, name string) (uint64, bool, error) {
+	if _, ok := args[name]; !ok {
+		return 0, false, nil
+	}
+	n, err := argUint(args, name)
+	if err != nil {
+		return 0, false, err
+	}
+	if n == 0 {
+		return 0, false, fmt.Errorf("argument %q must be a positive integer", name)
+	}
+	return n, true, nil
 }
 
 // argObjectJSON marshals a required object argument (a form schema, completion
@@ -34,8 +51,194 @@ func objectProp(desc string) map[string]any {
 	return map[string]any{"type": "object", "description": desc}
 }
 
+// optVariablesMap returns the optional "variables" object argument as a map,
+// empty when absent. A present non-object value is an error, mirroring the HTTP
+// endpoints that decode {"variables": ...} (parseStartVariables).
+func optVariablesMap(args map[string]any) (map[string]any, error) {
+	if raw, ok := args["variables"]; ok {
+		m, isObject := raw.(map[string]any)
+		if !isObject {
+			return nil, fmt.Errorf("argument %q must be an object", "variables")
+		}
+		return m, nil
+	}
+	return map[string]any{}, nil
+}
+
+// optVariablesBody builds the JSON body {"variables": {...}} from an optional
+// "variables" object argument. It is shared by instance start, task completion,
+// and job completion so all forward variables identically — the same {name: value}
+// shape a human's start or task form submits.
+func optVariablesBody(args map[string]any) ([]byte, error) {
+	vars, err := optVariablesMap(args)
+	if err != nil {
+		return nil, err
+	}
+	// Marshalling a map[string]any of JSON-decoded values cannot fail.
+	body, _ := json.Marshal(map[string]any{"variables": vars})
+	return body, nil
+}
+
+// failJobBody builds the fail-job request body {retries, message?} from the tool
+// arguments. retries defaults to 0 (which exhausts the job and raises an
+// incident). The /fail endpoint requires a JSON body — unlike /complete it does
+// not tolerate an empty one — so this always marshals a non-empty object.
+func failJobBody(args map[string]any) ([]byte, error) {
+	retries := uint64(0)
+	if _, ok := args["retries"]; ok {
+		r, err := argUint(args, "retries")
+		if err != nil {
+			return nil, err
+		}
+		retries = r
+	}
+	payload := map[string]any{"retries": retries}
+	if msg := optString(args, "message"); msg != "" {
+		payload["message"] = msg
+	}
+	body, _ := json.Marshal(payload)
+	return body, nil
+}
+
+// terminateInstancesBody builds the terminate request body from the tool
+// arguments. Two mutually exclusive selectors: an explicit "keys" array, or a
+// "processDefKey" with optional "q" (variable query) and "limit" (filter-mode
+// per-call cap). At least one selector is required here; the server rejects
+// supplying both.
+func terminateInstancesBody(args map[string]any) ([]byte, error) {
+	payload := map[string]any{}
+	if raw, ok := args["keys"]; ok {
+		arr, isArray := raw.([]any)
+		if !isArray {
+			return nil, fmt.Errorf("argument %q must be an array of instance keys", "keys")
+		}
+		keys := make([]uint64, 0, len(arr))
+		for i, el := range arr {
+			// Reuse the name-keyed integer coercion for each element so the array
+			// accepts the same JSON shapes a scalar key argument does.
+			k, err := argUint(map[string]any{"key": el}, "key")
+			if err != nil {
+				return nil, fmt.Errorf("keys[%d] must be a non-negative integer", i)
+			}
+			keys = append(keys, k)
+		}
+		payload["keys"] = keys
+	}
+	if _, ok := args["processDefKey"]; ok {
+		k, err := argUint(args, "processDefKey")
+		if err != nil {
+			return nil, err
+		}
+		payload["processDefKey"] = k
+	}
+	if q := optString(args, "q"); q != "" {
+		payload["q"] = q
+	}
+	if _, ok := args["limit"]; ok {
+		limit, err := argUint(args, "limit")
+		if err != nil {
+			return nil, err
+		}
+		payload["limit"] = limit
+	}
+	_, hasKeys := payload["keys"]
+	_, hasDef := payload["processDefKey"]
+	if !hasKeys && !hasDef {
+		return nil, fmt.Errorf("provide either %q or %q", "keys", "processDefKey")
+	}
+	body, _ := json.Marshal(payload)
+	return body, nil
+}
+
+// claimTaskBody builds the claim request body {assignee} from the tool
+// arguments. The endpoint's body is optional; forwarding {"assignee":""} when no
+// assignee is given preserves the server's own semantics — with auth on that
+// self-claims for the caller, with auth off it is rejected as "assignee required".
+func claimTaskBody(args map[string]any) []byte {
+	body, _ := json.Marshal(map[string]any{"assignee": optString(args, "assignee")})
+	return body
+}
+
+// withProjectID appends an optional ?projectId= filter to a list path when the
+// tool arguments carry one, so the design-time list reads can be scoped to a
+// project exactly as the HTTP endpoints allow.
+func withProjectID(path string, args map[string]any) string {
+	if pid := optString(args, "projectId"); pid != "" {
+		return path + "?projectId=" + url.QueryEscape(pid)
+	}
+	return path
+}
+
+// searchInstancesPath builds the instance-search path for a variable query,
+// escaping the raw query string into the ?q= parameter the endpoint parses
+// (name=value, name exact and value substring, or free text over names/values).
+func searchInstancesPath(q string) string {
+	return "/api/v1/instances/search?q=" + url.QueryEscape(q)
+}
+
+// resolveIncidentBody builds the resolve request body {retries} from the tool
+// arguments. The /resolve endpoint requires a JSON body; the server coerces a
+// retries value below 1 up to 1, so an omitted argument (sending {"retries":0})
+// grants the default single retry.
+func resolveIncidentBody(args map[string]any) ([]byte, error) {
+	retries := uint64(0)
+	if _, ok := args["retries"]; ok {
+		r, err := argUint(args, "retries")
+		if err != nil {
+			return nil, err
+		}
+		retries = r
+	}
+	body, _ := json.Marshal(map[string]any{"retries": retries})
+	return body, nil
+}
+
+// incidentsPage folds the {incidents:[…]} body and the X-Incidents-Truncated
+// header the list endpoint returns into one JSON envelope {incidents, truncated},
+// so the truncation signal survives as data (ADR-0016). The list is capped, not
+// cursor-paged, so there is no continuation token.
+func incidentsPage(body []byte, headers http.Header) (string, error) {
+	var env struct {
+		Incidents []json.RawMessage `json:"incidents"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		return "", fmt.Errorf("decode Atlas incident list: %w", err)
+	}
+	out, err := json.Marshal(map[string]any{
+		"incidents": env.Incidents,
+		"truncated": strings.EqualFold(strings.TrimSpace(headers.Get("X-Incidents-Truncated")), "true"),
+	})
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+// messageBody builds the publish-message request body {name, correlationKey?,
+// variables} from the tool arguments. name is placed by the caller (already
+// validated non-empty); the optional variables object is validated here and the
+// server reads it from the same body via parseStartVariables.
+func messageBody(name string, args map[string]any) ([]byte, error) {
+	vars, err := optVariablesMap(args)
+	if err != nil {
+		return nil, err
+	}
+	payload := map[string]any{"name": name, "variables": vars}
+	if ck := optString(args, "correlationKey"); ck != "" {
+		payload["correlationKey"] = ck
+	}
+	body, _ := json.Marshal(payload)
+	return body, nil
+}
+
 func stringProp(desc string) map[string]any {
 	return map[string]any{"type": "string", "description": desc}
+}
+
+type taskListPage struct {
+	Items      []json.RawMessage `json:"items"`
+	Truncated  bool              `json:"truncated"`
+	NextCursor uint64            `json:"nextCursor,omitempty"`
 }
 
 // authoringTools are the design-time and human-task tools that let an agent set a
@@ -70,6 +273,28 @@ func authoringTools() []Tool {
 			InputSchema: noArgs(),
 			Handler: func(c *Client, _ map[string]any) (string, error) {
 				return asText(c.get("/api/v1/projects"))
+			},
+		},
+		{
+			Name: "atlas_delete_project",
+			Description: "Delete a design-time project by id. The operation is idempotent. It removes only " +
+				"the project folder; tagged drafts and decision references remain and become ungrouped. " +
+				"When authentication is enabled, the caller must have the project owner role.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"id": stringProp("The project id from atlas_create_project or atlas_list_projects.")},
+				"required":   []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				if _, err := c.del("/api/v1/projects/" + url.PathEscape(id)); err != nil {
+					return "", err
+				}
+				confirmation, _ := json.Marshal(map[string]any{"deleted": true, "id": id})
+				return string(confirmation), nil
 			},
 		},
 		{
@@ -188,6 +413,71 @@ func authoringTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_deployed_decisions",
+			Description: "List deployed DMN decisions — one row per decision across all deployed definitions, " +
+				"with the processes that reference it and how many times it has been evaluated. The decisions " +
+				"overview, the counterpart to atlas_list_processes.",
+			InputSchema: noArgs(),
+			Handler: func(c *Client, _ map[string]any) (string, error) {
+				return asText(c.get("/api/v1/decisions/deployed"))
+			},
+		},
+		{
+			Name: "atlas_decision_evaluations",
+			Description: "List every retained evaluation of one DMN decision by its decision id — newest first, " +
+				"each with the instance that made it, the inputs, outputs, and trace. Drill into a decision across " +
+				"all its instances (the cross-instance counterpart to atlas_instance_decisions). An unknown id has " +
+				"no evaluations and returns [].",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"id": stringProp("The decision id (from atlas_deployed_decisions or atlas_list_decisions).")},
+				"required":   []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/decisions/" + url.PathEscape(id) + "/evaluations"))
+			},
+		},
+		{
+			Name: "atlas_dmnref_graph",
+			Description: "Read a decision reference's decision requirements graph (DRD) — its decision nodes and " +
+				"the requirement edges between them — by the reference id from atlas_register_decision. Refused " +
+				"with a not-found error if no reference has that id.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"id": stringProp("The decision reference id (from atlas_register_decision or atlas_list_projects artifacts).")},
+				"required":   []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/dmnrefs/" + url.PathEscape(id) + "/graph"))
+			},
+		},
+		{
+			Name: "atlas_get_decision_model",
+			Description: "Get the raw DMN XML stored under a model handle — the handle used with " +
+				"atlas_upload_decision_model, i.e. a decision reference's modelRef. Refused with a not-found error " +
+				"if no model matches the handle.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"ref": stringProp("The model handle (from atlas_upload_decision_model).")},
+				"required":   []any{"ref"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				ref, err := argString(args, "ref")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/dmn-models/" + url.PathEscape(ref) + "/xml"))
+			},
+		},
+		{
 			Name: "atlas_deploy_project",
 			Description: "Deploy a project by id: compiles its diagram draft(s) and bundles the decisions " +
 				"its registered references resolve, so a deployed business rule task can evaluate them. " +
@@ -206,13 +496,154 @@ func authoringTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_list_drafts",
+			Description: "List saved BPMN diagram drafts (design-time), optionally filtered to one project. " +
+				"Each entry has the process id, name, project, and save time. Read a draft's XML with atlas_get_draft_xml.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"projectId": stringProp("Optional project id to filter by (from atlas_create_project).")},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return asText(c.get(withProjectID("/api/v1/drafts", args)))
+			},
+		},
+		{
+			Name: "atlas_get_draft_xml",
+			Description: "Get a saved draft's BPMN 2.0 XML by its process id (from atlas_list_drafts). Refused " +
+				"with a not-found error if no draft has that process id.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"id": stringProp("The draft's process id (from atlas_list_drafts).")},
+				"required":   []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/drafts/" + url.PathEscape(id) + "/xml"))
+			},
+		},
+		{
+			Name: "atlas_list_forms",
+			Description: "List saved form definitions (design-time), optionally filtered to one project. Each " +
+				"entry has the form id and name. Read a form's schema with atlas_get_form.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"projectId": stringProp("Optional project id to filter by (from atlas_create_project).")},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return asText(c.get(withProjectID("/api/v1/forms", args)))
+			},
+		},
+		{
+			Name: "atlas_get_form",
+			Description: "Get a form definition (its form-js schema) by its form id (from atlas_list_forms). " +
+				"Refused with a not-found error if no form has that id.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"id": stringProp("The form id (from atlas_list_forms).")},
+				"required":   []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/forms/" + url.PathEscape(id)))
+			},
+		},
+		{
+			Name: "atlas_list_decision_refs",
+			Description: "List registered DMN decision references (name + modelRef, from atlas_register_decision), " +
+				"optionally filtered to one project. These are the design-time artifacts; atlas_deployed_decisions " +
+				"is the runtime counterpart.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"projectId": stringProp("Optional project id to filter by (from atlas_create_project).")},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return asText(c.get(withProjectID("/api/v1/dmnrefs", args)))
+			},
+		},
+		{
+			Name: "atlas_list_decisions",
+			Description: "List the DMN decisions (with their inputs and outputs) discoverable from the registered " +
+				"decision references, optionally filtered to one project. Use a decision's id as a business rule " +
+				"task's calledDecision.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"projectId": stringProp("Optional project id to filter by (from atlas_create_project).")},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return asText(c.get(withProjectID("/api/v1/decisions", args)))
+			},
+		},
+		{
 			Name: "atlas_list_tasks",
-			Description: "List active (open) user tasks across all instances — each with its task key, " +
-				"process, element, name, assignee, candidate groups, and bound formId. Use the task key " +
-				"with atlas_complete_task.",
-			InputSchema: noArgs(),
-			Handler: func(c *Client, _ map[string]any) (string, error) {
-				return asText(c.get("/api/v1/tasks"))
+			Description: "List active (open) user tasks with optional limit, newest-first cursor, or " +
+				"process-instance filter. Returns {items, truncated, nextCursor}; use nextCursor as before " +
+				"to fetch the next older global page. Use a task key from items with atlas_complete_task.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"limit": map[string]any{
+						"type":        "integer",
+						"minimum":     1,
+						"description": "Maximum tasks to return (API default 500, capped at 5000).",
+					},
+					"before": map[string]any{
+						"type":        "integer",
+						"minimum":     1,
+						"description": "Newest-first job-key cursor from nextCursor; use for global listing without processInstance.",
+					},
+					"processInstance": map[string]any{
+						"type":        "integer",
+						"minimum":     1,
+						"description": "Restrict tasks to one process instance key.",
+					},
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				query := url.Values{}
+				for _, name := range []string{"limit", "before", "processInstance"} {
+					value, present, err := optPositiveUint(args, name)
+					if err != nil {
+						return "", err
+					}
+					if present {
+						query.Set(name, strconv.FormatUint(value, 10))
+					}
+				}
+				path := "/api/v1/tasks"
+				if encoded := query.Encode(); encoded != "" {
+					path += "?" + encoded
+				}
+
+				body, headers, err := c.getWithHeaders(path)
+				if err != nil {
+					return "", err
+				}
+				var items []json.RawMessage
+				if err := json.Unmarshal(body, &items); err != nil {
+					return "", fmt.Errorf("decode Atlas task list: %w", err)
+				}
+				page := taskListPage{
+					Items:     items,
+					Truncated: strings.EqualFold(strings.TrimSpace(headers.Get("X-Tasks-Truncated")), "true"),
+				}
+				if raw := strings.TrimSpace(headers.Get("X-Tasks-Next-Cursor")); raw != "" {
+					cursor, err := parseUint(raw)
+					if err != nil {
+						return "", fmt.Errorf("decode Atlas task cursor %q: %w", raw, err)
+					}
+					page.NextCursor = cursor
+				}
+				encoded, err := json.Marshal(page)
+				if err != nil {
+					return "", err
+				}
+				return string(encoded), nil
 			},
 		},
 		{
@@ -233,12 +664,73 @@ func authoringTools() []Tool {
 				if err != nil {
 					return "", err
 				}
-				vars := map[string]any{}
-				if v, ok := args["variables"].(map[string]any); ok {
-					vars = v
+				body, err := optVariablesBody(args)
+				if err != nil {
+					return "", err
 				}
-				body, _ := json.Marshal(map[string]any{"variables": vars})
 				return asText(c.post("/api/v1/tasks/"+strconv.FormatUint(key, 10)+"/complete", "application/json", body))
+			},
+		},
+		{
+			Name: "atlas_get_task",
+			Description: "Fetch one open user task by its task key — the deep-link read primitive, so a task " +
+				"stays reachable outside a capped atlas_list_tasks page. Returns the task's process, element, " +
+				"assignee, form, priority, and due date. Refused with a not-found error if the key is not an open " +
+				"user task.",
+			InputSchema: keyArg("The task key (from atlas_list_tasks) to fetch."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/tasks/" + strconv.FormatUint(key, 10)))
+			},
+		},
+		{
+			Name: "atlas_assignable_users",
+			Description: "List the users an open task can be assigned to — each with a username and optional " +
+				"display name. Feed a returned username as the 'assignee' for atlas_claim_task. Assigning work is " +
+				"an everyday Tasks action (ADR-0045), so this is available to any authenticated caller (and open when " +
+				"auth is off); disabled accounts are excluded. Returns [] when no enabled users exist.",
+			InputSchema: noArgs(),
+			Handler: func(c *Client, _ map[string]any) (string, error) {
+				return asText(c.get("/api/v1/users/assignable"))
+			},
+		},
+		{
+			Name: "atlas_claim_task",
+			Description: "Claim (assign) an open user task by its task key. 'assignee' names the user to assign " +
+				"it to; omit it only when the server has authentication enabled, where an empty assignee claims the " +
+				"task for the calling identity (without auth an assignee is required). Refused with a not-found error " +
+				"if the key is not an open task. Returns {taskKey, assignee}.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":      map[string]any{"type": "integer", "description": "The task key (from atlas_list_tasks) to claim."},
+					"assignee": stringProp("The user to assign the task to. Required unless the server authenticates the caller."),
+				},
+				"required": []any{"key"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/tasks/"+strconv.FormatUint(key, 10)+"/claim", "application/json", claimTaskBody(args)))
+			},
+		},
+		{
+			Name: "atlas_unclaim_task",
+			Description: "Release (unassign) an open user task by its task key, clearing its assignee so it is " +
+				"available again. Refused with a not-found error if the key is not an open task. Returns " +
+				"{taskKey, assignee} with an empty assignee.",
+			InputSchema: keyArg("The task key (from atlas_list_tasks) to release."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/tasks/"+strconv.FormatUint(key, 10)+"/unclaim", "application/json", []byte("{}")))
 			},
 		},
 	}

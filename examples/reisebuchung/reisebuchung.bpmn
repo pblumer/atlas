@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Reisebuchung — abhängige Formulare auf ZWEI Ebenen (siehe README.md).
+
+  Ebene A (im Formular, ohne Prozess-Roundtrip):
+    * kaskadierende Auswahl: Reiseart → Zielliste (form-js valuesExpression)
+    * bedingtes Feld: Reisepass-Nr. nur bei Fernreise (form-js conditional.hide)
+    Die Engine sieht davon nichts — sie speichert nur die abgeschickten Werte.
+
+  Ebene B (im Prozess, datengetrieben):
+    Start
+     → User-Task "Reisedaten erfassen"  (Formular reise-start → reiseart, ziel,
+                                          geburtsdatum, reisepassNr)
+     → Script "Alter berechnen"         (alter aus geburtsdatum, FEEL)
+     → Business-Rule-Task "Pflichten"   (DMN ReisePflichten: reiseart + alter →
+                                          pflichten {brauchtVisum, brauchtEinverstaendnis})
+     → Inclusive-Split                  (öffnet 0–2 Zweige)
+          brauchtVisum ─────────→ User-Task "Visum-Angaben"  (reise-visum)
+          brauchtEinverstaendnis → User-Task "Einverständnis" (reise-einverstaendnis)
+          sonst ────────────────→ (direkt zum Join)
+        Inclusive-Join            (wartet auf genau die geöffneten Zweige)
+     → User-Task "Buchung bestätigen"   (reise-bestaetigung)
+     → Ende
+
+  Welche Formulare Pflicht sind, entscheidet die DMN-Tabelle — nicht der Code.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_reisebuchung" targetNamespace="http://atlas/examples">
+  <process id="proc_reisebuchung" name="Reisebuchung" isExecutable="true">
+
+    <startEvent id="start" name="Reise angefragt">
+      <outgoing>f_start_erfassen</outgoing>
+    </startEvent>
+
+    <userTask id="erfassen" name="Reisedaten erfassen">
+      <extensionElements>
+        <zeebe:formDefinition formId="reise-start"/>
+      </extensionElements>
+      <incoming>f_start_erfassen</incoming>
+      <outgoing>f_erfassen_alter</outgoing>
+    </userTask>
+
+    <scriptTask id="alter_berechnen" name="Alter berechnen">
+      <extensionElements>
+        <zeebe:script resultVariable="alter"
+          expression="= years and months duration(date(geburtsdatum), date(if stichtag = null then &quot;2026-08-08&quot; else stichtag)).years"/>
+      </extensionElements>
+      <incoming>f_erfassen_alter</incoming>
+      <outgoing>f_alter_pflichten</outgoing>
+    </scriptTask>
+
+    <businessRuleTask id="pflichten" name="Pflichten ermitteln">
+      <extensionElements>
+        <calledDecision decisionId="ReisePflichten" resultVariable="pflichten" retries="3"/>
+        <ioMapping>
+          <input source="=reiseart" target="reiseart"/>
+          <input source="=alter" target="alter"/>
+        </ioMapping>
+      </extensionElements>
+      <incoming>f_alter_pflichten</incoming>
+      <outgoing>f_pflichten_split</outgoing>
+    </businessRuleTask>
+
+    <inclusiveGateway id="split" name="Welche Nachweise?" default="f_split_join">
+      <incoming>f_pflichten_split</incoming>
+      <outgoing>f_split_visum</outgoing>
+      <outgoing>f_split_einv</outgoing>
+      <outgoing>f_split_join</outgoing>
+    </inclusiveGateway>
+
+    <userTask id="visum" name="Visum-Angaben">
+      <extensionElements>
+        <zeebe:formDefinition formId="reise-visum"/>
+      </extensionElements>
+      <incoming>f_split_visum</incoming>
+      <outgoing>f_visum_join</outgoing>
+    </userTask>
+
+    <userTask id="einverstaendnis" name="Einverständnis einholen">
+      <extensionElements>
+        <zeebe:formDefinition formId="reise-einverstaendnis"/>
+      </extensionElements>
+      <incoming>f_split_einv</incoming>
+      <outgoing>f_einv_join</outgoing>
+    </userTask>
+
+    <inclusiveGateway id="join" name="Nachweise vollständig">
+      <incoming>f_visum_join</incoming>
+      <incoming>f_einv_join</incoming>
+      <incoming>f_split_join</incoming>
+      <outgoing>f_join_bestaetigung</outgoing>
+    </inclusiveGateway>
+
+    <userTask id="bestaetigen" name="Buchung bestätigen">
+      <extensionElements>
+        <zeebe:formDefinition formId="reise-bestaetigung"/>
+      </extensionElements>
+      <incoming>f_join_bestaetigung</incoming>
+      <outgoing>f_bestaetigen_end</outgoing>
+    </userTask>
+
+    <endEvent id="end" name="Buchung abgeschlossen">
+      <incoming>f_bestaetigen_end</incoming>
+    </endEvent>
+
+    <sequenceFlow id="f_start_erfassen" sourceRef="start" targetRef="erfassen"/>
+    <sequenceFlow id="f_erfassen_alter" sourceRef="erfassen" targetRef="alter_berechnen"/>
+    <sequenceFlow id="f_alter_pflichten" sourceRef="alter_berechnen" targetRef="pflichten"/>
+    <sequenceFlow id="f_pflichten_split" sourceRef="pflichten" targetRef="split"/>
+    <sequenceFlow id="f_split_visum" name="Visum nötig" sourceRef="split" targetRef="visum">
+      <conditionExpression>= pflichten.brauchtVisum</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_split_einv" name="Einverständnis nötig" sourceRef="split" targetRef="einverstaendnis">
+      <conditionExpression>= pflichten.brauchtEinverstaendnis</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_split_join" name="sonst" sourceRef="split" targetRef="join"/>
+    <sequenceFlow id="f_visum_join" sourceRef="visum" targetRef="join"/>
+    <sequenceFlow id="f_einv_join" sourceRef="einverstaendnis" targetRef="join"/>
+    <sequenceFlow id="f_join_bestaetigung" sourceRef="join" targetRef="bestaetigen"/>
+    <sequenceFlow id="f_bestaetigen_end" sourceRef="bestaetigen" targetRef="end"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_reisebuchung">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="160" y="122" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="146" y="162" width="66" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_erfassen" bpmnElement="erfassen">
+        <dc:Bounds x="240" y="100" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_alter" bpmnElement="alter_berechnen">
+        <dc:Bounds x="390" y="100" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_pflichten" bpmnElement="pflichten">
+        <dc:Bounds x="540" y="100" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_split" bpmnElement="split" isMarkerVisible="true">
+        <dc:Bounds x="690" y="115" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="676" y="80" width="78" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_visum" bpmnElement="visum">
+        <dc:Bounds x="790" y="10" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_einv" bpmnElement="einverstaendnis">
+        <dc:Bounds x="790" y="210" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_join" bpmnElement="join" isMarkerVisible="true">
+        <dc:Bounds x="990" y="115" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="972" y="170" width="86" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_bestaetigen" bpmnElement="bestaetigen">
+        <dc:Bounds x="1090" y="100" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end">
+        <dc:Bounds x="1240" y="122" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1214" y="162" width="90" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="di_f_start_erfassen" bpmnElement="f_start_erfassen">
+        <di:waypoint x="196" y="140"/><di:waypoint x="240" y="140"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_erfassen_alter" bpmnElement="f_erfassen_alter">
+        <di:waypoint x="340" y="140"/><di:waypoint x="390" y="140"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_alter_pflichten" bpmnElement="f_alter_pflichten">
+        <di:waypoint x="490" y="140"/><di:waypoint x="540" y="140"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_pflichten_split" bpmnElement="f_pflichten_split">
+        <di:waypoint x="640" y="140"/><di:waypoint x="690" y="140"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_split_visum" bpmnElement="f_split_visum">
+        <di:waypoint x="715" y="115"/><di:waypoint x="715" y="50"/><di:waypoint x="790" y="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="722" y="28" width="60" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_visum_join" bpmnElement="f_visum_join">
+        <di:waypoint x="890" y="50"/><di:waypoint x="1015" y="50"/><di:waypoint x="1015" y="115"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_split_einv" bpmnElement="f_split_einv">
+        <di:waypoint x="715" y="165"/><di:waypoint x="715" y="250"/><di:waypoint x="790" y="250"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="722" y="256" width="60" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_einv_join" bpmnElement="f_einv_join">
+        <di:waypoint x="890" y="250"/><di:waypoint x="1015" y="250"/><di:waypoint x="1015" y="165"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_split_join" bpmnElement="f_split_join">
+        <di:waypoint x="740" y="140"/><di:waypoint x="990" y="140"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="850" y="118" width="30" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_join_bestaetigung" bpmnElement="f_join_bestaetigung">
+        <di:waypoint x="1040" y="140"/><di:waypoint x="1090" y="140"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_bestaetigen_end" bpmnElement="f_bestaetigen_end">
+        <di:waypoint x="1190" y="140"/><di:waypoint x="1240" y="140"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

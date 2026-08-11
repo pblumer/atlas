@@ -59,9 +59,24 @@ func (e *apiError) Error() string {
 	return fmt.Sprintf("atlas server error (%d): %s", e.Status, e.Message)
 }
 
+type clientResponse struct {
+	body   []byte
+	header http.Header
+}
+
 // get issues a GET and returns the raw response body on 2xx, or an *apiError.
 func (c *Client) get(path string) ([]byte, error) {
 	return c.do(http.MethodGet, path, "", nil)
+}
+
+// getWithHeaders issues a GET and also returns a copy of the response headers.
+// Listing tools use it to preserve API pagination metadata in their MCP result.
+func (c *Client) getWithHeaders(path string) ([]byte, http.Header, error) {
+	resp, err := c.doResponse(http.MethodGet, path, "", nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	return resp.body, resp.header, nil
 }
 
 // post issues a POST with the given content type and body.
@@ -76,13 +91,21 @@ func (c *Client) del(path string) ([]byte, error) {
 }
 
 func (c *Client) do(method, path, contentType string, body []byte) ([]byte, error) {
+	resp, err := c.doResponse(method, path, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	return resp.body, nil
+}
+
+func (c *Client) doResponse(method, path, contentType string, body []byte) (clientResponse, error) {
 	var reader io.Reader
 	if body != nil {
 		reader = strings.NewReader(string(body))
 	}
 	req, err := http.NewRequest(method, c.baseURL+path, reader)
 	if err != nil {
-		return nil, err
+		return clientResponse{}, err
 	}
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
@@ -92,18 +115,18 @@ func (c *Client) do(method, path, contentType string, body []byte) ([]byte, erro
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("reach atlas server at %s: %w", c.baseURL, err)
+		return clientResponse{}, fmt.Errorf("reach atlas server at %s: %w", c.baseURL, err)
 	}
 	defer resp.Body.Close()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return clientResponse{}, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, &apiError{Status: resp.StatusCode, Message: extractError(data)}
+		return clientResponse{}, &apiError{Status: resp.StatusCode, Message: extractError(data)}
 	}
-	return data, nil
+	return clientResponse{body: data, header: resp.Header.Clone()}, nil
 }
 
 // extractError pulls the "error" field out of an Atlas JSON error body, falling
