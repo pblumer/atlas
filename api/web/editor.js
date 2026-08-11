@@ -176,6 +176,18 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 
 const shortType = (t) => (t || "").replace(/^bpmn:/, "");
 
+// isValidTtl mirrors the engine's instance-TTL parser (ADR-0085, compiler/duration.go):
+// the day-and-time subset of ISO-8601 durations (P[nD]T[nH][nM][nS]), and it must be
+// positive — the empty duration "P"/"PT" and an all-zero "PT0S" are rejected. Used only
+// to warn while authoring; the deploy is the authority that rejects a bad value.
+const isValidTtl = (s) => {
+  const m = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/.exec(String(s).trim());
+  if (!m) return false;
+  const parts = [m[1], m[2], m[3], m[4]];
+  if (parts.every((p) => p === undefined)) return false; // no components → empty duration
+  return parts.some((p) => p !== undefined && Number(p) > 0); // must be strictly positive
+};
+
 // --- Variable presentation (shared by the live and replay views) ---
 //
 // Operators inspect an instance's variables, which can be whole JSON structures.
@@ -2996,6 +3008,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
           <label class="field"><span>Version tag</span><input type="text" id="f-pver" value="${esc(rootBo.versionTag || "")}" placeholder="1.0.0"/></label>
           <label class="pcheck"><input type="checkbox" id="f-pexec"${rootBo.isExecutable !== false ? " checked" : ""}/> <span>Executable</span></label>
           <p class="muted" style="font-size:12px">An <b>executable</b> process can be started and offered in the start lists; leave it off for a descriptive-only diagram. <b>Version tag</b> is an optional label for this revision.</p>
+          <label class="field"><span>Instance TTL</span><input type="text" id="f-pttl" value="${esc(rootBo.instanceTtl || "")}" placeholder="P7D"/></label>
+          <p class="muted" style="font-size:12px">A self-cleaning <b>time-to-live</b> for instances of this process, as an ISO-8601 duration (e.g. <code>P7D</code> = 7 days, <code>PT12H</code> = 12 hours, <code>PT30M</code> = 30 minutes). An instance that outlives its TTL is automatically terminated and moved to history — where it stays queryable and can still be exported. Leave empty for no TTL (instances live until they complete or are cancelled). Set it above the longest run you legitimately expect.</p>
           ${startVarsHTML}
           ${messagesManagerHTML(modeler)}
           ${signalsManagerHTML(modeler)}
@@ -3011,6 +3025,15 @@ function wireProperties(root, modeler, api, projectId, toast) {
         body.querySelector("#f-pver").addEventListener("change", (e) => {
           const v = (e.target.value || "").trim();
           try { modeling.updateProperties(rootEl, { versionTag: v || undefined }); } catch { /* ignore */ }
+        });
+        body.querySelector("#f-pttl").addEventListener("change", (e) => {
+          const v = (e.target.value || "").trim();
+          // The engine parses the day/time subset of ISO-8601 and rejects a malformed or
+          // non-positive TTL at deploy (ADR-0085). Catch it here so the mistake surfaces
+          // while authoring instead of as a failed deploy — but still store what was typed
+          // so the field never silently drops the user's value.
+          if (v && !isValidTtl(v)) toast("Instance TTL must be a positive ISO-8601 duration, e.g. P7D or PT12H", "err");
+          try { modeling.updateProperties(rootEl, { instanceTtl: v || undefined }); } catch { /* ignore */ }
         });
         body.querySelector("#f-pexec").addEventListener("change", (e) => {
           try { modeling.updateProperties(rootEl, { isExecutable: e.target.checked }); } catch { /* ignore */ }

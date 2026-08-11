@@ -163,7 +163,8 @@
       "name": "ProcessMeta",
       "extends": ["bpmn:Process"],
       "properties": [
-        { "name": "versionTag", "type": "String", "isAttr": true }
+        { "name": "versionTag", "type": "String", "isAttr": true },
+        { "name": "instanceTtl", "type": "String", "isAttr": true }
       ]
     }
   ]
