@@ -298,9 +298,12 @@ Making processes wait, react, and time out.
   (`zeebe:taskDefinition` or an `atlas:*Connector`) is a job-creating *activity* identical in
   execution to a service task — it reuses `serviceTaskBehavior`, so connectors (e-mail, REST, …),
   boundary timeouts, I/O/data/multi-instance, retry backoff, and incidents all apply. A **message**
-  kind (`messageRef`) is a correlating throw in task form: it compiles to the message throw path
-  (`TypeMessageThrowEvent`) and flows straight on, with no new runtime. Recovery-tested; the Modeler
-  offers the connector/job-worker catalog plus a Message entry on the send task.
+  kind (`messageRef`, or an `operationRef` naming a `<bpmn:operation>` whose `inMessageRef` is
+  resolved to that message) is a correlating throw in task form: it compiles to the message throw
+  path (`TypeMessageThrowEvent`) and flows straight on, with no new runtime. `operationRef` is a
+  deploy-time compatibility path for imported WSDL-style models (its `outMessageRef` response is
+  not supported). Recovery-tested; the Modeler offers the connector/job-worker catalog plus a
+  Message entry on the send task.
 - ✅ **Event-based gateways** (deferred choice): an `<eventBasedGateway>` arms **every**
   target catch event at once — each outgoing flow leads to a message/timer/signal
   intermediate catch — and takes the branch whose event fires **first**, cancelling the rest
