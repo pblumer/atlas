@@ -2882,6 +2882,7 @@ async function viewTasks(preselectKey) {
         <div class="tasks-bulk" id="task-bulk" hidden></div>
         <div class="tasks-trunc" id="task-trunc" hidden></div>
         <ul class="tasks-list" id="task-list"><li class="tasks-empty muted">Loading&hellip;</li></ul>
+        <div class="tasks-col-resizer" id="tasks-col-resizer" title="Drag to resize" role="separator" aria-orientation="vertical"></div>
       </section>
       <section class="tasks-detail" id="task-detail"></section>
     </div>`;
@@ -2890,6 +2891,39 @@ async function viewTasks(preselectKey) {
   const listEl = document.getElementById("task-list");
   const detailEl = document.getElementById("task-detail");
   const titleEl = document.getElementById("task-list-title");
+
+  // Make the list | detail divider draggable, so the detail (and its form) can be
+  // widened or narrowed by resizing the list column. The width persists across
+  // sessions. Folders stay fixed; the detail is the flexible remainder (1fr).
+  (function wireDetailResize() {
+    const grid = view.querySelector(".tasks");
+    const listPane = view.querySelector(".tasks-list-pane");
+    const rez = document.getElementById("tasks-col-resizer");
+    if (!grid || !listPane || !rez) return;
+    const MINW = 240, MAXW = 760;
+    const foldersW = Math.round((view.querySelector(".tasks-folders") || {}).getBoundingClientRect
+      ? view.querySelector(".tasks-folders").getBoundingClientRect().width : 210) || 210;
+    const clamp = (w) => Math.min(MAXW, Math.max(MINW, w));
+    const saved = parseInt(localStorage.getItem("atlas.tasks.listW"), 10);
+    let listW = Number.isFinite(saved) ? clamp(saved) : 340;
+    const apply = () => { grid.style.gridTemplateColumns = `${foldersW}px ${listW}px 1fr`; };
+    apply();
+    const move = (e) => { listW = clamp(Math.round(e.clientX - listPane.getBoundingClientRect().left)); apply(); };
+    const up = () => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      rez.classList.remove("dragging");
+      document.body.style.userSelect = "";
+      localStorage.setItem("atlas.tasks.listW", String(listW));
+    };
+    rez.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      rez.classList.add("dragging");
+      document.body.style.userSelect = "none";
+      document.addEventListener("pointermove", move);
+      document.addEventListener("pointerup", up);
+    });
+  })();
 
   // visible applies the folder, then the free-text query, then the chosen sort.
   const matchesQuery = (t, q) =>
@@ -3155,6 +3189,32 @@ async function viewTasks(preselectKey) {
     } catch (err) {
       host.innerHTML = `<p class="muted err" style="padding:16px">Could not load the process view: ${esc(err.message)}</p>`;
     }
+    renderProcVars(t); // the instance's current variables, beneath the diagram
+  }
+
+  // renderProcVars fills the Process tab's Variables list with the instance's
+  // current process variables, so the assignee sees the data the process carries,
+  // not just where the token is. Guards against the selection moving on mid-fetch.
+  async function renderProcVars(t) {
+    if (!document.getElementById("tp-vars-body")) return;
+    let vars;
+    try {
+      vars = await api("GET", "/api/v1/instances/" + t.processInstanceKey + "/variables");
+    } catch (err) {
+      const b = document.getElementById("tp-vars-body");
+      if (b && state.selected === t.key) b.innerHTML = `<p class="muted err">Could not load variables: ${esc(err.message)}</p>`;
+      return;
+    }
+    if (state.selected !== t.key) return;
+    const b = document.getElementById("tp-vars-body");
+    if (!b) return;
+    const entries = vars && typeof vars === "object" ? Object.entries(vars) : [];
+    if (!entries.length) { b.innerHTML = `<p class="muted">No variables set yet.</p>`; return; }
+    const fmt = (v) => (v === null || v === undefined ? "null" : typeof v === "object" ? JSON.stringify(v) : String(v));
+    b.innerHTML = `<table class="tp-vars-table"><tbody>${entries
+      .sort((a, c) => a[0].localeCompare(c[0]))
+      .map(([k, v]) => `<tr><td class="tp-var-k">${esc(k)}</td><td class="tp-var-v"><code>${esc(fmt(v))}</code></td></tr>`)
+      .join("")}</tbody></table>`;
   }
 
   function renderDetail() {
@@ -3202,6 +3262,10 @@ async function viewTasks(preselectKey) {
           <span><i class="tp-sw done"></i> Completed</span>
         </div>
         <div class="tp-canvas" id="tp-canvas"><p class="tp-msg muted">Loading&hellip;</p></div>
+        <div class="tp-vars" id="tp-vars">
+          <h3 class="tp-vars-head">Variables</h3>
+          <div id="tp-vars-body"><p class="tp-msg muted">Loading&hellip;</p></div>
+        </div>
       </div>`;
     detailEl.innerHTML = `
       <header class="tasks-detail-head">
