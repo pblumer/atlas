@@ -293,6 +293,9 @@ type cancelInstancesResp struct {
 type failJobReq struct {
 	Retries int32  `json:"retries"`
 	Message string `json:"message"`
+	// RetryBackoff is the delay in milliseconds a worker asks to wait before its failed job
+	// may be retried (ADR-0111). 0 (or absent) retries immediately, the pre-0111 behavior.
+	RetryBackoff int64 `json:"retryBackoff"`
 }
 
 type resolveIncidentReq struct {
@@ -2813,7 +2816,7 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
-		s.proc.FailJob(key, req.Retries, req.Message)
+		s.proc.FailJob(key, req.Retries, req.Message, req.RetryBackoff*int64(time.Millisecond))
 		runErr = s.jobRunner.Drive()
 	})
 	switch {

@@ -54,6 +54,7 @@ func TestRecordRoundTrip(t *testing.T) {
 				JobType:            42,
 				Retries:            3,
 				Deadline:           1_700_000_000,
+				RetryDueDate:       1_700_000_030_000_000_000, // backing off after a failure (ADR-0111)
 			},
 		},
 		{
@@ -122,6 +123,17 @@ func TestRecordRoundTrip(t *testing.T) {
 				TargetElementId:    8,
 				DueDate:            1_700_000_123,
 				Repetitions:        -1,
+			},
+		},
+		{
+			name:   "retry-backoff timer carries a job key",
+			vt:     VTTimer,
+			intent: IntentTimerCreated,
+			value: &TimerValue{
+				// A retry-backoff timer re-activates its job when due (ADR-0111): no element.
+				ProcessInstanceKey: NewKey(2, 20),
+				DueDate:            1_700_000_500,
+				JobKey:             NewKey(2, 22),
 			},
 		},
 		{

@@ -318,9 +318,16 @@ Making processes wait, react, and time out.
   catch or boundary timer whose FEEL schedule can't be evaluated parks its token
   and raises a job-less incident (the failing field in its message) instead of
   firing immediately; resolving re-arms the timer against the instance's current
-  variables (re-raising if it still fails). Recovery-tested. Recurring-boundary
-  re-arm failures, start-event timer FEEL, retry backoff, and an operator UI still
-  to come.
+  variables (re-raising if it still fails). Recovery-tested. **Retry backoff and the
+  remaining FEEL-failure gaps now closed** ([ADR-0111](docs/adr/0111-incident-model-completion.md)):
+  a worker can fail a job with a **backoff** — the job is held off the activatable
+  index until a retry timer re-activates it (durable across a crash), instead of
+  hammering immediately; a **recurring** boundary or event-subprocess timer whose
+  FEEL cadence stops resolving mid-cycle raises the same job-less incident and parks
+  rather than silently ceasing to recur; and a **timer start** event's constant FEEL
+  schedule that can't resolve is now a deploy-time validation error
+  (`timer.start-schedule`) instead of a start timer that silently never arms. An
+  operator UI for incidents is the last piece still to come.
 
 ## Milestone 3 — Structure ✅
 

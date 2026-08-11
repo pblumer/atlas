@@ -141,7 +141,10 @@ func (t *Tx) ElementInstancesOfProcess(procKey uint64, fn func(elKey uint64, v *
 // positive retry count (ADR-0061).
 func (t *Tx) PutJob(key uint64, v *model.JobValue) error {
 	err := t.b.Set(keyJob(key), t.encodeValue(v), nil)
-	if v.Retries > 0 {
+	// A job is pullable iff it has retries left AND is not currently backing off from a
+	// failure (RetryDueDate == 0): a backing-off job stays stored, off the worker-visible
+	// index, until its retry timer clears RetryDueDate and re-emits it (ADR-0111).
+	if v.Retries > 0 && v.RetryDueDate == 0 {
 		if e := t.b.Set(keyJobActivatable(v.JobType, key), nil, nil); err == nil {
 			err = e
 		}

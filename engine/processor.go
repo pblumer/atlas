@@ -321,11 +321,13 @@ func (p *Processor) SetVariables(piKey, scopeKey uint64, actor string, vars ...m
 }
 
 // FailJob enqueues a worker's failure report for a job (ADR-0061), carrying the
-// retries the worker leaves it and a failure message. With retries > 0 the job is
-// retried (back on the activatable index); with retries <= 0 an incident is raised
-// on the job's element and the token parks there. Failing a job that no longer
-// exists is a no-op. Call RunUntilIdle (or Drive) to process it.
-func (p *Processor) FailJob(jobKey uint64, retries int32, message string) {
+// retries the worker leaves it, a failure message, and a retry backoff (unix-nanoseconds;
+// 0 = retry immediately, ADR-0111). With retries > 0 the job is retried — immediately if
+// backoff is 0, otherwise held off the activatable index until a retry timer fires backoff
+// nanoseconds later; with retries <= 0 an incident is raised on the job's element and the
+// token parks there. Failing a job that no longer exists is a no-op. Call RunUntilIdle (or
+// Drive) to process it.
+func (p *Processor) FailJob(jobKey uint64, retries int32, message string, backoff int64) {
 	p.queue = append(p.queue, Command{
 		Key:       jobKey,
 		ValueType: model.VTJob,
@@ -334,6 +336,7 @@ func (p *Processor) FailJob(jobKey uint64, retries int32, message string) {
 			job:      model.JobValue{Retries: retries},
 			incident: model.IncidentValue{Message: message},
 		},
+		RetryBackoff: backoff,
 	})
 }
 
