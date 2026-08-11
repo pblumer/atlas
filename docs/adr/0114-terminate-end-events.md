@@ -1,10 +1,10 @@
 # ADR-0114: Terminate end events
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-11
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Proposed. A `<endEvent><terminateEventDefinition/></endEvent>` ends its
+> **Implementation status.** Delivered. A `<endEvent><terminateEventDefinition/></endEvent>` ends its
 > **enclosing flow scope** at once — every other live token in that scope is terminated (its jobs
 > cancelled), then the scope completes. At the process root that ends the instance; inside an
 > embedded subprocess it ends that subprocess and the parent continues on the subprocess's outgoing
@@ -123,6 +123,15 @@ and (c) dropping the compiler rejection and the Modeler's `UNSUPPORTED_EVENT_DEF
 - Multi-instance iterations, nested subprocesses, and armed event-subprocess/boundary triggers inside
   the terminated scope are all torn down by the existing `terminateScopeExcept`/`completeScope` walk —
   no special-casing. Compensation is deliberately **not** triggered (unlike a cancel end).
+- **One latent inconsistency surfaced and fixed.** A terminate reached in the *same batch* as a
+  parallel sibling's activation (the common `fork → terminate` shape) could not see the sibling: the
+  scope-teardown scan `ForEachElementInstance` read **committed** state, while every other teardown
+  read (`GetElementInstance`, `GetJob`, `ActiveChildren`, `scopeContains`) reads the in-flight
+  transaction — so the not-yet-committed sibling was invisible and survived. `ForEachElementInstance`
+  now reads the tx too, aligning it with the rest; the full race suite (cancel, interrupting
+  boundary, event-gateway loser cancellation, compensation — the other callers of the shared scan)
+  stays green, confirming the alignment is a strict consistency fix, not a behavior change for them.
+  A cancel end never hit this because a transaction's tokens are always committed from prior batches.
 
 ### Modeler
 

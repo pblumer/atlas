@@ -315,6 +315,14 @@ Making processes wait, react, and time out.
   catch event; recovery rebuilds the armed race and its group from the log, so the first fire
   after a restart still wins — no new recovery path. Authored in the Modeler (bpmn-js draws
   it natively) ([ADR-0110](docs/adr/0110-event-based-gateways.md)).
+- ✅ **Terminate end events** ([ADR-0114](docs/adr/0114-terminate-end-events.md)): an
+  `<endEvent><terminateEventDefinition/>` — the "abort" end — ends its **enclosing flow scope** at
+  once, terminating every other live token in the scope (cancelling their jobs). At the process
+  root the instance ends; inside an embedded subprocess only that subprocess ends and the parent
+  continues on its outgoing flow (scoped BPMN semantics). It reuses `terminateScopeExcept` +
+  `completeScope` — `cancelEndEventBehavior` minus compensation and the cancel boundary — so no new
+  recovery path; recovery-tested. The last unimplemented standard end-event type (none/message/
+  signal/error/cancel already run). bpmn-js draws it natively.
 - 🚧 **Incident model**: a job whose retries a worker exhausts raises a durable
   **incident** on its element instead of hanging or retrying forever; the token
   parks off the activatable index until an operator resolves the incident, which
