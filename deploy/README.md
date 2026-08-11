@@ -30,6 +30,9 @@ Node.js).
 ## Kubernetes (Helm)
 
 ```bash
+# From the OCI registry (published to ghcr.io/pblumer/charts/atlas on each
+# chart-version bump), or from a local checkout:
+helm install atlas oci://ghcr.io/pblumer/charts/atlas --version 0.1.1
 helm install atlas ./deploy/helm/atlas
 kubectl port-forward svc/atlas 8080:8080
 ```

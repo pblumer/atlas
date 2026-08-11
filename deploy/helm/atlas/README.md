@@ -20,15 +20,22 @@ not pods.
 ## Install
 
 ```bash
-# From a checkout of the repo:
+# From the OCI registry (no checkout needed):
+helm install atlas oci://ghcr.io/pblumer/charts/atlas --version 0.1.1
+
+# ...or from a checkout of the repo:
 helm install atlas ./deploy/helm/atlas
 
 # Pin an image tag and give it real storage:
-helm install atlas ./deploy/helm/atlas \
+helm install atlas oci://ghcr.io/pblumer/charts/atlas --version 0.1.1 \
   --set image.tag=0.1.0 \
   --set persistence.size=20Gi \
   --set persistence.storageClass=fast-ssd
 ```
+
+The chart is published to `ghcr.io/pblumer/charts/atlas` on every chart-version
+bump. List the available versions with
+`helm show chart oci://ghcr.io/pblumer/charts/atlas`.
 
 Then reach it (default `ClusterIP`):
 
