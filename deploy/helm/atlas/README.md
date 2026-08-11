@@ -3,8 +3,9 @@
 Deploys the single-binary [Atlas](https://github.com/pblumer/atlas) BPMN workflow
 engine — the engine, HTTP API, web UI and MCP endpoint in one container.
 
-> ⚠️ Atlas is in early development. APIs are unstable; this chart tracks the
-> image built from `main` by default. Pin an image tag before relying on it.
+> ⚠️ Atlas is in early development (`0.x`) — APIs and on-disk formats are
+> unstable. By default this chart deploys the pinned `0.1.0` release image; set
+> `image.tag` to move to another release (or to the rolling `main` tag).
 
 ## Why a StatefulSet with one replica
 
@@ -24,7 +25,7 @@ helm install atlas ./deploy/helm/atlas
 
 # Pin an image tag and give it real storage:
 helm install atlas ./deploy/helm/atlas \
-  --set image.tag=v0.1.0 \
+  --set image.tag=0.1.0 \
   --set persistence.size=20Gi \
   --set persistence.storageClass=fast-ssd
 ```
