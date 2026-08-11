@@ -56,6 +56,26 @@ const (
 	// not an error: the catch may live at a call-activity caller one process cannot see,
 	// and the runtime incident is the real terminal for a truly uncaught error.
 	RuleErrorUnhandled = "error.unhandled"
+	// RuleCancelEndOutsideTransaction marks a cancel end event whose enclosing scope is not a
+	// transaction — an error, since BPMN allows a cancel end only within a <transaction> (ADR-0108).
+	RuleCancelEndOutsideTransaction = "cancel.end-outside-transaction"
+	// RuleCancelBoundaryInvalidHost marks a cancel boundary attached to something other than a
+	// transaction — an error, since a cancel boundary may attach only to a <transaction> (ADR-0108).
+	RuleCancelBoundaryInvalidHost = "cancel.boundary-invalid-host"
+	// RuleTransactionNoCancelBoundary marks a transaction that has a cancel end event but no
+	// cancel boundary (ADR-0108). A warning: the cancellation tears the transaction down with
+	// no recovery route, usually a modeling mistake, but not structurally invalid.
+	RuleTransactionNoCancelBoundary = "transaction.no-cancel-boundary"
+	// RuleEventGatewayTarget marks an event-based gateway whose outgoing flow leads to a
+	// non-catch element — an error, since a deferred choice can only race catch events
+	// (message/timer/signal intermediate catch); a task or gateway cannot participate (ADR-0110).
+	RuleEventGatewayTarget = "event-gateway.invalid-target"
+	// RuleTimerStartSchedule marks a timer start event whose constant FEEL schedule cannot be
+	// resolved to a valid duration/date/cycle at deploy (ADR-0111). It is an error: a start
+	// schedule that will not resolve arms nothing, so the process would silently never trigger.
+	// A start-event FEEL schedule is compiler-constant (references no variables, ADR-0056), so it
+	// evaluates the same way at deploy as at arm and can be checked without an instance.
+	RuleTimerStartSchedule = "timer.start-schedule"
 )
 
 // Rule slugs for whole-model dry-run findings that [ValidateModel] raises outside
@@ -100,6 +120,8 @@ func Validate(cp *CompiledProcess) []Problem {
 	ps = append(ps, checkGateways(cp)...)
 	ps = append(ps, checkScopes(cp)...)
 	ps = append(ps, checkErrorHandling(cp)...)
+	ps = append(ps, checkTransactions(cp)...)
+	ps = append(ps, checkTimerStartSchedules(cp)...)
 	return ps
 }
 
@@ -296,6 +318,25 @@ func checkGateways(cp *CompiledProcess) []Problem {
 		if n.Type == TypeExclusiveGateway || n.Type == TypeInclusiveGateway {
 			ps = append(ps, checkDataGatewayCoverage(cp, int32(id))...)
 		}
+		if n.Type == TypeEventBasedGateway {
+			ps = append(ps, checkEventGatewayTargets(cp, int32(id))...)
+		}
+	}
+	return ps
+}
+
+// checkEventGatewayTargets validates that every outgoing flow of an event-based gateway
+// leads to a catch event (ADR-0110). A deferred choice races catch events; a target that is
+// a task, a gateway, or an end event cannot participate, so it is a deploy error — the
+// runtime would arm nothing on that branch and the token would deadlock.
+func checkEventGatewayTargets(cp *CompiledProcess, id int32) []Problem {
+	var ps []Problem
+	for _, fid := range cp.Outgoing(id) {
+		target := cp.Flow(fid).Target
+		if !isCatchEvent(cp.nodes[target].Type) {
+			ps = append(ps, problem(cp, id, SeverityError, RuleEventGatewayTarget,
+				fmt.Sprintf("%s targets %s, which is not a message/timer/signal intermediate catch event — an event-based gateway can only race catch events", describeNode(cp, id), describeNode(cp, target))))
+		}
 	}
 	return ps
 }
@@ -442,6 +483,81 @@ func errorCaught(cp *CompiledProcess, scope int32, code string) bool {
 	return false
 }
 
+// checkTransactions validates the transaction constructs (ADR-0108). A cancel end event must
+// sit directly inside a transaction, and a cancel boundary may attach only to a transaction —
+// both errors (BPMN restricts them so, and the runtime relies on it). A transaction that has a
+// cancel end event but no cancel boundary is a warning: the cancellation runs, but the token
+// leaves the transaction with no recovery route, usually a modeling mistake.
+func checkTransactions(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	for id := range cp.nodes {
+		n := &cp.nodes[id]
+		switch {
+		case n.Type == TypeCancelEndEvent:
+			if n.FlowScope < 0 || !cp.IsTransaction(n.FlowScope) {
+				ps = append(ps, problem(cp, int32(id), SeverityError, RuleCancelEndOutsideTransaction,
+					"cancel end event is not directly inside a transaction — a cancel end event may appear only within a <transaction>"))
+			}
+		case n.Type == TypeBoundaryEvent && cp.boundaryEventDets[n.Detail].Kind == BoundaryCancel:
+			if !cp.IsTransaction(cp.boundaryEventDets[n.Detail].HostNode) {
+				ps = append(ps, problem(cp, int32(id), SeverityError, RuleCancelBoundaryInvalidHost,
+					"cancel boundary event is not attached to a transaction — a cancel boundary may attach only to a <transaction>"))
+			}
+		}
+	}
+	// A transaction with a cancel end event but no cancel boundary: warn.
+	for id := range cp.nodes {
+		if !cp.nodes[id].Transaction || !scopeHasCancelEnd(cp, int32(id)) {
+			continue
+		}
+		hasCancelBoundary := false
+		for _, be := range cp.BoundaryEvents(int32(id)) {
+			if cp.BoundaryEvent(cp.Node(be).Detail).Kind == BoundaryCancel {
+				hasCancelBoundary = true
+				break
+			}
+		}
+		if !hasCancelBoundary {
+			ps = append(ps, problem(cp, int32(id), SeverityWarning, RuleTransactionNoCancelBoundary,
+				"transaction has a cancel end event but no cancel boundary — the cancellation would tear the transaction down with no recovery route"))
+		}
+	}
+	return ps
+}
+
+// checkTimerStartSchedules validates that every timer start event's FEEL schedule actually
+// resolves (ADR-0111). A start-event FEEL schedule is compiler-constant — it references no
+// variables (ADR-0056), enforced at parse — so it evaluates at deploy exactly as it will at
+// arm, against an empty scope. A constant that compiles but does not resolve to a valid
+// duration/date/cycle (e.g. ="not-a-duration") would arm no timer and the process would
+// silently never trigger, so it is a deploy error rather than a runtime surprise. A literal
+// (non-FEEL) schedule is validated at parse and always resolves here.
+func checkTimerStartSchedules(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	for _, s := range cp.TimerStartEvents() {
+		if !s.Schedule.IsFeel() {
+			continue
+		}
+		if _, err := s.Schedule.ResolveConstant(); err != nil {
+			ps = append(ps, problem(cp, s.ElementId, SeverityError, RuleTimerStartSchedule,
+				fmt.Sprintf("%s has a constant FEEL timer schedule that does not resolve: %s",
+					describeNode(cp, s.ElementId), err)))
+		}
+	}
+	return ps
+}
+
+// scopeHasCancelEnd reports whether any cancel end event sits directly in the scope rooted at
+// the transaction node id.
+func scopeHasCancelEnd(cp *CompiledProcess, txID int32) bool {
+	for j := range cp.nodes {
+		if cp.nodes[j].Type == TypeCancelEndEvent && cp.nodes[j].FlowScope == txID {
+			return true
+		}
+	}
+	return false
+}
+
 // errorCodeMatches reports whether a catch with catchCode catches a thrown throwCode: an
 // equal code, or a code-less catch-all (ADR-0089).
 func errorCodeMatches(catchCode, throwCode string) bool {
@@ -466,7 +582,14 @@ func describeNode(cp *CompiledProcess, id int32) string {
 // isGateway reports whether a node type is a gateway — the elements the gateway
 // coverage checks apply to.
 func isGateway(t BpmnType) bool {
-	return t == TypeExclusiveGateway || t == TypeInclusiveGateway || t == TypeParallelGateway
+	return t == TypeExclusiveGateway || t == TypeInclusiveGateway || t == TypeParallelGateway ||
+		t == TypeEventBasedGateway
+}
+
+// isCatchEvent reports whether a node type is an intermediate catch event — a valid
+// target of an event-based gateway's deferred choice (ADR-0110).
+func isCatchEvent(t BpmnType) bool {
+	return t == TypeMessageCatchEvent || t == TypeTimerCatchEvent || t == TypeSignalCatchEvent
 }
 
 // isActivity reports whether a node type is an activity — an element a token
@@ -476,7 +599,8 @@ func isGateway(t BpmnType) bool {
 func isActivity(t BpmnType) bool {
 	switch t {
 	case TypeServiceTask, TypeScriptTask, TypeScriptJobTask, TypeBusinessRuleTask,
-		TypeUserTask, TypeConnectorTask, TypeTask, TypeReceiveTask, TypeSubProcess, TypeCallActivity:
+		TypeUserTask, TypeConnectorTask, TypeTask, TypeReceiveTask, TypeSendTask,
+		TypeSubProcess, TypeCallActivity:
 		return true
 	default:
 		return false

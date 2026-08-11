@@ -46,6 +46,7 @@ The three core pillars:
   - [Invariants](docs/architecture/invariants.md) — the rules the engine's correctness depends on
 - **[Architecture Decision Records](docs/adr/)** — *why* things are the way they are
 - **[Postman onboarding kit](postman/)** — import the collection + environment and drive the HTTP API (deploy, run instances, work user tasks) in five minutes
+- **[Deploying Atlas](deploy/)** — the container image ([`Dockerfile`](Dockerfile)) and a [Helm chart](deploy/helm/atlas) for running the server on Kubernetes
 - **[Roadmap](ROADMAP.md)** — where this is going · **[Changelog](CHANGELOG.md)** — what changed in each release
 - **[Contributing](CONTRIBUTING.md)** · **[Development](DEVELOPMENT.md)** · **[Security](SECURITY.md)**
 

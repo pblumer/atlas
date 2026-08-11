@@ -12,6 +12,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -22,6 +24,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -54,6 +57,10 @@ func main() {
 		}
 	case "version", "-v", "--version":
 		printVersion(os.Stdout)
+	case "reset-password":
+		if err := runResetPassword(args); err != nil {
+			log.Fatalf("atlas reset-password: %v", err)
+		}
 	case "help", "-h", "--help":
 		usage()
 	default:
@@ -84,9 +91,10 @@ func usage() {
 	fmt.Fprint(os.Stderr, `Atlas — a durable BPMN workflow engine.
 
 Usage:
-  atlas serve [flags]   Run the engine, HTTP API, and web UI (default)
-  atlas mcp   [flags]   Run the Model Context Protocol adapter on stdio
-  atlas version         Print the version and build metadata
+  atlas serve          [flags]      Run the engine, HTTP API, and web UI (default)
+  atlas mcp            [flags]      Run the Model Context Protocol adapter on stdio
+  atlas reset-password [flags] USER Reset a local user's password from the shell
+  atlas version                     Print the version and build metadata
 
 Run "atlas <command> -h" for the flags of a command.
 `)
@@ -145,6 +153,16 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return err
+	}
+
+	// Apply a staged whole-instance snapshot restore, if one was uploaded before this
+	// restart (ADR-0108). This MUST happen before the WAL and state stores are opened:
+	// it replaces the WAL (and drops the state store so recovery rebuilds it), which
+	// cannot be done while the engine holds them open under the single-writer invariant.
+	if applied, err := api.ApplyPendingRestore(dataDir); err != nil {
+		return fmt.Errorf("apply pending restore: %w", err)
+	} else if applied {
+		log.Printf("applied a staged full-snapshot restore; state will be rebuilt from the restored WAL")
 	}
 
 	// Open durable stores. The wal is the source of truth; the store is its
@@ -265,4 +283,90 @@ func runMCP(args []string) error {
 
 	s := mcp.NewServer(mcp.NewClient(*server))
 	return s.Serve(os.Stdin, os.Stdout)
+}
+
+// runResetPassword sets a local user's password directly against the on-disk user
+// store, without a running server or a login. It is the operator recovery path
+// for a self-hosted, admin-managed instance whose admin is locked out — there is
+// no self-service reset and the MCP adapter is not an admin (ADR-0044/0049), so
+// recovery has to be reachable from a shell (e.g. `docker exec … reset-password`).
+//
+// By default it generates a strong password and prints it once; --password-stdin
+// reads one from stdin instead, keeping the secret out of the process arguments
+// (where `ps` or shell history would expose it).
+func runResetPassword(args []string) error {
+	fs := flag.NewFlagSet("reset-password", flag.ExitOnError)
+	dataDir := fs.String("data-dir", "atlas-data", "the server's data directory (its user store lives here); must match the running server's --data-dir")
+	createAdmin := fs.Bool("create-admin", false, "if no user with this name exists, create an enabled admin with it")
+	passwordStdin := fs.Bool("password-stdin", false, "read the new password from stdin instead of generating one (keeps it out of the process arguments)")
+	fs.Usage = func() {
+		fmt.Fprint(os.Stderr, `Usage: atlas reset-password [flags] USERNAME
+
+Reset a local user's password by writing directly to the data directory, so a
+locked-out admin can recover without a login. Stop the server first if you like;
+it is not required (login re-reads the store on every attempt).
+
+Examples:
+  atlas reset-password --data-dir /data patrick
+  echo -n 'a-strong-password' | atlas reset-password --data-dir /data --password-stdin patrick
+
+Flags:
+`)
+		fs.PrintDefaults()
+	}
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	rest := fs.Args()
+	if len(rest) != 1 {
+		fs.Usage()
+		return fmt.Errorf("expected exactly one USERNAME argument, got %d", len(rest))
+	}
+	username := rest[0]
+
+	password, generated, err := resetPasswordValue(*passwordStdin)
+	if err != nil {
+		return err
+	}
+
+	res, err := api.ResetPassword(api.ResetPasswordOptions{
+		DataDir:     *dataDir,
+		Username:    username,
+		NewPassword: password,
+		CreateAdmin: *createAdmin,
+		Now:         time.Now().Unix(),
+	})
+	if err != nil {
+		return err
+	}
+
+	verb := "reset the password for"
+	if res.Created {
+		verb = "created admin"
+	}
+	log.Printf("atlas: %s user %q (id %s)", verb, res.Username, res.UserID)
+	if generated {
+		// The generated secret goes to stdout (not the log) so it is easy to
+		// capture and does not linger in a shared log buffer.
+		fmt.Printf("Generated password for %q: %s\n", res.Username, password)
+	}
+	return nil
+}
+
+// resetPasswordValue returns the new password to set: read from stdin when
+// fromStdin is true, otherwise a freshly generated one (with generated=true so
+// the caller knows to print it).
+func resetPasswordValue(fromStdin bool) (password string, generated bool, err error) {
+	if fromStdin {
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return "", false, fmt.Errorf("read password from stdin: %w", err)
+		}
+		return strings.Trim(string(data), "\r\n"), false, nil
+	}
+	b := make([]byte, 12)
+	if _, err := rand.Read(b); err != nil {
+		return "", false, fmt.Errorf("generate password: %w", err)
+	}
+	return hex.EncodeToString(b), true, nil
 }

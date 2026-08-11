@@ -217,6 +217,12 @@ type timelineStep struct {
 	SourceElementID    string         `json:"sourceElementId,omitempty"`
 	Action             string         `json:"action,omitempty"`
 	Relation           string         `json:"relation,omitempty"`
+	// ChildInstanceKey is the process instance a call activity started as its child
+	// (ADR-0076), so the replay view can drill from the caller's call activity into
+	// the child's own replay. Zero for a non-call-activity step, or a call activity
+	// whose child was never created (it parked). Resolved by the reverse
+	// ParentElementInstanceKey link, covering active and completed children.
+	ChildInstanceKey uint64 `json:"childInstanceKey,omitempty"`
 }
 
 type timelineToken struct {
@@ -287,6 +293,9 @@ type cancelInstancesResp struct {
 type failJobReq struct {
 	Retries int32  `json:"retries"`
 	Message string `json:"message"`
+	// RetryBackoff is the delay in milliseconds a worker asks to wait before its failed job
+	// may be retried (ADR-0111). 0 (or absent) retries immediately, the pre-0111 behavior.
+	RetryBackoff int64 `json:"retryBackoff"`
 }
 
 type resolveIncidentReq struct {
@@ -1063,6 +1072,25 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				return nil
 			})
 		}
+		// Reverse call-activity link: a child instance records the call-activity element
+		// instance that started it (ParentElementInstanceKey, ADR-0076). Build the map
+		// once — only if this definition actually has call activities — so a call
+		// activity's step can carry its childInstanceKey and the replay can drill in.
+		// Covers active and completed children (the child usually outlives the caller's
+		// step but may already be done).
+		var childByParent map[uint64]uint64
+		if scanErr == nil && len(d.cp.CallActivities()) > 0 {
+			childByParent = map[uint64]uint64{}
+			link := func(childKey uint64, v *model.ProcessInstanceValue) error {
+				if v.ParentElementInstanceKey != 0 {
+					childByParent[v.ParentElementInstanceKey] = childKey
+				}
+				return nil
+			}
+			if scanErr = s.store.ActiveProcessInstances(link); scanErr == nil {
+				scanErr = s.store.CompletedProcessInstances(link)
+			}
+		}
 		// Variable snapshots are scope-aware: the process-instance (root) scope plus
 		// each embedded subprocess scope of this instance, so a subprocess's local
 		// variables (its input mappings) are visible in the replay, labeled by their
@@ -1243,6 +1271,11 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			}
 			if rv, ok := activations[sr.pos]; ok {
 				step.TokenID, step.ElementInstanceKey = rv.TokenID, rv.ElementInstanceKey
+				// A call activity carries the child instance it started, so the replay
+				// can drill from the caller into the child (ADR-0076).
+				if childByParent != nil && d.cp.Node(sr.elementID).Type == compiler.TypeCallActivity {
+					step.ChildInstanceKey = childByParent[rv.ElementInstanceKey]
+				}
 				// The completion of this same element instance (Action==2) gives the
 				// element's end time, so the history can show start → end per element
 				// like Operate. Absent (still active / parked), endAt stays zero.
@@ -2783,7 +2816,7 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
-		s.proc.FailJob(key, req.Retries, req.Message)
+		s.proc.FailJob(key, req.Retries, req.Message, req.RetryBackoff*int64(time.Millisecond))
 		runErr = s.jobRunner.Drive()
 	})
 	switch {

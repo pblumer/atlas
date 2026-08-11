@@ -99,6 +99,24 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Recent log lines, oldest first", schemaObj(map[string]any{
 				"lines": tArray(),
 			}))}},
+		{"GET", "/api/v1/backup", s.handleBackup, apiOp{
+			summary: "Download a backup of all design-time data (projects, drafts, deployments, forms, decisions, connectors) as a gzip tar; excludes user accounts, the vault key, and runtime state (admin-only when auth is on) (ADR-0107)", tag: "System",
+			resp: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip-compressed tar archive of the design-time data directory"}}},
+		{"POST", "/api/v1/restore", s.handleRestore, apiOp{
+			summary: "Restore design-time data from an uploaded backup archive; overwrites matching artifacts, skips anything outside the design-time allowlist, and needs a restart for deployed processes to take effect (admin-only when auth is on) (ADR-0107)", tag: "System",
+			req: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip tar archive produced by GET /api/v1/backup"},
+			resp: jsonBody("Restore summary", schemaObj(map[string]any{
+				"restored": tInteger(), "restartRequired": tBool(), "note": tString(),
+			}))}},
+		{"GET", "/api/v1/backup/full", s.handleBackupFull, apiOp{
+			summary: "Download a whole-instance snapshot (design-time data plus the WAL — running instances — the user accounts and the vault key) as a gzip tar; excludes only the derivable state store (admin-only when auth is on) (ADR-0109)", tag: "System",
+			resp: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip-compressed tar archive of the whole-instance snapshot"}}},
+		{"POST", "/api/v1/restore/full", s.handleRestoreFull, apiOp{
+			summary: "Stage a whole-instance snapshot for restore; it is applied on the next server restart, which replaces the WAL, running instances, design-time data, users and vault key, then rebuilds state from the restored WAL (admin-only when auth is on) (ADR-0109)", tag: "System",
+			req: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip tar archive produced by GET /api/v1/backup/full"},
+			resp: jsonBody("Restore staging summary", schemaObj(map[string]any{
+				"restored": tInteger(), "restartRequired": tBool(), "note": tString(),
+			}))}},
 
 		{"POST", "/api/v1/feel/validate", s.handleValidateFeel, apiOp{
 			summary: "Validate a FEEL expression compiles", tag: "FEEL",
@@ -146,6 +164,13 @@ func (s *Server) apiRoutes() []apiRoute {
 			status: http.StatusNoContent}},
 		{"GET", "/api/v1/processes/{key}/runtime", s.handleProcessRuntime, apiOp{
 			summary: "Read a process's live runtime state", tag: "Processes", resp: jsonBody("Runtime state", tObject())}},
+		{"GET", "/api/v1/call-activities", s.handleCallActivities, apiOp{
+			summary: "List every call activity across deployed processes with its per-server resolution status", tag: "Processes", resp: jsonBody("Call activities", tArray())}},
+		{"PUT", "/api/v1/call-activities/overrides/{processId}", s.handleSetCallOverride, apiOp{
+			summary: "Set a per-server call-activity target override (redirect/pin/disable) for a called process id", tag: "Processes",
+			req: jsonBody("Override", tObject()), resp: jsonBody("Stored override", tObject())}},
+		{"DELETE", "/api/v1/call-activities/overrides/{processId}", s.handleDeleteCallOverride, apiOp{
+			summary: "Clear a called process id's per-server target override", tag: "Processes", status: http.StatusNoContent}},
 		{"GET", "/api/v1/collaborations/{key}/runtime", s.handleCollaborationRuntime, apiOp{
 			summary: "Read a collaboration's live runtime state", tag: "Collaborations", resp: jsonBody("Runtime state", tObject())}},
 
@@ -388,6 +413,16 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Store or overwrite a secret value in the encrypted vault", tag: "Secrets", req: jsonBody("Secret value", schemaObj(map[string]any{"value": tString()}, "value")), resp: jsonBody("Secret metadata", tObject())}},
 		{"DELETE", "/api/v1/secrets/{name}", s.handleDeleteSecret, apiOp{
 			summary: "Delete a secret from the encrypted vault", tag: "Secrets", status: http.StatusNoContent}},
+
+		{"GET", "/api/v1/settings/theme", s.handleGetTheme, apiOp{
+			summary: "Get the org-wide UI brand accent colour (public; applied before login)", tag: "System",
+			resp: jsonBody("Theme", schemaObj(map[string]any{"accent": tString()}))}},
+		{"PUT", "/api/v1/settings/theme", s.handleSetTheme, apiOp{
+			summary: "Set the org-wide UI brand accent colour (admin-only when auth is on) (ADR-0113)", tag: "System",
+			req:  jsonBody("Theme", schemaObj(map[string]any{"accent": tString()}, "accent")),
+			resp: jsonBody("Theme", schemaObj(map[string]any{"accent": tString()}))}},
+		{"DELETE", "/api/v1/settings/theme", s.handleDeleteTheme, apiOp{
+			summary: "Reset the org-wide UI theme to the built-in default (admin-only when auth is on) (ADR-0113)", tag: "System", status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/auth/login", s.handleLogin, apiOp{
 			summary: "Log in with a username and password", tag: "Auth",

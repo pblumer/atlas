@@ -139,6 +139,35 @@ const CsvImportJobType = "io.atlas.csv-import"
 // way the mail worker uses MailJobTypeIndex.
 const CsvImportJobTypeIndex int32 = 11
 
+// SharePointJobType is the reserved job type a SharePoint connector task carries.
+// The in-process SharePoint connector worker subscribes to it to create a list item
+// in a model-authored SharePoint site/list through a server-registered SharePoint
+// provider (Microsoft Graph) off the hot path (ADR-0105), the same way the mail
+// worker subscribes to MailJobType.
+const SharePointJobType = "io.atlas.sharepoint.createitem"
+
+// SharePointJobTypeIndex is the interned index SharePointJobType is guaranteed to
+// occupy in every compiled process: NewBuilder reserves it thirteenth (after the
+// twelve job types above), so it is always 12. This lets a single in-process
+// SharePoint worker subscribe by one global index across every deployed process, the
+// same way the mail worker uses MailJobTypeIndex (ADR-0105).
+const SharePointJobTypeIndex int32 = 12
+
+// RemedyJobType is the reserved job type a BMC Remedy connector task carries. The
+// in-process Remedy connector worker subscribes to it to create an entry (e.g. an
+// incident) in a Remedy form through the BMC AR System REST API off the hot path
+// (ADR-0106), the same way the mail worker subscribes to MailJobType. The provider
+// host and credentials live in a server-registered connector, like clio/mail; only
+// the form name and its field values are model-authored.
+const RemedyJobType = "io.atlas.remedy.entry"
+
+// RemedyJobTypeIndex is the interned index RemedyJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it fourteenth (after the thirteen job
+// types above), so it is always 13. This lets a single in-process Remedy worker
+// subscribe by one global index across every deployed process, the same way the mail
+// worker uses MailJobTypeIndex (ADR-0079/0106).
+const RemedyJobTypeIndex int32 = 13
+
 // TemisDecisionJobType is the reserved job type a *central* business rule task
 // carries — one whose decision is evaluated by a remote temis service rather than
 // the embedded temis library. The in-process temis decision connector worker
@@ -233,6 +262,8 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 	b.intern(ClioReadJobType)      // reserve ClioReadJobTypeIndex == 9
 	b.intern(MailJobType)          // reserve MailJobTypeIndex == 10
 	b.intern(CsvImportJobType)     // reserve CsvImportJobTypeIndex == 11
+	b.intern(SharePointJobType)    // reserve SharePointJobTypeIndex == 12
+	b.intern(RemedyJobType)        // reserve RemedyJobTypeIndex == 13
 	return b
 }
 
@@ -403,6 +434,20 @@ func (b *Builder) AddServiceTask(jobType string, retries int32) int32 {
 		Retries: retries,
 	})
 	return b.addNode(TypeServiceTask, detail)
+}
+
+// AddSendTask adds a send task with the given job type and retries and returns its
+// element id (ADR-0112). A send task is a service task under a different BPMN label: it
+// creates a job and waits, so it reuses the service-task detail table and (at runtime)
+// serviceTaskBehavior. Only its node type (TypeSendTask) differs, to preserve the
+// send-task identity — the TypeConnectorTask "distinct type, shared behavior" pattern.
+func (b *Builder) AddSendTask(jobType string, retries int32) int32 {
+	detail := int32(len(b.serviceTasks))
+	b.serviceTasks = append(b.serviceTasks, ServiceTaskDetail{
+		JobType: b.intern(jobType),
+		Retries: retries,
+	})
+	return b.addNode(TypeSendTask, detail)
 }
 
 // AddScriptTask adds a script task that evaluates the given compiled FEEL
@@ -678,6 +723,92 @@ func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
 	return b.addNode(TypeConnectorTask, detail)
 }
 
+// SharePointConfig is the deploy-time configuration of a SharePoint connector task
+// (ADR-0105). Connector names the server-registered SharePoint provider (its Graph
+// base and OAuth credential live server-side, never in the model); Site and List
+// address the target list, and Fields are the created item's column values — all
+// literal-or-FEEL values (the parser compiles the FEEL ones) evaluated over the
+// instance's variables at call time. ResultVar, if set, is the process variable the
+// created item's JSON is written back into (empty = discard it).
+type SharePointConfig struct {
+	Connector string
+	Site      RestExpr
+	List      RestExpr
+	Fields    []RestKV
+	ResultVar string
+	Retries   int32
+}
+
+// AddSharePointConnectorTask adds a SharePoint connector task and returns its element
+// id. Like a service task it creates a job on activation and waits; the job carries
+// the reserved SharePointJobType so the in-process SharePoint worker picks it up,
+// evaluates any FEEL site/list/field values over the instance's variables, resolves
+// the named connector's Graph client, creates the list item, writes the created
+// item's JSON into ResultVar, and completes the job (ADR-0105). The Graph base and
+// credentials are resolved server-side from the named connector, never authored in
+// the model — mirroring the mail connector (ADR-0079).
+func (b *Builder) AddSharePointConnectorTask(cfg SharePointConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:    b.intern(SharePointJobType),
+		Connector:  b.intern(cfg.Connector),
+		Subject:    -1, // not a clio task
+		EventType:  -1,
+		ClioQuery:  -1,
+		ReduceSpec: -1,
+		Method:     -1, // not a REST task
+		ResultVar:  b.intern(cfg.ResultVar),
+		Auth:       -1,
+		Site:       cfg.Site,
+		List:       cfg.List,
+		Fields:     cfg.Fields,
+		Retries:    cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// RemedyConfig is the deploy-time configuration of a BMC Remedy connector task
+// (ADR-0106). Connector names the server-registered Remedy instance (its base URL
+// and credentials live server-side, never in the model). Form is the Remedy form
+// the entry is created in (e.g. "HPD:IncidentInterface_Create"); Fields carries the
+// entry's field values as name/literal-or-FEEL pairs evaluated over the instance's
+// variables at call time (the fx toggle, ADR-0067). ResultVar, if set, is the
+// process variable the created entry's id is written back into.
+type RemedyConfig struct {
+	Connector string
+	Form      RestExpr
+	Fields    []RestKV
+	ResultVar string
+	Retries   int32
+}
+
+// AddRemedyConnectorTask adds a BMC Remedy connector task and returns its element
+// id. Like a service task it creates a job on activation and waits; the job carries
+// the reserved RemedyJobType so the in-process Remedy worker picks it up, evaluates
+// any FEEL form/field values over the instance's variables, resolves the named
+// connector's AR System REST client, creates the entry, writes the new entry id into
+// ResultVar (empty = discard it), and completes the job (ADR-0106). The Remedy base
+// URL and credentials are resolved server-side from the named connector, never
+// authored in the model — mirroring clio and mail (ADR-0036/0079).
+func (b *Builder) AddRemedyConnectorTask(cfg RemedyConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:      b.intern(RemedyJobType),
+		Connector:    b.intern(cfg.Connector),
+		Subject:      -1, // not a clio task
+		EventType:    -1,
+		ClioQuery:    -1,
+		ReduceSpec:   -1,
+		Method:       -1, // not a REST task
+		ResultVar:    b.intern(cfg.ResultVar),
+		Auth:         -1,
+		RemedyForm:   cfg.Form,
+		RemedyFields: cfg.Fields,
+		Retries:      cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
 // AddUserTask adds a user task that parks a token and creates a job for a human
 // to complete via the Tasks app (ADR-0028). assignee and candidateGroups are
 // optional (empty strings are stored as -1). Returns its element id.
@@ -869,6 +1000,12 @@ func (b *Builder) AddParallelGateway() int32 { return b.addNode(TypeParallelGate
 // and SetFlowDefault.
 func (b *Builder) AddExclusiveGateway() int32 { return b.addNode(TypeExclusiveGateway, -1) }
 
+// AddEventBasedGateway adds an event-based gateway (deferred choice) and returns its
+// element id. It carries no detail: at runtime it arms every target catch event (each
+// outgoing flow must lead to a message/timer/signal intermediate catch) and takes the
+// branch whose event fires first, cancelling the rest (ADR-0110).
+func (b *Builder) AddEventBasedGateway() int32 { return b.addNode(TypeEventBasedGateway, -1) }
+
 // AddTimerCatchEvent adds an intermediate timer catch event that waits the given
 // fixed duration (nanoseconds) before continuing, and returns its element id. It
 // is the duration convenience over AddTimerCatchSchedule.
@@ -1001,6 +1138,34 @@ func (b *Builder) AddCompensationEndEvent() int32 {
 	detail := int32(len(b.compensationThrows))
 	b.compensationThrows = append(b.compensationThrows, CompensationDetail{ActivityRef: -1})
 	return b.addNode(TypeCompensationEndEvent, detail)
+}
+
+// AddCancelEndEvent adds a cancel end event: an end event inside a transaction that cancels
+// it — compensating the transaction's completed activities in reverse order, then routing out
+// the transaction's cancel boundary (ADR-0108). It carries no detail (a cancel always
+// compensates the whole transaction). Returns its element id.
+func (b *Builder) AddCancelEndEvent() int32 { return b.addNode(TypeCancelEndEvent, -1) }
+
+// AddBoundaryCancelEvent adds a cancel boundary event attached to host (a transaction): it
+// catches the transaction's cancellation and routes its recovery flow. Armed inert like an
+// error boundary and always interrupting (ADR-0108). Returns its element id.
+func (b *Builder) AddBoundaryCancelEvent(host int32) int32 {
+	detail := int32(len(b.boundaryEventDets))
+	b.boundaryEventDets = append(b.boundaryEventDets, BoundaryEventDetail{
+		HostNode:     host,
+		Interrupting: true, // a cancel boundary is always interrupting
+		Kind:         BoundaryCancel,
+	})
+	return b.addNode(TypeBoundaryEvent, detail)
+}
+
+// SetTransaction marks an already-added subprocess node as a <transaction> (ADR-0108), so the
+// runtime and validation know it may host a cancel boundary and hold a cancel end event. A
+// no-op for an out-of-range node.
+func (b *Builder) SetTransaction(nodeID int32) {
+	if b.validNode(nodeID) {
+		b.nodes[nodeID].Transaction = true
+	}
 }
 
 // AddBoundaryCompensationEvent adds a compensation boundary event attached to host: an inert

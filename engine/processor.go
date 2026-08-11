@@ -61,6 +61,15 @@ type Processor struct {
 	// so the last write wins deterministically (the ADR-0063 binding argument, I6).
 	latestProcess map[string]uint64
 
+	// callOverrides redirects, pins, or disables a call activity's target resolution
+	// per server, keyed by called bpmn process id (ADR-0105). Unlike latestProcess it
+	// is NOT derived from deployments — it is operator config the server layer loads
+	// from a sidecar at startup and pushes here via SetCallTargetOverride, owned by
+	// this run-loop goroutine (I3). It affects only LIVE resolution: a child's chosen
+	// def key is frozen into its create event (ADR-0076), so replay is unaffected and
+	// this map need not live in the log (I6).
+	callOverrides map[string]CallTargetOverride
+
 	jobNotifier func(jobType int32)
 
 	queue        []Command
@@ -110,6 +119,7 @@ func New(partition uint16, log *wal.Log, store *state.Store, clock Clock) *Proce
 		messageStarts: map[string][]messageStartRef{},
 		signalStarts:  map[string][]uint64{},
 		latestProcess: map[string]uint64{},
+		callOverrides: map[string]CallTargetOverride{},
 	}
 	p.registerHandlers()
 	p.registerBehaviors()
@@ -132,6 +142,39 @@ func (p *Processor) Deploy(cp *compiler.CompiledProcess) {
 	for _, ss := range cp.SignalStartEvents() {
 		p.signalStarts[ss.SignalName] = append(p.signalStarts[ss.SignalName], cp.Key)
 	}
+}
+
+// CallTargetOverride redirects, pins, or disables a call activity's target on this
+// server (ADR-0105). Exactly one shape is meaningful per record; the resolution
+// precedence (see ProcessingContext.resolveCallTarget) is Disabled, then
+// PinnedDefKey, then RedirectProcessId, else the default `latest` resolution. It is
+// operator config, not derived from deployments and not event-sourced — it changes
+// only future resolutions; a child already created carries its frozen def key, so
+// replay is unaffected (I6).
+type CallTargetOverride struct {
+	// Disabled parks the call (as an undeployed callee does) instead of resolving.
+	Disabled bool
+	// PinnedDefKey resolves to exactly this definition key (0 = not pinned). The
+	// server layer picks the key from an operator-named version; the engine is
+	// version-agnostic and simply uses it, parking if it is no longer deployed.
+	PinnedDefKey uint64
+	// RedirectProcessId resolves the newest deployment of this process id instead of
+	// the called one ("" = no redirect). A redirect uses the default `latest`
+	// resolution for its target (no chaining), so overrides cannot form a cycle.
+	RedirectProcessId string
+}
+
+// SetCallTargetOverride installs (or replaces) the per-server override for a called
+// process id. Must be called on the run-loop goroutine (the map's single owner):
+// the server layer calls it at startup and on an admin change (ADR-0105).
+func (p *Processor) SetCallTargetOverride(calledProcessId string, ov CallTargetOverride) {
+	p.callOverrides[calledProcessId] = ov
+}
+
+// ClearCallTargetOverride removes a called process id's override, restoring the
+// default `latest` resolution. Idempotent. Run-loop goroutine only.
+func (p *Processor) ClearCallTargetOverride(calledProcessId string) {
+	delete(p.callOverrides, calledProcessId)
 }
 
 // Undeploy removes a definition so no new instances of it can be created,
@@ -278,11 +321,13 @@ func (p *Processor) SetVariables(piKey, scopeKey uint64, actor string, vars ...m
 }
 
 // FailJob enqueues a worker's failure report for a job (ADR-0061), carrying the
-// retries the worker leaves it and a failure message. With retries > 0 the job is
-// retried (back on the activatable index); with retries <= 0 an incident is raised
-// on the job's element and the token parks there. Failing a job that no longer
-// exists is a no-op. Call RunUntilIdle (or Drive) to process it.
-func (p *Processor) FailJob(jobKey uint64, retries int32, message string) {
+// retries the worker leaves it, a failure message, and a retry backoff (unix-nanoseconds;
+// 0 = retry immediately, ADR-0111). With retries > 0 the job is retried — immediately if
+// backoff is 0, otherwise held off the activatable index until a retry timer fires backoff
+// nanoseconds later; with retries <= 0 an incident is raised on the job's element and the
+// token parks there. Failing a job that no longer exists is a no-op. Call RunUntilIdle (or
+// Drive) to process it.
+func (p *Processor) FailJob(jobKey uint64, retries int32, message string, backoff int64) {
 	p.queue = append(p.queue, Command{
 		Key:       jobKey,
 		ValueType: model.VTJob,
@@ -291,6 +336,7 @@ func (p *Processor) FailJob(jobKey uint64, retries int32, message string) {
 			job:      model.JobValue{Retries: retries},
 			incident: model.IncidentValue{Message: message},
 		},
+		RetryBackoff: backoff,
 	})
 }
 

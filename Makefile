@@ -1,7 +1,8 @@
 # Atlas — developer command entry point.
 # Agents and CI: prefer these targets so the canonical commands live in one place.
 
-.PHONY: all build test race vet fmt fmt-check lint check cover tidy clean run server
+.PHONY: all build test race vet fmt fmt-check lint check cover tidy clean run server \
+        docker docker-powershell docker-buildx helm-lint helm-template
 
 all: check
 
@@ -51,3 +52,28 @@ tidy:
 clean:
 	go clean ./...
 	rm -rf bin dist coverage
+
+# --- Container image & Helm chart (see deploy/) -----------------------------
+
+IMAGE ?= ghcr.io/pblumer/atlas:dev
+CHART := deploy/helm/atlas
+
+# Build the server image for the local architecture (python3 + node).
+docker:
+	docker build -t $(IMAGE) .
+
+# Build the image with PowerShell (pwsh) bundled as well.
+docker-powershell:
+	docker build --build-arg INCLUDE_POWERSHELL=true -t $(IMAGE) .
+
+# Build (and optionally push with PUSH=--push) a multi-arch image via buildx.
+docker-buildx:
+	docker buildx build --platform linux/amd64,linux/arm64 -t $(IMAGE) $(PUSH) .
+
+# Lint the Helm chart.
+helm-lint:
+	helm lint $(CHART)
+
+# Render the chart to stdout (override values via ARGS, e.g. ARGS="--set atlas.auth.enabled=true").
+helm-template:
+	helm template atlas $(CHART) $(ARGS)

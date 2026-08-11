@@ -9,7 +9,11 @@
 // milestone; the linearized result here is the shape the engine consumes.
 package compiler
 
-import "github.com/pblumer/atlas/expr"
+import (
+	"fmt"
+
+	"github.com/pblumer/atlas/expr"
+)
 
 // BpmnType is the kind of a BPMN element. It is stored in element-instance state
 // (as uint8) for O(1) behavior dispatch.
@@ -57,8 +61,14 @@ const (
 	TypeCompensationThrowEvent // an intermediate throw event that triggers compensation — runs the handlers of completed compensable activities in its scope, or of one named activity (ADR-0103)
 	TypeCompensationEndEvent   // an end event that triggers compensation, then ends its scope (ADR-0103); the trigger-and-stop counterpart of a compensation throw, reusing the throw detail table
 
+	TypeCancelEndEvent // an end event inside a transaction that cancels it: compensates the transaction's completed activities in reverse order, then routes out the transaction's cancel boundary (ADR-0108)
+
+	TypeEventBasedGateway // a deferred choice: arms every target catch event (message/timer/signal) at once and takes the branch whose event fires first, cancelling the rest (ADR-0110)
+
+	TypeSendTask // a send task: a job-creating activity identical in execution to a service task (ADR-0112) — it creates a job and waits, reusing ServiceTaskDetail and serviceTaskBehavior; a distinct type only to preserve the send-task identity, like TypeConnectorTask
+
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 31
+	numBpmnTypes = 34
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -90,6 +100,8 @@ func (t BpmnType) String() string {
 		return "ParallelGateway"
 	case TypeInclusiveGateway:
 		return "InclusiveGateway"
+	case TypeEventBasedGateway:
+		return "EventBasedGateway"
 	case TypeMessageStartEvent:
 		return "MessageStartEvent"
 	case TypeConnectorTask:
@@ -122,10 +134,14 @@ func (t BpmnType) String() string {
 		return "ErrorEndEvent"
 	case TypeReceiveTask:
 		return "ReceiveTask"
+	case TypeSendTask:
+		return "SendTask"
 	case TypeCompensationThrowEvent:
 		return "CompensationThrowEvent"
 	case TypeCompensationEndEvent:
 		return "CompensationEndEvent"
+	case TypeCancelEndEvent:
+		return "CancelEndEvent"
 	default:
 		return "Unspecified"
 	}
@@ -157,6 +173,7 @@ type CompiledNode struct {
 	EventSub        int32 // index into eventSubProcesses, -1 if this subprocess is not event-triggered (ADR-0082)
 	EventSubStart   int32 // offset into eventSubs (the event-subprocess handler nodes nested directly in this scope)
 	EventSubCount   int32 // number of event subprocesses in this scope (0 for a node that hosts none)
+	Transaction     bool  // this subprocess is a <transaction>: it may hold a cancel end event and host a cancel boundary (ADR-0108)
 }
 
 // CompiledFlow is a sequence flow between two nodes. Condition is the compiled
@@ -274,6 +291,20 @@ const (
 	BindingDeployment
 )
 
+// String renders a binding as the lower-case token used on the wire and in the
+// Modeler (`bindingType`): "latest" or "deployment". Any unknown value is
+// reported verbatim so a drift is visible rather than silently mapped to latest.
+func (b DecisionBinding) String() string {
+	switch b {
+	case BindingLatest:
+		return "latest"
+	case BindingDeployment:
+		return "deployment"
+	default:
+		return fmt.Sprintf("DecisionBinding(%d)", int32(b))
+	}
+}
+
 // UserTaskDetail is the per-user-task data a behavior needs at runtime. A user
 // task parks a token and creates a job like a service task; the "worker" is a
 // person using the Tasks app (ADR-0028). Assignee and CandidateGroups are
@@ -319,6 +350,14 @@ type UserTaskDetail struct {
 //     method (e.g. "POST") and the full endpoint URL authored in the model
 //     (ADR-0067, revising ADR-0036 for REST); ResultVar, if set, is the process
 //     variable the JSON response is written back into on completion.
+//   - SharePoint (JobType == SharePointJobType): Connector names the
+//     server-registered SharePoint provider; Site and List address the target list
+//     and Fields are the created item's column values (all literal-or-FEEL); the
+//     created item's JSON is written into ResultVar when set (ADR-0105).
+//   - BMC Remedy (JobType == RemedyJobType): Connector names the server-registered
+//     Remedy instance; RemedyForm and RemedyFields are the form and the entry's field
+//     values (literal-or-FEEL) an incident/entry is created with through the AR System
+//     REST API; ResultVar, if set, receives the created entry's id (ADR-0106).
 //
 // Unused fields for a given kind are -1 (Intern maps that back to ""); Limit is 0
 // when unset. The write and REST kinds send the instance's variables as the
@@ -360,6 +399,24 @@ type ConnectorTaskDetail struct {
 	From        RestExpr
 	MailSubject RestExpr
 	Body        RestExpr
+	// SharePoint connector fields (JobType == SharePointJobType, ADR-0105). Connector
+	// (above) names the server-registered SharePoint provider (its Graph base and
+	// OAuth credential live server-side). Site and List address the target list (a
+	// site host/path or id, and a list name or id); Fields are the created item's
+	// column values. Each is a literal-or-FEEL value evaluated over the instance's
+	// variables at call time; Site/List are the zero RestExpr and Fields is nil for a
+	// non-SharePoint task. ResultVar (above), if set, receives the created item's JSON.
+	Site   RestExpr
+	List   RestExpr
+	Fields []RestKV
+	// Remedy connector fields (JobType == RemedyJobType, ADR-0106). Connector (above)
+	// names the server-registered BMC Remedy instance; ResultVar (above), if set,
+	// receives the created entry's id. RemedyForm is the Remedy form the entry is
+	// created in (literal-or-FEEL, the zero RestExpr for a non-remedy task);
+	// RemedyFields are the entry's field values as name/literal-or-FEEL pairs, evaluated
+	// over the instance's variables at call time (nil for a non-remedy task).
+	RemedyForm   RestExpr
+	RemedyFields []RestKV
 }
 
 // RestExpr is a REST connector field value that is either a literal string
@@ -465,6 +522,7 @@ const (
 	BoundarySignal                                // waits for a broadcast signal by name, then fires (ADR-0088)
 	BoundaryError                                 // catches an error propagating up to it by code, then fires; always interrupting (ADR-0089)
 	BoundaryCompensation                          // links a host activity to its compensation handler; inert — never armed as an element instance, only read on host completion to record the activity as compensable (ADR-0103)
+	BoundaryCancel                                // on a transaction only: catches the transaction's cancellation and routes its recovery flow; armed inert like an error boundary, and always interrupting (ADR-0108)
 )
 
 // BoundaryEventDetail is the per-boundary-event data a behavior needs at runtime.
@@ -616,6 +674,10 @@ type CompiledProcess struct {
 // Node returns the node with the given ElementId.
 func (p *CompiledProcess) Node(id int32) *CompiledNode { return &p.nodes[id] }
 
+// IsTransaction reports whether node id is a <transaction> subprocess — a subprocess
+// that may hold a cancel end event and host a cancel boundary (ADR-0108).
+func (p *CompiledProcess) IsTransaction(id int32) bool { return p.nodes[id].Transaction }
+
 // Flow returns the flow with the given id.
 func (p *CompiledProcess) Flow(id int32) *CompiledFlow { return &p.flows[id] }
 
@@ -702,6 +764,13 @@ func (p *CompiledProcess) NodesReaching(target int32) map[int32]bool {
 
 // ServiceTask returns the detail at the given table index.
 func (p *CompiledProcess) ServiceTask(detail int32) *ServiceTaskDetail {
+	return &p.serviceTasks[detail]
+}
+
+// SendTask returns the detail at the given table index (ADR-0112). A send task is a
+// service task under a different label — it reuses ServiceTaskDetail and the same detail
+// table, so this is ServiceTask by another name, kept for call-site clarity.
+func (p *CompiledProcess) SendTask(detail int32) *ServiceTaskDetail {
 	return &p.serviceTasks[detail]
 }
 
@@ -857,6 +926,45 @@ func (p *CompiledProcess) CallActivity(detail int32) *CallActivityDetail {
 	return &p.callActivities[detail]
 }
 
+// CallActivityRef is the static, read-only view of one call activity: the BPMN
+// element that hosts it, the process id it calls, the version binding, whether
+// variables propagate wholesale in/out, and whether it is a multi-instance loop
+// (spawning one child per collection element). It carries no resolved def key —
+// which deployed definition the call reaches is a per-server, deploy-time fact
+// the server layer computes on top of this (ADR-0076).
+type CallActivityRef struct {
+	ElementId          string
+	CalledProcessId    string
+	Binding            DecisionBinding
+	PropagateAllParent bool
+	PropagateAllChild  bool
+	MultiInstance      bool
+}
+
+// CallActivities returns every call activity in this process, in node order —
+// empty if it has none. It mirrors BusinessRuleDecisions: a static enumeration of
+// an outbound reference (here the called process id) that the server surfaces so
+// operators can see and manage the call activities deployed on a server — which
+// process calls which, and whether the target resolves (ADR-0076).
+func (p *CompiledProcess) CallActivities() []CallActivityRef {
+	var out []CallActivityRef
+	for i := range p.nodes {
+		if p.nodes[i].Type != TypeCallActivity {
+			continue
+		}
+		d := p.CallActivity(p.nodes[i].Detail)
+		out = append(out, CallActivityRef{
+			ElementId:          p.ElementBpmnId(int32(i)),
+			CalledProcessId:    p.Intern(d.CalledProcessId),
+			Binding:            d.Binding,
+			PropagateAllParent: d.PropagateAllParent,
+			PropagateAllChild:  d.PropagateAllChild,
+			MultiInstance:      p.nodes[i].MultiInstance >= 0,
+		})
+	}
+	return out
+}
+
 // MultiInstance returns the loop characteristics at the given table index — the
 // per-activity multi-instance detail a node's MultiInstance field points at
 // (ADR-0077).
@@ -909,6 +1017,26 @@ func (p *CompiledProcess) UserTask(detail int32) *UserTaskDetail {
 // ConnectorTask returns the connector-task detail at the given table index.
 func (p *CompiledProcess) ConnectorTask(detail int32) *ConnectorTaskDetail {
 	return &p.connectorTasks[detail]
+}
+
+// ConnectorTaskOf returns the connector-task detail for element node id, or an
+// error if id is not a connector task in this compiled process. It is the
+// bounds-checked accessor for the job-worker path: a persisted job can outlive
+// the process definition that compiled its element as a connector task (e.g. a
+// job created before a redeploy that recompiled the element into something else,
+// or dropped its connector-task table), and resolving such a stale job must fail
+// it into an incident (ADR-0061) rather than index out of range and panic the
+// job-runner goroutine — an unrecovered panic there crashes the whole server. A
+// worker that gets an error returns it, and FailJob retries then parks the token.
+func (p *CompiledProcess) ConnectorTaskOf(id int32) (*ConnectorTaskDetail, error) {
+	if id < 0 || int(id) >= len(p.nodes) {
+		return nil, fmt.Errorf("element %d out of range (%d nodes)", id, len(p.nodes))
+	}
+	detail := p.nodes[id].Detail
+	if detail < 0 || int(detail) >= len(p.connectorTasks) {
+		return nil, fmt.Errorf("element %d is not a connector task (detail index %d, %d connector tasks)", id, detail, len(p.connectorTasks))
+	}
+	return &p.connectorTasks[detail], nil
 }
 
 // StartEvents returns the process's entry-point element ids.

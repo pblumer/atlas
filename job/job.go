@@ -60,7 +60,7 @@ type Engine interface {
 	RunUntilIdle() error
 	CompleteJob(jobKey uint64, outputs ...model.VariableValue)
 	CompleteJobWithDecision(jobKey uint64, decision *model.DecisionEvaluationValue, outputs ...model.VariableValue)
-	FailJob(jobKey uint64, retries int32, message string)
+	FailJob(jobKey uint64, retries int32, message string, backoff int64)
 }
 
 // Runner dispatches activatable jobs to registered handlers.
@@ -138,7 +138,9 @@ func (r *Runner) PollOnce() (int, error) {
 				// it as progress so Drive loops to apply the FailJob command; when the
 				// job parks (or completes on a retry) it drops off the activatable
 				// index and Drive terminates.
-				r.engine.FailJob(job.Key, job.Retries-1, err.Error())
+				// The in-process runner retries immediately (backoff 0); a worker-supplied
+				// backoff arrives through the HTTP fail endpoint instead (ADR-0111).
+				r.engine.FailJob(job.Key, job.Retries-1, err.Error(), 0)
 				dispatched++
 				continue
 			}

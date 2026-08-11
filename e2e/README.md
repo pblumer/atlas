@@ -38,6 +38,22 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 - **`multi-instance.spec.mjs`** (ADR-0097 / ADR-0100): a modelled **loop cardinality** drives
   the instance count and ticks down; a **data-driven** activity falls back to the
   toolbar-configurable default.
+- **`backup.spec.mjs`** (ADR-0107 / ADR-0109): the **Console → Backup** view — the nav entry
+  opens it, both the design-time backup and the whole-instance **full snapshot** expose their
+  `.tar.gz` download links and restore controls, and each restore flow validates an empty
+  selection, then reports the file count and restart note on a (mocked) successful upload.
+  Drives the real app shell against a mocked `/api/v1` (backup/restore hit the Go API, which
+  the static harness doesn't run).
+- **`call-activity-replay.spec.mjs`** (ADR-0076): the **call-activity drill-down** in the
+  Operations instance replay — a call activity whose timeline step carries a `childInstanceKey`
+  turns its "+" marker into an invisible click hotspot (single click → the child's replay, same
+  window) and shows a "Called process" link in its Details panel; a plain element carries
+  neither. Drives the real `mountInstanceReplay` against a mock `api`.
+- **`call-activity-modeler.spec.mjs`** (ADR-0076): the **Process ID picker + create-new** in
+  the Modeler's call-activity Implement panel — selecting the call activity offers a datalist of
+  existing callees (deployed processes and drafts), and "＋ Create new process" saves the caller,
+  POSTs a starter draft keyed by the entered id, and navigates to it. Drives the real
+  `mountEditor` against a mock `api`.
 
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
 

@@ -63,8 +63,9 @@ Not for production use.
 
 **Connectors**
 
-- A service-task **connector catalog** (plain job worker, clio event-store
-  writer, and a model-authored **REST** connector), each served by one worker.
+- A service-task **connector catalog** — a plain job worker, a clio event-store
+  writer, a model-authored **REST** connector, and email/SharePoint/Remedy
+  connectors — each served by one worker.
 
 **Single-binary server, web UI & tooling**
 
@@ -86,8 +87,17 @@ Not for production use.
 - **MCP server** (ADR-0016) over stdio (`atlas mcp`) and Streamable HTTP
   (`/mcp`), so an AI agent can deploy a model, start an instance, and read live
   runtime state.
+- **Backup & restore** of the design-time state and whole-instance snapshots
+  over the HTTP API.
 - `atlas version` reports the product version plus the binary's embedded VCS
   build metadata (commit, build time, dirty flag, Go toolchain).
+
+**Deployment**
+
+- A container **`Dockerfile`** and a **Helm chart** (`deploy/helm/atlas`) for
+  running the server on Kubernetes, plus the tag-driven release workflow that
+  publishes cross-compiled binaries (linux/macOS/windows × amd64/arm64) with a
+  `SHA256SUMS` file.
 
 ### Notes
 
