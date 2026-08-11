@@ -108,7 +108,17 @@ The control-flow basics most real models use.
   folding the `SourcePos` chain, item-definition schema validation, list-index path
   targets, and connector-backed data stores.
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
-- 🔲 Conformance tests against a curated BPMN model set
+- 🚧 **Conformance tests against a curated BPMN model set** — the
+  [`conformance/`](conformance/) package scaffolds the suite: a register of BPMN
+  execution features mapped onto the workflow control-flow patterns (so gaps are
+  visible in `conformance/COVERAGE.md`), plus four layered correctness oracles per
+  model — golden token traces, replay equivalence (I4, free on every model),
+  structural invariants (no orphan tokens), and metamorphic equivalence
+  (behaviorally equal models must agree despite different shapes). First
+  self-completing scenarios landed (sequence, exclusive gateway, parallel
+  fork/join, a metamorphic pair). Next: a deterministic driver for parking
+  features (user/service tasks, timers, messages), negative models rejected at
+  compile, and broader pattern coverage.
 - 🚧 **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)
   engine, [ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)): the
   element, its behavior, and evaluation through the job path landed as a vertical

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: parallel fork/join over two independent effects.
+
+  Start -> parallel fork -> (set_x: = 1 -> x) & (set_y: = 2 -> y) -> parallel
+  join -> End. Realizes WCP-2 (Parallel Split) and WCP-3 (Synchronization).
+
+  Metamorphic partner of linear-independent.bpmn: two independent effect tasks
+  run concurrently here and sequentially there, so the two models must reach the
+  same effect projection (final variables + terminal state) despite different
+  control-flow shapes. See the "equivalence" oracle in the runner.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_parallel_independent" targetNamespace="http://atlas/conformance">
+  <process id="parallel-independent" name="Parallel (independent)" isExecutable="true">
+    <startEvent id="start"/>
+    <parallelGateway id="fork"/>
+    <scriptTask id="set_x">
+      <extensionElements>
+        <zeebe:script expression="= 1" resultVariable="x"/>
+      </extensionElements>
+    </scriptTask>
+    <scriptTask id="set_y">
+      <extensionElements>
+        <zeebe:script expression="= 2" resultVariable="y"/>
+      </extensionElements>
+    </scriptTask>
+    <parallelGateway id="join"/>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="fork"/>
+    <sequenceFlow id="f2" sourceRef="fork" targetRef="set_x"/>
+    <sequenceFlow id="f3" sourceRef="fork" targetRef="set_y"/>
+    <sequenceFlow id="f4" sourceRef="set_x" targetRef="join"/>
+    <sequenceFlow id="f5" sourceRef="set_y" targetRef="join"/>
+    <sequenceFlow id="f6" sourceRef="join" targetRef="end"/>
+  </process>
+</definitions>

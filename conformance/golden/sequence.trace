@@ -1,0 +1,4 @@
+state: completed
+path: start -> set_a -> end
+vars:
+  a=1

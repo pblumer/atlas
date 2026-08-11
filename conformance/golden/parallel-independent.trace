@@ -1,0 +1,5 @@
+state: completed
+path: start -> fork -> set_x -> set_y -> join -> join -> end
+vars:
+  x=1
+  y=2
