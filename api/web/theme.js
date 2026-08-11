@@ -1,21 +1,29 @@
-// Atlas UI theming — company colors (buildless, ADR-0012 spirit).
+// Atlas UI theming — org-wide company colours (buildless, ADR-0012 / ADR-0112).
 //
 // The whole app chrome (buttons, links, active nav, focus rings, pills, toggles)
 // is painted from three CSS custom properties: --accent, --accent-hover and
 // --accent-soft. Overriding those on the document root re-tints the entire UI to
 // an organisation's brand colour, without touching any component CSS.
 //
+// The brand accent is **org-wide**: it is stored on the server
+// (GET/PUT/DELETE /api/v1/settings/theme) so every user of the instance sees it.
+// localStorage is only a client-side cache of the last-applied palette, so the
+// tiny inline bootstrap in index.html can paint the brand colour before this
+// module (or the network) has loaded — no flash of the default blue. The server
+// value always wins: syncFromServer() reconciles the cache on boot.
+//
 // This module is the single source of truth for how a chosen colour derives the
-// hover/soft shades, how a theme is persisted, and how it is applied. The tiny
-// inline bootstrap in index.html applies the *stored* variable map directly (so
-// there is no flash of the default blue before app.js loads); it never needs the
-// derivation logic here — that runs only when a colour is chosen and saved.
+// hover/soft shades. The server stores only the source accent; the shades are
+// derived here.
 
-// localStorage key. The stored value is JSON: { color, vars } — the source hex
-// plus the fully-derived CSS variable map the bootstrap applies verbatim.
+// localStorage cache key. Value is JSON: { color, vars } — the source hex plus
+// the fully-derived CSS variable map the bootstrap applies verbatim.
 export const THEME_KEY = "atlas.theme";
 
-// The variables a theme overrides. Kept as a list so applyTheme can cleanly
+// The server endpoint that holds the org-wide accent.
+const THEME_URL = "/api/v1/settings/theme";
+
+// The variables a theme overrides. Kept as a list so applyAccent can cleanly
 // clear *all* of them when resetting to the built-in default.
 export const THEME_VARS = ["--accent", "--accent-hover", "--accent-soft"];
 
@@ -37,7 +45,8 @@ export const PRESETS = [
 ];
 
 // normalizeHex accepts "#rgb", "#rrggbb" or the same without the leading "#" and
-// returns a lowercase "#rrggbb", or null if it isn't a valid hex colour.
+// returns a lowercase "#rrggbb", or null if it isn't a valid hex colour. Mirrors
+// the server's normalizeAccent (settings.go).
 export function normalizeHex(input) {
   if (typeof input !== "string") return null;
   let h = input.trim().toLowerCase();
@@ -77,14 +86,22 @@ export function derivePalette(color) {
   };
 }
 
-// makeTheme builds the persisted theme record for a chosen colour.
-export function makeTheme(color) {
-  const accent = normalizeHex(color) || DEFAULT_ACCENT;
-  return { color: accent, vars: derivePalette(accent) };
+// ---------- Applying + local cache ----------
+
+// applyAccent sets the accent variables on the document root, or clears them all
+// (falling back to app.css's :root default) when passed a falsy colour.
+export function applyAccent(color) {
+  const root = document.documentElement;
+  const norm = normalizeHex(color);
+  if (!norm) {
+    for (const v of THEME_VARS) root.style.removeProperty(v);
+    return;
+  }
+  for (const [k, val] of Object.entries(derivePalette(norm))) root.style.setProperty(k, val);
 }
 
-// readTheme returns the stored theme record, or null if none/invalid.
-export function readTheme() {
+// readCache returns the cached { color, vars } record, or null if none/invalid.
+export function readCache() {
   try {
     const raw = localStorage.getItem(THEME_KEY);
     if (!raw) return null;
@@ -94,36 +111,92 @@ export function readTheme() {
   return null;
 }
 
-// applyTheme sets the accent variables on the document root, or clears them all
-// (falling back to app.css's :root default) when passed null.
-export function applyTheme(theme) {
-  const root = document.documentElement;
-  if (!theme || !theme.vars) {
-    for (const v of THEME_VARS) root.style.removeProperty(v);
-    return;
-  }
-  for (const [k, val] of Object.entries(theme.vars)) {
-    if (THEME_VARS.includes(k)) root.style.setProperty(k, val);
-  }
+function writeCache(color) {
+  const norm = normalizeHex(color);
+  if (!norm) return;
+  try {
+    localStorage.setItem(THEME_KEY, JSON.stringify({ color: norm, vars: derivePalette(norm) }));
+  } catch { /* quota/denied — the server still holds the source of truth */ }
 }
 
-// saveTheme persists and applies a chosen colour. Returns the stored record.
-export function saveTheme(color) {
-  const theme = makeTheme(color);
-  try { localStorage.setItem(THEME_KEY, JSON.stringify(theme)); } catch { /* quota/denied */ }
-  applyTheme(theme);
-  return theme;
-}
-
-// clearTheme removes any override and restores the built-in accent.
-export function clearTheme() {
+function clearCache() {
   try { localStorage.removeItem(THEME_KEY); } catch { /* ignore */ }
-  applyTheme(null);
 }
 
-// currentAccent is the accent colour in effect (stored override or the default),
-// for seeding the settings controls.
+// currentAccent is the accent colour in effect locally (cached override or the
+// default), for seeding the settings controls synchronously.
 export function currentAccent() {
-  const t = readTheme();
+  const t = readCache();
   return (t && normalizeHex(t.color)) || DEFAULT_ACCENT;
+}
+
+// applyCurrent re-applies exactly what the cache holds (or clears to default) —
+// used to revert an optimistic preview when a server write fails.
+export function applyCurrent() {
+  const t = readCache();
+  applyAccent(t ? t.color : null);
+}
+
+// ---------- Server (source of truth) ----------
+
+// getServerAccent reads the org-wide accent, returning "" when none is set. It
+// resolves to null on a network/parse failure so callers can distinguish "no
+// override" ("") from "couldn't reach the server" (null) and keep the cache.
+export async function getServerAccent() {
+  try {
+    const res = await fetch(THEME_URL);
+    if (!res.ok) return null;
+    const body = await res.json();
+    return normalizeHex(body && body.accent) || "";
+  } catch {
+    return null;
+  }
+}
+
+// setServerAccent persists the org-wide accent (admin-only when auth is on). It
+// throws an Error carrying the server's message on failure (e.g. a 403 for a
+// non-admin), so the caller can surface it and revert.
+export async function setServerAccent(color) {
+  const norm = normalizeHex(color);
+  if (!norm) throw new Error("Not a valid colour");
+  const res = await fetch(THEME_URL, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ accent: norm }),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res));
+  writeCache(norm);
+  return norm;
+}
+
+// resetServerAccent clears the org-wide override, restoring the built-in accent.
+export async function resetServerAccent() {
+  const res = await fetch(THEME_URL, { method: "DELETE" });
+  if (!res.ok) throw new Error(await errorMessage(res));
+  clearCache();
+}
+
+async function errorMessage(res) {
+  try {
+    const body = await res.json();
+    if (body && body.error) return body.error;
+  } catch { /* fall through */ }
+  return res.status === 403
+    ? "Changing the theme requires the admin role"
+    : `Request failed (${res.status})`;
+}
+
+// syncFromServer reconciles the local cache with the org-wide value on boot: the
+// server's accent is applied and cached; an empty value clears any local override;
+// an unreachable server leaves the cache (already applied by the bootstrap) intact.
+export async function syncFromServer() {
+  const accent = await getServerAccent();
+  if (accent === null) return; // offline — keep whatever the bootstrap applied
+  if (accent) {
+    applyAccent(accent);
+    writeCache(accent);
+  } else {
+    applyAccent(null);
+    clearCache();
+  }
 }

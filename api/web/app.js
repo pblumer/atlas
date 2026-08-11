@@ -2,7 +2,8 @@
 // into #view; heavy widgets (the BPMN modeler) are loaded on demand by editor.js.
 
 import {
-  PRESETS, normalizeHex, saveTheme, clearTheme, currentAccent,
+  PRESETS, normalizeHex, currentAccent, applyAccent, applyCurrent,
+  setServerAccent, resetServerAccent, syncFromServer,
 } from "./theme.js";
 
 const view = document.getElementById("view");
@@ -1005,9 +1006,8 @@ async function viewConsoleOrg() {
 
 // appearanceCard renders the "Appearance" panel in Organization: a row of brand
 // presets plus a custom colour picker that re-tints the whole UI to a company
-// colour (theme.js). The choice is stored in this browser — honest about the
-// scope, since like the other UI preferences it lives in localStorage, not on
-// the server.
+// colour (theme.js). The choice is org-wide — persisted on the server and applied
+// for every user of the instance; setting it needs the admin role when auth is on.
 function appearanceCard() {
   const active = currentAccent();
   const swatch = (p) => {
@@ -1022,7 +1022,7 @@ function appearanceCard() {
         <button type="button" class="btn ghost sm" id="theme-reset">Reset to default</button></div>
       <p class="muted" style="margin:6px 0 14px">Tint the interface with your organisation's brand
       colour. The accent recolours buttons, links, the active navigation and highlights across every
-      view. Saved in this browser.</p>
+      view — applied for everyone on this instance.</p>
       <div class="theme-swatches" id="theme-presets">${PRESETS.map(swatch).join("")}</div>
       <div class="theme-custom">
         <label class="field inline" style="margin:0">
@@ -1041,7 +1041,9 @@ function appearanceCard() {
 }
 
 // wireAppearance connects the preset swatches, the colour picker and the hex box
-// to theme.js: any pick applies live and persists; Reset clears the override.
+// to theme.js. Picking a colour previews it instantly (a local root re-tint), then
+// persists it org-wide on the server; a failed write (e.g. a non-admin) is surfaced
+// and the preview reverts. Reset clears the org-wide override.
 function wireAppearance() {
   const presets = document.getElementById("theme-presets");
   const picker = document.getElementById("theme-color");
@@ -1062,32 +1064,51 @@ function wireAppearance() {
     });
   };
 
-  const choose = (color, announce) => {
+  // preview re-tints the UI locally for immediate feedback (e.g. while dragging the
+  // picker) without persisting — commit() is what saves.
+  const preview = (color) => { const n = normalizeHex(color); if (n) applyAccent(n); };
+
+  // commit persists the chosen colour org-wide, then reflects it; on failure it
+  // reverts the preview and the controls to whatever is actually in effect.
+  const commit = async (color) => {
     const norm = normalizeHex(color);
-    if (!norm) return false;
-    saveTheme(norm);
-    reflectActive();
-    if (announce) toast("Theme updated", "ok");
-    return true;
+    if (!norm) { reflectActive(); applyCurrent(); return; }
+    try {
+      await setServerAccent(norm);
+      reflectActive();
+      toast("Theme updated for everyone", "ok");
+    } catch (e) {
+      applyCurrent();
+      reflectActive();
+      toast(e.message || "Couldn't save theme", "err");
+    }
   };
 
   presets.addEventListener("click", (e) => {
     const btn = e.target.closest(".theme-swatch");
-    if (btn) choose(btn.dataset.color, true);
+    if (btn) { preview(btn.dataset.color); commit(btn.dataset.color); }
   });
-  // The native picker fires input continuously while dragging — apply live for an
-  // instant preview, and confirm once on change.
-  picker.addEventListener("input", () => choose(picker.value, false));
-  picker.addEventListener("change", () => choose(picker.value, true));
-  // The hex box is applied on Enter or blur, and only when it parses.
-  const commitHex = () => { if (!choose(hex.value, true)) { hex.value = currentAccent(); } };
+  // The native picker fires input continuously while dragging — preview live and
+  // persist once, on change (drag end).
+  picker.addEventListener("input", () => preview(picker.value));
+  picker.addEventListener("change", () => commit(picker.value));
+  // The hex box commits on Enter or blur, reverting the field if it doesn't parse.
+  const commitHex = () => {
+    if (normalizeHex(hex.value)) { preview(hex.value); commit(hex.value); }
+    else { hex.value = currentAccent(); }
+  };
   hex.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); commitHex(); } });
   hex.addEventListener("blur", commitHex);
 
-  reset.addEventListener("click", () => {
-    clearTheme();
-    reflectActive();
-    toast("Theme reset", "ok");
+  reset.addEventListener("click", async () => {
+    try {
+      await resetServerAccent();
+      applyAccent(null);
+      reflectActive();
+      toast("Theme reset for everyone", "ok");
+    } catch (e) {
+      toast(e.message || "Couldn't reset theme", "err");
+    }
   });
 }
 
@@ -4133,3 +4154,8 @@ async function route() {
 initShell();
 window.addEventListener("hashchange", route);
 loadAuth().then(route);
+// Reconcile the org-wide brand colour with the server. The inline bootstrap in
+// index.html has already applied the cached palette (no flash); this confirms or
+// updates it once the network responds, and is the first paint of the accent for a
+// browser that has no cache yet.
+syncFromServer();
