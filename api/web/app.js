@@ -2789,6 +2789,7 @@ async function viewTasks(preselectKey) {
         <div class="tasks-bulk" id="task-bulk" hidden></div>
         <div class="tasks-trunc" id="task-trunc" hidden></div>
         <ul class="tasks-list" id="task-list"><li class="tasks-empty muted">Loading&hellip;</li></ul>
+        <div class="tasks-col-resizer" id="tasks-col-resizer" title="Drag to resize" role="separator" aria-orientation="vertical"></div>
       </section>
       <section class="tasks-detail" id="task-detail"></section>
     </div>`;
@@ -2797,6 +2798,39 @@ async function viewTasks(preselectKey) {
   const listEl = document.getElementById("task-list");
   const detailEl = document.getElementById("task-detail");
   const titleEl = document.getElementById("task-list-title");
+
+  // Make the list | detail divider draggable, so the detail (and its form) can be
+  // widened or narrowed by resizing the list column. The width persists across
+  // sessions. Folders stay fixed; the detail is the flexible remainder (1fr).
+  (function wireDetailResize() {
+    const grid = view.querySelector(".tasks");
+    const listPane = view.querySelector(".tasks-list-pane");
+    const rez = document.getElementById("tasks-col-resizer");
+    if (!grid || !listPane || !rez) return;
+    const MINW = 240, MAXW = 760;
+    const foldersW = Math.round((view.querySelector(".tasks-folders") || {}).getBoundingClientRect
+      ? view.querySelector(".tasks-folders").getBoundingClientRect().width : 210) || 210;
+    const clamp = (w) => Math.min(MAXW, Math.max(MINW, w));
+    const saved = parseInt(localStorage.getItem("atlas.tasks.listW"), 10);
+    let listW = Number.isFinite(saved) ? clamp(saved) : 340;
+    const apply = () => { grid.style.gridTemplateColumns = `${foldersW}px ${listW}px 1fr`; };
+    apply();
+    const move = (e) => { listW = clamp(Math.round(e.clientX - listPane.getBoundingClientRect().left)); apply(); };
+    const up = () => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      rez.classList.remove("dragging");
+      document.body.style.userSelect = "";
+      localStorage.setItem("atlas.tasks.listW", String(listW));
+    };
+    rez.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      rez.classList.add("dragging");
+      document.body.style.userSelect = "none";
+      document.addEventListener("pointermove", move);
+      document.addEventListener("pointerup", up);
+    });
+  })();
 
   // visible applies the folder, then the free-text query, then the chosen sort.
   const matchesQuery = (t, q) =>

@@ -1264,7 +1264,18 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tasks-folder.active .tasks-count { background: #fff; color: var(--accent); }
 
 /* List pane */
-.tasks-list-pane { display: flex; flex-direction: column; min-height: 0; }
+.tasks-list-pane { display: flex; flex-direction: column; min-height: 0; position: relative; }
+/* Draggable divider on the list pane's right edge: resizes the list column so the
+   detail (and its form) can be widened or narrowed. */
+.tasks-col-resizer {
+  position: absolute; top: 0; bottom: 0; right: 0; width: 11px; transform: translateX(50%);
+  z-index: 6; cursor: col-resize;
+}
+.tasks-col-resizer::before {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 2px;
+  background: transparent; transition: background 0.12s;
+}
+.tasks-col-resizer:hover::before, .tasks-col-resizer.dragging::before { background: var(--accent); }
 .tasks-list-head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 12px 14px; border-bottom: 1px solid var(--border);
