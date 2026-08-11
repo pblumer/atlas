@@ -157,6 +157,40 @@ func TestParseSendTaskUnknownMessage(t *testing.T) {
 	}
 }
 
+// TestParseSendTaskMessageBoundaryRejected checks that a boundary event drawn on a message-kind
+// send task is a deploy error with a targeted message — a message send is an instantaneous throw
+// that never waits, so a boundary could never fire (ADR-0112). The error names the send task and
+// points at the fix, rather than the generic "attaches to a non-activity".
+func TestParseSendTaskMessageBoundaryRejected(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+	             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+	  <message id="Msg_notify" name="notify">
+	    <extensionElements><zeebe:subscription correlationKey="=orderId"/></extensionElements>
+	  </message>
+	  <process id="p" isExecutable="true">
+	    <startEvent id="s"/>
+	    <sendTask id="send" messageRef="Msg_notify"/>
+	    <boundaryEvent id="timeout" attachedToRef="send">
+	      <timerEventDefinition><timeDuration>PT1H</timeDuration></timerEventDefinition>
+	    </boundaryEvent>
+	    <endEvent id="e"/>
+	    <endEvent id="late"/>
+	    <sequenceFlow id="f1" sourceRef="s" targetRef="send"/>
+	    <sequenceFlow id="f2" sourceRef="send" targetRef="e"/>
+	    <sequenceFlow id="f3" sourceRef="timeout" targetRef="late"/>
+	  </process>
+	</definitions>`
+	_, err := Parse(1, 1, strings.NewReader(xml))
+	if err == nil {
+		t.Fatal("Parse: want an error for a boundary on a message-kind send task, got nil")
+	}
+	for _, want := range []string{"timeout", "send task", "instantaneous throw"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q should mention %q", err.Error(), want)
+		}
+	}
+}
+
 // TestParseSendTaskNoTaskDefinition rejects a bare send task (no task definition, no
 // connector): like a service task with no taskDefinition type, it cannot execute, so it is a
 // deploy error naming the send task (ADR-0112).

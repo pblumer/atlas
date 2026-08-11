@@ -223,8 +223,10 @@ and (d) dropping the "unsupported" rejections and surfacing the kind picker in t
   uniform runtime contract — the Implement picker, not the element, tells you which.
 - **Follow-ups / risks to watch:** an `operationRef` (WSDL-style) message send is still out of scope;
   a send/receive **task pair** (message-kind send task ↔ receive task, ADR-0102) is now a pure
-  modeling convention, not new engine work. A targeted validation message when a boundary is drawn on
-  a message-kind send task (rather than the generic "attaches to non-activity") is Phase 3 polish.
+  modeling convention, not new engine work. A boundary event drawn on a message-kind send task is
+  caught at deploy with a **targeted** error (it names the send task and points at the fix — switch
+  to a job/connector kind, or model the wait with a receive task and a boundary timer), rather than
+  the generic "attaches to a non-activity".
 
 ## Pros and cons of the options
 

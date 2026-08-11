@@ -301,6 +301,10 @@ func registerScope(
 			return err
 		}
 	}
+	// Message-kind send tasks compile to a throw (ADR-0112) — instantaneous, so not an
+	// activity. Record them so a boundary drawn on one gets a targeted error below rather
+	// than the generic "attaches to a non-activity".
+	messageSendIDs := map[string]bool{}
 	for _, st := range c.SendTasks {
 		// The message kind: a <sendTask messageRef> is a correlating throw in task form
 		// (ADR-0112). It reuses the intermediate message throw's compile path — resolve the
@@ -308,6 +312,7 @@ func registerScope(
 		// on. A throw is instantaneous, so unlike the job/connector kinds it is not an activity
 		// (no boundary/I/O/MI — those loops skip it, keyed on the same MessageRef).
 		if strings.TrimSpace(st.MessageRef) != "" {
+			messageSendIDs[st.Id] = true
 			name, keyExpr, err := resolveMessage(st.Id, st.MessageRef)
 			if err != nil {
 				return err
@@ -687,6 +692,9 @@ func registerScope(
 		host, ok := ids[ev.AttachedToRef]
 		if !ok {
 			return fmt.Errorf("compiler: boundary event %q attaches to unknown activity %q", ev.Id, ev.AttachedToRef)
+		}
+		if messageSendIDs[ev.AttachedToRef] {
+			return fmt.Errorf("compiler: boundary event %q attaches to send task %q, but a message-kind send task is an instantaneous throw (it publishes the message and continues) and cannot host a boundary event; switch the send task to a job or connector kind, which waits so a boundary can fire, or model a wait-and-time-out with a receive task and a boundary timer", ev.Id, ev.AttachedToRef)
 		}
 		interrupting := ev.CancelActivity != "false"
 		switch {
