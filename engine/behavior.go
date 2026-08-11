@@ -74,6 +74,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeCompensationThrowEvent] = compensationThrowEventBehavior{}
 	p.behaviors[compiler.TypeCompensationEndEvent] = compensationEndEventBehavior{}
 	p.behaviors[compiler.TypeCancelEndEvent] = cancelEndEventBehavior{}
+	p.behaviors[compiler.TypeTerminateEndEvent] = terminateEndEventBehavior{}
 	// A signal start event is a plain entry point once instantiated: a broadcast
 	// signal creates the instance (see broadcastSignal/Deploy) and it then flows
 	// straight on like a none start (ADR-0088), the same as a message start.
@@ -2233,6 +2234,26 @@ func (cancelEndEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *
 func (cancelEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	c.AppendElementEvent(key, model.IntentCompleted, *ei) // decrements the transaction scope; applyToState marks it cancelling
 	completeScope(c, ei.FlowScopeKey)                     // fires the transaction's Completing once compensation drains
+}
+
+// terminateEndEventBehavior ends the enclosing flow scope at once (ADR-0114): on activation it
+// terminates every other live token in the scope — recursively, cancelling their jobs — sparing
+// itself, then hops to Completing; on completing its own Completed event drains the scope's last
+// child and completeScope fires. At the process root that ends the instance (resuming a
+// call-activity caller if any); inside a subprocess it completes that subprocess, so the parent
+// continues on its outgoing flow. It is cancelEndEventBehavior minus compensation and minus the
+// cancel boundary — a terminate runs no compensation or event handling (BPMN 13.4.6). No new
+// events, so recovery replays the Terminated/Completed history unchanged (I4).
+type terminateEndEventBehavior struct{}
+
+func (terminateEndEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	terminateScopeExcept(c, ei.ProcessInstanceKey, ei.FlowScopeKey, key)
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (terminateEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendElementEvent(key, model.IntentCompleted, *ei) // decrements the now-drained scope's last child
+	completeScope(c, ei.FlowScopeKey)                     // subprocess → outgoing flow; root → instance ends
 }
 
 // cancelTransaction completes a cancelled transaction whose scope has drained (compensation

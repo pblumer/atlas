@@ -67,8 +67,10 @@ const (
 
 	TypeSendTask // a send task: a job-creating activity identical in execution to a service task (ADR-0112) — it creates a job and waits, reusing ServiceTaskDetail and serviceTaskBehavior; a distinct type only to preserve the send-task identity, like TypeConnectorTask
 
+	TypeTerminateEndEvent // an end event that ends its enclosing flow scope at once (ADR-0114): it terminates every other live token in the scope (cancelling their jobs), then completes the scope — at the root the instance ends, inside a subprocess that subprocess ends and the parent continues. cancelEndEventBehavior minus compensation and the cancel boundary
+
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 34
+	numBpmnTypes = 35
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -142,6 +144,8 @@ func (t BpmnType) String() string {
 		return "CompensationEndEvent"
 	case TypeCancelEndEvent:
 		return "CancelEndEvent"
+	case TypeTerminateEndEvent:
+		return "TerminateEndEvent"
 	default:
 		return "Unspecified"
 	}
