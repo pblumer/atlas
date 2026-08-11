@@ -2,7 +2,7 @@
 # Agents and CI: prefer these targets so the canonical commands live in one place.
 
 .PHONY: all build test race vet fmt fmt-check lint check cover tidy clean run server \
-        docker docker-powershell docker-buildx helm-lint helm-template
+        docker docker-powershell docker-buildx helm-lint helm-template helm-package
 
 all: check
 
@@ -77,3 +77,7 @@ helm-lint:
 # Render the chart to stdout (override values via ARGS, e.g. ARGS="--set atlas.auth.enabled=true").
 helm-template:
 	helm template atlas $(CHART) $(ARGS)
+
+# Package the chart into dist/ (CI pushes it to ghcr.io/pblumer/charts/atlas).
+helm-package:
+	helm package $(CHART) --destination dist
