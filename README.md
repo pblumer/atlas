@@ -4,7 +4,7 @@
 
 **Atlas** is named after the Titan who bears an immense load without ever letting it drop. That's exactly what it does: it carries millions of process instances, batch after batch, and never drops a token.
 
-> 🚧 **Early development.** APIs are unstable and changing fast. Not ready for production use. See the [roadmap](ROADMAP.md).
+> 🚧 **Developer preview (`0.x`).** Atlas already runs a broad slice of BPMN 2.x durably on a single node, but it is not ready for production use — the pre-1.0 API and on-disk formats are unstable and changing fast. See the [changelog](CHANGELOG.md) for what's in each release and the [roadmap](ROADMAP.md) for what's next.
 
 ---
 
@@ -46,7 +46,7 @@ The three core pillars:
   - [Invariants](docs/architecture/invariants.md) — the rules the engine's correctness depends on
 - **[Architecture Decision Records](docs/adr/)** — *why* things are the way they are
 - **[Postman onboarding kit](postman/)** — import the collection + environment and drive the HTTP API (deploy, run instances, work user tasks) in five minutes
-- **[Roadmap](ROADMAP.md)** — where this is going
+- **[Roadmap](ROADMAP.md)** — where this is going · **[Changelog](CHANGELOG.md)** — what changed in each release
 - **[Contributing](CONTRIBUTING.md)** · **[Development](DEVELOPMENT.md)** · **[Security](SECURITY.md)**
 
 **Working on this with an AI coding agent?** Start at **[`AGENTS.md`](AGENTS.md)** (Claude Code: [`CLAUDE.md`](CLAUDE.md)). It carries the invariants, the exact build/test commands, and how to approach a task.
