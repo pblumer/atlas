@@ -3,6 +3,8 @@ package api_test
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -63,5 +65,43 @@ func TestThemeEndpointRoundTrip(t *testing.T) {
 	}
 	if a := readAccent(); a != "" {
 		t.Fatalf("accent after DELETE = %q; want empty", a)
+	}
+}
+
+// TestThemeHandlerIOErrors drives the handlers' 5xx branches by making the on-disk
+// theme file unusable: a corrupt file fails the read (GET → 500), and a directory
+// in the file's place fails both the atomic save (PUT → 500) and the remove
+// (DELETE → 500). Uses newBackupServer, which exposes the data dir.
+func TestThemeHandlerIOErrors(t *testing.T) {
+	ts, dir := newBackupServer(t)
+	themeFile := filepath.Join(dir, "settings", "theme.json")
+	if err := os.MkdirAll(filepath.Dir(themeFile), 0o755); err != nil {
+		t.Fatalf("mkdir settings: %v", err)
+	}
+
+	// Corrupt file → GET surfaces a read/decode error as 500.
+	if err := os.WriteFile(themeFile, []byte("{ corrupt"), 0o644); err != nil {
+		t.Fatalf("write corrupt: %v", err)
+	}
+	if code, body := doReq(t, ts, http.MethodGet, "/api/v1/settings/theme", "", ""); code != http.StatusInternalServerError {
+		t.Fatalf("GET with corrupt file: status=%d body=%s, want 500", code, body)
+	}
+
+	// A directory in the file's place → the atomic rename (PUT) and the remove
+	// (DELETE) both fail, surfaced as 500.
+	if err := os.Remove(themeFile); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if err := os.Mkdir(themeFile, 0o755); err != nil {
+		t.Fatalf("mkdir in file's place: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(themeFile, "x"), []byte("y"), 0o644); err != nil {
+		t.Fatalf("populate dir: %v", err)
+	}
+	if code, body := doReq(t, ts, http.MethodPut, "/api/v1/settings/theme", `{"accent":"#123456"}`, "application/json"); code != http.StatusInternalServerError {
+		t.Fatalf("PUT with dir in place of file: status=%d body=%s, want 500", code, body)
+	}
+	if code, body := doReq(t, ts, http.MethodDelete, "/api/v1/settings/theme", "", ""); code != http.StatusInternalServerError {
+		t.Fatalf("DELETE with non-empty dir: status=%d body=%s, want 500", code, body)
 	}
 }
