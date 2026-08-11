@@ -4,12 +4,21 @@
 - **Date:** 2026-08-11
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Proposed. A `<sendTask>` is an **activity** that hands work to a
-> job worker and waits for it — a service task under a different BPMN label and marker. It reuses
-> `serviceTaskBehavior`, the job machinery, the incident model (ADR-0061/0111), boundary/I/O/data/
-> multi-instance wiring, and recovery **wholesale**. It introduces one compiled element type
-> (`TypeSendTask`) that dispatches to the existing service-task behavior — exactly as
-> `TypeConnectorTask` already does — and no new job path, value type, or recovery path.
+> **Implementation status.** Proposed. A `<sendTask>` is Atlas's **single outbound element**: what
+> it sends is chosen at author time (the *kind*), and the compiler dispatches on that kind, exactly
+> as a service task already dispatches on its connector extension. Three kinds:
+>
+> - **Job / connector** (a `zeebe:taskDefinition` or an `atlas:*Connector` extension): a
+>   job-creating **activity** identical in execution to a service task — it creates a job and waits.
+>   Reuses `serviceTaskBehavior`, the job machinery, the incident model (ADR-0061/0111),
+>   boundary/I/O/data/multi-instance wiring, and recovery **wholesale**, via one compiled type
+>   (`TypeSendTask`) that dispatches to the existing service-task behavior — as `TypeConnectorTask`
+>   already does. This is the send task's primary, most-requested use (e-mail, REST, …).
+> - **Message** (a `messageRef`): a correlating fire-and-forget send — the message intermediate
+>   throw's semantics in task form. It compiles straight to `TypeMessageThrowEvent` and reuses
+>   `messageThrowEventBehavior` (correlate, then flow on) with **no new runtime code**.
+>
+> No new job path, value type, behavior, or recovery path in any case.
 
 ## Context and problem statement
 
@@ -70,12 +79,18 @@ wiring, dropping the two rejections, and the Modeler surfacing.
 - **Faithful BPMN.** A send task is an activity: it accepts boundary events, I/O and data mappings,
   and multi-instance, and it round-trips as a `<sendTask>` (its own palette entry, marker, and
   identity), not as a service task in disguise.
-- **Durable send, not fire-and-forget.** The token **waits** for the worker to complete the job, so
-  a send that fails backs off and ultimately raises an incident rather than being silently lost —
-  the whole point of a durable engine. "Send and don't wait" is not a send task in Atlas; it is a
-  **message end/throw event** (ADR-0052/0020), which already exists.
-- **Keep it compile-gated.** A send task with no task definition cannot execute, so it stays a
-  deploy error (like a service task with no `taskDefinition` type) rather than a silent no-op.
+- **The kind determines durability.** For the **job/connector** kinds the token **waits** for the
+  worker to complete the job, so a send that fails backs off and ultimately raises an incident
+  rather than being silently lost — the whole point of a durable engine. The **message** kind is a
+  correlating throw: it publishes and flows straight on (a durably-logged event, but no waiting),
+  the message intermediate throw's semantics. Both are legitimate "sends"; the author picks.
+- **One outbound element, kind chosen at author time.** Rather than making the author choose between
+  a send task and a message throw event, the send task carries the choice — dispatched by the
+  compiler on the `messageRef` / connector / `taskDefinition` it finds, exactly as a service task
+  already dispatches on its connector extension.
+- **Keep it compile-gated.** A send task with no kind at all (no `messageRef`, no connector, no task
+  definition) cannot execute, so it stays a deploy error (like a service task with no
+  `taskDefinition` type) rather than a silent no-op.
 
 ## Considered options
 
@@ -94,24 +109,31 @@ wiring, dropping the two rejections, and the Modeler surfacing.
    (message correlation) if they are wanted later. This mirrors ADR-0102's rejected option 2: the
    element-type distinction is real and should survive, and `TypeConnectorTask` already sets the
    "distinct type, shared behavior" precedent, which costs nothing.
-3. **Send task as a message throw (standard-BPMN `messageRef`/`operationRef`, correlating
-   fire-and-forget send).** Rejected as the *primary* semantics: Atlas already sends correlating
-   messages through **message throw / message end events** on the ADR-0020 machinery, and the
-   actual gap modelers hit is the **job/connector** send (e-mail, REST, …), which is how Camunda 8 /
-   Zeebe treat a send task. Making the send task a throw would duplicate the message-throw path and
-   *not* give modelers the connector send they want. The `messageRef` send remains expressible as a
-   message throw event today, and could be layered onto the send task later (a `<sendTask
-   messageRef>` compiling to the throw path) if demand appears — noted as a follow-up, not this
-   ADR's scope.
+3. **Send task as a message throw (standard-BPMN `messageRef`, correlating fire-and-forget send) —
+   adopted as an *additional kind*, not the primary one.** A `messageRef` send task is the message
+   intermediate throw's semantics in task form: on activation it correlates the referenced message
+   (waking any waiting catch/receive) and flows straight on. It compiles directly to
+   `TypeMessageThrowEvent` and reuses `messageThrowEventBehavior` with **no new runtime code** —
+   the same "distinct authoring, existing behavior" move the job/connector kinds make. It is *not*
+   the primary semantics (the job/connector send is the gap modelers hit, and is how Camunda 8 /
+   Zeebe treat a send task), but offering it as a kind makes the send task Atlas's single outbound
+   element: the author picks message vs. e-mail vs. REST vs. job worker in one place, rather than
+   choosing between a send task and a message throw event. Because a throw is instantaneous
+   (correlate, then flow on), the message kind does not host boundary events or carry I/O/data/MI —
+   those apply to the job and connector kinds, which are activities.
 
 ## Decision outcome
 
-Chosen: **option 1 — a distinct `TypeSendTask` activity whose behavior is `serviceTaskBehavior`,
-reusing the job path, incident model, and activity machinery wholesale.** The genuinely new logic
-is (a) an `xmlSendTask` parse shape and a compiled `TypeSendTask` reusing `ServiceTaskDetail`, (b)
-adding the send task to `isActivity` and the data/I/O/multi-instance wiring loops so it is a
-first-class activity, (c) one line pointing `TypeSendTask` at the existing `serviceTaskBehavior`,
-and (d) dropping the two "unsupported" rejections and surfacing the send task in the Modeler.
+Chosen: **option 1 as the primary kind, plus option 3 as an additional kind** — the send task is
+Atlas's single outbound element, dispatched by the compiler on the kind it finds. A job/connector
+send task is a distinct `TypeSendTask` activity whose behavior is `serviceTaskBehavior`, reusing the
+job path, incident model, and activity machinery wholesale; a `messageRef` send task compiles to
+`TypeMessageThrowEvent`, reusing `messageThrowEventBehavior`. The genuinely new logic is (a) an
+`xmlSendTask` parse shape (the service task's activity shape plus a `messageRef`) and a compiled
+`TypeSendTask` reusing `ServiceTaskDetail`, (b) adding the job/connector send task to `isActivity`
+and the data/I/O/multi-instance wiring loops, (c) one line pointing `TypeSendTask` at the existing
+`serviceTaskBehavior` and a `registerScope` branch routing `messageRef` to `AddMessageThrowEvent`,
+and (d) dropping the "unsupported" rejections and surfacing the kind picker in the Modeler.
 
 ### Compiler
 
@@ -124,14 +146,16 @@ and (d) dropping the two "unsupported" rejections and surfacing the send task in
   that appends to the existing service-task detail table (or a parallel `sendTasks` table if the
   detail must record the send label; the detail itself is identical), plus a `SendTask(detail)`
   accessor.
-- In `registerScope`, compile each `<sendTask>` exactly like a service task: a connector extension
-  takes the connector path (`AddConnectorTask`, `TypeConnectorTask`) so e-mail/REST/… connectors
-  author on a send task unchanged; otherwise a `taskDefinition` type is required (an empty type is
-  a deploy error, mirroring the service task's `"has no task definition type"`), and the node is
-  `AddSendTask(type, retries)`. Remove `sendTask` from the "unsupported element" list
-  (`compiler/scope_compile.go:743`). Add `TypeSendTask` to `isActivity` and call
-  `wireDataOut`/`wireDataIn`/`wireIO`/`wireMI` over the send tasks, so boundary attachment
-  validation, data associations, I/O mappings, and multi-instance all apply.
+- In `registerScope`, dispatch each `<sendTask>` on its kind: a **`messageRef`** resolves through
+  `resolveMessage` (the intermediate throw's path) and registers `AddMessageThrowEvent(name, key)`
+  → `TypeMessageThrowEvent`; otherwise it is a job/connector send — a connector extension takes the
+  connector path (`AddConnectorTask`, `TypeConnectorTask`), else a `taskDefinition` type is required
+  (empty is a deploy error, mirroring the service task's `"has no task definition type"`) and the
+  node is `AddSendTask(type, retries)` → `TypeSendTask`. Remove `sendTask` from the "unsupported
+  element" list. Add `TypeSendTask` to `isActivity` and call `wireDataOut`/`wireDataIn`/`wireIO`/
+  `wireMI` over the job/connector send tasks so boundary attachment, data associations, I/O
+  mappings, and multi-instance apply; the message kind (an instantaneous throw) is skipped from
+  those loops, exactly as a message throw event is.
 
 ### Runtime
 
@@ -143,12 +167,13 @@ and (d) dropping the two "unsupported" rejections and surfacing the send task in
 
 ### Modeler
 
-- Drop `"bpmn:SendTask"` from `UNSUPPORTED_TYPES` (`api/web/editor.js:581`) so the badge and
-  Problems-bar warning clear. The Implement panel offers the send task the **same task-definition
-  and connector-kind UI it offers a service task** (`serviceTaskKindHTML` / the `zeebe:taskDefinition`
-  editor), gated on `bo.$type === "bpmn:SendTask"` alongside `"bpmn:ServiceTask"`. bpmn-js already
-  draws the send task and offers it in the palette and replace menu, and already round-trips it
-  through the moddle, so no vendored-editor change is needed.
+- Drop `"bpmn:SendTask"` from `UNSUPPORTED_TYPES` (`api/web/editor.js`) so the badge and Problems-bar
+  warning clear. The Implement panel offers the send task a **kind picker** — the service task's
+  `serviceTaskKindHTML` connector/job-worker catalog, plus a **"Message"** entry that writes a
+  `messageRef` (the shared-message picker `messageFieldsHTML`, as on a message throw/receive) and
+  strips any `taskDefinition`/connector extension. Gated on `bo.$type === "bpmn:SendTask"` alongside
+  `"bpmn:ServiceTask"`. bpmn-js already draws the send task, offers it in the palette and replace
+  menu, and round-trips it through the moddle, so no vendored-editor change is needed.
 
 ### Phased implementation plan (test-first)
 
@@ -166,9 +191,18 @@ and (d) dropping the two "unsupported" rejections and surfacing the send task in
   backoff parks and re-activates (ADR-0111); exhausted retries raise an incident (ADR-0061); a
   **boundary timer** on a send task times the send out; a **recovery test** — a parked send-task job
   rebuilds from the log and completes after replay. Confirm no new per-command allocation (I1).
-- **Phase 3 — Modeler + docs.** Drop `bpmn:SendTask` from `UNSUPPORTED_TYPES`; offer the
-  task-definition/connector UI on a send task; a round-trip test (author → deploy → the send task
-  survives as `<sendTask>`). Update this ADR to **Accepted/Delivered**, `docs/adr/README.md`, and the
+- **Phase 2.5 — Message kind (compile).** Add `messageRef` to the send-task parse shape; in
+  `registerScope`, a `messageRef` send task registers `AddMessageThrowEvent` (→ `TypeMessageThrowEvent`,
+  reusing `messageThrowEventBehavior`); gate the data/I/O/MI wiring loops so a message-kind send task
+  is skipped (an instantaneous throw, like a message throw event). *Tests:* a `<sendTask messageRef>`
+  compiles to `TypeMessageThrowEvent` with the referenced message's name/key; an unknown `messageRef`
+  is a deploy error; a send task with neither a kind nor a `messageRef` is a deploy error; **runtime:**
+  a message-kind send task wakes a waiting receive task and flows on (the throw path, reached through
+  a send task).
+- **Phase 3 — Modeler + docs.** Drop `bpmn:SendTask` from `UNSUPPORTED_TYPES`; offer the kind picker
+  (connector/job-worker catalog **plus a Message entry** writing `messageRef`) on a send task; a
+  round-trip test per kind (author → deploy → the send task survives as `<sendTask>` with the right
+  extension/attribute). Update this ADR to **Accepted/Delivered**, `docs/adr/README.md`, and the
   ROADMAP task-type note. Full sequence green: `go test -race ./...`, `go vet ./...`, `gofmt -l .`,
   and `./scripts/check-coverage.sh 95`.
 
@@ -181,13 +215,16 @@ and (d) dropping the two "unsupported" rejections and surfacing the send task in
   semantically-correct home for outbound-send connectors, so a model reads as "send an e-mail" on a
   send task rather than a service task.
 - **Negative / trade-offs accepted:** a second compiled type (`TypeSendTask`) whose behavior is
-  identical to the service task's — the (near-zero) cost of preserving the send-vs-service identity
-  rather than collapsing them. A send task is *synchronous at the worker* (the token waits for job
-  completion); a true fire-and-forget send is a message end/throw event, not a send task — a
-  deliberate, documented boundary.
-- **Follow-ups / risks to watch:** a `messageRef`/`operationRef` send task compiling to the message
-  throw path (option 3) if correlating-send-as-task demand appears; a send/receive **task pair**
-  (send task ↔ receive task, ADR-0102) is then a modeling convention, not new engine work.
+  identical to the service task's — the (near-zero) cost of preserving the send-vs-service identity.
+  The send task's runtime shape now **depends on its kind**: job/connector kinds are activities that
+  wait (boundaries, I/O, MI, incidents); the message kind is an instantaneous throw that does not
+  host boundaries or carry I/O/MI. This asymmetry is inherent to what each kind *is* (a throw never
+  waits, so a boundary on it could never fire) and is documented, but it means "send task" is not one
+  uniform runtime contract — the Implement picker, not the element, tells you which.
+- **Follow-ups / risks to watch:** an `operationRef` (WSDL-style) message send is still out of scope;
+  a send/receive **task pair** (message-kind send task ↔ receive task, ADR-0102) is now a pure
+  modeling convention, not new engine work. A targeted validation message when a boundary is drawn on
+  a message-kind send task (rather than the generic "attaches to non-activity") is Phase 3 polish.
 
 ## Pros and cons of the options
 
@@ -203,10 +240,13 @@ and (d) dropping the two "unsupported" rejections and surfacing the send task in
 - Bad: the send task loses its BPMN identity (reports/renders as a service task) and leaves nowhere
   to hang send-specific semantics later; contradicts the `TypeConnectorTask` precedent.
 
-### Option 3 — send task as a message throw (rejected)
-- Good: matches strict-BPMN `messageRef` send semantics.
-- Bad: duplicates the existing message throw/end path, and does **not** give modelers the
-  job/connector send that is the real gap; correlating sends already work as message throw events.
+### Option 3 — send task as a message throw (adopted as an additional kind)
+- Good: matches strict-BPMN `messageRef` send semantics; reuses `TypeMessageThrowEvent` and
+  `messageThrowEventBehavior` with no new runtime code; makes the send task the single outbound
+  element (message vs. connector vs. job worker chosen in one Implement picker).
+- Bad: not the *primary* send (the job/connector send is the real gap), so it is offered alongside,
+  not instead; and it makes "send task" a non-uniform runtime contract — the message kind is an
+  instantaneous throw (no boundaries, no I/O/MI), unlike the activity-shaped job/connector kinds.
 
 ## Links
 

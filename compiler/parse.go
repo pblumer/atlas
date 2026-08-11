@@ -474,6 +474,9 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 	}
 	for _, st := range proc.SendTasks {
+		if strings.TrimSpace(st.MessageRef) != "" {
+			continue // a message-kind send task is a throw, not an activity (ADR-0112)
+		}
 		if err := wireDataOut(st.Id, st.DataOut); err != nil {
 			return nil, err
 		}
@@ -547,6 +550,9 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 	}
 	for _, st := range proc.SendTasks {
+		if strings.TrimSpace(st.MessageRef) != "" {
+			continue // a message-kind send task is a throw, not an activity (ADR-0112)
+		}
 		if err := wireDataIn(st.Id, st.DataIn); err != nil {
 			return nil, err
 		}
@@ -624,6 +630,9 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			}
 		}
 		for _, st := range c.SendTasks {
+			if strings.TrimSpace(st.MessageRef) != "" {
+				continue // a message-kind send task is a throw, not an activity (ADR-0112)
+			}
 			if err := wireIO(st.Id, st.IOMapping); err != nil {
 				return err
 			}
@@ -718,6 +727,9 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			}
 		}
 		for _, st := range c.SendTasks {
+			if strings.TrimSpace(st.MessageRef) != "" {
+				continue // a message-kind send task is a throw, not an activity (ADR-0112)
+			}
 			if err := wireMI(st.Id, st.MultiInstance); err != nil {
 				return err
 			}
@@ -1240,7 +1252,11 @@ type xmlAssignmentDefinition struct {
 }
 
 type xmlServiceTask struct {
-	Id             string            `xml:"id,attr"`
+	Id string `xml:"id,attr"`
+	// MessageRef is read only for a send task (ADR-0112): a <sendTask messageRef> is the
+	// message-kind send — a correlating throw in task form. A service task never carries one
+	// (it dispatches on its taskDefinition/connector), so the field is inert there.
+	MessageRef     string            `xml:"messageRef,attr"`
 	TaskDefinition xmlTaskDefinition `xml:"extensionElements>taskDefinition"`
 	// Clio, when present, marks this service task a clio connector task (ADR-0036).
 	// The pointer is nil when the <atlas:clioConnector> extension is absent.

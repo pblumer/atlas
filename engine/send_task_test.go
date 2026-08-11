@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
@@ -201,6 +202,67 @@ func TestSendTaskBoundaryTimeout(t *testing.T) {
 	v := elementVisits(t, h.store, cp.Key)
 	if v[escalated] != 1 || v[done] != 0 {
 		t.Errorf("visits escalated=%d done=%d, want 1 and 0", v[escalated], v[done])
+	}
+}
+
+// TestSendTaskMessageKindCorrelates proves the message kind end to end: a <sendTask messageRef>
+// compiles to a throw (ADR-0112) that, on activation, correlates the referenced message — waking a
+// receive task already waiting on the same (name, key) — then flows straight on. The sender is
+// parsed from XML (only the parser produces a message-kind send task); the receiver is the ADR-0102
+// receive task. This proves the send task reaches the existing message-throw path unchanged.
+func TestSendTaskMessageKindCorrelates(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	// Receiver: parks on a receive task waiting for "reply" with key "k".
+	receiver, recvEnd := receiveTaskProcess(t, 95)
+
+	// Sender: Start → sendTask(messageRef "reply", key "k") → End, from XML — the message kind.
+	const senderXML = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+	             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+	  <message id="Msg_reply" name="reply">
+	    <extensionElements><zeebe:subscription correlationKey='="k"'/></extensionElements>
+	  </message>
+	  <process id="sender" isExecutable="true">
+	    <startEvent id="s"/>
+	    <sendTask id="send" messageRef="Msg_reply"/>
+	    <endEvent id="e"/>
+	    <sequenceFlow id="f1" sourceRef="s" targetRef="send"/>
+	    <sequenceFlow id="f2" sourceRef="send" targetRef="e"/>
+	  </process>
+	</definitions>`
+	sender, err := compiler.Parse(96, 1, strings.NewReader(senderXML))
+	if err != nil {
+		t.Fatalf("Parse sender: %v", err)
+	}
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.SetJobNotifier(func(int32) {})
+	p.Deploy(receiver)
+	p.Deploy(sender)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+
+	// Park the receiver first.
+	p.CreateInstance(receiver.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (receiver): %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 1 || ei != 1 {
+		t.Fatalf("receiver parked: process=%d element=%d, want 1 and 1", pi, ei)
+	}
+
+	// Run the sender: its send task throws "reply"/"k", waking the receiver, and flows on.
+	p.CreateInstance(sender.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (sender): %v", err)
+	}
+	if pi := activeProcs(t, h.store); pi != 0 {
+		t.Fatalf("after send: active=%d, want 0 (sender flowed on, receiver correlated)", pi)
+	}
+	if v := elementVisits(t, h.store, receiver.Key)[recvEnd]; v != 1 {
+		t.Errorf("receiver end visits = %d, want 1 (the send task's message woke the receive task)", v)
 	}
 }
 

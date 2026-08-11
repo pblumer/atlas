@@ -110,6 +110,53 @@ func TestParseSendTaskConnector(t *testing.T) {
 	}
 }
 
+// TestParseSendTaskMessageKind checks that a <sendTask messageRef> — the message kind — compiles
+// to a TypeMessageThrowEvent carrying the referenced message's name, reusing the intermediate
+// message throw's path (ADR-0112). It is a correlating throw in task form: no new runtime.
+func TestParseSendTaskMessageKind(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+	             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+	  <message id="Msg_notify" name="notify">
+	    <extensionElements><zeebe:subscription correlationKey="=orderId"/></extensionElements>
+	  </message>
+	  <process id="p" isExecutable="true">
+	    <startEvent id="s"/>
+	    <sendTask id="send" messageRef="Msg_notify"/>
+	    <endEvent id="e"/>
+	    <sequenceFlow id="f1" sourceRef="s" targetRef="send"/>
+	    <sequenceFlow id="f2" sourceRef="send" targetRef="e"/>
+	  </process>
+	</definitions>`
+	cp, err := Parse(1, 1, strings.NewReader(xml))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	st := nodeByBpmnId(t, cp, "send")
+	if st.Type != TypeMessageThrowEvent {
+		t.Fatalf("message-kind send task type = %v, want MessageThrowEvent (a correlating throw)", st.Type)
+	}
+	if d := cp.MessageThrow(st.Detail); d.MessageName != "notify" {
+		t.Errorf("thrown message name = %q, want notify", d.MessageName)
+	}
+}
+
+// TestParseSendTaskUnknownMessage rejects a message-kind send task whose messageRef names no
+// declared message, mirroring the message throw's check (ADR-0112/0020).
+func TestParseSendTaskUnknownMessage(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="p" isExecutable="true">
+	    <startEvent id="s"/>
+	    <sendTask id="send" messageRef="Nope"/>
+	    <endEvent id="e"/>
+	    <sequenceFlow id="f1" sourceRef="s" targetRef="send"/>
+	    <sequenceFlow id="f2" sourceRef="send" targetRef="e"/>
+	  </process>
+	</definitions>`
+	if _, err := Parse(1, 1, strings.NewReader(xml)); err == nil {
+		t.Fatal("Parse: want an error for a send task referencing an unknown message, got nil")
+	}
+}
+
 // TestParseSendTaskNoTaskDefinition rejects a bare send task (no task definition, no
 // connector): like a service task with no taskDefinition type, it cannot execute, so it is a
 // deploy error naming the send task (ADR-0112).

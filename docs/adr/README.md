@@ -120,7 +120,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0109](0109-full-instance-snapshot.md) | Whole-instance snapshot — a full backup including the WAL (running instances), users and vault key; restore staged and applied on restart | Accepted |
 | [0110](0110-event-based-gateways.md) | Event-based gateways — a deferred choice that arms several catch events at once; the first to fire wins and the rest are cancelled | Accepted |
 | [0111](0111-incident-model-completion.md) | Completing the incident model — job retry backoff (a retry timer holds the job off the index until due), recurring-timer re-arm FEEL-failure incidents, and start-timer FEEL failures caught at deploy | Accepted |
-| [0112](0112-send-tasks.md) | Send tasks — a `<sendTask>` as a job-creating activity identical in execution to a service task (a distinct `TypeSendTask` reusing `serviceTaskBehavior`, the `TypeConnectorTask` precedent); connectors, boundaries, I/O, and incidents inherited; a fire-and-forget correlating send stays a message throw/end event | Proposed |
+| [0112](0112-send-tasks.md) | Send tasks — the single outbound element, kind chosen at author time: job/connector kinds are a distinct `TypeSendTask` reusing `serviceTaskBehavior` (the `TypeConnectorTask` precedent) with connectors/boundaries/I/O/incidents inherited; a `messageRef` kind compiles to `TypeMessageThrowEvent` (correlate, then flow on) with no new runtime | Proposed |
 
 ## Status values
 

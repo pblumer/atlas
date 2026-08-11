@@ -302,6 +302,21 @@ func registerScope(
 		}
 	}
 	for _, st := range c.SendTasks {
+		// The message kind: a <sendTask messageRef> is a correlating throw in task form
+		// (ADR-0112). It reuses the intermediate message throw's compile path — resolve the
+		// message, then register a TypeMessageThrowEvent, which correlates and flows straight
+		// on. A throw is instantaneous, so unlike the job/connector kinds it is not an activity
+		// (no boundary/I/O/MI — those loops skip it, keyed on the same MessageRef).
+		if strings.TrimSpace(st.MessageRef) != "" {
+			name, keyExpr, err := resolveMessage(st.Id, st.MessageRef)
+			if err != nil {
+				return err
+			}
+			if err := register(st.Id, b.AddMessageThrowEvent(name, keyExpr)); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := registerJobWorkerTask(st, "send task", b.AddSendTask); err != nil {
 			return err
 		}
