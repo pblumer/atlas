@@ -6,6 +6,18 @@
 <title>Atlas</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2314161a'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='20' font-weight='700' fill='white' text-anchor='middle'%3EA%3C/text%3E%3C/svg%3E" />
 <link rel="stylesheet" href="app.css" />
+<!-- Apply the saved company-colour theme before first paint, so the UI never
+     flashes the default accent. Logic-free on purpose: it applies the already
+     derived variable map that theme.js stored; see theme.js for the derivation. -->
+<script>
+  try {
+    var t = JSON.parse(localStorage.getItem("atlas.theme"));
+    if (t && t.vars) {
+      var r = document.documentElement;
+      for (var k in t.vars) if (k.indexOf("--accent") === 0) r.style.setProperty(k, t.vars[k]);
+    }
+  } catch (e) { /* no/!invalid theme — fall back to the CSS default */ }
+</script>
 </head>
 <body>
   <!-- App-switcher drawer (hidden until the grid button is pressed) -->

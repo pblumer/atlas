@@ -1947,3 +1947,38 @@ tr[hidden] { display: none; }
 .sp-tgt.on { color: #fff; background: var(--accent); border-color: var(--accent); }
 .sp-foot { display: flex; gap: 16px; padding: 8px 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; }
 .sp-foot kbd { font: 600 11px system-ui; border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; margin-right: 2px; }
+
+/* ---------- Appearance / company-colour theming (Console → Organization) ----------
+   The controls that pick a brand accent (theme.js). The accent variables they set
+   live on :root; these rules only style the picker itself. */
+.theme-swatches { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.theme-swatch {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 12px 6px 8px; border: 1px solid var(--border-strong); border-radius: 999px;
+  background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer;
+}
+.theme-swatch:hover { border-color: var(--accent); }
+.theme-swatch.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.theme-dot { width: 15px; height: 15px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15); }
+.theme-custom { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+/* A tidy, square colour well — browsers render input[type=color] as a chunky
+   button otherwise. */
+.theme-custom input[type="color"] {
+  width: 34px; height: 34px; padding: 0; border: 1px solid var(--border-strong);
+  border-radius: 7px; background: var(--surface); cursor: pointer;
+}
+.theme-custom input[type="color"]::-webkit-color-swatch-wrapper { padding: 3px; }
+.theme-custom input[type="color"]::-webkit-color-swatch { border: none; border-radius: 4px; }
+/* input[type=text] qualifier so this outranks the generic `input[type=text]`
+   width:100% reset (same-element, higher specificity), keeping the hex box a
+   compact inline field rather than a full-width row. */
+input[type="text"].theme-hex {
+  width: 108px; font: 13px/1.5 ui-monospace, monospace; text-transform: uppercase;
+  padding: 7px 10px; border: 1px solid var(--border-strong); border-radius: 7px;
+  background: var(--surface); color: var(--text);
+}
+input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+/* A live sample of the accent in context, so a choice is visible without leaving
+   the page. */
+.theme-preview { display: inline-flex; align-items: center; gap: 12px; }
+.theme-preview .theme-link { color: var(--accent); font-weight: 600; }
