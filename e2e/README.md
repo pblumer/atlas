@@ -45,10 +45,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   Drives the real app shell against a mocked `/api/v1` (backup/restore hit the Go API, which
   the static harness doesn't run).
 - **`call-activity-replay.spec.mjs`** (ADR-0076): the **call-activity drill-down** in the
-  Operations instance replay — a call activity whose timeline step carries a `childInstanceKey`
-  turns its "+" marker into an invisible click hotspot (single click → the child's replay, same
-  window) and shows a "Called process" link in its Details panel; a plain element carries
-  neither. Drives the real `mountInstanceReplay` against a mock `api`.
+  Operations instance replay — clicking a call activity's "+" marker (whose timeline step carries
+  a `childInstanceKey`) drills into the child's replay, clicking its body selects it instead, a
+  double-click does not open label editing (the replay is read-only), and its Details panel shows
+  a "Called process" link. Drives the real `mountInstanceReplay` against a mock `api`.
 - **`call-activity-modeler.spec.mjs`** (ADR-0076): the **Process ID picker + create-new** in
   the Modeler's call-activity Implement panel — selecting the call activity offers a datalist of
   existing callees (deployed processes and drafts), and "＋ Create new process" saves the caller,

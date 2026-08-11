@@ -5964,29 +5964,39 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const stepsForElement = (elId) => steps.filter((s) => s.elementId === elId);
   const stepByEik = (eik) => steps.find((s) => s.elementInstanceKey === eik) || null;
 
-  // drawCallActivityLinks puts a transparent, clickable hotspot directly over each
-  // call activity's "+" marker (bpmn-js draws it at the shape's bottom centre) whose
-  // child instance is known, so a single click on the marker itself jumps into the
-  // child's replay (same window) — no extra badge, the marker is the target. It
-  // complements the Details panel's link and is rebuilt whenever the step set grows.
-  // One hotspot per element (the first child); a multi-instance call activity's
-  // per-iteration children are reachable by selecting each iteration in the history.
-  const caLinkIds = [];
-  function drawCallActivityLinks() {
-    for (const id of caLinkIds.splice(0)) { try { overlays.remove(id); } catch { /* gone */ } }
-    const seen = new Set();
+  // indexCallActivityChildren maps each call-activity element id to the child
+  // instance it started (ADR-0076), rebuilt when the step set grows. A click on the
+  // element's "+" marker (its bottom-centre call-activity glyph) drills into that
+  // child — see the element.click handler; the marker itself is the target, with no
+  // extra badge. The Details panel offers the same as a link. One child per element
+  // (the first); a multi-instance call activity's per-iteration children are reached
+  // by selecting each iteration in the history.
+  const caChildByElement = new Map();
+  function indexCallActivityChildren() {
+    caChildByElement.clear();
     for (const s of steps) {
-      if (!s.childInstanceKey || seen.has(s.elementId)) continue;
-      seen.add(s.elementId);
-      const el = registry.get(s.elementId);
-      if (!el) continue; // element not on this diagram
-      // Centre a small hotspot (sized in CSS) horizontally on the bottom marker.
-      const left = Math.max(0, Math.round((el.width || 100) / 2) - 11);
-      caLinkIds.push(overlays.add(s.elementId, "atlas-callchild", {
-        position: { bottom: 1, left },
-        html: `<a class="ca-child-hotspot" href="#/operations/i/${s.childInstanceKey}" title="Open the called process's instance replay" aria-label="Open the called process"></a>`,
-      }));
+      if (s.childInstanceKey && !caChildByElement.has(s.elementId)) {
+        caChildByElement.set(s.elementId, s.childInstanceKey);
+      }
     }
+  }
+
+  // callMarkerChild returns the child instance to drill into when a click lands on a
+  // call activity's bottom-centre "+" marker, else 0. It reads the real click point
+  // (screen coordinates, zoom-independent) against the element's on-screen box: the
+  // bottom band, horizontally centred — where bpmn-js draws the marker. The overlay
+  // approach can't win this click because the shape's own hit layer sits on top, so
+  // the navigation is driven from element.click instead.
+  function callMarkerChild(e, el) {
+    const childKey = caChildByElement.get(el.id);
+    if (!childKey) return 0;
+    const oe = e.originalEvent;
+    const gfx = registry.getGraphics(el.id);
+    if (!oe || !gfx) return 0;
+    const r = gfx.getBoundingClientRect();
+    const inX = oe.clientX >= r.left + r.width * 0.28 && oe.clientX <= r.right - r.width * 0.28;
+    const inY = oe.clientY >= r.bottom - Math.min(30, r.height * 0.42) && oe.clientY <= r.bottom + 2;
+    return inX && inY ? childKey : 0;
   }
 
   // renderDetail fills the Details tab for the selected element instance (or the
@@ -6441,7 +6451,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       scrub.max = String(frames.length);
       renderHistory();
       loadBadges();
-      drawCallActivityLinks();
+      indexCallActivityChildren();
       if (!playing && wasAtEnd) setPlayhead(frames.length); // follow new frames live
       else { scrub.value = String(playhead); updateClock(); renderOverlay(); highlightHistory(); }
       renderInspector();
@@ -6463,13 +6473,22 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     renderDecisions();
   }
 
-  // Selecting an element in the diagram inspects it, the same as a history click.
+  // Selecting an element in the diagram inspects it, the same as a history click —
+  // except a click on a call activity's "+" marker drills into the child instance it
+  // started (ADR-0076), same window.
   eventBus.on("element.click", (e) => {
     const el = e.element;
     if (!el || el.waypoints || el === canvas.getRootElement()) { selectElement("", 0); return; }
+    const childKey = callMarkerChild(e, el);
+    if (childKey) { pause(); location.hash = `#/operations/i/${childKey}`; return; }
     pause();
     selectElement(el.id, 0);
   });
+
+  // The replay is read-only: a double-click must not open bpmn-js label editing,
+  // which would blank the element's name. Preempt the LabelEditingProvider (default
+  // priority 1000) by handling element.dblclick first and stopping propagation.
+  eventBus.on("element.dblclick", 2000, () => false);
 
   root.querySelectorAll("#rp-tabs button").forEach((b) => b.addEventListener("click", () => {
     activeTab = b.dataset.tab;

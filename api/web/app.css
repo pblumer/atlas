@@ -607,12 +607,9 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 }
 .task-open:hover { filter: brightness(1.08); }
 /* Drill-down from a call activity's replay into the child instance it started
-   (ADR-0076). On the diagram it is an invisible click hotspot sized over the "+"
-   call-activity marker — the marker itself becomes the target, with no extra
-   emblem; a faint highlight on hover signals it is clickable. In the Details panel
-   it is a plain text link. */
-.ca-child-hotspot { display: block; width: 22px; height: 22px; cursor: pointer; border-radius: 5px; }
-.ca-child-hotspot:hover { background: rgba(37, 99, 235, 0.14); }
+   (ADR-0076). On the diagram the target is the call activity's own "+" marker —
+   clicking it navigates (handled in editor.js element.click), with no extra emblem.
+   In the Details panel the same drill-down is a plain text link. */
 .ca-child-link { color: var(--accent, #2563eb); font-weight: 600; text-decoration: none; }
 .ca-child-link:hover { text-decoration: underline; }
 /* "Decision" badge on a business rule task that has been evaluated: opens the
