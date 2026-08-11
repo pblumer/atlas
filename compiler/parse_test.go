@@ -362,18 +362,20 @@ func TestParseTimerCatchEventErrors(t *testing.T) {
 	}
 }
 
-// TestParseUnsupportedElementMessage locks in the actionable error text for an
-// unsupported element (a user task) rather than a confusing "unknown targetRef".
+// TestParseUnsupportedElementMessage locks in the actionable error text for an element
+// Atlas can't run yet (an ad-hoc subprocess) rather than a confusing "unknown targetRef".
+// Send tasks were the original stand-in here; they compile now (ADR-0112), so this uses a
+// still-unsupported element to keep the safety net — and its message — under test.
 func TestParseUnsupportedElementMessage(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
-		<startEvent id="s"/><sendTask id="Activity_1"/><endEvent id="e"/>
+		<startEvent id="s"/><adHocSubProcess id="Activity_1"/><endEvent id="e"/>
 		<sequenceFlow id="f1" sourceRef="s" targetRef="Activity_1"/>
 		<sequenceFlow id="f2" sourceRef="Activity_1" targetRef="e"/></process></definitions>`
 	_, err := Parse(1, 1, strings.NewReader(xml))
 	if err == nil {
-		t.Fatal("want error for a <sendTask>")
+		t.Fatal("want error for an <adHocSubProcess>")
 	}
-	for _, want := range []string{"Activity_1", "sendTask", "service"} {
+	for _, want := range []string{"Activity_1", "adHocSubProcess", "service"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q should mention %q", err.Error(), want)
 		}

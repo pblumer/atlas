@@ -83,12 +83,16 @@ func registerScope(
 			b.SetStartFormId(s.Form.FormId)
 		}
 	}
-	for _, st := range c.ServiceTasks {
+	// A send task is a service task under a different BPMN label (ADR-0112): it creates a
+	// job and waits, and a connector extension on it takes the connector path exactly as on
+	// a service task. registerJobWorkerTask compiles both — only the plain-worker node type
+	// (AddServiceTask vs AddSendTask, passed as plain) and the diagnostic label differ.
+	registerJobWorkerTask := func(st xmlServiceTask, label string, plain func(jobType string, retries int32) int32) error {
 		retries := int32(defaultRetries)
 		if r := st.TaskDefinition.Retries; r != "" {
 			n, err := strconv.Atoi(r)
 			if err != nil {
-				return fmt.Errorf("compiler: service task %q has invalid retries %q: %w", st.Id, r, err)
+				return fmt.Errorf("compiler: %s %q has invalid retries %q: %w", label, st.Id, r, err)
 			}
 			retries = int32(n)
 		}
@@ -131,10 +135,7 @@ func registerScope(
 			default:
 				return fmt.Errorf("compiler: clio connector task %q has unknown operation %q (want write, query, or read)", st.Id, op)
 			}
-			if err := register(st.Id, id); err != nil {
-				return err
-			}
-			continue
+			return register(st.Id, id)
 		}
 		// A service task bearing an <atlas:restConnector> extension is an HTTP-REST
 		// connector task: it calls the model-authored URL via the job path
@@ -173,10 +174,7 @@ func registerScope(
 				Auth:      auth,
 				Retries:   retries,
 			})
-			if err := register(st.Id, id); err != nil {
-				return err
-			}
-			continue
+			return register(st.Id, id)
 		}
 		// A service task bearing an <atlas:mailConnector> extension is an outbound
 		// mail connector task: it sends a model-authored message through a
@@ -224,10 +222,7 @@ func registerScope(
 				Body:      body,
 				Retries:   retries,
 			})
-			if err := register(st.Id, id); err != nil {
-				return err
-			}
-			continue
+			return register(st.Id, id)
 		}
 		// A service task bearing an <atlas:sharepointConnector> extension is a
 		// SharePoint connector task: it creates a list item in a model-authored
@@ -265,10 +260,7 @@ func registerScope(
 				ResultVar: strings.TrimSpace(cn.ResultVariable),
 				Retries:   retries,
 			})
-			if err := register(st.Id, id); err != nil {
-				return err
-			}
-			continue
+			return register(st.Id, id)
 		}
 		// A service task bearing an <atlas:remedyConnector> extension is a BMC Remedy
 		// connector task: it creates an entry (e.g. an incident) in a Remedy form
@@ -297,15 +289,20 @@ func registerScope(
 				ResultVar: strings.TrimSpace(cn.ResultVariable),
 				Retries:   retries,
 			})
-			if err := register(st.Id, id); err != nil {
-				return err
-			}
-			continue
+			return register(st.Id, id)
 		}
 		if st.TaskDefinition.Type == "" {
-			return fmt.Errorf("compiler: service task %q has no task definition type", st.Id)
+			return fmt.Errorf("compiler: %s %q has no task definition type", label, st.Id)
 		}
-		if err := register(st.Id, b.AddServiceTask(st.TaskDefinition.Type, retries)); err != nil {
+		return register(st.Id, plain(st.TaskDefinition.Type, retries))
+	}
+	for _, st := range c.ServiceTasks {
+		if err := registerJobWorkerTask(st, "service task", b.AddServiceTask); err != nil {
+			return err
+		}
+	}
+	for _, st := range c.SendTasks {
+		if err := registerJobWorkerTask(st, "send task", b.AddSendTask); err != nil {
 			return err
 		}
 	}
@@ -740,7 +737,7 @@ func registerScope(
 		label string
 		nodes []xmlNode
 	}{
-		{"sendTask", c.SendTasks},
+		{"adHocSubProcess", c.AdHocSubProcesses},
 	} {
 		if len(u.nodes) > 0 {
 			return fmt.Errorf("compiler: element %q is a <%s>, which Atlas can't execute yet "+

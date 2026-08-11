@@ -599,7 +599,8 @@ func isCatchEvent(t BpmnType) bool {
 func isActivity(t BpmnType) bool {
 	switch t {
 	case TypeServiceTask, TypeScriptTask, TypeScriptJobTask, TypeBusinessRuleTask,
-		TypeUserTask, TypeConnectorTask, TypeTask, TypeReceiveTask, TypeSubProcess, TypeCallActivity:
+		TypeUserTask, TypeConnectorTask, TypeTask, TypeReceiveTask, TypeSendTask,
+		TypeSubProcess, TypeCallActivity:
 		return true
 	default:
 		return false
