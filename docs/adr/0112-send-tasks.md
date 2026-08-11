@@ -1,10 +1,10 @@
 # ADR-0112: Send tasks
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-11
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Proposed. A `<sendTask>` is Atlas's **single outbound element**: what
+> **Implementation status.** Delivered. A `<sendTask>` is Atlas's **single outbound element**: what
 > it sends is chosen at author time (the *kind*), and the compiler dispatches on that kind, exactly
 > as a service task already dispatches on its connector extension. Three kinds:
 >
