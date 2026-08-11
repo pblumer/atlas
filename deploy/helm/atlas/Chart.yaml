@@ -1,0 +1,24 @@
+apiVersion: v2
+name: atlas
+description: A durable, high-throughput BPMN 2.x workflow engine — the single-binary Atlas server.
+type: application
+
+# Chart version — bump on every change to the chart itself (SemVer).
+version: 0.1.0
+
+# The Atlas version this chart deploys by default. Used as the image tag when
+# image.tag is left empty. "main" tracks the image published from the main
+# branch; pin a released tag in production once releases exist.
+appVersion: "main"
+
+home: https://github.com/pblumer/atlas
+sources:
+  - https://github.com/pblumer/atlas
+keywords:
+  - bpmn
+  - workflow
+  - workflow-engine
+  - process-automation
+maintainers:
+  - name: Atlas maintainers
+    url: https://github.com/pblumer/atlas
