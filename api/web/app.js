@@ -3062,6 +3062,32 @@ async function viewTasks(preselectKey) {
     } catch (err) {
       host.innerHTML = `<p class="muted err" style="padding:16px">Could not load the process view: ${esc(err.message)}</p>`;
     }
+    renderProcVars(t); // the instance's current variables, beneath the diagram
+  }
+
+  // renderProcVars fills the Process tab's Variables list with the instance's
+  // current process variables, so the assignee sees the data the process carries,
+  // not just where the token is. Guards against the selection moving on mid-fetch.
+  async function renderProcVars(t) {
+    if (!document.getElementById("tp-vars-body")) return;
+    let vars;
+    try {
+      vars = await api("GET", "/api/v1/instances/" + t.processInstanceKey + "/variables");
+    } catch (err) {
+      const b = document.getElementById("tp-vars-body");
+      if (b && state.selected === t.key) b.innerHTML = `<p class="muted err">Could not load variables: ${esc(err.message)}</p>`;
+      return;
+    }
+    if (state.selected !== t.key) return;
+    const b = document.getElementById("tp-vars-body");
+    if (!b) return;
+    const entries = vars && typeof vars === "object" ? Object.entries(vars) : [];
+    if (!entries.length) { b.innerHTML = `<p class="muted">No variables set yet.</p>`; return; }
+    const fmt = (v) => (v === null || v === undefined ? "null" : typeof v === "object" ? JSON.stringify(v) : String(v));
+    b.innerHTML = `<table class="tp-vars-table"><tbody>${entries
+      .sort((a, c) => a[0].localeCompare(c[0]))
+      .map(([k, v]) => `<tr><td class="tp-var-k">${esc(k)}</td><td class="tp-var-v"><code>${esc(fmt(v))}</code></td></tr>`)
+      .join("")}</tbody></table>`;
   }
 
   function renderDetail() {
@@ -3109,6 +3135,10 @@ async function viewTasks(preselectKey) {
           <span><i class="tp-sw done"></i> Completed</span>
         </div>
         <div class="tp-canvas" id="tp-canvas"><p class="tp-msg muted">Loading&hellip;</p></div>
+        <div class="tp-vars" id="tp-vars">
+          <h3 class="tp-vars-head">Variables</h3>
+          <div id="tp-vars-body"><p class="tp-msg muted">Loading&hellip;</p></div>
+        </div>
       </div>`;
     detailEl.innerHTML = `
       <header class="tasks-detail-head">
