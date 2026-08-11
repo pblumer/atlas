@@ -84,6 +84,17 @@ test("picking a preset re-tints the root and persists to the server", async ({ p
   await expect(page.locator("#toast")).toContainText("everyone");
 });
 
+test("the Bund preset applies the Swiss federal red (CD Bund)", async ({ page }) => {
+  const server = installMock(page);
+  await bootApp(page);
+  await gotoOrg(page);
+
+  await page.locator('.theme-swatch[data-color="#d52b1e"]').click();
+
+  await expect.poll(() => rootAccent(page)).toBe("#d52b1e");
+  await expect.poll(() => server.accent).toBe("#d52b1e");
+});
+
 test("a custom hex value applies and persists the accent", async ({ page }) => {
   const server = installMock(page);
   await bootApp(page);

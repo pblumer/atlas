@@ -33,8 +33,15 @@ export const DEFAULT_ACCENT = "#0b5cff";
 
 // A short menu of ready-made brand colours so picking one is a single click. The
 // custom picker covers everything else.
+//
+// "Bund" is the Swiss Confederation federal red (Bundesrot) from the CD Bund
+// corporate design (bk.admin.ch/de/corporate-design-grundelemente): Pantone 485,
+// i.e. the flag/coat-of-arms red, #D52B1E. The hover/soft shades derive from it
+// like any other accent. Only the accent is themed here — the CD Bund's typography,
+// logo and layout rules are out of scope for a colour theme.
 export const PRESETS = [
   { name: "Atlas", color: DEFAULT_ACCENT },
+  { name: "Bund", color: "#d52b1e" },
   { name: "Indigo", color: "#4f46e5" },
   { name: "Violet", color: "#7c3aed" },
   { name: "Teal", color: "#0d7a63" },
