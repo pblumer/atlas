@@ -1,0 +1,54 @@
+{
+  "type": "default",
+  "id": "pruefung-fragen",
+  "components": [
+    {
+      "type": "text",
+      "text": "# 📝 Abschlussprüfung: Atlas-Grundlagen\n\nBeantworten Sie alle **vier** Fragen. Jede richtige Antwort zählt **25 Punkte** (max. 100). Das Zeitlimit beträgt **45 Minuten** — läuft es ab, bevor Sie abgeben, gilt die Prüfung als nicht bestanden."
+    },
+    {
+      "key": "antwort1",
+      "type": "radio",
+      "label": "1. Was persistiert Atlas bei jeder Zustandsänderung?",
+      "values": [
+        { "label": "Ein Event in einem Append-only-Log", "value": "event" },
+        { "label": "Ein UPDATE in einer SQL-Tabelle", "value": "sql" },
+        { "label": "Nichts — der Zustand liegt nur im RAM", "value": "ram" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "key": "antwort2",
+      "type": "radio",
+      "label": "2. Wie macht Atlas viele Events dauerhaft (durable)?",
+      "values": [
+        { "label": "Ein fsync pro Batch (Group Commit)", "value": "group" },
+        { "label": "Ein fsync pro einzelnem Event", "value": "single" },
+        { "label": "Gar nicht — Events bleiben im Speicher", "value": "keine" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "key": "antwort3",
+      "type": "radio",
+      "label": "3. Wie viele Writer besitzt eine Partition?",
+      "values": [
+        { "label": "Genau einen (Single-Writer)", "value": "one" },
+        { "label": "Beliebig viele, mit Locks synchronisiert", "value": "many" },
+        { "label": "Keinen — Schreiben ist zustandslos", "value": "none" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "key": "antwort4",
+      "type": "radio",
+      "label": "4. Wann wird ein BPMN-Modell in den Ausführungsgraphen kompiliert?",
+      "values": [
+        { "label": "Einmalig zur Deploy-Zeit", "value": "deploy" },
+        { "label": "Bei jedem Token auf dem Hot Path", "value": "runtime" },
+        { "label": "Nie — die XML wird direkt interpretiert", "value": "nie" }
+      ],
+      "validate": { "required": true }
+    }
+  ]
+}
