@@ -498,89 +498,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	for jobType, exec := range s.scriptWorkers {
 		s.jobRunner.HandleWithOutput(jobType, script.Handler(store, s.processLookup, exec))
 	}
-	// A *central* business rule task delegates its decision to a remote temis
-	// service instead of the embedded library (ADR-0050). One connector worker
-	// serves every process under the reserved temis-connector job type; it resolves
-	// each job's connector name from the compiled process and calls the endpoint
-	// configured for that connector. Connectors come from the environment plus
-	// operator-managed instances in the Console (ADR-0041); the registry is built
-	// here (before the loop serves traffic) and rebuilt on every connector change.
-	// A model whose connector is not configured simply parks until it is.
-	s.temisRegistry = temis.NewRegistry()
-	clients, err := s.buildTemisClients()
-	if err != nil {
+	// Managed connector job workers (temis, clio, mail, sharepoint, remedy): one
+	// registry plus job worker(s) per kind, all driven from the managedConnectorKinds
+	// registry so adding a kind needs no new block here. Each registry is created and
+	// built before the loop serves traffic and rebuilt on every connector change; a
+	// task whose connector is not configured parks until it is.
+	if err := s.setupManagedConnectors(store); err != nil {
 		return nil, err
 	}
-	s.temisRegistry.Replace(clients)
-	s.jobRunner.HandleCompleting(compiler.TemisDecisionJobTypeIndex, temis.Handler(store, s.processLookup, s.temisRegistry, nil))
-	// A clio connector task appends, reads, or queries a server-registered clio
-	// event store (ADR-0036). One worker per operation serves every process under a
-	// reserved clio job type; each resolves its job's connector name from the
-	// compiled process and calls the endpoint configured for that connector. Unlike
-	// REST's model-authored endpoint, a clio connector's endpoint and token live in
-	// the managed connector store; the token is resolved from the vault at build time
-	// (ADR-0041). The registry is built here (before the loop serves traffic) and
-	// rebuilt on every connector change; a task whose connector is not configured
-	// parks until it is.
-	s.clioRegistry = clio.NewRegistry()
-	clioClients, err := s.buildClioClients()
-	if err != nil {
-		return nil, err
-	}
-	s.clioRegistry.Replace(clioClients)
-	s.jobRunner.Handle(compiler.ClioWriteJobTypeIndex, clio.Handler(store, s.processLookup, s.clioRegistry))
-	s.jobRunner.HandleWithOutput(compiler.ClioQueryJobTypeIndex, clio.QueryHandler(store, s.processLookup, s.clioRegistry))
-	s.jobRunner.HandleWithOutput(compiler.ClioReadJobTypeIndex, clio.ReadHandler(store, s.processLookup, s.clioRegistry))
-	// An outbound mail connector task sends a model-authored message through a
-	// server-registered mail provider (ADR-0079). One worker serves every process
-	// under the reserved mail job type; it resolves each job's connector name and
-	// recipients/subject/body from the compiled process, sends the message off the run
-	// loop and after fsync, and completes the job. The provider host and credentials
-	// live in the managed connector store like clio's; the credential is resolved from
-	// the vault at build time (ADR-0041), so a secret never lives in a model. The
-	// registry is built here and rebuilt on every connector change; a task whose
-	// connector is not configured parks until it is.
-	s.mailRegistry = mail.NewRegistry()
-	mailClients, err := s.buildMailClients()
-	if err != nil {
-		return nil, err
-	}
-	s.mailRegistry.Replace(mailClients)
-	s.jobRunner.Handle(compiler.MailJobTypeIndex, mail.Handler(store, s.processLookup, s.mailRegistry))
-	// A SharePoint connector task creates a list item in a model-authored site/list
-	// through a server-registered Microsoft Graph provider (ADR-0105). One worker
-	// serves every process under the reserved SharePoint job type; it resolves each
-	// job's connector name and site/list/fields from the compiled process, creates the
-	// item off the run loop and after fsync, and writes the created item's JSON into
-	// the task's result variable. The Graph base and OAuth credential live in the
-	// managed connector store like mail's; the credential is resolved from the vault at
-	// build time (ADR-0041), so a secret never lives in a model. The registry is built
-	// here and rebuilt on every connector change; a task whose connector is not
-	// configured parks until it is.
-	s.sharePointRegistry = sharepoint.NewRegistry()
-	sharePointClients, err := s.buildSharePointClients()
-	if err != nil {
-		return nil, err
-	}
-	s.sharePointRegistry.Replace(sharePointClients)
-	s.jobRunner.HandleWithOutput(compiler.SharePointJobTypeIndex, sharepoint.Handler(store, s.processLookup, s.sharePointRegistry))
-	// A BMC Remedy connector task creates an entry (e.g. an incident) in a Remedy form
-	// through the AR System REST API (ADR-0106). One worker serves every process under
-	// the reserved Remedy job type; it resolves each job's connector/form/fields from
-	// the compiled process, creates the entry off the run loop and after fsync, writes
-	// the new entry id into the task's result variable, and completes the job. The
-	// Remedy base URL and credentials live in the managed connector store like mail's;
-	// the credential bundle (username/password) is resolved from the vault at build
-	// time (ADR-0041), so a secret never lives in a model. The registry is built here
-	// and rebuilt on every connector change; a task whose connector is not configured
-	// parks until it is.
-	s.remedyRegistry = remedy.NewRegistry()
-	remedyClients, err := s.buildRemedyClients()
-	if err != nil {
-		return nil, err
-	}
-	s.remedyRegistry.Replace(remedyClients)
-	s.jobRunner.HandleWithOutput(compiler.RemedyJobTypeIndex, remedy.Handler(store, s.processLookup, s.remedyRegistry))
 	// An HTTP-REST connector task calls a model-authored endpoint (ADR-0067). One
 	// worker serves every process under the reserved REST job type; it resolves each
 	// job's method/url/headers/query/result-variable from the compiled process, calls
