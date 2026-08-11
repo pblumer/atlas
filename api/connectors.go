@@ -253,39 +253,19 @@ func (s *Server) buildRemedyClients() (map[string]remedy.Client, error) {
 	return clients, nil
 }
 
-// rebuildConnectorRegistries rebuilds every managed connector registry (temis, clio,
-// mail, sharepoint and remedy) from the current connector store and swaps each live
-// registry atomically,
-// so a task referencing a changed connector starts (or stops) resolving at once.
-// Callers run it on the run-loop goroutine, inside the same s.do closure that saved
-// the change, so the rebuild sees the write. A single helper keeps every CRUD handler
-// from having to know which kinds exist.
+// rebuildConnectorRegistries rebuilds every managed connector registry from the
+// current connector store and swaps each live registry atomically, so a task
+// referencing a changed connector starts (or stops) resolving at once. It iterates the
+// managedConnectorKinds registry in order, so a CRUD handler never has to know which
+// kinds exist and adding a kind needs no change here. Callers run it on the run-loop
+// goroutine, inside the same s.do closure that saved the change, so the rebuild sees
+// the write.
 func (s *Server) rebuildConnectorRegistries() error {
-	temisClients, err := s.buildTemisClients()
-	if err != nil {
-		return err
+	for _, k := range managedConnectorKinds {
+		if err := k.rebuild(s); err != nil {
+			return err
+		}
 	}
-	clioClients, err := s.buildClioClients()
-	if err != nil {
-		return err
-	}
-	mailClients, err := s.buildMailClients()
-	if err != nil {
-		return err
-	}
-	sharePointClients, err := s.buildSharePointClients()
-	if err != nil {
-		return err
-	}
-	remedyClients, err := s.buildRemedyClients()
-	if err != nil {
-		return err
-	}
-	s.temisRegistry.Replace(temisClients)
-	s.clioRegistry.Replace(clioClients)
-	s.mailRegistry.Replace(mailClients)
-	s.sharePointRegistry.Replace(sharePointClients)
-	s.remedyRegistry.Replace(remedyClients)
 	return nil
 }
 
@@ -316,84 +296,34 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
-	var p struct {
-		Name           string `json:"name"`
-		Kind           string `json:"kind"`
-		Endpoint       string `json:"endpoint"`
-		CredentialsRef string `json:"credentialsRef"`
-		Provider       string `json:"provider"`
-		Sender         string `json:"sender"`
-		Enabled        *bool  `json:"enabled"`
-	}
+	var p createConnectorParams
 	if err := json.Unmarshal(body, &p); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
-	name := strings.TrimSpace(p.Name)
-	kind := strings.TrimSpace(p.Kind)
-	if kind == "" {
-		kind = connectorKindTemis
+	p.Name = strings.TrimSpace(p.Name)
+	p.Kind = strings.TrimSpace(p.Kind)
+	if p.Kind == "" {
+		p.Kind = connectorKindTemis
 	}
-	endpoint := strings.TrimSpace(p.Endpoint)
-	provider := strings.TrimSpace(p.Provider)
-	sender := strings.TrimSpace(p.Sender)
-	if name == "" {
+	p.Endpoint = strings.TrimSpace(p.Endpoint)
+	p.Provider = strings.TrimSpace(p.Provider)
+	p.Sender = strings.TrimSpace(p.Sender)
+	p.CredentialsRef = strings.TrimSpace(p.CredentialsRef)
+	if p.Name == "" {
 		writeError(w, http.StatusBadRequest, "connector name is required")
 		return
 	}
-	if kind != connectorKindTemis && kind != connectorKindClio && kind != connectorKindMail && kind != connectorKindSharePoint && kind != connectorKindRemedy {
-		writeError(w, http.StatusBadRequest, "connector kind must be \"temis\", \"clio\", \"mail\", \"sharepoint\", or \"remedy\"")
+	kind, ok := lookupManagedConnectorKind(p.Kind)
+	if !ok {
+		writeError(w, http.StatusBadRequest, managedConnectorKindsError())
 		return
 	}
-	switch kind {
-	case connectorKindMail:
-		if provider == "" {
-			provider = mail.ProviderSMTP
-		}
-		switch provider {
-		case mail.ProviderSMTP, mail.ProviderGmail, mail.ProviderMicrosoft:
-		default:
-			writeError(w, http.StatusBadRequest, "mail connector provider must be \"smtp\", \"gmail\", or \"microsoft\"")
-			return
-		}
-		if sender == "" {
-			writeError(w, http.StatusBadRequest, "mail connector sender (default From address) is required")
-			return
-		}
-		// SMTP needs a submission endpoint (host:port); Gmail/Microsoft default their
-		// API base and need a credentialsRef pointing at a vault auth bundle instead.
-		if provider == mail.ProviderSMTP {
-			if endpoint == "" {
-				writeError(w, http.StatusBadRequest, "smtp mail connector endpoint (host:port) is required")
-				return
-			}
-		} else if strings.TrimSpace(p.CredentialsRef) == "" {
-			writeError(w, http.StatusBadRequest, "a "+provider+" mail connector requires a credentialsRef naming a vault auth bundle")
-			return
-		}
-	case connectorKindSharePoint:
-		// Provider/Sender are mail-only. A SharePoint connector defaults its Graph API
-		// base (endpoint is an optional override) and needs a credentialsRef pointing
-		// at a vault OAuth auth bundle (client secret / refresh token, ADR-0105).
-		provider, sender = "", ""
-		if strings.TrimSpace(p.CredentialsRef) == "" {
-			writeError(w, http.StatusBadRequest, "a sharepoint connector requires a credentialsRef naming a vault auth bundle")
-			return
-		}
-	default:
-		// temis/clio/remedy: Provider/Sender are mail-only; these kinds require an endpoint.
-		provider, sender = "", ""
-		if endpoint == "" {
-			writeError(w, http.StatusBadRequest, "connector endpoint is required")
-			return
-		}
-		// A Remedy connector authenticates against the AR System, so it needs a
-		// credentialsRef naming a vault {username,password} bundle (ADR-0106); the
-		// secret itself never lives in the record or a model.
-		if kind == connectorKindRemedy && strings.TrimSpace(p.CredentialsRef) == "" {
-			writeError(w, http.StatusBadRequest, "a remedy connector requires a credentialsRef naming a vault {username,password} bundle")
-			return
-		}
+	// The kind's validator applies its own rules and normalizes p (defaulting a mail
+	// provider, clearing mail-only fields for kinds that don't use them).
+	if msg := kind.validateCreate(&p); msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
+		return
 	}
 	id, err := newID()
 	if err != nil {
@@ -405,9 +335,9 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		enabled = *p.Enabled
 	}
 	rec := connector{
-		ID: id, Name: name, Kind: kind, Endpoint: endpoint,
-		CredentialsRef: strings.TrimSpace(p.CredentialsRef), Enabled: enabled,
-		Provider: provider, Sender: sender,
+		ID: id, Name: p.Name, Kind: p.Kind, Endpoint: p.Endpoint,
+		CredentialsRef: p.CredentialsRef, Enabled: enabled,
+		Provider: p.Provider, Sender: p.Sender,
 		CreatedAt: time.Now().Unix(),
 	}
 
@@ -422,7 +352,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for _, c := range existing {
-			if strings.EqualFold(c.Name, name) {
+			if strings.EqualFold(c.Name, p.Name) {
 				dupErr = true
 				return
 			}
@@ -434,7 +364,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case dupErr:
-		writeError(w, http.StatusConflict, "a connector named "+name+" already exists")
+		writeError(w, http.StatusConflict, "a connector named "+p.Name+" already exists")
 		return
 	case saveErr != nil:
 		writeError(w, http.StatusInternalServerError, "save connector: "+saveErr.Error())
