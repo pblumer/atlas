@@ -73,10 +73,25 @@ at a Secret with a `vault-key` entry.
 
 ## Script tasks
 
-Script-task workers (`powershell`/`python`/`javascript`) shell out to interpreters
-and run arbitrary code. The default image ships **none** of them, so they are
-disabled by default. Enable one only with an image that bundles the interpreter,
-and consider setting `securityContext.readOnlyRootFilesystem=false`.
+Script-task workers shell out to interpreters and run arbitrary code (ADR-0047).
+The default image bundles **python3** and **node**, so `atlas.script.python` and
+`atlas.script.javascript` are **on by default**. The interpreters get a writable
+`emptyDir` at `/tmp` (the container's `HOME`), so the root filesystem stays
+read-only.
+
+**PowerShell is opt-in.** The default image does not ship `pwsh`; build the image
+with PowerShell first, then enable it:
+
+```bash
+docker build --build-arg INCLUDE_POWERSHELL=true -t ghcr.io/pblumer/atlas:pwsh .
+helm install atlas ./deploy/helm/atlas \
+  --set image.tag=pwsh \
+  --set atlas.script.powershell=true
+```
+
+All three run inside the Linux container: `pwsh` is PowerShell Core (not Windows
+PowerShell), `python3` (not Python 2), and Node.js — scripts must be
+Linux-compatible. To turn a language off, set its `atlas.script.<lang>=false`.
 
 ## Ingress / TLS
 

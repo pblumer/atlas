@@ -40,9 +40,9 @@ podSecurityContext:
   seccompProfile:
     type: RuntimeDefault
 
-# -- Container-level security context. The server writes only under the data
-# volume, so the root filesystem can stay read-only. Relax readOnlyRootFilesystem
-# if you enable script tasks that need scratch space outside the data dir.
+# -- Container-level security context. The root filesystem stays read-only; the
+# server writes under the data volume and the interpreters get a writable
+# emptyDir at /tmp (mounted by the chart), so this holds even with script tasks on.
 securityContext:
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: true
@@ -135,13 +135,14 @@ atlas:
     enabled: true
 
   # -- Script task workers. Each shells out to an interpreter and runs arbitrary
-  # code; the default image ships none of them, so they are OFF by default. Turn
-  # one on only with an image that bundles the interpreter, and consider relaxing
-  # securityContext.readOnlyRootFilesystem.
+  # code (ADR-0047). The default image bundles python3 and node, so those are ON;
+  # PowerShell is OFF because the default image does not ship pwsh — build the
+  # image with `--build-arg INCLUDE_POWERSHELL=true` (or point image.repository at
+  # such a build) before enabling it.
   script:
     powershell: false
-    python: false
-    javascript: false
+    python: true
+    javascript: true
     # -- Wall-clock limit for a single script task (--script-timeout).
     timeout: 30s
 

@@ -2,7 +2,7 @@
 # Agents and CI: prefer these targets so the canonical commands live in one place.
 
 .PHONY: all build test race vet fmt fmt-check lint check cover tidy clean run server \
-        docker docker-buildx helm-lint helm-template
+        docker docker-powershell docker-buildx helm-lint helm-template
 
 all: check
 
@@ -58,9 +58,13 @@ clean:
 IMAGE ?= ghcr.io/pblumer/atlas:dev
 CHART := deploy/helm/atlas
 
-# Build the server image for the local architecture.
+# Build the server image for the local architecture (python3 + node).
 docker:
 	docker build -t $(IMAGE) .
+
+# Build the image with PowerShell (pwsh) bundled as well.
+docker-powershell:
+	docker build --build-arg INCLUDE_POWERSHELL=true -t $(IMAGE) .
 
 # Build (and optionally push with PUSH=--push) a multi-arch image via buildx.
 docker-buildx:

@@ -19,8 +19,13 @@ docker run --rm -p 8080:8080 -v atlas-data:/data ghcr.io/pblumer/atlas:dev
 # open http://127.0.0.1:8080/
 ```
 
-The image is a distroless static build (no shell) running as nonroot (uid 65532)
-and storing durable state under `/data` — mount a volume there.
+The image is a Debian-slim build running as nonroot (uid 65532), storing durable
+state under `/data` — mount a volume there. It bundles the **python3** and
+**node** interpreters for script tasks; build with
+`--build-arg INCLUDE_POWERSHELL=true` to also include **PowerShell** (`pwsh`).
+Everything runs as a Linux container (amd64/arm64); Windows containers are not
+supported and script tasks must be Linux-compatible (PowerShell Core, `python3`,
+Node.js).
 
 ## Kubernetes (Helm)
 
