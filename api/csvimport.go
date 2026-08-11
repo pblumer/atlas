@@ -70,11 +70,31 @@ func parseCSVRows(cfg csvConfig, data []byte) ([]map[string]any, error) {
 	}
 
 	// Resolve each configured column to a source position in a record.
-	srcIndex := make([]int, len(cfg.Columns))
 	dataStart := 0
+	var srcIndex []int
 	if cfg.hasHeader() {
 		header := records[0]
 		dataStart = 1
+		// With no explicit column layout, derive one string column per distinct,
+		// non-empty header cell — the "just turn this CSV into JSON" case (ADR-0090).
+		if len(cfg.Columns) == 0 {
+			seen := make(map[string]struct{}, len(header))
+			for _, h := range header {
+				name := strings.TrimSpace(h)
+				if name == "" {
+					continue // a blank header names no field
+				}
+				if _, dup := seen[name]; dup {
+					continue // first occurrence wins, like the header lookup below
+				}
+				seen[name] = struct{}{}
+				cfg.Columns = append(cfg.Columns, csvColumn{Name: name})
+			}
+			if len(cfg.Columns) == 0 {
+				return nil, fmt.Errorf("CSV header row has no usable column names")
+			}
+		}
+		srcIndex = make([]int, len(cfg.Columns))
 		pos := make(map[string]int, len(header))
 		for i, h := range header {
 			key := strings.TrimSpace(h)
@@ -94,6 +114,7 @@ func parseCSVRows(cfg csvConfig, data []byte) ([]map[string]any, error) {
 			srcIndex[c] = i
 		}
 	} else {
+		srcIndex = make([]int, len(cfg.Columns))
 		for c, col := range cfg.Columns {
 			srcIndex[c] = *col.Index
 		}
@@ -119,8 +140,8 @@ func parseCSVRows(cfg csvConfig, data []byte) ([]map[string]any, error) {
 // type. Type is checked here (not lazily per cell) so a bad layout fails even on
 // a file that happens to contain no rows.
 func validateCSVConfig(cfg csvConfig) error {
-	if len(cfg.Columns) == 0 {
-		return fmt.Errorf("column layout must declare at least one column")
+	if len(cfg.Columns) == 0 && !cfg.hasHeader() {
+		return fmt.Errorf("column layout must declare at least one column (or set a header row to derive the columns)")
 	}
 	seen := make(map[string]struct{}, len(cfg.Columns))
 	for _, col := range cfg.Columns {

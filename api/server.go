@@ -490,7 +490,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// records is ingested and validated on the engine with the file arriving through a
 	// user-task form rather than a side-channel endpoint (ADR-0087). One worker serves
 	// every process under the reserved CSV-import job type.
-	s.jobRunner.HandleWithOutput(compiler.CsvImportJobTypeIndex, csvImportHandler(store))
+	s.jobRunner.HandleWithOutput(compiler.CsvImportJobTypeIndex, csvImportHandler(store, s.processLookup))
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
 	}

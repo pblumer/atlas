@@ -1025,7 +1025,10 @@ type xmlServiceTask struct {
 	// Mail, when present, marks this service task an outbound mail connector task
 	// (ADR-0079). The pointer is nil when the <atlas:mailConnector> extension is
 	// absent.
-	Mail          *xmlMailConnector          `xml:"extensionElements>mailConnector"`
+	Mail *xmlMailConnector `xml:"extensionElements>mailConnector"`
+	// Csv, when present, marks this service task a CSV-to-JSON connector task
+	// (ADR-0090). The pointer is nil when the <atlas:csvConnector> extension is absent.
+	Csv           *xmlCsvConnector           `xml:"extensionElements>csvConnector"`
 	IOMapping     xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
 	MultiInstance *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
 	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
@@ -1096,6 +1099,49 @@ type xmlMailConnector struct {
 	From      string `xml:"from,attr"`
 	Subject   string `xml:"subject,attr"`
 	Body      string `xml:"body,attr"`
+}
+
+// A CSV-to-JSON connector task's parameters, carried on a service task as an
+// <atlas:csvConnector source="..." delimiter="," .../> extension element (ADR-0090).
+// source names the process variable holding the raw CSV text (default "csvText");
+// delimiter is the single-character field separator (default ","); hasHeader is
+// "true"/"false" (default true) — whether the first row is a header; columns is an
+// optional comma-separated list of field names (omit to derive them from the header
+// row); resultVariable names the variable the parsed rows are written to (default
+// "rows"). The layout lives in the model, so nothing but the file arrives at runtime.
+type xmlCsvConnector struct {
+	Source         string `xml:"source,attr"`
+	Delimiter      string `xml:"delimiter,attr"`
+	HasHeader      string `xml:"hasHeader,attr"`
+	Columns        string `xml:"columns,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	Retries        string `xml:"retries,attr"`
+}
+
+// splitCSVColumns turns a csvConnector's comma-separated columns attribute into a
+// trimmed list of field names, dropping empty entries so a trailing comma or an
+// unset attribute yields no phantom column. An empty result means "derive the
+// columns from the header row" (ADR-0090).
+func splitCSVColumns(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if name := strings.TrimSpace(p); name != "" {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// csvHasHeader interprets a csvConnector's hasHeader attribute, defaulting to true
+// (a header row is present) when the attribute is absent or blank — matching the
+// CSV parser's own default (ADR-0084/0090).
+func csvHasHeader(attr string) bool {
+	s := strings.TrimSpace(attr)
+	return s == "" || strings.EqualFold(s, "true")
 }
 
 type xmlTaskDefinition struct {

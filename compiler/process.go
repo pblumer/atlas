@@ -345,6 +345,19 @@ type ConnectorTaskDetail struct {
 	From        RestExpr
 	MailSubject RestExpr
 	Body        RestExpr
+	// CSV connector fields (JobType == CsvImportJobType, ADR-0090). CsvSource is the
+	// interned name of the process variable holding the raw CSV text (-1 → the
+	// default "csvText"); CsvResult the variable the parsed rows are written to
+	// (-1 → "rows"); CsvDelimiter the field delimiter (-1 → ","); CsvHasHeader
+	// whether the first row is a header; CsvColumns the interned field names (empty →
+	// derive them from the header row). Each is the zero value for a non-CSV task and
+	// is read only by the in-process CSV worker, which the runner dispatches by the
+	// CSV job type alone.
+	CsvSource    int32
+	CsvResult    int32
+	CsvDelimiter int32
+	CsvHasHeader bool
+	CsvColumns   []int32
 }
 
 // RestExpr is a REST connector field value that is either a literal string
