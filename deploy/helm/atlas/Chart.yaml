@@ -4,12 +4,12 @@ description: A durable, high-throughput BPMN 2.x workflow engine — the single-
 type: application
 
 # Chart version — bump on every change to the chart itself (SemVer).
-version: 0.1.0
+version: 0.1.1
 
 # The Atlas version this chart deploys by default. Used as the image tag when
-# image.tag is left empty. "main" tracks the image published from the main
-# branch; pin a released tag in production once releases exist.
-appVersion: "main"
+# image.tag is left empty, so the default install pulls the immutable
+# ghcr.io/pblumer/atlas:0.1.0 release rather than a moving tag.
+appVersion: "0.1.0"
 
 home: https://github.com/pblumer/atlas
 sources:
