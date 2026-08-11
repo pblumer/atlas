@@ -292,6 +292,12 @@ func registerScope(
 			return register(st.Id, id)
 		}
 		if st.TaskDefinition.Type == "" {
+			// A send task reaching here has no message kind either (its messageRef/operationRef
+			// were resolved earlier), so name every kind it could take rather than only the task
+			// definition (ADR-0112) — this is the "Message selected but no message chosen yet" state.
+			if label == "send task" {
+				return fmt.Errorf("compiler: send task %q has no kind: choose a message (messageRef/operationRef), a task definition, or a connector", st.Id)
+			}
 			return fmt.Errorf("compiler: %s %q has no task definition type", label, st.Id)
 		}
 		return register(st.Id, plain(st.TaskDefinition.Type, retries))

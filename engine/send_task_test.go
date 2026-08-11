@@ -266,6 +266,63 @@ func TestSendTaskMessageKindCorrelates(t *testing.T) {
 	}
 }
 
+// TestSendTaskOperationRefCorrelates proves the operationRef spelling of the message kind runs
+// end to end (ADR-0112): a <sendTask operationRef> resolves the operation's inMessageRef and
+// throws it, waking a waiting receive task and flowing on — the same path as a messageRef send.
+func TestSendTaskOperationRefCorrelates(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	receiver, recvEnd := receiveTaskProcess(t, 97)
+
+	// Sender: a send task referencing an operation whose inMessageRef is "reply" (key "k").
+	const senderXML = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+	             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+	  <message id="Msg_reply" name="reply">
+	    <extensionElements><zeebe:subscription correlationKey='="k"'/></extensionElements>
+	  </message>
+	  <interface id="Iface"><operation id="Op_reply"><inMessageRef>Msg_reply</inMessageRef></operation></interface>
+	  <process id="sender" isExecutable="true">
+	    <startEvent id="s"/>
+	    <sendTask id="send" operationRef="Op_reply"/>
+	    <endEvent id="e"/>
+	    <sequenceFlow id="f1" sourceRef="s" targetRef="send"/>
+	    <sequenceFlow id="f2" sourceRef="send" targetRef="e"/>
+	  </process>
+	</definitions>`
+	sender, err := compiler.Parse(98, 1, strings.NewReader(senderXML))
+	if err != nil {
+		t.Fatalf("Parse sender: %v", err)
+	}
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.SetJobNotifier(func(int32) {})
+	p.Deploy(receiver)
+	p.Deploy(sender)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+
+	p.CreateInstance(receiver.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (receiver): %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 1 || ei != 1 {
+		t.Fatalf("receiver parked: process=%d element=%d, want 1 and 1", pi, ei)
+	}
+
+	p.CreateInstance(sender.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (sender): %v", err)
+	}
+	if pi := activeProcs(t, h.store); pi != 0 {
+		t.Fatalf("after operationRef send: active=%d, want 0 (sender flowed on, receiver correlated)", pi)
+	}
+	if v := elementVisits(t, h.store, receiver.Key)[recvEnd]; v != 1 {
+		t.Errorf("receiver end visits = %d, want 1 (the operationRef send woke the receive task)", v)
+	}
+}
+
 // TestSendTaskRecovers proves a parked send-task job survives a crash: replaying the log into a
 // fresh store restores the waiting job, and completing it after recovery finishes the instance —
 // the send task inherits the service task's recovery path (ADR-0112, invariant I4).

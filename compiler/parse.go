@@ -142,7 +142,7 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 	if len(defs.Processes) == 0 {
 		return nil, fmt.Errorf("compiler: no <process> element in definitions")
 	}
-	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs))
+	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildOperationResolver(defs))
 }
 
 // Deployable is one executable process compiled from a model, plus the display
@@ -171,6 +171,7 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 	resolve := buildMessageResolver(defs)
 	resolveSig := buildSignalResolver(defs)
 	resolveErr := buildErrorResolver(defs)
+	resolveOp := buildOperationResolver(defs)
 	poolName := participantNames(defs)
 
 	var out []Deployable
@@ -178,7 +179,7 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 		if len(proc.StartEvents) == 0 {
 			continue // black-box pool: nothing to run
 		}
-		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig, resolveErr)
+		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig, resolveErr, resolveOp)
 		if err != nil {
 			return nil, err
 		}
@@ -201,7 +202,7 @@ func ParseNamed(key uint64, version int32, r io.Reader, processId string) (*Comp
 	}
 	for _, proc := range defs.Processes {
 		if proc.Id == processId {
-			return compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs))
+			return compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildOperationResolver(defs))
 		}
 	}
 	return nil, fmt.Errorf("compiler: no <process> with id %q in model", processId)
@@ -260,6 +261,32 @@ func buildMessageResolver(defs xmlDefinitions) func(ownerId, messageRef string) 
 	}
 }
 
+// buildOperationResolver indexes a model's <interface> operations by id and returns a
+// resolver from a send task's operationRef to the id of the operation's <inMessageRef>
+// message (ADR-0112) — the message that send publishes. An unknown operation, or one with no
+// inMessageRef, is a deploy error. The operation's outMessageRef (a response) is ignored: an
+// operationRef send is a fire-and-forget throw, exactly like a messageRef send.
+func buildOperationResolver(defs xmlDefinitions) func(ownerId, operationRef string) (string, error) {
+	ops := make(map[string]string, len(defs.Interfaces))
+	for _, iface := range defs.Interfaces {
+		for _, op := range iface.Operations {
+			if op.Id != "" {
+				ops[op.Id] = strings.TrimSpace(op.InMessageRef)
+			}
+		}
+	}
+	return func(ownerId, operationRef string) (string, error) {
+		msg, ok := ops[operationRef]
+		if !ok {
+			return "", fmt.Errorf("compiler: send task %q references unknown operation %q", ownerId, operationRef)
+		}
+		if msg == "" {
+			return "", fmt.Errorf("compiler: operation %q referenced by send task %q has no inMessageRef", operationRef, ownerId)
+		}
+		return msg, nil
+	}
+}
+
 // buildSignalResolver indexes a model's top-level <bpmn:signal> declarations by id and
 // returns a closure resolving a signalRef to the signal's name (ADR-0088). A signal is
 // broadcast by name, so — unlike a message — there is no correlation key to compile.
@@ -311,7 +338,7 @@ func buildErrorResolver(defs xmlDefinitions) func(ownerId, errorRef string) (str
 // compileProcess linearizes one <process> into an immutable CompiledProcess,
 // resolving message, signal, and error references through resolveMessage/resolveSignal/
 // resolveError (shared across a collaboration's processes).
-func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error), resolveError func(ownerId, errorRef string) (string, error)) (*CompiledProcess, error) {
+func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error), resolveError func(ownerId, errorRef string) (string, error), resolveOperation func(ownerId, operationRef string) (string, error)) (*CompiledProcess, error) {
 	b := NewBuilder(key, proc.Id, version)
 	// isExecutable defaults to true when the attribute is absent (BPMN convention;
 	// Atlas has always run every deployed process), so an existing model without it
@@ -349,6 +376,11 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	// scope walk, so a transaction is registered, wired, and validated as the subprocess it
 	// structurally is (ADR-0108).
 	foldTransactions(&proc.xmlFlowContent)
+	// Resolve each send task's operationRef to the message the operation sends, before
+	// registerScope, so an operationRef send is compiled as the message kind (ADR-0112).
+	if err := resolveSendTaskOperations(&proc.xmlFlowContent, resolveOperation); err != nil {
+		return nil, err
+	}
 
 	// Register every flow node — the process root and, recursively, each embedded
 	// subprocess scope — then require a root-scope start event before wiring flows.
@@ -773,7 +805,22 @@ type xmlDefinitions struct {
 	Messages      []xmlMessage      `xml:"message"`
 	Signals       []xmlSignal       `xml:"signal"`
 	Errors        []xmlError        `xml:"error"`
+	Interfaces    []xmlInterface    `xml:"interface"`
 	Collaboration *xmlCollaboration `xml:"collaboration"`
+}
+
+// A BPMN <interface> groups <operation>s (the WSDL-style service-interface model). Atlas
+// reads them only to resolve a send task's operationRef to the operation's inMessageRef
+// (ADR-0112) — the message that send publishes.
+type xmlInterface struct {
+	Operations []xmlOperation `xml:"operation"`
+}
+
+// A BPMN <operation> inside an <interface>. Its <inMessageRef> names the message an
+// operationRef send task publishes; its outMessageRef (a response) is not supported.
+type xmlOperation struct {
+	Id           string `xml:"id,attr"`
+	InMessageRef string `xml:"inMessageRef"`
 }
 
 // A collaboration groups participant pools. Each participant references the
@@ -986,6 +1033,36 @@ func foldTransactions(fc *xmlFlowContent) {
 	for i := range fc.SubProcesses {
 		foldTransactions(&fc.SubProcesses[i].xmlFlowContent)
 	}
+}
+
+// resolveSendTaskOperations rewrites each send task's operationRef to the message that
+// operation sends (its inMessageRef), so the rest of the compiler treats an operationRef send
+// exactly as a messageRef send — the message kind (ADR-0112). It walks every scope, like
+// foldTransactions, and runs right after it (so send tasks inside a folded transaction are
+// covered) and before registerScope. A send task carrying both a messageRef and an operationRef
+// is a conflict (a deploy error).
+func resolveSendTaskOperations(fc *xmlFlowContent, resolveOperation func(ownerId, operationRef string) (string, error)) error {
+	for i := range fc.SendTasks {
+		st := &fc.SendTasks[i]
+		op := strings.TrimSpace(st.OperationRef)
+		if op == "" {
+			continue
+		}
+		if strings.TrimSpace(st.MessageRef) != "" {
+			return fmt.Errorf("compiler: send task %q sets both messageRef and operationRef; use one", st.Id)
+		}
+		msg, err := resolveOperation(st.Id, op)
+		if err != nil {
+			return err
+		}
+		st.MessageRef = msg
+	}
+	for i := range fc.SubProcesses {
+		if err := resolveSendTaskOperations(&fc.SubProcesses[i].xmlFlowContent, resolveOperation); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // A BPMN data object. It is not a flow node — no token flows through it — so it
@@ -1256,7 +1333,13 @@ type xmlServiceTask struct {
 	// MessageRef is read only for a send task (ADR-0112): a <sendTask messageRef> is the
 	// message-kind send — a correlating throw in task form. A service task never carries one
 	// (it dispatches on its taskDefinition/connector), so the field is inert there.
-	MessageRef     string            `xml:"messageRef,attr"`
+	MessageRef string `xml:"messageRef,attr"`
+	// OperationRef is read only for a send task (ADR-0112): a <sendTask operationRef> names a
+	// <bpmn:operation> whose <inMessageRef> is the message to send. It is resolved to that
+	// message before compilation (resolveSendTaskOperations), so it is an alternate spelling of
+	// the message kind — a fire-and-forget throw. The operation's outMessageRef (a response) is
+	// not supported. Inert on a service task.
+	OperationRef   string            `xml:"operationRef,attr"`
 	TaskDefinition xmlTaskDefinition `xml:"extensionElements>taskDefinition"`
 	// Clio, when present, marks this service task a clio connector task (ADR-0036).
 	// The pointer is nil when the <atlas:clioConnector> extension is absent.
