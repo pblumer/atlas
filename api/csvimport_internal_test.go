@@ -173,9 +173,9 @@ func TestParseCSVRowsErrors(t *testing.T) {
 		want string // substring the error must contain
 	}{
 		{
-			name: "no columns configured",
-			cfg:  csvConfig{Columns: nil},
-			data: "email\nada@x.io\n",
+			name: "no columns and no header row",
+			cfg:  csvConfig{Columns: nil, HasHeader: csvBoolPtr(false)},
+			data: "ada@x.io\n",
 			want: "at least one column",
 		},
 		{
@@ -241,6 +241,12 @@ func TestParseCSVRowsErrors(t *testing.T) {
 			data: "",
 			want: "empty",
 		},
+		{
+			name: "header row with only blank names, no columns to derive",
+			cfg:  csvConfig{Columns: nil},
+			data: " , \nx,y\n",
+			want: "no usable column names",
+		},
 	}
 
 	for _, tc := range tests {
@@ -253,5 +259,36 @@ func TestParseCSVRowsErrors(t *testing.T) {
 				t.Fatalf("error = %q, want substring %q", err.Error(), tc.want)
 			}
 		})
+	}
+}
+
+// csvBoolPtr returns a pointer to b, for setting the optional HasHeader field in a
+// test csvConfig literal.
+func csvBoolPtr(b bool) *bool { return &b }
+
+// TestParseCSVRowsDeriveColumns covers ADR-0090's header-derivation mode: with a
+// header row and no explicit column layout, every distinct non-blank header cell
+// becomes a string field, and duplicate/blank header cells are skipped.
+func TestParseCSVRowsDeriveColumns(t *testing.T) {
+	rows, err := parseCSVRows(csvConfig{Columns: nil}, []byte("email,group,license\nada@x.io,users,PRO\nbob@x.io,ops,BASIC\n"))
+	if err != nil {
+		t.Fatalf("derive: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("rows = %d, want 2", len(rows))
+	}
+	first := rows[0]
+	if len(first) != 3 || first["email"] != "ada@x.io" || first["group"] != "users" || first["license"] != "PRO" {
+		t.Fatalf("row[0] = %v, want the three derived string columns", first)
+	}
+
+	// A duplicate header cell is taken once (first occurrence wins); a blank one is
+	// dropped. Here "email" repeats and one cell is blank.
+	rows, err = parseCSVRows(csvConfig{Columns: nil}, []byte("email, ,email\na, b, c\n"))
+	if err != nil {
+		t.Fatalf("derive dup/blank: %v", err)
+	}
+	if len(rows) != 1 || len(rows[0]) != 1 || rows[0]["email"] != "a" {
+		t.Fatalf("row = %v, want a single email column bound to the first occurrence", rows[0])
 	}
 }

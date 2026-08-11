@@ -2,21 +2,21 @@
 <!--
   prüfe Datensätze — Massenprüfung von CSV-Datensätzen gegen Geschäftsregeln,
   mit In-Prozess-Upload und Korrektur-Loop je fehlerhafter Zeile
-  (ADR-0084, ADR-0086, ADR-0087).
+  (ADR-0084, ADR-0086, ADR-0087, ADR-0090).
 
   Start
    → User-Task "CSV hochladen"    (Formular csv-upload-form → Variable csvText)
-   → Script-Task "Spaltenkonfig"  (FEEL setzt columnConfig — die Config lebt im Prozess)
-   → Service-Task "CSV einlesen"  (parst csvText gemäß columnConfig → rows, rowCount)
+   → Service-Task "CSV einlesen"  (CSV-to-JSON-Connector: csvText → rows, rowCount)
    → Multi-Instance-Subprozess "prüfe Datensatz"   (prüft + korrigiert je Zeile)
    → Ende
 
   Der Upload ist ein Prozessschritt: der Quality Manager lädt die Datei im
   Formular des ersten User-Tasks hoch (die Tasks-App legt den Datei-Inhalt als
-  `csvText` ab). Ein Script-Task hält die vorgegebene Spaltenkonfiguration
-  (`columnConfig`) — die Daten werden im Prozess behandelt, nicht über einen
-  Seiten-Endpoint. Der CSV-Service-Task (`io.atlas.csv-import`) parst `csvText`
-  gegen `columnConfig` zu `rows`; danach läuft die Maschine an.
+  `csvText` ab). Der CSV-Service-Task ist ein erstklassiger CSV-to-JSON-Connector
+  (`atlas:csvConnector`, ADR-0090): Quellvariable, Trennzeichen, Kopfzeile,
+  Spalten und Ergebnisvariable sind am Task selbst hinterlegt — kein separater
+  Spaltenkonfig-Script mehr. Er parst `csvText` gegen dieses Layout zu `rows`;
+  danach läuft die Maschine an.
 
   Der eingebettete Subprozess ist multi-instanziert über `=rows`: er läuft
   einmal pro Datensatz, gebunden an `row`. Je Iteration:
@@ -42,6 +42,7 @@
 -->
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
              id="defs_pruefe_datensaetze" targetNamespace="http://atlas/examples">
   <process id="proc_pruefe_datensaetze" name="prüfe Datensätze" isExecutable="true">
 
@@ -54,16 +55,10 @@
       </extensionElements>
     </userTask>
 
-    <scriptTask id="spaltenkonfig" name="Spaltenkonfiguration">
-      <extensionElements>
-        <zeebe:script resultVariable="columnConfig"
-          expression="= {columns: [{name: &quot;email&quot;}, {name: &quot;group&quot;}, {name: &quot;license&quot;}], delimiter: &quot;,&quot;}"/>
-      </extensionElements>
-    </scriptTask>
-
     <serviceTask id="einlesen" name="CSV einlesen">
       <extensionElements>
-        <zeebe:taskDefinition type="io.atlas.csv-import" retries="3"/>
+        <atlas:csvConnector source="csvText" delimiter="," hasHeader="true"
+          columns="email,group,license" resultVariable="rows"/>
       </extensionElements>
     </serviceTask>
 
@@ -120,8 +115,7 @@
     <endEvent id="end" name="Ende"/>
 
     <sequenceFlow id="f_start_upload" sourceRef="start" targetRef="hochladen"/>
-    <sequenceFlow id="f_upload_konfig" sourceRef="hochladen" targetRef="spaltenkonfig"/>
-    <sequenceFlow id="f_konfig_einlesen" sourceRef="spaltenkonfig" targetRef="einlesen"/>
+    <sequenceFlow id="f_upload_einlesen" sourceRef="hochladen" targetRef="einlesen"/>
     <sequenceFlow id="f_einlesen_pruefe" sourceRef="einlesen" targetRef="pruefe_datensatz"/>
     <sequenceFlow id="f_pruefe_end" sourceRef="pruefe_datensatz" targetRef="end"/>
   </process>
