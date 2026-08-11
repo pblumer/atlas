@@ -70,4 +70,4 @@ If you're making or changing a significant architectural decision:
 
 ## License and DCO
 
-By contributing, you agree your contributions are licensed under the project's license ([Apache 2.0](LICENSE)). Sign off your commits (`git commit -s`) to certify the [Developer Certificate of Origin](https://developercertificate.org/).
+By contributing, you agree your contributions are licensed under the project's license ([AGPL-3.0-only](LICENSE)). Sign off your commits (`git commit -s`) to certify the [Developer Certificate of Origin](https://developercertificate.org/).

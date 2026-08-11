@@ -65,7 +65,7 @@ The three core pillars:
 
 ## License
 
-[Apache License 2.0](LICENSE). *(Proposed default — chosen for its explicit patent grant, which suits an infrastructure component others build on. Change it if you prefer MIT or another license before the first release.)*
+[GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`). Strong copyleft with a network-use clause: anyone who runs a modified Atlas as a network service must make their modified source available to its users. Contributions are accepted under the same license (see [`CONTRIBUTING.md`](CONTRIBUTING.md)).
 
 ---
 
