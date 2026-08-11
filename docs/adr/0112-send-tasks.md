@@ -221,12 +221,27 @@ and (d) dropping the "unsupported" rejections and surfacing the kind picker in t
   host boundaries or carry I/O/MI. This asymmetry is inherent to what each kind *is* (a throw never
   waits, so a boundary on it could never fire) and is documented, but it means "send task" is not one
   uniform runtime contract — the Implement picker, not the element, tells you which.
-- **Follow-ups / risks to watch:** an `operationRef` (WSDL-style) message send is still out of scope;
-  a send/receive **task pair** (message-kind send task ↔ receive task, ADR-0102) is now a pure
-  modeling convention, not new engine work. A boundary event drawn on a message-kind send task is
-  caught at deploy with a **targeted** error (it names the send task and points at the fix — switch
-  to a job/connector kind, or model the wait with a receive task and a boundary timer), rather than
-  the generic "attaches to a non-activity".
+- **Follow-ups / risks to watch:** a send/receive **task pair** (message-kind send task ↔ receive
+  task, ADR-0102) is now a pure modeling convention, not new engine work. A boundary event drawn on
+  a message-kind send task is caught at deploy with a **targeted** error (it names the send task and
+  points at the fix — switch to a job/connector kind, or model the wait with a receive task and a
+  boundary timer), rather than the generic "attaches to a non-activity".
+
+### Operation references (`operationRef`) — an alternate spelling of the message kind
+
+A `<sendTask operationRef="Op">` names a `<bpmn:operation id="Op"><inMessageRef>Msg</inMessageRef></bpmn:operation>`
+inside a `<bpmn:interface>` — the WSDL-style service-interface model some BPMN tools emit. Atlas
+does not run WSDL interfaces; instead it reads the operation only to resolve `operationRef` to the
+operation's `inMessageRef`, so an operationRef send is compiled as **exactly** the message kind: a
+`resolveSendTaskOperations` pre-pass (beside `foldTransactions`, before `registerScope`) rewrites
+the send task's `operationRef` to that message id, and everything downstream — the throw
+compilation, the boundary rejection, the wiring skip — applies unchanged. A `<bpmn:interface>` /
+`<bpmn:operation>` is parsed at the definitions level; an unknown operation, an operation with no
+`inMessageRef`, or a send task setting **both** `messageRef` and `operationRef` is a deploy error.
+The operation's **`outMessageRef` (a response) is not supported** — an operationRef send is
+fire-and-forget, like a messageRef send; a request/response (wait for the reply) would need response
+correlation and is out of scope. `operationRef` is a **deploy-time compatibility** path for imported
+models; the Modeler authors the message kind via `messageRef`, not `operationRef`.
 
 ## Pros and cons of the options
 

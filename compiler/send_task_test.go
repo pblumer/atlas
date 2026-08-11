@@ -157,6 +157,88 @@ func TestParseSendTaskUnknownMessage(t *testing.T) {
 	}
 }
 
+// TestParseSendTaskOperationRef checks that a <sendTask operationRef> — an alternate spelling of
+// the message kind (ADR-0112) — resolves the operation's <inMessageRef> and compiles to the same
+// TypeMessageThrowEvent as a messageRef send, carrying the resolved message's name.
+func TestParseSendTaskOperationRef(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+	             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+	  <message id="Msg_notify" name="notify">
+	    <extensionElements><zeebe:subscription correlationKey="=orderId"/></extensionElements>
+	  </message>
+	  <interface id="Iface" name="Notifications">
+	    <operation id="Op_notify"><inMessageRef>Msg_notify</inMessageRef></operation>
+	  </interface>
+	  <process id="p" isExecutable="true">
+	    <startEvent id="s"/>
+	    <sendTask id="send" operationRef="Op_notify"/>
+	    <endEvent id="e"/>
+	    <sequenceFlow id="f1" sourceRef="s" targetRef="send"/>
+	    <sequenceFlow id="f2" sourceRef="send" targetRef="e"/>
+	  </process>
+	</definitions>`
+	cp, err := Parse(1, 1, strings.NewReader(xml))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	st := nodeByBpmnId(t, cp, "send")
+	if st.Type != TypeMessageThrowEvent {
+		t.Fatalf("operationRef send task type = %v, want MessageThrowEvent (resolves to the message kind)", st.Type)
+	}
+	if d := cp.MessageThrow(st.Detail); d.MessageName != "notify" {
+		t.Errorf("thrown message name = %q, want notify (the operation's inMessageRef)", d.MessageName)
+	}
+}
+
+// TestParseSendTaskOperationErrors covers the operationRef deploy errors: an unknown operation, an
+// operation with no inMessageRef, and a send task that sets both messageRef and operationRef.
+func TestParseSendTaskOperationErrors(t *testing.T) {
+	cases := []struct {
+		name, decls, sendTask, want string
+	}{
+		{
+			name:     "unknown operation",
+			decls:    "",
+			sendTask: `<sendTask id="send" operationRef="Nope"/>`,
+			want:     "unknown operation",
+		},
+		{
+			name:     "operation with no inMessageRef",
+			decls:    `<interface id="i"><operation id="Op_empty"/></interface>`,
+			sendTask: `<sendTask id="send" operationRef="Op_empty"/>`,
+			want:     "no inMessageRef",
+		},
+		{
+			name: "both messageRef and operationRef",
+			decls: `<message id="M" name="m"/>
+			  <interface id="i"><operation id="Op"><inMessageRef>M</inMessageRef></operation></interface>`,
+			sendTask: `<sendTask id="send" messageRef="M" operationRef="Op"/>`,
+			want:     "both messageRef and operationRef",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			xml := `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+			  ` + tc.decls + `
+			  <process id="p" isExecutable="true">
+			    <startEvent id="s"/>
+			    ` + tc.sendTask + `
+			    <endEvent id="e"/>
+			    <sequenceFlow id="f1" sourceRef="s" targetRef="send"/>
+			    <sequenceFlow id="f2" sourceRef="send" targetRef="e"/>
+			  </process>
+			</definitions>`
+			_, err := Parse(1, 1, strings.NewReader(xml))
+			if err == nil {
+				t.Fatalf("Parse: want an error, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error %q should mention %q", err.Error(), tc.want)
+			}
+		})
+	}
+}
+
 // TestParseSendTaskMessageBoundaryRejected checks that a boundary event drawn on a message-kind
 // send task is a deploy error with a targeted message — a message send is an instantaneous throw
 // that never waits, so a boundary could never fire (ADR-0112). The error names the send task and
