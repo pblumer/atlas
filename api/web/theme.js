@@ -1,4 +1,4 @@
-// Atlas UI theming — org-wide company colours (buildless, ADR-0012 / ADR-0112).
+// Atlas UI theming — org-wide company colours (buildless, ADR-0012 / ADR-0113).
 //
 // The whole app chrome (buttons, links, active nav, focus rings, pills, toggles)
 // is painted from three CSS custom properties: --accent, --accent-hover and

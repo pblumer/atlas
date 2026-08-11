@@ -436,6 +436,20 @@ func (b *Builder) AddServiceTask(jobType string, retries int32) int32 {
 	return b.addNode(TypeServiceTask, detail)
 }
 
+// AddSendTask adds a send task with the given job type and retries and returns its
+// element id (ADR-0112). A send task is a service task under a different BPMN label: it
+// creates a job and waits, so it reuses the service-task detail table and (at runtime)
+// serviceTaskBehavior. Only its node type (TypeSendTask) differs, to preserve the
+// send-task identity — the TypeConnectorTask "distinct type, shared behavior" pattern.
+func (b *Builder) AddSendTask(jobType string, retries int32) int32 {
+	detail := int32(len(b.serviceTasks))
+	b.serviceTasks = append(b.serviceTasks, ServiceTaskDetail{
+		JobType: b.intern(jobType),
+		Retries: retries,
+	})
+	return b.addNode(TypeSendTask, detail)
+}
+
 // AddScriptTask adds a script task that evaluates the given compiled FEEL
 // expression and writes the result to resultVar. Returns its element id.
 func (b *Builder) AddScriptTask(e *expr.Compiled, resultVar string) int32 {

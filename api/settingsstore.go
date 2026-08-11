@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 )
 
-// uiTheme is the org-wide UI theme (ADR-0112): a single brand accent colour the
+// uiTheme is the org-wide UI theme (ADR-0113): a single brand accent colour the
 // whole Console is tinted with. It is design-time configuration — an operator
 // preference shared across the instance, not engine state — so it lives in a
 // sidecar JSON file, is served to every browser, and is captured by the

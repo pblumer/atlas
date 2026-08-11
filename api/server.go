@@ -155,7 +155,7 @@ type Server struct {
 	callOverrides    *callOverrideStore   // durable sidecar for per-server call-activity target overrides (ADR-0105)
 	marketplace      []marketplacePackage // curated, bundled marketplace catalog, immutable after New (ADR-0081)
 	marketplaceStore *marketplaceStore    // durable sidecar for installed marketplace templates (ADR-0081)
-	settings         *settingsStore       // durable sidecar for org-wide UI settings, e.g. the brand theme (ADR-0112)
+	settings         *settingsStore       // durable sidecar for org-wide UI settings, e.g. the brand theme (ADR-0113)
 	vault            *secretVault         // engine-internal encrypted secret store, nil when disabled (ADR-0069/0070)
 	vaultEnabled     bool                 // whether to build the vault; on by default, off via WithoutVault (ADR-0070)
 	users            *userStore           // durable sidecar for user accounts (ADR-0044)

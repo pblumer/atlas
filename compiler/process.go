@@ -65,8 +65,10 @@ const (
 
 	TypeEventBasedGateway // a deferred choice: arms every target catch event (message/timer/signal) at once and takes the branch whose event fires first, cancelling the rest (ADR-0110)
 
+	TypeSendTask // a send task: a job-creating activity identical in execution to a service task (ADR-0112) — it creates a job and waits, reusing ServiceTaskDetail and serviceTaskBehavior; a distinct type only to preserve the send-task identity, like TypeConnectorTask
+
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 33
+	numBpmnTypes = 34
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -132,6 +134,8 @@ func (t BpmnType) String() string {
 		return "ErrorEndEvent"
 	case TypeReceiveTask:
 		return "ReceiveTask"
+	case TypeSendTask:
+		return "SendTask"
 	case TypeCompensationThrowEvent:
 		return "CompensationThrowEvent"
 	case TypeCompensationEndEvent:
@@ -760,6 +764,13 @@ func (p *CompiledProcess) NodesReaching(target int32) map[int32]bool {
 
 // ServiceTask returns the detail at the given table index.
 func (p *CompiledProcess) ServiceTask(detail int32) *ServiceTaskDetail {
+	return &p.serviceTasks[detail]
+}
+
+// SendTask returns the detail at the given table index (ADR-0112). A send task is a
+// service task under a different label — it reuses ServiceTaskDetail and the same detail
+// table, so this is ServiceTask by another name, kept for call-site clarity.
+func (p *CompiledProcess) SendTask(detail int32) *ServiceTaskDetail {
 	return &p.serviceTasks[detail]
 }
 

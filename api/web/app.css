@@ -1264,7 +1264,18 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tasks-folder.active .tasks-count { background: #fff; color: var(--accent); }
 
 /* List pane */
-.tasks-list-pane { display: flex; flex-direction: column; min-height: 0; }
+.tasks-list-pane { display: flex; flex-direction: column; min-height: 0; position: relative; }
+/* Draggable divider on the list pane's right edge: resizes the list column so the
+   detail (and its form) can be widened or narrowed. */
+.tasks-col-resizer {
+  position: absolute; top: 0; bottom: 0; right: 0; width: 11px; transform: translateX(50%);
+  z-index: 6; cursor: col-resize;
+}
+.tasks-col-resizer::before {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 2px;
+  background: transparent; transition: background 0.12s;
+}
+.tasks-col-resizer:hover::before, .tasks-col-resizer.dragging::before { background: var(--accent); }
 .tasks-list-head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 12px 14px; border-bottom: 1px solid var(--border);
@@ -1380,6 +1391,14 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tp-canvas .djs-palette,
 .tp-canvas .djs-context-pad,
 .tp-canvas .djs-direct-editing-parent { display: none !important; }
+/* The instance's current variables, listed beneath the diagram in the Process tab. */
+.tp-vars { margin-top: 16px; max-width: 640px; }
+.tp-vars-head { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+.tp-vars-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tp-vars-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.tp-vars-table tr:last-child td { border-bottom: none; }
+.tp-var-k { width: 40%; max-width: 260px; font: 12px ui-monospace, monospace; color: var(--muted); word-break: break-word; }
+.tp-var-v code { font: 12px ui-monospace, monospace; color: var(--text); word-break: break-word; white-space: pre-wrap; }
 /* Form editor (form-js Playground, ADR-0028) — the split editor+preview surface
    renders itself into this container, which just needs to fill the body. */
 .form-playground { flex: 1; min-height: 0; overflow: hidden; }

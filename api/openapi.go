@@ -418,11 +418,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Get the org-wide UI brand accent colour (public; applied before login)", tag: "System",
 			resp: jsonBody("Theme", schemaObj(map[string]any{"accent": tString()}))}},
 		{"PUT", "/api/v1/settings/theme", s.handleSetTheme, apiOp{
-			summary: "Set the org-wide UI brand accent colour (admin-only when auth is on) (ADR-0112)", tag: "System",
+			summary: "Set the org-wide UI brand accent colour (admin-only when auth is on) (ADR-0113)", tag: "System",
 			req:  jsonBody("Theme", schemaObj(map[string]any{"accent": tString()}, "accent")),
 			resp: jsonBody("Theme", schemaObj(map[string]any{"accent": tString()}))}},
 		{"DELETE", "/api/v1/settings/theme", s.handleDeleteTheme, apiOp{
-			summary: "Reset the org-wide UI theme to the built-in default (admin-only when auth is on) (ADR-0112)", tag: "System", status: http.StatusNoContent}},
+			summary: "Reset the org-wide UI theme to the built-in default (admin-only when auth is on) (ADR-0113)", tag: "System", status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/auth/login", s.handleLogin, apiOp{
 			summary: "Log in with a username and password", tag: "Auth",

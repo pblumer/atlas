@@ -473,6 +473,14 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			return nil, err
 		}
 	}
+	for _, st := range proc.SendTasks {
+		if strings.TrimSpace(st.MessageRef) != "" {
+			continue // a message-kind send task is a throw, not an activity (ADR-0112)
+		}
+		if err := wireDataOut(st.Id, st.DataOut); err != nil {
+			return nil, err
+		}
+	}
 
 	// Wire data-input associations: a sourceRef names the data object read (resolved
 	// like an output target, its state ignored on a read); a targetRef is the process
@@ -538,6 +546,14 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	}
 	for _, rt := range proc.ReceiveTasks {
 		if err := wireDataIn(rt.Id, rt.DataIn); err != nil {
+			return nil, err
+		}
+	}
+	for _, st := range proc.SendTasks {
+		if strings.TrimSpace(st.MessageRef) != "" {
+			continue // a message-kind send task is a throw, not an activity (ADR-0112)
+		}
+		if err := wireDataIn(st.Id, st.DataIn); err != nil {
 			return nil, err
 		}
 	}
@@ -610,6 +626,14 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		for _, rt := range c.ReceiveTasks {
 			if err := wireIO(rt.Id, rt.IOMapping); err != nil {
+				return err
+			}
+		}
+		for _, st := range c.SendTasks {
+			if strings.TrimSpace(st.MessageRef) != "" {
+				continue // a message-kind send task is a throw, not an activity (ADR-0112)
+			}
+			if err := wireIO(st.Id, st.IOMapping); err != nil {
 				return err
 			}
 		}
@@ -699,6 +723,14 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		for _, rt := range c.ReceiveTasks {
 			if err := wireMI(rt.Id, rt.MultiInstance); err != nil {
+				return err
+			}
+		}
+		for _, st := range c.SendTasks {
+			if strings.TrimSpace(st.MessageRef) != "" {
+				continue // a message-kind send task is a throw, not an activity (ADR-0112)
+			}
+			if err := wireMI(st.Id, st.MultiInstance); err != nil {
 				return err
 			}
 		}
@@ -849,9 +881,14 @@ type xmlFlowContent struct {
 
 	ReceiveTasks []xmlReceiveTask `xml:"receiveTask"`
 
-	// Captured only to give a clear "unsupported element" error (see Parse); not
+	// A send task is a service task under a different BPMN label (ADR-0112): it creates a
+	// job and waits, carrying the same taskDefinition, connector extensions, and activity
+	// sub-elements. It parses into the very same shape, so xmlSendTask is an alias.
+	SendTasks []xmlSendTask `xml:"sendTask"`
+
+	// Captured only to give a clear "unsupported element" error (see registerScope); not
 	// executable yet.
-	SendTasks []xmlNode `xml:"sendTask"`
+	AdHocSubProcesses []xmlNode `xml:"adHocSubProcess"`
 
 	// Associations are BPMN <association> artifacts declared in this scope. Atlas reads
 	// them only to link a compensation boundary event to its handler (ADR-0103).
@@ -1215,7 +1252,11 @@ type xmlAssignmentDefinition struct {
 }
 
 type xmlServiceTask struct {
-	Id             string            `xml:"id,attr"`
+	Id string `xml:"id,attr"`
+	// MessageRef is read only for a send task (ADR-0112): a <sendTask messageRef> is the
+	// message-kind send — a correlating throw in task form. A service task never carries one
+	// (it dispatches on its taskDefinition/connector), so the field is inert there.
+	MessageRef     string            `xml:"messageRef,attr"`
 	TaskDefinition xmlTaskDefinition `xml:"extensionElements>taskDefinition"`
 	// Clio, when present, marks this service task a clio connector task (ADR-0036).
 	// The pointer is nil when the <atlas:clioConnector> extension is absent.
@@ -1241,6 +1282,12 @@ type xmlServiceTask struct {
 	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
 	DataIn        []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
+
+// xmlSendTask is a <sendTask>: a job-creating activity identical in shape and execution to
+// a service task (ADR-0112) — same taskDefinition, connector extensions, I/O mappings,
+// multi-instance, and data associations. It is a type alias so both parse and every
+// per-activity wiring loop treat the two identically; only the compiled node type differs.
+type xmlSendTask = xmlServiceTask
 
 // A clio connector task's parameters, carried on a service task as an
 // <atlas:clioConnector connector="..." operation="..." .../> extension element.

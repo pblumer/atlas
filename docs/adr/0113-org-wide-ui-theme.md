@@ -1,4 +1,4 @@
-# ADR-0112: Org-wide UI brand theme
+# ADR-0113: Org-wide UI brand theme
 
 - **Status:** Accepted
 - **Date:** 2026-08-11
