@@ -155,6 +155,20 @@ func TestApplyBuildSettings(t *testing.T) {
 	}
 }
 
+// TestBuildExposesVersionAndMetadata: the exported Build() accessor (used by the
+// `atlas version` CLI command) carries the product version and the same Go
+// toolchain string the /info endpoint reports, so the CLI and HTTP surface never
+// disagree about the running build.
+func TestBuildExposesVersionAndMetadata(t *testing.T) {
+	b := Build()
+	if b.Version != Version {
+		t.Errorf("Build().Version = %q, want %q", b.Version, Version)
+	}
+	if b.Go == "" {
+		t.Error("Build().Go (Go toolchain version) is empty, want it populated")
+	}
+}
+
 // TestRunScriptBadBody: a malformed request body is a 400, not an ok:false result.
 func TestRunScriptBadBody(t *testing.T) {
 	_, x := newSystemServer(t, WithScriptWorker(compiler.PwshJobTypeIndex, stubExec{result: "x"}))
