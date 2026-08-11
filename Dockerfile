@@ -53,7 +53,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends ca-certificates tzdata python3 nodejs libicu72; \
-    ln -sf /usr/bin/nodejs /usr/bin/node; \
+    command -v node >/dev/null || ln -s /usr/bin/nodejs /usr/bin/node; \
     if [ "$INCLUDE_POWERSHELL" = "true" ]; then \
       apt-get install -y --no-install-recommends curl libssl3 libgssapi-krb5-2; \
       case "${TARGETARCH:-amd64}" in \
