@@ -96,7 +96,8 @@ Not for production use.
 
 - A container **`Dockerfile`** and a **Helm chart** (`deploy/helm/atlas`) for
   running the server on Kubernetes, plus the tag-driven release workflow that
-  publishes cross-compiled binaries (linux/macOS/windows × amd64/arm64) with a
+  publishes cross-compiled binaries — linux (amd64, arm64, and 32-bit arm/v6 for
+  Raspberry Pi), macOS (amd64, arm64), and windows (amd64) — with a
   `SHA256SUMS` file.
 
 ### Notes

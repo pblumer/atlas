@@ -97,7 +97,8 @@ Releases are driven entirely by a git tag — there is no manual binary building
    ```
 
 The [`release` workflow](.github/workflows/release.yml) then cross-compiles the
-single binary for linux/macOS/windows (amd64 + arm64), stamps the tag into the
+single binary for linux (amd64, arm64, 32-bit arm/v6), macOS (amd64, arm64), and
+windows (amd64), stamps the tag into the
 version string via `-ldflags` (so `atlas version` reports it), and publishes a
 GitHub Release with the archives and a `SHA256SUMS` file. Every `0.x` tag is
 marked a prerelease. No CGO is involved, so all targets build from the one Linux
