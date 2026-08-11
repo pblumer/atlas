@@ -251,6 +251,7 @@ const TOPNAV = {
   ],
   operations: [
     { name: "Instances", route: "#/operations" },
+    { name: "Incidents", route: "#/operations/incidents" },
     { name: "Decisions", route: "#/operations/decisions" },
     { name: "Call activities", route: "#/operations/call-activities" },
   ],
@@ -2521,6 +2522,98 @@ function overrideCell(r) {
   return sel + note;
 }
 
+// viewIncidents is the Operations "Incidents" view: every unresolved incident on
+// this server — the operator "what's stuck" list (ADR-0061). Two shapes land here:
+// a *job* incident (a service-task job whose retries ran out and parked) and a
+// job-less *timer* incident (a boundary / event-subprocess timer whose FEEL schedule
+// stopped resolving, ADR-0064/0111). Each row links to the live instance and
+// resolves in place over POST /incidents/{elementInstanceKey}/resolve: a job incident
+// re-activates its job with a fresh retry budget; a timer incident re-arms the element
+// against the instance's current variables (re-raising if it still fails). The list
+// shares the task list's ceiling and flags a capped page the same way (X-Incidents-
+// Truncated), newest scan order.
+async function viewIncidents() {
+  view.innerHTML = `
+    <div class="between">
+      <h1>Incidents</h1>
+      <button class="btn neutral" id="refresh">Refresh</button>
+    </div>
+    <p class="muted">Every unresolved incident on this server — where a token is
+    stuck waiting for an operator (ADR-0061). A <b>job</b> incident is a service task
+    whose retries ran out and parked; a <b>timer</b> incident is a recurring boundary
+    or event-subprocess timer whose FEEL schedule stopped resolving (ADR-0111).
+    <b>Resolve</b> re-activates the work: a parked job retries with the budget you
+    grant, a timer re-arms against the instance's current variables — re-raising if it
+    still fails.</p>
+    <div id="inc-note"></div>
+    <div class="card" style="padding:0">
+      <table>
+        <thead><tr><th>Instance</th><th>Element</th><th>Cause</th><th>Raised</th><th>Message</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>`;
+  const tbody = document.getElementById("rows");
+  const note = document.getElementById("inc-note");
+  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—"; // raisedAt is ns
+
+  const load = async () => {
+    try {
+      const { data, headers } = await apiRaw("GET", "/api/v1/incidents");
+      const rows = (data && data.incidents) || [];
+      note.innerHTML = headers.get("X-Incidents-Truncated") === "true"
+        ? `<p class="muted">Showing the first ${rows.length}. Resolve some and refresh to see the rest.</p>`
+        : "";
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="empty">No incidents — nothing is stuck.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = rows.map((r) => {
+        const inst = `<a href="#/operations/p/${r.processInstanceKey}">${r.processInstanceKey}</a>`;
+        // The element instance key (the resolve key) is the row's identity; the compiled
+        // element index rides along as a title for anyone cross-referencing the graph.
+        const el = `<span style="font-family:ui-monospace,monospace" title="Compiled element index #${r.elementId}">${r.elementInstanceKey}</span>`;
+        const cause = r.jobKey
+          ? `<span class="pill err"><span class="dot"></span>job</span> <span class="muted" style="font-family:ui-monospace,monospace">${r.jobKey}</span>`
+          : `<span class="pill warn"><span class="dot"></span>timer</span>`;
+        return `<tr>
+          <td>${inst}</td>
+          <td>${el}</td>
+          <td>${cause}</td>
+          <td>${fmtNano(r.raisedAt)}</td>
+          <td>${esc(r.message || "—")}</td>
+          <td style="text-align:right"><button class="btn sm" data-resolve="${r.elementInstanceKey}">Resolve…</button></td>
+        </tr>`;
+      }).join("");
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;
+    }
+  };
+
+  // One delegated handler for every row's Resolve button (the tbody persists across
+  // reloads; the rows inside it do not, so a per-row listener would leak). Resolving
+  // prompts for the retry budget the re-activated job gets (default 1); a timer
+  // incident re-arms and ignores the count.
+  tbody.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-resolve]");
+    if (!btn) return;
+    const key = btn.dataset.resolve;
+    const v = prompt("Resume with how many retries? (a timer incident re-arms and ignores this)", "1");
+    if (v === null) return;
+    const n = parseInt(v, 10);
+    if (!Number.isInteger(n) || n <= 0) { toast("Enter a positive number of retries", "warn"); return; }
+    try {
+      await api("POST", `/api/v1/incidents/${encodeURIComponent(key)}/resolve`, { retries: n });
+      toast("Incident resolved", "ok");
+    } catch (err) {
+      toast(err.message || "Resolve failed", "warn");
+    }
+    await load();
+  });
+
+  document.getElementById("refresh").addEventListener("click", load);
+  await load();
+}
+
 // viewDecisionDetail lists every evaluation of one decision — its "instances" —
 // newest first, each showing the exact inputs it saw, the outputs it produced, and
 // (expandable) the temis trace of which rules fired (ADR-0066). This is the
@@ -3915,6 +4008,7 @@ async function route() {
     const tk = path.match(/^#\/tasks\/t\/(\d+)$/);
     if (tk) return await viewTasks(Number(tk[1]));
     if (path === "#/operations") return await viewInstances();
+    if (path === "#/operations/incidents") return await viewIncidents();
     if (path === "#/operations/decisions") return await viewDecisions();
     if (path === "#/operations/call-activities") return await viewCallActivities();
     // Drill into one decision's evaluations (its "instances"). The id is URL-encoded
