@@ -1,6 +1,6 @@
 # ADR-0105: Per-server call-activity target overrides
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-10
 - **Deciders:** Atlas engine team
 
