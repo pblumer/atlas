@@ -14,7 +14,7 @@ _Changed_ / _Removed_ for each version.
 
 _Nothing yet._
 
-## [0.1.0] — Unreleased
+## [0.1.0] — 2026-08-11
 
 The first tagged release: a **developer preview**. Atlas already runs a broad
 slice of BPMN 2.x durably on a single node, but the operability surface a
