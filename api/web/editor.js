@@ -1746,11 +1746,19 @@ const SEND_MESSAGE_KIND = {
   glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#4666ff"/><rect x="3" y="4.6" width="10" height="6.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 5.2L8 8.6l4.6-3.4" fill="none" stroke="#fff" stroke-width="1.1"/></svg>`,
 };
 
-// sendTaskKind returns the kind a send task currently represents: the Message kind when it
-// carries a messageRef, otherwise the same connector/job-worker detection a service task uses.
+// sendTaskKind returns the kind a send task currently represents (ADR-0112). It is detected by
+// what the task carries: a messageRef → Message; a connector extension → that connector; a
+// taskDefinition → Job worker. With none of those, the send task is the Message kind by default —
+// so selecting Message (which clears the other kinds' extensions) keeps the message picker visible
+// until a message is chosen, and a fresh send task starts as a plain message send. Without this
+// default, the Message kind would be undetectable while messageRef is still empty.
 function sendTaskKind(bo) {
   if (bo && bo.messageRef) return SEND_MESSAGE_KIND;
-  return serviceTaskKind(bo);
+  for (const k of SERVICE_TASK_KINDS) {
+    if (k.id !== "worker" && findExt(bo, k.ext)) return k;
+  }
+  if (findExt(bo, "zeebe:TaskDefinition")) return SERVICE_TASK_KINDS[0]; // Job worker
+  return SEND_MESSAGE_KIND;
 }
 
 // sendTaskKindHTML renders the send task's kind picker: the Message kind plus the service
