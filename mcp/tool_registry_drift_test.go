@@ -172,6 +172,11 @@ var mcpOmittedRoutes = map[string]string{
 	"PUT /api/v1/secrets/{name}":    "credential storage is not an agent capability",
 	"DELETE /api/v1/secrets/{name}": "credential storage is not an agent capability",
 
+	// UI theme: org-wide branding config for the Console, an admin/UI concern.
+	"GET /api/v1/settings/theme":    "UI branding is a Console concern, not an agent action",
+	"PUT /api/v1/settings/theme":    "UI branding is a Console concern, not an agent action",
+	"DELETE /api/v1/settings/theme": "UI branding is a Console concern, not an agent action",
+
 	// Auth + user administration: security surface, deliberately off-limits.
 	"POST /api/v1/auth/login":          "auth flow is not an agent capability",
 	"POST /api/v1/auth/logout":         "auth flow is not an agent capability",

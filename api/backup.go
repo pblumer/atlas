@@ -37,6 +37,7 @@ var backupDirs = []string{
 	"connectors",
 	"marketplace",
 	"inbound-subscriptions",
+	"settings",
 }
 
 // maxRestoreBytes caps the total uncompressed size a single restore will read, a
