@@ -55,6 +55,8 @@ func main() {
 		if err := runMCP(args); err != nil {
 			log.Fatalf("atlas mcp: %v", err)
 		}
+	case "version", "-v", "--version":
+		printVersion(os.Stdout)
 	case "reset-password":
 		if err := runResetPassword(args); err != nil {
 			log.Fatalf("atlas reset-password: %v", err)
@@ -92,9 +94,34 @@ Usage:
   atlas serve          [flags]      Run the engine, HTTP API, and web UI (default)
   atlas mcp            [flags]      Run the Model Context Protocol adapter on stdio
   atlas reset-password [flags] USER Reset a local user's password from the shell
+  atlas version                     Print the version and build metadata
 
 Run "atlas <command> -h" for the flags of a command.
 `)
+}
+
+// printVersion writes the product version and the binary's embedded VCS build
+// metadata (git commit, commit time, dirty flag, Go toolchain) to w. The values
+// come from the api package, so the CLI, the web UI, and GET /api/v1/info all
+// report exactly the same running build.
+func printVersion(w io.Writer) {
+	b := api.Build()
+	fmt.Fprintf(w, "atlas %s\n", b.Version)
+	if b.Revision != "" {
+		rev := b.Revision
+		if len(rev) > 12 {
+			rev = rev[:12]
+		}
+		dirty := ""
+		if b.Modified {
+			dirty = " (modified)"
+		}
+		fmt.Fprintf(w, "  commit: %s%s\n", rev, dirty)
+	}
+	if b.Time != "" {
+		fmt.Fprintf(w, "  built:  %s\n", b.Time)
+	}
+	fmt.Fprintf(w, "  go:     %s\n", b.Go)
 }
 
 // runServe boots the engine behind the HTTP API and web UI.
