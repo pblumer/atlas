@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  2.2.1.1  Verluste App-Login durchführen (SOLL)
+
+  Vorgelagerte Zugangsstrecke. Zwei Fälle:
+    - Login vorhanden      -> BG gibt Login-Daten ein, App prüft Anmeldung
+                              (Sicherheit/Identifikation) -> angemeldet.
+    - Kein Login           -> BG stellt Loginantrag, DSKU wird benachrichtigt und
+                              prüft fachlich:
+         * bewilligt -> App erstellt Benutzerkonto und sendet Login-Daten ->
+                        angemeldet (Merge mit dem Hauptpfad).
+         * abgelehnt -> App sendet Ablehnungsmail (Ende: Zugang abgelehnt).
+  Hauptachse = "Login vorhanden"; die Antragsstrecke liegt auf einer Lane darunter.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_login" targetNamespace="http://atlas/verluste">
+  <process id="verluste-app-login" name="2.2.1.1 Verluste App-Login durchführen" isExecutable="true">
+
+    <startEvent id="start" name="Bedarf: Zugang zur Verluste App"/>
+
+    <exclusiveGateway id="login_vorhanden" name="Login vorhanden?" default="f_nein"/>
+    <userTask id="login_eingeben" name="Login-Daten eingeben">
+      <extensionElements><zeebe:assignmentDefinition candidateGroups="buergschaftsorganisation"/></extensionElements>
+    </userTask>
+    <serviceTask id="anmeldung_pruefen" name="Anmeldung prüfen (Sicherheit/Identifikation)">
+      <extensionElements><zeebe:taskDefinition type="anmeldung-pruefen"/></extensionElements>
+    </serviceTask>
+    <exclusiveGateway id="gjoin" name=""/>
+    <endEvent id="ende_ok" name="In Verluste App angemeldet"/>
+
+    <userTask id="antrag_stellen" name="Loginantrag stellen">
+      <extensionElements><zeebe:assignmentDefinition candidateGroups="buergschaftsorganisation"/></extensionElements>
+    </userTask>
+    <serviceTask id="dsku_benachrichtigen" name="DSKU über Loginantrag benachrichtigen">
+      <extensionElements><zeebe:taskDefinition type="loginantrag-benachrichtigen"/></extensionElements>
+    </serviceTask>
+    <userTask id="antrag_pruefen" name="Loginantrag fachlich prüfen">
+      <extensionElements><zeebe:assignmentDefinition candidateGroups="dsku"/></extensionElements>
+    </userTask>
+    <exclusiveGateway id="bewilligt" name="Antrag bewilligt?" default="f_abg"/>
+    <serviceTask id="konto_erstellen" name="Benutzerkonto erstellen und Login-Daten senden">
+      <extensionElements><zeebe:taskDefinition type="benutzerkonto-erstellen"/></extensionElements>
+    </serviceTask>
+    <serviceTask id="ablehnung_senden" name="Ablehnungsmail senden">
+      <extensionElements><zeebe:taskDefinition type="loginantrag-ablehnung"/></extensionElements>
+    </serviceTask>
+    <endEvent id="ende_abgelehnt" name="Zugang abgelehnt"/>
+
+    <sequenceFlow id="f0" sourceRef="start" targetRef="login_vorhanden"/>
+    <sequenceFlow id="f_ja" name="Ja (Login vorhanden)" sourceRef="login_vorhanden" targetRef="login_eingeben">
+      <conditionExpression>= loginVorhanden = true</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f1" sourceRef="login_eingeben" targetRef="anmeldung_pruefen"/>
+    <sequenceFlow id="f2" sourceRef="anmeldung_pruefen" targetRef="gjoin"/>
+    <sequenceFlow id="f3" sourceRef="gjoin" targetRef="ende_ok"/>
+    <sequenceFlow id="f_nein" name="Nein (kein Login)" sourceRef="login_vorhanden" targetRef="antrag_stellen"/>
+    <sequenceFlow id="f4" sourceRef="antrag_stellen" targetRef="dsku_benachrichtigen"/>
+    <sequenceFlow id="f5" sourceRef="dsku_benachrichtigen" targetRef="antrag_pruefen"/>
+    <sequenceFlow id="f6" sourceRef="antrag_pruefen" targetRef="bewilligt"/>
+    <sequenceFlow id="f_bew" name="Bewilligt" sourceRef="bewilligt" targetRef="konto_erstellen">
+      <conditionExpression>= antragBewilligt = true</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_konto" sourceRef="konto_erstellen" targetRef="gjoin"/>
+    <sequenceFlow id="f_abg" name="Abgelehnt" sourceRef="bewilligt" targetRef="ablehnung_senden"/>
+    <sequenceFlow id="f7" sourceRef="ablehnung_senden" targetRef="ende_abgelehnt"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="D">
+    <bpmndi:BPMNPlane id="P" bpmnElement="verluste-app-login">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <omgdc:Bounds x="160" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="140" y="145" width="82" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="login_vorhanden_di" bpmnElement="login_vorhanden" isMarkerVisible="true">
+        <omgdc:Bounds x="260" y="95" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="248" y="58" width="74" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="login_eingeben_di" bpmnElement="login_eingeben">
+        <omgdc:Bounds x="360" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="anmeldung_pruefen_di" bpmnElement="anmeldung_pruefen">
+        <omgdc:Bounds x="510" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gjoin_di" bpmnElement="gjoin" isMarkerVisible="true">
+        <omgdc:Bounds x="1080" y="95" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_ok_di" bpmnElement="ende_ok">
+        <omgdc:Bounds x="1180" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1156" y="145" width="86" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="antrag_stellen_di" bpmnElement="antrag_stellen">
+        <omgdc:Bounds x="360" y="210" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="dsku_benachrichtigen_di" bpmnElement="dsku_benachrichtigen">
+        <omgdc:Bounds x="510" y="210" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="antrag_pruefen_di" bpmnElement="antrag_pruefen">
+        <omgdc:Bounds x="660" y="210" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="bewilligt_di" bpmnElement="bewilligt" isMarkerVisible="true">
+        <omgdc:Bounds x="830" y="225" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="818" y="188" width="74" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="konto_erstellen_di" bpmnElement="konto_erstellen">
+        <omgdc:Bounds x="930" y="210" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ablehnung_senden_di" bpmnElement="ablehnung_senden">
+        <omgdc:Bounds x="930" y="340" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_abgelehnt_di" bpmnElement="ende_abgelehnt">
+        <omgdc:Bounds x="1080" y="362" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1056" y="405" width="86" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><omgdi:waypoint x="196" y="120"/><omgdi:waypoint x="260" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ja_di" bpmnElement="f_ja">
+        <omgdi:waypoint x="310" y="120"/><omgdi:waypoint x="360" y="120"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="300" y="98" width="110" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><omgdi:waypoint x="460" y="120"/><omgdi:waypoint x="510" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><omgdi:waypoint x="610" y="120"/><omgdi:waypoint x="1080" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><omgdi:waypoint x="1130" y="120"/><omgdi:waypoint x="1180" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_nein_di" bpmnElement="f_nein">
+        <omgdi:waypoint x="285" y="145"/><omgdi:waypoint x="285" y="250"/><omgdi:waypoint x="360" y="250"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="292" y="180" width="98" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4"><omgdi:waypoint x="460" y="250"/><omgdi:waypoint x="510" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f5_di" bpmnElement="f5"><omgdi:waypoint x="610" y="250"/><omgdi:waypoint x="660" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f6_di" bpmnElement="f6"><omgdi:waypoint x="760" y="250"/><omgdi:waypoint x="830" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_bew_di" bpmnElement="f_bew">
+        <omgdi:waypoint x="880" y="250"/><omgdi:waypoint x="930" y="250"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="882" y="228" width="52" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_konto_di" bpmnElement="f_konto">
+        <omgdi:waypoint x="1030" y="250"/><omgdi:waypoint x="1105" y="250"/><omgdi:waypoint x="1105" y="145"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_abg_di" bpmnElement="f_abg">
+        <omgdi:waypoint x="855" y="275"/><omgdi:waypoint x="855" y="380"/><omgdi:waypoint x="930" y="380"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="862" y="358" width="56" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f7_di" bpmnElement="f7"><omgdi:waypoint x="1030" y="380"/><omgdi:waypoint x="1080" y="380"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

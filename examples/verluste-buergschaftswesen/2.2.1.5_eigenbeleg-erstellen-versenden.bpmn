@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  2.2.1.5  Eigenbeleg erstellen und versenden (SOLL)
+
+  Startet nach Aktualisierung des Kontrollregisters. DSKU fordert die Erstellung
+  an; die Verluste App generiert aus dem validierten Registerstand einen
+  Eigenbeleg-Entwurf für EFV-DLZ. DSKU prüft den Entwurf fachlich:
+    - korrekt  -> validieren, PDF-Abrechnungsdokument zusammenführen, an EFV-DLZ
+                  versenden (DSKU in Kopie)
+    - nicht korrekt -> intern in der App korrigieren (kein Rücklauf an die BG),
+                  danach erneut prüfen (Schleife über das Join-Gateway).
+  Hauptachse gerade; die interne Korrekturschleife liegt auf einer Lane darunter.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_eigenbeleg" targetNamespace="http://atlas/verluste">
+  <process id="eigenbeleg-erstellen-versenden" name="2.2.1.5 Eigenbeleg erstellen und versenden" isExecutable="true">
+
+    <startEvent id="start" name="Kontrollregister aktualisiert"/>
+
+    <userTask id="anfordern" name="Eigenbeleg-Erstellung anfordern">
+      <extensionElements><zeebe:assignmentDefinition candidateGroups="dsku"/></extensionElements>
+    </userTask>
+    <serviceTask id="entwurf" name="Eigenbeleg-Entwurf aus Registerstand generieren">
+      <extensionElements><zeebe:taskDefinition type="eigenbeleg-entwurf"/></extensionElements>
+    </serviceTask>
+    <exclusiveGateway id="join" name=""/>
+    <userTask id="pruefen" name="Eigenbeleg-Entwurf fachlich prüfen">
+      <extensionElements><zeebe:assignmentDefinition candidateGroups="dsku"/></extensionElements>
+    </userTask>
+    <exclusiveGateway id="korrekt" name="Eigenbeleg korrekt?"/>
+
+    <serviceTask id="validieren" name="Eigenbeleg validieren und speichern">
+      <extensionElements><zeebe:taskDefinition type="eigenbeleg-validieren"/></extensionElements>
+    </serviceTask>
+    <serviceTask id="zusammenfuehren" name="Abrechnungsdokument (PDF) zusammenführen">
+      <extensionElements><zeebe:taskDefinition type="abrechnungsdokument-zusammenfuehren"/></extensionElements>
+    </serviceTask>
+    <serviceTask id="versand" name="An EFV-DLZ versenden (DSKU in Kopie)">
+      <extensionElements><zeebe:taskDefinition type="eigenbeleg-versand-efv"/></extensionElements>
+    </serviceTask>
+
+    <userTask id="korrektur" name="Eigenbeleg intern korrigieren">
+      <extensionElements><zeebe:assignmentDefinition candidateGroups="dsku"/></extensionElements>
+    </userTask>
+
+    <endEvent id="ende" name="Eigenbeleg an EFV-DLZ übermittelt"/>
+
+    <sequenceFlow id="f0" sourceRef="start" targetRef="anfordern"/>
+    <sequenceFlow id="f1" sourceRef="anfordern" targetRef="entwurf"/>
+    <sequenceFlow id="f2" sourceRef="entwurf" targetRef="join"/>
+    <sequenceFlow id="f3" sourceRef="join" targetRef="pruefen"/>
+    <sequenceFlow id="f4" sourceRef="pruefen" targetRef="korrekt"/>
+    <sequenceFlow id="f_ja" name="Ja" sourceRef="korrekt" targetRef="validieren"/>
+    <sequenceFlow id="f5" sourceRef="validieren" targetRef="zusammenfuehren"/>
+    <sequenceFlow id="f6" sourceRef="zusammenfuehren" targetRef="versand"/>
+    <sequenceFlow id="f7" sourceRef="versand" targetRef="ende"/>
+    <sequenceFlow id="f_nein" name="Nein" sourceRef="korrekt" targetRef="korrektur">
+      <conditionExpression>= eigenbelegKorrekt = false</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_loop" sourceRef="korrektur" targetRef="join"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="D">
+    <bpmndi:BPMNPlane id="P" bpmnElement="eigenbeleg-erstellen-versenden">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <omgdc:Bounds x="160" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="140" y="145" width="80" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="anfordern_di" bpmnElement="anfordern">
+        <omgdc:Bounds x="260" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="entwurf_di" bpmnElement="entwurf">
+        <omgdc:Bounds x="410" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="join_di" bpmnElement="join" isMarkerVisible="true">
+        <omgdc:Bounds x="580" y="95" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pruefen_di" bpmnElement="pruefen">
+        <omgdc:Bounds x="680" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="korrekt_di" bpmnElement="korrekt" isMarkerVisible="true">
+        <omgdc:Bounds x="850" y="95" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="818" y="55" width="114" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="validieren_di" bpmnElement="validieren">
+        <omgdc:Bounds x="950" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="zusammenfuehren_di" bpmnElement="zusammenfuehren">
+        <omgdc:Bounds x="1100" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="versand_di" bpmnElement="versand">
+        <omgdc:Bounds x="1250" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="korrektur_di" bpmnElement="korrektur">
+        <omgdc:Bounds x="690" y="210" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_di" bpmnElement="ende">
+        <omgdc:Bounds x="1420" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1396" y="145" width="86" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><omgdi:waypoint x="196" y="120"/><omgdi:waypoint x="260" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><omgdi:waypoint x="360" y="120"/><omgdi:waypoint x="410" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><omgdi:waypoint x="510" y="120"/><omgdi:waypoint x="580" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><omgdi:waypoint x="630" y="120"/><omgdi:waypoint x="680" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4"><omgdi:waypoint x="780" y="120"/><omgdi:waypoint x="850" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ja_di" bpmnElement="f_ja">
+        <omgdi:waypoint x="900" y="120"/><omgdi:waypoint x="950" y="120"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="910" y="98" width="20" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f5_di" bpmnElement="f5"><omgdi:waypoint x="1050" y="120"/><omgdi:waypoint x="1100" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f6_di" bpmnElement="f6"><omgdi:waypoint x="1200" y="120"/><omgdi:waypoint x="1250" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f7_di" bpmnElement="f7"><omgdi:waypoint x="1350" y="120"/><omgdi:waypoint x="1420" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_nein_di" bpmnElement="f_nein">
+        <omgdi:waypoint x="875" y="145"/><omgdi:waypoint x="875" y="250"/><omgdi:waypoint x="790" y="250"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="882" y="180" width="28" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_loop_di" bpmnElement="f_loop">
+        <omgdi:waypoint x="690" y="250"/><omgdi:waypoint x="605" y="250"/><omgdi:waypoint x="605" y="145"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

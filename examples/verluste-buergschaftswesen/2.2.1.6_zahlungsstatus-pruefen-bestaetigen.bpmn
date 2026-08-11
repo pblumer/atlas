@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  2.2.1.6  Zahlungsstatus prüfen und Fall bestätigen (SOLL)
+
+  Überwacht einen genehmigten Zahlungsauftrag bis zur finalen Genehmigung. Die
+  Verluste App ruft den Fallstatus aus dem Kontrollregister und die
+  Rechnungsnummer ab und prüft den Zahlungsstatus in SAP SuPro 100:
+    - keine Statusänderung          -> warten, nächster täglicher Prüflauf (P1D)
+    - Statusänderung, nicht final   -> festhalten, warten, nächster Prüflauf
+    - Statusänderung, final genehmigt-> DSKU benachrichtigen; DSKU bestätigt den
+                                        Fallabschluss (Ende).
+  Die beiden Warte-Pfade laufen über ein Merge-Gateway auf einen gemeinsamen
+  Tages-Timer, der zurück in den Prüflauf schleift.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_zahlungsstatus" targetNamespace="http://atlas/verluste">
+  <process id="zahlungsstatus-pruefen-bestaetigen" name="2.2.1.6 Zahlungsstatus prüfen und Fall bestätigen" isExecutable="true">
+
+    <startEvent id="start" name="Zahlungsauftrag genehmigt – Überwachung startet"/>
+
+    <exclusiveGateway id="join" name=""/>
+    <serviceTask id="status_abrufen" name="Fallstatus aus Kontrollregister abrufen">
+      <extensionElements><zeebe:taskDefinition type="fallstatus-abrufen"/></extensionElements>
+    </serviceTask>
+    <serviceTask id="rechnungsnr" name="Rechnungsnummer zum Zahlungsauftrag abrufen">
+      <extensionElements><zeebe:taskDefinition type="rechnungsnummer-abrufen"/></extensionElements>
+    </serviceTask>
+    <serviceTask id="sap_pruefen" name="Zahlungsstatus in SAP SuPro 100 prüfen">
+      <extensionElements><zeebe:taskDefinition type="sap-status-pruefen"/></extensionElements>
+    </serviceTask>
+    <exclusiveGateway id="statusaenderung" name="Statusänderung?" default="f_keine"/>
+    <serviceTask id="festhalten" name="Statusänderung im Verlustfall festhalten">
+      <extensionElements><zeebe:taskDefinition type="statusaenderung-festhalten"/></extensionElements>
+    </serviceTask>
+    <exclusiveGateway id="final" name="Final genehmigt?" default="f_nichtfinal"/>
+    <serviceTask id="benachrichtigen" name="DSKU über finale Genehmigung benachrichtigen">
+      <extensionElements><zeebe:taskDefinition type="final-benachrichtigen"/></extensionElements>
+    </serviceTask>
+    <userTask id="bestaetigen" name="Fallabschluss bestätigen">
+      <extensionElements><zeebe:assignmentDefinition candidateGroups="dsku"/></extensionElements>
+    </userTask>
+    <endEvent id="ende" name="Verlustfall bestätigt und abgeschlossen"/>
+
+    <exclusiveGateway id="gwait" name=""/>
+    <intermediateCatchEvent id="warten" name="Nächster täglicher Prüflauf (P1D)">
+      <timerEventDefinition><timeDuration>P1D</timeDuration></timerEventDefinition>
+    </intermediateCatchEvent>
+
+    <sequenceFlow id="f0" sourceRef="start" targetRef="join"/>
+    <sequenceFlow id="f1" sourceRef="join" targetRef="status_abrufen"/>
+    <sequenceFlow id="f2" sourceRef="status_abrufen" targetRef="rechnungsnr"/>
+    <sequenceFlow id="f3" sourceRef="rechnungsnr" targetRef="sap_pruefen"/>
+    <sequenceFlow id="f4" sourceRef="sap_pruefen" targetRef="statusaenderung"/>
+    <sequenceFlow id="f_ja1" name="Ja" sourceRef="statusaenderung" targetRef="festhalten">
+      <conditionExpression>= statusGeaendert = true</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_keine" name="Keine Änderung" sourceRef="statusaenderung" targetRef="gwait"/>
+    <sequenceFlow id="f5" sourceRef="festhalten" targetRef="final"/>
+    <sequenceFlow id="f_final" name="Final genehmigt" sourceRef="final" targetRef="benachrichtigen">
+      <conditionExpression>= finalGenehmigt = true</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_nichtfinal" name="Noch nicht final" sourceRef="final" targetRef="gwait"/>
+    <sequenceFlow id="f6" sourceRef="benachrichtigen" targetRef="bestaetigen"/>
+    <sequenceFlow id="f7" sourceRef="bestaetigen" targetRef="ende"/>
+    <sequenceFlow id="f_wait" sourceRef="gwait" targetRef="warten"/>
+    <sequenceFlow id="f_loop" sourceRef="warten" targetRef="join"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="D">
+    <bpmndi:BPMNPlane id="P" bpmnElement="zahlungsstatus-pruefen-bestaetigen">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <omgdc:Bounds x="160" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="138" y="145" width="82" height="40"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="join_di" bpmnElement="join" isMarkerVisible="true">
+        <omgdc:Bounds x="260" y="95" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="status_abrufen_di" bpmnElement="status_abrufen">
+        <omgdc:Bounds x="360" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="rechnungsnr_di" bpmnElement="rechnungsnr">
+        <omgdc:Bounds x="510" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sap_pruefen_di" bpmnElement="sap_pruefen">
+        <omgdc:Bounds x="660" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="statusaenderung_di" bpmnElement="statusaenderung" isMarkerVisible="true">
+        <omgdc:Bounds x="830" y="95" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="800" y="58" width="110" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="festhalten_di" bpmnElement="festhalten">
+        <omgdc:Bounds x="930" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="final_di" bpmnElement="final" isMarkerVisible="true">
+        <omgdc:Bounds x="1100" y="95" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1075" y="58" width="100" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="benachrichtigen_di" bpmnElement="benachrichtigen">
+        <omgdc:Bounds x="1200" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="bestaetigen_di" bpmnElement="bestaetigen">
+        <omgdc:Bounds x="1350" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_di" bpmnElement="ende">
+        <omgdc:Bounds x="1510" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1486" y="145" width="86" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gwait_di" bpmnElement="gwait" isMarkerVisible="true">
+        <omgdc:Bounds x="830" y="225" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="warten_di" bpmnElement="warten">
+        <omgdc:Bounds x="560" y="362" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="524" y="400" width="108" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><omgdi:waypoint x="196" y="120"/><omgdi:waypoint x="260" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><omgdi:waypoint x="310" y="120"/><omgdi:waypoint x="360" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><omgdi:waypoint x="460" y="120"/><omgdi:waypoint x="510" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><omgdi:waypoint x="610" y="120"/><omgdi:waypoint x="660" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4"><omgdi:waypoint x="760" y="120"/><omgdi:waypoint x="830" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ja1_di" bpmnElement="f_ja1">
+        <omgdi:waypoint x="880" y="120"/><omgdi:waypoint x="930" y="120"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="890" y="98" width="20" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f5_di" bpmnElement="f5"><omgdi:waypoint x="1030" y="120"/><omgdi:waypoint x="1100" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_final_di" bpmnElement="f_final">
+        <omgdi:waypoint x="1150" y="120"/><omgdi:waypoint x="1200" y="120"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1150" y="98" width="86" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f6_di" bpmnElement="f6"><omgdi:waypoint x="1300" y="120"/><omgdi:waypoint x="1350" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f7_di" bpmnElement="f7"><omgdi:waypoint x="1450" y="120"/><omgdi:waypoint x="1510" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_keine_di" bpmnElement="f_keine">
+        <omgdi:waypoint x="855" y="145"/><omgdi:waypoint x="855" y="225"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="862" y="170" width="92" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_nichtfinal_di" bpmnElement="f_nichtfinal">
+        <omgdi:waypoint x="1125" y="145"/><omgdi:waypoint x="1125" y="250"/><omgdi:waypoint x="880" y="250"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="960" y="228" width="96" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_wait_di" bpmnElement="f_wait">
+        <omgdi:waypoint x="855" y="275"/><omgdi:waypoint x="855" y="380"/><omgdi:waypoint x="596" y="380"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_loop_di" bpmnElement="f_loop">
+        <omgdi:waypoint x="560" y="380"/><omgdi:waypoint x="285" y="380"/><omgdi:waypoint x="285" y="145"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

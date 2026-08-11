@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  2.2.1  Verluste Bürgschaftswesen (SOLL) — End-to-End-Orchestrierung
+
+  Digital unterstützter End-to-End-Ablauf von der Einreichung einer
+  Vorschussabrechnung bis zum dokumentierten Fallabschluss. Der Hauptprozess
+  orchestriert die sieben Subprozesse als Call Activities:
+
+    2.2.1.1 Login  ->  2.2.1.2 Eröffnen/Upload  ->  2.2.1.3 Validieren
+      -> (Verlustfall validiert?)  [nein]  Ende: abgelehnt
+                                   [ja]    2.2.1.4 Kontrollregister
+      -> 2.2.1.5 Eigenbeleg  ->  [Empfangsbestätigung EFV-DLZ]
+      -> [Zahlungsauftrag von SuPro 100 (SAP)]  ->  DSKU: Zahlungsauftrag genehmigen
+      -> (genehmigt?)  [nein]  Ende: nicht genehmigt
+                       [ja]    2.2.1.6 Zahlungsstatus/Bestätigung
+      -> 2.2.1.7 Dokumentation  ->  Ende: Fall abgeschlossen und dokumentiert
+
+  Prozessgrenze bewusst beim dokumentierten Fallabschluss; EFV-DLZ und SAP sind
+  als Anschlussstellen (Message-Events) eingebunden, ihre interne Logik ist nicht
+  Teil des Kernablaufs.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_verluste_soll" targetNamespace="http://atlas/verluste">
+
+  <message id="Msg_EFV_Empfang" name="EmpfangsbestaetigungEFVDLZ"/>
+  <message id="Msg_SAP_Zahlungsauftrag" name="ZahlungsauftragSAP"/>
+
+  <process id="verluste-buergschaftswesen-soll" name="2.2.1 Verluste Bürgschaftswesen (SOLL)" isExecutable="true">
+
+    <startEvent id="start" name="Bedarf zur Einreichung einer Vorschussabrechnung entsteht"/>
+
+    <callActivity id="ca_login" name="2.2.1.1 Verluste App-Login">
+      <extensionElements><zeebe:calledElement processId="verluste-app-login" bindingType="deployment"/></extensionElements>
+    </callActivity>
+    <callActivity id="ca_eroeffnen" name="2.2.1.2 Verlustfall eröffnen und hochladen">
+      <extensionElements><zeebe:calledElement processId="verlustfall-eroeffnen-hochladen" bindingType="deployment"/></extensionElements>
+    </callActivity>
+    <callActivity id="ca_validieren" name="2.2.1.3 Vorschussdaten validieren">
+      <extensionElements><zeebe:calledElement processId="vorschussdaten-validieren" bindingType="deployment"/></extensionElements>
+    </callActivity>
+
+    <exclusiveGateway id="g_validiert" name="Verlustfall validiert?" default="f_g1_nein"/>
+    <endEvent id="ende_abgelehnt" name="Verlustfall abgelehnt"/>
+
+    <callActivity id="ca_register" name="2.2.1.4 Kontrollregister übernehmen">
+      <extensionElements><zeebe:calledElement processId="verlustfalldaten-kontrollregister" bindingType="deployment"/></extensionElements>
+    </callActivity>
+    <callActivity id="ca_eigenbeleg" name="2.2.1.5 Eigenbeleg erstellen und versenden">
+      <extensionElements><zeebe:calledElement processId="eigenbeleg-erstellen-versenden" bindingType="deployment"/></extensionElements>
+    </callActivity>
+
+    <intermediateCatchEvent id="msg_efv" name="Empfangsbestätigung EFV-DLZ">
+      <extensionElements><zeebe:subscription correlationKey="= abrechnungsfallId"/></extensionElements>
+      <messageEventDefinition messageRef="Msg_EFV_Empfang"/>
+    </intermediateCatchEvent>
+    <intermediateCatchEvent id="msg_sap" name="Zahlungsauftrag von SuPro 100 (SAP)">
+      <extensionElements><zeebe:subscription correlationKey="= abrechnungsfallId"/></extensionElements>
+      <messageEventDefinition messageRef="Msg_SAP_Zahlungsauftrag"/>
+    </intermediateCatchEvent>
+
+    <userTask id="genehmigen" name="Zahlungsauftrag genehmigen">
+      <extensionElements><zeebe:assignmentDefinition candidateGroups="dsku"/></extensionElements>
+    </userTask>
+    <exclusiveGateway id="g_genehmigt" name="Zahlungsauftrag genehmigt?" default="f_g2_nein"/>
+    <endEvent id="ende_nicht_genehmigt" name="Zahlungsauftrag nicht genehmigt"/>
+
+    <callActivity id="ca_zahlung" name="2.2.1.6 Zahlungsstatus prüfen und Fall bestätigen">
+      <extensionElements><zeebe:calledElement processId="zahlungsstatus-pruefen-bestaetigen" bindingType="deployment"/></extensionElements>
+    </callActivity>
+    <callActivity id="ca_doku" name="2.2.1.7 Dokumentation ablegen">
+      <extensionElements><zeebe:calledElement processId="dokumentation-ablegen" bindingType="deployment"/></extensionElements>
+    </callActivity>
+
+    <endEvent id="ende_ok" name="Fall abgeschlossen und dokumentiert"/>
+
+    <sequenceFlow id="f0" sourceRef="start" targetRef="ca_login"/>
+    <sequenceFlow id="f1" sourceRef="ca_login" targetRef="ca_eroeffnen"/>
+    <sequenceFlow id="f2" sourceRef="ca_eroeffnen" targetRef="ca_validieren"/>
+    <sequenceFlow id="f3" sourceRef="ca_validieren" targetRef="g_validiert"/>
+    <sequenceFlow id="f_g1_ja" name="Ja" sourceRef="g_validiert" targetRef="ca_register">
+      <conditionExpression>= verlustfallValidiert = true</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_g1_nein" name="Nein" sourceRef="g_validiert" targetRef="ende_abgelehnt"/>
+    <sequenceFlow id="f4" sourceRef="ca_register" targetRef="ca_eigenbeleg"/>
+    <sequenceFlow id="f5" sourceRef="ca_eigenbeleg" targetRef="msg_efv"/>
+    <sequenceFlow id="f6" sourceRef="msg_efv" targetRef="msg_sap"/>
+    <sequenceFlow id="f7" sourceRef="msg_sap" targetRef="genehmigen"/>
+    <sequenceFlow id="f8" sourceRef="genehmigen" targetRef="g_genehmigt"/>
+    <sequenceFlow id="f_g2_ja" name="Ja" sourceRef="g_genehmigt" targetRef="ca_zahlung">
+      <conditionExpression>= zahlungsauftragGenehmigt = true</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_g2_nein" name="Nein" sourceRef="g_genehmigt" targetRef="ende_nicht_genehmigt"/>
+    <sequenceFlow id="f9" sourceRef="ca_zahlung" targetRef="ca_doku"/>
+    <sequenceFlow id="f10" sourceRef="ca_doku" targetRef="ende_ok"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="D">
+    <bpmndi:BPMNPlane id="P" bpmnElement="verluste-buergschaftswesen-soll">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <omgdc:Bounds x="160" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="140" y="145" width="86" height="40"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ca_login_di" bpmnElement="ca_login">
+        <omgdc:Bounds x="250" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ca_eroeffnen_di" bpmnElement="ca_eroeffnen">
+        <omgdc:Bounds x="400" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ca_validieren_di" bpmnElement="ca_validieren">
+        <omgdc:Bounds x="550" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_validiert_di" bpmnElement="g_validiert" isMarkerVisible="true">
+        <omgdc:Bounds x="720" y="95" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="702" y="55" width="86" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_abgelehnt_di" bpmnElement="ende_abgelehnt">
+        <omgdc:Bounds x="727" y="232" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="703" y="275" width="86" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ca_register_di" bpmnElement="ca_register">
+        <omgdc:Bounds x="820" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ca_eigenbeleg_di" bpmnElement="ca_eigenbeleg">
+        <omgdc:Bounds x="970" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="msg_efv_di" bpmnElement="msg_efv">
+        <omgdc:Bounds x="1130" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1106" y="145" width="86" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="msg_sap_di" bpmnElement="msg_sap">
+        <omgdc:Bounds x="1240" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1214" y="145" width="90" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="genehmigen_di" bpmnElement="genehmigen">
+        <omgdc:Bounds x="1330" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="g_genehmigt_di" bpmnElement="g_genehmigt" isMarkerVisible="true">
+        <omgdc:Bounds x="1500" y="95" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1470" y="55" width="110" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_nicht_genehmigt_di" bpmnElement="ende_nicht_genehmigt">
+        <omgdc:Bounds x="1507" y="232" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1483" y="275" width="90" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ca_zahlung_di" bpmnElement="ca_zahlung">
+        <omgdc:Bounds x="1600" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ca_doku_di" bpmnElement="ca_doku">
+        <omgdc:Bounds x="1750" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_ok_di" bpmnElement="ende_ok">
+        <omgdc:Bounds x="1910" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1886" y="145" width="86" height="40"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><omgdi:waypoint x="196" y="120"/><omgdi:waypoint x="250" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><omgdi:waypoint x="350" y="120"/><omgdi:waypoint x="400" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><omgdi:waypoint x="500" y="120"/><omgdi:waypoint x="550" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><omgdi:waypoint x="650" y="120"/><omgdi:waypoint x="720" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_g1_ja_di" bpmnElement="f_g1_ja">
+        <omgdi:waypoint x="770" y="120"/><omgdi:waypoint x="820" y="120"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="780" y="98" width="20" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_g1_nein_di" bpmnElement="f_g1_nein">
+        <omgdi:waypoint x="745" y="145"/><omgdi:waypoint x="745" y="232"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="752" y="180" width="28" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4"><omgdi:waypoint x="920" y="120"/><omgdi:waypoint x="970" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f5_di" bpmnElement="f5"><omgdi:waypoint x="1070" y="120"/><omgdi:waypoint x="1130" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f6_di" bpmnElement="f6"><omgdi:waypoint x="1166" y="120"/><omgdi:waypoint x="1240" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f7_di" bpmnElement="f7"><omgdi:waypoint x="1276" y="120"/><omgdi:waypoint x="1330" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f8_di" bpmnElement="f8"><omgdi:waypoint x="1430" y="120"/><omgdi:waypoint x="1500" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_g2_ja_di" bpmnElement="f_g2_ja">
+        <omgdi:waypoint x="1550" y="120"/><omgdi:waypoint x="1600" y="120"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1560" y="98" width="20" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_g2_nein_di" bpmnElement="f_g2_nein">
+        <omgdi:waypoint x="1525" y="145"/><omgdi:waypoint x="1525" y="232"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1532" y="180" width="28" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f9_di" bpmnElement="f9"><omgdi:waypoint x="1700" y="120"/><omgdi:waypoint x="1750" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f10_di" bpmnElement="f10"><omgdi:waypoint x="1850" y="120"/><omgdi:waypoint x="1910" y="120"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  2.2.1.7  Dokumentation ablegen (SOLL)
+
+  Startet nach der Abschlussbestätigung durch DSKU. Die Verluste App führt den
+  Fall im Kontrollregister nach, aktualisiert den Fallstatus, erstellt/führt das
+  Acta-Nova-Subdossier (SECO-332.82), legt die validierten Dokumente ab,
+  speichert die Acta-Nova-Referenz und meldet die Archivierung an DSKU.
+  Rein systemischer, linearer Ablauf (keine manuelle Ablagehandlung).
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_dokumentation_ablegen" targetNamespace="http://atlas/verluste">
+  <process id="dokumentation-ablegen" name="2.2.1.7 Dokumentation ablegen" isExecutable="true">
+
+    <startEvent id="start" name="Fallabschluss bestätigt"/>
+
+    <serviceTask id="register_nachfuehren" name="Zentrales Kontrollregister nachführen">
+      <extensionElements><zeebe:taskDefinition type="register-nachfuehren"/></extensionElements>
+    </serviceTask>
+    <serviceTask id="status_aktualisieren" name="Fallstatus aktualisieren">
+      <extensionElements><zeebe:taskDefinition type="fallstatus-aktualisieren"/></extensionElements>
+    </serviceTask>
+    <serviceTask id="subdossier_erstellen" name="Acta-Nova-Subdossier erstellen (SECO-332.82)">
+      <extensionElements><zeebe:taskDefinition type="acta-nova-subdossier"/></extensionElements>
+    </serviceTask>
+    <serviceTask id="dokumente_ablegen" name="Validierte Dokumente ablegen">
+      <extensionElements><zeebe:taskDefinition type="dokumente-ablegen"/></extensionElements>
+    </serviceTask>
+    <serviceTask id="referenz_speichern" name="Acta-Nova-Referenz im Verlustfall speichern">
+      <extensionElements><zeebe:taskDefinition type="acta-nova-referenz-speichern"/></extensionElements>
+    </serviceTask>
+    <serviceTask id="archiv_melden" name="Archivierung an DSKU melden">
+      <extensionElements><zeebe:taskDefinition type="archivierung-benachrichtigung"/></extensionElements>
+    </serviceTask>
+
+    <endEvent id="ende" name="Fall abgeschlossen, archiviert und dokumentiert"/>
+
+    <sequenceFlow id="f0" sourceRef="start" targetRef="register_nachfuehren"/>
+    <sequenceFlow id="f1" sourceRef="register_nachfuehren" targetRef="status_aktualisieren"/>
+    <sequenceFlow id="f2" sourceRef="status_aktualisieren" targetRef="subdossier_erstellen"/>
+    <sequenceFlow id="f3" sourceRef="subdossier_erstellen" targetRef="dokumente_ablegen"/>
+    <sequenceFlow id="f4" sourceRef="dokumente_ablegen" targetRef="referenz_speichern"/>
+    <sequenceFlow id="f5" sourceRef="referenz_speichern" targetRef="archiv_melden"/>
+    <sequenceFlow id="f6" sourceRef="archiv_melden" targetRef="ende"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="D">
+    <bpmndi:BPMNPlane id="P" bpmnElement="dokumentation-ablegen">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <omgdc:Bounds x="160" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="140" y="145" width="80" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="register_nachfuehren_di" bpmnElement="register_nachfuehren">
+        <omgdc:Bounds x="260" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="status_aktualisieren_di" bpmnElement="status_aktualisieren">
+        <omgdc:Bounds x="410" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="subdossier_erstellen_di" bpmnElement="subdossier_erstellen">
+        <omgdc:Bounds x="560" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="dokumente_ablegen_di" bpmnElement="dokumente_ablegen">
+        <omgdc:Bounds x="710" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="referenz_speichern_di" bpmnElement="referenz_speichern">
+        <omgdc:Bounds x="860" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="archiv_melden_di" bpmnElement="archiv_melden">
+        <omgdc:Bounds x="1010" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_di" bpmnElement="ende">
+        <omgdc:Bounds x="1170" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1146" y="145" width="86" height="40"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><omgdi:waypoint x="196" y="120"/><omgdi:waypoint x="260" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><omgdi:waypoint x="360" y="120"/><omgdi:waypoint x="410" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><omgdi:waypoint x="510" y="120"/><omgdi:waypoint x="560" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><omgdi:waypoint x="660" y="120"/><omgdi:waypoint x="710" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4"><omgdi:waypoint x="810" y="120"/><omgdi:waypoint x="860" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f5_di" bpmnElement="f5"><omgdi:waypoint x="960" y="120"/><omgdi:waypoint x="1010" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f6_di" bpmnElement="f6"><omgdi:waypoint x="1110" y="120"/><omgdi:waypoint x="1170" y="120"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

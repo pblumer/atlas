@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  2.2.1.3  Vorschussdaten validieren (SOLL)
+
+  Startet, sobald der Verlustfall eingereicht und technisch geprüft ist. Die
+  Verluste App extrahiert die Vorschussdaten und führt die gebündelte
+  automatische Kontrolle durch (UID gegen uid.admin.ch, Doppelbezüge/
+  Nacheinforderungen, Totale/Saldi, Gewährungsdatum/Datumslogik,
+  Mehrfacheinträge, Missbrauchshinweise gegen das Zentrale Kontrollregister),
+  erstellt ein Prüfereignis und benachrichtigt DSKU.
+
+  DSKU prüft das Prüfereignis fachlich und entscheidet:
+    - validierbar        -> Validierung erfassen, BG informieren (Ende: validiert)
+    - nicht validierbar  -> G2:
+         * ablehnen             -> Ablehnung erfassen, BG informieren (Ende: abgelehnt)
+         * Korrektur/Abklärung  -> intern korrigieren bzw. mit BG abklären,
+                                   danach erneut fachlich prüfen (Schleife).
+  Hinweis: Die Unterscheidung interner Fehler vs. Abklärung mit der BG ist in
+  diesem ersten Wurf im Schritt "korrigieren/abklären" zusammengefasst und kann
+  bei Bedarf in zwei Pfade aufgetrennt werden.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_vorschussdaten" targetNamespace="http://atlas/verluste">
+  <process id="vorschussdaten-validieren" name="2.2.1.3 Vorschussdaten validieren" isExecutable="true">
+
+    <startEvent id="start" name="Verlustfall eingereicht und technisch geprüft"/>
+
+    <serviceTask id="extrahieren" name="Vorschussdaten extrahieren">
+      <extensionElements><zeebe:taskDefinition type="vorschussdaten-extrahieren"/></extensionElements>
+    </serviceTask>
+    <serviceTask id="kontrolle" name="Automatische Kontrolle (UID, Doppelbezüge, Totale/Saldi, Datumslogik, Mehrfacheinträge, Missbrauch)">
+      <extensionElements><zeebe:taskDefinition type="vorschussdaten-kontrolle"/></extensionElements>
+    </serviceTask>
+    <serviceTask id="pruefereignis" name="Prüfereignis erstellen und DSKU benachrichtigen">
+      <extensionElements><zeebe:taskDefinition type="pruefereignis-erstellen"/></extensionElements>
+    </serviceTask>
+    <exclusiveGateway id="join" name=""/>
+    <userTask id="pruefen" name="Prüfereignis fachlich prüfen">
+      <extensionElements><zeebe:assignmentDefinition candidateGroups="dsku"/></extensionElements>
+    </userTask>
+    <exclusiveGateway id="entscheid" name="Validierbar?" default="f_nein"/>
+
+    <serviceTask id="validieren" name="Validierung erfassen und BG informieren">
+      <extensionElements><zeebe:taskDefinition type="validierung-erfassen"/></extensionElements>
+    </serviceTask>
+    <endEvent id="ende_validiert" name="Verlustfall fachlich validiert"/>
+
+    <exclusiveGateway id="behandlung" name="Ablehnen oder korrigieren?" default="f_korr"/>
+    <serviceTask id="ablehnen" name="Ablehnung erfassen und BG informieren">
+      <extensionElements><zeebe:taskDefinition type="ablehnung-erfassen"/></extensionElements>
+    </serviceTask>
+    <endEvent id="ende_abgelehnt" name="Verlustfall abgelehnt"/>
+
+    <userTask id="korrektur" name="Intern korrigieren / mit BG abklären">
+      <extensionElements><zeebe:assignmentDefinition candidateGroups="dsku"/></extensionElements>
+    </userTask>
+
+    <sequenceFlow id="f0" sourceRef="start" targetRef="extrahieren"/>
+    <sequenceFlow id="f1" sourceRef="extrahieren" targetRef="kontrolle"/>
+    <sequenceFlow id="f2" sourceRef="kontrolle" targetRef="pruefereignis"/>
+    <sequenceFlow id="f3" sourceRef="pruefereignis" targetRef="join"/>
+    <sequenceFlow id="f4" sourceRef="join" targetRef="pruefen"/>
+    <sequenceFlow id="f5" sourceRef="pruefen" targetRef="entscheid"/>
+    <sequenceFlow id="f_val" name="Validierbar" sourceRef="entscheid" targetRef="validieren">
+      <conditionExpression>= validierbar = true</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f6" sourceRef="validieren" targetRef="ende_validiert"/>
+    <sequenceFlow id="f_nein" name="Auffällig / Fehler" sourceRef="entscheid" targetRef="behandlung"/>
+    <sequenceFlow id="f_abg" name="Ablehnen" sourceRef="behandlung" targetRef="ablehnen">
+      <conditionExpression>= ablehnen = true</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f7" sourceRef="ablehnen" targetRef="ende_abgelehnt"/>
+    <sequenceFlow id="f_korr" name="Korrektur / Abklärung" sourceRef="behandlung" targetRef="korrektur"/>
+    <sequenceFlow id="f_loop" sourceRef="korrektur" targetRef="join"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="D">
+    <bpmndi:BPMNPlane id="P" bpmnElement="vorschussdaten-validieren">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <omgdc:Bounds x="160" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="140" y="145" width="80" height="40"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="extrahieren_di" bpmnElement="extrahieren">
+        <omgdc:Bounds x="240" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="kontrolle_di" bpmnElement="kontrolle">
+        <omgdc:Bounds x="390" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pruefereignis_di" bpmnElement="pruefereignis">
+        <omgdc:Bounds x="540" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="join_di" bpmnElement="join" isMarkerVisible="true">
+        <omgdc:Bounds x="710" y="95" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pruefen_di" bpmnElement="pruefen">
+        <omgdc:Bounds x="810" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="entscheid_di" bpmnElement="entscheid" isMarkerVisible="true">
+        <omgdc:Bounds x="980" y="95" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="968" y="60" width="74" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="validieren_di" bpmnElement="validieren">
+        <omgdc:Bounds x="1090" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_validiert_di" bpmnElement="ende_validiert">
+        <omgdc:Bounds x="1250" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1226" y="145" width="86" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="behandlung_di" bpmnElement="behandlung" isMarkerVisible="true">
+        <omgdc:Bounds x="980" y="225" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="900" y="278" width="130" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ablehnen_di" bpmnElement="ablehnen">
+        <omgdc:Bounds x="1090" y="210" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_abgelehnt_di" bpmnElement="ende_abgelehnt">
+        <omgdc:Bounds x="1250" y="232" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1226" y="275" width="86" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="korrektur_di" bpmnElement="korrektur">
+        <omgdc:Bounds x="700" y="340" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><omgdi:waypoint x="196" y="120"/><omgdi:waypoint x="240" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><omgdi:waypoint x="340" y="120"/><omgdi:waypoint x="390" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><omgdi:waypoint x="490" y="120"/><omgdi:waypoint x="540" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><omgdi:waypoint x="640" y="120"/><omgdi:waypoint x="710" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4"><omgdi:waypoint x="760" y="120"/><omgdi:waypoint x="810" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f5_di" bpmnElement="f5"><omgdi:waypoint x="910" y="120"/><omgdi:waypoint x="980" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_val_di" bpmnElement="f_val">
+        <omgdi:waypoint x="1030" y="120"/><omgdi:waypoint x="1090" y="120"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1034" y="98" width="56" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f6_di" bpmnElement="f6"><omgdi:waypoint x="1190" y="120"/><omgdi:waypoint x="1250" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_nein_di" bpmnElement="f_nein">
+        <omgdi:waypoint x="1005" y="145"/><omgdi:waypoint x="1005" y="225"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1012" y="170" width="90" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_abg_di" bpmnElement="f_abg">
+        <omgdi:waypoint x="1030" y="250"/><omgdi:waypoint x="1090" y="250"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1034" y="228" width="52" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f7_di" bpmnElement="f7"><omgdi:waypoint x="1190" y="250"/><omgdi:waypoint x="1250" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_korr_di" bpmnElement="f_korr">
+        <omgdi:waypoint x="1005" y="275"/><omgdi:waypoint x="1005" y="380"/><omgdi:waypoint x="800" y="380"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="820" y="358" width="120" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_loop_di" bpmnElement="f_loop">
+        <omgdi:waypoint x="700" y="380"/><omgdi:waypoint x="735" y="380"/><omgdi:waypoint x="735" y="145"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

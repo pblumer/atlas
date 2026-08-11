@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  2.2.1.4  Geprüfte Verlustfalldaten in Kontrollregister übernehmen (SOLL)
+
+  Startet, sobald ein Verlustfall fachlich validiert ist. Die Verluste App
+  bereitet die Registerfelder auf, übernimmt die validierten Daten in das
+  Zentrale Kontrollregister Verluste (führender Datastore, ersetzt die frühere
+  Excel-Übersicht), ergänzt das Abrechnungsdatum, berechnet das Gesamttotal,
+  gibt den Registereintrag systemisch für die Eigenbeleg-Erstellung frei und
+  informiert DSKU. Rein systemischer, linearer Ablauf.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_kontrollregister" targetNamespace="http://atlas/verluste">
+  <process id="verlustfalldaten-kontrollregister" name="2.2.1.4 Kontrollregister übernehmen" isExecutable="true">
+
+    <startEvent id="start" name="Verlustfall fachlich validiert"/>
+
+    <serviceTask id="felder_vorbereiten" name="Registerfelder aus validiertem Fall vorbereiten">
+      <extensionElements><zeebe:taskDefinition type="registerfelder-vorbereiten"/></extensionElements>
+    </serviceTask>
+    <serviceTask id="daten_uebernehmen" name="Validierte Verlustfalldaten übernehmen">
+      <extensionElements><zeebe:taskDefinition type="register-uebernehmen"/></extensionElements>
+    </serviceTask>
+    <serviceTask id="abrechnungsdatum" name="Abrechnungsdatum ergänzen">
+      <extensionElements><zeebe:taskDefinition type="abrechnungsdatum-ergaenzen"/></extensionElements>
+    </serviceTask>
+    <serviceTask id="gesamttotal" name="Gesamttotal berechnen">
+      <extensionElements><zeebe:taskDefinition type="gesamttotal-berechnen"/></extensionElements>
+    </serviceTask>
+    <serviceTask id="freigabe" name="Registereintrag systemisch freigeben">
+      <extensionElements><zeebe:taskDefinition type="register-freigabe"/></extensionElements>
+    </serviceTask>
+    <serviceTask id="dsku_informieren" name="DSKU über Aktualisierung informieren">
+      <extensionElements><zeebe:taskDefinition type="register-benachrichtigung"/></extensionElements>
+    </serviceTask>
+
+    <endEvent id="ende" name="Kontrollregister aktualisiert und freigegeben"/>
+
+    <sequenceFlow id="f0" sourceRef="start" targetRef="felder_vorbereiten"/>
+    <sequenceFlow id="f1" sourceRef="felder_vorbereiten" targetRef="daten_uebernehmen"/>
+    <sequenceFlow id="f2" sourceRef="daten_uebernehmen" targetRef="abrechnungsdatum"/>
+    <sequenceFlow id="f3" sourceRef="abrechnungsdatum" targetRef="gesamttotal"/>
+    <sequenceFlow id="f4" sourceRef="gesamttotal" targetRef="freigabe"/>
+    <sequenceFlow id="f5" sourceRef="freigabe" targetRef="dsku_informieren"/>
+    <sequenceFlow id="f6" sourceRef="dsku_informieren" targetRef="ende"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="D">
+    <bpmndi:BPMNPlane id="P" bpmnElement="verlustfalldaten-kontrollregister">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <omgdc:Bounds x="160" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="138" y="145" width="82" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="felder_vorbereiten_di" bpmnElement="felder_vorbereiten">
+        <omgdc:Bounds x="260" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="daten_uebernehmen_di" bpmnElement="daten_uebernehmen">
+        <omgdc:Bounds x="410" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="abrechnungsdatum_di" bpmnElement="abrechnungsdatum">
+        <omgdc:Bounds x="560" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gesamttotal_di" bpmnElement="gesamttotal">
+        <omgdc:Bounds x="710" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="freigabe_di" bpmnElement="freigabe">
+        <omgdc:Bounds x="860" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="dsku_informieren_di" bpmnElement="dsku_informieren">
+        <omgdc:Bounds x="1010" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_di" bpmnElement="ende">
+        <omgdc:Bounds x="1170" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1146" y="145" width="86" height="40"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><omgdi:waypoint x="196" y="120"/><omgdi:waypoint x="260" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><omgdi:waypoint x="360" y="120"/><omgdi:waypoint x="410" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><omgdi:waypoint x="510" y="120"/><omgdi:waypoint x="560" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><omgdi:waypoint x="660" y="120"/><omgdi:waypoint x="710" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4"><omgdi:waypoint x="810" y="120"/><omgdi:waypoint x="860" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f5_di" bpmnElement="f5"><omgdi:waypoint x="960" y="120"/><omgdi:waypoint x="1010" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f6_di" bpmnElement="f6"><omgdi:waypoint x="1110" y="120"/><omgdi:waypoint x="1170" y="120"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

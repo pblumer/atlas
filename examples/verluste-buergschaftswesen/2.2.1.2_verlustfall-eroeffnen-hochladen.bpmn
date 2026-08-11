@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  2.2.1.2  Neuen Verlustfall eröffnen und Dokumente hochladen (SOLL)
+
+  Startet, sobald die BG in der Verluste App angemeldet ist. Die BG eröffnet
+  einen neuen Verlustfall (App erzeugt Abrechnungsfall-ID + fallbezogene Ablage),
+  erfasst minimale Metadaten, lädt Vorschusstabelle (Excel) und
+  Vorschussabrechnung (PDF) hoch und reicht ein. Die App prüft rein technisch
+  auf Vollständigkeit/Lesbarkeit:
+    - vollständig & lesbar -> Status "eingereicht & technisch geprüft", BG informiert
+    - Uploadfehler -> anzeigen, BG ergänzt/ersetzt, erneut einreichen (Schleife).
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_eroeffnen_upload" targetNamespace="http://atlas/verluste">
+  <process id="verlustfall-eroeffnen-hochladen" name="2.2.1.2 Verlustfall eröffnen und Dokumente hochladen" isExecutable="true">
+
+    <startEvent id="start" name="In Verluste App angemeldet"/>
+
+    <userTask id="eroeffnen" name="Neuen Verlustfall eröffnen">
+      <extensionElements><zeebe:assignmentDefinition candidateGroups="buergschaftsorganisation"/></extensionElements>
+    </userTask>
+    <serviceTask id="id_ablage" name="Abrechnungsfall-ID und fallbezogene Ablage erzeugen">
+      <extensionElements><zeebe:taskDefinition type="abrechnungsfall-anlegen"/></extensionElements>
+    </serviceTask>
+    <userTask id="metadaten" name="Basis-/Metadaten erfassen">
+      <extensionElements><zeebe:assignmentDefinition candidateGroups="buergschaftsorganisation"/></extensionElements>
+    </userTask>
+    <userTask id="upload" name="Vorschusstabelle (Excel) und Vorschussabrechnung (PDF) hochladen">
+      <extensionElements><zeebe:assignmentDefinition candidateGroups="buergschaftsorganisation"/></extensionElements>
+    </userTask>
+    <exclusiveGateway id="join" name=""/>
+    <userTask id="einreichen" name="Verlustfall einreichen">
+      <extensionElements><zeebe:assignmentDefinition candidateGroups="buergschaftsorganisation"/></extensionElements>
+    </userTask>
+    <serviceTask id="techpruefung" name="Technische Prüfung (Vollständigkeit und Lesbarkeit)">
+      <extensionElements><zeebe:taskDefinition type="technische-pruefung"/></extensionElements>
+    </serviceTask>
+    <exclusiveGateway id="vollstaendig" name="Dokumente vollständig und lesbar?"/>
+
+    <serviceTask id="status_ok" name="Status setzen und BG benachrichtigen">
+      <extensionElements><zeebe:taskDefinition type="einreichung-annehmen"/></extensionElements>
+    </serviceTask>
+
+    <serviceTask id="fehler_anzeigen" name="Uploadfehler anzeigen">
+      <extensionElements><zeebe:taskDefinition type="uploadfehler-anzeigen"/></extensionElements>
+    </serviceTask>
+    <userTask id="ergaenzen" name="Dokumente ergänzen/ersetzen">
+      <extensionElements><zeebe:assignmentDefinition candidateGroups="buergschaftsorganisation"/></extensionElements>
+    </userTask>
+
+    <endEvent id="ende" name="Verlustfall eingereicht und technisch geprüft"/>
+
+    <sequenceFlow id="f0" sourceRef="start" targetRef="eroeffnen"/>
+    <sequenceFlow id="f1" sourceRef="eroeffnen" targetRef="id_ablage"/>
+    <sequenceFlow id="f2" sourceRef="id_ablage" targetRef="metadaten"/>
+    <sequenceFlow id="f3" sourceRef="metadaten" targetRef="upload"/>
+    <sequenceFlow id="f4" sourceRef="upload" targetRef="join"/>
+    <sequenceFlow id="f5" sourceRef="join" targetRef="einreichen"/>
+    <sequenceFlow id="f6" sourceRef="einreichen" targetRef="techpruefung"/>
+    <sequenceFlow id="f7" sourceRef="techpruefung" targetRef="vollstaendig"/>
+    <sequenceFlow id="f_ja" name="Ja" sourceRef="vollstaendig" targetRef="status_ok"/>
+    <sequenceFlow id="f8" sourceRef="status_ok" targetRef="ende"/>
+    <sequenceFlow id="f_nein" name="Nein" sourceRef="vollstaendig" targetRef="fehler_anzeigen">
+      <conditionExpression>= dokumenteVollstaendig = false</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_reupload" sourceRef="fehler_anzeigen" targetRef="ergaenzen"/>
+    <sequenceFlow id="f_loop" sourceRef="ergaenzen" targetRef="join"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="D">
+    <bpmndi:BPMNPlane id="P" bpmnElement="verlustfall-eroeffnen-hochladen">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <omgdc:Bounds x="160" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="140" y="145" width="80" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="eroeffnen_di" bpmnElement="eroeffnen">
+        <omgdc:Bounds x="240" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="id_ablage_di" bpmnElement="id_ablage">
+        <omgdc:Bounds x="390" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="metadaten_di" bpmnElement="metadaten">
+        <omgdc:Bounds x="540" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="upload_di" bpmnElement="upload">
+        <omgdc:Bounds x="690" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="join_di" bpmnElement="join" isMarkerVisible="true">
+        <omgdc:Bounds x="860" y="95" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="einreichen_di" bpmnElement="einreichen">
+        <omgdc:Bounds x="960" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="techpruefung_di" bpmnElement="techpruefung">
+        <omgdc:Bounds x="1110" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="vollstaendig_di" bpmnElement="vollstaendig" isMarkerVisible="true">
+        <omgdc:Bounds x="1280" y="95" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1244" y="52" width="122" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="status_ok_di" bpmnElement="status_ok">
+        <omgdc:Bounds x="1400" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="fehler_anzeigen_di" bpmnElement="fehler_anzeigen">
+        <omgdc:Bounds x="1120" y="210" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ergaenzen_di" bpmnElement="ergaenzen">
+        <omgdc:Bounds x="950" y="210" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_di" bpmnElement="ende">
+        <omgdc:Bounds x="1570" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1546" y="145" width="86" height="40"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><omgdi:waypoint x="196" y="120"/><omgdi:waypoint x="240" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><omgdi:waypoint x="340" y="120"/><omgdi:waypoint x="390" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><omgdi:waypoint x="490" y="120"/><omgdi:waypoint x="540" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><omgdi:waypoint x="640" y="120"/><omgdi:waypoint x="690" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4"><omgdi:waypoint x="790" y="120"/><omgdi:waypoint x="860" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f5_di" bpmnElement="f5"><omgdi:waypoint x="910" y="120"/><omgdi:waypoint x="960" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f6_di" bpmnElement="f6"><omgdi:waypoint x="1060" y="120"/><omgdi:waypoint x="1110" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f7_di" bpmnElement="f7"><omgdi:waypoint x="1210" y="120"/><omgdi:waypoint x="1280" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ja_di" bpmnElement="f_ja">
+        <omgdi:waypoint x="1330" y="120"/><omgdi:waypoint x="1400" y="120"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1350" y="98" width="20" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f8_di" bpmnElement="f8"><omgdi:waypoint x="1500" y="120"/><omgdi:waypoint x="1570" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_nein_di" bpmnElement="f_nein">
+        <omgdi:waypoint x="1305" y="145"/><omgdi:waypoint x="1305" y="250"/><omgdi:waypoint x="1220" y="250"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1312" y="180" width="28" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_reupload_di" bpmnElement="f_reupload"><omgdi:waypoint x="1120" y="250"/><omgdi:waypoint x="1050" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_loop_di" bpmnElement="f_loop">
+        <omgdi:waypoint x="950" y="250"/><omgdi:waypoint x="885" y="250"/><omgdi:waypoint x="885" y="145"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
