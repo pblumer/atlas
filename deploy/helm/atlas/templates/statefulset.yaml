@@ -1,0 +1,160 @@
+{{- /*
+Atlas is a single-writer, single-partition engine (invariants 2 and 3): exactly
+one process may own the write-ahead log and state store at a time. This is a
+StatefulSet with a hard-coded replica count of 1 and a ReadWriteOnce volume, so
+two servers can never mount the same data concurrently. Do NOT convert this to a
+Deployment or raise the replica count — that would corrupt durable state.
+*/ -}}
+{{- if and .Values.atlas.auth.enabled (not .Values.atlas.auth.existingSecret) (not .Values.atlas.auth.password) -}}
+{{- fail "atlas.auth.enabled is true but no admin password source is set. Provide atlas.auth.password or atlas.auth.existingSecret." -}}
+{{- end -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "atlas.fullname" . }}
+  labels:
+    {{- include "atlas.labels" . | nindent 4 }}
+spec:
+  # Single writer per partition — never scale this above 1 (see note above).
+  replicas: 1
+  serviceName: {{ include "atlas.fullname" . }}
+  selector:
+    matchLabels:
+      {{- include "atlas.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "atlas.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        {{- if eq (include "atlas.createSecret" .) "true" }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "atlas.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: atlas
+          image: {{ include "atlas.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          args:
+            - serve
+            - --addr=:8080
+            - --data-dir={{ .Values.persistence.mountPath }}
+            - --auth={{ .Values.atlas.auth.enabled }}
+            - --vault={{ .Values.atlas.vault.enabled }}
+            - --docs={{ .Values.atlas.docs.enabled }}
+            - --powershell={{ .Values.atlas.script.powershell }}
+            - --python={{ .Values.atlas.script.python }}
+            - --javascript={{ .Values.atlas.script.javascript }}
+            - --script-timeout={{ .Values.atlas.script.timeout }}
+            - --shutdown-timeout={{ .Values.atlas.shutdownTimeout }}
+            {{- range .Values.atlas.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          env:
+            {{- if .Values.atlas.auth.enabled }}
+            - name: ATLAS_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.atlas.auth.existingSecret | default (include "atlas.secretName" .) }}
+                  key: {{ .Values.atlas.auth.usernameKey }}
+            - name: ATLAS_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.atlas.auth.existingSecret | default (include "atlas.secretName" .) }}
+                  key: {{ .Values.atlas.auth.passwordKey }}
+            {{- end }}
+            {{- if and .Values.atlas.vault.enabled (or .Values.atlas.vault.existingSecret .Values.atlas.vault.key) }}
+            - name: ATLAS_VAULT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.atlas.vault.existingSecret | default (include "atlas.secretName" .) }}
+                  key: {{ .Values.atlas.vault.keyKey }}
+            {{- end }}
+            {{- with .Values.atlas.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          {{- with .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.persistence.mountPath }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        {{- if and .Values.persistence.enabled .Values.persistence.existingClaim }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim }}
+        {{- else if not .Values.persistence.enabled }}
+        # Ephemeral storage — data is lost on pod restart. For testing only.
+        - name: data
+          emptyDir: {}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- if and .Values.persistence.enabled (not .Values.persistence.existingClaim) }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        {{- with .Values.persistence.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          {{- toYaml .Values.persistence.accessModes | nindent 10 }}
+        {{- if .Values.persistence.storageClass }}
+        {{- if eq "-" .Values.persistence.storageClass }}
+        storageClassName: ""
+        {{- else }}
+        storageClassName: {{ .Values.persistence.storageClass | quote }}
+        {{- end }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size | quote }}
+  {{- end }}
