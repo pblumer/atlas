@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: an intermediate timer catch event.
+
+  Start -> intermediateCatchEvent "wait" (duration PT30S) -> End. The token parks
+  until the timer is due. The driver advances the clock past the due date with
+  Wait(31s) and fires due timers. Exercises the timer driver path.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             id="defs_timer_catch" targetNamespace="http://atlas/conformance">
+  <process id="timer-catch" name="Timer catch" isExecutable="true">
+    <startEvent id="start"/>
+    <intermediateCatchEvent id="wait" name="Wait 30s">
+      <timerEventDefinition>
+        <timeDuration>PT30S</timeDuration>
+      </timerEventDefinition>
+    </intermediateCatchEvent>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="wait"/>
+    <sequenceFlow id="f2" sourceRef="wait" targetRef="end"/>
+  </process>
+</definitions>

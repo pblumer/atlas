@@ -24,8 +24,27 @@ The suite keeps two questions apart:
 | **Structural invariants** | Model-independent truths, e.g. a completed instance leaves no orphan tokens. | `executeLive` |
 | **Metamorphic** | Behaviorally equivalent models (concurrent vs. sequential independent effects) reach the same effect projection despite different shapes — no reference engine needed. | `TestMetamorphic` |
 
-Because the models are self-completing (inline FEEL scripts, no parked tokens),
-every run is deterministic and reproducible — the precondition for golden files.
+Runs are deterministic — the precondition for golden files. Self-completing
+models (inline FEEL scripts) need no help; models that **park a token** (user and
+service tasks, message and timer catch events) carry a `Driver`: an ordered list
+of steps that advance the wait deterministically.
+
+## The driver
+
+A scenario's `Driver` is a list of steps, applied to the live run in order with a
+`RunUntilIdle` after each. The steps only touch the live run — replay rebuilds
+from the log the events they produced, so replay equivalence still holds
+unchanged. Three step kinds cover the parking mechanisms:
+
+| Constructor | Drives | Engine call |
+|-------------|--------|-------------|
+| `Complete("task", Str("k","v")…)` | a parked job (user or service task), writing outputs | `CompleteJob` |
+| `Publish("msg", "corrKey", …)` | a waiting message subscription | `PublishMessage` |
+| `Wait(30*time.Second)` | the clock past a timer's due date, firing it | clock advance + `TickTimers` |
+
+`Complete` resolves the job by the task's BPMN id (job → element instance →
+compiled element), and fails loudly if the id names no parked job or an ambiguous
+one — a mis-authored step is a test error, not a wrong-token run.
 
 ## Running
 
@@ -40,27 +59,29 @@ A regenerated golden is a **behavior change**: review the diff before committing
 
 ## Adding a scenario
 
-1. Drop a **self-completing** BPMN model under [`models/`](models/) — drive it to
-   an end event with inline `<zeebe:script>` tasks so no token parks. Fixtures
-   intentionally omit BPMN-DI (they are executed, not rendered).
+1. Drop a BPMN model under [`models/`](models/). If it parks a token, note which
+   step advances each wait; otherwise make it self-completing with inline
+   `<zeebe:script>` tasks. Fixtures intentionally omit BPMN-DI (they are executed,
+   not rendered).
 2. Register it in `Scenarios` in [`scenario.go`](scenario.go), listing the
-   `Features` it exercises. Add new `Feature`/`Pattern` entries if needed. For a
-   metamorphic pair, give both members the same `EquivClass`.
+   `Features` it exercises and, for a parking model, the `Driver` steps that carry
+   it to an end. Add new `Feature`/`Pattern` entries if needed. For a metamorphic
+   pair, give both members the same `EquivClass`.
 3. `go test ./conformance/ -update` to mint the golden and refresh `COVERAGE.md`.
 4. Review both generated files, then commit.
 
 ## What's next
 
-The scaffold covers self-completing control flow. The planned extensions, roughly
-in order:
+The scaffold covers self-completing control flow plus the parking features the
+driver reaches (user/service tasks, message and timer catch events). Planned
+extensions, roughly in order:
 
-- A **driver** so scenarios can exercise parking features (user/service tasks,
-  timers, messages) deterministically — inject the clock, feed fixed inputs and
-  job completions, capture the trace across the wait.
+- More driver reach: **boundary events** (interrupting timer/message), **receive
+  tasks**, **event-based gateway**, **message/timer start events**, and job
+  **failure/incident** steps (`FailJob` → `ResolveIncident`).
 - **Negative models** that must be rejected at compile, not at runtime (the
   category `TestRunRejectsMalformedModel` stands in for today).
-- Broader pattern coverage (inclusive gateways, event-based gateway, boundary
-  events, subprocess, multi-instance, compensation) — each a row that flips from
-  🔲 to ✅ in `COVERAGE.md`.
+- Broader pattern coverage (inclusive gateways, subprocess, multi-instance,
+  compensation) — each a row that flips from 🔲 to ✅ in `COVERAGE.md`.
 - Optionally, a **differential** job comparing outcomes against a reference
   engine (Camunda/Zeebe) as the strongest external oracle.

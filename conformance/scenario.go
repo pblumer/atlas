@@ -1,6 +1,9 @@
 package conformance
 
-import "embed"
+import (
+	"embed"
+	"time"
+)
 
 //go:embed models/*.bpmn
 var modelsFS embed.FS
@@ -41,26 +44,42 @@ var Features = []Feature{
 	{"script-task", "Inline FEEL script task (in-engine, no worker)", nil},
 	{"exclusive-gateway", "Data-based exclusive gateway with default flow", []string{"WCP-4", "WCP-5"}},
 	{"parallel-gateway", "Parallel fork and synchronizing join", []string{"WCP-2", "WCP-3"}},
+	{"user-task", "User task (human-completed job)", nil},
+	{"service-task", "Service task (worker-completed job with outputs)", nil},
+	{"message-catch", "Intermediate message catch event", nil},
+	{"timer-catch", "Intermediate timer catch event", nil},
 }
 
-// Scenario binds a BPMN model to the features it exercises. A non-empty
-// EquivClass marks it as one of a metamorphic group: every scenario sharing that
-// class must produce the same effect projection (see RunResult.Effect).
+// Scenario binds a BPMN model to the features it exercises and the driver steps
+// that carry it through any parked waits. A non-empty EquivClass marks it as one
+// of a metamorphic group: every scenario sharing that class must produce the same
+// effect projection (see RunResult.Effect).
 type Scenario struct {
 	Name       string   // model base name; also the golden file base name
 	Model      string   // file under models/
 	Features   []string // feature IDs this scenario exercises
 	EquivClass string   // non-empty: metamorphic equivalence group
+	Driver     []Step   // ordered actions that drive parked tokens; nil = self-completing
 }
 
-// Scenarios is the curated collection. Keep it self-completing (inline scripts,
-// no parked tokens) so every run is deterministic; a driver for parking features
-// (user/service tasks, timers, messages) is the next extension.
+// Scenarios is the curated collection. Self-completing models (inline scripts)
+// carry a nil Driver; models that park a token carry the deterministic steps that
+// advance them — a completed job, a delivered message, an elapsed timer.
 var Scenarios = []Scenario{
-	{"sequence", "sequence.bpmn", []string{"start-end-event", "sequence-flow", "script-task"}, ""},
-	{"exclusive-gateway", "exclusive-gateway.bpmn", []string{"exclusive-gateway", "script-task"}, ""},
-	{"parallel-independent", "parallel-independent.bpmn", []string{"parallel-gateway", "script-task"}, "independent-effects"},
-	{"linear-independent", "linear-independent.bpmn", []string{"sequence-flow", "script-task"}, "independent-effects"},
+	{Name: "sequence", Model: "sequence.bpmn", Features: []string{"start-end-event", "sequence-flow", "script-task"}},
+	{Name: "exclusive-gateway", Model: "exclusive-gateway.bpmn", Features: []string{"exclusive-gateway", "script-task"}},
+	{Name: "parallel-independent", Model: "parallel-independent.bpmn", Features: []string{"parallel-gateway", "script-task"}, EquivClass: "independent-effects"},
+	{Name: "linear-independent", Model: "linear-independent.bpmn", Features: []string{"sequence-flow", "script-task"}, EquivClass: "independent-effects"},
+
+	// Parked features, driven to completion.
+	{Name: "user-task", Model: "user-task.bpmn", Features: []string{"user-task"},
+		Driver: []Step{Complete("approve")}},
+	{Name: "service-task", Model: "service-task.bpmn", Features: []string{"service-task"},
+		Driver: []Step{Complete("charge", Str("status", "captured"))}},
+	{Name: "message-catch", Model: "message-catch.bpmn", Features: []string{"message-catch"},
+		Driver: []Step{Publish("payment-received", "K")}},
+	{Name: "timer-catch", Model: "timer-catch.bpmn", Features: []string{"timer-catch"},
+		Driver: []Step{Wait(31 * time.Second)}},
 }
 
 // load reads the scenario's embedded BPMN model.

@@ -11,6 +11,10 @@ Generated from the register in `scenario.go` by `go test ./conformance -update`.
 | Inline FEEL script task (in-engine, no worker) | — | exclusive-gateway, linear-independent, parallel-independent, sequence | ✅ |
 | Data-based exclusive gateway with default flow | WCP-4, WCP-5 | exclusive-gateway | ✅ |
 | Parallel fork and synchronizing join | WCP-2, WCP-3 | parallel-independent | ✅ |
+| User task (human-completed job) | — | user-task | ✅ |
+| Service task (worker-completed job with outputs) | — | service-task | ✅ |
+| Intermediate message catch event | — | message-catch | ✅ |
+| Intermediate timer catch event | — | timer-catch | ✅ |
 
 ## Control-flow patterns
 

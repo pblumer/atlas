@@ -12,7 +12,7 @@ import (
 // category the collection will grow.
 func TestRunRejectsMalformedModel(t *testing.T) {
 	garbage := []byte("<definitions><process id=\"x\"><startEvent id=\"s\"/>")
-	if _, err := Run(t.TempDir(), garbage); err == nil {
+	if _, err := Run(t.TempDir(), garbage, nil); err == nil {
 		t.Fatal("Run accepted a malformed model; want a compile error")
 	}
 }
@@ -31,7 +31,7 @@ func TestRunSurfacesIOError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load model: %v", err)
 	}
-	if _, err := Run(base, model); err == nil {
+	if _, err := Run(base, model, nil); err == nil {
 		t.Fatal("Run ignored an I/O failure; want an error")
 	}
 }

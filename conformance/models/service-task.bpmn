@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: a worker-backed service task that parks a token.
+
+  Start -> serviceTask "charge" (job type "payment") -> End. The token parks on
+  the job until an external worker completes it. The driver plays the worker with
+  Complete("charge", Str("status", "captured")), and the output variable flows
+  into the instance scope. Exercises the job-completion driver path with outputs.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_service_task" targetNamespace="http://atlas/conformance">
+  <process id="service-task" name="Service task" isExecutable="true">
+    <startEvent id="start"/>
+    <serviceTask id="charge" name="Charge card">
+      <extensionElements>
+        <zeebe:taskDefinition type="payment" retries="3"/>
+      </extensionElements>
+    </serviceTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="charge"/>
+    <sequenceFlow id="f2" sourceRef="charge" targetRef="end"/>
+  </process>
+</definitions>

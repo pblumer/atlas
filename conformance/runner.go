@@ -20,12 +20,15 @@ import (
 // model.NewKey(1, 1).
 const defKey uint64 = 7
 
-// seqClock is a deterministic monotonic clock: each read advances by one. Runs
-// must not depend on wall-clock time, and replayed facts carry their own frozen
-// timestamps (invariant I6), so the clock only orders live work.
-type seqClock struct{ t int64 }
+// driverClock is a deterministic clock: each read advances by one for stable
+// ordering, and advance jumps it forward so a Wait step can push a timer past its
+// due date. Runs must not depend on wall-clock time, and replayed facts carry
+// their own frozen timestamps (invariant I6), so the clock only orders live work.
+type driverClock struct{ t int64 }
 
-func (c *seqClock) Now() int64 { c.t++; return c.t }
+func (c *driverClock) Now() int64 { c.t++; return c.t }
+
+func (c *driverClock) advance(ns int64) { c.t += ns }
 
 // RunResult is a scenario's observable behavior: the terminal instance state, the
 // ordered token path (BPMN element ids a token activated), and the final
@@ -36,18 +39,19 @@ type RunResult struct {
 	Variables map[string]string
 }
 
-// Run executes the model live, replays its log into a fresh store, and returns
-// the live result. It fails if replay diverges from live (invariant I4) or if a
-// completed instance left orphan tokens (a structural invariant). base must be an
-// empty directory unique to this call.
-func Run(base string, modelXML []byte) (RunResult, error) {
+// Run compiles the model, executes it live while applying the driver steps,
+// replays its log into a fresh store, and returns the live result. It fails if
+// replay diverges from live (invariant I4) or if a completed instance left orphan
+// tokens (a structural invariant). Pass nil steps for a self-completing model.
+// base must be an empty directory unique to this call.
+func Run(base string, modelXML []byte, steps []Step) (RunResult, error) {
 	cp, err := compiler.Parse(defKey, 1, bytes.NewReader(modelXML))
 	if err != nil {
 		return RunResult{}, fmt.Errorf("compile: %w", err)
 	}
 
 	liveDir := filepath.Join(base, "live")
-	live, err := executeLive(liveDir, cp)
+	live, err := executeLive(liveDir, cp, steps)
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -64,17 +68,19 @@ func Run(base string, modelXML []byte) (RunResult, error) {
 	return live, nil
 }
 
-// executeLive builds a fresh engine, runs the instance to idle, checks the
-// no-orphan-tokens invariant, and captures the result. It closes its store and
-// log so the log can be reopened for replay.
-func executeLive(dir string, cp *compiler.CompiledProcess) (RunResult, error) {
+// executeLive builds a fresh engine, runs the instance to idle, applies each
+// driver step (with a RunUntilIdle after it), checks the no-orphan-tokens
+// invariant, and captures the result. It closes its store and log so the log can
+// be reopened for replay.
+func executeLive(dir string, cp *compiler.CompiledProcess, steps []Step) (RunResult, error) {
 	log, store, err := openStores(dir)
 	if err != nil {
 		return RunResult{}, err
 	}
 	defer closeStores(log, store)
 
-	p := engine.New(1, log, store, &seqClock{})
+	clock := &driverClock{}
+	p := engine.New(1, log, store, clock)
 	p.Deploy(cp)
 	if err := p.Recover(); err != nil {
 		return RunResult{}, fmt.Errorf("recover: %w", err)
@@ -82,6 +88,13 @@ func executeLive(dir string, cp *compiler.CompiledProcess) (RunResult, error) {
 	p.CreateInstance(cp.Key)
 	if err := p.RunUntilIdle(); err != nil {
 		return RunResult{}, fmt.Errorf("run: %w", err)
+	}
+
+	d := &driver{p: p, store: store, cp: cp, clock: clock}
+	for i, step := range steps {
+		if err := d.apply(step); err != nil {
+			return RunResult{}, fmt.Errorf("driver step %d of [%s]: %q: %w", i+1, stepList(steps), step.describe(), err)
+		}
 	}
 
 	res, err := capture(store, cp)
@@ -116,7 +129,7 @@ func replayLog(liveDir, replayDir string, cp *compiler.CompiledProcess) (RunResu
 	}
 	defer closeStores(log, store)
 
-	p := engine.New(1, log, store, &seqClock{})
+	p := engine.New(1, log, store, &driverClock{})
 	p.Deploy(cp)
 	if err := p.Recover(); err != nil {
 		return RunResult{}, fmt.Errorf("recover: %w", err)

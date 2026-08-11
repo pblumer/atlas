@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: a human task that parks a token.
+
+  Start -> userTask "approve" -> End. A user task parks a job (its "worker" is a
+  human); the token waits until the job is completed. The driver completes it with
+  Complete("approve"). Exercises the job-completion driver path against a user task.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_user_task" targetNamespace="http://atlas/conformance">
+  <process id="user-task" name="User task" isExecutable="true">
+    <startEvent id="start"/>
+    <userTask id="approve" name="Approve">
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="reviewers"/>
+      </extensionElements>
+    </userTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="approve"/>
+    <sequenceFlow id="f2" sourceRef="approve" targetRef="end"/>
+  </process>
+</definitions>
