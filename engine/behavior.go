@@ -50,6 +50,12 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeStartEvent] = startEventBehavior{}
 	p.behaviors[compiler.TypeEndEvent] = endEventBehavior{}
 	p.behaviors[compiler.TypeServiceTask] = serviceTaskBehavior{}
+	// A send task is a service task under a different BPMN label (ADR-0112): it creates a
+	// job and waits, so it shares serviceTaskBehavior — which reads its ServiceTaskDetail
+	// from the same table (CompiledProcess.SendTask == ServiceTask). Retry backoff, incidents,
+	// boundary interruption, and recovery are inherited because they key off the job and the
+	// element instance, not the element type.
+	p.behaviors[compiler.TypeSendTask] = serviceTaskBehavior{}
 	p.behaviors[compiler.TypeScriptTask] = scriptTaskBehavior{}
 	p.behaviors[compiler.TypeBusinessRuleTask] = businessRuleTaskBehavior{}
 	p.behaviors[compiler.TypeConnectorTask] = connectorTaskBehavior{}

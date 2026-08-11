@@ -578,7 +578,6 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
 // surprised at Deploy/Validate. Keep in sync with the compiler's rejections and unrun
 // elements (compiler/scope_compile.go, compiler/parse.go).
 const UNSUPPORTED_TYPES = {
-  "bpmn:SendTask": "Send tasks can't run yet",
   "bpmn:ComplexGateway": "Complex gateways aren't supported yet",
   "bpmn:AdHocSubProcess": "Ad-hoc subprocesses aren't supported yet",
   "bpmn:DataStoreReference": "Data stores aren't supported yet",
@@ -992,6 +991,14 @@ function implMarker(bo) {
   if (bo.$type === "bpmn:ServiceTask") {
     const kind = serviceTaskKind(bo);
     if (!kind.glyph) return null; // plain job worker — the default gear is its symbol
+    return { label: kind.name, icon: kind.glyph };
+  }
+  if (bo.$type === "bpmn:SendTask") {
+    // The send task's kind badge (ADR-0112): a message throw, a connector, or (plain job
+    // worker) nothing — the filled send-task arrow bpmn-js draws is that kind's own symbol.
+    if (bo.messageRef) return { label: SEND_MESSAGE_KIND.name, icon: SEND_MESSAGE_KIND.glyph };
+    const kind = serviceTaskKind(bo);
+    if (!kind.glyph) return null;
     return { label: kind.name, icon: kind.glyph };
   }
   return null;
@@ -1667,15 +1674,21 @@ function stMapRowHTML(fieldKey, name, value) {
 // tooling's template chooser within the buildless panel (ADR-0067/0012); the field
 // form is generic over text/select/map fields, section groups, and showIf
 // visibility so a new connector kind needs no bespoke panel code.
-function serviceTaskKindHTML(bo) {
-  const cur = serviceTaskKind(bo);
-  const ext = findExt(bo, cur.ext) || {};
-  const rows = SERVICE_TASK_KINDS.map((k) => `
+// stKindRowsHTML renders the searchable kind-picker rows for a list of kinds, highlighting
+// curId. Shared by the service task (SERVICE_TASK_KINDS) and the send task, which prepends a
+// Message kind (ADR-0112); the click/filter handlers key off the .stkind-row markup.
+function stKindRowsHTML(kinds, curId) {
+  return kinds.map((k) => `
     <div class="stkind-row" data-kind="${k.id}" data-match="${esc((k.name + " " + k.desc).toLowerCase())}"
-         style="display:flex;gap:8px;align-items:center;padding:8px;border:1px solid #d7d7d7;border-radius:6px;margin-bottom:6px;cursor:pointer;${k.id === cur.id ? "background:#eef2ff;border-color:#9aa8ff" : ""}">
+         style="display:flex;gap:8px;align-items:center;padding:8px;border:1px solid #d7d7d7;border-radius:6px;margin-bottom:6px;cursor:pointer;${k.id === curId ? "background:#eef2ff;border-color:#9aa8ff" : ""}">
       <span class="stkind-icon">${k.glyph || esc(k.icon)}</span>
       <span style="line-height:1.25"><b>${esc(k.name)}</b><br><span class="muted" style="font-size:12px">${esc(k.desc)}</span></span>
     </div>`).join("");
+}
+
+// stKindFieldsHTML renders the typed field form for one catalog kind over its stored
+// extension, generic over text/select/map fields, section groups, and showIf visibility.
+function stKindFieldsHTML(cur, ext) {
   let fields = "";
   for (const f of cur.fields) {
     if (f.group) {
@@ -1709,10 +1722,52 @@ function serviceTaskKindHTML(bo) {
     }
     if (f.hint) fields += `<p class="muted" style="font-size:12px">${esc(f.hint)}</p>`;
   }
+  return fields;
+}
+
+// serviceTaskKindHTML renders the searchable kind picker plus the current kind's fields,
+// both from SERVICE_TASK_KINDS (ADR-0067). A new connector kind needs no bespoke panel code.
+function serviceTaskKindHTML(bo) {
+  const cur = serviceTaskKind(bo);
+  const ext = findExt(bo, cur.ext) || {};
   return `<h3>Type</h3>
     <input type="text" id="f-stkind-filter" placeholder="Search type… (e.g. rest)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
-    <div id="f-stkind-list">${rows}</div>
-    <h3>${esc(cur.name)}</h3>${fields}`;
+    <div id="f-stkind-list">${stKindRowsHTML(SERVICE_TASK_KINDS, cur.id)}</div>
+    <h3>${esc(cur.name)}</h3>${stKindFieldsHTML(cur, ext)}`;
+}
+
+// SEND_MESSAGE_KIND is the send task's Message kind (ADR-0112): a correlating throw in task
+// form. It is not a connector (no ext / fields form) — it is configured by the shared message
+// picker and detected by a messageRef — so it lives outside SERVICE_TASK_KINDS and is prepended
+// to the send task's picker.
+const SEND_MESSAGE_KIND = {
+  id: "message", name: "Message", icon: "✉",
+  desc: "Publish a BPMN message; a waiting receive task or message catch with a matching key continues",
+  glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#4666ff"/><rect x="3" y="4.6" width="10" height="6.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 5.2L8 8.6l4.6-3.4" fill="none" stroke="#fff" stroke-width="1.1"/></svg>`,
+};
+
+// sendTaskKind returns the kind a send task currently represents: the Message kind when it
+// carries a messageRef, otherwise the same connector/job-worker detection a service task uses.
+function sendTaskKind(bo) {
+  if (bo && bo.messageRef) return SEND_MESSAGE_KIND;
+  return serviceTaskKind(bo);
+}
+
+// sendTaskKindHTML renders the send task's kind picker: the Message kind plus the service
+// task's connector/job-worker catalog, then either the shared message picker (Message kind)
+// or the chosen connector's field form (ADR-0112). The picker reuses the .stkind-row markup,
+// so the existing filter/click wiring drives it.
+function sendTaskKindHTML(modeler, bo) {
+  const cur = sendTaskKind(bo);
+  const picker = `<h3>Type</h3>
+    <input type="text" id="f-stkind-filter" placeholder="Search type… (e.g. message, mail)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
+    <div id="f-stkind-list">${stKindRowsHTML([SEND_MESSAGE_KIND, ...SERVICE_TASK_KINDS], cur.id)}</div>`;
+  if (cur.id === "message") {
+    return picker + messageFieldsHTML(modeler, bo,
+      "On reaching this send task the message is published; any instance waiting on it (a receive task or message catch) with a matching correlation key continues. The token then flows straight on.");
+  }
+  const ext = findExt(bo, cur.ext) || {};
+  return picker + `<h3>${esc(cur.name)}</h3>${stKindFieldsHTML(cur, ext)}`;
 }
 
 // applyServiceTaskKind switches a service task to a catalog kind by writing that
@@ -1731,6 +1786,20 @@ function applyServiceTaskKind(modeler, element, kindId) {
     }
   }
   upsertExt(modeler, element, kind.ext, defaults);
+}
+
+// applySendTaskKind switches a send task between its Message kind and the connector/job-worker
+// kinds (ADR-0112). The three kinds are mutually exclusive at compile time, so switching to
+// Message drops every connector/taskDefinition extension (the message picker then sets the
+// messageRef), and switching to a connector/worker clears any messageRef first.
+function applySendTaskKind(modeler, element, kindId) {
+  if (kindId === "message") {
+    for (const k of SERVICE_TASK_KINDS) removeExt(modeler, element, k.ext);
+    return;
+  }
+  const bo = element.businessObject;
+  if (bo && bo.messageRef) linkMessage(modeler, element, bo, null);
+  applyServiceTaskKind(modeler, element, kindId);
 }
 
 // decisionInputRowHTML renders one editable business-rule-task input mapping: a
@@ -2134,7 +2203,10 @@ function messageDefOf(bo) {
 // what the message picker reads and its handlers write, so a receive task reuses the same
 // picker as a message catch. null when the element references no message.
 function messageRefHolder(bo) {
-  if (bo && bo.$type === "bpmn:ReceiveTask") return bo;
+  // A receive task (ADR-0102) and a message-kind send task (ADR-0112) both hold messageRef
+  // directly on their own business object, not via an event definition, so the shared
+  // message picker reads and writes them the same way it does a message event.
+  if (bo && (bo.$type === "bpmn:ReceiveTask" || bo.$type === "bpmn:SendTask")) return bo;
   return messageDefOf(bo);
 }
 
@@ -3038,6 +3110,10 @@ function wireProperties(root, modeler, api, projectId, toast) {
         // an activity, so it takes the shared message picker (the receive task holds its
         // messageRef directly, which messageRefHolder resolves for the field handlers).
         html += messageFieldsHTML(modeler, bo, "The receive task waits until this message is published (or thrown) with a matching correlation key, then continues. Attach a timer boundary event for a wait-or-time-out.");
+      } else if (bo.$type === "bpmn:SendTask") {
+        // The single outbound element (ADR-0112): a kind picker chooses what it sends —
+        // Message (a correlating throw), or a connector / job worker (a job it waits on).
+        html += sendTaskKindHTML(modeler, bo);
       } else if (isActivity(bo)) {
         const t = bo.$type;
         html += `
@@ -3545,7 +3621,9 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const row = e.target.closest(".stkind-row");
         if (!row) return;
         try {
-          applyServiceTaskKind(modeler, element, row.dataset.kind);
+          // A send task's picker includes the Message kind (ADR-0112); a service task's does not.
+          if (bo.$type === "bpmn:SendTask") applySendTaskKind(modeler, element, row.dataset.kind);
+          else applyServiceTaskKind(modeler, element, row.dataset.kind);
           show(element);
         } catch { /* stale */ }
       });
