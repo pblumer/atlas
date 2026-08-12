@@ -17,6 +17,23 @@ func TestGoldenRendersEmpty(t *testing.T) {
 	}
 }
 
+// TestRenderDataObject covers both the stateful and stateless renderings and the
+// boolean value branch, which the number-valued data-object scenario doesn't hit.
+func TestRenderDataObject(t *testing.T) {
+	cases := []struct {
+		v    model.DataObjectValue
+		want string
+	}{
+		{model.DataObjectValue{Name: "order", State: "approved", Kind: model.VarNumber, Text: "100"}, "order[approved]=100"},
+		{model.DataObjectValue{Name: "flag", Kind: model.VarBool, Bool: true}, "flag=true"},
+	}
+	for _, c := range cases {
+		if got := renderDataObject(&c.v); got != c.want {
+			t.Errorf("renderDataObject(%+v) = %q, want %q", c.v, got, c.want)
+		}
+	}
+}
+
 // TestEffectDropsPath proves the metamorphic projection ignores control flow: two
 // results with identical state and variables but different paths are equal under
 // Effect, while a variable difference separates them.

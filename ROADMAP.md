@@ -137,11 +137,14 @@ The control-flow basics most real models use.
   handler that a compensation throw runs), and the **inclusive (OR) gateway**
   (multi-choice split + synchronizing merge, WCP-6/7), and the **signal start
   event** (a trigger process's broadcast births the root instance, captured while
-  the trigger instance is filtered out by definition key) — 26 scenarios, plus a
-  fourth negative model pinning that a **terminate end event** is rejected at
-  compile rather than silently degraded. (Escalation events stay out until the
-  engine supports `escalationEventDefinition`.) Next: transaction/cancel and
-  data-object scenarios, and broader pattern coverage.
+  the trigger instance is filtered out by definition key), and a **first-class data
+  object** written by an output association and read back by an input one (the
+  trace now surfaces data objects with their advancing data state, e.g.
+  `order[approved]=100`) — 27 scenarios, plus a fourth negative model pinning that
+  a **terminate end event** is rejected at compile rather than silently degraded.
+  (Escalation events stay out until the engine supports `escalationEventDefinition`.)
+  Next: transaction/cancel scenarios, field-level and collection data objects, and
+  broader pattern coverage.
 - 🚧 **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)
   engine, [ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)): the
   element, its behavior, and evaluation through the job path landed as a vertical

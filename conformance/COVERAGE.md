@@ -32,6 +32,7 @@ Generated from the register in `scenario.go` by `go test ./conformance -update`.
 | Interrupting boundary signal event | — | signal-boundary | ✅ |
 | Inclusive (OR) gateway split and synchronizing join | WCP-6, WCP-7 | inclusive-gateway | ✅ |
 | Signal start event (broadcast births an instance) | — | signal-start | ✅ |
+| First-class data object: output/input associations and data state | — | data-object | ✅ |
 
 ## Control-flow patterns
 

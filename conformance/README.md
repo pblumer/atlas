@@ -19,7 +19,7 @@ The suite keeps two questions apart:
 
 | Oracle | What it proves | Where |
 |--------|----------------|-------|
-| **Golden trace** | The token path and variables a model produces match a reviewed baseline. | `golden/*.trace`, compared in `TestScenarios` |
+| **Golden trace** | The token path, variables, and data objects a model produces match a reviewed baseline. | `golden/*.trace`, compared in `TestScenarios` |
 | **Replay equivalence** | State rebuilt from the log alone equals the live state — invariant I4, on every model for free. | `Run` → `replayLog` |
 | **Structural invariants** | Model-independent truths, e.g. a completed instance leaves no orphan tokens. | `executeLive` |
 | **Metamorphic** | Behaviorally equivalent models (concurrent vs. sequential independent effects) reach the same effect projection despite different shapes — no reference engine needed. | `TestMetamorphic` |
@@ -106,13 +106,13 @@ Add one by dropping a `neg-*.bpmn` under `models/` and registering it in
 The suite covers self-completing control flow (exclusive, parallel, and
 **inclusive** gateways), the parking features the driver reaches (user/service
 tasks, messages, timers, receive tasks, boundary timer/message/**error**/**signal**
-events, event-based gateway, start events), the incident lifecycle, **signal**
-throw/catch, **compensation**, **embedded subprocess**, **parallel and sequential
-multi-instance**, **call activity**, and a growing set of negative models. Planned
-extensions, roughly in order:
+events, event-based gateway, all four start-event kinds), the incident lifecycle,
+**signal** throw/catch, **compensation**, **embedded subprocess**, **parallel and
+sequential multi-instance**, **call activity**, **first-class data objects**, and a
+growing set of negative models. Planned extensions, roughly in order:
 
-- Broader coverage (transaction/cancel end, data objects) — each a row that flips
-  from 🔲 to ✅ in `COVERAGE.md`.
+- Broader coverage (transaction/cancel end, field-level data-object writes,
+  collection data objects) — each a row that flips from 🔲 to ✅ in `COVERAGE.md`.
 - More negative models as unsupported constructs are pinned (terminate end is the
   latest — the compiler rejects it rather than silently degrading it).
 - **Escalation** events once the engine supports them — there is no

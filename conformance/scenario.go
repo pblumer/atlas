@@ -68,6 +68,7 @@ var Features = []Feature{
 	{"signal-boundary", "Interrupting boundary signal event", nil},
 	{"inclusive-gateway", "Inclusive (OR) gateway split and synchronizing join", []string{"WCP-6", "WCP-7"}},
 	{"signal-start", "Signal start event (broadcast births an instance)", nil},
+	{"data-object", "First-class data object: output/input associations and data state", nil},
 }
 
 // Scenario binds a BPMN model to the features it exercises, how its instance is
@@ -154,6 +155,9 @@ var Scenarios = []Scenario{
 	// Signal start: instantiate the thrower; its broadcast births the root instance.
 	{Name: "signal-start", Model: "signal-start.bpmn", Features: []string{"signal-start"},
 		Root: "on-signal", Start: SignalStart("thrower")},
+
+	// Data object: write it via an output association, read it back via an input one.
+	{Name: "data-object", Model: "data-object.bpmn", Features: []string{"data-object"}},
 }
 
 // NegativeModel is a well-formed BPMN model that is nonetheless invalid and must be

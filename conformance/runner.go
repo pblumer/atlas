@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/pblumer/atlas/compiler"
@@ -34,9 +35,10 @@ func (c *driverClock) advance(ns int64) { c.t += ns }
 // ordered token path (BPMN element ids a token activated), and the final
 // root-scope variables. It is the unit both the golden and replay oracles compare.
 type RunResult struct {
-	State     model.ProcessInstanceState
-	Path      []string
-	Variables map[string]string
+	State       model.ProcessInstanceState
+	Path        []string
+	Variables   map[string]string
+	DataObjects []string // "name[state]=value", sorted; empty for models with none
 }
 
 // Run compiles the model (every executable process in it — a call activity needs
@@ -197,7 +199,29 @@ func capture(store *state.Store, rootCp *compiler.CompiledProcess) (RunResult, e
 		return RunResult{}, fmt.Errorf("variables: %w", err)
 	}
 
-	return RunResult{State: instanceState, Path: path, Variables: vars}, nil
+	var dataObjects []string
+	if err := store.DataObjectsOfScope(piKey, func(v *model.DataObjectValue) error {
+		dataObjects = append(dataObjects, renderDataObject(v))
+		return nil
+	}); err != nil {
+		return RunResult{}, fmt.Errorf("data objects: %w", err)
+	}
+	sort.Strings(dataObjects)
+
+	return RunResult{State: instanceState, Path: path, Variables: vars, DataObjects: dataObjects}, nil
+}
+
+// renderDataObject formats one data object as "name[state]=value" (or "name=value"
+// when it declares no data state).
+func renderDataObject(v *model.DataObjectValue) string {
+	val := v.Text
+	if v.Kind == model.VarBool {
+		val = strconv.FormatBool(v.Bool)
+	}
+	if v.State == "" {
+		return v.Name + "=" + val
+	}
+	return v.Name + "[" + v.State + "]=" + val
 }
 
 // rootInstance returns the one instance of the root definition a scenario produced
@@ -261,7 +285,8 @@ func closeStores(log *wal.Log, store *state.Store) {
 func equalResult(a, b RunResult) bool {
 	return a.State == b.State &&
 		reflect.DeepEqual(a.Path, b.Path) &&
-		reflect.DeepEqual(a.Variables, b.Variables)
+		reflect.DeepEqual(a.Variables, b.Variables) &&
+		reflect.DeepEqual(a.DataObjects, b.DataObjects)
 }
 
 // Golden renders the result as the canonical, human-readable golden-file text.
@@ -275,11 +300,19 @@ func (r RunResult) Golden() string {
 	}
 	if len(r.Variables) == 0 {
 		b.WriteString("vars: (none)\n")
-		return b.String()
+	} else {
+		b.WriteString("vars:\n")
+		for _, name := range sortedKeys(r.Variables) {
+			fmt.Fprintf(&b, "  %s=%s\n", name, r.Variables[name])
+		}
 	}
-	b.WriteString("vars:\n")
-	for _, name := range sortedKeys(r.Variables) {
-		fmt.Fprintf(&b, "  %s=%s\n", name, r.Variables[name])
+	// Data objects are shown only when the model declares them, so models without
+	// any keep their trace unchanged.
+	if len(r.DataObjects) > 0 {
+		b.WriteString("data-objects:\n")
+		for _, d := range r.DataObjects {
+			fmt.Fprintf(&b, "  %s\n", d)
+		}
 	}
 	return b.String()
 }
@@ -292,6 +325,9 @@ func (r RunResult) Effect() string {
 	fmt.Fprintf(&b, "state=%s", r.State)
 	for _, name := range sortedKeys(r.Variables) {
 		fmt.Fprintf(&b, " %s=%s", name, r.Variables[name])
+	}
+	for _, d := range r.DataObjects {
+		fmt.Fprintf(&b, " do:%s", d)
 	}
 	return b.String()
 }
