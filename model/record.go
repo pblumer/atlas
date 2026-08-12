@@ -271,6 +271,20 @@ const (
 	// compensated (the handler was activated), so it is compensated at most once (ADR-0103).
 	// It carries the record's scope and sequence; applyToState deletes that index entry.
 	IntentCompensableConsumed
+
+	// IntentPurging is a command-only intent (never persisted as an event), like
+	// IntentTimerStartArm: the retention sweep directs the processor to hard-delete a
+	// finished instance's history (ADR-0115). Its handler emits IntentPurged for the
+	// instance it carries. Because commands are not replayed (invariant I6), its numeric
+	// value never reaches the log. Appended at the end so every prior intent keeps its
+	// numeric value.
+	IntentPurging
+	// IntentPurged removes a finished process instance's history from the state store —
+	// the terminal record and every per-instance family (ADR-0115). It is the durable
+	// delete: applyToState folds it into the removals, so recovery reproduces the purge
+	// (invariants I4/I6). Appended at the end so every prior intent keeps its numeric
+	// value on the log.
+	IntentPurged
 )
 
 func (i Intent) String() string {
@@ -345,6 +359,10 @@ func (i Intent) String() string {
 		return "CompensableConsumed"
 	case IntentJobErrorThrown:
 		return "JobErrorThrown"
+	case IntentPurging:
+		return "Purging"
+	case IntentPurged:
+		return "Purged"
 	default:
 		return "Intent(?)"
 	}

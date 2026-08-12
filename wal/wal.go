@@ -205,8 +205,13 @@ func (l *Log) syncDir() error {
 	return d.Sync()
 }
 
-func (l *Log) segmentFiles() ([]string, error) {
-	entries, err := os.ReadDir(l.dir)
+func (l *Log) segmentFiles() ([]string, error) { return segmentFilesIn(l.dir) }
+
+// segmentFilesIn lists the segment file names in dir, in append (segment) order.
+// It is a free function so a Tailer can read a log directory without holding the
+// writing *Log (invariant I3: the Tailer never touches the writer's state).
+func segmentFilesIn(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}

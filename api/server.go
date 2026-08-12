@@ -29,6 +29,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"fmt"
 	"io/fs"
@@ -46,6 +47,8 @@ import (
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/mail"
+	"github.com/pblumer/atlas/model"
+	"github.com/pblumer/atlas/opensearch"
 	"github.com/pblumer/atlas/remedy"
 	"github.com/pblumer/atlas/rest"
 	"github.com/pblumer/atlas/script"
@@ -259,6 +262,26 @@ type Server struct {
 	// than monopolizing the single writer with one unbounded publish storm (ADR-0075).
 	inboundBatch int
 
+	// osExportCfg is the OpenSearch event-exporter configuration (ADR-0114); it is
+	// enabled only when a URL is set (WithOpenSearchExporter). exporter is the built
+	// WAL-tailing sink, nil when disabled, and exporterPoll is its poll cadence. The
+	// exporter runs on its own goroutine off the run loop — it only reads the durable
+	// WAL files and the state store's applied-position watermark, never the processor
+	// — so it never touches the single-writer invariant (I3).
+	osExportCfg  opensearch.Config
+	exporter     *opensearch.Exporter
+	exporterPoll time.Duration
+
+	// Retention (ADR-0115): hard-delete finished-instance history older than
+	// retentionMaxAge, gated on the safe (exported, else durable) position so nothing
+	// is deleted before it is archived. Off unless retentionMaxAge > 0 (WithRetention).
+	// The sweep is bounded (retentionBatch per tick) and resumable (retentionCursor);
+	// all three are touched only on the run-loop goroutine (via do), so no lock.
+	retentionMaxAge   time.Duration
+	retentionInterval time.Duration
+	retentionBatch    int
+	retentionCursor   uint64
+
 	// docsEnabled gates the OpenAPI spec and the Scalar API explorer. On by
 	// default (opt-out), consistent with the already-open web UI and MCP
 	// endpoint; an operator who does not want the interactive surface disables
@@ -338,6 +361,68 @@ func WithScriptWorker(jobType int32, exec script.Exec) Option {
 			s.scriptWorkers = map[int32]script.Exec{}
 		}
 		s.scriptWorkers[jobType] = exec
+	}
+}
+
+// WithOpenSearchExporter enables the OpenSearch event exporter (ADR-0114): a
+// WAL-tailing sink that mirrors the durable event log into an OpenSearch index so
+// history stays searchable and can outlive engine-side retention. It is opt-in —
+// a config with an empty URL leaves the exporter off. The endpoint, credentials,
+// and index live in server config, never in a model.
+func WithOpenSearchExporter(cfg opensearch.Config) Option {
+	return func(s *Server) { s.osExportCfg = cfg }
+}
+
+// WithOpenSearchExportInterval sets how often the exporter polls the log for newly
+// durable records (ADR-0114). A non-positive value restores the default (5s).
+// Tests pass a short interval to exercise the loop.
+func WithOpenSearchExportInterval(d time.Duration) Option {
+	return func(s *Server) {
+		if d > 0 {
+			s.exporterPoll = d
+		}
+	}
+}
+
+const (
+	// retentionSweepInterval is the default cadence of the history-retention sweep.
+	retentionSweepInterval = time.Minute
+	// retentionBatchDefault bounds how many finished instances one sweep tick evaluates,
+	// so the scan never blocks the run loop (ADR-0115 / ADR-0085 no-full-scan rule).
+	retentionBatchDefault = 1000
+)
+
+// WithRetention enables history retention (ADR-0115): a finished instance whose
+// terminal event is older than maxAge and whose events are already exported (its
+// terminal position is at or below the safe position) is hard-deleted from the state
+// store. A non-positive maxAge leaves retention off — the opt-in default.
+func WithRetention(maxAge time.Duration) Option {
+	return func(s *Server) {
+		if maxAge > 0 {
+			s.retentionMaxAge = maxAge
+		}
+	}
+}
+
+// WithRetentionInterval sets the retention sweep cadence (ADR-0115). A non-positive
+// value restores the default. Tests pass a short interval to exercise the sweep.
+func WithRetentionInterval(d time.Duration) Option {
+	return func(s *Server) {
+		if d > 0 {
+			s.retentionInterval = d
+		}
+	}
+}
+
+// WithRetentionBatch caps how many finished instances one retention sweep tick
+// evaluates and purges (ADR-0115), bounding the work a single tick does on the run
+// loop; a larger backlog then drains as bounded catch-up across ticks. A non-positive
+// value restores the default.
+func WithRetentionBatch(n int) Option {
+	return func(s *Server) {
+		if n > 0 {
+			s.retentionBatch = n
+		}
 	}
 }
 
@@ -422,26 +507,29 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		publicLinks: publicLinks,
 		// A public start link tolerates a modest burst then ~1 start/sec per IP;
 		// generous for a human intake form, throttling for a script (ADR-0029).
-		publicRate:       newRateLimiter(20, 1),
-		projects:         projects,
-		dmnrefs:          dmnrefs,
-		connectors:       connectors,
-		callOverrides:    callOverrides,
-		marketplace:      marketplaceCatalog,
-		marketplaceStore: marketplaceStore,
-		inboundSubs:      inboundSubs,
-		settings:         settings,
-		inboundPoll:      2 * time.Second,     // default cadence; WithInboundPollInterval overrides, 0 disables
-		inboundBatch:     defaultInboundBatch, // per-poll ReadEvents cap; WithInboundBatchLimit overrides
-		vaultEnabled:     true,                // opt-out: built unless WithoutVault is passed (ADR-0070)
-		users:            users,
-		sessions:         newSessionStore(defaultSessionTTL),
-		collab:           newCollabRegistry(),
-		collabKeepalive:  collabKeepaliveInterval,
-		dmnResolver:      resolver,
-		dmnValidator:     dmn.NewValidator(resolver),
-		dmnRegistry:      dmn.NewRegistry(),
-		docsEnabled:      true, // opt-out: served unless WithoutDocs is passed (ADR-0043)
+		publicRate:        newRateLimiter(20, 1),
+		projects:          projects,
+		dmnrefs:           dmnrefs,
+		connectors:        connectors,
+		callOverrides:     callOverrides,
+		marketplace:       marketplaceCatalog,
+		marketplaceStore:  marketplaceStore,
+		inboundSubs:       inboundSubs,
+		settings:          settings,
+		inboundPoll:       2 * time.Second,        // default cadence; WithInboundPollInterval overrides, 0 disables
+		inboundBatch:      defaultInboundBatch,    // per-poll ReadEvents cap; WithInboundBatchLimit overrides
+		exporterPoll:      5 * time.Second,        // OpenSearch export cadence; WithOpenSearchExportInterval overrides (ADR-0114)
+		retentionInterval: retentionSweepInterval, // history-retention sweep cadence; WithRetentionInterval overrides (ADR-0115)
+		retentionBatch:    retentionBatchDefault,  // finished instances evaluated per sweep tick
+		vaultEnabled:      true,                   // opt-out: built unless WithoutVault is passed (ADR-0070)
+		users:             users,
+		sessions:          newSessionStore(defaultSessionTTL),
+		collab:            newCollabRegistry(),
+		collabKeepalive:   collabKeepaliveInterval,
+		dmnResolver:       resolver,
+		dmnValidator:      dmn.NewValidator(resolver),
+		dmnRegistry:       dmn.NewRegistry(),
+		docsEnabled:       true, // opt-out: served unless WithoutDocs is passed (ADR-0043)
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -530,6 +618,24 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err := s.loadCallOverrides(); err != nil {
 		return nil, err
 	}
+	// Build the OpenSearch exporter when configured (ADR-0114). It tails the durable
+	// WAL under dataDir and is bounded by the state store's applied-position
+	// watermark (LastAppliedPosition), so it only ever indexes records that are on
+	// disk — durable-before-visible (I2) — while never touching the processor.
+	if s.osExportCfg.Enabled() {
+		exp, err := opensearch.New(
+			filepath.Join(dataDir, "wal"),
+			s.store.LastAppliedPosition,
+			opensearch.NewHTTPClient(s.osExportCfg),
+			s.osExportCfg.Index,
+			opensearch.NewPositionStore(filepath.Join(dataDir, "exporter")),
+		)
+		if err != nil {
+			return nil, err
+		}
+		s.exporter = exp
+	}
+
 	s.wg.Add(3)
 	go s.loop()
 	go s.timerScheduler(time.Second)
@@ -546,7 +652,124 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		s.wg.Add(1)
 		go s.inboundBridge(s.inboundPoll)
 	}
+	// The OpenSearch exporter tails the durable log and bulk-indexes new records
+	// (ADR-0114). Like the timer scheduler and inbound bridge it is a separate
+	// goroutine doing its I/O off the run loop; it reads only the durable WAL files
+	// and the concurrent-safe applied-position watermark, so it never funnels
+	// through do() and never touches the processor (invariant I3).
+	if s.exporter != nil {
+		s.wg.Add(1)
+		go s.exporterLoop(s.exporterPoll)
+	}
+	// History retention hard-deletes finished instances past the max age, gated on the
+	// exported (else durable) position (ADR-0115). Off unless a max age is configured.
+	// Like the other pollers it computes wall-clock time off the run loop and hops onto
+	// it via do() to touch the processor and its bounded, resumable cursor.
+	if s.retentionMaxAge > 0 {
+		s.wg.Add(1)
+		go s.retentionSweeper(s.retentionInterval)
+	}
 	return s, nil
+}
+
+// exporterLoop polls the durable log on a fixed cadence and hands each newly
+// durable batch of records to the OpenSearch exporter (ADR-0114). A tick error
+// (OpenSearch unreachable, a transient index failure) is logged and retried on the
+// next tick — the exporter leaves its high-water mark unadvanced on failure, so no
+// record is skipped and delivery stays at-least-once.
+func (s *Server) exporterLoop(every time.Duration) {
+	defer s.wg.Done()
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-s.quit:
+			return
+		case <-t.C:
+			if n, err := s.exporter.Tick(context.Background()); err != nil {
+				log.Printf("opensearch exporter: %v (will retry next tick)", err)
+			} else if n > 0 {
+				log.Printf("opensearch exporter: indexed %d record(s)", n)
+			}
+		}
+	}
+}
+
+// retentionSweeper runs the history-retention sweep on a fixed cadence (ADR-0115).
+// Wall-clock "now" is read off the run loop; the sweep itself hops onto the loop via
+// do() so its scan, purge commands, and cursor are single-writer-safe.
+func (s *Server) retentionSweeper(every time.Duration) {
+	defer s.wg.Done()
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-s.quit:
+			return
+		case <-t.C:
+			now := time.Now().UnixNano()
+			s.do(func() { s.sweepRetention(now) })
+		}
+	}
+}
+
+// sweepRetention evaluates one bounded, resumable window of finished instances and
+// hard-deletes those eligible: finished before now-maxAge AND provably exported (a
+// non-zero terminal position at or below the safe position). It runs inside a do()
+// turn, so the scan, the purge commands it enqueues, and the cursor advance are one
+// atomic single-writer step (ADR-0115). Errors are logged and retried next tick.
+func (s *Server) sweepRetention(now int64) {
+	// A transient read error just skips this tick (retried on the next), matching the
+	// silent, best-effort style of the other run-loop pollers (timerScheduler).
+	safePos, err := s.retentionSafePosition()
+	if err != nil {
+		return
+	}
+	cutoff := now - s.retentionMaxAge.Nanoseconds()
+	type target struct {
+		key uint64
+		pi  model.ProcessInstanceValue
+	}
+	var targets []target
+	next, more, err := s.store.CompletedProcessInstancesFrom(s.retentionCursor, s.retentionBatch,
+		func(key uint64, v *model.ProcessInstanceValue) error {
+			// Eligible only when old enough AND export-provable: a zero CompletedPosition
+			// (a record written before this feature) is never provably exported, so it is
+			// conservatively skipped rather than deleted (ADR-0115).
+			if v.CompletedAt <= cutoff && v.CompletedPosition != 0 && v.CompletedPosition <= safePos {
+				targets = append(targets, target{key, *v})
+			}
+			return nil
+		})
+	if err != nil {
+		return
+	}
+	for i := range targets {
+		s.proc.PurgeInstance(targets[i].key, &targets[i].pi)
+	}
+	if len(targets) > 0 {
+		_ = s.jobRunner.Drive() // durable purge events; a drive error is retried next tick
+		log.Printf("retention: purged %d finished instance(s) past %s", len(targets), s.retentionMaxAge)
+	}
+	// Advance the cursor; wrap to genesis at the end so the next pass re-evaluates
+	// instances that have since aged past the cutoff or become exported.
+	if more {
+		s.retentionCursor = next
+	} else {
+		s.retentionCursor = 0
+	}
+}
+
+// retentionSafePosition is the highest log position safe to hard-delete up to: the
+// exporter's high-water mark when the exporter is enabled (delete only what OpenSearch
+// already holds — the operator's export-before-delete requirement), otherwise the
+// state store's durable applied position (retention still works standalone, with the
+// WAL as the archive of record). See ADR-0115.
+func (s *Server) retentionSafePosition() (uint64, error) {
+	if s.exporter != nil {
+		return s.exporter.HighWaterMark(), nil
+	}
+	return s.store.LastAppliedPosition()
 }
 
 // processLookup resolves a def key to its compiled process for the DMN worker. It

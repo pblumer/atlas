@@ -17,6 +17,9 @@ func TestProcessInstanceTTL(t *testing.T) {
 		{"seconds", ` instanceTtl="PT30S"`, int64(30e9)},
 		{"days", ` instanceTtl="P7D"`, int64(7*24*3600) * 1e9},
 		{"hours-minutes", ` instanceTtl="PT2H30M"`, int64((2*3600 + 30*60)) * 1e9},
+		// The Modeler authors the attribute in the atlas namespace (ADR-0085 config
+		// surface); it must compile identically to the bare form the tests above use.
+		{"namespaced", ` atlas:instanceTtl="P7D"`, int64(7*24*3600) * 1e9},
 		{"absent", "", 0},
 	}
 	for _, tc := range valid {
