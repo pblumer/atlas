@@ -5,6 +5,10 @@ its diagram, how it is driven, and the outcome it must produce. It is the readab
 face of the [`../tck`](../tck) case format and the basis for an interactive gallery
 (planned).
 
+**➡ [Browse the scenario pages](scenarios/README.md)** — one page per scenario,
+each with its description, diagram, driver, and expected outcome. The pages are
+generated from `../scenario.go`, so they never drift from the executable suite.
+
 ## Diagrams
 
 Each model's layout is **hand-authored BPMN-DI carried in the fixture itself**
@@ -30,8 +34,20 @@ npm run render                      # renders every fixture that carries BPMN-DI
 each diagram tightly. The committed PNGs are the source of truth; rerun after editing
 a model's layout.
 
+## Scenario pages
+
+The per-scenario Markdown pages live under [`scenarios/`](scenarios/) — one page
+per scenario plus an [index](scenarios/README.md). Each page is generated from the
+scenario definition and its live run result (description, diagram, driver steps,
+and expected path/variables/data objects), so a stale page fails the suite exactly
+like a stale golden. Regenerate them alongside the TCK cases:
+
+```bash
+go test ./conformance -update
+```
+
 ## Status
 
-Rollout is in progress — diagrams are added a batch at a time, flat control-flow
-models first, nested ones (subprocess, transaction, call activity) last. The
-per-scenario Markdown pages are assembled once the diagrams for a batch land.
+Every positive scenario carries a hand-authored diagram and a generated catalog
+page. Remaining planned work: diagrams for the negative models and the interactive
+hosted gallery.
