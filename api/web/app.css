@@ -361,6 +361,9 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   overflow: hidden; color: var(--text);
 }
 .code-editor .ce-highlight code { font: inherit; }
+/* The FEEL '=' expression marker (fx toggle), shown as a dimmed, read-only prefix —
+   it can't be edited or deleted, only cleared by switching fx back off. */
+.code-editor .ce-locked { color: var(--muted); opacity: 0.7; }
 /* Hidden measuring twin used to locate the caret for popup placement. */
 .code-editor .ce-mirror {
   visibility: hidden; height: auto; overflow: hidden;

@@ -1436,9 +1436,11 @@ function enhanceScript(body, modeler, api, variables) {
 // with a leading '=' (that's exactly what the compiler keys on), so the field
 // element stays the single value holder the save wiring already reads — toggling
 // only changes the editing surface and whether the value carries the '=' prefix.
-// In expression mode the field becomes a FEEL code editor; the mode is inferred
-// from the current value on load. No-op if the field isn't present. Exported so it
-// can be reused by any value-or-expression field (and driven by a UI smoke test).
+// In expression mode the field becomes a FEEL code editor with the '=' shown as a
+// dimmed, read-only prefix (deleting it is the fx button's job, not a keystroke); the
+// mode is inferred from the current value on load. No-op if the field isn't present.
+// Exported so it can be reused by any value-or-expression field (and driven by a UI
+// smoke test).
 export function attachExpressionToggle(el, opts = {}) {
   if (!el || el.dataset.fxOn === "1") return;
   el.dataset.fxOn = "1";
@@ -1462,7 +1464,15 @@ export function attachExpressionToggle(el, opts = {}) {
     btn.classList.toggle("active", expr);
     btn.setAttribute("aria-pressed", expr ? "true" : "false");
     if (expr && !feelHandle) {
-      feelHandle = attachFeelEditor(el, { variables: opts.variables, validate: opts.validate });
+      // The leading '=' stays in the field value (the save wiring and compiler key on
+      // it), but is shown as a dimmed, read-only prefix — it can't be typed away, and
+      // the FEEL validator sees the bare expression, not "=expr" (which it rejects as
+      // an unexpected '='). Switching back to a literal is the fx button's job.
+      feelHandle = attachFeelEditor(el, {
+        variables: opts.variables,
+        validate: opts.validate,
+        lockPrefix: (v) => (/^\s*=\s*/.exec(v) || [""])[0].length,
+      });
     } else if (!expr && feelHandle) {
       feelHandle.destroy();
       feelHandle = null;

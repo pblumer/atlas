@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas fx locked-prefix e2e harness</title>
+    <!-- Drives the real api/web/editor.js attachExpressionToggle against a mock FEEL
+         validator, so the test can prove the value-or-expression (fx) field shows the
+         '=' marker as a dimmed, read-only prefix, validates the bare expression, and
+         won't let the marker be deleted with the keyboard. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div class="props" style="padding: 20px">
+      <label class="field"
+        ><span>To</span>
+        <textarea id="fld" rows="1"></textarea>
+      </label>
+    </div>
+    <script type="module">
+      import { attachExpressionToggle } from "/editor.js";
+
+      const el = document.getElementById("fld");
+      window.__el = el;
+      window.__validateCalls = [];
+
+      // A stand-in for POST /api/v1/feel/validate: it records the expression it is
+      // handed and, like the real FEEL parser, rejects a leading '=' as unexpected.
+      const validate = async (expression) => {
+        window.__validateCalls.push(expression);
+        if (/^\s*=/.test(expression)) return { ok: false, error: '1:1: unexpected "="' };
+        return { ok: true };
+      };
+
+      // Load already in expression mode ("=email"), the exact case from the report.
+      el.value = "=email";
+      attachExpressionToggle(el, { variables: ["email", "name"], validate });
+
+      window.__locked = () => document.querySelector(".ce-locked");
+      window.__invalid = () => !!document.querySelector(".code-editor.invalid");
+      window.__ready = true;
+    </script>
+  </body>
+</html>
