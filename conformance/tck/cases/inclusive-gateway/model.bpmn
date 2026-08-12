@@ -17,39 +17,39 @@
              xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
              id="defs_inclusive_gateway" targetNamespace="http://atlas/conformance">
   <process id="inclusive-gateway" name="Inclusive gateway" isExecutable="true">
-    <startEvent id="start"/>
-    <scriptTask id="seed">
+    <startEvent id="start" name="Start"/>
+    <scriptTask id="seed" name="Seed order">
       <extensionElements>
         <zeebe:script expression="= { priority: true, region: &quot;EU&quot; }" resultVariable="order"/>
       </extensionElements>
     </scriptTask>
     <inclusiveGateway id="split" name="Which handling?" default="f_standard"/>
-    <scriptTask id="priority">
+    <scriptTask id="priority" name="Priority handling">
       <extensionElements>
         <zeebe:script expression="= &quot;done&quot;" resultVariable="prio"/>
       </extensionElements>
     </scriptTask>
-    <scriptTask id="eu_check">
+    <scriptTask id="eu_check" name="EU check">
       <extensionElements>
         <zeebe:script expression="= &quot;done&quot;" resultVariable="eu"/>
       </extensionElements>
     </scriptTask>
-    <scriptTask id="standard">
+    <scriptTask id="standard" name="Standard handling">
       <extensionElements>
         <zeebe:script expression="= &quot;done&quot;" resultVariable="std"/>
       </extensionElements>
     </scriptTask>
     <inclusiveGateway id="join"/>
-    <endEvent id="end"/>
+    <endEvent id="end" name="Done"/>
     <sequenceFlow id="f1" sourceRef="start" targetRef="seed"/>
     <sequenceFlow id="f2" sourceRef="seed" targetRef="split"/>
-    <sequenceFlow id="f_prio" sourceRef="split" targetRef="priority">
+    <sequenceFlow id="f_prio" name="priority" sourceRef="split" targetRef="priority">
       <conditionExpression>= order.priority</conditionExpression>
     </sequenceFlow>
-    <sequenceFlow id="f_eu" sourceRef="split" targetRef="eu_check">
+    <sequenceFlow id="f_eu" name="region = EU" sourceRef="split" targetRef="eu_check">
       <conditionExpression>= order.region = "EU"</conditionExpression>
     </sequenceFlow>
-    <sequenceFlow id="f_standard" sourceRef="split" targetRef="standard"/>
+    <sequenceFlow id="f_standard" name="default" sourceRef="split" targetRef="standard"/>
     <sequenceFlow id="f3" sourceRef="priority" targetRef="join"/>
     <sequenceFlow id="f4" sourceRef="eu_check" targetRef="join"/>
     <sequenceFlow id="f5" sourceRef="standard" targetRef="join"/>

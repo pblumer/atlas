@@ -16,7 +16,7 @@
              xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
              id="defs_compensation" targetNamespace="http://atlas/conformance">
   <process id="compensation" name="Compensation" isExecutable="true">
-    <startEvent id="start"/>
+    <startEvent id="start" name="Start"/>
     <serviceTask id="charge" name="Charge card">
       <extensionElements><zeebe:taskDefinition type="charge-card" retries="3"/></extensionElements>
     </serviceTask>

@@ -19,11 +19,11 @@
     </extensionElements>
   </message>
   <process id="message-catch" name="Message catch" isExecutable="true">
-    <startEvent id="start"/>
+    <startEvent id="start" name="Start"/>
     <intermediateCatchEvent id="await_payment" name="Await payment">
       <messageEventDefinition messageRef="Msg_paid"/>
     </intermediateCatchEvent>
-    <endEvent id="end"/>
+    <endEvent id="end" name="Done"/>
     <sequenceFlow id="f1" sourceRef="start" targetRef="await_payment"/>
     <sequenceFlow id="f2" sourceRef="await_payment" targetRef="end"/>
   </process>

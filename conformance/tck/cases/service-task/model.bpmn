@@ -14,13 +14,13 @@
              xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
              id="defs_service_task" targetNamespace="http://atlas/conformance">
   <process id="service-task" name="Service task" isExecutable="true">
-    <startEvent id="start"/>
+    <startEvent id="start" name="Start"/>
     <serviceTask id="charge" name="Charge card">
       <extensionElements>
         <zeebe:taskDefinition type="payment" retries="3"/>
       </extensionElements>
     </serviceTask>
-    <endEvent id="end"/>
+    <endEvent id="end" name="Done"/>
     <sequenceFlow id="f1" sourceRef="start" targetRef="charge"/>
     <sequenceFlow id="f2" sourceRef="charge" targetRef="end"/>
   </process>

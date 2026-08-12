@@ -17,20 +17,20 @@
              xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
              id="defs_parallel_independent" targetNamespace="http://atlas/conformance">
   <process id="parallel-independent" name="Parallel (independent)" isExecutable="true">
-    <startEvent id="start"/>
+    <startEvent id="start" name="Start"/>
     <parallelGateway id="fork"/>
-    <scriptTask id="set_x">
+    <scriptTask id="set_x" name="Set x">
       <extensionElements>
         <zeebe:script expression="= 1" resultVariable="x"/>
       </extensionElements>
     </scriptTask>
-    <scriptTask id="set_y">
+    <scriptTask id="set_y" name="Set y">
       <extensionElements>
         <zeebe:script expression="= 2" resultVariable="y"/>
       </extensionElements>
     </scriptTask>
     <parallelGateway id="join"/>
-    <endEvent id="end"/>
+    <endEvent id="end" name="Done"/>
     <sequenceFlow id="f1" sourceRef="start" targetRef="fork"/>
     <sequenceFlow id="f2" sourceRef="fork" targetRef="set_x"/>
     <sequenceFlow id="f3" sourceRef="fork" targetRef="set_y"/>

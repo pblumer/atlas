@@ -27,7 +27,7 @@
       <dataState name="approved"/>
     </dataObjectReference>
     <dataObjectReference id="Ref_read" name="order" dataObjectRef="DO_order"/>
-    <startEvent id="start"/>
+    <startEvent id="start" name="Start"/>
     <scriptTask id="seed" name="Seed amount">
       <extensionElements>
         <zeebe:script expression="= 100" resultVariable="amount"/>

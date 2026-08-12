@@ -19,7 +19,7 @@
              id="defs_signal_boundary" targetNamespace="http://atlas/conformance">
   <signal id="Sig_abort" name="abort"/>
   <process id="signal-boundary" name="Signal boundary" isExecutable="true">
-    <startEvent id="start"/>
+    <startEvent id="start" name="Start"/>
     <parallelGateway id="fork"/>
     <userTask id="review" name="Review">
       <extensionElements>
@@ -31,7 +31,7 @@
     </boundaryEvent>
     <endEvent id="reviewed" name="Reviewed"/>
     <endEvent id="aborted" name="Aborted"/>
-    <scriptTask id="prep">
+    <scriptTask id="prep" name="Prep">
       <extensionElements>
         <zeebe:script expression="= 1" resultVariable="ready"/>
       </extensionElements>

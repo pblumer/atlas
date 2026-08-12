@@ -16,7 +16,7 @@
              id="defs_boundary_error" targetNamespace="http://atlas/conformance">
   <error id="Err_boom" errorCode="BOOM" name="Boom"/>
   <process id="boundary-error" name="Boundary error" isExecutable="true">
-    <startEvent id="start"/>
+    <startEvent id="start" name="Start"/>
     <serviceTask id="call" name="Risky call">
       <extensionElements>
         <zeebe:taskDefinition type="call" retries="3"/>
@@ -25,8 +25,8 @@
     <boundaryEvent id="on_error" name="On error" attachedToRef="call">
       <errorEventDefinition errorRef="Err_boom"/>
     </boundaryEvent>
-    <endEvent id="done"/>
-    <endEvent id="handled"/>
+    <endEvent id="done" name="Done"/>
+    <endEvent id="handled" name="Handled"/>
     <sequenceFlow id="f1" sourceRef="start" targetRef="call"/>
     <sequenceFlow id="f2" sourceRef="call" targetRef="done"/>
     <sequenceFlow id="f3" sourceRef="on_error" targetRef="handled"/>

@@ -14,30 +14,30 @@
              xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
              id="defs_exclusive" targetNamespace="http://atlas/conformance">
   <process id="exclusive-gateway" name="Exclusive choice" isExecutable="true">
-    <startEvent id="start"/>
-    <scriptTask id="set_betrag">
+    <startEvent id="start" name="Start"/>
+    <scriptTask id="set_betrag" name="Set betrag">
       <extensionElements>
         <zeebe:script expression="= 250" resultVariable="betrag"/>
       </extensionElements>
     </scriptTask>
     <exclusiveGateway id="gw" name="Betrag?" default="f_low"/>
-    <scriptTask id="high">
+    <scriptTask id="high" name="Grade H">
       <extensionElements>
         <zeebe:script expression="= &quot;H&quot;" resultVariable="grade"/>
       </extensionElements>
     </scriptTask>
-    <scriptTask id="low">
+    <scriptTask id="low" name="Grade L">
       <extensionElements>
         <zeebe:script expression="= &quot;L&quot;" resultVariable="grade"/>
       </extensionElements>
     </scriptTask>
-    <endEvent id="end"/>
+    <endEvent id="end" name="Done"/>
     <sequenceFlow id="f1" sourceRef="start" targetRef="set_betrag"/>
     <sequenceFlow id="f2" sourceRef="set_betrag" targetRef="gw"/>
-    <sequenceFlow id="f_high" sourceRef="gw" targetRef="high">
+    <sequenceFlow id="f_high" name="betrag &gt; 1000" sourceRef="gw" targetRef="high">
       <conditionExpression>= betrag &gt; 1000</conditionExpression>
     </sequenceFlow>
-    <sequenceFlow id="f_low" sourceRef="gw" targetRef="low"/>
+    <sequenceFlow id="f_low" name="default" sourceRef="gw" targetRef="low"/>
     <sequenceFlow id="f3" sourceRef="high" targetRef="end"/>
     <sequenceFlow id="f4" sourceRef="low" targetRef="end"/>
   </process>

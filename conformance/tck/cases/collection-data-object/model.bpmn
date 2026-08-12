@@ -20,7 +20,7 @@
     <dataObject id="DO_items" name="items" isCollection="true"/>
     <dataObjectReference id="Ref_write" name="items" dataObjectRef="DO_items"/>
     <dataObjectReference id="Ref_read" name="items" dataObjectRef="DO_items"/>
-    <startEvent id="start"/>
+    <startEvent id="start" name="Start"/>
     <scriptTask id="seed" name="Seed items">
       <extensionElements>
         <zeebe:script expression="= [10, 20, 30]" resultVariable="raw"/>

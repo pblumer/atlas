@@ -16,8 +16,8 @@
              xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
              id="defs_multi_instance_sequential" targetNamespace="http://atlas/conformance">
   <process id="multi-instance-sequential" name="Multi-instance (sequential)" isExecutable="true">
-    <startEvent id="start"/>
-    <scriptTask id="seed">
+    <startEvent id="start" name="Start"/>
+    <scriptTask id="seed" name="Seed list">
       <extensionElements>
         <zeebe:script expression="= [1, 2, 3]" resultVariable="items"/>
       </extensionElements>
@@ -32,7 +32,7 @@
         </extensionElements>
       </multiInstanceLoopCharacteristics>
     </serviceTask>
-    <endEvent id="end"/>
+    <endEvent id="end" name="Done"/>
     <sequenceFlow id="f1" sourceRef="start" targetRef="seed"/>
     <sequenceFlow id="f2" sourceRef="seed" targetRef="step"/>
     <sequenceFlow id="f3" sourceRef="step" targetRef="end"/>

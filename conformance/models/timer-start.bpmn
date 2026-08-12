@@ -14,17 +14,17 @@
              xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
              id="defs_timer_start" targetNamespace="http://atlas/conformance">
   <process id="timer-start" name="Timer start" isExecutable="true">
-    <startEvent id="on_schedule">
+    <startEvent id="on_schedule" name="Nightly">
       <timerEventDefinition>
         <timeDuration>PT30S</timeDuration>
       </timerEventDefinition>
     </startEvent>
-    <scriptTask id="tick">
+    <scriptTask id="tick" name="Tick">
       <extensionElements>
         <zeebe:script expression="= 1" resultVariable="fired"/>
       </extensionElements>
     </scriptTask>
-    <endEvent id="end"/>
+    <endEvent id="end" name="Done"/>
     <sequenceFlow id="f1" sourceRef="on_schedule" targetRef="tick"/>
     <sequenceFlow id="f2" sourceRef="tick" targetRef="end"/>
   </process>

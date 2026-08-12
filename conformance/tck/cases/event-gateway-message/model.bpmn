@@ -15,7 +15,7 @@
              id="defs_event_based_gateway" targetNamespace="http://atlas/conformance">
   <message id="Msg_go" name="go"/>
   <process id="event-based-gateway" name="Event-based gateway" isExecutable="true">
-    <startEvent id="start"/>
+    <startEvent id="start" name="Start"/>
     <eventBasedGateway id="gw"/>
     <intermediateCatchEvent id="got_msg" name="Got message">
       <messageEventDefinition messageRef="Msg_go"/>
@@ -25,8 +25,8 @@
         <timeDuration>PT30S</timeDuration>
       </timerEventDefinition>
     </intermediateCatchEvent>
-    <endEvent id="end_msg"/>
-    <endEvent id="end_timeout"/>
+    <endEvent id="end_msg" name="Message won"/>
+    <endEvent id="end_timeout" name="Timed out"/>
     <sequenceFlow id="f1" sourceRef="start" targetRef="gw"/>
     <sequenceFlow id="f2" sourceRef="gw" targetRef="got_msg"/>
     <sequenceFlow id="f3" sourceRef="gw" targetRef="timed_out"/>
