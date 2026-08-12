@@ -7,6 +7,9 @@
   Wait(31s) and fires due timers. Exercises the timer driver path.
 -->
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
              id="defs_timer_catch" targetNamespace="http://atlas/conformance">
   <process id="timer-catch" name="Timer catch" isExecutable="true">
     <startEvent id="start"/>
@@ -19,4 +22,13 @@
     <sequenceFlow id="f1" sourceRef="start" targetRef="wait"/>
     <sequenceFlow id="f2" sourceRef="wait" targetRef="end"/>
   </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="timer-catch">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="160" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_wait" bpmnElement="wait"><dc:Bounds x="290" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="420" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="196" y="200"/><di:waypoint x="290" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="326" y="200"/><di:waypoint x="420" y="200"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 </definitions>
