@@ -341,12 +341,15 @@ export const feel = {
 // the code-editor handle (destroy / setVariables / setMarkers / focusLine).
 //   opts.variables is the initial list of in-scope variable names.
 //   opts.validate(expr) -> Promise<{ok, error}> compiles against the real engine.
+//   opts.lockPrefix(value) -> length of a dimmed, read-only leading run (the fx
+//     toggle's '=' marker); stripped before validate. Omit for a plain expression.
 // FEEL expressions are short, so the field wraps and shows no line-number gutter.
 export function attachFeelEditor(textarea, opts = {}) {
   return attachCodeEditor(textarea, {
     lang: feel,
     variables: opts.variables,
     validate: opts.validate,
+    lockPrefix: opts.lockPrefix,
     wrap: true,
     gutter: false,
   });
