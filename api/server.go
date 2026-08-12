@@ -129,6 +129,10 @@ type deployment struct {
 	DeployedAt int64 // unix seconds, for the UI's "last changed" column
 	xml        []byte
 	cp         *compiler.CompiledProcess // for the live overlay's element-id mapping
+	// inactive mirrors the persisted deactivation flag (ADR-0119) so the process
+	// listing can report it without re-reading the sidecar. The processor holds the
+	// authoritative gate; this is the display copy, kept in sync on toggle and load.
+	inactive bool
 }
 
 // Server hosts the engine behind an HTTP surface. Construct it with New, mount
@@ -819,6 +823,13 @@ func (s *Server) loadDeployments() error {
 				return fmt.Errorf("api: reload dmn model for def %d (%s): %w", rec.Key, rec.ProcessID, err)
 			}
 		}
+		// Restore the deactivation flag (ADR-0119) before the loop serves traffic and
+		// before timers tick, so a start timer restored from the log finds the definition
+		// inactive and skips instantiation. loadDeployments does not re-arm timers (they
+		// come back from the WAL), so this is the only place recovery re-applies the gate.
+		if rec.Inactive {
+			s.proc.SetProcessActive(rec.Key, false)
+		}
 		s.deployments[rec.Key] = &deployment{
 			Key:        rec.Key,
 			ProcessID:  rec.ProcessID,
@@ -827,6 +838,7 @@ func (s *Server) loadDeployments() error {
 			DeployedAt: rec.DeployedAt,
 			xml:        []byte(rec.XML),
 			cp:         cp,
+			inactive:   rec.Inactive,
 		}
 		s.order = append(s.order, rec.Key)
 		if rec.Version > s.versions[rec.ProcessID] {

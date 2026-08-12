@@ -862,7 +862,13 @@ func fireStartTimer(c *ProcessingContext, timer model.TimerValue) {
 	if cp == nil {
 		return
 	}
-	c.AppendCreateInstanceCommand(timer.ProcessDefKey, nil, "") // a timer start has no correlation key
+	// A deactivated definition keeps its start timer ticking and re-arming below, but
+	// does not instantiate while inactive — the operator paused new runs (ADR-0119). A
+	// recurring schedule resumes cleanly when reactivated; a one-shot that came due
+	// while paused is simply skipped.
+	if c.p.ProcessActive(timer.ProcessDefKey) {
+		c.AppendCreateInstanceCommand(timer.ProcessDefKey, nil, "") // a timer start has no correlation key
+	}
 	if timer.Repetitions == 0 {
 		return // one-shot (duration/date) or a finite cycle that has run out
 	}
@@ -1802,6 +1808,11 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 	// both correlate a waiting instance and start new ones, all recovered from the
 	// events the created instances emit.
 	for _, ref := range c.p.messageStarts[name] {
+		// A deactivated definition does not start on a correlating message (ADR-0119):
+		// skip it entirely, so no instance and no message-flow record are created for it.
+		if !c.p.ProcessActive(ref.defKey) {
+			continue
+		}
 		startKey := evalStartCorrelationKey(ref.correlationKey, vars)
 		// A singleton message start (ADR-0094) instantiates only if no instance of this
 		// definition is already live for this correlation key. An empty key identifies
@@ -1935,6 +1946,10 @@ func broadcastSignal(c *ProcessingContext, name string, vars []model.VariableVal
 	// fire waiting catches and start fresh instances, all recovered from the events
 	// the created instances emit.
 	for _, defKey := range c.p.signalStarts[name] {
+		// A deactivated definition does not start on a broadcast signal (ADR-0119).
+		if !c.p.ProcessActive(defKey) {
+			continue
+		}
 		c.AppendCreateInstanceCommand(defKey, vars, "")
 	}
 }
