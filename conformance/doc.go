@@ -29,6 +29,10 @@
 //     effects run concurrently vs. sequentially) must reach the same effect
 //     projection despite different control-flow shapes — a correctness check that
 //     needs no reference engine.
+//  5. Differential. The outcome must match an independent engine (Node's
+//     bpmn-engine) — the only oracle that compares against a second implementation
+//     rather than trusting Atlas alone. A control-flow subset, opt-in behind a
+//     build tag; see the differential subpackage.
 //
 // Adding a scenario: drop a self-completing BPMN model under models/, register it
 // in Scenarios (and any new Feature/Pattern), run `go test ./conformance -update`

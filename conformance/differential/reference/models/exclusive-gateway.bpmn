@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Reference translation of ../../../models/exclusive-gateway.bpmn (same element
+     ids; FEEL scripts/conditions expressed as JavaScript). betrag=250 so the
+     default (low) branch is taken, matching Atlas. -->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             id="d_exclusive" targetNamespace="http://atlas/conformance/ref">
+  <process id="exclusive-gateway" isExecutable="true">
+    <startEvent id="start"/>
+    <scriptTask id="set_betrag" scriptFormat="javascript"><script>environment.variables.betrag = 250; next();</script></scriptTask>
+    <exclusiveGateway id="gw" default="f_low"/>
+    <scriptTask id="high" scriptFormat="javascript"><script>environment.variables.grade = "H"; next();</script></scriptTask>
+    <scriptTask id="low" scriptFormat="javascript"><script>environment.variables.grade = "L"; next();</script></scriptTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="set_betrag"/>
+    <sequenceFlow id="f2" sourceRef="set_betrag" targetRef="gw"/>
+    <sequenceFlow id="f_high" sourceRef="gw" targetRef="high">
+      <conditionExpression xsi:type="tFormalExpression" language="javascript">next(null, environment.variables.betrag > 1000);</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_low" sourceRef="gw" targetRef="low"/>
+    <sequenceFlow id="f3" sourceRef="high" targetRef="end"/>
+    <sequenceFlow id="f4" sourceRef="low" targetRef="end"/>
+  </process>
+</definitions>

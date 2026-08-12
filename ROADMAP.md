@@ -150,9 +150,15 @@ The control-flow basics most real models use.
   cancel boundary routes to a handler instead of the normal end, ADR-0108) — 30
   scenarios, plus a fourth negative model pinning that a **terminate end event** is
   rejected at compile rather than silently degraded. (Escalation events stay out
-  until the engine supports `escalationEventDefinition`.) Next: data-object
-  lineage, error/message end events, and a differential job against a reference
-  engine.
+  until the engine supports `escalationEventDefinition`.) A **fifth oracle** now
+  landed: a **differential** against an independent engine (Node's `bpmn-engine`) —
+  the same process run on both, comparing a normalized control-flow projection
+  (did it complete, which activities ran), so a bug where Atlas is consistently
+  wrong shows up as disagreement with a second implementation. It covers the pure
+  control-flow subset (sequence, exclusive/parallel/inclusive gateways) and is
+  opt-in behind a build tag (needs Node), out of the default test/coverage path.
+  Next: grow the differential's reference translations, plus data-object lineage
+  and error/message end events.
 - 🚧 **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)
   engine, [ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)): the
   element, its behavior, and evaluation through the job path landed as a vertical

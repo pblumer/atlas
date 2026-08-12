@@ -15,7 +15,7 @@ The suite keeps two questions apart:
 - **Correctness** — *does the engine produce the right result, not merely a
   self-consistent one?* Answered by four layered oracles.
 
-## The four oracles
+## The five oracles
 
 | Oracle | What it proves | Where |
 |--------|----------------|-------|
@@ -23,6 +23,10 @@ The suite keeps two questions apart:
 | **Replay equivalence** | State rebuilt from the log alone equals the live state — invariant I4, on every model for free. | `Run` → `replayLog` |
 | **Structural invariants** | Model-independent truths, e.g. a completed instance leaves no orphan tokens. | `executeLive` |
 | **Metamorphic** | Behaviorally equivalent models (concurrent vs. sequential independent effects) reach the same effect projection despite different shapes — no reference engine needed. | `TestMetamorphic` |
+| **Differential** | The outcome matches an *independent* engine (Node's bpmn-engine) — the one oracle that catches Atlas being consistently wrong. Control-flow subset, opt-in. | [`differential/`](differential/) |
+
+The first four trust Atlas alone (self-consistency); the differential is the only
+one that compares against a second implementation. See [`differential/README.md`](differential/README.md).
 
 Runs are deterministic — the precondition for golden files. Self-completing
 models (inline FEEL scripts) need no help; models that **park a token** carry a
@@ -114,6 +118,8 @@ growing set of negative models. Planned extensions, roughly in order:
 
 - Broader coverage (data-object lineage, error/message end events, manual/send
   tasks) — each a row that flips from 🔲 to ✅ in `COVERAGE.md`.
+- More **differential** reference translations, growing the cross-engine subset
+  beyond pure control flow (see [`differential/README.md`](differential/README.md)).
 - More negative models as unsupported constructs are pinned (terminate end is the
   latest — the compiler rejects it rather than silently degrading it).
 - **Escalation** events once the engine supports them — there is no
