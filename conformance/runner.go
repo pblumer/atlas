@@ -199,9 +199,17 @@ func capture(store *state.Store, rootCp *compiler.CompiledProcess) (RunResult, e
 		return RunResult{}, fmt.Errorf("variables: %w", err)
 	}
 
+	// Which declared data objects are collections is compile-time metadata, not on
+	// the runtime value, so read it from the process and surface it in the trace.
+	collections := map[string]bool{}
+	for _, do := range rootCp.DataObjects() {
+		if do.IsCollection {
+			collections[rootCp.Intern(do.Name)] = true
+		}
+	}
 	var dataObjects []string
 	if err := store.DataObjectsOfScope(piKey, func(v *model.DataObjectValue) error {
-		dataObjects = append(dataObjects, renderDataObject(v))
+		dataObjects = append(dataObjects, renderDataObject(v, collections[v.Name]))
 		return nil
 	}); err != nil {
 		return RunResult{}, fmt.Errorf("data objects: %w", err)
@@ -211,17 +219,25 @@ func capture(store *state.Store, rootCp *compiler.CompiledProcess) (RunResult, e
 	return RunResult{State: instanceState, Path: path, Variables: vars, DataObjects: dataObjects}, nil
 }
 
-// renderDataObject formats one data object as "name[state]=value" (or "name=value"
-// when it declares no data state).
-func renderDataObject(v *model.DataObjectValue) string {
+// renderDataObject formats one data object as "name[annotations]=value", where the
+// optional annotations are its data state and/or "collection". A scalar object
+// with no state renders as plain "name=value".
+func renderDataObject(v *model.DataObjectValue, isCollection bool) string {
 	val := v.Text
 	if v.Kind == model.VarBool {
 		val = strconv.FormatBool(v.Bool)
 	}
-	if v.State == "" {
+	var ann []string
+	if v.State != "" {
+		ann = append(ann, v.State)
+	}
+	if isCollection {
+		ann = append(ann, "collection")
+	}
+	if len(ann) == 0 {
 		return v.Name + "=" + val
 	}
-	return v.Name + "[" + v.State + "]=" + val
+	return v.Name + "[" + strings.Join(ann, ",") + "]=" + val
 }
 
 // rootInstance returns the one instance of the root definition a scenario produced

@@ -21,15 +21,18 @@ func TestGoldenRendersEmpty(t *testing.T) {
 // boolean value branch, which the number-valued data-object scenario doesn't hit.
 func TestRenderDataObject(t *testing.T) {
 	cases := []struct {
-		v    model.DataObjectValue
-		want string
+		v            model.DataObjectValue
+		isCollection bool
+		want         string
 	}{
-		{model.DataObjectValue{Name: "order", State: "approved", Kind: model.VarNumber, Text: "100"}, "order[approved]=100"},
-		{model.DataObjectValue{Name: "flag", Kind: model.VarBool, Bool: true}, "flag=true"},
+		{model.DataObjectValue{Name: "order", State: "approved", Kind: model.VarNumber, Text: "100"}, false, "order[approved]=100"},
+		{model.DataObjectValue{Name: "flag", Kind: model.VarBool, Bool: true}, false, "flag=true"},
+		{model.DataObjectValue{Name: "items", Kind: model.VarJSON, Text: "[1,2]"}, true, "items[collection]=[1,2]"},
+		{model.DataObjectValue{Name: "rows", State: "loaded", Kind: model.VarJSON, Text: "[]"}, true, "rows[loaded,collection]=[]"},
 	}
 	for _, c := range cases {
-		if got := renderDataObject(&c.v); got != c.want {
-			t.Errorf("renderDataObject(%+v) = %q, want %q", c.v, got, c.want)
+		if got := renderDataObject(&c.v, c.isCollection); got != c.want {
+			t.Errorf("renderDataObject(%+v, %v) = %q, want %q", c.v, c.isCollection, got, c.want)
 		}
 	}
 }

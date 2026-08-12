@@ -1,0 +1,7 @@
+state: completed
+path: start -> seed -> store_items -> load_items -> end
+vars:
+  items_copy=[10,20,30]
+  raw=[10,20,30]
+data-objects:
+  items[collection]=[10,20,30]

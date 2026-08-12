@@ -70,6 +70,7 @@ var Features = []Feature{
 	{"signal-start", "Signal start event (broadcast births an instance)", nil},
 	{"data-object", "First-class data object: output/input associations and data state", nil},
 	{"field-level-data-object", "Field-level data-object writes (accrue members)", nil},
+	{"collection-data-object", "Collection data object (isCollection list)", nil},
 }
 
 // Scenario binds a BPMN model to the features it exercises, how its instance is
@@ -162,6 +163,9 @@ var Scenarios = []Scenario{
 
 	// Field-level data object: accrue members across steps into one structured object.
 	{Name: "data-object-fields", Model: "data-object-fields.bpmn", Features: []string{"field-level-data-object"}},
+
+	// Collection data object: a list-valued object round-trips, marked as a collection.
+	{Name: "collection-data-object", Model: "collection-data-object.bpmn", Features: []string{"collection-data-object"}},
 }
 
 // NegativeModel is a well-formed BPMN model that is nonetheless invalid and must be
