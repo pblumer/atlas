@@ -34,6 +34,7 @@ var connectorCompilers = []connectorCompiler{
 	{present: func(st xmlServiceTask) bool { return st.Mail != nil }, compile: compileMailConnectorTask},
 	{present: func(st xmlServiceTask) bool { return st.SharePoint != nil }, compile: compileSharePointConnectorTask},
 	{present: func(st xmlServiceTask) bool { return st.Remedy != nil }, compile: compileRemedyConnectorTask},
+	{present: func(st xmlServiceTask) bool { return st.WebScrape != nil }, compile: compileWebScrapeConnectorTask},
 }
 
 // serviceTaskRetries reads the retries count from a job-worker task's
@@ -243,6 +244,39 @@ func compileRemedyConnectorTask(b *Builder, st xmlServiceTask, retries int32) (i
 		Form:      form,
 		Fields:    fields,
 		ResultVar: strings.TrimSpace(cn.ResultVariable),
+		Retries:   retries,
+	}), nil
+}
+
+// compileWebScrapeConnectorTask compiles an <atlas:webscrapeConnector> task: it
+// fetches the model-authored URL and extracts the elements matching a CSS selector
+// via the job path (ADR-0117), not an external service-task worker. The URL and
+// selector live in the model (like REST's endpoint, ADR-0067); the extracted values
+// are written back into the required result variable as a JSON array.
+func compileWebScrapeConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+	cn := st.WebScrape
+	if strings.TrimSpace(cn.Url) == "" {
+		return 0, fmt.Errorf("compiler: webscrape connector task %q needs a url", st.Id)
+	}
+	if strings.TrimSpace(cn.Selector) == "" {
+		return 0, fmt.Errorf("compiler: webscrape connector task %q needs a selector", st.Id)
+	}
+	if strings.TrimSpace(cn.ResultVariable) == "" {
+		return 0, fmt.Errorf("compiler: webscrape connector task %q needs a resultVariable", st.Id)
+	}
+	url, err := restValue(st.Id, "url", cn.Url)
+	if err != nil {
+		return 0, err
+	}
+	selector, err := restValue(st.Id, "selector", cn.Selector)
+	if err != nil {
+		return 0, err
+	}
+	return b.AddWebScrapeConnectorTask(WebScrapeConfig{
+		Url:       url,
+		Selector:  selector,
+		Attribute: strings.TrimSpace(cn.Attribute),
+		Result:    strings.TrimSpace(cn.ResultVariable),
 		Retries:   retries,
 	}), nil
 }

@@ -1670,6 +1670,24 @@ const SERVICE_TASK_KINDS = [
       { key: "resultVariable", label: "Result variable", placeholder: "incidentNumber", hint: "The created entry's id is written into this process variable (leave empty to discard it)." },
     ],
   },
+  {
+    id: "webscrape", name: "Web Scraping Connector", desc: "Fetch a web page and extract elements by CSS selector", icon: "W",
+    // A spider-web mark on an indigo tile reads "web scraping" at a glance — this
+    // connector's counterpart to REST's globe and mail's envelope. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white web strokes.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#5b5bd6"/><g fill="none" stroke="#fff" stroke-width="1.1"><path d="M8 2.4v11.2M2.4 8h11.2M4 4l8 8M12 4l-8 8"/><circle cx="8" cy="8" r="2.6"/><circle cx="8" cy="8" r="5"/></g></svg>`,
+    ext: "atlas:WebScrapeConnector",
+    fields: [
+      { group: "Page" },
+      { key: "url", label: "URL", placeholder: "https://example.com/news", fx: true, hint: "The page to fetch. A value may be a FEEL expression (fx) over the instance's variables." },
+      { group: "Extraction" },
+      { key: "selector", label: "CSS selector", placeholder: ".headline a", fx: true, hint: "The CSS selector whose matching elements are extracted. May be a FEEL expression (fx)." },
+      { key: "attribute", label: "Attribute", placeholder: "leave empty for the element's text", hint: "The HTML attribute read from each match (e.g. href). Leave empty to extract each match's text content." },
+      { group: "Output" },
+      { key: "resultVariable", label: "Result variable", placeholder: "matches", hint: "The extracted values are written into this process variable as a JSON array." },
+    ],
+  },
 ];
 
 // serviceTaskKind returns the catalog entry a service task currently represents,

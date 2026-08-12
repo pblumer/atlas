@@ -168,6 +168,20 @@ const RemedyJobType = "io.atlas.remedy.entry"
 // worker uses MailJobTypeIndex (ADR-0079/0106).
 const RemedyJobTypeIndex int32 = 13
 
+// WebScrapeJobType is the reserved job type a web-scraping connector task carries.
+// The in-process web-scraping worker subscribes to it to fetch a model-authored URL
+// and extract the elements matching a CSS selector off the hot path (ADR-0117), the
+// same way the REST worker subscribes to RestJobType. The URL and selector live in
+// the model (like REST's endpoint); nothing about the target is registry-held.
+const WebScrapeJobType = "io.atlas.webscrape"
+
+// WebScrapeJobTypeIndex is the interned index WebScrapeJobType is guaranteed to
+// occupy in every compiled process: NewBuilder reserves it fifteenth (after the
+// fourteen job types above), so it is always 14. This lets a single in-process
+// web-scraping worker subscribe by one global index across every deployed process,
+// the same way the mail worker uses MailJobTypeIndex (ADR-0117).
+const WebScrapeJobTypeIndex int32 = 14
+
 // TemisDecisionJobType is the reserved job type a *central* business rule task
 // carries — one whose decision is evaluated by a remote temis service rather than
 // the embedded temis library. The in-process temis decision connector worker
@@ -264,6 +278,7 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 	b.intern(CsvImportJobType)     // reserve CsvImportJobTypeIndex == 11
 	b.intern(SharePointJobType)    // reserve SharePointJobTypeIndex == 12
 	b.intern(RemedyJobType)        // reserve RemedyJobTypeIndex == 13
+	b.intern(WebScrapeJobType)     // reserve WebScrapeJobTypeIndex == 14
 	return b
 }
 
@@ -854,6 +869,49 @@ func (b *Builder) AddRemedyConnectorTask(cfg RemedyConfig) int32 {
 		RemedyForm:   cfg.Form,
 		RemedyFields: cfg.Fields,
 		Retries:      cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// WebScrapeConfig is the deploy-time configuration of a web-scraping connector task
+// (ADR-0117). Url is the page to fetch and Selector the CSS selector whose matches
+// are extracted — both literal-or-FEEL values (the parser compiles the FEEL ones)
+// evaluated over the instance's variables at call time. Attribute, when set, names
+// the HTML attribute to read from each match (empty → each match's text content);
+// Result is the process variable the extracted values are written to as a JSON
+// array. Like REST, the target lives entirely in the model, not a registry.
+type WebScrapeConfig struct {
+	Url       RestExpr
+	Selector  RestExpr
+	Attribute string
+	Result    string
+	Retries   int32
+}
+
+// AddWebScrapeConnectorTask adds a web-scraping connector task and returns its
+// element id. Like a service task it creates a job on activation and waits; the job
+// carries the reserved WebScrapeJobType so the in-process web-scraping worker picks
+// it up, evaluates any FEEL url/selector values over the instance's variables,
+// fetches the page, extracts the text (or the named attribute) of every element
+// matching the selector, writes the values into Result as a JSON array, and
+// completes the job (ADR-0117). The URL and selector live in the model, mirroring
+// the REST connector (ADR-0067); nothing about the target is registry-held.
+func (b *Builder) AddWebScrapeConnectorTask(cfg WebScrapeConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:         b.intern(WebScrapeJobType),
+		Connector:       -1, // scrape carries its URL in the model, not a registry name
+		Subject:         -1, // not a clio task
+		EventType:       -1,
+		ClioQuery:       -1,
+		ReduceSpec:      -1,
+		Method:          -1, // not a REST task
+		ResultVar:       b.intern(cfg.Result),
+		Auth:            -1,
+		Url:             cfg.Url,
+		ScrapeSelector:  cfg.Selector,
+		ScrapeAttribute: b.intern(cfg.Attribute),
+		Retries:         cfg.Retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

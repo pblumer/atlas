@@ -362,6 +362,11 @@ type UserTaskDetail struct {
 //     Remedy instance; RemedyForm and RemedyFields are the form and the entry's field
 //     values (literal-or-FEEL) an incident/entry is created with through the AR System
 //     REST API; ResultVar, if set, receives the created entry's id (ADR-0106).
+//   - web scrape (JobType == WebScrapeJobType): Url is the model-authored page to
+//     fetch (literal-or-FEEL, like REST); ScrapeSelector is the CSS selector whose
+//     matches are extracted; ScrapeAttribute names the HTML attribute to read from
+//     each match (-1 → each match's text content); ResultVar receives the extracted
+//     values as a JSON array (ADR-0117).
 //
 // Unused fields for a given kind are -1 (Intern maps that back to ""); Limit is 0
 // when unset. The write and REST kinds send the instance's variables as the
@@ -434,6 +439,14 @@ type ConnectorTaskDetail struct {
 	// over the instance's variables at call time (nil for a non-remedy task).
 	RemedyForm   RestExpr
 	RemedyFields []RestKV
+	// Web-scrape connector fields (JobType == WebScrapeJobType, ADR-0117). Url (above)
+	// is the model-authored page to fetch; ScrapeSelector is the CSS selector whose
+	// matches are extracted (literal-or-FEEL, the zero RestExpr for a non-scrape task);
+	// ScrapeAttribute is the interned HTML attribute read from each match (-1 → each
+	// match's text content). ResultVar (above) receives the extracted values as a JSON
+	// array. Read only by the in-process web-scraping worker.
+	ScrapeSelector  RestExpr
+	ScrapeAttribute int32
 }
 
 // RestExpr is a REST connector field value that is either a literal string
