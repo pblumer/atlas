@@ -333,8 +333,14 @@ Making processes wait, react, and time out.
   a repeating reminder that fires while the host runs (ADR-0054); each field may be
   a literal or a **FEEL expression** over the instance's variables, including a
   FEEL cycle re-evaluated each occurrence (ADR-0055/0056). Recovery-tested
-  (ADR-0040, ADR-0054). Signal boundaries are delivered (ADR-0088); error boundaries
-  and boundaries on subprocesses remain.
+  (ADR-0040, ADR-0054). **Signal boundaries** are delivered (ADR-0088) and **error
+  boundaries** via error propagation to the nearest handler (ADR-0089). **Boundaries
+  on subprocesses** work for every kind — timer, message, and signal: a boundary
+  attached to an embedded subprocess arms when the subprocess activates, and an
+  interrupting one tears the whole subprocess scope down (every inner token
+  terminated, its jobs canceled) before routing out its flow, because a subprocess
+  is a first-class activity (ADR-0074) and boundaries are generic over activities.
+  Recovery-tested.
 - ✅ **Receive tasks** ([ADR-0102](docs/adr/0102-receive-tasks.md)): a `<receiveTask
   messageRef="…">` is the message intermediate catch event's wait-for-a-message semantics in
   **task** form — so, unlike the catch event, it is an *activity* that accepts **boundary
