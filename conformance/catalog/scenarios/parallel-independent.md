@@ -25,5 +25,28 @@ Metamorphic partner of linear-independent.bpmn: two independent effect tasks run
 - **Path:** `start` → `fork` → `set_x` → `set_y` → `join` → `join` → `end`
 - **Variables:** `x = 1`, `y = 2`
 
+## What is verified
+
+The outcome above is not asserted once — it is cross-checked by several
+independent oracles that must all agree, so a wrong result cannot slip through:
+
+- **Golden trace** — the exact path, variables, and data objects above are
+  compared byte-for-byte against a committed golden file; any drift fails the suite.
+- **Replay equivalence (invariant I4)** — the scenario runs live, then replays
+  from its event log; both must reach an identical state, proving recovery is
+  deterministic and loses nothing.
+- **Structural invariants** — the finished run must leave no orphan tokens and
+  honor the engine's six state invariants (see `docs/architecture/invariants.md`).
+- **Metamorphic equivalence** — this scenario is in the `independent-effects` group; it must
+  produce the same observable effect as `linear-independent`, even though the models differ.
+- **Differential oracle** — the same case is run against an independent BPMN
+  engine (Node's `bpmn-engine`) and both must agree on the outcome
+  (opt-in: `go test -tags differential ./conformance/differential`).
+
+## Run it yourself
+
+- **Locally:** `go test ./conformance -run 'TestScenarios/parallel-independent'`
+- **Portable case:** the language-neutral form lives in [`../../tck/cases/parallel-independent`](../../tck/cases/parallel-independent) (`model.bpmn` + `case.json` + `expected.json`), so another engine can replay it without reading Go.
+
 ---
 _Generated from `conformance/scenario.go` by `go test ./conformance -update`. Do not edit by hand._

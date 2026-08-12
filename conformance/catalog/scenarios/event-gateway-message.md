@@ -23,5 +23,23 @@ Start -&gt; eventBasedGateway -&gt; races a message catch ("go", keyless) agains
 - **Completed:** yes
 - **Path:** `start` → `gw` → `got_msg` → `timed_out` → `end_msg`
 
+## What is verified
+
+The outcome above is not asserted once — it is cross-checked by several
+independent oracles that must all agree, so a wrong result cannot slip through:
+
+- **Golden trace** — the exact path, variables, and data objects above are
+  compared byte-for-byte against a committed golden file; any drift fails the suite.
+- **Replay equivalence (invariant I4)** — the scenario runs live, then replays
+  from its event log; both must reach an identical state, proving recovery is
+  deterministic and loses nothing.
+- **Structural invariants** — the finished run must leave no orphan tokens and
+  honor the engine's six state invariants (see `docs/architecture/invariants.md`).
+
+## Run it yourself
+
+- **Locally:** `go test ./conformance -run 'TestScenarios/event-gateway-message'`
+- **Portable case:** the language-neutral form lives in [`../../tck/cases/event-gateway-message`](../../tck/cases/event-gateway-message) (`model.bpmn` + `case.json` + `expected.json`), so another engine can replay it without reading Go.
+
 ---
 _Generated from `conformance/scenario.go` by `go test ./conformance -update`. Do not edit by hand._

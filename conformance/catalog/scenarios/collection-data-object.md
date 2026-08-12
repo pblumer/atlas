@@ -22,5 +22,23 @@ Start -&gt; script "seed" (raw = [10, 20, 30]) -&gt; task "store_items" -&gt; ta
 - **Variables:** `items_copy = [10,20,30]`, `raw = [10,20,30]`
 - **Data objects:** `items[collection]=[10,20,30]`
 
+## What is verified
+
+The outcome above is not asserted once — it is cross-checked by several
+independent oracles that must all agree, so a wrong result cannot slip through:
+
+- **Golden trace** — the exact path, variables, and data objects above are
+  compared byte-for-byte against a committed golden file; any drift fails the suite.
+- **Replay equivalence (invariant I4)** — the scenario runs live, then replays
+  from its event log; both must reach an identical state, proving recovery is
+  deterministic and loses nothing.
+- **Structural invariants** — the finished run must leave no orphan tokens and
+  honor the engine's six state invariants (see `docs/architecture/invariants.md`).
+
+## Run it yourself
+
+- **Locally:** `go test ./conformance -run 'TestScenarios/collection-data-object'`
+- **Portable case:** the language-neutral form lives in [`../../tck/cases/collection-data-object`](../../tck/cases/collection-data-object) (`model.bpmn` + `case.json` + `expected.json`), so another engine can replay it without reading Go.
+
 ---
 _Generated from `conformance/scenario.go` by `go test ./conformance -update`. Do not edit by hand._
