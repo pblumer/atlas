@@ -57,10 +57,10 @@
       <bpmndi:BPMNShape id="di_cancelled" bpmnElement="cancelled"><dc:Bounds x="460" y="182" width="36" height="36"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_book_cancelled" bpmnElement="book_cancelled"><dc:Bounds x="452" y="442" width="36" height="36"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_done" bpmnElement="done"><dc:Bounds x="620" y="182" width="36" height="36"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="di_handled" bpmnElement="handled"><dc:Bounds x="620" y="442" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_handled" bpmnElement="handled"><dc:Bounds x="620" y="502" width="36" height="36"/></bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="156" y="200"/><di:waypoint x="180" y="200"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="540" y="200"/><di:waypoint x="620" y="200"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3"><di:waypoint x="470" y="478"/><di:waypoint x="470" y="520"/><di:waypoint x="638" y="520"/><di:waypoint x="638" y="478"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3"><di:waypoint x="470" y="478"/><di:waypoint x="470" y="520"/><di:waypoint x="620" y="520"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_tf1" bpmnElement="tf1"><di:waypoint x="246" y="200"/><di:waypoint x="290" y="200"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_tf2" bpmnElement="tf2"><di:waypoint x="390" y="200"/><di:waypoint x="460" y="200"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_ca1" bpmnElement="ca1"><di:waypoint x="340" y="258"/><di:waypoint x="340" y="340"/></bpmndi:BPMNEdge>
