@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/pblumer/atlas/model"
@@ -35,8 +36,8 @@ type Exporter struct {
 	pos      *PositionStore
 	maxBatch int
 
-	cursor wal.Cursor // in-memory read position; re-derived from hwm on restart
-	hwm    uint64     // highest exported record position (persisted via pos)
+	cursor wal.Cursor    // in-memory read position; re-derived from hwm on restart
+	hwm    atomic.Uint64 // highest exported record position (persisted via pos)
 }
 
 // New constructs an Exporter tailing the WAL under walDir, bounded by durable,
@@ -51,15 +52,16 @@ func New(walDir string, durable DurableFunc, client Client, index string, pos *P
 	if index == "" {
 		index = DefaultIndex
 	}
-	return &Exporter{
+	e := &Exporter{
 		tailer:   wal.NewTailer(walDir),
 		durable:  durable,
 		client:   client,
 		index:    index,
 		pos:      pos,
 		maxBatch: defaultMaxBatch,
-		hwm:      hwm,
-	}, nil
+	}
+	e.hwm.Store(hwm)
+	return e, nil
 }
 
 // Tick runs one export pass: read newly-durable event records after the
@@ -72,12 +74,15 @@ func (e *Exporter) Tick(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("opensearch: durable position: %w", err)
 	}
-	if watermark <= e.hwm {
+	// hwm is only written here (Tick runs on one goroutine), but read concurrently by
+	// the retention sweep (ADR-0115), so it is an atomic. Snapshot it once per Tick.
+	hwm := e.hwm.Load()
+	if watermark <= hwm {
 		return 0, nil // nothing durable beyond what we have already exported
 	}
 
 	var items []Item
-	lastConsumed := e.hwm
+	lastConsumed := hwm
 	next, err := e.tailer.Read(e.cursor, func(data []byte) (bool, error) {
 		rec, err := model.ReadRecord(data)
 		if err != nil {
@@ -90,7 +95,7 @@ func (e *Exporter) Tick(ctx context.Context) (int, error) {
 		if len(items) >= e.maxBatch {
 			return true, nil // batch full: resume at this record next Tick
 		}
-		if pos > e.hwm && rec.Header.RecordType == model.RecordEvent {
+		if pos > hwm && rec.Header.RecordType == model.RecordEvent {
 			item, err := toItem(rec)
 			if err != nil {
 				return false, err
@@ -109,10 +114,10 @@ func (e *Exporter) Tick(ctx context.Context) (int, error) {
 			return 0, err // mark not advanced → the batch is retried next Tick
 		}
 	}
-	if lastConsumed > e.hwm {
+	if lastConsumed > hwm {
 		e.cursor = next
-		e.hwm = lastConsumed
-		if err := e.pos.Save(e.hwm); err != nil {
+		e.hwm.Store(lastConsumed)
+		if err := e.pos.Save(lastConsumed); err != nil {
 			return len(items), err
 		}
 	}
@@ -120,8 +125,9 @@ func (e *Exporter) Tick(ctx context.Context) (int, error) {
 }
 
 // HighWaterMark returns the highest record position exported so far — the value
-// persisted across restarts. Exposed for observability and tests.
-func (e *Exporter) HighWaterMark() uint64 { return e.hwm }
+// persisted across restarts. Safe to call from another goroutine (the retention
+// sweep gates deletes on it, ADR-0115).
+func (e *Exporter) HighWaterMark() uint64 { return e.hwm.Load() }
 
 // document is the JSON shape of an exported event: the record header fields plus
 // the record's value marshalled generically (inline, via the any field). It is a

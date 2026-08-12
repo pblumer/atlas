@@ -186,11 +186,12 @@ func TestRecordRoundTrip(t *testing.T) {
 			vt:     VTProcessInstance,
 			intent: IntentCompleted,
 			value: &ProcessInstanceValue{
-				ProcessDefKey:  NewKey(3, 2),
-				State:          PICompleted,
-				CompletedAt:    1_700_000_000_000_000_000,
-				CreatedAt:      1_699_999_999_000_000_000,
-				CorrelationKey: "order-42",
+				ProcessDefKey:     NewKey(3, 2),
+				State:             PICompleted,
+				CompletedAt:       1_700_000_000_000_000_000,
+				CreatedAt:         1_699_999_999_000_000_000,
+				CorrelationKey:    "order-42",
+				CompletedPosition: 4_242,
 			},
 		},
 		{

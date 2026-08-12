@@ -277,6 +277,43 @@ func (t *Tx) PutProcessInstanceHistory(key uint64, v *model.ProcessInstanceValue
 	return t.b.Set(keyProcessInstanceHistory(key), t.encodeValue(v), nil)
 }
 
+// PurgeInstanceHistory hard-deletes a finished instance from the state store: the
+// terminal history record and every per-instance history/live family addressable
+// from the instance key (and its definition key), so no orphaned rows outlive it
+// (ADR-0115). It touches no per-definition counter — the active count was already
+// decremented at termination and the finished count is monotonic (ADR-0083). Every
+// delete is idempotent (an absent key is a no-op), so a replayed or re-enqueued
+// purge is safe. Called only from applyToState(IntentPurged), so it replays
+// identically on recovery (I4/I6).
+//
+// Not swept (by design, see ADR-0115): message-flow history (keyed by receiver
+// definition, not instance) and incidents (an element key; a finished instance holds
+// no live incident). Sub-scope variables/data objects that outlived their activity are
+// not reached — a finished instance's live state is root-scoped (== the instance key)
+// in practice.
+func (t *Tx) PurgeInstanceHistory(piKey, procDefKey uint64) error {
+	for _, prefix := range [][]byte{
+		// The terminal history record is a full key, a strict prefix of no other, so a
+		// prefix delete over it removes exactly that record — uniform with the families.
+		keyProcessInstanceHistory(piKey),
+		elementStepInstancePrefix(piKey),
+		elementReplayInstancePrefix(piKey),
+		elementVisitInstancePrefix(procDefKey, piKey),
+		variableSnapshotScopePrefix(piKey),
+		variableAuditScopePrefix(piKey),
+		decisionEvaluationScopePrefix(piKey),
+		variablePrefix(piKey),
+		dataObjectPrefix(piKey),
+		dataObjectSnapshotScopePrefix(piKey),
+		compensableScopePrefix(piKey),
+	} {
+		if err := t.deletePrefix(prefix); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // --- MessageSubscription ---
 
 // PutMessageSubscription writes an open message subscription, keyed by its
@@ -377,7 +414,12 @@ func (t *Tx) DeleteCompensable(scopeKey, seq uint64) error {
 // collected before deleting so the scan is not disturbed. Idempotent — a scope with none
 // is a no-op.
 func (t *Tx) DeleteCompensablesOfScope(scopeKey uint64) error {
-	prefix := compensableScopePrefix(scopeKey)
+	return t.deletePrefix(compensableScopePrefix(scopeKey))
+}
+
+// deletePrefix drops every key under prefix. Keys are collected before deleting so
+// the scan is not disturbed by the deletes. Idempotent — an empty prefix is a no-op.
+func (t *Tx) deletePrefix(prefix []byte) error {
 	iter, err := t.b.NewIter(&pebble.IterOptions{LowerBound: prefix, UpperBound: prefixEnd(prefix)})
 	if err != nil {
 		return err

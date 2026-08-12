@@ -32,6 +32,7 @@ func (p *Processor) registerHandlers() {
 	p.handlers = map[uint16]func(*ProcessingContext){
 		handlerKey(model.VTProcessInstance, model.IntentActivating):  handleProcessInstanceActivating,
 		handlerKey(model.VTProcessInstance, model.IntentTerminating): handleProcessInstanceTerminating,
+		handlerKey(model.VTProcessInstance, model.IntentPurging):     handleProcessInstancePurging,
 		handlerKey(model.VTElementInstance, model.IntentActivating):  handleElementActivating,
 		handlerKey(model.VTElementInstance, model.IntentCompleting):  handleElementCompleting,
 		handlerKey(model.VTJob, model.IntentJobCompleted):            handleJobCompleted,
@@ -201,6 +202,16 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 		}
 	})
 	c.AppendProcessInstanceEvent(piKey, model.IntentTerminated, *pi)
+}
+
+// handleProcessInstancePurging hard-deletes a finished instance's history (ADR-0115):
+// it emits the durable IntentPurged event carrying the instance, which applyToState
+// folds into the removal of the terminal record and every per-instance family. The
+// retention sweep only enqueues instances it read from the history index and gated on
+// age + export position, so the carried value (with its definition key) is present and
+// the deletion is safe; a re-enqueued purge just re-runs idempotent deletes.
+func handleProcessInstancePurging(c *ProcessingContext) {
+	c.AppendProcessInstanceEvent(c.cmd.Key, model.IntentPurged, c.cmd.Value.process)
 }
 
 // cancelExpiryTimer retires an instance's TTL expiry timer (ADR-0085) when the instance

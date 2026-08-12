@@ -53,8 +53,8 @@ func TestExporterBatchCapDrainsOverTicks(t *testing.T) {
 	if got, err := e.Tick(context.Background()); err != nil || got != 2 {
 		t.Fatalf("tick 1 = (%d, %v), want (2, nil)", got, err)
 	}
-	if e.hwm != 2 {
-		t.Fatalf("hwm after tick 1 = %d, want 2", e.hwm)
+	if e.hwm.Load() != 2 {
+		t.Fatalf("hwm after tick 1 = %d, want 2", e.hwm.Load())
 	}
 	// Second tick another 2.
 	if got, _ := e.Tick(context.Background()); got != 2 {

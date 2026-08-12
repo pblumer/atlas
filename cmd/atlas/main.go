@@ -143,6 +143,8 @@ func runServe(args []string) error {
 	// credentials are env-only so a secret never lands in the process arguments.
 	osURL := fs.String("opensearch-url", os.Getenv("ATLAS_OPENSEARCH_URL"), "base URL of an OpenSearch cluster to mirror the event log into (ADR-0114); empty disables the exporter. Credentials come from ATLAS_OPENSEARCH_USERNAME/ATLAS_OPENSEARCH_PASSWORD")
 	osIndex := fs.String("opensearch-index", envOr("ATLAS_OPENSEARCH_INDEX", opensearch.DefaultIndex), "OpenSearch index the exporter writes events to")
+	// History retention (ADR-0115): opt-in, off unless a positive max-age is set.
+	retentionAge := fs.Duration("retention-max-age", envDuration("ATLAS_RETENTION_MAX_AGE"), "hard-delete finished process instances older than this once their events are exported (ADR-0115), e.g. 720h; 0 disables retention")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -153,7 +155,7 @@ func runServe(args []string) error {
 		Password: os.Getenv("ATLAS_OPENSEARCH_PASSWORD"),
 		Index:    strings.TrimSpace(*osIndex),
 	}
-	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, enabled, *scriptTimeout, osCfg)
+	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, enabled, *scriptTimeout, osCfg, *retentionAge)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -164,7 +166,18 @@ func envOr(key, def string) string {
 	return def
 }
 
-func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config) error {
+// envDuration parses a duration from the environment variable, or 0 when it is
+// unset, empty, or malformed.
+func envDuration(key string) time.Duration {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+	}
+	return 0
+}
+
+func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retentionMaxAge time.Duration) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -215,6 +228,15 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 	if osExport.Enabled() {
 		apiOpts = append(apiOpts, api.WithOpenSearchExporter(osExport))
 		log.Printf("opensearch exporter enabled: indexing events into %s at %s", osExport.Index, osExport.URL)
+	}
+	// Hard-delete finished-instance history past the max age, gated on export (ADR-0115).
+	if retentionMaxAge > 0 {
+		apiOpts = append(apiOpts, api.WithRetention(retentionMaxAge))
+		gate := "durable position"
+		if osExport.Enabled() {
+			gate = "OpenSearch export"
+		}
+		log.Printf("history retention enabled: purging finished instances older than %s, gated on %s", retentionMaxAge, gate)
 	}
 	if auth {
 		apiOpts = append(apiOpts, api.WithAuth())

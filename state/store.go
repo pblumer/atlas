@@ -517,6 +517,46 @@ func (s *Store) CompletedProcessInstances(fn func(key uint64, v *model.ProcessIn
 	})
 }
 
+// errScanWindowFull halts a bounded scan once its per-tick cap is reached; it never
+// escapes CompletedProcessInstancesFrom.
+var errScanWindowFull = errors.New("state: scan window full")
+
+// CompletedProcessInstancesFrom scans finished instances in key order starting at
+// startKey, invoking fn for up to limit of them, and returns the key to resume from
+// next and whether the window filled (more may remain). It gives the retention sweep
+// a bounded, resumable window so one tick never scans the whole history family on the
+// run loop (ADR-0115, honoring the ADR-0085 no-full-scan rule). When the scan reaches
+// the end, more is false and the caller restarts from genesis.
+func (s *Store) CompletedProcessInstancesFrom(startKey uint64, limit int, fn func(key uint64, v *model.ProcessInstanceValue) error) (next uint64, more bool, err error) {
+	lo := keyProcessInstanceHistory(startKey)
+	hi := prefixEnd([]byte{byte(cfProcessInstanceHistory)})
+	n := 0
+	scanErr := s.scanRange(lo, hi, func(k, raw []byte) error {
+		if n >= limit {
+			more = true
+			return errScanWindowFull
+		}
+		v, derr := model.DecodeValue(model.VTProcessInstance, raw)
+		if derr != nil {
+			return derr
+		}
+		key := trailingKey(k)
+		if ferr := fn(key, v.(*model.ProcessInstanceValue)); ferr != nil {
+			return ferr
+		}
+		next = key + 1
+		n++
+		return nil
+	})
+	if errors.Is(scanErr, errScanWindowFull) {
+		scanErr = nil
+	}
+	if scanErr != nil {
+		return 0, false, scanErr
+	}
+	return next, more, nil
+}
+
 // Incidents calls fn with the element-instance key and value of every unresolved
 // incident — the operator "list incidents" access pattern (ADR-0061).
 func (s *Store) Incidents(fn func(elementKey uint64, v *model.IncidentValue) error) error {

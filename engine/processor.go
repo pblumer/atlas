@@ -396,6 +396,22 @@ func (p *Processor) CancelInstance(piKey uint64) {
 	})
 }
 
+// PurgeInstance enqueues the hard delete of a finished instance's history (ADR-0115):
+// its terminal record and every per-instance family are removed from the state store
+// through a durable IntentPurged event, so the deletion replays on recovery. The
+// retention sweep calls it for an instance it has already read from the history index
+// and gated on age + exported position; the carried value supplies the definition key
+// the cleanup needs. Purging an instance that is not (or no longer) in history is a
+// harmless no-op — the deletes are idempotent. Call RunUntilIdle to process it.
+func (p *Processor) PurgeInstance(piKey uint64, pi *model.ProcessInstanceValue) {
+	p.queue = append(p.queue, Command{
+		Key:       piKey,
+		ValueType: model.VTProcessInstance,
+		Intent:    model.IntentPurging,
+		Value:     inflightValue{process: *pi},
+	})
+}
+
 // PublishMessage enqueues publication of a message with the given name and
 // correlation key, optionally carrying payload variables that are written into
 // every correlated instance's scope. It correlates against open subscriptions
