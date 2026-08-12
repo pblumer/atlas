@@ -15,6 +15,38 @@ import (
 	"github.com/pblumer/atlas/mail"
 )
 
+// TestManagedConnectorKindsRegistry pins the consolidated kind registry that drives
+// the create whitelist, the create validation, and the rebuild sequence: every entry
+// is fully populated, lookup works for a managed and a non-managed kind, and the
+// whitelist error message is derived from the registry in order.
+func TestManagedConnectorKindsRegistry(t *testing.T) {
+	if len(managedConnectorKinds) == 0 {
+		t.Fatal("managedConnectorKinds is empty")
+	}
+	seen := map[string]bool{}
+	for _, k := range managedConnectorKinds {
+		if k.name == "" || k.validateCreate == nil || k.rebuild == nil {
+			t.Errorf("kind %q is incompletely defined: %+v", k.name, k)
+		}
+		if seen[k.name] {
+			t.Errorf("duplicate managed kind %q", k.name)
+		}
+		seen[k.name] = true
+		if got, ok := lookupManagedConnectorKind(k.name); !ok || got.name != k.name {
+			t.Errorf("lookupManagedConnectorKind(%q) = %+v, %v", k.name, got, ok)
+		}
+	}
+	// The model-authored http.rest kind is not managed here.
+	if _, ok := lookupManagedConnectorKind("http.rest"); ok {
+		t.Error("http.rest should not be a managed connector kind")
+	}
+	// The whitelist error lists exactly the registered kinds, in order.
+	want := "connector kind must be \"temis\", \"clio\", \"mail\", \"sharepoint\", or \"remedy\""
+	if got := managedConnectorKindsError(); got != want {
+		t.Errorf("managedConnectorKindsError() = %q, want %q", got, want)
+	}
+}
+
 // TestConnectorStoreCRUD covers the durable store directly.
 func TestConnectorStoreCRUD(t *testing.T) {
 	st, err := newConnectorStore(filepath.Join(t.TempDir(), "connectors"))
