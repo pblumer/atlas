@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: a signal start event.
+
+  Two processes. "on-signal" begins with a signal start event for "launch"
+  (signalStart "on_launch" -> script "handle" -> End); deploying it arms the
+  subscription. "thrower" is the trigger (Start -> signal throw "launch" -> End).
+  The scenario instantiates the thrower; its broadcast births a fresh "on-signal"
+  instance, which runs to completion. Root is "on-signal", so the captured trace
+  is the signal-started instance's; the thrower instance is filtered out by
+  definition key.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_signal_start" targetNamespace="http://atlas/conformance">
+  <signal id="Sig_launch" name="launch"/>
+  <process id="on-signal" name="On signal" isExecutable="true">
+    <startEvent id="on_launch">
+      <signalEventDefinition signalRef="Sig_launch"/>
+    </startEvent>
+    <scriptTask id="handle">
+      <extensionElements>
+        <zeebe:script expression="= 1" resultVariable="handled"/>
+      </extensionElements>
+    </scriptTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="on_launch" targetRef="handle"/>
+    <sequenceFlow id="f2" sourceRef="handle" targetRef="end"/>
+  </process>
+  <process id="thrower" name="Thrower" isExecutable="true">
+    <startEvent id="tstart"/>
+    <intermediateThrowEvent id="raise">
+      <signalEventDefinition signalRef="Sig_launch"/>
+    </intermediateThrowEvent>
+    <endEvent id="tend"/>
+    <sequenceFlow id="tf1" sourceRef="tstart" targetRef="raise"/>
+    <sequenceFlow id="tf2" sourceRef="raise" targetRef="tend"/>
+  </process>
+</definitions>

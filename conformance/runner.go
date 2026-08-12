@@ -120,7 +120,7 @@ func executeLive(dir string, deployables []compiler.Deployable, rootCp *compiler
 		return RunResult{}, fmt.Errorf("recover: %w", err)
 	}
 
-	d := &driver{p: p, store: store, cp: rootCp, clock: clock}
+	d := &driver{p: p, store: store, cp: rootCp, clock: clock, deployables: deployables}
 	if err := d.begin(start); err != nil {
 		return RunResult{}, fmt.Errorf("start: %w", err)
 	}

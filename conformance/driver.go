@@ -52,14 +52,15 @@ type Var struct {
 func Str(name, text string) Var { return Var{Name: name, Text: text} }
 
 // Start says how a scenario's instance is born. The zero value is an explicit
-// CreateInstance (the default for models with a none start event); message- and
-// timer-start events instead spring the instance from a trigger, so no
-// CreateInstance is ever called for them.
+// CreateInstance (the default for models with a none start event); message-,
+// timer-, and signal-start events instead spring the instance from a trigger, so
+// no CreateInstance is ever called on the root for them.
 type Start struct {
 	kind        startKind
 	message     string
 	correlation string
 	after       time.Duration
+	trigger     string // signal start: the BPMN id of the process that throws the signal
 }
 
 type startKind int
@@ -68,6 +69,7 @@ const (
 	startExplicit startKind = iota // CreateInstance(cp.Key)
 	startMessage                   // a message start event: PublishMessage births the instance
 	startTimer                     // a timer start event: an armed timer births the instance
+	startSignal                    // a signal start event: another process's throw births the instance
 )
 
 // MessageStart births the instance by publishing a message to a message start
@@ -80,6 +82,12 @@ func MessageStart(name, correlation string) Start {
 // after so the timer comes due and births the instance.
 func TimerStart(after time.Duration) Start {
 	return Start{kind: startTimer, after: after}
+}
+
+// SignalStart births the instance by instantiating the trigger process (named by
+// its BPMN id), whose signal throw broadcasts to the root's signal start event.
+func SignalStart(triggerProcessId string) Start {
+	return Start{kind: startSignal, trigger: triggerProcessId}
 }
 
 // Complete completes the parked job of the task with the given BPMN id, writing
@@ -137,10 +145,11 @@ func (s Step) describe() string {
 
 // driver applies steps against a live processor. It is not used on replay.
 type driver struct {
-	p     *engine.Processor
-	store *state.Store
-	cp    *compiler.CompiledProcess
-	clock *driverClock
+	p           *engine.Processor
+	store       *state.Store
+	cp          *compiler.CompiledProcess
+	clock       *driverClock
+	deployables []compiler.Deployable // all deployed processes, for cross-process triggers
 }
 
 // begin births the instance according to the scenario's Start and runs it to its
@@ -167,6 +176,15 @@ func (d *driver) begin(s Start) error {
 		if err := d.p.TickTimers(); err != nil {
 			return err
 		}
+		return d.p.RunUntilIdle()
+	case startSignal:
+		// The signal-start subscription is armed by deploy; instantiating the
+		// trigger process throws the signal, which broadcasts and births the root.
+		triggerCp, err := pickRoot(d.deployables, s.trigger)
+		if err != nil {
+			return fmt.Errorf("signal-start trigger: %w", err)
+		}
+		d.p.CreateInstance(triggerCp.Key)
 		return d.p.RunUntilIdle()
 	default:
 		return fmt.Errorf("unknown start kind %d", s.kind)

@@ -73,6 +73,18 @@ func TestDriverResolveWithoutIncident(t *testing.T) {
 	}
 }
 
+// TestSignalStartUnknownTrigger proves a signal-start scenario naming a trigger
+// process that isn't in the model fails loudly rather than hanging.
+func TestSignalStartUnknownTrigger(t *testing.T) {
+	model, err := scenarioByName(t, "signal-start").load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if _, err := Run(t.TempDir(), model, "on-signal", SignalStart("ghost"), nil); err == nil {
+		t.Fatal("SignalStart with an unknown trigger should error")
+	}
+}
+
 // TestBeginUnknownStartKind guards the begin switch's default.
 func TestBeginUnknownStartKind(t *testing.T) {
 	d := &driver{}

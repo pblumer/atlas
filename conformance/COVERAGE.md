@@ -31,6 +31,7 @@ Generated from the register in `scenario.go` by `go test ./conformance -update`.
 | Compensation via a boundary and a compensation throw | — | compensation | ✅ |
 | Interrupting boundary signal event | — | signal-boundary | ✅ |
 | Inclusive (OR) gateway split and synchronizing join | WCP-6, WCP-7 | inclusive-gateway | ✅ |
+| Signal start event (broadcast births an instance) | — | signal-start | ✅ |
 
 ## Control-flow patterns
 

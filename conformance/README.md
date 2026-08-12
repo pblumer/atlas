@@ -66,6 +66,7 @@ For start events the instance has no `CreateInstance` at all; the scenario's
 | (zero value) | an explicit create — the default for a none start event | `CreateInstance` |
 | `MessageStart("msg", "corrKey")` | publishing to a message start event | `PublishMessage` |
 | `TimerStart(30*time.Second)` | arming the start timer and advancing the clock past it | `ArmStartTimers` + `TickTimers` |
+| `SignalStart("thrower")` | instantiating a trigger process whose signal throw broadcasts to the root's signal start event | `CreateInstance` (on the trigger) |
 
 ## Running
 
@@ -110,7 +111,7 @@ throw/catch, **compensation**, **embedded subprocess**, **parallel and sequentia
 multi-instance**, **call activity**, and a growing set of negative models. Planned
 extensions, roughly in order:
 
-- Broader coverage (signal start, transaction/cancel end) — each a row that flips
+- Broader coverage (transaction/cancel end, data objects) — each a row that flips
   from 🔲 to ✅ in `COVERAGE.md`.
 - More negative models as unsupported constructs are pinned (terminate end is the
   latest — the compiler rejects it rather than silently degrading it).

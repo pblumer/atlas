@@ -67,6 +67,7 @@ var Features = []Feature{
 	{"compensation", "Compensation via a boundary and a compensation throw", nil},
 	{"signal-boundary", "Interrupting boundary signal event", nil},
 	{"inclusive-gateway", "Inclusive (OR) gateway split and synchronizing join", []string{"WCP-6", "WCP-7"}},
+	{"signal-start", "Signal start event (broadcast births an instance)", nil},
 }
 
 // Scenario binds a BPMN model to the features it exercises, how its instance is
@@ -149,6 +150,10 @@ var Scenarios = []Scenario{
 
 	// Inclusive (OR) gateway: open several branches by condition, join synchronizes them.
 	{Name: "inclusive-gateway", Model: "inclusive-gateway.bpmn", Features: []string{"inclusive-gateway"}},
+
+	// Signal start: instantiate the thrower; its broadcast births the root instance.
+	{Name: "signal-start", Model: "signal-start.bpmn", Features: []string{"signal-start"},
+		Root: "on-signal", Start: SignalStart("thrower")},
 }
 
 // NegativeModel is a well-formed BPMN model that is nonetheless invalid and must be
