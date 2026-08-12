@@ -30,6 +30,7 @@ Generated from the register in `scenario.go` by `go test ./conformance -update`.
 | Call activity invoking a child process | — | call-activity | ✅ |
 | Compensation via a boundary and a compensation throw | — | compensation | ✅ |
 | Interrupting boundary signal event | — | signal-boundary | ✅ |
+| Inclusive (OR) gateway split and synchronizing join | WCP-6, WCP-7 | inclusive-gateway | ✅ |
 
 ## Control-flow patterns
 
@@ -40,6 +41,8 @@ Generated from the register in `scenario.go` by `go test ./conformance -update`.
 | WCP-3 Synchronization | parallel-gateway | ✅ |
 | WCP-4 Exclusive Choice | exclusive-gateway | ✅ |
 | WCP-5 Simple Merge | exclusive-gateway | ✅ |
+| WCP-6 Multi-Choice | inclusive-gateway | ✅ |
+| WCP-7 Structured Synchronizing Merge | inclusive-gateway | ✅ |
 | WCP-16 Deferred Choice | event-based-gateway | ✅ |
 
 ## Gaps
@@ -53,3 +56,4 @@ None — every registered feature and pattern has a covering scenario.
 | neg-dangling-flow | a sequence flow targets an element that does not exist |
 | neg-boundary-bad-host | a boundary event attaches to a host that does not exist |
 | neg-unknown-message | a receive task references a message that is not declared |
+| neg-terminate-end | a terminate end event is unsupported and must not silently degrade to a plain end |

@@ -1,0 +1,6 @@
+state: completed
+path: start -> seed -> split -> priority -> eu_check -> join -> join -> end
+vars:
+  eu=done
+  order={"priority":true,"region":"EU"}
+  prio=done

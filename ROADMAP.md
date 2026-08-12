@@ -133,11 +133,13 @@ The control-flow basics most real models use.
   (the sequential one driven one job at a time), and **call activity** (a
   two-process model where the runner deploys both, instantiates the named root,
   and filters the spawned child instance out of the captured trace), **interrupting
-  signal boundary**, and **compensation** (a compensable activity's boundary links
-  to a handler that a compensation throw runs) — 24 scenarios. (Escalation events
-  stay out until the engine supports `escalationEventDefinition`.) Next: signal
-  start, transaction/cancel and terminate end events, and broader pattern
-  coverage.
+  signal boundary**, **compensation** (a compensable activity's boundary links to a
+  handler that a compensation throw runs), and the **inclusive (OR) gateway**
+  (multi-choice split + synchronizing merge, WCP-6/7) — 25 scenarios, plus a
+  fourth negative model pinning that a **terminate end event** is rejected at
+  compile rather than silently degraded. (Escalation events stay out until the
+  engine supports `escalationEventDefinition`.) Next: signal start and
+  transaction/cancel scenarios, and broader pattern coverage.
 - 🚧 **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)
   engine, [ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)): the
   element, its behavior, and evaluation through the job path landed as a vertical

@@ -25,6 +25,8 @@ var Patterns = []Pattern{
 	{"WCP-3", "Synchronization"},
 	{"WCP-4", "Exclusive Choice"},
 	{"WCP-5", "Simple Merge"},
+	{"WCP-6", "Multi-Choice"},
+	{"WCP-7", "Structured Synchronizing Merge"},
 	{"WCP-16", "Deferred Choice"},
 }
 
@@ -64,6 +66,7 @@ var Features = []Feature{
 	{"call-activity", "Call activity invoking a child process", nil},
 	{"compensation", "Compensation via a boundary and a compensation throw", nil},
 	{"signal-boundary", "Interrupting boundary signal event", nil},
+	{"inclusive-gateway", "Inclusive (OR) gateway split and synchronizing join", []string{"WCP-6", "WCP-7"}},
 }
 
 // Scenario binds a BPMN model to the features it exercises, how its instance is
@@ -143,6 +146,9 @@ var Scenarios = []Scenario{
 
 	// Signal boundary: a thrown signal interrupts a parked user task — self-completing.
 	{Name: "signal-boundary", Model: "signal-boundary.bpmn", Features: []string{"signal-boundary"}},
+
+	// Inclusive (OR) gateway: open several branches by condition, join synchronizes them.
+	{Name: "inclusive-gateway", Model: "inclusive-gateway.bpmn", Features: []string{"inclusive-gateway"}},
 }
 
 // NegativeModel is a well-formed BPMN model that is nonetheless invalid and must be
@@ -160,6 +166,7 @@ var NegativeModels = []NegativeModel{
 	{"neg-dangling-flow", "neg-dangling-flow.bpmn", "a sequence flow targets an element that does not exist"},
 	{"neg-boundary-bad-host", "neg-boundary-bad-host.bpmn", "a boundary event attaches to a host that does not exist"},
 	{"neg-unknown-message", "neg-unknown-message.bpmn", "a receive task references a message that is not declared"},
+	{"neg-terminate-end", "neg-terminate-end.bpmn", "a terminate end event is unsupported and must not silently degrade to a plain end"},
 }
 
 func (n NegativeModel) load() ([]byte, error) {
