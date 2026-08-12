@@ -1611,7 +1611,7 @@ const SERVICE_TASK_KINDS = [
       { key: "bcc", label: "Bcc", placeholder: "audit@example.com", fx: true, hint: "Delivered but never shown in the message headers." },
       { key: "from", label: "From", placeholder: "leave empty for the connector's default sender", fx: true },
       { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true },
-      { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, hint: "Plain-text body. A value may be a FEEL expression (fx) composed over the instance's variables." },
+      { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, rows: 8, hint: "Plain-text body, or a FEEL expression (fx) composed from the instance's variables — switch on fx, then press Ctrl+Space for variable completion." },
     ],
   },
   {
@@ -1744,9 +1744,10 @@ function stKindFieldsHTML(cur, ext) {
       }).join("");
       fields += `<label class="field"><span>${esc(f.label)}</span><select id="f-st-${f.key}">${opts}</select></label>`;
     } else if (f.fx) {
-      // A 1-row textarea so the fx toggle can host the FEEL editor in place.
+      // A textarea — 1 row by default, taller for prose like an e-mail body — so the
+      // fx toggle can host the FEEL editor in place at that size.
       fields += `<label class="field"><span>${esc(f.label)}</span>
-        <textarea id="f-st-${f.key}" rows="1" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
+        <textarea id="f-st-${f.key}" rows="${f.rows || 1}" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
     } else {
       fields += `<label class="field"><span>${esc(f.label)}</span>
         <input type="text" id="f-st-${f.key}" value="${esc(ext[f.key] || "")}" placeholder="${esc(f.placeholder || "")}"/></label>`;
