@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: a non-interrupting boundary message.
+
+  Start -> userTask "review" -> End "done", with a non-interrupting boundary
+  message ("ping", correlation key "K") on "review" routing to End "notified".
+  When the message arrives the boundary spawns a *parallel* token to "notified"
+  while the host keeps running — the defining property of non-interrupting. The
+  instance finishes only once both tokens end. Driver: Publish("ping", "K") then
+  Complete("review").
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_boundary_message_noninterrupting" targetNamespace="http://atlas/conformance">
+  <message id="Msg_ping" name="ping">
+    <extensionElements>
+      <zeebe:subscription correlationKey="= &quot;K&quot;"/>
+    </extensionElements>
+  </message>
+  <process id="boundary-message-noninterrupting" name="Boundary message (non-interrupting)" isExecutable="true">
+    <startEvent id="start"/>
+    <userTask id="review" name="Review">
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="reviewers"/>
+      </extensionElements>
+    </userTask>
+    <boundaryEvent id="pinged" name="Pinged" attachedToRef="review" cancelActivity="false">
+      <messageEventDefinition messageRef="Msg_ping"/>
+    </boundaryEvent>
+    <endEvent id="done"/>
+    <endEvent id="notified"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="review"/>
+    <sequenceFlow id="f2" sourceRef="review" targetRef="done"/>
+    <sequenceFlow id="f3" sourceRef="pinged" targetRef="notified"/>
+  </process>
+</definitions>

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: an interrupting boundary timer.
+
+  Start -> serviceTask "work" -> End "done", with an interrupting boundary timer
+  (PT30S) on "work" routing to End "escalated". The token parks on the service
+  job; when the timer comes due it interrupts the host (its job is discarded) and
+  the token leaves via the boundary event to "escalated". Driver: Wait(31s) — the
+  host job is never completed, so reaching "escalated" is the whole point.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_boundary_timer_interrupting" targetNamespace="http://atlas/conformance">
+  <process id="boundary-timer-interrupting" name="Boundary timer (interrupting)" isExecutable="true">
+    <startEvent id="start"/>
+    <serviceTask id="work" name="Do work">
+      <extensionElements>
+        <zeebe:taskDefinition type="work" retries="3"/>
+      </extensionElements>
+    </serviceTask>
+    <boundaryEvent id="timeout" name="Timed out" attachedToRef="work">
+      <timerEventDefinition>
+        <timeDuration>PT30S</timeDuration>
+      </timerEventDefinition>
+    </boundaryEvent>
+    <endEvent id="done"/>
+    <endEvent id="escalated"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="work"/>
+    <sequenceFlow id="f2" sourceRef="work" targetRef="done"/>
+    <sequenceFlow id="f3" sourceRef="timeout" targetRef="escalated"/>
+  </process>
+</definitions>

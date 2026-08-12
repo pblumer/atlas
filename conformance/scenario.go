@@ -48,6 +48,9 @@ var Features = []Feature{
 	{"service-task", "Service task (worker-completed job with outputs)", nil},
 	{"message-catch", "Intermediate message catch event", nil},
 	{"timer-catch", "Intermediate timer catch event", nil},
+	{"receive-task", "Receive task (message wait as an activity)", nil},
+	{"boundary-timer-interrupting", "Interrupting boundary timer event", nil},
+	{"boundary-message-noninterrupting", "Non-interrupting boundary message event", nil},
 }
 
 // Scenario binds a BPMN model to the features it exercises and the driver steps
@@ -80,6 +83,12 @@ var Scenarios = []Scenario{
 		Driver: []Step{Publish("payment-received", "K")}},
 	{Name: "timer-catch", Model: "timer-catch.bpmn", Features: []string{"timer-catch"},
 		Driver: []Step{Wait(31 * time.Second)}},
+	{Name: "receive-task", Model: "receive-task.bpmn", Features: []string{"receive-task"},
+		Driver: []Step{Publish("reply", "K")}},
+	{Name: "boundary-timer-interrupting", Model: "boundary-timer-interrupting.bpmn", Features: []string{"boundary-timer-interrupting"},
+		Driver: []Step{Wait(31 * time.Second)}},
+	{Name: "boundary-message-noninterrupting", Model: "boundary-message-noninterrupting.bpmn", Features: []string{"boundary-message-noninterrupting"},
+		Driver: []Step{Publish("ping", "K"), Complete("review")}},
 }
 
 // load reads the scenario's embedded BPMN model.

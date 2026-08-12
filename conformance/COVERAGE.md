@@ -15,6 +15,9 @@ Generated from the register in `scenario.go` by `go test ./conformance -update`.
 | Service task (worker-completed job with outputs) | — | service-task | ✅ |
 | Intermediate message catch event | — | message-catch | ✅ |
 | Intermediate timer catch event | — | timer-catch | ✅ |
+| Receive task (message wait as an activity) | — | receive-task | ✅ |
+| Interrupting boundary timer event | — | boundary-timer-interrupting | ✅ |
+| Non-interrupting boundary message event | — | boundary-message-noninterrupting | ✅ |
 
 ## Control-flow patterns
 

@@ -73,12 +73,13 @@ A regenerated golden is a **behavior change**: review the diff before committing
 ## What's next
 
 The scaffold covers self-completing control flow plus the parking features the
-driver reaches (user/service tasks, message and timer catch events). Planned
-extensions, roughly in order:
+driver reaches: user/service tasks, message and timer catch events, receive
+tasks, and interrupting/non-interrupting boundary events. Planned extensions,
+roughly in order:
 
-- More driver reach: **boundary events** (interrupting timer/message), **receive
-  tasks**, **event-based gateway**, **message/timer start events**, and job
-  **failure/incident** steps (`FailJob` → `ResolveIncident`).
+- More driver reach: **event-based gateway**, **message/timer start events**,
+  boundary **error/escalation/signal** events, and job **failure/incident** steps
+  (`FailJob` → `ResolveIncident`).
 - **Negative models** that must be rejected at compile, not at runtime (the
   category `TestRunRejectsMalformedModel` stands in for today).
 - Broader pattern coverage (inclusive gateways, subprocess, multi-instance,
