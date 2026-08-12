@@ -1170,12 +1170,8 @@ async function viewModelerHome() {
     </div>
     <h2 style="margin:22px 0 10px"><button class="section-toggle" aria-expanded="${sectionState("deployed")}" data-section="deployed">Deployed</button></h2>
     <div class="section-body" id="sec-deployed"${sectionState("deployed") ? "" : ' hidden'}>
-    <div class="card" style="padding:0">
-      <table>
-        <thead><tr><th>Process</th><th>Latest</th><th>Deployed</th><th></th></tr></thead>
-        <tbody id="rows"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
-      </table>
-    </div></div>`;
+      <div id="rows"><p class="muted" style="padding:14px 2px">Loading…</p></div>
+    </div>`;
   for (const t of view.querySelectorAll(".section-toggle"))
     t.addEventListener("click", () => toggleSection(t.dataset.section, t));
   const rows = document.getElementById("rows");
@@ -1234,42 +1230,92 @@ async function viewModelerHome() {
     if (act === "import") importArtifact("", renderProjects);
   });
 
+  // One deployed process = one row. A process may have several deployed versions;
+  // groupByProcess collapsed them, so the row shows the latest and a version count.
+  const deployRow = (g) => {
+    const older = g.versions.length > 1
+      ? ` <span class="muted">· ${g.versions.length} versions</span>` : "";
+    const label = g.latest.name || g.processId;
+    const sub = g.latest.name
+      ? `<div class="muted" style="font-size:12px">${esc(g.processId)}</div>` : "";
+    // A deactivated definition stays deployed but does not auto-start new instances
+    // from its timer/message/signal start events (ADR-0119). Flag it and offer the
+    // inverse toggle.
+    const inactive = g.latest.active === false;
+    const badge = inactive
+      ? ` <span class="pill warn" title="Deployed but paused: no new instances auto-start from its timer, message, or signal start events">Inactive</span>`
+      : "";
+    const toggleLabel = inactive ? "Activate" : "Deactivate";
+    const toggleTitle = inactive
+      ? "Resume automatic starts (timer/message/signal start events)"
+      : "Pause automatic starts: keep it deployed but stop new instances from starting on their own";
+    return `<tr>
+      <td><a href="#/modeler/d/${g.latest.key}"><b>${esc(label)}</b></a>${badge}${sub}</td>
+      <td>v${g.latest.version}${older}</td>
+      <td class="muted">${esc(fmtTime(g.latest.deployedAt))}</td>
+      <td style="text-align:right; white-space:nowrap">
+        <button class="btn ghost" data-toggle="${g.latest.key}" data-active="${inactive ? "1" : "0"}" title="${toggleTitle}">${toggleLabel}</button>
+        <a class="btn ghost" href="#/modeler/d/${g.latest.key}">Open</a>
+        <button class="btn ghost danger" data-del="${esc(g.processId)}">Delete</button>
+      </td>
+    </tr>`;
+  };
+  const deployTable = (gs) => `<div class="card" style="padding:0">
+      <table>
+        <thead><tr><th>Process</th><th>Latest</th><th>Deployed</th><th></th></tr></thead>
+        <tbody>${gs.map(deployRow).join("")}</tbody>
+      </table>
+    </div>`;
+
   const render = async () => {
     try {
-      const groups = groupByProcess(await api("GET", "/api/v1/processes"));
+      const [procs, projects] = await Promise.all([
+        api("GET", "/api/v1/processes"),
+        api("GET", "/api/v1/projects"),
+      ]);
+      const groups = groupByProcess(procs);
       if (!groups.length) {
-        rows.innerHTML = `<tr><td colspan="4" class="empty">
-          Nothing deployed yet. <a href="#/modeler/new">Create a diagram</a>, save it as a draft, then Deploy &amp; run.</td></tr>`;
+        rows.innerHTML = `<p class="empty" style="padding:14px">
+          Nothing deployed yet. <a href="#/modeler/new">Create a diagram</a>, save it as a draft, then Deploy &amp; run.</p>`;
         return;
       }
-      rows.innerHTML = groups.map((g) => {
-        const older = g.versions.length > 1
-          ? ` <span class="muted">· ${g.versions.length} versions</span>` : "";
-        const label = g.latest.name || g.processId;
-        const sub = g.latest.name
-          ? `<div class="muted" style="font-size:12px">${esc(g.processId)}</div>` : "";
-        // A deactivated definition stays deployed but does not auto-start new instances
-        // from its timer/message/signal start events (ADR-0119). Flag it and offer the
-        // inverse toggle.
-        const inactive = g.latest.active === false;
-        const badge = inactive
-          ? ` <span class="pill warn" title="Deployed but paused: no new instances auto-start from its timer, message, or signal start events">Inactive</span>`
-          : "";
-        const toggleLabel = inactive ? "Activate" : "Deactivate";
-        const toggleTitle = inactive
-          ? "Resume automatic starts (timer/message/signal start events)"
-          : "Pause automatic starts: keep it deployed but stop new instances from starting on their own";
-        return `<tr>
-          <td><a href="#/modeler/d/${g.latest.key}"><b>${esc(label)}</b></a>${badge}${sub}</td>
-          <td>v${g.latest.version}${older}</td>
-          <td class="muted">${esc(fmtTime(g.latest.deployedAt))}</td>
-          <td style="text-align:right; white-space:nowrap">
-            <button class="btn ghost" data-toggle="${g.latest.key}" data-active="${inactive ? "1" : "0"}" title="${toggleTitle}">${toggleLabel}</button>
-            <a class="btn ghost" href="#/modeler/d/${g.latest.key}">Open</a>
-            <button class="btn ghost danger" data-del="${esc(g.processId)}">Delete</button>
-          </td>
-        </tr>`;
-      }).join("");
+      // Group deployed definitions into the same project folders as design-time
+      // artifacts (ADR-0034): bucket by each process's projectId, ordering the
+      // buckets like the projects table above, then a trailing "Ungrouped" bucket for
+      // definitions with no (or an unknown) project. With no project at all, fall back
+      // to the plain flat table so a project-less install is unchanged.
+      const known = new Map(projects.map((p) => [p.id, p.name]));
+      const byProject = new Map();
+      for (const g of groups) {
+        const pid = g.latest.projectId && known.has(g.latest.projectId) ? g.latest.projectId : "";
+        if (!byProject.has(pid)) byProject.set(pid, []);
+        byProject.get(pid).push(g);
+      }
+      const buckets = [];
+      for (const p of projects) {
+        if (byProject.has(p.id)) buckets.push({ id: p.id, name: p.name, icon: "📁", groups: byProject.get(p.id) });
+      }
+      if (byProject.has("")) buckets.push({ id: "ungrouped", name: "Ungrouped", icon: "🗂", groups: byProject.get("") });
+
+      if (buckets.length === 1 && buckets[0].id === "ungrouped") {
+        rows.innerHTML = deployTable(buckets[0].groups);
+      } else {
+        rows.innerHTML = buckets.map((b) => {
+          const sec = "dep-" + b.id;
+          const open = sectionState(sec);
+          return `<div style="margin-bottom:14px">
+            <h3 style="margin:0 0 8px; font-size:15px">
+              <button class="section-toggle" aria-expanded="${open}" data-section="${esc(sec)}">
+                <span class="mi-icon">${b.icon}</span>${esc(b.name)}
+                <span class="muted" style="font-weight:normal">· ${b.groups.length}</span>
+              </button>
+            </h3>
+            <div class="section-body" id="sec-${esc(sec)}"${open ? "" : " hidden"}>${deployTable(b.groups)}</div>
+          </div>`;
+        }).join("");
+        for (const t of rows.querySelectorAll(".section-toggle"))
+          t.addEventListener("click", () => toggleSection(t.dataset.section, t));
+      }
       for (const b of rows.querySelectorAll("button[data-del]")) {
         b.addEventListener("click", () => deleteProcess(b.dataset.del, groups, render));
       }
@@ -1278,7 +1324,7 @@ async function viewModelerHome() {
           toggleProcessActive(Number(b.dataset.toggle), b.dataset.active === "1", render));
       }
     } catch (e) {
-      rows.innerHTML = `<tr><td colspan="4" class="empty">${esc(e.message)}</td></tr>`;
+      rows.innerHTML = `<p class="empty" style="padding:14px">${esc(e.message)}</p>`;
     }
   };
   await Promise.all([renderProjects(), render()]);
