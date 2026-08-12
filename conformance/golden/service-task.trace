@@ -1,0 +1,4 @@
+state: completed
+path: start -> charge -> end
+vars:
+  status=captured

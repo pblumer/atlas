@@ -1,0 +1,15 @@
+{
+  "name": "linear-independent",
+  "model": "linear-independent.bpmn",
+  "features": [
+    "sequence-flow",
+    "script-task"
+  ],
+  "patterns": [
+    "WCP-1"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": null
+}

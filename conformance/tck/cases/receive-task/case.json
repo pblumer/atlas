@@ -1,0 +1,17 @@
+{
+  "name": "receive-task",
+  "model": "receive-task.bpmn",
+  "features": [
+    "receive-task"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": [
+    {
+      "action": "publish",
+      "correlation": "K",
+      "message": "reply"
+    }
+  ]
+}

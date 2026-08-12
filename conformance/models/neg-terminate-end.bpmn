@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  NEGATIVE fixture: must be REJECTED at compile.
+
+  The end event carries a <terminateEventDefinition>. Atlas does not execute
+  terminate end events yet, and rather than silently drop the definition and
+  deploy a plain none end (abandoning the terminate semantics), the compiler
+  rejects the model. This fixture pins that "reject, don't silently degrade"
+  behavior.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             id="defs_neg_terminate_end" targetNamespace="http://atlas/conformance">
+  <process id="neg-terminate-end" name="Terminate end" isExecutable="true">
+    <startEvent id="s"/>
+    <endEvent id="stop">
+      <terminateEventDefinition/>
+    </endEvent>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="stop"/>
+  </process>
+</definitions>

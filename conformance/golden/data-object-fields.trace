@@ -1,0 +1,5 @@
+state: completed
+path: start -> set_id -> set_total -> end
+vars: (none)
+data-objects:
+  order={"id":"ORD-1","total":100}

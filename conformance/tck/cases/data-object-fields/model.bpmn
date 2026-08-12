@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: field-level data-object writes (ADR-0060).
+
+  Start -> task "set_id" -> task "set_total" -> End. The <dataObject> "order"
+  starts unset. Each pass-through task's data output association targets a single
+  member via <assignment><to>: "set_id" writes order.id, "set_total" writes
+  order.total. The engine reads the object's current JSON, sets that one member,
+  and writes the merged value back — so the object accrues field by field, and the
+  first member write creates it from unset. The captured trace shows the merged
+  order={"id":"ORD-1","total":100}. Self-completing (pass-through tasks).
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_data_object_fields" targetNamespace="http://atlas/conformance">
+  <process id="data-object-fields" name="Data object (field-level)" isExecutable="true">
+    <dataObject id="DO_order" name="order"/>
+    <dataObjectReference id="Ref_order" name="order" dataObjectRef="DO_order"/>
+    <startEvent id="start" name="Start"/>
+    <task id="set_id" name="Set id">
+      <dataOutputAssociation id="doa_set_id">
+        <targetRef>Ref_order</targetRef>
+        <assignment><from>= "ORD-1"</from><to>id</to></assignment>
+      </dataOutputAssociation>
+    </task>
+    <task id="set_total" name="Set total">
+      <dataOutputAssociation id="doa_set_total">
+        <targetRef>Ref_order</targetRef>
+        <assignment><from>= 100</from><to>total</to></assignment>
+      </dataOutputAssociation>
+    </task>
+    <endEvent id="end" name="Done"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="set_id"/>
+    <sequenceFlow id="f2" sourceRef="set_id" targetRef="set_total"/>
+    <sequenceFlow id="f3" sourceRef="set_total" targetRef="end"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="data-object-fields">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="160" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_set_id" bpmnElement="set_id"><dc:Bounds x="250" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_set_total" bpmnElement="set_total"><dc:Bounds x="410" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="570" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ref_order" bpmnElement="Ref_order"><dc:Bounds x="362" y="60" width="36" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="196" y="200"/><di:waypoint x="250" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="350" y="200"/><di:waypoint x="410" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3"><di:waypoint x="510" y="200"/><di:waypoint x="570" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_doa_set_id" bpmnElement="doa_set_id"><di:waypoint x="300" y="160"/><di:waypoint x="300" y="85"/><di:waypoint x="362" y="85"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_doa_set_total" bpmnElement="doa_set_total"><di:waypoint x="460" y="160"/><di:waypoint x="460" y="85"/><di:waypoint x="398" y="85"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

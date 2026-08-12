@@ -1,0 +1,19 @@
+{
+  "name": "service-task",
+  "model": "service-task.bpmn",
+  "features": [
+    "service-task"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": [
+    {
+      "action": "complete",
+      "element": "charge",
+      "vars": {
+        "status": "captured"
+      }
+    }
+  ]
+}

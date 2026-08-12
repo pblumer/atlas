@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: a message start event.
+
+  A message named "order-placed" starts a new instance: messageStart "on_order"
+  -> script "record" -> End. There is no CreateInstance call — the instance is
+  born from the message. The suite's Start hook publishes it with
+  MessageStart("order-placed", ""); the inline script then self-completes the run.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_message_start" targetNamespace="http://atlas/conformance">
+  <message id="Msg_order" name="order-placed"/>
+  <process id="message-start" name="Message start" isExecutable="true">
+    <startEvent id="on_order" name="Order placed">
+      <messageEventDefinition messageRef="Msg_order"/>
+    </startEvent>
+    <scriptTask id="record" name="Record order">
+      <extensionElements>
+        <zeebe:script expression="= 1" resultVariable="recorded"/>
+      </extensionElements>
+    </scriptTask>
+    <endEvent id="end" name="Done"/>
+    <sequenceFlow id="f1" sourceRef="on_order" targetRef="record"/>
+    <sequenceFlow id="f2" sourceRef="record" targetRef="end"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="message-start">
+      <bpmndi:BPMNShape id="di_on_order" bpmnElement="on_order"><dc:Bounds x="160" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_record" bpmnElement="record"><dc:Bounds x="270" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="440" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="196" y="200"/><di:waypoint x="270" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="370" y="200"/><di:waypoint x="440" y="200"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

@@ -1,0 +1,6 @@
+{
+  "name": "neg-terminate-end",
+  "model": "neg-terminate-end.bpmn",
+  "rejected": true,
+  "reason": "a terminate end event is unsupported and must not silently degrade to a plain end"
+}

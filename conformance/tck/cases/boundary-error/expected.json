@@ -1,0 +1,17 @@
+{
+  "completed": true,
+  "activities": [
+    "call",
+    "handled",
+    "on_error",
+    "start"
+  ],
+  "path": [
+    "start",
+    "call",
+    "on_error",
+    "handled"
+  ],
+  "variables": {},
+  "dataObjects": []
+}

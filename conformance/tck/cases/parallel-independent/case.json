@@ -1,0 +1,16 @@
+{
+  "name": "parallel-independent",
+  "model": "parallel-independent.bpmn",
+  "features": [
+    "parallel-gateway",
+    "script-task"
+  ],
+  "patterns": [
+    "WCP-2",
+    "WCP-3"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": null
+}

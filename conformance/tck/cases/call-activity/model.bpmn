@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: a call activity invoking a child process.
+
+  Two processes in one model. The root "call-parent" runs Start -> callActivity
+  "call" -> End; reaching the call activity creates an instance of "call-child"
+  (Start -> script -> End) and waits for it. The child is in-engine, so it
+  self-completes, and the parent's call activity then completes. The scenario's
+  Root is "call-parent"; the trace captured is the parent's, and the child
+  instance is filtered out by definition key.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_call_activity" targetNamespace="http://atlas/conformance">
+  <collaboration id="collab">
+    <participant id="p_parent" name="Caller" processRef="call-parent"/>
+    <participant id="p_child" name="Child" processRef="call-child"/>
+  </collaboration>
+  <process id="call-parent" name="Caller" isExecutable="true">
+    <startEvent id="start" name="Start"/>
+    <callActivity id="call" name="Call child">
+      <extensionElements>
+        <zeebe:calledElement processId="call-child"/>
+      </extensionElements>
+    </callActivity>
+    <endEvent id="end" name="Done"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="call"/>
+    <sequenceFlow id="f2" sourceRef="call" targetRef="end"/>
+  </process>
+  <process id="call-child" name="Child" isExecutable="true">
+    <startEvent id="cstart" name="Start"/>
+    <scriptTask id="cwork" name="Do child work">
+      <extensionElements>
+        <zeebe:script expression="= 1" resultVariable="child_done"/>
+      </extensionElements>
+    </scriptTask>
+    <endEvent id="cend" name="Done"/>
+    <sequenceFlow id="cf1" sourceRef="cstart" targetRef="cwork"/>
+    <sequenceFlow id="cf2" sourceRef="cwork" targetRef="cend"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="collab">
+      <bpmndi:BPMNShape id="di_p_parent" bpmnElement="p_parent" isHorizontal="true"><dc:Bounds x="160" y="80" width="440" height="120"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="230" y="122" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_call" bpmnElement="call"><dc:Bounds x="320" y="100" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="480" y="122" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_p_child" bpmnElement="p_child" isHorizontal="true"><dc:Bounds x="160" y="240" width="440" height="120"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_cstart" bpmnElement="cstart"><dc:Bounds x="230" y="282" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_cwork" bpmnElement="cwork"><dc:Bounds x="320" y="260" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_cend" bpmnElement="cend"><dc:Bounds x="480" y="282" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="266" y="140"/><di:waypoint x="320" y="140"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="420" y="140"/><di:waypoint x="480" y="140"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_cf1" bpmnElement="cf1"><di:waypoint x="266" y="300"/><di:waypoint x="320" y="300"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_cf2" bpmnElement="cf2"><di:waypoint x="420" y="300"/><di:waypoint x="480" y="300"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

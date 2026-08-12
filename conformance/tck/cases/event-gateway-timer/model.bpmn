@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: an event-based gateway (deferred choice).
+
+  Start -> eventBasedGateway -> races a message catch ("go", keyless) against a
+  timer catch (PT30S). Whichever fires first wins; the other is canceled. The
+  outcome is decided by the environment, not by data — that is the deferred
+  choice. One model, two scenarios: the message-driven run reaches "end_msg", the
+  timer-driven run reaches "end_timeout".
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_event_based_gateway" targetNamespace="http://atlas/conformance">
+  <message id="Msg_go" name="go"/>
+  <process id="event-based-gateway" name="Event-based gateway" isExecutable="true">
+    <startEvent id="start" name="Start"/>
+    <eventBasedGateway id="gw"/>
+    <intermediateCatchEvent id="got_msg" name="Got message">
+      <messageEventDefinition messageRef="Msg_go"/>
+    </intermediateCatchEvent>
+    <intermediateCatchEvent id="timed_out" name="Timed out">
+      <timerEventDefinition>
+        <timeDuration>PT30S</timeDuration>
+      </timerEventDefinition>
+    </intermediateCatchEvent>
+    <endEvent id="end_msg" name="Message won"/>
+    <endEvent id="end_timeout" name="Timed out"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="gw"/>
+    <sequenceFlow id="f2" sourceRef="gw" targetRef="got_msg"/>
+    <sequenceFlow id="f3" sourceRef="gw" targetRef="timed_out"/>
+    <sequenceFlow id="f4" sourceRef="got_msg" targetRef="end_msg"/>
+    <sequenceFlow id="f5" sourceRef="timed_out" targetRef="end_timeout"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="event-based-gateway">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="160" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw" bpmnElement="gw"><dc:Bounds x="270" y="175" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_got_msg" bpmnElement="got_msg"><dc:Bounds x="400" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_msg" bpmnElement="end_msg"><dc:Bounds x="520" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_timed_out" bpmnElement="timed_out"><dc:Bounds x="400" y="302" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_timeout" bpmnElement="end_timeout"><dc:Bounds x="520" y="302" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="196" y="200"/><di:waypoint x="270" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="320" y="200"/><di:waypoint x="400" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3"><di:waypoint x="295" y="225"/><di:waypoint x="295" y="320"/><di:waypoint x="400" y="320"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f4" bpmnElement="f4"><di:waypoint x="436" y="200"/><di:waypoint x="520" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f5" bpmnElement="f5"><di:waypoint x="436" y="320"/><di:waypoint x="520" y="320"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
