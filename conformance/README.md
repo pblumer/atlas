@@ -30,6 +30,12 @@ models (inline FEEL scripts) need no help; models that **park a token** carry a
 the instance is **born** is a separate axis — an explicit start by default, or a
 message/timer start event that springs it from a trigger.
 
+A model may declare more than one `<process>` (a call activity needs its child
+deployed alongside the caller); the runner compiles and deploys them all, and the
+scenario's `Root` names which one to instantiate. The captured trace is the root
+instance's — child instances a call activity spawns are filtered out by definition
+key.
+
 ## The driver
 
 A scenario's `Driver` is a list of steps, applied to the live run in order with a
@@ -99,13 +105,12 @@ Add one by dropping a `neg-*.bpmn` under `models/` and registering it in
 The suite covers self-completing control flow, the parking features the driver
 reaches (user/service tasks, messages, timers, receive tasks, boundary
 timer/message/**error** events, event-based gateway, start events), the incident
-lifecycle, **signal** throw/catch, **embedded subprocess** and **multi-instance**
-activities, and a first set of negative models. Planned extensions, roughly in
-order:
+lifecycle, **signal** throw/catch, **embedded subprocess**, **parallel and
+sequential multi-instance**, **call activity**, and a first set of negative
+models. Planned extensions, roughly in order:
 
-- Broader coverage (inclusive gateway, sequential multi-instance, compensation,
-  signal boundary/start, call activity) — each a row that flips from 🔲 to ✅ in
-  `COVERAGE.md`.
+- Broader coverage (inclusive gateway, compensation, signal boundary/start,
+  transaction/cancel) — each a row that flips from 🔲 to ✅ in `COVERAGE.md`.
 - **Escalation** events once the engine supports them — there is no
   `escalationEventDefinition` in the compiler yet, so there is no feature to
   exercise; this stays out until it lands.

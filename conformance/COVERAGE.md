@@ -26,6 +26,8 @@ Generated from the register in `scenario.go` by `go test ./conformance -update`.
 | Signal throw and catch (1:n broadcast) | — | signal-throw-catch | ✅ |
 | Embedded subprocess | — | subprocess | ✅ |
 | Parallel multi-instance activity with output collection | — | multi-instance | ✅ |
+| Sequential multi-instance activity | — | multi-instance-sequential | ✅ |
+| Call activity invoking a child process | — | call-activity | ✅ |
 
 ## Control-flow patterns
 

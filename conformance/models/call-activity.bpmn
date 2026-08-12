@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: a call activity invoking a child process.
+
+  Two processes in one model. The root "call-parent" runs Start -> callActivity
+  "call" -> End; reaching the call activity creates an instance of "call-child"
+  (Start -> script -> End) and waits for it. The child is in-engine, so it
+  self-completes, and the parent's call activity then completes. The scenario's
+  Root is "call-parent"; the trace captured is the parent's, and the child
+  instance is filtered out by definition key.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_call_activity" targetNamespace="http://atlas/conformance">
+  <process id="call-parent" name="Caller" isExecutable="true">
+    <startEvent id="start"/>
+    <callActivity id="call" name="Call child">
+      <extensionElements>
+        <zeebe:calledElement processId="call-child"/>
+      </extensionElements>
+    </callActivity>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="call"/>
+    <sequenceFlow id="f2" sourceRef="call" targetRef="end"/>
+  </process>
+  <process id="call-child" name="Child" isExecutable="true">
+    <startEvent id="cstart"/>
+    <scriptTask id="cwork">
+      <extensionElements>
+        <zeebe:script expression="= 1" resultVariable="child_done"/>
+      </extensionElements>
+    </scriptTask>
+    <endEvent id="cend"/>
+    <sequenceFlow id="cf1" sourceRef="cstart" targetRef="cwork"/>
+    <sequenceFlow id="cf2" sourceRef="cwork" targetRef="cend"/>
+  </process>
+</definitions>

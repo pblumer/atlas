@@ -17,7 +17,7 @@ func TestDriverRejectsUnknownElement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	_, err = Run(t.TempDir(), model, Start{}, []Step{Complete("does-not-exist")})
+	_, err = Run(t.TempDir(), model, "", Start{}, []Step{Complete("does-not-exist")})
 	if err == nil {
 		t.Fatal("driver accepted a Complete for an unknown element; want an error")
 	}
@@ -64,7 +64,7 @@ func TestDriverResolveWithoutIncident(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	_, err = Run(t.TempDir(), model, Start{}, []Step{Resolve("risky")})
+	_, err = Run(t.TempDir(), model, "", Start{}, []Step{Resolve("risky")})
 	if err == nil {
 		t.Fatal("Resolve without an incident should error")
 	}
@@ -89,8 +89,8 @@ func TestSingleInstanceEmpty(t *testing.T) {
 		t.Fatalf("openStores: %v", err)
 	}
 	defer closeStores(log, store)
-	if _, _, err := singleInstance(store); err == nil {
-		t.Fatal("singleInstance on an empty store returned no error")
+	if _, _, err := rootInstance(store, defKey); err == nil {
+		t.Fatal("rootInstance on an empty store returned no error")
 	}
 }
 
@@ -113,8 +113,8 @@ func TestSingleInstanceRejectsMany(t *testing.T) {
 	if err := p.RunUntilIdle(); err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if _, _, err := singleInstance(store); err == nil {
-		t.Fatal("singleInstance accepted multiple instances; want an error")
+	if _, _, err := rootInstance(store, cp.Key); err == nil {
+		t.Fatal("rootInstance accepted multiple instances; want an error")
 	}
 }
 
@@ -141,8 +141,8 @@ func TestSingleInstanceSurfacesCorruption(t *testing.T) {
 	if err := store.InjectCorruptProcessInstance(model.NewKey(1, 1)); err != nil {
 		t.Fatalf("inject: %v", err)
 	}
-	if _, _, err := singleInstance(store); err == nil {
-		t.Error("singleInstance ignored a corrupt active-instance record")
+	if _, _, err := rootInstance(store, cp.Key); err == nil {
+		t.Error("rootInstance ignored a corrupt active-instance record")
 	}
 }
 

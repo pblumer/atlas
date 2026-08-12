@@ -39,24 +39,30 @@ type RunResult struct {
 	Variables map[string]string
 }
 
-// Run compiles the model, executes it live while applying the driver steps,
-// replays its log into a fresh store, and returns the live result. It fails if
-// replay diverges from live (invariant I4) or if a completed instance left orphan
-// tokens (a structural invariant). Pass nil steps for a self-completing model.
-// base must be an empty directory unique to this call.
-func Run(base string, modelXML []byte, start Start, steps []Step) (RunResult, error) {
-	cp, err := compiler.Parse(defKey, 1, bytes.NewReader(modelXML))
+// Run compiles the model (every executable process in it — a call activity needs
+// its child deployed too), executes the root process live while applying the
+// driver steps, replays its log into a fresh store, and returns the live result.
+// It fails if replay diverges from live (invariant I4) or if a completed instance
+// left orphan tokens. root is the BPMN id of the process to instantiate; pass ""
+// when the model has exactly one process. base must be an empty directory unique
+// to this call.
+func Run(base string, modelXML []byte, root string, start Start, steps []Step) (RunResult, error) {
+	deployables, err := compiler.ParseAll(defKey, 1, bytes.NewReader(modelXML))
 	if err != nil {
 		return RunResult{}, fmt.Errorf("compile: %w", err)
 	}
-
-	liveDir := filepath.Join(base, "live")
-	live, err := executeLive(liveDir, cp, start, steps)
+	rootCp, err := pickRoot(deployables, root)
 	if err != nil {
 		return RunResult{}, err
 	}
 
-	replay, err := replayLog(liveDir, filepath.Join(base, "replay"), cp)
+	liveDir := filepath.Join(base, "live")
+	live, err := executeLive(liveDir, deployables, rootCp, start, steps)
+	if err != nil {
+		return RunResult{}, err
+	}
+
+	replay, err := replayLog(liveDir, filepath.Join(base, "replay"), deployables, rootCp)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("replay: %w", err)
 	}
@@ -68,11 +74,39 @@ func Run(base string, modelXML []byte, start Start, steps []Step) (RunResult, er
 	return live, nil
 }
 
+// pickRoot selects the process to instantiate: the one whose BPMN id matches root,
+// or the sole process when root is "".
+func pickRoot(deployables []compiler.Deployable, root string) (*compiler.CompiledProcess, error) {
+	if root == "" {
+		if len(deployables) == 1 {
+			return deployables[0].Process, nil
+		}
+		return nil, fmt.Errorf("model has %d processes; the scenario must name a Root", len(deployables))
+	}
+	for _, d := range deployables {
+		if d.Process.ProcessId() == root {
+			return d.Process, nil
+		}
+	}
+	return nil, fmt.Errorf("no process %q among the model's %d process(es)", root, len(deployables))
+}
+
+// deployAll deploys every process, the root last so a deployment-bound call
+// activity resolves an already-registered child.
+func deployAll(p *engine.Processor, deployables []compiler.Deployable, rootCp *compiler.CompiledProcess) {
+	for _, d := range deployables {
+		if d.Process.Key != rootCp.Key {
+			p.Deploy(d.Process)
+		}
+	}
+	p.Deploy(rootCp)
+}
+
 // executeLive builds a fresh engine, runs the instance to idle, applies each
 // driver step (with a RunUntilIdle after it), checks the no-orphan-tokens
 // invariant, and captures the result. It closes its store and log so the log can
 // be reopened for replay.
-func executeLive(dir string, cp *compiler.CompiledProcess, start Start, steps []Step) (RunResult, error) {
+func executeLive(dir string, deployables []compiler.Deployable, rootCp *compiler.CompiledProcess, start Start, steps []Step) (RunResult, error) {
 	log, store, err := openStores(dir)
 	if err != nil {
 		return RunResult{}, err
@@ -81,12 +115,12 @@ func executeLive(dir string, cp *compiler.CompiledProcess, start Start, steps []
 
 	clock := &driverClock{}
 	p := engine.New(1, log, store, clock)
-	p.Deploy(cp)
+	deployAll(p, deployables, rootCp)
 	if err := p.Recover(); err != nil {
 		return RunResult{}, fmt.Errorf("recover: %w", err)
 	}
 
-	d := &driver{p: p, store: store, cp: cp, clock: clock}
+	d := &driver{p: p, store: store, cp: rootCp, clock: clock}
 	if err := d.begin(start); err != nil {
 		return RunResult{}, fmt.Errorf("start: %w", err)
 	}
@@ -96,7 +130,7 @@ func executeLive(dir string, cp *compiler.CompiledProcess, start Start, steps []
 		}
 	}
 
-	res, err := capture(store, cp)
+	res, err := capture(store, rootCp)
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -116,7 +150,7 @@ func executeLive(dir string, cp *compiler.CompiledProcess, start Start, steps []
 
 // replayLog reopens the live log against a brand-new store and rebuilds state by
 // recovery alone — the "state after replay" side of invariant I4.
-func replayLog(liveDir, replayDir string, cp *compiler.CompiledProcess) (RunResult, error) {
+func replayLog(liveDir, replayDir string, deployables []compiler.Deployable, rootCp *compiler.CompiledProcess) (RunResult, error) {
 	log, err := wal.Open(wal.Options{Dir: filepath.Join(liveDir, "wal")})
 	if err != nil {
 		return RunResult{}, fmt.Errorf("reopen wal: %w", err)
@@ -129,27 +163,27 @@ func replayLog(liveDir, replayDir string, cp *compiler.CompiledProcess) (RunResu
 	defer closeStores(log, store)
 
 	p := engine.New(1, log, store, &driverClock{})
-	p.Deploy(cp)
+	deployAll(p, deployables, rootCp)
 	if err := p.Recover(); err != nil {
 		return RunResult{}, fmt.Errorf("recover: %w", err)
 	}
-	return capture(store, cp)
+	return capture(store, rootCp)
 }
 
-// capture reads the instance's observable behavior out of a store. It resolves
-// the instance key by enumeration rather than assuming it (a timer start event,
-// for one, allocates a key for its armed timer before the instance), and requires
-// exactly one instance so "nothing was created" is a loud failure, not a silently
-// empty trace.
-func capture(store *state.Store, cp *compiler.CompiledProcess) (RunResult, error) {
-	piKey, instanceState, err := singleInstance(store)
+// capture reads the root instance's observable behavior out of a store. It
+// resolves the instance by its definition key rather than assuming it (a timer
+// start allocates a key for its armed timer before the instance; a call activity
+// spawns a second, child instance), and requires exactly one instance of the root
+// definition so "nothing was created" is a loud failure, not an empty trace.
+func capture(store *state.Store, rootCp *compiler.CompiledProcess) (RunResult, error) {
+	piKey, instanceState, err := rootInstance(store, rootCp.Key)
 	if err != nil {
 		return RunResult{}, err
 	}
 
 	var path []string
 	if err := store.ElementStepHistory(piKey, func(_ int64, _ uint64, elementId int32) error {
-		path = append(path, cp.ElementBpmnId(elementId))
+		path = append(path, rootCp.ElementBpmnId(elementId))
 		return nil
 	}); err != nil {
 		return RunResult{}, fmt.Errorf("element steps: %w", err)
@@ -166,15 +200,18 @@ func capture(store *state.Store, cp *compiler.CompiledProcess) (RunResult, error
 	return RunResult{State: instanceState, Path: path, Variables: vars}, nil
 }
 
-// singleInstance returns the one process instance a scenario produced (active or
-// completed) with its state. Conformance models are single-instance by design, so
-// zero or many is an error worth surfacing.
-func singleInstance(store *state.Store) (uint64, model.ProcessInstanceState, error) {
+// rootInstance returns the one instance of the root definition a scenario produced
+// (active or completed) with its state, filtering out any child instances a call
+// activity spawned. Conformance models start exactly one root instance, so zero or
+// many is an error worth surfacing.
+func rootInstance(store *state.Store, rootDefKey uint64) (uint64, model.ProcessInstanceState, error) {
 	var keys []uint64
 	var states []model.ProcessInstanceState
 	collect := func(k uint64, v *model.ProcessInstanceValue) error {
-		keys = append(keys, k)
-		states = append(states, v.State)
+		if v.ProcessDefKey == rootDefKey {
+			keys = append(keys, k)
+			states = append(states, v.State)
+		}
 		return nil
 	}
 	if err := store.ActiveProcessInstances(collect); err != nil {
@@ -185,11 +222,11 @@ func singleInstance(store *state.Store) (uint64, model.ProcessInstanceState, err
 	}
 	switch len(keys) {
 	case 0:
-		return 0, 0, fmt.Errorf("no process instance was created")
+		return 0, 0, fmt.Errorf("no root process instance was created")
 	case 1:
 		return keys[0], states[0], nil
 	default:
-		return 0, 0, fmt.Errorf("expected exactly one process instance, got %d", len(keys))
+		return 0, 0, fmt.Errorf("expected exactly one root process instance, got %d", len(keys))
 	}
 }
 

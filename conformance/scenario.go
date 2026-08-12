@@ -60,6 +60,8 @@ var Features = []Feature{
 	{"signal", "Signal throw and catch (1:n broadcast)", nil},
 	{"embedded-subprocess", "Embedded subprocess", nil},
 	{"multi-instance", "Parallel multi-instance activity with output collection", nil},
+	{"multi-instance-sequential", "Sequential multi-instance activity", nil},
+	{"call-activity", "Call activity invoking a child process", nil},
 }
 
 // Scenario binds a BPMN model to the features it exercises, how its instance is
@@ -71,6 +73,7 @@ type Scenario struct {
 	Model      string   // file under models/ (several scenarios may share one model)
 	Features   []string // feature IDs this scenario exercises
 	EquivClass string   // non-empty: metamorphic equivalence group
+	Root       string   // BPMN id of the process to instantiate; "" = the sole process
 	Start      Start    // how the instance is born; zero value = explicit CreateInstance
 	Driver     []Step   // ordered actions that drive parked tokens; nil = self-completing
 }
@@ -123,9 +126,14 @@ var Scenarios = []Scenario{
 	// Signal: one branch throws, the other catches — self-completing.
 	{Name: "signal-throw-catch", Model: "signal-throw-catch.bpmn", Features: []string{"signal"}},
 
-	// Structure: embedded subprocess and a multi-instance activity.
+	// Structure: embedded subprocess and multi-instance (parallel and sequential).
 	{Name: "subprocess", Model: "subprocess.bpmn", Features: []string{"embedded-subprocess"}},
 	{Name: "multi-instance", Model: "multi-instance.bpmn", Features: []string{"multi-instance"}},
+	{Name: "multi-instance-sequential", Model: "multi-instance-sequential.bpmn", Features: []string{"multi-instance-sequential"},
+		Driver: []Step{Complete("step"), Complete("step"), Complete("step")}},
+
+	// Call activity: a two-process model; instantiate the parent, child self-completes.
+	{Name: "call-activity", Model: "call-activity.bpmn", Features: []string{"call-activity"}, Root: "call-parent"},
 }
 
 // NegativeModel is a well-formed BPMN model that is nonetheless invalid and must be

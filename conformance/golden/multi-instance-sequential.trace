@@ -1,0 +1,4 @@
+state: completed
+path: start -> seed -> step -> step -> step -> step -> end
+vars:
+  items=[1,2,3]
