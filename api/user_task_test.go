@@ -353,3 +353,61 @@ func TestCompleteTaskInvalidKey(t *testing.T) {
 		t.Errorf("complete task with non-numeric key: %d, want 400", code)
 	}
 }
+
+const laneUserTaskBPMN = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs">
+  <bpmn:process id="approval" isExecutable="true">
+    <bpmn:laneSet id="ls">
+      <bpmn:lane id="l_finance" name="Finance">
+        <bpmn:flowNodeRef>review</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="s"/>
+    <bpmn:userTask id="review" name="Review order"/>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="review"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="review" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+
+// TestUserTaskLane checks that a user task drawn inside a lane carries the lane in the task-list
+// response, so the Tasks app can group by it (ADR-0118 Layer A).
+func TestUserTaskLane(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", laneUserTaskBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy: status=%d body=%s", code, body)
+	}
+	var deploy struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &deploy); err != nil {
+		t.Fatalf("decode deploy: %v (%s)", err, body)
+	}
+	code, body = doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", deploy.Key), "{}", "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("create instance: status=%d body=%s", code, body)
+	}
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/tasks", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("list tasks: status=%d body=%s", code, body)
+	}
+	var tasks []struct {
+		ElementID string   `json:"elementId"`
+		Lane      string   `json:"lane"`
+		LanePath  []string `json:"lanePath"`
+	}
+	if err := json.Unmarshal(body, &tasks); err != nil {
+		t.Fatalf("decode tasks: %v (%s)", err, body)
+	}
+	if len(tasks) != 1 {
+		t.Fatalf("tasks = %d, want 1", len(tasks))
+	}
+	if tasks[0].Lane != "Finance" {
+		t.Errorf("lane = %q, want \"Finance\"", tasks[0].Lane)
+	}
+	if len(tasks[0].LanePath) != 1 || tasks[0].LanePath[0] != "Finance" {
+		t.Errorf("lanePath = %v, want [Finance]", tasks[0].LanePath)
+	}
+}

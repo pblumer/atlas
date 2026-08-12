@@ -379,6 +379,15 @@ Making processes wait, react, and time out.
   `completeScope` — `cancelEndEventBehavior` minus compensation and the cancel boundary — so no new
   recovery path; recovery-tested. The last unimplemented standard end-event type (none/message/
   signal/error/cancel already run). bpmn-js draws it natively.
+- ✅ **Lanes** (organizational metadata — Layer A) ([ADR-0118](docs/adr/0118-bpmn-lanes.md)): a
+  `<laneSet>`/`<lane>` with `<flowNodeRef>` children (and nested `<childLaneSet>`) partitions a
+  process's flow nodes into named lanes. Faithful to BPMN 2.x and Camunda 8, a lane is **metadata
+  with no execution semantics** — the compiler records each node's leaf lane (and its outermost→leaf
+  path) and the task API exposes it (`lane`, `lanePath`), which the Tasks app surfaces as a lane
+  chip and detail row; the engine, `applyToState`, and token flow are untouched. A deploy rejects a
+  `flowNodeRef` naming no flow node or a node claimed by two lanes. **Layer B** (a lane referencing
+  an Atlas group as a compile-time `candidateGroups` default) and **Layer C** (instance-level access
+  control) are designed in the ADR and deferred to their own PRs.
 - 🚧 **Incident model**: a job whose retries a worker exhausts raises a durable
   **incident** on its element instead of hanging or retrying forever; the token
   parks off the activatable index until an operator resolves the incident, which

@@ -1,10 +1,10 @@
 # ADR-0118: BPMN lanes
 
-- **Status:** Proposed
+- **Status:** Accepted (Layer A)
 - **Date:** 2026-08-12
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Proposed. A `<laneSet>`/`<lane>` partitions a process's flow nodes
+> **Implementation status.** Layer A accepted and delivered. A `<laneSet>`/`<lane>` partitions a process's flow nodes
 > into **organizational lanes** — a role, team, or system responsible for those nodes. Atlas adopts
 > lanes as **metadata with no execution semantics** (spec-faithful): the compiler records which lane
 > each node belongs to and exposes it to Operations and the Tasks app; the engine, `applyToState`,
@@ -116,16 +116,17 @@ explicit.** Layer A is the delivered scope; B and C are designed and deferred.
 
 ### Phased implementation plan (test-first, Layer A)
 
-- **Phase 1 — Compile.** Parse `<laneSet>`/`<lane>`/`<flowNodeRef>`/`<childLaneSet>`; a lane table +
-  a per-node leaf-lane index resolved from `flowNodeRef`; deploy errors for an unknown `flowNodeRef`
-  and a node in two lanes. *Tests:* a two-lane process compiles with each node mapped to its lane; a
-  nested lane maps a node to its leaf lane; an unknown/duplicate `flowNodeRef` is a deploy error; a
-  process with no lanes is unaffected.
-- **Phase 2 — API/Operations/Tasks.** Expose element→lane over the HTTP API; Operations shows the
-  lane; the Tasks app groups/filters by lane. *Tests:* the API returns the lane for an element; the
-  Tasks list groups by lane.
-- **Phase 3 — Docs.** Accept this ADR (Layer A), update the ROADMAP. (Layers B and C are separate
-  future ADRs/PRs.)
+- **Phase 1 — Compile (done).** Parse `<laneSet>`/`<lane>`/`<flowNodeRef>`/`<childLaneSet>`; a lane
+  table + a per-node leaf-lane index resolved from `flowNodeRef`; deploy errors for an unknown
+  `flowNodeRef` and a node in two lanes. *Tests:* a two-lane process compiles with each node mapped
+  to its lane; a nested lane maps a node to its leaf lane; an unknown/duplicate `flowNodeRef` is a
+  deploy error; a process with no lanes is unaffected.
+- **Phase 2 — API/Tasks (done).** Expose element→lane over the HTTP task API (`lane` = leaf-lane
+  name, `lanePath` = outermost→leaf), and surface it in the Tasks app (a lane chip in the list row, a
+  Lane detail row showing the full path). *Tests:* the task API returns the lane and lane path for a
+  user task in a lane. (Operations lane display and Tasks grouping/filtering are follow-ups.)
+- **Phase 3 — Docs (done).** Accept this ADR (Layer A), update the ROADMAP. (Layers B and C are
+  separate future ADRs/PRs.)
 
 ### Consequences
 
