@@ -93,6 +93,18 @@
       ]
     },
     {
+      "name": "CsvConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "source", "type": "String", "isAttr": true },
+        { "name": "delimiter", "type": "String", "isAttr": true },
+        { "name": "hasHeader", "type": "String", "isAttr": true },
+        { "name": "columns", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "SharePointConnector",
       "superClass": ["Element"],
       "meta": { "allowedIn": ["bpmn:ServiceTask"] },

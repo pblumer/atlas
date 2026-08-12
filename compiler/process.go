@@ -61,8 +61,14 @@ const (
 	TypeCompensationThrowEvent // an intermediate throw event that triggers compensation — runs the handlers of completed compensable activities in its scope, or of one named activity (ADR-0103)
 	TypeCompensationEndEvent   // an end event that triggers compensation, then ends its scope (ADR-0103); the trigger-and-stop counterpart of a compensation throw, reusing the throw detail table
 
+	TypeCancelEndEvent // an end event inside a transaction that cancels it: compensates the transaction's completed activities in reverse order, then routes out the transaction's cancel boundary (ADR-0108)
+
+	TypeEventBasedGateway // a deferred choice: arms every target catch event (message/timer/signal) at once and takes the branch whose event fires first, cancelling the rest (ADR-0110)
+
+	TypeSendTask // a send task: a job-creating activity identical in execution to a service task (ADR-0112) — it creates a job and waits, reusing ServiceTaskDetail and serviceTaskBehavior; a distinct type only to preserve the send-task identity, like TypeConnectorTask
+
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 31
+	numBpmnTypes = 34
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -94,6 +100,8 @@ func (t BpmnType) String() string {
 		return "ParallelGateway"
 	case TypeInclusiveGateway:
 		return "InclusiveGateway"
+	case TypeEventBasedGateway:
+		return "EventBasedGateway"
 	case TypeMessageStartEvent:
 		return "MessageStartEvent"
 	case TypeConnectorTask:
@@ -126,10 +134,14 @@ func (t BpmnType) String() string {
 		return "ErrorEndEvent"
 	case TypeReceiveTask:
 		return "ReceiveTask"
+	case TypeSendTask:
+		return "SendTask"
 	case TypeCompensationThrowEvent:
 		return "CompensationThrowEvent"
 	case TypeCompensationEndEvent:
 		return "CompensationEndEvent"
+	case TypeCancelEndEvent:
+		return "CancelEndEvent"
 	default:
 		return "Unspecified"
 	}
@@ -161,6 +173,7 @@ type CompiledNode struct {
 	EventSub        int32 // index into eventSubProcesses, -1 if this subprocess is not event-triggered (ADR-0082)
 	EventSubStart   int32 // offset into eventSubs (the event-subprocess handler nodes nested directly in this scope)
 	EventSubCount   int32 // number of event subprocesses in this scope (0 for a node that hosts none)
+	Transaction     bool  // this subprocess is a <transaction>: it may hold a cancel end event and host a cancel boundary (ADR-0108)
 }
 
 // CompiledFlow is a sequence flow between two nodes. Condition is the compiled
@@ -386,6 +399,19 @@ type ConnectorTaskDetail struct {
 	From        RestExpr
 	MailSubject RestExpr
 	Body        RestExpr
+	// CSV connector fields (JobType == CsvImportJobType, ADR-0090). CsvSource is the
+	// interned name of the process variable holding the raw CSV text (-1 → the
+	// default "csvText"); CsvResult the variable the parsed rows are written to
+	// (-1 → "rows"); CsvDelimiter the field delimiter (-1 → ","); CsvHasHeader
+	// whether the first row is a header; CsvColumns the interned field names (empty →
+	// derive them from the header row). Each is the zero value for a non-CSV task and
+	// is read only by the in-process CSV worker, which the runner dispatches by the
+	// CSV job type alone.
+	CsvSource    int32
+	CsvResult    int32
+	CsvDelimiter int32
+	CsvHasHeader bool
+	CsvColumns   []int32
 	// SharePoint connector fields (JobType == SharePointJobType, ADR-0105). Connector
 	// (above) names the server-registered SharePoint provider (its Graph base and
 	// OAuth credential live server-side). Site and List address the target list (a
@@ -509,6 +535,7 @@ const (
 	BoundarySignal                                // waits for a broadcast signal by name, then fires (ADR-0088)
 	BoundaryError                                 // catches an error propagating up to it by code, then fires; always interrupting (ADR-0089)
 	BoundaryCompensation                          // links a host activity to its compensation handler; inert — never armed as an element instance, only read on host completion to record the activity as compensable (ADR-0103)
+	BoundaryCancel                                // on a transaction only: catches the transaction's cancellation and routes its recovery flow; armed inert like an error boundary, and always interrupting (ADR-0108)
 )
 
 // BoundaryEventDetail is the per-boundary-event data a behavior needs at runtime.
@@ -660,6 +687,10 @@ type CompiledProcess struct {
 // Node returns the node with the given ElementId.
 func (p *CompiledProcess) Node(id int32) *CompiledNode { return &p.nodes[id] }
 
+// IsTransaction reports whether node id is a <transaction> subprocess — a subprocess
+// that may hold a cancel end event and host a cancel boundary (ADR-0108).
+func (p *CompiledProcess) IsTransaction(id int32) bool { return p.nodes[id].Transaction }
+
 // Flow returns the flow with the given id.
 func (p *CompiledProcess) Flow(id int32) *CompiledFlow { return &p.flows[id] }
 
@@ -746,6 +777,13 @@ func (p *CompiledProcess) NodesReaching(target int32) map[int32]bool {
 
 // ServiceTask returns the detail at the given table index.
 func (p *CompiledProcess) ServiceTask(detail int32) *ServiceTaskDetail {
+	return &p.serviceTasks[detail]
+}
+
+// SendTask returns the detail at the given table index (ADR-0112). A send task is a
+// service task under a different label — it reuses ServiceTaskDetail and the same detail
+// table, so this is ServiceTask by another name, kept for call-site clarity.
+func (p *CompiledProcess) SendTask(detail int32) *ServiceTaskDetail {
 	return &p.serviceTasks[detail]
 }
 
@@ -992,6 +1030,26 @@ func (p *CompiledProcess) UserTask(detail int32) *UserTaskDetail {
 // ConnectorTask returns the connector-task detail at the given table index.
 func (p *CompiledProcess) ConnectorTask(detail int32) *ConnectorTaskDetail {
 	return &p.connectorTasks[detail]
+}
+
+// ConnectorTaskOf returns the connector-task detail for element node id, or an
+// error if id is not a connector task in this compiled process. It is the
+// bounds-checked accessor for the job-worker path: a persisted job can outlive
+// the process definition that compiled its element as a connector task (e.g. a
+// job created before a redeploy that recompiled the element into something else,
+// or dropped its connector-task table), and resolving such a stale job must fail
+// it into an incident (ADR-0061) rather than index out of range and panic the
+// job-runner goroutine — an unrecovered panic there crashes the whole server. A
+// worker that gets an error returns it, and FailJob retries then parks the token.
+func (p *CompiledProcess) ConnectorTaskOf(id int32) (*ConnectorTaskDetail, error) {
+	if id < 0 || int(id) >= len(p.nodes) {
+		return nil, fmt.Errorf("element %d out of range (%d nodes)", id, len(p.nodes))
+	}
+	detail := p.nodes[id].Detail
+	if detail < 0 || int(detail) >= len(p.connectorTasks) {
+		return nil, fmt.Errorf("element %d is not a connector task (detail index %d, %d connector tasks)", id, detail, len(p.connectorTasks))
+	}
+	return &p.connectorTasks[detail], nil
 }
 
 // StartEvents returns the process's entry-point element ids.

@@ -436,6 +436,20 @@ func (b *Builder) AddServiceTask(jobType string, retries int32) int32 {
 	return b.addNode(TypeServiceTask, detail)
 }
 
+// AddSendTask adds a send task with the given job type and retries and returns its
+// element id (ADR-0112). A send task is a service task under a different BPMN label: it
+// creates a job and waits, so it reuses the service-task detail table and (at runtime)
+// serviceTaskBehavior. Only its node type (TypeSendTask) differs, to preserve the
+// send-task identity — the TypeConnectorTask "distinct type, shared behavior" pattern.
+func (b *Builder) AddSendTask(jobType string, retries int32) int32 {
+	detail := int32(len(b.serviceTasks))
+	b.serviceTasks = append(b.serviceTasks, ServiceTaskDetail{
+		JobType: b.intern(jobType),
+		Retries: retries,
+	})
+	return b.addNode(TypeSendTask, detail)
+}
+
 // AddScriptTask adds a script task that evaluates the given compiled FEEL
 // expression and writes the result to resultVar. Returns its element id.
 func (b *Builder) AddScriptTask(e *expr.Compiled, resultVar string) int32 {
@@ -705,6 +719,55 @@ func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
 		MailSubject: cfg.Subject,
 		Body:        cfg.Body,
 		Retries:     cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// CsvConfig is the deploy-time configuration of a CSV-to-JSON connector task
+// (ADR-0090). Source names the process variable holding the raw CSV text
+// (empty → the worker's default "csvText"); Result the variable the parsed rows
+// are written to (empty → "rows"); Delimiter the field delimiter (empty → ",");
+// HasHeader whether the first row is a header; Columns the field names (empty →
+// derive them from the header row). All are interned deploy-time data (I5).
+type CsvConfig struct {
+	Source    string
+	Result    string
+	Delimiter string
+	HasHeader bool
+	Columns   []string
+	Retries   int32
+}
+
+// AddCsvConnectorTask adds a CSV-to-JSON connector task and returns its element
+// id. Like a service task it creates a job on activation and waits; the job carries
+// the reserved CsvImportJobType so the in-process CSV worker picks it up, reads the
+// raw text from the named source variable, parses it against the authored
+// delimiter/header/columns with the same parser the ingestion endpoint uses, and
+// writes the JSON rows (and a rowCount) into the result variable (ADR-0090). The
+// layout lives in the model — unlike the ADR-0087 convention, which read it from a
+// columnConfig variable — so nothing but the file arrives at runtime.
+func (b *Builder) AddCsvConnectorTask(cfg CsvConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	cols := make([]int32, 0, len(cfg.Columns))
+	for _, c := range cfg.Columns {
+		cols = append(cols, b.intern(c))
+	}
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:      b.intern(CsvImportJobType),
+		Connector:    -1, // CSV carries its layout in the model, not a registry name
+		Subject:      -1,
+		EventType:    -1,
+		ClioQuery:    -1,
+		ReduceSpec:   -1,
+		Method:       -1,
+		ResultVar:    -1, // CSV uses its own CsvResult field, not the REST/clio one
+		Auth:         -1,
+		CsvSource:    b.intern(cfg.Source),
+		CsvResult:    b.intern(cfg.Result),
+		CsvDelimiter: b.intern(cfg.Delimiter),
+		CsvHasHeader: cfg.HasHeader,
+		CsvColumns:   cols,
+		Retries:      cfg.Retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }
@@ -986,6 +1049,12 @@ func (b *Builder) AddParallelGateway() int32 { return b.addNode(TypeParallelGate
 // and SetFlowDefault.
 func (b *Builder) AddExclusiveGateway() int32 { return b.addNode(TypeExclusiveGateway, -1) }
 
+// AddEventBasedGateway adds an event-based gateway (deferred choice) and returns its
+// element id. It carries no detail: at runtime it arms every target catch event (each
+// outgoing flow must lead to a message/timer/signal intermediate catch) and takes the
+// branch whose event fires first, cancelling the rest (ADR-0110).
+func (b *Builder) AddEventBasedGateway() int32 { return b.addNode(TypeEventBasedGateway, -1) }
+
 // AddTimerCatchEvent adds an intermediate timer catch event that waits the given
 // fixed duration (nanoseconds) before continuing, and returns its element id. It
 // is the duration convenience over AddTimerCatchSchedule.
@@ -1118,6 +1187,34 @@ func (b *Builder) AddCompensationEndEvent() int32 {
 	detail := int32(len(b.compensationThrows))
 	b.compensationThrows = append(b.compensationThrows, CompensationDetail{ActivityRef: -1})
 	return b.addNode(TypeCompensationEndEvent, detail)
+}
+
+// AddCancelEndEvent adds a cancel end event: an end event inside a transaction that cancels
+// it — compensating the transaction's completed activities in reverse order, then routing out
+// the transaction's cancel boundary (ADR-0108). It carries no detail (a cancel always
+// compensates the whole transaction). Returns its element id.
+func (b *Builder) AddCancelEndEvent() int32 { return b.addNode(TypeCancelEndEvent, -1) }
+
+// AddBoundaryCancelEvent adds a cancel boundary event attached to host (a transaction): it
+// catches the transaction's cancellation and routes its recovery flow. Armed inert like an
+// error boundary and always interrupting (ADR-0108). Returns its element id.
+func (b *Builder) AddBoundaryCancelEvent(host int32) int32 {
+	detail := int32(len(b.boundaryEventDets))
+	b.boundaryEventDets = append(b.boundaryEventDets, BoundaryEventDetail{
+		HostNode:     host,
+		Interrupting: true, // a cancel boundary is always interrupting
+		Kind:         BoundaryCancel,
+	})
+	return b.addNode(TypeBoundaryEvent, detail)
+}
+
+// SetTransaction marks an already-added subprocess node as a <transaction> (ADR-0108), so the
+// runtime and validation know it may host a cancel boundary and hold a cancel end event. A
+// no-op for an out-of-range node.
+func (b *Builder) SetTransaction(nodeID int32) {
+	if b.validNode(nodeID) {
+		b.nodes[nodeID].Transaction = true
+	}
 }
 
 // AddBoundaryCompensationEvent adds a compensation boundary event attached to host: an inert

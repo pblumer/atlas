@@ -34,6 +34,7 @@ func TestBpmnTypeString(t *testing.T) {
 		{TypeReceiveTask, "ReceiveTask"},
 		{TypeCompensationThrowEvent, "CompensationThrowEvent"},
 		{TypeCompensationEndEvent, "CompensationEndEvent"},
+		{TypeEventBasedGateway, "EventBasedGateway"},
 		{TypeUnspecified, "Unspecified"},
 		{BpmnType(200), "Unspecified"},
 	}

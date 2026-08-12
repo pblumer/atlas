@@ -112,8 +112,16 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0102](0102-receive-tasks.md) | Receive tasks — an activity that waits for a correlating message, reusing the message-catch machinery | Accepted |
 | [0103](0103-live-collaborative-modeling-sessions.md) | Live collaborative modeling sessions — real-time co-editing of drafts by people and AI agents | Proposed |
 | [0104](0104-token-simulation-embedded-subprocesses.md) | Token simulation — entering and running expanded embedded subprocesses as scopes | Accepted |
+| [0105](0105-per-server-call-activity-target-overrides.md) | Per-server call-activity target overrides — route, pin, or disable a call activity's target on one server | Proposed |
 | [0105](0105-sharepoint-connector.md) | SharePoint connector — create a list item via Microsoft Graph, provider managed and OAuth credential in the vault | Accepted |
 | [0106](0106-bmc-remedy-connector.md) | A BMC Remedy connector — server-registered ITSM entry creation via the AR System REST API | Accepted |
+| [0107](0107-backup-and-restore.md) | Backup and restore — a one-file gzip-tar download of the design-time data directory, secrets excluded | Accepted |
+| [0108](0108-bpmn-transactions.md) | BPMN transactions — a transaction subprocess whose cancel end event compensates completed work in reverse order, then routes out an always-interrupting cancel boundary | Accepted |
+| [0109](0109-full-instance-snapshot.md) | Whole-instance snapshot — a full backup including the WAL (running instances), users and vault key; restore staged and applied on restart | Accepted |
+| [0110](0110-event-based-gateways.md) | Event-based gateways — a deferred choice that arms several catch events at once; the first to fire wins and the rest are cancelled | Accepted |
+| [0111](0111-incident-model-completion.md) | Completing the incident model — job retry backoff (a retry timer holds the job off the index until due), recurring-timer re-arm FEEL-failure incidents, and start-timer FEEL failures caught at deploy | Accepted |
+| [0112](0112-send-tasks.md) | Send tasks — the single outbound element, kind chosen at author time: job/connector kinds are a distinct `TypeSendTask` reusing `serviceTaskBehavior` (the `TypeConnectorTask` precedent) with connectors/boundaries/I/O/incidents inherited; a `messageRef` kind compiles to `TypeMessageThrowEvent` (correlate, then flow on) with no new runtime | Accepted |
+| [0113](0113-org-wide-ui-theme.md) | Org-wide UI brand theme — the Console accent colour stored on the server (public read, admin-gated write) and applied for every user; the browser caches it only to avoid a flash | Accepted |
 
 ## Status values
 

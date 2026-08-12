@@ -94,6 +94,19 @@ var mcpOmittedRoutes = map[string]string{
 	// Server introspection / diagnostics an agent does not drive scenarios with.
 	"GET /api/v1/logs": "admin diagnostics, not an agent authoring/runtime action",
 
+	// Backup/restore: an admin file-transfer of the data directory (ADR-0107 design-
+	// time, ADR-0109 whole-instance snapshot), not an agent authoring/runtime action.
+	"GET /api/v1/backup":        "admin data backup download, not an agent action",
+	"POST /api/v1/restore":      "admin data restore upload, not an agent action",
+	"GET /api/v1/backup/full":   "admin whole-instance snapshot download, not an agent action",
+	"POST /api/v1/restore/full": "admin whole-instance snapshot upload, not an agent action",
+
+	// Per-server call-activity target overrides (ADR-0105): admin operator config,
+	// like connectors — an agent reads the resolution via atlas_call_activities but
+	// does not set server-local routing. requireAdmin-gated.
+	"PUT /api/v1/call-activities/overrides/{processId}":    "per-server call-activity override is admin config, not an agent action",
+	"DELETE /api/v1/call-activities/overrides/{processId}": "per-server call-activity override is admin config, not an agent action",
+
 	// Dry-run BPMN validation for the Modeler's Problems panel (ADR-0026): an MCP
 	// agent deploys directly via atlas_deploy, which already compiles and validates.
 	"POST /api/v1/validate": "modeler-time dry-run validation; atlas_deploy already compiles+validates",
@@ -158,6 +171,11 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/secrets":           "credential storage is not an agent capability",
 	"PUT /api/v1/secrets/{name}":    "credential storage is not an agent capability",
 	"DELETE /api/v1/secrets/{name}": "credential storage is not an agent capability",
+
+	// UI theme: org-wide branding config for the Console, an admin/UI concern.
+	"GET /api/v1/settings/theme":    "UI branding is a Console concern, not an agent action",
+	"PUT /api/v1/settings/theme":    "UI branding is a Console concern, not an agent action",
+	"DELETE /api/v1/settings/theme": "UI branding is a Console concern, not an agent action",
 
 	// Auth + user administration: security surface, deliberately off-limits.
 	"POST /api/v1/auth/login":          "auth flow is not an agent capability",

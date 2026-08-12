@@ -141,7 +141,10 @@ func (t *Tx) ElementInstancesOfProcess(procKey uint64, fn func(elKey uint64, v *
 // positive retry count (ADR-0061).
 func (t *Tx) PutJob(key uint64, v *model.JobValue) error {
 	err := t.b.Set(keyJob(key), t.encodeValue(v), nil)
-	if v.Retries > 0 {
+	// A job is pullable iff it has retries left AND is not currently backing off from a
+	// failure (RetryDueDate == 0): a backing-off job stays stored, off the worker-visible
+	// index, until its retry timer clears RetryDueDate and re-emits it (ADR-0111).
+	if v.Retries > 0 && v.RetryDueDate == 0 {
 		if e := t.b.Set(keyJobActivatable(v.JobType, key), nil, nil); err == nil {
 			err = e
 		}
@@ -396,6 +399,30 @@ func (t *Tx) DeleteCompensablesOfScope(scopeKey uint64) error {
 		}
 	}
 	return nil
+}
+
+// SetCanceling marks the transaction scope txKey as cancelling: a cancel end event fired in
+// it, so when its scope drains the transaction routes out its cancel boundary rather than
+// completing normally (ADR-0108). It is derived in applyToState from the cancel end event's
+// committed Completed event, so it rebuilds identically on replay (I4/I6). The value is a
+// single non-empty byte; only presence is meaningful.
+func (t *Tx) SetCanceling(txKey uint64) error {
+	return t.b.Set(keyCanceling(txKey), []byte{1}, nil)
+}
+
+// IsCanceling reports whether the transaction scope txKey was marked cancelling by a cancel
+// end event (ADR-0108). It reads through the in-flight batch, so it observes a mark written
+// earlier in the same batch.
+func (t *Tx) IsCanceling(txKey uint64) (bool, error) {
+	_, ok, err := getCopy(t.b, keyCanceling(txKey))
+	return ok, err
+}
+
+// DeleteCanceling drops the cancelling marker for txKey when the transaction tears down
+// (ADR-0108). Idempotent — a transaction that was never cancelled, or a plain subprocess that
+// never carried a marker, is a no-op.
+func (t *Tx) DeleteCanceling(txKey uint64) error {
+	return t.b.Delete(keyCanceling(txKey), nil)
 }
 
 // CompensablesOfScopeDesc calls fn for every completed compensable activity recorded

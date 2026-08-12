@@ -102,9 +102,16 @@ func connectorEnvKey(name string) string {
 //go:embed web
 var webFS embed.FS
 
-// Version is the Atlas product version reported to the UI. It is UI/display
-// metadata only and unrelated to a deployment's process version.
-const Version = "0.1.0-dev"
+// Version is the Atlas product version reported to the UI and the CLI. It is
+// UI/display metadata only and unrelated to a deployment's process version.
+//
+// It is a var, not a const, so a release build can stamp the tag into it with
+//
+//	go build -ldflags "-X github.com/pblumer/atlas/api.Version=0.1.0"
+//
+// A plain checkout build keeps the "-dev" suffix; the exact commit is always
+// available from the embedded VCS metadata (see buildInfo).
+var Version = "0.1.0-dev"
 
 // deployment is the server-side record of a deployed definition. The compiled
 // process itself lives in the processor; here we keep the metadata the UI needs
@@ -126,6 +133,12 @@ type Server struct {
 	proc  *engine.Processor
 	store *state.Store
 
+	// dataDir is the root under which every durable store lives (the WAL, the
+	// state store, and the design-time sidecar directories). The backup/restore
+	// endpoints (ADR-0107) read and write the design-time subtree of it; nothing
+	// else needs it, so it is set once at construction and read-only thereafter.
+	dataDir string
+
 	// tasks carries closures to the single run-loop goroutine that owns the
 	// processor; quit stops that goroutine.
 	tasks chan func()
@@ -146,8 +159,10 @@ type Server struct {
 	projects         *projectStore        // durable sidecar for projects grouping artifacts (ADR-0034)
 	dmnrefs          *dmnRefStore         // durable sidecar for DMN reference artifacts (ADR-0034)
 	connectors       *connectorStore      // durable sidecar for managed connector instances (ADR-0041)
+	callOverrides    *callOverrideStore   // durable sidecar for per-server call-activity target overrides (ADR-0105)
 	marketplace      []marketplacePackage // curated, bundled marketplace catalog, immutable after New (ADR-0081)
 	marketplaceStore *marketplaceStore    // durable sidecar for installed marketplace templates (ADR-0081)
+	settings         *settingsStore       // durable sidecar for org-wide UI settings, e.g. the brand theme (ADR-0113)
 	vault            *secretVault         // engine-internal encrypted secret store, nil when disabled (ADR-0069/0070)
 	vaultEnabled     bool                 // whether to build the vault; on by default, off via WithoutVault (ADR-0070)
 	users            *userStore           // durable sidecar for user accounts (ADR-0044)
@@ -366,6 +381,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	callOverrides, err := newCallOverrideStore(filepath.Join(dataDir, "call-overrides"))
+	if err != nil {
+		return nil, err
+	}
 	marketplaceStore, err := newMarketplaceStore(filepath.Join(dataDir, "marketplace"))
 	if err != nil {
 		return nil, err
@@ -380,6 +399,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	settings, err := newSettingsStore(filepath.Join(dataDir, "settings"))
+	if err != nil {
+		return nil, err
+	}
 	// DMN reference models are resolved either from a temis model service (when
 	// configured) or the zero-config <data-dir>/dmn-models folder. Both satisfy the
 	// Resolver interface, so the rest of the server is unaffected (ADR-0034/0014).
@@ -387,6 +410,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s := &Server{
 		proc:        proc,
 		store:       store,
+		dataDir:     dataDir,
 		tasks:       make(chan func()),
 		quit:        make(chan struct{}),
 		deployments: map[uint64]*deployment{},
@@ -402,9 +426,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		projects:         projects,
 		dmnrefs:          dmnrefs,
 		connectors:       connectors,
+		callOverrides:    callOverrides,
 		marketplace:      marketplaceCatalog,
 		marketplaceStore: marketplaceStore,
 		inboundSubs:      inboundSubs,
+		settings:         settings,
 		inboundPoll:      2 * time.Second,     // default cadence; WithInboundPollInterval overrides, 0 disables
 		inboundBatch:     defaultInboundBatch, // per-poll ReadEvents cap; WithInboundBatchLimit overrides
 		vaultEnabled:     true,                // opt-out: built unless WithoutVault is passed (ADR-0070)
@@ -472,89 +498,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	for jobType, exec := range s.scriptWorkers {
 		s.jobRunner.HandleWithOutput(jobType, script.Handler(store, s.processLookup, exec))
 	}
-	// A *central* business rule task delegates its decision to a remote temis
-	// service instead of the embedded library (ADR-0050). One connector worker
-	// serves every process under the reserved temis-connector job type; it resolves
-	// each job's connector name from the compiled process and calls the endpoint
-	// configured for that connector. Connectors come from the environment plus
-	// operator-managed instances in the Console (ADR-0041); the registry is built
-	// here (before the loop serves traffic) and rebuilt on every connector change.
-	// A model whose connector is not configured simply parks until it is.
-	s.temisRegistry = temis.NewRegistry()
-	clients, err := s.buildTemisClients()
-	if err != nil {
+	// Managed connector job workers (temis, clio, mail, sharepoint, remedy): one
+	// registry plus job worker(s) per kind, all driven from the managedConnectorKinds
+	// registry so adding a kind needs no new block here. Each registry is created and
+	// built before the loop serves traffic and rebuilt on every connector change; a
+	// task whose connector is not configured parks until it is.
+	if err := s.setupManagedConnectors(store); err != nil {
 		return nil, err
 	}
-	s.temisRegistry.Replace(clients)
-	s.jobRunner.HandleCompleting(compiler.TemisDecisionJobTypeIndex, temis.Handler(store, s.processLookup, s.temisRegistry, nil))
-	// A clio connector task appends, reads, or queries a server-registered clio
-	// event store (ADR-0036). One worker per operation serves every process under a
-	// reserved clio job type; each resolves its job's connector name from the
-	// compiled process and calls the endpoint configured for that connector. Unlike
-	// REST's model-authored endpoint, a clio connector's endpoint and token live in
-	// the managed connector store; the token is resolved from the vault at build time
-	// (ADR-0041). The registry is built here (before the loop serves traffic) and
-	// rebuilt on every connector change; a task whose connector is not configured
-	// parks until it is.
-	s.clioRegistry = clio.NewRegistry()
-	clioClients, err := s.buildClioClients()
-	if err != nil {
-		return nil, err
-	}
-	s.clioRegistry.Replace(clioClients)
-	s.jobRunner.Handle(compiler.ClioWriteJobTypeIndex, clio.Handler(store, s.processLookup, s.clioRegistry))
-	s.jobRunner.HandleWithOutput(compiler.ClioQueryJobTypeIndex, clio.QueryHandler(store, s.processLookup, s.clioRegistry))
-	s.jobRunner.HandleWithOutput(compiler.ClioReadJobTypeIndex, clio.ReadHandler(store, s.processLookup, s.clioRegistry))
-	// An outbound mail connector task sends a model-authored message through a
-	// server-registered mail provider (ADR-0079). One worker serves every process
-	// under the reserved mail job type; it resolves each job's connector name and
-	// recipients/subject/body from the compiled process, sends the message off the run
-	// loop and after fsync, and completes the job. The provider host and credentials
-	// live in the managed connector store like clio's; the credential is resolved from
-	// the vault at build time (ADR-0041), so a secret never lives in a model. The
-	// registry is built here and rebuilt on every connector change; a task whose
-	// connector is not configured parks until it is.
-	s.mailRegistry = mail.NewRegistry()
-	mailClients, err := s.buildMailClients()
-	if err != nil {
-		return nil, err
-	}
-	s.mailRegistry.Replace(mailClients)
-	s.jobRunner.Handle(compiler.MailJobTypeIndex, mail.Handler(store, s.processLookup, s.mailRegistry))
-	// A SharePoint connector task creates a list item in a model-authored site/list
-	// through a server-registered Microsoft Graph provider (ADR-0105). One worker
-	// serves every process under the reserved SharePoint job type; it resolves each
-	// job's connector name and site/list/fields from the compiled process, creates the
-	// item off the run loop and after fsync, and writes the created item's JSON into
-	// the task's result variable. The Graph base and OAuth credential live in the
-	// managed connector store like mail's; the credential is resolved from the vault at
-	// build time (ADR-0041), so a secret never lives in a model. The registry is built
-	// here and rebuilt on every connector change; a task whose connector is not
-	// configured parks until it is.
-	s.sharePointRegistry = sharepoint.NewRegistry()
-	sharePointClients, err := s.buildSharePointClients()
-	if err != nil {
-		return nil, err
-	}
-	s.sharePointRegistry.Replace(sharePointClients)
-	s.jobRunner.HandleWithOutput(compiler.SharePointJobTypeIndex, sharepoint.Handler(store, s.processLookup, s.sharePointRegistry))
-	// A BMC Remedy connector task creates an entry (e.g. an incident) in a Remedy form
-	// through the AR System REST API (ADR-0106). One worker serves every process under
-	// the reserved Remedy job type; it resolves each job's connector/form/fields from
-	// the compiled process, creates the entry off the run loop and after fsync, writes
-	// the new entry id into the task's result variable, and completes the job. The
-	// Remedy base URL and credentials live in the managed connector store like mail's;
-	// the credential bundle (username/password) is resolved from the vault at build
-	// time (ADR-0041), so a secret never lives in a model. The registry is built here
-	// and rebuilt on every connector change; a task whose connector is not configured
-	// parks until it is.
-	s.remedyRegistry = remedy.NewRegistry()
-	remedyClients, err := s.buildRemedyClients()
-	if err != nil {
-		return nil, err
-	}
-	s.remedyRegistry.Replace(remedyClients)
-	s.jobRunner.HandleWithOutput(compiler.RemedyJobTypeIndex, remedy.Handler(store, s.processLookup, s.remedyRegistry))
 	// An HTTP-REST connector task calls a model-authored endpoint (ADR-0067). One
 	// worker serves every process under the reserved REST job type; it resolves each
 	// job's method/url/headers/query/result-variable from the compiled process, calls
@@ -568,8 +519,15 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// records is ingested and validated on the engine with the file arriving through a
 	// user-task form rather than a side-channel endpoint (ADR-0087). One worker serves
 	// every process under the reserved CSV-import job type.
-	s.jobRunner.HandleWithOutput(compiler.CsvImportJobTypeIndex, csvImportHandler(store))
+	s.jobRunner.HandleWithOutput(compiler.CsvImportJobTypeIndex, csvImportHandler(store, s.processLookup))
 	if err := s.loadDeployments(); err != nil {
+		return nil, err
+	}
+	// Push per-server call-activity overrides into the processor. Runs after
+	// loadDeployments so a pin's version resolves to a definition key, and before the
+	// loop serves traffic so touching the processor directly is single-writer-safe
+	// (ADR-0105).
+	if err := s.loadCallOverrides(); err != nil {
 		return nil, err
 	}
 	s.wg.Add(3)

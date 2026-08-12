@@ -2,7 +2,21 @@
 
 ## Status
 
-Atlas is in early development and is **not yet ready for production use**. There are no supported releases and no security guarantees at this stage. Treat the current code as experimental.
+Atlas is in early development. The `0.x` line is a **developer preview** and is
+**not ready for production use** — the pre-1.0 API and on-disk formats are
+unstable, and there are no hard security guarantees at this stage. Treat it as
+experimental.
+
+## Supported versions
+
+Only the **latest `0.x` release** (and the `main` branch it is cut from) is
+supported. Security fixes land in the next release rather than as backported
+patches to older tags; there are no long-term-support branches before 1.0.
+
+| Version | Supported |
+|---------|-----------|
+| latest `0.x` / `main` | ✅ |
+| older `0.x` tags | ❌ |
 
 ## Reporting a vulnerability
 

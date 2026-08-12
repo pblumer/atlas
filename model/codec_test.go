@@ -40,7 +40,8 @@ func TestRecordRoundTrip(t *testing.T) {
 				TokenID:            NewKey(3, 4),
 				ParentTokenID:      NewKey(3, 5),
 				SourceFlowId:       9,
-				MultiInstance:      2, // an inner multi-instance iteration (ADR-0077)
+				MultiInstance:      2,            // an inner multi-instance iteration (ADR-0077)
+				EventGatewayKey:    NewKey(3, 6), // armed by an event-based gateway (ADR-0110)
 			},
 		},
 		{
@@ -53,6 +54,7 @@ func TestRecordRoundTrip(t *testing.T) {
 				JobType:            42,
 				Retries:            3,
 				Deadline:           1_700_000_000,
+				RetryDueDate:       1_700_000_030_000_000_000, // backing off after a failure (ADR-0111)
 			},
 		},
 		{
@@ -121,6 +123,17 @@ func TestRecordRoundTrip(t *testing.T) {
 				TargetElementId:    8,
 				DueDate:            1_700_000_123,
 				Repetitions:        -1,
+			},
+		},
+		{
+			name:   "retry-backoff timer carries a job key",
+			vt:     VTTimer,
+			intent: IntentTimerCreated,
+			value: &TimerValue{
+				// A retry-backoff timer re-activates its job when due (ADR-0111): no element.
+				ProcessInstanceKey: NewKey(2, 20),
+				DueDate:            1_700_000_500,
+				JobKey:             NewKey(2, 22),
 			},
 		},
 		{
@@ -337,7 +350,7 @@ func TestReadRecordUnknownVersion(t *testing.T) {
 func TestEncodedSize(t *testing.T) {
 	r := Record{Header: sampleHeader(), Value: &ElementInstanceValue{}}
 	buf := AppendRecord(nil, &r)
-	if want := HeaderSize + elementInstanceMISize; len(buf) != want {
+	if want := HeaderSize + elementInstanceEGSize; len(buf) != want {
 		t.Errorf("encoded size = %d, want %d", len(buf), want)
 	}
 }

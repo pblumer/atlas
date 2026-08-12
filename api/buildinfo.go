@@ -34,6 +34,31 @@ func buildInfo() buildMeta {
 	return buildVal
 }
 
+// BuildInfo is the exported view of the running binary's version and embedded
+// VCS build metadata, for callers outside this package — the `atlas version`
+// command. The GET /api/v1/info endpoint reports the same values.
+type BuildInfo struct {
+	Version  string // product version (api.Version), stampable via -ldflags
+	Revision string // git commit, "" if built outside a VCS checkout
+	Time     string // commit time (RFC3339), "" if unknown
+	Modified bool   // true if built from a dirty working tree
+	Go       string // Go toolchain version
+}
+
+// Build returns the running binary's version together with its embedded VCS
+// build metadata. It reuses the same cached source as the /info endpoint, so
+// the CLI and the HTTP surface never disagree about what is running.
+func Build() BuildInfo {
+	b := buildInfo()
+	return BuildInfo{
+		Version:  Version,
+		Revision: b.Revision,
+		Time:     b.Time,
+		Modified: b.Modified,
+		Go:       b.Go,
+	}
+}
+
 // applyBuildSettings folds the vcs.* build settings into m. Split out so it is
 // unit-testable with synthetic settings (ReadBuildInfo can't be faked).
 func applyBuildSettings(m *buildMeta, settings []debug.BuildSetting) {

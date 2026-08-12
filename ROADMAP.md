@@ -293,6 +293,28 @@ Making processes wait, react, and time out.
   correlating publish/throw arrives, reusing the ADR-0020 subscription/correlate path
   wholesale — no new subscription, value type, or recovery path. Recovery-tested; authored in
   the Modeler's Implement panel via the shared message picker.
+- ✅ **Send tasks** ([ADR-0112](docs/adr/0112-send-tasks.md)): a `<sendTask>` is the **single
+  outbound element**, its kind chosen in the Implement panel. A **job/connector** kind
+  (`zeebe:taskDefinition` or an `atlas:*Connector`) is a job-creating *activity* identical in
+  execution to a service task — it reuses `serviceTaskBehavior`, so connectors (e-mail, REST, …),
+  boundary timeouts, I/O/data/multi-instance, retry backoff, and incidents all apply. A **message**
+  kind (`messageRef`, or an `operationRef` naming a `<bpmn:operation>` whose `inMessageRef` is
+  resolved to that message) is a correlating throw in task form: it compiles to the message throw
+  path (`TypeMessageThrowEvent`) and flows straight on, with no new runtime. `operationRef` is a
+  deploy-time compatibility path for imported WSDL-style models (its `outMessageRef` response is
+  not supported). Recovery-tested; the Modeler offers the connector/job-worker catalog plus a
+  Message entry on the send task.
+- ✅ **Event-based gateways** (deferred choice): an `<eventBasedGateway>` arms **every**
+  target catch event at once — each outgoing flow leads to a message/timer/signal
+  intermediate catch — and takes the branch whose event fires **first**, cancelling the rest
+  (the classic request-with-timeout: a message catch raced against a timer catch). It reuses
+  the catch-event, subscription, timer, and correlate/fire machinery wholesale; the gateway
+  labels its armed catches with a **race group** (a new `EventGatewayKey` on the element
+  instance), and the winner runs an `interruptHost`-shaped sibling loop to terminate the
+  losers (their subscriptions/timers self-retire). The compiler validates every target is a
+  catch event; recovery rebuilds the armed race and its group from the log, so the first fire
+  after a restart still wins — no new recovery path. Authored in the Modeler (bpmn-js draws
+  it natively) ([ADR-0110](docs/adr/0110-event-based-gateways.md)).
 - 🚧 **Incident model**: a job whose retries a worker exhausts raises a durable
   **incident** on its element instead of hanging or retrying forever; the token
   parks off the activatable index until an operator resolves the incident, which
@@ -307,11 +329,18 @@ Making processes wait, react, and time out.
   catch or boundary timer whose FEEL schedule can't be evaluated parks its token
   and raises a job-less incident (the failing field in its message) instead of
   firing immediately; resolving re-arms the timer against the instance's current
-  variables (re-raising if it still fails). Recovery-tested. Recurring-boundary
-  re-arm failures, start-event timer FEEL, retry backoff, and an operator UI still
-  to come.
+  variables (re-raising if it still fails). Recovery-tested. **Retry backoff and the
+  remaining FEEL-failure gaps now closed** ([ADR-0111](docs/adr/0111-incident-model-completion.md)):
+  a worker can fail a job with a **backoff** — the job is held off the activatable
+  index until a retry timer re-activates it (durable across a crash), instead of
+  hammering immediately; a **recurring** boundary or event-subprocess timer whose
+  FEEL cadence stops resolving mid-cycle raises the same job-less incident and parks
+  rather than silently ceasing to recur; and a **timer start** event's constant FEEL
+  schedule that can't resolve is now a deploy-time validation error
+  (`timer.start-schedule`) instead of a start timer that silently never arms. An
+  operator UI for incidents is the last piece still to come.
 
-## Milestone 3 — Structure 🔲
+## Milestone 3 — Structure ✅
 
 Composition and reuse.
 
@@ -353,7 +382,21 @@ Composition and reuse.
   index rebuilds from the log — no new recovery path; the throw is a command-path scope
   walk, the twin of error propagation). bpmn-js already authors it, so no Modeler change
   was needed. Recovery-tested ([ADR-0103](docs/adr/0103-compensation.md)).
-- 🔲 BPMN transactions (with cancel/compensation)
+- ✅ **BPMN transactions** (with cancel/compensation): a `<transaction>` is an
+  embedded subprocess with one added outcome — it can be **cancelled**. A **cancel
+  end event** (`<endEvent><cancelEventDefinition/>`) inside it rolls the transaction
+  back: it terminates the transaction's other running work, **compensates** every
+  completed compensable activity in the transaction scope (ADR-0103, reverse
+  completion order), then — once compensation drains the scope — routes the token out
+  an always-interrupting **cancel boundary** (`<boundaryEvent><cancelEventDefinition/>`,
+  valid only on a transaction). A committing transaction takes its normal flow and does
+  not compensate. Built on the subprocess scope (ADR-0074), the `compensate` walk, and
+  `interruptHost`, reusing `TypeSubProcess` (marked `IsTransaction`) so every scope
+  site is inherited; the compensate-then-continue ordering rides the existing
+  scope-drain through a small event-derived canceling marker, so recovery rebuilds it
+  with no new recovery path. Recovery-tested; authored in the Modeler (bpmn-js draws
+  transactions and cancel events; the cancel boundary/end panels are wired)
+  ([ADR-0108](docs/adr/0108-bpmn-transactions.md)). **Closes Milestone 3.**
 
 ## Milestone 4 — Operability 🔲
 

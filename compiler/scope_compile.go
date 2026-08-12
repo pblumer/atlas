@@ -83,229 +83,98 @@ func registerScope(
 			b.SetStartFormId(s.Form.FormId)
 		}
 	}
-	for _, st := range c.ServiceTasks {
-		retries := int32(defaultRetries)
-		if r := st.TaskDefinition.Retries; r != "" {
-			n, err := strconv.Atoi(r)
-			if err != nil {
-				return fmt.Errorf("compiler: service task %q has invalid retries %q: %w", st.Id, r, err)
-			}
-			retries = int32(n)
+	// A send task is a service task under a different BPMN label (ADR-0112): it creates a
+	// job and waits, and a connector extension on it takes the connector path exactly as on
+	// a service task. registerJobWorkerTask compiles both — only the plain-worker node type
+	// (AddServiceTask vs AddSendTask, passed as plain) and the diagnostic label differ.
+	registerJobWorkerTask := func(st xmlServiceTask, label string, plain func(jobType string, retries int32) int32) error {
+		retries, err := serviceTaskRetries(st, label)
+		if err != nil {
+			return err
 		}
-		// A service task bearing an <atlas:clioConnector> extension is a connector
-		// task: it delegates to a server-registered clio connector via the job path
-		// (ADR-0036), not to an external service-task worker. operation selects the
-		// clio call (write/query/read); write is the default for back-compatibility
-		// with the original write-only element.
-		if cn := st.Clio; cn != nil {
-			if cn.Connector == "" {
-				return fmt.Errorf("compiler: clio connector task %q needs a connector", st.Id)
+		// A service task (or send task) bearing a connector extension delegates to a
+		// server-registered connector via the job path rather than to an external
+		// service-task worker. The ordered connectorCompilers table owns the set of
+		// flavors (clio, rest, mail, sharepoint, remedy); the first present extension
+		// wins, exactly as when these were inlined arms.
+		for _, cc := range connectorCompilers {
+			if !cc.present(st) {
+				continue
 			}
-			var id int32
-			switch op := clioOperation(cn.Operation); op {
-			case "write":
-				if cn.Subject == "" || cn.EventType == "" {
-					return fmt.Errorf("compiler: clio write task %q needs subject and eventType", st.Id)
-				}
-				id = b.AddClioWriteTask(cn.Connector, cn.Subject, cn.EventType, retries)
-			case "query":
-				if cn.Query == "" && cn.Subject == "" {
-					return fmt.Errorf("compiler: clio query task %q needs a query or a subject", st.Id)
-				}
-				if strings.TrimSpace(cn.ResultVariable) == "" {
-					return fmt.Errorf("compiler: clio query task %q needs a resultVariable", st.Id)
-				}
-				id = b.AddClioQueryTask(cn.Connector, cn.Subject, cn.ReduceSpec, cn.Query, strings.TrimSpace(cn.ResultVariable), retries)
-			case "read":
-				if cn.Subject == "" {
-					return fmt.Errorf("compiler: clio read task %q needs a subject", st.Id)
-				}
-				if strings.TrimSpace(cn.ResultVariable) == "" {
-					return fmt.Errorf("compiler: clio read task %q needs a resultVariable", st.Id)
-				}
-				limit, err := clioLimit(st.Id, cn.Limit)
+			id, err := cc.compile(b, st, retries)
+			if err != nil {
+				return err
+			}
+			return register(st.Id, id)
+		}
+		// A service task bearing an <atlas:csvConnector> extension is a CSV-to-JSON
+		// connector task: the in-process CSV worker parses the named source variable's
+		// text against the model-authored layout into a rows collection via the job
+		// path (ADR-0090), rather than reading a columnConfig variable (ADR-0087). The
+		// whole layout lives in the model; only the file arrives at runtime.
+		if cn := st.Csv; cn != nil {
+			if r := strings.TrimSpace(cn.Retries); r != "" {
+				n, err := strconv.Atoi(r)
 				if err != nil {
-					return err
+					return fmt.Errorf("compiler: csv connector task %q has invalid retries %q: %w", st.Id, r, err)
 				}
-				id = b.AddClioReadTask(cn.Connector, cn.Subject, strings.TrimSpace(cn.ResultVariable), limit, retries)
-			default:
-				return fmt.Errorf("compiler: clio connector task %q has unknown operation %q (want write, query, or read)", st.Id, op)
+				retries = int32(n)
 			}
-			if err := register(st.Id, id); err != nil {
-				return err
+			cols := splitCSVColumns(cn.Columns)
+			hasHeader := csvHasHeader(cn.HasHeader)
+			// A headerless file maps columns by position, so it must name them; a header
+			// file may omit them to derive the columns from the header row (ADR-0090).
+			if !hasHeader && len(cols) == 0 {
+				return fmt.Errorf("compiler: csv connector task %q without a header row must list its columns", st.Id)
 			}
-			continue
-		}
-		// A service task bearing an <atlas:restConnector> extension is an HTTP-REST
-		// connector task: it calls the model-authored URL via the job path
-		// (ADR-0067), not an external service-task worker. The URL lives in the model
-		// (unlike clio's registry-only endpoint); credentials never do.
-		if cn := st.Rest; cn != nil {
-			if strings.TrimSpace(cn.Url) == "" {
-				return fmt.Errorf("compiler: rest connector task %q needs a url", st.Id)
-			}
-			method, err := normalizeHTTPMethod(cn.Method)
-			if err != nil {
-				return fmt.Errorf("compiler: rest connector task %q: %w", st.Id, err)
-			}
-			url, err := restValue(st.Id, "url", cn.Url)
-			if err != nil {
-				return err
-			}
-			headers, err := httpKVList(st.Id, "header", cn.Headers)
-			if err != nil {
-				return err
-			}
-			query, err := httpKVList(st.Id, "query parameter", cn.QueryParams)
-			if err != nil {
-				return err
-			}
-			auth, err := restAuth(st.Id, cn)
-			if err != nil {
-				return err
-			}
-			id := b.AddRestConnectorTask(RestConfig{
-				Method:    method,
-				Url:       url,
-				ResultVar: strings.TrimSpace(cn.ResultVariable),
-				Headers:   headers,
-				Query:     query,
-				Auth:      auth,
+			id := b.AddCsvConnectorTask(CsvConfig{
+				Source:    strings.TrimSpace(cn.Source),
+				Result:    strings.TrimSpace(cn.ResultVariable),
+				Delimiter: cn.Delimiter,
+				HasHeader: hasHeader,
+				Columns:   cols,
 				Retries:   retries,
 			})
-			if err := register(st.Id, id); err != nil {
-				return err
-			}
-			continue
-		}
-		// A service task bearing an <atlas:mailConnector> extension is an outbound
-		// mail connector task: it sends a model-authored message through a
-		// server-registered mail provider via the job path (ADR-0079). The provider
-		// (host, credentials) is resolved server-side by connector name, like clio;
-		// only the message (recipients, subject, body) lives in the model.
-		if cn := st.Mail; cn != nil {
-			if strings.TrimSpace(cn.Connector) == "" {
-				return fmt.Errorf("compiler: mail connector task %q needs a connector", st.Id)
-			}
-			if strings.TrimSpace(cn.To) == "" {
-				return fmt.Errorf("compiler: mail connector task %q needs a to recipient", st.Id)
-			}
-			to, err := restValue(st.Id, "to", cn.To)
-			if err != nil {
-				return err
-			}
-			cc, err := restValue(st.Id, "cc", cn.Cc)
-			if err != nil {
-				return err
-			}
-			bcc, err := restValue(st.Id, "bcc", cn.Bcc)
-			if err != nil {
-				return err
-			}
-			from, err := restValue(st.Id, "from", cn.From)
-			if err != nil {
-				return err
-			}
-			subject, err := restValue(st.Id, "subject", cn.Subject)
-			if err != nil {
-				return err
-			}
-			body, err := restValue(st.Id, "body", cn.Body)
-			if err != nil {
-				return err
-			}
-			id := b.AddMailConnectorTask(MailConfig{
-				Connector: strings.TrimSpace(cn.Connector),
-				To:        to,
-				Cc:        cc,
-				Bcc:       bcc,
-				From:      from,
-				Subject:   subject,
-				Body:      body,
-				Retries:   retries,
-			})
-			if err := register(st.Id, id); err != nil {
-				return err
-			}
-			continue
-		}
-		// A service task bearing an <atlas:sharepointConnector> extension is a
-		// SharePoint connector task: it creates a list item in a model-authored
-		// site/list through a server-registered SharePoint provider (Microsoft Graph)
-		// via the job path (ADR-0105). The provider (Graph base, OAuth credential) is
-		// resolved server-side by connector name, like mail; only the target
-		// (site, list, item fields) lives in the model.
-		if cn := st.SharePoint; cn != nil {
-			if strings.TrimSpace(cn.Connector) == "" {
-				return fmt.Errorf("compiler: sharepoint connector task %q needs a connector", st.Id)
-			}
-			if strings.TrimSpace(cn.Site) == "" {
-				return fmt.Errorf("compiler: sharepoint connector task %q needs a site", st.Id)
-			}
-			if strings.TrimSpace(cn.List) == "" {
-				return fmt.Errorf("compiler: sharepoint connector task %q needs a list", st.Id)
-			}
-			site, err := restValue(st.Id, "site", cn.Site)
-			if err != nil {
-				return err
-			}
-			list, err := restValue(st.Id, "list", cn.List)
-			if err != nil {
-				return err
-			}
-			fields, err := httpKVList(st.Id, "item field", cn.Fields)
-			if err != nil {
-				return err
-			}
-			id := b.AddSharePointConnectorTask(SharePointConfig{
-				Connector: strings.TrimSpace(cn.Connector),
-				Site:      site,
-				List:      list,
-				Fields:    fields,
-				ResultVar: strings.TrimSpace(cn.ResultVariable),
-				Retries:   retries,
-			})
-			if err := register(st.Id, id); err != nil {
-				return err
-			}
-			continue
-		}
-		// A service task bearing an <atlas:remedyConnector> extension is a BMC Remedy
-		// connector task: it creates an entry (e.g. an incident) in a Remedy form
-		// through the AR System REST API via the job path (ADR-0106). The Remedy base
-		// URL and credentials are resolved server-side by connector name, like clio and
-		// mail; only the form and its field values live in the model.
-		if cn := st.Remedy; cn != nil {
-			if strings.TrimSpace(cn.Connector) == "" {
-				return fmt.Errorf("compiler: remedy connector task %q needs a connector", st.Id)
-			}
-			if strings.TrimSpace(cn.Form) == "" {
-				return fmt.Errorf("compiler: remedy connector task %q needs a form", st.Id)
-			}
-			form, err := restValue(st.Id, "form", cn.Form)
-			if err != nil {
-				return err
-			}
-			fields, err := httpKVList(st.Id, "field", cn.Fields)
-			if err != nil {
-				return err
-			}
-			id := b.AddRemedyConnectorTask(RemedyConfig{
-				Connector: strings.TrimSpace(cn.Connector),
-				Form:      form,
-				Fields:    fields,
-				ResultVar: strings.TrimSpace(cn.ResultVariable),
-				Retries:   retries,
-			})
-			if err := register(st.Id, id); err != nil {
-				return err
-			}
-			continue
+			return register(st.Id, id)
 		}
 		if st.TaskDefinition.Type == "" {
-			return fmt.Errorf("compiler: service task %q has no task definition type", st.Id)
+			// A send task reaching here has no message kind either (its messageRef/operationRef
+			// were resolved earlier), so name every kind it could take rather than only the task
+			// definition (ADR-0112) — this is the "Message selected but no message chosen yet" state.
+			if label == "send task" {
+				return fmt.Errorf("compiler: send task %q has no kind: choose a message (messageRef/operationRef), a task definition, or a connector", st.Id)
+			}
+			return fmt.Errorf("compiler: %s %q has no task definition type", label, st.Id)
 		}
-		if err := register(st.Id, b.AddServiceTask(st.TaskDefinition.Type, retries)); err != nil {
+		return register(st.Id, plain(st.TaskDefinition.Type, retries))
+	}
+	for _, st := range c.ServiceTasks {
+		if err := registerJobWorkerTask(st, "service task", b.AddServiceTask); err != nil {
+			return err
+		}
+	}
+	// Message-kind send tasks compile to a throw (ADR-0112) — instantaneous, so not an
+	// activity. Record them so a boundary drawn on one gets a targeted error below rather
+	// than the generic "attaches to a non-activity".
+	messageSendIDs := map[string]bool{}
+	for _, st := range c.SendTasks {
+		// The message kind: a <sendTask messageRef> is a correlating throw in task form
+		// (ADR-0112). It reuses the intermediate message throw's compile path — resolve the
+		// message, then register a TypeMessageThrowEvent, which correlates and flows straight
+		// on. A throw is instantaneous, so unlike the job/connector kinds it is not an activity
+		// (no boundary/I/O/MI — those loops skip it, keyed on the same MessageRef).
+		if strings.TrimSpace(st.MessageRef) != "" {
+			messageSendIDs[st.Id] = true
+			name, keyExpr, err := resolveMessage(st.Id, st.MessageRef)
+			if err != nil {
+				return err
+			}
+			if err := register(st.Id, b.AddMessageThrowEvent(name, keyExpr)); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := registerJobWorkerTask(st, "send task", b.AddSendTask); err != nil {
 			return err
 		}
 	}
@@ -441,6 +310,11 @@ func registerScope(
 	}
 	for _, g := range c.InclusiveGateways {
 		if err := register(g.Id, b.AddInclusiveGateway()); err != nil {
+			return err
+		}
+	}
+	for _, g := range c.EventBasedGateways {
+		if err := register(g.Id, b.AddEventBasedGateway()); err != nil {
 			return err
 		}
 	}
@@ -586,6 +460,14 @@ func registerScope(
 			}
 			continue
 		}
+		// A cancel end event cancels its enclosing transaction (ADR-0108); validation
+		// (checkTransactions) enforces that the enclosing scope really is a transaction.
+		if e.Cancel != nil {
+			if err := register(e.Id, b.AddCancelEndEvent()); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := register(e.Id, b.AddEndEvent()); err != nil {
 			return err
 		}
@@ -599,6 +481,11 @@ func registerScope(
 		subID := b.AddSubProcess()
 		if err := register(sub.Id, subID); err != nil {
 			return err
+		}
+		// A <transaction> is a subprocess with cancellation added; mark the node so the
+		// runtime and validation treat it as one (ADR-0108). It is never triggeredByEvent.
+		if sub.IsTransaction {
+			b.SetTransaction(subID)
 		}
 		b.PushScope(subID)
 		if err := registerScope(b, ids, register, resolveMessage, resolveSignal, resolveError, &sub.xmlFlowContent); err != nil {
@@ -658,6 +545,9 @@ func registerScope(
 		if !ok {
 			return fmt.Errorf("compiler: boundary event %q attaches to unknown activity %q", ev.Id, ev.AttachedToRef)
 		}
+		if messageSendIDs[ev.AttachedToRef] {
+			return fmt.Errorf("compiler: boundary event %q attaches to send task %q, but a message-kind send task is an instantaneous throw (it publishes the message and continues) and cannot host a boundary event; switch the send task to a job or connector kind, which waits so a boundary can fire, or model a wait-and-time-out with a receive task and a boundary timer", ev.Id, ev.AttachedToRef)
+		}
 		interrupting := ev.CancelActivity != "false"
 		switch {
 		case ev.Timer != nil:
@@ -705,8 +595,15 @@ func registerScope(
 			if err := register(ev.Id, b.AddBoundaryCompensationEvent(host)); err != nil {
 				return err
 			}
+		case ev.Cancel != nil:
+			// A cancel boundary catches its host transaction's cancellation and is always
+			// interrupting — cancelActivity is ignored (ADR-0108). validation (checkTransactions)
+			// enforces that the host really is a transaction.
+			if err := register(ev.Id, b.AddBoundaryCancelEvent(host)); err != nil {
+				return err
+			}
 		default:
-			return fmt.Errorf("compiler: boundary event %q: only timer, message, signal, error, and compensation boundary events are supported yet", ev.Id)
+			return fmt.Errorf("compiler: boundary event %q: only timer, message, signal, error, compensation, and cancel boundary events are supported yet", ev.Id)
 		}
 	}
 	// Report an unsupported element with a clear message rather than letting it
@@ -715,7 +612,7 @@ func registerScope(
 		label string
 		nodes []xmlNode
 	}{
-		{"sendTask", c.SendTasks},
+		{"adHocSubProcess", c.AdHocSubProcesses},
 	} {
 		if len(u.nodes) > 0 {
 			return fmt.Errorf("compiler: element %q is a <%s>, which Atlas can't execute yet "+

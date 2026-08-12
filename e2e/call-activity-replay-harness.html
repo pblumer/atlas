@@ -1,0 +1,113 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas call-activity replay drill-down e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountInstanceReplay against a mock `api`,
+         with a caller timeline whose call-activity step carries a childInstanceKey
+         (ADR-0076). Verifies the drill-down affordances: the clickable "child" badge
+         on the call activity and the "Called process" link in its Details panel. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+      /* The replay is read-only; hide the editing palette so element clicks in the
+         test land on the shapes rather than being intercepted by it. */
+      .djs-palette { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div id="view"></div>
+    <script type="module">
+      import { mountInstanceReplay } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+      const T = 1_722_260_303_000;
+      const ns = (ms) => ms * 1e6;
+
+      const CALLER = "281474978841611";
+      const CHILD = "281474978841614";
+      window.__CALLER = CALLER;
+      window.__CHILD = CHILD;
+
+      // The caller: Start → CallActivity_1 → End, with hand-authored DI so it renders.
+      const CALLER_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_caller" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="caller" name="Test Call Activity" isExecutable="true">
+    <bpmn:startEvent id="Start_1" name="Start"><bpmn:outgoing>f0</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:callActivity id="CallActivity_1" name="CallActivity_1"><bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing></bpmn:callActivity>
+    <bpmn:endEvent id="End_1" name="End"><bpmn:incoming>f1</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="CallActivity_1"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="CallActivity_1" targetRef="End_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="caller">
+    <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="CallActivity_1_di" bpmnElement="CallActivity_1"><dc:Bounds x="260" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="420" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="260" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="360" y="138"/><di:waypoint x="420" y="138"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // The child: a trivial Start → End, shown if the drill-down navigates here.
+      const CHILD_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_child" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="child" name="Call Activity Prozess" isExecutable="true">
+    <bpmn:startEvent id="cs" name="Start"><bpmn:outgoing>cf0</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:endEvent id="ce" name="End"><bpmn:incoming>cf0</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="cf0" sourceRef="cs" targetRef="ce"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="CD"><bpmndi:BPMNPlane id="CP" bpmnElement="child">
+    <bpmndi:BPMNShape id="cs_di" bpmnElement="cs"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="ce_di" bpmnElement="ce"><dc:Bounds x="300" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="cf0_di" bpmnElement="cf0"><di:waypoint x="196" y="138"/><di:waypoint x="300" y="138"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // A step for each walked element; the call activity carries the child link.
+      const callerSteps = [
+        step("Start_1", "bpmn:StartEvent", 0, 0),
+        step("CallActivity_1", "bpmn:CallActivity", 1, CHILD),
+        step("End_1", "bpmn:EndEvent", 2, 0),
+      ];
+      function step(elementId, type, i, childInstanceKey) {
+        const s = {
+          elementId,
+          elementInstanceKey: String(1000 + i),
+          at: ns(T + i * 1000),
+          endAt: ns(T + i * 1000 + 500),
+          position: i + 1,
+          type,
+          tokenId: "1",
+        };
+        if (childInstanceKey) s.childInstanceKey = childInstanceKey;
+        return s;
+      }
+      const callerFrames = callerSteps.map((s, i) => ({
+        position: i + 1, at: s.at,
+        tokens: i < callerSteps.length - 1 ? [{ elementId: s.elementId, tokenId: "1", state: "active" }] : [],
+      }));
+
+      const TIMELINE = {
+        [CALLER]: { processDefKey: "callerdef", processId: "caller", version: 1, state: "completed", steps: callerSteps, frames: callerFrames },
+        [CHILD]: { processDefKey: "childdef", processId: "child", version: 1, state: "completed",
+          steps: [step("cs", "bpmn:StartEvent", 0, 0), step("ce", "bpmn:EndEvent", 1, 0)],
+          frames: [{ position: 1, at: ns(T), tokens: [] }] },
+      };
+      const XML = { callerdef: CALLER_XML, childdef: CHILD_XML };
+
+      const api = async (method, url) => {
+        let m;
+        if ((m = url.match(/\/instances\/(\d+)\/timeline$/))) return TIMELINE[m[1]] || {};
+        if ((m = url.match(/\/processes\/([\w-]+)\/xml$/))) return XML[m[1]] || "";
+        if (url.includes("/runtime")) return { elements: [] };
+        if (url.match(/\/instances\/\d+\/decisions$/)) return [];
+        return {};
+      };
+
+      window.__mount = (key = CALLER) => mountInstanceReplay(view, { api, toast: noop, key });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

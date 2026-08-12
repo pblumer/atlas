@@ -115,6 +115,34 @@ function blankXML() {
 </bpmn:definitions>`;
 }
 
+// calleeXML builds a starter diagram for a *called* process a call activity refers
+// to (ADR-0076): a single start event, keyed by the caller-chosen process id (the
+// deploy/route identity), so the "＋ create new" affordance in the call-activity
+// panel scaffolds the callee the caller already points at. Whitespace in the id is
+// collapsed to underscores so it stays a valid BPMN id; an empty id falls back to a
+// unique one, like blankXML.
+function calleeXML(pid, name) {
+  const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const id = (pid || "").trim().replace(/\s+/g, "_") || `Process_${suffix}`;
+  const nm = (name || id).trim();
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  id="Definitions_${suffix}" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="${esc(id)}" name="${esc(nm)}" isExecutable="true">
+    <bpmn:startEvent id="StartEvent_1" name="Start"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="${esc(id)}">
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+        <dc:Bounds x="180" y="160" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+}
+
 let current; // active modeler/viewer, destroyed on remount
 let liveTimer; // active live-overlay poll, cleared on remount/leave
 let collab; // active live collaboration session (ADR-0103), closed on remount
@@ -550,17 +578,13 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
 // surprised at Deploy/Validate. Keep in sync with the compiler's rejections and unrun
 // elements (compiler/scope_compile.go, compiler/parse.go).
 const UNSUPPORTED_TYPES = {
-  "bpmn:SendTask": "Send tasks can't run yet",
-  "bpmn:EventBasedGateway": "Event-based gateways aren't supported yet",
   "bpmn:ComplexGateway": "Complex gateways aren't supported yet",
-  "bpmn:Transaction": "Transaction subprocesses aren't supported yet",
   "bpmn:AdHocSubProcess": "Ad-hoc subprocesses aren't supported yet",
   "bpmn:DataStoreReference": "Data stores aren't supported yet",
 };
 const UNSUPPORTED_EVENT_DEFS = {
   "bpmn:TerminateEventDefinition": "Terminate end events can't run yet",
   "bpmn:EscalationEventDefinition": "Escalation events aren't supported yet",
-  "bpmn:CompensateEventDefinition": "Compensation events aren't supported yet",
   "bpmn:ConditionalEventDefinition": "Conditional events aren't supported yet",
   "bpmn:LinkEventDefinition": "Link events aren't supported yet",
 };
@@ -967,6 +991,14 @@ function implMarker(bo) {
   if (bo.$type === "bpmn:ServiceTask") {
     const kind = serviceTaskKind(bo);
     if (!kind.glyph) return null; // plain job worker — the default gear is its symbol
+    return { label: kind.name, icon: kind.glyph };
+  }
+  if (bo.$type === "bpmn:SendTask") {
+    // The send task's kind badge (ADR-0112): a message throw, a connector, or (plain job
+    // worker) nothing — the filled send-task arrow bpmn-js draws is that kind's own symbol.
+    if (bo.messageRef) return { label: SEND_MESSAGE_KIND.name, icon: SEND_MESSAGE_KIND.glyph };
+    const kind = serviceTaskKind(bo);
+    if (!kind.glyph) return null;
     return { label: kind.name, icon: kind.glyph };
   }
   return null;
@@ -1571,6 +1603,25 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
+    id: "csv", name: "CSV to JSON", desc: "Parse an uploaded CSV into a JSON rows array", icon: "T",
+    // A grid/table mark on a teal tile reads "tabular data → rows" at a glance — the
+    // CSV connector's counterpart to REST's globe and mail's envelope. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white grid strokes.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#3b82f6"/><rect x="3" y="3.6" width="10" height="8.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3 6.4h10M3 9.2h10M6.6 3.6v8.8" stroke="#fff" stroke-width="1.1"/></svg>`,
+    ext: "atlas:CsvConnector",
+    fields: [
+      { group: "Source" },
+      { key: "source", label: "Source variable", placeholder: "csvText", hint: "Name of the process variable holding the raw CSV text (e.g. from the upload task)." },
+      { group: "Layout" },
+      { key: "delimiter", label: "Delimiter", type: "select", options: [{ v: ",", l: "Comma ," }, { v: ";", l: "Semicolon ;" }, { v: "\t", l: "Tab" }, { v: "|", l: "Pipe |" }] },
+      { key: "hasHeader", label: "Header row", type: "select", options: [{ v: "true", l: "First row is the header" }, { v: "false", l: "No header row" }] },
+      { key: "columns", label: "Columns", placeholder: "email, group, license", hint: "Comma-separated field names. Leave empty to derive them from the header row; required when there is no header." },
+      { group: "Output" },
+      { key: "resultVariable", label: "Result variable", placeholder: "rows", hint: "The parsed JSON array of rows is written into this process variable (rowCount is also set)." },
+    ],
+  },
+  {
     id: "sharepoint", name: "SharePoint Connector", desc: "Create a list item in a SharePoint site", icon: "S",
     // A list/grid mark on a Microsoft-teal tile reads "SharePoint list" at a glance —
     // this connector's counterpart to REST's globe and mail's envelope. The
@@ -1642,15 +1693,21 @@ function stMapRowHTML(fieldKey, name, value) {
 // tooling's template chooser within the buildless panel (ADR-0067/0012); the field
 // form is generic over text/select/map fields, section groups, and showIf
 // visibility so a new connector kind needs no bespoke panel code.
-function serviceTaskKindHTML(bo) {
-  const cur = serviceTaskKind(bo);
-  const ext = findExt(bo, cur.ext) || {};
-  const rows = SERVICE_TASK_KINDS.map((k) => `
+// stKindRowsHTML renders the searchable kind-picker rows for a list of kinds, highlighting
+// curId. Shared by the service task (SERVICE_TASK_KINDS) and the send task, which prepends a
+// Message kind (ADR-0112); the click/filter handlers key off the .stkind-row markup.
+function stKindRowsHTML(kinds, curId) {
+  return kinds.map((k) => `
     <div class="stkind-row" data-kind="${k.id}" data-match="${esc((k.name + " " + k.desc).toLowerCase())}"
-         style="display:flex;gap:8px;align-items:center;padding:8px;border:1px solid #d7d7d7;border-radius:6px;margin-bottom:6px;cursor:pointer;${k.id === cur.id ? "background:#eef2ff;border-color:#9aa8ff" : ""}">
+         style="display:flex;gap:8px;align-items:center;padding:8px;border:1px solid #d7d7d7;border-radius:6px;margin-bottom:6px;cursor:pointer;${k.id === curId ? "background:#eef2ff;border-color:#9aa8ff" : ""}">
       <span class="stkind-icon">${k.glyph || esc(k.icon)}</span>
       <span style="line-height:1.25"><b>${esc(k.name)}</b><br><span class="muted" style="font-size:12px">${esc(k.desc)}</span></span>
     </div>`).join("");
+}
+
+// stKindFieldsHTML renders the typed field form for one catalog kind over its stored
+// extension, generic over text/select/map fields, section groups, and showIf visibility.
+function stKindFieldsHTML(cur, ext) {
   let fields = "";
   for (const f of cur.fields) {
     if (f.group) {
@@ -1684,10 +1741,60 @@ function serviceTaskKindHTML(bo) {
     }
     if (f.hint) fields += `<p class="muted" style="font-size:12px">${esc(f.hint)}</p>`;
   }
+  return fields;
+}
+
+// serviceTaskKindHTML renders the searchable kind picker plus the current kind's fields,
+// both from SERVICE_TASK_KINDS (ADR-0067). A new connector kind needs no bespoke panel code.
+function serviceTaskKindHTML(bo) {
+  const cur = serviceTaskKind(bo);
+  const ext = findExt(bo, cur.ext) || {};
   return `<h3>Type</h3>
     <input type="text" id="f-stkind-filter" placeholder="Search type… (e.g. rest)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
-    <div id="f-stkind-list">${rows}</div>
-    <h3>${esc(cur.name)}</h3>${fields}`;
+    <div id="f-stkind-list">${stKindRowsHTML(SERVICE_TASK_KINDS, cur.id)}</div>
+    <h3>${esc(cur.name)}</h3>${stKindFieldsHTML(cur, ext)}`;
+}
+
+// SEND_MESSAGE_KIND is the send task's Message kind (ADR-0112): a correlating throw in task
+// form. It is not a connector (no ext / fields form) — it is configured by the shared message
+// picker and detected by a messageRef — so it lives outside SERVICE_TASK_KINDS and is prepended
+// to the send task's picker.
+const SEND_MESSAGE_KIND = {
+  id: "message", name: "Message", icon: "✉",
+  desc: "Publish a BPMN message; a waiting receive task or message catch with a matching key continues",
+  glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#4666ff"/><rect x="3" y="4.6" width="10" height="6.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 5.2L8 8.6l4.6-3.4" fill="none" stroke="#fff" stroke-width="1.1"/></svg>`,
+};
+
+// sendTaskKind returns the kind a send task currently represents (ADR-0112). It is detected by
+// what the task carries: a messageRef → Message; a connector extension → that connector; a
+// taskDefinition → Job worker. With none of those, the send task is the Message kind by default —
+// so selecting Message (which clears the other kinds' extensions) keeps the message picker visible
+// until a message is chosen, and a fresh send task starts as a plain message send. Without this
+// default, the Message kind would be undetectable while messageRef is still empty.
+function sendTaskKind(bo) {
+  if (bo && bo.messageRef) return SEND_MESSAGE_KIND;
+  for (const k of SERVICE_TASK_KINDS) {
+    if (k.id !== "worker" && findExt(bo, k.ext)) return k;
+  }
+  if (findExt(bo, "zeebe:TaskDefinition")) return SERVICE_TASK_KINDS[0]; // Job worker
+  return SEND_MESSAGE_KIND;
+}
+
+// sendTaskKindHTML renders the send task's kind picker: the Message kind plus the service
+// task's connector/job-worker catalog, then either the shared message picker (Message kind)
+// or the chosen connector's field form (ADR-0112). The picker reuses the .stkind-row markup,
+// so the existing filter/click wiring drives it.
+function sendTaskKindHTML(modeler, bo) {
+  const cur = sendTaskKind(bo);
+  const picker = `<h3>Type</h3>
+    <input type="text" id="f-stkind-filter" placeholder="Search type… (e.g. message, mail)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
+    <div id="f-stkind-list">${stKindRowsHTML([SEND_MESSAGE_KIND, ...SERVICE_TASK_KINDS], cur.id)}</div>`;
+  if (cur.id === "message") {
+    return picker + messageFieldsHTML(modeler, bo,
+      "On reaching this send task the message is published; any instance waiting on it (a receive task or message catch) with a matching correlation key continues. The token then flows straight on.");
+  }
+  const ext = findExt(bo, cur.ext) || {};
+  return picker + `<h3>${esc(cur.name)}</h3>${stKindFieldsHTML(cur, ext)}`;
 }
 
 // applyServiceTaskKind switches a service task to a catalog kind by writing that
@@ -1706,6 +1813,20 @@ function applyServiceTaskKind(modeler, element, kindId) {
     }
   }
   upsertExt(modeler, element, kind.ext, defaults);
+}
+
+// applySendTaskKind switches a send task between its Message kind and the connector/job-worker
+// kinds (ADR-0112). The three kinds are mutually exclusive at compile time, so switching to
+// Message drops every connector/taskDefinition extension (the message picker then sets the
+// messageRef), and switching to a connector/worker clears any messageRef first.
+function applySendTaskKind(modeler, element, kindId) {
+  if (kindId === "message") {
+    for (const k of SERVICE_TASK_KINDS) removeExt(modeler, element, k.ext);
+    return;
+  }
+  const bo = element.businessObject;
+  if (bo && bo.messageRef) linkMessage(modeler, element, bo, null);
+  applyServiceTaskKind(modeler, element, kindId);
 }
 
 // decisionInputRowHTML renders one editable business-rule-task input mapping: a
@@ -2109,7 +2230,10 @@ function messageDefOf(bo) {
 // what the message picker reads and its handlers write, so a receive task reuses the same
 // picker as a message catch. null when the element references no message.
 function messageRefHolder(bo) {
-  if (bo && bo.$type === "bpmn:ReceiveTask") return bo;
+  // A receive task (ADR-0102) and a message-kind send task (ADR-0112) both hold messageRef
+  // directly on their own business object, not via an event definition, so the shared
+  // message picker reads and writes them the same way it does a message event.
+  if (bo && (bo.$type === "bpmn:ReceiveTask" || bo.$type === "bpmn:SendTask")) return bo;
   return messageDefOf(bo);
 }
 
@@ -2328,6 +2452,13 @@ function wireSignalsManager(body, modeler, rerenderRoot) {
 // errorDefOf returns an event's bpmn:ErrorEventDefinition, or null.
 function errorDefOf(bo) {
   return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:ErrorEventDefinition") || null;
+}
+
+// cancelDefOf returns the <cancelEventDefinition> of an element, or null. On a boundary event
+// it makes a cancel boundary (a transaction's cancellation catch); on an end event a cancel
+// end event (ADR-0108).
+function cancelDefOf(bo) {
+  return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:CancelEventDefinition") || null;
 }
 
 // listErrors returns every <bpmn:error> declared on the model's definitions.
@@ -3006,6 +3137,10 @@ function wireProperties(root, modeler, api, projectId, toast) {
         // an activity, so it takes the shared message picker (the receive task holds its
         // messageRef directly, which messageRefHolder resolves for the field handlers).
         html += messageFieldsHTML(modeler, bo, "The receive task waits until this message is published (or thrown) with a matching correlation key, then continues. Attach a timer boundary event for a wait-or-time-out.");
+      } else if (bo.$type === "bpmn:SendTask") {
+        // The single outbound element (ADR-0112): a kind picker chooses what it sends —
+        // Message (a correlating throw), or a connector / job worker (a job it waits on).
+        html += sendTaskKindHTML(modeler, bo);
       } else if (isActivity(bo)) {
         const t = bo.$type;
         html += `
@@ -3159,7 +3294,9 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const propChild = ce.propagateAllChildVariables !== false;   // default true (Zeebe)
         html += `<h3>Called process</h3>
           <label class="field"><span>Process ID</span>
-            <input type="text" id="f-call-processid" value="${esc(ce.processId || "")}" placeholder="pruefe-auftrag"/></label>
+            <input type="text" id="f-call-processid" list="f-call-proc-list" autocomplete="off" value="${esc(ce.processId || "")}" placeholder="pruefe-auftrag"/>
+            <datalist id="f-call-proc-list"></datalist></label>
+          <div class="field-actions"><button type="button" class="btn ghost small" id="f-call-newproc">&#43; Create new process</button></div>
           <label class="field"><span>Binding</span>
             <select id="f-call-binding">
               <option value="latest" ${binding === "latest" ? "selected" : ""}>Latest — newest deployed version</option>
@@ -3215,11 +3352,17 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
         const err = errorDefOf(bo);
+        const cancel = cancelDefOf(bo);
         if (err) {
           // An error boundary is always interrupting — no cancelActivity toggle (ADR-0089).
           html += `<h3>Behaviour</h3>
             <p class="muted" style="font-size:12px">An <b>error boundary</b> is always <b>interrupting</b>: a matching thrown error cancels the attached activity (and its job) and routes the token out this event.</p>`;
           html += errorFieldsHTML(modeler, err, "The event fires when the attached activity throws a matching error — an error end event inside it, a worker failing its job to the code, or an error propagating up from a called process.");
+        } else if (cancel) {
+          // A cancel boundary may attach only to a transaction and is always interrupting — no
+          // cancelActivity toggle and no trigger fields (ADR-0108).
+          html += `<h3>Behaviour</h3>
+            <p class="muted" style="font-size:12px">A <b>cancel boundary</b> attaches only to a <b>transaction</b> and is always <b>interrupting</b>: when a cancel end event inside the transaction fires, its completed activities are compensated (in reverse order) and the token is then routed out this event. Draw it on a transaction subprocess.</p>`;
         } else {
           const interrupting = bo.cancelActivity !== false;
           html += `<h3>Behaviour</h3>
@@ -3310,16 +3453,24 @@ function wireProperties(root, modeler, api, projectId, toast) {
               <a href="#/modeler/form/new" target="_blank" rel="noopener">Create a new form</a>, then reopen this to link it.</p>
             <p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, or <b>Signal</b> start event instead.</p>`;
         }
+      } else if (bo.$type === "bpmn:EventBasedGateway") {
+        // A deferred choice: no configuration of its own — the branches are the
+        // catch events it points at (ADR-0110).
+        html += `<p class="muted" style="font-size:12px">An <b>event-based gateway</b> is a <b>deferred choice</b>: reaching it arms every branch's catch event at once (each outgoing flow must lead to a <b>message</b>, <b>timer</b>, or <b>signal</b> intermediate catch event), and the branch whose event fires <b>first</b> is taken — the others are cancelled. The classic use is a request with a timeout (a message catch raced against a timer catch).</p>`;
       } else if (bo.$type === "bpmn:EndEvent") {
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
         const err = errorDefOf(bo);
+        const cancel = cancelDefOf(bo);
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "On reaching this end event the message is published; any instance waiting on it with a matching correlation key continues. The instance then ends.");
         } else if (sig) {
           html += signalFieldsHTML(modeler, sig, "On reaching this end event the signal is broadcast to every event waiting on that signal name, across all instances. The instance then ends.");
         } else if (err) {
           html += errorFieldsHTML(modeler, err, "On reaching this end event the error is thrown, aborting its scope and propagating up to the nearest matching error boundary or error event subprocess. Uncaught, it raises an incident.");
+        } else if (cancel) {
+          // A cancel end event is only meaningful inside a transaction (ADR-0108).
+          html += `<p class="muted" style="font-size:12px">A <b>cancel end event</b> cancels its enclosing <b>transaction</b>: its completed activities are compensated (in reverse order), then the token is routed out the transaction's <b>cancel boundary</b>. Use it only inside a transaction subprocess.</p>`;
         } else {
           html += `<p class="muted" style="font-size:12px">A plain end event ends the instance. Use the wrench icon on the element to make this a <b>Message</b>, <b>Signal</b>, or <b>Error</b> end event.</p>`;
         }
@@ -3497,7 +3648,9 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const row = e.target.closest(".stkind-row");
         if (!row) return;
         try {
-          applyServiceTaskKind(modeler, element, row.dataset.kind);
+          // A send task's picker includes the Message kind (ADR-0112); a service task's does not.
+          if (bo.$type === "bpmn:SendTask") applySendTaskKind(modeler, element, row.dataset.kind);
+          else applyServiceTaskKind(modeler, element, row.dataset.kind);
           show(element);
         } catch { /* stale */ }
       });
@@ -3855,6 +4008,77 @@ function wireProperties(root, modeler, api, projectId, toast) {
       fcallbind.addEventListener("change", saveCall);
       fcallpp.addEventListener("change", saveCall);
       fcallpc.addEventListener("change", saveCall);
+
+      // Suggest existing callees — deployed processes and saved drafts — so the
+      // Process ID is a pick, not blind typing; free text stays allowed for a callee
+      // that doesn't exist yet (ADR-0076). Best-effort: a load failure just leaves an
+      // empty suggestion list.
+      const proclist = body.querySelector("#f-call-proc-list");
+      if (proclist) {
+        (async () => {
+          try {
+            const [procs, drafts] = await Promise.all([
+              api("GET", "/api/v1/processes").catch(() => []),
+              api("GET", "/api/v1/drafts").catch(() => []),
+            ]);
+            const seen = new Set();
+            const opts = [];
+            const add = (id, label) => {
+              id = (id || "").trim();
+              if (!id || seen.has(id)) return;
+              seen.add(id);
+              opts.push(`<option value="${esc(id)}">${esc(label)}</option>`);
+            };
+            (procs || []).forEach((p) => add(p.processId,
+              (p.name && p.name !== p.processId ? p.name + " · " : "") + "deployed" + (p.version ? " v" + p.version : "")));
+            (drafts || []).forEach((d) => add(d.processId,
+              (d.name && d.name !== d.processId ? d.name + " · " : "") + "draft"));
+            proclist.innerHTML = opts.join("");
+          } catch { /* suggestions are best-effort */ }
+        })();
+      }
+
+      // "＋ Create new process" scaffolds the called process the caller points at and
+      // opens it (ADR-0076): it saves this caller first (drafts persist only on save,
+      // so navigating away would otherwise drop its edits), then creates a starter
+      // draft keyed by the process id and navigates to it in the modeler.
+      const newbtn = body.querySelector("#f-call-newproc");
+      if (newbtn) {
+        newbtn.addEventListener("click", async () => {
+          let pid = (fcallpid.value || "").trim();
+          if (!pid) {
+            const typed = prompt("Process ID for the new called process:", "");
+            if (typed == null) return;
+            pid = typed.trim();
+            if (!pid) return;
+          }
+          pid = pid.replace(/\s+/g, "_");
+          newbtn.disabled = true;
+          try {
+            // Point the caller at this child, then persist the caller so its unsaved
+            // edits survive the navigation.
+            fcallpid.value = pid;
+            saveCall();
+            const savePath = "/api/v1/drafts" + (projectId ? "?projectId=" + encodeURIComponent(projectId) : "");
+            const { xml: callerXml } = await modeler.saveXML({ format: true });
+            await api("POST", savePath, callerXml, true);
+            if (collab && collab.markSaved) collab.markSaved();
+            // Scaffold the child only if no draft already holds that id — never clobber
+            // existing work; just open it in that case.
+            const existing = await api("GET", "/api/v1/drafts").catch(() => []);
+            if ((existing || []).some((d) => (d.processId || "") === pid)) {
+              toast(`Opening existing draft “${pid}”`, "ok");
+            } else {
+              await api("POST", savePath, calleeXML(pid, pid), true);
+              toast(`Created called process “${pid}”`, "ok");
+            }
+            location.hash = `#/modeler/draft/${encodeURIComponent(pid)}`;
+          } catch (e) {
+            toast("Could not create the process: " + e.message, "err");
+            newbtn.disabled = false;
+          }
+        });
+      }
     }
 
     // Multi-instance (ADR-0077): the whole bpmn:MultiInstanceLoopCharacteristics is
@@ -5767,6 +5991,31 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const stepsForElement = (elId) => steps.filter((s) => s.elementId === elId);
   const stepByEik = (eik) => steps.find((s) => s.elementInstanceKey === eik) || null;
 
+  // drawCallActivityLinks puts a transparent, clickable hotspot directly over each
+  // call activity's "+" marker (bpmn-js draws it at the shape's bottom centre) whose
+  // child instance is known, so a single click on the marker itself jumps into the
+  // child's replay (same window) — no extra badge, the marker is the target. It
+  // complements the Details panel's link and is rebuilt whenever the step set grows.
+  // One hotspot per element (the first child); a multi-instance call activity's
+  // per-iteration children are reachable by selecting each iteration in the history.
+  const caLinkIds = [];
+  function drawCallActivityLinks() {
+    for (const id of caLinkIds.splice(0)) { try { overlays.remove(id); } catch { /* gone */ } }
+    const seen = new Set();
+    for (const s of steps) {
+      if (!s.childInstanceKey || seen.has(s.elementId)) continue;
+      seen.add(s.elementId);
+      const el = registry.get(s.elementId);
+      if (!el) continue; // element not on this diagram
+      // Centre a small hotspot (sized in CSS) horizontally on the bottom marker.
+      const left = Math.max(0, Math.round((el.width || 100) / 2) - 11);
+      caLinkIds.push(overlays.add(s.elementId, "atlas-callchild", {
+        position: { bottom: 1, left },
+        html: `<a class="ca-child-hotspot" href="#/operations/i/${s.childInstanceKey}" title="Open the called process's instance replay" aria-label="Open the called process"></a>`,
+      }));
+    }
+  }
+
   // renderDetail fills the Details tab for the selected element instance (or the
   // process instance when nothing is selected), mirroring Operate's element panel.
   function renderDetail() {
@@ -5784,6 +6033,11 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     if (!s) { detailEl.innerHTML = `<p class="ops-empty">No details for this element.</p>`; return; }
     const rel = s.relation ? `<dt>Concurrency</dt><dd>${s.relation === "fork" ? "Parallel branch (fork)" : "Join arrival"}</dd>` : "";
     const from = s.sourceElementId ? `<dt>Entered from</dt><dd>${esc(stepLabel({ elementId: s.sourceElementId }))}</dd>` : "";
+    // A call activity links to the child instance it started (ADR-0076), so an
+    // operator drills from caller to child in one click, same window.
+    const child = s.childInstanceKey
+      ? `<dt>Called process</dt><dd><a class="ca-child-link" href="#/operations/i/${s.childInstanceKey}" title="Open the called process's instance replay">&#8627; Instance ${esc(String(s.childInstanceKey))}</a></dd>`
+      : "";
     detailEl.innerHTML = `<dl class="ops-props">
       <dt>Element</dt><dd>${esc(stepLabel(s))}</dd>
       <dt>Type</dt><dd>${esc(typeLabel(s.type))}</dd>
@@ -5792,7 +6046,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       <dt>Token</dt><dd class="mono">${s.tokenId ? esc(String(s.tokenId)) : "—"}</dd>
       <dt>Start Date</dt><dd>${esc(fmtDateTime(s.at))}</dd>
       <dt>End Date</dt><dd>${s.endAt ? esc(fmtDateTime(s.endAt)) : '<span class="ops-live">active</span>'}</dd>
-      ${from}${rel}
+      ${from}${rel}${child}
     </dl>`;
   }
 
@@ -6214,6 +6468,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       scrub.max = String(frames.length);
       renderHistory();
       loadBadges();
+      drawCallActivityLinks();
       if (!playing && wasAtEnd) setPlayhead(frames.length); // follow new frames live
       else { scrub.value = String(playhead); updateClock(); renderOverlay(); highlightHistory(); }
       renderInspector();

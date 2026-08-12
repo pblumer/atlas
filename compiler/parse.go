@@ -142,7 +142,7 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 	if len(defs.Processes) == 0 {
 		return nil, fmt.Errorf("compiler: no <process> element in definitions")
 	}
-	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs))
+	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildOperationResolver(defs))
 }
 
 // Deployable is one executable process compiled from a model, plus the display
@@ -171,6 +171,7 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 	resolve := buildMessageResolver(defs)
 	resolveSig := buildSignalResolver(defs)
 	resolveErr := buildErrorResolver(defs)
+	resolveOp := buildOperationResolver(defs)
 	poolName := participantNames(defs)
 
 	var out []Deployable
@@ -178,7 +179,7 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 		if len(proc.StartEvents) == 0 {
 			continue // black-box pool: nothing to run
 		}
-		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig, resolveErr)
+		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig, resolveErr, resolveOp)
 		if err != nil {
 			return nil, err
 		}
@@ -201,7 +202,7 @@ func ParseNamed(key uint64, version int32, r io.Reader, processId string) (*Comp
 	}
 	for _, proc := range defs.Processes {
 		if proc.Id == processId {
-			return compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs))
+			return compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildOperationResolver(defs))
 		}
 	}
 	return nil, fmt.Errorf("compiler: no <process> with id %q in model", processId)
@@ -260,6 +261,32 @@ func buildMessageResolver(defs xmlDefinitions) func(ownerId, messageRef string) 
 	}
 }
 
+// buildOperationResolver indexes a model's <interface> operations by id and returns a
+// resolver from a send task's operationRef to the id of the operation's <inMessageRef>
+// message (ADR-0112) — the message that send publishes. An unknown operation, or one with no
+// inMessageRef, is a deploy error. The operation's outMessageRef (a response) is ignored: an
+// operationRef send is a fire-and-forget throw, exactly like a messageRef send.
+func buildOperationResolver(defs xmlDefinitions) func(ownerId, operationRef string) (string, error) {
+	ops := make(map[string]string, len(defs.Interfaces))
+	for _, iface := range defs.Interfaces {
+		for _, op := range iface.Operations {
+			if op.Id != "" {
+				ops[op.Id] = strings.TrimSpace(op.InMessageRef)
+			}
+		}
+	}
+	return func(ownerId, operationRef string) (string, error) {
+		msg, ok := ops[operationRef]
+		if !ok {
+			return "", fmt.Errorf("compiler: send task %q references unknown operation %q", ownerId, operationRef)
+		}
+		if msg == "" {
+			return "", fmt.Errorf("compiler: operation %q referenced by send task %q has no inMessageRef", operationRef, ownerId)
+		}
+		return msg, nil
+	}
+}
+
 // buildSignalResolver indexes a model's top-level <bpmn:signal> declarations by id and
 // returns a closure resolving a signalRef to the signal's name (ADR-0088). A signal is
 // broadcast by name, so — unlike a message — there is no correlation key to compile.
@@ -311,7 +338,7 @@ func buildErrorResolver(defs xmlDefinitions) func(ownerId, errorRef string) (str
 // compileProcess linearizes one <process> into an immutable CompiledProcess,
 // resolving message, signal, and error references through resolveMessage/resolveSignal/
 // resolveError (shared across a collaboration's processes).
-func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error), resolveError func(ownerId, errorRef string) (string, error)) (*CompiledProcess, error) {
+func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error), resolveError func(ownerId, errorRef string) (string, error), resolveOperation func(ownerId, operationRef string) (string, error)) (*CompiledProcess, error) {
 	b := NewBuilder(key, proc.Id, version)
 	// isExecutable defaults to true when the attribute is absent (BPMN convention;
 	// Atlas has always run every deployed process), so an existing model without it
@@ -343,6 +370,16 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		ids[id] = nodeID
 		b.SetElementBpmnId(nodeID, id) // retain for the live diagram overlay
 		return nil
+	}
+
+	// Fold <transaction> subprocesses into SubProcesses (marked IsTransaction) before any
+	// scope walk, so a transaction is registered, wired, and validated as the subprocess it
+	// structurally is (ADR-0108).
+	foldTransactions(&proc.xmlFlowContent)
+	// Resolve each send task's operationRef to the message the operation sends, before
+	// registerScope, so an operationRef send is compiled as the message kind (ADR-0112).
+	if err := resolveSendTaskOperations(&proc.xmlFlowContent, resolveOperation); err != nil {
+		return nil, err
 	}
 
 	// Register every flow node — the process root and, recursively, each embedded
@@ -468,6 +505,14 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			return nil, err
 		}
 	}
+	for _, st := range proc.SendTasks {
+		if strings.TrimSpace(st.MessageRef) != "" {
+			continue // a message-kind send task is a throw, not an activity (ADR-0112)
+		}
+		if err := wireDataOut(st.Id, st.DataOut); err != nil {
+			return nil, err
+		}
+	}
 
 	// Wire data-input associations: a sourceRef names the data object read (resolved
 	// like an output target, its state ignored on a read); a targetRef is the process
@@ -533,6 +578,14 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	}
 	for _, rt := range proc.ReceiveTasks {
 		if err := wireDataIn(rt.Id, rt.DataIn); err != nil {
+			return nil, err
+		}
+	}
+	for _, st := range proc.SendTasks {
+		if strings.TrimSpace(st.MessageRef) != "" {
+			continue // a message-kind send task is a throw, not an activity (ADR-0112)
+		}
+		if err := wireDataIn(st.Id, st.DataIn); err != nil {
 			return nil, err
 		}
 	}
@@ -605,6 +658,14 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		for _, rt := range c.ReceiveTasks {
 			if err := wireIO(rt.Id, rt.IOMapping); err != nil {
+				return err
+			}
+		}
+		for _, st := range c.SendTasks {
+			if strings.TrimSpace(st.MessageRef) != "" {
+				continue // a message-kind send task is a throw, not an activity (ADR-0112)
+			}
+			if err := wireIO(st.Id, st.IOMapping); err != nil {
 				return err
 			}
 		}
@@ -697,6 +758,14 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 				return err
 			}
 		}
+		for _, st := range c.SendTasks {
+			if strings.TrimSpace(st.MessageRef) != "" {
+				continue // a message-kind send task is a throw, not an activity (ADR-0112)
+			}
+			if err := wireMI(st.Id, st.MultiInstance); err != nil {
+				return err
+			}
+		}
 		for i := range c.SubProcesses {
 			sub := &c.SubProcesses[i]
 			if err := wireMI(sub.Id, sub.MultiInstance); err != nil {
@@ -736,7 +805,22 @@ type xmlDefinitions struct {
 	Messages      []xmlMessage      `xml:"message"`
 	Signals       []xmlSignal       `xml:"signal"`
 	Errors        []xmlError        `xml:"error"`
+	Interfaces    []xmlInterface    `xml:"interface"`
 	Collaboration *xmlCollaboration `xml:"collaboration"`
+}
+
+// A BPMN <interface> groups <operation>s (the WSDL-style service-interface model). Atlas
+// reads them only to resolve a send task's operationRef to the operation's inMessageRef
+// (ADR-0112) — the message that send publishes.
+type xmlInterface struct {
+	Operations []xmlOperation `xml:"operation"`
+}
+
+// A BPMN <operation> inside an <interface>. Its <inMessageRef> names the message an
+// operationRef send task publishes; its outMessageRef (a response) is not supported.
+type xmlOperation struct {
+	Id           string `xml:"id,attr"`
+	InMessageRef string `xml:"inMessageRef"`
 }
 
 // A collaboration groups participant pools. Each participant references the
@@ -825,21 +909,33 @@ type xmlFlowContent struct {
 
 	Flows []xmlSequenceFlow `xml:"sequenceFlow"`
 
-	Tasks             []xmlNode             `xml:"task"`
-	ManualTasks       []xmlNode             `xml:"manualTask"`
-	ParallelGateways  []xmlNode             `xml:"parallelGateway"`
-	InclusiveGateways []xmlInclusiveGateway `xml:"inclusiveGateway"`
+	Tasks              []xmlNode             `xml:"task"`
+	ManualTasks        []xmlNode             `xml:"manualTask"`
+	ParallelGateways   []xmlNode             `xml:"parallelGateway"`
+	InclusiveGateways  []xmlInclusiveGateway `xml:"inclusiveGateway"`
+	EventBasedGateways []xmlNode             `xml:"eventBasedGateway"` // deferred choice; only its id matters (ADR-0110)
 
 	UserTasks []xmlUserTask `xml:"userTask"`
 
 	SubProcesses   []xmlSubProcess   `xml:"subProcess"`
 	CallActivities []xmlCallActivity `xml:"callActivity"`
 
+	// Transactions are <transaction> subprocesses — structurally an embedded subprocess with
+	// one added outcome, cancellation (ADR-0108). They share xmlSubProcess's shape; foldTransactions
+	// merges them into SubProcesses (marked IsTransaction) right after parse, so every scope walk
+	// that already handles subprocesses handles transactions unchanged.
+	Transactions []xmlSubProcess `xml:"transaction"`
+
 	ReceiveTasks []xmlReceiveTask `xml:"receiveTask"`
 
-	// Captured only to give a clear "unsupported element" error (see Parse); not
+	// A send task is a service task under a different BPMN label (ADR-0112): it creates a
+	// job and waits, carrying the same taskDefinition, connector extensions, and activity
+	// sub-elements. It parses into the very same shape, so xmlSendTask is an alias.
+	SendTasks []xmlSendTask `xml:"sendTask"`
+
+	// Captured only to give a clear "unsupported element" error (see registerScope); not
 	// executable yet.
-	SendTasks []xmlNode `xml:"sendTask"`
+	AdHocSubProcesses []xmlNode `xml:"adHocSubProcess"`
 
 	// Associations are BPMN <association> artifacts declared in this scope. Atlas reads
 	// them only to link a compensation boundary event to its handler (ADR-0103).
@@ -914,7 +1010,59 @@ type xmlSubProcess struct {
 	// scope runs. "true" makes it an event subprocess; empty/absent is an ordinary one.
 	TriggeredByEvent string            `xml:"triggeredByEvent,attr"`
 	MultiInstance    *xmlMultiInstance `xml:"multiInstanceLoopCharacteristics"`
+	// IsTransaction marks a subprocess that was parsed from a <transaction> element (never from
+	// XML — set by foldTransactions). The compiler marks its compiled node so the runtime and
+	// validation know it may host a cancel boundary and hold a cancel end event (ADR-0108).
+	IsTransaction bool `xml:"-"`
 	xmlFlowContent
+}
+
+// foldTransactions merges each scope's <transaction> subprocesses into its SubProcesses
+// slice, marked IsTransaction, recursively down the scope tree. A transaction is
+// structurally an embedded subprocess with cancellation added (ADR-0108); folding it into
+// SubProcesses means every existing walk (registration, flow wiring, compensation
+// resolution, I/O and multi-instance) treats it as a subprocess with no special-casing, and
+// only the two genuinely new sites — marking the compiled node, and dispatching a cancel
+// end/boundary — need to look at IsTransaction / the cancel event definition.
+func foldTransactions(fc *xmlFlowContent) {
+	for i := range fc.Transactions {
+		fc.Transactions[i].IsTransaction = true
+	}
+	fc.SubProcesses = append(fc.SubProcesses, fc.Transactions...)
+	fc.Transactions = nil
+	for i := range fc.SubProcesses {
+		foldTransactions(&fc.SubProcesses[i].xmlFlowContent)
+	}
+}
+
+// resolveSendTaskOperations rewrites each send task's operationRef to the message that
+// operation sends (its inMessageRef), so the rest of the compiler treats an operationRef send
+// exactly as a messageRef send — the message kind (ADR-0112). It walks every scope, like
+// foldTransactions, and runs right after it (so send tasks inside a folded transaction are
+// covered) and before registerScope. A send task carrying both a messageRef and an operationRef
+// is a conflict (a deploy error).
+func resolveSendTaskOperations(fc *xmlFlowContent, resolveOperation func(ownerId, operationRef string) (string, error)) error {
+	for i := range fc.SendTasks {
+		st := &fc.SendTasks[i]
+		op := strings.TrimSpace(st.OperationRef)
+		if op == "" {
+			continue
+		}
+		if strings.TrimSpace(st.MessageRef) != "" {
+			return fmt.Errorf("compiler: send task %q sets both messageRef and operationRef; use one", st.Id)
+		}
+		msg, err := resolveOperation(st.Id, op)
+		if err != nil {
+			return err
+		}
+		st.MessageRef = msg
+	}
+	for i := range fc.SubProcesses {
+		if err := resolveSendTaskOperations(&fc.SubProcesses[i].xmlFlowContent, resolveOperation); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // A BPMN data object. It is not a flow node — no token flows through it — so it
@@ -1085,11 +1233,21 @@ type xmlEndEvent struct {
 	// compensation, then ends its scope (ADR-0103); the trigger-and-stop counterpart of a
 	// compensation throw. A pointer so an absent one is nil.
 	Compensation *xmlCompensateEventDefinition `xml:"compensateEventDefinition"`
+	// Cancel, when present, makes this a cancel end event: it cancels the enclosing
+	// transaction — compensating its completed activities, then routing out the transaction's
+	// cancel boundary (ADR-0108). Valid only inside a transaction. A pointer so an absent one is nil.
+	Cancel *xmlCancelEventDefinition `xml:"cancelEventDefinition"`
 }
 
 // xmlTerminateEventDefinition is the empty <terminateEventDefinition> element; only its
 // presence matters (a non-nil pointer once parsed).
 type xmlTerminateEventDefinition struct{}
+
+// xmlCancelEventDefinition is the empty <cancelEventDefinition> element; only its presence
+// matters. On an end event it makes a cancel end event (cancels the enclosing transaction);
+// on a boundary event it makes a cancel boundary (catches a transaction's cancellation),
+// which may attach only to a transaction and is always interrupting (ADR-0108).
+type xmlCancelEventDefinition struct{}
 
 // A boundary event is attached to a host activity (AttachedToRef) and arms while
 // it runs. CancelActivity mirrors BPMN's attribute: absent or "true" is
@@ -1111,6 +1269,10 @@ type xmlBoundaryEvent struct {
 	// (never armed), marking its host activity compensable and linking — via a BPMN
 	// <association> — to the compensation handler (ADR-0103). A pointer so an absent one is nil.
 	Compensation *xmlCompensateEventDefinition `xml:"compensateEventDefinition"`
+	// Cancel, when present, makes this a cancel boundary event: it catches its host
+	// transaction's cancellation and routes the recovery flow. Valid only on a transaction,
+	// and always interrupting (ADR-0108). A pointer so an absent one is nil.
+	Cancel *xmlCancelEventDefinition `xml:"cancelEventDefinition"`
 }
 
 type xmlTimerEventDefinition struct {
@@ -1167,7 +1329,17 @@ type xmlAssignmentDefinition struct {
 }
 
 type xmlServiceTask struct {
-	Id             string            `xml:"id,attr"`
+	Id string `xml:"id,attr"`
+	// MessageRef is read only for a send task (ADR-0112): a <sendTask messageRef> is the
+	// message-kind send — a correlating throw in task form. A service task never carries one
+	// (it dispatches on its taskDefinition/connector), so the field is inert there.
+	MessageRef string `xml:"messageRef,attr"`
+	// OperationRef is read only for a send task (ADR-0112): a <sendTask operationRef> names a
+	// <bpmn:operation> whose <inMessageRef> is the message to send. It is resolved to that
+	// message before compilation (resolveSendTaskOperations), so it is an alternate spelling of
+	// the message kind — a fire-and-forget throw. The operation's outMessageRef (a response) is
+	// not supported. Inert on a service task.
+	OperationRef   string            `xml:"operationRef,attr"`
 	TaskDefinition xmlTaskDefinition `xml:"extensionElements>taskDefinition"`
 	// Clio, when present, marks this service task a clio connector task (ADR-0036).
 	// The pointer is nil when the <atlas:clioConnector> extension is absent.
@@ -1180,6 +1352,9 @@ type xmlServiceTask struct {
 	// (ADR-0079). The pointer is nil when the <atlas:mailConnector> extension is
 	// absent.
 	Mail *xmlMailConnector `xml:"extensionElements>mailConnector"`
+	// Csv, when present, marks this service task a CSV-to-JSON connector task
+	// (ADR-0090). The pointer is nil when the <atlas:csvConnector> extension is absent.
+	Csv *xmlCsvConnector `xml:"extensionElements>csvConnector"`
 	// SharePoint, when present, marks this service task a SharePoint connector task
 	// (ADR-0105). The pointer is nil when the <atlas:sharepointConnector> extension is
 	// absent.
@@ -1193,6 +1368,12 @@ type xmlServiceTask struct {
 	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
 	DataIn        []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
+
+// xmlSendTask is a <sendTask>: a job-creating activity identical in shape and execution to
+// a service task (ADR-0112) — same taskDefinition, connector extensions, I/O mappings,
+// multi-instance, and data associations. It is a type alias so both parse and every
+// per-activity wiring loop treat the two identically; only the compiled node type differs.
+type xmlSendTask = xmlServiceTask
 
 // A clio connector task's parameters, carried on a service task as an
 // <atlas:clioConnector connector="..." operation="..." .../> extension element.
@@ -1258,6 +1439,49 @@ type xmlMailConnector struct {
 	From      string `xml:"from,attr"`
 	Subject   string `xml:"subject,attr"`
 	Body      string `xml:"body,attr"`
+}
+
+// A CSV-to-JSON connector task's parameters, carried on a service task as an
+// <atlas:csvConnector source="..." delimiter="," .../> extension element (ADR-0090).
+// source names the process variable holding the raw CSV text (default "csvText");
+// delimiter is the single-character field separator (default ","); hasHeader is
+// "true"/"false" (default true) — whether the first row is a header; columns is an
+// optional comma-separated list of field names (omit to derive them from the header
+// row); resultVariable names the variable the parsed rows are written to (default
+// "rows"). The layout lives in the model, so nothing but the file arrives at runtime.
+type xmlCsvConnector struct {
+	Source         string `xml:"source,attr"`
+	Delimiter      string `xml:"delimiter,attr"`
+	HasHeader      string `xml:"hasHeader,attr"`
+	Columns        string `xml:"columns,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	Retries        string `xml:"retries,attr"`
+}
+
+// splitCSVColumns turns a csvConnector's comma-separated columns attribute into a
+// trimmed list of field names, dropping empty entries so a trailing comma or an
+// unset attribute yields no phantom column. An empty result means "derive the
+// columns from the header row" (ADR-0090).
+func splitCSVColumns(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if name := strings.TrimSpace(p); name != "" {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// csvHasHeader interprets a csvConnector's hasHeader attribute, defaulting to true
+// (a header row is present) when the attribute is absent or blank — matching the
+// CSV parser's own default (ADR-0084/0090).
+func csvHasHeader(attr string) bool {
+	s := strings.TrimSpace(attr)
+	return s == "" || strings.EqualFold(s, "true")
 }
 
 // A SharePoint connector task's parameters, carried on a service task as an

@@ -45,10 +45,15 @@ type callActivityRow struct {
 	PropagateAllParent bool   `json:"propagateAllParent"`
 	PropagateAllChild  bool   `json:"propagateAllChild"`
 	MultiInstance      bool   `json:"multiInstance"`
-	Resolved           bool   `json:"resolved"`
-	TargetKey          uint64 `json:"targetKey"`
-	TargetName         string `json:"targetName"`
-	TargetVersion      int32  `json:"targetVersion"`
+	Override           *struct {
+		Action          string `json:"action"`
+		TargetProcessID string `json:"targetProcessId"`
+		TargetVersion   int32  `json:"targetVersion"`
+	} `json:"override"`
+	Resolved      bool   `json:"resolved"`
+	TargetKey     uint64 `json:"targetKey"`
+	TargetName    string `json:"targetName"`
+	TargetVersion int32  `json:"targetVersion"`
 }
 
 // TestCallActivitiesEndpoint deploys a caller with a resolvable and an
