@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: an embedded subprocess.
+
+  Start -> subProcess "sub" { inner_start -> script "inner_work" -> inner_end }
+  -> End. A token enters the subprocess, runs its inner flow to the inner end
+  event, then leaves the subprocess and continues. The inner script is in-engine,
+  so the whole thing self-completes.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_subprocess" targetNamespace="http://atlas/conformance">
+  <process id="subprocess" name="Subprocess" isExecutable="true">
+    <startEvent id="start"/>
+    <subProcess id="sub" name="Do the work">
+      <startEvent id="inner_start"/>
+      <scriptTask id="inner_work">
+        <extensionElements>
+          <zeebe:script expression="= 1" resultVariable="inner_done"/>
+        </extensionElements>
+      </scriptTask>
+      <endEvent id="inner_end"/>
+      <sequenceFlow id="if1" sourceRef="inner_start" targetRef="inner_work"/>
+      <sequenceFlow id="if2" sourceRef="inner_work" targetRef="inner_end"/>
+    </subProcess>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="sub"/>
+    <sequenceFlow id="f2" sourceRef="sub" targetRef="end"/>
+  </process>
+</definitions>

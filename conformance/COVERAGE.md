@@ -24,6 +24,8 @@ Generated from the register in `scenario.go` by `go test ./conformance -update`.
 | Job failure raises an incident; resolve resumes it | — | incident | ✅ |
 | Interrupting boundary error event | — | boundary-error | ✅ |
 | Signal throw and catch (1:n broadcast) | — | signal-throw-catch | ✅ |
+| Embedded subprocess | — | subprocess | ✅ |
+| Parallel multi-instance activity with output collection | — | multi-instance | ✅ |
 
 ## Control-flow patterns
 

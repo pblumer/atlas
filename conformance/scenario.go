@@ -58,6 +58,8 @@ var Features = []Feature{
 	{"incident", "Job failure raises an incident; resolve resumes it", nil},
 	{"boundary-error", "Interrupting boundary error event", nil},
 	{"signal", "Signal throw and catch (1:n broadcast)", nil},
+	{"embedded-subprocess", "Embedded subprocess", nil},
+	{"multi-instance", "Parallel multi-instance activity with output collection", nil},
 }
 
 // Scenario binds a BPMN model to the features it exercises, how its instance is
@@ -120,6 +122,10 @@ var Scenarios = []Scenario{
 
 	// Signal: one branch throws, the other catches — self-completing.
 	{Name: "signal-throw-catch", Model: "signal-throw-catch.bpmn", Features: []string{"signal"}},
+
+	// Structure: embedded subprocess and a multi-instance activity.
+	{Name: "subprocess", Model: "subprocess.bpmn", Features: []string{"embedded-subprocess"}},
+	{Name: "multi-instance", Model: "multi-instance.bpmn", Features: []string{"multi-instance"}},
 }
 
 // NegativeModel is a well-formed BPMN model that is nonetheless invalid and must be

@@ -129,9 +129,12 @@ The control-flow basics most real models use.
   unknown message), asserted by `TestNegativeModels`. Now also covering the
   **interrupting boundary error** event (a job throws a business error the
   boundary catches) and **signal** throw/catch (a 1:n broadcast within an
-  instance) — 18 scenarios. (Escalation events stay out until the engine supports
-  `escalationEventDefinition`.) Next: signal boundary/start, subprocess,
-  multi-instance and compensation scenarios, and broader pattern coverage.
+  instance), plus **embedded subprocess** and a **parallel multi-instance**
+  activity (self-completing over an inline-script body, with output-collection
+  aggregation) — 20 scenarios. (Escalation events stay out until the engine
+  supports `escalationEventDefinition`.) Next: signal boundary/start, sequential
+  multi-instance, call activity and compensation scenarios, and broader pattern
+  coverage.
 - 🚧 **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)
   engine, [ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)): the
   element, its behavior, and evaluation through the job path landed as a vertical

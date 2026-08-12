@@ -99,11 +99,12 @@ Add one by dropping a `neg-*.bpmn` under `models/` and registering it in
 The suite covers self-completing control flow, the parking features the driver
 reaches (user/service tasks, messages, timers, receive tasks, boundary
 timer/message/**error** events, event-based gateway, start events), the incident
-lifecycle, **signal** throw/catch, and a first set of negative models. Planned
-extensions, roughly in order:
+lifecycle, **signal** throw/catch, **embedded subprocess** and **multi-instance**
+activities, and a first set of negative models. Planned extensions, roughly in
+order:
 
-- Broader pattern coverage (inclusive gateways, subprocess, multi-instance,
-  compensation, signal boundary/start) — each a row that flips from 🔲 to ✅ in
+- Broader coverage (inclusive gateway, sequential multi-instance, compensation,
+  signal boundary/start, call activity) — each a row that flips from 🔲 to ✅ in
   `COVERAGE.md`.
 - **Escalation** events once the engine supports them — there is no
   `escalationEventDefinition` in the compiler yet, so there is no feature to
