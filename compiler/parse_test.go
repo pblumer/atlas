@@ -382,23 +382,20 @@ func TestParseUnsupportedElementMessage(t *testing.T) {
 	}
 }
 
-// TestParseTerminateEndRejected guards the silent-drop: a <terminateEventDefinition>
-// on an end event used to parse as a plain none end (terminate semantics lost with no
-// error). It must now be rejected at compile time with a clear message, so a modeled
-// terminate can't deploy as a no-op.
-func TestParseTerminateEndRejected(t *testing.T) {
+// TestParseTerminateEndCompiles: a <terminateEventDefinition> on an end event compiles to a
+// TypeTerminateEndEvent — the "abort" end that ends its enclosing flow scope (ADR-0116). It used
+// to be a deploy error (Atlas couldn't run it); it now runs.
+func TestParseTerminateEndCompiles(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
 		<startEvent id="s"/>
 		<endEvent id="stop"><terminateEventDefinition/></endEvent>
 		<sequenceFlow id="f" sourceRef="s" targetRef="stop"/></process></definitions>`
-	_, err := Parse(1, 1, strings.NewReader(xml))
-	if err == nil {
-		t.Fatal("want error for a terminate end event (unsupported), got nil")
+	cp, err := Parse(1, 1, strings.NewReader(xml))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
 	}
-	for _, want := range []string{"stop", "terminate"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("error %q should mention %q", err.Error(), want)
-		}
+	if n := nodeByBpmnId(t, cp, "stop"); n.Type != TypeTerminateEndEvent || n.Type.String() != "TerminateEndEvent" {
+		t.Fatalf("terminate end type = %v (%q), want TerminateEndEvent", n.Type, n.Type.String())
 	}
 }
 

@@ -188,7 +188,6 @@ var NegativeModels = []NegativeModel{
 	{"neg-dangling-flow", "neg-dangling-flow.bpmn", "a sequence flow targets an element that does not exist"},
 	{"neg-boundary-bad-host", "neg-boundary-bad-host.bpmn", "a boundary event attaches to a host that does not exist"},
 	{"neg-unknown-message", "neg-unknown-message.bpmn", "a receive task references a message that is not declared"},
-	{"neg-terminate-end", "neg-terminate-end.bpmn", "a terminate end event is unsupported and must not silently degrade to a plain end"},
 }
 
 func (n NegativeModel) load() ([]byte, error) {

@@ -595,7 +595,6 @@ const UNSUPPORTED_TYPES = {
   "bpmn:DataStoreReference": "Data stores aren't supported yet",
 };
 const UNSUPPORTED_EVENT_DEFS = {
-  "bpmn:TerminateEventDefinition": "Terminate end events can't run yet",
   "bpmn:EscalationEventDefinition": "Escalation events aren't supported yet",
   "bpmn:ConditionalEventDefinition": "Conditional events aren't supported yet",
   "bpmn:LinkEventDefinition": "Link events aren't supported yet",

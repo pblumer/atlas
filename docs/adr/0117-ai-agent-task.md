@@ -1,4 +1,4 @@
-# ADR-0116: An AI agent task — an LLM agent as a managed connector on the job path
+# ADR-0117: An AI agent task — an LLM agent as a managed connector on the job path
 
 - **Status:** Proposed
 - **Date:** 2026-08-12

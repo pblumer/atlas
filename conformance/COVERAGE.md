@@ -61,4 +61,3 @@ None — every registered feature and pattern has a covering scenario.
 | neg-dangling-flow | a sequence flow targets an element that does not exist |
 | neg-boundary-bad-host | a boundary event attaches to a host that does not exist |
 | neg-unknown-message | a receive task references a message that is not declared |
-| neg-terminate-end | a terminate end event is unsupported and must not silently degrade to a plain end |

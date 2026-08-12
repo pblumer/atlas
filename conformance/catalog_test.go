@@ -155,8 +155,62 @@ func catalogPage(sc Scenario, res RunResult, desc string) string {
 		fmt.Fprintf(&b, "- **Data objects:** %s\n", strings.Join(dd, ", "))
 	}
 
+	b.WriteString("\n## What is verified\n\n")
+	b.WriteString("The outcome above is not asserted once — it is cross-checked by several\n")
+	b.WriteString("independent oracles that must all agree, so a wrong result cannot slip through:\n\n")
+	b.WriteString("- **Golden trace** — the exact path, variables, and data objects above are\n")
+	b.WriteString("  compared byte-for-byte against a committed golden file; any drift fails the suite.\n")
+	b.WriteString("- **Replay equivalence (invariant I4)** — the scenario runs live, then replays\n")
+	b.WriteString("  from its event log; both must reach an identical state, proving recovery is\n")
+	b.WriteString("  deterministic and loses nothing.\n")
+	b.WriteString("- **Structural invariants** — the finished run must leave no orphan tokens and\n")
+	b.WriteString("  honor the engine's six state invariants (see `docs/architecture/invariants.md`).\n")
+	if peers := equivPeers(sc); len(peers) > 0 {
+		var pl []string
+		for _, p := range peers {
+			pl = append(pl, "`"+p+"`")
+		}
+		fmt.Fprintf(&b, "- **Metamorphic equivalence** — this scenario is in the `%s` group; it must\n"+
+			"  produce the same observable effect as %s, even though the models differ.\n",
+			sc.EquivClass, strings.Join(pl, ", "))
+	}
+	if differentialSubset[sc.Name] {
+		b.WriteString("- **Differential oracle** — the same case is run against an independent BPMN\n")
+		b.WriteString("  engine (Node's `bpmn-engine`) and both must agree on the outcome\n")
+		b.WriteString("  (opt-in: `go test -tags differential ./conformance/differential`).\n")
+	}
+
+	b.WriteString("\n## Run it yourself\n\n")
+	fmt.Fprintf(&b, "- **Locally:** `go test ./conformance -run 'TestScenarios/%s'`\n", sc.Name)
+	fmt.Fprintf(&b, "- **Portable case:** the language-neutral form lives in "+
+		"[`../../tck/cases/%s`](../../tck/cases/%s) (`model.bpmn` + `case.json` + `expected.json`), "+
+		"so another engine can replay it without reading Go.\n", sc.Name, sc.Name)
+
 	b.WriteString("\n---\n_Generated from `conformance/scenario.go` by `go test ./conformance -update`. Do not edit by hand._\n")
 	return b.String()
+}
+
+// differentialSubset lists the scenarios also checked against the independent
+// reference engine (mirrors conformance/differential/differential_test.go).
+var differentialSubset = map[string]bool{
+	"sequence":             true,
+	"exclusive-gateway":    true,
+	"parallel-independent": true,
+	"inclusive-gateway":    true,
+}
+
+// equivPeers returns the other scenarios sharing sc's metamorphic class, or nil.
+func equivPeers(sc Scenario) []string {
+	if sc.EquivClass == "" {
+		return nil
+	}
+	var peers []string
+	for _, o := range Scenarios {
+		if o.EquivClass == sc.EquivClass && o.Name != sc.Name {
+			peers = append(peers, o.Name)
+		}
+	}
+	return peers
 }
 
 func patternLabel(id string) string {
