@@ -140,11 +140,12 @@ The control-flow basics most real models use.
   the trigger instance is filtered out by definition key), and a **first-class data
   object** written by an output association and read back by an input one (the
   trace now surfaces data objects with their advancing data state, e.g.
-  `order[approved]=100`) — 27 scenarios, plus a fourth negative model pinning that
-  a **terminate end event** is rejected at compile rather than silently degraded.
-  (Escalation events stay out until the engine supports `escalationEventDefinition`.)
-  Next: transaction/cancel scenarios, field-level and collection data objects, and
-  broader pattern coverage.
+  `order[approved]=100`), and **field-level data-object writes** (members accrued
+  across steps into one structured object, `order={"id":"ORD-1","total":100}`) — 28
+  scenarios, plus a fourth negative model pinning that a **terminate end event** is
+  rejected at compile rather than silently degraded. (Escalation events stay out
+  until the engine supports `escalationEventDefinition`.) Next: transaction/cancel
+  scenarios, collection data objects, and broader pattern coverage.
 - 🚧 **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)
   engine, [ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)): the
   element, its behavior, and evaluation through the job path landed as a vertical

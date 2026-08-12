@@ -108,11 +108,12 @@ The suite covers self-completing control flow (exclusive, parallel, and
 tasks, messages, timers, receive tasks, boundary timer/message/**error**/**signal**
 events, event-based gateway, all four start-event kinds), the incident lifecycle,
 **signal** throw/catch, **compensation**, **embedded subprocess**, **parallel and
-sequential multi-instance**, **call activity**, **first-class data objects**, and a
-growing set of negative models. Planned extensions, roughly in order:
+sequential multi-instance**, **call activity**, **first-class data objects
+(whole-object and field-level writes)**, and a growing set of negative models.
+Planned extensions, roughly in order:
 
-- Broader coverage (transaction/cancel end, field-level data-object writes,
-  collection data objects) — each a row that flips from 🔲 to ✅ in `COVERAGE.md`.
+- Broader coverage (transaction/cancel end, collection data objects, data-object
+  lineage) — each a row that flips from 🔲 to ✅ in `COVERAGE.md`.
 - More negative models as unsupported constructs are pinned (terminate end is the
   latest — the compiler rejects it rather than silently degrading it).
 - **Escalation** events once the engine supports them — there is no
