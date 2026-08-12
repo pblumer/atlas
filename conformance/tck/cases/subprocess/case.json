@@ -1,0 +1,11 @@
+{
+  "name": "subprocess",
+  "model": "subprocess.bpmn",
+  "features": [
+    "embedded-subprocess"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": null
+}

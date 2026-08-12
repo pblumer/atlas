@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: a collection data object.
+
+  Start -> script "seed" (raw = [10, 20, 30]) -> task "store_items" -> task
+  "load_items" -> End. The <dataObject> "items" is declared isCollection="true".
+  The "store_items" task's output association writes the list into it; the
+  "load_items" task's input association reads it back into "items_copy". The list
+  round-trips, and the trace marks the object as a collection —
+  items[collection]=[10,20,30] — a distinction that is compile-time metadata, not
+  visible on the runtime value alone. Self-completing (pass-through tasks).
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_collection_data_object" targetNamespace="http://atlas/conformance">
+  <process id="collection-data-object" name="Collection data object" isExecutable="true">
+    <dataObject id="DO_items" name="items" isCollection="true"/>
+    <dataObjectReference id="Ref_write" dataObjectRef="DO_items"/>
+    <dataObjectReference id="Ref_read" dataObjectRef="DO_items"/>
+    <startEvent id="start"/>
+    <scriptTask id="seed">
+      <extensionElements>
+        <zeebe:script expression="= [10, 20, 30]" resultVariable="raw"/>
+      </extensionElements>
+    </scriptTask>
+    <task id="store_items">
+      <dataOutputAssociation>
+        <targetRef>Ref_write</targetRef>
+        <assignment><from>= raw</from></assignment>
+      </dataOutputAssociation>
+    </task>
+    <task id="load_items">
+      <dataInputAssociation>
+        <sourceRef>Ref_read</sourceRef>
+        <assignment><to>items_copy</to></assignment>
+      </dataInputAssociation>
+    </task>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="seed"/>
+    <sequenceFlow id="f2" sourceRef="seed" targetRef="store_items"/>
+    <sequenceFlow id="f3" sourceRef="store_items" targetRef="load_items"/>
+    <sequenceFlow id="f4" sourceRef="load_items" targetRef="end"/>
+  </process>
+</definitions>

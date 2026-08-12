@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: a plain sequence.
+
+  Start -> script "set_a" (= 1 -> a) -> End. The smallest self-completing model:
+  one inline FEEL script means the token never parks, so an instance runs
+  straight to the end event with no worker attached. Realizes WCP-1 (Sequence).
+
+  Fixtures deliberately omit BPMN-DI: they are executed, not rendered, so the
+  engine's auto-layout is fine here (unlike the human-facing examples/ models).
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_sequence" targetNamespace="http://atlas/conformance">
+  <process id="sequence" name="Sequence" isExecutable="true">
+    <startEvent id="start"/>
+    <scriptTask id="set_a">
+      <extensionElements>
+        <zeebe:script expression="= 1" resultVariable="a"/>
+      </extensionElements>
+    </scriptTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="set_a"/>
+    <sequenceFlow id="f2" sourceRef="set_a" targetRef="end"/>
+  </process>
+</definitions>

@@ -1,0 +1,19 @@
+{
+  "completed": true,
+  "activities": [
+    "end",
+    "set_id",
+    "set_total",
+    "start"
+  ],
+  "path": [
+    "start",
+    "set_id",
+    "set_total",
+    "end"
+  ],
+  "variables": {},
+  "dataObjects": [
+    "order={\"id\":\"ORD-1\",\"total\":100}"
+  ]
+}

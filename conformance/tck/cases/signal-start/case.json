@@ -1,0 +1,13 @@
+{
+  "name": "signal-start",
+  "model": "signal-start.bpmn",
+  "features": [
+    "signal-start"
+  ],
+  "root": "on-signal",
+  "start": {
+    "kind": "signal",
+    "trigger": "thrower"
+  },
+  "driver": null
+}

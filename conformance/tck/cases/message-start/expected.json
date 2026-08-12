@@ -1,0 +1,17 @@
+{
+  "completed": true,
+  "activities": [
+    "end",
+    "on_order",
+    "record"
+  ],
+  "path": [
+    "on_order",
+    "record",
+    "end"
+  ],
+  "variables": {
+    "recorded": "1"
+  },
+  "dataObjects": []
+}

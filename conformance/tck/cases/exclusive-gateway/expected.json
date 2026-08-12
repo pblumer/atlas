@@ -1,0 +1,22 @@
+{
+  "completed": true,
+  "activities": [
+    "end",
+    "gw",
+    "low",
+    "set_betrag",
+    "start"
+  ],
+  "path": [
+    "start",
+    "set_betrag",
+    "gw",
+    "low",
+    "end"
+  ],
+  "variables": {
+    "betrag": "250",
+    "grade": "L"
+  },
+  "dataObjects": []
+}

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: a timer start event.
+
+  A duration timer (PT30S) starts a new instance: timerStart "on_schedule" ->
+  script "tick" -> End. There is no CreateInstance call — the suite's Start hook
+  arms the start timer, advances the clock past its due date with TimerStart(31s),
+  and the timer births the instance, which the inline script self-completes.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_timer_start" targetNamespace="http://atlas/conformance">
+  <process id="timer-start" name="Timer start" isExecutable="true">
+    <startEvent id="on_schedule">
+      <timerEventDefinition>
+        <timeDuration>PT30S</timeDuration>
+      </timerEventDefinition>
+    </startEvent>
+    <scriptTask id="tick">
+      <extensionElements>
+        <zeebe:script expression="= 1" resultVariable="fired"/>
+      </extensionElements>
+    </scriptTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="on_schedule" targetRef="tick"/>
+    <sequenceFlow id="f2" sourceRef="tick" targetRef="end"/>
+  </process>
+</definitions>

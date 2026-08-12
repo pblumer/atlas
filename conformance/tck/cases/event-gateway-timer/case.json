@@ -1,0 +1,19 @@
+{
+  "name": "event-gateway-timer",
+  "model": "event-based-gateway.bpmn",
+  "features": [
+    "event-based-gateway"
+  ],
+  "patterns": [
+    "WCP-16"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": [
+    {
+      "action": "wait",
+      "afterMs": 31000
+    }
+  ]
+}

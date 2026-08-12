@@ -1,0 +1,19 @@
+{
+  "completed": true,
+  "activities": [
+    "end_msg",
+    "got_msg",
+    "gw",
+    "start",
+    "timed_out"
+  ],
+  "path": [
+    "start",
+    "gw",
+    "got_msg",
+    "timed_out",
+    "end_msg"
+  ],
+  "variables": {},
+  "dataObjects": []
+}

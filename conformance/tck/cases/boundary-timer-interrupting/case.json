@@ -1,0 +1,16 @@
+{
+  "name": "boundary-timer-interrupting",
+  "model": "boundary-timer-interrupting.bpmn",
+  "features": [
+    "boundary-timer-interrupting"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": [
+    {
+      "action": "wait",
+      "afterMs": 31000
+    }
+  ]
+}

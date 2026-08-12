@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: field-level data-object writes (ADR-0060).
+
+  Start -> task "set_id" -> task "set_total" -> End. The <dataObject> "order"
+  starts unset. Each pass-through task's data output association targets a single
+  member via <assignment><to>: "set_id" writes order.id, "set_total" writes
+  order.total. The engine reads the object's current JSON, sets that one member,
+  and writes the merged value back — so the object accrues field by field, and the
+  first member write creates it from unset. The captured trace shows the merged
+  order={"id":"ORD-1","total":100}. Self-completing (pass-through tasks).
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             id="defs_data_object_fields" targetNamespace="http://atlas/conformance">
+  <process id="data-object-fields" name="Data object (field-level)" isExecutable="true">
+    <dataObject id="DO_order" name="order"/>
+    <dataObjectReference id="Ref_order" dataObjectRef="DO_order"/>
+    <startEvent id="start"/>
+    <task id="set_id">
+      <dataOutputAssociation>
+        <targetRef>Ref_order</targetRef>
+        <assignment><from>= "ORD-1"</from><to>id</to></assignment>
+      </dataOutputAssociation>
+    </task>
+    <task id="set_total">
+      <dataOutputAssociation>
+        <targetRef>Ref_order</targetRef>
+        <assignment><from>= 100</from><to>total</to></assignment>
+      </dataOutputAssociation>
+    </task>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="set_id"/>
+    <sequenceFlow id="f2" sourceRef="set_id" targetRef="set_total"/>
+    <sequenceFlow id="f3" sourceRef="set_total" targetRef="end"/>
+  </process>
+</definitions>

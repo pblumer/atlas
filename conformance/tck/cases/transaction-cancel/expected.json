@@ -1,0 +1,25 @@
+{
+  "completed": true,
+  "activities": [
+    "book",
+    "book_cancelled",
+    "cancelled",
+    "handled",
+    "reserve",
+    "start",
+    "ts",
+    "unreserve"
+  ],
+  "path": [
+    "start",
+    "book",
+    "ts",
+    "book_cancelled",
+    "reserve",
+    "cancelled",
+    "unreserve",
+    "handled"
+  ],
+  "variables": {},
+  "dataObjects": []
+}

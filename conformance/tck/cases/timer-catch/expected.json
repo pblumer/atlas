@@ -1,0 +1,15 @@
+{
+  "completed": true,
+  "activities": [
+    "end",
+    "start",
+    "wait"
+  ],
+  "path": [
+    "start",
+    "wait",
+    "end"
+  ],
+  "variables": {},
+  "dataObjects": []
+}

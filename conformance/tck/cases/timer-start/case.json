@@ -1,0 +1,12 @@
+{
+  "name": "timer-start",
+  "model": "timer-start.bpmn",
+  "features": [
+    "timer-start"
+  ],
+  "start": {
+    "afterMs": 31000,
+    "kind": "timer"
+  },
+  "driver": null
+}

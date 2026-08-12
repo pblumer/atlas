@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: a transaction subprocess with cancel (ADR-0108).
+
+  Start -> transaction "book" { ts -> serviceTask "reserve" -> cancel end
+  "cancelled" } -> End "done", with a cancel boundary on the transaction routing
+  to End "handled". "reserve" is compensable (a compensation boundary links it to
+  the "unreserve" handler). Once reserve completes, the flow reaches the cancel
+  end event, which rolls the transaction back: the engine compensates the
+  completed reserve (running unreserve), then the transaction's cancel boundary
+  fires and routes to "handled" instead of "done". Driver: Complete("reserve")
+  then Complete("unreserve").
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_transaction_cancel" targetNamespace="http://atlas/conformance">
+  <process id="transaction-cancel" name="Transaction (cancel)" isExecutable="true">
+    <startEvent id="start"/>
+    <transaction id="book">
+      <startEvent id="ts"/>
+      <serviceTask id="reserve">
+        <extensionElements><zeebe:taskDefinition type="reserve" retries="3"/></extensionElements>
+      </serviceTask>
+      <boundaryEvent id="reserve_comp" attachedToRef="reserve">
+        <compensateEventDefinition/>
+      </boundaryEvent>
+      <serviceTask id="unreserve" isForCompensation="true">
+        <extensionElements><zeebe:taskDefinition type="unreserve" retries="3"/></extensionElements>
+      </serviceTask>
+      <endEvent id="cancelled">
+        <cancelEventDefinition/>
+      </endEvent>
+      <association id="ca1" sourceRef="reserve_comp" targetRef="unreserve"/>
+      <sequenceFlow id="tf1" sourceRef="ts" targetRef="reserve"/>
+      <sequenceFlow id="tf2" sourceRef="reserve" targetRef="cancelled"/>
+    </transaction>
+    <boundaryEvent id="book_cancelled" attachedToRef="book">
+      <cancelEventDefinition/>
+    </boundaryEvent>
+    <endEvent id="done"/>
+    <endEvent id="handled"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="book"/>
+    <sequenceFlow id="f2" sourceRef="book" targetRef="done"/>
+    <sequenceFlow id="f3" sourceRef="book_cancelled" targetRef="handled"/>
+  </process>
+</definitions>

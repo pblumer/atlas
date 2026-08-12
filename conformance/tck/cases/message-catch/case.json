@@ -1,0 +1,17 @@
+{
+  "name": "message-catch",
+  "model": "message-catch.bpmn",
+  "features": [
+    "message-catch"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": [
+    {
+      "action": "publish",
+      "correlation": "K",
+      "message": "payment-received"
+    }
+  ]
+}

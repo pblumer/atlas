@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: a first-class data object, written then read.
+
+  Start -> script "seed" (amount = 100) -> task "record" -> task "load" -> End.
+  A <dataObject> "order" is seeded at instance creation with data state
+  "received". The "record" task's data OUTPUT association writes it from the
+  "amount" variable and, via a reference carrying data state "approved", advances
+  its state received -> approved. The "load" task's data INPUT association then
+  reads the object back into the "order_copy" variable. Data flows variable ->
+  data object -> variable, and the object's state advances along the way — the
+  captured trace shows both order_copy=100 and order[approved]=100. The record and
+  load tasks are pass-through (no execution semantics), so the model
+  self-completes.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_data_object" targetNamespace="http://atlas/conformance">
+  <process id="data-object" name="Data object" isExecutable="true">
+    <dataObject id="DO_order" name="order">
+      <dataState name="received"/>
+    </dataObject>
+    <dataObjectReference id="Ref_write" dataObjectRef="DO_order">
+      <dataState name="approved"/>
+    </dataObjectReference>
+    <dataObjectReference id="Ref_read" dataObjectRef="DO_order"/>
+    <startEvent id="start"/>
+    <scriptTask id="seed">
+      <extensionElements>
+        <zeebe:script expression="= 100" resultVariable="amount"/>
+      </extensionElements>
+    </scriptTask>
+    <task id="record">
+      <dataOutputAssociation>
+        <targetRef>Ref_write</targetRef>
+        <assignment><from>= amount</from></assignment>
+      </dataOutputAssociation>
+    </task>
+    <task id="load">
+      <dataInputAssociation>
+        <sourceRef>Ref_read</sourceRef>
+        <assignment><to>order_copy</to></assignment>
+      </dataInputAssociation>
+    </task>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="seed"/>
+    <sequenceFlow id="f2" sourceRef="seed" targetRef="record"/>
+    <sequenceFlow id="f3" sourceRef="record" targetRef="load"/>
+    <sequenceFlow id="f4" sourceRef="load" targetRef="end"/>
+  </process>
+</definitions>

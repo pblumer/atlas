@@ -1,0 +1,20 @@
+{
+  "name": "transaction-cancel",
+  "model": "transaction-cancel.bpmn",
+  "features": [
+    "transaction-cancel"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": [
+    {
+      "action": "complete",
+      "element": "reserve"
+    },
+    {
+      "action": "complete",
+      "element": "unreserve"
+    }
+  ]
+}

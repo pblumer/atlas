@@ -1,0 +1,17 @@
+{
+  "completed": true,
+  "activities": [
+    "charge",
+    "end",
+    "start"
+  ],
+  "path": [
+    "start",
+    "charge",
+    "end"
+  ],
+  "variables": {
+    "status": "captured"
+  },
+  "dataObjects": []
+}

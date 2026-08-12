@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: an intermediate message catch event.
+
+  Start -> intermediateCatchEvent "await_payment" -> End. The token parks on a
+  message subscription (name "payment-received", constant correlation key "K")
+  until a matching message arrives. The driver delivers it with
+  Publish("payment-received", "K", ...). Exercises the message driver path.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_message_catch" targetNamespace="http://atlas/conformance">
+  <message id="Msg_paid" name="payment-received">
+    <extensionElements>
+      <zeebe:subscription correlationKey="= &quot;K&quot;"/>
+    </extensionElements>
+  </message>
+  <process id="message-catch" name="Message catch" isExecutable="true">
+    <startEvent id="start"/>
+    <intermediateCatchEvent id="await_payment" name="Await payment">
+      <messageEventDefinition messageRef="Msg_paid"/>
+    </intermediateCatchEvent>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="await_payment"/>
+    <sequenceFlow id="f2" sourceRef="await_payment" targetRef="end"/>
+  </process>
+</definitions>

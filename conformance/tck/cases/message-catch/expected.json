@@ -1,0 +1,15 @@
+{
+  "completed": true,
+  "activities": [
+    "await_payment",
+    "end",
+    "start"
+  ],
+  "path": [
+    "start",
+    "await_payment",
+    "end"
+  ],
+  "variables": {},
+  "dataObjects": []
+}

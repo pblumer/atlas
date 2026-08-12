@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: a receive task (a message wait modeled as an activity).
+
+  Start -> receiveTask "await_reply" -> End. Semantically like an intermediate
+  message catch, but an activity — it can carry boundary events and I/O mappings.
+  The token parks on the subscription (name "reply", constant correlation key "K")
+  until a matching message arrives. Driver: Publish("reply", "K").
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_receive_task" targetNamespace="http://atlas/conformance">
+  <message id="Msg_reply" name="reply">
+    <extensionElements>
+      <zeebe:subscription correlationKey="= &quot;K&quot;"/>
+    </extensionElements>
+  </message>
+  <process id="receive-task" name="Receive task" isExecutable="true">
+    <startEvent id="start"/>
+    <receiveTask id="await_reply" name="Await reply" messageRef="Msg_reply"/>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="await_reply"/>
+    <sequenceFlow id="f2" sourceRef="await_reply" targetRef="end"/>
+  </process>
+</definitions>
