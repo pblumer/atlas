@@ -10,6 +10,9 @@
   Complete("review").
 -->
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
              xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
              id="defs_boundary_message_noninterrupting" targetNamespace="http://atlas/conformance">
   <message id="Msg_ping" name="ping">
@@ -33,4 +36,16 @@
     <sequenceFlow id="f2" sourceRef="review" targetRef="done"/>
     <sequenceFlow id="f3" sourceRef="pinged" targetRef="notified"/>
   </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="boundary-message-noninterrupting">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="160" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_review" bpmnElement="review"><dc:Bounds x="270" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_done" bpmnElement="done"><dc:Bounds x="460" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_pinged" bpmnElement="pinged"><dc:Bounds x="302" y="222" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_notified" bpmnElement="notified"><dc:Bounds x="460" y="302" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="196" y="200"/><di:waypoint x="270" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="370" y="200"/><di:waypoint x="460" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3"><di:waypoint x="320" y="258"/><di:waypoint x="320" y="320"/><di:waypoint x="460" y="320"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 </definitions>
