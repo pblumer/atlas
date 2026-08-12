@@ -1,0 +1,17 @@
+{
+  "completed": true,
+  "activities": [
+    "call",
+    "end",
+    "start"
+  ],
+  "path": [
+    "start",
+    "call",
+    "end"
+  ],
+  "variables": {
+    "child_done": "1"
+  },
+  "dataObjects": []
+}

@@ -176,6 +176,18 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 
 const shortType = (t) => (t || "").replace(/^bpmn:/, "");
 
+// isValidTtl mirrors the engine's instance-TTL parser (ADR-0085, compiler/duration.go):
+// the day-and-time subset of ISO-8601 durations (P[nD]T[nH][nM][nS]), and it must be
+// positive — the empty duration "P"/"PT" and an all-zero "PT0S" are rejected. Used only
+// to warn while authoring; the deploy is the authority that rejects a bad value.
+const isValidTtl = (s) => {
+  const m = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/.exec(String(s).trim());
+  if (!m) return false;
+  const parts = [m[1], m[2], m[3], m[4]];
+  if (parts.every((p) => p === undefined)) return false; // no components → empty duration
+  return parts.some((p) => p !== undefined && Number(p) > 0); // must be strictly positive
+};
+
 // --- Variable presentation (shared by the live and replay views) ---
 //
 // Operators inspect an instance's variables, which can be whole JSON structures.
@@ -1598,7 +1610,26 @@ const SERVICE_TASK_KINDS = [
       { key: "bcc", label: "Bcc", placeholder: "audit@example.com", fx: true, hint: "Delivered but never shown in the message headers." },
       { key: "from", label: "From", placeholder: "leave empty for the connector's default sender", fx: true },
       { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true },
-      { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, hint: "Plain-text body. A value may be a FEEL expression (fx) composed over the instance's variables." },
+      { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, rows: 8, hint: "Plain-text body, or a FEEL expression (fx) composed from the instance's variables — switch on fx, then press Ctrl+Space for variable completion." },
+    ],
+  },
+  {
+    id: "csv", name: "CSV to JSON", desc: "Parse an uploaded CSV into a JSON rows array", icon: "T",
+    // A grid/table mark on a teal tile reads "tabular data → rows" at a glance — the
+    // CSV connector's counterpart to REST's globe and mail's envelope. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white grid strokes.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#3b82f6"/><rect x="3" y="3.6" width="10" height="8.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3 6.4h10M3 9.2h10M6.6 3.6v8.8" stroke="#fff" stroke-width="1.1"/></svg>`,
+    ext: "atlas:CsvConnector",
+    fields: [
+      { group: "Source" },
+      { key: "source", label: "Source variable", placeholder: "csvText", hint: "Name of the process variable holding the raw CSV text (e.g. from the upload task)." },
+      { group: "Layout" },
+      { key: "delimiter", label: "Delimiter", type: "select", options: [{ v: ",", l: "Comma ," }, { v: ";", l: "Semicolon ;" }, { v: "\t", l: "Tab" }, { v: "|", l: "Pipe |" }] },
+      { key: "hasHeader", label: "Header row", type: "select", options: [{ v: "true", l: "First row is the header" }, { v: "false", l: "No header row" }] },
+      { key: "columns", label: "Columns", placeholder: "email, group, license", hint: "Comma-separated field names. Leave empty to derive them from the header row; required when there is no header." },
+      { group: "Output" },
+      { key: "resultVariable", label: "Result variable", placeholder: "rows", hint: "The parsed JSON array of rows is written into this process variable (rowCount is also set)." },
     ],
   },
   {
@@ -1712,9 +1743,10 @@ function stKindFieldsHTML(cur, ext) {
       }).join("");
       fields += `<label class="field"><span>${esc(f.label)}</span><select id="f-st-${f.key}">${opts}</select></label>`;
     } else if (f.fx) {
-      // A 1-row textarea so the fx toggle can host the FEEL editor in place.
+      // A textarea — 1 row by default, taller for prose like an e-mail body — so the
+      // fx toggle can host the FEEL editor in place at that size.
       fields += `<label class="field"><span>${esc(f.label)}</span>
-        <textarea id="f-st-${f.key}" rows="1" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
+        <textarea id="f-st-${f.key}" rows="${f.rows || 1}" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
     } else {
       fields += `<label class="field"><span>${esc(f.label)}</span>
         <input type="text" id="f-st-${f.key}" value="${esc(ext[f.key] || "")}" placeholder="${esc(f.placeholder || "")}"/></label>`;
@@ -2976,6 +3008,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
           <label class="field"><span>Version tag</span><input type="text" id="f-pver" value="${esc(rootBo.versionTag || "")}" placeholder="1.0.0"/></label>
           <label class="pcheck"><input type="checkbox" id="f-pexec"${rootBo.isExecutable !== false ? " checked" : ""}/> <span>Executable</span></label>
           <p class="muted" style="font-size:12px">An <b>executable</b> process can be started and offered in the start lists; leave it off for a descriptive-only diagram. <b>Version tag</b> is an optional label for this revision.</p>
+          <label class="field"><span>Instance TTL</span><input type="text" id="f-pttl" value="${esc(rootBo.instanceTtl || "")}" placeholder="P7D"/></label>
+          <p class="muted" style="font-size:12px">A self-cleaning <b>time-to-live</b> for instances of this process, as an ISO-8601 duration (e.g. <code>P7D</code> = 7 days, <code>PT12H</code> = 12 hours, <code>PT30M</code> = 30 minutes). An instance that outlives its TTL is automatically terminated and moved to history — where it stays queryable and can still be exported. Leave empty for no TTL (instances live until they complete or are cancelled). Set it above the longest run you legitimately expect.</p>
           ${startVarsHTML}
           ${messagesManagerHTML(modeler)}
           ${signalsManagerHTML(modeler)}
@@ -2991,6 +3025,15 @@ function wireProperties(root, modeler, api, projectId, toast) {
         body.querySelector("#f-pver").addEventListener("change", (e) => {
           const v = (e.target.value || "").trim();
           try { modeling.updateProperties(rootEl, { versionTag: v || undefined }); } catch { /* ignore */ }
+        });
+        body.querySelector("#f-pttl").addEventListener("change", (e) => {
+          const v = (e.target.value || "").trim();
+          // The engine parses the day/time subset of ISO-8601 and rejects a malformed or
+          // non-positive TTL at deploy (ADR-0085). Catch it here so the mistake surfaces
+          // while authoring instead of as a failed deploy — but still store what was typed
+          // so the field never silently drops the user's value.
+          if (v && !isValidTtl(v)) toast("Instance TTL must be a positive ISO-8601 duration, e.g. P7D or PT12H", "err");
+          try { modeling.updateProperties(rootEl, { instanceTtl: v || undefined }); } catch { /* ignore */ }
         });
         body.querySelector("#f-pexec").addEventListener("change", (e) => {
           try { modeling.updateProperties(rootEl, { isExecutable: e.target.checked }); } catch { /* ignore */ }

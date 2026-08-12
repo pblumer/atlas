@@ -1,0 +1,10 @@
+{
+  "name": "atlas-conformance-reference",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Independent reference BPMN engine (bpmn-engine) for the Atlas conformance differential oracle.",
+  "license": "MIT",
+  "dependencies": {
+    "bpmn-engine": "21.1.0"
+  }
+}

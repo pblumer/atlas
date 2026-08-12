@@ -1,0 +1,24 @@
+{
+  "completed": true,
+  "activities": [
+    "end",
+    "load_items",
+    "seed",
+    "start",
+    "store_items"
+  ],
+  "path": [
+    "start",
+    "seed",
+    "store_items",
+    "load_items",
+    "end"
+  ],
+  "variables": {
+    "items_copy": "[10,20,30]",
+    "raw": "[10,20,30]"
+  },
+  "dataObjects": [
+    "items[collection]=[10,20,30]"
+  ]
+}

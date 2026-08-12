@@ -1,0 +1,19 @@
+{
+  "completed": true,
+  "activities": [
+    "done",
+    "notified",
+    "pinged",
+    "review",
+    "start"
+  ],
+  "path": [
+    "start",
+    "review",
+    "pinged",
+    "notified",
+    "done"
+  ],
+  "variables": {},
+  "dataObjects": []
+}

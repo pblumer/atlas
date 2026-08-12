@@ -12,7 +12,7 @@ import (
 
 // terminateAtRootProcess builds Start → parallel split → { ServiceTask "work" → End } and a
 // { TerminateEnd }. When the terminate branch runs it ends the whole instance, cancelling the
-// other branch's waiting job (ADR-0114). Returns the process, the "work" job type, and the
+// other branch's waiting job (ADR-0116). Returns the process, the "work" job type, and the
 // terminate node id.
 func terminateAtRootProcess(t testing.TB, key uint64) (*compiler.CompiledProcess, int32, int32) {
 	t.Helper()
@@ -35,7 +35,7 @@ func terminateAtRootProcess(t testing.TB, key uint64) (*compiler.CompiledProcess
 
 // TestTerminateEndEndsInstance proves a terminate end on one branch of a parallel split ends the
 // whole instance at the root, cancelling the other branch's waiting job — the modeled abort a
-// plain end could never do (ADR-0114).
+// plain end could never do (ADR-0116).
 func TestTerminateEndEndsInstance(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -66,7 +66,7 @@ func TestTerminateEndEndsInstance(t *testing.T) {
 
 // terminateInSubProcess builds Start → Sub[ iStart → parallel split → {ServiceTask "inner" → End}
 // and {TerminateEnd} ] → ServiceTask "after" → End. The terminate ends only the subprocess; the
-// parent must continue on the subprocess's outgoing flow to "after" (ADR-0114). Returns the
+// parent must continue on the subprocess's outgoing flow to "after" (ADR-0116). Returns the
 // process and the "inner"/"after" job types.
 func terminateInSubProcess(t testing.TB, key uint64) (*compiler.CompiledProcess, int32, int32) {
 	t.Helper()
@@ -98,7 +98,7 @@ func terminateInSubProcess(t testing.TB, key uint64) (*compiler.CompiledProcess,
 
 // TestTerminateEndScopesToSubProcess proves a terminate end inside an embedded subprocess ends
 // only that subprocess — cancelling its inner job — and the parent continues on the subprocess's
-// outgoing flow, parking on the following "after" task (ADR-0114). This is the scoped semantics: a
+// outgoing flow, parking on the following "after" task (ADR-0116). This is the scoped semantics: a
 // terminate is not always a whole-instance abort.
 func TestTerminateEndScopesToSubProcess(t *testing.T) {
 	h := openHarness(t, t.TempDir())
@@ -138,7 +138,7 @@ func TestTerminateEndScopesToSubProcess(t *testing.T) {
 // TestTerminateEndRecovers proves the scoped terminate's effect is durable: after the subprocess
 // terminate parks the parent on "after", replaying the log into a fresh store rebuilds exactly
 // that state (the inner job gone, "after" activatable), and completing "after" finishes the
-// instance (ADR-0114, invariant I4).
+// instance (ADR-0116, invariant I4).
 func TestTerminateEndRecovers(t *testing.T) {
 	dir := t.TempDir()
 	cp, innerJobType, afterJobType := terminateInSubProcess(t, 122)

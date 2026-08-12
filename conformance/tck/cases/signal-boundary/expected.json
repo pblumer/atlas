@@ -1,0 +1,27 @@
+{
+  "completed": true,
+  "activities": [
+    "aborted",
+    "fork",
+    "on_abort",
+    "prep",
+    "raise_abort",
+    "review",
+    "start",
+    "thrown"
+  ],
+  "path": [
+    "start",
+    "fork",
+    "review",
+    "prep",
+    "on_abort",
+    "raise_abort",
+    "aborted",
+    "thrown"
+  ],
+  "variables": {
+    "ready": "1"
+  },
+  "dataObjects": []
+}

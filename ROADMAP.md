@@ -108,7 +108,57 @@ The control-flow basics most real models use.
   folding the `SourcePos` chain, item-definition schema validation, list-index path
   targets, and connector-backed data stores.
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
-- 🔲 Conformance tests against a curated BPMN model set
+- 🚧 **Conformance tests against a curated BPMN model set** — the
+  [`conformance/`](conformance/) package scaffolds the suite: a register of BPMN
+  execution features mapped onto the workflow control-flow patterns (so gaps are
+  visible in `conformance/COVERAGE.md`), plus four layered correctness oracles per
+  model — golden token traces, replay equivalence (I4, free on every model),
+  structural invariants (no orphan tokens), and metamorphic equivalence
+  (behaviorally equal models must agree despite different shapes). Self-completing
+  scenarios landed (sequence, exclusive gateway, parallel fork/join, a metamorphic
+  pair), plus a **deterministic driver for parking features** — declarative steps
+  that complete a job (user/service task), deliver a message, or advance the clock
+  past a timer, driving the parked instance to completion while replay stays
+  log-only, reaching parked jobs, messages and timers, **receive tasks**,
+  interrupting/non-interrupting **boundary events**, the **event-based gateway**
+  (deferred choice, WCP-16), **message/timer start events** (where the instance is
+  born from a trigger, not CreateInstance), and the **incident lifecycle**
+  (`FailJob` raises, `ResolveIncident` resumes) — 16 scenarios. It also has an
+  **adversarial half**: negative models that are well-formed but structurally
+  invalid and must be rejected at compile (dangling flow, bad boundary host,
+  unknown message), asserted by `TestNegativeModels`. Now also covering the
+  **interrupting boundary error** event (a job throws a business error the
+  boundary catches) and **signal** throw/catch (a 1:n broadcast within an
+  instance), **embedded subprocess**, **parallel and sequential multi-instance**
+  (the sequential one driven one job at a time), and **call activity** (a
+  two-process model where the runner deploys both, instantiates the named root,
+  and filters the spawned child instance out of the captured trace), **interrupting
+  signal boundary**, **compensation** (a compensable activity's boundary links to a
+  handler that a compensation throw runs), and the **inclusive (OR) gateway**
+  (multi-choice split + synchronizing merge, WCP-6/7), and the **signal start
+  event** (a trigger process's broadcast births the root instance, captured while
+  the trigger instance is filtered out by definition key), and a **first-class data
+  object** written by an output association and read back by an input one (the
+  trace now surfaces data objects with their advancing data state, e.g.
+  `order[approved]=100`), and **field-level data-object writes** (members accrued
+  across steps into one structured object, `order={"id":"ORD-1","total":100}`), and
+  a **collection data object** (an `isCollection` list-valued object round-tripped,
+  the trace marking it `items[collection]=[10,20,30]` — collection-ness is
+  compile-time metadata surfaced from the process, not the runtime value), and a
+  **transaction subprocess with cancel** (a cancel end event rolls the transaction
+  back — compensating a completed compensable activity — and the transaction's
+  cancel boundary routes to a handler instead of the normal end, ADR-0108) — 30
+  scenarios, plus a fourth negative model pinning that a **terminate end event** is
+  rejected at compile rather than silently degraded. (Escalation events stay out
+  until the engine supports `escalationEventDefinition`.) A **fifth oracle** now
+  landed: a **differential** against an independent engine (Node's `bpmn-engine`) —
+  the same process run on both, comparing a normalized control-flow projection
+  (did it complete, which activities ran), so a bug where Atlas is consistently
+  wrong shows up as disagreement with a second implementation. It covers the pure
+  control-flow subset (sequence, exclusive/parallel/inclusive gateways) and is
+  opt-in behind a build tag (needs Node), out of the default test/coverage path.
+  Next: grow the differential's reference translations, plus data-object lineage
+  and error/message end events.
 - 🚧 **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)
   engine, [ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)): the
   element, its behavior, and evaluation through the job path landed as a vertical
@@ -315,7 +365,7 @@ Making processes wait, react, and time out.
   catch event; recovery rebuilds the armed race and its group from the log, so the first fire
   after a restart still wins — no new recovery path. Authored in the Modeler (bpmn-js draws
   it natively) ([ADR-0110](docs/adr/0110-event-based-gateways.md)).
-- ✅ **Terminate end events** ([ADR-0114](docs/adr/0114-terminate-end-events.md)): an
+- ✅ **Terminate end events** ([ADR-0116](docs/adr/0116-terminate-end-events.md)): an
   `<endEvent><terminateEventDefinition/>` — the "abort" end — ends its **enclosing flow scope** at
   once, terminating every other live token in the scope (cancelling their jobs). At the process
   root the instance ends; inside an embedded subprocess only that subprocess ends and the parent

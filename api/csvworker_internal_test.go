@@ -73,11 +73,30 @@ func TestCSVScopeChainVars(t *testing.T) {
 	}
 }
 
-// TestCSVImportHandlerReadError covers the handler's scope-read error branch.
-func TestCSVImportHandlerReadError(t *testing.T) {
-	h := csvImportHandler(fakeVarStore{varsErr: errors.New("boom")})
+// TestCSVImportHandler covers the handler's element-instance and scope-read
+// branches on the legacy (nil-lookup) path.
+func TestCSVImportHandler(t *testing.T) {
+	// A present element instance, but reading its scope variables fails: the handler
+	// wraps it as a read-variables error.
+	readErr := fakeVarStore{
+		ei:      map[uint64]model.ElementInstanceValue{1: {}},
+		varsErr: errors.New("boom"),
+	}
+	h := csvImportHandler(readErr, nil)
 	if _, err := h(job.Job{ElementInstanceKey: 1}); err == nil || !strings.Contains(err.Error(), "read variables") {
 		t.Fatalf("error = %v, want a read-variables error", err)
+	}
+
+	// GetElementInstance failing is surfaced as a get-element-instance error.
+	h = csvImportHandler(fakeVarStore{eiErr: errors.New("boom")}, nil)
+	if _, err := h(job.Job{ElementInstanceKey: 1}); err == nil || !strings.Contains(err.Error(), "get element instance") {
+		t.Fatalf("error = %v, want a get-element-instance error", err)
+	}
+
+	// A gone element instance (ok=false) is a no-op, not an error.
+	h = csvImportHandler(fakeVarStore{}, nil)
+	if out, err := h(job.Job{ElementInstanceKey: 99}); err != nil || out != nil {
+		t.Fatalf("gone instance: out=%v err=%v, want nil, nil", out, err)
 	}
 }
 
@@ -127,7 +146,7 @@ func TestCSVRowsFromVars(t *testing.T) {
 		{"missing columnConfig", map[string]model.VariableValue{"csvText": vstr("email\nx\n")}, "columnConfig"},
 		{"columnConfig wrong kind", map[string]model.VariableValue{"csvText": vstr("email\nx\n"), "columnConfig": vstr("{}")}, "columnConfig"},
 		{"columnConfig bad JSON", map[string]model.VariableValue{"csvText": vstr("email\nx\n"), "columnConfig": vjson("{")}, "invalid columnConfig"},
-		{"unparseable layout", map[string]model.VariableValue{"csvText": vstr("email\nx\n"), "columnConfig": vjson(`{"columns":[]}`)}, "at least one column"},
+		{"unparseable layout", map[string]model.VariableValue{"csvText": vstr("email\nx\n"), "columnConfig": vjson(`{"columns":[],"hasHeader":false}`)}, "at least one column"},
 	}
 	for _, tc := range errCases {
 		t.Run(tc.name, func(t *testing.T) {

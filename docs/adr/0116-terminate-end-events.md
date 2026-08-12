@@ -1,4 +1,4 @@
-# ADR-0114: Terminate end events
+# ADR-0116: Terminate end events
 
 - **Status:** Accepted
 - **Date:** 2026-08-11

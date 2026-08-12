@@ -246,6 +246,12 @@ type ProcessInstanceValue struct {
 	// 0 when the definition has no TTL (ADR-0085). Stored so completion/termination can
 	// cancel that timer by key (the instance key) without scanning the timer index.
 	ExpiryDueDate int64
+	// CompletedPosition is the log position of the instance's terminal event, set only
+	// on the history record (0 while active, and 0 on records written before this field,
+	// ADR-0115). Since the terminal event is an instance's last, it is the instance's
+	// highest position — so history retention can prove every event is exported
+	// (CompletedPosition <= exported position) before hard-deleting the instance.
+	CompletedPosition uint64
 }
 
 // processInstanceLegacySize is the original fixed layout (ProcessDefKey, State,
@@ -263,7 +269,8 @@ func (v *ProcessInstanceValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.CreatedAt))
 	dst = appendString(dst, v.CorrelationKey)
 	dst = binary.LittleEndian.AppendUint64(dst, v.ParentElementInstanceKey)
-	return binary.LittleEndian.AppendUint64(dst, uint64(v.ExpiryDueDate))
+	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.ExpiryDueDate))
+	return binary.LittleEndian.AppendUint64(dst, v.CompletedPosition)
 }
 
 func (v *ProcessInstanceValue) decode(src []byte) error {
@@ -290,10 +297,15 @@ func (v *ProcessInstanceValue) decode(src []byte) error {
 	if len(tail) >= 8 {
 		v.ParentElementInstanceKey = binary.LittleEndian.Uint64(tail)
 	}
-	// ExpiryDueDate is the newest appended field: a record written before it ends after
+	// ExpiryDueDate is a later appended field: a record written before it ends after
 	// the parent key and leaves it zero (no TTL).
 	if len(tail) >= 16 {
 		v.ExpiryDueDate = int64(binary.LittleEndian.Uint64(tail[8:]))
+	}
+	// CompletedPosition is the newest appended field: a record written before it ends
+	// after the expiry due date and leaves it zero (no terminal position recorded).
+	if len(tail) >= 24 {
+		v.CompletedPosition = binary.LittleEndian.Uint64(tail[16:])
 	}
 	return nil
 }

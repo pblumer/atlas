@@ -1,0 +1,16 @@
+{
+  "name": "exclusive-gateway",
+  "model": "exclusive-gateway.bpmn",
+  "features": [
+    "exclusive-gateway",
+    "script-task"
+  ],
+  "patterns": [
+    "WCP-4",
+    "WCP-5"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": null
+}

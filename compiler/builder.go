@@ -723,6 +723,55 @@ func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
 	return b.addNode(TypeConnectorTask, detail)
 }
 
+// CsvConfig is the deploy-time configuration of a CSV-to-JSON connector task
+// (ADR-0090). Source names the process variable holding the raw CSV text
+// (empty → the worker's default "csvText"); Result the variable the parsed rows
+// are written to (empty → "rows"); Delimiter the field delimiter (empty → ",");
+// HasHeader whether the first row is a header; Columns the field names (empty →
+// derive them from the header row). All are interned deploy-time data (I5).
+type CsvConfig struct {
+	Source    string
+	Result    string
+	Delimiter string
+	HasHeader bool
+	Columns   []string
+	Retries   int32
+}
+
+// AddCsvConnectorTask adds a CSV-to-JSON connector task and returns its element
+// id. Like a service task it creates a job on activation and waits; the job carries
+// the reserved CsvImportJobType so the in-process CSV worker picks it up, reads the
+// raw text from the named source variable, parses it against the authored
+// delimiter/header/columns with the same parser the ingestion endpoint uses, and
+// writes the JSON rows (and a rowCount) into the result variable (ADR-0090). The
+// layout lives in the model — unlike the ADR-0087 convention, which read it from a
+// columnConfig variable — so nothing but the file arrives at runtime.
+func (b *Builder) AddCsvConnectorTask(cfg CsvConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	cols := make([]int32, 0, len(cfg.Columns))
+	for _, c := range cfg.Columns {
+		cols = append(cols, b.intern(c))
+	}
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:      b.intern(CsvImportJobType),
+		Connector:    -1, // CSV carries its layout in the model, not a registry name
+		Subject:      -1,
+		EventType:    -1,
+		ClioQuery:    -1,
+		ReduceSpec:   -1,
+		Method:       -1,
+		ResultVar:    -1, // CSV uses its own CsvResult field, not the REST/clio one
+		Auth:         -1,
+		CsvSource:    b.intern(cfg.Source),
+		CsvResult:    b.intern(cfg.Result),
+		CsvDelimiter: b.intern(cfg.Delimiter),
+		CsvHasHeader: cfg.HasHeader,
+		CsvColumns:   cols,
+		Retries:      cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
 // SharePointConfig is the deploy-time configuration of a SharePoint connector task
 // (ADR-0105). Connector names the server-registered SharePoint provider (its Graph
 // base and OAuth credential live server-side, never in the model); Site and List
@@ -1147,7 +1196,7 @@ func (b *Builder) AddCompensationEndEvent() int32 {
 func (b *Builder) AddCancelEndEvent() int32 { return b.addNode(TypeCancelEndEvent, -1) }
 
 // AddTerminateEndEvent adds a terminate end event: reaching it ends the enclosing flow scope at
-// once — every other live token in the scope is terminated, then the scope completes (ADR-0114).
+// once — every other live token in the scope is terminated, then the scope completes (ADR-0116).
 // It carries no detail (a terminate has no code, message, or handler). Returns its element id.
 func (b *Builder) AddTerminateEndEvent() int32 { return b.addNode(TypeTerminateEndEvent, -1) }
 

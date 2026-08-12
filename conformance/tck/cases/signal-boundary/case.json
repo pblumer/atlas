@@ -1,0 +1,11 @@
+{
+  "name": "signal-boundary",
+  "model": "signal-boundary.bpmn",
+  "features": [
+    "signal-boundary"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": null
+}

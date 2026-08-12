@@ -1,0 +1,11 @@
+{
+  "name": "data-object",
+  "model": "data-object.bpmn",
+  "features": [
+    "data-object"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": null
+}

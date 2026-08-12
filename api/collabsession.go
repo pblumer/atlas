@@ -65,19 +65,20 @@ type collabEvent struct {
 // currently has selected (presence).
 //
 // detached marks a participant with no live SSE stream (an agent that joined over
-// MCP and reads by polling). Such a participant is not reaped on a disconnect the
-// way a browser stream is, so it carries lastSeen — refreshed on every action —
-// and the reaper evicts it once it goes silent past the TTL. A streaming (browser)
-// participant is exempt: it is reaped when its connection closes, and it would
-// otherwise be wrongly evicted while sitting idle just watching.
+// MCP and reads by polling) versus a streaming browser. Every participant carries
+// lastSeen — refreshed on each action, and for a browser also on a periodic client
+// heartbeat — and the TTL reaper evicts any that falls silent past the TTL. A
+// browser stream is normally reaped the instant its connection drops (a failed
+// keepalive write); the TTL is the backstop for a half-open connection whose write
+// keeps succeeding into a dead socket, so a forgotten tab can never wedge a lock.
 type collabParticipant struct {
 	ID        string
 	UserID    string // resolved principal (ADR-0044); empty when auth is off
 	Name      string // display name
 	selection string
 	ch        chan collabEvent
-	detached  bool      // joined without an SSE stream (an MCP agent); subject to the TTL reaper
-	lastSeen  time.Time // last action time; only meaningful (and only checked) for a detached participant
+	detached  bool      // joined without an SSE stream (an MCP agent) rather than a browser stream
+	lastSeen  time.Time // last action/heartbeat time; the TTL reaper checks it for every participant
 	canEdit   bool      // project role permits editing (editor/owner); a viewer joins read-only (ADR-0071)
 }
 
@@ -146,20 +147,21 @@ type collabPresence struct {
 	Selection string `json:"selection,omitempty"`
 }
 
-// collabParticipantTTL is how long a detached (MCP agent) participant may go
-// without an action before the reaper evicts it and releases its locks. An agent
-// is told to poll periodically, which refreshes its lastSeen; a crashed or
-// forgotten one falls silent and is cleaned up so its locks never wedge an
-// element forever. collabReapInterval is how often the reaper sweeps.
+// collabParticipantTTL is how long any participant may go without a sign of life
+// before the reaper evicts it and releases its locks. An MCP agent refreshes it by
+// polling; a browser refreshes it on every action and on a periodic heartbeat (the
+// client re-announces presence well inside this window). A crashed agent or a
+// forgotten tab falls silent and is cleaned up so its locks never wedge an element
+// forever. collabReapInterval is how often the reaper sweeps.
 const (
 	collabParticipantTTL = 90 * time.Second
 	collabReapInterval   = 30 * time.Second
 )
 
-// collabKeepaliveInterval is how often an idle SSE session stream writes a
-// keepalive comment. It is the liveness backstop for a *streaming* (browser)
-// participant, which the TTL reaper deliberately exempts: a half-open connection
-// is detected when a keepalive write fails, letting the deferred leave() reap it.
+// collabKeepaliveInterval is how often an idle SSE session stream writes a keepalive
+// comment. A failed write reveals a dropped browser connection and reaps it at once
+// (via the deferred leave()); the TTL reaper above is the slower backstop for a
+// half-open connection whose keepalive write still succeeds into a dead socket.
 const collabKeepaliveInterval = 15 * time.Second
 
 // collabRegistry holds every live draft session in memory. It is mutex-guarded
@@ -322,13 +324,13 @@ func (reg *collabRegistry) leave(draftID, participantID string) {
 	}
 }
 
-// reap evicts every detached participant that has gone silent past the TTL,
-// releasing its locks so a crashed or forgotten MCP agent never holds an element
-// forever. Streaming (browser) participants are exempt — they are reaped on
-// disconnect and would otherwise be wrongly evicted while idle-watching. It
-// broadcasts an updated roster (and lock set, if any changed) to each affected
-// session, discards any that empties, and returns how many participants it
-// removed.
+// reap evicts every participant that has gone silent past the TTL, releasing its
+// locks so a crashed MCP agent or a forgotten browser tab never holds an element
+// forever. A browser is normally reaped the instant its stream drops; this is the
+// backstop for a half-open connection — its lastSeen is kept fresh by the client's
+// periodic heartbeat, so a live but idle editor is never evicted. It broadcasts an
+// updated roster (and lock set, if any changed) to each affected session, discards
+// any that empties, and returns how many participants it removed.
 func (reg *collabRegistry) reap() int {
 	reg.mu.Lock()
 	defer reg.mu.Unlock()
@@ -337,7 +339,7 @@ func (reg *collabRegistry) reap() int {
 	for draftID, sess := range reg.sessions {
 		var stale []string
 		for id, p := range sess.participants {
-			if p.detached && p.lastSeen.Before(cutoff) {
+			if p.lastSeen.Before(cutoff) {
 				stale = append(stale, id)
 			}
 		}

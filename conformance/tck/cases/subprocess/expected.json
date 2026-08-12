@@ -1,0 +1,21 @@
+{
+  "completed": true,
+  "activities": [
+    "end",
+    "inner_end",
+    "inner_start",
+    "inner_work",
+    "start",
+    "sub"
+  ],
+  "path": [
+    "start",
+    "sub",
+    "inner_start",
+    "inner_work",
+    "inner_end",
+    "end"
+  ],
+  "variables": {},
+  "dataObjects": []
+}

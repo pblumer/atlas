@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: a worker-backed service task that parks a token.
+
+  Start -> serviceTask "charge" (job type "payment") -> End. The token parks on
+  the job until an external worker completes it. The driver plays the worker with
+  Complete("charge", Str("status", "captured")), and the output variable flows
+  into the instance scope. Exercises the job-completion driver path with outputs.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_service_task" targetNamespace="http://atlas/conformance">
+  <process id="service-task" name="Service task" isExecutable="true">
+    <startEvent id="start" name="Start"/>
+    <serviceTask id="charge" name="Charge card">
+      <extensionElements>
+        <zeebe:taskDefinition type="payment" retries="3"/>
+      </extensionElements>
+    </serviceTask>
+    <endEvent id="end" name="Done"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="charge"/>
+    <sequenceFlow id="f2" sourceRef="charge" targetRef="end"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="service-task">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="160" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_charge" bpmnElement="charge"><dc:Bounds x="270" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="440" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="196" y="200"/><di:waypoint x="270" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="370" y="200"/><di:waypoint x="440" y="200"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

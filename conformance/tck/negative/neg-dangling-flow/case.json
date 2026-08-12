@@ -1,0 +1,6 @@
+{
+  "name": "neg-dangling-flow",
+  "model": "neg-dangling-flow.bpmn",
+  "rejected": true,
+  "reason": "a sequence flow targets an element that does not exist"
+}

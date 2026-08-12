@@ -1,0 +1,16 @@
+{
+  "name": "user-task",
+  "model": "user-task.bpmn",
+  "features": [
+    "user-task"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": [
+    {
+      "action": "complete",
+      "element": "approve"
+    }
+  ]
+}

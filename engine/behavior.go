@@ -32,6 +32,7 @@ func (p *Processor) registerHandlers() {
 	p.handlers = map[uint16]func(*ProcessingContext){
 		handlerKey(model.VTProcessInstance, model.IntentActivating):  handleProcessInstanceActivating,
 		handlerKey(model.VTProcessInstance, model.IntentTerminating): handleProcessInstanceTerminating,
+		handlerKey(model.VTProcessInstance, model.IntentPurging):     handleProcessInstancePurging,
 		handlerKey(model.VTElementInstance, model.IntentActivating):  handleElementActivating,
 		handlerKey(model.VTElementInstance, model.IntentCompleting):  handleElementCompleting,
 		handlerKey(model.VTJob, model.IntentJobCompleted):            handleJobCompleted,
@@ -202,6 +203,16 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 		}
 	})
 	c.AppendProcessInstanceEvent(piKey, model.IntentTerminated, *pi)
+}
+
+// handleProcessInstancePurging hard-deletes a finished instance's history (ADR-0115):
+// it emits the durable IntentPurged event carrying the instance, which applyToState
+// folds into the removal of the terminal record and every per-instance family. The
+// retention sweep only enqueues instances it read from the history index and gated on
+// age + export position, so the carried value (with its definition key) is present and
+// the deletion is safe; a re-enqueued purge just re-runs idempotent deletes.
+func handleProcessInstancePurging(c *ProcessingContext) {
+	c.AppendProcessInstanceEvent(c.cmd.Key, model.IntentPurged, c.cmd.Value.process)
 }
 
 // cancelExpiryTimer retires an instance's TTL expiry timer (ADR-0085) when the instance
@@ -2236,7 +2247,7 @@ func (cancelEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei 
 	completeScope(c, ei.FlowScopeKey)                     // fires the transaction's Completing once compensation drains
 }
 
-// terminateEndEventBehavior ends the enclosing flow scope at once (ADR-0114): on activation it
+// terminateEndEventBehavior ends the enclosing flow scope at once (ADR-0116): on activation it
 // terminates every other live token in the scope — recursively, cancelling their jobs — sparing
 // itself, then hops to Completing; on completing its own Completed event drains the scope's last
 // child and completeScope fires. At the process root that ends the instance (resuming a

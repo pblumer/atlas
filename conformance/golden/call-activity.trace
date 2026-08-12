@@ -1,0 +1,4 @@
+state: completed
+path: start -> call -> end
+vars:
+  child_done=1

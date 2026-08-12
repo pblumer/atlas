@@ -1,0 +1,17 @@
+{
+  "completed": true,
+  "activities": [
+    "escalated",
+    "start",
+    "timeout",
+    "work"
+  ],
+  "path": [
+    "start",
+    "work",
+    "timeout",
+    "escalated"
+  ],
+  "variables": {},
+  "dataObjects": []
+}

@@ -1,0 +1,24 @@
+{
+  "name": "multi-instance-sequential",
+  "model": "multi-instance-sequential.bpmn",
+  "features": [
+    "multi-instance-sequential"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": [
+    {
+      "action": "complete",
+      "element": "step"
+    },
+    {
+      "action": "complete",
+      "element": "step"
+    },
+    {
+      "action": "complete",
+      "element": "step"
+    }
+  ]
+}

@@ -383,7 +383,7 @@ func TestParseUnsupportedElementMessage(t *testing.T) {
 }
 
 // TestParseTerminateEndCompiles: a <terminateEventDefinition> on an end event compiles to a
-// TypeTerminateEndEvent — the "abort" end that ends its enclosing flow scope (ADR-0114). It used
+// TypeTerminateEndEvent — the "abort" end that ends its enclosing flow scope (ADR-0116). It used
 // to be a deploy error (Atlas couldn't run it); it now runs.
 func TestParseTerminateEndCompiles(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">

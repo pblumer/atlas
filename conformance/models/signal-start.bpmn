@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: a signal start event.
+
+  Two processes. "on-signal" begins with a signal start event for "launch"
+  (signalStart "on_launch" -> script "handle" -> End); deploying it arms the
+  subscription. "thrower" is the trigger (Start -> signal throw "launch" -> End).
+  The scenario instantiates the thrower; its broadcast births a fresh "on-signal"
+  instance, which runs to completion. Root is "on-signal", so the captured trace
+  is the signal-started instance's; the thrower instance is filtered out by
+  definition key.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_signal_start" targetNamespace="http://atlas/conformance">
+  <signal id="Sig_launch" name="launch"/>
+  <collaboration id="collab">
+    <participant id="p_on" name="On signal" processRef="on-signal"/>
+    <participant id="p_thrower" name="Thrower" processRef="thrower"/>
+  </collaboration>
+  <process id="on-signal" name="On signal" isExecutable="true">
+    <startEvent id="on_launch" name="Launch">
+      <signalEventDefinition signalRef="Sig_launch"/>
+    </startEvent>
+    <scriptTask id="handle" name="Handle launch">
+      <extensionElements>
+        <zeebe:script expression="= 1" resultVariable="handled"/>
+      </extensionElements>
+    </scriptTask>
+    <endEvent id="end" name="Done"/>
+    <sequenceFlow id="f1" sourceRef="on_launch" targetRef="handle"/>
+    <sequenceFlow id="f2" sourceRef="handle" targetRef="end"/>
+  </process>
+  <process id="thrower" name="Thrower" isExecutable="true">
+    <startEvent id="tstart" name="Start"/>
+    <intermediateThrowEvent id="raise" name="Broadcast launch">
+      <signalEventDefinition signalRef="Sig_launch"/>
+    </intermediateThrowEvent>
+    <endEvent id="tend" name="Done"/>
+    <sequenceFlow id="tf1" sourceRef="tstart" targetRef="raise"/>
+    <sequenceFlow id="tf2" sourceRef="raise" targetRef="tend"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="collab">
+      <bpmndi:BPMNShape id="di_p_on" bpmnElement="p_on" isHorizontal="true"><dc:Bounds x="160" y="80" width="440" height="120"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_on_launch" bpmnElement="on_launch"><dc:Bounds x="230" y="122" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_handle" bpmnElement="handle"><dc:Bounds x="320" y="100" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="480" y="122" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_p_thrower" bpmnElement="p_thrower" isHorizontal="true"><dc:Bounds x="160" y="240" width="440" height="120"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_tstart" bpmnElement="tstart"><dc:Bounds x="230" y="282" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_raise" bpmnElement="raise"><dc:Bounds x="340" y="282" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_tend" bpmnElement="tend"><dc:Bounds x="450" y="282" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="266" y="140"/><di:waypoint x="320" y="140"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="420" y="140"/><di:waypoint x="480" y="140"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tf1" bpmnElement="tf1"><di:waypoint x="266" y="300"/><di:waypoint x="340" y="300"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_tf2" bpmnElement="tf2"><di:waypoint x="376" y="300"/><di:waypoint x="450" y="300"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

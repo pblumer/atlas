@@ -1,0 +1,15 @@
+{
+  "name": "inclusive-gateway",
+  "model": "inclusive-gateway.bpmn",
+  "features": [
+    "inclusive-gateway"
+  ],
+  "patterns": [
+    "WCP-6",
+    "WCP-7"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": null
+}

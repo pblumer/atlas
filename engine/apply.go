@@ -66,6 +66,11 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 				hist.State = model.PICompleted
 			}
 			hist.CompletedAt = h.Timestamp
+			// The terminal event is the instance's last, so its position is the
+			// instance's highest. Recording it lets history retention prove every event
+			// is exported before hard-deleting the instance (ADR-0115). It comes only
+			// from the event header, so replay rebuilds it identically (I4/I6).
+			hist.CompletedPosition = h.Position
 			// A finishing instance moves to the history, drops the active record, and
 			// updates the derived counters: the active count down, the finished count up,
 			// and last-activity stamped, so the summary reads both in O(1) (ADR-0083).
@@ -87,6 +92,13 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 				err = tx.DeleteCompensablesOfScope(h.Key)
 			}
 			return err
+		case model.IntentPurged:
+			// History retention hard-deletes a finished instance: its terminal record and
+			// every per-instance history/live family (ADR-0115). Derived only from the
+			// event — the instance key and the definition key it carries — so replay
+			// reproduces the identical deletion (I4/I6). Deleting an already-absent key is
+			// a no-op, so a re-applied purge (replay, or a double-enqueue) is idempotent.
+			return tx.PurgeInstanceHistory(h.Key, v.process.ProcessDefKey)
 		}
 
 	case model.VTElementInstance:

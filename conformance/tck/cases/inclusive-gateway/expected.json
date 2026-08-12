@@ -1,0 +1,28 @@
+{
+  "completed": true,
+  "activities": [
+    "end",
+    "eu_check",
+    "join",
+    "priority",
+    "seed",
+    "split",
+    "start"
+  ],
+  "path": [
+    "start",
+    "seed",
+    "split",
+    "priority",
+    "eu_check",
+    "join",
+    "join",
+    "end"
+  ],
+  "variables": {
+    "eu": "done",
+    "order": "{\"priority\":true,\"region\":\"EU\"}",
+    "prio": "done"
+  },
+  "dataObjects": []
+}

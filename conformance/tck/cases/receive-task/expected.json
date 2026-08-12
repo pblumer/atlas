@@ -1,0 +1,15 @@
+{
+  "completed": true,
+  "activities": [
+    "await_reply",
+    "end",
+    "start"
+  ],
+  "path": [
+    "start",
+    "await_reply",
+    "end"
+  ],
+  "variables": {},
+  "dataObjects": []
+}

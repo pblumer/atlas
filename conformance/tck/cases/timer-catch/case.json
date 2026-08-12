@@ -1,0 +1,16 @@
+{
+  "name": "timer-catch",
+  "model": "timer-catch.bpmn",
+  "features": [
+    "timer-catch"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": [
+    {
+      "action": "wait",
+      "afterMs": 31000
+    }
+  ]
+}

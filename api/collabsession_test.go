@@ -324,57 +324,57 @@ func TestCollabCanEdit(t *testing.T) {
 	}
 }
 
-// TestCollabReaper covers the TTL reaper (ADR-0103): a detached (MCP agent)
-// participant that falls silent past the TTL is evicted and its locks released,
-// while a streaming (browser) participant is exempt, and a recent poll keeps a
-// detached participant alive.
+// TestCollabReaper covers the TTL reaper (ADR-0103): any participant that falls
+// silent past the TTL is evicted and its locks released — a detached MCP agent, and
+// now a streaming browser too (the backstop for a half-open connection the keepalive
+// never catches). A participant kept fresh survives: an agent by polling, a browser
+// by its periodic heartbeat (a re-announced presence).
 func TestCollabReaper(t *testing.T) {
 	now := time.Unix(1000, 0)
 	reg := newCollabRegistry()
 	reg.now = func() time.Time { return now }
 
-	browser, _, _ := reg.join("d", "u1", "Anja")      // streaming: exempt
-	agent, _ := reg.joinDetached("d", "u2", "Claude") // detached: subject to TTL
-	reg.acquireLock("d", agent.ID, "Task_1")
-	drainType(t, browser.ch, collabEventLock) // clear frames seen so far
+	live, _, _ := reg.join("d", "u1", "Anja")         // streaming: keeps heartbeating
+	ghost, _, _ := reg.join("d", "u2", "Bea")         // streaming: a dead tab that falls silent
+	agent, _ := reg.joinDetached("d", "u3", "Claude") // detached MCP agent that falls silent
+	reg.acquireLock("d", ghost.ID, "Task_1")
+	drainType(t, live.ch, collabEventLock) // clear frames seen so far
 
-	// Halfway to the TTL: nothing is stale yet.
+	// Within the TTL: nothing is stale yet.
 	now = now.Add(reg.ttl / 2)
 	if n := reg.reap(); n != 0 {
 		t.Fatalf("early reap removed %d, want 0", n)
 	}
 
-	// The agent polls, refreshing its lastSeen; it then survives a sweep that is
-	// past the *original* join time but within the TTL of the poll.
-	reg.poll("d", agent.ID)
-	now = now.Add(reg.ttl - time.Second)
-	if n := reg.reap(); n != 0 {
-		t.Fatalf("reap after a fresh poll removed %d, want 0", n)
-	}
-
-	// Now let the agent go silent well past the TTL.
-	now = now.Add(2 * reg.ttl)
-	if n := reg.reap(); n != 1 {
-		t.Fatalf("reap removed %d, want 1", n)
+	// Past the TTL for everyone — but the live browser heartbeats (re-announces
+	// presence) just before the sweep, so only the silent browser and agent go.
+	now = now.Add(reg.ttl + time.Second)
+	reg.presence("d", live.ID, "") // the live editor's heartbeat lands in time
+	if n := reg.reap(); n != 2 {
+		t.Fatalf("reap removed %d, want 2 (the silent browser and agent)", n)
 	}
 
 	reg.mu.Lock()
 	sess := reg.sessions["d"]
+	_, ghostThere := sess.participants[ghost.ID]
 	_, agentThere := sess.participants[agent.ID]
-	_, browserThere := sess.participants[browser.ID]
+	_, liveThere := sess.participants[live.ID]
 	lockCount := len(sess.locks)
 	reg.mu.Unlock()
+	if ghostThere {
+		t.Error("silent (half-open) browser was not reaped")
+	}
 	if agentThere {
 		t.Error("idle detached agent was not reaped")
 	}
-	if !browserThere {
-		t.Error("streaming participant was wrongly reaped")
+	if !liveThere {
+		t.Error("heartbeating browser was wrongly reaped")
 	}
 	if lockCount != 0 {
-		t.Errorf("reaped agent's lock was not released: %d held", lockCount)
+		t.Errorf("reaped participant's lock was not released: %d held", lockCount)
 	}
-	// The surviving browser was told (presence + lock frames) that the agent left.
-	if _, ok := drainType(t, browser.ch, collabEventLock); !ok {
+	// The surviving browser was told (presence + lock frames) the others left.
+	if _, ok := drainType(t, live.ch, collabEventLock); !ok {
 		t.Error("no lock frame reached the survivor after the reap")
 	}
 }

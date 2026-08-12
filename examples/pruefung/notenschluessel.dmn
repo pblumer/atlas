@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Notenschlüssel — die Bewertungsregeln der Prüfung als echte DMN-Entscheidung.
+
+  Eingabe:  punkte (0..100), vom Prozess aus den vier Antworten berechnet.
+  Ausgaben: bestanden (boolean) und note (string).
+
+  hitPolicy UNIQUE — die vier Punktebereiche überschneiden sich nicht, es trifft
+  je Eingabe genau eine Regel. Die Bestehensgrenze (50 Punkte) und die
+  Notenstufen leben HIER, nicht im Prozessmodell: Prüfungsverantwortliche können
+  den Schlüssel anpassen (z. B. Grenze auf 60 heben), ohne die Engine oder das
+  BPMN neu zu deployen — nur die Entscheidungstabelle ändert sich.
+
+  Der Business-Rule-Task ruft die Entscheidung als decisionId="Notenschluessel"
+  auf und legt das Ergebnis (Kontext {bestanden, note}) in der Variablen
+  `bewertung` ab; das Exklusiv-Gateway verzweigt auf `bewertung.bestanden`.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="defs_notenschluessel" name="notenschluessel" namespace="http://atlas/dmn">
+  <inputData id="id_punkte" name="punkte"/>
+  <decision id="Notenschluessel" name="Notenschluessel">
+    <informationRequirement><requiredInput href="#id_punkte"/></informationRequirement>
+    <decisionTable id="dt" hitPolicy="UNIQUE">
+      <input id="in_punkte" label="punkte">
+        <inputExpression id="ie_punkte" typeRef="number"><text>punkte</text></inputExpression>
+      </input>
+      <output id="o_bestanden" label="bestanden" name="bestanden" typeRef="boolean"/>
+      <output id="o_note" label="note" name="note" typeRef="string"/>
+      <rule id="r_durchgefallen">
+        <inputEntry id="i1"><text>&lt; 50</text></inputEntry>
+        <outputEntry id="b1"><text>false</text></outputEntry>
+        <outputEntry id="n1"><text>"nicht bestanden"</text></outputEntry>
+      </rule>
+      <rule id="r_befriedigend">
+        <inputEntry id="i2"><text>[50..65)</text></inputEntry>
+        <outputEntry id="b2"><text>true</text></outputEntry>
+        <outputEntry id="n2"><text>"befriedigend"</text></outputEntry>
+      </rule>
+      <rule id="r_gut">
+        <inputEntry id="i3"><text>[65..85)</text></inputEntry>
+        <outputEntry id="b3"><text>true</text></outputEntry>
+        <outputEntry id="n3"><text>"gut"</text></outputEntry>
+      </rule>
+      <rule id="r_sehrgut">
+        <inputEntry id="i4"><text>&gt;= 85</text></inputEntry>
+        <outputEntry id="b4"><text>true</text></outputEntry>
+        <outputEntry id="n4"><text>"sehr gut"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

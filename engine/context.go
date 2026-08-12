@@ -131,7 +131,7 @@ func (c *ProcessingContext) VariablesOfScope(scope uint64, fn func(v model.Varia
 // element instances created earlier in the same batch, consistently with
 // GetElementInstance, GetJob, and ActiveChildren (all tx-reads). This matters for a
 // terminate end event reached in the same batch as a parallel sibling's activation
-// (ADR-0114): the sibling is not yet committed, but it is in the tx, so the scope
+// (ADR-0116): the sibling is not yet committed, but it is in the tx, so the scope
 // teardown finds it. Keys are collected before fn runs so fn may mutate
 // element-instance state (e.g. emit terminations) without disturbing the scan.
 func (c *ProcessingContext) ForEachElementInstance(procKey uint64, fn func(elKey uint64)) {

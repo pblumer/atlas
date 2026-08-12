@@ -1,0 +1,5 @@
+state: completed
+path: start -> set_betrag -> gw -> low -> end
+vars:
+  betrag=250
+  grade=L

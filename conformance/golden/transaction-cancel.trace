@@ -1,0 +1,3 @@
+state: completed
+path: start -> book -> ts -> book_cancelled -> reserve -> cancelled -> unreserve -> handled
+vars: (none)
