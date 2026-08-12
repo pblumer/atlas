@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: a signal broadcast within one instance.
+
+  Start -> parallel fork -> two branches that rendezvous on a signal:
+    A: intermediate signal catch "abort" -> join
+    B: script "prep" -> intermediate signal throw "abort" -> join
+  When branch B's throw is reached it broadcasts "abort", firing branch A's armed
+  catch; the join then synchronizes and the instance ends. The script on the throw
+  branch keeps the throw one hop behind the catch's arming, so the catch is always
+  subscribed before the broadcast — self-completing, no driver needed.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_signal_throw_catch" targetNamespace="http://atlas/conformance">
+  <signal id="Sig_abort" name="abort"/>
+  <process id="signal-throw-catch" name="Signal throw/catch" isExecutable="true">
+    <startEvent id="start"/>
+    <parallelGateway id="fork"/>
+    <intermediateCatchEvent id="await_abort" name="Await abort">
+      <signalEventDefinition signalRef="Sig_abort"/>
+    </intermediateCatchEvent>
+    <scriptTask id="prep">
+      <extensionElements>
+        <zeebe:script expression="= 1" resultVariable="ready"/>
+      </extensionElements>
+    </scriptTask>
+    <intermediateThrowEvent id="raise_abort" name="Raise abort">
+      <signalEventDefinition signalRef="Sig_abort"/>
+    </intermediateThrowEvent>
+    <parallelGateway id="join"/>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="fork"/>
+    <sequenceFlow id="f2" sourceRef="fork" targetRef="await_abort"/>
+    <sequenceFlow id="f3" sourceRef="fork" targetRef="prep"/>
+    <sequenceFlow id="f4" sourceRef="prep" targetRef="raise_abort"/>
+    <sequenceFlow id="f5" sourceRef="await_abort" targetRef="join"/>
+    <sequenceFlow id="f6" sourceRef="raise_abort" targetRef="join"/>
+    <sequenceFlow id="f7" sourceRef="join" targetRef="end"/>
+  </process>
+</definitions>

@@ -56,6 +56,8 @@ var Features = []Feature{
 	{"message-start", "Message start event", nil},
 	{"timer-start", "Timer start event", nil},
 	{"incident", "Job failure raises an incident; resolve resumes it", nil},
+	{"boundary-error", "Interrupting boundary error event", nil},
+	{"signal", "Signal throw and catch (1:n broadcast)", nil},
 }
 
 // Scenario binds a BPMN model to the features it exercises, how its instance is
@@ -111,6 +113,13 @@ var Scenarios = []Scenario{
 	// Incident lifecycle: fail with no retries (raise), resolve (resume), complete.
 	{Name: "incident", Model: "incident.bpmn", Features: []string{"incident"},
 		Driver: []Step{Fail("risky", "boom"), Resolve("risky"), Complete("risky")}},
+
+	// Boundary error: the job throws a business error the boundary catches.
+	{Name: "boundary-error", Model: "boundary-error.bpmn", Features: []string{"boundary-error"},
+		Driver: []Step{ThrowError("call", "BOOM")}},
+
+	// Signal: one branch throws, the other catches — self-completing.
+	{Name: "signal-throw-catch", Model: "signal-throw-catch.bpmn", Features: []string{"signal"}},
 }
 
 // NegativeModel is a well-formed BPMN model that is nonetheless invalid and must be

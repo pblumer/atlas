@@ -22,6 +22,8 @@ Generated from the register in `scenario.go` by `go test ./conformance -update`.
 | Message start event | — | message-start | ✅ |
 | Timer start event | — | timer-start | ✅ |
 | Job failure raises an incident; resolve resumes it | — | incident | ✅ |
+| Interrupting boundary error event | — | boundary-error | ✅ |
+| Signal throw and catch (1:n broadcast) | — | signal-throw-catch | ✅ |
 
 ## Control-flow patterns
 

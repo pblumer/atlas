@@ -38,6 +38,7 @@ func TestStepDescribeAndList(t *testing.T) {
 		{Wait(time.Second), "wait 1s"},
 		{Fail("risky", "boom"), "fail risky"},
 		{Resolve("risky"), "resolve risky"},
+		{ThrowError("call", "BOOM"), "throw call/BOOM"},
 	}
 	for _, c := range cases {
 		if got := c.step.describe(); got != c.want {

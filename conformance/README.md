@@ -44,6 +44,7 @@ unchanged. Three step kinds cover the parking mechanisms:
 | `Wait(30*time.Second)` | the clock past a timer's due date, firing it | clock advance + `TickTimers` |
 | `Fail("task", "message")` | a job to failure with no retries, raising an incident | `FailJob` |
 | `Resolve("task")` | the incident on a task, re-activating its job | `ResolveIncident` |
+| `ThrowError("task", "CODE")` | a job to throw a business error a boundary catches | `ThrowJobError` |
 
 `Complete` resolves the job by the task's BPMN id (job → element instance →
 compiled element), and fails loudly if the id names no parked job or an ambiguous
@@ -96,14 +97,17 @@ Add one by dropping a `neg-*.bpmn` under `models/` and registering it in
 ## What's next
 
 The suite covers self-completing control flow, the parking features the driver
-reaches (user/service tasks, messages, timers, receive tasks, boundary events,
-event-based gateway, start events), the incident lifecycle, and a first set of
-negative models. Planned extensions, roughly in order:
+reaches (user/service tasks, messages, timers, receive tasks, boundary
+timer/message/**error** events, event-based gateway, start events), the incident
+lifecycle, **signal** throw/catch, and a first set of negative models. Planned
+extensions, roughly in order:
 
-- More driver reach: boundary **error/escalation/signal** events and **signal**
-  broadcast.
 - Broader pattern coverage (inclusive gateways, subprocess, multi-instance,
-  compensation) — each a row that flips from 🔲 to ✅ in `COVERAGE.md`.
+  compensation, signal boundary/start) — each a row that flips from 🔲 to ✅ in
+  `COVERAGE.md`.
+- **Escalation** events once the engine supports them — there is no
+  `escalationEventDefinition` in the compiler yet, so there is no feature to
+  exercise; this stays out until it lands.
 - More negative models as the compiler's validation grows (unroutable gateways,
   multiple defaults, cross-scope references).
 - Optionally, a **differential** job comparing outcomes against a reference

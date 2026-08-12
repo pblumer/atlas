@@ -33,6 +33,7 @@ const (
 	stepWait
 	stepFail
 	stepResolve
+	stepThrowError
 )
 
 // incidentResolveRetries is how many fresh attempts a Resolve step grants the job
@@ -108,6 +109,13 @@ func Fail(element, message string) Step {
 // re-activating its job. It fails if no incident is present there.
 func Resolve(element string) Step { return Step{kind: stepResolve, element: element} }
 
+// ThrowError makes the given task's job throw the business error code instead of
+// completing, so a matching boundary error event catches it (code carried in the
+// message field).
+func ThrowError(element, code string) Step {
+	return Step{kind: stepThrowError, element: element, message: code}
+}
+
 func (s Step) describe() string {
 	switch s.kind {
 	case stepComplete:
@@ -120,6 +128,8 @@ func (s Step) describe() string {
 		return "fail " + s.element
 	case stepResolve:
 		return "resolve " + s.element
+	case stepThrowError:
+		return fmt.Sprintf("throw %s/%s", s.element, s.message)
 	default:
 		return "unknown"
 	}
@@ -190,6 +200,13 @@ func (d *driver) apply(s Step) error {
 		return d.p.RunUntilIdle()
 	case stepResolve:
 		return d.resolveIncident(s.element)
+	case stepThrowError:
+		jobKey, err := d.jobForElement(s.element)
+		if err != nil {
+			return err
+		}
+		d.p.ThrowJobError(jobKey, s.message)
+		return d.p.RunUntilIdle()
 	default:
 		return fmt.Errorf("unknown step kind %d", s.kind)
 	}

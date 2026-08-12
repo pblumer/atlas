@@ -126,9 +126,12 @@ The control-flow basics most real models use.
   (`FailJob` raises, `ResolveIncident` resumes) — 16 scenarios. It also has an
   **adversarial half**: negative models that are well-formed but structurally
   invalid and must be rejected at compile (dangling flow, bad boundary host,
-  unknown message), asserted by `TestNegativeModels`. Next: boundary
-  error/escalation/signal events, more negative models as compiler validation
-  grows, and broader pattern coverage.
+  unknown message), asserted by `TestNegativeModels`. Now also covering the
+  **interrupting boundary error** event (a job throws a business error the
+  boundary catches) and **signal** throw/catch (a 1:n broadcast within an
+  instance) — 18 scenarios. (Escalation events stay out until the engine supports
+  `escalationEventDefinition`.) Next: signal boundary/start, subprocess,
+  multi-instance and compensation scenarios, and broader pattern coverage.
 - 🚧 **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)
   engine, [ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)): the
   element, its behavior, and evaluation through the job path landed as a vertical
