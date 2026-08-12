@@ -126,6 +126,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0115](0115-history-retention-hard-delete.md) | History retention — an export-gated, age-based hard delete of finished instances via a durable IntentPurged event; bounded sweep, opt-in, counters untouched | Accepted |
 | [0116](0116-terminate-end-events.md) | Terminate end events — `<terminateEventDefinition>` ends its enclosing flow scope at once (root → instance, subprocess → subprocess then parent continues), reusing `terminateScopeExcept` + `completeScope`; `cancelEndEventBehavior` minus compensation, no new recovery path | Accepted |
 | [0117](0117-ai-agent-task.md) | An AI agent task — an LLM agent as a managed connector on the job path: the call runs in a post-fsync worker and its result is frozen into the completion event (never re-invoked on replay), authored via the connector catalog with a vault-resolved credential, with a durable agent-run audit record | Proposed |
+| [0118](0118-bpmn-lanes.md) | BPMN lanes — organizational metadata with no execution semantics (compiler records each node's lane, Operations/Tasks expose it); a lane *references* an Atlas group (never equals one) so a user task without its own `candidateGroups` inherits it as a compile-time default, explicit assignment winning; layered A (metadata) now, B (assignment default) and C (access control) deferred | Proposed |
 
 ## Status values
 
