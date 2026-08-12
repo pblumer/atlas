@@ -144,11 +144,15 @@ The control-flow basics most real models use.
   across steps into one structured object, `order={"id":"ORD-1","total":100}`), and
   a **collection data object** (an `isCollection` list-valued object round-tripped,
   the trace marking it `items[collection]=[10,20,30]` — collection-ness is
-  compile-time metadata surfaced from the process, not the runtime value) — 29
+  compile-time metadata surfaced from the process, not the runtime value), and a
+  **transaction subprocess with cancel** (a cancel end event rolls the transaction
+  back — compensating a completed compensable activity — and the transaction's
+  cancel boundary routes to a handler instead of the normal end, ADR-0108) — 30
   scenarios, plus a fourth negative model pinning that a **terminate end event** is
   rejected at compile rather than silently degraded. (Escalation events stay out
-  until the engine supports `escalationEventDefinition`.) Next: transaction/cancel
-  scenarios, data-object lineage, and broader pattern coverage.
+  until the engine supports `escalationEventDefinition`.) Next: data-object
+  lineage, error/message end events, and a differential job against a reference
+  engine.
 - 🚧 **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)
   engine, [ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)): the
   element, its behavior, and evaluation through the job path landed as a vertical

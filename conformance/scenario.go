@@ -71,6 +71,7 @@ var Features = []Feature{
 	{"data-object", "First-class data object: output/input associations and data state", nil},
 	{"field-level-data-object", "Field-level data-object writes (accrue members)", nil},
 	{"collection-data-object", "Collection data object (isCollection list)", nil},
+	{"transaction-cancel", "Transaction subprocess with cancel end and cancel boundary", nil},
 }
 
 // Scenario binds a BPMN model to the features it exercises, how its instance is
@@ -166,6 +167,10 @@ var Scenarios = []Scenario{
 
 	// Collection data object: a list-valued object round-trips, marked as a collection.
 	{Name: "collection-data-object", Model: "collection-data-object.bpmn", Features: []string{"collection-data-object"}},
+
+	// Transaction with cancel: cancel end rolls back (compensates), cancel boundary routes.
+	{Name: "transaction-cancel", Model: "transaction-cancel.bpmn", Features: []string{"transaction-cancel"},
+		Driver: []Step{Complete("reserve"), Complete("unreserve")}},
 }
 
 // NegativeModel is a well-formed BPMN model that is nonetheless invalid and must be

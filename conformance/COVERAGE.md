@@ -35,6 +35,7 @@ Generated from the register in `scenario.go` by `go test ./conformance -update`.
 | First-class data object: output/input associations and data state | — | data-object | ✅ |
 | Field-level data-object writes (accrue members) | — | data-object-fields | ✅ |
 | Collection data object (isCollection list) | — | collection-data-object | ✅ |
+| Transaction subprocess with cancel end and cancel boundary | — | transaction-cancel | ✅ |
 
 ## Control-flow patterns
 
