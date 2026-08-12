@@ -1,0 +1,65 @@
+{
+  "type": "default",
+  "id": "ba-konto",
+  "components": [
+    {
+      "type": "text",
+      "text": "# 🔑 Konto anlegen\n\nLege das Atlas-Konto jetzt im Admin-Bereich an (**Benutzer → Neu**) mit den unten stehenden Daten und dem hier gesetzten Initialpasswort. Bestätige anschließend hier.\n\n> Die Anlage ist bewusst eine Admin-Handlung – die Benutzerverwaltung ist admin-gated (ADR-0044/0049). Dieser Prozess koordiniert und dokumentiert sie und versendet die Zugangs-Mail automatisch."
+    },
+    {
+      "key": "vorname",
+      "type": "textfield",
+      "label": "Vorname",
+      "disabled": true
+    },
+    {
+      "key": "nachname",
+      "type": "textfield",
+      "label": "Nachname",
+      "disabled": true
+    },
+    {
+      "key": "email",
+      "type": "textfield",
+      "label": "E-Mail-Adresse",
+      "disabled": true
+    },
+    {
+      "key": "rolle",
+      "type": "textfield",
+      "label": "Rolle",
+      "disabled": true
+    },
+    {
+      "key": "benutzername",
+      "type": "textfield",
+      "label": "Benutzername",
+      "description": "Vorschlag aus vorname.nachname – bei Bedarf anpassen.",
+      "validate": { "required": true }
+    },
+    {
+      "key": "entscheidung",
+      "type": "radio",
+      "label": "Entscheidung",
+      "values": [
+        { "label": "Konto anlegen und Zugang versenden", "value": "anlegen" },
+        { "label": "Antrag ablehnen", "value": "ablehnen" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "key": "initialpasswort",
+      "type": "textfield",
+      "label": "Initiales Passwort",
+      "description": "Wird dem Benutzer per E-Mail zugesendet. Muss beim ersten Login geändert werden.",
+      "conditional": { "hide": "=entscheidung != \"anlegen\"" },
+      "validate": { "required": true }
+    },
+    {
+      "key": "ablehnungsgrund",
+      "type": "textarea",
+      "label": "Ablehnungsgrund",
+      "conditional": { "hide": "=entscheidung != \"ablehnen\"" }
+    }
+  ]
+}

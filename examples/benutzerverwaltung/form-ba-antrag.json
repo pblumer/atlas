@@ -1,0 +1,50 @@
+{
+  "type": "default",
+  "id": "ba-antrag",
+  "components": [
+    {
+      "type": "text",
+      "text": "# 👤 Benutzer aufnehmen\n\nBeantrage die Aufnahme eines neuen Atlas-Benutzers. Aus deinen Angaben wird ein Benutzername vorgeschlagen; ein Administrator legt das Konto anschließend an."
+    },
+    {
+      "key": "vorname",
+      "type": "textfield",
+      "label": "Vorname",
+      "validate": { "required": true }
+    },
+    {
+      "key": "nachname",
+      "type": "textfield",
+      "label": "Nachname",
+      "validate": { "required": true }
+    },
+    {
+      "key": "email",
+      "type": "textfield",
+      "label": "E-Mail-Adresse",
+      "description": "An diese Adresse werden die Zugangsdaten versendet.",
+      "validate": { "required": true, "validationType": "email" }
+    },
+    {
+      "key": "rolle",
+      "type": "radio",
+      "label": "Rolle",
+      "values": [
+        { "label": "Benutzer (user)", "value": "user" },
+        { "label": "Administrator (admin)", "value": "admin" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "key": "abteilung",
+      "type": "textfield",
+      "label": "Abteilung / Team"
+    },
+    {
+      "key": "begruendung",
+      "type": "textarea",
+      "label": "Begründung",
+      "description": "Warum wird der Zugang benötigt?"
+    }
+  ]
+}
