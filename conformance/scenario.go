@@ -62,6 +62,8 @@ var Features = []Feature{
 	{"multi-instance", "Parallel multi-instance activity with output collection", nil},
 	{"multi-instance-sequential", "Sequential multi-instance activity", nil},
 	{"call-activity", "Call activity invoking a child process", nil},
+	{"compensation", "Compensation via a boundary and a compensation throw", nil},
+	{"signal-boundary", "Interrupting boundary signal event", nil},
 }
 
 // Scenario binds a BPMN model to the features it exercises, how its instance is
@@ -134,6 +136,13 @@ var Scenarios = []Scenario{
 
 	// Call activity: a two-process model; instantiate the parent, child self-completes.
 	{Name: "call-activity", Model: "call-activity.bpmn", Features: []string{"call-activity"}, Root: "call-parent"},
+
+	// Compensation: complete the compensable activity, then the throw runs its handler.
+	{Name: "compensation", Model: "compensation.bpmn", Features: []string{"compensation"},
+		Driver: []Step{Complete("charge"), Complete("refund")}},
+
+	// Signal boundary: a thrown signal interrupts a parked user task — self-completing.
+	{Name: "signal-boundary", Model: "signal-boundary.bpmn", Features: []string{"signal-boundary"}},
 }
 
 // NegativeModel is a well-formed BPMN model that is nonetheless invalid and must be

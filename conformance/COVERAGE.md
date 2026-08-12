@@ -28,6 +28,8 @@ Generated from the register in `scenario.go` by `go test ./conformance -update`.
 | Parallel multi-instance activity with output collection | — | multi-instance | ✅ |
 | Sequential multi-instance activity | — | multi-instance-sequential | ✅ |
 | Call activity invoking a child process | — | call-activity | ✅ |
+| Compensation via a boundary and a compensation throw | — | compensation | ✅ |
+| Interrupting boundary signal event | — | signal-boundary | ✅ |
 
 ## Control-flow patterns
 

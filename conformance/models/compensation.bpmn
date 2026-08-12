@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: compensation.
+
+  Start -> serviceTask "charge" (compensable) -> intermediate throw "cancel" ->
+  End "done". The "charge" activity carries a compensation boundary event linked
+  by a BPMN <association> to the "refund" handler (isForCompensation). Once charge
+  has completed, reaching the "cancel" throw compensates it: the engine runs the
+  refund handler for the completed charge, and only when it finishes does the
+  throw continue to "done". Driver: Complete("charge") then Complete("refund").
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_compensation" targetNamespace="http://atlas/conformance">
+  <process id="compensation" name="Compensation" isExecutable="true">
+    <startEvent id="start"/>
+    <serviceTask id="charge" name="Charge card">
+      <extensionElements><zeebe:taskDefinition type="charge-card" retries="3"/></extensionElements>
+    </serviceTask>
+    <boundaryEvent id="charge_comp" attachedToRef="charge">
+      <compensateEventDefinition/>
+    </boundaryEvent>
+    <serviceTask id="refund" name="Refund card" isForCompensation="true">
+      <extensionElements><zeebe:taskDefinition type="refund-card" retries="3"/></extensionElements>
+    </serviceTask>
+    <intermediateThrowEvent id="cancel" name="Cancel order">
+      <compensateEventDefinition activityRef="charge"/>
+    </intermediateThrowEvent>
+    <endEvent id="done"/>
+    <association id="a1" sourceRef="charge_comp" targetRef="refund"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="charge"/>
+    <sequenceFlow id="f2" sourceRef="charge" targetRef="cancel"/>
+    <sequenceFlow id="f3" sourceRef="cancel" targetRef="done"/>
+  </process>
+</definitions>

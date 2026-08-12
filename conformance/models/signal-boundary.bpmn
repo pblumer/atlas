@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: an interrupting boundary signal event.
+
+  Start -> parallel fork -> two branches:
+    A: userTask "review" with an interrupting boundary signal "abort" -> "aborted"
+    B: script "prep" -> intermediate signal throw "abort" -> "thrown"
+  When branch B throws "abort", branch A's boundary signal fires; being
+  interrupting it cancels the still-parked "review" and routes to "aborted". The
+  script keeps the throw one hop behind the boundary's arming, so the boundary is
+  always subscribed first — self-completing, no driver. The user task is never
+  completed; being interrupted is the point.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_signal_boundary" targetNamespace="http://atlas/conformance">
+  <signal id="Sig_abort" name="abort"/>
+  <process id="signal-boundary" name="Signal boundary" isExecutable="true">
+    <startEvent id="start"/>
+    <parallelGateway id="fork"/>
+    <userTask id="review" name="Review">
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="reviewers"/>
+      </extensionElements>
+    </userTask>
+    <boundaryEvent id="on_abort" name="On abort" attachedToRef="review">
+      <signalEventDefinition signalRef="Sig_abort"/>
+    </boundaryEvent>
+    <endEvent id="reviewed"/>
+    <endEvent id="aborted"/>
+    <scriptTask id="prep">
+      <extensionElements>
+        <zeebe:script expression="= 1" resultVariable="ready"/>
+      </extensionElements>
+    </scriptTask>
+    <intermediateThrowEvent id="raise_abort" name="Raise abort">
+      <signalEventDefinition signalRef="Sig_abort"/>
+    </intermediateThrowEvent>
+    <endEvent id="thrown"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="fork"/>
+    <sequenceFlow id="f2" sourceRef="fork" targetRef="review"/>
+    <sequenceFlow id="f3" sourceRef="fork" targetRef="prep"/>
+    <sequenceFlow id="f4" sourceRef="review" targetRef="reviewed"/>
+    <sequenceFlow id="f5" sourceRef="on_abort" targetRef="aborted"/>
+    <sequenceFlow id="f6" sourceRef="prep" targetRef="raise_abort"/>
+    <sequenceFlow id="f7" sourceRef="raise_abort" targetRef="thrown"/>
+  </process>
+</definitions>
