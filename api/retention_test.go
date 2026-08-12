@@ -71,8 +71,14 @@ func waitForPurge(t *testing.T, what string, cond func() bool) {
 // disappears from the instances listing (ADR-0115). The safe position is the durable
 // applied position, so a just-terminated instance is immediately export-provable.
 func TestRetentionPurgesFinishedInstance(t *testing.T) {
+	// The max age is deliberately larger than the sweep interval and the setup time,
+	// not a token 1ms: eligibility is wall-clock (now-CompletedAt >= maxAge), so a tiny
+	// age lets a sweep tick purge the instance *during* setup — before the pre-purge
+	// assertion below — which raced under load. A 500ms age keeps the instance
+	// ineligible until well after the assertion, then it ages out and is purged inside
+	// waitForPurge's 3s window.
 	ts := newTestServerWith(t,
-		api.WithRetention(time.Millisecond),
+		api.WithRetention(500*time.Millisecond),
 		api.WithRetentionInterval(15*time.Millisecond),
 	)
 	deployAndTerminateOne(t, ts)
@@ -90,8 +96,14 @@ func TestRetentionPurgesFinishedInstance(t *testing.T) {
 // instances are purged one per tick — exercising the bounded, resumable cursor
 // (ADR-0115). All are eventually cleared.
 func TestRetentionDrainsBacklogAcrossTicks(t *testing.T) {
+	// A 500ms max age (not a token 1ms) keeps all three instances ineligible until
+	// after the "3 present before purge" assertion below: eligibility is wall-clock
+	// (now-CompletedAt >= maxAge), so a 1ms age let a 15ms sweep tick purge one during
+	// setup and the assertion then saw 2 — the flake this hardening fixes. Once they
+	// age past the cutoff they still drain one-per-tick (batch 1), and the whole
+	// backlog clears inside waitForPurge's 3s window.
 	ts := newTestServerWith(t,
-		api.WithRetention(time.Millisecond),
+		api.WithRetention(500*time.Millisecond),
 		api.WithRetentionInterval(15*time.Millisecond),
 		api.WithRetentionBatch(1),
 	)
