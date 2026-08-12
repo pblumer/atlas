@@ -482,14 +482,18 @@ function initShell() {
 // initHelpMenu fills the top-bar "?" dropdown. Its API Explorer entry opens the
 // Scalar explorer (/api/docs) in a new tab when the server was started with docs
 // enabled; otherwise it shows an inert hint about --docs=false, so the missing
-// link is self-explanatory rather than a dead button (ADR-0043). Open/close is
-// handled by the shared delegated .dropdown-toggle machinery above.
+// link is self-explanatory rather than a dead button (ADR-0043). The Conformance
+// Gallery entry is always shown — that page is a static asset served regardless
+// of the --docs flag. Open/close is handled by the shared delegated
+// .dropdown-toggle machinery above.
 function initHelpMenu(docsEnabled) {
   const menu = document.getElementById("help-menu");
   if (!menu) return;
-  menu.innerHTML = docsEnabled
+  const explorer = docsEnabled
     ? `<a role="menuitem" href="/api/docs" target="_blank" rel="noopener">API Explorer <span class="ext" aria-hidden="true">↗</span></a>`
     : `<span class="help-note">API Explorer is disabled<br><span class="muted">start the server without <code>--docs=false</code></span></span>`;
+  const gallery = `<a role="menuitem" href="/conformance-gallery.html" target="_blank" rel="noopener">Conformance Gallery <span class="ext" aria-hidden="true">↗</span></a>`;
+  menu.innerHTML = explorer + gallery;
 }
 
 function setChrome(appId, route) {

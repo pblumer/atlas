@@ -2,12 +2,19 @@
 
 A human-readable catalog of the conformance suite — one entry per scenario, with
 its diagram, how it is driven, and the outcome it must produce. It is the readable
-face of the [`../tck`](../tck) case format and the basis for an interactive gallery
-(planned).
+face of the [`../tck`](../tck) case format.
 
 **➡ [Browse the scenario pages](scenarios/README.md)** — one page per scenario,
 each with its description, diagram, driver, and expected outcome. The pages are
 generated from `../scenario.go`, so they never drift from the executable suite.
+
+**▶ Interactive gallery:** a running Atlas server serves a live "try it out" page
+at **`/conformance-gallery.html`** (also linked from the web UI's **?** menu). Each
+scenario gets a **Deploy & Run** button that deploys the model, starts an instance,
+and shows the live path + variables against the expected golden outcome; one button
+deploys the whole collection into a project. The page is generated into
+[`../../api/web/conformance-gallery.html`](../../api/web/conformance-gallery.html)
+by `go test ./conformance -update` (see `../gallery_test.go`).
 
 ## Diagrams
 
@@ -48,6 +55,6 @@ go test ./conformance -update
 
 ## Status
 
-Every positive scenario carries a hand-authored diagram and a generated catalog
-page. Remaining planned work: diagrams for the negative models and the interactive
-hosted gallery.
+Every positive scenario carries a hand-authored diagram, a generated catalog
+page, and an entry in the interactive gallery served at `/conformance-gallery.html`.
+Remaining planned work: diagrams for the negative models.
