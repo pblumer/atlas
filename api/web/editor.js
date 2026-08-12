@@ -1687,7 +1687,7 @@ const SERVICE_TASK_KINDS = [
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
     // fill and the white web strokes.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#5b5bd6"/><g fill="none" stroke="#fff" stroke-width="1.1"><path d="M8 2.4v11.2M2.4 8h11.2M4 4l8 8M12 4l-8 8"/><circle cx="8" cy="8" r="2.6"/><circle cx="8" cy="8" r="5"/></g></svg>`,
-    ext: "atlas:WebScrapeConnector",
+    ext: "atlas:WebscrapeConnector",
     fields: [
       { group: "Page" },
       { key: "url", label: "URL", placeholder: "https://example.com/news", fx: true, hint: "The page to fetch. A value may be a FEEL expression (fx) over the instance's variables." },
