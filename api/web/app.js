@@ -3850,15 +3850,32 @@ async function viewDmnViewer(refId) {
   }
   if (superseded(gen)) return; // navigated away while the graph loaded
   const title = g.modelName || (ref && ref.name) || "DMN model";
-  const back = `<a href="#/modeler">← Modeler</a>`;
+  // Back link mirrors a process/form opened from a project: return to the owning
+  // project (resolved from the ref's projectId) rather than the Modeler home, so
+  // the operator lands where they came from. Ungrouped models keep "← Modeler".
+  const projId = (ref && ref.projectId) || "";
+  const back = projId
+    ? `<a href="#/modeler/p/${encodeURIComponent(projId)}" id="dmn-back">← Project</a>`
+    : `<a href="#/modeler" id="dmn-back">← Modeler</a>`;
+  const resolveBack = async () => {
+    if (!projId) return;
+    try {
+      const projects = await api("GET", "/api/v1/projects");
+      const p = (projects || []).find((x) => x.id === projId);
+      const el = document.getElementById("dmn-back");
+      if (p && el && !superseded(gen)) el.textContent = `← ${p.name}`;
+    } catch { /* keep the generic "← Project" label, which still links correctly */ }
+  };
   const editBtn = ref && ref.modelRef
     ? `<button class="btn" id="dmn-edit">Bearbeiten</button>` : "";
-  // Re-render from the updated model once the editor closes on a save.
+  // Re-render from the updated model once the editor closes on a save; also
+  // resolves the back link's project name.
   const wireEdit = () => {
     const b = document.getElementById("dmn-edit");
     if (b) b.addEventListener("click", async () => {
       await editDmnRef({ id: ref.id, modelRef: ref.modelRef, projectId: ref.projectId || "", name: ref.name }, () => viewDmnViewer(refId));
     });
+    resolveBack();
   };
   if (!g.valid) {
     view.innerHTML = `<div class="card">${back}
