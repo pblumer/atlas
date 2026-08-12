@@ -1364,7 +1364,7 @@ type xmlServiceTask struct {
 	// absent.
 	Remedy *xmlRemedyConnector `xml:"extensionElements>remedyConnector"`
 	// WebScrape, when present, marks this service task a web-scraping connector task
-	// (ADR-0117). The pointer is nil when the <atlas:webscrapeConnector> extension is
+	// (ADR-0118). The pointer is nil when the <atlas:webscrapeConnector> extension is
 	// absent.
 	WebScrape     *xmlWebScrapeConnector     `xml:"extensionElements>webscrapeConnector"`
 	IOMapping     xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
@@ -1523,7 +1523,7 @@ type xmlRemedyConnector struct {
 
 // A web-scraping connector task's parameters, carried on a service task as an
 // <atlas:webscrapeConnector url="..." selector="..." attribute="..."
-// resultVariable="..."/> extension element (ADR-0117). url (required) is the page to
+// resultVariable="..."/> extension element (ADR-0118). url (required) is the page to
 // fetch and selector (required) the CSS selector whose matches are extracted; both
 // live in the model (unlike a registry endpoint), and credentials never do. attribute,
 // when set, names the HTML attribute read from each match (omit to read each match's

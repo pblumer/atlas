@@ -366,7 +366,7 @@ type UserTaskDetail struct {
 //     fetch (literal-or-FEEL, like REST); ScrapeSelector is the CSS selector whose
 //     matches are extracted; ScrapeAttribute names the HTML attribute to read from
 //     each match (-1 → each match's text content); ResultVar receives the extracted
-//     values as a JSON array (ADR-0117).
+//     values as a JSON array (ADR-0118).
 //
 // Unused fields for a given kind are -1 (Intern maps that back to ""); Limit is 0
 // when unset. The write and REST kinds send the instance's variables as the
@@ -439,7 +439,7 @@ type ConnectorTaskDetail struct {
 	// over the instance's variables at call time (nil for a non-remedy task).
 	RemedyForm   RestExpr
 	RemedyFields []RestKV
-	// Web-scrape connector fields (JobType == WebScrapeJobType, ADR-0117). Url (above)
+	// Web-scrape connector fields (JobType == WebScrapeJobType, ADR-0118). Url (above)
 	// is the model-authored page to fetch; ScrapeSelector is the CSS selector whose
 	// matches are extracted (literal-or-FEEL, the zero RestExpr for a non-scrape task);
 	// ScrapeAttribute is the interned HTML attribute read from each match (-1 → each

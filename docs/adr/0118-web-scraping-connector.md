@@ -1,4 +1,4 @@
-# ADR-0117: A web-scraping connector — model-authored URL + CSS selector extraction
+# ADR-0118: A web-scraping connector — model-authored URL + CSS selector extraction
 
 - **Status:** Accepted
 - **Date:** 2026-08-12

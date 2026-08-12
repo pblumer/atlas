@@ -250,7 +250,7 @@ func compileRemedyConnectorTask(b *Builder, st xmlServiceTask, retries int32) (i
 
 // compileWebScrapeConnectorTask compiles an <atlas:webscrapeConnector> task: it
 // fetches the model-authored URL and extracts the elements matching a CSS selector
-// via the job path (ADR-0117), not an external service-task worker. The URL and
+// via the job path (ADR-0118), not an external service-task worker. The URL and
 // selector live in the model (like REST's endpoint, ADR-0067); the extracted values
 // are written back into the required result variable as a JSON array.
 func compileWebScrapeConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {

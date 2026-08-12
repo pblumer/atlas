@@ -1,6 +1,6 @@
 // Package webscrape integrates web scraping as a service-task connector: a BPMN
 // web-scraping connector task fetches a model-authored URL and extracts the elements
-// matching a CSS selector through the job path (ADR-0117), mirroring how the rest
+// matching a CSS selector through the job path (ADR-0118), mirroring how the rest
 // package calls a model-authored HTTP endpoint (ADR-0067). The integration inherits
 // the job protocol's durability and non-blocking properties (ADR-0007):
 //
@@ -54,7 +54,7 @@ type HTTPClient struct {
 }
 
 // NewHTTPClient builds a web-scraping HTTP client backed by http.DefaultClient. A
-// configurable timeout is a follow-up (ADR-0117).
+// configurable timeout is a follow-up (ADR-0118).
 func NewHTTPClient() *HTTPClient {
 	return &HTTPClient{http: http.DefaultClient}
 }

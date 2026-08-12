@@ -612,7 +612,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// A web-scraping service task fetches a model-authored URL and extracts the
 	// elements matching a CSS selector, in-process, off the run loop and after fsync,
 	// writing the extracted values into the task's result variable as a JSON array.
-	// The URL and selector live in the model, like REST (ADR-0117). One worker serves
+	// The URL and selector live in the model, like REST (ADR-0118). One worker serves
 	// every process under the reserved web-scrape job type.
 	s.jobRunner.HandleWithOutput(compiler.WebScrapeJobTypeIndex, webscrape.Handler(store, s.processLookup, webscrape.NewHTTPClient()))
 	if err := s.loadDeployments(); err != nil {

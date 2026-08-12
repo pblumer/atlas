@@ -170,7 +170,7 @@ const RemedyJobTypeIndex int32 = 13
 
 // WebScrapeJobType is the reserved job type a web-scraping connector task carries.
 // The in-process web-scraping worker subscribes to it to fetch a model-authored URL
-// and extract the elements matching a CSS selector off the hot path (ADR-0117), the
+// and extract the elements matching a CSS selector off the hot path (ADR-0118), the
 // same way the REST worker subscribes to RestJobType. The URL and selector live in
 // the model (like REST's endpoint); nothing about the target is registry-held.
 const WebScrapeJobType = "io.atlas.webscrape"
@@ -179,7 +179,7 @@ const WebScrapeJobType = "io.atlas.webscrape"
 // occupy in every compiled process: NewBuilder reserves it fifteenth (after the
 // fourteen job types above), so it is always 14. This lets a single in-process
 // web-scraping worker subscribe by one global index across every deployed process,
-// the same way the mail worker uses MailJobTypeIndex (ADR-0117).
+// the same way the mail worker uses MailJobTypeIndex (ADR-0118).
 const WebScrapeJobTypeIndex int32 = 14
 
 // TemisDecisionJobType is the reserved job type a *central* business rule task
@@ -874,7 +874,7 @@ func (b *Builder) AddRemedyConnectorTask(cfg RemedyConfig) int32 {
 }
 
 // WebScrapeConfig is the deploy-time configuration of a web-scraping connector task
-// (ADR-0117). Url is the page to fetch and Selector the CSS selector whose matches
+// (ADR-0118). Url is the page to fetch and Selector the CSS selector whose matches
 // are extracted — both literal-or-FEEL values (the parser compiles the FEEL ones)
 // evaluated over the instance's variables at call time. Attribute, when set, names
 // the HTML attribute to read from each match (empty → each match's text content);
@@ -894,7 +894,7 @@ type WebScrapeConfig struct {
 // it up, evaluates any FEEL url/selector values over the instance's variables,
 // fetches the page, extracts the text (or the named attribute) of every element
 // matching the selector, writes the values into Result as a JSON array, and
-// completes the job (ADR-0117). The URL and selector live in the model, mirroring
+// completes the job (ADR-0118). The URL and selector live in the model, mirroring
 // the REST connector (ADR-0067); nothing about the target is registry-held.
 func (b *Builder) AddWebScrapeConnectorTask(cfg WebScrapeConfig) int32 {
 	detail := int32(len(b.connectorTasks))

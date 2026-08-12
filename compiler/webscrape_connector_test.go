@@ -6,7 +6,7 @@ import (
 )
 
 // A service task bearing an <atlas:webscrapeConnector> extension is a web-scraping
-// connector task (ADR-0117): it fetches the model-authored URL and extracts the
+// connector task (ADR-0118): it fetches the model-authored URL and extracts the
 // elements matching a CSS selector via the job path rather than delegating to an
 // external service-task worker.
 const webscrapeConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>

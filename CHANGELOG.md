@@ -14,7 +14,7 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
-- **Web-scraping connector** ([ADR-0117](docs/adr/0117-web-scraping-connector.md)):
+- **Web-scraping connector** ([ADR-0118](docs/adr/0118-web-scraping-connector.md)):
   a `<serviceTask>` bearing an `<atlas:webscrapeConnector url selector attribute
   resultVariable>` extension fetches a model-authored page and extracts the elements
   matching a CSS selector, writing the values into a process variable as a JSON array.
