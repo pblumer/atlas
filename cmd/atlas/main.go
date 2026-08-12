@@ -31,6 +31,7 @@ import (
 	"github.com/pblumer/atlas/api"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/mcp"
+	"github.com/pblumer/atlas/opensearch"
 	"github.com/pblumer/atlas/script"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
@@ -137,14 +138,33 @@ func runServe(args []string) error {
 	python := fs.Bool("python", true, "run Python script tasks by shelling out to python3; on by default, --python=false to disable (executes arbitrary interpreter code)")
 	javascript := fs.Bool("javascript", true, "run JavaScript script tasks by shelling out to node; on by default, --javascript=false to disable (executes arbitrary interpreter code)")
 	scriptTimeout := fs.Duration("script-timeout", 30*time.Second, "wall-clock limit for a single script task in any language; an overrunning script is killed and its job left pending")
+	// OpenSearch event exporter (ADR-0114): opt-in, off unless a URL is set. The URL
+	// and index accept a flag (defaulting to the env var) for discoverability; the
+	// credentials are env-only so a secret never lands in the process arguments.
+	osURL := fs.String("opensearch-url", os.Getenv("ATLAS_OPENSEARCH_URL"), "base URL of an OpenSearch cluster to mirror the event log into (ADR-0114); empty disables the exporter. Credentials come from ATLAS_OPENSEARCH_USERNAME/ATLAS_OPENSEARCH_PASSWORD")
+	osIndex := fs.String("opensearch-index", envOr("ATLAS_OPENSEARCH_INDEX", opensearch.DefaultIndex), "OpenSearch index the exporter writes events to")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	enabled := map[string]bool{"powershell": *powershell, "python": *python, "javascript": *javascript}
-	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, enabled, *scriptTimeout)
+	osCfg := opensearch.Config{
+		URL:      strings.TrimSpace(*osURL),
+		Username: os.Getenv("ATLAS_OPENSEARCH_USERNAME"),
+		Password: os.Getenv("ATLAS_OPENSEARCH_PASSWORD"),
+		Index:    strings.TrimSpace(*osIndex),
+	}
+	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, enabled, *scriptTimeout, osCfg)
 }
 
-func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault bool, scriptLangs map[string]bool, scriptTimeout time.Duration) error {
+// envOr returns the environment variable's value, or def when it is unset/empty.
+func envOr(key, def string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
+	}
+	return def
+}
+
+func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -190,6 +210,11 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 	apiOpts := []api.Option{api.WithLogBuffer(logs)}
 	if !docs {
 		apiOpts = append(apiOpts, api.WithoutDocs())
+	}
+	// Mirror the durable event log into OpenSearch when configured (ADR-0114).
+	if osExport.Enabled() {
+		apiOpts = append(apiOpts, api.WithOpenSearchExporter(osExport))
+		log.Printf("opensearch exporter enabled: indexing events into %s at %s", osExport.Index, osExport.URL)
 	}
 	if auth {
 		apiOpts = append(apiOpts, api.WithAuth())

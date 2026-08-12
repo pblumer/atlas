@@ -29,6 +29,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"fmt"
 	"io/fs"
@@ -46,6 +47,7 @@ import (
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/mail"
+	"github.com/pblumer/atlas/opensearch"
 	"github.com/pblumer/atlas/remedy"
 	"github.com/pblumer/atlas/rest"
 	"github.com/pblumer/atlas/script"
@@ -259,6 +261,16 @@ type Server struct {
 	// than monopolizing the single writer with one unbounded publish storm (ADR-0075).
 	inboundBatch int
 
+	// osExportCfg is the OpenSearch event-exporter configuration (ADR-0114); it is
+	// enabled only when a URL is set (WithOpenSearchExporter). exporter is the built
+	// WAL-tailing sink, nil when disabled, and exporterPoll is its poll cadence. The
+	// exporter runs on its own goroutine off the run loop — it only reads the durable
+	// WAL files and the state store's applied-position watermark, never the processor
+	// — so it never touches the single-writer invariant (I3).
+	osExportCfg  opensearch.Config
+	exporter     *opensearch.Exporter
+	exporterPoll time.Duration
+
 	// docsEnabled gates the OpenAPI spec and the Scalar API explorer. On by
 	// default (opt-out), consistent with the already-open web UI and MCP
 	// endpoint; an operator who does not want the interactive surface disables
@@ -338,6 +350,26 @@ func WithScriptWorker(jobType int32, exec script.Exec) Option {
 			s.scriptWorkers = map[int32]script.Exec{}
 		}
 		s.scriptWorkers[jobType] = exec
+	}
+}
+
+// WithOpenSearchExporter enables the OpenSearch event exporter (ADR-0114): a
+// WAL-tailing sink that mirrors the durable event log into an OpenSearch index so
+// history stays searchable and can outlive engine-side retention. It is opt-in —
+// a config with an empty URL leaves the exporter off. The endpoint, credentials,
+// and index live in server config, never in a model.
+func WithOpenSearchExporter(cfg opensearch.Config) Option {
+	return func(s *Server) { s.osExportCfg = cfg }
+}
+
+// WithOpenSearchExportInterval sets how often the exporter polls the log for newly
+// durable records (ADR-0114). A non-positive value restores the default (5s).
+// Tests pass a short interval to exercise the loop.
+func WithOpenSearchExportInterval(d time.Duration) Option {
+	return func(s *Server) {
+		if d > 0 {
+			s.exporterPoll = d
+		}
 	}
 }
 
@@ -433,6 +465,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		settings:         settings,
 		inboundPoll:      2 * time.Second,     // default cadence; WithInboundPollInterval overrides, 0 disables
 		inboundBatch:     defaultInboundBatch, // per-poll ReadEvents cap; WithInboundBatchLimit overrides
+		exporterPoll:     5 * time.Second,     // OpenSearch export cadence; WithOpenSearchExportInterval overrides (ADR-0114)
 		vaultEnabled:     true,                // opt-out: built unless WithoutVault is passed (ADR-0070)
 		users:            users,
 		sessions:         newSessionStore(defaultSessionTTL),
@@ -605,6 +638,24 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err := s.loadCallOverrides(); err != nil {
 		return nil, err
 	}
+	// Build the OpenSearch exporter when configured (ADR-0114). It tails the durable
+	// WAL under dataDir and is bounded by the state store's applied-position
+	// watermark (LastAppliedPosition), so it only ever indexes records that are on
+	// disk — durable-before-visible (I2) — while never touching the processor.
+	if s.osExportCfg.Enabled() {
+		exp, err := opensearch.New(
+			filepath.Join(dataDir, "wal"),
+			s.store.LastAppliedPosition,
+			opensearch.NewHTTPClient(s.osExportCfg),
+			s.osExportCfg.Index,
+			opensearch.NewPositionStore(filepath.Join(dataDir, "exporter")),
+		)
+		if err != nil {
+			return nil, err
+		}
+		s.exporter = exp
+	}
+
 	s.wg.Add(3)
 	go s.loop()
 	go s.timerScheduler(time.Second)
@@ -621,7 +672,39 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		s.wg.Add(1)
 		go s.inboundBridge(s.inboundPoll)
 	}
+	// The OpenSearch exporter tails the durable log and bulk-indexes new records
+	// (ADR-0114). Like the timer scheduler and inbound bridge it is a separate
+	// goroutine doing its I/O off the run loop; it reads only the durable WAL files
+	// and the concurrent-safe applied-position watermark, so it never funnels
+	// through do() and never touches the processor (invariant I3).
+	if s.exporter != nil {
+		s.wg.Add(1)
+		go s.exporterLoop(s.exporterPoll)
+	}
 	return s, nil
+}
+
+// exporterLoop polls the durable log on a fixed cadence and hands each newly
+// durable batch of records to the OpenSearch exporter (ADR-0114). A tick error
+// (OpenSearch unreachable, a transient index failure) is logged and retried on the
+// next tick — the exporter leaves its high-water mark unadvanced on failure, so no
+// record is skipped and delivery stays at-least-once.
+func (s *Server) exporterLoop(every time.Duration) {
+	defer s.wg.Done()
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-s.quit:
+			return
+		case <-t.C:
+			if n, err := s.exporter.Tick(context.Background()); err != nil {
+				log.Printf("opensearch exporter: %v (will retry next tick)", err)
+			} else if n > 0 {
+				log.Printf("opensearch exporter: indexed %d record(s)", n)
+			}
+		}
+	}
 }
 
 // processLookup resolves a def key to its compiled process for the DMN worker. It
