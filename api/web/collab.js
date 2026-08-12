@@ -159,6 +159,7 @@ export function attachCollab(modeler, api, draftId, toast) {
   // until the next save (markSaved), so a co-editor's arriving change can't discard
   // what this editor has typed but not yet saved.
   let reimportTimer = null;
+  let heartbeatTimer = null;
 
   const reimport = async () => {
     if (state.closed || state.applyingRemote) return;
@@ -231,6 +232,17 @@ export function attachCollab(modeler, api, draftId, toast) {
     } catch { /* ignore */ }
   });
 
+  // Heartbeat: our locks are freed the instant this stream drops (the server's
+  // keepalive write fails), but a half-open connection can hide a dead tab far
+  // longer. Re-announce presence on a fixed interval — well inside the server's
+  // participant TTL — so its reaper can evict a truly gone browser (and free its
+  // locks) as a backstop, while this live editor keeps its session by heartbeating.
+  heartbeatTimer = setInterval(() => {
+    let sel = [];
+    try { sel = modeler.get("selection").get() || []; } catch { /* torn down */ }
+    send("/presence", { selection: sel.length ? sel[0].id : "" });
+  }, 20000);
+
   // --- Outgoing: selection drives presence + locks ---
   const onSelection = (ev) => {
     if (state.applyingRemote) return; // selection churn from our own re-import
@@ -276,6 +288,7 @@ export function attachCollab(modeler, api, draftId, toast) {
     close() {
       state.closed = true;
       if (reimportTimer) { clearTimeout(reimportTimer); reimportTimer = null; }
+      if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
       try { modeler.off("selection.changed", onSelection); } catch { /* torn down */ }
       try { modeler.off("element.changed", onChange); } catch { /* torn down */ }
       try { es.close(); } catch { /* already closed */ }
