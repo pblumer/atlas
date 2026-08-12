@@ -124,6 +124,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0113](0113-org-wide-ui-theme.md) | Org-wide UI brand theme — the Console accent colour stored on the server (public read, admin-gated write) and applied for every user; the browser caches it only to avoid a flash | Accepted |
 | [0114](0114-opensearch-event-exporter.md) | OpenSearch event exporter — a WAL-tailing sink off the hot path, bounded by the durable position watermark (I2), resumable and idempotent, opt-in via server config | Accepted |
 | [0115](0115-history-retention-hard-delete.md) | History retention — an export-gated, age-based hard delete of finished instances via a durable IntentPurged event; bounded sweep, opt-in, counters untouched | Accepted |
+| [0116](0116-terminate-end-events.md) | Terminate end events — `<terminateEventDefinition>` ends its enclosing flow scope at once (root → instance, subprocess → subprocess then parent continues), reusing `terminateScopeExcept` + `completeScope`; `cancelEndEventBehavior` minus compensation, no new recovery path | Accepted |
 
 ## Status values
 

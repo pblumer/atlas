@@ -1195,6 +1195,11 @@ func (b *Builder) AddCompensationEndEvent() int32 {
 // compensates the whole transaction). Returns its element id.
 func (b *Builder) AddCancelEndEvent() int32 { return b.addNode(TypeCancelEndEvent, -1) }
 
+// AddTerminateEndEvent adds a terminate end event: reaching it ends the enclosing flow scope at
+// once — every other live token in the scope is terminated, then the scope completes (ADR-0116).
+// It carries no detail (a terminate has no code, message, or handler). Returns its element id.
+func (b *Builder) AddTerminateEndEvent() int32 { return b.addNode(TypeTerminateEndEvent, -1) }
+
 // AddBoundaryCancelEvent adds a cancel boundary event attached to host (a transaction): it
 // catches the transaction's cancellation and routes its recovery flow. Armed inert like an
 // error boundary and always interrupting (ADR-0108). Returns its element id.

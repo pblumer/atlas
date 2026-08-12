@@ -39,7 +39,7 @@ produce. Regenerate with `go test ./conformance -update`; do not edit by hand.
 | [collection-data-object](collection-data-object.md) | `collection-data-object` | — |
 | [transaction-cancel](transaction-cancel.md) | `transaction-cancel` | — |
 
-## Negative models (4)
+## Negative models (3)
 
 Models that must be **rejected at compile** — the suite asserts the engine refuses
 them rather than executing something ill-defined.
@@ -49,4 +49,3 @@ them rather than executing something ill-defined.
 | [`neg-dangling-flow.bpmn`](../../models/neg-dangling-flow.bpmn) | a sequence flow targets an element that does not exist |
 | [`neg-boundary-bad-host.bpmn`](../../models/neg-boundary-bad-host.bpmn) | a boundary event attaches to a host that does not exist |
 | [`neg-unknown-message.bpmn`](../../models/neg-unknown-message.bpmn) | a receive task references a message that is not declared |
-| [`neg-terminate-end.bpmn`](../../models/neg-terminate-end.bpmn) | a terminate end event is unsupported and must not silently degrade to a plain end |

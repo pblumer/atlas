@@ -127,12 +127,16 @@ func (c *ProcessingContext) VariablesOfScope(scope uint64, fn func(v model.Varia
 }
 
 // ForEachElementInstance calls fn with the key of every element instance
-// belonging to a process instance, via the committed elByProc index. Keys are
-// collected before fn runs so fn may mutate element-instance state (e.g. emit
-// terminations) without disturbing the scan.
+// belonging to a process instance, through the in-flight transaction — so it sees
+// element instances created earlier in the same batch, consistently with
+// GetElementInstance, GetJob, and ActiveChildren (all tx-reads). This matters for a
+// terminate end event reached in the same batch as a parallel sibling's activation
+// (ADR-0116): the sibling is not yet committed, but it is in the tx, so the scope
+// teardown finds it. Keys are collected before fn runs so fn may mutate
+// element-instance state (e.g. emit terminations) without disturbing the scan.
 func (c *ProcessingContext) ForEachElementInstance(procKey uint64, fn func(elKey uint64)) {
 	var keys []uint64
-	if err := c.p.store.ElementInstancesOfProcess(procKey, func(k uint64) error {
+	if err := c.tx.ElementInstancesOfProcess(procKey, func(k uint64, _ *model.ElementInstanceValue) error {
 		keys = append(keys, k)
 		return nil
 	}); err != nil {
