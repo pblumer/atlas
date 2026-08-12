@@ -119,11 +119,13 @@ The control-flow basics most real models use.
   pair), plus a **deterministic driver for parking features** — declarative steps
   that complete a job (user/service task), deliver a message, or advance the clock
   past a timer, driving the parked instance to completion while replay stays
-  log-only (user-task, service-task, message-catch, timer-catch scenarios), now
-  reaching **receive tasks and interrupting/non-interrupting boundary events**
-  (boundary-timer-interrupting, boundary-message-noninterrupting). Next:
-  event-based gateway and start events in the driver, incidents, negative models
-  rejected at compile, and broader pattern coverage.
+  log-only, reaching parked jobs, messages and timers, **receive tasks**,
+  interrupting/non-interrupting **boundary events**, the **event-based gateway**
+  (deferred choice, WCP-16), and **message/timer start events** (where the
+  instance is born from a trigger, not CreateInstance) — 15 scenarios. Next:
+  boundary error/escalation/signal events, incidents (`FailJob`/`ResolveIncident`)
+  in the driver, negative models rejected at compile, and broader pattern
+  coverage.
 - 🚧 **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)
   engine, [ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)): the
   element, its behavior, and evaluation through the job path landed as a vertical

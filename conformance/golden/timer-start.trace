@@ -1,0 +1,4 @@
+state: completed
+path: on_schedule -> tick -> end
+vars:
+  fired=1

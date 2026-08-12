@@ -44,14 +44,14 @@ type RunResult struct {
 // replay diverges from live (invariant I4) or if a completed instance left orphan
 // tokens (a structural invariant). Pass nil steps for a self-completing model.
 // base must be an empty directory unique to this call.
-func Run(base string, modelXML []byte, steps []Step) (RunResult, error) {
+func Run(base string, modelXML []byte, start Start, steps []Step) (RunResult, error) {
 	cp, err := compiler.Parse(defKey, 1, bytes.NewReader(modelXML))
 	if err != nil {
 		return RunResult{}, fmt.Errorf("compile: %w", err)
 	}
 
 	liveDir := filepath.Join(base, "live")
-	live, err := executeLive(liveDir, cp, steps)
+	live, err := executeLive(liveDir, cp, start, steps)
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -72,7 +72,7 @@ func Run(base string, modelXML []byte, steps []Step) (RunResult, error) {
 // driver step (with a RunUntilIdle after it), checks the no-orphan-tokens
 // invariant, and captures the result. It closes its store and log so the log can
 // be reopened for replay.
-func executeLive(dir string, cp *compiler.CompiledProcess, steps []Step) (RunResult, error) {
+func executeLive(dir string, cp *compiler.CompiledProcess, start Start, steps []Step) (RunResult, error) {
 	log, store, err := openStores(dir)
 	if err != nil {
 		return RunResult{}, err
@@ -85,12 +85,11 @@ func executeLive(dir string, cp *compiler.CompiledProcess, steps []Step) (RunRes
 	if err := p.Recover(); err != nil {
 		return RunResult{}, fmt.Errorf("recover: %w", err)
 	}
-	p.CreateInstance(cp.Key)
-	if err := p.RunUntilIdle(); err != nil {
-		return RunResult{}, fmt.Errorf("run: %w", err)
-	}
 
 	d := &driver{p: p, store: store, cp: cp, clock: clock}
+	if err := d.begin(start); err != nil {
+		return RunResult{}, fmt.Errorf("start: %w", err)
+	}
 	for i, step := range steps {
 		if err := d.apply(step); err != nil {
 			return RunResult{}, fmt.Errorf("driver step %d of [%s]: %q: %w", i+1, stepList(steps), step.describe(), err)
@@ -137,9 +136,16 @@ func replayLog(liveDir, replayDir string, cp *compiler.CompiledProcess) (RunResu
 	return capture(store, cp)
 }
 
-// capture reads the first instance's observable behavior out of a store.
+// capture reads the instance's observable behavior out of a store. It resolves
+// the instance key by enumeration rather than assuming it (a timer start event,
+// for one, allocates a key for its armed timer before the instance), and requires
+// exactly one instance so "nothing was created" is a loud failure, not a silently
+// empty trace.
 func capture(store *state.Store, cp *compiler.CompiledProcess) (RunResult, error) {
-	piKey := model.NewKey(1, 1)
+	piKey, instanceState, err := singleInstance(store)
+	if err != nil {
+		return RunResult{}, err
+	}
 
 	var path []string
 	if err := store.ElementStepHistory(piKey, func(_ int64, _ uint64, elementId int32) error {
@@ -157,18 +163,34 @@ func capture(store *state.Store, cp *compiler.CompiledProcess) (RunResult, error
 		return RunResult{}, fmt.Errorf("variables: %w", err)
 	}
 
-	// PIActive unless the instance appears in the completed-history index.
-	instanceState := model.PIActive
-	if err := store.CompletedProcessInstances(func(k uint64, v *model.ProcessInstanceValue) error {
-		if k == piKey {
-			instanceState = v.State
-		}
-		return nil
-	}); err != nil {
-		return RunResult{}, fmt.Errorf("completed instances: %w", err)
-	}
-
 	return RunResult{State: instanceState, Path: path, Variables: vars}, nil
+}
+
+// singleInstance returns the one process instance a scenario produced (active or
+// completed) with its state. Conformance models are single-instance by design, so
+// zero or many is an error worth surfacing.
+func singleInstance(store *state.Store) (uint64, model.ProcessInstanceState, error) {
+	var keys []uint64
+	var states []model.ProcessInstanceState
+	collect := func(k uint64, v *model.ProcessInstanceValue) error {
+		keys = append(keys, k)
+		states = append(states, v.State)
+		return nil
+	}
+	if err := store.ActiveProcessInstances(collect); err != nil {
+		return 0, 0, fmt.Errorf("active instances: %w", err)
+	}
+	if err := store.CompletedProcessInstances(collect); err != nil {
+		return 0, 0, fmt.Errorf("completed instances: %w", err)
+	}
+	switch len(keys) {
+	case 0:
+		return 0, 0, fmt.Errorf("no process instance was created")
+	case 1:
+		return keys[0], states[0], nil
+	default:
+		return 0, 0, fmt.Errorf("expected exactly one process instance, got %d", len(keys))
+	}
 }
 
 func activeCounts(store *state.Store) (procInstances, elementInstances int, err error) {

@@ -44,6 +44,37 @@ type Var struct {
 // Str names a string variable.
 func Str(name, text string) Var { return Var{Name: name, Text: text} }
 
+// Start says how a scenario's instance is born. The zero value is an explicit
+// CreateInstance (the default for models with a none start event); message- and
+// timer-start events instead spring the instance from a trigger, so no
+// CreateInstance is ever called for them.
+type Start struct {
+	kind        startKind
+	message     string
+	correlation string
+	after       time.Duration
+}
+
+type startKind int
+
+const (
+	startExplicit startKind = iota // CreateInstance(cp.Key)
+	startMessage                   // a message start event: PublishMessage births the instance
+	startTimer                     // a timer start event: an armed timer births the instance
+)
+
+// MessageStart births the instance by publishing a message to a message start
+// event, rather than by an explicit CreateInstance.
+func MessageStart(name, correlation string) Start {
+	return Start{kind: startMessage, message: name, correlation: correlation}
+}
+
+// TimerStart arms the definition's timer start event and advances the clock by
+// after so the timer comes due and births the instance.
+func TimerStart(after time.Duration) Start {
+	return Start{kind: startTimer, after: after}
+}
+
 // Complete completes the parked job of the task with the given BPMN id, writing
 // any vars as outputs — the driver stands in for the human (user task) or worker
 // (service task).
@@ -82,6 +113,36 @@ type driver struct {
 	clock *driverClock
 }
 
+// begin births the instance according to the scenario's Start and runs it to its
+// first idle point. For a timer start it arms the timer and jumps the clock so
+// TickTimers fires it.
+func (d *driver) begin(s Start) error {
+	switch s.kind {
+	case startExplicit:
+		d.p.CreateInstance(d.cp.Key)
+		return d.p.RunUntilIdle()
+	case startMessage:
+		d.p.PublishMessage(s.message, s.correlation)
+		return d.p.RunUntilIdle()
+	case startTimer:
+		// Arm and drain so the start timer is durably indexed before we jump the
+		// clock; only then can TickTimers find it due. Firing the timer creates the
+		// instance, whose first token movement is a followup, so drain once more to
+		// carry the newborn instance to its first idle point.
+		d.p.ArmStartTimers(d.cp.Key)
+		if err := d.p.RunUntilIdle(); err != nil {
+			return err
+		}
+		d.clock.advance(int64(s.after))
+		if err := d.p.TickTimers(); err != nil {
+			return err
+		}
+		return d.p.RunUntilIdle()
+	default:
+		return fmt.Errorf("unknown start kind %d", s.kind)
+	}
+}
+
 func (d *driver) apply(s Step) error {
 	switch s.kind {
 	case stepComplete:
@@ -96,7 +157,10 @@ func (d *driver) apply(s Step) error {
 		return d.p.RunUntilIdle()
 	case stepWait:
 		d.clock.advance(int64(s.after))
-		return d.p.TickTimers()
+		if err := d.p.TickTimers(); err != nil {
+			return err
+		}
+		return d.p.RunUntilIdle()
 	default:
 		return fmt.Errorf("unknown step kind %d", s.kind)
 	}

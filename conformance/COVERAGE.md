@@ -18,6 +18,9 @@ Generated from the register in `scenario.go` by `go test ./conformance -update`.
 | Receive task (message wait as an activity) | — | receive-task | ✅ |
 | Interrupting boundary timer event | — | boundary-timer-interrupting | ✅ |
 | Non-interrupting boundary message event | — | boundary-message-noninterrupting | ✅ |
+| Event-based gateway (deferred choice) | WCP-16 | event-gateway-message, event-gateway-timer | ✅ |
+| Message start event | — | message-start | ✅ |
+| Timer start event | — | timer-start | ✅ |
 
 ## Control-flow patterns
 
@@ -28,6 +31,7 @@ Generated from the register in `scenario.go` by `go test ./conformance -update`.
 | WCP-3 Synchronization | parallel-gateway | ✅ |
 | WCP-4 Exclusive Choice | exclusive-gateway | ✅ |
 | WCP-5 Simple Merge | exclusive-gateway | ✅ |
+| WCP-16 Deferred Choice | event-based-gateway | ✅ |
 
 ## Gaps
 

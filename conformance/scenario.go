@@ -25,6 +25,7 @@ var Patterns = []Pattern{
 	{"WCP-3", "Synchronization"},
 	{"WCP-4", "Exclusive Choice"},
 	{"WCP-5", "Simple Merge"},
+	{"WCP-16", "Deferred Choice"},
 }
 
 // Feature is one BPMN execution feature the engine must cover. Patterns lists the
@@ -51,17 +52,21 @@ var Features = []Feature{
 	{"receive-task", "Receive task (message wait as an activity)", nil},
 	{"boundary-timer-interrupting", "Interrupting boundary timer event", nil},
 	{"boundary-message-noninterrupting", "Non-interrupting boundary message event", nil},
+	{"event-based-gateway", "Event-based gateway (deferred choice)", []string{"WCP-16"}},
+	{"message-start", "Message start event", nil},
+	{"timer-start", "Timer start event", nil},
 }
 
-// Scenario binds a BPMN model to the features it exercises and the driver steps
-// that carry it through any parked waits. A non-empty EquivClass marks it as one
-// of a metamorphic group: every scenario sharing that class must produce the same
-// effect projection (see RunResult.Effect).
+// Scenario binds a BPMN model to the features it exercises, how its instance is
+// born, and the driver steps that carry it through any parked waits. A non-empty
+// EquivClass marks it as one of a metamorphic group: every scenario sharing that
+// class must produce the same effect projection (see RunResult.Effect).
 type Scenario struct {
 	Name       string   // model base name; also the golden file base name
-	Model      string   // file under models/
+	Model      string   // file under models/ (several scenarios may share one model)
 	Features   []string // feature IDs this scenario exercises
 	EquivClass string   // non-empty: metamorphic equivalence group
+	Start      Start    // how the instance is born; zero value = explicit CreateInstance
 	Driver     []Step   // ordered actions that drive parked tokens; nil = self-completing
 }
 
@@ -89,6 +94,18 @@ var Scenarios = []Scenario{
 		Driver: []Step{Wait(31 * time.Second)}},
 	{Name: "boundary-message-noninterrupting", Model: "boundary-message-noninterrupting.bpmn", Features: []string{"boundary-message-noninterrupting"},
 		Driver: []Step{Publish("ping", "K"), Complete("review")}},
+
+	// Event-based gateway: one model, two races — the driver decides the winner.
+	{Name: "event-gateway-message", Model: "event-based-gateway.bpmn", Features: []string{"event-based-gateway"},
+		Driver: []Step{Publish("go", "")}},
+	{Name: "event-gateway-timer", Model: "event-based-gateway.bpmn", Features: []string{"event-based-gateway"},
+		Driver: []Step{Wait(31 * time.Second)}},
+
+	// Start events: the instance is born from a trigger, not CreateInstance.
+	{Name: "message-start", Model: "message-start.bpmn", Features: []string{"message-start"},
+		Start: MessageStart("order-placed", "")},
+	{Name: "timer-start", Model: "timer-start.bpmn", Features: []string{"timer-start"},
+		Start: TimerStart(31 * time.Second)},
 }
 
 // load reads the scenario's embedded BPMN model.

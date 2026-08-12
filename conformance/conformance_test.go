@@ -23,7 +23,7 @@ func TestScenarios(t *testing.T) {
 			if err != nil {
 				t.Fatalf("load model: %v", err)
 			}
-			res, err := Run(t.TempDir(), modelXML, sc.Driver)
+			res, err := Run(t.TempDir(), modelXML, sc.Start, sc.Driver)
 			if err != nil {
 				t.Fatalf("run: %v", err)
 			}
@@ -71,7 +71,7 @@ func TestMetamorphic(t *testing.T) {
 				if err != nil {
 					t.Fatalf("load %s: %v", sc.Name, err)
 				}
-				res, err := Run(t.TempDir(), modelXML, sc.Driver)
+				res, err := Run(t.TempDir(), modelXML, sc.Start, sc.Driver)
 				if err != nil {
 					t.Fatalf("run %s: %v", sc.Name, err)
 				}

@@ -25,9 +25,10 @@ The suite keeps two questions apart:
 | **Metamorphic** | Behaviorally equivalent models (concurrent vs. sequential independent effects) reach the same effect projection despite different shapes — no reference engine needed. | `TestMetamorphic` |
 
 Runs are deterministic — the precondition for golden files. Self-completing
-models (inline FEEL scripts) need no help; models that **park a token** (user and
-service tasks, message and timer catch events) carry a `Driver`: an ordered list
-of steps that advance the wait deterministically.
+models (inline FEEL scripts) need no help; models that **park a token** carry a
+`Driver`: an ordered list of steps that advance the wait deterministically. How
+the instance is **born** is a separate axis — an explicit start by default, or a
+message/timer start event that springs it from a trigger.
 
 ## The driver
 
@@ -45,6 +46,15 @@ unchanged. Three step kinds cover the parking mechanisms:
 `Complete` resolves the job by the task's BPMN id (job → element instance →
 compiled element), and fails loudly if the id names no parked job or an ambiguous
 one — a mis-authored step is a test error, not a wrong-token run.
+
+For start events the instance has no `CreateInstance` at all; the scenario's
+`Start` field says how it is born:
+
+| Start | Births the instance by | Engine call |
+|-------|------------------------|-------------|
+| (zero value) | an explicit create — the default for a none start event | `CreateInstance` |
+| `MessageStart("msg", "corrKey")` | publishing to a message start event | `PublishMessage` |
+| `TimerStart(30*time.Second)` | arming the start timer and advancing the clock past it | `ArmStartTimers` + `TickTimers` |
 
 ## Running
 
@@ -74,12 +84,12 @@ A regenerated golden is a **behavior change**: review the diff before committing
 
 The scaffold covers self-completing control flow plus the parking features the
 driver reaches: user/service tasks, message and timer catch events, receive
-tasks, and interrupting/non-interrupting boundary events. Planned extensions,
-roughly in order:
+tasks, interrupting/non-interrupting boundary events, the event-based gateway
+(deferred choice), and message/timer start events. Planned extensions, roughly in
+order:
 
-- More driver reach: **event-based gateway**, **message/timer start events**,
-  boundary **error/escalation/signal** events, and job **failure/incident** steps
-  (`FailJob` → `ResolveIncident`).
+- More driver reach: boundary **error/escalation/signal** events, **signal**
+  broadcast, and job **failure/incident** steps (`FailJob` → `ResolveIncident`).
 - **Negative models** that must be rejected at compile, not at runtime (the
   category `TestRunRejectsMalformedModel` stands in for today).
 - Broader pattern coverage (inclusive gateways, subprocess, multi-instance,
