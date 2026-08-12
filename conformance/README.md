@@ -42,10 +42,14 @@ unchanged. Three step kinds cover the parking mechanisms:
 | `Complete("task", Str("k","v")…)` | a parked job (user or service task), writing outputs | `CompleteJob` |
 | `Publish("msg", "corrKey", …)` | a waiting message subscription | `PublishMessage` |
 | `Wait(30*time.Second)` | the clock past a timer's due date, firing it | clock advance + `TickTimers` |
+| `Fail("task", "message")` | a job to failure with no retries, raising an incident | `FailJob` |
+| `Resolve("task")` | the incident on a task, re-activating its job | `ResolveIncident` |
 
 `Complete` resolves the job by the task's BPMN id (job → element instance →
 compiled element), and fails loudly if the id names no parked job or an ambiguous
-one — a mis-authored step is a test error, not a wrong-token run.
+one — a mis-authored step is a test error, not a wrong-token run. `Resolve` is
+self-verifying the same way: it errors if there is no incident on the named task,
+so an incident scenario can't pass without the incident actually being raised.
 
 For start events the instance has no `CreateInstance` at all; the scenario's
 `Start` field says how it is born:
@@ -80,19 +84,27 @@ A regenerated golden is a **behavior change**: review the diff before committing
 3. `go test ./conformance/ -update` to mint the golden and refresh `COVERAGE.md`.
 4. Review both generated files, then commit.
 
+## Negative models
+
+The adversarial half of the collection. A `NegativeModel` is well-formed XML that
+is nonetheless structurally invalid; `TestNegativeModels` asserts the compiler
+rejects each one, because "garbage refused at deploy" is as much a correctness
+property as "valid model runs" (invariant 5). They are listed in `COVERAGE.md`.
+Add one by dropping a `neg-*.bpmn` under `models/` and registering it in
+`NegativeModels` with the reason it must fail.
+
 ## What's next
 
-The scaffold covers self-completing control flow plus the parking features the
-driver reaches: user/service tasks, message and timer catch events, receive
-tasks, interrupting/non-interrupting boundary events, the event-based gateway
-(deferred choice), and message/timer start events. Planned extensions, roughly in
-order:
+The suite covers self-completing control flow, the parking features the driver
+reaches (user/service tasks, messages, timers, receive tasks, boundary events,
+event-based gateway, start events), the incident lifecycle, and a first set of
+negative models. Planned extensions, roughly in order:
 
-- More driver reach: boundary **error/escalation/signal** events, **signal**
-  broadcast, and job **failure/incident** steps (`FailJob` → `ResolveIncident`).
-- **Negative models** that must be rejected at compile, not at runtime (the
-  category `TestRunRejectsMalformedModel` stands in for today).
+- More driver reach: boundary **error/escalation/signal** events and **signal**
+  broadcast.
 - Broader pattern coverage (inclusive gateways, subprocess, multi-instance,
   compensation) — each a row that flips from 🔲 to ✅ in `COVERAGE.md`.
+- More negative models as the compiler's validation grows (unroutable gateways,
+  multiple defaults, cross-scope references).
 - Optionally, a **differential** job comparing outcomes against a reference
   engine (Camunda/Zeebe) as the strongest external oracle.

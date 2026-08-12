@@ -55,6 +55,7 @@ var Features = []Feature{
 	{"event-based-gateway", "Event-based gateway (deferred choice)", []string{"WCP-16"}},
 	{"message-start", "Message start event", nil},
 	{"timer-start", "Timer start event", nil},
+	{"incident", "Job failure raises an incident; resolve resumes it", nil},
 }
 
 // Scenario binds a BPMN model to the features it exercises, how its instance is
@@ -106,6 +107,31 @@ var Scenarios = []Scenario{
 		Start: MessageStart("order-placed", "")},
 	{Name: "timer-start", Model: "timer-start.bpmn", Features: []string{"timer-start"},
 		Start: TimerStart(31 * time.Second)},
+
+	// Incident lifecycle: fail with no retries (raise), resolve (resume), complete.
+	{Name: "incident", Model: "incident.bpmn", Features: []string{"incident"},
+		Driver: []Step{Fail("risky", "boom"), Resolve("risky"), Complete("risky")}},
+}
+
+// NegativeModel is a well-formed BPMN model that is nonetheless invalid and must be
+// rejected at compile — proving the engine refuses garbage at deploy rather than
+// running it into undefined behavior (invariant 5). Reason documents why.
+type NegativeModel struct {
+	Name   string
+	Model  string
+	Reason string
+}
+
+// NegativeModels is the adversarial half of the collection: each must fail to
+// compile. TestNegativeModels asserts it; COVERAGE.md lists them.
+var NegativeModels = []NegativeModel{
+	{"neg-dangling-flow", "neg-dangling-flow.bpmn", "a sequence flow targets an element that does not exist"},
+	{"neg-boundary-bad-host", "neg-boundary-bad-host.bpmn", "a boundary event attaches to a host that does not exist"},
+	{"neg-unknown-message", "neg-unknown-message.bpmn", "a receive task references a message that is not declared"},
+}
+
+func (n NegativeModel) load() ([]byte, error) {
+	return modelsFS.ReadFile("models/" + n.Model)
 }
 
 // load reads the scenario's embedded BPMN model.

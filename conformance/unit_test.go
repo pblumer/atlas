@@ -42,7 +42,8 @@ func TestCoverageGapsReported(t *testing.T) {
 	patterns := []Pattern{{"P-1", "One"}, {"P-2", "Two"}}
 	scenarios := []Scenario{{Name: "s1", Model: "m", Features: []string{"covered"}}}
 
-	report := buildCoverage(features, patterns, scenarios)
+	negatives := []NegativeModel{{Name: "neg-x", Model: "x.bpmn", Reason: "x is invalid"}}
+	report := buildCoverage(features, patterns, scenarios, negatives)
 	if !strings.Contains(report, "- feature: orphan") {
 		t.Errorf("missing uncovered feature in Gaps:\n%s", report)
 	}
@@ -54,6 +55,9 @@ func TestCoverageGapsReported(t *testing.T) {
 	}
 	if !strings.Contains(report, tick(false)) {
 		t.Errorf("expected a not-covered mark in the report:\n%s", report)
+	}
+	if !strings.Contains(report, "neg-x") || !strings.Contains(report, "x is invalid") {
+		t.Errorf("expected the negative model listed with its reason:\n%s", report)
 	}
 }
 

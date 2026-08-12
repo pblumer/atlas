@@ -121,11 +121,14 @@ The control-flow basics most real models use.
   past a timer, driving the parked instance to completion while replay stays
   log-only, reaching parked jobs, messages and timers, **receive tasks**,
   interrupting/non-interrupting **boundary events**, the **event-based gateway**
-  (deferred choice, WCP-16), and **message/timer start events** (where the
-  instance is born from a trigger, not CreateInstance) — 15 scenarios. Next:
-  boundary error/escalation/signal events, incidents (`FailJob`/`ResolveIncident`)
-  in the driver, negative models rejected at compile, and broader pattern
-  coverage.
+  (deferred choice, WCP-16), **message/timer start events** (where the instance is
+  born from a trigger, not CreateInstance), and the **incident lifecycle**
+  (`FailJob` raises, `ResolveIncident` resumes) — 16 scenarios. It also has an
+  **adversarial half**: negative models that are well-formed but structurally
+  invalid and must be rejected at compile (dangling flow, bad boundary host,
+  unknown message), asserted by `TestNegativeModels`. Next: boundary
+  error/escalation/signal events, more negative models as compiler validation
+  grows, and broader pattern coverage.
 - 🚧 **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)
   engine, [ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)): the
   element, its behavior, and evaluation through the job path landed as a vertical

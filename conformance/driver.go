@@ -31,7 +31,13 @@ const (
 	stepComplete stepKind = iota
 	stepPublish
 	stepWait
+	stepFail
+	stepResolve
 )
+
+// incidentResolveRetries is how many fresh attempts a Resolve step grants the job
+// it re-activates — any positive number lets the job be pulled again.
+const incidentResolveRetries = 3
 
 // Var is a string-valued variable carried by a step (a job output or a message
 // payload). String values are enough for routing conformance models on results;
@@ -92,6 +98,16 @@ func Publish(name, correlation string, vars ...Var) Step {
 // deterministic stand-in for wall-clock time passing.
 func Wait(d time.Duration) Step { return Step{kind: stepWait, after: d} }
 
+// Fail fails the parked job of the given task with no retries left, raising an
+// incident (message becomes the incident message).
+func Fail(element, message string) Step {
+	return Step{kind: stepFail, element: element, message: message}
+}
+
+// Resolve clears the incident on the given task's element with fresh retries,
+// re-activating its job. It fails if no incident is present there.
+func Resolve(element string) Step { return Step{kind: stepResolve, element: element} }
+
 func (s Step) describe() string {
 	switch s.kind {
 	case stepComplete:
@@ -100,6 +116,10 @@ func (s Step) describe() string {
 		return fmt.Sprintf("publish %s/%s", s.message, s.correlation)
 	case stepWait:
 		return "wait " + s.after.String()
+	case stepFail:
+		return "fail " + s.element
+	case stepResolve:
+		return "resolve " + s.element
 	default:
 		return "unknown"
 	}
@@ -161,9 +181,41 @@ func (d *driver) apply(s Step) error {
 			return err
 		}
 		return d.p.RunUntilIdle()
+	case stepFail:
+		jobKey, err := d.jobForElement(s.element)
+		if err != nil {
+			return err
+		}
+		d.p.FailJob(jobKey, 0, s.message, 0)
+		return d.p.RunUntilIdle()
+	case stepResolve:
+		return d.resolveIncident(s.element)
 	default:
 		return fmt.Errorf("unknown step kind %d", s.kind)
 	}
+}
+
+// resolveIncident clears the incident raised on the given task's element, granting
+// fresh retries so its job can be pulled again. It errors if no incident is there,
+// making a Resolve step self-verifying: the incident must actually have been raised.
+func (d *driver) resolveIncident(bpmnID string) error {
+	var elKey uint64
+	found := false
+	err := d.store.Incidents(func(k uint64, v *model.IncidentValue) error {
+		if d.cp.ElementBpmnId(v.ElementId) == bpmnID {
+			elKey = k
+			found = true
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("scan incidents: %w", err)
+	}
+	if !found {
+		return fmt.Errorf("no incident on element %q to resolve", bpmnID)
+	}
+	d.p.ResolveIncident(elKey, incidentResolveRetries)
+	return d.p.RunUntilIdle()
 }
 
 // jobForElement resolves the single activatable job created by the task with the

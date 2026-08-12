@@ -21,6 +21,7 @@ Generated from the register in `scenario.go` by `go test ./conformance -update`.
 | Event-based gateway (deferred choice) | WCP-16 | event-gateway-message, event-gateway-timer | ✅ |
 | Message start event | — | message-start | ✅ |
 | Timer start event | — | timer-start | ✅ |
+| Job failure raises an incident; resolve resumes it | — | incident | ✅ |
 
 ## Control-flow patterns
 
@@ -36,3 +37,11 @@ Generated from the register in `scenario.go` by `go test ./conformance -update`.
 ## Gaps
 
 None — every registered feature and pattern has a covering scenario.
+
+## Negative models (rejected at compile)
+
+| Model | Why it must be rejected |
+|-------|-------------------------|
+| neg-dangling-flow | a sequence flow targets an element that does not exist |
+| neg-boundary-bad-host | a boundary event attaches to a host that does not exist |
+| neg-unknown-message | a receive task references a message that is not declared |

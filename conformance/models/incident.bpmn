@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: a job failure that raises and resolves an incident.
+
+  Start -> serviceTask "risky" -> End. The driver plays a worker that fails the
+  job with no retries left (Fail), which raises an incident and takes the job off
+  the activatable index; then an operator resolves the incident with fresh retries
+  (Resolve), re-activating the job; then the worker completes it (Complete). The
+  Resolve step fails loudly if no incident is present, so this scenario only
+  passes if the incident was genuinely raised.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_incident" targetNamespace="http://atlas/conformance">
+  <process id="incident" name="Incident" isExecutable="true">
+    <startEvent id="start"/>
+    <serviceTask id="risky" name="Risky work">
+      <extensionElements>
+        <zeebe:taskDefinition type="risky" retries="1"/>
+      </extensionElements>
+    </serviceTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="risky"/>
+    <sequenceFlow id="f2" sourceRef="risky" targetRef="end"/>
+  </process>
+</definitions>

@@ -36,6 +36,8 @@ func TestStepDescribeAndList(t *testing.T) {
 		{Complete("approve"), "complete approve"},
 		{Publish("paid", "K"), "publish paid/K"},
 		{Wait(time.Second), "wait 1s"},
+		{Fail("risky", "boom"), "fail risky"},
+		{Resolve("risky"), "resolve risky"},
 	}
 	for _, c := range cases {
 		if got := c.step.describe(); got != c.want {
@@ -50,6 +52,23 @@ func TestStepDescribeAndList(t *testing.T) {
 	}
 	if got := (Step{kind: stepKind(99)}).describe(); got != "unknown" {
 		t.Errorf("describe(unknown) = %q, want unknown", got)
+	}
+}
+
+// TestDriverResolveWithoutIncident proves a Resolve step is self-verifying: with
+// no incident raised it errors rather than silently no-op'ing, so a scenario can't
+// claim to exercise the incident path without one.
+func TestDriverResolveWithoutIncident(t *testing.T) {
+	model, err := scenarioByName(t, "incident").load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	_, err = Run(t.TempDir(), model, Start{}, []Step{Resolve("risky")})
+	if err == nil {
+		t.Fatal("Resolve without an incident should error")
+	}
+	if !strings.Contains(err.Error(), "no incident") {
+		t.Errorf("error should explain the missing incident: %v", err)
 	}
 }
 
