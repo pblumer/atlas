@@ -14,38 +14,58 @@
   self-completes.
 -->
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
              xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
              id="defs_data_object" targetNamespace="http://atlas/conformance">
   <process id="data-object" name="Data object" isExecutable="true">
     <dataObject id="DO_order" name="order">
       <dataState name="received"/>
     </dataObject>
-    <dataObjectReference id="Ref_write" dataObjectRef="DO_order">
+    <dataObjectReference id="Ref_write" name="order" dataObjectRef="DO_order">
       <dataState name="approved"/>
     </dataObjectReference>
-    <dataObjectReference id="Ref_read" dataObjectRef="DO_order"/>
+    <dataObjectReference id="Ref_read" name="order" dataObjectRef="DO_order"/>
     <startEvent id="start"/>
-    <scriptTask id="seed">
+    <scriptTask id="seed" name="Seed amount">
       <extensionElements>
         <zeebe:script expression="= 100" resultVariable="amount"/>
       </extensionElements>
     </scriptTask>
-    <task id="record">
-      <dataOutputAssociation>
+    <task id="record" name="Record order">
+      <dataOutputAssociation id="doa_record">
         <targetRef>Ref_write</targetRef>
         <assignment><from>= amount</from></assignment>
       </dataOutputAssociation>
     </task>
-    <task id="load">
-      <dataInputAssociation>
+    <task id="load" name="Load order">
+      <dataInputAssociation id="dia_load">
         <sourceRef>Ref_read</sourceRef>
         <assignment><to>order_copy</to></assignment>
       </dataInputAssociation>
     </task>
-    <endEvent id="end"/>
+    <endEvent id="end" name="Done"/>
     <sequenceFlow id="f1" sourceRef="start" targetRef="seed"/>
     <sequenceFlow id="f2" sourceRef="seed" targetRef="record"/>
     <sequenceFlow id="f3" sourceRef="record" targetRef="load"/>
     <sequenceFlow id="f4" sourceRef="load" targetRef="end"/>
   </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="data-object">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="160" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_seed" bpmnElement="seed"><dc:Bounds x="250" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_record" bpmnElement="record"><dc:Bounds x="410" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_load" bpmnElement="load"><dc:Bounds x="570" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="730" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ref_write" bpmnElement="Ref_write"><dc:Bounds x="442" y="70" width="36" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ref_read" bpmnElement="Ref_read"><dc:Bounds x="602" y="70" width="36" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="196" y="200"/><di:waypoint x="250" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="350" y="200"/><di:waypoint x="410" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3"><di:waypoint x="510" y="200"/><di:waypoint x="570" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f4" bpmnElement="f4"><di:waypoint x="670" y="200"/><di:waypoint x="730" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_doa_record" bpmnElement="doa_record"><di:waypoint x="460" y="160"/><di:waypoint x="460" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_dia_load" bpmnElement="dia_load"><di:waypoint x="620" y="120"/><di:waypoint x="620" y="160"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 </definitions>
