@@ -126,6 +126,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0115](0115-history-retention-hard-delete.md) | History retention — an export-gated, age-based hard delete of finished instances via a durable IntentPurged event; bounded sweep, opt-in, counters untouched | Accepted |
 | [0116](0116-terminate-end-events.md) | Terminate end events — `<terminateEventDefinition>` ends its enclosing flow scope at once (root → instance, subprocess → subprocess then parent continues), reusing `terminateScopeExcept` + `completeScope`; `cancelEndEventBehavior` minus compensation, no new recovery path | Accepted |
 | [0117](0117-ai-agent-task.md) | An AI agent task — an LLM agent as a managed connector on the job path: the call runs in a post-fsync worker and its result is frozen into the completion event (never re-invoked on replay), authored via the connector catalog with a vault-resolved credential, with a durable agent-run audit record | Proposed |
+| [0118](0118-web-scraping-connector.md) | Web-scraping connector — a model-authored URL + CSS selector service task that fetches a page and extracts matching elements into a JSON array via the job path (goquery in the worker only, no engine change); model-authored like REST, read-only GET so no idempotency key | Accepted |
 
 ## Status values
 

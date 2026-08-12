@@ -12,7 +12,16 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **Web-scraping connector** ([ADR-0118](docs/adr/0118-web-scraping-connector.md)):
+  a `<serviceTask>` bearing an `<atlas:webscrapeConnector url selector attribute
+  resultVariable>` extension fetches a model-authored page and extracts the elements
+  matching a CSS selector, writing the values into a process variable as a JSON array.
+  Like the REST connector, the URL and selector are authored in the model (each
+  literal or a FEEL expression); extraction runs off the hot path in an in-process
+  worker under the reserved `WebScrapeJobTypeIndex`. Authorable in the Modeler via the
+  service-task connector catalog.
 
 ## [0.1.0] — 2026-08-11
 

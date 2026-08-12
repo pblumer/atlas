@@ -1362,7 +1362,11 @@ type xmlServiceTask struct {
 	// Remedy, when present, marks this service task a BMC Remedy connector task
 	// (ADR-0106). The pointer is nil when the <atlas:remedyConnector> extension is
 	// absent.
-	Remedy        *xmlRemedyConnector        `xml:"extensionElements>remedyConnector"`
+	Remedy *xmlRemedyConnector `xml:"extensionElements>remedyConnector"`
+	// WebScrape, when present, marks this service task a web-scraping connector task
+	// (ADR-0118). The pointer is nil when the <atlas:webscrapeConnector> extension is
+	// absent.
+	WebScrape     *xmlWebScrapeConnector     `xml:"extensionElements>webscrapeConnector"`
 	IOMapping     xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
 	MultiInstance *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
 	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
@@ -1515,6 +1519,23 @@ type xmlRemedyConnector struct {
 	Form           string      `xml:"form,attr"`
 	ResultVariable string      `xml:"resultVariable,attr"`
 	Fields         []xmlHTTPKV `xml:"remedyField"`
+}
+
+// A web-scraping connector task's parameters, carried on a service task as an
+// <atlas:webscrapeConnector url="..." selector="..." attribute="..."
+// resultVariable="..."/> extension element (ADR-0118). url (required) is the page to
+// fetch and selector (required) the CSS selector whose matches are extracted; both
+// live in the model (unlike a registry endpoint), and credentials never do. attribute,
+// when set, names the HTML attribute read from each match (omit to read each match's
+// text). resultVariable (required) receives the extracted values as a JSON array. url
+// and selector are literal or, with a leading '=', a FEEL expression over the instance's
+// variables at call time (the fx toggle, ADR-0067); attribute is a structural literal.
+type xmlWebScrapeConnector struct {
+	Url            string `xml:"url,attr"`
+	Selector       string `xml:"selector,attr"`
+	Attribute      string `xml:"attribute,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	Retries        string `xml:"retries,attr"`
 }
 
 type xmlTaskDefinition struct {

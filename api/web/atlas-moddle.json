@@ -144,6 +144,17 @@
       ]
     },
     {
+      "name": "WebScrapeConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "url", "type": "String", "isAttr": true },
+        { "name": "selector", "type": "String", "isAttr": true },
+        { "name": "attribute", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "HttpHeader",
       "superClass": ["Element"],
       "properties": [
