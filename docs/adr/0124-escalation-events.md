@@ -1,10 +1,10 @@
 # ADR-0124: Escalation events (non-interrupting, propagating throw/catch)
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-13
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Proposed. An **escalation** is a named, coded signal that a process
+> **Implementation status.** Delivered (all five phases). An **escalation** is a named, coded signal that a process
 > raises to say "something needs attention up the chain" — thrown by an **escalation intermediate
 > throw event** (which raises the escalation and then **continues on its own outgoing flow**) or an
 > **escalation end event** (which raises it and ends its path), and caught by the **nearest enclosing**

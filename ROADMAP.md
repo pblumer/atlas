@@ -149,8 +149,7 @@ The control-flow basics most real models use.
   back — compensating a completed compensable activity — and the transaction's
   cancel boundary routes to a handler instead of the normal end, ADR-0108) — 30
   scenarios, plus a fourth negative model pinning that a **terminate end event** is
-  rejected at compile rather than silently degraded. (Escalation events stay out
-  until the engine supports `escalationEventDefinition`.) A **fifth oracle** now
+  rejected at compile rather than silently degraded. A **fifth oracle** now
   landed: a **differential** against an independent engine (Node's `bpmn-engine`) —
   the same process run on both, comparing a normalized control-flow projection
   (did it complete, which activities ran), so a bug where Atlas is consistently
@@ -325,6 +324,22 @@ Making processes wait, react, and time out.
   propagation is a pure function of committed scope state. Recovery-tested; authored in the
   Modeler's Implement panel (an error-code picker on error end/boundary/event-subprocess
   events, plus a central errors manager).
+- ✅ **Escalation events** ([ADR-0124](docs/adr/0124-escalation-events.md)): an
+  `escalationEventDefinition` is a **named, coded signal** raised up the scope chain to the
+  **nearest enclosing** matching handler — the non-interrupting, benign sibling of error events.
+  An **escalation intermediate throw** (which raises it and then **continues on its outgoing
+  flow**) or an **escalation end event** raises it; the nearest **escalation boundary** or
+  **escalation event subprocess** whose code matches (a code-less catch is a catch-all) catches
+  it. Two things set it apart from an error: the catch may be **non-interrupting** — the handler
+  runs alongside the still-running activity (reusing the ADR-0040/0082 non-interrupting fire
+  path) — and an **uncaught escalation is benign** (no incident; the throw's own flow semantics
+  apply and the instance runs on). An escalation unhandled in a call-activity child propagates to
+  the caller without aborting the child (ADR-0076). Reuses `propagateError`'s scope walk and the
+  scope-teardown primitives — no subscription, value type, or recovery path; propagation is a
+  pure function of committed scope state. Recovery-tested; authored in the Modeler's Implement
+  panel (an escalation-code picker on escalation throw/end/boundary/event-subprocess events —
+  keeping the interrupting toggle, unlike errors — plus a central escalations manager). Completes
+  the throw/catch event family (message, error, signal, escalation).
 - ✅ Boundary events: timer and message, interrupting and non-interrupting,
   attached to waiting activities. An interrupting boundary cancels the host (and
   its job) and routes out its flow; a non-interrupting one spawns a parallel
