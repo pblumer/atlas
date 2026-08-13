@@ -144,6 +144,7 @@ function calleeXML(pid, name) {
 }
 
 let current; // active modeler/viewer, destroyed on remount
+let onLayoutKey; // document-level F8 handler for auto-layout, removed on remount
 let liveTimer; // active live-overlay poll, cleared on remount/leave
 let collab; // active live collaboration session (ADR-0103), closed on remount
 // generation is bumped by cleanup() on every navigation/remount. A mount captures
@@ -165,6 +166,7 @@ function docTitle(label) { document.title = label ? `${label} · Atlas` : "Atlas
 // window.__atlasCleanup) when navigating away so nothing keeps running.
 export function cleanup() {
   generation++; // supersede any in-flight mount (see `generation` above)
+  if (onLayoutKey) { document.removeEventListener("keydown", onLayoutKey, true); onLayoutKey = null; }
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
   if (collab) { try { collab.close(); } catch { /* ignore */ } collab = null; }
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
@@ -459,7 +461,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
         <div style="flex:1"></div>
         <button class="btn neutral sim-toggle" id="sim-toggle" title="Play tokens through the diagram to see how the control flow moves — no deploy, just a walkthrough" aria-pressed="false">&#9654; Token simulation</button>
         <button class="btn neutral" id="vars-toggle" title="Show the variables this diagram writes">Variables</button>
-        <button class="btn neutral" id="autolayout" title="Re-flow the diagram into a clean left-to-right layout">Auto-layout</button>
+        <button class="btn neutral" id="autolayout" title="Re-flow the diagram into a clean left-to-right layout (F8)">Auto-layout</button>
         <button class="btn neutral" id="save">Save</button>
         <button class="btn neutral" id="export">Export XML</button>
         <button class="btn" id="deploy">Deploy</button>
@@ -4734,6 +4736,19 @@ function wireActions(root, modeler, api, toast, projectId) {
       layoutBtn.disabled = false;
     }
   });
+
+  // F8 triggers the same auto-layout (the shortcut is otherwise unbound). Captured
+  // at the document so it works wherever focus sits in the editor; cleanup() removes
+  // it on navigation away. Ignored while a layout is already running or when the
+  // user is typing in a field, so it never eats an F8 meant for something else.
+  onLayoutKey = (e) => {
+    if (e.key !== "F8" || e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
+    const el = document.activeElement;
+    if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+    e.preventDefault();
+    if (!layoutBtn.disabled) layoutBtn.click();
+  };
+  document.addEventListener("keydown", onLayoutKey, true);
 
   root.querySelector("#export").addEventListener("click", async () => {
     try {
