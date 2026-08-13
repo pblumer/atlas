@@ -598,7 +598,6 @@ const UNSUPPORTED_TYPES = {
   "bpmn:DataStoreReference": "Data stores aren't supported yet",
 };
 const UNSUPPORTED_EVENT_DEFS = {
-  "bpmn:EscalationEventDefinition": "Escalation events aren't supported yet",
   "bpmn:ConditionalEventDefinition": "Conditional events aren't supported yet",
   "bpmn:LinkEventDefinition": "Link events aren't supported yet",
 };
@@ -2744,6 +2743,121 @@ function wireErrorsManager(body, modeler, rerenderRoot) {
   });
 }
 
+// --- Escalation authoring (ADR-0125) ---
+// An escalation is raised by an escalation throw or end event and caught by the nearest
+// enclosing escalation boundary or event subprocess with a matching code. Unlike an error, an
+// escalation catch may be non-interrupting (the handler runs alongside the still-running
+// activity) and an uncaught escalation is benign. These helpers mirror the error ones, keyed on
+// the escalation code — a code-less escalation is a catch-all when caught, an uncoded raise when
+// thrown.
+
+// escalationDefOf returns an event's bpmn:EscalationEventDefinition, or null.
+function escalationDefOf(bo) {
+  return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:EscalationEventDefinition") || null;
+}
+
+// listEscalations returns every <bpmn:escalation> declared on the model's definitions.
+function listEscalations(modeler) {
+  const defs = definitionsOf(modeler);
+  const out = [];
+  if (defs && defs.rootElements) {
+    for (const el of defs.rootElements) {
+      if (el.$type === "bpmn:Escalation") out.push(el);
+    }
+  }
+  return out;
+}
+
+// createEscalation adds a fresh <bpmn:escalation> with the given code and returns it.
+function createEscalation(modeler, code) {
+  const moddle = modeler.get("moddle");
+  const esc_ = moddle.create("bpmn:Escalation");
+  esc_.id = "Escalation_" + Math.random().toString(36).slice(2, 8);
+  esc_.escalationCode = code || "";
+  const defs = definitionsOf(modeler);
+  if (defs) {
+    esc_.$parent = defs;
+    defs.rootElements = [...(defs.rootElements || []), esc_];
+  }
+  return esc_;
+}
+
+// linkEscalation points an escalation event definition at an escalation (undo/redo tracked).
+function linkEscalation(modeler, element, eed, esc_) {
+  try { modeler.get("modeling").updateModdleProperties(element, eed, { escalationRef: esc_ || undefined }); } catch { /* stale */ }
+}
+
+// deleteEscalation removes an escalation and clears any event still referencing it, so a
+// deleted escalation never leaves a dangling escalationRef (which would fail to compile).
+function deleteEscalation(modeler, escId) {
+  const defs = definitionsOf(modeler);
+  if (defs && defs.rootElements) defs.rootElements = defs.rootElements.filter((e) => e.id !== escId);
+  const modeling = modeler.get("modeling");
+  modeler.get("elementRegistry").getAll().forEach((el) => {
+    const eed = escalationDefOf(el.businessObject);
+    if (eed && eed.escalationRef && eed.escalationRef.id === escId) {
+      try { modeling.updateModdleProperties(el, eed, { escalationRef: undefined }); } catch { /* stale */ }
+    }
+  });
+}
+
+// escalationFieldsHTML renders the escalation picker for an escalation throw/end event or an
+// escalation boundary / event subprocess: a dropdown of the model's shared escalations (plus
+// "new") and — once one is chosen — its code, shared so a raiser and its catchers stay in sync.
+// Matching is by code; a code-less escalation is a catch-all. eed is the
+// bpmn:EscalationEventDefinition.
+function escalationFieldsHTML(modeler, eed, hint) {
+  const current = eed.escalationRef;
+  const options = listEscalations(modeler).map((e) =>
+    `<option value="${esc(e.id)}"${current && current.id === e.id ? " selected" : ""}>${esc(e.escalationCode || e.id)}</option>`
+  ).join("");
+  const fields = current ? `
+    <label class="field"><span>Escalation code</span>
+      <input type="text" id="f-esccode" value="${esc(current.escalationCode || "")}" placeholder="ESCALATE_TO_MANAGER"/></label>
+    <p class="muted" style="font-size:12px">Shared with every event that uses this escalation — a raised code is caught by the nearest enclosing escalation boundary or escalation event subprocess with the same code (an empty code is a catch-all).</p>` : "";
+  return `<h3>Escalation</h3>
+    <label class="field"><span>Escalation</span>
+      <select id="f-escref">
+        <option value="">— none —</option>
+        ${options}
+        <option value="__new__">＋ New escalation…</option>
+      </select></label>
+    ${fields}
+    <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
+// escalationsManagerHTML lists the model's escalations for central management (add, edit code,
+// delete).
+function escalationsManagerHTML(modeler) {
+  const escs = listEscalations(modeler);
+  const rows = escs.length
+    ? escs.map((e) => `
+        <div class="esc-row" data-id="${esc(e.id)}">
+          <input class="esc-code" value="${esc(e.escalationCode || "")}" placeholder="escalation code"/>
+          <button type="button" class="btn ghost danger esc-del" title="Delete escalation">✕</button>
+        </div>`).join("")
+    : `<p class="muted" style="font-size:12px;margin:0 0 8px">No escalations yet — add one, then reference it from an escalation throw/end event or escalation boundary.</p>`;
+  return `<h3>Escalations</h3>
+    ${rows}
+    <button type="button" class="btn ghost" id="esc-add">＋ Add escalation</button>
+    <p class="muted" style="font-size:12px">An escalation is a matter raised up the scope chain: an <b>escalation throw</b> or <b>end event</b> raises it, and the nearest enclosing <b>escalation boundary</b> or <b>escalation event subprocess</b> with the same code catches it. Unlike an error, a catch may be <b>non-interrupting</b> (the activity keeps running) and an uncaught escalation is harmless.</p>`;
+}
+
+// wireEscalationsManager binds the Escalations management section's inputs and buttons.
+// rerenderRoot re-renders the root panel after add/delete so the list updates.
+function wireEscalationsManager(body, modeler, rerenderRoot) {
+  const add = body.querySelector("#esc-add");
+  if (add) add.addEventListener("click", () => { createEscalation(modeler, "ESCALATION_CODE"); rerenderRoot(); });
+  body.querySelectorAll(".esc-row").forEach((row) => {
+    const id = row.dataset.id;
+    const escl = () => listEscalations(modeler).find((e) => e.id === id);
+    const codeIn = row.querySelector(".esc-code");
+    if (codeIn) codeIn.addEventListener("change", () => { const e = escl(); if (e) e.escalationCode = codeIn.value.trim(); });
+    const del = row.querySelector(".esc-del");
+    if (del) del.addEventListener("click", () => { deleteEscalation(modeler, id); rerenderRoot(); });
+  });
+}
+
 // rootProcess returns the diagram's process business object, or null if the root
 // isn't a plain process (e.g. a collaboration with pools).
 function rootProcess(modeler) {
@@ -3184,7 +3298,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
           ${startVarsHTML}
           ${messagesManagerHTML(modeler)}
           ${signalsManagerHTML(modeler)}
-          ${errorsManagerHTML(modeler)}`;
+          ${errorsManagerHTML(modeler)}
+          ${escalationsManagerHTML(modeler)}`;
         const rootEl = modeler.get("canvas").getRootElement();
         body.querySelector("#f-pname").addEventListener("change", (e) => {
           try { modeling.updateProperties(rootEl, { name: e.target.value }); } catch { /* ignore */ }
@@ -3213,6 +3328,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         wireMessagesManager(body, modeler, () => show(null));
         wireSignalsManager(body, modeler, () => show(null));
         wireErrorsManager(body, modeler, () => show(null));
+        wireEscalationsManager(body, modeler, () => show(null));
         return;
       }
       // A collaboration root has no single process to rename; each pool
@@ -3224,10 +3340,12 @@ function wireProperties(root, modeler, api, projectId, toast) {
           <p class="muted" style="font-size:12px">This diagram has several <b>pools</b>. A pool is a <b>participant</b> that <i>executes a process</i> — the process holds the flow, the pool just names who runs it, and each deploys as its own process. Select a pool to name it and configure the process it runs, or an element inside a pool to configure it. Pools talk to each other through <b>message events</b>: a throw event in one pool and a catch event in another that reference the <b>same message</b> below.</p>
           ${messagesManagerHTML(modeler)}
           ${signalsManagerHTML(modeler)}
-          ${errorsManagerHTML(modeler)}`;
+          ${errorsManagerHTML(modeler)}
+          ${escalationsManagerHTML(modeler)}`;
         wireMessagesManager(body, modeler, () => show(null));
         wireSignalsManager(body, modeler, () => show(null));
         wireErrorsManager(body, modeler, () => show(null));
+        wireEscalationsManager(body, modeler, () => show(null));
         return;
       }
       icon.textContent = "–"; typename.textContent = "No selection"; nameEl.textContent = "—";
@@ -3530,12 +3648,15 @@ function wireProperties(root, modeler, api, projectId, toast) {
       } else if (bo.$type === "bpmn:IntermediateThrowEvent") {
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
+        const escl = escalationDefOf(bo);
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "On reaching this event the message is published; any instance waiting on it with a matching correlation key continues.");
         } else if (sig) {
           html += signalFieldsHTML(modeler, sig, "On reaching this event the signal is broadcast to every event waiting on that signal name, across all instances. The token then continues.");
+        } else if (escl) {
+          html += escalationFieldsHTML(modeler, escl, "On reaching this event the escalation is raised, propagating up to the nearest matching escalation boundary or event subprocess, and the token then continues on its outgoing flow (unless an interrupting catch aborts it). Uncaught, it is harmless.");
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Message</b> or <b>Signal</b> throw event, then configure it here.</p>`;
+          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Message</b>, <b>Signal</b>, or <b>Escalation</b> throw event, then configure it here.</p>`;
         }
       } else if (bo.$type === "bpmn:BoundaryEvent") {
         // A boundary event is attached to an activity and arms while it runs. Its
@@ -3546,6 +3667,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
         const err = errorDefOf(bo);
+        const escl = escalationDefOf(bo);
         const cancel = cancelDefOf(bo);
         if (err) {
           // An error boundary is always interrupting — no cancelActivity toggle (ADR-0089).
@@ -3578,8 +3700,10 @@ function wireProperties(root, modeler, api, projectId, toast) {
             html += messageFieldsHTML(modeler, msg, "The event fires when this message is published with a matching correlation key.");
           } else if (sig) {
             html += signalFieldsHTML(modeler, sig, "The event fires when a signal with this name is broadcast (in this or any other instance) while the activity runs.");
+          } else if (escl) {
+            html += escalationFieldsHTML(modeler, escl, "The event fires when the attached activity raises a matching escalation — an escalation throw/end event inside it, or one propagating up from a called process. Interrupting cancels the activity and routes out this event; non-interrupting runs the handler while the activity keeps going.");
           } else {
-            html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, or <b>Error</b> boundary event, then configure its trigger here.</p>`;
+            html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, <b>Error</b>, or <b>Escalation</b> boundary event, then configure its trigger here.</p>`;
           }
         }
       } else if (bo.$type === "bpmn:StartEvent" && isEventSubStart(element)) {
@@ -3591,6 +3715,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
         const err = errorDefOf(bo);
+        const escl = escalationDefOf(bo);
         if (err) {
           // An error event subprocess is always interrupting — no toggle (ADR-0089).
           html += `<h3>Event subprocess trigger</h3>
@@ -3617,8 +3742,10 @@ function wireProperties(root, modeler, api, projectId, toast) {
             html += messageFieldsHTML(modeler, msg, "The event subprocess fires when this message is published with a matching correlation key, while its scope runs.");
           } else if (sig) {
             html += signalFieldsHTML(modeler, sig, "The event subprocess fires when a signal with this name is broadcast while its scope runs. A non-interrupting trigger re-arms and can fire again.");
+          } else if (escl) {
+            html += escalationFieldsHTML(modeler, escl, "The event subprocess fires when its enclosing scope raises a matching escalation. Interrupting terminates the scope's other work first; non-interrupting runs this handler alongside the still-running scope.");
           } else {
-            html += `<p class="muted" style="font-size:12px">Use the wrench icon on this start event to give it a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, or <b>Error</b> trigger, then configure it here.</p>`;
+            html += `<p class="muted" style="font-size:12px">Use the wrench icon on this start event to give it a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, <b>Error</b>, or <b>Escalation</b> trigger, then configure it here.</p>`;
           }
         }
       } else if (bo.$type === "bpmn:StartEvent") {
@@ -3655,6 +3782,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
         const err = errorDefOf(bo);
+        const escl = escalationDefOf(bo);
         const cancel = cancelDefOf(bo);
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "On reaching this end event the message is published; any instance waiting on it with a matching correlation key continues. The instance then ends.");
@@ -3662,11 +3790,13 @@ function wireProperties(root, modeler, api, projectId, toast) {
           html += signalFieldsHTML(modeler, sig, "On reaching this end event the signal is broadcast to every event waiting on that signal name, across all instances. The instance then ends.");
         } else if (err) {
           html += errorFieldsHTML(modeler, err, "On reaching this end event the error is thrown, aborting its scope and propagating up to the nearest matching error boundary or error event subprocess. Uncaught, it raises an incident.");
+        } else if (escl) {
+          html += escalationFieldsHTML(modeler, escl, "On reaching this end event the escalation is raised, propagating up to the nearest matching escalation boundary or event subprocess, then this path ends. Unlike an error end, a matching catch may be non-interrupting, and an uncaught escalation is harmless (no incident).");
         } else if (cancel) {
           // A cancel end event is only meaningful inside a transaction (ADR-0108).
           html += `<p class="muted" style="font-size:12px">A <b>cancel end event</b> cancels its enclosing <b>transaction</b>: its completed activities are compensated (in reverse order), then the token is routed out the transaction's <b>cancel boundary</b>. Use it only inside a transaction subprocess.</p>`;
         } else {
-          html += `<p class="muted" style="font-size:12px">A plain end event ends the instance. Use the wrench icon on the element to make this a <b>Message</b>, <b>Signal</b>, or <b>Error</b> end event.</p>`;
+          html += `<p class="muted" style="font-size:12px">A plain end event ends the instance. Use the wrench icon on the element to make this a <b>Message</b>, <b>Signal</b>, <b>Error</b>, or <b>Escalation</b> end event.</p>`;
         }
       }
     } else if (isGatewayFlow && !isDefaultFlow) {
@@ -4497,6 +4627,31 @@ function wireProperties(root, modeler, api, projectId, toast) {
       ferrcode.addEventListener("change", () => {
         const eed = errorDefOf(element.businessObject);
         if (eed && eed.errorRef) eed.errorRef.errorCode = (ferrcode.value || "").trim();
+      });
+    }
+    const fescref = body.querySelector("#f-escref");
+    if (fescref) {
+      fescref.addEventListener("change", () => {
+        const eed = escalationDefOf(element.businessObject);
+        if (!eed) return;
+        const v = fescref.value;
+        savePreservingPanel(() => {
+          if (v === "__new__") {
+            linkEscalation(modeler, element, eed, createEscalation(modeler, ""));
+          } else if (v === "") {
+            linkEscalation(modeler, element, eed, null);
+          } else {
+            linkEscalation(modeler, element, eed, listEscalations(modeler).find((e) => e.id === v));
+          }
+        });
+        show(element); // re-render so the code field matches the chosen escalation
+      });
+    }
+    const fesccode = body.querySelector("#f-esccode");
+    if (fesccode) {
+      fesccode.addEventListener("change", () => {
+        const eed = escalationDefOf(element.businessObject);
+        if (eed && eed.escalationRef) eed.escalationRef.escalationCode = (fesccode.value || "").trim();
       });
     }
 

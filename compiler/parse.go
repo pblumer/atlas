@@ -142,7 +142,7 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 	if len(defs.Processes) == 0 {
 		return nil, fmt.Errorf("compiler: no <process> element in definitions")
 	}
-	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildOperationResolver(defs))
+	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs))
 }
 
 // Deployable is one executable process compiled from a model, plus the display
@@ -171,6 +171,7 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 	resolve := buildMessageResolver(defs)
 	resolveSig := buildSignalResolver(defs)
 	resolveErr := buildErrorResolver(defs)
+	resolveEsc := buildEscalationResolver(defs)
 	resolveOp := buildOperationResolver(defs)
 	poolName := participantNames(defs)
 
@@ -179,7 +180,7 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 		if len(proc.StartEvents) == 0 {
 			continue // black-box pool: nothing to run
 		}
-		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig, resolveErr, resolveOp)
+		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig, resolveErr, resolveEsc, resolveOp)
 		if err != nil {
 			return nil, err
 		}
@@ -202,7 +203,7 @@ func ParseNamed(key uint64, version int32, r io.Reader, processId string) (*Comp
 	}
 	for _, proc := range defs.Processes {
 		if proc.Id == processId {
-			return compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildOperationResolver(defs))
+			return compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs))
 		}
 	}
 	return nil, fmt.Errorf("compiler: no <process> with id %q in model", processId)
@@ -335,10 +336,36 @@ func buildErrorResolver(defs xmlDefinitions) func(ownerId, errorRef string) (str
 	}
 }
 
+// buildEscalationResolver indexes a model's top-level <bpmn:escalation> declarations by id
+// and returns a closure resolving an escalationRef to the escalation's code (ADR-0125).
+// Escalations match by code, mirroring errors (buildErrorResolver): a code-less escalation —
+// or an escalationEventDefinition with no escalationRef at all — resolves to "": a catch-all
+// on a boundary/handler, and an uncoded throw on an escalation throw/end event. An empty
+// code is legal; only a non-empty escalationRef that names no declared escalation is a
+// deploy error.
+func buildEscalationResolver(defs xmlDefinitions) func(ownerId, escalationRef string) (string, error) {
+	escs := make(map[string]xmlEscalation, len(defs.Escalations))
+	for _, e := range defs.Escalations {
+		if e.Id != "" {
+			escs[e.Id] = e
+		}
+	}
+	return func(ownerId, escalationRef string) (string, error) {
+		if escalationRef == "" {
+			return "", nil // a code-less catch-all, or an uncoded escalation throw
+		}
+		e, ok := escs[escalationRef]
+		if !ok {
+			return "", fmt.Errorf("compiler: escalation event %q references unknown escalation %q", ownerId, escalationRef)
+		}
+		return e.EscalationCode, nil
+	}
+}
+
 // compileProcess linearizes one <process> into an immutable CompiledProcess,
 // resolving message, signal, and error references through resolveMessage/resolveSignal/
 // resolveError (shared across a collaboration's processes).
-func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error), resolveError func(ownerId, errorRef string) (string, error), resolveOperation func(ownerId, operationRef string) (string, error)) (*CompiledProcess, error) {
+func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error), resolveError func(ownerId, errorRef string) (string, error), resolveEscalation func(ownerId, escalationRef string) (string, error), resolveOperation func(ownerId, operationRef string) (string, error)) (*CompiledProcess, error) {
 	b := NewBuilder(key, proc.Id, version)
 	// isExecutable defaults to true when the attribute is absent (BPMN convention;
 	// Atlas has always run every deployed process), so an existing model without it
@@ -385,7 +412,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	// Register every flow node — the process root and, recursively, each embedded
 	// subprocess scope — then require a root-scope start event before wiring flows.
 	// Data objects and I/O mappings below stay process-scoped (ADR-0074).
-	if err := registerScope(b, ids, register, resolveMessage, resolveSignal, resolveError, &proc.xmlFlowContent); err != nil {
+	if err := registerScope(b, ids, register, resolveMessage, resolveSignal, resolveError, resolveEscalation, &proc.xmlFlowContent); err != nil {
 		return nil, err
 	}
 
@@ -811,6 +838,7 @@ type xmlDefinitions struct {
 	Messages      []xmlMessage      `xml:"message"`
 	Signals       []xmlSignal       `xml:"signal"`
 	Errors        []xmlError        `xml:"error"`
+	Escalations   []xmlEscalation   `xml:"escalation"`
 	Interfaces    []xmlInterface    `xml:"interface"`
 	Collaboration *xmlCollaboration `xml:"collaboration"`
 }
@@ -881,6 +909,21 @@ type xmlError struct {
 
 type xmlErrorEventDefinition struct {
 	ErrorRef string `xml:"errorRef,attr"`
+}
+
+// A top-level escalation declaration (ADR-0125). Like an error, an escalation is caught by
+// its code — the nearest enclosing escalation handler whose escalationCode matches, or a
+// code-less catch-all — so the escalationCode, not the id or name, is what an escalation
+// boundary/handler compares against. The id is what an escalationRef points at; the name is
+// human-facing only.
+type xmlEscalation struct {
+	Id             string `xml:"id,attr"`
+	EscalationCode string `xml:"escalationCode,attr"`
+	Name           string `xml:"name,attr"`
+}
+
+type xmlEscalationEventDefinition struct {
+	EscalationRef string `xml:"escalationRef,attr"`
 }
 
 type xmlProcess struct {
@@ -1242,6 +1285,11 @@ type xmlStartEvent struct {
 	// event subprocess: it catches an error propagating in its scope whose code matches
 	// (ADR-0089). A pointer so an absent one is nil.
 	Error *xmlErrorEventDefinition `xml:"errorEventDefinition"`
+	// Escalation, when present on an event-subprocess start event, makes it an
+	// escalation-triggered event subprocess: it catches an escalation propagating in its
+	// scope whose code matches (ADR-0125). May be interrupting or non-interrupting per
+	// IsInterrupting. A pointer so an absent one is nil.
+	Escalation *xmlEscalationEventDefinition `xml:"escalationEventDefinition"`
 	// IsInterrupting is the event-subprocess start event's cancel flag (ADR-0082):
 	// absent or "true" interrupts the parent scope when the trigger fires, "false" runs
 	// the handler alongside it. Empty for an ordinary start event.
@@ -1268,7 +1316,8 @@ type xmlIntermediateCatchEvent struct {
 	Signal  *xmlSignalEventDefinition  `xml:"signalEventDefinition"`
 }
 
-// An intermediate throw event; the message, signal, and compensation variants are executable.
+// An intermediate throw event; the message, signal, compensation, and escalation variants
+// are executable.
 type xmlIntermediateThrowEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
@@ -1277,6 +1326,10 @@ type xmlIntermediateThrowEvent struct {
 	// compensation of completed compensable activities in its scope (or of the one named
 	// by activityRef), then flows on (ADR-0103). A pointer so an absent one is nil.
 	Compensation *xmlCompensateEventDefinition `xml:"compensateEventDefinition"`
+	// Escalation, when present, makes this an escalation throw event: it raises the
+	// referenced escalation, propagating up to the nearest matching handler, then continues
+	// on its outgoing flow (ADR-0125). A pointer so an absent one is nil.
+	Escalation *xmlEscalationEventDefinition `xml:"escalationEventDefinition"`
 }
 
 // xmlCompensateEventDefinition is a <compensateEventDefinition> on a throw, end, or
@@ -1312,6 +1365,10 @@ type xmlEndEvent struct {
 	// ending its enclosing scope abnormally and propagating up to the nearest matching
 	// handler (ADR-0089). A pointer so an absent one is nil.
 	Error *xmlErrorEventDefinition `xml:"errorEventDefinition"`
+	// Escalation, when present, makes this an escalation end event: it raises the referenced
+	// escalation, propagating up to the nearest matching handler, then ends its path
+	// (ADR-0125). A pointer so an absent one is nil.
+	Escalation *xmlEscalationEventDefinition `xml:"escalationEventDefinition"`
 	// Terminate is present when the end event carries a <terminateEventDefinition>.
 	// Atlas can't execute a terminate end yet, so it is rejected at compile time rather
 	// than silently dropped to a plain end (which would abandon the terminate semantics).
@@ -1352,6 +1409,11 @@ type xmlBoundaryEvent struct {
 	// by the host activity (or propagated up to it) whose code matches, and is always
 	// interrupting (ADR-0089). A pointer so an absent one is nil.
 	Error *xmlErrorEventDefinition `xml:"errorEventDefinition"`
+	// Escalation, when present, makes this an escalation boundary event: it catches an
+	// escalation raised by the host activity (or propagated up to it) whose code matches.
+	// Unlike an error boundary it honors CancelActivity — it may be interrupting or
+	// non-interrupting (ADR-0125). A pointer so an absent one is nil.
+	Escalation *xmlEscalationEventDefinition `xml:"escalationEventDefinition"`
 	// Compensation, when present, makes this a compensation boundary event: it is inert
 	// (never armed), marking its host activity compensable and linking — via a BPMN
 	// <association> — to the compensation handler (ADR-0103). A pointer so an absent one is nil.

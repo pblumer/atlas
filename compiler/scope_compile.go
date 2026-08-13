@@ -13,7 +13,7 @@ import (
 // has none (ADR-0082, ADR-0088, ADR-0089).
 func eventSubStart(sub *xmlSubProcess) *xmlStartEvent {
 	for i := range sub.StartEvents {
-		if s := &sub.StartEvents[i]; s.Message != nil || s.Timer != nil || s.Signal != nil || s.Error != nil {
+		if s := &sub.StartEvents[i]; s.Message != nil || s.Timer != nil || s.Signal != nil || s.Error != nil || s.Escalation != nil {
 			return s
 		}
 	}
@@ -37,6 +37,7 @@ func registerScope(
 	resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error),
 	resolveSignal func(ownerId, signalRef string) (string, error),
 	resolveError func(ownerId, errorRef string) (string, error),
+	resolveEscalation func(ownerId, escalationRef string) (string, error),
 	c *xmlFlowContent,
 ) error {
 	for _, s := range c.StartEvents {
@@ -383,8 +384,20 @@ func registerScope(
 			}
 			continue
 		}
+		if ev.Escalation != nil {
+			// An escalation throw raises an escalation, propagating up to the nearest
+			// matching handler, then continues on its outgoing flow (ADR-0125).
+			code, err := resolveEscalation(ev.Id, ev.Escalation.EscalationRef)
+			if err != nil {
+				return err
+			}
+			if err := register(ev.Id, b.AddEscalationThrowEvent(code)); err != nil {
+				return err
+			}
+			continue
+		}
 		if ev.Message == nil {
-			return fmt.Errorf("compiler: intermediate throw event %q: only message, signal, and compensation events are supported yet", ev.Id)
+			return fmt.Errorf("compiler: intermediate throw event %q: only message, signal, compensation, and escalation events are supported yet", ev.Id)
 		}
 		name, keyExpr, err := resolveMessage(ev.Id, ev.Message.MessageRef)
 		if err != nil {
@@ -465,6 +478,21 @@ func registerScope(
 			}
 			continue
 		}
+		// An escalation end event raises its escalation code, propagating up to the nearest
+		// matching handler, then ends its path (ADR-0125). Unlike an error end an uncaught
+		// escalation is benign. This arm also stops the former silent degrade — before
+		// escalation was compiled, an escalationEventDefinition on an end event fell through
+		// to a plain none end, quietly dropping the escalation.
+		if e.Escalation != nil {
+			code, err := resolveEscalation(e.Id, e.Escalation.EscalationRef)
+			if err != nil {
+				return err
+			}
+			if err := register(e.Id, b.AddEscalationEndEvent(code)); err != nil {
+				return err
+			}
+			continue
+		}
 		// A compensation end event triggers compensation, then ends its scope (ADR-0103);
 		// its optional activityRef is resolved in the post-pass, like a compensation throw.
 		if e.Compensation != nil {
@@ -501,7 +529,7 @@ func registerScope(
 			b.SetTransaction(subID)
 		}
 		b.PushScope(subID)
-		if err := registerScope(b, ids, register, resolveMessage, resolveSignal, resolveError, &sub.xmlFlowContent); err != nil {
+		if err := registerScope(b, ids, register, resolveMessage, resolveSignal, resolveError, resolveEscalation, &sub.xmlFlowContent); err != nil {
 			return err
 		}
 		b.PopScope()
@@ -513,7 +541,7 @@ func registerScope(
 		if sub.TriggeredByEvent == "true" {
 			st := eventSubStart(sub)
 			if st == nil {
-				return fmt.Errorf("compiler: event subprocess %q must have a start event with a message, timer, signal, or error event definition", sub.Id)
+				return fmt.Errorf("compiler: event subprocess %q must have a start event with a message, timer, signal, error, or escalation event definition", sub.Id)
 			}
 			d := EventSubProcessDetail{StartNode: ids[st.Id], Interrupting: st.IsInterrupting != "false"}
 			switch {
@@ -538,6 +566,16 @@ func registerScope(
 					return err
 				}
 				d.Kind, d.ErrorCode, d.Interrupting = BoundaryError, code, true
+			case st.Escalation != nil:
+				// An escalation event subprocess catches an escalation propagating in its scope
+				// by code (ADR-0125). Unlike an error event subprocess it honors isInterrupting —
+				// a non-interrupting escalation handler runs alongside the still-running scope —
+				// so d.Interrupting (already set from st.IsInterrupting) is kept.
+				code, err := resolveEscalation(st.Id, st.Escalation.EscalationRef)
+				if err != nil {
+					return err
+				}
+				d.Kind, d.EscalationCode = BoundaryEscalation, code
 			case st.Timer != nil:
 				schedule, err := parseTimerSchedule(st.Timer)
 				if err != nil {
@@ -600,6 +638,18 @@ func registerScope(
 			if err := register(ev.Id, b.AddBoundaryErrorEvent(host, code)); err != nil {
 				return err
 			}
+		case ev.Escalation != nil:
+			// An escalation boundary catches an escalation propagating up to the host by code
+			// (ADR-0125). Unlike an error boundary it honors cancelActivity — an interrupting
+			// escalation boundary tears the host down, a non-interrupting one runs the handler
+			// alongside the still-running host.
+			code, err := resolveEscalation(ev.Id, ev.Escalation.EscalationRef)
+			if err != nil {
+				return err
+			}
+			if err := register(ev.Id, b.AddBoundaryEscalationEvent(host, code, interrupting)); err != nil {
+				return err
+			}
 		case ev.Compensation != nil:
 			// A compensation boundary is inert: it never arms, it only marks its host
 			// compensable and links to a handler (resolved from a BPMN <association> in the
@@ -616,7 +666,7 @@ func registerScope(
 				return err
 			}
 		default:
-			return fmt.Errorf("compiler: boundary event %q: only timer, message, signal, error, compensation, and cancel boundary events are supported yet", ev.Id)
+			return fmt.Errorf("compiler: boundary event %q: only timer, message, signal, error, escalation, compensation, and cancel boundary events are supported yet", ev.Id)
 		}
 	}
 	// Report an unsupported element with a clear message rather than letting it

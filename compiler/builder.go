@@ -242,6 +242,7 @@ type Builder struct {
 	signalThrows       []SignalDetail // shared by signal throw and signal end events
 	signalStarts       []SignalDetail
 	errorEnds          []ErrorEndDetail     // error end events (ADR-0089)
+	escalations        []EscalationDetail   // shared by escalation throw and end events (ADR-0125)
 	compensationThrows []CompensationDetail // shared by compensation throw and end events (ADR-0103)
 	timerStarts        []TimerStartDetail
 	dataObjects        []CompiledDataObject
@@ -1330,6 +1331,42 @@ func (b *Builder) AddBoundaryErrorEvent(host int32, errorCode string) int32 {
 	return b.addNode(TypeBoundaryEvent, detail)
 }
 
+// AddEscalationThrowEvent adds an intermediate throw event that raises the given escalation
+// code — propagating up to the nearest matching handler — then continues on its outgoing
+// flow (ADR-0125). A code-less escalation raises "". Returns its element id.
+func (b *Builder) AddEscalationThrowEvent(escalationCode string) int32 {
+	detail := int32(len(b.escalations))
+	b.escalations = append(b.escalations, EscalationDetail{EscalationCode: escalationCode})
+	return b.addNode(TypeEscalationThrowEvent, detail)
+}
+
+// AddEscalationEndEvent adds an end event that raises the given escalation code —
+// propagating up to the nearest matching handler — then ends its path (ADR-0125). Unlike an
+// error end, an uncaught escalation is benign (no incident) and a matching catch may be
+// non-interrupting. A code-less escalation raises "". Returns its element id.
+func (b *Builder) AddEscalationEndEvent(escalationCode string) int32 {
+	detail := int32(len(b.escalations))
+	b.escalations = append(b.escalations, EscalationDetail{EscalationCode: escalationCode})
+	return b.addNode(TypeEscalationEndEvent, detail)
+}
+
+// AddBoundaryEscalationEvent adds an escalation boundary event attached to host that catches
+// an escalation propagating up to the host whose code matches escalationCode ("" is a
+// catch-all). Unlike an error boundary it honors interrupting: an interrupting escalation
+// boundary tears the host down on fire, a non-interrupting one runs the handler alongside
+// the still-running host (ADR-0125). It opens no subscription and waits only to be found by
+// propagation. Returns its element id.
+func (b *Builder) AddBoundaryEscalationEvent(host int32, escalationCode string, interrupting bool) int32 {
+	detail := int32(len(b.boundaryEventDets))
+	b.boundaryEventDets = append(b.boundaryEventDets, BoundaryEventDetail{
+		HostNode:       host,
+		Interrupting:   interrupting,
+		Kind:           BoundaryEscalation,
+		EscalationCode: escalationCode,
+	})
+	return b.addNode(TypeBoundaryEvent, detail)
+}
+
 // AddCompensationThrowEvent adds an intermediate throw event that, on activation, triggers
 // compensation — running the handlers of completed compensable activities in its scope (or
 // of the single activity later set via SetCompensationActivityRef) — then flows on (ADR-0103).
@@ -1661,6 +1698,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		signalThrows:       b.signalThrows,
 		signalStarts:       b.signalStarts,
 		errorEnds:          b.errorEnds,
+		escalations:        b.escalations,
 		compensationThrows: b.compensationThrows,
 		timerStarts:        b.timerStarts,
 		dataObjects:        b.dataObjects,
