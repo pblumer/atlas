@@ -2329,7 +2329,14 @@ async function viewInstances() {
     <div id="var-panel" hidden></div>
     <div class="card" id="proc-card" style="padding:0">
       <table>
-        <thead><tr><th>Process</th><th>Versions</th><th>Running</th><th>Finished</th><th>Last activity</th><th></th></tr></thead>
+        <thead><tr>
+          <th class="sortable" data-sort="proc"><button type="button" class="th-sort">Process<span class="sort-ind"></span></button></th>
+          <th class="sortable" data-sort="versions"><button type="button" class="th-sort">Versions<span class="sort-ind"></span></button></th>
+          <th class="sortable" data-sort="running"><button type="button" class="th-sort">Running<span class="sort-ind"></span></button></th>
+          <th class="sortable" data-sort="finished"><button type="button" class="th-sort">Finished<span class="sort-ind"></span></button></th>
+          <th class="sortable" data-sort="activity"><button type="button" class="th-sort">Last activity<span class="sort-ind"></span></button></th>
+          <th></th>
+        </tr></thead>
         <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>`;
@@ -2339,9 +2346,61 @@ async function viewInstances() {
   let summary = new Map();
   const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—"; // completedAt is ns
 
+  // Column sort: each key maps a process group to a comparable value. String keys
+  // sort lexically, the rest numerically; the process id breaks ties so equal rows
+  // keep a stable order. The chosen column/direction persists so it survives a
+  // refresh or a trip into a replay and back.
+  const summaryOf = (g) => summary.get(g.processId) || { running: 0, finished: 0, latestCompletedAt: 0 };
+  const SORTERS = {
+    proc: (g) => (g.latest.name || g.processId).toLowerCase(),
+    versions: (g) => g.versions.length,
+    running: (g) => summaryOf(g).running || 0,
+    finished: (g) => summaryOf(g).finished || 0,
+    activity: (g) => summaryOf(g).latestCompletedAt || 0,
+  };
+  let sortState = (() => {
+    try { const s = JSON.parse(localStorage.getItem("atlas.ops.sort")); if (s && SORTERS[s.key]) return s; } catch { /* ignore */ }
+    return { key: null, dir: "desc" };
+  })();
+  const saveSort = () => { try { localStorage.setItem("atlas.ops.sort", JSON.stringify(sortState)); } catch { /* ignore */ } };
+  function sortGroups(groups) {
+    if (!sortState.key) return groups; // natural registration order (newest deploy first)
+    const val = SORTERS[sortState.key];
+    const dir = sortState.dir === "asc" ? 1 : -1;
+    return [...groups].sort((a, b) => {
+      const va = val(a), vb = val(b);
+      let c = typeof va === "string" ? va.localeCompare(vb) : va - vb;
+      if (c === 0) c = a.processId.localeCompare(b.processId);
+      return c * dir;
+    });
+  }
+  function updateSortIndicators() {
+    for (const th of view.querySelectorAll("#proc-card th.sortable")) {
+      const ind = th.querySelector(".sort-ind");
+      if (sortState.key === th.dataset.sort) {
+        ind.textContent = sortState.dir === "asc" ? "▲" : "▼";
+        th.setAttribute("aria-sort", sortState.dir === "asc" ? "ascending" : "descending");
+      } else {
+        ind.textContent = "";
+        th.removeAttribute("aria-sort");
+      }
+    }
+  }
+  for (const th of view.querySelectorAll("#proc-card th.sortable")) {
+    th.querySelector(".th-sort").addEventListener("click", () => {
+      const key = th.dataset.sort;
+      if (sortState.key === key) sortState.dir = sortState.dir === "asc" ? "desc" : "asc";
+      else sortState = { key, dir: key === "proc" ? "asc" : "desc" }; // text A→Z, counts high→low
+      saveSort();
+      renderRows();
+    });
+  }
+
   // renderRows draws the process rows, narrowed by the filter box (name or process
-  // id). Kept separate from load so filtering never refetches.
+  // id) and ordered by the chosen column sort. Kept separate from load so filtering
+  // and sorting never refetch.
   function renderRows() {
+    updateSortIndicators();
     if (!allGroups.length) {
       tbody.innerHTML = `<tr><td colspan="6" class="empty">
         No processes deployed. Click <b>Deploy demo</b> above, or create one in the
@@ -2349,13 +2408,14 @@ async function viewInstances() {
       return;
     }
     const q = (document.getElementById("proc-filter").value || "").trim().toLowerCase();
-    const groups = q
+    const filtered = q
       ? allGroups.filter((g) => ((g.latest.name || "") + " " + g.processId).toLowerCase().includes(q))
       : allGroups;
-    if (!groups.length) {
+    if (!filtered.length) {
       tbody.innerHTML = `<tr><td colspan="6" class="empty">No processes match “${esc(q)}”.</td></tr>`;
       return;
     }
+    const groups = sortGroups(filtered);
     tbody.innerHTML = groups.map((g) => {
       const s = summary.get(g.processId) || { running: 0, finished: 0, latestCompletedAt: 0 };
       const label = g.latest.name || g.processId;
