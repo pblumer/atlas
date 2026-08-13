@@ -2670,6 +2670,11 @@ type taskResp struct {
 	// when the task has no due date (ADR-0091).
 	Priority int32 `json:"priority"`
 	DueDate  int64 `json:"dueDate,omitempty"`
+	// Lane is the organizational lane the task's element is drawn in (ADR-0121), leaf name
+	// for a flat model; LanePath is the outermost-to-leaf path for a nested lane. Both empty
+	// when the task is in no lane. Metadata only — the Tasks app groups/labels by it.
+	Lane     string   `json:"lane,omitempty"`
+	LanePath []string `json:"lanePath,omitempty"`
 }
 
 // handleListTasks lists open user tasks — activatable jobs of the reserved
@@ -2824,6 +2829,12 @@ func (s *Server) enrichTask(jobKey uint64, jv *model.JobValue) taskResp {
 			tr.ProcessID = d.ProcessID
 			cp := d.cp
 			tr.ElementID = cp.ElementBpmnId(ei.ElementId)
+			// The organizational lane the task is drawn in (ADR-0121) — metadata for
+			// grouping in the inbox: the leaf name plus the outermost-to-leaf path.
+			if path := cp.LanePath(ei.ElementId); len(path) > 0 {
+				tr.Lane = path[len(path)-1]
+				tr.LanePath = path
+			}
 			if n := cp.Node(ei.ElementId); n.Type == compiler.TypeUserTask {
 				detail := cp.UserTask(n.Detail)
 				tr.Name = cp.Intern(detail.Name)

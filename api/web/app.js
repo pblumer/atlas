@@ -3129,6 +3129,7 @@ async function viewTasks(preselectKey) {
           <div class="tasks-item-body">
             <div class="tasks-item-top">
               <span class="tasks-item-title">${hi}${esc(taskTitle(t))}</span>
+              ${t.lane ? `<span class="chip" title="Lane">${esc(t.lane)}</span>` : ""}
               <span class="chip">${esc(t.processId || "")}</span>
             </div>
             <div class="tasks-item-sub muted"><span>${who}</span>${due}</div>
@@ -3431,6 +3432,7 @@ async function viewTasks(preselectKey) {
         ${row("Element", `<span class="chip">${esc(t.elementId || "—")}</span>`)}
         ${row("Assignee", esc(t.assignee || "—"))}
         ${row("Candidate groups", esc(t.candidateGroups || "—"))}
+        ${t.lane ? row("Lane", esc((t.lanePath && t.lanePath.length > 1 ? t.lanePath : [t.lane]).join(" › "))) : ""}
         ${row("Priority", `${taskPriority(t)}${taskPriority(t) >= 70 ? ' <span class="prio-dot" title="High priority"></span>' : ""}`)}
         ${row("Due", (() => { const d = dueInfo(t); return d ? `<span class="${d.overdue ? "due-text overdue" : "due-text"}" title="${esc(d.abs)}">${esc(d.label)} · ${esc(d.abs)}</span>` : "—"; })())}
         ${row("Instance", `<span class="chip">${t.processInstanceKey}</span>`)}

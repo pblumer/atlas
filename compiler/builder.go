@@ -235,6 +235,7 @@ type Builder struct {
 	ioInputs           []pendingIO      // zeebe:ioMapping inputs, grouped by node in Build
 	ioOutputs          []pendingIO      // zeebe:ioMapping outputs, grouped by node in Build
 	elementIds         []int32          // interned source BPMN id per node, -1 if unset
+	lanes              []LaneDetail     // organizational lanes (ADR-0121)
 	startFormId        int32            // interned start-form id (ADR-0028), -1 if the process has none
 	versionTag         int32            // interned atlas:versionTag revision label, -1 if none
 	instanceTtlNanos   int64            // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
@@ -305,6 +306,7 @@ func (b *Builder) addNode(t BpmnType, detail int32) int32 {
 		Detail:        detail,
 		MultiInstance: -1, // not a loop unless SetMultiInstance marks it (ADR-0077)
 		EventSub:      -1, // not event-triggered unless SetEventSubProcess marks it (ADR-0082)
+		Lane:          -1, // in no lane unless SetLane assigns one (ADR-0121)
 	})
 	b.elementIds = append(b.elementIds, -1) // kept in lockstep with nodes
 	return id
@@ -1318,6 +1320,22 @@ func (b *Builder) SetTransaction(nodeID int32) {
 	}
 }
 
+// AddLane adds an organizational lane and returns its index (ADR-0121). parent is the index of
+// the enclosing lane in a nested laneSet, or -1 for a top-level lane. A lane is pure metadata — it
+// affects no token flow.
+func (b *Builder) AddLane(name string, parent int32) int32 {
+	idx := int32(len(b.lanes))
+	b.lanes = append(b.lanes, LaneDetail{Name: b.intern(name), Parent: parent})
+	return idx
+}
+
+// SetLane records that a flow node belongs to a lane (ADR-0121). A no-op for an unknown node.
+func (b *Builder) SetLane(nodeID, laneIdx int32) {
+	if b.validNode(nodeID) {
+		b.nodes[nodeID].Lane = laneIdx
+	}
+}
+
 // AddBoundaryCompensationEvent adds a compensation boundary event attached to host: an inert
 // marker (never armed as an element instance) that makes the host compensable and links it to
 // a compensation handler, resolved later from a BPMN <association> via SetCompensationHandler
@@ -1590,6 +1608,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		ioOutputs:          ioOut,
 		startEvents:        startEvents,
 		elementIds:         b.elementIds,
+		lanes:              b.lanes,
 		startFormId:        b.startFormId,
 		versionTag:         b.versionTag,
 		instanceTtlNanos:   b.instanceTtlNanos,

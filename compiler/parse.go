@@ -405,6 +405,12 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		return nil, err
 	}
 
+	// Record each flow node's organizational lane (ADR-0121). Lanes are metadata with no
+	// execution effect, resolved through the same process-wide id map as compensation.
+	if err := resolveLanes(b, ids, &proc.xmlFlowContent); err != nil {
+		return nil, err
+	}
+
 	// Data objects are not flow nodes (no token flows through them), so they are
 	// added as a separate collection, not registered as flow nodes (ADR-0053). A
 	// nameless data object falls back to its BPMN id so it stays addressable.
@@ -940,6 +946,87 @@ type xmlFlowContent struct {
 	// Associations are BPMN <association> artifacts declared in this scope. Atlas reads
 	// them only to link a compensation boundary event to its handler (ADR-0103).
 	Associations []xmlAssociation `xml:"association"`
+
+	// LaneSets partition this scope's flow nodes into organizational lanes (ADR-0121).
+	// Lanes are metadata with no execution effect; resolveLanes records each node's lane.
+	LaneSets []xmlLaneSet `xml:"laneSet"`
+}
+
+// xmlLaneSet is a <laneSet> — a set of sibling lanes partitioning a process or subprocess scope.
+type xmlLaneSet struct {
+	Lanes []xmlLane `xml:"lane"`
+}
+
+// xmlLane is a <lane> — an organizational partition naming the flow nodes it contains via
+// <flowNodeRef> children, optionally subdivided into a nested <childLaneSet> (ADR-0121).
+type xmlLane struct {
+	Id           string      `xml:"id,attr"`
+	Name         string      `xml:"name,attr"`
+	FlowNodeRefs []string    `xml:"flowNodeRef"`
+	ChildLaneSet *xmlLaneSet `xml:"childLaneSet"`
+}
+
+// laneLabel is a lane's name, or its id when unnamed — for error messages.
+func laneLabel(l *xmlLane) string {
+	if l.Name != "" {
+		return l.Name
+	}
+	return l.Id
+}
+
+// resolveLanes records each flow node's organizational lane (ADR-0121). It walks every scope's
+// laneSets — following nested childLaneSets and building the lane table with parent pointers — and
+// resolves each <flowNodeRef> to a node through the process-wide id map, so a lane's assignment
+// works regardless of scope. A flowNodeRef naming no registered node, or a node claimed by two
+// lanes, is a deploy error. Lanes are pure metadata, so this runs after registration and changes
+// no flow; a process with no lanes leaves every node's Lane at -1.
+func resolveLanes(b *Builder, ids map[string]int32, fc *xmlFlowContent) error {
+	assigned := map[int32]string{} // node id → the lane that already claimed it (process-wide)
+
+	var walkLaneSet func(ls *xmlLaneSet, parent int32) error
+	walkLaneSet = func(ls *xmlLaneSet, parent int32) error {
+		for i := range ls.Lanes {
+			lane := &ls.Lanes[i]
+			idx := b.AddLane(lane.Name, parent)
+			for _, ref := range lane.FlowNodeRefs {
+				ref = strings.TrimSpace(ref)
+				if ref == "" {
+					continue
+				}
+				node, ok := ids[ref]
+				if !ok {
+					return fmt.Errorf("compiler: lane %q references unknown flow node %q", laneLabel(lane), ref)
+				}
+				if prev, dup := assigned[node]; dup {
+					return fmt.Errorf("compiler: flow node %q is in two lanes (%q and %q); a node belongs to at most one lane", ref, prev, laneLabel(lane))
+				}
+				assigned[node] = laneLabel(lane)
+				b.SetLane(node, idx)
+			}
+			if lane.ChildLaneSet != nil {
+				if err := walkLaneSet(lane.ChildLaneSet, idx); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
+	var walkScope func(c *xmlFlowContent) error
+	walkScope = func(c *xmlFlowContent) error {
+		for i := range c.LaneSets {
+			if err := walkLaneSet(&c.LaneSets[i], -1); err != nil {
+				return err
+			}
+		}
+		for i := range c.SubProcesses {
+			if err := walkScope(&c.SubProcesses[i].xmlFlowContent); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return walkScope(fc)
 }
 
 // xmlReceiveTask is a <receiveTask messageRef="…">: an activity that waits for the
