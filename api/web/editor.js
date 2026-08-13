@@ -1698,6 +1698,26 @@ const SERVICE_TASK_KINDS = [
       { key: "resultVariable", label: "Result variable", placeholder: "matches", hint: "The extracted values are written into this process variable as a JSON array." },
     ],
   },
+  {
+    id: "mockup", name: "Mockup (Simulation)", desc: "Let the engine simulate this task — random duration, scripted output, optional failures", icon: "K",
+    // A beaker on a slate tile reads "simulation / lab" at a glance — the mockup
+    // task's counterpart to REST's globe and mail's envelope. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white beaker strokes.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#647488"/><path d="M6.3 3.2v3.4L3.9 11a1 1 0 0 0 .9 1.5h6.4a1 1 0 0 0 .9-1.5L9.7 6.6V3.2" fill="none" stroke="#fff" stroke-width="1.1" stroke-linejoin="round"/><path d="M5.6 3.2h4.8M5.4 8.4h5.2" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/></svg>`,
+    ext: "atlas:MockupConnector",
+    fields: [
+      { group: "Duration" },
+      { key: "minDuration", label: "Min duration", placeholder: "PT1S", hint: "ISO-8601 duration (e.g. PT1S, PT5M). The engine waits a random time in [min, max] before completing. For a fixed time, set only this." },
+      { key: "maxDuration", label: "Max duration", placeholder: "leave empty for a fixed duration", hint: "ISO-8601 duration. Omit to make the duration exactly the minimum." },
+      { group: "Result (input → output)" },
+      { key: "resultExpression", label: "Result expression", placeholder: `={ status: "ok", id: orderId }`, fx: true, rows: 4, hint: "A FEEL expression evaluated over the instance's variables and written to the result variable — the input→output script, e.g. a simulated REST/Umsystem response. Press Ctrl+Space for variable completion." },
+      { key: "resultVariable", label: "Result variable", placeholder: "response", hint: "The process variable the result expression is written into. Required when a result expression is set." },
+      { group: "Failure simulation" },
+      { key: "failRate", label: "Failure rate", placeholder: "0 = never, 1 = always", hint: "Probability in [0,1] that an attempt fails and raises an incident instead of completing — for exercising error/retry paths. Resolving the incident retries with a fresh draw." },
+      { key: "failMessage", label: "Failure message", placeholder: "umsystem unavailable", hint: "The incident message used when a simulated failure occurs." },
+    ],
+  },
 ];
 
 // serviceTaskKind returns the catalog entry a service task currently represents,

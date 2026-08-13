@@ -69,8 +69,10 @@ const (
 
 	TypeTerminateEndEvent // an end event that ends its enclosing flow scope at once (ADR-0116): it terminates every other live token in the scope (cancelling their jobs), then completes the scope — at the root the instance ends, inside a subprocess that subprocess ends and the parent continues. cancelEndEventBehavior minus compensation and the cancel boundary
 
+	TypeMockupTask // a service task simulated by the engine itself (ADR-0120): on activation it writes an optional FEEL result and arms a one-shot timer for a random duration, then completes (or, per a fail probability, raises an incident) — no external worker or connector. A distinct type because its execution (timer-wait, no job) differs from a service task, like TypeConnectorTask.
+
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 35
+	numBpmnTypes = 36
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -146,6 +148,8 @@ func (t BpmnType) String() string {
 		return "CancelEndEvent"
 	case TypeTerminateEndEvent:
 		return "TerminateEndEvent"
+	case TypeMockupTask:
+		return "MockupTask"
 	default:
 		return "Unspecified"
 	}
@@ -449,6 +453,29 @@ type ConnectorTaskDetail struct {
 	ScrapeAttribute int32
 }
 
+// MockupTaskDetail is the per-mockup-task data the engine reads to simulate a
+// service task itself (ADR-0120), instead of dispatching a job to an external
+// worker or connector. On activation the behavior arms a one-shot timer for a
+// random duration in [MinNanos, MaxNanos] and, if Expr is set, evaluates it over
+// the instance's variables and writes the result into ResultVar (the input→output
+// "script", e.g. a simulated REST response). When the timer fires the task
+// completes — unless the fail draw selects failure, in which case a job-less
+// incident is raised with FailMessage.
+//
+// The random duration and the fail decision are derived deterministically from
+// the frozen timer key at command time (never re-drawn on replay), so no new
+// nondeterministic source enters the engine (invariant I6). FailPerMillion is the
+// failure probability scaled to parts-per-million (0 = never fail, 1_000_000 =
+// always) so the whole decision stays integer-pure across live and replay.
+type MockupTaskDetail struct {
+	MinNanos       int64          // minimum simulated duration in nanoseconds
+	MaxNanos       int64          // maximum simulated duration in nanoseconds (>= MinNanos)
+	ResultVar      string         // result-variable name, "" if none (a raw string, like ScriptTaskDetail.ResultVar)
+	Expr           *expr.Compiled // FEEL result expression compiled at deploy time (I5), nil if none
+	FailPerMillion int32          // failure probability in parts-per-million, 0..1_000_000
+	FailMessage    string         // incident message on a simulated failure, "" for a default
+}
+
 // RestExpr is a REST connector field value that is either a literal string
 // (Expr == nil, use Literal) or a FEEL expression evaluated over the instance's
 // variables at call time (Expr != nil), compiled once at deploy time (invariant
@@ -672,6 +699,7 @@ type CompiledProcess struct {
 	businessRuleTasks  []BusinessRuleTaskDetail
 	timerCatches       []TimerCatchDetail
 	connectorTasks     []ConnectorTaskDetail
+	mockupTasks        []MockupTaskDetail
 	userTasks          []UserTaskDetail
 	boundaryEventDets  []BoundaryEventDetail
 	eventSubProcesses  []EventSubProcessDetail
@@ -807,6 +835,11 @@ func (p *CompiledProcess) SendTask(detail int32) *ServiceTaskDetail {
 // TimerCatch returns the timer-catch detail at the given table index.
 func (p *CompiledProcess) TimerCatch(detail int32) *TimerCatchDetail {
 	return &p.timerCatches[detail]
+}
+
+// MockupTask returns the mockup-task detail at the given table index (ADR-0120).
+func (p *CompiledProcess) MockupTask(detail int32) *MockupTaskDetail {
+	return &p.mockupTasks[detail]
 }
 
 // ReceiveTask returns the receive-task detail at the given table index (ADR-0102). A

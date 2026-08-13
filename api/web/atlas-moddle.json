@@ -155,6 +155,19 @@
       ]
     },
     {
+      "name": "MockupConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "minDuration", "type": "String", "isAttr": true },
+        { "name": "maxDuration", "type": "String", "isAttr": true },
+        { "name": "resultExpression", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "failRate", "type": "String", "isAttr": true },
+        { "name": "failMessage", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "HttpHeader",
       "superClass": ["Element"],
       "properties": [
