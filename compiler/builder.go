@@ -215,6 +215,7 @@ type Builder struct {
 	businessRuleTasks  []BusinessRuleTaskDetail
 	timerCatches       []TimerCatchDetail
 	connectorTasks     []ConnectorTaskDetail
+	mockupTasks        []MockupTaskDetail
 	userTasks          []UserTaskDetail
 	boundaryEventDets  []BoundaryEventDetail
 	eventSubProcesses  []EventSubProcessDetail
@@ -471,6 +472,41 @@ func (b *Builder) AddScriptTask(e *expr.Compiled, resultVar string) int32 {
 	detail := int32(len(b.scriptTasks))
 	b.scriptTasks = append(b.scriptTasks, ScriptTaskDetail{Expr: e, ResultVar: resultVar})
 	return b.addNode(TypeScriptTask, detail)
+}
+
+// MockupConfig is the authored configuration of a mockup (engine-simulated)
+// service task (ADR-0120). MinNanos/MaxNanos bound the random simulated duration
+// (MaxNanos >= MinNanos, both >= 0). Expr, when non-nil, is the compiled FEEL
+// result expression written to ResultVar on activation (the input→output script).
+// FailPerMillion is the failure probability in parts-per-million (0..1_000_000).
+// FailMessage is the incident message used when a simulated failure occurs.
+type MockupConfig struct {
+	MinNanos       int64
+	MaxNanos       int64
+	ResultVar      string
+	Expr           *expr.Compiled
+	FailPerMillion int32
+	FailMessage    string
+}
+
+// AddMockupTask adds a mockup service task the engine simulates itself (ADR-0120)
+// and returns its element id. Unlike a service task it creates no job: at runtime
+// mockupTaskBehavior writes the optional FEEL result, arms a one-shot timer for a
+// random duration, and completes (or raises an incident per the fail probability).
+// The result variable and fail message are stored as raw strings (like
+// ScriptTaskDetail.ResultVar); the FEEL expression is compiled by the caller at
+// deploy time (invariant I5), as AddScriptTask takes a pre-compiled expression.
+func (b *Builder) AddMockupTask(cfg MockupConfig) int32 {
+	detail := int32(len(b.mockupTasks))
+	b.mockupTasks = append(b.mockupTasks, MockupTaskDetail{
+		MinNanos:       cfg.MinNanos,
+		MaxNanos:       cfg.MaxNanos,
+		ResultVar:      cfg.ResultVar,
+		Expr:           cfg.Expr,
+		FailPerMillion: cfg.FailPerMillion,
+		FailMessage:    cfg.FailMessage,
+	})
+	return b.addNode(TypeMockupTask, detail)
 }
 
 // AddScriptJobTask adds a job-based script task authored in a general-purpose
@@ -1529,6 +1565,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		businessRuleTasks:  b.businessRuleTasks,
 		timerCatches:       b.timerCatches,
 		connectorTasks:     b.connectorTasks,
+		mockupTasks:        b.mockupTasks,
 		userTasks:          b.userTasks,
 		boundaryEventDets:  b.boundaryEventDets,
 		eventSubProcesses:  b.eventSubProcesses,

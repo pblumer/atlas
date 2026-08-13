@@ -1366,7 +1366,11 @@ type xmlServiceTask struct {
 	// WebScrape, when present, marks this service task a web-scraping connector task
 	// (ADR-0118). The pointer is nil when the <atlas:webscrapeConnector> extension is
 	// absent.
-	WebScrape     *xmlWebScrapeConnector     `xml:"extensionElements>webscrapeConnector"`
+	WebScrape *xmlWebScrapeConnector `xml:"extensionElements>webscrapeConnector"`
+	// Mockup, when present, marks this service task an engine-simulated mockup task
+	// (ADR-0120). The pointer is nil when the <atlas:mockupConnector> extension is
+	// absent.
+	Mockup        *xmlMockupConnector        `xml:"extensionElements>mockupConnector"`
 	IOMapping     xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
 	MultiInstance *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
 	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
@@ -1541,6 +1545,24 @@ type xmlWebScrapeConnector struct {
 type xmlTaskDefinition struct {
 	Type    string `xml:"type,attr"`
 	Retries string `xml:"retries,attr"`
+}
+
+// A mockup service task's parameters, carried on a service task as an
+// <atlas:mockupConnector minDuration="PT1S" maxDuration="PT5S" .../> extension
+// element (ADR-0120): the engine simulates the task itself. minDuration/maxDuration
+// are ISO-8601 durations bounding the random simulated execution time (a single
+// fixed duration is minDuration == maxDuration). resultExpression, when set, is a
+// FEEL expression (a leading '=' is optional and stripped) evaluated over the
+// instance's variables and written into resultVariable — the input→output script,
+// e.g. a simulated REST response. failRate is the failure probability in [0,1];
+// failMessage is the incident message used when a simulated failure occurs.
+type xmlMockupConnector struct {
+	MinDuration      string `xml:"minDuration,attr"`
+	MaxDuration      string `xml:"maxDuration,attr"`
+	ResultVariable   string `xml:"resultVariable,attr"`
+	ResultExpression string `xml:"resultExpression,attr"`
+	FailRate         string `xml:"failRate,attr"`
+	FailMessage      string `xml:"failMessage,attr"`
 }
 
 // Zeebe script tasks carry the FEEL expression and its result variable in a

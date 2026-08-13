@@ -601,7 +601,7 @@ func isActivity(t BpmnType) bool {
 	switch t {
 	case TypeServiceTask, TypeScriptTask, TypeScriptJobTask, TypeBusinessRuleTask,
 		TypeUserTask, TypeConnectorTask, TypeTask, TypeReceiveTask, TypeSendTask,
-		TypeSubProcess, TypeCallActivity:
+		TypeMockupTask, TypeSubProcess, TypeCallActivity:
 		return true
 	default:
 		return false
