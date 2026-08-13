@@ -1834,8 +1834,9 @@ const SERVICE_TASK_KINDS = [
       { key: "resultExpression", label: "Result expression", placeholder: `={ status: "ok", id: orderId }`, fx: true, rows: 4, hint: "A FEEL expression evaluated over the instance's variables and written to the result variable — the input→output script, e.g. a simulated REST/Umsystem response. Press Ctrl+Space for variable completion." },
       { key: "resultVariable", label: "Result variable", placeholder: "response", hint: "The process variable the result expression is written into. Required when a result expression is set." },
       { group: "Failure simulation" },
-      { key: "failRate", label: "Failure rate", placeholder: "0 = never, 1 = always", hint: "Probability in [0,1] that an attempt fails and raises an incident instead of completing — for exercising error/retry paths. Resolving the incident retries with a fresh draw." },
-      { key: "failMessage", label: "Failure message", placeholder: "umsystem unavailable", hint: "The incident message used when a simulated failure occurs." },
+      { key: "failRate", label: "Failure rate", placeholder: "0 = never, 1 = always", hint: "Probability in [0,1] that an attempt fails instead of completing — for exercising error/retry paths." },
+      { key: "errorCode", label: "BPMN error code", placeholder: "leave empty to raise an incident", hint: "When set, a failure throws a BPMN error with this code — caught by a matching error boundary event or error event subprocess. Leave empty to raise a technical incident (resolvable, retries with a fresh draw) instead." },
+      { key: "failMessage", label: "Incident message", placeholder: "umsystem unavailable", hint: "The incident message when a failure raises an incident (i.e. when no error code is set)." },
     ],
   },
 ];

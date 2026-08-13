@@ -50,10 +50,12 @@ with its own `mockupTaskBehavior`:
   the inline FEEL script task), then arms a one-shot timer whose due date is
   `now + duration`. It stays activated.
 - **When the timer fires**, the existing `handleTimerTriggered` drives the element
-  to completion — unless the failure draw selects failure, in which case a
-  **job-less incident** is raised (the element parks, mirroring the ADR-0064/0111
-  timer-schedule incident). Resolving the incident re-arms a fresh attempt through
-  the existing `rearmTimerElement` path.
+  to completion — unless the failure draw selects failure. A failure with an
+  authored `errorCode` **throws a BPMN error** (via the existing `propagateError`,
+  ADR-0089), caught by a matching error boundary or error event subprocess; without
+  an error code it raises a **job-less incident** (the element parks, mirroring the
+  ADR-0064/0111 timer-schedule incident), which resolving re-arms as a fresh attempt
+  through the existing `rearmTimerElement` path.
 
 The duration and the failure decision are pure functions of the **timer key**,
 which is generated live and frozen into the `TimerCreated` event; the due date is
@@ -77,11 +79,15 @@ to output mappings.
   failure/retry paths are exercisable. No server worker, no engine hot-path
   change, no new event type — it composes the timer, variable, and incident
   machinery that already exist.
+- **Positive (added):** a simulated failure can either raise a technical
+  **incident** (no `errorCode`) or throw a **BPMN error** (`errorCode` set), so both
+  technical and business error paths — error boundaries and error event
+  subprocesses — are exercisable, reusing `propagateError` (ADR-0089) with no new
+  mechanism.
 - **Negative / trade-offs accepted:** the duration is drawn uniformly from the
-  key hash (good enough for a dev mockup, not a statistical model); a simulated
-  failure raises a technical **incident** rather than throwing a BPMN error.
-- **Follow-ups / risks to watch:** an optional `errorCode` to throw a BPMN error
-  (for error-boundary/event-subprocess playthrough) is a natural later addition.
+  key hash (good enough for a dev mockup, not a statistical model).
+- **Follow-ups / risks to watch:** richer distributions or a message/escalation
+  throw could follow the same pattern if a need appears.
 
 ## Pros and cons of the options
 

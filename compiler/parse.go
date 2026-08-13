@@ -1554,8 +1554,10 @@ type xmlTaskDefinition struct {
 // fixed duration is minDuration == maxDuration). resultExpression, when set, is a
 // FEEL expression (a leading '=' is optional and stripped) evaluated over the
 // instance's variables and written into resultVariable — the input→output script,
-// e.g. a simulated REST response. failRate is the failure probability in [0,1];
-// failMessage is the incident message used when a simulated failure occurs.
+// e.g. a simulated REST response. failRate is the failure probability in [0,1].
+// When errorCode is set, a simulated failure throws a BPMN error with that code
+// (caught by a matching error boundary/event subprocess); otherwise it raises an
+// incident with failMessage.
 type xmlMockupConnector struct {
 	MinDuration      string `xml:"minDuration,attr"`
 	MaxDuration      string `xml:"maxDuration,attr"`
@@ -1563,6 +1565,7 @@ type xmlMockupConnector struct {
 	ResultExpression string `xml:"resultExpression,attr"`
 	FailRate         string `xml:"failRate,attr"`
 	FailMessage      string `xml:"failMessage,attr"`
+	ErrorCode        string `xml:"errorCode,attr"`
 }
 
 // Zeebe script tasks carry the FEEL expression and its result variable in a

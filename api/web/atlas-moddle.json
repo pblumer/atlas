@@ -164,7 +164,8 @@
         { "name": "resultExpression", "type": "String", "isAttr": true },
         { "name": "resultVariable", "type": "String", "isAttr": true },
         { "name": "failRate", "type": "String", "isAttr": true },
-        { "name": "failMessage", "type": "String", "isAttr": true }
+        { "name": "failMessage", "type": "String", "isAttr": true },
+        { "name": "errorCode", "type": "String", "isAttr": true }
       ]
     },
     {

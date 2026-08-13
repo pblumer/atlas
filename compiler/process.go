@@ -474,6 +474,11 @@ type MockupTaskDetail struct {
 	Expr           *expr.Compiled // FEEL result expression compiled at deploy time (I5), nil if none
 	FailPerMillion int32          // failure probability in parts-per-million, 0..1_000_000
 	FailMessage    string         // incident message on a simulated failure, "" for a default
+	// ErrorCode, when non-empty, makes a simulated failure throw a BPMN error with this
+	// code (caught by a matching error boundary/event subprocess, ADR-0089) instead of
+	// raising an incident — so business error paths, not just technical ones, are
+	// exercisable. Empty keeps the incident behavior.
+	ErrorCode string
 }
 
 // RestExpr is a REST connector field value that is either a literal string
