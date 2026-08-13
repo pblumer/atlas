@@ -76,6 +76,12 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeSignalThrowEvent] = signalThrowEventBehavior{}
 	p.behaviors[compiler.TypeSignalEndEvent] = signalEndEventBehavior{}
 	p.behaviors[compiler.TypeErrorEndEvent] = errorEndEventBehavior{}
+	// Escalation throw/end events (ADR-0124): both raise an escalation up the scope chain via
+	// propagateEscalation, then — unlike an error end — continue their own path unless an
+	// interrupting catch tore them down (an escalation may be caught non-interruptingly, or
+	// go uncaught, which is benign).
+	p.behaviors[compiler.TypeEscalationThrowEvent] = escalationThrowEventBehavior{}
+	p.behaviors[compiler.TypeEscalationEndEvent] = escalationEndEventBehavior{}
 	p.behaviors[compiler.TypeCompensationThrowEvent] = compensationThrowEventBehavior{}
 	p.behaviors[compiler.TypeCompensationEndEvent] = compensationEndEventBehavior{}
 	p.behaviors[compiler.TypeCancelEndEvent] = cancelEndEventBehavior{}
@@ -2294,6 +2300,195 @@ func raiseErrorIncident(c *ProcessingContext, elKey uint64, code string) {
 	})
 }
 
+// --- Escalation (ADR-0124) ---
+
+// escalationThrowEventBehavior: an intermediate throw event that raises an escalation
+// (ADR-0124). OnActivated raises it up the scope chain via propagateEscalation, then — unlike
+// a compensation/message throw that always continues — continues on its outgoing flow only if
+// the throw was NOT caught by an interrupting handler (which would have torn this token down;
+// continuing would double-count). A non-interrupting or uncaught escalation leaves the token
+// alive, so it flows on. Running on the command path keeps applyToState pure (I4/I6).
+type escalationThrowEventBehavior struct{}
+
+func (escalationThrowEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	code := cp.Escalation(cp.Node(ei.ElementId).Detail).EscalationCode
+	if propagateEscalation(c, key, code) {
+		// An interrupting catch fired: this token is inside the scope being torn down, so it
+		// must not take its outgoing flow (the interrupt handles teardown). Do nothing.
+		return
+	}
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (escalationThrowEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// escalationEndEventBehavior: an end event that raises an escalation, then ends its path
+// (ADR-0124). OnActivated hops to Completing like a none end; OnCompleting raises the
+// escalation and then — unless an interrupting catch tore this token down — ends its path
+// exactly like a none end (emit Completed, maybe complete the scope). This is the escalation
+// twin of errorEndEventBehavior, except an error end never completes (its catch always
+// interrupts) whereas an escalation end usually does (its catch may be non-interrupting, or
+// the escalation may go uncaught — both benign).
+type escalationEndEventBehavior struct{}
+
+func (escalationEndEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+func (escalationEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	code := cp.Escalation(cp.Node(ei.ElementId).Detail).EscalationCode
+	if propagateEscalation(c, key, code) {
+		// An interrupting catch fired: interruptHost's terminateScope tears this end event down,
+		// so emitting Completed here would double-count. Leave the teardown to the interrupt.
+		return
+	}
+	// Non-interrupting or uncaught: end the path like a none end event.
+	c.AppendElementEvent(key, model.IntentCompleted, *ei) // decrements scope's active children
+	completeScope(c, ei.FlowScopeKey)                     // completes the scope owner if it drained
+}
+
+// propagateEscalation routes a raised escalation up the live scope chain to the nearest
+// matching escalation handler (ADR-0124) — the non-interrupting, benign-when-uncaught sibling
+// of propagateError. Starting from the raising element it walks up FlowScopeKey; at each
+// enclosing scope it checks that scope's armed escalation event subprocesses and, for an
+// activity scope, its armed escalation boundaries for a code match (equal, or a code-less
+// catch-all), driving the first match to Completing. It differs from propagateError in two
+// ways: (1) a matching catch may be non-interrupting — its boundary/event-sub OnCompleting
+// honors d.Interrupting, running the handler alongside the still-running scope; and (2) an
+// escalation that reaches a top-level root uncaught is BENIGN — no incident (an escalation is
+// a notification, not a failure). A call-activity child's uncaught escalation continues from
+// the caller's element (ADR-0076) without aborting the child. It returns whether it fired an
+// INTERRUPTING catch: true means the raising scope will be torn down, so the caller must not
+// also complete its own path; false means the raising token survives and flows on/ends
+// normally. Pure function of committed state (I6); command path only, never replay. Bounded by
+// maxScopeDepth (both the scope walk and the caller-hop count).
+func propagateEscalation(c *ProcessingContext, fromKey uint64, code string) (interrupted bool) {
+	for hop := 0; hop <= maxScopeDepth; hop++ {
+		ei := c.GetElementInstance(fromKey)
+		if ei == nil {
+			return false // the raising/caller element vanished (already torn down): nothing to do
+		}
+		if caught, interrupting := escalationCaughtInInstance(c, ei.ProcessInstanceKey, fromKey, code); caught {
+			return interrupting
+		}
+		// Uncaught in this instance. Unlike an error, a call-activity child's escalation does
+		// NOT abort the child — it is benign: continue from the caller's element to look for a
+		// handler there (an interrupting boundary on the call activity, if it catches, tears the
+		// child down; otherwise both run on).
+		pi := c.GetProcessInstance(ei.ProcessInstanceKey)
+		if pi != nil && pi.ParentElementInstanceKey != 0 {
+			fromKey = pi.ParentElementInstanceKey
+			continue
+		}
+		return false // uncaught at a top-level root: benign, no incident
+	}
+	return false
+}
+
+// escalationCaughtInInstance walks the scope chain of one instance from fromKey up to its
+// root, firing the nearest matching escalation catch (an event subprocess before a boundary at
+// each scope; the root's event subprocesses last), and reports whether one fired and, if so,
+// whether it was interrupting (ADR-0124). Mirrors errorCaughtInInstance.
+func escalationCaughtInInstance(c *ProcessingContext, piKey, fromKey uint64, code string) (caught, interrupting bool) {
+	for depth, scope := 0, fromKey; depth <= maxScopeDepth; depth++ {
+		ei := c.GetElementInstance(scope)
+		if ei == nil {
+			break // walked past the process root: no enclosing element scope left
+		}
+		if k := findEscalationEventSub(c, piKey, scope, code); k != 0 {
+			return true, fireEscalationCatch(c, k)
+		}
+		if k := findEscalationBoundary(c, piKey, scope, code); k != 0 {
+			return true, fireEscalationCatch(c, k)
+		}
+		scope = ei.FlowScopeKey
+	}
+	// The process root's own escalation event subprocesses are keyed by the instance scope,
+	// which is not an element instance — so they are checked here, after the element-scope walk.
+	if k := findEscalationEventSub(c, piKey, piKey, code); k != 0 {
+		return true, fireEscalationCatch(c, k)
+	}
+	return false, false
+}
+
+// fireEscalationCatch drives a found escalation catch (a boundary or event-subprocess trigger)
+// to Completing and returns whether that catch is interrupting — read from the compiled detail,
+// the same flag its OnCompleting path acts on (ADR-0124). A vanished catch is treated as
+// non-interrupting (nothing tears the raiser down).
+func fireEscalationCatch(c *ProcessingContext, catchKey uint64) bool {
+	catch := c.GetElementInstance(catchKey)
+	if catch == nil {
+		return false
+	}
+	interrupting := catchInterrupting(c, catch)
+	c.AppendElementCommand(catchKey, model.IntentCompleting, *catch)
+	return interrupting
+}
+
+// catchInterrupting reports whether an escalation catch element (a boundary or an
+// event-subprocess trigger) is interrupting, reading its compiled detail (ADR-0124).
+func catchInterrupting(c *ProcessingContext, catch *model.ElementInstanceValue) bool {
+	cp := c.process(catch.ProcessDefKey)
+	node := cp.Node(catch.ElementId)
+	switch node.Type {
+	case compiler.TypeBoundaryEvent:
+		return cp.BoundaryEvent(node.Detail).Interrupting
+	case compiler.TypeEventSubProcessStart:
+		return cp.EventSubProcess(node.EventSub).Interrupting
+	}
+	return true
+}
+
+// findEscalationBoundary returns the element-instance key of an armed escalation boundary
+// attached to hostKey whose code catches the raised code (equal, or a code-less catch-all), or
+// 0 if the host has none (ADR-0124). Mirrors findErrorBoundary but matches BoundaryEscalation.
+func findEscalationBoundary(c *ProcessingContext, piKey, hostKey uint64, code string) uint64 {
+	var found uint64
+	c.ForEachElementInstance(piKey, func(elKey uint64) {
+		if found != 0 {
+			return
+		}
+		b := c.GetElementInstance(elKey)
+		if b == nil || b.AttachedToKey != hostKey || b.BpmnElementType != uint8(compiler.TypeBoundaryEvent) {
+			return
+		}
+		cp := c.process(b.ProcessDefKey)
+		d := cp.BoundaryEvent(cp.Node(b.ElementId).Detail)
+		if d.Kind == compiler.BoundaryEscalation && errorCodeMatches(d.EscalationCode, code) {
+			found = elKey
+		}
+	})
+	return found
+}
+
+// findEscalationEventSub returns the element-instance key of an armed escalation
+// event-subprocess trigger in scope scopeKey whose code catches the raised code, or 0 if the
+// scope hosts none (ADR-0124, reusing ADR-0082). Mirrors findErrorEventSub but matches
+// BoundaryEscalation; driving the trigger to Completing runs its handler, interrupting or not
+// per its compiled Interrupting flag.
+func findEscalationEventSub(c *ProcessingContext, piKey, scopeKey uint64, code string) uint64 {
+	var found uint64
+	c.ForEachElementInstance(piKey, func(elKey uint64) {
+		if found != 0 {
+			return
+		}
+		t := c.GetElementInstance(elKey)
+		if t == nil || t.FlowScopeKey != scopeKey || t.BpmnElementType != uint8(compiler.TypeEventSubProcessStart) {
+			return
+		}
+		cp := c.process(t.ProcessDefKey)
+		d := cp.EventSubProcess(cp.Node(t.ElementId).EventSub)
+		if d.Kind == compiler.BoundaryEscalation && errorCodeMatches(d.EscalationCode, code) {
+			found = elKey
+		}
+	})
+	return found
+}
+
 // --- Compensation (ADR-0103) ---
 
 // compensationThrowEventBehavior triggers compensation, then flows on. OnActivated runs
@@ -2920,6 +3115,11 @@ func (boundaryEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *m
 		// A cancel boundary opens nothing either — it is inert, armed only to be *found* when
 		// its host transaction is cancelled (its scope has drained after compensation), then
 		// driven to Completing to take the recovery flow (ADR-0108).
+	case compiler.BoundaryEscalation:
+		// An escalation boundary opens nothing — it is inert, armed only to be *found* by
+		// propagateEscalation walking the scope chain when an escalation is raised, then driven
+		// to Completing (ADR-0124). Its OnCompleting path already honors d.Interrupting, so a
+		// non-interrupting escalation boundary runs its handler while the host keeps running.
 	}
 	// Stays Activated: waits until the timer fires, the message correlates, the signal
 	// broadcasts, or (for an error boundary) an error propagates up to it.
