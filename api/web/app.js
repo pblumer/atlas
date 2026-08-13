@@ -493,7 +493,12 @@ function initHelpMenu(docsEnabled) {
     ? `<a role="menuitem" href="/api/docs" target="_blank" rel="noopener">API Explorer <span class="ext" aria-hidden="true">↗</span></a>`
     : `<span class="help-note">API Explorer is disabled<br><span class="muted">start the server without <code>--docs=false</code></span></span>`;
   const gallery = `<a role="menuitem" href="/conformance-gallery.html" target="_blank" rel="noopener">Conformance Gallery <span class="ext" aria-hidden="true">↗</span></a>`;
-  menu.innerHTML = explorer + gallery;
+  // The Handbook is a self-contained static page (bilingual DE/EN), served like
+  // the gallery regardless of the --docs flag. It leads because it's the primary
+  // learning resource for new users; the API Explorer and gallery are for
+  // reference and hands-on trials.
+  const handbook = `<a role="menuitem" href="/handbuch.html" target="_blank" rel="noopener">Handbook <span class="ext" aria-hidden="true">↗</span></a>`;
+  menu.innerHTML = handbook + explorer + gallery;
 }
 
 function setChrome(appId, route) {
@@ -528,6 +533,7 @@ async function viewConsoleDashboard() {
       <div class="row">
         <a class="btn" href="#/modeler">Open Modeler</a>
         <a class="btn ghost" href="#/console/engine">View engine</a>
+        <a class="btn ghost" href="/handbuch.html" target="_blank" rel="noopener">Handbook ↗</a>
       </div>
     </div>
     <div class="grid2" style="margin-top:18px">

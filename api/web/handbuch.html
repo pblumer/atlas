@@ -1,0 +1,820 @@
+<!doctype html>
+<html lang="de" data-lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atlas – Handbuch / Handbook</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2314161a'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='20' font-weight='700' fill='white' text-anchor='middle'%3EA%3C/text%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f6f7f9; --fg:#1c2024; --muted:#5b636c; --card:#ffffff; --border:#e3e6ea;
+  --accent:#2d6cdf; --accent-fg:#ffffff; --chip:#eef1f5; --code:#f2f4f7;
+  --ok:#1a7f4b; --warn:#b26a00; --err:#c0392b;
+  --shadow:0 1px 2px rgba(20,22,26,.05), 0 8px 24px rgba(20,22,26,.06);
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#15181c; --fg:#e6e9ec; --muted:#9aa3ad; --card:#1e2228; --border:#2c323a;
+  --accent:#5b8def; --accent-fg:#0d1117; --chip:#262c34; --code:#12151a;
+  --ok:#4cc38a; --warn:#e0a44a; --err:#e5707a;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font:15.5px/1.65 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased}
+
+/* ---- bilingual show/hide: the root data-lang decides which variant is visible ---- */
+html[data-lang="de"] [data-l="en"], html[data-lang="en"] [data-l="de"]{display:none !important}
+
+/* ---- top bar ---- */
+.topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:14px;
+  padding:12px clamp(16px,3vw,28px);background:var(--card);border-bottom:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;text-decoration:none;color:var(--fg)}
+.brand .mark{display:grid;place-items:center;width:28px;height:28px;border-radius:7px;
+  background:#14161a;color:#fff;font-family:ui-monospace,monospace;font-weight:700}
+.brand small{font-weight:600;color:var(--muted)}
+.topbar .spacer{flex:1}
+.langtoggle{display:inline-flex;border:1px solid var(--border);border-radius:999px;overflow:hidden}
+.langtoggle button{border:0;background:transparent;color:var(--muted);padding:6px 14px;
+  font:inherit;font-weight:600;cursor:pointer}
+.langtoggle button.on{background:var(--accent);color:var(--accent-fg)}
+.applink{text-decoration:none;color:var(--accent);font-weight:600;font-size:14px}
+.applink:hover{text-decoration:underline}
+
+/* ---- layout ---- */
+.wrap{display:grid;grid-template-columns:264px minmax(0,1fr);gap:0;align-items:start;
+  max-width:1180px;margin:0 auto}
+nav.toc{position:sticky;top:53px;align-self:start;max-height:calc(100vh - 53px);overflow:auto;
+  padding:22px 12px 40px 20px}
+nav.toc h4{margin:18px 0 6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+nav.toc a{display:block;padding:5px 10px;border-radius:7px;text-decoration:none;color:var(--fg);
+  font-size:14px;line-height:1.35}
+nav.toc a:hover{background:var(--chip)}
+nav.toc a.active{background:var(--accent);color:var(--accent-fg)}
+main{padding:8px clamp(16px,4vw,44px) 96px;min-width:0}
+
+/* ---- content ---- */
+.hero{padding:34px 0 8px}
+.hero h1{font-size:30px;margin:0 0 8px;letter-spacing:-.01em}
+.hero p{margin:0;color:var(--muted);max-width:70ch;font-size:16px}
+section{padding-top:40px;scroll-margin-top:66px}
+section>h2{font-size:23px;margin:0 0 6px;letter-spacing:-.01em;
+  border-bottom:1px solid var(--border);padding-bottom:8px}
+section h3{font-size:17px;margin:26px 0 6px}
+p{margin:10px 0;max-width:74ch}
+ul,ol{max-width:74ch;padding-left:22px}
+li{margin:5px 0}
+a{color:var(--accent)}
+.lead{color:var(--muted);font-size:16px;max-width:74ch}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;
+  background:var(--code);border:1px solid var(--border);border-radius:5px;padding:1px 5px}
+pre{background:var(--code);border:1px solid var(--border);border-radius:10px;
+  padding:14px 16px;overflow:auto;font-size:13px;line-height:1.55}
+pre code{background:transparent;border:0;padding:0}
+kbd{font-family:ui-monospace,monospace;font-size:.82em;background:var(--card);
+  border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:1px 6px}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:16px 18px;margin:14px 0;box-shadow:var(--shadow)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+.steps{counter-reset:step;list-style:none;padding:0;max-width:none}
+.steps>li{counter-increment:step;position:relative;padding:14px 16px 14px 56px;margin:12px 0;
+  background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow)}
+.steps>li::before{content:counter(step);position:absolute;left:14px;top:14px;
+  width:28px;height:28px;display:grid;place-items:center;border-radius:50%;
+  background:var(--accent);color:var(--accent-fg);font-weight:700;font-size:14px}
+.steps>li>b{display:block;margin-bottom:2px}
+.note{border-left:3px solid var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent);
+  border-radius:0 10px 10px 0;padding:10px 14px;margin:14px 0}
+.note.tip{border-left-color:var(--ok);background:color-mix(in srgb,var(--ok) 9%,transparent)}
+.note.warn{border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 10%,transparent)}
+.note .lbl{font-weight:700;font-size:12px;letter-spacing:.04em;text-transform:uppercase}
+.tag{display:inline-block;font-size:11px;font-family:ui-monospace,monospace;
+  background:var(--chip);color:var(--muted);padding:2px 8px;border-radius:999px;margin:2px 4px 2px 0}
+.pilllink{display:inline-flex;align-items:center;gap:6px;text-decoration:none;
+  background:var(--accent);color:var(--accent-fg);font-weight:600;font-size:14px;
+  padding:8px 14px;border-radius:9px;margin:4px 6px 4px 0}
+.pilllink.ghost{background:transparent;color:var(--accent);border:1px solid var(--border)}
+.pilllink:hover{filter:brightness(1.05)}
+
+table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14px;display:block;overflow:auto}
+th,td{border:1px solid var(--border);padding:8px 11px;text-align:left;vertical-align:top}
+th{background:var(--chip);font-weight:600}
+td code{white-space:nowrap}
+
+/* ---- diagram gallery ---- */
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;margin:14px 0}
+.gcard{background:var(--card);border:1px solid var(--border);border-radius:11px;overflow:hidden;
+  display:flex;flex-direction:column;box-shadow:var(--shadow)}
+.gcard img{width:100%;height:120px;object-fit:contain;background:#fff;border-bottom:1px solid var(--border)}
+.gcard .gc{padding:9px 11px}
+.gcard .gc b{font-size:13.5px}
+.gcard .gc p{margin:3px 0 0;font-size:12.5px;color:var(--muted);max-width:none}
+.gfilter{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0}
+.gfilter button{cursor:pointer;border:1px solid var(--border);border-radius:999px;padding:5px 12px;
+  font:inherit;font-size:13px;background:var(--card);color:var(--fg)}
+.gfilter button.on{background:var(--accent);color:var(--accent-fg);border-color:transparent;font-weight:600}
+
+footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
+  color:var(--muted);font-size:13px;border-top:1px solid var(--border)}
+
+@media (max-width:860px){
+  .wrap{grid-template-columns:1fr}
+  nav.toc{position:static;max-height:none;padding:14px 16px;border-bottom:1px solid var(--border)}
+  nav.toc h4{margin-top:10px}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="/#/console">
+    <span class="mark" aria-hidden="true">A</span>
+    <span>Atlas <small data-l="de">· Handbuch</small><small data-l="en">· Handbook</small></span>
+  </a>
+  <span class="spacer"></span>
+  <a class="applink" href="/#/console" title="Zurück zur App / Back to the app">
+    <span data-l="de">← Zur App</span><span data-l="en">← To the app</span>
+  </a>
+  <div class="langtoggle" role="group" aria-label="Language">
+    <button id="lang-de" type="button">DE</button>
+    <button id="lang-en" type="button">EN</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <nav class="toc" id="toc">
+    <h4 data-l="de">Einstieg</h4><h4 data-l="en">Getting started</h4>
+    <a href="#willkommen"><span data-l="de">Willkommen</span><span data-l="en">Welcome</span></a>
+    <a href="#schnellstart"><span data-l="de">Schnellstart (10 Min)</span><span data-l="en">Quick start (10 min)</span></a>
+    <a href="#konzepte"><span data-l="de">Grundkonzepte</span><span data-l="en">Core concepts</span></a>
+    <h4 data-l="de">Lernen</h4><h4 data-l="en">Learn</h4>
+    <a href="#bpmn"><span data-l="de">BPMN lernen</span><span data-l="en">Learn BPMN</span></a>
+    <a href="#elemente"><span data-l="de">BPMN-Elemente</span><span data-l="en">BPMN elements</span></a>
+    <a href="#dmn"><span data-l="de">DMN lernen</span><span data-l="en">Learn DMN</span></a>
+    <a href="#feel"><span data-l="de">FEEL-Spickzettel</span><span data-l="en">FEEL cheat sheet</span></a>
+    <h4 data-l="de">Bauen &amp; Betreiben</h4><h4 data-l="en">Build &amp; operate</h4>
+    <a href="#designen"><span data-l="de">Prozesse designen</span><span data-l="en">Design processes</span></a>
+    <a href="#formulare"><span data-l="de">Formulare &amp; Connectors</span><span data-l="en">Forms &amp; connectors</span></a>
+    <a href="#laufen"><span data-l="de">Zum Laufen bringen</span><span data-l="en">Make it run</span></a>
+    <a href="#testen"><span data-l="de">Testen &amp; Simulieren</span><span data-l="en">Test &amp; simulate</span></a>
+    <a href="#betrieb"><span data-l="de">Betrieb &amp; Incidents</span><span data-l="en">Operations &amp; incidents</span></a>
+    <h4 data-l="de">Nachschlagen</h4><h4 data-l="en">Reference</h4>
+    <a href="#glossar"><span data-l="de">Glossar</span><span data-l="en">Glossary</span></a>
+    <a href="#ressourcen"><span data-l="de">Ressourcen</span><span data-l="en">Resources</span></a>
+  </nav>
+
+  <main>
+    <div class="hero">
+      <h1 data-l="de">Atlas-Handbuch</h1><h1 data-l="en">Atlas Handbook</h1>
+      <p data-l="de">Alles, was du brauchst, um mit Atlas Prozesse zu <b>lernen</b>, zu <b>designen</b>,
+        zum <b>Laufen</b> zu bringen und zu <b>testen</b> – vom ersten Klick bis zum produktiven Prozess.
+        Kein Vorwissen nötig. Nimm dir den Schnellstart, wenn du gleich loslegen willst.</p>
+      <p data-l="en">Everything you need to <b>learn</b>, <b>design</b>, <b>run</b> and <b>test</b> processes with
+        Atlas – from your first click to a production process. No prior knowledge required. Take the quick start
+        if you want to dive straight in.</p>
+    </div>
+
+    <!-- ==================== WELCOME ==================== -->
+    <section id="willkommen">
+      <h2 data-l="de">Willkommen bei Atlas</h2><h2 data-l="en">Welcome to Atlas</h2>
+      <p class="lead" data-l="de">Atlas ist eine <b>Workflow-Engine für BPMN&nbsp;2.x</b>: Du zeichnest einen
+        Geschäftsprozess als Diagramm, deployst ihn, und Atlas führt ihn Schritt für Schritt aus – zuverlässig,
+        nachvollziehbar und dauerhaft gespeichert. Entscheidungen lagerst du in <b>DMN</b>-Tabellen aus.</p>
+      <p class="lead" data-l="en">Atlas is a <b>workflow engine for BPMN&nbsp;2.x</b>: you draw a business
+        process as a diagram, deploy it, and Atlas runs it step by step – reliably, traceably and durably stored.
+        Decisions live in <b>DMN</b> tables.</p>
+
+      <h3 data-l="de">Die vier Apps</h3><h3 data-l="en">The four apps</h3>
+      <p data-l="de">Oben links im Raster-Menü (⊞) wechselst du zwischen den Apps:</p>
+      <p data-l="en">Switch between the apps via the grid menu (⊞) in the top-left corner:</p>
+      <div class="grid2">
+        <div class="card"><b>Console</b>
+          <p class="lead" data-l="de">Überblick über Deployments und Engine-Gesundheit. Dein Startpunkt.</p>
+          <p class="lead" data-l="en">Overview of deployments and engine health. Your starting point.</p>
+          <a class="applink" href="/#/console">→ Console</a></div>
+        <div class="card"><b>Modeler</b>
+          <p class="lead" data-l="de">BPMN- und DMN-Modelle im Browser zeichnen, testen und deployen.</p>
+          <p class="lead" data-l="en">Draw, test and deploy BPMN and DMN models in the browser.</p>
+          <a class="applink" href="/#/modeler">→ Modeler</a></div>
+        <div class="card"><b>Tasks</b>
+          <p class="lead" data-l="de">Der Posteingang für menschliche Aufgaben (User-Tasks) mit Formularen.</p>
+          <p class="lead" data-l="en">The inbox for human work (user tasks) with forms.</p>
+          <a class="applink" href="/#/tasks">→ Tasks</a></div>
+        <div class="card"><b>Operations</b>
+          <p class="lead" data-l="de">Laufende Instanzen beobachten, Incidents lösen, Entscheidungen prüfen.</p>
+          <p class="lead" data-l="en">Watch running instances, resolve incidents, inspect decisions.</p>
+          <a class="applink" href="/#/operations">→ Operations</a></div>
+      </div>
+    </section>
+
+    <!-- ==================== QUICK START ==================== -->
+    <section id="schnellstart">
+      <h2 data-l="de">Schnellstart in 10 Minuten</h2><h2 data-l="en">Quick start in 10 minutes</h2>
+      <p class="lead" data-l="de">Der schnellste Weg zum „Aha": einen fertigen Beispielprozess deployen,
+        starten und live durchlaufen lassen. Jeder Schritt verlinkt direkt in die App.</p>
+      <p class="lead" data-l="en">The fastest path to the "aha": deploy a ready-made example process, start it,
+        and watch it run live. Every step links straight into the app.</p>
+
+      <ol class="steps">
+        <li>
+          <b data-l="de">Modeler öffnen und ein Beispiel laden</b>
+          <b data-l="en">Open the Modeler and load an example</b>
+          <p data-l="de">Öffne den <a href="/#/modeler">Modeler</a>. Im <a href="/#/modeler/marketplace">Marketplace</a>
+            findest du fertige Vorlagen – oder starte mit <a href="/#/modeler/new">Neues Diagramm</a>.</p>
+          <p data-l="en">Open the <a href="/#/modeler">Modeler</a>. The <a href="/#/modeler/marketplace">Marketplace</a>
+            has ready-made templates – or begin with <a href="/#/modeler/new">New diagram</a>.</p>
+        </li>
+        <li>
+          <b data-l="de">Deployen &amp; starten in einem Schritt</b>
+          <b data-l="en">Deploy &amp; run in one step</b>
+          <p data-l="de">Klicke im Editor auf <b>Deploy &amp; run</b>. Atlas macht das Modell lauffähig und
+            startet gleich eine <b>Instanz</b> – einen konkreten Durchlauf des Prozesses.</p>
+          <p data-l="en">In the editor, click <b>Deploy &amp; run</b>. Atlas makes the model runnable and immediately
+            starts an <b>instance</b> – one concrete run of the process.</p>
+        </li>
+        <li>
+          <b data-l="de">Der Ausführung zusehen</b>
+          <b data-l="en">Watch it execute</b>
+          <p data-l="de">Wechsle zu <a href="/#/operations">Operations → Instances</a>. Dort siehst du deine
+            laufende Instanz, welches Element gerade aktiv ist (der „Token") und alle Variablen.</p>
+          <p data-l="en">Switch to <a href="/#/operations">Operations → Instances</a>. You'll see your running
+            instance, which element is currently active (the "token"), and all variables.</p>
+        </li>
+        <li>
+          <b data-l="de">Eine menschliche Aufgabe erledigen</b>
+          <b data-l="en">Complete a human task</b>
+          <p data-l="de">Enthält der Prozess einen <b>User-Task</b>, landet er im
+            <a href="/#/tasks">Tasks</a>-Posteingang. Aufgabe öffnen, Formular ausfüllen, abschließen –
+            der Token läuft weiter.</p>
+          <p data-l="en">If the process contains a <b>user task</b>, it appears in the
+            <a href="/#/tasks">Tasks</a> inbox. Open the task, fill in the form, complete it –
+            the token moves on.</p>
+        </li>
+        <li>
+          <b data-l="de">Geschafft 🎉</b><b data-l="en">Done 🎉</b>
+          <p data-l="de">Du hast einen Prozess deployt, gestartet, beobachtet und eine Aufgabe erledigt.
+            Das ist die komplette Schleife. Alles Weitere ist Vertiefung.</p>
+          <p data-l="en">You deployed a process, started it, watched it, and completed a task.
+            That's the whole loop. Everything else is depth.</p>
+        </li>
+      </ol>
+
+      <div class="note tip">
+        <span class="lbl">Tipp</span>
+        <p data-l="de" style="margin:.3em 0 0">Willst du Atlas <i>durch</i> Atlas lernen? Es gibt einen
+          selbst-referenziellen Onboarding-Prozess (<code>examples/onboarding</code>), der dich als echte
+          laufende Instanz durch die Grundlagen führt – Dogfooding at its best.</p>
+        <p data-l="en" style="margin:.3em 0 0">Want to learn Atlas <i>through</i> Atlas? There's a
+          self-referential onboarding process (<code>examples/onboarding</code>) that walks you through the basics
+          as a real running instance – dogfooding at its best.</p>
+      </div>
+    </section>
+
+    <!-- ==================== CONCEPTS ==================== -->
+    <section id="konzepte">
+      <h2 data-l="de">Grundkonzepte</h2><h2 data-l="en">Core concepts</h2>
+      <p class="lead" data-l="de">Sechs Begriffe, und der Rest ergibt sich:</p>
+      <p class="lead" data-l="en">Six terms, and the rest follows:</p>
+      <table>
+        <thead><tr>
+          <th data-l="de">Begriff</th><th data-l="en">Term</th>
+          <th data-l="de">Bedeutung</th><th data-l="en">Meaning</th>
+        </tr></thead>
+        <tbody>
+          <tr><td><b>Prozess / Process</b></td>
+            <td data-l="de">Ein deploytes, ausführbares BPMN-Modell (die Schablone).</td>
+            <td data-l="en">A deployed, executable BPMN model (the blueprint).</td></tr>
+          <tr><td><b>Instanz / Instance</b></td>
+            <td data-l="de">Ein konkreter Durchlauf eines Prozesses. Viele Instanzen pro Prozess.</td>
+            <td data-l="en">One concrete run of a process. Many instances per process.</td></tr>
+          <tr><td><b>Token</b></td>
+            <td data-l="de">Der „Spielstein", der den Kontrollfluss durch das Diagramm bewegt.</td>
+            <td data-l="en">The "marker" that moves the thread of control through the diagram.</td></tr>
+          <tr><td><b>Task / Aufgabe</b></td>
+            <td data-l="de">Ein Arbeitsschritt: automatisch (Service-Task) oder menschlich (User-Task).</td>
+            <td data-l="en">A step of work: automatic (service task) or human (user task).</td></tr>
+          <tr><td><b>Gateway</b></td>
+            <td data-l="de">Eine Verzweigung: entscheidet, welchen Weg der Token nimmt.</td>
+            <td data-l="en">A branch point: decides which path the token takes.</td></tr>
+          <tr><td><b>Variable</b></td>
+            <td data-l="de">Daten, die die Instanz mit sich trägt – gesetzt von Formularen, Tasks, Skripten.</td>
+            <td data-l="en">Data the instance carries – set by forms, tasks, scripts.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="note">
+        <span class="lbl" data-l="de">Unter der Haube</span><span class="lbl" data-l="en">Under the hood</span>
+        <p data-l="de" style="margin:.3em 0 0">Atlas speichert <b>jeden</b> Zustandsübergang als Ereignis in einem
+          append-only Log und baut den Zustand daraus wieder auf. Darum ist jede Instanz vollständig nachvollziehbar
+          und übersteht Neustarts ohne Datenverlust. Neugierig aufs Warum? Siehe
+          <a href="/#/console/engine">Console → Engine</a> und die Architektur-Doku im Repository.</p>
+        <p data-l="en" style="margin:.3em 0 0">Atlas records <b>every</b> state transition as an event in an
+          append-only log and rebuilds state from it. That's why every instance is fully traceable and survives
+          restarts without data loss. Curious about the why? See
+          <a href="/#/console/engine">Console → Engine</a> and the architecture docs in the repository.</p>
+      </div>
+    </section>
+
+    <!-- ==================== LEARN BPMN ==================== -->
+    <section id="bpmn">
+      <h2 data-l="de">BPMN lernen</h2><h2 data-l="en">Learn BPMN</h2>
+      <p class="lead" data-l="de"><b>BPMN</b> (Business Process Model and Notation) ist die weltweite Standardsprache
+        für Prozessdiagramme. Das Schöne: Fachbereich und IT lesen dasselbe Bild. Du brauchst überraschend wenig,
+        um anzufangen.</p>
+      <p class="lead" data-l="en"><b>BPMN</b> (Business Process Model and Notation) is the worldwide standard language
+        for process diagrams. The beauty: business and IT read the same picture. You need surprisingly little to
+        get started.</p>
+
+      <h3 data-l="de">Das Vokabular in einer Minute</h3><h3 data-l="en">The vocabulary in one minute</h3>
+      <ul>
+        <li data-l="de"><b>Events (Kreise)</b> – etwas passiert: Start (dünn), Zwischenereignis (doppelt),
+          Ende (dick). Ein Prozess beginnt mit einem Start- und endet mit einem End-Event.</li>
+        <li data-l="en"><b>Events (circles)</b> – something happens: start (thin), intermediate (double),
+          end (thick). A process begins with a start and finishes with an end event.</li>
+        <li data-l="de"><b>Aktivitäten (Rechtecke)</b> – Arbeit wird getan: Tasks (z.&nbsp;B. Service-, User-,
+          Script-Task) und Subprozesse.</li>
+        <li data-l="en"><b>Activities (rounded rectangles)</b> – work gets done: tasks (e.g. service, user, script
+          task) and subprocesses.</li>
+        <li data-l="de"><b>Gateways (Rauten)</b> – der Fluss verzweigt oder führt zusammen: exklusiv (X),
+          parallel (+), inklusiv (O), ereignisbasiert.</li>
+        <li data-l="en"><b>Gateways (diamonds)</b> – the flow splits or joins: exclusive (X), parallel (+),
+          inclusive (O), event-based.</li>
+        <li data-l="de"><b>Sequenzflüsse (Pfeile)</b> – verbinden die Elemente und geben die Reihenfolge vor.</li>
+        <li data-l="en"><b>Sequence flows (arrows)</b> – connect the elements and define the order.</li>
+      </ul>
+
+      <h3 data-l="de">Dein erstes Modell</h3><h3 data-l="en">Your first model</h3>
+      <p data-l="de">Ein lauffähiger Prozess braucht mindestens: ein <b>Start-Event</b> → eine oder mehrere
+        <b>Aktivitäten</b> → ein <b>End-Event</b>, verbunden durch <b>Sequenzflüsse</b>. Sobald du eine Entscheidung
+        brauchst („wenn Betrag &gt; 1000, dann Freigabe"), setzt du ein <b>exklusives Gateway</b> und schreibst die
+        Bedingung als <a href="#feel">FEEL</a>-Ausdruck an den Ausgangsfluss.</p>
+      <p data-l="en">A runnable process needs at least: a <b>start event</b> → one or more <b>activities</b> →
+        an <b>end event</b>, connected by <b>sequence flows</b>. As soon as you need a decision ("if amount &gt; 1000,
+        require approval"), add an <b>exclusive gateway</b> and write the condition as a
+        <a href="#feel">FEEL</a> expression on the outgoing flow.</p>
+
+      <div class="note tip">
+        <span class="lbl" data-l="de">Gut lesbare Diagramme</span><span class="lbl" data-l="en">Readable diagrams</span>
+        <p data-l="de" style="margin:.3em 0 0">Halte den Happy Path auf <b>einer geraden Linie</b>. Führe
+          Alternativen in einer eigenen Spur darüber oder darunter und lass sie an einem Join-Gateway wieder
+          zusammenlaufen. Beschrifte die Ausgänge von Gateways. Ein Diagramm, das kompiliert, aber wie ein
+          Kabelsalat aussieht, ist noch nicht fertig.</p>
+        <p data-l="en" style="margin:.3em 0 0">Keep the happy path on <b>one straight line</b>. Route alternatives
+          in their own lane above or below and reconverge them at a join gateway. Label the gateway's outgoing flows.
+          A diagram that compiles but looks like a tangle of wires isn't done yet.</p>
+      </div>
+    </section>
+
+    <!-- ==================== BPMN ELEMENTS GALLERY ==================== -->
+    <section id="elemente">
+      <h2 data-l="de">BPMN-Elemente im Überblick</h2><h2 data-l="en">BPMN elements at a glance</h2>
+      <p class="lead" data-l="de">Jedes Element, das Atlas ausführt – mit Diagramm und Kurzbeschreibung. Filtere nach
+        Kategorie. Alle Muster sind durch die Conformance-Suite abgesichert (siehe
+        <a href="/conformance-gallery.html" target="_blank" rel="noopener">interaktive Galerie ↗</a>).</p>
+      <p class="lead" data-l="en">Every element Atlas executes – with a diagram and a one-line description. Filter by
+        category. All patterns are covered by the conformance suite (see the
+        <a href="/conformance-gallery.html" target="_blank" rel="noopener">interactive gallery ↗</a>).</p>
+      <div class="gfilter" id="gfilter"></div>
+      <div class="gallery" id="gallery"></div>
+    </section>
+
+    <!-- ==================== LEARN DMN ==================== -->
+    <section id="dmn">
+      <h2 data-l="de">DMN lernen</h2><h2 data-l="en">Learn DMN</h2>
+      <p class="lead" data-l="de"><b>DMN</b> (Decision Model and Notation) trennt <i>Entscheidungslogik</i> vom
+        Prozessfluss. Statt zig verschachtelte Gateways zu bauen, schreibst du die Regeln als übersichtliche
+        <b>Entscheidungstabelle</b>. Fachbereiche können sie lesen und pflegen. Atlas wertet DMN über die eingebaute
+        Decision-Engine <b>temis</b> (DMN&nbsp;1.5 / FEEL) aus.</p>
+      <p class="lead" data-l="en"><b>DMN</b> (Decision Model and Notation) separates <i>decision logic</i> from the
+        process flow. Instead of a maze of nested gateways, you write the rules as a tidy <b>decision table</b>.
+        Business teams can read and maintain it. Atlas evaluates DMN through the built-in decision engine
+        <b>temis</b> (DMN&nbsp;1.5 / FEEL).</p>
+
+      <h3 data-l="de">Eine Entscheidungstabelle lesen</h3><h3 data-l="en">Reading a decision table</h3>
+      <p data-l="de">Spalten links sind <b>Eingaben</b> (Inputs), Spalten rechts sind <b>Ausgaben</b> (Outputs).
+        Jede Zeile ist eine <b>Regel</b>: „wenn die Inputs so aussehen, dann liefere diese Outputs". Beispiel –
+        Rabattstufe nach Kundentyp und Bestellwert:</p>
+      <p data-l="en">Columns on the left are <b>inputs</b>, columns on the right are <b>outputs</b>. Each row is a
+        <b>rule</b>: "if the inputs look like this, produce these outputs". Example – discount tier by customer type
+        and order value:</p>
+      <table>
+        <thead><tr>
+          <th><span data-l="de">Kundentyp</span><span data-l="en">Customer type</span> (in)</th>
+          <th><span data-l="de">Bestellwert</span><span data-l="en">Order value</span> (in)</th>
+          <th><span data-l="de">Rabatt</span><span data-l="en">Discount</span> (out)</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>"premium"</td><td>&gt;= 1000</td><td>15%</td></tr>
+          <tr><td>"premium"</td><td>&lt; 1000</td><td>10%</td></tr>
+          <tr><td>"standard"</td><td>&gt;= 1000</td><td>5%</td></tr>
+          <tr><td>"standard"</td><td>&lt; 1000</td><td>0%</td></tr>
+        </tbody>
+      </table>
+
+      <h3 data-l="de">Hit Policy – welche Regel gewinnt?</h3><h3 data-l="en">Hit policy – which rule wins?</h3>
+      <ul>
+        <li><b>Unique (U)</b> – <span data-l="de">genau eine Regel darf passen. Der sichere Standard.</span>
+          <span data-l="en">exactly one rule may match. The safe default.</span></li>
+        <li><b>First (F)</b> – <span data-l="de">die erste passende Regel von oben gewinnt.</span>
+          <span data-l="en">the first matching rule from the top wins.</span></li>
+        <li><b>Collect (C)</b> – <span data-l="de">alle passenden Regeln, als Liste (optional summiert/min/max).</span>
+          <span data-l="en">all matching rules, as a list (optionally sum/min/max).</span></li>
+        <li><b>Any (A)</b> – <span data-l="de">mehrere dürfen passen, müssen aber dasselbe liefern.</span>
+          <span data-l="en">several may match but must all produce the same result.</span></li>
+      </ul>
+
+      <h3 data-l="de">DMN in Atlas nutzen</h3><h3 data-l="en">Using DMN in Atlas</h3>
+      <ol>
+        <li data-l="de">DMN-Modell im <a href="/#/modeler">Modeler</a> anlegen oder hochladen und deployen.</li>
+        <li data-l="en">Create or upload a DMN model in the <a href="/#/modeler">Modeler</a> and deploy it.</li>
+        <li data-l="de">Im Prozess eine <b>Business-Rule-Task</b> setzen und auf die Entscheidung verweisen.</li>
+        <li data-l="en">Add a <b>business rule task</b> in the process and reference the decision.</li>
+        <li data-l="de">Das Ergebnis landet als Variable in der Instanz und steuert den weiteren Fluss.</li>
+        <li data-l="en">The result lands as a variable in the instance and steers the rest of the flow.</li>
+        <li data-l="de">Ausgewertete Entscheidungen prüfst du unter
+          <a href="/#/operations/decisions">Operations → Decisions</a>.</li>
+        <li data-l="en">Inspect evaluated decisions under
+          <a href="/#/operations/decisions">Operations → Decisions</a>.</li>
+      </ol>
+      <p data-l="de">Beispiele im Repository: <code>examples/pruefung/notenschluessel.dmn</code> (Notenschlüssel),
+        <code>examples/reisebuchung/reisepflichten.dmn</code> (Reisepflichten).</p>
+      <p data-l="en">Examples in the repository: <code>examples/pruefung/notenschluessel.dmn</code> (grading scale),
+        <code>examples/reisebuchung/reisepflichten.dmn</code> (travel requirements).</p>
+    </section>
+
+    <!-- ==================== FEEL ==================== -->
+    <section id="feel">
+      <h2 data-l="de">FEEL-Spickzettel</h2><h2 data-l="en">FEEL cheat sheet</h2>
+      <p class="lead" data-l="de"><b>FEEL</b> (Friendly Enough Expression Language) ist die Ausdruckssprache aus dem
+        DMN-Standard. In Atlas schreibst du damit Gateway-Bedingungen, Variablen-Mappings, Timer und DMN-Regeln.
+        Sie wird beim Deploy kompiliert – Fehler siehst du also früh, nicht erst zur Laufzeit.</p>
+      <p class="lead" data-l="en"><b>FEEL</b> (Friendly Enough Expression Language) is the expression language from the
+        DMN standard. In Atlas you use it for gateway conditions, variable mappings, timers and DMN rules. It's
+        compiled at deploy time – so you see errors early, not at runtime.</p>
+      <table>
+        <thead><tr><th data-l="de">Zweck</th><th data-l="en">Purpose</th><th>FEEL</th></tr></thead>
+        <tbody>
+          <tr><td data-l="de">Vergleich</td><td data-l="en">Comparison</td><td><code>amount &gt;= 1000</code></td></tr>
+          <tr><td data-l="de">Und / Oder</td><td data-l="en">And / or</td><td><code>vip and amount &gt; 500</code></td></tr>
+          <tr><td data-l="de">Bereich</td><td data-l="en">Range</td><td><code>age in [18..67]</code></td></tr>
+          <tr><td data-l="de">Wenn-dann-sonst</td><td data-l="en">If-then-else</td><td><code>if score &gt;= 50 then "pass" else "fail"</code></td></tr>
+          <tr><td data-l="de">Text zusammenbauen</td><td data-l="en">Build text</td><td><code>"Hallo " + name</code></td></tr>
+          <tr><td data-l="de">Liste filtern</td><td data-l="en">Filter a list</td><td><code>items[price &gt; 100]</code></td></tr>
+          <tr><td data-l="de">Liste summieren</td><td data-l="en">Sum a list</td><td><code>sum(items.price)</code></td></tr>
+          <tr><td data-l="de">Feld/Default</td><td data-l="en">Field / default</td><td><code>order.total</code>, <code>x != null</code></td></tr>
+          <tr><td data-l="de">Timer (Dauer)</td><td data-l="en">Timer (duration)</td><td><code>duration("PT2H")</code> · <code>@"2026-01-01T09:00:00Z"</code></td></tr>
+        </tbody>
+      </table>
+      <div class="note tip">
+        <span class="lbl" data-l="de">Ausprobieren</span><span class="lbl" data-l="en">Try it out</span>
+        <p data-l="de" style="margin:.3em 0 0">Der Modeler hat einen <b>„Test expression"</b>-Helfer: gib Beispiel-
+          Variablen ein und sieh sofort, was ein FEEL-Ausdruck liefert – bevor du deployst.</p>
+        <p data-l="en" style="margin:.3em 0 0">The Modeler has a <b>"Test expression"</b> helper: enter sample
+          variables and instantly see what a FEEL expression returns – before you deploy.</p>
+      </div>
+    </section>
+
+    <!-- ==================== DESIGN ==================== -->
+    <section id="designen">
+      <h2 data-l="de">Prozesse designen</h2><h2 data-l="en">Design processes</h2>
+      <p class="lead" data-l="de">Vom leeren Diagramm zum durchdachten Modell.</p>
+      <p class="lead" data-l="en">From an empty diagram to a well-thought-out model.</p>
+      <ol class="steps">
+        <li><b data-l="de">Das Ziel zuerst</b><b data-l="en">Goal first</b>
+          <p data-l="de">Formuliere in einem Satz, was der Prozess erreichen soll und wann er fertig ist. Das
+            bestimmt Start- und End-Event.</p>
+          <p data-l="en">State in one sentence what the process should achieve and when it's finished. That fixes
+            the start and end events.</p></li>
+        <li><b data-l="de">Den Happy Path zeichnen</b><b data-l="en">Draw the happy path</b>
+          <p data-l="de">Die ideale Abfolge ohne Sonderfälle – eine gerade Linie von Tasks.</p>
+          <p data-l="en">The ideal sequence without special cases – a straight line of tasks.</p></li>
+        <li><b data-l="de">Entscheidungen &amp; Ausnahmen</b><b data-l="en">Decisions &amp; exceptions</b>
+          <p data-l="de">Gateways für Verzweigungen, Boundary-Events für Timeouts/Fehler, DMN für komplexe Regeln.</p>
+          <p data-l="en">Gateways for branches, boundary events for timeouts/errors, DMN for complex rules.</p></li>
+        <li><b data-l="de">Daten festlegen</b><b data-l="en">Define the data</b>
+          <p data-l="de">Welche Variablen trägt die Instanz? Woher kommen sie (Start-Formular, Task, Connector)?</p>
+          <p data-l="en">Which variables does the instance carry? Where do they come from (start form, task, connector)?</p></li>
+        <li><b data-l="de">Prüfen &amp; aufräumen</b><b data-l="en">Validate &amp; tidy</b>
+          <p data-l="de">Der Modeler validiert live. Aufgeräumtes Layout ist Teil der Arbeit, nicht Kür.</p>
+          <p data-l="en">The Modeler validates live. A tidy layout is part of the job, not a bonus.</p></li>
+      </ol>
+      <p><a class="pilllink" href="/#/modeler/new"><span data-l="de">Neues Diagramm anlegen</span><span data-l="en">Create a new diagram</span></a>
+         <a class="pilllink ghost" href="/#/modeler/marketplace"><span data-l="de">Vorlagen im Marketplace</span><span data-l="en">Templates in the Marketplace</span></a></p>
+    </section>
+
+    <!-- ==================== FORMS & CONNECTORS ==================== -->
+    <section id="formulare">
+      <h2 data-l="de">Formulare &amp; Connectors</h2><h2 data-l="en">Forms &amp; connectors</h2>
+      <h3 data-l="de">Formulare</h3><h3 data-l="en">Forms</h3>
+      <p data-l="de">Menschen interagieren über <b>Formulare</b> mit dem Prozess: als <b>Start-Formular</b>
+        (sammelt Daten beim Anlegen der Instanz) oder an einem <b>User-Task</b> (im Tasks-Posteingang). Der Modeler
+        hat einen Formular-Editor; die abgeschickten Felder werden zu Prozessvariablen.</p>
+      <p data-l="en">People interact with the process through <b>forms</b>: as a <b>start form</b> (collects data when
+        the instance is created) or at a <b>user task</b> (in the Tasks inbox). The Modeler has a form editor;
+        submitted fields become process variables.</p>
+
+      <h3 data-l="de">Connectors – Atlas mit der Außenwelt verbinden</h3><h3 data-l="en">Connectors – wiring Atlas to the outside</h3>
+      <p data-l="de">Ein <b>Service-Task</b> übergibt Arbeit an einen Connector. Diese sind eingebaut:</p>
+      <p data-l="en">A <b>service task</b> hands work off to a connector. These are built in:</p>
+      <table>
+        <thead><tr><th>Connector</th><th data-l="de">Wofür</th><th data-l="en">For what</th></tr></thead>
+        <tbody>
+          <tr><td><b>temis</b></td><td data-l="de">DMN-Entscheidungen auswerten.</td><td data-l="en">Evaluate DMN decisions.</td></tr>
+          <tr><td><b>HTTP REST</b></td><td data-l="de">Eine REST-API aufrufen, Antwort als Variable speichern.</td><td data-l="en">Call a REST API, store the response as a variable.</td></tr>
+          <tr><td><b>Mail</b></td><td data-l="de">E-Mail versenden (SMTP, Gmail, Microsoft&nbsp;365).</td><td data-l="en">Send email (SMTP, Gmail, Microsoft&nbsp;365).</td></tr>
+          <tr><td><b>SharePoint</b></td><td data-l="de">Listeneintrag in SharePoint anlegen (Graph API).</td><td data-l="en">Create a list item in SharePoint (Graph API).</td></tr>
+          <tr><td><b>BMC Remedy</b></td><td data-l="de">Ticket/Incident im ITSM-System anlegen.</td><td data-l="en">Create a ticket/incident in the ITSM system.</td></tr>
+          <tr><td><b>clio</b></td><td data-l="de">Ereignisse in den Event-Store schreiben/lesen.</td><td data-l="en">Write/read events to the event store.</td></tr>
+        </tbody>
+      </table>
+      <p data-l="de">Zugangsdaten für Connectors verwaltest du zentral unter
+        <a href="/#/console/org">Console → Organization</a> (im Vault gespeichert, serverseitig aufgelöst).</p>
+      <p data-l="en">Manage connector credentials centrally under
+        <a href="/#/console/org">Console → Organization</a> (stored in the vault, resolved server-side).</p>
+    </section>
+
+    <!-- ==================== RUN ==================== -->
+    <section id="laufen">
+      <h2 data-l="de">Zum Laufen bringen</h2><h2 data-l="en">Make it run</h2>
+      <p class="lead" data-l="de">Drei Wege, einen Prozess zu deployen und Instanzen zu starten – wähle, was passt.</p>
+      <p class="lead" data-l="en">Three ways to deploy a process and start instances – pick what fits.</p>
+
+      <h3 data-l="de">1 · Aus dem Modeler (empfohlen zum Start)</h3><h3 data-l="en">1 · From the Modeler (recommended to start)</h3>
+      <p data-l="de">Im Editor auf <b>Deploy</b> (nur deployen) oder <b>Deploy &amp; run</b> (deployen und eine Instanz
+        starten). Am schnellsten für die ersten Runden.</p>
+      <p data-l="en">In the editor, click <b>Deploy</b> (deploy only) or <b>Deploy &amp; run</b> (deploy and start one
+        instance). Fastest for the first rounds.</p>
+
+      <h3 data-l="de">2 · Über die REST-API (für Integration)</h3><h3 data-l="en">2 · Via the REST API (for integration)</h3>
+      <pre data-l="de"><code># Modell deployen
+curl -X POST https://DEINE-INSTANZ/api/v1/deployments \
+  -H "Content-Type: application/xml" --data-binary @prozess.bpmn
+
+# Instanz starten (mit Startvariablen)
+curl -X POST https://DEINE-INSTANZ/api/v1/instances \
+  -H "Content-Type: application/json" \
+  -d '{"processId":"mein-prozess","variables":{"amount":1200}}'</code></pre>
+      <pre data-l="en"><code># Deploy a model
+curl -X POST https://YOUR-INSTANCE/api/v1/deployments \
+  -H "Content-Type: application/xml" --data-binary @process.bpmn
+
+# Start an instance (with start variables)
+curl -X POST https://YOUR-INSTANCE/api/v1/instances \
+  -H "Content-Type: application/json" \
+  -d '{"processId":"my-process","variables":{"amount":1200}}'</code></pre>
+      <p data-l="de">Die vollständige, immer aktuelle API-Referenz findest du im
+        <a href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a> (falls aktiviert).</p>
+      <p data-l="en">The full, always-current API reference is in the
+        <a href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a> (if enabled).</p>
+
+      <h3 data-l="de">3 · Über die MCP-Tools (für Automatisierung/KI)</h3><h3 data-l="en">3 · Via the MCP tools (for automation/AI)</h3>
+      <pre><code>atlas_create_project   name="Mein Projekt"        → projectId
+atlas_save_form        id=…  projectId=…          (optional)
+atlas_save_draft       xml=&lt;prozess.bpmn&gt;  projectId=…
+atlas_deploy_project   id=&lt;projectId&gt;             → definition key
+atlas_create_instance  key=&lt;definition key&gt;       → starts an instance</code></pre>
+    </section>
+
+    <!-- ==================== TEST & SIMULATE ==================== -->
+    <section id="testen">
+      <h2 data-l="de">Testen &amp; Simulieren</h2><h2 data-l="en">Test &amp; simulate</h2>
+      <p class="lead" data-l="de">Bevor ein Prozess auf echte Fälle losgelassen wird, willst du wissen, dass er sich
+        richtig verhält. Atlas bietet dafür mehrere Ebenen – von „im Kopf durchspielen" bis „echt ausführen".</p>
+      <p class="lead" data-l="en">Before a process meets real cases, you want to know it behaves correctly. Atlas
+        offers several levels for that – from "play it through" to "actually execute".</p>
+
+      <div class="grid2">
+        <div class="card">
+          <b data-l="de">① Token-Simulation (Design-Ansicht)</b><b data-l="en">① Token simulation (Design view)</b>
+          <p class="lead" data-l="de">Spiele den Kontrollfluss direkt im Diagramm durch, ohne zu deployen. Ideal, um
+            Gateways und Verzweigungen visuell zu verstehen.</p>
+          <p class="lead" data-l="en">Play the control flow through directly on the diagram, without deploying. Great
+            for understanding gateways and branches visually.</p>
+        </div>
+        <div class="card">
+          <b data-l="de">② FEEL „Test expression"</b><b data-l="en">② FEEL "Test expression"</b>
+          <p class="lead" data-l="de">Ausdrücke mit Beispieldaten prüfen, bevor sie im Modell landen.</p>
+          <p class="lead" data-l="en">Check expressions against sample data before they go into the model.</p>
+        </div>
+        <div class="card">
+          <b data-l="de">③ Echt ausführen &amp; beobachten</b><b data-l="en">③ Run for real &amp; observe</b>
+          <p class="lead" data-l="de">Instanz starten und in <a href="/#/operations">Operations</a> die Timeline,
+            Variablen und den aktiven Token Schritt für Schritt verfolgen.</p>
+          <p class="lead" data-l="en">Start an instance and follow the timeline, variables and active token step by
+            step in <a href="/#/operations">Operations</a>.</p>
+        </div>
+        <div class="card">
+          <b data-l="de">④ Conformance-Galerie</b><b data-l="en">④ Conformance gallery</b>
+          <p class="lead" data-l="de">Jedes BPMN-Muster als kleines, lauffähiges Szenario – ein Knopf deployt und
+            führt es gegen deine Instanz aus.</p>
+          <p class="lead" data-l="en">Every BPMN pattern as a small runnable scenario – one button deploys and runs
+            it against your instance.</p>
+          <a class="applink" href="/conformance-gallery.html" target="_blank" rel="noopener">→ <span data-l="de">Galerie öffnen</span><span data-l="en">Open the gallery</span> ↗</a>
+        </div>
+      </div>
+
+      <div class="note">
+        <span class="lbl" data-l="de">Empfohlener Test-Rhythmus</span><span class="lbl" data-l="en">Recommended test rhythm</span>
+        <p data-l="de" style="margin:.3em 0 0">Simuliere den Fluss → prüfe deine FEEL-Ausdrücke → starte ein paar
+          echte Instanzen mit typischen <i>und</i> untypischen Daten (Grenzwerte, leere Felder, Fehlerfälle) →
+          schau in Operations, ob Timeline und Variablen stimmen. Erst dann produktiv.</p>
+        <p data-l="en" style="margin:.3em 0 0">Simulate the flow → check your FEEL expressions → start a few real
+          instances with typical <i>and</i> atypical data (boundaries, empty fields, error cases) → check in
+          Operations that the timeline and variables are correct. Only then go to production.</p>
+      </div>
+    </section>
+
+    <!-- ==================== OPERATIONS ==================== -->
+    <section id="betrieb">
+      <h2 data-l="de">Betrieb &amp; Incidents</h2><h2 data-l="en">Operations &amp; incidents</h2>
+      <p class="lead" data-l="de">Im Alltag beobachtest und steuerst du laufende Prozesse in der
+        <a href="/#/operations">Operations</a>-App.</p>
+      <p class="lead" data-l="en">Day to day, you watch and steer running processes in the
+        <a href="/#/operations">Operations</a> app.</p>
+      <ul>
+        <li data-l="de"><b><a href="/#/operations">Instances</a></b> – alle Durchläufe, ihr Zustand, Variablen und
+          eine vollständige Timeline jeder Instanz.</li>
+        <li data-l="en"><b><a href="/#/operations">Instances</a></b> – all runs, their state, variables and a
+          complete timeline per instance.</li>
+        <li data-l="de"><b><a href="/#/operations/incidents">Incidents</a></b> – wenn ein Token nicht weiterkommt
+          (Job fehlgeschlagen, Ausdrucksfehler, fehlende Variable), entsteht ein <b>Incident</b>. Du behebst die
+          Ursache und löst ihn auf – die Instanz läuft weiter.</li>
+        <li data-l="en"><b><a href="/#/operations/incidents">Incidents</a></b> – when a token can't proceed (job
+          failed, expression error, missing variable), an <b>incident</b> is raised. You fix the cause and resolve
+          it – the instance resumes.</li>
+        <li data-l="de"><b><a href="/#/operations/decisions">Decisions</a></b> – jede ausgewertete DMN-Entscheidung
+          mit Ein- und Ausgaben.</li>
+        <li data-l="en"><b><a href="/#/operations/decisions">Decisions</a></b> – every evaluated DMN decision with
+          its inputs and outputs.</li>
+      </ul>
+      <div class="note tip">
+        <span class="lbl" data-l="de">Merke</span><span class="lbl" data-l="en">Remember</span>
+        <p data-l="de" style="margin:.3em 0 0">Ein Incident ist kein Datenverlust – die Instanz <i>pausiert</i>
+          sicher an genau der Stelle. Nichts geht verloren, während du recherchierst.</p>
+        <p data-l="en" style="margin:.3em 0 0">An incident is not data loss – the instance <i>pauses</i> safely at
+          exactly that spot. Nothing is lost while you investigate.</p>
+      </div>
+    </section>
+
+    <!-- ==================== GLOSSARY ==================== -->
+    <section id="glossar">
+      <h2 data-l="de">Glossar</h2><h2 data-l="en">Glossary</h2>
+      <table>
+        <thead><tr><th data-l="de">Begriff</th><th data-l="en">Term</th><th data-l="de">Bedeutung</th><th data-l="en">Meaning</th></tr></thead>
+        <tbody>
+          <tr><td>BPMN</td><td data-l="de">Standard-Notation für Prozessdiagramme.</td><td data-l="en">Standard notation for process diagrams.</td></tr>
+          <tr><td>DMN</td><td data-l="de">Standard-Notation für Entscheidungstabellen.</td><td data-l="en">Standard notation for decision tables.</td></tr>
+          <tr><td>FEEL</td><td data-l="de">Ausdruckssprache für Bedingungen, Mappings, Regeln.</td><td data-l="en">Expression language for conditions, mappings, rules.</td></tr>
+          <tr><td data-l="de">Prozessdefinition</td><td data-l="en">Process definition</td><td data-l="de">Ein deploytes, kompiliertes Modell; mehrere Versionen möglich.</td><td data-l="en">A deployed, compiled model; multiple versions may coexist.</td></tr>
+          <tr><td>Instanz / Instance</td><td data-l="de">Ein einzelner Durchlauf einer Prozessdefinition.</td><td data-l="en">A single run of a process definition.</td></tr>
+          <tr><td>Token</td><td data-l="de">Der Kontrollfluss durch das Modell.</td><td data-l="en">The thread of control through the model.</td></tr>
+          <tr><td>Job</td><td data-l="de">Eine Arbeitseinheit eines Service-Tasks für einen Worker/Connector.</td><td data-l="en">A unit of service-task work for a worker/connector.</td></tr>
+          <tr><td>Incident</td><td data-l="de">Ein blockierter Token, der Eingreifen braucht.</td><td data-l="en">A blocked token that needs intervention.</td></tr>
+          <tr><td data-l="de">Boundary-Event</td><td data-l="en">Boundary event</td><td data-l="de">An eine Aktivität geheftetes Ereignis (Timeout, Fehler, Nachricht).</td><td data-l="en">An event attached to an activity (timeout, error, message).</td></tr>
+          <tr><td>Connector</td><td data-l="de">Anbindung an ein Fremdsystem (Mail, REST, DMN …).</td><td data-l="en">Integration to an external system (mail, REST, DMN …).</td></tr>
+        </tbody>
+      </table>
+      <p class="lead" data-l="de">Ausführlicheres Glossar (mit Engine-Interna) im Repository unter
+        <code>docs/architecture/glossary.md</code>.</p>
+      <p class="lead" data-l="en">A more detailed glossary (with engine internals) is in the repository at
+        <code>docs/architecture/glossary.md</code>.</p>
+    </section>
+
+    <!-- ==================== RESOURCES ==================== -->
+    <section id="ressourcen">
+      <h2 data-l="de">Ressourcen</h2><h2 data-l="en">Resources</h2>
+      <div class="grid2">
+        <div class="card"><b data-l="de">In der App</b><b data-l="en">In the app</b>
+          <p><a class="applink" href="/#/modeler">Modeler</a> ·
+             <a class="applink" href="/#/tasks">Tasks</a> ·
+             <a class="applink" href="/#/operations">Operations</a> ·
+             <a class="applink" href="/#/console">Console</a></p>
+        </div>
+        <div class="card"><b data-l="de">Zum Ausprobieren</b><b data-l="en">To try out</b>
+          <p><a class="applink" href="/conformance-gallery.html" target="_blank" rel="noopener">Conformance-Galerie ↗</a> ·
+             <a class="applink" href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a></p>
+        </div>
+        <div class="card"><b data-l="de">Beispiele im Repo</b><b data-l="en">Examples in the repo</b>
+          <p class="lead"><code>examples/order-to-cash</code>, <code>examples/reisebuchung</code>,
+             <code>examples/pruefung</code>, <code>examples/onboarding</code></p>
+        </div>
+        <div class="card"><b data-l="de">Architektur &amp; Warum</b><b data-l="en">Architecture &amp; why</b>
+          <p class="lead"><code>docs/ARCHITECTURE.md</code>, <code>docs/adr/</code>,
+             <code>docs/architecture/glossary.md</code></p>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<footer>
+  <span data-l="de">Atlas-Handbuch · lebendiges Dokument, wächst mit dem Produkt. Feedback &amp; Lücken?
+    Sprich das Team an oder öffne ein Issue.</span>
+  <span data-l="en">Atlas Handbook · a living document that grows with the product. Feedback &amp; gaps?
+    Reach out to the team or open an issue.</span>
+</footer>
+
+<script>
+// ---- language toggle (persisted) ----
+const LANG_KEY = "atlas.handbuch.lang";
+const root = document.documentElement;
+function setLang(l){
+  root.dataset.lang = l;
+  root.setAttribute("lang", l);
+  document.getElementById("lang-de").classList.toggle("on", l === "de");
+  document.getElementById("lang-en").classList.toggle("on", l === "en");
+  try { localStorage.setItem(LANG_KEY, l); } catch(e) {}
+}
+(function initLang(){
+  let l = null;
+  try { l = localStorage.getItem(LANG_KEY); } catch(e) {}
+  if (l !== "de" && l !== "en") l = (navigator.language || "de").toLowerCase().startsWith("de") ? "de" : "en";
+  setLang(l);
+})();
+document.getElementById("lang-de").addEventListener("click", () => setLang("de"));
+document.getElementById("lang-en").addEventListener("click", () => setLang("en"));
+
+// ---- BPMN element gallery (built from the conformance diagrams already shipped) ----
+// cat: flow | task | gateway | event | data | advanced
+const ELEMENTS = [
+  {img:"sequence",               cat:"flow",     de:["Sequenzfluss","Verbindet Elemente und gibt die Reihenfolge vor."],                 en:["Sequence flow","Connects elements and defines the order."]},
+  {img:"service-task",           cat:"task",     de:["Service-Task","Automatischer Schritt – übergibt Arbeit an einen Worker/Connector."], en:["Service task","Automatic step – hands work to a worker/connector."]},
+  {img:"user-task",              cat:"task",     de:["User-Task","Menschliche Aufgabe mit Formular im Tasks-Posteingang."],               en:["User task","Human task with a form in the Tasks inbox."]},
+  {img:"receive-task",           cat:"task",     de:["Receive-Task","Wartet auf eine eingehende Nachricht."],                             en:["Receive task","Waits for an incoming message."]},
+  {img:"exclusive-gateway",      cat:"gateway",  de:["Exklusives Gateway (X)","Genau ein Ausgang wird gewählt – die erste wahre Bedingung."], en:["Exclusive gateway (X)","Exactly one path is chosen – the first true condition."]},
+  {img:"parallel-independent",   cat:"gateway",  de:["Paralleles Gateway (+)","Teilt in gleichzeitige Zweige und führt sie wieder zusammen."], en:["Parallel gateway (+)","Splits into simultaneous branches and joins them."]},
+  {img:"inclusive-gateway",      cat:"gateway",  de:["Inklusives Gateway (O)","Alle zutreffenden Zweige zugleich."],                     en:["Inclusive gateway (O)","All matching branches at once."]},
+  {img:"event-based-gateway",    cat:"gateway",  de:["Ereignisbasiertes Gateway","Der erste eintretende Event entscheidet den Weg."],    en:["Event-based gateway","The first event to occur decides the path."]},
+  {img:"message-start",          cat:"event",    de:["Nachrichten-Start","Startet eine Instanz beim Eintreffen einer Nachricht."],       en:["Message start","Starts an instance when a message arrives."]},
+  {img:"timer-start",            cat:"event",    de:["Timer-Start","Startet eine Instanz zeit-/terminbasiert."],                          en:["Timer start","Starts an instance on a schedule/date."]},
+  {img:"signal-start",           cat:"event",    de:["Signal-Start","Startet bei einem breit gesendeten Signal."],                       en:["Signal start","Starts on a broadcast signal."]},
+  {img:"message-catch",          cat:"event",    de:["Nachricht empfangen","Zwischenereignis, das auf eine Nachricht wartet."],          en:["Message catch","Intermediate event that waits for a message."]},
+  {img:"timer-catch",            cat:"event",    de:["Timer (warten)","Pausiert den Token für eine Dauer/bis zu einem Termin."],          en:["Timer catch","Pauses the token for a duration/until a date."]},
+  {img:"signal-throw-catch",     cat:"event",    de:["Signal werfen/fangen","Broadcast an alle wartenden Empfänger."],                   en:["Signal throw/catch","Broadcast to all waiting receivers."]},
+  {img:"boundary-timer-interrupting", cat:"event", de:["Boundary-Timer","Timeout an einer Aktivität – bricht sie ab und verzweigt."],    en:["Boundary timer","Timeout on an activity – interrupts and branches."]},
+  {img:"boundary-error",         cat:"event",    de:["Boundary-Fehler","Fängt einen Fehler einer Aktivität ab."],                        en:["Boundary error","Catches an error from an activity."]},
+  {img:"boundary-message-noninterrupting", cat:"event", de:["Boundary-Nachricht (nicht unterbrechend)","Reagiert auf eine Nachricht, ohne die Aktivität zu stoppen."], en:["Boundary message (non-interrupting)","Reacts to a message without stopping the activity."]},
+  {img:"signal-boundary",        cat:"event",    de:["Boundary-Signal","Reagiert an einer Aktivität auf ein Signal."],                   en:["Boundary signal","Reacts to a signal on an activity."]},
+  {img:"subprocess",             cat:"advanced", de:["Subprozess","Kapselt mehrere Schritte in einem eingebetteten Prozess."],           en:["Subprocess","Encapsulates several steps in an embedded process."]},
+  {img:"call-activity",          cat:"advanced", de:["Call-Activity","Ruft einen eigenständigen, separat deployten Prozess auf."],       en:["Call activity","Calls a standalone, separately deployed process."]},
+  {img:"multi-instance",         cat:"advanced", de:["Multi-Instance (parallel)","Führt eine Aktivität für jedes Element einer Liste aus."], en:["Multi-instance (parallel)","Runs an activity once per item in a list."]},
+  {img:"multi-instance-sequential", cat:"advanced", de:["Multi-Instance (seriell)","Wie oben, aber nacheinander."],                     en:["Multi-instance (sequential)","As above, but one after another."]},
+  {img:"compensation",           cat:"advanced", de:["Kompensation","Macht bereits getane Arbeit bei Abbruch rückgängig."],              en:["Compensation","Undoes already-done work on cancellation."]},
+  {img:"transaction-cancel",     cat:"advanced", de:["Transaktion (Abbruch)","Transaktionaler Subprozess mit Cancel/Kompensation."],    en:["Transaction (cancel)","Transactional subprocess with cancel/compensation."]},
+  {img:"data-object",            cat:"data",     de:["Datenobjekt","Strukturierte Daten, die die Instanz mit sich führt."],             en:["Data object","Structured data the instance carries."]},
+  {img:"data-object-fields",     cat:"data",     de:["Datenobjekt-Felder","Typisierte Felder eines Datenobjekts."],                     en:["Data object fields","Typed fields of a data object."]},
+  {img:"collection-data-object", cat:"data",     de:["Sammlung","Eine Liste als Datenobjekt – Grundlage für Multi-Instance."],         en:["Collection","A list as a data object – the basis for multi-instance."]},
+  {img:"incident",               cat:"advanced", de:["Incident","Ein blockierter Token, den ein Operator auflöst."],                    en:["Incident","A blocked token an operator resolves."]},
+];
+const CATS = [
+  {id:"all",     de:"Alle",        en:"All"},
+  {id:"flow",    de:"Fluss",       en:"Flow"},
+  {id:"task",    de:"Tasks",       en:"Tasks"},
+  {id:"gateway", de:"Gateways",    en:"Gateways"},
+  {id:"event",   de:"Events",      en:"Events"},
+  {id:"data",    de:"Daten",       en:"Data"},
+  {id:"advanced",de:"Erweitert",   en:"Advanced"},
+];
+let gcat = "all";
+const gallery = document.getElementById("gallery");
+const gfilter = document.getElementById("gfilter");
+function renderFilter(){
+  gfilter.innerHTML = CATS.map(c =>
+    `<button data-cat="${c.id}" class="${c.id===gcat?"on":""}"><span data-l="de">${c.de}</span><span data-l="en">${c.en}</span></button>`
+  ).join("");
+}
+function renderGallery(){
+  const items = ELEMENTS.filter(e => gcat==="all" || e.cat===gcat);
+  gallery.innerHTML = items.map(e => `
+    <div class="gcard">
+      <img loading="lazy" src="conformance-diagrams/${e.img}.png" alt="">
+      <div class="gc">
+        <b data-l="de">${e.de[0]}</b><b data-l="en">${e.en[0]}</b>
+        <p data-l="de">${e.de[1]}</p><p data-l="en">${e.en[1]}</p>
+      </div>
+    </div>`).join("");
+}
+gfilter.addEventListener("click", (ev) => {
+  const b = ev.target.closest("button[data-cat]"); if (!b) return;
+  gcat = b.dataset.cat; renderFilter(); renderGallery();
+});
+renderFilter();
+renderGallery();
+
+// ---- TOC active-section highlight ----
+const tocLinks = [...document.querySelectorAll("nav.toc a")];
+const byId = new Map(tocLinks.map(a => [a.getAttribute("href").slice(1), a]));
+const obs = new IntersectionObserver((entries) => {
+  entries.forEach(en => {
+    if (en.isIntersecting) {
+      tocLinks.forEach(a => a.classList.remove("active"));
+      const a = byId.get(en.target.id); if (a) a.classList.add("active");
+    }
+  });
+}, {rootMargin:"-40% 0px -55% 0px"});
+document.querySelectorAll("main section[id]").forEach(s => obs.observe(s));
+</script>
+</body>
+</html>
