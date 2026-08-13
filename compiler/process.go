@@ -461,6 +461,20 @@ type ConnectorTaskDetail struct {
 	// array. Read only by the in-process web-scraping worker.
 	ScrapeSelector  RestExpr
 	ScrapeAttribute int32
+	// User-provisioning connector fields (JobType == UserConnectorJobType, ADR-0123).
+	// UserOp is the interned operation ("create" | "set-password" | "disable").
+	// UserName identifies the account; UserEmail/UserDisplayName/UserRoles/UserPassword
+	// are the create/update values — each a literal-or-FEEL value evaluated over the
+	// instance's variables at call time. Each is the zero value for a non-user task and
+	// is read only by the in-process user-provisioning worker, which the runner
+	// dispatches by the user job type alone. There is no Connector and no credential:
+	// the worker mutates the internal user store directly, gated to the system project.
+	UserOp          int32
+	UserName        RestExpr
+	UserEmail       RestExpr
+	UserDisplayName RestExpr
+	UserRoles       RestExpr
+	UserPassword    RestExpr
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a

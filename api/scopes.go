@@ -103,6 +103,13 @@ func (p project) effectiveRole(pr *Principal, authEnabled bool) string {
 	if pr.hasRole(RoleAdmin) {
 		return ScopeRoleOwner
 	}
+	// A protected system project (ADR-0122) is visible to every authenticated
+	// principal so its platform processes can be found and started, but it grants
+	// no more than viewer here — mutation is separately refused for all callers by
+	// the protected guard, so no member/owner role on it is meaningful.
+	if p.Protected {
+		return ScopeRoleViewer
+	}
 	if p.OwnerID == "" {
 		return "" // legacy/ownerless: only admin manages it (handled above)
 	}
@@ -192,6 +199,10 @@ func (s *Server) handleSetProjectMember(w http.ResponseWriter, r *http.Request) 
 		writeError(w, code, msg)
 		return
 	}
+	if code, msg := protectedGuard(proj); code != 0 {
+		writeError(w, code, msg)
+		return
+	}
 	if userID == proj.OwnerID {
 		writeError(w, http.StatusBadRequest, "the owner already has full access and cannot be added as a member")
 		return
@@ -249,6 +260,10 @@ func (s *Server) handleRemoveProjectMember(w http.ResponseWriter, r *http.Reques
 
 	proj, code, msg := s.authorizeProject(r, id, ScopeRoleOwner)
 	if code != 0 {
+		writeError(w, code, msg)
+		return
+	}
+	if code, msg := protectedGuard(proj); code != 0 {
 		writeError(w, code, msg)
 		return
 	}

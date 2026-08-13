@@ -75,9 +75,24 @@ func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 		SavedAt:   time.Now().Unix(),
 		Schema:    string(payload.Schema),
 	}
-	var saveErr error
-	s.do(func() { saveErr = s.forms.save(rec) })
-	if saveErr != nil {
+	var (
+		saveErr   error
+		protected bool
+	)
+	s.do(func() {
+		// A form filed under the protected system project is platform-managed
+		// (ADR-0122): refuse overwriting it, for every caller.
+		if existing, ok, e := s.forms.get(id); e == nil && ok && existing.ProjectID == systemProjectID {
+			protected = true
+			return
+		}
+		saveErr = s.forms.save(rec)
+	})
+	switch {
+	case protected:
+		writeError(w, http.StatusForbidden, "protected system form cannot be modified")
+		return
+	case saveErr != nil:
 		writeError(w, http.StatusInternalServerError, "save form: "+saveErr.Error())
 		return
 	}
@@ -140,9 +155,22 @@ func (s *Server) handleGetForm(w http.ResponseWriter, r *http.Request) {
 // shows the task without a form — so this does not scan deployments.
 func (s *Server) handleDeleteForm(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var delErr error
-	s.do(func() { delErr = s.forms.delete(id) })
-	if delErr != nil {
+	var (
+		delErr    error
+		protected bool
+	)
+	s.do(func() {
+		if existing, ok, e := s.forms.get(id); e == nil && ok && existing.ProjectID == systemProjectID {
+			protected = true
+			return
+		}
+		delErr = s.forms.delete(id)
+	})
+	switch {
+	case protected:
+		writeError(w, http.StatusForbidden, "protected system form cannot be deleted")
+		return
+	case delErr != nil:
 		writeError(w, http.StatusInternalServerError, "delete form: "+delErr.Error())
 		return
 	}

@@ -1439,6 +1439,9 @@ type xmlServiceTask struct {
 	// (ADR-0079). The pointer is nil when the <atlas:mailConnector> extension is
 	// absent.
 	Mail *xmlMailConnector `xml:"extensionElements>mailConnector"`
+	// User, when present, marks this service task a user-provisioning connector task
+	// (ADR-0123). The pointer is nil when the <atlas:userConnector> extension is absent.
+	User *xmlUserConnector `xml:"extensionElements>userConnector"`
 	// Csv, when present, marks this service task a CSV-to-JSON connector task
 	// (ADR-0090). The pointer is nil when the <atlas:csvConnector> extension is absent.
 	Csv *xmlCsvConnector `xml:"extensionElements>csvConnector"`
@@ -1534,6 +1537,18 @@ type xmlMailConnector struct {
 	From      string `xml:"from,attr"`
 	Subject   string `xml:"subject,attr"`
 	Body      string `xml:"body,attr"`
+}
+
+// xmlUserConnector is the <atlas:userConnector> extension of a user-provisioning
+// connector task (ADR-0123). Operation selects the action; the remaining
+// attributes are literal-or-FEEL values, like the mail connector's fields.
+type xmlUserConnector struct {
+	Operation   string `xml:"operation,attr"`
+	Username    string `xml:"username,attr"`
+	Email       string `xml:"email,attr"`
+	DisplayName string `xml:"displayName,attr"`
+	Roles       string `xml:"roles,attr"`
+	Password    string `xml:"password,attr"`
 }
 
 // A CSV-to-JSON connector task's parameters, carried on a service task as an

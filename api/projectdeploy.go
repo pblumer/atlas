@@ -86,6 +86,12 @@ func (s *Server) handleDeployProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, code, msg)
 		return
 	}
+	// A protected system project is deployed only by the startup bootstrap
+	// (ADR-0122); refuse deploying it through the API, for every caller.
+	if code, msg := protectedGuard(proj); code != 0 {
+		writeError(w, code, msg)
+		return
+	}
 
 	// Phase 2 (off-loop): DMN preflight. Resolve + validate every reference; a
 	// single failure refuses the bundle without deploying anything. For each valid

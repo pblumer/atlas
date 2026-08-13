@@ -766,15 +766,23 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 	}
 	var (
 		found      bool
+		protected  bool
 		running    int
 		scanErr    error
 		persistErr error
 	)
 	s.do(func() {
-		if _, ok := s.deployments[key]; !ok {
+		d, ok := s.deployments[key]
+		if !ok {
 			return
 		}
 		found = true
+		// A bootstrap-deployed platform process is platform-managed (ADR-0122):
+		// refuse deletion for every caller.
+		if s.systemPIDs[d.ProcessID] {
+			protected = true
+			return
+		}
 		scanErr = s.store.ActiveProcessInstances(func(_ uint64, v *model.ProcessInstanceValue) error {
 			if v.ProcessDefKey == key {
 				running++
@@ -802,6 +810,8 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case !found:
 		writeError(w, http.StatusNotFound, "no deployment with that key")
+	case protected:
+		writeError(w, http.StatusForbidden, "protected system process cannot be deleted")
 	case scanErr != nil:
 		writeError(w, http.StatusInternalServerError, "check instances: "+scanErr.Error())
 	case running > 0:
@@ -3312,6 +3322,7 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	var (
 		saveErr, projErr error
 		unknownProject   bool
+		protectedProject bool
 	)
 	s.do(func() {
 		if !hasProjectParam {
@@ -3320,13 +3331,19 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 				rec.ProjectID = existing.ProjectID
 			}
 		} else if projectID != "" {
-			_, ok, e := s.projects.get(projectID)
+			proj, ok, e := s.projects.get(projectID)
 			if e != nil {
 				projErr = e
 				return
 			}
 			if !ok {
 				unknownProject = true
+				return
+			}
+			// A protected system project's content is platform-managed (ADR-0122):
+			// refuse authoring a draft into it, for any caller.
+			if proj.Protected {
+				protectedProject = true
 				return
 			}
 		}
@@ -3337,6 +3354,8 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "read project: "+projErr.Error())
 	case unknownProject:
 		writeError(w, http.StatusBadRequest, "unknown project id")
+	case protectedProject:
+		writeError(w, http.StatusForbidden, "protected system project cannot be modified")
 	case saveErr != nil:
 		writeError(w, http.StatusInternalServerError, "save draft: "+saveErr.Error())
 	default:
@@ -3386,6 +3405,7 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 	}
 	var (
 		found, unknownProject    bool
+		protectedProject         bool
 		getErr, projErr, saveErr error
 		view                     draftResp
 	)
@@ -3400,13 +3420,19 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 		}
 		found = true
 		if payload.ProjectID != "" {
-			_, pok, pe := s.projects.get(payload.ProjectID)
+			proj, pok, pe := s.projects.get(payload.ProjectID)
 			if pe != nil {
 				projErr = pe
 				return
 			}
 			if !pok {
 				unknownProject = true
+				return
+			}
+			// A protected system project's content is platform-managed (ADR-0122):
+			// refuse moving a draft into it, for any caller.
+			if proj.Protected {
+				protectedProject = true
 				return
 			}
 		}
@@ -3425,6 +3451,8 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "read project: "+projErr.Error())
 	case unknownProject:
 		writeError(w, http.StatusBadRequest, "unknown project id")
+	case protectedProject:
+		writeError(w, http.StatusForbidden, "protected system project cannot be modified")
 	case saveErr != nil:
 		writeError(w, http.StatusInternalServerError, "move draft: "+saveErr.Error())
 	default:

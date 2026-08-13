@@ -1,0 +1,33 @@
+{
+  "type": "default",
+  "id": "rev-start",
+  "components": [
+    {
+      "type": "text",
+      "text": "# 🔎 Zugriffs-Review\n\nPeriodische Kontrolle der aktiven Konten. Lege Zeitraum und Umfang fest; anschließend prüft ein Reviewer die Konten."
+    },
+    {
+      "key": "quartal",
+      "type": "textfield",
+      "label": "Zeitraum / Quartal",
+      "description": "z. B. Q3 2026.",
+      "validate": { "required": true }
+    },
+    {
+      "key": "umfang",
+      "type": "radio",
+      "label": "Umfang",
+      "values": [
+        { "label": "Alle aktiven Konten", "value": "alle_aktiven" },
+        { "label": "Nur Administratoren", "value": "nur_admins" },
+        { "label": "Eine Abteilung", "value": "abteilung" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "key": "hinweis",
+      "type": "textarea",
+      "label": "Hinweis an den Reviewer"
+    }
+  ]
+}

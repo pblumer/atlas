@@ -32,6 +32,7 @@ var connectorCompilers = []connectorCompiler{
 	{present: func(st xmlServiceTask) bool { return st.Clio != nil }, compile: compileClioConnectorTask},
 	{present: func(st xmlServiceTask) bool { return st.Rest != nil }, compile: compileRestConnectorTask},
 	{present: func(st xmlServiceTask) bool { return st.Mail != nil }, compile: compileMailConnectorTask},
+	{present: func(st xmlServiceTask) bool { return st.User != nil }, compile: compileUserConnectorTask},
 	{present: func(st xmlServiceTask) bool { return st.SharePoint != nil }, compile: compileSharePointConnectorTask},
 	{present: func(st xmlServiceTask) bool { return st.Remedy != nil }, compile: compileRemedyConnectorTask},
 	{present: func(st xmlServiceTask) bool { return st.WebScrape != nil }, compile: compileWebScrapeConnectorTask},
@@ -177,6 +178,57 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 		Subject:   subject,
 		Body:      body,
 		Retries:   retries,
+	}), nil
+}
+
+// compileUserConnectorTask compiles an <atlas:userConnector> task: it delegates to
+// the in-process user-provisioning worker via the job path (ADR-0123), which mutates
+// the internal user store. operation selects the action; username is always required,
+// and create/set-password additionally require a password. The field values are
+// literal-or-FEEL (like the mail connector); no connector name or credential is
+// authored — the worker uses the local store, gated to the system project.
+func compileUserConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+	cn := st.User
+	op := strings.TrimSpace(cn.Operation)
+	switch op {
+	case "create", "set-password", "disable":
+	default:
+		return 0, fmt.Errorf("compiler: user connector task %q has unknown operation %q (want create, set-password, or disable)", st.Id, op)
+	}
+	if strings.TrimSpace(cn.Username) == "" {
+		return 0, fmt.Errorf("compiler: user connector task %q needs a username", st.Id)
+	}
+	if (op == "create" || op == "set-password") && strings.TrimSpace(cn.Password) == "" {
+		return 0, fmt.Errorf("compiler: user connector task %q (%s) needs a password", st.Id, op)
+	}
+	username, err := restValue(st.Id, "username", cn.Username)
+	if err != nil {
+		return 0, err
+	}
+	email, err := restValue(st.Id, "email", cn.Email)
+	if err != nil {
+		return 0, err
+	}
+	displayName, err := restValue(st.Id, "displayName", cn.DisplayName)
+	if err != nil {
+		return 0, err
+	}
+	roles, err := restValue(st.Id, "roles", cn.Roles)
+	if err != nil {
+		return 0, err
+	}
+	password, err := restValue(st.Id, "password", cn.Password)
+	if err != nil {
+		return 0, err
+	}
+	return b.AddUserConnectorTask(UserConnectorConfig{
+		Operation:   op,
+		Username:    username,
+		Email:       email,
+		DisplayName: displayName,
+		Roles:       roles,
+		Password:    password,
+		Retries:     retries,
 	}), nil
 }
 

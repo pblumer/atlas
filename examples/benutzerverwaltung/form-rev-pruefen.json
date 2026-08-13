@@ -1,0 +1,44 @@
+{
+  "type": "default",
+  "id": "rev-pruefen",
+  "components": [
+    {
+      "type": "text",
+      "text": "# ✅ Konten prüfen\n\nPrüfe die Konten im festgelegten Umfang (in der Konsole unter **Organization → Users**) und halte das Ergebnis fest."
+    },
+    {
+      "key": "quartal",
+      "type": "textfield",
+      "label": "Zeitraum / Quartal",
+      "disabled": true
+    },
+    {
+      "key": "umfang",
+      "type": "textfield",
+      "label": "Umfang",
+      "disabled": true
+    },
+    {
+      "key": "ergebnis",
+      "type": "radio",
+      "label": "Ergebnis",
+      "values": [
+        { "label": "Alles in Ordnung", "value": "ok" },
+        { "label": "Handlungsbedarf", "value": "handlungsbedarf" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "key": "betroffene_konten",
+      "type": "textarea",
+      "label": "Betroffene Konten",
+      "description": "Welche Konten brauchen eine Maßnahme (sperren, Rolle entziehen …)?",
+      "conditional": { "hide": "=ergebnis != \"handlungsbedarf\"" }
+    },
+    {
+      "key": "bemerkung",
+      "type": "textarea",
+      "label": "Bemerkung"
+    }
+  ]
+}

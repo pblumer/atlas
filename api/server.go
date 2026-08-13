@@ -166,6 +166,9 @@ type Server struct {
 	publicLinks      *publicLinkStore     // durable sidecar for public start links (ADR-0029)
 	publicRate       *rateLimiter         // throttles the unauthenticated public endpoints
 	projects         *projectStore        // durable sidecar for projects grouping artifacts (ADR-0034)
+	systemPIDs       map[string]bool      // process ids of the bootstrap-deployed platform processes, protected from deletion (ADR-0122)
+	deploySysProcs   bool                 // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
+	userProvisioning bool                 // opt-in: enable the user-provisioning connector for system processes (ADR-0123)
 	dmnrefs          *dmnRefStore         // durable sidecar for DMN reference artifacts (ADR-0034)
 	connectors       *connectorStore      // durable sidecar for managed connector instances (ADR-0041)
 	callOverrides    *callOverrideStore   // durable sidecar for per-server call-activity target overrides (ADR-0105)
@@ -341,6 +344,21 @@ func WithLogBuffer(b *LogBuffer) Option { return func(s *Server) { s.logs = b } 
 // it when the interactive, mutating "Try it out" surface should not be exposed
 // (ADR-0043).
 func WithoutDocs() Option { return func(s *Server) { s.docsEnabled = false } }
+
+// WithSystemProcesses bootstrap-deploys Atlas's own embedded platform processes
+// (user intake, access review, offboarding) into the protected system project at
+// startup (ADR-0122). Opt-in — the installed binary (cmd/atlas) enables it, while
+// the engine tests construct servers without it so a fresh instance still starts
+// with no deployments.
+func WithSystemProcesses() Option { return func(s *Server) { s.deploySysProcs = true } }
+
+// WithUserProvisioning enables the in-process user-provisioning connector
+// (create/set-password/disable Atlas logins) for the protected system project's
+// processes (ADR-0123). Opt-in and off by default: it deliberately, and narrowly,
+// reopens the ADR-0044/0049 boundary that no automated identity may manage users —
+// so an instance keeps the human-in-the-loop ADR-0122 behavior until an operator
+// turns this on. When off, a userConnector job has no worker and parks.
+func WithUserProvisioning() Option { return func(s *Server) { s.userProvisioning = true } }
 
 // WithInboundPollInterval sets the clio inbound bridge's poll cadence (ADR-0075).
 // A non-positive interval disables the bridge (useful in tests that drive it
@@ -639,6 +657,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		}
 		s.internalToken = token
 	}
+	// Ensure the protected system project exists (ADR-0122). Like bootstrapAdmin,
+	// this runs on the constructing goroutine before the loop serves traffic, so it
+	// touches the project store directly within the single-writer discipline. It is
+	// idempotent, so it is safe on every start regardless of auth.
+	if err := s.ensureSystemProject(time.Now().Unix()); err != nil {
+		return nil, err
+	}
 	// The in-process DMN worker evaluates business rule tasks off no separate
 	// goroutine (the single-binary server drives jobs synchronously on the run
 	// loop). One handler serves every process: it resolves each job's decision,
@@ -685,6 +710,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// The URL and selector live in the model, like REST (ADR-0118). One worker serves
 	// every process under the reserved web-scrape job type.
 	s.jobRunner.HandleWithOutput(compiler.WebScrapeJobTypeIndex, webscrape.Handler(store, s.processLookup, webscrape.NewHTTPClient()))
+	// User-provisioning connector (ADR-0123), opt-in. The handler mutates the
+	// run-loop-owned user store, so it is a closure over s and runs on the loop (the
+	// server drives jobs synchronously); it is gated at runtime to the system project.
+	if s.userProvisioning {
+		s.jobRunner.Handle(compiler.UserConnectorJobTypeIndex, s.userConnectorHandler(s.store))
+	}
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
 	}
@@ -694,6 +725,16 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// (ADR-0105).
 	if err := s.loadCallOverrides(); err != nil {
 		return nil, err
+	}
+	// Bootstrap-deploy Atlas's own platform processes into the protected system
+	// project (ADR-0122), when enabled. Runs after loadDeployments so its
+	// idempotency check sees the recovered deployments (a restart adds no versions),
+	// and before the loop serves traffic so the deploy path is single-writer-safe —
+	// the same discipline loadDeployments itself uses.
+	if s.deploySysProcs {
+		if err := s.ensureSystemProcesses(time.Now().Unix()); err != nil {
+			return nil, err
+		}
 	}
 	// Build the OpenSearch exporter when configured (ADR-0114). It tails the durable
 	// WAL under dataDir and is bounded by the state store's applied-position
