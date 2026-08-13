@@ -524,11 +524,13 @@ Adoption and polish.
   in-memory profile (so the difference from durable reads off the disk-`fsync`
   latency, ~95% of the durable per-op time on the CI machine). It also covers the
   **startup/recovery axis** — recovery benchmarks that replay a `b.N`-instance WAL
-  from genesis into a fresh state store, measuring the per-instance recovery cost.
-  They report `ns/op` (→ instances/sec), `events/op`, `walB/op`, and allocations, with
-  a Markdown-summary script and a CI smoke run. Still to come: latency percentiles, a
-  loopback-socket HTTP variant, and committed machine-labelled baseline results
-  ([`benchmarks/README.md`](benchmarks/README.md)).
+  from genesis into a fresh state store, measuring the per-instance recovery cost —
+  and **P50/P95/P99 latency** benchmarks that sample each operation so the `fsync`
+  tail the mean hides is visible. They report `ns/op` (→ instances/sec), `events/op`,
+  `walB/op`, allocations, and (for the latency benchmarks) the percentile
+  distribution, with a Markdown-summary script and a CI smoke run. Still to come: a
+  loopback-socket HTTP variant, a large parked-workload profile, and committed
+  machine-labelled baseline results ([`benchmarks/README.md`](benchmarks/README.md)).
 - 🔲 Documentation site, tutorials, examples
 - 🔲 1.0 API stability commitment
 
