@@ -479,26 +479,68 @@ function initShell() {
   }).catch(() => { initHelpMenu(false); });
 }
 
-// initHelpMenu fills the top-bar "?" dropdown. Its API Explorer entry opens the
-// Scalar explorer (/api/docs) in a new tab when the server was started with docs
-// enabled; otherwise it shows an inert hint about --docs=false, so the missing
-// link is self-explanatory rather than a dead button (ADR-0043). The Conformance
-// Gallery entry is always shown — that page is a static asset served regardless
-// of the --docs flag. Open/close is handled by the shared delegated
-// .dropdown-toggle machinery above.
+// handbookHelp maps the current route to the most relevant handbook chapter, so
+// the "?" menu can offer help *for the view you're looking at* rather than only a
+// generic link. The checks mirror the router's order (most specific first); the
+// anchor is a section id in handbuch.html and the label is the (English, matching
+// the chrome) menu text. Adding a route here is all it takes to give it contextual
+// help — the handbook page and the menu wiring are unchanged.
+function handbookHelp(path) {
+  const H = (anchor, label) => ({ anchor, label });
+  if (/^#\/modeler\/dmn\//.test(path)) return H("dmn", "Learn DMN");
+  if (/^#\/modeler\/form\b/.test(path)) return H("formulare", "Forms & connectors");
+  if (path.startsWith("#/modeler")) return H("designen", "Designing processes");
+  if (path.startsWith("#/tasks")) return H("formulare", "Tasks & forms");
+  if (path.startsWith("#/operations/decisions")) return H("dmn", "Learn DMN");
+  if (path.startsWith("#/operations/call-activities")) return H("elemente", "BPMN elements");
+  if (path.startsWith("#/operations")) return H("betrieb", "Operations & incidents");
+  if (path.startsWith("#/console/engine")) return H("konzepte", "Core concepts");
+  if (path.startsWith("#/console/org")) return H("formulare", "Forms & connectors");
+  if (path.startsWith("#/console")) return H("schnellstart", "Quick start");
+  return H("willkommen", "Welcome to Atlas");
+}
+
+// The help menu is built once (async, after /info resolves) but its contextual
+// entry has to follow navigation, which happens independently. We stash the docs
+// flag and the current route so either event can (re)render correctly regardless
+// of which lands first: initHelpMenu renders using the last route setChrome saw,
+// and setHelpContext refreshes the entry in place on every later navigation.
+let helpDocsEnabled = false;
+let helpRoutePath = "#/console";
+
+// setHelpContext points the "On this page" entry at the chapter for `path`. Safe
+// to call before the menu exists (early navigations) — it just records the route.
+function setHelpContext(path) {
+  helpRoutePath = path;
+  const ctx = document.getElementById("help-ctx");
+  if (!ctx) return;
+  const { anchor, label } = handbookHelp(path);
+  ctx.href = `/handbuch.html#${anchor}`;
+  ctx.innerHTML = `${esc(label)} <span class="ext" aria-hidden="true">↗</span>`;
+}
+
+// initHelpMenu fills the top-bar "?" dropdown. It leads with a contextual
+// "On this page" link into the handbook chapter for the current view (see
+// handbookHelp), then the general references: the Handbook (a self-contained
+// bilingual page served regardless of the --docs flag), the Scalar API Explorer
+// (/api/docs) when docs are enabled — otherwise an inert hint about --docs=false
+// so the missing link is self-explanatory rather than a dead button (ADR-0043) —
+// and the Conformance Gallery (always shown; a static asset). Open/close is
+// handled by the shared delegated .dropdown-toggle machinery above.
 function initHelpMenu(docsEnabled) {
+  helpDocsEnabled = docsEnabled;
   const menu = document.getElementById("help-menu");
   if (!menu) return;
   const explorer = docsEnabled
     ? `<a role="menuitem" href="/api/docs" target="_blank" rel="noopener">API Explorer <span class="ext" aria-hidden="true">↗</span></a>`
     : `<span class="help-note">API Explorer is disabled<br><span class="muted">start the server without <code>--docs=false</code></span></span>`;
   const gallery = `<a role="menuitem" href="/conformance-gallery.html" target="_blank" rel="noopener">Conformance Gallery <span class="ext" aria-hidden="true">↗</span></a>`;
-  // The Handbook is a self-contained static page (bilingual DE/EN), served like
-  // the gallery regardless of the --docs flag. It leads because it's the primary
-  // learning resource for new users; the API Explorer and gallery are for
-  // reference and hands-on trials.
   const handbook = `<a role="menuitem" href="/handbuch.html" target="_blank" rel="noopener">Handbook <span class="ext" aria-hidden="true">↗</span></a>`;
-  menu.innerHTML = handbook + explorer + gallery;
+  const context = `<div class="mlabel">On this page</div>` +
+    `<a id="help-ctx" role="menuitem" target="_blank" rel="noopener" href="/handbuch.html"></a>` +
+    `<div class="sep"></div>`;
+  menu.innerHTML = context + handbook + explorer + gallery;
+  setHelpContext(helpRoutePath); // fill the contextual entry for the current view
 }
 
 function setChrome(appId, route) {
@@ -510,6 +552,7 @@ function setChrome(appId, route) {
   ).join("");
   document.querySelectorAll("#drawer-apps a").forEach((a) =>
     a.classList.toggle("active", a.dataset.app === appId));
+  setHelpContext(route); // keep the "?" menu's contextual help pointed at this view
   const fullBleed = route.includes("/modeler/d/") || route.includes("/modeler/draft/") || route.includes("/modeler/form/") || route.includes("/modeler/new") || route.includes("/operations/p/");
   document.body.classList.toggle("editor-mode", fullBleed);
   // The Tasks inbox is a wide three-pane layout, so it drops the centered
