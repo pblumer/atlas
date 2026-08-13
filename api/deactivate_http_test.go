@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -122,6 +124,67 @@ func TestSetProcessActiveErrors(t *testing.T) {
 	}
 	if code, _ := doReq(t, ts, http.MethodPut, "/api/v1/processes/1/active", `not json`, "application/json"); code != http.StatusBadRequest {
 		t.Fatalf("bad body status=%d, want 400", code)
+	}
+}
+
+// TestSetProcessActiveSidecarCorrupt covers the handler's read-failure path: if the
+// on-disk deployment record can no longer be decoded when the toggle re-reads it to
+// preserve the XML/DMN models, the change is refused with a 500 rather than applied
+// unpersisted (ADR-0119).
+func TestSetProcessActiveSidecarCorrupt(t *testing.T) {
+	dir := t.TempDir()
+	s := boot(t, dir)
+	defer s.shutdown()
+	if code, body := doReq(t, s.ts, http.MethodPost, "/api/v1/deployments", sampleBPMN, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "deployments", "1.json"), []byte("{not json"), 0o644); err != nil {
+		t.Fatalf("corrupt record: %v", err)
+	}
+	if code, body := doReq(t, s.ts, http.MethodPut, "/api/v1/processes/1/active", `{"active":false}`, "application/json"); code != http.StatusInternalServerError {
+		t.Fatalf("corrupt-record toggle status=%d body=%s, want 500", code, body)
+	}
+}
+
+// TestSetProcessActiveSidecarUnreadable covers load's read-failure branch (distinct
+// from a missing file): the record path exists but cannot be read as a file, so the
+// toggle refuses with a 500 (ADR-0119).
+func TestSetProcessActiveSidecarUnreadable(t *testing.T) {
+	dir := t.TempDir()
+	s := boot(t, dir)
+	defer s.shutdown()
+	if code, body := doReq(t, s.ts, http.MethodPost, "/api/v1/deployments", sampleBPMN, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	recPath := filepath.Join(dir, "deployments", "1.json")
+	if err := os.Remove(recPath); err != nil {
+		t.Fatalf("remove record: %v", err)
+	}
+	// Replace the record file with a directory of the same name: os.ReadFile then fails
+	// with a non-"not exist" error.
+	if err := os.Mkdir(recPath, 0o755); err != nil {
+		t.Fatalf("mkdir record path: %v", err)
+	}
+	if code, body := doReq(t, s.ts, http.MethodPut, "/api/v1/processes/1/active", `{"active":false}`, "application/json"); code != http.StatusInternalServerError {
+		t.Fatalf("unreadable-record toggle status=%d body=%s, want 500", code, body)
+	}
+}
+
+// TestSetProcessActiveSidecarMissing covers the divergence path: the definition is in
+// the in-memory registry but its sidecar record is gone, so the toggle reports 404
+// rather than applying a change it cannot persist (ADR-0119).
+func TestSetProcessActiveSidecarMissing(t *testing.T) {
+	dir := t.TempDir()
+	s := boot(t, dir)
+	defer s.shutdown()
+	if code, body := doReq(t, s.ts, http.MethodPost, "/api/v1/deployments", sampleBPMN, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	if err := os.Remove(filepath.Join(dir, "deployments", "1.json")); err != nil {
+		t.Fatalf("remove record: %v", err)
+	}
+	if code, body := doReq(t, s.ts, http.MethodPut, "/api/v1/processes/1/active", `{"active":false}`, "application/json"); code != http.StatusNotFound {
+		t.Fatalf("missing-record toggle status=%d body=%s, want 404", code, body)
 	}
 }
 
