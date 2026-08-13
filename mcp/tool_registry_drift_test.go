@@ -116,6 +116,12 @@ var mcpOmittedRoutes = map[string]string{
 	// agent deploys directly via atlas_deploy, which already compiles and validates.
 	"POST /api/v1/validate": "modeler-time dry-run validation; atlas_deploy already compiles+validates",
 
+	// Diagram-layout regeneration for the Modeler's Auto-layout button: a pure
+	// rendering transform of BPMN-DI coordinates. An MCP agent authors BPMN-DI
+	// directly (or relies on server-side ensureDiagramLayout on read), so it does
+	// not drive a scenario through this.
+	"POST /api/v1/layout": "modeler-time diagram layout regeneration; a rendering concern, not a scenario action",
+
 	// Expression/script sandboxes: authored inside BPMN, not called standalone.
 	"POST /api/v1/feel/validate": "modeler-time expression check, not a scenario action",
 	"POST /api/v1/feel/evaluate": "modeler-time expression check, not a scenario action",
