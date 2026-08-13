@@ -441,6 +441,71 @@ func TestGenerateDIBoundaryOnSubProcess(t *testing.T) {
 	}
 }
 
+// TestGenerateDIHappyPathStaysStraight is the regression for auto-layout bending a
+// linear main flow into a staircase. When side branches (here boundary-event error
+// handlers ending in their own end events) share the happy path's columns, every
+// node on the main sequence must keep a single shared center line — the branch's
+// end events must not seize the main axis and shove the happy-path tasks off it.
+func TestGenerateDIHappyPathStaysStraight(t *testing.T) {
+	src := []byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="P">
+	    <startEvent id="Start"/>
+	    <serviceTask id="Init"/>
+	    <serviceTask id="Establish"/>
+	    <serviceTask id="Discover"/>
+	    <serviceTask id="Execute"/>
+	    <serviceTask id="Log"/>
+	    <serviceTask id="Cleanup"/>
+	    <endEvent id="EndSuccess"/>
+	    <serviceTask id="HandleSessionError"/>
+	    <serviceTask id="HandleError"/>
+	    <endEvent id="EndError1"/>
+	    <endEvent id="EndError2"/>
+	    <boundaryEvent id="SessionError" attachedToRef="Establish"/>
+	    <boundaryEvent id="Error" attachedToRef="Execute"/>
+	    <sequenceFlow id="f1" sourceRef="Start" targetRef="Init"/>
+	    <sequenceFlow id="f2" sourceRef="Init" targetRef="Establish"/>
+	    <sequenceFlow id="f3" sourceRef="Establish" targetRef="Discover"/>
+	    <sequenceFlow id="f4" sourceRef="Discover" targetRef="Execute"/>
+	    <sequenceFlow id="f5" sourceRef="Execute" targetRef="Log"/>
+	    <sequenceFlow id="f6" sourceRef="Log" targetRef="Cleanup"/>
+	    <sequenceFlow id="f7" sourceRef="Cleanup" targetRef="EndSuccess"/>
+	    <sequenceFlow id="e1" sourceRef="SessionError" targetRef="HandleSessionError"/>
+	    <sequenceFlow id="e2" sourceRef="HandleSessionError" targetRef="EndError1"/>
+	    <sequenceFlow id="e3" sourceRef="Error" targetRef="HandleError"/>
+	    <sequenceFlow id="e4" sourceRef="HandleError" targetRef="EndError2"/>
+	  </process>
+	</definitions>`)
+	di, ok := generateDI(src)
+	if !ok {
+		t.Fatal("generateDI: want ok")
+	}
+	shapes := parseShapes(t, di)
+	happyPath := []string{"Start", "Init", "Establish", "Discover", "Execute", "Log", "Cleanup", "EndSuccess"}
+	want := shapes[happyPath[0]]
+	wantCY := want.y + want.h/2
+	for _, id := range happyPath {
+		s, ok := shapes[id]
+		if !ok {
+			t.Fatalf("happy-path shape %q missing:\n%s", id, di)
+		}
+		if cy := s.y + s.h/2; cy != wantCY {
+			t.Errorf("happy-path node %q center y=%d, want %d (main flow must stay one straight line)", id, cy, wantCY)
+		}
+	}
+	// The side-branch end events must have been pushed off the main axis, not left
+	// sitting on it (which is what displaced the happy path before the fix).
+	for _, id := range []string{"EndError1", "EndError2", "HandleSessionError", "HandleError"} {
+		s, ok := shapes[id]
+		if !ok {
+			t.Fatalf("branch shape %q missing:\n%s", id, di)
+		}
+		if cy := s.y + s.h/2; cy == wantCY {
+			t.Errorf("branch node %q sits on the main axis (y-center %d); it should be off-axis", id, cy)
+		}
+	}
+}
+
 // TestGenerateDIOrthogonalRouting is the regression for diagonal branch edges: on a
 // split/join, the main-axis flows run straight while the flows down to and up from
 // the branch lane are right-angled elbows, never diagonals clipping the boxes.

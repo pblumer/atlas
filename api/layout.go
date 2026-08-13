@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -273,12 +274,13 @@ func layoutOf(c layoutContainer) laidOut {
 		idx[n.id] = i
 	}
 	assignLayers(nodes, idx, c.Flows)
+	trunk := markTrunk(nodes, idx, c.Flows)
 
 	var laneShapes []placedShape
 	if lanes, laneOf := collectLanes(c, nodes); len(lanes) > 0 {
-		laneShapes = placeLaned(nodes, lanes, laneOf)
+		laneShapes = placeLaned(nodes, lanes, laneOf, trunk)
 	} else {
-		placeNodes(nodes)
+		placeNodes(nodes, trunk)
 	}
 	placeBoundaries(nodes, idx)
 
@@ -386,14 +388,83 @@ func assignLayers(nodes []lnode, idx map[string]int, flows []layoutFlow) {
 	}
 }
 
+// markTrunk traces the primary ("happy") path through the container and reports
+// which node indices lie on it. Starting from the entry node (an event with no
+// incoming flow, else the lowest-layer node), it walks forward always taking the
+// successor that continues furthest — so the trunk is the longest straight run —
+// and placeNodes/placeLaned then keep that node on the main axis. Without this,
+// which node holds the centre of a shared column is decided by node-slice order
+// (grouped by element type), so a side branch's end event can displace the
+// happy-path task and bend the main line into a staircase. Boundary events never
+// join the trunk; they ride their host. Iteration is capped by the node count so a
+// cyclic model still terminates.
+func markTrunk(nodes []lnode, idx map[string]int, flows []layoutFlow) []bool {
+	trunk := make([]bool, len(nodes))
+	succ := make([][]int, len(nodes))
+	indeg := make([]int, len(nodes))
+	for _, f := range flows {
+		s, sok := idx[f.SourceRef]
+		t, tok := idx[f.TargetRef]
+		if !sok || !tok {
+			continue
+		}
+		succ[s] = append(succ[s], t)
+		indeg[t]++
+	}
+	start := -1
+	pick := func(i int) {
+		if start == -1 || nodes[i].layer < nodes[start].layer {
+			start = i
+		}
+	}
+	for i := range nodes {
+		if !nodes[i].bound && indeg[i] == 0 {
+			pick(i)
+		}
+	}
+	if start == -1 { // every node has an incoming flow (a cycle); seed at the shallowest.
+		for i := range nodes {
+			if !nodes[i].bound {
+				pick(i)
+			}
+		}
+	}
+	// Walk forward, always continuing to the successor that reaches the furthest
+	// layer (ties keep flow-declaration order), until the path ends or loops back.
+	for cur := start; cur != -1 && !trunk[cur]; {
+		trunk[cur] = true
+		next := -1
+		for _, t := range succ[cur] {
+			if nodes[t].bound {
+				continue
+			}
+			if next == -1 || nodes[t].layer > nodes[next].layer {
+				next = t
+			}
+		}
+		cur = next
+	}
+	return trunk
+}
+
+// orderLayer returns the indices of one layer's non-boundary nodes with the trunk
+// node first, so it takes the main axis; the rest keep their existing relative
+// order below it.
+func orderLayer(idxs []int, trunk []bool) []int {
+	sort.SliceStable(idxs, func(a, b int) bool { return trunk[idxs[a]] && !trunk[idxs[b]] })
+	return idxs
+}
+
 // placeNodes assigns each non-boundary node a local position: columns are spaced by
 // the widest node in each preceding column, and nodes sharing a column stack
-// downward with the first centered on the main axis (y=0), so a linear happy path
-// renders as one straight line even when node heights differ. Boundary events are
-// skipped here and positioned by placeBoundaries.
-func placeNodes(nodes []lnode) {
+// downward with the trunk (happy-path) node centered on the main axis (y=0), so a
+// linear happy path renders as one straight line even when node heights differ and
+// side branches share its columns. Boundary events are skipped here and positioned
+// by placeBoundaries.
+func placeNodes(nodes []lnode, trunk []bool) {
 	laneW := map[int]int{}
 	maxLayer := 0
+	byLayer := map[int][]int{}
 	for i := range nodes {
 		if nodes[i].bound {
 			continue
@@ -405,26 +476,23 @@ func placeNodes(nodes []lnode) {
 		if l > maxLayer {
 			maxLayer = l
 		}
+		byLayer[l] = append(byLayer[l], i)
 	}
 	colX := make([]int, maxLayer+1)
 	for l := 1; l <= maxLayer; l++ {
 		colX[l] = colX[l-1] + laneW[l-1] + layoutGapX
 	}
-	cursorY := map[int]int{}
-	started := map[int]bool{}
-	for i := range nodes {
-		if nodes[i].bound {
-			continue
+	for l := 0; l <= maxLayer; l++ {
+		var y int
+		for row, i := range orderLayer(byLayer[l], trunk) {
+			if row == 0 {
+				nodes[i].y = -nodes[i].h / 2 // trunk row centered on the main axis
+			} else {
+				nodes[i].y = y
+			}
+			nodes[i].x = colX[l] + (laneW[l]-nodes[i].w)/2
+			y = nodes[i].y + nodes[i].h + layoutGapY
 		}
-		l := nodes[i].layer
-		if !started[l] {
-			nodes[i].y = -nodes[i].h / 2 // first row centered on the main axis
-			started[l] = true
-		} else {
-			nodes[i].y = cursorY[l]
-		}
-		nodes[i].x = colX[l] + (laneW[l]-nodes[i].w)/2
-		cursorY[l] = nodes[i].y + nodes[i].h + layoutGapY
 	}
 }
 
@@ -469,7 +537,7 @@ func collectLanes(c layoutContainer, nodes []lnode) (lanes []layoutLane, laneOf 
 // column's stack is centered in the band, and the band is tall enough for its
 // busiest column. A boundary event is left to placeBoundaries, riding its host and
 // so inheriting the host's lane.
-func placeLaned(nodes []lnode, lanes []layoutLane, laneOf []int) []placedShape {
+func placeLaned(nodes []lnode, lanes []layoutLane, laneOf []int, trunk []bool) []placedShape {
 	laneW := map[int]int{}
 	maxLayer := 0
 	for i := range nodes {
@@ -527,7 +595,7 @@ func placeLaned(nodes []lnode, lanes []layoutLane, laneOf []int) []placedShape {
 			bandH = laneMinH
 		}
 		for l := 0; l <= maxLayer; l++ {
-			idxs := byCell[cell{li, l}]
+			idxs := orderLayer(byCell[cell{li, l}], trunk)
 			y := bandTop + (bandH-stackHeight(idxs))/2
 			for _, ni := range idxs {
 				nodes[ni].x = laneLabelStrip + colX[l] + (laneW[l]-nodes[ni].w)/2
