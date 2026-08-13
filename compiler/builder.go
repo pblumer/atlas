@@ -168,6 +168,20 @@ const RemedyJobType = "io.atlas.remedy.entry"
 // worker uses MailJobTypeIndex (ADR-0079/0106).
 const RemedyJobTypeIndex int32 = 13
 
+// WebScrapeJobType is the reserved job type a web-scraping connector task carries.
+// The in-process web-scraping worker subscribes to it to fetch a model-authored URL
+// and extract the elements matching a CSS selector off the hot path (ADR-0118), the
+// same way the REST worker subscribes to RestJobType. The URL and selector live in
+// the model (like REST's endpoint); nothing about the target is registry-held.
+const WebScrapeJobType = "io.atlas.webscrape"
+
+// WebScrapeJobTypeIndex is the interned index WebScrapeJobType is guaranteed to
+// occupy in every compiled process: NewBuilder reserves it fifteenth (after the
+// fourteen job types above), so it is always 14. This lets a single in-process
+// web-scraping worker subscribe by one global index across every deployed process,
+// the same way the mail worker uses MailJobTypeIndex (ADR-0118).
+const WebScrapeJobTypeIndex int32 = 14
+
 // TemisDecisionJobType is the reserved job type a *central* business rule task
 // carries — one whose decision is evaluated by a remote temis service rather than
 // the embedded temis library. The in-process temis decision connector worker
@@ -201,6 +215,7 @@ type Builder struct {
 	businessRuleTasks  []BusinessRuleTaskDetail
 	timerCatches       []TimerCatchDetail
 	connectorTasks     []ConnectorTaskDetail
+	mockupTasks        []MockupTaskDetail
 	userTasks          []UserTaskDetail
 	boundaryEventDets  []BoundaryEventDetail
 	eventSubProcesses  []EventSubProcessDetail
@@ -220,7 +235,7 @@ type Builder struct {
 	ioInputs           []pendingIO      // zeebe:ioMapping inputs, grouped by node in Build
 	ioOutputs          []pendingIO      // zeebe:ioMapping outputs, grouped by node in Build
 	elementIds         []int32          // interned source BPMN id per node, -1 if unset
-	lanes              []LaneDetail     // organizational lanes (ADR-0118)
+	lanes              []LaneDetail     // organizational lanes (ADR-0121)
 	startFormId        int32            // interned start-form id (ADR-0028), -1 if the process has none
 	versionTag         int32            // interned atlas:versionTag revision label, -1 if none
 	instanceTtlNanos   int64            // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
@@ -265,6 +280,7 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 	b.intern(CsvImportJobType)     // reserve CsvImportJobTypeIndex == 11
 	b.intern(SharePointJobType)    // reserve SharePointJobTypeIndex == 12
 	b.intern(RemedyJobType)        // reserve RemedyJobTypeIndex == 13
+	b.intern(WebScrapeJobType)     // reserve WebScrapeJobTypeIndex == 14
 	return b
 }
 
@@ -290,7 +306,7 @@ func (b *Builder) addNode(t BpmnType, detail int32) int32 {
 		Detail:        detail,
 		MultiInstance: -1, // not a loop unless SetMultiInstance marks it (ADR-0077)
 		EventSub:      -1, // not event-triggered unless SetEventSubProcess marks it (ADR-0082)
-		Lane:          -1, // in no lane unless SetLane assigns one (ADR-0118)
+		Lane:          -1, // in no lane unless SetLane assigns one (ADR-0121)
 	})
 	b.elementIds = append(b.elementIds, -1) // kept in lockstep with nodes
 	return id
@@ -458,6 +474,41 @@ func (b *Builder) AddScriptTask(e *expr.Compiled, resultVar string) int32 {
 	detail := int32(len(b.scriptTasks))
 	b.scriptTasks = append(b.scriptTasks, ScriptTaskDetail{Expr: e, ResultVar: resultVar})
 	return b.addNode(TypeScriptTask, detail)
+}
+
+// MockupConfig is the authored configuration of a mockup (engine-simulated)
+// service task (ADR-0120). MinNanos/MaxNanos bound the random simulated duration
+// (MaxNanos >= MinNanos, both >= 0). Expr, when non-nil, is the compiled FEEL
+// result expression written to ResultVar on activation (the input→output script).
+// FailPerMillion is the failure probability in parts-per-million (0..1_000_000).
+// FailMessage is the incident message used when a simulated failure occurs.
+type MockupConfig struct {
+	MinNanos       int64
+	MaxNanos       int64
+	ResultVar      string
+	Expr           *expr.Compiled
+	FailPerMillion int32
+	FailMessage    string
+}
+
+// AddMockupTask adds a mockup service task the engine simulates itself (ADR-0120)
+// and returns its element id. Unlike a service task it creates no job: at runtime
+// mockupTaskBehavior writes the optional FEEL result, arms a one-shot timer for a
+// random duration, and completes (or raises an incident per the fail probability).
+// The result variable and fail message are stored as raw strings (like
+// ScriptTaskDetail.ResultVar); the FEEL expression is compiled by the caller at
+// deploy time (invariant I5), as AddScriptTask takes a pre-compiled expression.
+func (b *Builder) AddMockupTask(cfg MockupConfig) int32 {
+	detail := int32(len(b.mockupTasks))
+	b.mockupTasks = append(b.mockupTasks, MockupTaskDetail{
+		MinNanos:       cfg.MinNanos,
+		MaxNanos:       cfg.MaxNanos,
+		ResultVar:      cfg.ResultVar,
+		Expr:           cfg.Expr,
+		FailPerMillion: cfg.FailPerMillion,
+		FailMessage:    cfg.FailMessage,
+	})
+	return b.addNode(TypeMockupTask, detail)
 }
 
 // AddScriptJobTask adds a job-based script task authored in a general-purpose
@@ -860,6 +911,49 @@ func (b *Builder) AddRemedyConnectorTask(cfg RemedyConfig) int32 {
 	return b.addNode(TypeConnectorTask, detail)
 }
 
+// WebScrapeConfig is the deploy-time configuration of a web-scraping connector task
+// (ADR-0118). Url is the page to fetch and Selector the CSS selector whose matches
+// are extracted — both literal-or-FEEL values (the parser compiles the FEEL ones)
+// evaluated over the instance's variables at call time. Attribute, when set, names
+// the HTML attribute to read from each match (empty → each match's text content);
+// Result is the process variable the extracted values are written to as a JSON
+// array. Like REST, the target lives entirely in the model, not a registry.
+type WebScrapeConfig struct {
+	Url       RestExpr
+	Selector  RestExpr
+	Attribute string
+	Result    string
+	Retries   int32
+}
+
+// AddWebScrapeConnectorTask adds a web-scraping connector task and returns its
+// element id. Like a service task it creates a job on activation and waits; the job
+// carries the reserved WebScrapeJobType so the in-process web-scraping worker picks
+// it up, evaluates any FEEL url/selector values over the instance's variables,
+// fetches the page, extracts the text (or the named attribute) of every element
+// matching the selector, writes the values into Result as a JSON array, and
+// completes the job (ADR-0118). The URL and selector live in the model, mirroring
+// the REST connector (ADR-0067); nothing about the target is registry-held.
+func (b *Builder) AddWebScrapeConnectorTask(cfg WebScrapeConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:         b.intern(WebScrapeJobType),
+		Connector:       -1, // scrape carries its URL in the model, not a registry name
+		Subject:         -1, // not a clio task
+		EventType:       -1,
+		ClioQuery:       -1,
+		ReduceSpec:      -1,
+		Method:          -1, // not a REST task
+		ResultVar:       b.intern(cfg.Result),
+		Auth:            -1,
+		Url:             cfg.Url,
+		ScrapeSelector:  cfg.Selector,
+		ScrapeAttribute: b.intern(cfg.Attribute),
+		Retries:         cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
 // AddUserTask adds a user task that parks a token and creates a job for a human
 // to complete via the Tasks app (ADR-0028). assignee and candidateGroups are
 // optional (empty strings are stored as -1). Returns its element id.
@@ -1224,7 +1318,7 @@ func (b *Builder) SetTransaction(nodeID int32) {
 	}
 }
 
-// AddLane adds an organizational lane and returns its index (ADR-0118). parent is the index of
+// AddLane adds an organizational lane and returns its index (ADR-0121). parent is the index of
 // the enclosing lane in a nested laneSet, or -1 for a top-level lane. A lane is pure metadata — it
 // affects no token flow.
 func (b *Builder) AddLane(name string, parent int32) int32 {
@@ -1233,7 +1327,7 @@ func (b *Builder) AddLane(name string, parent int32) int32 {
 	return idx
 }
 
-// SetLane records that a flow node belongs to a lane (ADR-0118). A no-op for an unknown node.
+// SetLane records that a flow node belongs to a lane (ADR-0121). A no-op for an unknown node.
 func (b *Builder) SetLane(nodeID, laneIdx int32) {
 	if b.validNode(nodeID) {
 		b.nodes[nodeID].Lane = laneIdx
@@ -1489,6 +1583,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		businessRuleTasks:  b.businessRuleTasks,
 		timerCatches:       b.timerCatches,
 		connectorTasks:     b.connectorTasks,
+		mockupTasks:        b.mockupTasks,
 		userTasks:          b.userTasks,
 		boundaryEventDets:  b.boundaryEventDets,
 		eventSubProcesses:  b.eventSubProcesses,

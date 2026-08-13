@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestParseLanes checks that a two-lane process records each flow node's lane (ADR-0118): a lane
+// TestParseLanes checks that a two-lane process records each flow node's lane (ADR-0121): a lane
 // is organizational metadata with no execution effect, so the tokens still flow, but every node
 // carries the lane it was drawn in.
 func TestParseLanes(t *testing.T) {
@@ -53,7 +53,7 @@ func TestParseLanes(t *testing.T) {
 }
 
 // TestParseNestedLanes checks that a node in a nested <childLaneSet> maps to its leaf lane, and
-// its lane path runs outermost-to-leaf (ADR-0118).
+// its lane path runs outermost-to-leaf (ADR-0121).
 func TestParseNestedLanes(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
 	  <process id="p" isExecutable="true">
@@ -91,7 +91,7 @@ func TestParseNestedLanes(t *testing.T) {
 	}
 }
 
-// TestParseLaneUnknownFlowNodeRef rejects a lane whose flowNodeRef names no flow node (ADR-0118).
+// TestParseLaneUnknownFlowNodeRef rejects a lane whose flowNodeRef names no flow node (ADR-0121).
 func TestParseLaneUnknownFlowNodeRef(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
 	  <process id="p" isExecutable="true">
@@ -112,7 +112,7 @@ func TestParseLaneUnknownFlowNodeRef(t *testing.T) {
 }
 
 // TestParseLaneDoubleAssignment rejects a flow node claimed by two lanes — a node belongs to at
-// most one lane (ADR-0118).
+// most one lane (ADR-0121).
 func TestParseLaneDoubleAssignment(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
 	  <process id="p" isExecutable="true">
@@ -136,7 +136,7 @@ func TestParseLaneDoubleAssignment(t *testing.T) {
 	}
 }
 
-// TestParseNoLanes: a process without any laneSet compiles, and every node's lane is -1 (ADR-0118).
+// TestParseNoLanes: a process without any laneSet compiles, and every node's lane is -1 (ADR-0121).
 func TestParseNoLanes(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
 	  <process id="p" isExecutable="true">

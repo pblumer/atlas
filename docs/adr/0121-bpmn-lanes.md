@@ -1,4 +1,4 @@
-# ADR-0118: BPMN lanes
+# ADR-0121: BPMN lanes
 
 - **Status:** Accepted (Layer A)
 - **Date:** 2026-08-12

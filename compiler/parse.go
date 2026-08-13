@@ -405,7 +405,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		return nil, err
 	}
 
-	// Record each flow node's organizational lane (ADR-0118). Lanes are metadata with no
+	// Record each flow node's organizational lane (ADR-0121). Lanes are metadata with no
 	// execution effect, resolved through the same process-wide id map as compensation.
 	if err := resolveLanes(b, ids, &proc.xmlFlowContent); err != nil {
 		return nil, err
@@ -947,7 +947,7 @@ type xmlFlowContent struct {
 	// them only to link a compensation boundary event to its handler (ADR-0103).
 	Associations []xmlAssociation `xml:"association"`
 
-	// LaneSets partition this scope's flow nodes into organizational lanes (ADR-0118).
+	// LaneSets partition this scope's flow nodes into organizational lanes (ADR-0121).
 	// Lanes are metadata with no execution effect; resolveLanes records each node's lane.
 	LaneSets []xmlLaneSet `xml:"laneSet"`
 }
@@ -958,7 +958,7 @@ type xmlLaneSet struct {
 }
 
 // xmlLane is a <lane> — an organizational partition naming the flow nodes it contains via
-// <flowNodeRef> children, optionally subdivided into a nested <childLaneSet> (ADR-0118).
+// <flowNodeRef> children, optionally subdivided into a nested <childLaneSet> (ADR-0121).
 type xmlLane struct {
 	Id           string      `xml:"id,attr"`
 	Name         string      `xml:"name,attr"`
@@ -974,7 +974,7 @@ func laneLabel(l *xmlLane) string {
 	return l.Id
 }
 
-// resolveLanes records each flow node's organizational lane (ADR-0118). It walks every scope's
+// resolveLanes records each flow node's organizational lane (ADR-0121). It walks every scope's
 // laneSets — following nested childLaneSets and building the lane table with parent pointers — and
 // resolves each <flowNodeRef> to a node through the process-wide id map, so a lane's assignment
 // works regardless of scope. A flowNodeRef naming no registered node, or a node claimed by two
@@ -1449,7 +1449,15 @@ type xmlServiceTask struct {
 	// Remedy, when present, marks this service task a BMC Remedy connector task
 	// (ADR-0106). The pointer is nil when the <atlas:remedyConnector> extension is
 	// absent.
-	Remedy        *xmlRemedyConnector        `xml:"extensionElements>remedyConnector"`
+	Remedy *xmlRemedyConnector `xml:"extensionElements>remedyConnector"`
+	// WebScrape, when present, marks this service task a web-scraping connector task
+	// (ADR-0118). The pointer is nil when the <atlas:webscrapeConnector> extension is
+	// absent.
+	WebScrape *xmlWebScrapeConnector `xml:"extensionElements>webscrapeConnector"`
+	// Mockup, when present, marks this service task an engine-simulated mockup task
+	// (ADR-0120). The pointer is nil when the <atlas:mockupConnector> extension is
+	// absent.
+	Mockup        *xmlMockupConnector        `xml:"extensionElements>mockupConnector"`
 	IOMapping     xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
 	MultiInstance *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
 	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
@@ -1604,9 +1612,44 @@ type xmlRemedyConnector struct {
 	Fields         []xmlHTTPKV `xml:"remedyField"`
 }
 
+// A web-scraping connector task's parameters, carried on a service task as an
+// <atlas:webscrapeConnector url="..." selector="..." attribute="..."
+// resultVariable="..."/> extension element (ADR-0118). url (required) is the page to
+// fetch and selector (required) the CSS selector whose matches are extracted; both
+// live in the model (unlike a registry endpoint), and credentials never do. attribute,
+// when set, names the HTML attribute read from each match (omit to read each match's
+// text). resultVariable (required) receives the extracted values as a JSON array. url
+// and selector are literal or, with a leading '=', a FEEL expression over the instance's
+// variables at call time (the fx toggle, ADR-0067); attribute is a structural literal.
+type xmlWebScrapeConnector struct {
+	Url            string `xml:"url,attr"`
+	Selector       string `xml:"selector,attr"`
+	Attribute      string `xml:"attribute,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	Retries        string `xml:"retries,attr"`
+}
+
 type xmlTaskDefinition struct {
 	Type    string `xml:"type,attr"`
 	Retries string `xml:"retries,attr"`
+}
+
+// A mockup service task's parameters, carried on a service task as an
+// <atlas:mockupConnector minDuration="PT1S" maxDuration="PT5S" .../> extension
+// element (ADR-0120): the engine simulates the task itself. minDuration/maxDuration
+// are ISO-8601 durations bounding the random simulated execution time (a single
+// fixed duration is minDuration == maxDuration). resultExpression, when set, is a
+// FEEL expression (a leading '=' is optional and stripped) evaluated over the
+// instance's variables and written into resultVariable — the input→output script,
+// e.g. a simulated REST response. failRate is the failure probability in [0,1];
+// failMessage is the incident message used when a simulated failure occurs.
+type xmlMockupConnector struct {
+	MinDuration      string `xml:"minDuration,attr"`
+	MaxDuration      string `xml:"maxDuration,attr"`
+	ResultVariable   string `xml:"resultVariable,attr"`
+	ResultExpression string `xml:"resultExpression,attr"`
+	FailRate         string `xml:"failRate,attr"`
+	FailMessage      string `xml:"failMessage,attr"`
 }
 
 // Zeebe script tasks carry the FEEL expression and its result variable in a

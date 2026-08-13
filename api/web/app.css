@@ -361,6 +361,9 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   overflow: hidden; color: var(--text);
 }
 .code-editor .ce-highlight code { font: inherit; }
+/* The FEEL '=' expression marker (fx toggle), shown as a dimmed, read-only prefix —
+   it can't be edited or deleted, only cleared by switching fx back off. */
+.code-editor .ce-locked { color: var(--muted); opacity: 0.7; }
 /* Hidden measuring twin used to locate the caret for popup placement. */
 .code-editor .ce-mirror {
   visibility: hidden; height: auto; overflow: hidden;
@@ -1759,6 +1762,13 @@ tr[hidden] { display: none; }
 .var-origin { color: var(--accent); cursor: pointer; }
 .var-origin:hover { text-decoration: underline; }
 .vars-empty { padding: 14px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.vars-group + .vars-group { margin-top: 4px; }
+.vars-group-head {
+  padding: 9px 8px 3px; font-size: 11px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--muted);
+}
+.var-row[draggable="true"] { cursor: grab; }
+.var-row[draggable="true"]:active { cursor: grabbing; }
 #vars-toggle.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 
 /* ---------- Sharing scopes (ADR-0071): visibility pill + share dialog ---------- */

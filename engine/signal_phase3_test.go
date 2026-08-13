@@ -267,6 +267,59 @@ func TestSignalStartUndeployStopsInstantiation(t *testing.T) {
 	}
 }
 
+// TestSignalStartNewVersionSupersedes proves deploying a new version of a
+// signal-start process retires the prior version from the broadcast index, so one
+// broadcast instantiates exactly one instance — the latest version — not one per
+// deployed version. This mirrors the message-start supersession (ADR-0035/0076); the
+// two share one entry point (Processor.Deploy), so a broadcast after redeploying a
+// model does not multiply the instances a single signal produces (ADR-0088).
+func TestSignalStartNewVersionSupersedes(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	v1, _ := signalStartProc(t, 700)
+	// v2: same process id "onSignal", newer version — a redeploy.
+	b := compiler.NewBuilder(701, "onSignal", 2)
+	start := b.AddSignalStartEvent("cancelled")
+	done := b.AddScriptTask(mustCompile(t, `"yes"`), "started")
+	end := b.AddEndEvent()
+	b.Connect(start, done)
+	b.Connect(done, end)
+	v2, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build v2: %v", err)
+	}
+	thrower := signalThrower(t, 702)
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(v1)
+	p.Deploy(v2) // same process id: supersedes v1 in the broadcast index
+	p.Deploy(thrower)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+
+	// One broadcast of "cancelled".
+	p.CreateInstance(thrower.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (throw): %v", err)
+	}
+
+	// Exactly one onSignal instance ran — the latest version. v1 must not instantiate.
+	completed := completedInstances(t, h.store)
+	onSignalRuns := 0
+	for _, pi := range completed {
+		switch pi.ProcessDefKey {
+		case v1.Key:
+			t.Errorf("v1 (superseded) instantiated on the broadcast; want only v2")
+		case v2.Key:
+			onSignalRuns++
+		}
+	}
+	if onSignalRuns != 1 {
+		t.Fatalf("latest onSignal version ran %d times, want 1", onSignalRuns)
+	}
+}
+
 // TestSignalBoundaryRecovers proves an armed signal boundary's subscription
 // survives a crash: after replaying the log into a fresh store the boundary is
 // still armed, and a signal broadcast post-recovery fires it (invariant I4).

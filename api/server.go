@@ -55,6 +55,7 @@ import (
 	"github.com/pblumer/atlas/sharepoint"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/temis"
+	"github.com/pblumer/atlas/webscrape"
 )
 
 // dmnResolverFromEnv picks the DMN model source. When ATLAS_DMN_RESOLVER_URL is
@@ -128,6 +129,10 @@ type deployment struct {
 	DeployedAt int64 // unix seconds, for the UI's "last changed" column
 	xml        []byte
 	cp         *compiler.CompiledProcess // for the live overlay's element-id mapping
+	// inactive mirrors the persisted deactivation flag (ADR-0119) so the process
+	// listing can report it without re-reading the sidecar. The processor holds the
+	// authoritative gate; this is the display copy, kept in sync on toggle and load.
+	inactive bool
 }
 
 // Server hosts the engine behind an HTTP surface. Construct it with New, mount
@@ -271,6 +276,14 @@ type Server struct {
 	osExportCfg  opensearch.Config
 	exporter     *opensearch.Exporter
 	exporterPoll time.Duration
+	// exporterTicks, when non-nil, replaces the exporter loop's real ticker so a test
+	// drives each export pass explicitly rather than racing a wall-clock cadence.
+	// exporterTicked, when non-nil, receives once after each triggered pass completes,
+	// so a test awaits the pass it triggered without polling. Both are nil in
+	// production (a real ticker drives the loop, nothing observes it). Set together by
+	// withExporterTrigger — the same deterministic-test seam as the retention sweep.
+	exporterTicks  <-chan time.Time
+	exporterTicked chan struct{}
 
 	// Retention (ADR-0115): hard-delete finished-instance history older than
 	// retentionMaxAge, gated on the safe (exported, else durable) position so nothing
@@ -281,6 +294,23 @@ type Server struct {
 	retentionInterval time.Duration
 	retentionBatch    int
 	retentionCursor   uint64
+
+	// now reads wall-clock time (unix nanoseconds) for the retention sweep's
+	// eligibility cutoff. It is injected so a test can drive the cutoff
+	// deterministically instead of tuning durations against real time — the same
+	// discipline the engine applies to event timestamps (invariant I4). It defaults
+	// to the system clock; a test overrides it with withClock, sharing one clock
+	// with the engine so a finished instance's CompletedAt and the sweep's "now"
+	// come from a single controllable source.
+	now func() int64
+	// retentionTicks, when non-nil, replaces the retention sweep's real ticker so a
+	// test triggers each sweep explicitly rather than racing a wall-clock cadence.
+	// retentionSwept, when non-nil, receives once after each triggered sweep
+	// completes, so a test awaits the sweep it triggered without polling. Both are
+	// nil in production (a real ticker drives the sweep, nothing observes it). Set
+	// together by withRetentionTrigger.
+	retentionTicks <-chan time.Time
+	retentionSwept chan struct{}
 
 	// docsEnabled gates the OpenAPI spec and the Scalar API explorer. On by
 	// default (opt-out), consistent with the already-open web UI and MCP
@@ -384,6 +414,18 @@ func WithOpenSearchExportInterval(d time.Duration) Option {
 	}
 }
 
+// withExporterTrigger replaces the exporter loop's real ticker with an explicit tick
+// channel and, optionally, a completion channel signaled after each triggered export
+// pass. It is unexported — a test seam, not an operator knob — so a test drives export
+// passes deterministically: send on ticks, receive on ticked, then assert, with no
+// wall-clock cadence or polling (ADR-0114). Mirrors withRetentionTrigger.
+func withExporterTrigger(ticks <-chan time.Time, ticked chan struct{}) Option {
+	return func(s *Server) {
+		s.exporterTicks = ticks
+		s.exporterTicked = ticked
+	}
+}
+
 const (
 	// retentionSweepInterval is the default cadence of the history-retention sweep.
 	retentionSweepInterval = time.Minute
@@ -423,6 +465,29 @@ func WithRetentionBatch(n int) Option {
 		if n > 0 {
 			s.retentionBatch = n
 		}
+	}
+}
+
+// withClock overrides the server clock the retention sweep reads for its eligibility
+// cutoff (unix nanoseconds). It is unexported — a test seam, not an operator knob — so
+// a test can share one deterministic clock with the engine and make a finished
+// instance's age exact rather than tuned against real time (invariant I4).
+func withClock(now func() int64) Option {
+	return func(s *Server) {
+		if now != nil {
+			s.now = now
+		}
+	}
+}
+
+// withRetentionTrigger replaces the retention sweep's real ticker with an explicit
+// tick channel and, optionally, a completion channel signaled after each triggered
+// sweep. It is unexported — a test seam — so a test drives sweeps deterministically:
+// send on ticks, receive on swept, then assert, with no wall-clock cadence or polling.
+func withRetentionTrigger(ticks <-chan time.Time, swept chan struct{}) Option {
+	return func(s *Server) {
+		s.retentionTicks = ticks
+		s.retentionSwept = swept
 	}
 }
 
@@ -531,6 +596,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		dmnRegistry:       dmn.NewRegistry(),
 		docsEnabled:       true, // opt-out: served unless WithoutDocs is passed (ADR-0043)
 	}
+	// The retention sweep reads its eligibility cutoff from the system clock by
+	// default; the options below may replace it (withClock) for a deterministic
+	// test. Set here rather than in the literal above to keep the literal's comment
+	// alignment intact (invariant I4).
+	s.now = func() int64 { return time.Now().UnixNano() }
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -608,6 +678,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// user-task form rather than a side-channel endpoint (ADR-0087). One worker serves
 	// every process under the reserved CSV-import job type.
 	s.jobRunner.HandleWithOutput(compiler.CsvImportJobTypeIndex, csvImportHandler(store, s.processLookup))
+	// A web-scraping service task fetches a model-authored URL and extracts the
+	// elements matching a CSS selector, in-process, off the run loop and after fsync,
+	// writing the extracted values into the task's result variable as a JSON array.
+	// The URL and selector live in the model, like REST (ADR-0118). One worker serves
+	// every process under the reserved web-scrape job type.
+	s.jobRunner.HandleWithOutput(compiler.WebScrapeJobTypeIndex, webscrape.Handler(store, s.processLookup, webscrape.NewHTTPClient()))
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
 	}
@@ -677,38 +753,73 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 // (OpenSearch unreachable, a transient index failure) is logged and retried on the
 // next tick — the exporter leaves its high-water mark unadvanced on failure, so no
 // record is skipped and delivery stays at-least-once.
+//
+// The trigger is a seam for deterministic tests: production runs a real ticker,
+// while a test injects an explicit tick channel (withExporterTrigger) so an export
+// pass runs exactly when the test says — no cadence to race, no polling. When
+// exporterTicked is set the loop signals it after each triggered pass so the test can
+// await completion. This mirrors the retention sweep's clock/ticker seam.
 func (s *Server) exporterLoop(every time.Duration) {
 	defer s.wg.Done()
-	t := time.NewTicker(every)
-	defer t.Stop()
+	ticks := s.exporterTicks
+	if ticks == nil {
+		t := time.NewTicker(every)
+		defer t.Stop()
+		ticks = t.C
+	}
 	for {
 		select {
 		case <-s.quit:
 			return
-		case <-t.C:
+		case <-ticks:
 			if n, err := s.exporter.Tick(context.Background()); err != nil {
 				log.Printf("opensearch exporter: %v (will retry next tick)", err)
 			} else if n > 0 {
 				log.Printf("opensearch exporter: indexed %d record(s)", n)
+			}
+			if s.exporterTicked != nil {
+				select {
+				case s.exporterTicked <- struct{}{}:
+				case <-s.quit:
+					return
+				}
 			}
 		}
 	}
 }
 
 // retentionSweeper runs the history-retention sweep on a fixed cadence (ADR-0115).
-// Wall-clock "now" is read off the run loop; the sweep itself hops onto the loop via
-// do() so its scan, purge commands, and cursor are single-writer-safe.
+// Wall-clock "now" is read from s.now() off the run loop; the sweep itself hops onto
+// the loop via do() so its scan, purge commands, and cursor are single-writer-safe.
+//
+// The trigger and clock are seams for deterministic tests (invariant I4): production
+// runs a real ticker and the system clock, while a test injects an explicit tick
+// channel and a fixed clock (withRetentionTrigger/withClock) so a sweep fires exactly
+// when the test says and evaluates a time the test controls — no scheduling luck, no
+// wall-clock-tuned durations. When retentionSwept is set the sweeper signals it after
+// each triggered sweep so the test can await completion.
 func (s *Server) retentionSweeper(every time.Duration) {
 	defer s.wg.Done()
-	t := time.NewTicker(every)
-	defer t.Stop()
+	ticks := s.retentionTicks
+	if ticks == nil {
+		t := time.NewTicker(every)
+		defer t.Stop()
+		ticks = t.C
+	}
 	for {
 		select {
 		case <-s.quit:
 			return
-		case <-t.C:
-			now := time.Now().UnixNano()
+		case <-ticks:
+			now := s.now()
 			s.do(func() { s.sweepRetention(now) })
+			if s.retentionSwept != nil {
+				select {
+				case s.retentionSwept <- struct{}{}:
+				case <-s.quit:
+					return
+				}
+			}
 		}
 	}
 }
@@ -812,6 +923,13 @@ func (s *Server) loadDeployments() error {
 				return fmt.Errorf("api: reload dmn model for def %d (%s): %w", rec.Key, rec.ProcessID, err)
 			}
 		}
+		// Restore the deactivation flag (ADR-0119) before the loop serves traffic and
+		// before timers tick, so a start timer restored from the log finds the definition
+		// inactive and skips instantiation. loadDeployments does not re-arm timers (they
+		// come back from the WAL), so this is the only place recovery re-applies the gate.
+		if rec.Inactive {
+			s.proc.SetProcessActive(rec.Key, false)
+		}
 		s.deployments[rec.Key] = &deployment{
 			Key:        rec.Key,
 			ProcessID:  rec.ProcessID,
@@ -820,6 +938,7 @@ func (s *Server) loadDeployments() error {
 			DeployedAt: rec.DeployedAt,
 			xml:        []byte(rec.XML),
 			cp:         cp,
+			inactive:   rec.Inactive,
 		}
 		s.order = append(s.order, rec.Key)
 		if rec.Version > s.versions[rec.ProcessID] {

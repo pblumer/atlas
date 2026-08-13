@@ -12,7 +12,51 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **Deactivate a deployed process** ([ADR-0119](docs/adr/0119-deactivate-deployed-process.md)):
+  a deployed definition can be paused so it stays deployed and keeps its running
+  instances, but no longer auto-starts new ones from its timer, message, or signal
+  start events — for holding a timer-driven process during a maintenance window, for
+  example. Reversible with no redeploy and no lost timers; a recurring timer resumes on
+  reactivation. Exposed as `PUT /api/v1/processes/{key}/active` and an `active` flag on
+  the process listing, and toggled from the Modeler's Deployed list (an "Inactive" badge
+  and an Activate/Deactivate button). The flag persists on the deployment sidecar and is
+  re-applied on restart; an explicit operator/API start is not gated.
+- **Web-scraping connector** ([ADR-0118](docs/adr/0118-web-scraping-connector.md)):
+  a `<serviceTask>` bearing an `<atlas:webscrapeConnector url selector attribute
+  resultVariable>` extension fetches a model-authored page and extracts the elements
+  matching a CSS selector, writing the values into a process variable as a JSON array.
+  Like the REST connector, the URL and selector are authored in the model (each
+  literal or a FEEL expression); extraction runs off the hot path in an in-process
+  worker under the reserved `WebScrapeJobTypeIndex`. Authorable in the Modeler via the
+  service-task connector catalog.
+
+### Changed
+
+- **Deterministic history-retention tests** (v0.2.0 reliability foundation): the
+  retention sweep (ADR-0115) gained two test seams — an injectable clock for its
+  eligibility cutoff and an explicit sweep trigger in place of the real ticker. The
+  black-box retention tests, which previously raced a wall-clock cadence and had to
+  widen a max age to 500ms so a sweep tick would not fire during setup (PR #313), are
+  replaced by deterministic ones that share a single fake clock with the engine (so a
+  finished instance's `CompletedAt` and the sweep's "now" are exact) and drive each
+  sweep through a channel handshake (no `time.Sleep`, no polling). They now assert the
+  exact age boundary and an exact one-per-tick drain, honoring the repository rule that
+  tests must not depend on wall-clock time or goroutine scheduling (invariant I4,
+  AGENTS.md). Production behavior is unchanged — a real ticker and the system clock
+  still drive the sweep in the running server.
+- **Deterministic OpenSearch-exporter test** (v0.2.0 reliability foundation): the
+  exporter loop (ADR-0114) gained a test seam — an injectable tick trigger in place of
+  its real ticker, with a completion signal. The exporter test previously fired a 15ms
+  export interval and polled `stub.count()` under a 3s deadline with a `time.Sleep`,
+  racing the background ticker; it is replaced by one that triggers a single export pass
+  and awaits it via a channel handshake, then asserts the instance's events were
+  mirrored to the configured index — no wall-clock cadence, no polling, no `time.Sleep`.
+  This follows the same seam the history-retention sweep uses and honors the repository
+  rule that tests must not depend on wall-clock time or goroutine scheduling (AGENTS.md).
+  Production behavior is unchanged — a real ticker still drives the loop in the running
+  server.
 
 ## [0.1.0] — 2026-08-11
 

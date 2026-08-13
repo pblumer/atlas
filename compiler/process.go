@@ -69,8 +69,10 @@ const (
 
 	TypeTerminateEndEvent // an end event that ends its enclosing flow scope at once (ADR-0116): it terminates every other live token in the scope (cancelling their jobs), then completes the scope — at the root the instance ends, inside a subprocess that subprocess ends and the parent continues. cancelEndEventBehavior minus compensation and the cancel boundary
 
+	TypeMockupTask // a service task simulated by the engine itself (ADR-0120): on activation it writes an optional FEEL result and arms a one-shot timer for a random duration, then completes (or, per a fail probability, raises an incident) — no external worker or connector. A distinct type because its execution (timer-wait, no job) differs from a service task, like TypeConnectorTask.
+
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 35
+	numBpmnTypes = 36
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -146,6 +148,8 @@ func (t BpmnType) String() string {
 		return "CancelEndEvent"
 	case TypeTerminateEndEvent:
 		return "TerminateEndEvent"
+	case TypeMockupTask:
+		return "MockupTask"
 	default:
 		return "Unspecified"
 	}
@@ -178,11 +182,11 @@ type CompiledNode struct {
 	EventSubStart   int32 // offset into eventSubs (the event-subprocess handler nodes nested directly in this scope)
 	EventSubCount   int32 // number of event subprocesses in this scope (0 for a node that hosts none)
 	Transaction     bool  // this subprocess is a <transaction>: it may hold a cancel end event and host a cancel boundary (ADR-0108)
-	Lane            int32 // index into lanes, -1 if this node is in no lane; organizational metadata with no execution effect (ADR-0118)
+	Lane            int32 // index into lanes, -1 if this node is in no lane; organizational metadata with no execution effect (ADR-0121)
 }
 
 // LaneDetail is one BPMN lane: an organizational partition of the process's flow nodes with no
-// execution semantics (ADR-0118). Name is the interned lane label; Parent is the index of the
+// execution semantics (ADR-0121). Name is the interned lane label; Parent is the index of the
 // enclosing lane in a nested laneSet (-1 for a top-level lane), so a node's full lane path can be
 // walked leaf-to-root for display.
 type LaneDetail struct {
@@ -372,6 +376,11 @@ type UserTaskDetail struct {
 //     Remedy instance; RemedyForm and RemedyFields are the form and the entry's field
 //     values (literal-or-FEEL) an incident/entry is created with through the AR System
 //     REST API; ResultVar, if set, receives the created entry's id (ADR-0106).
+//   - web scrape (JobType == WebScrapeJobType): Url is the model-authored page to
+//     fetch (literal-or-FEEL, like REST); ScrapeSelector is the CSS selector whose
+//     matches are extracted; ScrapeAttribute names the HTML attribute to read from
+//     each match (-1 → each match's text content); ResultVar receives the extracted
+//     values as a JSON array (ADR-0118).
 //
 // Unused fields for a given kind are -1 (Intern maps that back to ""); Limit is 0
 // when unset. The write and REST kinds send the instance's variables as the
@@ -444,6 +453,37 @@ type ConnectorTaskDetail struct {
 	// over the instance's variables at call time (nil for a non-remedy task).
 	RemedyForm   RestExpr
 	RemedyFields []RestKV
+	// Web-scrape connector fields (JobType == WebScrapeJobType, ADR-0118). Url (above)
+	// is the model-authored page to fetch; ScrapeSelector is the CSS selector whose
+	// matches are extracted (literal-or-FEEL, the zero RestExpr for a non-scrape task);
+	// ScrapeAttribute is the interned HTML attribute read from each match (-1 → each
+	// match's text content). ResultVar (above) receives the extracted values as a JSON
+	// array. Read only by the in-process web-scraping worker.
+	ScrapeSelector  RestExpr
+	ScrapeAttribute int32
+}
+
+// MockupTaskDetail is the per-mockup-task data the engine reads to simulate a
+// service task itself (ADR-0120), instead of dispatching a job to an external
+// worker or connector. On activation the behavior arms a one-shot timer for a
+// random duration in [MinNanos, MaxNanos] and, if Expr is set, evaluates it over
+// the instance's variables and writes the result into ResultVar (the input→output
+// "script", e.g. a simulated REST response). When the timer fires the task
+// completes — unless the fail draw selects failure, in which case a job-less
+// incident is raised with FailMessage.
+//
+// The random duration and the fail decision are derived deterministically from
+// the frozen timer key at command time (never re-drawn on replay), so no new
+// nondeterministic source enters the engine (invariant I6). FailPerMillion is the
+// failure probability scaled to parts-per-million (0 = never fail, 1_000_000 =
+// always) so the whole decision stays integer-pure across live and replay.
+type MockupTaskDetail struct {
+	MinNanos       int64          // minimum simulated duration in nanoseconds
+	MaxNanos       int64          // maximum simulated duration in nanoseconds (>= MinNanos)
+	ResultVar      string         // result-variable name, "" if none (a raw string, like ScriptTaskDetail.ResultVar)
+	Expr           *expr.Compiled // FEEL result expression compiled at deploy time (I5), nil if none
+	FailPerMillion int32          // failure probability in parts-per-million, 0..1_000_000
+	FailMessage    string         // incident message on a simulated failure, "" for a default
 }
 
 // RestExpr is a REST connector field value that is either a literal string
@@ -669,6 +709,7 @@ type CompiledProcess struct {
 	businessRuleTasks  []BusinessRuleTaskDetail
 	timerCatches       []TimerCatchDetail
 	connectorTasks     []ConnectorTaskDetail
+	mockupTasks        []MockupTaskDetail
 	userTasks          []UserTaskDetail
 	boundaryEventDets  []BoundaryEventDetail
 	eventSubProcesses  []EventSubProcessDetail
@@ -695,7 +736,7 @@ type CompiledProcess struct {
 	instanceTtlNanos   int64        // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
 	isExecutable       bool         // bpmn:isExecutable — a non-executable process can't be started
 	elementIds         []int32      // interned source BPMN id per node id (-1 if unset)
-	lanes              []LaneDetail // organizational lanes (ADR-0118); a node's CompiledNode.Lane indexes this
+	lanes              []LaneDetail // organizational lanes (ADR-0121); a node's CompiledNode.Lane indexes this
 	strings            []string     // intern table (index → string), for debug/export
 }
 
@@ -795,14 +836,14 @@ func (p *CompiledProcess) ServiceTask(detail int32) *ServiceTaskDetail {
 	return &p.serviceTasks[detail]
 }
 
-// Lane returns the lane at the given table index (ADR-0118).
+// Lane returns the lane at the given table index (ADR-0121).
 func (p *CompiledProcess) Lane(idx int32) *LaneDetail { return &p.lanes[idx] }
 
-// NodeLane returns the leaf lane index a node belongs to, or -1 if it is in no lane (ADR-0118).
+// NodeLane returns the leaf lane index a node belongs to, or -1 if it is in no lane (ADR-0121).
 func (p *CompiledProcess) NodeLane(nodeID int32) int32 { return p.nodes[nodeID].Lane }
 
 // LanePath returns a node's lane names from the outermost lane to the leaf, for display (e.g.
-// ["Finance", "Approver"] for a node in a nested lane). Empty when the node is in no lane (ADR-0118).
+// ["Finance", "Approver"] for a node in a nested lane). Empty when the node is in no lane (ADR-0121).
 func (p *CompiledProcess) LanePath(nodeID int32) []string {
 	idx := p.nodes[nodeID].Lane
 	var leafToRoot []string
@@ -827,6 +868,11 @@ func (p *CompiledProcess) SendTask(detail int32) *ServiceTaskDetail {
 // TimerCatch returns the timer-catch detail at the given table index.
 func (p *CompiledProcess) TimerCatch(detail int32) *TimerCatchDetail {
 	return &p.timerCatches[detail]
+}
+
+// MockupTask returns the mockup-task detail at the given table index (ADR-0120).
+func (p *CompiledProcess) MockupTask(detail int32) *MockupTaskDetail {
+	return &p.mockupTasks[detail]
 }
 
 // ReceiveTask returns the receive-task detail at the given table index (ADR-0102). A

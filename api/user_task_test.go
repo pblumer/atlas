@@ -372,7 +372,7 @@ const laneUserTaskBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 </bpmn:definitions>`
 
 // TestUserTaskLane checks that a user task drawn inside a lane carries the lane in the task-list
-// response, so the Tasks app can group by it (ADR-0118 Layer A).
+// response, so the Tasks app can group by it (ADR-0121 Layer A).
 func TestUserTaskLane(t *testing.T) {
 	ts := newTestServer(t)
 	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", laneUserTaskBPMN, "application/xml")

@@ -379,7 +379,7 @@ Making processes wait, react, and time out.
   `completeScope` — `cancelEndEventBehavior` minus compensation and the cancel boundary — so no new
   recovery path; recovery-tested. The last unimplemented standard end-event type (none/message/
   signal/error/cancel already run). bpmn-js draws it natively.
-- ✅ **Lanes** (organizational metadata — Layer A) ([ADR-0118](docs/adr/0118-bpmn-lanes.md)): a
+- ✅ **Lanes** (organizational metadata — Layer A) ([ADR-0121](docs/adr/0121-bpmn-lanes.md)): a
   `<laneSet>`/`<lane>` with `<flowNodeRef>` children (and nested `<childLaneSet>`) partitions a
   process's flow nodes into named lanes. Faithful to BPMN 2.x and Camunda 8, a lane is **metadata
   with no execution semantics** — the compiler records each node's leaf lane (and its outermost→leaf

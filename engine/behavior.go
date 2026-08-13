@@ -60,6 +60,10 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeScriptTask] = scriptTaskBehavior{}
 	p.behaviors[compiler.TypeBusinessRuleTask] = businessRuleTaskBehavior{}
 	p.behaviors[compiler.TypeConnectorTask] = connectorTaskBehavior{}
+	// A mockup task is simulated by the engine itself (ADR-0120): no job, a timer for
+	// a random duration and an optional FEEL result. A distinct behavior because its
+	// activation (timer, not job) and completion (write result, maybe fail) differ.
+	p.behaviors[compiler.TypeMockupTask] = mockupTaskBehavior{}
 	p.behaviors[compiler.TypeScriptJobTask] = scriptJobTaskBehavior{}
 	p.behaviors[compiler.TypeUserTask] = userTaskBehavior{}
 	p.behaviors[compiler.TypeBoundaryEvent] = boundaryEventBehavior{}
@@ -675,6 +679,11 @@ func rearmTimerElement(c *ProcessingContext, elKey uint64) {
 	}
 	node := cp.Node(ei.ElementId)
 	switch node.Type {
+	case compiler.TypeMockupTask:
+		// A resolved mockup-failure incident (ADR-0120): re-arm a fresh attempt. The
+		// new timer key drives an independent duration and failure draw, so a retry can
+		// make progress rather than deterministically failing again.
+		armMockupTimer(c, elKey, ei)
 	case compiler.TypeTimerCatchEvent:
 		armOneShotTimer(c, elKey, ei, cp.TimerCatch(node.Detail).Schedule)
 	case compiler.TypeBoundaryEvent:
@@ -741,6 +750,14 @@ func handleTimerTriggered(c *ProcessingContext) {
 	}
 	if raw, ok := recurringEventSubSchedule(c, ei); ok {
 		fireRecurringOrIncident(c, timer, ei, raw, fireRecurringEventSub)
+		return
+	}
+	// A mockup task's duration timer (ADR-0120): per its fail probability, drawn from
+	// this fired timer's key, simulate a failure (a job-less incident that parks the
+	// element) instead of completing. The TimerTriggered event is already appended
+	// above, so the fired timer is consumed on the failure path too.
+	if msg, fail := mockupFailure(c, ei, c.cmd.Key); fail {
+		raiseMockupIncident(c, timer.ElementInstanceKey, ei, msg)
 		return
 	}
 	c.AppendElementCommand(timer.ElementInstanceKey, model.IntentCompleting, *ei)
@@ -862,7 +879,13 @@ func fireStartTimer(c *ProcessingContext, timer model.TimerValue) {
 	if cp == nil {
 		return
 	}
-	c.AppendCreateInstanceCommand(timer.ProcessDefKey, nil, "") // a timer start has no correlation key
+	// A deactivated definition keeps its start timer ticking and re-arming below, but
+	// does not instantiate while inactive — the operator paused new runs (ADR-0119). A
+	// recurring schedule resumes cleanly when reactivated; a one-shot that came due
+	// while paused is simply skipped.
+	if c.p.ProcessActive(timer.ProcessDefKey) {
+		c.AppendCreateInstanceCommand(timer.ProcessDefKey, nil, "") // a timer start has no correlation key
+	}
 	if timer.Repetitions == 0 {
 		return // one-shot (duration/date) or a finite cycle that has run out
 	}
@@ -1614,6 +1637,148 @@ func (timerCatchEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei
 	completeAndTakeFlows(c, key, ei)
 }
 
+// mockupTaskBehavior: a service task the engine simulates itself (ADR-0120),
+// instead of dispatching a job to an external worker or connector. On activation it
+// writes the optional FEEL result (the input→output "script", e.g. a simulated REST
+// response) and arms a one-shot timer for a random duration, then waits. When the
+// timer fires the task completes — unless the fail draw selects failure, in which
+// case handleTimerTriggered raises a job-less incident and the element parks
+// (resolving it re-arms a fresh attempt). The result is written in OnActivated, not
+// OnCompleting: handleElementCompleting runs output mappings and then drops the
+// activity-local scope before OnCompleting, so a result written there would be
+// discarded and invisible to output mappings.
+type mockupTaskBehavior struct{}
+
+func (mockupTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.MockupTask(cp.Node(ei.ElementId).Detail)
+	// Evaluate the result expression here (command processing), exactly like a FEEL
+	// script task, and freeze the result into the variable event; on replay
+	// applyToState re-applies the stored result rather than re-evaluating (I6). The
+	// input mappings are already bound in the local scope, so the FEEL sees them.
+	if detail.Expr != nil {
+		result, err := detail.Expr.Eval(bindInputsChain(c, detail.Expr.Inputs(), key))
+		if err != nil {
+			// Match the inline script task: FEEL is null-propagating, so a failed
+			// evaluation yields null rather than halting the processor.
+			result = expr.Null
+		}
+		kind, b, text := expr.Classify(result)
+		c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+			ScopeKey: ioResultScope(cp, key, ei),
+			Name:     detail.ResultVar,
+			Kind:     toVarKind(kind),
+			Bool:     b,
+			Text:     text,
+		})
+	}
+	armMockupTimer(c, key, ei)
+	// Stays Activated: no Completing until the simulated-duration timer fires.
+}
+
+func (mockupTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	completeAndTakeFlows(c, key, ei)
+}
+
+// mockupDurationSalt and mockupFailSalt make the duration and the failure decision
+// independent draws from the same timer key (ADR-0120): mockupHash mixes the key
+// with each salt so the two never correlate.
+const (
+	mockupDurationSalt uint64 = 0x6d6f636b75705f64 // "mockup_d"
+	mockupFailSalt     uint64 = 0x6d6f636b75705f66 // "mockup_f"
+)
+
+// armMockupTimer arms the one-shot timer that drives a mockup task to completion
+// (ADR-0120). It mints a fresh timer key, derives the random duration deterministically
+// from that key, and freezes the resulting due date into the TimerCreated event, so
+// the duration reproduces on replay without any new nondeterministic source (I6).
+// Because the key is fresh on every arm, each re-arm (after a simulated failure is
+// resolved) draws an independent duration and failure outcome. Shared by OnActivated
+// and rearmTimerElement so the two never diverge.
+func armMockupTimer(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	detail := cp.MockupTask(cp.Node(ei.ElementId).Detail)
+	tkey := c.NewKey()
+	dur := mockupDurationNanos(tkey, detail.MinNanos, detail.MaxNanos)
+	c.AppendTimerEvent(tkey, model.IntentTimerCreated, model.TimerValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		TargetElementId:    ei.ElementId,
+		DueDate:            c.Now() + dur,
+	})
+}
+
+// mockupFailure reports whether the mockup task ei, whose duration timer just fired
+// with key tkey, should simulate a failure instead of completing, and returns the
+// incident message to raise. It is a pure function of the frozen timer key, so live
+// and replay agree (though it runs only live, since handleTimerTriggered is never
+// replayed). A non-mockup element never fails here.
+func mockupFailure(c *ProcessingContext, ei *model.ElementInstanceValue, tkey uint64) (string, bool) {
+	cp := c.process(ei.ProcessDefKey)
+	node := cp.Node(ei.ElementId)
+	if node.Type != compiler.TypeMockupTask {
+		return "", false
+	}
+	detail := cp.MockupTask(node.Detail)
+	if !mockupShouldFail(tkey, detail.FailPerMillion) {
+		return "", false
+	}
+	if detail.FailMessage != "" {
+		return detail.FailMessage, true
+	}
+	return "mockup task simulated failure", true
+}
+
+// raiseMockupIncident parks a mockup task with a job-less incident on a simulated
+// failure (ADR-0120), mirroring raiseTimerScheduleIncident: JobKey stays zero, the
+// marker that routes resolution back through rearmTimerElement — which re-arms a
+// fresh attempt.
+func raiseMockupIncident(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue, message string) {
+	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		ElementId:          ei.ElementId,
+		RaisedAt:           c.Now(),
+		Message:            message,
+	})
+}
+
+// mockupDurationNanos derives a mockup task's simulated duration, uniformly in
+// [minNanos, maxNanos], from the frozen timer key (ADR-0120). span is non-negative
+// because the compiler validates maxNanos >= minNanos.
+func mockupDurationNanos(tkey uint64, minNanos, maxNanos int64) int64 {
+	span := maxNanos - minNanos
+	if span <= 0 {
+		return minNanos
+	}
+	off := int64(mockupHash(tkey, mockupDurationSalt) % uint64(span+1))
+	return minNanos + off
+}
+
+// mockupShouldFail reports whether a mockup task with the given failure probability
+// (parts-per-million) fails on the attempt whose timer key is tkey (ADR-0120). The
+// endpoints short-circuit so 0 never fails and 1_000_000 always does.
+func mockupShouldFail(tkey uint64, failPerMillion int32) bool {
+	if failPerMillion <= 0 {
+		return false
+	}
+	if failPerMillion >= 1_000_000 {
+		return true
+	}
+	return mockupHash(tkey, mockupFailSalt)%1_000_000 < uint64(failPerMillion)
+}
+
+// mockupHash is a deterministic, self-contained mixer (splitmix64) over a key and a
+// salt (ADR-0120). It must stay pure — no math/rand, no seeded hash/maphash — so the
+// mockup duration and failure draws it feeds are identical live and on replay.
+func mockupHash(seed, salt uint64) uint64 {
+	x := seed ^ salt
+	x += 0x9e3779b97f4a7c15
+	x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9
+	x = (x ^ (x >> 27)) * 0x94d049bb133111eb
+	return x ^ (x >> 31)
+}
+
 // messageCatchEventBehavior: an intermediate message catch event. On activation
 // it evaluates its correlation-key expression over the instance's variables,
 // opens a subscription on (message name, key), and waits (stays Activated). A
@@ -1802,6 +1967,11 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 	// both correlate a waiting instance and start new ones, all recovered from the
 	// events the created instances emit.
 	for _, ref := range c.p.messageStarts[name] {
+		// A deactivated definition does not start on a correlating message (ADR-0119):
+		// skip it entirely, so no instance and no message-flow record are created for it.
+		if !c.p.ProcessActive(ref.defKey) {
+			continue
+		}
 		startKey := evalStartCorrelationKey(ref.correlationKey, vars)
 		// A singleton message start (ADR-0094) instantiates only if no instance of this
 		// definition is already live for this correlation key. An empty key identifies
@@ -1935,6 +2105,10 @@ func broadcastSignal(c *ProcessingContext, name string, vars []model.VariableVal
 	// fire waiting catches and start fresh instances, all recovered from the events
 	// the created instances emit.
 	for _, defKey := range c.p.signalStarts[name] {
+		// A deactivated definition does not start on a broadcast signal (ADR-0119).
+		if !c.p.ProcessActive(defKey) {
+			continue
+		}
 		c.AppendCreateInstanceCommand(defKey, vars, "")
 	}
 }

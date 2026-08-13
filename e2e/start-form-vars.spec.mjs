@@ -1,0 +1,58 @@
+// End-to-end coverage for the Modeler Variables panel surfacing a linked form's
+// input fields (api/web/editor.js, ADR-0028). Driven through the real vendored
+// bpmn-js against a mock `api`: a process whose start event links a form gets that
+// form's fields listed under a "Form" group in the Variables panel, next to the
+// process's own variables under "Process". The rows are drag sources (their name is
+// the drag payload) so a variable can be dropped into a property field.
+import { test, expect } from "@playwright/test";
+
+test.beforeEach(async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  page.__errors = errors;
+  await page.goto("/start-form-vars-harness.html");
+  await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
+  await page.evaluate(() => window.__mount());
+  // Open the Variables panel; its render also fires the lazy form-schema fetch.
+  await page.locator("#vars-toggle").click();
+});
+
+test("a linked start form's fields appear under a Form group", async ({ page }) => {
+  const list = page.locator("#vars-list");
+
+  // The form schema loads asynchronously; wait for its fields to land.
+  await expect(list.locator('.var-row[data-var="filename"]')).toBeVisible();
+
+  // Two groups, in order: the form's fields first, then the process's variables.
+  const heads = page.locator(".vars-group-head");
+  await expect(heads).toHaveCount(2);
+  // innerText reflects the CSS text-transform:uppercase, so compare case-insensitively.
+  expect((await heads.allInnerTexts()).map((s) => s.toLowerCase())).toEqual(["form", "process"]);
+
+  // Every input-bearing field is surfaced; layout-only components and a dynamic
+  // list's inner field (bound under its path) are not.
+  const names = await list.locator(".var-name").allInnerTexts();
+  expect(names).toEqual(expect.arrayContaining(["filename", "delimiter", "header", "rows", "orderId"]));
+  expect(names).not.toContain("cell");
+
+  // A form field names its form as the click-to-select origin.
+  await expect(list.locator('.var-row[data-var="filename"] .var-meta')).toContainText("form field · CSV Upload");
+
+  expect(page.__errors).toEqual([]);
+});
+
+test("variable rows are drag sources carrying the variable name", async ({ page }) => {
+  const row = page.locator('#vars-list .var-row[data-var="filename"]');
+  await expect(row).toBeVisible();
+  await expect(row).toHaveAttribute("draggable", "true");
+
+  // A synthesized dragstart exposes the variable name as the text/plain payload —
+  // what the browser's native drop-to-insert writes into a text field.
+  const payload = await row.evaluate((el) => {
+    const dt = new DataTransfer();
+    el.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer: dt }));
+    return dt.getData("text/plain");
+  });
+  expect(payload).toBe("filename");
+  expect(page.__errors).toEqual([]);
+});

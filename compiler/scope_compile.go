@@ -92,6 +92,18 @@ func registerScope(
 		if err != nil {
 			return err
 		}
+		// A service task bearing an <atlas:mockupConnector> extension is simulated by
+		// the engine itself (ADR-0120): it creates no job and delegates to no external
+		// worker or connector, so it is checked before the connector table and the
+		// plain-worker fallthrough. It has no reserved job type — the engine's
+		// mockupTaskBehavior arms a timer and completes it.
+		if st.Mockup != nil {
+			id, err := compileMockupTask(b, st)
+			if err != nil {
+				return err
+			}
+			return register(st.Id, id)
+		}
 		// A service task (or send task) bearing a connector extension delegates to a
 		// server-registered connector via the job path rather than to an external
 		// service-task worker. The ordered connectorCompilers table owns the set of

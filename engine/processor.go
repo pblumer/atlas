@@ -70,6 +70,15 @@ type Processor struct {
 	// this map need not live in the log (I6).
 	callOverrides map[string]CallTargetOverride
 
+	// inactive is the set of definition keys an operator has deactivated (ADR-0119):
+	// a deactivated definition does not auto-start new instances from its timer,
+	// message, or signal start events. Like callOverrides it is operator config the
+	// server layer loads from a sidecar at startup and pushes here via SetProcessActive,
+	// owned by this run-loop goroutine (I3). It gates only the LIVE decision to schedule
+	// a create followup, never applyToState, so no Activated event is ever suppressed on
+	// replay — the flag need not live in the log (I6).
+	inactive map[uint64]bool
+
 	jobNotifier func(jobType int32)
 
 	queue        []Command
@@ -118,6 +127,7 @@ func New(partition uint16, log *wal.Log, store *state.Store, clock Clock) *Proce
 		processes:     map[uint64]*compiler.CompiledProcess{},
 		messageStarts: map[string][]messageStartRef{},
 		signalStarts:  map[string][]uint64{},
+		inactive:      map[uint64]bool{},
 		latestProcess: map[string]uint64{},
 		callOverrides: map[string]CallTargetOverride{},
 	}
@@ -134,6 +144,14 @@ func (p *Processor) Deploy(cp *compiler.CompiledProcess) {
 	// Newest definition per process id wins; deployments reload oldest-first on
 	// recovery, so this is deterministic (ADR-0076).
 	p.latestProcess[cp.ProcessId()] = cp.Key
+	// A redeployment supersedes older versions of the same process id: only the
+	// latest version may start on a message or signal. Without this, every deployed
+	// version's start subscription stays live, so one incoming event instantiates the
+	// process once per version — the reported "one request, N welcome e-mails" fan-out
+	// when a model is iterated in the modeler. Timer starts already retire a prior
+	// version's armed timers on re-arm (see handleTimerStartArm); message and signal
+	// starts must match (ADR-0035/0076/0088).
+	p.supersedeStarts(cp.Key)
 	for _, ms := range cp.MessageStartEvents() {
 		p.messageStarts[ms.MessageName] = append(p.messageStarts[ms.MessageName],
 			messageStartRef{defKey: cp.Key, elementId: ms.ElementId, correlationKey: ms.CorrelationKey, singletonStart: ms.SingletonStart})
@@ -177,6 +195,29 @@ func (p *Processor) ClearCallTargetOverride(calledProcessId string) {
 	delete(p.callOverrides, calledProcessId)
 }
 
+// SetProcessActive marks a deployed definition active or inactive (ADR-0119). An
+// inactive definition does not auto-start new instances when its timer, message, or
+// signal start events fire; existing instances run to completion, and an explicit
+// operator/API start is unaffected. The server layer loads the flag from the
+// deployment sidecar at startup and calls this on an operator toggle. Like
+// SetCallTargetOverride it is operator config, not event-sourced: it changes only the
+// live decision to schedule a create, so replay is unaffected (I6). Run-loop goroutine
+// only (the map's single owner).
+func (p *Processor) SetProcessActive(defKey uint64, active bool) {
+	if active {
+		delete(p.inactive, defKey)
+		return
+	}
+	p.inactive[defKey] = true
+}
+
+// ProcessActive reports whether a definition may auto-start new instances — the
+// inverse of the ADR-0119 deactivation flag. A key that was never deactivated (the
+// default) is active. Run-loop goroutine only.
+func (p *Processor) ProcessActive(defKey uint64) bool {
+	return !p.inactive[defKey]
+}
+
 // Undeploy removes a definition so no new instances of it can be created,
 // dropping its message-start index entries too. It is the caller's
 // responsibility not to undeploy a definition with running instances (they
@@ -191,6 +232,9 @@ func (p *Processor) Undeploy(defKey uint64) {
 		}
 	}
 	delete(p.processes, defKey)
+	// Drop any deactivation for this key so a future definition reusing it (there is
+	// none today — keys are monotonic) never inherits a stale inactive flag.
+	delete(p.inactive, defKey)
 }
 
 // messageStartRef points a starting message at the definition it instantiates
@@ -206,6 +250,58 @@ type messageStartRef struct {
 	// already started with the same correlation key (ADR-0094); false = ADR-0035's
 	// start-per-message default.
 	singletonStart bool
+}
+
+// supersedeStarts drops every message- and signal-start index entry that points at
+// an older version of newKey's process id, so redeploying a process leaves only its
+// latest version able to start on an incoming message or signal. newKey must already
+// be in p.processes. Entries for a *different* process id that happens to share a
+// message or signal name are kept — only same-process-id older versions are retired —
+// so two distinct processes started by the same event both keep starting. Rebuilding
+// the index by replaying deploys oldest-first therefore converges on the latest
+// version deterministically (ADR-0076), matching how a re-armed timer start retires a
+// prior version's timers (handleTimerStartArm).
+func (p *Processor) supersedeStarts(newKey uint64) {
+	cp := p.processes[newKey]
+	if cp == nil {
+		return
+	}
+	pid := cp.ProcessId()
+	// olderVersion reports whether defKey is a different, same-process-id definition
+	// than the one being deployed — i.e. a version this deploy supersedes.
+	olderVersion := func(defKey uint64) bool {
+		if defKey == newKey {
+			return false
+		}
+		other := p.processes[defKey]
+		return other != nil && other.ProcessId() == pid
+	}
+	for name, refs := range p.messageStarts {
+		kept := refs[:0:0]
+		for _, r := range refs {
+			if !olderVersion(r.defKey) {
+				kept = append(kept, r)
+			}
+		}
+		if len(kept) == 0 {
+			delete(p.messageStarts, name)
+		} else {
+			p.messageStarts[name] = kept
+		}
+	}
+	for name, keys := range p.signalStarts {
+		kept := keys[:0:0]
+		for _, k := range keys {
+			if !olderVersion(k) {
+				kept = append(kept, k)
+			}
+		}
+		if len(kept) == 0 {
+			delete(p.signalStarts, name)
+		} else {
+			p.signalStarts[name] = kept
+		}
+	}
 }
 
 // removeStartRef returns refs with the first entry for defKey removed. A name
