@@ -39,6 +39,16 @@ _Changed_ / _Removed_ for each version.
   request decode, routing, the run-loop handoff, and response encode. The existing
   `-bench=.` CI smoke step covers them; still deferred are a loopback-socket (real
   TCP) variant and service-task completion over HTTP.
+- **In-memory benchmark profile** (v0.2.0 programme B): RAM-backed (tmpfs) twins of
+  the three engine-level workloads (`BenchmarkInMemory…`). The state store already
+  commits with `pebble.NoSync`, so the WAL `fsync` is the only durability cost;
+  running it on tmpfs makes that `fsync` hit RAM, so comparing an in-memory
+  benchmark to its durable twin splits the per-instance cost into engine CPU (what
+  remains) and disk-`fsync` latency (the difference — on the CI machine, ~95% of the
+  durable time). Same `events/op`/`walB/op`/`allocs/op` as the durable twin. It is a
+  measurement profile, not a durability mode; the benchmarks skip when no tmpfs is
+  available (`ATLAS_BENCH_TMPFS` overrides the mount). Still test-only, so the
+  coverage floor is untouched, and the `-bench=.` CI smoke step covers them.
 - **Deactivate a deployed process** ([ADR-0119](docs/adr/0119-deactivate-deployed-process.md)):
   a deployed definition can be paused so it stays deployed and keeps its running
   instances, but no longer auto-starts new ones from its timer, message, or signal

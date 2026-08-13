@@ -41,7 +41,18 @@ func (c *benchClock) Now() int64 { c.t++; return c.t }
 // b, so callers do not close anything themselves.
 func durableEngine(b *testing.B) (*engine.Processor, *state.Store, string) {
 	b.Helper()
-	dir := b.TempDir()
+	// b.TempDir() lives on the OS temp filesystem — real disk, so the WAL's
+	// per-batch fsync is a real fsync. That is the durable profile.
+	return engineOverDir(b, b.TempDir())
+}
+
+// engineOverDir builds the processor, WAL, and state store under dir. It backs both
+// the durable profile (dir on real disk) and the in-memory profile (dir on a
+// RAM-backed tmpfs), which differ only in where the WAL's fsync lands — the state
+// store already commits with pebble.NoSync, so the WAL fsync is the sole durability
+// cost. Cleanup is registered on b.
+func engineOverDir(b *testing.B, dir string) (*engine.Processor, *state.Store, string) {
+	b.Helper()
 	walDir := filepath.Join(dir, "wal")
 	log, err := wal.Open(wal.Options{Dir: walDir})
 	if err != nil {

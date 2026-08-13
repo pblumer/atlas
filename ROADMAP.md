@@ -503,14 +503,15 @@ Adoption and polish.
 - 🚧 **Benchmark suite and published performance numbers** (v0.2.0 programme B):
   a reproducible harness landed in [`benchmarks/`](benchmarks/) — durable-profile
   (real WAL `fsync` per batch) steady-state benchmarks for the minimal
-  self-completing, service-task-lifecycle, and variable+gateway workloads, in **two
-  profiles**: the pure engine and the end-to-end HTTP/API path through `api.Server`
-  (so the difference reads off the API-layer overhead). They report `ns/op`
+  self-completing, service-task-lifecycle, and variable+gateway workloads, across
+  **three profiles**: the pure engine, the end-to-end HTTP/API path through
+  `api.Server` (so the difference reads off the API-layer overhead), and a RAM-backed
+  in-memory profile (so the difference from durable reads off the disk-`fsync`
+  latency, ~95% of the durable per-op time on the CI machine). They report `ns/op`
   (→ instances/sec), `events/op`, `walB/op`, and allocations, with a Markdown-summary
-  script and a CI smoke run. Still to come: an in-memory/no-fsync profile, latency
-  percentiles, a recovery-from-N-events profile, a loopback-socket HTTP variant, and
-  committed machine-labelled baseline results
-  ([`benchmarks/README.md`](benchmarks/README.md)).
+  script and a CI smoke run. Still to come: latency percentiles, a
+  recovery-from-N-events profile, a loopback-socket HTTP variant, and committed
+  machine-labelled baseline results ([`benchmarks/README.md`](benchmarks/README.md)).
 - 🔲 Documentation site, tutorials, examples
 - 🔲 1.0 API stability commitment
 
