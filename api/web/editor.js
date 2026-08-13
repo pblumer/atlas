@@ -575,7 +575,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   refreshPoolCaptions(); // name the process each pool runs, on the diagram just imported
   wireTabs(root, () => { rerender(); refreshBadges(); });
   wireActions(root, modeler, api, toast, projectId);
-  wireEditorVars(root, modeler);
+  wireEditorVars(root, modeler, api);
   wireProblems(root, modeler, api);
   wireResizer(root, modeler);
   wireTokenSim(root, modeler);
@@ -1163,19 +1163,84 @@ function variablesForCompletion(modeler, element) {
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// formFieldCache maps a linked form's id to its input-field keys once fetched:
+// null marks a fetch in flight (so each form is requested once), otherwise
+// { name, fields } — the form's display name and its variable-bearing field keys.
+// collectDiagramVariables reads it synchronously; ensureFormFields fills it.
+const formFieldCache = new Map();
+
+// formFieldKeys extracts the variable-bearing field keys from a form-js schema.
+// Every form-js input component carries a `key` — the variable it reads and writes;
+// layout-only components (text, image, spacer, separator, …) have none. A repeating
+// container (dynamic list / group with a `path`) binds an array under that path, so
+// surface the path rather than descending into its per-row template. A plain group
+// is layout only, so recurse — its fields live in the enclosing scope. Each key
+// appears once, in document order.
+function formFieldKeys(schema) {
+  const keys = [];
+  const seen = new Set();
+  const add = (k) => {
+    k = (k || "").trim();
+    if (k && !seen.has(k)) { seen.add(k); keys.push(k); }
+  };
+  const walk = (comps) => {
+    for (const c of comps || []) {
+      if (!c || typeof c !== "object") continue;
+      if (c.path) { add(c.path); continue; } // repeatable scope: its path is the variable
+      if (typeof c.key === "string") add(c.key);
+      if (Array.isArray(c.components)) walk(c.components); // layout group: keys are in-scope
+    }
+  };
+  if (schema && Array.isArray(schema.components)) walk(schema.components);
+  return keys;
+}
+
+// linkedFormIds returns the form ids referenced by any element's zeebe:FormDefinition
+// (start forms and user-task forms). Best-effort — a registry hiccup yields none.
+function linkedFormIds(modeler) {
+  const ids = [];
+  try {
+    modeler.get("elementRegistry").forEach((el) => {
+      const fd = findExt(el.businessObject, "zeebe:FormDefinition");
+      if (fd && fd.formId) ids.push(fd.formId);
+    });
+  } catch { /* best-effort */ }
+  return ids;
+}
+
+// ensureFormFields fetches the schema of each not-yet-cached form id, records its
+// field keys, then calls onLoaded so the caller can re-render with the new
+// variables. Each form is requested once (its cache slot is reserved as null while
+// in flight); a missing or failed load caches as no fields so it isn't retried in a
+// loop. No-op without an `api`.
+function ensureFormFields(api, ids, onLoaded) {
+  if (!api) return;
+  for (const id of new Set(ids)) {
+    if (!id || formFieldCache.has(id)) continue;
+    formFieldCache.set(id, null); // reserve: in flight, don't refetch
+    api("GET", "/api/v1/forms/" + encodeURIComponent(id))
+      .then((def) => {
+        formFieldCache.set(id, { name: (def && def.name) || id, fields: formFieldKeys(def && def.schema) });
+      })
+      .catch(() => { formFieldCache.set(id, { name: id, fields: [] }); })
+      .then(() => { try { if (onLoaded) onLoaded(); } catch { /* best-effort */ } });
+  }
+}
+
 // collectDiagramVariables statically analyses the diagram for the variables it
 // writes and where — the data behind the Variables panel (like Camunda's). Each
-// entry is { name, origin, originId, source }: the variable name, the element that
-// writes it (name/id and the id to select it), and how (start variable, script
-// result, decision result, output mapping). De-duplicated by name, sorted.
+// entry is { name, origin, originId, source, category }: the variable name, the
+// element that writes it (name/id and the id to select it), how (start variable,
+// linked-form field, script result, decision result, output mapping), and which
+// panel section it groups under. De-duplicated by name, sorted.
 function collectDiagramVariables(modeler) {
   const out = [];
   const seen = new Set();
-  const push = (name, origin, originId, source) => {
+  const push = (name, origin, originId, source, category = "Process") => {
     name = (name || "").trim();
     if (!name || seen.has(name)) return;
     seen.add(name);
-    out.push({ name, origin, originId, source });
+    out.push({ name, origin, originId, source, category });
   };
   try {
     const rootBo = rootProcess(modeler);
@@ -1206,6 +1271,18 @@ function collectDiagramVariables(modeler) {
         const st = (bo.dataState && bo.dataState.name) || "";
         push((obj && obj.name) || bo.name, "Data object", bo.id, st ? "data object · [" + st + "]" : "data object");
       }
+      // A linked form (start form or user-task form, ADR-0028) contributes each of
+      // its input fields as a variable: a start form's fields become the instance's
+      // start variables, a task form's become variables when the task completes. The
+      // schema is fetched lazily (ensureFormFields); until it lands the form adds
+      // nothing here. Grouped under "Form" so it reads as its own panel section.
+      const fd = findExt(bo, "zeebe:FormDefinition");
+      if (fd && fd.formId) {
+        const cached = formFieldCache.get(fd.formId);
+        if (cached && cached.fields) {
+          for (const key of cached.fields) push(key, cached.name || fd.formId, bo.id, "form field", "Form");
+        }
+      }
     });
   } catch { /* best-effort */ }
   return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -1216,7 +1293,7 @@ function collectDiagramVariables(modeler) {
 // the list, and it refreshes as the diagram changes while open — a modeling aid
 // that answers "what variables exist here and who writes them" without running
 // anything. (The live view has its own runtime-variables panel, wireVarsPanel.)
-function wireEditorVars(root, modeler) {
+function wireEditorVars(root, modeler, api) {
   const panel = root.querySelector("#vars-panel");
   const toggle = root.querySelector("#vars-toggle");
   const closeBtn = root.querySelector("#vars-close");
@@ -1224,28 +1301,59 @@ function wireEditorVars(root, modeler) {
   const list = root.querySelector("#vars-list");
   if (!panel || !toggle || !list) return;
 
+  // One variable row. Draggable so its name can be dropped into any text field to
+  // insert it (a FEEL expression, a mapping source, …) — a plain-text payload, so
+  // the browser's native drop-to-insert does the work with no per-field wiring.
+  const rowHTML = (v) => {
+    // A data object isn't "written by" an element — it *is* the element, so its
+    // source label itself is the click-to-select target. A form field names its form
+    // (also click-to-select). Other sources name the writing element.
+    let meta;
+    if (v.source === "form field") {
+      meta = `form field · <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`;
+    } else if (v.origin === "Data object") {
+      meta = `<span class="var-origin" data-el="${esc(v.originId)}">${esc(v.source)}</span>`;
+    } else {
+      meta = `${esc(v.source)}${v.originId
+        ? ` · written by <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`
+        : ` · ${esc(v.origin)}`}`;
+    }
+    return `<div class="var-row" draggable="true" data-var="${esc(v.name)}" title="Drag into a field to insert">
+      <div class="var-name">${esc(v.name)}</div>
+      <div class="var-meta">${meta}</div></div>`;
+  };
+
   const render = () => {
+    // Warming the form-schema cache here (fired on every diagram change) also feeds
+    // the completion/picker lists, which read the same collectDiagramVariables.
+    ensureFormFields(api, linkedFormIds(modeler), render);
     if (panel.hidden) return;
     const q = (filter.value || "").trim().toLowerCase();
     const vars = collectDiagramVariables(modeler).filter((v) =>
-      !q || v.name.toLowerCase().includes(q) || (v.origin || "").toLowerCase().includes(q));
+      !q || v.name.toLowerCase().includes(q) || (v.origin || "").toLowerCase().includes(q) ||
+      (v.source || "").toLowerCase().includes(q));
     if (!vars.length) {
       list.innerHTML = `<p class="vars-empty">${q ? "No matching variables." :
-        "No variables yet. They appear as you add start variables, script or decision result variables, output mappings, and data objects."}</p>`;
+        "No variables yet. They appear as you add start variables, a linked form's fields, script or decision result variables, output mappings, and data objects."}</p>`;
       return;
     }
-    list.innerHTML = vars.map((v) => {
-      // A data object isn't "written by" an element — it *is* the element, so its source
-      // label itself is the click-to-select target; other sources name the writing element.
-      const meta = v.origin === "Data object"
-        ? `<span class="var-origin" data-el="${esc(v.originId)}">${esc(v.source)}</span>`
-        : `${esc(v.source)}${v.originId
-            ? ` · written by <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`
-            : ` · ${esc(v.origin)}`}`;
-      return `<div class="var-row">
-        <div class="var-name">${esc(v.name)}</div>
-        <div class="var-meta">${meta}</div></div>`;
-    }).join("");
+    // Group by category so a linked form's fields read as their own section
+    // ("Form"), the process's own variables under "Process". With only one group
+    // (the common no-form case) keep the familiar flat list — no lone header.
+    const groups = new Map();
+    for (const v of vars) {
+      const g = v.category || "Process";
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g).push(v);
+    }
+    const order = ["Form", "Process"];
+    const rank = (c) => { const i = order.indexOf(c); return i < 0 ? order.length : i; };
+    const cats = [...groups.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+    list.innerHTML = cats.length === 1
+      ? groups.get(cats[0]).map(rowHTML).join("")
+      : cats.map((cat) =>
+          `<div class="vars-group"><div class="vars-group-head">${esc(cat)}</div>${groups.get(cat).map(rowHTML).join("")}</div>`
+        ).join("");
   };
 
   toggle.addEventListener("click", () => {
@@ -1267,7 +1375,18 @@ function wireEditorVars(root, modeler) {
       try { modeler.get("canvas").scrollToElement(el); } catch { /* older bpmn-js */ }
     }
   });
-  // Keep the open panel current as the diagram is edited.
+  list.addEventListener("dragstart", (e) => {
+    const row = e.target.closest(".var-row");
+    if (!row || !e.dataTransfer) return;
+    // Plain-text payload: dropping onto a text input/textarea natively inserts the
+    // variable name at the drop point — no drop handler needed on each field.
+    e.dataTransfer.setData("text/plain", row.dataset.var || "");
+    e.dataTransfer.effectAllowed = "copy";
+  });
+  // Keep the open panel current as the diagram is edited; warm the cache once now
+  // (import.done has already fired by the time this wires up) so completion sees a
+  // linked form's fields even before the panel is first opened.
+  render();
   modeler.on("element.changed", render);
   modeler.on("elements.changed", render);
   modeler.on("import.done", render);
