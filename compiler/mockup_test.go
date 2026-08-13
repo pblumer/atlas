@@ -27,7 +27,7 @@ func mockupBPMN(ext string) string {
 // result, and a failure probability — no reserved job type.
 func TestParseMockupTask(t *testing.T) {
 	cp, err := Parse(1, 1, strings.NewReader(mockupBPMN(
-		`<atlas:mockupConnector minDuration="PT1S" maxDuration="PT5S" resultExpression="amount * 2" resultVariable="doubled" failRate="0.25" failMessage="umsystem down"/>`)))
+		`<atlas:mockupConnector minDuration="PT1S" maxDuration="PT5S" resultExpression="amount * 2" resultVariable="doubled" failRate="0.25" failMessage="umsystem down" errorCode="UMSYS_DOWN"/>`)))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -51,6 +51,9 @@ func TestParseMockupTask(t *testing.T) {
 	}
 	if d.FailMessage != "umsystem down" {
 		t.Errorf("failMessage = %q, want %q", d.FailMessage, "umsystem down")
+	}
+	if d.ErrorCode != "UMSYS_DOWN" {
+		t.Errorf("errorCode = %q, want %q", d.ErrorCode, "UMSYS_DOWN")
 	}
 }
 

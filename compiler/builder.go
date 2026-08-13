@@ -487,6 +487,7 @@ type MockupConfig struct {
 	Expr           *expr.Compiled
 	FailPerMillion int32
 	FailMessage    string
+	ErrorCode      string
 }
 
 // AddMockupTask adds a mockup service task the engine simulates itself (ADR-0120)
@@ -505,6 +506,7 @@ func (b *Builder) AddMockupTask(cfg MockupConfig) int32 {
 		Expr:           cfg.Expr,
 		FailPerMillion: cfg.FailPerMillion,
 		FailMessage:    cfg.FailMessage,
+		ErrorCode:      cfg.ErrorCode,
 	})
 	return b.addNode(TypeMockupTask, detail)
 }

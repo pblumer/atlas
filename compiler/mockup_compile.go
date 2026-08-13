@@ -59,6 +59,7 @@ func compileMockupTask(b *Builder, st xmlServiceTask) (int32, error) {
 		Expr:           compiled,
 		FailPerMillion: failPerMillion,
 		FailMessage:    strings.TrimSpace(cn.FailMessage),
+		ErrorCode:      strings.TrimSpace(cn.ErrorCode),
 	}), nil
 }
 

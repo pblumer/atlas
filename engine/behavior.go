@@ -753,11 +753,17 @@ func handleTimerTriggered(c *ProcessingContext) {
 		return
 	}
 	// A mockup task's duration timer (ADR-0120): per its fail probability, drawn from
-	// this fired timer's key, simulate a failure (a job-less incident that parks the
-	// element) instead of completing. The TimerTriggered event is already appended
-	// above, so the fired timer is consumed on the failure path too.
-	if msg, fail := mockupFailure(c, ei, c.cmd.Key); fail {
-		raiseMockupIncident(c, timer.ElementInstanceKey, ei, msg)
+	// this fired timer's key, simulate a failure instead of completing. With an error
+	// code it throws a BPMN error (caught by a matching error boundary/event subprocess,
+	// ADR-0089); otherwise it raises a job-less incident that parks the element. The
+	// TimerTriggered event is already appended above, so the fired timer is consumed on
+	// the failure path too.
+	if detail := mockupFailureDetail(c, ei, c.cmd.Key); detail != nil {
+		if detail.ErrorCode != "" {
+			propagateError(c, timer.ElementInstanceKey, detail.ErrorCode)
+		} else {
+			raiseMockupIncident(c, timer.ElementInstanceKey, ei, mockupFailMessage(detail))
+		}
 		return
 	}
 	c.AppendElementCommand(timer.ElementInstanceKey, model.IntentCompleting, *ei)
@@ -1708,25 +1714,31 @@ func armMockupTimer(c *ProcessingContext, key uint64, ei *model.ElementInstanceV
 	})
 }
 
-// mockupFailure reports whether the mockup task ei, whose duration timer just fired
-// with key tkey, should simulate a failure instead of completing, and returns the
-// incident message to raise. It is a pure function of the frozen timer key, so live
-// and replay agree (though it runs only live, since handleTimerTriggered is never
-// replayed). A non-mockup element never fails here.
-func mockupFailure(c *ProcessingContext, ei *model.ElementInstanceValue, tkey uint64) (string, bool) {
+// mockupFailureDetail returns the mockup task's detail when ei is a mockup task
+// whose duration timer, fired with key tkey, should simulate a failure — else nil.
+// It is a pure function of the frozen timer key, so live and replay agree (though it
+// runs only live, since handleTimerTriggered is never replayed). A non-mockup element
+// never fails here.
+func mockupFailureDetail(c *ProcessingContext, ei *model.ElementInstanceValue, tkey uint64) *compiler.MockupTaskDetail {
 	cp := c.process(ei.ProcessDefKey)
 	node := cp.Node(ei.ElementId)
 	if node.Type != compiler.TypeMockupTask {
-		return "", false
+		return nil
 	}
 	detail := cp.MockupTask(node.Detail)
 	if !mockupShouldFail(tkey, detail.FailPerMillion) {
-		return "", false
+		return nil
 	}
+	return detail
+}
+
+// mockupFailMessage is the incident message for a simulated failure with no error
+// code: the authored message, or a default.
+func mockupFailMessage(detail *compiler.MockupTaskDetail) string {
 	if detail.FailMessage != "" {
-		return detail.FailMessage, true
+		return detail.FailMessage
 	}
-	return "mockup task simulated failure", true
+	return "mockup task simulated failure"
 }
 
 // raiseMockupIncident parks a mockup task with a job-less incident on a simulated

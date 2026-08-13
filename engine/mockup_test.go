@@ -229,6 +229,95 @@ func TestMockupTaskFailureDefaultMessage(t *testing.T) {
 	}
 }
 
+// TestMockupTaskThrowsBpmnErrorCaughtByBoundary proves a simulated failure with an
+// error code throws a BPMN error that a matching error boundary on the mockup task
+// catches (ADR-0089): the task is torn down and the recovery flow runs, rather than
+// an incident being raised.
+func TestMockupTaskThrowsBpmnErrorCaughtByBoundary(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	const dur = int64(1e9)
+	b := compiler.NewBuilder(defKey, "mockuperr", 1)
+	start := b.AddStartEvent()
+	task := b.AddMockupTask(compiler.MockupConfig{MinNanos: dur, MaxNanos: dur, FailPerMillion: 1_000_000, ErrorCode: "UMSYS"})
+	boundary := b.AddBoundaryErrorEvent(task, "UMSYS")
+	done := b.AddEndEvent()
+	recovered := b.AddEndEvent()
+	b.Connect(start, task)
+	b.Connect(task, done)
+	b.Connect(boundary, recovered)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	clk := &fixedClock{t: 1_000}
+
+	p := engine.New(1, h.log, h.store, clk)
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	clk.t = 1_000 + dur
+	if err := p.TickTimers(); err != nil {
+		t.Fatalf("TickTimers: %v", err)
+	}
+	// The error aborted the task and the boundary routed to recovery; no incident.
+	if n := len(incidents(t, h.store)); n != 0 {
+		t.Fatalf("a caught BPMN error raised %d incidents, want 0", n)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after caught error: process=%d element=%d, want 0 and 0 (finished)", pi, ei)
+	}
+	v := elementVisits(t, h.store, cp.Key)
+	if v[recovered] != 1 {
+		t.Errorf("recovery end visits = %d, want 1 (error boundary fired)", v[recovered])
+	}
+	if v[done] != 0 {
+		t.Errorf("normal end visits = %d, want 0 (the task was aborted by the error)", v[done])
+	}
+}
+
+// TestMockupTaskUncaughtErrorRaisesIncident proves a simulated BPMN error with no
+// matching handler surfaces as an incident on the throwing element (ADR-0089), the
+// same as any other unhandled error.
+func TestMockupTaskUncaughtErrorRaisesIncident(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	const dur = int64(1e9)
+	cp := mockupProcess(t, compiler.MockupConfig{MinNanos: dur, MaxNanos: dur, FailPerMillion: 1_000_000, ErrorCode: "UMSYS"}, "")
+	clk := &fixedClock{t: 1_000}
+
+	p := engine.New(1, h.log, h.store, clk)
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	clk.t = 1_000 + dur
+	if err := p.TickTimers(); err != nil {
+		t.Fatalf("TickTimers: %v", err)
+	}
+	inc := incidents(t, h.store)
+	if len(inc) != 1 {
+		t.Fatalf("uncaught error raised %d incidents, want 1", len(inc))
+	}
+	for _, v := range inc {
+		if v.Message != "unhandled error 'UMSYS'" {
+			t.Fatalf("incident message = %q, want the unhandled-error message", v.Message)
+		}
+	}
+	if pi, ei := counts(t, h.store); pi != 1 || ei != 1 {
+		t.Fatalf("parked on incident: process=%d element=%d, want 1 and 1", pi, ei)
+	}
+}
+
 // TestMockupTaskRecovers is the recovery property (invariants I4/I6): after a
 // mockup task arms its timer and writes its result, replaying the log into a fresh
 // store restores the pending timer and the result — the random due date is read back
