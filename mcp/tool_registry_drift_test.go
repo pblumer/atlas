@@ -188,6 +188,12 @@ var mcpOmittedRoutes = map[string]string{
 	"PUT /api/v1/settings/theme":    "UI branding is a Console concern, not an agent action",
 	"DELETE /api/v1/settings/theme": "UI branding is a Console concern, not an agent action",
 
+	// Self-service registration config (ADR-0126): a login-screen/admin concern,
+	// not an agent action.
+	"GET /api/v1/settings/registration":    "registration config is a Console/login concern, not an agent action",
+	"PUT /api/v1/settings/registration":    "registration config is a Console/login concern, not an agent action",
+	"DELETE /api/v1/settings/registration": "registration config is a Console/login concern, not an agent action",
+
 	// Auth + user administration: security surface, deliberately off-limits.
 	"POST /api/v1/auth/login":          "auth flow is not an agent capability",
 	"POST /api/v1/auth/logout":         "auth flow is not an agent capability",

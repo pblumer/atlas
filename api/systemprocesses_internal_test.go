@@ -121,7 +121,9 @@ func TestSystemIntakeProvisionsUser(t *testing.T) {
 	if key == 0 {
 		t.Fatal("intake process not deployed")
 	}
-	startInstance(t, h, key, `{"vorname":"Neuer","nachname":"Kollege","email":"neuer@example.org","rolle":"user"}`)
+	// The start form carries no role field (ADR-0126) — the requester never picks a
+	// role; the admin assigns it at approval below.
+	startInstance(t, h, key, `{"vorname":"Neuer","nachname":"Kollege","email":"neuer@example.org"}`)
 
 	// Find the waiting "Antrag freigeben" user task.
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil)
@@ -144,9 +146,10 @@ func TestSystemIntakeProvisionsUser(t *testing.T) {
 		t.Fatal("freigabe task not found")
 	}
 
-	// Approve: set the username and initial password, decide "anlegen".
+	// Approve: the admin assigns the role, sets the username and initial password,
+	// and decides "anlegen".
 	creq := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+strconv.FormatUint(taskKey, 10)+"/complete",
-		strings.NewReader(`{"variables":{"benutzername":"neuer.kollege","entscheidung":"anlegen","initialpasswort":"willkommen1"}}`))
+		strings.NewReader(`{"variables":{"rolle":"user","benutzername":"neuer.kollege","entscheidung":"anlegen","initialpasswort":"willkommen1"}}`))
 	crec := httptest.NewRecorder()
 	h.ServeHTTP(crec, creq)
 	if crec.Code != http.StatusOK {

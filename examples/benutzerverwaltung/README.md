@@ -50,14 +50,19 @@ der `Konto anlegen`-Task, bis ein Operator sie aktiviert — der sichere Default
 
 ### 1. Benutzer aufnehmen — `proc_benutzer_aufnahme`
 ```
-Start (ba-antrag: Vorname, Nachname, E-Mail, Rolle, Abteilung, Begründung)
+Start (ba-antrag: Vorname, Nachname, E-Mail, Abteilung, Begründung)
   → [Script] Zugangsdaten vorschlagen   – FEEL: benutzername = vorname.nachname
-  → 🔑 User-Task "Antrag freigeben" (ba-konto) – Admin entscheidet, setzt Initialpasswort
+  → 🔑 User-Task "Antrag freigeben" (ba-konto) – Admin vergibt Rolle, setzt Initialpasswort
   → (X) Angelegt?
         anlegen (Default) → [userConnector create] "Konto anlegen" → Zugangs-Mail
         ablehnen          → Ablehnungs-Mail
   → Ende
 ```
+Der Antragsteller wählt seine **Rolle bewusst nicht selbst** — das Start-Formular
+kennt kein Rollen-Feld. So ist derselbe Prozess auch als **öffentliches
+Registrierungs-Formular** tragfähig: die Login-Seite zeigt einen
+„Registrieren"-Link auf die öffentliche Start-URL dieses Prozesses (ADR-0029 /
+ADR-0126). Der Admin vergibt die Rolle erst bei der Freigabe.
 
 ### 2. Zugriffs-Review — `proc_benutzer_review`
 ```

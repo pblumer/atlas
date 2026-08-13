@@ -9,10 +9,15 @@
   opt-in via the user-provisioning flag). Ist die Provisionierung nicht aktiviert, parkt
   der userConnector-Task, bis ein Operator sie einschaltet.
 
-  Start (Formular ba-antrag: vorname, nachname, email, rolle, abteilung, begruendung)
+  Start (Formular ba-antrag: vorname, nachname, email, abteilung, begruendung)
    -> Script-Task "Zugangsdaten vorschlagen"  (FEEL schlaegt benutzername vor)
    -> User-Task  "Antrag freigeben"           (Formular ba-konto; Admin entscheidet,
-                                               setzt Initialpasswort)
+                                               vergibt die Rolle, setzt Initialpasswort)
+
+  Die Rolle waehlt der Antragsteller bewusst NICHT selbst: das Start-Formular
+  kennt kein Rollen-Feld, damit dieser Prozess auch als oeffentliches
+  Registrierungs-Formular (ADR-0126) sicher ist. Der Admin vergibt die Rolle bei
+  der Freigabe (ba-konto); der userConnector uebernimmt sie aus [rolle].
    -> (X) Gateway "Angelegt?"  (default -> anlegen; entscheidung="ablehnen" -> Bypass)
         [anlegen]  -> Service-Task "Konto anlegen" (userConnector create)
                    -> Service-Task "Zugangsdaten senden" (Mail-Connector)

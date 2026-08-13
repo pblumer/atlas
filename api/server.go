@@ -735,6 +735,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		if err := s.ensureSystemProcesses(time.Now().Unix()); err != nil {
 			return nil, err
 		}
+		// Mint the public start link for the self-service registration process so a
+		// fresh instance's login screen offers a "Registrieren" link out of the box
+		// (ADR-0126). Runs after ensureSystemProcesses so the default process is
+		// deployed, and before the loop serves so the mint is single-writer-safe.
+		if err := s.ensureRegistrationLink(time.Now().Unix()); err != nil {
+			return nil, err
+		}
 	}
 	// Build the OpenSearch exporter when configured (ADR-0114). It tails the durable
 	// WAL under dataDir and is bounded by the state store's applied-position

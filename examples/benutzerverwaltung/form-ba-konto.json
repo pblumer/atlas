@@ -4,7 +4,7 @@
   "components": [
     {
       "type": "text",
-      "text": "# 🔑 Antrag freigeben\n\nPrüfe den Aufnahme-Antrag. Bei **Freigabe** wird das Atlas-Konto automatisch angelegt (userConnector) und die Zugangsdaten werden per E-Mail versendet.\n\n> Die Anlage läuft über den gated, opt-in userConnector (ADR-0122/0123) — kein manueller Schritt im Admin-Bereich mehr. Ist die Provisionierung nicht aktiviert, wartet der Prozess, bis ein Operator sie einschaltet."
+      "text": "# 🔑 Antrag freigeben\n\nPrüfe den Aufnahme-Antrag. Bei **Freigabe** vergibst du die Rolle, das Atlas-Konto wird automatisch angelegt (userConnector) und die Zugangsdaten werden per E-Mail versendet.\n\n> Der Antragsteller wählt seine Rolle nicht selbst — das ist die Sicherheitsgrenze, die dieses Formular auch als öffentliches Registrierungs-Formular (ADR-0126) tragfähig macht. Die Anlage läuft über den gated, opt-in userConnector (ADR-0122/0123). Ist die Provisionierung nicht aktiviert, wartet der Prozess, bis ein Operator sie einschaltet."
     },
     {
       "key": "vorname",
@@ -26,9 +26,16 @@
     },
     {
       "key": "rolle",
-      "type": "textfield",
+      "type": "radio",
       "label": "Rolle",
-      "disabled": true
+      "description": "Der Antragsteller wählt die Rolle nicht selbst — der Administrator vergibt sie bei der Freigabe.",
+      "values": [
+        { "label": "Benutzer (user)", "value": "user" },
+        { "label": "Administrator (admin)", "value": "admin" }
+      ],
+      "value": "user",
+      "conditional": { "hide": "=entscheidung != \"anlegen\"" },
+      "validate": { "required": true }
     },
     {
       "key": "benutzername",
