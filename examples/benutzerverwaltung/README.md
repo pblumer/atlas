@@ -7,10 +7,15 @@ mit Atlas-Formularen. Die Prozesse sind die **Koordinations- und Audit-Schicht**
 die eigentlichen privilegierten Mutationen (Konto anlegen/sperren) bleiben bewusst
 Admin-Handlungen.
 
-Diese Beispiele sind der erste geplante Insasse des **geschützten System-Projekts**
-aus [ADR-0119](../../docs/adr/0119-protected-system-project-and-bootstrap-deployment.md):
+Diese Beispiele sind der erste Insasse des **geschützten System-Projekts** aus
+[ADR-0119](../../docs/adr/0119-protected-system-project-and-bootstrap-deployment.md):
 eigene Plattform-Prozesse, die mit der Installation kommen und nicht wie normale
 Nutzer-Inhalte editier-/löschbar sind.
+
+> **Deploybare Quelle:** Die Kopien unter [`api/systemprocesses/`](../../api/systemprocesses/)
+> sind ins Binary eingebettet und werden beim Serverstart automatisch ins
+> geschützte System-Projekt deployed (idempotent per Checksumme). Die Dateien
+> hier dienen der menschlichen Lektüre; bei Änderungen beide Stellen angleichen.
 
 ## Direkt-CRUD vs. regierter Prozess
 

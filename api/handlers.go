@@ -697,15 +697,23 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 	}
 	var (
 		found      bool
+		protected  bool
 		running    int
 		scanErr    error
 		persistErr error
 	)
 	s.do(func() {
-		if _, ok := s.deployments[key]; !ok {
+		d, ok := s.deployments[key]
+		if !ok {
 			return
 		}
 		found = true
+		// A bootstrap-deployed platform process is platform-managed (ADR-0119):
+		// refuse deletion for every caller.
+		if s.systemPIDs[d.ProcessID] {
+			protected = true
+			return
+		}
 		scanErr = s.store.ActiveProcessInstances(func(_ uint64, v *model.ProcessInstanceValue) error {
 			if v.ProcessDefKey == key {
 				running++
@@ -733,6 +741,8 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case !found:
 		writeError(w, http.StatusNotFound, "no deployment with that key")
+	case protected:
+		writeError(w, http.StatusForbidden, "protected system process cannot be deleted")
 	case scanErr != nil:
 		writeError(w, http.StatusInternalServerError, "check instances: "+scanErr.Error())
 	case running > 0:

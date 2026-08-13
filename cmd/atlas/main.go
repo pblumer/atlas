@@ -220,7 +220,7 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 		return err
 	}
 
-	apiOpts := []api.Option{api.WithLogBuffer(logs)}
+	apiOpts := []api.Option{api.WithLogBuffer(logs), api.WithSystemProcesses()}
 	if !docs {
 		apiOpts = append(apiOpts, api.WithoutDocs())
 	}
