@@ -124,6 +124,17 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
   nav.toc{position:static;max-height:none;padding:14px 16px;border-bottom:1px solid var(--border)}
   nav.toc h4{margin-top:10px}
 }
+
+/* ---- interactive tour ---- */
+.tour-controls{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end}
+.tour-field{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted);font-weight:600}
+.tour-field input,.tour-field select{font:inherit;font-weight:400;color:var(--fg);background:var(--bg);
+  border:1px solid var(--border);border-radius:8px;padding:8px 10px;min-width:190px}
+#tour-start{border:0;cursor:pointer}
+#tour-start:disabled{opacity:.6;cursor:default}
+.tour-status{margin-top:12px;font-size:14px;color:var(--muted);min-height:20px}
+.tour-status.ok{color:var(--ok);font-weight:600}
+.tour-status.err{color:var(--err);font-weight:600}
 </style>
 </head>
 <body>
@@ -148,6 +159,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <h4 data-l="de">Einstieg</h4><h4 data-l="en">Getting started</h4>
     <a href="#willkommen"><span data-l="de">Willkommen</span><span data-l="en">Welcome</span></a>
     <a href="#schnellstart"><span data-l="de">Schnellstart (10 Min)</span><span data-l="en">Quick start (10 min)</span></a>
+    <a href="#rundgang"><span data-l="de">Interaktiver Rundgang</span><span data-l="en">Interactive tour</span></a>
     <a href="#konzepte"><span data-l="de">Grundkonzepte</span><span data-l="en">Core concepts</span></a>
     <h4 data-l="de">Lernen</h4><h4 data-l="en">Learn</h4>
     <a href="#bpmn"><span data-l="de">BPMN lernen</span><span data-l="en">Learn BPMN</span></a>
@@ -269,6 +281,54 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <p data-l="en" style="margin:.3em 0 0">Want to learn Atlas <i>through</i> Atlas? There's a
           self-referential onboarding process (<code>examples/onboarding</code>) that walks you through the basics
           as a real running instance – dogfooding at its best.</p>
+      </div>
+    </section>
+
+    <!-- ==================== INTERACTIVE TOUR ==================== -->
+    <section id="rundgang">
+      <h2 data-l="de">Interaktiver Rundgang</h2><h2 data-l="en">Interactive tour</h2>
+      <p class="lead" data-l="de">Lerne Atlas, indem du Atlas benutzt: Dieser Rundgang deployt einen echten
+        Onboarding-Prozess in <b>diese</b> Instanz und startet einen Durchlauf für dich. Danach arbeitest du dich
+        im <a href="/#/tasks">Tasks</a>-Posteingang Schritt für Schritt durch die Grundlagen – jede Aufgabe ist
+        ein echter User-Task mit Formular.</p>
+      <p class="lead" data-l="en">Learn Atlas by using Atlas: this tour deploys a real onboarding process to
+        <b>this</b> instance and starts a run for you. You then work through the basics step by step in the
+        <a href="/#/tasks">Tasks</a> inbox – every step is a real user task with a form.</p>
+
+      <div class="card tour">
+        <div class="tour-controls">
+          <label class="tour-field">
+            <span data-l="de">Dein Name (optional)</span><span data-l="en">Your name (optional)</span>
+            <input id="tour-name" type="text" maxlength="60" autocomplete="off" placeholder="…">
+          </label>
+          <label class="tour-field">
+            <span data-l="de">Schwerpunkt</span><span data-l="en">Focus</span>
+            <select id="tour-track">
+              <option value="beides">Beides · Both</option>
+              <option value="nur_benutzen">Nur benutzen · Just use</option>
+              <option value="mitentwickeln">Mitentwickeln · Contribute</option>
+            </select>
+          </label>
+          <button id="tour-start" class="pilllink" type="button">
+            <span data-l="de">🚀 Rundgang starten</span><span data-l="en">🚀 Start the tour</span>
+          </button>
+        </div>
+        <div id="tour-status" class="tour-status" role="status" aria-live="polite"></div>
+        <div id="tour-done" class="note tip" hidden style="margin:14px 0 0">
+          <a class="pilllink" href="/#/tasks"><span data-l="de">→ Zum Posteingang</span><span data-l="en">→ Go to the inbox</span></a>
+          <p style="margin:.6em 0 0" data-l="de">Öffne die Aufgabe <b>„👋 Willkommen an Bord“</b> und leg los.</p>
+          <p style="margin:.6em 0 0" data-l="en">Open the task <b>“👋 Welcome aboard”</b> and get going.</p>
+        </div>
+      </div>
+
+      <div class="note">
+        <span class="lbl" data-l="de">Gut zu wissen</span><span class="lbl" data-l="en">Good to know</span>
+        <p data-l="de" style="margin:.3em 0 0">Der Rundgang schreibt in diese Atlas-Instanz (Formulare, ein Deploy und
+          eine laufende Instanz). Bei aktivierter Anmeldung musst du in der App eingeloggt sein. Du kannst ihn
+          gefahrlos mehrfach starten – jeder Klick ist ein eigener, wiederholbarer Durchlauf.</p>
+        <p data-l="en" style="margin:.3em 0 0">The tour writes to this Atlas instance (forms, a deployment and a
+          running instance). If sign-in is enabled, you need to be logged in to the app. You can start it repeatedly
+          without harm – each click is its own repeatable run.</p>
       </div>
     </section>
 
@@ -716,6 +776,74 @@ atlas_create_instance  key=&lt;definition key&gt;       → starts an instance</
     Reach out to the team or open an issue.</span>
 </footer>
 
+<script type="application/json" id="onb-data">{"bpmn": "\u003c?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\u003c!--\n  Onboarding: Willkommen bei Atlas 🚀\n\n  Ein selbst-referenzielles Onboarding: der neue Kollege lernt Atlas, indem er\n  eine echte Atlas-Instanz durchläuft. Atlas onboardet mit Atlas (Dogfooding).\n\n  Start (Start-Formular onb-start: displayName, track)\n   → User-Task  \"👋 Willkommen\"        (Formular onb-welcome)\n   → User-Task  \"🧩 Grundbegriffe\"      (Formular onb-concepts, kleine Wissensprüfung)\n   → Script-Task \"Begrüßung\"            (FEEL baut personalisierten willkommensgruss)\n   → (X) Gateway \"Auch mitentwickeln?\"  (verzweigt auf track)\n        ── Default ─→ \"🏗️ Architektur\" → \"🔧 Setup & DoD\" → Join   (Hauptpfad)\n        ── track = \"nur_benutzen\" ─────────────────────────→ Join  (Bypass darunter)\n   → User-Task  \"🎓 Dein erster Schritt\" (Formular onb-finish)\n   → Script-Task \"Abschluss\"            (setzt onboardingStatus)\n   → Ende \"🎉 Geschafft!\"\n\n  Der fachliche Teil (benutzen) läuft für alle; der technische Teil\n  (mitentwickeln) liegt auf dem geraden Hauptpfad. Wer \"nur_benutzen\" wählt,\n  nimmt den Bypass-Bogen darunter. Das BPMN-DI ist bewusst von Hand gesetzt:\n  gerade Hauptachse, Verzweigung sauber getrennt, keine überlappenden Kanten.\n-->\n\u003cdefinitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n             xmlns:zeebe=\"http://camunda.org/schema/zeebe/1.0\"\n             xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\"\n             xmlns:omgdc=\"http://www.omg.org/spec/DD/20100524/DC\"\n             xmlns:omgdi=\"http://www.omg.org/spec/DD/20100524/DI\"\n             id=\"defs_onboarding_atlas\" targetNamespace=\"http://atlas/examples\">\n  \u003cprocess id=\"onboarding-atlas\" name=\"Onboarding: Willkommen bei Atlas 🚀\" isExecutable=\"true\">\n\n    \u003cstartEvent id=\"start\" name=\"Account erstellt\">\n      \u003cextensionElements>\n        \u003czeebe:formDefinition formId=\"onb-start\"/>\n      \u003c/extensionElements>\n    \u003c/startEvent>\n\n    \u003cuserTask id=\"willkommen\" name=\"👋 Willkommen an Bord\">\n      \u003cextensionElements>\n        \u003czeebe:assignmentDefinition candidateGroups=\"onboarding\"/>\n        \u003czeebe:formDefinition formId=\"onb-welcome\"/>\n      \u003c/extensionElements>\n    \u003c/userTask>\n\n    \u003cuserTask id=\"grundbegriffe\" name=\"🧩 Grundbegriffe verstehen\">\n      \u003cextensionElements>\n        \u003czeebe:assignmentDefinition candidateGroups=\"onboarding\"/>\n        \u003czeebe:formDefinition formId=\"onb-concepts\"/>\n      \u003c/extensionElements>\n    \u003c/userTask>\n\n    \u003cscriptTask id=\"begruessung\" name=\"Begrüßung personalisieren\">\n      \u003cextensionElements>\n        \u003czeebe:script resultVariable=\"willkommensgruss\"\n          expression=\"= &quot;Willkommen im Team, &quot; + (if displayName = null then &quot;Kollege&quot; else displayName) + &quot;!&quot;\"/>\n      \u003c/extensionElements>\n    \u003c/scriptTask>\n\n    \u003cexclusiveGateway id=\"weg\" name=\"Auch mitentwickeln?\" default=\"f_dev\"/>\n\n    \u003cuserTask id=\"architektur\" name=\"🏗️ Architektur &amp; Invarianten\">\n      \u003cextensionElements>\n        \u003czeebe:assignmentDefinition candidateGroups=\"onboarding\"/>\n        \u003czeebe:formDefinition formId=\"onb-architecture\"/>\n      \u003c/extensionElements>\n    \u003c/userTask>\n\n    \u003cuserTask id=\"devsetup\" name=\"🔧 Setup &amp; Definition of Done\">\n      \u003cextensionElements>\n        \u003czeebe:assignmentDefinition candidateGroups=\"onboarding\"/>\n        \u003czeebe:formDefinition formId=\"onb-devsetup\"/>\n      \u003c/extensionElements>\n    \u003c/userTask>\n\n    \u003cexclusiveGateway id=\"join\"/>\n\n    \u003cuserTask id=\"ersterschritt\" name=\"🎓 Dein erster Schritt\">\n      \u003cextensionElements>\n        \u003czeebe:assignmentDefinition candidateGroups=\"onboarding\"/>\n        \u003czeebe:formDefinition formId=\"onb-finish\"/>\n      \u003c/extensionElements>\n    \u003c/userTask>\n\n    \u003cscriptTask id=\"abschluss\" name=\"Onboarding abschließen\">\n      \u003cextensionElements>\n        \u003czeebe:script resultVariable=\"onboardingStatus\" expression=\"= &quot;abgeschlossen&quot;\"/>\n      \u003c/extensionElements>\n    \u003c/scriptTask>\n\n    \u003cendEvent id=\"ende\" name=\"🎉 Geschafft!\"/>\n\n    \u003csequenceFlow id=\"f_start_willkommen\" sourceRef=\"start\" targetRef=\"willkommen\"/>\n    \u003csequenceFlow id=\"f_willkommen_begriffe\" sourceRef=\"willkommen\" targetRef=\"grundbegriffe\"/>\n    \u003csequenceFlow id=\"f_begriffe_gruss\" sourceRef=\"grundbegriffe\" targetRef=\"begruessung\"/>\n    \u003csequenceFlow id=\"f_gruss_weg\" sourceRef=\"begruessung\" targetRef=\"weg\"/>\n    \u003csequenceFlow id=\"f_dev\" name=\"auch entwickeln\" sourceRef=\"weg\" targetRef=\"architektur\"/>\n    \u003csequenceFlow id=\"f_arch_setup\" sourceRef=\"architektur\" targetRef=\"devsetup\"/>\n    \u003csequenceFlow id=\"f_setup_join\" sourceRef=\"devsetup\" targetRef=\"join\"/>\n    \u003csequenceFlow id=\"f_skip\" name=\"nur benutzen\" sourceRef=\"weg\" targetRef=\"join\">\n      \u003cconditionExpression>= track = \"nur_benutzen\"\u003c/conditionExpression>\n    \u003c/sequenceFlow>\n    \u003csequenceFlow id=\"f_join_ersterschritt\" sourceRef=\"join\" targetRef=\"ersterschritt\"/>\n    \u003csequenceFlow id=\"f_ersterschritt_abschluss\" sourceRef=\"ersterschritt\" targetRef=\"abschluss\"/>\n    \u003csequenceFlow id=\"f_abschluss_ende\" sourceRef=\"abschluss\" targetRef=\"ende\"/>\n  \u003c/process>\n\n  \u003cbpmndi:BPMNDiagram id=\"BPMNDiagram_onboarding\">\n    \u003cbpmndi:BPMNPlane id=\"BPMNPlane_onboarding\" bpmnElement=\"onboarding-atlas\">\n      \u003cbpmndi:BPMNShape id=\"start_di\" bpmnElement=\"start\">\n        \u003comgdc:Bounds x=\"152\" y=\"102\" width=\"36\" height=\"36\" />\n        \u003cbpmndi:BPMNLabel>\u003comgdc:Bounds x=\"138\" y=\"145\" width=\"66\" height=\"14\" />\u003c/bpmndi:BPMNLabel>\n      \u003c/bpmndi:BPMNShape>\n      \u003cbpmndi:BPMNShape id=\"willkommen_di\" bpmnElement=\"willkommen\">\n        \u003comgdc:Bounds x=\"240\" y=\"80\" width=\"100\" height=\"80\" />\n      \u003c/bpmndi:BPMNShape>\n      \u003cbpmndi:BPMNShape id=\"grundbegriffe_di\" bpmnElement=\"grundbegriffe\">\n        \u003comgdc:Bounds x=\"390\" y=\"80\" width=\"100\" height=\"80\" />\n      \u003c/bpmndi:BPMNShape>\n      \u003cbpmndi:BPMNShape id=\"begruessung_di\" bpmnElement=\"begruessung\">\n        \u003comgdc:Bounds x=\"540\" y=\"80\" width=\"100\" height=\"80\" />\n      \u003c/bpmndi:BPMNShape>\n      \u003cbpmndi:BPMNShape id=\"weg_di\" bpmnElement=\"weg\" isMarkerVisible=\"true\">\n        \u003comgdc:Bounds x=\"700\" y=\"95\" width=\"50\" height=\"50\" />\n        \u003cbpmndi:BPMNLabel>\u003comgdc:Bounds x=\"668\" y=\"55\" width=\"114\" height=\"27\" />\u003c/bpmndi:BPMNLabel>\n      \u003c/bpmndi:BPMNShape>\n      \u003cbpmndi:BPMNShape id=\"architektur_di\" bpmnElement=\"architektur\">\n        \u003comgdc:Bounds x=\"800\" y=\"80\" width=\"100\" height=\"80\" />\n      \u003c/bpmndi:BPMNShape>\n      \u003cbpmndi:BPMNShape id=\"devsetup_di\" bpmnElement=\"devsetup\">\n        \u003comgdc:Bounds x=\"950\" y=\"80\" width=\"100\" height=\"80\" />\n      \u003c/bpmndi:BPMNShape>\n      \u003cbpmndi:BPMNShape id=\"join_di\" bpmnElement=\"join\" isMarkerVisible=\"true\">\n        \u003comgdc:Bounds x=\"1110\" y=\"95\" width=\"50\" height=\"50\" />\n      \u003c/bpmndi:BPMNShape>\n      \u003cbpmndi:BPMNShape id=\"ersterschritt_di\" bpmnElement=\"ersterschritt\">\n        \u003comgdc:Bounds x=\"1210\" y=\"80\" width=\"100\" height=\"80\" />\n      \u003c/bpmndi:BPMNShape>\n      \u003cbpmndi:BPMNShape id=\"abschluss_di\" bpmnElement=\"abschluss\">\n        \u003comgdc:Bounds x=\"1360\" y=\"80\" width=\"100\" height=\"80\" />\n      \u003c/bpmndi:BPMNShape>\n      \u003cbpmndi:BPMNShape id=\"ende_di\" bpmnElement=\"ende\">\n        \u003comgdc:Bounds x=\"1520\" y=\"102\" width=\"36\" height=\"36\" />\n        \u003cbpmndi:BPMNLabel>\u003comgdc:Bounds x=\"1508\" y=\"145\" width=\"62\" height=\"14\" />\u003c/bpmndi:BPMNLabel>\n      \u003c/bpmndi:BPMNShape>\n\n      \u003cbpmndi:BPMNEdge id=\"f_start_willkommen_di\" bpmnElement=\"f_start_willkommen\">\n        \u003comgdi:waypoint x=\"188\" y=\"120\" />\u003comgdi:waypoint x=\"240\" y=\"120\" />\n      \u003c/bpmndi:BPMNEdge>\n      \u003cbpmndi:BPMNEdge id=\"f_willkommen_begriffe_di\" bpmnElement=\"f_willkommen_begriffe\">\n        \u003comgdi:waypoint x=\"340\" y=\"120\" />\u003comgdi:waypoint x=\"390\" y=\"120\" />\n      \u003c/bpmndi:BPMNEdge>\n      \u003cbpmndi:BPMNEdge id=\"f_begriffe_gruss_di\" bpmnElement=\"f_begriffe_gruss\">\n        \u003comgdi:waypoint x=\"490\" y=\"120\" />\u003comgdi:waypoint x=\"540\" y=\"120\" />\n      \u003c/bpmndi:BPMNEdge>\n      \u003cbpmndi:BPMNEdge id=\"f_gruss_weg_di\" bpmnElement=\"f_gruss_weg\">\n        \u003comgdi:waypoint x=\"640\" y=\"120\" />\u003comgdi:waypoint x=\"700\" y=\"120\" />\n      \u003c/bpmndi:BPMNEdge>\n      \u003cbpmndi:BPMNEdge id=\"f_dev_di\" bpmnElement=\"f_dev\">\n        \u003comgdi:waypoint x=\"750\" y=\"120\" />\u003comgdi:waypoint x=\"800\" y=\"120\" />\n        \u003cbpmndi:BPMNLabel>\u003comgdc:Bounds x=\"748\" y=\"96\" width=\"86\" height=\"14\" />\u003c/bpmndi:BPMNLabel>\n      \u003c/bpmndi:BPMNEdge>\n      \u003cbpmndi:BPMNEdge id=\"f_arch_setup_di\" bpmnElement=\"f_arch_setup\">\n        \u003comgdi:waypoint x=\"900\" y=\"120\" />\u003comgdi:waypoint x=\"950\" y=\"120\" />\n      \u003c/bpmndi:BPMNEdge>\n      \u003cbpmndi:BPMNEdge id=\"f_setup_join_di\" bpmnElement=\"f_setup_join\">\n        \u003comgdi:waypoint x=\"1050\" y=\"120\" />\u003comgdi:waypoint x=\"1110\" y=\"120\" />\n      \u003c/bpmndi:BPMNEdge>\n      \u003cbpmndi:BPMNEdge id=\"f_skip_di\" bpmnElement=\"f_skip\">\n        \u003comgdi:waypoint x=\"725\" y=\"145\" />\n        \u003comgdi:waypoint x=\"725\" y=\"260\" />\n        \u003comgdi:waypoint x=\"1135\" y=\"260\" />\n        \u003comgdi:waypoint x=\"1135\" y=\"145\" />\n        \u003cbpmndi:BPMNLabel>\u003comgdc:Bounds x=\"885\" y=\"266\" width=\"90\" height=\"14\" />\u003c/bpmndi:BPMNLabel>\n      \u003c/bpmndi:BPMNEdge>\n      \u003cbpmndi:BPMNEdge id=\"f_join_ersterschritt_di\" bpmnElement=\"f_join_ersterschritt\">\n        \u003comgdi:waypoint x=\"1160\" y=\"120\" />\u003comgdi:waypoint x=\"1210\" y=\"120\" />\n      \u003c/bpmndi:BPMNEdge>\n      \u003cbpmndi:BPMNEdge id=\"f_ersterschritt_abschluss_di\" bpmnElement=\"f_ersterschritt_abschluss\">\n        \u003comgdi:waypoint x=\"1310\" y=\"120\" />\u003comgdi:waypoint x=\"1360\" y=\"120\" />\n      \u003c/bpmndi:BPMNEdge>\n      \u003cbpmndi:BPMNEdge id=\"f_abschluss_ende_di\" bpmnElement=\"f_abschluss_ende\">\n        \u003comgdi:waypoint x=\"1460\" y=\"120\" />\u003comgdi:waypoint x=\"1520\" y=\"120\" />\n      \u003c/bpmndi:BPMNEdge>\n    \u003c/bpmndi:BPMNPlane>\n  \u003c/bpmndi:BPMNDiagram>\n\u003c/definitions>\n", "forms": [{"id": "onb-start", "name": "Onboarding – Start", "schema": {"type": "default", "id": "onb-start", "components": [{"type": "text", "text": "# 🚀 Willkommen bei Atlas!\n\nSchön, dass du da bist. Dieses Onboarding ist **selbst ein laufender Atlas-Prozess** — du lernst Atlas, indem du Atlas benutzt.\n\nSag uns kurz, wer du bist, dann geht's los:"}, {"key": "displayName", "type": "textfield", "label": "Dein Name", "validate": {"required": true}}, {"key": "track", "type": "radio", "label": "Was möchtest du mit Atlas tun?", "values": [{"label": "Atlas benutzen – Prozesse starten, Aufgaben erledigen", "value": "nur_benutzen"}, {"label": "An Atlas mitentwickeln – am Engine-Code arbeiten", "value": "mitentwickeln"}, {"label": "Beides – erst benutzen, dann mitentwickeln", "value": "beides"}], "validate": {"required": true}}, {"key": "losGehts", "type": "checkbox", "label": "Los geht's! 🎉"}]}}, {"id": "onb-welcome", "name": "Onboarding – Willkommen", "schema": {"type": "default", "id": "onb-welcome", "components": [{"type": "text", "text": "# 👋 Willkommen an Bord\n\nDas hier ist deine erste **Aufgabe (User-Task)** in Atlas. Dass du dieses Formular überhaupt siehst, bedeutet: ein Prozess läuft *genau jetzt*, und ein **Token** wartet an dieser Stelle auf dich.\n\n## Was ist Atlas?\n\nAtlas ist eine **durable, hochperformante BPMN 2.x Workflow-Engine** in Go. Sie führt Geschäftsprozesse aus, indem sie Tokens durch einen kompilierten Graphen bewegt und **jeden Zustandsübergang als Event in einem append-only Log** festhält. Nichts wird sichtbar, bevor es sicher auf der Platte liegt.\n\n## Die drei Säulen\n\n- **Compiler** — BPMN-XML wird zu einem unveränderlichen, integer-indizierten Prozess kompiliert.\n- **Processor** — ein Single-Writer-Loop faltet Kommandos zu durablen Events.\n- **Datenmodell** — jeder Übergang ist ein Record `(ValueType, Intent)`.\n\nKlick unten auf **Absenden** — damit rückt der Token zum nächsten Schritt weiter. ✅"}, {"key": "welcomeAck", "type": "checkbox", "label": "Alles klar, weiter geht's"}]}}, {"id": "onb-concepts", "name": "Onboarding – Grundbegriffe", "schema": {"type": "default", "id": "onb-concepts", "components": [{"type": "text", "text": "# 🧩 Die wichtigsten Begriffe\n\nEin paar Vokabeln, die dir überall in Atlas begegnen:\n\n- **Prozess (Definition)** — die Vorlage: das deployte, versionierte BPMN-Modell.\n- **Instanz** — eine konkrete Ausführung eines Prozesses (dieses Onboarding ist eine Instanz!).\n- **Token** — der Marker, der durch den Graphen wandert und den Fortschritt trägt.\n- **User-Task** — ein Schritt, der auf einen Menschen wartet (wie dieser hier).\n- **Formular** — die Eingabemaske eines User-Tasks (form-js), die du gerade ausfüllst.\n- **Script-/Service-Task** — automatische Schritte: ein FEEL-Ausdruck bzw. ein externer Worker.\n- **Gateway** — eine Verzweigung: hier entscheidet der Prozess, wie es weitergeht.\n\nKleine Wissensprüfung 👇 (kein Stress — es geht ums Verankern)"}, {"key": "quizInstanz", "type": "radio", "label": "Eine *Instanz* ist …", "values": [{"label": "eine konkrete Ausführung eines Prozesses", "value": "richtig"}, {"label": "die BPMN-Vorlage selbst", "value": "vorlage"}, {"label": "ein Fehlereintrag im Log", "value": "fehler"}], "validate": {"required": true}}]}}, {"id": "onb-architecture", "name": "Onboarding – Architektur", "schema": {"type": "default", "id": "onb-architecture", "components": [{"type": "text", "text": "# 🏗️ Architektur & die 6 Invarianten\n\nDu willst mitentwickeln — stark! Ein Schritt vor dem ersten `git commit`: **lies `AGENTS.md`**, die kanonische Betriebsanleitung des Repos. Diese sechs Invarianten sind *load-bearing* und unverhandelbar:\n\n1. **Keine Allocation auf dem Hot-Path** — der Processor-Batch-Zyklus darf pro Kommando nichts allozieren. (ADR-0010)\n2. **Durable before visible** — Reihenfolge immer: Log anhängen → *ein* `fsync` → State committen → Side-Effects. (ADR-0005)\n3. **Single Writer pro Partition** — eine Goroutine besitzt den State, keine Locks; Cross-Partition nur async. (ADR-0002/0006)\n4. **Ein `applyToState`** — State-Mutation lebt in genau einer Funktion, identisch live und bei Recovery. (ADR-0001)\n5. **Compile, don't interpret** — was zur Deploy-Zeit passieren kann, gehört nicht auf den Hot-Path. (ADR-0004/0008)\n6. **Events sind Fakten, Kommandos sind Absichten** — nur Events werden persistiert; Keys/Timestamps landen *in* den Events (deterministisches Replay). (ADR-0001)\n\n> ⚠️ Wenn eine Aufgabe eine Invariante zu brechen scheint: **stopp und melde es** — das braucht einen neuen ADR, keinen Workaround.\n\n📖 Tiefer: `docs/ARCHITECTURE.md` · `docs/architecture/invariants.md` · `docs/adr/`"}, {"key": "archAck", "type": "checklist", "label": "Ich nehme mit:", "values": [{"label": "Ich lese AGENTS.md, bevor ich Code schreibe", "value": "agents"}, {"label": "Ich kenne die 6 Invarianten", "value": "invarianten"}, {"label": "Bei Zweifeln: stoppen und einen ADR anstoßen", "value": "adr"}]}]}}, {"id": "onb-devsetup", "name": "Onboarding – Setup", "schema": {"type": "default", "id": "onb-devsetup", "components": [{"type": "text", "text": "# 🔧 Setup & Definition of Done\n\nAlle Befehle vom Repo-Root ausführen:\n\n```\ngo build ./...\ngo test ./...\ngo test -race ./...   # PFLICHT, bevor etwas \"fertig\" ist\ngo vet ./...\ngofmt -l .            # muss leere Ausgabe liefern\n```\n\n**Definition of Done:** `go build ./...`, `go test -race ./...`, `go vet ./...` sind grün und `gofmt -l .` ist leer. Vorher gilt keine Änderung als abgeschlossen.\n\n## Arbeitsweise\n\n- **TDD ist Default** (ADR-0018): erst der failing Test, dann der minimale Code, dann refactoren.\n- **Coverage-Floor: 95 %** statement-coverage, repo-weit in CI geprüft.\n- **Recovery-Tests sind first-class**: „State nach Replay == State live gebaut\".\n- **Determinismus**: keine Abhängigkeit von Wall-Clock oder Goroutine-Scheduling — `Clock` injizieren.\n- Kleine, fokussierte Changes; `gofmt` ist nicht verhandelbar."}, {"key": "devAck", "type": "checklist", "label": "Mein Dev-Setup:", "values": [{"label": "Go-Toolchain steht, `go build ./...` läuft", "value": "build"}, {"label": "Ich laufe `go test -race ./...` vor jedem \"fertig\"", "value": "race"}, {"label": "Ich arbeite test-first (TDD)", "value": "tdd"}]}]}}, {"id": "onb-finish", "name": "Onboarding – Abschluss", "schema": {"type": "default", "id": "onb-finish", "components": [{"type": "text", "text": "# 🎓 Fast geschafft!\n\nDu hast die Kernkonzepte gesehen — und dabei *live* erlebt, wie sich ein Atlas-Prozess anfühlt: **Start → User-Tasks → Script-Task → Gateway → Ende**. Genau so wird in Atlas Arbeit orchestriert.\n\nEine letzte Frage, dann bist du durch:"}, {"key": "erstesZiel", "type": "textarea", "label": "Was möchtest du als Erstes mit Atlas bauen oder ausprobieren?"}, {"type": "text", "text": "Willkommen im Team! 🎉 Nach dem **Absenden** ist dein Onboarding abgeschlossen — die Instanz läuft bis zum End-Event und schließt sauber ab."}]}}]}</script>
+<script>
+// ---- interactive onboarding tour: deploy the real onboarding process to this
+// instance and start a run, then send the visitor to the Tasks inbox. Same-origin
+// REST calls, mirroring the conformance gallery's deploy pattern. The BPMN and its
+// six forms are embedded in the #onb-data JSON block above.
+(function initTour(){
+  const $ = (id) => document.getElementById(id);
+  const btn = $("tour-start");
+  if (!btn) return;
+  const statusEl = $("tour-status"), doneEl = $("tour-done");
+  const L = () => (document.documentElement.dataset.lang === "en" ? "en" : "de");
+  const T = (de, en) => (L() === "en" ? en : de);
+  const setStatus = (msg, kind) => { statusEl.textContent = msg; statusEl.className = "tour-status" + (kind ? " " + kind : ""); };
+
+  async function apiCall(method, path, body, isXml){
+    const opts = { method, headers: {} };
+    if (body !== undefined){
+      opts.headers["Content-Type"] = isXml ? "application/xml" : "application/json";
+      opts.body = isXml ? body : JSON.stringify(body);
+    }
+    const res = await fetch(path, opts);
+    const text = await res.text();
+    if (!res.ok){
+      let msg = text;
+      try { const j = JSON.parse(text); msg = j.error || j.message || text; } catch (e) { /* keep text */ }
+      const err = new Error(msg || (res.status + " " + res.statusText));
+      err.status = res.status;
+      throw err;
+    }
+    return text ? JSON.parse(text) : {};
+  }
+
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    doneEl.hidden = true;
+    try {
+      const data = JSON.parse($("onb-data").textContent);
+      setStatus(T("Formulare speichern\u2026", "Saving forms\u2026"));
+      for (const f of data.forms){
+        await apiCall("POST", "/api/v1/forms", { id: f.id, name: f.name, schema: f.schema });
+      }
+      setStatus(T("Prozess deployen\u2026", "Deploying the process\u2026"));
+      const dep = await apiCall("POST", "/api/v1/deployments", data.bpmn, true);
+      const defs = dep.deployments || [];
+      const match = defs.find((d) => d.processId === "onboarding-atlas");
+      if (!match) throw new Error(T("Deploy lieferte keine Prozessdefinition.", "Deploy returned no process definition."));
+      setStatus(T("Instanz starten\u2026", "Starting an instance\u2026"));
+      const name = ($("tour-name").value || "").trim();
+      const vars = { track: $("tour-track").value || "beides" };
+      if (name) vars.displayName = name;
+      await apiCall("POST", "/api/v1/processes/" + match.key + "/instances", { variables: vars });
+      setStatus(T("\u2713 Onboarding l\u00e4uft! Deine erste Aufgabe wartet im Posteingang.",
+                  "\u2713 Onboarding is running! Your first task is waiting in the inbox."), "ok");
+      doneEl.hidden = false;
+    } catch (e){
+      if (e.status === 401 || e.status === 403){
+        setStatus(T("Bitte melde dich zuerst in der App an, dann versuche es erneut.",
+                    "Please sign in to the app first, then try again."), "err");
+      } else {
+        setStatus(T("Fehler: ", "Error: ") + e.message, "err");
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  });
+})();
+</script>
 <script>
 // ---- language toggle (persisted) ----
 const LANG_KEY = "atlas.handbuch.lang";
