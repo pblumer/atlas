@@ -59,6 +59,16 @@ _Changed_ / _Removed_ for each version.
   `events/op` × instances/sec); the two workloads recover completed history and
   parked instances-plus-jobs respectively. Test-only, so the coverage floor is
   untouched; the `-bench=.` CI smoke step covers them.
+- **Latency-percentile benchmark profile** (v0.2.0 programme B): `ns/op` is a mean,
+  which the skewed `fsync` latency understates, so `BenchmarkLatencyHTTPLinearCreate`
+  and `BenchmarkLatencyEngineLinearSelfCompleting` sample each operation's wall-clock
+  latency and report **P50/P95/P99 and max** (computed by nearest-rank on the sorted
+  samples). They make the tail visible — on the CI machine the durable HTTP create's
+  median is ~2 ms but its max is ~50 ms — and cover both the end-to-end HTTP path and
+  the pure engine, so the API-layer tail can be attributed. Run with `-benchtime=Nx`
+  for a fixed, meaningful sample count (P99 wants a few thousand); the percentiles
+  appear in the raw `-bench` output and via `benchstat`. Test-only, coverage floor
+  untouched; the `-bench=.` CI smoke step covers them.
 - **Deactivate a deployed process** ([ADR-0119](docs/adr/0119-deactivate-deployed-process.md)):
   a deployed definition can be paused so it stays deployed and keeps its running
   instances, but no longer auto-starts new ones from its timer, message, or signal
