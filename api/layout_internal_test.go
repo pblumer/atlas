@@ -376,12 +376,13 @@ func TestGenerateDIBoundaryEvent(t *testing.T) {
 	if !ok1 || !ok2 {
 		t.Fatalf("host or boundary shape missing (host=%v be=%v):\n%s", ok1, ok2, di)
 	}
-	// The boundary event's center must lie on the host's bottom border.
-	if cy := be.y + be.h/2; cy != host.bottom() {
-		t.Errorf("boundary center y=%d not on host bottom edge y=%d", cy, host.bottom())
+	// The handler (Escalated) is a side branch, so it sits above the trunk and the
+	// boundary event rides the host's top border, facing it.
+	if cy := be.y + be.h/2; cy != host.y {
+		t.Errorf("boundary center y=%d not on host top edge y=%d", cy, host.y)
 	}
 	if cx := be.x + be.w/2; cx < host.x || cx > host.right() {
-		t.Errorf("boundary center x=%d not along host's bottom edge [%d,%d]", cx, host.x, host.right())
+		t.Errorf("boundary center x=%d not along host's top edge [%d,%d]", cx, host.x, host.right())
 	}
 	// The exception path is drawn.
 	if !strings.Contains(di, `bpmnElement="s3"`) {
@@ -410,7 +411,8 @@ func TestGenerateDIBoundaryDangling(t *testing.T) {
 }
 
 // TestGenerateDIBoundaryOnSubProcess attaches a boundary event to a subprocess box
-// (not a plain task): it must ride the box's bottom border.
+// (not a plain task): it must ride the box's border facing its handler (here the
+// top, as the handler is a side branch above the trunk).
 func TestGenerateDIBoundaryOnSubProcess(t *testing.T) {
 	src := []byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
 	  <process id="P">
@@ -436,8 +438,8 @@ func TestGenerateDIBoundaryOnSubProcess(t *testing.T) {
 	if !ok1 || !ok2 {
 		t.Fatalf("subprocess or boundary shape missing:\n%s", di)
 	}
-	if cy := be.y + be.h/2; cy != sub.bottom() {
-		t.Errorf("boundary center y=%d not on subprocess bottom edge y=%d", cy, sub.bottom())
+	if cy := be.y + be.h/2; cy != sub.y {
+		t.Errorf("boundary center y=%d not on subprocess top edge y=%d", cy, sub.y)
 	}
 }
 
@@ -493,15 +495,15 @@ func TestGenerateDIHappyPathStaysStraight(t *testing.T) {
 			t.Errorf("happy-path node %q center y=%d, want %d (main flow must stay one straight line)", id, cy, wantCY)
 		}
 	}
-	// The side-branch end events must have been pushed off the main axis, not left
-	// sitting on it (which is what displaced the happy path before the fix).
+	// The side branches rise above the main axis, never displacing it or dropping
+	// below it (smaller y is higher on the canvas).
 	for _, id := range []string{"EndError1", "EndError2", "HandleSessionError", "HandleError"} {
 		s, ok := shapes[id]
 		if !ok {
 			t.Fatalf("branch shape %q missing:\n%s", id, di)
 		}
-		if cy := s.y + s.h/2; cy == wantCY {
-			t.Errorf("branch node %q sits on the main axis (y-center %d); it should be off-axis", id, cy)
+		if cy := s.y + s.h/2; cy >= wantCY {
+			t.Errorf("branch node %q y-center %d is not above the main axis %d", id, cy, wantCY)
 		}
 	}
 }

@@ -282,7 +282,7 @@ func layoutOf(c layoutContainer) laidOut {
 	} else {
 		placeNodes(nodes, trunk)
 	}
-	placeBoundaries(nodes, idx)
+	placeBoundaries(nodes, idx, c.Flows)
 
 	var lo laidOut
 	lo.shapes = append(lo.shapes, laneShapes...) // lane bands before the nodes they hold
@@ -457,10 +457,11 @@ func orderLayer(idxs []int, trunk []bool) []int {
 
 // placeNodes assigns each non-boundary node a local position: columns are spaced by
 // the widest node in each preceding column, and nodes sharing a column stack
-// downward with the trunk (happy-path) node centered on the main axis (y=0), so a
-// linear happy path renders as one straight line even when node heights differ and
-// side branches share its columns. Boundary events are skipped here and positioned
-// by placeBoundaries.
+// upward from the trunk (happy-path) node, which is centered on the main axis
+// (y=0). A linear happy path thus renders as one straight line even when node
+// heights differ, and side branches — error handlers and the like — rise above it
+// rather than dropping below. Boundary events are skipped here and positioned by
+// placeBoundaries.
 func placeNodes(nodes []lnode, trunk []bool) {
 	laneW := map[int]int{}
 	maxLayer := 0
@@ -483,15 +484,15 @@ func placeNodes(nodes []lnode, trunk []bool) {
 		colX[l] = colX[l-1] + laneW[l-1] + layoutGapX
 	}
 	for l := 0; l <= maxLayer; l++ {
-		var y int
+		var top int // running top edge; branches stack upward above the trunk
 		for row, i := range orderLayer(byLayer[l], trunk) {
 			if row == 0 {
 				nodes[i].y = -nodes[i].h / 2 // trunk row centered on the main axis
 			} else {
-				nodes[i].y = y
+				nodes[i].y = top - layoutGapY - nodes[i].h
 			}
 			nodes[i].x = colX[l] + (laneW[l]-nodes[i].w)/2
-			y = nodes[i].y + nodes[i].h + layoutGapY
+			top = nodes[i].y
 		}
 	}
 }
@@ -611,10 +612,23 @@ func placeLaned(nodes []lnode, lanes []layoutLane, laneOf []int, trunk []bool) [
 	return shapes
 }
 
-// placeBoundaries sits each boundary event on the bottom border of its host,
-// centered when it is the only one and spread evenly along the edge when several
-// share a host, straddling the border so bpmn-js snaps them onto it.
-func placeBoundaries(nodes []lnode, idx map[string]int) {
+// placeBoundaries sits each boundary event on its host's border — centered when it
+// is the only one, spread evenly along the edge when several share a host, and
+// straddling the border so bpmn-js snaps it on. The event rides whichever of the
+// top/bottom edges faces its exception handler (side branches rise above the trunk,
+// so a handler is usually above), so the exception flow leaves toward the handler
+// without doubling back across the host. With no resolvable handler it defaults to
+// the top edge, matching the upward branch convention.
+func placeBoundaries(nodes []lnode, idx map[string]int, flows []layoutFlow) {
+	// Each boundary's exception-flow target, so it can ride the facing edge.
+	target := map[string]int{}
+	for _, f := range flows {
+		s, sok := idx[f.SourceRef]
+		t, tok := idx[f.TargetRef]
+		if sok && tok && nodes[s].bound {
+			target[nodes[s].id] = t
+		}
+	}
 	count := map[string]int{}
 	for i := range nodes {
 		if nodes[i].bound {
@@ -635,7 +649,15 @@ func placeBoundaries(nodes []lnode, idx map[string]int) {
 		seen[nodes[i].host]++
 		cx := host.x + host.w*(k+1)/(count[nodes[i].host]+1)
 		nodes[i].x = cx - nodes[i].w/2
-		nodes[i].y = host.y + host.h - nodes[i].h/2
+		onBottom := false // default to the top edge (branches rise above the trunk)
+		if t, ok := target[nodes[i].id]; ok && nodes[t].y+nodes[t].h/2 > host.y+host.h/2 {
+			onBottom = true // handler sits below: ride the bottom edge instead
+		}
+		if onBottom {
+			nodes[i].y = host.y + host.h - nodes[i].h/2
+		} else {
+			nodes[i].y = host.y - nodes[i].h/2
+		}
 	}
 }
 
@@ -674,15 +696,19 @@ func emitEdges(lo *laidOut, nodes []lnode, idx map[string]int, flows []layoutFlo
 }
 
 // routeFlow builds the orthogonal waypoints from src to tgt. A normal source leaves
-// on its right edge, a boundary event drops out of its bottom; every target is
-// entered on its left. When the two ends already share a row the run is straight;
-// otherwise a vertical riser at the mid-x turns the diagonal into a right-angled
-// out-across-in path.
+// on its right edge, a boundary event drops out of the vertical edge facing its
+// target (top when the handler sits above, else bottom); every target is entered on
+// its left. When the two ends already share a row the run is straight; otherwise a
+// vertical riser at the mid-x turns the diagonal into a right-angled out-across-in
+// path.
 func routeFlow(src, tgt lnode) []point {
 	tx, ty := tgt.x, tgt.y+tgt.h/2 // target entry: left-center
 	if src.bound {
-		// Exception path: straight down out of the host, then across into the target.
-		sx, sy := src.x+src.w/2, src.y+src.h
+		// Exception path: out of the edge facing the handler, then across into it.
+		sx, sy := src.x+src.w/2, src.y+src.h // default: leave from the bottom
+		if ty < src.y+src.h/2 {
+			sy = src.y // handler above: leave from the top
+		}
 		if sx == tx {
 			return []point{{sx, sy}, {tx, ty}}
 		}
