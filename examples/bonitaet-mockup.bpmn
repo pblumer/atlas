@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Bonitätsprüfung mit simuliertem Umsystem — ein Mockup-Service-Task (ADR-0120).
+
+  Zeigt, wie sich ein Prozess end-to-end durchspielen lässt, obwohl das externe
+  Umsystem (hier eine Bonitäts-Auskunft, real per REST angebunden) noch gar nicht
+  existiert: Der Service-Task ist im Mockup-Modus, also simuliert ihn die Engine
+  selbst — mit zufälliger Antwortzeit, einer geskripteten Antwort und einer
+  simulierten Ausfallquote. Kein externer Worker, kein Connector nötig.
+
+    Start "Antrag eingegangen"
+     → Mockup-Service-Task "Bonität im Umsystem prüfen"
+          minDuration PT1S / maxDuration PT4S   (zufällige Antwortzeit)
+          resultExpression → bonitaet           ({score, genehmigt} — die
+                                                  simulierte Umsystem-Antwort,
+                                                  aus dem Eingabewert betrag)
+          failRate 0.2 / errorCode UMSYS_...     (simulierter Umsystem-Ausfall)
+        └─ Error-Boundary "Umsystem nicht erreichbar"
+             → Ende "Manuell prüfen"             (fachlicher Fehlerpfad)
+     → Exklusiv-Gateway "Bonität ok?"
+          bonitaet.genehmigt = true  → Ende "Kredit genehmigt"
+          sonst (default)            → Ende "Kredit abgelehnt"
+
+  Die Engine wartet die (zufällige) Dauer über einen Timer ab — nicht blockierend,
+  durabel und in der Timeline sichtbar. Bei einem simulierten Ausfall wirft der
+  Task den BPMN-Fehler UMSYS_NICHT_ERREICHBAR, den die Error-Boundary fängt; sonst
+  schreibt er die simulierte Antwort nach `bonitaet` und der Prozess verzweigt
+  darauf. Setzt man failRate auf 0, entfällt der Ausfall; setzt man min == max,
+  ist die Dauer fix. So wird der ganze Ablauf testbar, bevor die echte
+  REST-Anbindung steht.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:atlas="http://atlas.dev/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_bonitaet_mockup" targetNamespace="http://atlas/examples">
+  <process id="proc_bonitaet_mockup" name="Bonitätsprüfung (Mockup)" isExecutable="true">
+
+    <startEvent id="start" name="Antrag eingegangen">
+      <outgoing>f_start_pruefen</outgoing>
+    </startEvent>
+
+    <serviceTask id="pruefen" name="Bonität im Umsystem prüfen">
+      <extensionElements>
+        <atlas:mockupConnector minDuration="PT1S" maxDuration="PT4S"
+          resultExpression="={ score: 720, genehmigt: betrag &lt;= 10000 }"
+          resultVariable="bonitaet"
+          failRate="0.2" errorCode="UMSYS_NICHT_ERREICHBAR"/>
+      </extensionElements>
+      <incoming>f_start_pruefen</incoming>
+      <outgoing>f_pruefen_gw</outgoing>
+    </serviceTask>
+
+    <boundaryEvent id="ausfall" name="Umsystem nicht erreichbar" attachedToRef="pruefen">
+      <outgoing>f_ausfall_manuell</outgoing>
+      <errorEventDefinition errorRef="err_umsystem"/>
+    </boundaryEvent>
+
+    <exclusiveGateway id="gw" name="Bonität ok?" default="f_gw_nok">
+      <incoming>f_pruefen_gw</incoming>
+      <outgoing>f_gw_ok</outgoing>
+      <outgoing>f_gw_nok</outgoing>
+    </exclusiveGateway>
+
+    <endEvent id="end_ok" name="Kredit genehmigt">
+      <incoming>f_gw_ok</incoming>
+    </endEvent>
+
+    <endEvent id="end_nok" name="Kredit abgelehnt">
+      <incoming>f_gw_nok</incoming>
+    </endEvent>
+
+    <endEvent id="end_manuell" name="Manuell prüfen">
+      <incoming>f_ausfall_manuell</incoming>
+    </endEvent>
+
+    <sequenceFlow id="f_start_pruefen" sourceRef="start" targetRef="pruefen"/>
+    <sequenceFlow id="f_pruefen_gw" sourceRef="pruefen" targetRef="gw"/>
+    <sequenceFlow id="f_gw_ok" name="genehmigt" sourceRef="gw" targetRef="end_ok">
+      <conditionExpression>= bonitaet.genehmigt</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_gw_nok" name="abgelehnt" sourceRef="gw" targetRef="end_nok"/>
+    <sequenceFlow id="f_ausfall_manuell" sourceRef="ausfall" targetRef="end_manuell"/>
+  </process>
+
+  <error id="err_umsystem" name="Umsystem nicht erreichbar" errorCode="UMSYS_NICHT_ERREICHBAR"/>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_bonitaet_mockup">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="160" y="122" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="146" y="162" width="66" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_pruefen" bpmnElement="pruefen">
+        <dc:Bounds x="260" y="100" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ausfall" bpmnElement="ausfall">
+        <dc:Bounds x="292" y="162" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="236" y="205" width="98" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw" bpmnElement="gw" isMarkerVisible="true">
+        <dc:Bounds x="440" y="115" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="432" y="80" width="66" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_ok" bpmnElement="end_ok">
+        <dc:Bounds x="572" y="122" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="548" y="162" width="86" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_nok" bpmnElement="end_nok">
+        <dc:Bounds x="447" y="250" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="423" y="290" width="86" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end_manuell" bpmnElement="end_manuell">
+        <dc:Bounds x="292" y="300" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="270" y="340" width="80" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="di_f_start_pruefen" bpmnElement="f_start_pruefen">
+        <di:waypoint x="196" y="140"/><di:waypoint x="260" y="140"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_pruefen_gw" bpmnElement="f_pruefen_gw">
+        <di:waypoint x="360" y="140"/><di:waypoint x="440" y="140"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_ok" bpmnElement="f_gw_ok">
+        <di:waypoint x="490" y="140"/><di:waypoint x="572" y="140"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="503" y="118" width="56" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_nok" bpmnElement="f_gw_nok">
+        <di:waypoint x="465" y="165"/><di:waypoint x="465" y="250"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="470" y="185" width="56" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_ausfall_manuell" bpmnElement="f_ausfall_manuell">
+        <di:waypoint x="310" y="198"/><di:waypoint x="310" y="300"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

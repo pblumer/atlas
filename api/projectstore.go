@@ -28,7 +28,7 @@ type project struct {
 	OwnerID    string          `json:"ownerId,omitempty"`
 	Visibility string          `json:"visibility,omitempty"`
 	Members    []projectMember `json:"members,omitempty"`
-	// Protected marks a platform-managed system project (ADR-0119): its content is
+	// Protected marks a platform-managed system project (ADR-0122): its content is
 	// bootstrap-deployed and it must not be renamed, deleted, reshared, or written
 	// into through the design-time API — by any caller, admins included. Additive
 	// and omitempty, so every pre-0119 record deserializes as an ordinary

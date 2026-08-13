@@ -133,7 +133,7 @@ func runServe(args []string) error {
 	shutdownTimeout := fs.Duration("shutdown-timeout", 10*time.Second, "grace period for in-flight requests on shutdown")
 	docs := fs.Bool("docs", true, "serve the OpenAPI spec (/api/v1/openapi.json) and the Scalar API explorer (/api/docs); pass --docs=false to disable")
 	auth := fs.Bool("auth", false, "require login for the API and UI; seeds an admin from ATLAS_ADMIN_USERNAME/ATLAS_ADMIN_PASSWORD on first run")
-	userProvisioning := fs.Bool("user-provisioning", false, "enable the user-provisioning connector for the protected system project's processes (create/set-password/disable Atlas logins); off by default — it deliberately reopens the user-management boundary for platform processes only (ADR-0120)")
+	userProvisioning := fs.Bool("user-provisioning", false, "enable the user-provisioning connector for the protected system project's processes (create/set-password/disable Atlas logins); off by default — it deliberately reopens the user-management boundary for platform processes only (ADR-0123)")
 	vault := fs.Bool("vault", true, "enable the encrypted secret vault; on by default (generates a key at <data-dir>/vault.key unless ATLAS_VAULT_KEY is set), --vault=false to disable (ADR-0070)")
 	powershell := fs.Bool("powershell", true, "run PowerShell script tasks by shelling out to pwsh; on by default, --powershell=false to disable (executes arbitrary interpreter code)")
 	python := fs.Bool("python", true, "run Python script tasks by shelling out to python3; on by default, --python=false to disable (executes arbitrary interpreter code)")

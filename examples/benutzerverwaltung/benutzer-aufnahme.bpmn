@@ -5,7 +5,7 @@
   Atlas bildet einen eigenen Verwaltungsprozess als BPMN + Formulare ab
   (Dogfooding). Der Prozess koordiniert die Aufnahme eines neuen Benutzers; die
   Freigabe bleibt eine Admin-Handlung (User-Task), die Konto-Anlage selbst laeuft
-  seit ADR-0120 automatisch ueber den userConnector (gated auf das System-Projekt,
+  seit ADR-0123 automatisch ueber den userConnector (gated auf das System-Projekt,
   opt-in via the user-provisioning flag). Ist die Provisionierung nicht aktiviert, parkt
   der userConnector-Task, bis ein Operator sie einschaltet.
 

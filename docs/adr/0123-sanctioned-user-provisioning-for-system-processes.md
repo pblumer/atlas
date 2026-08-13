@@ -1,4 +1,4 @@
-# ADR-0120: A sanctioned automated user-provisioning path for system processes
+# ADR-0123: A sanctioned automated user-provisioning path for system processes
 
 - **Status:** Accepted
 - **Date:** 2026-08-13
@@ -6,7 +6,7 @@
 
 ## Context and problem statement
 
-ADR-0119 gave Atlas a protected system project holding its own operating
+ADR-0122 gave Atlas a protected system project holding its own operating
 processes — user intake, access review, offboarding. Those processes deliberately
 stop short of the privileged act: the intake process *coordinates* onboarding but
 a human admin still creates the account by hand, because user management is
@@ -28,7 +28,7 @@ provision accounts, no un-audited privileged writes, and no way to lock every
 operator out.
 
 This is not a proposal to automate *all* user changes (the native console stays
-the direct/break-glass surface, ADR-0119). It is a narrow, opt-in capability for
+the direct/break-glass surface, ADR-0122). It is a narrow, opt-in capability for
 the platform's own, non-editable processes.
 
 ## Decision drivers
@@ -37,7 +37,7 @@ the platform's own, non-editable processes.
   create-user / set-password / disable-user, not a general admin credential that
   could do anything the admin API allows.
 - **Gated to the platform.** Only deployments in the protected system project
-  (ADR-0119) may invoke it. A user-authored model must not be able to provision
+  (ADR-0122) may invoke it. A user-authored model must not be able to provision
   accounts.
 - **No secret in the model (ADR-0041/0067).** Whatever credential or capability
   is used is resolved server-side; the model carries only intent.
@@ -51,7 +51,7 @@ the platform's own, non-editable processes.
   that process instance, distinct from a human admin's action (ADR-0044's audit
   trail intent).
 - **Off by default.** An instance that does not want automated provisioning must
-  be unaffected — the same opt-in stance as ADR-0119's `WithSystemProcesses`.
+  be unaffected — the same opt-in stance as ADR-0122's `WithSystemProcesses`.
 
 ## Considered options
 
@@ -68,7 +68,7 @@ the platform's own, non-editable processes.
    directly through a bounded capability — no loopback HTTP, no credential in the
    model at all. The deploy/runtime path refuses it for any process not in the
    protected system project.
-3. **Status quo (ADR-0119): keep it a human admin task.** The process
+3. **Status quo (ADR-0122): keep it a human admin task.** The process
    coordinates; a person clicks "create".
 
 ## Decision outcome
@@ -92,7 +92,7 @@ shape; a follow-up implements it test-first):
   can do exactly these three things.
 - **Gated to the system project.** The handler refuses to run for any process
   whose id is not a bootstrap-deployed system process (the `systemPIDs` set from
-  ADR-0119). A tenant model that somehow declared the connector would fail at
+  ADR-0122). A tenant model that somehow declared the connector would fail at
   runtime; ideally the compiler also rejects it outside the system project.
 - **Idempotent.** `create` treats an existing username as success (returns the
   existing id, `created:false`), mirroring the EntraID example, so an
@@ -102,7 +102,7 @@ shape; a follow-up implements it test-first):
   from "changed by admin Y" (ADR-0044 follow-up: audit logging).
 - **Opt-in.** A server option (e.g. `WithUserProvisioning`) enables the flavor,
   off by default; `WithSystemProcesses` does not imply it. An instance keeps the
-  human-in-the-loop ADR-0119 behavior until an operator opts in.
+  human-in-the-loop ADR-0122 behavior until an operator opts in.
 
 This supersedes, for the system project only, the ADR-0044/0049 rule that no
 automated identity may manage users — and *only* there, with a bounded capability
@@ -146,7 +146,7 @@ remain valid and are unchanged.
 
 ### Option 2 — dedicated in-process provisioning connector (chosen)
 - **Good:** Least privilege (exactly three operations); no credential anywhere;
-  natural gating to the system project via the ADR-0119 `systemPIDs`; reuses the
+  natural gating to the system project via the ADR-0122 `systemPIDs`; reuses the
   store's safety guards; clean attribution to the process instance.
 - **Bad:** More code — a new connector flavor, worker, gating, and opt-in.
 
@@ -158,7 +158,7 @@ remain valid and are unchanged.
 
 - supersedes (for the system project only) the automation-cannot-manage-users
   rule of ADR-0044 and ADR-0049
-- builds on ADR-0119 (protected system project + `systemPIDs` gating), ADR-0067
+- builds on ADR-0122 (protected system project + `systemPIDs` gating), ADR-0067
   (service-task connector catalog), ADR-0041 (connector management / secret
   store), ADR-0069/0070 (encrypted vault), and the at-least-once idempotency
   pattern of `examples/entra-create-account.bpmn`

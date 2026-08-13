@@ -405,6 +405,12 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		return nil, err
 	}
 
+	// Record each flow node's organizational lane (ADR-0121). Lanes are metadata with no
+	// execution effect, resolved through the same process-wide id map as compensation.
+	if err := resolveLanes(b, ids, &proc.xmlFlowContent); err != nil {
+		return nil, err
+	}
+
 	// Data objects are not flow nodes (no token flows through them), so they are
 	// added as a separate collection, not registered as flow nodes (ADR-0053). A
 	// nameless data object falls back to its BPMN id so it stays addressable.
@@ -940,6 +946,87 @@ type xmlFlowContent struct {
 	// Associations are BPMN <association> artifacts declared in this scope. Atlas reads
 	// them only to link a compensation boundary event to its handler (ADR-0103).
 	Associations []xmlAssociation `xml:"association"`
+
+	// LaneSets partition this scope's flow nodes into organizational lanes (ADR-0121).
+	// Lanes are metadata with no execution effect; resolveLanes records each node's lane.
+	LaneSets []xmlLaneSet `xml:"laneSet"`
+}
+
+// xmlLaneSet is a <laneSet> — a set of sibling lanes partitioning a process or subprocess scope.
+type xmlLaneSet struct {
+	Lanes []xmlLane `xml:"lane"`
+}
+
+// xmlLane is a <lane> — an organizational partition naming the flow nodes it contains via
+// <flowNodeRef> children, optionally subdivided into a nested <childLaneSet> (ADR-0121).
+type xmlLane struct {
+	Id           string      `xml:"id,attr"`
+	Name         string      `xml:"name,attr"`
+	FlowNodeRefs []string    `xml:"flowNodeRef"`
+	ChildLaneSet *xmlLaneSet `xml:"childLaneSet"`
+}
+
+// laneLabel is a lane's name, or its id when unnamed — for error messages.
+func laneLabel(l *xmlLane) string {
+	if l.Name != "" {
+		return l.Name
+	}
+	return l.Id
+}
+
+// resolveLanes records each flow node's organizational lane (ADR-0121). It walks every scope's
+// laneSets — following nested childLaneSets and building the lane table with parent pointers — and
+// resolves each <flowNodeRef> to a node through the process-wide id map, so a lane's assignment
+// works regardless of scope. A flowNodeRef naming no registered node, or a node claimed by two
+// lanes, is a deploy error. Lanes are pure metadata, so this runs after registration and changes
+// no flow; a process with no lanes leaves every node's Lane at -1.
+func resolveLanes(b *Builder, ids map[string]int32, fc *xmlFlowContent) error {
+	assigned := map[int32]string{} // node id → the lane that already claimed it (process-wide)
+
+	var walkLaneSet func(ls *xmlLaneSet, parent int32) error
+	walkLaneSet = func(ls *xmlLaneSet, parent int32) error {
+		for i := range ls.Lanes {
+			lane := &ls.Lanes[i]
+			idx := b.AddLane(lane.Name, parent)
+			for _, ref := range lane.FlowNodeRefs {
+				ref = strings.TrimSpace(ref)
+				if ref == "" {
+					continue
+				}
+				node, ok := ids[ref]
+				if !ok {
+					return fmt.Errorf("compiler: lane %q references unknown flow node %q", laneLabel(lane), ref)
+				}
+				if prev, dup := assigned[node]; dup {
+					return fmt.Errorf("compiler: flow node %q is in two lanes (%q and %q); a node belongs to at most one lane", ref, prev, laneLabel(lane))
+				}
+				assigned[node] = laneLabel(lane)
+				b.SetLane(node, idx)
+			}
+			if lane.ChildLaneSet != nil {
+				if err := walkLaneSet(lane.ChildLaneSet, idx); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
+	var walkScope func(c *xmlFlowContent) error
+	walkScope = func(c *xmlFlowContent) error {
+		for i := range c.LaneSets {
+			if err := walkLaneSet(&c.LaneSets[i], -1); err != nil {
+				return err
+			}
+		}
+		for i := range c.SubProcesses {
+			if err := walkScope(&c.SubProcesses[i].xmlFlowContent); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return walkScope(fc)
 }
 
 // xmlReceiveTask is a <receiveTask messageRef="…">: an activity that waits for the
@@ -1353,7 +1440,7 @@ type xmlServiceTask struct {
 	// absent.
 	Mail *xmlMailConnector `xml:"extensionElements>mailConnector"`
 	// User, when present, marks this service task a user-provisioning connector task
-	// (ADR-0120). The pointer is nil when the <atlas:userConnector> extension is absent.
+	// (ADR-0123). The pointer is nil when the <atlas:userConnector> extension is absent.
 	User *xmlUserConnector `xml:"extensionElements>userConnector"`
 	// Csv, when present, marks this service task a CSV-to-JSON connector task
 	// (ADR-0090). The pointer is nil when the <atlas:csvConnector> extension is absent.
@@ -1369,7 +1456,11 @@ type xmlServiceTask struct {
 	// WebScrape, when present, marks this service task a web-scraping connector task
 	// (ADR-0118). The pointer is nil when the <atlas:webscrapeConnector> extension is
 	// absent.
-	WebScrape     *xmlWebScrapeConnector     `xml:"extensionElements>webscrapeConnector"`
+	WebScrape *xmlWebScrapeConnector `xml:"extensionElements>webscrapeConnector"`
+	// Mockup, when present, marks this service task an engine-simulated mockup task
+	// (ADR-0120). The pointer is nil when the <atlas:mockupConnector> extension is
+	// absent.
+	Mockup        *xmlMockupConnector        `xml:"extensionElements>mockupConnector"`
 	IOMapping     xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
 	MultiInstance *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
 	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
@@ -1449,7 +1540,7 @@ type xmlMailConnector struct {
 }
 
 // xmlUserConnector is the <atlas:userConnector> extension of a user-provisioning
-// connector task (ADR-0120). Operation selects the action; the remaining
+// connector task (ADR-0123). Operation selects the action; the remaining
 // attributes are literal-or-FEEL values, like the mail connector's fields.
 type xmlUserConnector struct {
 	Operation   string `xml:"operation,attr"`
@@ -1556,6 +1647,27 @@ type xmlWebScrapeConnector struct {
 type xmlTaskDefinition struct {
 	Type    string `xml:"type,attr"`
 	Retries string `xml:"retries,attr"`
+}
+
+// A mockup service task's parameters, carried on a service task as an
+// <atlas:mockupConnector minDuration="PT1S" maxDuration="PT5S" .../> extension
+// element (ADR-0120): the engine simulates the task itself. minDuration/maxDuration
+// are ISO-8601 durations bounding the random simulated execution time (a single
+// fixed duration is minDuration == maxDuration). resultExpression, when set, is a
+// FEEL expression (a leading '=' is optional and stripped) evaluated over the
+// instance's variables and written into resultVariable — the input→output script,
+// e.g. a simulated REST response. failRate is the failure probability in [0,1].
+// When errorCode is set, a simulated failure throws a BPMN error with that code
+// (caught by a matching error boundary/event subprocess); otherwise it raises an
+// incident with failMessage.
+type xmlMockupConnector struct {
+	MinDuration      string `xml:"minDuration,attr"`
+	MaxDuration      string `xml:"maxDuration,attr"`
+	ResultVariable   string `xml:"resultVariable,attr"`
+	ResultExpression string `xml:"resultExpression,attr"`
+	FailRate         string `xml:"failRate,attr"`
+	FailMessage      string `xml:"failMessage,attr"`
+	ErrorCode        string `xml:"errorCode,attr"`
 }
 
 // Zeebe script tasks carry the FEEL expression and its result variable in a

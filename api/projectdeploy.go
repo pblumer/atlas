@@ -87,7 +87,7 @@ func (s *Server) handleDeployProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A protected system project is deployed only by the startup bootstrap
-	// (ADR-0119); refuse deploying it through the API, for every caller.
+	// (ADR-0122); refuse deploying it through the API, for every caller.
 	if code, msg := protectedGuard(proj); code != 0 {
 		writeError(w, code, msg)
 		return

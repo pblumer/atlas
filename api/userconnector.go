@@ -14,13 +14,13 @@ import (
 	"github.com/pblumer/atlas/state"
 )
 
-// This file implements the user-provisioning connector worker (ADR-0120): the
+// This file implements the user-provisioning connector worker (ADR-0123): the
 // in-process side of an <atlas:userConnector> task. It create/set-password/disables
 // an Atlas login through the internal user store.
 //
 // It deliberately, and narrowly, reopens the ADR-0044/0049 boundary that no
 // automated identity may manage users — but only for the protected system project
-// (ADR-0119), only for these three bounded operations, and only when an operator
+// (ADR-0122), only for these three bounded operations, and only when an operator
 // opts in (WithUserProvisioning). It reuses the same store rails the admin API uses
 // (password length, uniqueness, the last-enabled-admin lockout guard), so the
 // connector can never provision a weaker or more dangerous account than an admin
@@ -48,7 +48,7 @@ func (s *Server) userConnectorHandler() job.Handler {
 			return fmt.Errorf("user connector: no compiled process for def %d", ei.ProcessDefKey)
 		}
 		// Gate: only the protected system project's processes may provision users
-		// (ADR-0119/0120). A tenant model that declared the connector fails here.
+		// (ADR-0122/0123). A tenant model that declared the connector fails here.
 		if !s.systemPIDs[cp.ProcessId()] {
 			return fmt.Errorf("user connector: process %q is not a system process; user provisioning is restricted to the system project", cp.ProcessId())
 		}

@@ -43,6 +43,13 @@ jobs:
       - name: Coverage floor (>= 95%, ADR-0018)
         run: ./scripts/check-coverage.sh 95
 
+      # Smoke-run the benchmark harness (programme B): one iteration each, just to
+      # prove it compiles and executes. No performance threshold is enforced on PR
+      # CI — see benchmarks/README.md for how to produce a real, machine-labelled
+      # baseline.
+      - name: Benchmark harness smoke
+        run: go test -run=^$ -bench=. -benchtime=1x ./benchmarks/
+
   e2e:
     name: e2e · token simulation
     runs-on: ubuntu-latest

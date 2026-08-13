@@ -6,7 +6,7 @@ import (
 )
 
 // A service task bearing an <atlas:userConnector> extension is a user-provisioning
-// connector task (ADR-0120): it creates, sets the password of, or disables an
+// connector task (ADR-0123): it creates, sets the password of, or disables an
 // Atlas login through the in-process user store via the job path. operation
 // selects the action; the fields are model-authored literal-or-FEEL values, like
 // the mail connector's message.

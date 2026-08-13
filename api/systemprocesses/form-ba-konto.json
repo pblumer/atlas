@@ -4,7 +4,7 @@
   "components": [
     {
       "type": "text",
-      "text": "# 🔑 Antrag freigeben\n\nPrüfe den Aufnahme-Antrag. Bei **Freigabe** wird das Atlas-Konto automatisch angelegt (userConnector) und die Zugangsdaten werden per E-Mail versendet.\n\n> Die Anlage läuft über den gated, opt-in userConnector (ADR-0119/0120) — kein manueller Schritt im Admin-Bereich mehr. Ist die Provisionierung nicht aktiviert, wartet der Prozess, bis ein Operator sie einschaltet."
+      "text": "# 🔑 Antrag freigeben\n\nPrüfe den Aufnahme-Antrag. Bei **Freigabe** wird das Atlas-Konto automatisch angelegt (userConnector) und die Zugangsdaten werden per E-Mail versendet.\n\n> Die Anlage läuft über den gated, opt-in userConnector (ADR-0122/0123) — kein manueller Schritt im Admin-Bereich mehr. Ist die Provisionierung nicht aktiviert, wartet der Prozess, bis ein Operator sie einschaltet."
     },
     {
       "key": "vorname",

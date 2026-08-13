@@ -183,7 +183,7 @@ const WebScrapeJobType = "io.atlas.webscrape"
 const WebScrapeJobTypeIndex int32 = 14
 
 // UserConnectorJobType is the reserved job type a user-provisioning connector task
-// carries (ADR-0120). The in-process user-provisioning worker subscribes to it to
+// carries (ADR-0123). The in-process user-provisioning worker subscribes to it to
 // create, set the password of, or disable an Atlas login through the internal user
 // store off the hot path, the same way the mail worker subscribes to MailJobType.
 // It is gated to the protected system project and opt-in server-side; nothing about
@@ -194,7 +194,7 @@ const UserConnectorJobType = "io.atlas.user.provision"
 // to occupy in every compiled process: NewBuilder reserves it sixteenth (after the
 // fifteen job types above), so it is always 15. This lets a single in-process
 // user-provisioning worker subscribe by one global index across every deployed
-// process, the same way the mail worker uses MailJobTypeIndex (ADR-0120).
+// process, the same way the mail worker uses MailJobTypeIndex (ADR-0123).
 const UserConnectorJobTypeIndex int32 = 15
 
 // TemisDecisionJobType is the reserved job type a *central* business rule task
@@ -230,6 +230,7 @@ type Builder struct {
 	businessRuleTasks  []BusinessRuleTaskDetail
 	timerCatches       []TimerCatchDetail
 	connectorTasks     []ConnectorTaskDetail
+	mockupTasks        []MockupTaskDetail
 	userTasks          []UserTaskDetail
 	boundaryEventDets  []BoundaryEventDetail
 	eventSubProcesses  []EventSubProcessDetail
@@ -249,6 +250,7 @@ type Builder struct {
 	ioInputs           []pendingIO      // zeebe:ioMapping inputs, grouped by node in Build
 	ioOutputs          []pendingIO      // zeebe:ioMapping outputs, grouped by node in Build
 	elementIds         []int32          // interned source BPMN id per node, -1 if unset
+	lanes              []LaneDetail     // organizational lanes (ADR-0121)
 	startFormId        int32            // interned start-form id (ADR-0028), -1 if the process has none
 	versionTag         int32            // interned atlas:versionTag revision label, -1 if none
 	instanceTtlNanos   int64            // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
@@ -320,6 +322,7 @@ func (b *Builder) addNode(t BpmnType, detail int32) int32 {
 		Detail:        detail,
 		MultiInstance: -1, // not a loop unless SetMultiInstance marks it (ADR-0077)
 		EventSub:      -1, // not event-triggered unless SetEventSubProcess marks it (ADR-0082)
+		Lane:          -1, // in no lane unless SetLane assigns one (ADR-0121)
 	})
 	b.elementIds = append(b.elementIds, -1) // kept in lockstep with nodes
 	return id
@@ -487,6 +490,43 @@ func (b *Builder) AddScriptTask(e *expr.Compiled, resultVar string) int32 {
 	detail := int32(len(b.scriptTasks))
 	b.scriptTasks = append(b.scriptTasks, ScriptTaskDetail{Expr: e, ResultVar: resultVar})
 	return b.addNode(TypeScriptTask, detail)
+}
+
+// MockupConfig is the authored configuration of a mockup (engine-simulated)
+// service task (ADR-0120). MinNanos/MaxNanos bound the random simulated duration
+// (MaxNanos >= MinNanos, both >= 0). Expr, when non-nil, is the compiled FEEL
+// result expression written to ResultVar on activation (the input→output script).
+// FailPerMillion is the failure probability in parts-per-million (0..1_000_000).
+// FailMessage is the incident message used when a simulated failure occurs.
+type MockupConfig struct {
+	MinNanos       int64
+	MaxNanos       int64
+	ResultVar      string
+	Expr           *expr.Compiled
+	FailPerMillion int32
+	FailMessage    string
+	ErrorCode      string
+}
+
+// AddMockupTask adds a mockup service task the engine simulates itself (ADR-0120)
+// and returns its element id. Unlike a service task it creates no job: at runtime
+// mockupTaskBehavior writes the optional FEEL result, arms a one-shot timer for a
+// random duration, and completes (or raises an incident per the fail probability).
+// The result variable and fail message are stored as raw strings (like
+// ScriptTaskDetail.ResultVar); the FEEL expression is compiled by the caller at
+// deploy time (invariant I5), as AddScriptTask takes a pre-compiled expression.
+func (b *Builder) AddMockupTask(cfg MockupConfig) int32 {
+	detail := int32(len(b.mockupTasks))
+	b.mockupTasks = append(b.mockupTasks, MockupTaskDetail{
+		MinNanos:       cfg.MinNanos,
+		MaxNanos:       cfg.MaxNanos,
+		ResultVar:      cfg.ResultVar,
+		Expr:           cfg.Expr,
+		FailPerMillion: cfg.FailPerMillion,
+		FailMessage:    cfg.FailMessage,
+		ErrorCode:      cfg.ErrorCode,
+	})
+	return b.addNode(TypeMockupTask, detail)
 }
 
 // AddScriptJobTask adds a job-based script task authored in a general-purpose
@@ -755,12 +795,12 @@ func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
 }
 
 // UserConnectorConfig is the deploy-time configuration of a user-provisioning
-// connector task (ADR-0120). Operation is one of "create", "set-password", or
+// connector task (ADR-0123). Operation is one of "create", "set-password", or
 // "disable". Username identifies the account; Email/DisplayName/Roles/Password are
 // the create/update fields — each a literal-or-FEEL value (the parser compiles the
 // FEEL ones) evaluated over the instance's variables at call time. There is no
 // connector name and no credential: the worker mutates the internal user store
-// directly, gated to the protected system project (ADR-0119) and opt-in server-side.
+// directly, gated to the protected system project (ADR-0122) and opt-in server-side.
 type UserConnectorConfig struct {
 	Operation   string
 	Username    RestExpr
@@ -776,7 +816,7 @@ type UserConnectorConfig struct {
 // carries the reserved UserConnectorJobType so the in-process user-provisioning
 // worker picks it up, evaluates any FEEL field over the instance's variables,
 // performs the operation against the internal user store, and completes the job
-// (ADR-0120). No provider or credential is involved.
+// (ADR-0123). No provider or credential is involved.
 func (b *Builder) AddUserConnectorTask(cfg UserConnectorConfig) int32 {
 	detail := int32(len(b.connectorTasks))
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
@@ -1342,6 +1382,22 @@ func (b *Builder) SetTransaction(nodeID int32) {
 	}
 }
 
+// AddLane adds an organizational lane and returns its index (ADR-0121). parent is the index of
+// the enclosing lane in a nested laneSet, or -1 for a top-level lane. A lane is pure metadata — it
+// affects no token flow.
+func (b *Builder) AddLane(name string, parent int32) int32 {
+	idx := int32(len(b.lanes))
+	b.lanes = append(b.lanes, LaneDetail{Name: b.intern(name), Parent: parent})
+	return idx
+}
+
+// SetLane records that a flow node belongs to a lane (ADR-0121). A no-op for an unknown node.
+func (b *Builder) SetLane(nodeID, laneIdx int32) {
+	if b.validNode(nodeID) {
+		b.nodes[nodeID].Lane = laneIdx
+	}
+}
+
 // AddBoundaryCompensationEvent adds a compensation boundary event attached to host: an inert
 // marker (never armed as an element instance) that makes the host compensable and links it to
 // a compensation handler, resolved later from a BPMN <association> via SetCompensationHandler
@@ -1591,6 +1647,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		businessRuleTasks:  b.businessRuleTasks,
 		timerCatches:       b.timerCatches,
 		connectorTasks:     b.connectorTasks,
+		mockupTasks:        b.mockupTasks,
 		userTasks:          b.userTasks,
 		boundaryEventDets:  b.boundaryEventDets,
 		eventSubProcesses:  b.eventSubProcesses,
@@ -1613,6 +1670,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		ioOutputs:          ioOut,
 		startEvents:        startEvents,
 		elementIds:         b.elementIds,
+		lanes:              b.lanes,
 		startFormId:        b.startFormId,
 		versionTag:         b.versionTag,
 		instanceTtlNanos:   b.instanceTtlNanos,

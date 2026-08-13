@@ -2,7 +2,7 @@ package api
 
 import "net/http"
 
-// This file backs ADR-0119: a protected, platform-managed "system" project that
+// This file backs ADR-0122: a protected, platform-managed "system" project that
 // holds Atlas's own operating processes (user intake, access review, offboarding).
 // It is created at startup and cannot be renamed, deleted, reshared, or written
 // into through the design-time API — by any caller, admins included.
@@ -27,7 +27,7 @@ const (
 )
 
 // ensureSystemProject makes the protected system project exist and stay protected
-// (ADR-0119). It is idempotent: a second run is a no-op, and a record that has
+// (ADR-0122). It is idempotent: a second run is a no-op, and a record that has
 // lost its protection/owner (e.g. hand-edited on disk) is repaired in place with
 // its timestamps preserved. It runs on the constructing goroutine before the run
 // loop serves traffic — the same single-writer discipline bootstrapAdmin uses — so
@@ -58,7 +58,7 @@ func (s *Server) ensureSystemProject(now int64) error {
 }
 
 // protectedGuard returns a 403 status and message when a project is protected — a
-// platform-managed system project (ADR-0119) that no caller, admin included, may
+// platform-managed system project (ADR-0122) that no caller, admin included, may
 // modify through the design-time API — and 0 otherwise. Handlers call it after
 // their normal role check, so protection is an additional refusal layered on top
 // of authorization, not a replacement for it.

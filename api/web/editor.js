@@ -144,6 +144,7 @@ function calleeXML(pid, name) {
 }
 
 let current; // active modeler/viewer, destroyed on remount
+let onLayoutKey; // document-level F8 handler for auto-layout, removed on remount
 let liveTimer; // active live-overlay poll, cleared on remount/leave
 let collab; // active live collaboration session (ADR-0103), closed on remount
 // generation is bumped by cleanup() on every navigation/remount. A mount captures
@@ -165,6 +166,7 @@ function docTitle(label) { document.title = label ? `${label} · Atlas` : "Atlas
 // window.__atlasCleanup) when navigating away so nothing keeps running.
 export function cleanup() {
   generation++; // supersede any in-flight mount (see `generation` above)
+  if (onLayoutKey) { document.removeEventListener("keydown", onLayoutKey, true); onLayoutKey = null; }
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
   if (collab) { try { collab.close(); } catch { /* ignore */ } collab = null; }
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
@@ -459,6 +461,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
         <div style="flex:1"></div>
         <button class="btn neutral sim-toggle" id="sim-toggle" title="Play tokens through the diagram to see how the control flow moves — no deploy, just a walkthrough" aria-pressed="false">&#9654; Token simulation</button>
         <button class="btn neutral" id="vars-toggle" title="Show the variables this diagram writes">Variables</button>
+        <button class="btn neutral" id="autolayout" title="Re-flow the diagram into a clean left-to-right layout (F8)">Auto-layout</button>
         <button class="btn neutral" id="save">Save</button>
         <button class="btn neutral" id="export">Export XML</button>
         <button class="btn" id="deploy">Deploy</button>
@@ -574,7 +577,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   refreshPoolCaptions(); // name the process each pool runs, on the diagram just imported
   wireTabs(root, () => { rerender(); refreshBadges(); });
   wireActions(root, modeler, api, toast, projectId);
-  wireEditorVars(root, modeler);
+  wireEditorVars(root, modeler, api);
   wireProblems(root, modeler, api);
   wireResizer(root, modeler);
   wireTokenSim(root, modeler);
@@ -1162,19 +1165,84 @@ function variablesForCompletion(modeler, element) {
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// formFieldCache maps a linked form's id to its input-field keys once fetched:
+// null marks a fetch in flight (so each form is requested once), otherwise
+// { name, fields } — the form's display name and its variable-bearing field keys.
+// collectDiagramVariables reads it synchronously; ensureFormFields fills it.
+const formFieldCache = new Map();
+
+// formFieldKeys extracts the variable-bearing field keys from a form-js schema.
+// Every form-js input component carries a `key` — the variable it reads and writes;
+// layout-only components (text, image, spacer, separator, …) have none. A repeating
+// container (dynamic list / group with a `path`) binds an array under that path, so
+// surface the path rather than descending into its per-row template. A plain group
+// is layout only, so recurse — its fields live in the enclosing scope. Each key
+// appears once, in document order.
+function formFieldKeys(schema) {
+  const keys = [];
+  const seen = new Set();
+  const add = (k) => {
+    k = (k || "").trim();
+    if (k && !seen.has(k)) { seen.add(k); keys.push(k); }
+  };
+  const walk = (comps) => {
+    for (const c of comps || []) {
+      if (!c || typeof c !== "object") continue;
+      if (c.path) { add(c.path); continue; } // repeatable scope: its path is the variable
+      if (typeof c.key === "string") add(c.key);
+      if (Array.isArray(c.components)) walk(c.components); // layout group: keys are in-scope
+    }
+  };
+  if (schema && Array.isArray(schema.components)) walk(schema.components);
+  return keys;
+}
+
+// linkedFormIds returns the form ids referenced by any element's zeebe:FormDefinition
+// (start forms and user-task forms). Best-effort — a registry hiccup yields none.
+function linkedFormIds(modeler) {
+  const ids = [];
+  try {
+    modeler.get("elementRegistry").forEach((el) => {
+      const fd = findExt(el.businessObject, "zeebe:FormDefinition");
+      if (fd && fd.formId) ids.push(fd.formId);
+    });
+  } catch { /* best-effort */ }
+  return ids;
+}
+
+// ensureFormFields fetches the schema of each not-yet-cached form id, records its
+// field keys, then calls onLoaded so the caller can re-render with the new
+// variables. Each form is requested once (its cache slot is reserved as null while
+// in flight); a missing or failed load caches as no fields so it isn't retried in a
+// loop. No-op without an `api`.
+function ensureFormFields(api, ids, onLoaded) {
+  if (!api) return;
+  for (const id of new Set(ids)) {
+    if (!id || formFieldCache.has(id)) continue;
+    formFieldCache.set(id, null); // reserve: in flight, don't refetch
+    api("GET", "/api/v1/forms/" + encodeURIComponent(id))
+      .then((def) => {
+        formFieldCache.set(id, { name: (def && def.name) || id, fields: formFieldKeys(def && def.schema) });
+      })
+      .catch(() => { formFieldCache.set(id, { name: id, fields: [] }); })
+      .then(() => { try { if (onLoaded) onLoaded(); } catch { /* best-effort */ } });
+  }
+}
+
 // collectDiagramVariables statically analyses the diagram for the variables it
 // writes and where — the data behind the Variables panel (like Camunda's). Each
-// entry is { name, origin, originId, source }: the variable name, the element that
-// writes it (name/id and the id to select it), and how (start variable, script
-// result, decision result, output mapping). De-duplicated by name, sorted.
+// entry is { name, origin, originId, source, category }: the variable name, the
+// element that writes it (name/id and the id to select it), how (start variable,
+// linked-form field, script result, decision result, output mapping), and which
+// panel section it groups under. De-duplicated by name, sorted.
 function collectDiagramVariables(modeler) {
   const out = [];
   const seen = new Set();
-  const push = (name, origin, originId, source) => {
+  const push = (name, origin, originId, source, category = "Process") => {
     name = (name || "").trim();
     if (!name || seen.has(name)) return;
     seen.add(name);
-    out.push({ name, origin, originId, source });
+    out.push({ name, origin, originId, source, category });
   };
   try {
     const rootBo = rootProcess(modeler);
@@ -1205,6 +1273,18 @@ function collectDiagramVariables(modeler) {
         const st = (bo.dataState && bo.dataState.name) || "";
         push((obj && obj.name) || bo.name, "Data object", bo.id, st ? "data object · [" + st + "]" : "data object");
       }
+      // A linked form (start form or user-task form, ADR-0028) contributes each of
+      // its input fields as a variable: a start form's fields become the instance's
+      // start variables, a task form's become variables when the task completes. The
+      // schema is fetched lazily (ensureFormFields); until it lands the form adds
+      // nothing here. Grouped under "Form" so it reads as its own panel section.
+      const fd = findExt(bo, "zeebe:FormDefinition");
+      if (fd && fd.formId) {
+        const cached = formFieldCache.get(fd.formId);
+        if (cached && cached.fields) {
+          for (const key of cached.fields) push(key, cached.name || fd.formId, bo.id, "form field", "Form");
+        }
+      }
     });
   } catch { /* best-effort */ }
   return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -1215,7 +1295,7 @@ function collectDiagramVariables(modeler) {
 // the list, and it refreshes as the diagram changes while open — a modeling aid
 // that answers "what variables exist here and who writes them" without running
 // anything. (The live view has its own runtime-variables panel, wireVarsPanel.)
-function wireEditorVars(root, modeler) {
+function wireEditorVars(root, modeler, api) {
   const panel = root.querySelector("#vars-panel");
   const toggle = root.querySelector("#vars-toggle");
   const closeBtn = root.querySelector("#vars-close");
@@ -1223,28 +1303,59 @@ function wireEditorVars(root, modeler) {
   const list = root.querySelector("#vars-list");
   if (!panel || !toggle || !list) return;
 
+  // One variable row. Draggable so its name can be dropped into any text field to
+  // insert it (a FEEL expression, a mapping source, …) — a plain-text payload, so
+  // the browser's native drop-to-insert does the work with no per-field wiring.
+  const rowHTML = (v) => {
+    // A data object isn't "written by" an element — it *is* the element, so its
+    // source label itself is the click-to-select target. A form field names its form
+    // (also click-to-select). Other sources name the writing element.
+    let meta;
+    if (v.source === "form field") {
+      meta = `form field · <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`;
+    } else if (v.origin === "Data object") {
+      meta = `<span class="var-origin" data-el="${esc(v.originId)}">${esc(v.source)}</span>`;
+    } else {
+      meta = `${esc(v.source)}${v.originId
+        ? ` · written by <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`
+        : ` · ${esc(v.origin)}`}`;
+    }
+    return `<div class="var-row" draggable="true" data-var="${esc(v.name)}" title="Drag into a field to insert">
+      <div class="var-name">${esc(v.name)}</div>
+      <div class="var-meta">${meta}</div></div>`;
+  };
+
   const render = () => {
+    // Warming the form-schema cache here (fired on every diagram change) also feeds
+    // the completion/picker lists, which read the same collectDiagramVariables.
+    ensureFormFields(api, linkedFormIds(modeler), render);
     if (panel.hidden) return;
     const q = (filter.value || "").trim().toLowerCase();
     const vars = collectDiagramVariables(modeler).filter((v) =>
-      !q || v.name.toLowerCase().includes(q) || (v.origin || "").toLowerCase().includes(q));
+      !q || v.name.toLowerCase().includes(q) || (v.origin || "").toLowerCase().includes(q) ||
+      (v.source || "").toLowerCase().includes(q));
     if (!vars.length) {
       list.innerHTML = `<p class="vars-empty">${q ? "No matching variables." :
-        "No variables yet. They appear as you add start variables, script or decision result variables, output mappings, and data objects."}</p>`;
+        "No variables yet. They appear as you add start variables, a linked form's fields, script or decision result variables, output mappings, and data objects."}</p>`;
       return;
     }
-    list.innerHTML = vars.map((v) => {
-      // A data object isn't "written by" an element — it *is* the element, so its source
-      // label itself is the click-to-select target; other sources name the writing element.
-      const meta = v.origin === "Data object"
-        ? `<span class="var-origin" data-el="${esc(v.originId)}">${esc(v.source)}</span>`
-        : `${esc(v.source)}${v.originId
-            ? ` · written by <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`
-            : ` · ${esc(v.origin)}`}`;
-      return `<div class="var-row">
-        <div class="var-name">${esc(v.name)}</div>
-        <div class="var-meta">${meta}</div></div>`;
-    }).join("");
+    // Group by category so a linked form's fields read as their own section
+    // ("Form"), the process's own variables under "Process". With only one group
+    // (the common no-form case) keep the familiar flat list — no lone header.
+    const groups = new Map();
+    for (const v of vars) {
+      const g = v.category || "Process";
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g).push(v);
+    }
+    const order = ["Form", "Process"];
+    const rank = (c) => { const i = order.indexOf(c); return i < 0 ? order.length : i; };
+    const cats = [...groups.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+    list.innerHTML = cats.length === 1
+      ? groups.get(cats[0]).map(rowHTML).join("")
+      : cats.map((cat) =>
+          `<div class="vars-group"><div class="vars-group-head">${esc(cat)}</div>${groups.get(cat).map(rowHTML).join("")}</div>`
+        ).join("");
   };
 
   toggle.addEventListener("click", () => {
@@ -1266,7 +1377,18 @@ function wireEditorVars(root, modeler) {
       try { modeler.get("canvas").scrollToElement(el); } catch { /* older bpmn-js */ }
     }
   });
-  // Keep the open panel current as the diagram is edited.
+  list.addEventListener("dragstart", (e) => {
+    const row = e.target.closest(".var-row");
+    if (!row || !e.dataTransfer) return;
+    // Plain-text payload: dropping onto a text input/textarea natively inserts the
+    // variable name at the drop point — no drop handler needed on each field.
+    e.dataTransfer.setData("text/plain", row.dataset.var || "");
+    e.dataTransfer.effectAllowed = "copy";
+  });
+  // Keep the open panel current as the diagram is edited; warm the cache once now
+  // (import.done has already fired by the time this wires up) so completion sees a
+  // linked form's fields even before the panel is first opened.
+  render();
   modeler.on("element.changed", render);
   modeler.on("elements.changed", render);
   modeler.on("import.done", render);
@@ -1696,6 +1818,27 @@ const SERVICE_TASK_KINDS = [
       { key: "attribute", label: "Attribute", placeholder: "leave empty for the element's text", hint: "The HTML attribute read from each match (e.g. href). Leave empty to extract each match's text content." },
       { group: "Output" },
       { key: "resultVariable", label: "Result variable", placeholder: "matches", hint: "The extracted values are written into this process variable as a JSON array." },
+    ],
+  },
+  {
+    id: "mockup", name: "Mockup (Simulation)", desc: "Let the engine simulate this task — random duration, scripted output, optional failures", icon: "K",
+    // A beaker on a slate tile reads "simulation / lab" at a glance — the mockup
+    // task's counterpart to REST's globe and mail's envelope. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
+    // fill and the white beaker strokes.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#647488"/><path d="M6.3 3.2v3.4L3.9 11a1 1 0 0 0 .9 1.5h6.4a1 1 0 0 0 .9-1.5L9.7 6.6V3.2" fill="none" stroke="#fff" stroke-width="1.1" stroke-linejoin="round"/><path d="M5.6 3.2h4.8M5.4 8.4h5.2" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/></svg>`,
+    ext: "atlas:MockupConnector",
+    fields: [
+      { group: "Duration" },
+      { key: "minDuration", label: "Min duration", placeholder: "PT1S", hint: "ISO-8601 duration (e.g. PT1S, PT5M). The engine waits a random time in [min, max] before completing. For a fixed time, set only this." },
+      { key: "maxDuration", label: "Max duration", placeholder: "leave empty for a fixed duration", hint: "ISO-8601 duration. Omit to make the duration exactly the minimum." },
+      { group: "Result (input → output)" },
+      { key: "resultExpression", label: "Result expression", placeholder: `={ status: "ok", id: orderId }`, fx: true, rows: 4, hint: "A FEEL expression evaluated over the instance's variables and written to the result variable — the input→output script, e.g. a simulated REST/Umsystem response. Press Ctrl+Space for variable completion." },
+      { key: "resultVariable", label: "Result variable", placeholder: "response", hint: "The process variable the result expression is written into. Required when a result expression is set." },
+      { group: "Failure simulation" },
+      { key: "failRate", label: "Failure rate", placeholder: "0 = never, 1 = always", hint: "Probability in [0,1] that an attempt fails instead of completing — for exercising error/retry paths." },
+      { key: "errorCode", label: "BPMN error code", placeholder: "leave empty to raise an incident", hint: "When set, a failure throws a BPMN error with this code — caught by a matching error boundary event or error event subprocess. Leave empty to raise a technical incident (resolvable, retries with a fresh draw) instead." },
+      { key: "failMessage", label: "Incident message", placeholder: "umsystem unavailable", hint: "The incident message when a failure raises an incident (i.e. when no error code is set)." },
     ],
   },
 ];
@@ -4572,6 +4715,41 @@ function wireActions(root, modeler, api, toast, projectId) {
       saveBtn.disabled = false;
     }
   });
+
+  // Auto-layout re-flows the diagram: the current model is sent to the server,
+  // which discards its diagram interchange and regenerates a clean left-to-right
+  // layout (the same generator that lays out a layout-less deployed model), then
+  // the reflowed model is re-imported. Purely a rendering convenience — it moves
+  // shapes and edges, never touching the semantic model — so a tangle of a
+  // hand-drawn diagram can be straightened out in one click.
+  const layoutBtn = root.querySelector("#autolayout");
+  layoutBtn.addEventListener("click", async () => {
+    layoutBtn.disabled = true;
+    try {
+      const { xml } = await modeler.saveXML({ format: true });
+      const relaid = await api("POST", "/api/v1/layout", xml, true);
+      await modeler.importXML(typeof relaid === "string" ? relaid : String(relaid));
+      modeler.get("canvas").zoom("fit-viewport");
+      toast("Diagram auto-laid out", "ok");
+    } catch (e) {
+      toast("auto-layout failed: " + e.message, "err");
+    } finally {
+      layoutBtn.disabled = false;
+    }
+  });
+
+  // F8 triggers the same auto-layout (the shortcut is otherwise unbound). Captured
+  // at the document so it works wherever focus sits in the editor; cleanup() removes
+  // it on navigation away. Ignored while a layout is already running or when the
+  // user is typing in a field, so it never eats an F8 meant for something else.
+  onLayoutKey = (e) => {
+    if (e.key !== "F8" || e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
+    const el = document.activeElement;
+    if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+    e.preventDefault();
+    if (!layoutBtn.disabled) layoutBtn.click();
+  };
+  document.addEventListener("keydown", onLayoutKey, true);
 
   root.querySelector("#export").addEventListener("click", async () => {
     try {

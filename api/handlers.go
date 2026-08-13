@@ -67,6 +67,11 @@ type processResp struct {
 	Executable bool `json:"executable"`
 	// VersionTag is the process's atlas:versionTag revision label, empty when unset.
 	VersionTag string `json:"versionTag,omitempty"`
+	// Active reports whether the definition may auto-start new instances from its
+	// timer/message/signal start events. A deactivated definition (false) stays
+	// deployed and keeps its running instances, but does not self-start (ADR-0119).
+	// Always emitted so the UI can render the active/inactive control unambiguously.
+	Active bool `json:"active"`
 }
 
 // collaborationParticipants reports how many <participant> pools a model's
@@ -657,6 +662,7 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
 				StartFormID:      d.cp.StartFormId(),
 				Executable:       d.cp.IsExecutable(),
 				VersionTag:       d.cp.VersionTag(),
+				Active:           !d.inactive,
 			})
 		}
 	})
@@ -686,6 +692,27 @@ func (s *Server) handleProcessXML(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(ensureDiagramLayout(raw))
 }
 
+// handleLayout regenerates a posted model's diagram layout: it discards whatever
+// diagram interchange the BPMN carries and returns the model with a freshly
+// generated left-to-right layout, backing the Modeler's "Auto-layout" button. Like
+// validate it is a pure transform — no key minted, no definition registered, no
+// state touched — so it runs off the run-loop goroutine. A model whose layout can't
+// be regenerated (unparseable, or nodeless) comes back unchanged; only a missing or
+// unreadable body is a 4xx, matching the deploy and validate endpoints.
+func (s *Server) handleLayout(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	if len(body) == 0 {
+		writeError(w, http.StatusBadRequest, "empty request body: expected BPMN XML")
+		return
+	}
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	_, _ = w.Write(relayoutDiagram(body))
+}
+
 // handleDeleteProcess removes a deployed definition (one version). It refuses if
 // the definition still has running instances, since a live instance resolves its
 // definition by key on every batch.
@@ -708,7 +735,7 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
-		// A bootstrap-deployed platform process is platform-managed (ADR-0119):
+		// A bootstrap-deployed platform process is platform-managed (ADR-0122):
 		// refuse deletion for every caller.
 		if s.systemPIDs[d.ProcessID] {
 			protected = true
@@ -751,6 +778,74 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "remove deployment: "+persistErr.Error())
 	default:
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// handleSetProcessActive activates or deactivates a deployed definition (ADR-0119).
+// A deactivated definition stays deployed and keeps its running instances, but no
+// longer auto-starts new ones when its timer, message, or signal start events fire —
+// the operator has paused it (e.g. a timer-driven process). Reactivating restores
+// automatic starts. The flag persists in the deployment sidecar and is re-applied on
+// restart. Body: {"active": bool}.
+func (s *Server) handleSetProcessActive(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid definition key")
+		return
+	}
+	var body struct {
+		Active bool `json:"active"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid body: expected {\"active\": bool}")
+		return
+	}
+	var (
+		found      bool
+		loadErr    error
+		persistErr error
+	)
+	s.do(func() {
+		d, ok := s.deployments[key]
+		if !ok {
+			return
+		}
+		found = true
+		// No-op fast path: an unchanged flag rewrites nothing (idempotent PUT).
+		if d.inactive == !body.Active {
+			return
+		}
+		// Read the full record so the rewrite preserves the XML and DMN models the
+		// in-memory deployment does not hold, then flip the flag. Durable before visible
+		// (I2, ADR-0019): persist first, then apply to the engine and the display copy.
+		rec, ok, err := s.deploys.load(key)
+		if err != nil {
+			loadErr = err
+			return
+		}
+		if !ok {
+			// The registry and the sidecar have diverged (should not happen); treat it as
+			// not found rather than silently applying an unpersisted change.
+			found = false
+			return
+		}
+		rec.Inactive = !body.Active
+		if err := s.deploys.save(rec); err != nil {
+			persistErr = err
+			return
+		}
+		s.proc.SetProcessActive(key, body.Active)
+		d.inactive = !body.Active
+	})
+	switch {
+	case !found:
+		writeError(w, http.StatusNotFound, "no deployment with that key")
+	case loadErr != nil:
+		writeError(w, http.StatusInternalServerError, "read deployment: "+loadErr.Error())
+	case persistErr != nil:
+		writeError(w, http.StatusInternalServerError, "persist deployment: "+persistErr.Error())
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"key": key, "active": body.Active})
 	}
 }
 
@@ -2585,6 +2680,11 @@ type taskResp struct {
 	// when the task has no due date (ADR-0091).
 	Priority int32 `json:"priority"`
 	DueDate  int64 `json:"dueDate,omitempty"`
+	// Lane is the organizational lane the task's element is drawn in (ADR-0121), leaf name
+	// for a flat model; LanePath is the outermost-to-leaf path for a nested lane. Both empty
+	// when the task is in no lane. Metadata only — the Tasks app groups/labels by it.
+	Lane     string   `json:"lane,omitempty"`
+	LanePath []string `json:"lanePath,omitempty"`
 }
 
 // handleListTasks lists open user tasks — activatable jobs of the reserved
@@ -2739,6 +2839,12 @@ func (s *Server) enrichTask(jobKey uint64, jv *model.JobValue) taskResp {
 			tr.ProcessID = d.ProcessID
 			cp := d.cp
 			tr.ElementID = cp.ElementBpmnId(ei.ElementId)
+			// The organizational lane the task is drawn in (ADR-0121) — metadata for
+			// grouping in the inbox: the leaf name plus the outermost-to-leaf path.
+			if path := cp.LanePath(ei.ElementId); len(path) > 0 {
+				tr.Lane = path[len(path)-1]
+				tr.LanePath = path
+			}
 			if n := cp.Node(ei.ElementId); n.Type == compiler.TypeUserTask {
 				detail := cp.UserTask(n.Detail)
 				tr.Name = cp.Intern(detail.Name)
@@ -3192,7 +3298,7 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 				unknownProject = true
 				return
 			}
-			// A protected system project's content is platform-managed (ADR-0119):
+			// A protected system project's content is platform-managed (ADR-0122):
 			// refuse authoring a draft into it, for any caller.
 			if proj.Protected {
 				protectedProject = true
@@ -3281,7 +3387,7 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 				unknownProject = true
 				return
 			}
-			// A protected system project's content is platform-managed (ADR-0119):
+			// A protected system project's content is platform-managed (ADR-0122):
 			// refuse moving a draft into it, for any caller.
 			if proj.Protected {
 				protectedProject = true

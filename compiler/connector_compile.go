@@ -182,7 +182,7 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 }
 
 // compileUserConnectorTask compiles an <atlas:userConnector> task: it delegates to
-// the in-process user-provisioning worker via the job path (ADR-0120), which mutates
+// the in-process user-provisioning worker via the job path (ADR-0123), which mutates
 // the internal user store. operation selects the action; username is always required,
 // and create/set-password additionally require a password. The field values are
 // literal-or-FEEL (like the mail connector); no connector name or credential is

@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// TestEnsureSystemProjectIdempotent asserts the ADR-0119 bootstrap: New() creates
+// TestEnsureSystemProjectIdempotent asserts the ADR-0122 bootstrap: New() creates
 // the protected system project, and re-running ensureSystemProject neither
 // duplicates it nor churns its CreatedAt — the "boot twice → one, unchanged"
 // property that keeps startup idempotent.
@@ -82,7 +82,7 @@ func TestEnsureSystemProjectStoreError(t *testing.T) {
 	}
 }
 
-// TestProtectedEffectiveRoleVisibleToAll pins the ADR-0119 visibility rule: a
+// TestProtectedEffectiveRoleVisibleToAll pins the ADR-0122 visibility rule: a
 // protected project is readable (viewer) by any authenticated principal and
 // owner-equivalent for admins, while ordinary access rules are unchanged.
 func TestProtectedEffectiveRoleVisibleToAll(t *testing.T) {
@@ -103,7 +103,7 @@ func TestProtectedEffectiveRoleVisibleToAll(t *testing.T) {
 	}
 }
 
-// TestProtectedProjectRefusesMutation is the enforcement heart of ADR-0119: with
+// TestProtectedProjectRefusesMutation is the enforcement heart of ADR-0122: with
 // auth off — where every caller is treated as owner (the highest access) — the
 // protected system project still refuses every mutating design-time operation,
 // while an ordinary project accepts them. Because the highest-access caller is

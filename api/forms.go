@@ -81,7 +81,7 @@ func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 	)
 	s.do(func() {
 		// A form filed under the protected system project is platform-managed
-		// (ADR-0119): refuse overwriting it, for every caller.
+		// (ADR-0122): refuse overwriting it, for every caller.
 		if existing, ok, e := s.forms.get(id); e == nil && ok && existing.ProjectID == systemProjectID {
 			protected = true
 			return

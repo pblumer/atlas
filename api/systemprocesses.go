@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-// The embedded platform-process bundle (ADR-0119): Atlas's own operating
+// The embedded platform-process bundle (ADR-0122): Atlas's own operating
 // processes (user intake, access review, offboarding) and their forms, compiled
 // into the binary so a fresh instance has them with no authoring step. The
 // human-readable mirror lives in examples/benutzerverwaltung; these copies are
@@ -105,7 +105,7 @@ func (s *Server) latestDeploymentFor(pid string) (*deployment, bool) {
 }
 
 // ensureSystemProcesses bootstrap-deploys the embedded platform processes into
-// the protected system project (ADR-0119): it seeds their forms, files their
+// the protected system project (ADR-0122): it seeds their forms, files their
 // drafts under the system project, and deploys each process only when it is
 // absent or its embedded bytes differ from the newest deployed version — so a
 // restart with the same binary adds no versions, and a changed process in a new

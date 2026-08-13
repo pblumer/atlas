@@ -47,7 +47,7 @@ func listProcesses(t *testing.T, h http.Handler) []procRow {
 	return rows
 }
 
-// TestBootstrapDeploysSystemProcesses asserts ADR-0119's bootstrap-deploy: New()
+// TestBootstrapDeploysSystemProcesses asserts ADR-0122's bootstrap-deploy: New()
 // deploys the embedded platform processes, seeds their forms, files their drafts
 // under the protected system project, and does so idempotently — a second run
 // adds no new versions.
@@ -103,7 +103,7 @@ func TestBootstrapDeploysSystemProcesses(t *testing.T) {
 	}
 }
 
-// TestSystemIntakeProvisionsUser drives the rewired intake process (ADR-0120) end
+// TestSystemIntakeProvisionsUser drives the rewired intake process (ADR-0123) end
 // to end: start the bootstrap-deployed proc_benutzer_aufnahme, approve the "Antrag
 // freigeben" task, and confirm the userConnector created exactly that Atlas login.
 // (The downstream mail task parks — no provider is configured — but the account is
@@ -223,7 +223,7 @@ func TestBootstrapDeployIdempotentAcrossRestart(t *testing.T) {
 }
 
 // TestDeleteSystemProcessRefused asserts a bootstrap-deployed system process
-// cannot be deleted through the API (ADR-0119), even by the implicit owner
+// cannot be deleted through the API (ADR-0122), even by the implicit owner
 // (auth off).
 func TestDeleteSystemProcessRefused(t *testing.T) {
 	srv, _ := newSystemServer(t, WithSystemProcesses())

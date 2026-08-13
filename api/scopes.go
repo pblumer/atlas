@@ -103,7 +103,7 @@ func (p project) effectiveRole(pr *Principal, authEnabled bool) string {
 	if pr.hasRole(RoleAdmin) {
 		return ScopeRoleOwner
 	}
-	// A protected system project (ADR-0119) is visible to every authenticated
+	// A protected system project (ADR-0122) is visible to every authenticated
 	// principal so its platform processes can be found and started, but it grants
 	// no more than viewer here — mutation is separately refused for all callers by
 	// the protected guard, so no member/owner role on it is meaningful.

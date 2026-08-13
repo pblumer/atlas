@@ -1248,11 +1248,23 @@ async function viewModelerHome() {
         const label = g.latest.name || g.processId;
         const sub = g.latest.name
           ? `<div class="muted" style="font-size:12px">${esc(g.processId)}</div>` : "";
+        // A deactivated definition stays deployed but does not auto-start new instances
+        // from its timer/message/signal start events (ADR-0119). Flag it and offer the
+        // inverse toggle.
+        const inactive = g.latest.active === false;
+        const badge = inactive
+          ? ` <span class="pill warn" title="Deployed but paused: no new instances auto-start from its timer, message, or signal start events">Inactive</span>`
+          : "";
+        const toggleLabel = inactive ? "Activate" : "Deactivate";
+        const toggleTitle = inactive
+          ? "Resume automatic starts (timer/message/signal start events)"
+          : "Pause automatic starts: keep it deployed but stop new instances from starting on their own";
         return `<tr>
-          <td><a href="#/modeler/d/${g.latest.key}"><b>${esc(label)}</b></a>${sub}</td>
+          <td><a href="#/modeler/d/${g.latest.key}"><b>${esc(label)}</b></a>${badge}${sub}</td>
           <td>v${g.latest.version}${older}</td>
           <td class="muted">${esc(fmtTime(g.latest.deployedAt))}</td>
           <td style="text-align:right; white-space:nowrap">
+            <button class="btn ghost" data-toggle="${g.latest.key}" data-active="${inactive ? "1" : "0"}" title="${toggleTitle}">${toggleLabel}</button>
             <a class="btn ghost" href="#/modeler/d/${g.latest.key}">Open</a>
             <button class="btn ghost danger" data-del="${esc(g.processId)}">Delete</button>
           </td>
@@ -1260,6 +1272,10 @@ async function viewModelerHome() {
       }).join("");
       for (const b of rows.querySelectorAll("button[data-del]")) {
         b.addEventListener("click", () => deleteProcess(b.dataset.del, groups, render));
+      }
+      for (const b of rows.querySelectorAll("button[data-toggle]")) {
+        b.addEventListener("click", () =>
+          toggleProcessActive(Number(b.dataset.toggle), b.dataset.active === "1", render));
       }
     } catch (e) {
       rows.innerHTML = `<tr><td colspan="4" class="empty">${esc(e.message)}</td></tr>`;
@@ -1455,6 +1471,21 @@ async function deleteProcess(processId, groups, reload) {
   }
   if (failed) toast(`Could not delete ${failed} version(s) — running instances?`, "err");
   else toast(`Deleted "${processId}"`, "ok");
+  await reload();
+}
+
+// toggleProcessActive activates or deactivates a deployed definition (ADR-0119). A
+// deactivated process stays deployed and keeps its running instances, but no longer
+// auto-starts new ones from its timer/message/signal start events. `key` is the latest
+// version's definition key; `inactive` is its current state (true → the click activates).
+async function toggleProcessActive(key, inactive, reload) {
+  const activate = inactive; // clicking "Activate" on an inactive one activates it
+  try {
+    await api("PUT", `/api/v1/processes/${key}/active`, { active: activate });
+    toast(activate ? "Process activated" : "Process deactivated — automatic starts paused", "ok");
+  } catch (e) {
+    toast("could not change activation: " + e.message, "err");
+  }
   await reload();
 }
 
@@ -3098,6 +3129,7 @@ async function viewTasks(preselectKey) {
           <div class="tasks-item-body">
             <div class="tasks-item-top">
               <span class="tasks-item-title">${hi}${esc(taskTitle(t))}</span>
+              ${t.lane ? `<span class="chip" title="Lane">${esc(t.lane)}</span>` : ""}
               <span class="chip">${esc(t.processId || "")}</span>
             </div>
             <div class="tasks-item-sub muted"><span>${who}</span>${due}</div>
@@ -3400,6 +3432,7 @@ async function viewTasks(preselectKey) {
         ${row("Element", `<span class="chip">${esc(t.elementId || "—")}</span>`)}
         ${row("Assignee", esc(t.assignee || "—"))}
         ${row("Candidate groups", esc(t.candidateGroups || "—"))}
+        ${t.lane ? row("Lane", esc((t.lanePath && t.lanePath.length > 1 ? t.lanePath : [t.lane]).join(" › "))) : ""}
         ${row("Priority", `${taskPriority(t)}${taskPriority(t) >= 70 ? ' <span class="prio-dot" title="High priority"></span>' : ""}`)}
         ${row("Due", (() => { const d = dueInfo(t); return d ? `<span class="${d.overdue ? "due-text overdue" : "due-text"}" title="${esc(d.abs)}">${esc(d.label)} · ${esc(d.abs)}</span>` : "—"; })())}
         ${row("Instance", `<span class="chip">${t.processInstanceKey}</span>`)}

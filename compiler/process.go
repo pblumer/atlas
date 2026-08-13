@@ -69,8 +69,10 @@ const (
 
 	TypeTerminateEndEvent // an end event that ends its enclosing flow scope at once (ADR-0116): it terminates every other live token in the scope (cancelling their jobs), then completes the scope — at the root the instance ends, inside a subprocess that subprocess ends and the parent continues. cancelEndEventBehavior minus compensation and the cancel boundary
 
+	TypeMockupTask // a service task simulated by the engine itself (ADR-0120): on activation it writes an optional FEEL result and arms a one-shot timer for a random duration, then completes (or, per a fail probability, raises an incident) — no external worker or connector. A distinct type because its execution (timer-wait, no job) differs from a service task, like TypeConnectorTask.
+
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 35
+	numBpmnTypes = 36
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -146,6 +148,8 @@ func (t BpmnType) String() string {
 		return "CancelEndEvent"
 	case TypeTerminateEndEvent:
 		return "TerminateEndEvent"
+	case TypeMockupTask:
+		return "MockupTask"
 	default:
 		return "Unspecified"
 	}
@@ -178,6 +182,16 @@ type CompiledNode struct {
 	EventSubStart   int32 // offset into eventSubs (the event-subprocess handler nodes nested directly in this scope)
 	EventSubCount   int32 // number of event subprocesses in this scope (0 for a node that hosts none)
 	Transaction     bool  // this subprocess is a <transaction>: it may hold a cancel end event and host a cancel boundary (ADR-0108)
+	Lane            int32 // index into lanes, -1 if this node is in no lane; organizational metadata with no execution effect (ADR-0121)
+}
+
+// LaneDetail is one BPMN lane: an organizational partition of the process's flow nodes with no
+// execution semantics (ADR-0121). Name is the interned lane label; Parent is the index of the
+// enclosing lane in a nested laneSet (-1 for a top-level lane), so a node's full lane path can be
+// walked leaf-to-root for display.
+type LaneDetail struct {
+	Name   int32 // interned lane name → index, -1 if unnamed
+	Parent int32 // index into lanes of the enclosing lane, -1 for a top-level lane
 }
 
 // CompiledFlow is a sequence flow between two nodes. Condition is the compiled
@@ -447,7 +461,7 @@ type ConnectorTaskDetail struct {
 	// array. Read only by the in-process web-scraping worker.
 	ScrapeSelector  RestExpr
 	ScrapeAttribute int32
-	// User-provisioning connector fields (JobType == UserConnectorJobType, ADR-0120).
+	// User-provisioning connector fields (JobType == UserConnectorJobType, ADR-0123).
 	// UserOp is the interned operation ("create" | "set-password" | "disable").
 	// UserName identifies the account; UserEmail/UserDisplayName/UserRoles/UserPassword
 	// are the create/update values — each a literal-or-FEEL value evaluated over the
@@ -461,6 +475,34 @@ type ConnectorTaskDetail struct {
 	UserDisplayName RestExpr
 	UserRoles       RestExpr
 	UserPassword    RestExpr
+}
+
+// MockupTaskDetail is the per-mockup-task data the engine reads to simulate a
+// service task itself (ADR-0120), instead of dispatching a job to an external
+// worker or connector. On activation the behavior arms a one-shot timer for a
+// random duration in [MinNanos, MaxNanos] and, if Expr is set, evaluates it over
+// the instance's variables and writes the result into ResultVar (the input→output
+// "script", e.g. a simulated REST response). When the timer fires the task
+// completes — unless the fail draw selects failure, in which case a job-less
+// incident is raised with FailMessage.
+//
+// The random duration and the fail decision are derived deterministically from
+// the frozen timer key at command time (never re-drawn on replay), so no new
+// nondeterministic source enters the engine (invariant I6). FailPerMillion is the
+// failure probability scaled to parts-per-million (0 = never fail, 1_000_000 =
+// always) so the whole decision stays integer-pure across live and replay.
+type MockupTaskDetail struct {
+	MinNanos       int64          // minimum simulated duration in nanoseconds
+	MaxNanos       int64          // maximum simulated duration in nanoseconds (>= MinNanos)
+	ResultVar      string         // result-variable name, "" if none (a raw string, like ScriptTaskDetail.ResultVar)
+	Expr           *expr.Compiled // FEEL result expression compiled at deploy time (I5), nil if none
+	FailPerMillion int32          // failure probability in parts-per-million, 0..1_000_000
+	FailMessage    string         // incident message on a simulated failure, "" for a default
+	// ErrorCode, when non-empty, makes a simulated failure throw a BPMN error with this
+	// code (caught by a matching error boundary/event subprocess, ADR-0089) instead of
+	// raising an incident — so business error paths, not just technical ones, are
+	// exercisable. Empty keeps the incident behavior.
+	ErrorCode string
 }
 
 // RestExpr is a REST connector field value that is either a literal string
@@ -686,6 +728,7 @@ type CompiledProcess struct {
 	businessRuleTasks  []BusinessRuleTaskDetail
 	timerCatches       []TimerCatchDetail
 	connectorTasks     []ConnectorTaskDetail
+	mockupTasks        []MockupTaskDetail
 	userTasks          []UserTaskDetail
 	boundaryEventDets  []BoundaryEventDetail
 	eventSubProcesses  []EventSubProcessDetail
@@ -707,12 +750,13 @@ type CompiledProcess struct {
 	ioInputs           []IOMapping             // shared: zeebe:ioMapping inputs grouped by activity node
 	ioOutputs          []IOMapping             // shared: zeebe:ioMapping outputs grouped by activity node
 	startEvents        []int32
-	startFormId        int32    // interned start-form id (ADR-0028), -1 if none
-	versionTag         int32    // interned atlas:versionTag revision label, -1 if none
-	instanceTtlNanos   int64    // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
-	isExecutable       bool     // bpmn:isExecutable — a non-executable process can't be started
-	elementIds         []int32  // interned source BPMN id per node id (-1 if unset)
-	strings            []string // intern table (index → string), for debug/export
+	startFormId        int32        // interned start-form id (ADR-0028), -1 if none
+	versionTag         int32        // interned atlas:versionTag revision label, -1 if none
+	instanceTtlNanos   int64        // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
+	isExecutable       bool         // bpmn:isExecutable — a non-executable process can't be started
+	elementIds         []int32      // interned source BPMN id per node id (-1 if unset)
+	lanes              []LaneDetail // organizational lanes (ADR-0121); a node's CompiledNode.Lane indexes this
+	strings            []string     // intern table (index → string), for debug/export
 }
 
 // Node returns the node with the given ElementId.
@@ -811,6 +855,28 @@ func (p *CompiledProcess) ServiceTask(detail int32) *ServiceTaskDetail {
 	return &p.serviceTasks[detail]
 }
 
+// Lane returns the lane at the given table index (ADR-0121).
+func (p *CompiledProcess) Lane(idx int32) *LaneDetail { return &p.lanes[idx] }
+
+// NodeLane returns the leaf lane index a node belongs to, or -1 if it is in no lane (ADR-0121).
+func (p *CompiledProcess) NodeLane(nodeID int32) int32 { return p.nodes[nodeID].Lane }
+
+// LanePath returns a node's lane names from the outermost lane to the leaf, for display (e.g.
+// ["Finance", "Approver"] for a node in a nested lane). Empty when the node is in no lane (ADR-0121).
+func (p *CompiledProcess) LanePath(nodeID int32) []string {
+	idx := p.nodes[nodeID].Lane
+	var leafToRoot []string
+	for idx != -1 {
+		leafToRoot = append(leafToRoot, p.Intern(p.lanes[idx].Name))
+		idx = p.lanes[idx].Parent
+	}
+	// Reverse to outermost-first.
+	for i, j := 0, len(leafToRoot)-1; i < j; i, j = i+1, j-1 {
+		leafToRoot[i], leafToRoot[j] = leafToRoot[j], leafToRoot[i]
+	}
+	return leafToRoot
+}
+
 // SendTask returns the detail at the given table index (ADR-0112). A send task is a
 // service task under a different label — it reuses ServiceTaskDetail and the same detail
 // table, so this is ServiceTask by another name, kept for call-site clarity.
@@ -821,6 +887,11 @@ func (p *CompiledProcess) SendTask(detail int32) *ServiceTaskDetail {
 // TimerCatch returns the timer-catch detail at the given table index.
 func (p *CompiledProcess) TimerCatch(detail int32) *TimerCatchDetail {
 	return &p.timerCatches[detail]
+}
+
+// MockupTask returns the mockup-task detail at the given table index (ADR-0120).
+func (p *CompiledProcess) MockupTask(detail int32) *MockupTaskDetail {
+	return &p.mockupTasks[detail]
 }
 
 // ReceiveTask returns the receive-task detail at the given table index (ADR-0102). A

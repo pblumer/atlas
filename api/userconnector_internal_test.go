@@ -55,7 +55,7 @@ func startInstance(t *testing.T, h http.Handler, key uint64, varsJSON string) {
 
 const createInner = `<atlas:userConnector operation="create" username="=username" email="=email" displayName="=displayName" roles="user" password="=password"/>`
 
-// TestUserConnectorCreatesUser is the ADR-0120 happy path: a system process with a
+// TestUserConnectorCreatesUser is the ADR-0123 happy path: a system process with a
 // create userConnector task, run with start variables, provisions exactly the
 // account an admin would — right username, roles, and a verifiable password.
 func TestUserConnectorCreatesUser(t *testing.T) {

@@ -107,9 +107,20 @@ var mcpOmittedRoutes = map[string]string{
 	"PUT /api/v1/call-activities/overrides/{processId}":    "per-server call-activity override is admin config, not an agent action",
 	"DELETE /api/v1/call-activities/overrides/{processId}": "per-server call-activity override is admin config, not an agent action",
 
+	// Deactivating/activating a deployed process (ADR-0119): operator config that pauses
+	// automatic (timer/message/signal) starts, the same category as a call-activity
+	// override — an operator action from the Console, not an agent scenario step.
+	"PUT /api/v1/processes/{key}/active": "process deactivation is operator config, not an agent action",
+
 	// Dry-run BPMN validation for the Modeler's Problems panel (ADR-0026): an MCP
 	// agent deploys directly via atlas_deploy, which already compiles and validates.
 	"POST /api/v1/validate": "modeler-time dry-run validation; atlas_deploy already compiles+validates",
+
+	// Diagram-layout regeneration for the Modeler's Auto-layout button: a pure
+	// rendering transform of BPMN-DI coordinates. An MCP agent authors BPMN-DI
+	// directly (or relies on server-side ensureDiagramLayout on read), so it does
+	// not drive a scenario through this.
+	"POST /api/v1/layout": "modeler-time diagram layout regeneration; a rendering concern, not a scenario action",
 
 	// Expression/script sandboxes: authored inside BPMN, not called standalone.
 	"POST /api/v1/feel/validate": "modeler-time expression check, not a scenario action",

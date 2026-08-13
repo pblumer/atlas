@@ -8,7 +8,7 @@ die eigentlichen privilegierten Mutationen (Konto anlegen/sperren) bleiben bewus
 Admin-Handlungen.
 
 Diese Beispiele sind der erste Insasse des **geschützten System-Projekts** aus
-[ADR-0119](../../docs/adr/0119-protected-system-project-and-bootstrap-deployment.md):
+[ADR-0122](../../docs/adr/0119-protected-system-project-and-bootstrap-deployment.md):
 eigene Plattform-Prozesse, die mit der Installation kommen und nicht wie normale
 Nutzer-Inhalte editier-/löschbar sind.
 
@@ -33,11 +33,11 @@ Ein Buttton wie „Disable" wird also **nicht** zum Prozess; der *Ablauf* rundhe
 
 ## Freigabe bleibt menschlich, Anlage ist automatisiert
 
-Die Atlas-Benutzerverwaltung (`api/users.go`) ist **admin-gated**. Bis ADR-0120
-blieb auch die Konto-Anlage eine reine Admin-Handhabung. Mit ADR-0120 gibt es
+Die Atlas-Benutzerverwaltung (`api/users.go`) ist **admin-gated**. Bis ADR-0123
+blieb auch die Konto-Anlage eine reine Admin-Handhabung. Mit ADR-0123 gibt es
 einen **sanktionierten, engen** Schreibpfad: den `userConnector` (create /
 set-password / disable), der **nur** für Prozesse des geschützten System-Projekts
-(ADR-0119) und **nur bei aktivierter Provisionierung** (`--user-provisioning`)
+(ADR-0122) und **nur bei aktivierter Provisionierung** (`--user-provisioning`)
 läuft, kein Credential im Modell trägt und dieselben Rails wie die Admin-API nutzt
 (Passwortlänge, Uniqueness, Last-Admin-Lockout).
 
@@ -106,7 +106,7 @@ atlas_deploy_project  id=<projektId>                            → Definition-K
 atlas_create_instance key=<Definition-Key>                     startet einen Ablauf
 ```
 
-Später übernimmt der Bootstrap-Deploy aus ADR-0119 diesen Schritt automatisch beim
+Später übernimmt der Bootstrap-Deploy aus ADR-0122 diesen Schritt automatisch beim
 Serverstart (idempotent, ins geschützte System-Projekt).
 
 ## Erfasste Prozessvariablen (Auswahl)
