@@ -167,6 +167,189 @@ func TestUncaughtEscalationIsBenign(t *testing.T) {
 	}
 }
 
+// TestEscalationNonInterruptingBoundaryAndThrowContinues exercises the two genuinely new
+// escalation semantics at once (ADR-0124 Phase 3): a subprocess raises an escalation with an
+// *intermediate throw* (not an end) and then continues to a waiting service task; a
+// *non-interrupting* escalation boundary on the subprocess catches it and runs a handler
+// branch — WITHOUT tearing the subprocess down. So the handler runs AND the subprocess keeps
+// running on its job; completing the job then drains the subprocess normally.
+func TestEscalationNonInterruptingBoundaryAndThrowContinues(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	b := compiler.NewBuilder(64, "esc-nonint", 1)
+	start := b.AddStartEvent()
+	sub := b.AddSubProcess()
+	b.PushScope(sub)
+	iStart := b.AddStartEvent()
+	thr := b.AddEscalationThrowEvent("MGR")
+	work := b.AddServiceTask("work", 3)
+	subEnd := b.AddEndEvent()
+	b.Connect(iStart, thr)
+	b.Connect(thr, work) // the throw continues on its outgoing flow to the waiting task
+	b.Connect(work, subEnd)
+	b.PopScope()
+	boundary := b.AddBoundaryEscalationEvent(sub, "MGR", false) // non-interrupting
+	notified := b.AddEndEvent()
+	done := b.AddEndEvent()
+	b.Connect(start, sub)
+	b.Connect(sub, done)
+	b.Connect(boundary, notified)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ServiceTask(cp.Node(work).Detail).JobType
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	// The non-interrupting handler ran; the throw continued, so the subprocess is still alive
+	// on its job and the outer flow is not yet taken.
+	v := elementVisits(t, h.store, cp.Key)
+	if v[notified] != 1 {
+		t.Errorf("handler end visits = %d, want 1 (non-interrupting boundary fired)", v[notified])
+	}
+	if v[done] != 0 {
+		t.Errorf("outer end visits = %d, want 0 (the subprocess keeps running — it was not interrupted)", v[done])
+	}
+	if pi := activeProcs(t, h.store); pi != 1 {
+		t.Fatalf("procs = %d, want 1 (subprocess still running on its job)", pi)
+	}
+	// Completing the job drains the subprocess, which then completes normally.
+	p.CompleteJob(singleActivatableJob(t, h.store, jobType))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (after job): %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after job: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+	if v := elementVisits(t, h.store, cp.Key); v[done] != 1 {
+		t.Errorf("outer end visits = %d, want 1 (subprocess completed after its job)", v[done])
+	}
+}
+
+// TestEscalationInterruptingThrowDoesNotContinue is the throw-then-continue GUARD (ADR-0124's
+// headline risk): an escalation *intermediate throw* whose escalation is caught by an
+// *interrupting* boundary must NOT take its outgoing flow — the interrupt tears the throwing
+// token down, so continuing would run a node that should never run (and double-count). The
+// subprocess is aborted and only the recovery branch runs.
+func TestEscalationInterruptingThrowDoesNotContinue(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	b := compiler.NewBuilder(65, "esc-int-throw", 1)
+	start := b.AddStartEvent()
+	sub := b.AddSubProcess()
+	b.PushScope(sub)
+	iStart := b.AddStartEvent()
+	thr := b.AddEscalationThrowEvent("MGR")
+	shouldNotRun := b.AddEndEvent()
+	b.Connect(iStart, thr)
+	b.Connect(thr, shouldNotRun) // must NOT be reached: the interrupt tears this token down
+	b.PopScope()
+	boundary := b.AddBoundaryEscalationEvent(sub, "MGR", true) // interrupting
+	recovered := b.AddEndEvent()
+	done := b.AddEndEvent()
+	b.Connect(start, sub)
+	b.Connect(sub, done)
+	b.Connect(boundary, recovered)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after escalation: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+	v := elementVisits(t, h.store, cp.Key)
+	if v[shouldNotRun] != 0 {
+		t.Errorf("throw continuation visits = %d, want 0 (an interrupting catch tears the throwing token down; it must not continue)", v[shouldNotRun])
+	}
+	if v[recovered] != 1 {
+		t.Errorf("recovery end visits = %d, want 1 (interrupting boundary fired)", v[recovered])
+	}
+	if v[done] != 0 {
+		t.Errorf("normal end visits = %d, want 0 (subprocess aborted)", v[done])
+	}
+}
+
+// TestEscalationNonInterruptingEventSubprocessAtRoot raises an escalation with an intermediate
+// throw at the process root, caught by a *non-interrupting* root escalation event subprocess.
+// The main flow continues past the throw to a waiting service task; the handler runs alongside
+// it (the main-flow job is untouched). Completing the job then drains the instance and the
+// re-armed trigger disarms (ADR-0124 Phase 3, reusing ADR-0082).
+func TestEscalationNonInterruptingEventSubprocessAtRoot(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	b := compiler.NewBuilder(66, "esc-eventsub-root", 1)
+	start := b.AddStartEvent()
+	thr := b.AddEscalationThrowEvent("E1")
+	work := b.AddServiceTask("work", 3)
+	mainEnd := b.AddEndEvent()
+	b.Connect(start, thr)
+	b.Connect(thr, work) // the throw continues to a waiting task, so the main flow stays alive
+	b.Connect(work, mainEnd)
+	handler := b.AddSubProcess()
+	b.PushScope(handler)
+	hStart := b.AddStartEvent()
+	hEnd := b.AddEndEvent()
+	b.Connect(hStart, hEnd)
+	b.PopScope()
+	b.SetEventSubProcess(handler, compiler.EventSubProcessDetail{
+		StartNode: hStart, Interrupting: false, Kind: compiler.BoundaryEscalation, EscalationCode: "E1",
+	})
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ServiceTask(cp.Node(work).Detail).JobType
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	// The non-interrupting handler ran; the main flow continued to its job (not cancelled).
+	if v := elementVisits(t, h.store, cp.Key)[hEnd]; v != 1 {
+		t.Errorf("handler end visits = %d, want 1 (non-interrupting escalation event subprocess ran)", v)
+	}
+	if jobGone(t, h.store, jobType) {
+		t.Fatal("the non-interrupting escalation handler cancelled the main-flow job")
+	}
+	// Completing the main-flow job drains the instance; the re-armed trigger disarms.
+	p.CompleteJob(singleActivatableJob(t, h.store, jobType))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (after job): %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after main flow completes: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+	if v := elementVisits(t, h.store, cp.Key)[mainEnd]; v != 1 {
+		t.Errorf("main end visits = %d, want 1 (the throw continued past to the task and on)", v)
+	}
+}
+
 // TestEscalationBoundaryRecovers proves an armed interrupting escalation boundary survives a
 // crash: a subprocess parks on an inner job with the boundary armed; after replaying the log
 // into a fresh store the boundary is rebuilt, so completing the job — which drives the token to

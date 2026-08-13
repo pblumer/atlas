@@ -2430,11 +2430,14 @@ func fireEscalationCatch(c *ProcessingContext, catchKey uint64) bool {
 }
 
 // catchInterrupting reports whether an escalation catch element (a boundary or an
-// event-subprocess trigger) is interrupting, reading its compiled detail (ADR-0124).
+// event-subprocess trigger) is interrupting, reading its compiled detail (ADR-0124). It
+// switches on the element *instance's* BpmnElementType, not the compiled node's Type: an
+// event-sub trigger instance is a TypeEventSubProcessStart whose ElementId points at the
+// handler container node (a TypeSubProcess) carrying the EventSub detail.
 func catchInterrupting(c *ProcessingContext, catch *model.ElementInstanceValue) bool {
 	cp := c.process(catch.ProcessDefKey)
 	node := cp.Node(catch.ElementId)
-	switch node.Type {
+	switch compiler.BpmnType(catch.BpmnElementType) {
 	case compiler.TypeBoundaryEvent:
 		return cp.BoundaryEvent(node.Detail).Interrupting
 	case compiler.TypeEventSubProcessStart:
