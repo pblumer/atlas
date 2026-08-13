@@ -135,6 +135,17 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
 .tour-status{margin-top:12px;font-size:14px;color:var(--muted);min-height:20px}
 .tour-status.ok{color:var(--ok);font-weight:600}
 .tour-status.err{color:var(--err);font-weight:600}
+
+/* ---- recipes ---- */
+.rz-group{margin:30px 0 4px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.recipe{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin:14px 0;box-shadow:var(--shadow)}
+.recipe>h4{margin:0 0 8px;font-size:16.5px;display:flex;align-items:center;gap:9px}
+.rz-emoji{font-size:19px;line-height:1}
+.rz-when{margin:0 0 10px;font-size:14px;color:var(--muted)}
+.rz-when .lbl{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--accent);margin-right:8px}
+.recipe pre{margin:6px 0}
+.rz-how{margin:10px 0 0;font-size:14px}
 </style>
 </head>
 <body>
@@ -168,6 +179,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <a href="#feel"><span data-l="de">FEEL-Spickzettel</span><span data-l="en">FEEL cheat sheet</span></a>
     <h4 data-l="de">Bauen &amp; Betreiben</h4><h4 data-l="en">Build &amp; operate</h4>
     <a href="#designen"><span data-l="de">Prozesse designen</span><span data-l="en">Design processes</span></a>
+    <a href="#rezepte"><span data-l="de">Rezepte</span><span data-l="en">Recipes</span></a>
     <a href="#formulare"><span data-l="de">Formulare &amp; Connectors</span><span data-l="en">Forms &amp; connectors</span></a>
     <a href="#laufen"><span data-l="de">Zum Laufen bringen</span><span data-l="en">Make it run</span></a>
     <a href="#testen"><span data-l="de">Testen &amp; Simulieren</span><span data-l="en">Test &amp; simulate</span></a>
@@ -562,6 +574,530 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
       </ol>
       <p><a class="pilllink" href="/#/modeler/new"><span data-l="de">Neues Diagramm anlegen</span><span data-l="en">Create a new diagram</span></a>
          <a class="pilllink ghost" href="/#/modeler/marketplace"><span data-l="de">Vorlagen im Marketplace</span><span data-l="en">Templates in the Marketplace</span></a></p>
+    </section>
+
+    <!-- ==================== RECIPES ==================== -->
+    <section id="rezepte">
+      <h2 data-l="de">Rezepte</h2><h2 data-l="en">Recipes</h2>
+      <p class="lead" data-l="de">Fertige, kopierbare Bausteine für die wichtigsten BPMN-Muster – jeder ist ein
+        vollständiges, lauffähiges Modell. Kopiere das XML und importiere es im <a href="/#/modeler/new">Modeler</a>
+        (Neues Diagramm → XML einfügen); das Layout erzeugt Atlas beim Deploy automatisch. Alle Prozess-Snippets
+        deployen unverändert gegen die Atlas-Engine – nur das DMN-Rezept braucht zusätzlich seine Entscheidung
+        (siehe Hinweis dort).</p>
+      <p class="lead" data-l="en">Ready-made, copy-paste building blocks for the essential BPMN patterns – each one is a
+        complete, runnable model. Copy the XML and import it in the <a href="/#/modeler/new">Modeler</a>
+        (New diagram → paste XML); Atlas lays it out automatically on deploy. Every process snippet deploys as-is
+        against the Atlas engine – only the DMN recipe additionally needs its decision (see the note there).</p>
+      <h3 class="rz-group"><span data-l="de">Automatisieren</span><span data-l="en">Automate</span></h3>
+      <div class="recipe" id="rz-script-value">
+        <h4><span class="rz-emoji" aria-hidden="true">🧮</span>
+          <span data-l="de">Script-Task: einen Wert berechnen</span><span data-l="en">Script task: compute a value</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Ein Zwischenergebnis aus vorhandenen Variablen ableiten – ganz ohne externen Worker.</span><span data-l="en">Derive an intermediate value from existing variables – with no external worker.</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-script-value&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;process id=&quot;recipe-script-value&quot; name=&quot;Netto berechnen&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot;/&gt;
+    &lt;scriptTask id=&quot;net&quot; name=&quot;Netto&quot;&gt;
+      &lt;extensionElements&gt;
+        &lt;zeebe:script expression=&quot;= round(gross / 1.19, 2)&quot; resultVariable=&quot;net&quot;/&gt;
+      &lt;/extensionElements&gt;
+    &lt;/scriptTask&gt;
+    &lt;endEvent id=&quot;end&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;start&quot; targetRef=&quot;net&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;net&quot; targetRef=&quot;end&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de">Der <code>zeebe:script</code>-Ausdruck (FEEL, beginnt mit <code>=</code>) läuft in der Engine und schreibt sein Ergebnis nach <code>resultVariable</code>. Kein Token parkt – die Instanz läuft durch.</span><span data-l="en">The <code>zeebe:script</code> expression (FEEL, starts with <code>=</code>) runs inside the engine and writes its result to <code>resultVariable</code>. No token parks – the instance runs straight through.</span></p>
+      </div>
+      <div class="recipe" id="rz-script-list">
+        <h4><span class="rz-emoji" aria-hidden="true">📊</span>
+          <span data-l="de">Script-Task: Listen &amp; Objekte</span><span data-l="en">Script task: lists &amp; objects</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Über eine Liste rechnen, filtern und ein strukturiertes Ergebnis bauen.</span><span data-l="en">Compute over a list, filter it, and build a structured result.</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-script-list&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;process id=&quot;recipe-script-list&quot; name=&quot;Warenkorb summieren&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot;/&gt;
+    &lt;scriptTask id=&quot;sum&quot; name=&quot;Summe&quot;&gt;
+      &lt;extensionElements&gt;
+        &lt;zeebe:script expression=&quot;= { total: sum(for p in positions return p.price * p.qty), count: count(positions), expensive: positions[price &gt; 100] }&quot; resultVariable=&quot;cart&quot;/&gt;
+      &lt;/extensionElements&gt;
+    &lt;/scriptTask&gt;
+    &lt;endEvent id=&quot;end&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;start&quot; targetRef=&quot;sum&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;sum&quot; targetRef=&quot;end&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de">FEEL kann Listen durchlaufen (<code>for … return …</code>), filtern (<code>positions[price &gt; 100]</code>) und Objekte bauen (<code>{ … }</code>). Das Ergebnis landet als verschachteltes Objekt in <code>cart</code>.</span><span data-l="en">FEEL iterates lists (<code>for … return …</code>), filters them (<code>positions[price &gt; 100]</code>) and builds objects (<code>{ … }</code>). The result lands as a nested object in <code>cart</code>.</span></p>
+      </div>
+      <div class="recipe" id="rz-service">
+        <h4><span class="rz-emoji" aria-hidden="true">⚙️</span>
+          <span data-l="de">Service-Task: Arbeit auslagern</span><span data-l="en">Service task: offload work</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Einen automatischen Schritt an einen Worker oder Connector übergeben.</span><span data-l="en">Hand an automatic step to a worker or connector.</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-service&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;process id=&quot;recipe-service&quot; name=&quot;Zahlung einziehen&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot;/&gt;
+    &lt;serviceTask id=&quot;charge&quot; name=&quot;Karte belasten&quot;&gt;
+      &lt;extensionElements&gt;
+        &lt;zeebe:taskDefinition type=&quot;payment&quot; retries=&quot;3&quot;/&gt;
+      &lt;/extensionElements&gt;
+    &lt;/serviceTask&gt;
+    &lt;endEvent id=&quot;end&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;start&quot; targetRef=&quot;charge&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;charge&quot; targetRef=&quot;end&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de">Der Token parkt als <b>Job</b> vom Typ <code>payment</code>, bis ein Worker ihn abschließt; scheitert er, wird bis <code>retries</code>-mal erneut versucht, danach entsteht ein Incident. Für REST, E-Mail, SharePoint &amp; Co. nimm die fertigen Connector-Vorlagen aus dem <a href="/#/modeler/marketplace">Marketplace</a>.</span><span data-l="en">The token parks as a <b>job</b> of type <code>payment</code> until a worker completes it; on failure it retries up to <code>retries</code> times, then raises an incident. For REST, e-mail, SharePoint &amp; co. use the ready-made connector templates in the <a href="/#/modeler/marketplace">Marketplace</a>.</span></p>
+      </div>
+      <div class="recipe" id="rz-dmn">
+        <h4><span class="rz-emoji" aria-hidden="true">📐</span>
+          <span data-l="de">Business-Rule-Task: Entscheidung via DMN</span><span data-l="en">Business rule task: decide via DMN</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Komplexe Regeln in eine DMN-Tabelle auslagern statt in ein Gewirr aus Gateways.</span><span data-l="en">Move complex rules into a DMN table instead of a maze of gateways.</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-dmn&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;process id=&quot;recipe-dmn&quot; name=&quot;Rabatt bestimmen&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot;/&gt;
+    &lt;businessRuleTask id=&quot;tier&quot; name=&quot;Rabattstufe&quot;&gt;
+      &lt;extensionElements&gt;
+        &lt;zeebe:calledDecision decisionId=&quot;discountTier&quot; resultVariable=&quot;discount&quot;/&gt;
+        &lt;zeebe:ioMapping&gt;
+          &lt;zeebe:input source=&quot;=customerType&quot; target=&quot;customerType&quot;/&gt;
+          &lt;zeebe:input source=&quot;=orderValue&quot; target=&quot;orderValue&quot;/&gt;
+        &lt;/zeebe:ioMapping&gt;
+      &lt;/extensionElements&gt;
+    &lt;/businessRuleTask&gt;
+    &lt;endEvent id=&quot;end&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;start&quot; targetRef=&quot;tier&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;tier&quot; targetRef=&quot;end&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de"><code>calledDecision</code> verweist auf die DMN-Entscheidung <code>discountTier</code>; die <code>ioMapping</code>-Inputs füttern sie, das Ergebnis landet in <code>discount</code>. Deploye die DMN gemeinsam mit dem Prozess in <b>einem Projekt</b> (siehe <a href="#dmn">DMN lernen</a>).</span><span data-l="en"><code>calledDecision</code> points to the DMN decision <code>discountTier</code>; the <code>ioMapping</code> inputs feed it and the result lands in <code>discount</code>. Deploy the DMN together with the process in <b>one project</b> (see <a href="#dmn">Learn DMN</a>).</span></p>
+      </div>
+      <h3 class="rz-group"><span data-l="de">Verzweigen &amp; Zusammenführen</span><span data-l="en">Branch &amp; merge</span></h3>
+      <div class="recipe" id="rz-xor">
+        <h4><span class="rz-emoji" aria-hidden="true">🔀</span>
+          <span data-l="de">Exklusives Gateway: bedingtes Routing</span><span data-l="en">Exclusive gateway: conditional routing</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Genau einen Weg abhängig von den Daten wählen – mit sicherem Default.</span><span data-l="en">Pick exactly one path based on the data – with a safe default.</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-xor&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;process id=&quot;recipe-xor&quot; name=&quot;Freigabe nötig?&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot;/&gt;
+    &lt;exclusiveGateway id=&quot;gw&quot; name=&quot;Betrag?&quot; default=&quot;f_auto&quot;/&gt;
+    &lt;userTask id=&quot;approve&quot; name=&quot;Manuell freigeben&quot;/&gt;
+    &lt;serviceTask id=&quot;auto&quot; name=&quot;Auto-Freigabe&quot;&gt;
+      &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;autoApprove&quot;/&gt;&lt;/extensionElements&gt;
+    &lt;/serviceTask&gt;
+    &lt;endEvent id=&quot;end&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f0&quot; sourceRef=&quot;start&quot; targetRef=&quot;gw&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f_manual&quot; name=&quot;&gt; 1000&quot; sourceRef=&quot;gw&quot; targetRef=&quot;approve&quot;&gt;
+      &lt;conditionExpression&gt;= amount &gt; 1000&lt;/conditionExpression&gt;
+    &lt;/sequenceFlow&gt;
+    &lt;sequenceFlow id=&quot;f_auto&quot; name=&quot;sonst&quot; sourceRef=&quot;gw&quot; targetRef=&quot;auto&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;approve&quot; targetRef=&quot;end&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;auto&quot; targetRef=&quot;end&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de">Das Gateway prüft die <code>conditionExpression</code>-Ausdrücke der Ausgänge von oben und nimmt den ersten wahren; trifft keiner zu, greift der <code>default</code>-Fluss. <b>Setze immer einen Default</b>, sonst kann der Token stecken bleiben.</span><span data-l="en">The gateway evaluates the outgoing flows' <code>conditionExpression</code>s and takes the first true one; if none match, the <code>default</code> flow fires. <b>Always set a default</b>, or the token can get stuck.</span></p>
+      </div>
+      <div class="recipe" id="rz-parallel">
+        <h4><span class="rz-emoji" aria-hidden="true">⏸️</span>
+          <span data-l="de">Paralleles Gateway: gleichzeitig &amp; zusammenführen</span><span data-l="en">Parallel gateway: fork &amp; join</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Mehrere Schritte gleichzeitig laufen lassen und erst weiter, wenn alle fertig sind.</span><span data-l="en">Run several steps at once and continue only when all are done.</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-parallel&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;process id=&quot;recipe-parallel&quot; name=&quot;Parallel prüfen&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot;/&gt;
+    &lt;parallelGateway id=&quot;fork&quot;/&gt;
+    &lt;serviceTask id=&quot;credit&quot; name=&quot;Bonität prüfen&quot;&gt;
+      &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;credit&quot;/&gt;&lt;/extensionElements&gt;
+    &lt;/serviceTask&gt;
+    &lt;serviceTask id=&quot;stock&quot; name=&quot;Bestand prüfen&quot;&gt;
+      &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;stock&quot;/&gt;&lt;/extensionElements&gt;
+    &lt;/serviceTask&gt;
+    &lt;parallelGateway id=&quot;join&quot;/&gt;
+    &lt;endEvent id=&quot;end&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;start&quot; targetRef=&quot;fork&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;fork&quot; targetRef=&quot;credit&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f3&quot; sourceRef=&quot;fork&quot; targetRef=&quot;stock&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f4&quot; sourceRef=&quot;credit&quot; targetRef=&quot;join&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f5&quot; sourceRef=&quot;stock&quot; targetRef=&quot;join&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f6&quot; sourceRef=&quot;join&quot; targetRef=&quot;end&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de">Der <code>fork</code> erzeugt für jeden Ausgang einen Token; der <code>join</code> wartet, bis <b>alle</b> eingehenden Token da sind, und führt dann einen einzigen weiter. Fork und Join gehören paarweise zusammen.</span><span data-l="en">The <code>fork</code> creates a token per outgoing flow; the <code>join</code> waits until <b>all</b> incoming tokens have arrived, then continues a single one. Fork and join come in pairs.</span></p>
+      </div>
+      <div class="recipe" id="rz-event-gateway">
+        <h4><span class="rz-emoji" aria-hidden="true">🎲</span>
+          <span data-l="de">Event-based Gateway: erstes Ereignis gewinnt</span><span data-l="en">Event-based gateway: first event wins</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Auf mehrere mögliche Ereignisse warten – das erste entscheidet, der Rest wird verworfen.</span><span data-l="en">Wait for several possible events – the first decides, the rest are discarded.</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-event-gw&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;message id=&quot;Msg_go&quot; name=&quot;go&quot;/&gt;
+  &lt;process id=&quot;recipe-event-gw&quot; name=&quot;Antwort oder Timeout&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot;/&gt;
+    &lt;eventBasedGateway id=&quot;gw&quot;/&gt;
+    &lt;intermediateCatchEvent id=&quot;reply&quot; name=&quot;Antwort&quot;&gt;
+      &lt;messageEventDefinition messageRef=&quot;Msg_go&quot;/&gt;
+    &lt;/intermediateCatchEvent&gt;
+    &lt;intermediateCatchEvent id=&quot;timeout&quot; name=&quot;Timeout&quot;&gt;
+      &lt;timerEventDefinition&gt;&lt;timeDuration&gt;PT1H&lt;/timeDuration&gt;&lt;/timerEventDefinition&gt;
+    &lt;/intermediateCatchEvent&gt;
+    &lt;endEvent id=&quot;end_reply&quot;/&gt;
+    &lt;endEvent id=&quot;end_timeout&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;start&quot; targetRef=&quot;gw&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;gw&quot; targetRef=&quot;reply&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f3&quot; sourceRef=&quot;gw&quot; targetRef=&quot;timeout&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f4&quot; sourceRef=&quot;reply&quot; targetRef=&quot;end_reply&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f5&quot; sourceRef=&quot;timeout&quot; targetRef=&quot;end_timeout&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de">Hinter dem Gateway stehen nur wartende Ereignisse (Nachricht, Timer, Signal). Es ist eine <i>deferred choice</i>: die Umgebung entscheidet, nicht die Daten. Klassisch für „warte auf Antwort, sonst Timeout“.</span><span data-l="en">Only waiting events (message, timer, signal) may follow the gateway. It's a <i>deferred choice</i>: the environment decides, not the data. The classic "wait for a reply, otherwise time out".</span></p>
+      </div>
+      <h3 class="rz-group"><span data-l="de">Warten &amp; Reagieren</span><span data-l="en">Wait &amp; react</span></h3>
+      <div class="recipe" id="rz-timer-wait">
+        <h4><span class="rz-emoji" aria-hidden="true">⏱️</span>
+          <span data-l="de">Timer: warten / verzögern</span><span data-l="en">Timer: wait / delay</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Den Ablauf für eine Dauer oder bis zu einem Zeitpunkt pausieren.</span><span data-l="en">Pause the flow for a duration or until a point in time.</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-timer&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;process id=&quot;recipe-timer&quot; name=&quot;Erinnerung nach 2 Tagen&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot;/&gt;
+    &lt;intermediateCatchEvent id=&quot;wait&quot; name=&quot;2 Tage warten&quot;&gt;
+      &lt;timerEventDefinition&gt;&lt;timeDuration&gt;P2D&lt;/timeDuration&gt;&lt;/timerEventDefinition&gt;
+    &lt;/intermediateCatchEvent&gt;
+    &lt;serviceTask id=&quot;remind&quot; name=&quot;Erinnern&quot;&gt;
+      &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;notify&quot;/&gt;&lt;/extensionElements&gt;
+    &lt;/serviceTask&gt;
+    &lt;endEvent id=&quot;end&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;start&quot; targetRef=&quot;wait&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;wait&quot; targetRef=&quot;remind&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f3&quot; sourceRef=&quot;remind&quot; targetRef=&quot;end&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de">ISO-8601: <code>&lt;timeDuration&gt;P2D&lt;/timeDuration&gt;</code> (Dauer), <code>&lt;timeDate&gt;</code> (fixer Zeitpunkt) oder <code>&lt;timeCycle&gt;</code> (Wiederholung). Alle drei akzeptieren auch FEEL-Ausdrücke, z.&nbsp;B. <code>= duration(slaFrist)</code>.</span><span data-l="en">ISO-8601: <code>&lt;timeDuration&gt;P2D&lt;/timeDuration&gt;</code> (duration), <code>&lt;timeDate&gt;</code> (a fixed instant) or <code>&lt;timeCycle&gt;</code> (repetition). All three also accept FEEL expressions, e.g. <code>= duration(slaLimit)</code>.</span></p>
+      </div>
+      <div class="recipe" id="rz-timer-start">
+        <h4><span class="rz-emoji" aria-hidden="true">🌙</span>
+          <span data-l="de">Timer-Start: geplant starten</span><span data-l="en">Timer start: run on a schedule</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Einen Prozess automatisch zu einer Zeit oder in einem Rhythmus starten.</span><span data-l="en">Start a process automatically at a time or on a cycle.</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-timer-start&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;process id=&quot;recipe-timer-start&quot; name=&quot;Nächtlicher Report&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;nightly&quot; name=&quot;Jede Nacht 02:00&quot;&gt;
+      &lt;timerEventDefinition&gt;&lt;timeCycle&gt;R/PT24H&lt;/timeCycle&gt;&lt;/timerEventDefinition&gt;
+    &lt;/startEvent&gt;
+    &lt;serviceTask id=&quot;report&quot; name=&quot;Report bauen&quot;&gt;
+      &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;buildReport&quot;/&gt;&lt;/extensionElements&gt;
+    &lt;/serviceTask&gt;
+    &lt;endEvent id=&quot;end&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;nightly&quot; targetRef=&quot;report&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;report&quot; targetRef=&quot;end&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de">Ein Start-Event mit <code>timerEventDefinition</code> braucht kein <code>CreateInstance</code> – die Engine startet die Instanzen selbst. <code>R/PT24H</code> heißt „alle 24&nbsp;Stunden, unbegrenzt oft“.</span><span data-l="en">A start event with a <code>timerEventDefinition</code> needs no <code>CreateInstance</code> – the engine starts the instances itself. <code>R/PT24H</code> means "every 24 hours, indefinitely".</span></p>
+      </div>
+      <div class="recipe" id="rz-boundary-timer">
+        <h4><span class="rz-emoji" aria-hidden="true">⏰</span>
+          <span data-l="de">Boundary-Timer: Timeout &amp; Eskalation</span><span data-l="en">Boundary timer: timeout &amp; escalation</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Eine Aufgabe abbrechen, wenn sie zu lange dauert, und stattdessen eskalieren.</span><span data-l="en">Cancel a task if it takes too long and escalate instead.</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-boundary-timer&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;process id=&quot;recipe-boundary-timer&quot; name=&quot;Freigabe mit Frist&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot;/&gt;
+    &lt;userTask id=&quot;review&quot; name=&quot;Freigeben&quot;&gt;
+      &lt;extensionElements&gt;&lt;zeebe:assignmentDefinition candidateGroups=&quot;approvers&quot;/&gt;&lt;/extensionElements&gt;
+    &lt;/userTask&gt;
+    &lt;boundaryEvent id=&quot;overdue&quot; name=&quot;Frist abgelaufen&quot; attachedToRef=&quot;review&quot;&gt;
+      &lt;timerEventDefinition&gt;&lt;timeDuration&gt;P1D&lt;/timeDuration&gt;&lt;/timerEventDefinition&gt;
+    &lt;/boundaryEvent&gt;
+    &lt;endEvent id=&quot;done&quot;/&gt;
+    &lt;endEvent id=&quot;escalated&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;start&quot; targetRef=&quot;review&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;review&quot; targetRef=&quot;done&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f3&quot; sourceRef=&quot;overdue&quot; targetRef=&quot;escalated&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de">Ein <code>boundaryEvent</code> mit <code>attachedToRef</code> hängt an der Aufgabe. Interrupting (Standard) bricht sie beim Auslösen ab; mit <code>cancelActivity="false"</code> läuft die Aufgabe weiter und der Zweig startet zusätzlich.</span><span data-l="en">A <code>boundaryEvent</code> with <code>attachedToRef</code> attaches to the task. Interrupting (default) cancels it when it fires; with <code>cancelActivity="false"</code> the task keeps running and the branch fires alongside it.</span></p>
+      </div>
+      <div class="recipe" id="rz-message-catch">
+        <h4><span class="rz-emoji" aria-hidden="true">📨</span>
+          <span data-l="de">Nachricht empfangen</span><span data-l="en">Receive a message</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Auf ein Ereignis von außen warten – korreliert auf die richtige Instanz.</span><span data-l="en">Wait for an outside event – correlated to the right instance.</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-msg-catch&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;message id=&quot;Msg_paid&quot; name=&quot;payment-received&quot;&gt;
+    &lt;extensionElements&gt;&lt;zeebe:subscription correlationKey=&quot;=orderId&quot;/&gt;&lt;/extensionElements&gt;
+  &lt;/message&gt;
+  &lt;process id=&quot;recipe-msg-catch&quot; name=&quot;Auf Zahlung warten&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot;/&gt;
+    &lt;intermediateCatchEvent id=&quot;await&quot; name=&quot;Zahlung&quot;&gt;
+      &lt;messageEventDefinition messageRef=&quot;Msg_paid&quot;/&gt;
+    &lt;/intermediateCatchEvent&gt;
+    &lt;endEvent id=&quot;end&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;start&quot; targetRef=&quot;await&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;await&quot; targetRef=&quot;end&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de">Die <code>correlationKey</code>-Angabe bestimmt, welche wartende Instanz eine eingehende Nachricht bekommt (hier über <code>orderId</code>). Nachrichten werden per <code>Publish-Message</code> (REST/MCP) mit passendem Schlüssel eingespielt.</span><span data-l="en">The <code>correlationKey</code> decides which waiting instance an incoming message reaches (here via <code>orderId</code>). Messages are delivered with a matching key via <code>publish-message</code> (REST/MCP).</span></p>
+      </div>
+      <div class="recipe" id="rz-message-start">
+        <h4><span class="rz-emoji" aria-hidden="true">🚪</span>
+          <span data-l="de">Nachricht-Start: durch ein Ereignis starten</span><span data-l="en">Message start: start from an event</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Eine neue Instanz automatisch anlegen, wenn eine Nachricht eintrifft.</span><span data-l="en">Create a new instance automatically when a message arrives.</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-msg-start&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;message id=&quot;Msg_order&quot; name=&quot;order-placed&quot;/&gt;
+  &lt;process id=&quot;recipe-msg-start&quot; name=&quot;Bestellung eingegangen&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;placed&quot; name=&quot;Bestellung&quot;&gt;
+      &lt;messageEventDefinition messageRef=&quot;Msg_order&quot;/&gt;
+    &lt;/startEvent&gt;
+    &lt;serviceTask id=&quot;fulfil&quot; name=&quot;Ausliefern&quot;&gt;
+      &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;fulfil&quot;/&gt;&lt;/extensionElements&gt;
+    &lt;/serviceTask&gt;
+    &lt;endEvent id=&quot;end&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;placed&quot; targetRef=&quot;fulfil&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;fulfil&quot; targetRef=&quot;end&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de">Ein Nachrichten-Start braucht keinen <code>correlationKey</code> – jede passende Nachricht startet eine <i>neue</i> Instanz. Ideal als Einstieg für ereignisgetriebene Prozesse.</span><span data-l="en">A message start needs no <code>correlationKey</code> – each matching message starts a <i>new</i> instance. Ideal as the entry point for event-driven processes.</span></p>
+      </div>
+      <div class="recipe" id="rz-boundary-message">
+        <h4><span class="rz-emoji" aria-hidden="true">🔔</span>
+          <span data-l="de">Boundary-Nachricht (nicht unterbrechend)</span><span data-l="en">Boundary message (non-interrupting)</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Auf ein Zwischenereignis reagieren, ohne die laufende Aufgabe zu stoppen.</span><span data-l="en">React to an interim event without stopping the running task.</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-boundary-msg&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;message id=&quot;Msg_nudge&quot; name=&quot;nudge&quot;&gt;
+    &lt;extensionElements&gt;&lt;zeebe:subscription correlationKey=&quot;=caseId&quot;/&gt;&lt;/extensionElements&gt;
+  &lt;/message&gt;
+  &lt;process id=&quot;recipe-boundary-msg&quot; name=&quot;Bearbeiten mit Nachhaken&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot;/&gt;
+    &lt;userTask id=&quot;work&quot; name=&quot;Fall bearbeiten&quot;&gt;
+      &lt;extensionElements&gt;&lt;zeebe:assignmentDefinition candidateGroups=&quot;agents&quot;/&gt;&lt;/extensionElements&gt;
+    &lt;/userTask&gt;
+    &lt;boundaryEvent id=&quot;nudged&quot; name=&quot;Nachgehakt&quot; attachedToRef=&quot;work&quot; cancelActivity=&quot;false&quot;&gt;
+      &lt;messageEventDefinition messageRef=&quot;Msg_nudge&quot;/&gt;
+    &lt;/boundaryEvent&gt;
+    &lt;endEvent id=&quot;done&quot;/&gt;
+    &lt;endEvent id=&quot;logged&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;start&quot; targetRef=&quot;work&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;work&quot; targetRef=&quot;done&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f3&quot; sourceRef=&quot;nudged&quot; targetRef=&quot;logged&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de">Mit <code>cancelActivity="false"</code> ist das Boundary-Event <b>nicht unterbrechend</b>: Jede eingehende Nachricht startet den Nebenzweig, während die Aufgabe unberührt weiterläuft – gut für „Zwischenstand melden“ oder Reminder.</span><span data-l="en">With <code>cancelActivity="false"</code> the boundary event is <b>non-interrupting</b>: each incoming message spawns the side branch while the task keeps running untouched – good for "send a status" or reminders.</span></p>
+      </div>
+      <div class="recipe" id="rz-signal">
+        <h4><span class="rz-emoji" aria-hidden="true">📡</span>
+          <span data-l="de">Signal: Broadcast werfen &amp; fangen</span><span data-l="en">Signal: broadcast throw &amp; catch</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Ein Ereignis an alle interessierten Stellen zugleich senden.</span><span data-l="en">Send one event to every interested place at once.</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-signal&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;signal id=&quot;Sig_stop&quot; name=&quot;stop-all&quot;/&gt;
+  &lt;process id=&quot;recipe-signal&quot; name=&quot;Stopp-Signal&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot;/&gt;
+    &lt;parallelGateway id=&quot;fork&quot;/&gt;
+    &lt;intermediateThrowEvent id=&quot;raise&quot; name=&quot;Stopp werfen&quot;&gt;
+      &lt;signalEventDefinition signalRef=&quot;Sig_stop&quot;/&gt;
+    &lt;/intermediateThrowEvent&gt;
+    &lt;intermediateCatchEvent id=&quot;await&quot; name=&quot;Stopp fangen&quot;&gt;
+      &lt;signalEventDefinition signalRef=&quot;Sig_stop&quot;/&gt;
+    &lt;/intermediateCatchEvent&gt;
+    &lt;parallelGateway id=&quot;join&quot;/&gt;
+    &lt;endEvent id=&quot;end&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;start&quot; targetRef=&quot;fork&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;fork&quot; targetRef=&quot;raise&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f3&quot; sourceRef=&quot;fork&quot; targetRef=&quot;await&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f4&quot; sourceRef=&quot;raise&quot; targetRef=&quot;join&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f5&quot; sourceRef=&quot;await&quot; targetRef=&quot;join&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f6&quot; sourceRef=&quot;join&quot; targetRef=&quot;end&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de">Anders als eine Nachricht (1:1, korreliert) ist ein Signal ein <b>Broadcast</b> (1:n, ohne Schlüssel): ein geworfenes Signal erreicht alle wartenden Fänger – auch in anderen Prozessen.</span><span data-l="en">Unlike a message (1:1, correlated) a signal is a <b>broadcast</b> (1:n, keyless): one thrown signal reaches every waiting catcher – across processes too.</span></p>
+      </div>
+      <div class="recipe" id="rz-boundary-error">
+        <h4><span class="rz-emoji" aria-hidden="true">🧯</span>
+          <span data-l="de">Boundary-Fehler abfangen</span><span data-l="en">Catch an error with a boundary event</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Einen fachlichen Fehler einer Aufgabe kontrolliert behandeln statt in einen Incident zu laufen.</span><span data-l="en">Handle a business error from a task deliberately instead of running into an incident.</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-boundary-error&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;error id=&quot;Err_declined&quot; errorCode=&quot;DECLINED&quot; name=&quot;Declined&quot;/&gt;
+  &lt;process id=&quot;recipe-boundary-error&quot; name=&quot;Zahlung mit Fehlerpfad&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot;/&gt;
+    &lt;serviceTask id=&quot;charge&quot; name=&quot;Belasten&quot;&gt;
+      &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;payment&quot; retries=&quot;3&quot;/&gt;&lt;/extensionElements&gt;
+    &lt;/serviceTask&gt;
+    &lt;boundaryEvent id=&quot;declined&quot; name=&quot;Abgelehnt&quot; attachedToRef=&quot;charge&quot;&gt;
+      &lt;errorEventDefinition errorRef=&quot;Err_declined&quot;/&gt;
+    &lt;/boundaryEvent&gt;
+    &lt;endEvent id=&quot;paid&quot;/&gt;
+    &lt;userTask id=&quot;retry&quot; name=&quot;Andere Zahlart&quot;/&gt;
+    &lt;endEvent id=&quot;handled&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;start&quot; targetRef=&quot;charge&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;charge&quot; targetRef=&quot;paid&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f3&quot; sourceRef=&quot;declined&quot; targetRef=&quot;retry&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f4&quot; sourceRef=&quot;retry&quot; targetRef=&quot;handled&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de">Ein Worker kann einen <b>BPMN-Fehler</b> mit Code <code>DECLINED</code> werfen; das passende <code>errorEventDefinition</code> am Rand der Aufgabe fängt ihn und lenkt auf einen Fehlerpfad. Das ist erwartbares Verhalten – kein Incident.</span><span data-l="en">A worker can throw a <b>BPMN error</b> with code <code>DECLINED</code>; the matching <code>errorEventDefinition</code> on the task's edge catches it and diverts to an error path. That's expected behaviour – not an incident.</span></p>
+      </div>
+      <h3 class="rz-group"><span data-l="de">Strukturieren &amp; Wiederverwenden</span><span data-l="en">Structure &amp; reuse</span></h3>
+      <div class="recipe" id="rz-subprocess">
+        <h4><span class="rz-emoji" aria-hidden="true">📦</span>
+          <span data-l="de">Eingebetteter Subprozess</span><span data-l="en">Embedded subprocess</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Mehrere Schritte zu einer Einheit bündeln – z.&nbsp;B. für einen gemeinsamen Boundary-Timer.</span><span data-l="en">Bundle several steps into one unit – e.g. to share a boundary timer.</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-subprocess&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;process id=&quot;recipe-subprocess&quot; name=&quot;Prüfblock mit Frist&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot;/&gt;
+    &lt;subProcess id=&quot;checks&quot; name=&quot;Prüfungen&quot;&gt;
+      &lt;startEvent id=&quot;s2&quot;/&gt;
+      &lt;serviceTask id=&quot;verify&quot; name=&quot;Verifizieren&quot;&gt;
+        &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;verify&quot;/&gt;&lt;/extensionElements&gt;
+      &lt;/serviceTask&gt;
+      &lt;endEvent id=&quot;e2&quot;/&gt;
+      &lt;sequenceFlow id=&quot;i1&quot; sourceRef=&quot;s2&quot; targetRef=&quot;verify&quot;/&gt;
+      &lt;sequenceFlow id=&quot;i2&quot; sourceRef=&quot;verify&quot; targetRef=&quot;e2&quot;/&gt;
+    &lt;/subProcess&gt;
+    &lt;boundaryEvent id=&quot;tooLong&quot; name=&quot;Zu lange&quot; attachedToRef=&quot;checks&quot;&gt;
+      &lt;timerEventDefinition&gt;&lt;timeDuration&gt;PT30M&lt;/timeDuration&gt;&lt;/timerEventDefinition&gt;
+    &lt;/boundaryEvent&gt;
+    &lt;endEvent id=&quot;end&quot;/&gt;
+    &lt;endEvent id=&quot;aborted&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;start&quot; targetRef=&quot;checks&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;checks&quot; targetRef=&quot;end&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f3&quot; sourceRef=&quot;tooLong&quot; targetRef=&quot;aborted&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de">Ein <code>subProcess</code> hat eigenes Start-/End-Event und kapselt seinen Inhalt. Ein Boundary-Event am Subprozess wirkt auf <b>alles darin</b> – praktisch für eine gemeinsame Frist über mehrere Schritte.</span><span data-l="en">A <code>subProcess</code> has its own start/end event and encapsulates its contents. A boundary event on the subprocess applies to <b>everything inside</b> – handy for one deadline across several steps.</span></p>
+      </div>
+      <div class="recipe" id="rz-call-activity">
+        <h4><span class="rz-emoji" aria-hidden="true">🔗</span>
+          <span data-l="de">Call-Activity: Prozess wiederverwenden</span><span data-l="en">Call activity: reuse a process</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Einen eigenständig deployten Prozess aus einem anderen aufrufen.</span><span data-l="en">Call a separately deployed process from another one.</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-call&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;process id=&quot;recipe-caller&quot; name=&quot;Aufrufer&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot;/&gt;
+    &lt;callActivity id=&quot;run&quot; name=&quot;KYC ausführen&quot;&gt;
+      &lt;extensionElements&gt;&lt;zeebe:calledElement processId=&quot;kyc-check&quot;/&gt;&lt;/extensionElements&gt;
+    &lt;/callActivity&gt;
+    &lt;endEvent id=&quot;end&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;start&quot; targetRef=&quot;run&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;run&quot; targetRef=&quot;end&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de"><code>calledElement processId</code> verweist auf einen anderen deployten Prozess (hier <code>kyc-check</code>). Der Aufrufer wartet, bis die Kind-Instanz fertig ist. So teilst du wiederkehrende Abläufe zwischen mehreren Prozessen.</span><span data-l="en"><code>calledElement processId</code> points to another deployed process (here <code>kyc-check</code>). The caller waits until the child instance finishes. This shares recurring flows across processes.</span></p>
+      </div>
+      <div class="recipe" id="rz-multi-instance">
+        <h4><span class="rz-emoji" aria-hidden="true">🧵</span>
+          <span data-l="de">Multi-Instance: pro Listenelement</span><span data-l="en">Multi-instance: once per list item</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Denselben Schritt für jedes Element einer Liste ausführen – parallel oder seriell.</span><span data-l="en">Run the same step for each item in a list – parallel or sequential.</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-mi&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;process id=&quot;recipe-mi&quot; name=&quot;Jede Position bearbeiten&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot;/&gt;
+    &lt;serviceTask id=&quot;ship&quot; name=&quot;Position versenden&quot;&gt;
+      &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;ship&quot;/&gt;&lt;/extensionElements&gt;
+      &lt;multiInstanceLoopCharacteristics&gt;
+        &lt;extensionElements&gt;
+          &lt;zeebe:loopCharacteristics inputCollection=&quot;=items&quot; inputElement=&quot;item&quot;
+            outputCollection=&quot;labels&quot; outputElement=&quot;=label&quot;/&gt;
+        &lt;/extensionElements&gt;
+      &lt;/multiInstanceLoopCharacteristics&gt;
+    &lt;/serviceTask&gt;
+    &lt;endEvent id=&quot;end&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;start&quot; targetRef=&quot;ship&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;ship&quot; targetRef=&quot;end&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de"><code>inputCollection</code> ist die Liste, <code>inputElement</code> der Name je Durchlauf; die <code>outputElement</code>-Werte werden in <code>outputCollection</code> gesammelt. Für seriell statt parallel: <code>&lt;multiInstanceLoopCharacteristics isSequential="true"&gt;</code>.</span><span data-l="en"><code>inputCollection</code> is the list, <code>inputElement</code> the per-iteration name; the <code>outputElement</code> values are gathered into <code>outputCollection</code>. For sequential instead of parallel: <code>&lt;multiInstanceLoopCharacteristics isSequential="true"&gt;</code>.</span></p>
+      </div>
+      <h3 class="rz-group"><span data-l="de">Robustheit</span><span data-l="en">Robustness</span></h3>
+      <div class="recipe" id="rz-incident">
+        <h4><span class="rz-emoji" aria-hidden="true">🚑</span>
+          <span data-l="de">Incident &amp; Retry</span><span data-l="en">Incident &amp; retry</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Verstehen, was passiert, wenn ein Schritt scheitert – und wie er weiterläuft.</span><span data-l="en">Understand what happens when a step fails – and how it recovers.</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-incident&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;process id=&quot;recipe-incident&quot; name=&quot;Riskanter Schritt&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot;/&gt;
+    &lt;serviceTask id=&quot;risky&quot; name=&quot;Externer Aufruf&quot;&gt;
+      &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;risky&quot; retries=&quot;2&quot;/&gt;&lt;/extensionElements&gt;
+    &lt;/serviceTask&gt;
+    &lt;endEvent id=&quot;end&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;start&quot; targetRef=&quot;risky&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;risky&quot; targetRef=&quot;end&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de">Scheitert der Job, zählt <code>retries</code> herunter; bei 0 entsteht ein <b>Incident</b> und der Token <i>pausiert sicher</i> – nichts geht verloren. Du behebst die Ursache und löst ihn in <a href="/#/operations/incidents">Operations → Incidents</a> auf; die Instanz läuft weiter.</span><span data-l="en">If the job fails, <code>retries</code> counts down; at 0 an <b>incident</b> is raised and the token <i>pauses safely</i> – nothing is lost. You fix the cause and resolve it in <a href="/#/operations/incidents">Operations → Incidents</a>; the instance resumes.</span></p>
+      </div>
+      <div class="note tip">
+        <span class="lbl" data-l="de">Kombinieren</span><span class="lbl" data-l="en">Combine</span>
+        <p data-l="de" style="margin:.3em 0 0">Echte Prozesse setzen diese Bausteine zusammen: ein Service-Task mit
+          Boundary-Timer, dahinter ein exklusives Gateway, das auf eine DMN-Entscheidung reagiert. Bau klein, simuliere
+          (siehe <a href="#testen">Testen &amp; Simulieren</a>), erweitere.</p>
+        <p data-l="en" style="margin:.3em 0 0">Real processes compose these blocks: a service task with a boundary
+          timer, followed by an exclusive gateway reacting to a DMN decision. Build small, simulate (see
+          <a href="#testen">Test &amp; simulate</a>), extend.</p>
+      </div>
     </section>
 
     <!-- ==================== FORMS & CONNECTORS ==================== -->
