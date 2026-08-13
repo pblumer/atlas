@@ -11,6 +11,7 @@ import (
 type shapeBox struct {
 	x, y, w, h int
 	expanded   bool
+	horizontal bool
 }
 
 func (s shapeBox) right() int  { return s.x + s.w }
@@ -23,7 +24,7 @@ func (outer shapeBox) contains(inner shapeBox) bool {
 }
 
 var shapeRe = regexp.MustCompile(
-	`<bpmndi:BPMNShape id="[^"]*" bpmnElement="([^"]*)"( isExpanded="true")?>\s*` +
+	`<bpmndi:BPMNShape id="[^"]*" bpmnElement="([^"]*)"([^>]*)>\s*` +
 		`<omgdc:Bounds x="(-?\d+)" y="(-?\d+)" width="(\d+)" height="(\d+)"/>`)
 
 var edgeRe = regexp.MustCompile(`(?s)<bpmndi:BPMNEdge id="[^"]*" bpmnElement="([^"]*)">(.*?)</bpmndi:BPMNEdge>`)
@@ -75,7 +76,11 @@ func parseShapes(t *testing.T, di string) map[string]shapeBox {
 	}
 	out := map[string]shapeBox{}
 	for _, m := range shapeRe.FindAllStringSubmatch(di, -1) {
-		out[m[1]] = shapeBox{x: atoi(m[3]), y: atoi(m[4]), w: atoi(m[5]), h: atoi(m[6]), expanded: m[2] != ""}
+		out[m[1]] = shapeBox{
+			x: atoi(m[3]), y: atoi(m[4]), w: atoi(m[5]), h: atoi(m[6]),
+			expanded:   strings.Contains(m[2], "isExpanded"),
+			horizontal: strings.Contains(m[2], "isHorizontal"),
+		}
 	}
 	return out
 }
@@ -480,5 +485,153 @@ func TestGenerateDIOrthogonalRouting(t *testing.T) {
 		if pts := edges[id]; len(pts) < 3 {
 			t.Errorf("branch flow %q should bend into its lane, got %v", id, pts)
 		}
+	}
+}
+
+// TestGenerateDILanesBanded lays out a swimlane process: each lane is a horizontal
+// band, the bands stack without overlapping, every node sits inside its lane's
+// band, and the columns stay shared so the flow still advances left-to-right across
+// lanes.
+func TestGenerateDILanesBanded(t *testing.T) {
+	src := []byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="P">
+	    <laneSet id="ls">
+	      <lane id="Top" name="Top"><flowNodeRef>Start</flowNodeRef><flowNodeRef>End</flowNodeRef></lane>
+	      <lane id="Bottom" name="Bottom"><flowNodeRef>Work</flowNodeRef></lane>
+	    </laneSet>
+	    <startEvent id="Start"/>
+	    <userTask id="Work"/>
+	    <endEvent id="End"/>
+	    <sequenceFlow id="f1" sourceRef="Start" targetRef="Work"/>
+	    <sequenceFlow id="f2" sourceRef="Work" targetRef="End"/>
+	  </process>
+	</definitions>`)
+	di, ok := generateDI(src)
+	if !ok {
+		t.Fatal("generateDI: want ok for a laned process")
+	}
+	shapes := parseShapes(t, di)
+
+	top, ok1 := shapes["Top"]
+	bottom, ok2 := shapes["Bottom"]
+	if !ok1 || !ok2 {
+		t.Fatalf("lane band shapes missing (top=%v bottom=%v):\n%s", ok1, ok2, di)
+	}
+	if !top.horizontal || !bottom.horizontal {
+		t.Errorf("lane bands must carry isHorizontal")
+	}
+	// Bands stack, same width, no vertical overlap.
+	if top.w != bottom.w {
+		t.Errorf("lane bands should share a width, got %d vs %d", top.w, bottom.w)
+	}
+	if top.bottom() > bottom.y {
+		t.Errorf("lane bands overlap: top ends at %d, bottom starts at %d", top.bottom(), bottom.y)
+	}
+	// Each node is inside its lane's band.
+	for _, n := range []string{"Start", "End"} {
+		if !top.contains(shapes[n]) {
+			t.Errorf("node %q (%+v) not inside its lane band %+v", n, shapes[n], top)
+		}
+	}
+	if !bottom.contains(shapes["Work"]) {
+		t.Errorf("node Work (%+v) not inside its lane band %+v", shapes["Work"], bottom)
+	}
+	// Columns are shared across lanes: Work (lane 2, column 2) sits to the right of
+	// Start and to the left of End even though they are in the other lane.
+	if !(shapes["Start"].x < shapes["Work"].x && shapes["Work"].x < shapes["End"].x) {
+		t.Errorf("columns not shared across lanes: Start.x=%d Work.x=%d End.x=%d",
+			shapes["Start"].x, shapes["Work"].x, shapes["End"].x)
+	}
+}
+
+// TestGenerateDILanesUnassignedNodeInFirstLane confirms a node no lane claims still
+// lands inside the first lane's band rather than floating outside every lane.
+func TestGenerateDILanesUnassignedNodeInFirstLane(t *testing.T) {
+	src := []byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="P">
+	    <laneSet id="ls">
+	      <lane id="First" name="First"><flowNodeRef>Start</flowNodeRef></lane>
+	      <lane id="Second" name="Second"><flowNodeRef>B</flowNodeRef></lane>
+	    </laneSet>
+	    <startEvent id="Start"/>
+	    <userTask id="A"/>
+	    <userTask id="B"/>
+	    <sequenceFlow id="f1" sourceRef="Start" targetRef="A"/>
+	    <sequenceFlow id="f2" sourceRef="A" targetRef="B"/>
+	  </process>
+	</definitions>`)
+	di, ok := generateDI(src)
+	if !ok {
+		t.Fatal("generateDI: want ok")
+	}
+	shapes := parseShapes(t, di)
+	if !shapes["First"].contains(shapes["A"]) {
+		t.Errorf("unassigned node A (%+v) should fall into the first lane %+v", shapes["A"], shapes["First"])
+	}
+}
+
+// TestGenerateDILanesInsidePool nests lanes within a collaboration pool: the pool
+// band contains both lane bands, which in turn contain the nodes.
+func TestGenerateDILanesInsidePool(t *testing.T) {
+	src := []byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <collaboration id="C">
+	    <participant id="Pool" name="Org" processRef="P"/>
+	  </collaboration>
+	  <process id="P">
+	    <laneSet id="ls">
+	      <lane id="L1" name="Sales"><flowNodeRef>Start</flowNodeRef></lane>
+	      <lane id="L2" name="Ops"><flowNodeRef>Do</flowNodeRef></lane>
+	    </laneSet>
+	    <startEvent id="Start"/>
+	    <userTask id="Do"/>
+	    <sequenceFlow id="f1" sourceRef="Start" targetRef="Do"/>
+	  </process>
+	</definitions>`)
+	di, ok := generateDI(src)
+	if !ok {
+		t.Fatal("generateDI: want ok for a laned pool")
+	}
+	shapes := parseShapes(t, di)
+	pool, ok0 := shapes["Pool"]
+	l1, ok1 := shapes["L1"]
+	l2, ok2 := shapes["L2"]
+	if !ok0 || !ok1 || !ok2 {
+		t.Fatalf("missing pool or lane shapes:\n%s", di)
+	}
+	if !pool.horizontal || !l1.horizontal || !l2.horizontal {
+		t.Errorf("pool and lanes must all be horizontal bands")
+	}
+	if !pool.contains(l1) || !pool.contains(l2) {
+		t.Errorf("lane bands must sit inside the pool (pool=%+v l1=%+v l2=%+v)", pool, l1, l2)
+	}
+	if !l1.contains(shapes["Start"]) {
+		t.Errorf("Start (%+v) not inside lane L1 %+v", shapes["Start"], l1)
+	}
+	if !l2.contains(shapes["Do"]) {
+		t.Errorf("Do (%+v) not inside lane L2 %+v", shapes["Do"], l2)
+	}
+}
+
+// TestGenerateDILaneNoIdOmitsShape leaves out a band shape for a lane with no id
+// (bpmn-js would choke on a shape whose bpmnElement points nowhere) while still
+// placing that lane's nodes.
+func TestGenerateDILaneNoIdOmitsShape(t *testing.T) {
+	src := []byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="P">
+	    <laneSet id="ls">
+	      <lane name="anon"><flowNodeRef>Start</flowNodeRef></lane>
+	    </laneSet>
+	    <startEvent id="Start"/>
+	    <endEvent id="End"/>
+	    <sequenceFlow id="f1" sourceRef="Start" targetRef="End"/>
+	  </process>
+	</definitions>`)
+	di, ok := generateDI(src)
+	if !ok {
+		t.Fatal("generateDI: want ok")
+	}
+	// The node is still drawn even though its lane has no id and thus no band shape.
+	if _, drawn := parseShapes(t, di)["Start"]; !drawn {
+		t.Errorf("Start should still be laid out:\n%s", di)
 	}
 }

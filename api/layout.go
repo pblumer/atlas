@@ -127,7 +127,20 @@ type layoutContainer struct {
 	// ride its border rather than a grid cell.
 	BoundaryEvents []layoutBoundary `xml:"boundaryEvent"`
 
+	// Lane sets partition the container into horizontal swimlanes; each lane claims
+	// a set of flow nodes by id and becomes a band the nodes are laid out within.
+	LaneSets []layoutLaneSet `xml:"laneSet"`
+
 	Flows []layoutFlow `xml:"sequenceFlow"`
+}
+
+type layoutLaneSet struct {
+	Lanes []layoutLane `xml:"lane"`
+}
+
+type layoutLane struct {
+	Id           string   `xml:"id,attr"`
+	FlowNodeRefs []string `xml:"flowNodeRef"`
 }
 
 type layoutElem struct {
@@ -159,15 +172,18 @@ var (
 // title, symmetric side and bottom padding — and the sub minimums keep an empty
 // subprocess readable as a container.
 const (
-	layoutMarginX = 150
-	layoutMarginY = 90
-	layoutGapX    = 50
-	layoutGapY    = 40
-	subPadX       = 30
-	subHeaderTop  = 40
-	subPadBottom  = 30
-	subMinW       = 200
-	subMinH       = 100
+	layoutMarginX  = 150
+	layoutMarginY  = 90
+	layoutGapX     = 50
+	layoutGapY     = 40
+	subPadX        = 30
+	subHeaderTop   = 40
+	subPadBottom   = 30
+	subMinW        = 200
+	subMinH        = 100
+	laneLabelStrip = 30 // lane title lane on the left
+	lanePadY       = 20 // vertical breathing room above/below a lane's content
+	laneMinH       = 80 // a lane reads as a band even when nearly empty
 )
 
 // lnode is one node while a single container is being laid out: a flow node
@@ -191,6 +207,7 @@ type placedShape struct {
 	id         string
 	x, y, w, h int
 	expanded   bool // an expanded subprocess box
+	horizontal bool // a swimlane band (isHorizontal)
 }
 
 type point struct{ x, y int }
@@ -241,9 +258,11 @@ func generateDI(src []byte) (string, bool) {
 // layoutOf lays out one container (a process or a subprocess) into a single
 // coordinate space rooted at (0,0): a left-to-right layered grid for its flow
 // nodes, an expanded box per nested subprocess with its children offset inside,
-// and boundary events sitting on their hosts' bottom borders. It returns the
-// shapes, edges, and extent occupied. An empty container yields an empty laidOut
-// (no shapes), which callers treat as "nothing to draw".
+// and boundary events sitting on their hosts' bottom borders. When the container
+// declares swimlanes, its nodes are partitioned into horizontal lane bands (the
+// columns stay shared, so the happy path still runs straight across). It returns
+// the shapes, edges, and extent occupied. An empty container yields an empty
+// laidOut (no shapes), which callers treat as "nothing to draw".
 func layoutOf(c layoutContainer) laidOut {
 	nodes, inner := containerNodes(c)
 	if len(nodes) == 0 {
@@ -254,10 +273,17 @@ func layoutOf(c layoutContainer) laidOut {
 		idx[n.id] = i
 	}
 	assignLayers(nodes, idx, c.Flows)
-	placeNodes(nodes)
+
+	var laneShapes []placedShape
+	if lanes, laneOf := collectLanes(c, nodes); len(lanes) > 0 {
+		laneShapes = placeLaned(nodes, lanes, laneOf)
+	} else {
+		placeNodes(nodes)
+	}
 	placeBoundaries(nodes, idx)
 
 	var lo laidOut
+	lo.shapes = append(lo.shapes, laneShapes...) // lane bands before the nodes they hold
 	emitShapes(&lo, nodes, inner)
 	emitEdges(&lo, nodes, idx, c.Flows)
 	normalize(&lo)
@@ -400,6 +426,121 @@ func placeNodes(nodes []lnode) {
 		nodes[i].x = colX[l] + (laneW[l]-nodes[i].w)/2
 		cursorY[l] = nodes[i].y + nodes[i].h + layoutGapY
 	}
+}
+
+// collectLanes flattens the container's lane sets into an ordered lane list and a
+// per-node lane assignment (node index -> lane slot, -1 for none). Reporting no
+// lanes when none are declared lets the caller fall back to the plain grid. Any
+// non-boundary node no lane claims is folded into the first lane so it still lands
+// in a band rather than floating outside every swimlane.
+func collectLanes(c layoutContainer, nodes []lnode) (lanes []layoutLane, laneOf []int) {
+	for _, ls := range c.LaneSets {
+		lanes = append(lanes, ls.Lanes...)
+	}
+	if len(lanes) == 0 {
+		return nil, nil
+	}
+	idx := make(map[string]int, len(nodes))
+	for i, n := range nodes {
+		idx[n.id] = i
+	}
+	laneOf = make([]int, len(nodes))
+	for i := range laneOf {
+		laneOf[i] = -1
+	}
+	for li, ln := range lanes {
+		for _, ref := range ln.FlowNodeRefs {
+			if j, ok := idx[strings.TrimSpace(ref)]; ok && laneOf[j] == -1 {
+				laneOf[j] = li
+			}
+		}
+	}
+	for i := range nodes {
+		if !nodes[i].bound && laneOf[i] == -1 {
+			laneOf[i] = 0
+		}
+	}
+	return lanes, laneOf
+}
+
+// placeLaned positions non-boundary nodes inside horizontal swimlane bands and
+// returns the lane band shapes. Columns are shared across lanes (so a flow that
+// stays on one row runs straight even as it crosses lanes); within a lane each
+// column's stack is centered in the band, and the band is tall enough for its
+// busiest column. A boundary event is left to placeBoundaries, riding its host and
+// so inheriting the host's lane.
+func placeLaned(nodes []lnode, lanes []layoutLane, laneOf []int) []placedShape {
+	laneW := map[int]int{}
+	maxLayer := 0
+	for i := range nodes {
+		if nodes[i].bound {
+			continue
+		}
+		l := nodes[i].layer
+		if nodes[i].w > laneW[l] {
+			laneW[l] = nodes[i].w
+		}
+		if l > maxLayer {
+			maxLayer = l
+		}
+	}
+	colX := make([]int, maxLayer+1)
+	for l := 1; l <= maxLayer; l++ {
+		colX[l] = colX[l-1] + laneW[l-1] + layoutGapX
+	}
+	contentW := colX[maxLayer] + laneW[maxLayer]
+	laneWidth := laneLabelStrip + contentW + layoutGapX
+
+	// Node indices grouped by (lane, column).
+	type cell struct{ lane, layer int }
+	byCell := map[cell][]int{}
+	for i := range nodes {
+		if nodes[i].bound {
+			continue
+		}
+		c := cell{laneOf[i], nodes[i].layer}
+		byCell[c] = append(byCell[c], i)
+	}
+	// stackHeight is the total height of a column's nodes within a lane.
+	stackHeight := func(idxs []int) int {
+		h := 0
+		for _, ni := range idxs {
+			h += nodes[ni].h
+		}
+		if n := len(idxs); n > 1 {
+			h += layoutGapY * (n - 1)
+		}
+		return h
+	}
+
+	var shapes []placedShape
+	bandTop := 0
+	for li := range lanes {
+		laneContentH := 0
+		for l := 0; l <= maxLayer; l++ {
+			if h := stackHeight(byCell[cell{li, l}]); h > laneContentH {
+				laneContentH = h
+			}
+		}
+		bandH := laneContentH + 2*lanePadY
+		if bandH < laneMinH {
+			bandH = laneMinH
+		}
+		for l := 0; l <= maxLayer; l++ {
+			idxs := byCell[cell{li, l}]
+			y := bandTop + (bandH-stackHeight(idxs))/2
+			for _, ni := range idxs {
+				nodes[ni].x = laneLabelStrip + colX[l] + (laneW[l]-nodes[ni].w)/2
+				nodes[ni].y = y
+				y += nodes[ni].h + layoutGapY
+			}
+		}
+		if lanes[li].Id != "" {
+			shapes = append(shapes, placedShape{id: lanes[li].Id, x: 0, y: bandTop, w: laneWidth, h: bandH, horizontal: true})
+		}
+		bandTop += bandH
+	}
+	return shapes
 }
 
 // placeBoundaries sits each boundary event on the bottom border of its host,
@@ -655,13 +796,17 @@ func writeLaidOut(b *strings.Builder, lo laidOut) {
 }
 
 // writeShape renders one BPMNShape. An expanded subprocess carries isExpanded so
-// bpmn-js draws it as an open container with its children in-plane.
+// bpmn-js draws it as an open container with its children in-plane; a swimlane band
+// carries isHorizontal so it renders as a lane.
 func writeShape(b *strings.Builder, s placedShape) {
-	exp := ""
+	attrs := ""
 	if s.expanded {
-		exp = ` isExpanded="true"`
+		attrs = ` isExpanded="true"`
 	}
-	fmt.Fprintf(b, "      <bpmndi:BPMNShape id=\"%s\" bpmnElement=\"%s\"%s>\n", attr(s.id+"_di"), attr(s.id), exp)
+	if s.horizontal {
+		attrs += ` isHorizontal="true"`
+	}
+	fmt.Fprintf(b, "      <bpmndi:BPMNShape id=\"%s\" bpmnElement=\"%s\"%s>\n", attr(s.id+"_di"), attr(s.id), attrs)
 	fmt.Fprintf(b, "        <omgdc:Bounds x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\"/>\n", s.x, s.y, s.w, s.h)
 	b.WriteString("      </bpmndi:BPMNShape>\n")
 }
