@@ -1,0 +1,36 @@
+{
+  "type": "default",
+  "id": "off-antrag",
+  "components": [
+    {
+      "type": "text",
+      "text": "# 👋 Benutzer offboarden\n\nBeantrage die geregelte Deaktivierung eines Atlas-Benutzers. Ein Administrator sperrt das Konto und bestätigt."
+    },
+    {
+      "key": "benutzername",
+      "type": "textfield",
+      "label": "Benutzername",
+      "description": "Das zu deaktivierende Konto (wie in Organization → Users).",
+      "validate": { "required": true }
+    },
+    {
+      "key": "letzter_tag",
+      "type": "textfield",
+      "label": "Letzter Arbeitstag",
+      "description": "Format JJJJ-MM-TT.",
+      "validate": { "required": true }
+    },
+    {
+      "key": "grund",
+      "type": "textarea",
+      "label": "Grund"
+    },
+    {
+      "key": "email",
+      "type": "textfield",
+      "label": "Benachrichtigung an (E-Mail)",
+      "description": "An diese Adresse geht die Offboarding-Bestätigung.",
+      "validate": { "required": true, "validationType": "email" }
+    }
+  ]
+}
