@@ -141,7 +141,7 @@ func (s *Server) ensureSystemProcesses(now int64) error {
 		if d, ok := s.latestDeploymentFor(p.processID); ok && sha256Hex(d.xml) == sha256Hex(p.xml) {
 			continue
 		}
-		if _, compErr, persistErr := s.deployModel(p.xml, nil, now); compErr != nil {
+		if _, compErr, persistErr := s.deployModel(p.xml, nil, now, systemProjectID); compErr != nil {
 			// A compile failure here is a packaging error, not a client error.
 			return fmt.Errorf("compile system process %s: %w", p.processID, compErr)
 		} else if persistErr != nil {
