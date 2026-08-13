@@ -19,7 +19,12 @@ type persistedDeployment struct {
 	Name       string `json:"name"`
 	Version    int32  `json:"version"`
 	DeployedAt int64  `json:"deployedAt"`
-	XML        string `json:"xml"`
+	// ProjectID files the deployment under the project its draft belonged to, so the
+	// Modeler home can group deployed definitions by project the same way it groups
+	// design-time artifacts (ADR-0034). Empty for a deployment made outside a project
+	// (a raw-XML or pre-grouping deploy), which the UI shows under "Ungrouped".
+	ProjectID string `json:"projectId,omitempty"`
+	XML       string `json:"xml"`
 	// DMNXMLs are the resolved DMN models this process's business rule tasks evaluate
 	// against, snapshotted at deploy time so the deployment is self-contained and
 	// re-registers on restart without re-resolving the temis references

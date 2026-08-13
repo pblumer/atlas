@@ -52,6 +52,11 @@ type processResp struct {
 	Name       string `json:"name"`
 	Version    int32  `json:"version"`
 	DeployedAt int64  `json:"deployedAt"`
+	// ProjectID names the project this definition's draft belonged to at deploy time,
+	// so the Modeler home groups deployed definitions into the same project folders as
+	// design-time artifacts (ADR-0034). Empty for a definition deployed outside a
+	// project, which the UI shows under "Ungrouped".
+	ProjectID string `json:"projectId,omitempty"`
 	// CollaborationKey groups a collaboration's pools: when non-zero, this process
 	// is a pool of a collaboration and the value is the stable key the Operations
 	// replay view is opened with (#/operations/c/{collaborationKey}). Zero for a
@@ -525,14 +530,40 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve the project this deploy files under, so the Modeler home groups the
+	// deployed definition into the same folder as its draft (ADR-0034). An explicit
+	// ?projectId= (the editor sends its current project) wins and, when non-empty,
+	// must name an existing project; without the param we inherit the matching draft's
+	// project so an API/MCP deploy of a project draft still lands in its folder. A
+	// deploy with neither is Ungrouped.
+	projectID := r.URL.Query().Get("projectId")
+	hasProjectParam := r.URL.Query().Has("projectId")
+	pid, _ := processIdentity(body)
 	var (
-		resp       deployResp
-		compErr    error
-		persistErr error
+		resp           deployResp
+		compErr        error
+		persistErr     error
+		projErr        error
+		unknownProject bool
 	)
 	s.do(func() {
+		if !hasProjectParam {
+			if d, ok, e := s.drafts.get(pid); e == nil && ok {
+				projectID = d.ProjectID
+			}
+		} else if projectID != "" {
+			_, ok, e := s.projects.get(projectID)
+			if e != nil {
+				projErr = e
+				return
+			}
+			if !ok {
+				unknownProject = true
+				return
+			}
+		}
 		var deployed []deployedProcess
-		deployed, compErr, persistErr = s.deployModel(body, dmnXMLs, time.Now().Unix())
+		deployed, compErr, persistErr = s.deployModel(body, dmnXMLs, time.Now().Unix(), projectID)
 		if compErr != nil || persistErr != nil {
 			return
 		}
@@ -544,6 +575,10 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 	switch {
+	case projErr != nil:
+		writeError(w, http.StatusInternalServerError, "read project: "+projErr.Error())
+	case unknownProject:
+		writeError(w, http.StatusBadRequest, "unknown project id")
 	case compErr != nil:
 		// A compile failure is a client error: the submitted model is invalid.
 		writeError(w, http.StatusBadRequest, compErr.Error())
@@ -570,7 +605,11 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 // deployment record and registered in the DMN registry under the process key, so
 // the tasks run now and re-register on restart (ADR-0014/ADR-0034). The caller is
 // responsible for having validated it; a compile failure here is a server error.
-func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64) (deployed []deployedProcess, compErr, persistErr error) {
+//
+// projectID files every process the model deploys under a project, so the Modeler
+// home can group deployed definitions the way it groups design-time artifacts
+// (ADR-0034). Empty for a deploy made outside a project.
+func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, projectID string) (deployed []deployedProcess, compErr, persistErr error) {
 	deployables, err := compiler.ParseAll(s.nextKey, 1, bytes.NewReader(body))
 	if err != nil {
 		return nil, err, nil
@@ -598,6 +637,7 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64) (d
 			Name:       name,
 			Version:    version,
 			DeployedAt: deployedAt,
+			ProjectID:  projectID,
 			XML:        string(body),
 			DMNXMLs:    dmnStrings,
 		}); err != nil {
@@ -628,6 +668,7 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64) (d
 			Name:       name,
 			Version:    version,
 			DeployedAt: deployedAt,
+			ProjectID:  projectID,
 			xml:        body,
 			cp:         cp,
 		}
@@ -658,6 +699,7 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
 				Name:             d.Name,
 				Version:          d.Version,
 				DeployedAt:       d.DeployedAt,
+				ProjectID:        d.ProjectID,
 				CollaborationKey: s.collaborationKeyOf(d),
 				StartFormID:      d.cp.StartFormId(),
 				Executable:       d.cp.IsExecutable(),
