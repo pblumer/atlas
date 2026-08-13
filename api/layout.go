@@ -431,13 +431,12 @@ func markTrunk(nodes []lnode, idx map[string]int, flows []layoutFlow) []bool {
 	}
 	// Walk forward, always continuing to the successor that reaches the furthest
 	// layer (ties keep flow-declaration order), until the path ends or loops back.
+	// Boundary events are never sequence-flow targets, so a successor is always a
+	// normal flow node.
 	for cur := start; cur != -1 && !trunk[cur]; {
 		trunk[cur] = true
 		next := -1
 		for _, t := range succ[cur] {
-			if nodes[t].bound {
-				continue
-			}
 			if next == -1 || nodes[t].layer > nodes[next].layer {
 				next = t
 			}

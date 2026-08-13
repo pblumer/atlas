@@ -443,6 +443,53 @@ func TestGenerateDIBoundaryOnSubProcess(t *testing.T) {
 	}
 }
 
+// TestGenerateDIBoundaryHandlerBelowRidesBottom covers the direction-aware boundary
+// placement: side branches normally rise above the trunk, so a boundary event rides
+// its host's top edge — but when its handler ends up below the host (here in a lower
+// swimlane), the event rides the bottom edge instead and its exception flow leaves
+// downward, never doubling back across the host.
+func TestGenerateDIBoundaryHandlerBelowRidesBottom(t *testing.T) {
+	src := []byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="P">
+	    <laneSet>
+	      <lane id="Top"><flowNodeRef>Start</flowNodeRef><flowNodeRef>Host</flowNodeRef></lane>
+	      <lane id="Bot"><flowNodeRef>Handler</flowNodeRef><flowNodeRef>Aborted</flowNodeRef></lane>
+	    </laneSet>
+	    <startEvent id="Start"/>
+	    <task id="Host"/>
+	    <boundaryEvent id="Guard" attachedToRef="Host"/>
+	    <task id="Handler"/>
+	    <endEvent id="Aborted"/>
+	    <sequenceFlow id="s1" sourceRef="Start" targetRef="Host"/>
+	    <sequenceFlow id="s2" sourceRef="Guard" targetRef="Handler"/>
+	    <sequenceFlow id="s3" sourceRef="Handler" targetRef="Aborted"/>
+	  </process>
+	</definitions>`)
+	di, ok := generateDI(src)
+	if !ok {
+		t.Fatal("generateDI: want ok")
+	}
+	shapes := parseShapes(t, di)
+	host, ok1 := shapes["Host"]
+	be, ok2 := shapes["Guard"]
+	handler, ok3 := shapes["Handler"]
+	if !ok1 || !ok2 || !ok3 {
+		t.Fatalf("host, boundary, or handler shape missing:\n%s", di)
+	}
+	if handler.y+handler.h/2 <= host.y+host.h/2 {
+		t.Fatalf("test setup: handler should sit below the host, got handler cy=%d host cy=%d",
+			handler.y+handler.h/2, host.y+host.h/2)
+	}
+	// The handler is below, so the boundary event rides the host's bottom edge.
+	if cy := be.y + be.h/2; cy != host.bottom() {
+		t.Errorf("boundary center y=%d not on host bottom edge y=%d", cy, host.bottom())
+	}
+	// The exception flow leaves from the boundary event's bottom, heading down.
+	if pts := parseEdges(t, di)["s2"]; len(pts) < 2 || pts[0].y < be.y+be.h/2 {
+		t.Errorf("exception flow s2 should leave downward from the boundary bottom, got %v", pts)
+	}
+}
+
 // TestGenerateDIHappyPathStaysStraight is the regression for auto-layout bending a
 // linear main flow into a staircase. When side branches (here boundary-event error
 // handlers ending in their own end events) share the happy path's columns, every
