@@ -1,6 +1,6 @@
 # ADR-0120: A sanctioned automated user-provisioning path for system processes
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-13
 - **Deciders:** Atlas maintainers
 
