@@ -1,4 +1,4 @@
-# ADR-0124: Escalation events (non-interrupting, propagating throw/catch)
+# ADR-0125: Escalation events (non-interrupting, propagating throw/catch)
 
 - **Status:** Accepted
 - **Date:** 2026-08-13

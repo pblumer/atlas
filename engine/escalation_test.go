@@ -12,7 +12,7 @@ import (
 
 // escalationSubprocess builds Start → subProcess{ iStart → escalationEnd(code) } → done, with
 // an escalation boundary (boundaryCode, interrupting) on the subprocess routed to a
-// "recovered" end (ADR-0124). Reaching the escalation end raises it; a matching interrupting
+// "recovered" end (ADR-0125). Reaching the escalation end raises it; a matching interrupting
 // boundary aborts the subprocess and routes out.
 func escalationSubprocess(t testing.TB, key uint64, code, boundaryCode string, interrupting bool) (cp *compiler.CompiledProcess, doneEnd, recEnd int32) {
 	t.Helper()
@@ -40,7 +40,7 @@ func escalationSubprocess(t testing.TB, key uint64, code, boundaryCode string, i
 // TestEscalationInterruptingBoundaryCatchesSubprocess raises an escalation end inside a
 // subprocess caught by an *interrupting* escalation boundary on that subprocess: the
 // escalation aborts the subprocess and the recovery flow runs, the normal outgoing flow is not
-// taken (ADR-0124 Phase 2 — the ADR-0089 error shape, but via BoundaryEscalation).
+// taken (ADR-0125 Phase 2 — the ADR-0089 error shape, but via BoundaryEscalation).
 func TestEscalationInterruptingBoundaryCatchesSubprocess(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -71,7 +71,7 @@ func TestEscalationInterruptingBoundaryCatchesSubprocess(t *testing.T) {
 // TestEscalationPropagatesToOuterBoundary raises an escalation in an inner subprocess whose
 // only escalation boundary catches a *different* code; the escalation propagates past it to the
 // outer subprocess's matching (interrupting) boundary — nearest *matching* enclosing handler
-// wins (ADR-0124).
+// wins (ADR-0125).
 func TestEscalationPropagatesToOuterBoundary(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -132,7 +132,7 @@ func TestEscalationPropagatesToOuterBoundary(t *testing.T) {
 // TestUncaughtEscalationIsBenign raises an escalation end at the process root with no enclosing
 // escalation handler: propagation reaches the root uncaught and — unlike an error — raises NO
 // incident. The escalation end simply ends its path like a none end, so the instance completes
-// normally (ADR-0124, the key divergence from ADR-0089).
+// normally (ADR-0125, the key divergence from ADR-0089).
 func TestUncaughtEscalationIsBenign(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -168,7 +168,7 @@ func TestUncaughtEscalationIsBenign(t *testing.T) {
 }
 
 // TestEscalationNonInterruptingBoundaryAndThrowContinues exercises the two genuinely new
-// escalation semantics at once (ADR-0124 Phase 3): a subprocess raises an escalation with an
+// escalation semantics at once (ADR-0125 Phase 3): a subprocess raises an escalation with an
 // *intermediate throw* (not an end) and then continues to a waiting service task; a
 // *non-interrupting* escalation boundary on the subprocess catches it and runs a handler
 // branch — WITHOUT tearing the subprocess down. So the handler runs AND the subprocess keeps
@@ -235,7 +235,7 @@ func TestEscalationNonInterruptingBoundaryAndThrowContinues(t *testing.T) {
 	}
 }
 
-// TestEscalationInterruptingThrowDoesNotContinue is the throw-then-continue GUARD (ADR-0124's
+// TestEscalationInterruptingThrowDoesNotContinue is the throw-then-continue GUARD (ADR-0125's
 // headline risk): an escalation *intermediate throw* whose escalation is caught by an
 // *interrupting* boundary must NOT take its outgoing flow — the interrupt tears the throwing
 // token down, so continuing would run a node that should never run (and double-count). The
@@ -293,7 +293,7 @@ func TestEscalationInterruptingThrowDoesNotContinue(t *testing.T) {
 // throw at the process root, caught by a *non-interrupting* root escalation event subprocess.
 // The main flow continues past the throw to a waiting service task; the handler runs alongside
 // it (the main-flow job is untouched). Completing the job then drains the instance and the
-// re-armed trigger disarms (ADR-0124 Phase 3, reusing ADR-0082).
+// re-armed trigger disarms (ADR-0125 Phase 3, reusing ADR-0082).
 func TestEscalationNonInterruptingEventSubprocessAtRoot(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -353,7 +353,7 @@ func TestEscalationNonInterruptingEventSubprocessAtRoot(t *testing.T) {
 // TestEscalationBoundaryRecovers proves an armed interrupting escalation boundary survives a
 // crash: a subprocess parks on an inner job with the boundary armed; after replaying the log
 // into a fresh store the boundary is rebuilt, so completing the job — which drives the token to
-// the escalation end — raises an escalation the recovered boundary still catches (ADR-0124,
+// the escalation end — raises an escalation the recovered boundary still catches (ADR-0125,
 // invariant I4).
 func TestEscalationBoundaryRecovers(t *testing.T) {
 	dir := t.TempDir()

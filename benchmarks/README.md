@@ -15,8 +15,11 @@ engine until the workloads are demonstrably equivalent.
 
 This first slice measures the **pure engine** under the **durable profile**:
 
-- **Pure engine** — the processor, WAL, and state store directly, with no HTTP/API
-  layer. The end-to-end server path is a separate, deferred axis.
+- **Two profiles** —
+  - *pure engine*: the processor, WAL, and state store driven directly, no HTTP;
+  - *end-to-end HTTP/API*: the same durable engine driven through `api.Server`'s
+    HTTP handlers (served in-process via `ServeHTTP`, so TCP/client cost is
+    excluded — it isolates the API layer over the engine, not a network round-trip).
 - **Durable** — a real segmented write-ahead log with a **group-commit `fsync` on
   every batch** and a real Pebble state store, over a temp directory. There is no
   synthetic/in-memory or no-fsync profile yet; the per-op time is therefore
@@ -24,12 +27,15 @@ This first slice measures the **pure engine** under the **durable profile**:
 - **Steady state** — throughput of a warm engine. Start-up/recovery is a separate,
   deferred axis.
 
-Deliberately **deferred** to later programme-B slices (see *Deferred* below):
-end-to-end HTTP benchmarks, an in-memory/no-fsync profile, P50/P95/P99 latency,
-recovery-from-N-events, a parked-workload profile, and published baseline result
-files.
+Deliberately **deferred** to later programme-B slices (see *Deferred* below): an
+in-memory/no-fsync profile, P50/P95/P99 latency, recovery-from-N-events, a
+parked-workload profile, a loopback-socket (real TCP) HTTP variant, service-task
+completion over HTTP, and published baseline result files.
 
 ## Workloads
+
+Engine-level (built with the public `compiler.NewBuilder`, so the process compiles
+once and only execution is measured):
 
 | Benchmark | Programme workload | Shape |
 |---|---|---|
@@ -37,8 +43,16 @@ files.
 | `BenchmarkServiceTaskLifecycle` | #2 service-task create/activate/complete | Start → ServiceTask → End; parks on a job, an in-process worker completes it |
 | `BenchmarkVariableGatewayRouting` | #3 mixed variables + gateway routing | Start → XOR(`amount > 100`) → Script → End; a start variable picks the branch |
 
-Each is built with the public `compiler.NewBuilder`, so the harness compiles the
-process once and measures only execution.
+End-to-end HTTP/API (`POST /api/v1/processes/{key}/instances` per iteration,
+against a deployed BPMN model). Each mirrors an engine-level workload's *shape*, so
+subtracting the two isolates the API-layer cost — the same `events/op` and `walB/op`
+with extra `allocs/op` and `B/op` from request decode, routing, the run-loop handoff,
+and response encode:
+
+| Benchmark | Mirrors | Path |
+|---|---|---|
+| `BenchmarkHTTPLinearCreate` | `BenchmarkLinearSelfCompleting` | create → self-complete, over HTTP |
+| `BenchmarkHTTPVariableGatewayCreate` | `BenchmarkVariableGatewayRouting` | create with a start variable → gateway → self-complete, over HTTP |
 
 ## Running
 
@@ -109,15 +123,16 @@ this; record the rest alongside the raw file.
 
 - Numbers are **machine- and commit-specific**. Do not quote them as "Atlas does X
   ops/sec" without the machine and commit.
-- This is the **durable, engine-only, steady-state** profile. Do not present it as
-  end-to-end server throughput, and do not derive a no-fsync "millions/sec" figure
-  from it.
+- These are the **durable, steady-state** profiles. The HTTP figure is the
+  in-process handler path (no TCP), not a network round-trip; do not present either
+  as a client-observed number, and do not derive a no-fsync "millions/sec" figure.
 - No cross-engine comparison (Camunda/Zeebe/Flowable/Temporal) until equivalent
   workloads exist.
 
 ## Deferred (next programme-B slices)
 
-- End-to-end HTTP/API benchmarks (through `api.Server`).
+- A loopback-socket (real TCP + `http.Client`) HTTP variant, and service-task
+  completion driven over HTTP, on top of the in-process create benchmarks here.
 - An in-memory / no-fsync profile alongside the durable one, to separate CPU cost
   from `fsync` cost.
 - P50/P95/P99 end-to-end latency with a defensible sampling method.

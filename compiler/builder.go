@@ -242,7 +242,7 @@ type Builder struct {
 	signalThrows       []SignalDetail // shared by signal throw and signal end events
 	signalStarts       []SignalDetail
 	errorEnds          []ErrorEndDetail     // error end events (ADR-0089)
-	escalations        []EscalationDetail   // shared by escalation throw and end events (ADR-0124)
+	escalations        []EscalationDetail   // shared by escalation throw and end events (ADR-0125)
 	compensationThrows []CompensationDetail // shared by compensation throw and end events (ADR-0103)
 	timerStarts        []TimerStartDetail
 	dataObjects        []CompiledDataObject
@@ -1333,7 +1333,7 @@ func (b *Builder) AddBoundaryErrorEvent(host int32, errorCode string) int32 {
 
 // AddEscalationThrowEvent adds an intermediate throw event that raises the given escalation
 // code — propagating up to the nearest matching handler — then continues on its outgoing
-// flow (ADR-0124). A code-less escalation raises "". Returns its element id.
+// flow (ADR-0125). A code-less escalation raises "". Returns its element id.
 func (b *Builder) AddEscalationThrowEvent(escalationCode string) int32 {
 	detail := int32(len(b.escalations))
 	b.escalations = append(b.escalations, EscalationDetail{EscalationCode: escalationCode})
@@ -1341,7 +1341,7 @@ func (b *Builder) AddEscalationThrowEvent(escalationCode string) int32 {
 }
 
 // AddEscalationEndEvent adds an end event that raises the given escalation code —
-// propagating up to the nearest matching handler — then ends its path (ADR-0124). Unlike an
+// propagating up to the nearest matching handler — then ends its path (ADR-0125). Unlike an
 // error end, an uncaught escalation is benign (no incident) and a matching catch may be
 // non-interrupting. A code-less escalation raises "". Returns its element id.
 func (b *Builder) AddEscalationEndEvent(escalationCode string) int32 {
@@ -1354,7 +1354,7 @@ func (b *Builder) AddEscalationEndEvent(escalationCode string) int32 {
 // an escalation propagating up to the host whose code matches escalationCode ("" is a
 // catch-all). Unlike an error boundary it honors interrupting: an interrupting escalation
 // boundary tears the host down on fire, a non-interrupting one runs the handler alongside
-// the still-running host (ADR-0124). It opens no subscription and waits only to be found by
+// the still-running host (ADR-0125). It opens no subscription and waits only to be found by
 // propagation. Returns its element id.
 func (b *Builder) AddBoundaryEscalationEvent(host int32, escalationCode string, interrupting bool) int32 {
 	detail := int32(len(b.boundaryEventDets))

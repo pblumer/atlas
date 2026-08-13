@@ -76,7 +76,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeSignalThrowEvent] = signalThrowEventBehavior{}
 	p.behaviors[compiler.TypeSignalEndEvent] = signalEndEventBehavior{}
 	p.behaviors[compiler.TypeErrorEndEvent] = errorEndEventBehavior{}
-	// Escalation throw/end events (ADR-0124): both raise an escalation up the scope chain via
+	// Escalation throw/end events (ADR-0125): both raise an escalation up the scope chain via
 	// propagateEscalation, then — unlike an error end — continue their own path unless an
 	// interrupting catch tore them down (an escalation may be caught non-interruptingly, or
 	// go uncaught, which is benign).
@@ -2300,10 +2300,10 @@ func raiseErrorIncident(c *ProcessingContext, elKey uint64, code string) {
 	})
 }
 
-// --- Escalation (ADR-0124) ---
+// --- Escalation (ADR-0125) ---
 
 // escalationThrowEventBehavior: an intermediate throw event that raises an escalation
-// (ADR-0124). OnActivated raises it up the scope chain via propagateEscalation, then — unlike
+// (ADR-0125). OnActivated raises it up the scope chain via propagateEscalation, then — unlike
 // a compensation/message throw that always continues — continues on its outgoing flow only if
 // the throw was NOT caught by an interrupting handler (which would have torn this token down;
 // continuing would double-count). A non-interrupting or uncaught escalation leaves the token
@@ -2326,7 +2326,7 @@ func (escalationThrowEventBehavior) OnCompleting(c *ProcessingContext, key uint6
 }
 
 // escalationEndEventBehavior: an end event that raises an escalation, then ends its path
-// (ADR-0124). OnActivated hops to Completing like a none end; OnCompleting raises the
+// (ADR-0125). OnActivated hops to Completing like a none end; OnCompleting raises the
 // escalation and then — unless an interrupting catch tore this token down — ends its path
 // exactly like a none end (emit Completed, maybe complete the scope). This is the escalation
 // twin of errorEndEventBehavior, except an error end never completes (its catch always
@@ -2352,7 +2352,7 @@ func (escalationEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64,
 }
 
 // propagateEscalation routes a raised escalation up the live scope chain to the nearest
-// matching escalation handler (ADR-0124) — the non-interrupting, benign-when-uncaught sibling
+// matching escalation handler (ADR-0125) — the non-interrupting, benign-when-uncaught sibling
 // of propagateError. Starting from the raising element it walks up FlowScopeKey; at each
 // enclosing scope it checks that scope's armed escalation event subprocesses and, for an
 // activity scope, its armed escalation boundaries for a code match (equal, or a code-less
@@ -2392,7 +2392,7 @@ func propagateEscalation(c *ProcessingContext, fromKey uint64, code string) (int
 // escalationCaughtInInstance walks the scope chain of one instance from fromKey up to its
 // root, firing the nearest matching escalation catch (an event subprocess before a boundary at
 // each scope; the root's event subprocesses last), and reports whether one fired and, if so,
-// whether it was interrupting (ADR-0124). Mirrors errorCaughtInInstance.
+// whether it was interrupting (ADR-0125). Mirrors errorCaughtInInstance.
 func escalationCaughtInInstance(c *ProcessingContext, piKey, fromKey uint64, code string) (caught, interrupting bool) {
 	for depth, scope := 0, fromKey; depth <= maxScopeDepth; depth++ {
 		ei := c.GetElementInstance(scope)
@@ -2417,7 +2417,7 @@ func escalationCaughtInInstance(c *ProcessingContext, piKey, fromKey uint64, cod
 
 // fireEscalationCatch drives a found escalation catch (a boundary or event-subprocess trigger)
 // to Completing and returns whether that catch is interrupting — read from the compiled detail,
-// the same flag its OnCompleting path acts on (ADR-0124). A vanished catch is treated as
+// the same flag its OnCompleting path acts on (ADR-0125). A vanished catch is treated as
 // non-interrupting (nothing tears the raiser down).
 func fireEscalationCatch(c *ProcessingContext, catchKey uint64) bool {
 	catch := c.GetElementInstance(catchKey)
@@ -2430,7 +2430,7 @@ func fireEscalationCatch(c *ProcessingContext, catchKey uint64) bool {
 }
 
 // catchInterrupting reports whether an escalation catch element (a boundary or an
-// event-subprocess trigger) is interrupting, reading its compiled detail (ADR-0124). It
+// event-subprocess trigger) is interrupting, reading its compiled detail (ADR-0125). It
 // switches on the element *instance's* BpmnElementType, not the compiled node's Type: an
 // event-sub trigger instance is a TypeEventSubProcessStart whose ElementId points at the
 // handler container node (a TypeSubProcess) carrying the EventSub detail.
@@ -2448,7 +2448,7 @@ func catchInterrupting(c *ProcessingContext, catch *model.ElementInstanceValue) 
 
 // findEscalationBoundary returns the element-instance key of an armed escalation boundary
 // attached to hostKey whose code catches the raised code (equal, or a code-less catch-all), or
-// 0 if the host has none (ADR-0124). Mirrors findErrorBoundary but matches BoundaryEscalation.
+// 0 if the host has none (ADR-0125). Mirrors findErrorBoundary but matches BoundaryEscalation.
 func findEscalationBoundary(c *ProcessingContext, piKey, hostKey uint64, code string) uint64 {
 	var found uint64
 	c.ForEachElementInstance(piKey, func(elKey uint64) {
@@ -2470,7 +2470,7 @@ func findEscalationBoundary(c *ProcessingContext, piKey, hostKey uint64, code st
 
 // findEscalationEventSub returns the element-instance key of an armed escalation
 // event-subprocess trigger in scope scopeKey whose code catches the raised code, or 0 if the
-// scope hosts none (ADR-0124, reusing ADR-0082). Mirrors findErrorEventSub but matches
+// scope hosts none (ADR-0125, reusing ADR-0082). Mirrors findErrorEventSub but matches
 // BoundaryEscalation; driving the trigger to Completing runs its handler, interrupting or not
 // per its compiled Interrupting flag.
 func findEscalationEventSub(c *ProcessingContext, piKey, scopeKey uint64, code string) uint64 {
@@ -3121,7 +3121,7 @@ func (boundaryEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *m
 	case compiler.BoundaryEscalation:
 		// An escalation boundary opens nothing — it is inert, armed only to be *found* by
 		// propagateEscalation walking the scope chain when an escalation is raised, then driven
-		// to Completing (ADR-0124). Its OnCompleting path already honors d.Interrupting, so a
+		// to Completing (ADR-0125). Its OnCompleting path already honors d.Interrupting, so a
 		// non-interrupting escalation boundary runs its handler while the host keeps running.
 	}
 	// Stays Activated: waits until the timer fires, the message correlates, the signal

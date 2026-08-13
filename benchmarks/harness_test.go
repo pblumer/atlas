@@ -1,6 +1,8 @@
 package benchmarks
 
 import (
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +14,16 @@ import (
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
 )
+
+// TestMain silences the standard logger for the whole benchmark run. The api.Server
+// (used by the HTTP benchmarks) emits operational log lines — notably the vault
+// key-generation notice — through the standard logger; discarding them keeps the
+// machine-readable benchmark output on stdout uncontaminated. The server is otherwise
+// left at its production defaults.
+func TestMain(m *testing.M) {
+	log.SetOutput(io.Discard)
+	os.Exit(m.Run())
+}
 
 // benchClock is a monotonic counter clock. Benchmarks read time into events on
 // every batch; a counter avoids a real time syscall skewing the per-op allocation

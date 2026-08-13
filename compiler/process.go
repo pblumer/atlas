@@ -71,8 +71,8 @@ const (
 
 	TypeMockupTask // a service task simulated by the engine itself (ADR-0120): on activation it writes an optional FEEL result and arms a one-shot timer for a random duration, then completes (or, per a fail probability, raises an incident) — no external worker or connector. A distinct type because its execution (timer-wait, no job) differs from a service task, like TypeConnectorTask.
 
-	TypeEscalationThrowEvent // an intermediate throw event that raises an escalation, propagating up to the nearest matching handler, then continues on its outgoing flow (ADR-0124); the continue-after-throw counterpart of TypeMessageThrowEvent
-	TypeEscalationEndEvent   // an end event that raises an escalation, propagating up to the nearest matching handler, then ends its path (ADR-0124); unlike an error end the catch may be non-interrupting and an uncaught escalation is benign (no incident)
+	TypeEscalationThrowEvent // an intermediate throw event that raises an escalation, propagating up to the nearest matching handler, then continues on its outgoing flow (ADR-0125); the continue-after-throw counterpart of TypeMessageThrowEvent
+	TypeEscalationEndEvent   // an end event that raises an escalation, propagating up to the nearest matching handler, then ends its path (ADR-0125); unlike an error end the catch may be non-interrupting and an uncaught escalation is benign (no incident)
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
 	numBpmnTypes = 38
@@ -604,7 +604,7 @@ type EventSubProcessDetail struct {
 	CorrelationKey *expr.Compiled // BoundaryMessage: correlation-key expression (ADR-0020)
 	SignalName     string         // BoundarySignal: the signal it subscribes to (ADR-0088)
 	ErrorCode      string         // BoundaryError: the error code it catches; "" is a catch-all (ADR-0089)
-	EscalationCode string         // BoundaryEscalation: the escalation code it catches; "" is a catch-all (ADR-0124)
+	EscalationCode string         // BoundaryEscalation: the escalation code it catches; "" is a catch-all (ADR-0125)
 }
 
 // BoundaryEventKind discriminates what a boundary event waits on.
@@ -617,7 +617,7 @@ const (
 	BoundaryError                                 // catches an error propagating up to it by code, then fires; always interrupting (ADR-0089)
 	BoundaryCompensation                          // links a host activity to its compensation handler; inert — never armed as an element instance, only read on host completion to record the activity as compensable (ADR-0103)
 	BoundaryCancel                                // on a transaction only: catches the transaction's cancellation and routes its recovery flow; armed inert like an error boundary, and always interrupting (ADR-0108)
-	BoundaryEscalation                            // catches an escalation propagating up to it by code, then fires; honors cancelActivity — may be interrupting or non-interrupting (ADR-0124)
+	BoundaryEscalation                            // catches an escalation propagating up to it by code, then fires; honors cancelActivity — may be interrupting or non-interrupting (ADR-0125)
 )
 
 // BoundaryEventDetail is the per-boundary-event data a behavior needs at runtime.
@@ -634,7 +634,7 @@ type BoundaryEventDetail struct {
 	CorrelationKey *expr.Compiled // BoundaryMessage: correlation-key expression (ADR-0020)
 	SignalName     string         // BoundarySignal: the signal it subscribes to (ADR-0088)
 	ErrorCode      string         // BoundaryError: the error code it catches; "" is a catch-all (ADR-0089)
-	EscalationCode string         // BoundaryEscalation: the escalation code it catches; "" is a catch-all (ADR-0124)
+	EscalationCode string         // BoundaryEscalation: the escalation code it catches; "" is a catch-all (ADR-0125)
 	// CompensationHandler is the ElementId of the compensation handler activity this
 	// boundary links its host to (BoundaryCompensation, ADR-0103). It is resolved at
 	// compile time from the BPMN <association> joining the boundary to the handler;
@@ -658,7 +658,7 @@ type ErrorEndDetail struct {
 }
 
 // EscalationDetail is the per-escalation-event data the runtime needs: the code it raises
-// (ADR-0124). Shared by the escalation throw and end events (like CompensationDetail is
+// (ADR-0125). Shared by the escalation throw and end events (like CompensationDetail is
 // shared by the compensation throw and end), since both just carry the escalation code. A
 // code-less escalation raises "", which a code-less catch-all catches.
 type EscalationDetail struct {
@@ -760,7 +760,7 @@ type CompiledProcess struct {
 	signalThrows       []SignalDetail // shared by signal throw and signal end events
 	signalStarts       []SignalDetail
 	errorEnds          []ErrorEndDetail     // error end events (ADR-0089)
-	escalations        []EscalationDetail   // shared by escalation throw and end events (ADR-0124)
+	escalations        []EscalationDetail   // shared by escalation throw and end events (ADR-0125)
 	compensationThrows []CompensationDetail // shared by compensation throw and end events (ADR-0103)
 	timerStarts        []TimerStartDetail
 	dataObjects        []CompiledDataObject
@@ -985,7 +985,7 @@ func (p *CompiledProcess) SignalThrow(detail int32) *SignalDetail { return &p.si
 // ErrorEnd returns the error-end detail at the given table index (ADR-0089).
 func (p *CompiledProcess) ErrorEnd(detail int32) *ErrorEndDetail { return &p.errorEnds[detail] }
 
-// Escalation returns the escalation-event detail (throw or end) at the given table index (ADR-0124).
+// Escalation returns the escalation-event detail (throw or end) at the given table index (ADR-0125).
 func (p *CompiledProcess) Escalation(detail int32) *EscalationDetail { return &p.escalations[detail] }
 
 // CompensationThrow returns the compensation-throw detail at the given table index —

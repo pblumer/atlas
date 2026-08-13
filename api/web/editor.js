@@ -2743,7 +2743,7 @@ function wireErrorsManager(body, modeler, rerenderRoot) {
   });
 }
 
-// --- Escalation authoring (ADR-0124) ---
+// --- Escalation authoring (ADR-0125) ---
 // An escalation is raised by an escalation throw or end event and caught by the nearest
 // enclosing escalation boundary or event subprocess with a matching code. Unlike an error, an
 // escalation catch may be non-interrupting (the handler runs alongside the still-running

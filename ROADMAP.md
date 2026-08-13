@@ -324,7 +324,7 @@ Making processes wait, react, and time out.
   propagation is a pure function of committed scope state. Recovery-tested; authored in the
   Modeler's Implement panel (an error-code picker on error end/boundary/event-subprocess
   events, plus a central errors manager).
-- ✅ **Escalation events** ([ADR-0124](docs/adr/0124-escalation-events.md)): an
+- ✅ **Escalation events** ([ADR-0125](docs/adr/0125-escalation-events.md)): an
   `escalationEventDefinition` is a **named, coded signal** raised up the scope chain to the
   **nearest enclosing** matching handler — the non-interrupting, benign sibling of error events.
   An **escalation intermediate throw** (which raises it and then **continues on its outgoing
@@ -516,13 +516,15 @@ Adoption and polish.
 - 🔲 Worker SDKs in more languages
 - 🔲 BPMN modeler interoperability (import from common tools)
 - 🚧 **Benchmark suite and published performance numbers** (v0.2.0 programme B):
-  a reproducible harness landed in [`benchmarks/`](benchmarks/) — engine-level,
-  durable-profile (real WAL `fsync` per batch) steady-state benchmarks for the
-  minimal self-completing, service-task-lifecycle, and variable+gateway workloads,
-  reporting `ns/op` (→ instances/sec), `events/op`, `walB/op`, and allocations, with
-  a Markdown-summary script and a CI smoke run. Still to come: an end-to-end
-  HTTP/API axis, an in-memory/no-fsync profile, latency percentiles, a
-  recovery-from-N-events profile, and committed machine-labelled baseline results
+  a reproducible harness landed in [`benchmarks/`](benchmarks/) — durable-profile
+  (real WAL `fsync` per batch) steady-state benchmarks for the minimal
+  self-completing, service-task-lifecycle, and variable+gateway workloads, in **two
+  profiles**: the pure engine and the end-to-end HTTP/API path through `api.Server`
+  (so the difference reads off the API-layer overhead). They report `ns/op`
+  (→ instances/sec), `events/op`, `walB/op`, and allocations, with a Markdown-summary
+  script and a CI smoke run. Still to come: an in-memory/no-fsync profile, latency
+  percentiles, a recovery-from-N-events profile, a loopback-socket HTTP variant, and
+  committed machine-labelled baseline results
   ([`benchmarks/README.md`](benchmarks/README.md)).
 - 🔲 Documentation site, tutorials, examples
 - 🔲 1.0 API stability commitment

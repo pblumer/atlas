@@ -337,7 +337,7 @@ func buildErrorResolver(defs xmlDefinitions) func(ownerId, errorRef string) (str
 }
 
 // buildEscalationResolver indexes a model's top-level <bpmn:escalation> declarations by id
-// and returns a closure resolving an escalationRef to the escalation's code (ADR-0124).
+// and returns a closure resolving an escalationRef to the escalation's code (ADR-0125).
 // Escalations match by code, mirroring errors (buildErrorResolver): a code-less escalation —
 // or an escalationEventDefinition with no escalationRef at all — resolves to "": a catch-all
 // on a boundary/handler, and an uncoded throw on an escalation throw/end event. An empty
@@ -911,7 +911,7 @@ type xmlErrorEventDefinition struct {
 	ErrorRef string `xml:"errorRef,attr"`
 }
 
-// A top-level escalation declaration (ADR-0124). Like an error, an escalation is caught by
+// A top-level escalation declaration (ADR-0125). Like an error, an escalation is caught by
 // its code — the nearest enclosing escalation handler whose escalationCode matches, or a
 // code-less catch-all — so the escalationCode, not the id or name, is what an escalation
 // boundary/handler compares against. The id is what an escalationRef points at; the name is
@@ -1287,7 +1287,7 @@ type xmlStartEvent struct {
 	Error *xmlErrorEventDefinition `xml:"errorEventDefinition"`
 	// Escalation, when present on an event-subprocess start event, makes it an
 	// escalation-triggered event subprocess: it catches an escalation propagating in its
-	// scope whose code matches (ADR-0124). May be interrupting or non-interrupting per
+	// scope whose code matches (ADR-0125). May be interrupting or non-interrupting per
 	// IsInterrupting. A pointer so an absent one is nil.
 	Escalation *xmlEscalationEventDefinition `xml:"escalationEventDefinition"`
 	// IsInterrupting is the event-subprocess start event's cancel flag (ADR-0082):
@@ -1328,7 +1328,7 @@ type xmlIntermediateThrowEvent struct {
 	Compensation *xmlCompensateEventDefinition `xml:"compensateEventDefinition"`
 	// Escalation, when present, makes this an escalation throw event: it raises the
 	// referenced escalation, propagating up to the nearest matching handler, then continues
-	// on its outgoing flow (ADR-0124). A pointer so an absent one is nil.
+	// on its outgoing flow (ADR-0125). A pointer so an absent one is nil.
 	Escalation *xmlEscalationEventDefinition `xml:"escalationEventDefinition"`
 }
 
@@ -1367,7 +1367,7 @@ type xmlEndEvent struct {
 	Error *xmlErrorEventDefinition `xml:"errorEventDefinition"`
 	// Escalation, when present, makes this an escalation end event: it raises the referenced
 	// escalation, propagating up to the nearest matching handler, then ends its path
-	// (ADR-0124). A pointer so an absent one is nil.
+	// (ADR-0125). A pointer so an absent one is nil.
 	Escalation *xmlEscalationEventDefinition `xml:"escalationEventDefinition"`
 	// Terminate is present when the end event carries a <terminateEventDefinition>.
 	// Atlas can't execute a terminate end yet, so it is rejected at compile time rather
@@ -1412,7 +1412,7 @@ type xmlBoundaryEvent struct {
 	// Escalation, when present, makes this an escalation boundary event: it catches an
 	// escalation raised by the host activity (or propagated up to it) whose code matches.
 	// Unlike an error boundary it honors CancelActivity — it may be interrupting or
-	// non-interrupting (ADR-0124). A pointer so an absent one is nil.
+	// non-interrupting (ADR-0125). A pointer so an absent one is nil.
 	Escalation *xmlEscalationEventDefinition `xml:"escalationEventDefinition"`
 	// Compensation, when present, makes this a compensation boundary event: it is inert
 	// (never armed), marking its host activity compensable and linking — via a BPMN

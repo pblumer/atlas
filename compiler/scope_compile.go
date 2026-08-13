@@ -386,7 +386,7 @@ func registerScope(
 		}
 		if ev.Escalation != nil {
 			// An escalation throw raises an escalation, propagating up to the nearest
-			// matching handler, then continues on its outgoing flow (ADR-0124).
+			// matching handler, then continues on its outgoing flow (ADR-0125).
 			code, err := resolveEscalation(ev.Id, ev.Escalation.EscalationRef)
 			if err != nil {
 				return err
@@ -479,7 +479,7 @@ func registerScope(
 			continue
 		}
 		// An escalation end event raises its escalation code, propagating up to the nearest
-		// matching handler, then ends its path (ADR-0124). Unlike an error end an uncaught
+		// matching handler, then ends its path (ADR-0125). Unlike an error end an uncaught
 		// escalation is benign. This arm also stops the former silent degrade — before
 		// escalation was compiled, an escalationEventDefinition on an end event fell through
 		// to a plain none end, quietly dropping the escalation.
@@ -568,7 +568,7 @@ func registerScope(
 				d.Kind, d.ErrorCode, d.Interrupting = BoundaryError, code, true
 			case st.Escalation != nil:
 				// An escalation event subprocess catches an escalation propagating in its scope
-				// by code (ADR-0124). Unlike an error event subprocess it honors isInterrupting —
+				// by code (ADR-0125). Unlike an error event subprocess it honors isInterrupting —
 				// a non-interrupting escalation handler runs alongside the still-running scope —
 				// so d.Interrupting (already set from st.IsInterrupting) is kept.
 				code, err := resolveEscalation(st.Id, st.Escalation.EscalationRef)
@@ -640,7 +640,7 @@ func registerScope(
 			}
 		case ev.Escalation != nil:
 			// An escalation boundary catches an escalation propagating up to the host by code
-			// (ADR-0124). Unlike an error boundary it honors cancelActivity — an interrupting
+			// (ADR-0125). Unlike an error boundary it honors cancelActivity — an interrupting
 			// escalation boundary tears the host down, a non-interrupting one runs the handler
 			// alongside the still-running host.
 			code, err := resolveEscalation(ev.Id, ev.Escalation.EscalationRef)

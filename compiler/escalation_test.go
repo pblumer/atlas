@@ -8,7 +8,7 @@ import (
 // TestParseEscalationEndAndBoundary checks that an escalation end event inside a subprocess
 // compiles to TypeEscalationEndEvent with its code, and an escalation boundary on that
 // subprocess compiles to a BoundaryEscalation boundary with the code that — unlike an error
-// boundary — HONORS cancelActivity="false" as non-interrupting (ADR-0124).
+// boundary — HONORS cancelActivity="false" as non-interrupting (ADR-0125).
 func TestParseEscalationEndAndBoundary(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
 	  <escalation id="Esc_late" escalationCode="LATE" name="Late"/>
@@ -59,7 +59,7 @@ func TestParseEscalationEndAndBoundary(t *testing.T) {
 // TestParseEscalationThrowInterrupting checks that an escalation intermediate throw event
 // compiles to TypeEscalationThrowEvent with its code, and that an escalation boundary WITHOUT
 // cancelActivity defaults to interrupting (the BPMN default), just like other boundaries
-// (ADR-0124).
+// (ADR-0125).
 func TestParseEscalationThrowInterrupting(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
 	  <escalation id="Esc" escalationCode="MGR" name="Manager"/>
@@ -102,7 +102,7 @@ func TestParseEscalationThrowInterrupting(t *testing.T) {
 
 // TestParseEscalationCatchAll checks that an escalation boundary with no escalationRef
 // compiles as a code-less catch-all (EscalationCode ""), and an escalation end with a
-// code-less escalation raises "" (ADR-0124).
+// code-less escalation raises "" (ADR-0125).
 func TestParseEscalationCatchAll(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
 	  <escalation id="Esc_bare" name="Bare"/>
@@ -137,7 +137,7 @@ func TestParseEscalationCatchAll(t *testing.T) {
 // TestParseEscalationEventSubprocess checks that an event subprocess triggered by an
 // escalation start compiles with a BoundaryEscalation event-subprocess detail carrying the
 // code, and — unlike an error event subprocess — HONORS isInterrupting="false" as
-// non-interrupting (ADR-0124, reusing ADR-0082).
+// non-interrupting (ADR-0125, reusing ADR-0082).
 func TestParseEscalationEventSubprocess(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
 	  <escalation id="Esc" escalationCode="E1" name="E1"/>
@@ -172,7 +172,7 @@ func TestParseEscalationEventSubprocess(t *testing.T) {
 
 // TestParseEscalationUnknownRef fails deploy when an escalation event references an
 // undeclared escalation, in every position — end, intermediate throw, boundary, and
-// event-subprocess start (ADR-0124).
+// event-subprocess start (ADR-0125).
 func TestParseEscalationUnknownRef(t *testing.T) {
 	wrap := func(body string) string {
 		return `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">

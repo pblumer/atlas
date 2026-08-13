@@ -9,7 +9,7 @@ import (
 
 // TestEscalationBoundaryCodeMatching puts two escalation boundaries with different codes on one
 // subprocess: an escalation end raising one code routes to that boundary, not the other
-// (ADR-0124). The nearest *matching* code wins.
+// (ADR-0125). The nearest *matching* code wins.
 func TestEscalationBoundaryCodeMatching(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -58,7 +58,7 @@ func TestEscalationBoundaryCodeMatching(t *testing.T) {
 }
 
 // TestEscalationCatchAllBoundary proves a code-less escalation boundary catches any raised code
-// (ADR-0124).
+// (ADR-0125).
 func TestEscalationCatchAllBoundary(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -84,7 +84,7 @@ func TestEscalationCatchAllBoundary(t *testing.T) {
 }
 
 // escalationChildProcess builds a child process Start → escalationEnd(code) with no escalation
-// handler of its own, so its escalation propagates to the caller (ADR-0124/ADR-0076).
+// handler of its own, so its escalation propagates to the caller (ADR-0125/ADR-0076).
 func escalationChildProcess(t testing.TB, key uint64, procId, code string) *compiler.CompiledProcess {
 	t.Helper()
 	b := compiler.NewBuilder(key, procId, 1)
@@ -101,7 +101,7 @@ func escalationChildProcess(t testing.TB, key uint64, procId, code string) *comp
 // TestChildEscalationCaughtByCallerBoundary proves an escalation unhandled in a call-activity
 // child propagates to the caller: an *interrupting* escalation boundary on the call activity
 // catches it, terminating the child and routing the caller to its recovery flow
-// (ADR-0124/ADR-0076).
+// (ADR-0125/ADR-0076).
 func TestChildEscalationCaughtByCallerBoundary(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -145,7 +145,7 @@ func TestChildEscalationCaughtByCallerBoundary(t *testing.T) {
 // is benign — unlike an error, it raises NO incident. Propagation reaches the caller root
 // uncaught and returns; the child's escalation end then ends its own path, so the child
 // completes, the caller resumes past the call activity, and the whole thing finishes normally
-// (ADR-0124, the divergence from ADR-0089's child-error incident).
+// (ADR-0125, the divergence from ADR-0089's child-error incident).
 func TestChildEscalationUncaughtIsBenign(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
