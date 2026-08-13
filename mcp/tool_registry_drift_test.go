@@ -107,6 +107,11 @@ var mcpOmittedRoutes = map[string]string{
 	"PUT /api/v1/call-activities/overrides/{processId}":    "per-server call-activity override is admin config, not an agent action",
 	"DELETE /api/v1/call-activities/overrides/{processId}": "per-server call-activity override is admin config, not an agent action",
 
+	// Deactivating/activating a deployed process (ADR-0119): operator config that pauses
+	// automatic (timer/message/signal) starts, the same category as a call-activity
+	// override — an operator action from the Console, not an agent scenario step.
+	"PUT /api/v1/processes/{key}/active": "process deactivation is operator config, not an agent action",
+
 	// Dry-run BPMN validation for the Modeler's Problems panel (ADR-0026): an MCP
 	// agent deploys directly via atlas_deploy, which already compiles and validates.
 	"POST /api/v1/validate": "modeler-time dry-run validation; atlas_deploy already compiles+validates",

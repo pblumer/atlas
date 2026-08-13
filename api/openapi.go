@@ -164,6 +164,10 @@ func (s *Server) apiRoutes() []apiRoute {
 			status: http.StatusNoContent}},
 		{"GET", "/api/v1/processes/{key}/runtime", s.handleProcessRuntime, apiOp{
 			summary: "Read a process's live runtime state", tag: "Processes", resp: jsonBody("Runtime state", tObject())}},
+		{"PUT", "/api/v1/processes/{key}/active", s.handleSetProcessActive, apiOp{
+			summary: "Activate or deactivate a deployed process (a deactivated process stays deployed but does not auto-start new instances from its timer/message/signal start events)", tag: "Processes",
+			req:  jsonBody("Active flag", schemaObj(map[string]any{"active": tBool()})),
+			resp: jsonBody("The key and its new active state", tObject())}},
 		{"GET", "/api/v1/call-activities", s.handleCallActivities, apiOp{
 			summary: "List every call activity across deployed processes with its per-server resolution status", tag: "Processes", resp: jsonBody("Call activities", tArray())}},
 		{"PUT", "/api/v1/call-activities/overrides/{processId}", s.handleSetCallOverride, apiOp{

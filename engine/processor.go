@@ -70,6 +70,15 @@ type Processor struct {
 	// this map need not live in the log (I6).
 	callOverrides map[string]CallTargetOverride
 
+	// inactive is the set of definition keys an operator has deactivated (ADR-0119):
+	// a deactivated definition does not auto-start new instances from its timer,
+	// message, or signal start events. Like callOverrides it is operator config the
+	// server layer loads from a sidecar at startup and pushes here via SetProcessActive,
+	// owned by this run-loop goroutine (I3). It gates only the LIVE decision to schedule
+	// a create followup, never applyToState, so no Activated event is ever suppressed on
+	// replay — the flag need not live in the log (I6).
+	inactive map[uint64]bool
+
 	jobNotifier func(jobType int32)
 
 	queue        []Command
@@ -118,6 +127,7 @@ func New(partition uint16, log *wal.Log, store *state.Store, clock Clock) *Proce
 		processes:     map[uint64]*compiler.CompiledProcess{},
 		messageStarts: map[string][]messageStartRef{},
 		signalStarts:  map[string][]uint64{},
+		inactive:      map[uint64]bool{},
 		latestProcess: map[string]uint64{},
 		callOverrides: map[string]CallTargetOverride{},
 	}
@@ -177,6 +187,29 @@ func (p *Processor) ClearCallTargetOverride(calledProcessId string) {
 	delete(p.callOverrides, calledProcessId)
 }
 
+// SetProcessActive marks a deployed definition active or inactive (ADR-0119). An
+// inactive definition does not auto-start new instances when its timer, message, or
+// signal start events fire; existing instances run to completion, and an explicit
+// operator/API start is unaffected. The server layer loads the flag from the
+// deployment sidecar at startup and calls this on an operator toggle. Like
+// SetCallTargetOverride it is operator config, not event-sourced: it changes only the
+// live decision to schedule a create, so replay is unaffected (I6). Run-loop goroutine
+// only (the map's single owner).
+func (p *Processor) SetProcessActive(defKey uint64, active bool) {
+	if active {
+		delete(p.inactive, defKey)
+		return
+	}
+	p.inactive[defKey] = true
+}
+
+// ProcessActive reports whether a definition may auto-start new instances — the
+// inverse of the ADR-0119 deactivation flag. A key that was never deactivated (the
+// default) is active. Run-loop goroutine only.
+func (p *Processor) ProcessActive(defKey uint64) bool {
+	return !p.inactive[defKey]
+}
+
 // Undeploy removes a definition so no new instances of it can be created,
 // dropping its message-start index entries too. It is the caller's
 // responsibility not to undeploy a definition with running instances (they
@@ -191,6 +224,9 @@ func (p *Processor) Undeploy(defKey uint64) {
 		}
 	}
 	delete(p.processes, defKey)
+	// Drop any deactivation for this key so a future definition reusing it (there is
+	// none today — keys are monotonic) never inherits a stale inactive flag.
+	delete(p.inactive, defKey)
 }
 
 // messageStartRef points a starting message at the definition it instantiates

@@ -14,6 +14,15 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Deactivate a deployed process** ([ADR-0119](docs/adr/0119-deactivate-deployed-process.md)):
+  a deployed definition can be paused so it stays deployed and keeps its running
+  instances, but no longer auto-starts new ones from its timer, message, or signal
+  start events — for holding a timer-driven process during a maintenance window, for
+  example. Reversible with no redeploy and no lost timers; a recurring timer resumes on
+  reactivation. Exposed as `PUT /api/v1/processes/{key}/active` and an `active` flag on
+  the process listing, and toggled from the Modeler's Deployed list (an "Inactive" badge
+  and an Activate/Deactivate button). The flag persists on the deployment sidecar and is
+  re-applied on restart; an explicit operator/API start is not gated.
 - **Web-scraping connector** ([ADR-0118](docs/adr/0118-web-scraping-connector.md)):
   a `<serviceTask>` bearing an `<atlas:webscrapeConnector url selector attribute
   resultVariable>` extension fetches a model-authored page and extracts the elements

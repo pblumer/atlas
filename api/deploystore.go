@@ -30,6 +30,12 @@ type persistedDeployment struct {
 	// multi-model support carry it; loadDeployments reads it as a one-element list
 	// when DMNXMLs is absent. New deployments write DMNXMLs and leave this empty.
 	DMNXML string `json:"dmnXml,omitempty"`
+	// Inactive marks a definition an operator has deactivated: it stays deployed but
+	// does not auto-start new instances from its timer/message/signal start events
+	// (ADR-0119). Absent (false) in every record written before this field existed, so
+	// deployments load active by default — the omitempty keeps the record unchanged for
+	// the common active case.
+	Inactive bool `json:"inactive,omitempty"`
 }
 
 // dmnModels returns the deployment's DMN models as a list, transparently reading a
@@ -71,6 +77,26 @@ func (d *deployStore) fileFor(key uint64) string {
 // caller may treat a nil return as "on disk" (I2 / ADR-0019).
 func (d *deployStore) save(rec persistedDeployment) error {
 	return atomicWriteJSON(d.dir, d.fileFor(rec.Key), rec)
+}
+
+// load reads a single deployment record by key. ok is false (with a nil error) when
+// no record exists for the key, so a caller can distinguish "not deployed" from a read
+// failure. It lets an in-place metadata edit (e.g. toggling Inactive, ADR-0119) rewrite
+// the full record without the caller having to hold every field (notably the DMN models)
+// in memory.
+func (d *deployStore) load(key uint64) (persistedDeployment, bool, error) {
+	data, err := os.ReadFile(d.fileFor(key))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return persistedDeployment{}, false, nil
+		}
+		return persistedDeployment{}, false, fmt.Errorf("deploystore: read: %w", err)
+	}
+	var rec persistedDeployment
+	if err := json.Unmarshal(data, &rec); err != nil {
+		return persistedDeployment{}, false, fmt.Errorf("deploystore: decode: %w", err)
+	}
+	return rec, true, nil
 }
 
 // delete removes a deployment's record. A missing file is not an error, so

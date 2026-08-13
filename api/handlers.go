@@ -67,6 +67,11 @@ type processResp struct {
 	Executable bool `json:"executable"`
 	// VersionTag is the process's atlas:versionTag revision label, empty when unset.
 	VersionTag string `json:"versionTag,omitempty"`
+	// Active reports whether the definition may auto-start new instances from its
+	// timer/message/signal start events. A deactivated definition (false) stays
+	// deployed and keeps its running instances, but does not self-start (ADR-0119).
+	// Always emitted so the UI can render the active/inactive control unambiguously.
+	Active bool `json:"active"`
 }
 
 // collaborationParticipants reports how many <participant> pools a model's
@@ -657,6 +662,7 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
 				StartFormID:      d.cp.StartFormId(),
 				Executable:       d.cp.IsExecutable(),
 				VersionTag:       d.cp.VersionTag(),
+				Active:           !d.inactive,
 			})
 		}
 	})
@@ -741,6 +747,74 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "remove deployment: "+persistErr.Error())
 	default:
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// handleSetProcessActive activates or deactivates a deployed definition (ADR-0119).
+// A deactivated definition stays deployed and keeps its running instances, but no
+// longer auto-starts new ones when its timer, message, or signal start events fire —
+// the operator has paused it (e.g. a timer-driven process). Reactivating restores
+// automatic starts. The flag persists in the deployment sidecar and is re-applied on
+// restart. Body: {"active": bool}.
+func (s *Server) handleSetProcessActive(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid definition key")
+		return
+	}
+	var body struct {
+		Active bool `json:"active"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid body: expected {\"active\": bool}")
+		return
+	}
+	var (
+		found      bool
+		loadErr    error
+		persistErr error
+	)
+	s.do(func() {
+		d, ok := s.deployments[key]
+		if !ok {
+			return
+		}
+		found = true
+		// No-op fast path: an unchanged flag rewrites nothing (idempotent PUT).
+		if d.inactive == !body.Active {
+			return
+		}
+		// Read the full record so the rewrite preserves the XML and DMN models the
+		// in-memory deployment does not hold, then flip the flag. Durable before visible
+		// (I2, ADR-0019): persist first, then apply to the engine and the display copy.
+		rec, ok, err := s.deploys.load(key)
+		if err != nil {
+			loadErr = err
+			return
+		}
+		if !ok {
+			// The registry and the sidecar have diverged (should not happen); treat it as
+			// not found rather than silently applying an unpersisted change.
+			found = false
+			return
+		}
+		rec.Inactive = !body.Active
+		if err := s.deploys.save(rec); err != nil {
+			persistErr = err
+			return
+		}
+		s.proc.SetProcessActive(key, body.Active)
+		d.inactive = !body.Active
+	})
+	switch {
+	case !found:
+		writeError(w, http.StatusNotFound, "no deployment with that key")
+	case loadErr != nil:
+		writeError(w, http.StatusInternalServerError, "read deployment: "+loadErr.Error())
+	case persistErr != nil:
+		writeError(w, http.StatusInternalServerError, "persist deployment: "+persistErr.Error())
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"key": key, "active": body.Active})
 	}
 }
 
