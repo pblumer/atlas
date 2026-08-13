@@ -4846,7 +4846,11 @@ function wireActions(root, modeler, api, toast, projectId) {
     derr.textContent = "";
     try {
       const { xml } = await modeler.saveXML({ format: true });
-      const dep = await api("POST", "/api/v1/deployments", xml, true);
+      // Carry the editor's project so the deployment files under the same folder as
+      // its draft on the Modeler home (ADR-0034); omitted when editing outside a
+      // project, which deploys to Ungrouped.
+      const depPath = "/api/v1/deployments" + (projectId ? "?projectId=" + encodeURIComponent(projectId) : "");
+      const dep = await api("POST", depPath, xml, true);
       const all = dep.deployments || [{ key: dep.key, processId: dep.processId, version: dep.version }];
       if (all.length > 1) {
         // A collaboration deploys one definition per pool; which pool to start is

@@ -479,21 +479,68 @@ function initShell() {
   }).catch(() => { initHelpMenu(false); });
 }
 
-// initHelpMenu fills the top-bar "?" dropdown. Its API Explorer entry opens the
-// Scalar explorer (/api/docs) in a new tab when the server was started with docs
-// enabled; otherwise it shows an inert hint about --docs=false, so the missing
-// link is self-explanatory rather than a dead button (ADR-0043). The Conformance
-// Gallery entry is always shown — that page is a static asset served regardless
-// of the --docs flag. Open/close is handled by the shared delegated
-// .dropdown-toggle machinery above.
+// handbookHelp maps the current route to the most relevant handbook chapter, so
+// the "?" menu can offer help *for the view you're looking at* rather than only a
+// generic link. The checks mirror the router's order (most specific first); the
+// anchor is a section id in handbuch.html and the label is the (English, matching
+// the chrome) menu text. Adding a route here is all it takes to give it contextual
+// help — the handbook page and the menu wiring are unchanged.
+function handbookHelp(path) {
+  const H = (anchor, label) => ({ anchor, label });
+  if (/^#\/modeler\/dmn\//.test(path)) return H("dmn", "Learn DMN");
+  if (/^#\/modeler\/form\b/.test(path)) return H("formulare", "Forms & connectors");
+  if (path.startsWith("#/modeler")) return H("designen", "Designing processes");
+  if (path.startsWith("#/tasks")) return H("formulare", "Tasks & forms");
+  if (path.startsWith("#/operations/decisions")) return H("dmn", "Learn DMN");
+  if (path.startsWith("#/operations/call-activities")) return H("elemente", "BPMN elements");
+  if (path.startsWith("#/operations")) return H("betrieb", "Operations & incidents");
+  if (path.startsWith("#/console/engine")) return H("konzepte", "Core concepts");
+  if (path.startsWith("#/console/org")) return H("formulare", "Forms & connectors");
+  if (path.startsWith("#/console")) return H("schnellstart", "Quick start");
+  return H("willkommen", "Welcome to Atlas");
+}
+
+// The help menu is built once (async, after /info resolves) but its contextual
+// entry has to follow navigation, which happens independently. We stash the docs
+// flag and the current route so either event can (re)render correctly regardless
+// of which lands first: initHelpMenu renders using the last route setChrome saw,
+// and setHelpContext refreshes the entry in place on every later navigation.
+let helpDocsEnabled = false;
+let helpRoutePath = "#/console";
+
+// setHelpContext points the "On this page" entry at the chapter for `path`. Safe
+// to call before the menu exists (early navigations) — it just records the route.
+function setHelpContext(path) {
+  helpRoutePath = path;
+  const ctx = document.getElementById("help-ctx");
+  if (!ctx) return;
+  const { anchor, label } = handbookHelp(path);
+  ctx.href = `/handbuch.html#${anchor}`;
+  ctx.innerHTML = `${esc(label)} <span class="ext" aria-hidden="true">↗</span>`;
+}
+
+// initHelpMenu fills the top-bar "?" dropdown. It leads with a contextual
+// "On this page" link into the handbook chapter for the current view (see
+// handbookHelp), then the general references: the Handbook (a self-contained
+// bilingual page served regardless of the --docs flag), the Scalar API Explorer
+// (/api/docs) when docs are enabled — otherwise an inert hint about --docs=false
+// so the missing link is self-explanatory rather than a dead button (ADR-0043) —
+// and the Conformance Gallery (always shown; a static asset). Open/close is
+// handled by the shared delegated .dropdown-toggle machinery above.
 function initHelpMenu(docsEnabled) {
+  helpDocsEnabled = docsEnabled;
   const menu = document.getElementById("help-menu");
   if (!menu) return;
   const explorer = docsEnabled
     ? `<a role="menuitem" href="/api/docs" target="_blank" rel="noopener">API Explorer <span class="ext" aria-hidden="true">↗</span></a>`
     : `<span class="help-note">API Explorer is disabled<br><span class="muted">start the server without <code>--docs=false</code></span></span>`;
   const gallery = `<a role="menuitem" href="/conformance-gallery.html" target="_blank" rel="noopener">Conformance Gallery <span class="ext" aria-hidden="true">↗</span></a>`;
-  menu.innerHTML = explorer + gallery;
+  const handbook = `<a role="menuitem" href="/handbuch.html" target="_blank" rel="noopener">Handbook <span class="ext" aria-hidden="true">↗</span></a>`;
+  const context = `<div class="mlabel">On this page</div>` +
+    `<a id="help-ctx" role="menuitem" target="_blank" rel="noopener" href="/handbuch.html"></a>` +
+    `<div class="sep"></div>`;
+  menu.innerHTML = context + handbook + explorer + gallery;
+  setHelpContext(helpRoutePath); // fill the contextual entry for the current view
 }
 
 function setChrome(appId, route) {
@@ -505,6 +552,7 @@ function setChrome(appId, route) {
   ).join("");
   document.querySelectorAll("#drawer-apps a").forEach((a) =>
     a.classList.toggle("active", a.dataset.app === appId));
+  setHelpContext(route); // keep the "?" menu's contextual help pointed at this view
   const fullBleed = route.includes("/modeler/d/") || route.includes("/modeler/draft/") || route.includes("/modeler/form/") || route.includes("/modeler/new") || route.includes("/operations/p/");
   document.body.classList.toggle("editor-mode", fullBleed);
   // The Tasks inbox is a wide three-pane layout, so it drops the centered
@@ -528,6 +576,7 @@ async function viewConsoleDashboard() {
       <div class="row">
         <a class="btn" href="#/modeler">Open Modeler</a>
         <a class="btn ghost" href="#/console/engine">View engine</a>
+        <a class="btn ghost" href="/handbuch.html" target="_blank" rel="noopener">Handbook ↗</a>
       </div>
     </div>
     <div class="grid2" style="margin-top:18px">
@@ -1170,12 +1219,8 @@ async function viewModelerHome() {
     </div>
     <h2 style="margin:22px 0 10px"><button class="section-toggle" aria-expanded="${sectionState("deployed")}" data-section="deployed">Deployed</button></h2>
     <div class="section-body" id="sec-deployed"${sectionState("deployed") ? "" : ' hidden'}>
-    <div class="card" style="padding:0">
-      <table>
-        <thead><tr><th>Process</th><th>Latest</th><th>Deployed</th><th></th></tr></thead>
-        <tbody id="rows"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
-      </table>
-    </div></div>`;
+      <div id="rows"><p class="muted" style="padding:14px 2px">Loading…</p></div>
+    </div>`;
   for (const t of view.querySelectorAll(".section-toggle"))
     t.addEventListener("click", () => toggleSection(t.dataset.section, t));
   const rows = document.getElementById("rows");
@@ -1234,42 +1279,92 @@ async function viewModelerHome() {
     if (act === "import") importArtifact("", renderProjects);
   });
 
+  // One deployed process = one row. A process may have several deployed versions;
+  // groupByProcess collapsed them, so the row shows the latest and a version count.
+  const deployRow = (g) => {
+    const older = g.versions.length > 1
+      ? ` <span class="muted">· ${g.versions.length} versions</span>` : "";
+    const label = g.latest.name || g.processId;
+    const sub = g.latest.name
+      ? `<div class="muted" style="font-size:12px">${esc(g.processId)}</div>` : "";
+    // A deactivated definition stays deployed but does not auto-start new instances
+    // from its timer/message/signal start events (ADR-0119). Flag it and offer the
+    // inverse toggle.
+    const inactive = g.latest.active === false;
+    const badge = inactive
+      ? ` <span class="pill warn" title="Deployed but paused: no new instances auto-start from its timer, message, or signal start events">Inactive</span>`
+      : "";
+    const toggleLabel = inactive ? "Activate" : "Deactivate";
+    const toggleTitle = inactive
+      ? "Resume automatic starts (timer/message/signal start events)"
+      : "Pause automatic starts: keep it deployed but stop new instances from starting on their own";
+    return `<tr>
+      <td><a href="#/modeler/d/${g.latest.key}"><b>${esc(label)}</b></a>${badge}${sub}</td>
+      <td>v${g.latest.version}${older}</td>
+      <td class="muted">${esc(fmtTime(g.latest.deployedAt))}</td>
+      <td style="text-align:right; white-space:nowrap">
+        <button class="btn ghost" data-toggle="${g.latest.key}" data-active="${inactive ? "1" : "0"}" title="${toggleTitle}">${toggleLabel}</button>
+        <a class="btn ghost" href="#/modeler/d/${g.latest.key}">Open</a>
+        <button class="btn ghost danger" data-del="${esc(g.processId)}">Delete</button>
+      </td>
+    </tr>`;
+  };
+  const deployTable = (gs) => `<div class="card" style="padding:0">
+      <table>
+        <thead><tr><th>Process</th><th>Latest</th><th>Deployed</th><th></th></tr></thead>
+        <tbody>${gs.map(deployRow).join("")}</tbody>
+      </table>
+    </div>`;
+
   const render = async () => {
     try {
-      const groups = groupByProcess(await api("GET", "/api/v1/processes"));
+      const [procs, projects] = await Promise.all([
+        api("GET", "/api/v1/processes"),
+        api("GET", "/api/v1/projects"),
+      ]);
+      const groups = groupByProcess(procs);
       if (!groups.length) {
-        rows.innerHTML = `<tr><td colspan="4" class="empty">
-          Nothing deployed yet. <a href="#/modeler/new">Create a diagram</a>, save it as a draft, then Deploy &amp; run.</td></tr>`;
+        rows.innerHTML = `<p class="empty" style="padding:14px">
+          Nothing deployed yet. <a href="#/modeler/new">Create a diagram</a>, save it as a draft, then Deploy &amp; run.</p>`;
         return;
       }
-      rows.innerHTML = groups.map((g) => {
-        const older = g.versions.length > 1
-          ? ` <span class="muted">· ${g.versions.length} versions</span>` : "";
-        const label = g.latest.name || g.processId;
-        const sub = g.latest.name
-          ? `<div class="muted" style="font-size:12px">${esc(g.processId)}</div>` : "";
-        // A deactivated definition stays deployed but does not auto-start new instances
-        // from its timer/message/signal start events (ADR-0119). Flag it and offer the
-        // inverse toggle.
-        const inactive = g.latest.active === false;
-        const badge = inactive
-          ? ` <span class="pill warn" title="Deployed but paused: no new instances auto-start from its timer, message, or signal start events">Inactive</span>`
-          : "";
-        const toggleLabel = inactive ? "Activate" : "Deactivate";
-        const toggleTitle = inactive
-          ? "Resume automatic starts (timer/message/signal start events)"
-          : "Pause automatic starts: keep it deployed but stop new instances from starting on their own";
-        return `<tr>
-          <td><a href="#/modeler/d/${g.latest.key}"><b>${esc(label)}</b></a>${badge}${sub}</td>
-          <td>v${g.latest.version}${older}</td>
-          <td class="muted">${esc(fmtTime(g.latest.deployedAt))}</td>
-          <td style="text-align:right; white-space:nowrap">
-            <button class="btn ghost" data-toggle="${g.latest.key}" data-active="${inactive ? "1" : "0"}" title="${toggleTitle}">${toggleLabel}</button>
-            <a class="btn ghost" href="#/modeler/d/${g.latest.key}">Open</a>
-            <button class="btn ghost danger" data-del="${esc(g.processId)}">Delete</button>
-          </td>
-        </tr>`;
-      }).join("");
+      // Group deployed definitions into the same project folders as design-time
+      // artifacts (ADR-0034): bucket by each process's projectId, ordering the
+      // buckets like the projects table above, then a trailing "Ungrouped" bucket for
+      // definitions with no (or an unknown) project. With no project at all, fall back
+      // to the plain flat table so a project-less install is unchanged.
+      const known = new Map(projects.map((p) => [p.id, p.name]));
+      const byProject = new Map();
+      for (const g of groups) {
+        const pid = g.latest.projectId && known.has(g.latest.projectId) ? g.latest.projectId : "";
+        if (!byProject.has(pid)) byProject.set(pid, []);
+        byProject.get(pid).push(g);
+      }
+      const buckets = [];
+      for (const p of projects) {
+        if (byProject.has(p.id)) buckets.push({ id: p.id, name: p.name, icon: "📁", groups: byProject.get(p.id) });
+      }
+      if (byProject.has("")) buckets.push({ id: "ungrouped", name: "Ungrouped", icon: "🗂", groups: byProject.get("") });
+
+      if (buckets.length === 1 && buckets[0].id === "ungrouped") {
+        rows.innerHTML = deployTable(buckets[0].groups);
+      } else {
+        rows.innerHTML = buckets.map((b) => {
+          const sec = "dep-" + b.id;
+          const open = sectionState(sec);
+          return `<div style="margin-bottom:14px">
+            <h3 style="margin:0 0 8px; font-size:15px">
+              <button class="section-toggle" aria-expanded="${open}" data-section="${esc(sec)}">
+                <span class="mi-icon">${b.icon}</span>${esc(b.name)}
+                <span class="muted" style="font-weight:normal">· ${b.groups.length}</span>
+              </button>
+            </h3>
+            <div class="section-body" id="sec-${esc(sec)}"${open ? "" : " hidden"}>${deployTable(b.groups)}</div>
+          </div>`;
+        }).join("");
+        for (const t of rows.querySelectorAll(".section-toggle"))
+          t.addEventListener("click", () => toggleSection(t.dataset.section, t));
+      }
       for (const b of rows.querySelectorAll("button[data-del]")) {
         b.addEventListener("click", () => deleteProcess(b.dataset.del, groups, render));
       }
@@ -1278,7 +1373,7 @@ async function viewModelerHome() {
           toggleProcessActive(Number(b.dataset.toggle), b.dataset.active === "1", render));
       }
     } catch (e) {
-      rows.innerHTML = `<tr><td colspan="4" class="empty">${esc(e.message)}</td></tr>`;
+      rows.innerHTML = `<p class="empty" style="padding:14px">${esc(e.message)}</p>`;
     }
   };
   await Promise.all([renderProjects(), render()]);
@@ -2283,7 +2378,14 @@ async function viewInstances() {
     <div id="var-panel" hidden></div>
     <div class="card" id="proc-card" style="padding:0">
       <table>
-        <thead><tr><th>Process</th><th>Versions</th><th>Running</th><th>Finished</th><th>Last activity</th><th></th></tr></thead>
+        <thead><tr>
+          <th class="sortable" data-sort="proc"><button type="button" class="th-sort">Process<span class="sort-ind"></span></button></th>
+          <th class="sortable" data-sort="versions"><button type="button" class="th-sort">Versions<span class="sort-ind"></span></button></th>
+          <th class="sortable" data-sort="running"><button type="button" class="th-sort">Running<span class="sort-ind"></span></button></th>
+          <th class="sortable" data-sort="finished"><button type="button" class="th-sort">Finished<span class="sort-ind"></span></button></th>
+          <th class="sortable" data-sort="activity"><button type="button" class="th-sort">Last activity<span class="sort-ind"></span></button></th>
+          <th></th>
+        </tr></thead>
         <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>`;
@@ -2293,9 +2395,61 @@ async function viewInstances() {
   let summary = new Map();
   const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—"; // completedAt is ns
 
+  // Column sort: each key maps a process group to a comparable value. String keys
+  // sort lexically, the rest numerically; the process id breaks ties so equal rows
+  // keep a stable order. The chosen column/direction persists so it survives a
+  // refresh or a trip into a replay and back.
+  const summaryOf = (g) => summary.get(g.processId) || { running: 0, finished: 0, latestCompletedAt: 0 };
+  const SORTERS = {
+    proc: (g) => (g.latest.name || g.processId).toLowerCase(),
+    versions: (g) => g.versions.length,
+    running: (g) => summaryOf(g).running || 0,
+    finished: (g) => summaryOf(g).finished || 0,
+    activity: (g) => summaryOf(g).latestCompletedAt || 0,
+  };
+  let sortState = (() => {
+    try { const s = JSON.parse(localStorage.getItem("atlas.ops.sort")); if (s && SORTERS[s.key]) return s; } catch { /* ignore */ }
+    return { key: null, dir: "desc" };
+  })();
+  const saveSort = () => { try { localStorage.setItem("atlas.ops.sort", JSON.stringify(sortState)); } catch { /* ignore */ } };
+  function sortGroups(groups) {
+    if (!sortState.key) return groups; // natural registration order (newest deploy first)
+    const val = SORTERS[sortState.key];
+    const dir = sortState.dir === "asc" ? 1 : -1;
+    return [...groups].sort((a, b) => {
+      const va = val(a), vb = val(b);
+      let c = typeof va === "string" ? va.localeCompare(vb) : va - vb;
+      if (c === 0) c = a.processId.localeCompare(b.processId);
+      return c * dir;
+    });
+  }
+  function updateSortIndicators() {
+    for (const th of view.querySelectorAll("#proc-card th.sortable")) {
+      const ind = th.querySelector(".sort-ind");
+      if (sortState.key === th.dataset.sort) {
+        ind.textContent = sortState.dir === "asc" ? "▲" : "▼";
+        th.setAttribute("aria-sort", sortState.dir === "asc" ? "ascending" : "descending");
+      } else {
+        ind.textContent = "";
+        th.removeAttribute("aria-sort");
+      }
+    }
+  }
+  for (const th of view.querySelectorAll("#proc-card th.sortable")) {
+    th.querySelector(".th-sort").addEventListener("click", () => {
+      const key = th.dataset.sort;
+      if (sortState.key === key) sortState.dir = sortState.dir === "asc" ? "desc" : "asc";
+      else sortState = { key, dir: key === "proc" ? "asc" : "desc" }; // text A→Z, counts high→low
+      saveSort();
+      renderRows();
+    });
+  }
+
   // renderRows draws the process rows, narrowed by the filter box (name or process
-  // id). Kept separate from load so filtering never refetches.
+  // id) and ordered by the chosen column sort. Kept separate from load so filtering
+  // and sorting never refetch.
   function renderRows() {
+    updateSortIndicators();
     if (!allGroups.length) {
       tbody.innerHTML = `<tr><td colspan="6" class="empty">
         No processes deployed. Click <b>Deploy demo</b> above, or create one in the
@@ -2303,13 +2457,14 @@ async function viewInstances() {
       return;
     }
     const q = (document.getElementById("proc-filter").value || "").trim().toLowerCase();
-    const groups = q
+    const filtered = q
       ? allGroups.filter((g) => ((g.latest.name || "") + " " + g.processId).toLowerCase().includes(q))
       : allGroups;
-    if (!groups.length) {
+    if (!filtered.length) {
       tbody.innerHTML = `<tr><td colspan="6" class="empty">No processes match “${esc(q)}”.</td></tr>`;
       return;
     }
+    const groups = sortGroups(filtered);
     tbody.innerHTML = groups.map((g) => {
       const s = summary.get(g.processId) || { running: 0, finished: 0, latestCompletedAt: 0 };
       const label = g.latest.name || g.processId;

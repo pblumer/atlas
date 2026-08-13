@@ -126,7 +126,8 @@ type deployment struct {
 	ProcessID  string
 	Name       string // human-readable <process name="…">, for display
 	Version    int32
-	DeployedAt int64 // unix seconds, for the UI's "last changed" column
+	DeployedAt int64  // unix seconds, for the UI's "last changed" column
+	ProjectID  string // project the deployment's draft belonged to, "" when none
 	xml        []byte
 	cp         *compiler.CompiledProcess // for the live overlay's element-id mapping
 	// inactive mirrors the persisted deactivation flag (ADR-0119) so the process
@@ -977,6 +978,7 @@ func (s *Server) loadDeployments() error {
 			Name:       rec.Name,
 			Version:    rec.Version,
 			DeployedAt: rec.DeployedAt,
+			ProjectID:  rec.ProjectID,
 			xml:        []byte(rec.XML),
 			cp:         cp,
 			inactive:   rec.Inactive,

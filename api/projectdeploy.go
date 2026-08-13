@@ -170,7 +170,7 @@ func (s *Server) handleDeployProject(w http.ResponseWriter, r *http.Request) {
 	s.do(func() {
 		deployedAt := time.Now().Unix()
 		for i, d := range drafts {
-			dps, _, pErr := s.deployModel([]byte(d.XML), dmnForDraft[i], deployedAt)
+			dps, _, pErr := s.deployModel([]byte(d.XML), dmnForDraft[i], deployedAt, d.ProjectID)
 			if pErr != nil {
 				persistErr = pErr
 				return
