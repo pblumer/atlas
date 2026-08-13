@@ -287,6 +287,23 @@ type Server struct {
 	retentionBatch    int
 	retentionCursor   uint64
 
+	// now reads wall-clock time (unix nanoseconds) for the retention sweep's
+	// eligibility cutoff. It is injected so a test can drive the cutoff
+	// deterministically instead of tuning durations against real time — the same
+	// discipline the engine applies to event timestamps (invariant I4). It defaults
+	// to the system clock; a test overrides it with withClock, sharing one clock
+	// with the engine so a finished instance's CompletedAt and the sweep's "now"
+	// come from a single controllable source.
+	now func() int64
+	// retentionTicks, when non-nil, replaces the retention sweep's real ticker so a
+	// test triggers each sweep explicitly rather than racing a wall-clock cadence.
+	// retentionSwept, when non-nil, receives once after each triggered sweep
+	// completes, so a test awaits the sweep it triggered without polling. Both are
+	// nil in production (a real ticker drives the sweep, nothing observes it). Set
+	// together by withRetentionTrigger.
+	retentionTicks <-chan time.Time
+	retentionSwept chan struct{}
+
 	// docsEnabled gates the OpenAPI spec and the Scalar API explorer. On by
 	// default (opt-out), consistent with the already-open web UI and MCP
 	// endpoint; an operator who does not want the interactive surface disables
@@ -431,6 +448,29 @@ func WithRetentionBatch(n int) Option {
 	}
 }
 
+// withClock overrides the server clock the retention sweep reads for its eligibility
+// cutoff (unix nanoseconds). It is unexported — a test seam, not an operator knob — so
+// a test can share one deterministic clock with the engine and make a finished
+// instance's age exact rather than tuned against real time (invariant I4).
+func withClock(now func() int64) Option {
+	return func(s *Server) {
+		if now != nil {
+			s.now = now
+		}
+	}
+}
+
+// withRetentionTrigger replaces the retention sweep's real ticker with an explicit
+// tick channel and, optionally, a completion channel signaled after each triggered
+// sweep. It is unexported — a test seam — so a test drives sweeps deterministically:
+// send on ticks, receive on swept, then assert, with no wall-clock cadence or polling.
+func withRetentionTrigger(ticks <-chan time.Time, swept chan struct{}) Option {
+	return func(s *Server) {
+		s.retentionTicks = ticks
+		s.retentionSwept = swept
+	}
+}
+
 // New builds a Server over an already-recovered processor and its store and
 // starts the run-loop goroutine. dataDir is the base data directory; the durable
 // deployment and draft sidecar stores live in its "deployments" and "drafts"
@@ -536,6 +576,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		dmnRegistry:       dmn.NewRegistry(),
 		docsEnabled:       true, // opt-out: served unless WithoutDocs is passed (ADR-0043)
 	}
+	// The retention sweep reads its eligibility cutoff from the system clock by
+	// default; the options below may replace it (withClock) for a deterministic
+	// test. Set here rather than in the literal above to keep the literal's comment
+	// alignment intact (invariant I4).
+	s.now = func() int64 { return time.Now().UnixNano() }
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -707,19 +752,37 @@ func (s *Server) exporterLoop(every time.Duration) {
 }
 
 // retentionSweeper runs the history-retention sweep on a fixed cadence (ADR-0115).
-// Wall-clock "now" is read off the run loop; the sweep itself hops onto the loop via
-// do() so its scan, purge commands, and cursor are single-writer-safe.
+// Wall-clock "now" is read from s.now() off the run loop; the sweep itself hops onto
+// the loop via do() so its scan, purge commands, and cursor are single-writer-safe.
+//
+// The trigger and clock are seams for deterministic tests (invariant I4): production
+// runs a real ticker and the system clock, while a test injects an explicit tick
+// channel and a fixed clock (withRetentionTrigger/withClock) so a sweep fires exactly
+// when the test says and evaluates a time the test controls — no scheduling luck, no
+// wall-clock-tuned durations. When retentionSwept is set the sweeper signals it after
+// each triggered sweep so the test can await completion.
 func (s *Server) retentionSweeper(every time.Duration) {
 	defer s.wg.Done()
-	t := time.NewTicker(every)
-	defer t.Stop()
+	ticks := s.retentionTicks
+	if ticks == nil {
+		t := time.NewTicker(every)
+		defer t.Stop()
+		ticks = t.C
+	}
 	for {
 		select {
 		case <-s.quit:
 			return
-		case <-t.C:
-			now := time.Now().UnixNano()
+		case <-ticks:
+			now := s.now()
 			s.do(func() { s.sweepRetention(now) })
+			if s.retentionSwept != nil {
+				select {
+				case s.retentionSwept <- struct{}{}:
+				case <-s.quit:
+					return
+				}
+			}
 		}
 	}
 }
