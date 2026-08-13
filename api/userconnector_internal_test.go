@@ -187,6 +187,54 @@ func TestProvisionOpsRails(t *testing.T) {
 	}
 }
 
+// TestUserConnectorEmptyUsername covers the handler's empty-username guard: when
+// the username field resolves to nothing (an unbound FEEL variable), no account
+// is created.
+func TestUserConnectorEmptyUsername(t *testing.T) {
+	srv, _ := newSystemServer(t, WithUserProvisioning())
+	srv.systemPIDs = map[string]bool{"sysproc": true}
+	h := srv.Handler()
+
+	key := deployBPMN(t, h, userConnBPMN("sysproc",
+		`<atlas:userConnector operation="create" username="=fehlt" email="x@example.org" displayName="X" roles="user" password="longenough1"/>`))
+	startInstance(t, h, key, `{}`)
+
+	all, err := srv.users.loadAll()
+	if err != nil {
+		t.Fatalf("loadAll: %v", err)
+	}
+	if len(all) != 0 {
+		t.Fatalf("empty username provisioned %d users, want 0", len(all))
+	}
+}
+
+// TestUserConnectorHandlerOpErrors drives the handler's three operation-error
+// branches end to end: a create that fails its rails (too-short password), and a
+// set-password / disable of a user that does not exist.
+func TestUserConnectorHandlerOpErrors(t *testing.T) {
+	srv, _ := newSystemServer(t, WithUserProvisioning())
+	srv.systemPIDs = map[string]bool{"sysproc": true}
+	h := srv.Handler()
+
+	badCreate := deployBPMN(t, h, userConnBPMN("sysproc",
+		`<atlas:userConnector operation="create" username="x" email="x@example.org" password="short"/>`))
+	startInstance(t, h, badCreate, `{}`)
+
+	missingSet := deployBPMN(t, h, userConnBPMN("sysproc",
+		`<atlas:userConnector operation="set-password" username="ghost" password="longenough1"/>`))
+	startInstance(t, h, missingSet, `{}`)
+
+	missingDisable := deployBPMN(t, h, userConnBPMN("sysproc",
+		`<atlas:userConnector operation="disable" username="ghost"/>`))
+	startInstance(t, h, missingDisable, `{}`)
+
+	// None of these created an account; the point is the handler ran each op's
+	// error branch (the jobs fail and raise incidents, which is fine here).
+	if all, _ := srv.users.loadAll(); len(all) != 0 {
+		t.Fatalf("op-error runs provisioned %d users, want 0", len(all))
+	}
+}
+
 // TestUserConnectorSetPasswordAndDisable exercises the other two operations against
 // an already-provisioned account.
 func TestUserConnectorSetPasswordAndDisable(t *testing.T) {

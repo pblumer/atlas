@@ -714,7 +714,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// run-loop-owned user store, so it is a closure over s and runs on the loop (the
 	// server drives jobs synchronously); it is gated at runtime to the system project.
 	if s.userProvisioning {
-		s.jobRunner.Handle(compiler.UserConnectorJobTypeIndex, s.userConnectorHandler())
+		s.jobRunner.Handle(compiler.UserConnectorJobTypeIndex, s.userConnectorHandler(s.store))
 	}
 	if err := s.loadDeployments(); err != nil {
 		return nil, err

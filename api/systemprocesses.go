@@ -22,6 +22,11 @@ var systemProcessesFS embed.FS
 
 const systemProcessesDir = "systemprocesses"
 
+// systemBundleFS is the filesystem the bootstrap reads the embedded bundle from. It
+// is a package var (defaulting to the embedded FS) purely so a test can point the
+// bootstrap at a broken bundle to exercise the packaging-error path.
+var systemBundleFS fs.FS = systemProcessesFS
+
 // systemProcess is one embedded process: its BPMN and the id/name parsed from it.
 type systemProcess struct {
 	processID string
@@ -39,8 +44,8 @@ type systemForm struct {
 // ordered by file name. A .bpmn without a <process id> or a .json without an
 // "id" is a packaging error, surfaced so New fails loudly rather than starting
 // with a half-populated system project.
-func loadSystemBundle() ([]systemProcess, []systemForm, error) {
-	entries, err := fs.ReadDir(systemProcessesFS, systemProcessesDir)
+func loadSystemBundle(fsys fs.FS) ([]systemProcess, []systemForm, error) {
+	entries, err := fs.ReadDir(fsys, systemProcessesDir)
 	if err != nil {
 		return nil, nil, fmt.Errorf("system bundle: read dir: %w", err)
 	}
@@ -55,7 +60,7 @@ func loadSystemBundle() ([]systemProcess, []systemForm, error) {
 	var procs []systemProcess
 	var forms []systemForm
 	for _, name := range names {
-		data, err := systemProcessesFS.ReadFile(systemProcessesDir + "/" + name)
+		data, err := fs.ReadFile(fsys, systemProcessesDir+"/"+name)
 		if err != nil {
 			return nil, nil, fmt.Errorf("system bundle: read %s: %w", name, err)
 		}
@@ -116,7 +121,7 @@ func (s *Server) latestDeploymentFor(pid string) (*deployment, bool) {
 // before the loop serves traffic, so it touches the stores, the deployment
 // registry, and the processor directly, within the single-writer discipline.
 func (s *Server) ensureSystemProcesses(now int64) error {
-	procs, forms, err := loadSystemBundle()
+	procs, forms, err := loadSystemBundle(systemBundleFS)
 	if err != nil {
 		return err
 	}

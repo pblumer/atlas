@@ -11,8 +11,16 @@ import (
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/model"
-	"github.com/pblumer/atlas/state"
 )
+
+// userConnStore is the slice of the state store the user-provisioning worker reads:
+// the element instance a job belongs to and its scope's variables. Narrowing it to
+// an interface (like the CSV worker's VarStore) lets a test drive the worker's
+// store-error and resolution branches with a fake, without a live engine.
+type userConnStore interface {
+	GetElementInstance(key uint64) (*model.ElementInstanceValue, bool, error)
+	VariablesOfScope(scope uint64, fn func(v *model.VariableValue) error) error
+}
 
 // This file implements the user-provisioning connector worker (ADR-0123): the
 // in-process side of an <atlas:userConnector> task. It create/set-password/disables
@@ -34,9 +42,9 @@ import (
 // userConnectorHandler builds the job handler for user-provisioning connector tasks.
 // Register it for the reserved compiler.UserConnectorJobTypeIndex only when
 // provisioning is enabled.
-func (s *Server) userConnectorHandler() job.Handler {
+func (s *Server) userConnectorHandler(store userConnStore) job.Handler {
 	return func(j job.Job) error {
-		ei, ok, err := s.store.GetElementInstance(j.ElementInstanceKey)
+		ei, ok, err := store.GetElementInstance(j.ElementInstanceKey)
 		if err != nil {
 			return err
 		}
@@ -57,7 +65,7 @@ func (s *Server) userConnectorHandler() job.Handler {
 			return fmt.Errorf("user connector: %w", err)
 		}
 		scope := ei.ProcessInstanceKey
-		scopeVars, err := userReadScopeVars(s.store, scope)
+		scopeVars, err := userReadScopeVars(store, scope)
 		if err != nil {
 			return fmt.Errorf("user connector: read variables: %w", err)
 		}
@@ -235,7 +243,7 @@ func userResolve(rv compiler.RestExpr, scope uint64, scopeVars map[string]model.
 }
 
 // userReadScopeVars reads all of a scope's variables into a map keyed by name.
-func userReadScopeVars(store *state.Store, scope uint64) (map[string]model.VariableValue, error) {
+func userReadScopeVars(store userConnStore, scope uint64) (map[string]model.VariableValue, error) {
 	vars := map[string]model.VariableValue{}
 	err := store.VariablesOfScope(scope, func(v *model.VariableValue) error {
 		vars[v.Name] = *v
