@@ -182,6 +182,21 @@ const WebScrapeJobType = "io.atlas.webscrape"
 // the same way the mail worker uses MailJobTypeIndex (ADR-0118).
 const WebScrapeJobTypeIndex int32 = 14
 
+// UserConnectorJobType is the reserved job type a user-provisioning connector task
+// carries (ADR-0120). The in-process user-provisioning worker subscribes to it to
+// create, set the password of, or disable an Atlas login through the internal user
+// store off the hot path, the same way the mail worker subscribes to MailJobType.
+// It is gated to the protected system project and opt-in server-side; nothing about
+// the credential is model-authored (there is none — it mutates the local store).
+const UserConnectorJobType = "io.atlas.user.provision"
+
+// UserConnectorJobTypeIndex is the interned index UserConnectorJobType is guaranteed
+// to occupy in every compiled process: NewBuilder reserves it sixteenth (after the
+// fifteen job types above), so it is always 15. This lets a single in-process
+// user-provisioning worker subscribe by one global index across every deployed
+// process, the same way the mail worker uses MailJobTypeIndex (ADR-0120).
+const UserConnectorJobTypeIndex int32 = 15
+
 // TemisDecisionJobType is the reserved job type a *central* business rule task
 // carries — one whose decision is evaluated by a remote temis service rather than
 // the embedded temis library. The in-process temis decision connector worker
@@ -279,6 +294,7 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 	b.intern(SharePointJobType)    // reserve SharePointJobTypeIndex == 12
 	b.intern(RemedyJobType)        // reserve RemedyJobTypeIndex == 13
 	b.intern(WebScrapeJobType)     // reserve WebScrapeJobTypeIndex == 14
+	b.intern(UserConnectorJobType) // reserve UserConnectorJobTypeIndex == 15
 	return b
 }
 
@@ -734,6 +750,52 @@ func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
 		MailSubject: cfg.Subject,
 		Body:        cfg.Body,
 		Retries:     cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// UserConnectorConfig is the deploy-time configuration of a user-provisioning
+// connector task (ADR-0120). Operation is one of "create", "set-password", or
+// "disable". Username identifies the account; Email/DisplayName/Roles/Password are
+// the create/update fields — each a literal-or-FEEL value (the parser compiles the
+// FEEL ones) evaluated over the instance's variables at call time. There is no
+// connector name and no credential: the worker mutates the internal user store
+// directly, gated to the protected system project (ADR-0119) and opt-in server-side.
+type UserConnectorConfig struct {
+	Operation   string
+	Username    RestExpr
+	Email       RestExpr
+	DisplayName RestExpr
+	Roles       RestExpr
+	Password    RestExpr
+	Retries     int32
+}
+
+// AddUserConnectorTask adds a user-provisioning connector task and returns its
+// element id. Like a service task it creates a job on activation and waits; the job
+// carries the reserved UserConnectorJobType so the in-process user-provisioning
+// worker picks it up, evaluates any FEEL field over the instance's variables,
+// performs the operation against the internal user store, and completes the job
+// (ADR-0120). No provider or credential is involved.
+func (b *Builder) AddUserConnectorTask(cfg UserConnectorConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:         b.intern(UserConnectorJobType),
+		Connector:       -1, // no server-registered provider; it mutates the local store
+		Subject:         -1,
+		EventType:       -1,
+		ClioQuery:       -1,
+		ReduceSpec:      -1,
+		Method:          -1,
+		ResultVar:       -1,
+		Auth:            -1,
+		UserOp:          b.intern(cfg.Operation),
+		UserName:        cfg.Username,
+		UserEmail:       cfg.Email,
+		UserDisplayName: cfg.DisplayName,
+		UserRoles:       cfg.Roles,
+		UserPassword:    cfg.Password,
+		Retries:         cfg.Retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

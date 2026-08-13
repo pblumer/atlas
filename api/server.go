@@ -163,6 +163,7 @@ type Server struct {
 	projects         *projectStore        // durable sidecar for projects grouping artifacts (ADR-0034)
 	systemPIDs       map[string]bool      // process ids of the bootstrap-deployed platform processes, protected from deletion (ADR-0119)
 	deploySysProcs   bool                 // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0119)
+	userProvisioning bool                 // opt-in: enable the user-provisioning connector for system processes (ADR-0120)
 	dmnrefs          *dmnRefStore         // durable sidecar for DMN reference artifacts (ADR-0034)
 	connectors       *connectorStore      // durable sidecar for managed connector instances (ADR-0041)
 	callOverrides    *callOverrideStore   // durable sidecar for per-server call-activity target overrides (ADR-0105)
@@ -320,6 +321,14 @@ func WithoutDocs() Option { return func(s *Server) { s.docsEnabled = false } }
 // the engine tests construct servers without it so a fresh instance still starts
 // with no deployments.
 func WithSystemProcesses() Option { return func(s *Server) { s.deploySysProcs = true } }
+
+// WithUserProvisioning enables the in-process user-provisioning connector
+// (create/set-password/disable Atlas logins) for the protected system project's
+// processes (ADR-0120). Opt-in and off by default: it deliberately, and narrowly,
+// reopens the ADR-0044/0049 boundary that no automated identity may manage users —
+// so an instance keeps the human-in-the-loop ADR-0119 behavior until an operator
+// turns this on. When off, a userConnector job has no worker and parks.
+func WithUserProvisioning() Option { return func(s *Server) { s.userProvisioning = true } }
 
 // WithInboundPollInterval sets the clio inbound bridge's poll cadence (ADR-0075).
 // A non-positive interval disables the bridge (useful in tests that drive it
@@ -631,6 +640,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// The URL and selector live in the model, like REST (ADR-0118). One worker serves
 	// every process under the reserved web-scrape job type.
 	s.jobRunner.HandleWithOutput(compiler.WebScrapeJobTypeIndex, webscrape.Handler(store, s.processLookup, webscrape.NewHTTPClient()))
+	// User-provisioning connector (ADR-0120), opt-in. The handler mutates the
+	// run-loop-owned user store, so it is a closure over s and runs on the loop (the
+	// server drives jobs synchronously); it is gated at runtime to the system project.
+	if s.userProvisioning {
+		s.jobRunner.Handle(compiler.UserConnectorJobTypeIndex, s.userConnectorHandler())
+	}
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
 	}

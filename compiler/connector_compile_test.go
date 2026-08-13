@@ -21,6 +21,7 @@ func TestConnectorCompilersRegistry(t *testing.T) {
 		{Clio: &xmlClioConnector{}},
 		{Rest: &xmlRestConnector{}},
 		{Mail: &xmlMailConnector{}},
+		{User: &xmlUserConnector{}},
 		{SharePoint: &xmlSharePointConnector{}},
 		{Remedy: &xmlRemedyConnector{}},
 		{WebScrape: &xmlWebScrapeConnector{}},
