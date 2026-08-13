@@ -14,6 +14,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Reproducible benchmark harness** (v0.2.0 programme B): a new
+  [`benchmarks/`](benchmarks/) package measures the pure engine under the durable
+  profile (a real segmented WAL with a group-commit `fsync` per batch and a real
+  Pebble state store). It ships idiomatic Go benchmarks for three steady-state
+  workloads — a minimal self-completing linear process, a service-task
+  create/activate/complete lifecycle, and a mixed variables-plus-gateway routing
+  process — reporting `ns/op` (→ instances/sec), `events/op` (from the applied log
+  position), `walB/op` (on-disk WAL growth), and `-benchmem` allocations. A
+  `summarize.sh` renders the machine-readable raw output as a Markdown table, a CI
+  smoke step runs the harness at one iteration each (no performance threshold on PR
+  CI), and [`benchmarks/README.md`](benchmarks/README.md) documents the commands,
+  metrics, the environment metadata to record, and the standing caveat that results
+  are specific to one machine and commit — not a product claim. All harness code
+  lives in `_test.go` files, so it adds nothing to the coverage floor. End-to-end
+  HTTP benchmarks, an in-memory/no-fsync profile, latency percentiles, and recovery
+  benchmarks are deferred to later programme-B slices.
 - **Deactivate a deployed process** ([ADR-0119](docs/adr/0119-deactivate-deployed-process.md)):
   a deployed definition can be paused so it stays deployed and keeps its running
   instances, but no longer auto-starts new ones from its timer, message, or signal
