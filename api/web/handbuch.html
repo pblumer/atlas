@@ -1067,6 +1067,41 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
 &lt;/definitions&gt;</code></pre>
         <p class="rz-how"><span data-l="de"><code>inputCollection</code> ist die Liste, <code>inputElement</code> der Name je Durchlauf; die <code>outputElement</code>-Werte werden in <code>outputCollection</code> gesammelt. Für seriell statt parallel: <code>&lt;multiInstanceLoopCharacteristics isSequential="true"&gt;</code>.</span><span data-l="en"><code>inputCollection</code> is the list, <code>inputElement</code> the per-iteration name; the <code>outputElement</code> values are gathered into <code>outputCollection</code>. For sequential instead of parallel: <code>&lt;multiInstanceLoopCharacteristics isSequential="true"&gt;</code>.</span></p>
       </div>
+      <div class="recipe" id="rz-event-sub">
+        <h4><span class="rz-emoji" aria-hidden="true">🪝</span>
+          <span data-l="de">Event-Subprozess: globaler Ereignis-Handler</span><span data-l="en">Event subprocess: a global event handler</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Auf ein Ereignis reagieren, das jederzeit während des Prozesses eintreffen kann – z.&nbsp;B. „Abbruch“.</span><span data-l="en">React to an event that can arrive at any time during the process – e.g. "cancel".</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-event-sub&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;message id=&quot;Msg_cancel&quot; name=&quot;cancel&quot;&gt;
+    &lt;extensionElements&gt;&lt;zeebe:subscription correlationKey=&quot;=orderId&quot;/&gt;&lt;/extensionElements&gt;
+  &lt;/message&gt;
+  &lt;process id=&quot;recipe-event-sub&quot; name=&quot;Auftrag mit Abbruch-Handler&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot;/&gt;
+    &lt;serviceTask id=&quot;fulfil&quot; name=&quot;Ausführen&quot;&gt;
+      &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;fulfil&quot;/&gt;&lt;/extensionElements&gt;
+    &lt;/serviceTask&gt;
+    &lt;endEvent id=&quot;end&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;start&quot; targetRef=&quot;fulfil&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;fulfil&quot; targetRef=&quot;end&quot;/&gt;
+    &lt;subProcess id=&quot;onCancel&quot; triggeredByEvent=&quot;true&quot;&gt;
+      &lt;startEvent id=&quot;cancelStart&quot; isInterrupting=&quot;true&quot;&gt;
+        &lt;messageEventDefinition messageRef=&quot;Msg_cancel&quot;/&gt;
+      &lt;/startEvent&gt;
+      &lt;serviceTask id=&quot;rollback&quot; name=&quot;Aufräumen&quot;&gt;
+        &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;rollback&quot;/&gt;&lt;/extensionElements&gt;
+      &lt;/serviceTask&gt;
+      &lt;endEvent id=&quot;cancelEnd&quot;/&gt;
+      &lt;sequenceFlow id=&quot;cf1&quot; sourceRef=&quot;cancelStart&quot; targetRef=&quot;rollback&quot;/&gt;
+      &lt;sequenceFlow id=&quot;cf2&quot; sourceRef=&quot;rollback&quot; targetRef=&quot;cancelEnd&quot;/&gt;
+    &lt;/subProcess&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de">Ein <code>subProcess triggeredByEvent="true"</code> hat keinen eingehenden Fluss – er startet, wenn sein Start-Ereignis feuert. <b>Interrupting</b> (<code>isInterrupting="true"</code>) bricht den laufenden Prozess ab und übernimmt; <b>non-interrupting</b> (<code>false</code>, z.&nbsp;B. mit Timer) läuft nebenher und kann mehrfach auslösen – ideal für wiederkehrende Erinnerungen.</span><span data-l="en">A <code>subProcess triggeredByEvent="true"</code> has no incoming flow – it starts when its start event fires. <b>Interrupting</b> (<code>isInterrupting="true"</code>) aborts the running process and takes over; <b>non-interrupting</b> (<code>false</code>, e.g. with a timer) runs alongside and can fire repeatedly – ideal for recurring reminders.</span></p>
+      </div>
       <h3 class="rz-group"><span data-l="de">Robustheit</span><span data-l="en">Robustness</span></h3>
       <div class="recipe" id="rz-incident">
         <h4><span class="rz-emoji" aria-hidden="true">🚑</span>
@@ -1088,6 +1123,44 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
         <p class="rz-how"><span data-l="de">Scheitert der Job, zählt <code>retries</code> herunter; bei 0 entsteht ein <b>Incident</b> und der Token <i>pausiert sicher</i> – nichts geht verloren. Du behebst die Ursache und löst ihn in <a href="/#/operations/incidents">Operations → Incidents</a> auf; die Instanz läuft weiter.</span><span data-l="en">If the job fails, <code>retries</code> counts down; at 0 an <b>incident</b> is raised and the token <i>pauses safely</i> – nothing is lost. You fix the cause and resolve it in <a href="/#/operations/incidents">Operations → Incidents</a>; the instance resumes.</span></p>
+      </div>
+      <div class="recipe" id="rz-compensation">
+        <h4><span class="rz-emoji" aria-hidden="true">↩️</span>
+          <span data-l="de">Compensation: getane Arbeit rückgängig machen</span><span data-l="en">Compensation: undo work already done</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Bereits abgeschlossene Schritte sauber zurückrollen, wenn der Vorgang später scheitert.</span><span data-l="en">Cleanly roll back already-completed steps when the case fails later.</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-compensation&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;process id=&quot;recipe-compensation&quot; name=&quot;Buchung mit Storno&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot;/&gt;
+    &lt;serviceTask id=&quot;book&quot; name=&quot;Hotel buchen&quot;&gt;
+      &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;book-hotel&quot; retries=&quot;3&quot;/&gt;&lt;/extensionElements&gt;
+    &lt;/serviceTask&gt;
+    &lt;boundaryEvent id=&quot;book_comp&quot; attachedToRef=&quot;book&quot;&gt;
+      &lt;compensateEventDefinition/&gt;
+    &lt;/boundaryEvent&gt;
+    &lt;serviceTask id=&quot;cancelBooking&quot; name=&quot;Buchung stornieren&quot; isForCompensation=&quot;true&quot;&gt;
+      &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;cancel-hotel&quot; retries=&quot;3&quot;/&gt;&lt;/extensionElements&gt;
+    &lt;/serviceTask&gt;
+    &lt;exclusiveGateway id=&quot;paid&quot; name=&quot;Zahlung ok?&quot; default=&quot;f_yes&quot;/&gt;
+    &lt;intermediateThrowEvent id=&quot;undo&quot; name=&quot;Rückabwicklung&quot;&gt;
+      &lt;compensateEventDefinition activityRef=&quot;book&quot;/&gt;
+    &lt;/intermediateThrowEvent&gt;
+    &lt;endEvent id=&quot;failed&quot;/&gt;
+    &lt;endEvent id=&quot;done&quot;/&gt;
+    &lt;association id=&quot;a1&quot; sourceRef=&quot;book_comp&quot; targetRef=&quot;cancelBooking&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;start&quot; targetRef=&quot;book&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;book&quot; targetRef=&quot;paid&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f_no&quot; name=&quot;nein&quot; sourceRef=&quot;paid&quot; targetRef=&quot;undo&quot;&gt;
+      &lt;conditionExpression&gt;= not(paymentOk)&lt;/conditionExpression&gt;
+    &lt;/sequenceFlow&gt;
+    &lt;sequenceFlow id=&quot;f_yes&quot; name=&quot;ja&quot; sourceRef=&quot;paid&quot; targetRef=&quot;done&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f3&quot; sourceRef=&quot;undo&quot; targetRef=&quot;failed&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de">Ein <code>compensateEventDefinition</code>-<b>Boundary-Event</b> an der Aufgabe verweist per <code>association</code> auf einen <code>isForCompensation="true"</code>-Handler (das „Undo“). Wirft später ein <code>intermediateThrowEvent</code> mit <code>compensateEventDefinition</code> die Kompensation (hier für <code>book</code>), führt Atlas den Handler für die bereits erledigte Arbeit aus. Der Undo-Task hängt an keinem normalen Fluss.</span><span data-l="en">A <code>compensateEventDefinition</code> <b>boundary event</b> on the task links via an <code>association</code> to an <code>isForCompensation="true"</code> handler (the "undo"). When an <code>intermediateThrowEvent</code> with a <code>compensateEventDefinition</code> later throws compensation (here for <code>book</code>), Atlas runs the handler for the work already done. The undo task sits on no normal flow.</span></p>
       </div>
       <div class="note tip">
         <span class="lbl" data-l="de">Kombinieren</span><span class="lbl" data-l="en">Combine</span>
