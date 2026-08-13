@@ -13,24 +13,32 @@ engine until the workloads are demonstrably equivalent.
 
 ## What this measures (and what it does not, yet)
 
-This first slice measures the **pure engine** under the **durable profile**:
+Two axes, three profiles:
 
-- **Two profiles** —
+- **Where** the workload is driven —
   - *pure engine*: the processor, WAL, and state store driven directly, no HTTP;
-  - *end-to-end HTTP/API*: the same durable engine driven through `api.Server`'s
-    HTTP handlers (served in-process via `ServeHTTP`, so TCP/client cost is
-    excluded — it isolates the API layer over the engine, not a network round-trip).
-- **Durable** — a real segmented write-ahead log with a **group-commit `fsync` on
-  every batch** and a real Pebble state store, over a temp directory. There is no
-  synthetic/in-memory or no-fsync profile yet; the per-op time is therefore
-  dominated by real disk `fsync` latency, which is the point.
+  - *end-to-end HTTP/API*: the same engine driven through `api.Server`'s HTTP
+    handlers (served in-process via `ServeHTTP`, so TCP/client cost is excluded — it
+    isolates the API layer over the engine, not a network round-trip).
+- **Durability** of the WAL —
+  - *durable*: WAL segments on real disk, so the **group-commit `fsync` on every
+    batch** is a real disk `fsync`; the per-op time is dominated by that latency,
+    which is the point of the durable numbers.
+  - *in-memory*: the same WAL and state store on a RAM-backed tmpfs. The state store
+    already commits with `pebble.NoSync`, so the WAL `fsync` is the only durability
+    cost; on tmpfs it hits RAM and returns almost immediately. Comparing an
+    in-memory benchmark to its durable twin **splits the per-instance cost into
+    engine CPU (what remains) and disk-`fsync` latency (the difference)**. It is a
+    measurement profile, not a durability mode — no claim that Atlas runs without
+    `fsync` in production. The in-memory benchmarks skip when no tmpfs is available
+    (set `ATLAS_BENCH_TMPFS` to a RAM-backed dir to force one).
 - **Steady state** — throughput of a warm engine. Start-up/recovery is a separate,
   deferred axis.
 
-Deliberately **deferred** to later programme-B slices (see *Deferred* below): an
-in-memory/no-fsync profile, P50/P95/P99 latency, recovery-from-N-events, a
-parked-workload profile, a loopback-socket (real TCP) HTTP variant, service-task
-completion over HTTP, and published baseline result files.
+Deliberately **deferred** to later programme-B slices (see *Deferred* below):
+P50/P95/P99 latency, recovery-from-N-events, a parked-workload profile, a
+loopback-socket (real TCP) HTTP variant, service-task completion over HTTP, and
+published baseline result files.
 
 ## Workloads
 
@@ -53,6 +61,16 @@ and response encode:
 |---|---|---|
 | `BenchmarkHTTPLinearCreate` | `BenchmarkLinearSelfCompleting` | create → self-complete, over HTTP |
 | `BenchmarkHTTPVariableGatewayCreate` | `BenchmarkVariableGatewayRouting` | create with a start variable → gateway → self-complete, over HTTP |
+
+In-memory (RAM-backed tmpfs) twins of the engine-level workloads — same workload,
+same `events/op`/`walB/op`/`allocs/op`, `fsync` on RAM instead of disk. The `ns/op`
+gap to the durable twin is the disk-`fsync` cost:
+
+| Benchmark | Durable twin |
+|---|---|
+| `BenchmarkInMemoryLinearSelfCompleting` | `BenchmarkLinearSelfCompleting` |
+| `BenchmarkInMemoryServiceTaskLifecycle` | `BenchmarkServiceTaskLifecycle` |
+| `BenchmarkInMemoryVariableGatewayRouting` | `BenchmarkVariableGatewayRouting` |
 
 ## Running
 
@@ -123,9 +141,11 @@ this; record the rest alongside the raw file.
 
 - Numbers are **machine- and commit-specific**. Do not quote them as "Atlas does X
   ops/sec" without the machine and commit.
-- These are the **durable, steady-state** profiles. The HTTP figure is the
-  in-process handler path (no TCP), not a network round-trip; do not present either
-  as a client-observed number, and do not derive a no-fsync "millions/sec" figure.
+- The durable figures are **steady-state**. The HTTP figure is the in-process
+  handler path (no TCP), not a network round-trip. The **in-memory figures are not a
+  throughput claim** — they exist only to isolate engine CPU from `fsync` latency;
+  never quote them as what Atlas does, and never derive a "millions/sec" number from
+  them.
 - No cross-engine comparison (Camunda/Zeebe/Flowable/Temporal) until equivalent
   workloads exist.
 
@@ -133,8 +153,8 @@ this; record the rest alongside the raw file.
 
 - A loopback-socket (real TCP + `http.Client`) HTTP variant, and service-task
   completion driven over HTTP, on top of the in-process create benchmarks here.
-- An in-memory / no-fsync profile alongside the durable one, to separate CPU cost
-  from `fsync` cost.
+- An in-memory profile for the HTTP path too (the RAM-backed profile currently
+  covers the engine-level workloads only).
 - P50/P95/P99 end-to-end latency with a defensible sampling method.
 - Recovery-from-a-known-event-count and a parked-workload (many active
   jobs/timers/messages) profile.
