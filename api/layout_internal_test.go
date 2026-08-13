@@ -376,12 +376,13 @@ func TestGenerateDIBoundaryEvent(t *testing.T) {
 	if !ok1 || !ok2 {
 		t.Fatalf("host or boundary shape missing (host=%v be=%v):\n%s", ok1, ok2, di)
 	}
-	// The boundary event's center must lie on the host's bottom border.
-	if cy := be.y + be.h/2; cy != host.bottom() {
-		t.Errorf("boundary center y=%d not on host bottom edge y=%d", cy, host.bottom())
+	// The handler (Escalated) is a side branch, so it sits above the trunk and the
+	// boundary event rides the host's top border, facing it.
+	if cy := be.y + be.h/2; cy != host.y {
+		t.Errorf("boundary center y=%d not on host top edge y=%d", cy, host.y)
 	}
 	if cx := be.x + be.w/2; cx < host.x || cx > host.right() {
-		t.Errorf("boundary center x=%d not along host's bottom edge [%d,%d]", cx, host.x, host.right())
+		t.Errorf("boundary center x=%d not along host's top edge [%d,%d]", cx, host.x, host.right())
 	}
 	// The exception path is drawn.
 	if !strings.Contains(di, `bpmnElement="s3"`) {
@@ -410,7 +411,8 @@ func TestGenerateDIBoundaryDangling(t *testing.T) {
 }
 
 // TestGenerateDIBoundaryOnSubProcess attaches a boundary event to a subprocess box
-// (not a plain task): it must ride the box's bottom border.
+// (not a plain task): it must ride the box's border facing its handler (here the
+// top, as the handler is a side branch above the trunk).
 func TestGenerateDIBoundaryOnSubProcess(t *testing.T) {
 	src := []byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
 	  <process id="P">
@@ -436,8 +438,120 @@ func TestGenerateDIBoundaryOnSubProcess(t *testing.T) {
 	if !ok1 || !ok2 {
 		t.Fatalf("subprocess or boundary shape missing:\n%s", di)
 	}
-	if cy := be.y + be.h/2; cy != sub.bottom() {
-		t.Errorf("boundary center y=%d not on subprocess bottom edge y=%d", cy, sub.bottom())
+	if cy := be.y + be.h/2; cy != sub.y {
+		t.Errorf("boundary center y=%d not on subprocess top edge y=%d", cy, sub.y)
+	}
+}
+
+// TestGenerateDIBoundaryHandlerBelowRidesBottom covers the direction-aware boundary
+// placement: side branches normally rise above the trunk, so a boundary event rides
+// its host's top edge — but when its handler ends up below the host (here in a lower
+// swimlane), the event rides the bottom edge instead and its exception flow leaves
+// downward, never doubling back across the host.
+func TestGenerateDIBoundaryHandlerBelowRidesBottom(t *testing.T) {
+	src := []byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="P">
+	    <laneSet>
+	      <lane id="Top"><flowNodeRef>Start</flowNodeRef><flowNodeRef>Host</flowNodeRef></lane>
+	      <lane id="Bot"><flowNodeRef>Handler</flowNodeRef><flowNodeRef>Aborted</flowNodeRef></lane>
+	    </laneSet>
+	    <startEvent id="Start"/>
+	    <task id="Host"/>
+	    <boundaryEvent id="Guard" attachedToRef="Host"/>
+	    <task id="Handler"/>
+	    <endEvent id="Aborted"/>
+	    <sequenceFlow id="s1" sourceRef="Start" targetRef="Host"/>
+	    <sequenceFlow id="s2" sourceRef="Guard" targetRef="Handler"/>
+	    <sequenceFlow id="s3" sourceRef="Handler" targetRef="Aborted"/>
+	  </process>
+	</definitions>`)
+	di, ok := generateDI(src)
+	if !ok {
+		t.Fatal("generateDI: want ok")
+	}
+	shapes := parseShapes(t, di)
+	host, ok1 := shapes["Host"]
+	be, ok2 := shapes["Guard"]
+	handler, ok3 := shapes["Handler"]
+	if !ok1 || !ok2 || !ok3 {
+		t.Fatalf("host, boundary, or handler shape missing:\n%s", di)
+	}
+	if handler.y+handler.h/2 <= host.y+host.h/2 {
+		t.Fatalf("test setup: handler should sit below the host, got handler cy=%d host cy=%d",
+			handler.y+handler.h/2, host.y+host.h/2)
+	}
+	// The handler is below, so the boundary event rides the host's bottom edge.
+	if cy := be.y + be.h/2; cy != host.bottom() {
+		t.Errorf("boundary center y=%d not on host bottom edge y=%d", cy, host.bottom())
+	}
+	// The exception flow leaves from the boundary event's bottom, heading down.
+	if pts := parseEdges(t, di)["s2"]; len(pts) < 2 || pts[0].y < be.y+be.h/2 {
+		t.Errorf("exception flow s2 should leave downward from the boundary bottom, got %v", pts)
+	}
+}
+
+// TestGenerateDIHappyPathStaysStraight is the regression for auto-layout bending a
+// linear main flow into a staircase. When side branches (here boundary-event error
+// handlers ending in their own end events) share the happy path's columns, every
+// node on the main sequence must keep a single shared center line — the branch's
+// end events must not seize the main axis and shove the happy-path tasks off it.
+func TestGenerateDIHappyPathStaysStraight(t *testing.T) {
+	src := []byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="P">
+	    <startEvent id="Start"/>
+	    <serviceTask id="Init"/>
+	    <serviceTask id="Establish"/>
+	    <serviceTask id="Discover"/>
+	    <serviceTask id="Execute"/>
+	    <serviceTask id="Log"/>
+	    <serviceTask id="Cleanup"/>
+	    <endEvent id="EndSuccess"/>
+	    <serviceTask id="HandleSessionError"/>
+	    <serviceTask id="HandleError"/>
+	    <endEvent id="EndError1"/>
+	    <endEvent id="EndError2"/>
+	    <boundaryEvent id="SessionError" attachedToRef="Establish"/>
+	    <boundaryEvent id="Error" attachedToRef="Execute"/>
+	    <sequenceFlow id="f1" sourceRef="Start" targetRef="Init"/>
+	    <sequenceFlow id="f2" sourceRef="Init" targetRef="Establish"/>
+	    <sequenceFlow id="f3" sourceRef="Establish" targetRef="Discover"/>
+	    <sequenceFlow id="f4" sourceRef="Discover" targetRef="Execute"/>
+	    <sequenceFlow id="f5" sourceRef="Execute" targetRef="Log"/>
+	    <sequenceFlow id="f6" sourceRef="Log" targetRef="Cleanup"/>
+	    <sequenceFlow id="f7" sourceRef="Cleanup" targetRef="EndSuccess"/>
+	    <sequenceFlow id="e1" sourceRef="SessionError" targetRef="HandleSessionError"/>
+	    <sequenceFlow id="e2" sourceRef="HandleSessionError" targetRef="EndError1"/>
+	    <sequenceFlow id="e3" sourceRef="Error" targetRef="HandleError"/>
+	    <sequenceFlow id="e4" sourceRef="HandleError" targetRef="EndError2"/>
+	  </process>
+	</definitions>`)
+	di, ok := generateDI(src)
+	if !ok {
+		t.Fatal("generateDI: want ok")
+	}
+	shapes := parseShapes(t, di)
+	happyPath := []string{"Start", "Init", "Establish", "Discover", "Execute", "Log", "Cleanup", "EndSuccess"}
+	want := shapes[happyPath[0]]
+	wantCY := want.y + want.h/2
+	for _, id := range happyPath {
+		s, ok := shapes[id]
+		if !ok {
+			t.Fatalf("happy-path shape %q missing:\n%s", id, di)
+		}
+		if cy := s.y + s.h/2; cy != wantCY {
+			t.Errorf("happy-path node %q center y=%d, want %d (main flow must stay one straight line)", id, cy, wantCY)
+		}
+	}
+	// The side branches rise above the main axis, never displacing it or dropping
+	// below it (smaller y is higher on the canvas).
+	for _, id := range []string{"EndError1", "EndError2", "HandleSessionError", "HandleError"} {
+		s, ok := shapes[id]
+		if !ok {
+			t.Fatalf("branch shape %q missing:\n%s", id, di)
+		}
+		if cy := s.y + s.h/2; cy >= wantCY {
+			t.Errorf("branch node %q y-center %d is not above the main axis %d", id, cy, wantCY)
+		}
 	}
 }
 
