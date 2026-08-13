@@ -46,6 +46,17 @@ _Changed_ / _Removed_ for each version.
   tests must not depend on wall-clock time or goroutine scheduling (invariant I4,
   AGENTS.md). Production behavior is unchanged — a real ticker and the system clock
   still drive the sweep in the running server.
+- **Deterministic OpenSearch-exporter test** (v0.2.0 reliability foundation): the
+  exporter loop (ADR-0114) gained a test seam — an injectable tick trigger in place of
+  its real ticker, with a completion signal. The exporter test previously fired a 15ms
+  export interval and polled `stub.count()` under a 3s deadline with a `time.Sleep`,
+  racing the background ticker; it is replaced by one that triggers a single export pass
+  and awaits it via a channel handshake, then asserts the instance's events were
+  mirrored to the configured index — no wall-clock cadence, no polling, no `time.Sleep`.
+  This follows the same seam the history-retention sweep uses and honors the repository
+  rule that tests must not depend on wall-clock time or goroutine scheduling (AGENTS.md).
+  Production behavior is unchanged — a real ticker still drives the loop in the running
+  server.
 
 ## [0.1.0] — 2026-08-11
 
