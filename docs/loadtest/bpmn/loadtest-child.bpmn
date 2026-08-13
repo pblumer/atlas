@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_loadtest_child" targetNamespace="http://atlas/loadtest">
+  <!-- Triviale Kind-Prozess-Instanz. Konstanter Script-Ausdruck, damit die Instanz
+       unabhängig von Eingabe-Variablen läuft (vermeidet Incident-Sturm bei N Kindern). -->
+  <process id="loadtest-child" name="Lasttest Kind (Order-Zeile)" isExecutable="true">
+    <startEvent id="cstart" name="Start"/>
+    <scriptTask id="cwork" name="Zeile verarbeiten">
+      <extensionElements>
+        <zeebe:script expression="= 21 * 2 + 1" resultVariable="result"/>
+      </extensionElements>
+    </scriptTask>
+    <endEvent id="cend" name="Fertig"/>
+    <sequenceFlow id="cf1" sourceRef="cstart" targetRef="cwork"/>
+    <sequenceFlow id="cf2" sourceRef="cwork" targetRef="cend"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="loadtest-child">
+      <bpmndi:BPMNShape id="di_cstart" bpmnElement="cstart"><dc:Bounds x="160" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_cwork" bpmnElement="cwork"><dc:Bounds x="260" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_cend" bpmnElement="cend"><dc:Bounds x="420" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_cf1" bpmnElement="cf1"><di:waypoint x="196" y="200"/><di:waypoint x="260" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_cf2" bpmnElement="cf2"><di:waypoint x="360" y="200"/><di:waypoint x="420" y="200"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

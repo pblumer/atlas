@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_loadtest_allround" targetNamespace="http://atlas/loadtest">
+  <process id="loadtest-allround" name="Lasttest Allround (Order)" isExecutable="true">
+    <startEvent id="start" name="Bestellung eingegangen"/>
+    <serviceTask id="t_validate" name="Auftrag validieren">
+      <extensionElements><zeebe:taskDefinition type="validate" retries="3"/></extensionElements>
+    </serviceTask>
+    <parallelGateway id="gw_fork" name="parallel"/>
+    <userTask id="t_credit" name="Bonität prüfen">
+      <extensionElements><zeebe:assignmentDefinition candidateGroups="reviewers"/></extensionElements>
+    </userTask>
+    <serviceTask id="t_reserve" name="Lager reservieren">
+      <extensionElements><zeebe:taskDefinition type="reserve" retries="3"/></extensionElements>
+    </serviceTask>
+    <parallelGateway id="gw_join" name="join"/>
+    <exclusiveGateway id="gw_choice" name="Betrag?" default="f9"/>
+    <userTask id="t_approve" name="Manuell genehmigen">
+      <extensionElements><zeebe:assignmentDefinition candidateGroups="managers"/></extensionElements>
+    </userTask>
+    <serviceTask id="t_autoapprove" name="Auto-Freigabe">
+      <extensionElements><zeebe:taskDefinition type="autoapprove" retries="3"/></extensionElements>
+    </serviceTask>
+    <exclusiveGateway id="gw_merge" name="merge"/>
+    <serviceTask id="t_notify" name="Versand &amp; Benachrichtigung">
+      <extensionElements><zeebe:taskDefinition type="notify" retries="3"/></extensionElements>
+    </serviceTask>
+    <endEvent id="end" name="Bestellung abgeschlossen"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="t_validate"/>
+    <sequenceFlow id="f2" sourceRef="t_validate" targetRef="gw_fork"/>
+    <sequenceFlow id="f3" sourceRef="gw_fork" targetRef="t_credit"/>
+    <sequenceFlow id="f4" sourceRef="gw_fork" targetRef="t_reserve"/>
+    <sequenceFlow id="f5" sourceRef="t_credit" targetRef="gw_join"/>
+    <sequenceFlow id="f6" sourceRef="t_reserve" targetRef="gw_join"/>
+    <sequenceFlow id="f7" sourceRef="gw_join" targetRef="gw_choice"/>
+    <sequenceFlow id="f8" name="&#8805; 1000 (manuell)" sourceRef="gw_choice" targetRef="t_approve">
+      <conditionExpression>=amount &gt;= 1000</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f9" name="&lt; 1000 (auto)" sourceRef="gw_choice" targetRef="t_autoapprove"/>
+    <sequenceFlow id="f10" sourceRef="t_approve" targetRef="gw_merge"/>
+    <sequenceFlow id="f11" sourceRef="t_autoapprove" targetRef="gw_merge"/>
+    <sequenceFlow id="f12" sourceRef="gw_merge" targetRef="t_notify"/>
+    <sequenceFlow id="f13" sourceRef="t_notify" targetRef="end"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="loadtest-allround">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="160" y="222" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_validate" bpmnElement="t_validate"><dc:Bounds x="240" y="200" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_fork" bpmnElement="gw_fork"><dc:Bounds x="400" y="215" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_credit" bpmnElement="t_credit"><dc:Bounds x="485" y="100" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_reserve" bpmnElement="t_reserve"><dc:Bounds x="485" y="320" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_join" bpmnElement="gw_join"><dc:Bounds x="620" y="215" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_choice" bpmnElement="gw_choice"><dc:Bounds x="720" y="215" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_approve" bpmnElement="t_approve"><dc:Bounds x="800" y="100" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_autoapprove" bpmnElement="t_autoapprove"><dc:Bounds x="800" y="320" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_merge" bpmnElement="gw_merge"><dc:Bounds x="940" y="215" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_notify" bpmnElement="t_notify"><dc:Bounds x="1040" y="200" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="1200" y="222" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="196" y="240"/><di:waypoint x="240" y="240"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="340" y="240"/><di:waypoint x="400" y="240"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3"><di:waypoint x="425" y="215"/><di:waypoint x="425" y="140"/><di:waypoint x="485" y="140"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f4" bpmnElement="f4"><di:waypoint x="425" y="265"/><di:waypoint x="425" y="360"/><di:waypoint x="485" y="360"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f5" bpmnElement="f5"><di:waypoint x="585" y="140"/><di:waypoint x="645" y="140"/><di:waypoint x="645" y="215"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f6" bpmnElement="f6"><di:waypoint x="585" y="360"/><di:waypoint x="645" y="360"/><di:waypoint x="645" y="265"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f7" bpmnElement="f7"><di:waypoint x="670" y="240"/><di:waypoint x="720" y="240"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f8" bpmnElement="f8"><di:waypoint x="745" y="215"/><di:waypoint x="745" y="140"/><di:waypoint x="800" y="140"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f9" bpmnElement="f9"><di:waypoint x="745" y="265"/><di:waypoint x="745" y="360"/><di:waypoint x="800" y="360"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f10" bpmnElement="f10"><di:waypoint x="900" y="140"/><di:waypoint x="965" y="140"/><di:waypoint x="965" y="215"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f11" bpmnElement="f11"><di:waypoint x="900" y="360"/><di:waypoint x="965" y="360"/><di:waypoint x="965" y="265"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f12" bpmnElement="f12"><di:waypoint x="990" y="240"/><di:waypoint x="1040" y="240"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f13" bpmnElement="f13"><di:waypoint x="1140" y="240"/><di:waypoint x="1200" y="240"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

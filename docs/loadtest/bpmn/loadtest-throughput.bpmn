@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_loadtest_throughput" targetNamespace="http://atlas/loadtest">
+  <process id="loadtest-throughput" name="Lasttest Durchsatz (Auto)" isExecutable="true">
+    <startEvent id="start" name="Start"/>
+    <parallelGateway id="gw_fork" name="fork"/>
+    <exclusiveGateway id="b1" name="b1"/>
+    <exclusiveGateway id="b2" name="b2"/>
+    <exclusiveGateway id="b3" name="b3"/>
+    <exclusiveGateway id="b4" name="b4"/>
+    <parallelGateway id="gw_join" name="join"/>
+    <endEvent id="end" name="Fertig"/>
+    <sequenceFlow id="s1" sourceRef="start" targetRef="gw_fork"/>
+    <sequenceFlow id="e1" sourceRef="gw_fork" targetRef="b1"/>
+    <sequenceFlow id="e2" sourceRef="gw_fork" targetRef="b2"/>
+    <sequenceFlow id="e3" sourceRef="gw_fork" targetRef="b3"/>
+    <sequenceFlow id="e4" sourceRef="gw_fork" targetRef="b4"/>
+    <sequenceFlow id="j1" sourceRef="b1" targetRef="gw_join"/>
+    <sequenceFlow id="j2" sourceRef="b2" targetRef="gw_join"/>
+    <sequenceFlow id="j3" sourceRef="b3" targetRef="gw_join"/>
+    <sequenceFlow id="j4" sourceRef="b4" targetRef="gw_join"/>
+    <sequenceFlow id="fin" sourceRef="gw_join" targetRef="end"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="loadtest-throughput">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="160" y="222" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_fork" bpmnElement="gw_fork"><dc:Bounds x="250" y="215" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_b1" bpmnElement="b1"><dc:Bounds x="380" y="80" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_b2" bpmnElement="b2"><dc:Bounds x="380" y="180" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_b3" bpmnElement="b3"><dc:Bounds x="380" y="280" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_b4" bpmnElement="b4"><dc:Bounds x="380" y="380" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_join" bpmnElement="gw_join"><dc:Bounds x="520" y="215" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="640" y="222" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_s1" bpmnElement="s1"><di:waypoint x="196" y="240"/><di:waypoint x="250" y="240"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_e1" bpmnElement="e1"><di:waypoint x="275" y="215"/><di:waypoint x="275" y="105"/><di:waypoint x="380" y="105"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_e2" bpmnElement="e2"><di:waypoint x="275" y="240"/><di:waypoint x="275" y="205"/><di:waypoint x="380" y="205"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_e3" bpmnElement="e3"><di:waypoint x="275" y="265"/><di:waypoint x="275" y="305"/><di:waypoint x="380" y="305"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_e4" bpmnElement="e4"><di:waypoint x="275" y="265"/><di:waypoint x="275" y="405"/><di:waypoint x="380" y="405"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_j1" bpmnElement="j1"><di:waypoint x="430" y="105"/><di:waypoint x="545" y="105"/><di:waypoint x="545" y="215"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_j2" bpmnElement="j2"><di:waypoint x="430" y="205"/><di:waypoint x="545" y="205"/><di:waypoint x="545" y="215"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_j3" bpmnElement="j3"><di:waypoint x="430" y="305"/><di:waypoint x="545" y="305"/><di:waypoint x="545" y="265"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_j4" bpmnElement="j4"><di:waypoint x="430" y="405"/><di:waypoint x="545" y="405"/><di:waypoint x="545" y="265"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_fin" bpmnElement="fin"><di:waypoint x="570" y="240"/><di:waypoint x="640" y="240"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
