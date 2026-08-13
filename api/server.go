@@ -569,6 +569,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		}
 		s.internalToken = token
 	}
+	// Ensure the protected system project exists (ADR-0119). Like bootstrapAdmin,
+	// this runs on the constructing goroutine before the loop serves traffic, so it
+	// touches the project store directly within the single-writer discipline. It is
+	// idempotent, so it is safe on every start regardless of auth.
+	if err := s.ensureSystemProject(time.Now().Unix()); err != nil {
+		return nil, err
+	}
 	// The in-process DMN worker evaluates business rule tasks off no separate
 	// goroutine (the single-binary server drives jobs synchronously on the run
 	// loop). One handler serves every process: it resolves each job's decision,

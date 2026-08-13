@@ -23,6 +23,7 @@ type projectView struct {
 	Visibility string          `json:"visibility"`
 	Members    []projectMember `json:"members"`
 	MyRole     string          `json:"myRole"`
+	Protected  bool            `json:"protected"`
 	CreatedAt  int64           `json:"createdAt"`
 	UpdatedAt  int64           `json:"updatedAt"`
 	Artifacts  int             `json:"artifacts"`
@@ -48,6 +49,7 @@ func (s *Server) projectViewFor(r *http.Request, p project, artifacts int) proje
 		Visibility: vis,
 		Members:    members,
 		MyRole:     p.effectiveRole(principalFrom(r.Context()), s.authEnabled),
+		Protected:  p.Protected,
 		CreatedAt:  p.CreatedAt,
 		UpdatedAt:  p.UpdatedAt,
 		Artifacts:  artifacts,
@@ -213,6 +215,10 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 			forbidden, fmsg = code, msg
 			return
 		}
+		if code, msg := protectedGuard(rec); code != 0 {
+			forbidden, fmsg = code, msg
+			return
+		}
 		if payload.OwnerID != nil && s.authEnabled {
 			if _, ok, e := s.users.get(*payload.OwnerID); e != nil {
 				lookupErr = e
@@ -287,6 +293,10 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if code, msg := s.checkProjectRole(r, rec, ScopeRoleOwner); code != 0 {
+			forbidden, fmsg = code, msg
+			return
+		}
+		if code, msg := protectedGuard(rec); code != 0 {
 			forbidden, fmsg = code, msg
 			return
 		}

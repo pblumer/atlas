@@ -3164,6 +3164,7 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	var (
 		saveErr, projErr error
 		unknownProject   bool
+		protectedProject bool
 	)
 	s.do(func() {
 		if !hasProjectParam {
@@ -3172,13 +3173,19 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 				rec.ProjectID = existing.ProjectID
 			}
 		} else if projectID != "" {
-			_, ok, e := s.projects.get(projectID)
+			proj, ok, e := s.projects.get(projectID)
 			if e != nil {
 				projErr = e
 				return
 			}
 			if !ok {
 				unknownProject = true
+				return
+			}
+			// A protected system project's content is platform-managed (ADR-0119):
+			// refuse authoring a draft into it, for any caller.
+			if proj.Protected {
+				protectedProject = true
 				return
 			}
 		}
@@ -3189,6 +3196,8 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "read project: "+projErr.Error())
 	case unknownProject:
 		writeError(w, http.StatusBadRequest, "unknown project id")
+	case protectedProject:
+		writeError(w, http.StatusForbidden, "protected system project cannot be modified")
 	case saveErr != nil:
 		writeError(w, http.StatusInternalServerError, "save draft: "+saveErr.Error())
 	default:
@@ -3238,6 +3247,7 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 	}
 	var (
 		found, unknownProject    bool
+		protectedProject         bool
 		getErr, projErr, saveErr error
 		view                     draftResp
 	)
@@ -3252,13 +3262,19 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 		}
 		found = true
 		if payload.ProjectID != "" {
-			_, pok, pe := s.projects.get(payload.ProjectID)
+			proj, pok, pe := s.projects.get(payload.ProjectID)
 			if pe != nil {
 				projErr = pe
 				return
 			}
 			if !pok {
 				unknownProject = true
+				return
+			}
+			// A protected system project's content is platform-managed (ADR-0119):
+			// refuse moving a draft into it, for any caller.
+			if proj.Protected {
+				protectedProject = true
 				return
 			}
 		}
@@ -3277,6 +3293,8 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "read project: "+projErr.Error())
 	case unknownProject:
 		writeError(w, http.StatusBadRequest, "unknown project id")
+	case protectedProject:
+		writeError(w, http.StatusForbidden, "protected system project cannot be modified")
 	case saveErr != nil:
 		writeError(w, http.StatusInternalServerError, "move draft: "+saveErr.Error())
 	default:
