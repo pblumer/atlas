@@ -77,8 +77,8 @@ func stripDiagramLayout(src []byte) []byte {
 // --- parsing (independent of the compiler's own XML structs) ---
 
 type layoutDefs struct {
-	Processes     []layoutProcess `xml:"process"`
-	Collaboration *layoutCollab   `xml:"collaboration"`
+	Processes     []layoutContainer `xml:"process"`
+	Collaboration *layoutCollab     `xml:"collaboration"`
 }
 
 type layoutCollab struct {
@@ -98,7 +98,11 @@ type layoutParticipant struct {
 	ProcessRef string `xml:"processRef,attr"`
 }
 
-type layoutProcess struct {
+// layoutContainer is a process or an (expanded) subprocess: the flow nodes it
+// holds, the subprocesses nested inside it, the boundary events attached to its
+// activities, and the sequence flows among them. A process and a subProcess share
+// this shape, so SubProcesses recurses to arbitrary depth.
+type layoutContainer struct {
 	Id           string       `xml:"id,attr"`
 	StartEvents  []layoutElem `xml:"startEvent"`
 	EndEvents    []layoutElem `xml:"endEvent"`
@@ -115,11 +119,24 @@ type layoutProcess struct {
 	IntermediateCatchEvents []layoutElem `xml:"intermediateCatchEvent"`
 	IntermediateThrowEvents []layoutElem `xml:"intermediateThrowEvent"`
 
+	// Expanded subprocesses laid out inline: each is sized to its own contents and
+	// its children rendered in the same plane, offset into the box.
+	SubProcesses []layoutContainer `xml:"subProcess"`
+
+	// Boundary events attach to an activity in this container via attachedToRef and
+	// ride its border rather than a grid cell.
+	BoundaryEvents []layoutBoundary `xml:"boundaryEvent"`
+
 	Flows []layoutFlow `xml:"sequenceFlow"`
 }
 
 type layoutElem struct {
 	Id string `xml:"id,attr"`
+}
+
+type layoutBoundary struct {
+	Id            string `xml:"id,attr"`
+	AttachedToRef string `xml:"attachedToRef,attr"`
 }
 
 type layoutFlow struct {
@@ -137,16 +154,64 @@ var (
 	kindGateway = nodeKind{50, 50}
 )
 
-type layoutNode struct {
-	id   string
-	kind nodeKind
-	// filled during layout
-	x, y int
+// Layout spacing. gapX/gapY separate columns and rows; the sub* paddings size an
+// expanded subprocess around its laid-out children — a header strip on top for the
+// title, symmetric side and bottom padding — and the sub minimums keep an empty
+// subprocess readable as a container.
+const (
+	layoutMarginX = 150
+	layoutMarginY = 90
+	layoutGapX    = 50
+	layoutGapY    = 40
+	subPadX       = 30
+	subHeaderTop  = 40
+	subPadBottom  = 30
+	subMinW       = 200
+	subMinH       = 100
+)
+
+// lnode is one node while a single container is being laid out: a flow node
+// (event/task/gateway), an expanded subprocess box, or a boundary event. A
+// boundary event takes part in layering — so the exception flow leaving it is
+// pushed one column past its host — but is positioned on the host's border rather
+// than on the grid.
+type lnode struct {
+	id    string
+	w, h  int
+	layer int
+	x, y  int      // local position, filled during placement
+	sub   *laidOut // non-nil for an expanded subprocess: its inner layout
+	bound bool     // a boundary event
+	host  string   // boundary: the activity id it is attached to
+}
+
+// placedShape and placedEdge are the emitted diagram interchange for one container
+// (and everything nested inside it), in a single coordinate space.
+type placedShape struct {
+	id         string
+	x, y, w, h int
+	expanded   bool // an expanded subprocess box
+}
+
+type point struct{ x, y int }
+
+type placedEdge struct {
+	id  string
+	pts []point
+}
+
+// laidOut is a fully positioned container: its shapes and edges in one coordinate
+// space rooted at (0,0), and the extent they occupy.
+type laidOut struct {
+	shapes []placedShape
+	edges  []placedEdge
+	w, h   int
 }
 
 // generateDI parses the model and returns a BPMNDiagram fragment, reporting
 // whether it produced anything usable. A collaboration is laid out as stacked
-// pools (one per participant); a plain model as a single left-to-right process.
+// pools (one per participant); a plain model as a single left-to-right process,
+// with nested subprocesses expanded inline and boundary events on their hosts.
 func generateDI(src []byte) (string, bool) {
 	var defs layoutDefs
 	if err := xml.Unmarshal(src, &defs); err != nil {
@@ -155,59 +220,324 @@ func generateDI(src []byte) (string, bool) {
 	if defs.Collaboration != nil && defs.Collaboration.Id != "" && len(defs.Collaboration.Participants) > 0 {
 		return generateCollaborationDI(defs)
 	}
-	if len(defs.Processes) == 0 {
+	if len(defs.Processes) == 0 || defs.Processes[0].Id == "" {
 		return "", false
 	}
 	p := defs.Processes[0]
-	if p.Id == "" {
+	lo := layoutOf(p)
+	if len(lo.shapes) == 0 {
 		return "", false
 	}
-	nodes := collectNodes(p)
-	if len(nodes) == 0 {
-		return "", false
-	}
-	idx := nodeIndex(nodes)
-	positionNodes(nodes, idx, p.Flows)
+	lo.shapes = shiftShapes(lo.shapes, layoutMarginX, layoutMarginY)
+	lo.edges = shiftEdges(lo.edges, layoutMarginX, layoutMarginY)
 
 	var b strings.Builder
 	openPlane(&b, p.Id)
-	renderShapesAndEdges(&b, nodes, idx, p.Flows)
+	writeLaidOut(&b, lo)
 	closePlane(&b)
 	return b.String(), true
 }
 
-// collectNodes gathers a process's layout nodes (events, tasks, gateways).
-func collectNodes(p layoutProcess) []layoutNode {
-	var nodes []layoutNode
-	add := func(elems []layoutElem, k nodeKind) {
-		for _, e := range elems {
-			if e.Id != "" {
-				nodes = append(nodes, layoutNode{id: e.Id, kind: k})
-			}
-		}
+// layoutOf lays out one container (a process or a subprocess) into a single
+// coordinate space rooted at (0,0): a left-to-right layered grid for its flow
+// nodes, an expanded box per nested subprocess with its children offset inside,
+// and boundary events sitting on their hosts' bottom borders. It returns the
+// shapes, edges, and extent occupied. An empty container yields an empty laidOut
+// (no shapes), which callers treat as "nothing to draw".
+func layoutOf(c layoutContainer) laidOut {
+	nodes, inner := containerNodes(c)
+	if len(nodes) == 0 {
+		return laidOut{}
 	}
-	add(p.StartEvents, kindEvent)
-	add(p.EndEvents, kindEvent)
-	add(p.IntermediateCatchEvents, kindEvent)
-	add(p.IntermediateThrowEvents, kindEvent)
-	add(p.Tasks, kindTask)
-	add(p.ServiceTasks, kindTask)
-	add(p.ScriptTasks, kindTask)
-	add(p.UserTasks, kindTask)
-	add(p.ManualTasks, kindTask)
-	add(p.BizRuleTasks, kindTask)
-	add(p.ExclusiveGws, kindGateway)
-	add(p.ParallelGws, kindGateway)
-	add(p.InclusiveGws, kindGateway)
-	return nodes
-}
-
-func nodeIndex(nodes []layoutNode) map[string]int {
 	idx := make(map[string]int, len(nodes))
 	for i, n := range nodes {
 		idx[n.id] = i
 	}
-	return idx
+	assignLayers(nodes, idx, c.Flows)
+	placeNodes(nodes)
+	placeBoundaries(nodes, idx)
+
+	var lo laidOut
+	emitShapes(&lo, nodes, inner)
+	emitEdges(&lo, nodes, idx, c.Flows)
+	normalize(&lo)
+	return lo
+}
+
+// containerNodes gathers the layout nodes of one container: its simple flow nodes
+// (events/tasks/gateways), an expanded box per nested subprocess (laid out
+// recursively so the box is sized to its contents), and a boundary event per
+// attachment whose host is present. The recursively laid-out inner containers are
+// returned keyed by subprocess id so emitShapes can offset their children into the
+// box.
+func containerNodes(c layoutContainer) (nodes []lnode, inner map[string]*laidOut) {
+	inner = map[string]*laidOut{}
+	add := func(elems []layoutElem, k nodeKind) {
+		for _, e := range elems {
+			if e.Id != "" {
+				nodes = append(nodes, lnode{id: e.Id, w: k.w, h: k.h})
+			}
+		}
+	}
+	add(c.StartEvents, kindEvent)
+	add(c.EndEvents, kindEvent)
+	add(c.IntermediateCatchEvents, kindEvent)
+	add(c.IntermediateThrowEvents, kindEvent)
+	add(c.Tasks, kindTask)
+	add(c.ServiceTasks, kindTask)
+	add(c.ScriptTasks, kindTask)
+	add(c.UserTasks, kindTask)
+	add(c.ManualTasks, kindTask)
+	add(c.BizRuleTasks, kindTask)
+	add(c.ExclusiveGws, kindGateway)
+	add(c.ParallelGws, kindGateway)
+	add(c.InclusiveGws, kindGateway)
+
+	for i := range c.SubProcesses {
+		sp := c.SubProcesses[i]
+		if sp.Id == "" {
+			continue
+		}
+		lo := layoutOf(sp)
+		w := lo.w + 2*subPadX
+		if w < subMinW {
+			w = subMinW
+		}
+		h := lo.h + subHeaderTop + subPadBottom
+		if h < subMinH {
+			h = subMinH
+		}
+		inner[sp.Id] = &lo
+		nodes = append(nodes, lnode{id: sp.Id, w: w, h: h, sub: &lo})
+	}
+
+	// A boundary event only lays out if it attaches to an activity in this
+	// container; a dangling attachedToRef is dropped rather than floated at the
+	// origin.
+	hosts := make(map[string]bool, len(nodes))
+	for _, n := range nodes {
+		hosts[n.id] = true
+	}
+	for _, be := range c.BoundaryEvents {
+		if be.Id == "" || !hosts[be.AttachedToRef] {
+			continue
+		}
+		nodes = append(nodes, lnode{id: be.Id, w: kindEvent.w, h: kindEvent.h, bound: true, host: be.AttachedToRef})
+	}
+	return nodes, inner
+}
+
+// assignLayers computes each node's column via longest-path layering over the
+// sequence flows, plus an attachment rule that pins a boundary event to its host's
+// layer so the exception flow leaving it lands one column past the host. Iteration
+// is capped at the node count so a cyclic model still terminates.
+func assignLayers(nodes []lnode, idx map[string]int, flows []layoutFlow) {
+	for iter := 0; iter < len(nodes); iter++ {
+		changed := false
+		for i := range nodes {
+			if !nodes[i].bound {
+				continue
+			}
+			if h, ok := idx[nodes[i].host]; ok && nodes[i].layer < nodes[h].layer {
+				nodes[i].layer = nodes[h].layer
+				changed = true
+			}
+		}
+		for _, f := range flows {
+			s, sok := idx[f.SourceRef]
+			t, tok := idx[f.TargetRef]
+			if !sok || !tok {
+				continue
+			}
+			if nodes[t].layer < nodes[s].layer+1 {
+				nodes[t].layer = nodes[s].layer + 1
+				changed = true
+			}
+		}
+		if !changed {
+			break
+		}
+	}
+}
+
+// placeNodes assigns each non-boundary node a local position: columns are spaced by
+// the widest node in each preceding column, and nodes sharing a column stack
+// downward with the first centered on the main axis (y=0), so a linear happy path
+// renders as one straight line even when node heights differ. Boundary events are
+// skipped here and positioned by placeBoundaries.
+func placeNodes(nodes []lnode) {
+	laneW := map[int]int{}
+	maxLayer := 0
+	for i := range nodes {
+		if nodes[i].bound {
+			continue
+		}
+		l := nodes[i].layer
+		if nodes[i].w > laneW[l] {
+			laneW[l] = nodes[i].w
+		}
+		if l > maxLayer {
+			maxLayer = l
+		}
+	}
+	colX := make([]int, maxLayer+1)
+	for l := 1; l <= maxLayer; l++ {
+		colX[l] = colX[l-1] + laneW[l-1] + layoutGapX
+	}
+	cursorY := map[int]int{}
+	started := map[int]bool{}
+	for i := range nodes {
+		if nodes[i].bound {
+			continue
+		}
+		l := nodes[i].layer
+		if !started[l] {
+			nodes[i].y = -nodes[i].h / 2 // first row centered on the main axis
+			started[l] = true
+		} else {
+			nodes[i].y = cursorY[l]
+		}
+		nodes[i].x = colX[l] + (laneW[l]-nodes[i].w)/2
+		cursorY[l] = nodes[i].y + nodes[i].h + layoutGapY
+	}
+}
+
+// placeBoundaries sits each boundary event on the bottom border of its host,
+// centered when it is the only one and spread evenly along the edge when several
+// share a host, straddling the border so bpmn-js snaps them onto it.
+func placeBoundaries(nodes []lnode, idx map[string]int) {
+	count := map[string]int{}
+	for i := range nodes {
+		if nodes[i].bound {
+			count[nodes[i].host]++
+		}
+	}
+	seen := map[string]int{}
+	for i := range nodes {
+		if !nodes[i].bound {
+			continue
+		}
+		h, ok := idx[nodes[i].host]
+		if !ok {
+			continue
+		}
+		host := nodes[h]
+		k := seen[nodes[i].host]
+		seen[nodes[i].host]++
+		cx := host.x + host.w*(k+1)/(count[nodes[i].host]+1)
+		nodes[i].x = cx - nodes[i].w/2
+		nodes[i].y = host.y + host.h - nodes[i].h/2
+	}
+}
+
+// emitShapes writes a shape for every placed node. A subprocess box is marked
+// expanded and its inner layout translated into the box (past the header strip)
+// and appended, so its children carry absolute coordinates in the same plane.
+func emitShapes(lo *laidOut, nodes []lnode, inner map[string]*laidOut) {
+	for i := range nodes {
+		n := nodes[i]
+		if n.sub != nil {
+			lo.shapes = append(lo.shapes, placedShape{id: n.id, x: n.x, y: n.y, w: n.w, h: n.h, expanded: true})
+			child := inner[n.id]
+			lo.shapes = append(lo.shapes, shiftShapes(child.shapes, n.x+subPadX, n.y+subHeaderTop)...)
+			lo.edges = append(lo.edges, shiftEdges(child.edges, n.x+subPadX, n.y+subHeaderTop)...)
+			continue
+		}
+		lo.shapes = append(lo.shapes, placedShape{id: n.id, x: n.x, y: n.y, w: n.w, h: n.h})
+	}
+}
+
+// emitEdges writes an edge for each sequence flow whose endpoints are both placed,
+// routed orthogonally (AGENTS.md: "clean orthogonal waypoints … never through the
+// main-axis boxes"). A flow on the main axis (source and target on the same row) is
+// a single straight segment; a branch to another row is an elbow — out, across,
+// then in — so the alternate path reads as its own lane instead of a diagonal that
+// clips the boxes it passes.
+func emitEdges(lo *laidOut, nodes []lnode, idx map[string]int, flows []layoutFlow) {
+	for _, f := range flows {
+		s, sok := idx[f.SourceRef]
+		t, tok := idx[f.TargetRef]
+		if !sok || !tok || f.Id == "" {
+			continue
+		}
+		lo.edges = append(lo.edges, placedEdge{id: f.Id, pts: routeFlow(nodes[s], nodes[t])})
+	}
+}
+
+// routeFlow builds the orthogonal waypoints from src to tgt. A normal source leaves
+// on its right edge, a boundary event drops out of its bottom; every target is
+// entered on its left. When the two ends already share a row the run is straight;
+// otherwise a vertical riser at the mid-x turns the diagonal into a right-angled
+// out-across-in path.
+func routeFlow(src, tgt lnode) []point {
+	tx, ty := tgt.x, tgt.y+tgt.h/2 // target entry: left-center
+	if src.bound {
+		// Exception path: straight down out of the host, then across into the target.
+		sx, sy := src.x+src.w/2, src.y+src.h
+		if sx == tx {
+			return []point{{sx, sy}, {tx, ty}}
+		}
+		return []point{{sx, sy}, {sx, ty}, {tx, ty}}
+	}
+	sx, sy := src.x+src.w, src.y+src.h/2 // source exit: right-center
+	if sy == ty {
+		return []point{{sx, sy}, {tx, ty}}
+	}
+	midX := (sx + tx) / 2
+	return []point{{sx, sy}, {midX, sy}, {midX, ty}, {tx, ty}}
+}
+
+// normalize shifts a laid-out container so its top-left sits at (0,0) and records
+// the extent it occupies. bpmn-js tolerates negative coordinates, but a (0,0)
+// origin keeps nested translation and pool sizing simple.
+func normalize(lo *laidOut) {
+	if len(lo.shapes) == 0 {
+		return
+	}
+	minX, minY := lo.shapes[0].x, lo.shapes[0].y
+	for _, s := range lo.shapes {
+		if s.x < minX {
+			minX = s.x
+		}
+		if s.y < minY {
+			minY = s.y
+		}
+	}
+	lo.shapes = shiftShapes(lo.shapes, -minX, -minY)
+	lo.edges = shiftEdges(lo.edges, -minX, -minY)
+	for _, s := range lo.shapes {
+		if r := s.x + s.w; r > lo.w {
+			lo.w = r
+		}
+		if b := s.y + s.h; b > lo.h {
+			lo.h = b
+		}
+	}
+}
+
+// shiftShapes / shiftEdges return copies translated by (dx,dy). They never mutate
+// their input, so a recursively laid-out subprocess can be offset into its box
+// without disturbing the cached inner layout.
+func shiftShapes(ss []placedShape, dx, dy int) []placedShape {
+	out := make([]placedShape, len(ss))
+	for i, s := range ss {
+		s.x += dx
+		s.y += dy
+		out[i] = s
+	}
+	return out
+}
+
+func shiftEdges(es []placedEdge, dx, dy int) []placedEdge {
+	out := make([]placedEdge, len(es))
+	for i, e := range es {
+		pts := make([]point, len(e.pts))
+		for j, p := range e.pts {
+			pts[j] = point{p.x + dx, p.y + dy}
+		}
+		out[i] = placedEdge{id: e.id, pts: pts}
+	}
+	return out
 }
 
 // generateCollaborationDI lays out a collaboration as horizontally stacked pools.
@@ -215,7 +545,7 @@ func nodeIndex(nodes []layoutNode) map[string]int {
 // participant with no resolvable/eventful process still gets an (empty) pool so
 // the collaboration structure is visible. The plane binds to the collaboration.
 func generateCollaborationDI(defs layoutDefs) (string, bool) {
-	byID := make(map[string]layoutProcess, len(defs.Processes))
+	byID := make(map[string]layoutContainer, len(defs.Processes))
 	for _, p := range defs.Processes {
 		byID[p.Id] = p
 	}
@@ -233,8 +563,9 @@ func generateCollaborationDI(defs layoutDefs) (string, bool) {
 	var b strings.Builder
 	openPlane(&b, defs.Collaboration.Id)
 
-	// Collect all nodes across all pools for cross-pool message flow edges.
-	allIdx := map[string]layoutNode{}
+	// Absolute bounds of every emitted shape, keyed by element id, for cross-pool
+	// message flow edges (nested nodes included).
+	placed := map[string]placedShape{}
 
 	poolTop := poolTop0
 	any := false
@@ -243,55 +574,47 @@ func generateCollaborationDI(defs layoutDefs) (string, bool) {
 			continue
 		}
 		proc, ok := byID[part.ProcessRef]
-		nodes := []layoutNode(nil)
+		var lo laidOut
 		if ok {
-			nodes = collectNodes(proc)
+			lo = layoutOf(proc)
 		}
-		if len(nodes) == 0 {
+		if len(lo.shapes) == 0 {
 			// Black-box pool: an empty band, still part of the picture.
 			poolShape(&b, part.Id, poolLeft, poolTop, emptyPoolW, emptyPoolH)
 			poolTop += emptyPoolH + poolGap
 			any = true
 			continue
 		}
-		idx := nodeIndex(nodes)
-		positionNodes(nodes, idx, proc.Flows)
-
-		// Shift the process's nodes into this pool's band (past the label strip and
-		// below the band top), and measure the band.
-		minY, maxYBot, maxXRight := nodeExtents(nodes)
-		yShift := poolTop + innerPadY - minY
-		for i := range nodes {
-			nodes[i].x += labelStrip
-			nodes[i].y += yShift
-		}
-		poolH := (maxYBot - minY) + 2*innerPadY
-		poolW := maxXRight + labelStrip + innerPadY
+		// Shift the process's nodes into this pool's band, past the label strip and
+		// below the band top, and measure the band.
+		dx := poolLeft + labelStrip
+		dy := poolTop + innerPadY
+		lo.shapes = shiftShapes(lo.shapes, dx, dy)
+		lo.edges = shiftEdges(lo.edges, dx, dy)
+		poolH := lo.h + 2*innerPadY
+		poolW := lo.w + labelStrip + innerPadY
 
 		poolShape(&b, part.Id, poolLeft, poolTop, poolW, poolH)
-		renderShapesAndEdges(&b, nodes, idx, proc.Flows)
-		for _, n := range nodes {
-			allIdx[n.id] = n
+		writeLaidOut(&b, lo)
+		for _, s := range lo.shapes {
+			placed[s.id] = s
 		}
 		poolTop += poolH + poolGap
 		any = true
 	}
 
-	// Message flow edges connect elements across pools.
+	// Message flow edges connect elements across pools: down out of the source's
+	// bottom, up into the target's top (pools are stacked vertically).
 	for _, mf := range defs.Collaboration.MessageFlows {
-		src, sok := allIdx[mf.SourceRef]
-		tgt, tok := allIdx[mf.TargetRef]
+		src, sok := placed[mf.SourceRef]
+		tgt, tok := placed[mf.TargetRef]
 		if !sok || !tok || mf.Id == "" {
 			continue
 		}
-		x1 := src.x + src.kind.w/2
-		y1 := src.y + src.kind.h
-		x2 := tgt.x + tgt.kind.w/2
-		y2 := tgt.y
-		fmt.Fprintf(&b, "      <bpmndi:BPMNEdge id=\"%s\" bpmnElement=\"%s\">\n", attr(mf.Id+"_di"), attr(mf.Id))
-		fmt.Fprintf(&b, "        <omgdi:waypoint x=\"%d\" y=\"%d\"/>\n", x1, y1)
-		fmt.Fprintf(&b, "        <omgdi:waypoint x=\"%d\" y=\"%d\"/>\n", x2, y2)
-		b.WriteString("      </bpmndi:BPMNEdge>\n")
+		writeEdge(&b, mf.Id, []point{
+			{src.x + src.w/2, src.y + src.h},
+			{tgt.x + tgt.w/2, tgt.y},
+		})
 	}
 
 	closePlane(&b)
@@ -299,66 +622,6 @@ func generateCollaborationDI(defs layoutDefs) (string, bool) {
 		return "", false
 	}
 	return b.String(), true
-}
-
-// nodeExtents returns the min top, max bottom, and max right edge of nodes.
-func nodeExtents(nodes []layoutNode) (minY, maxYBot, maxXRight int) {
-	minY = nodes[0].y
-	for _, n := range nodes {
-		if n.y < minY {
-			minY = n.y
-		}
-		if bot := n.y + n.kind.h; bot > maxYBot {
-			maxYBot = bot
-		}
-		if right := n.x + n.kind.w; right > maxXRight {
-			maxXRight = right
-		}
-	}
-	return minY, maxYBot, maxXRight
-}
-
-// positionNodes assigns each node a coordinate using longest-path layering: a
-// node's column is the longest chain of sequence flows reaching it from a source,
-// and nodes sharing a column are stacked vertically. Iteration is capped at the
-// node count so a cyclic model still terminates.
-func positionNodes(nodes []layoutNode, idx map[string]int, flows []layoutFlow) {
-	const (
-		marginX = 150
-		marginY = 90
-		colW    = 150
-		rowH    = 110
-	)
-
-	layer := make([]int, len(nodes))
-	for iter := 0; iter < len(nodes); iter++ {
-		changed := false
-		for _, f := range flows {
-			s, sok := idx[f.SourceRef]
-			t, tok := idx[f.TargetRef]
-			if !sok || !tok {
-				continue
-			}
-			if layer[t] < layer[s]+1 {
-				layer[t] = layer[s] + 1
-				changed = true
-			}
-		}
-		if !changed {
-			break
-		}
-	}
-
-	rowInLayer := map[int]int{}
-	for i := range nodes {
-		l := layer[i]
-		row := rowInLayer[l]
-		rowInLayer[l] = row + 1
-		cx := marginX + l*colW
-		cy := marginY + row*rowH
-		nodes[i].x = cx - nodes[i].kind.w/2
-		nodes[i].y = cy - nodes[i].kind.h/2
-	}
 }
 
 // openPlane writes the BPMNDiagram + BPMNPlane opening, bound to planeElement (a
@@ -381,31 +644,36 @@ func poolShape(b *strings.Builder, id string, x, y, w, h int) {
 	b.WriteString("      </bpmndi:BPMNShape>\n")
 }
 
-// renderShapesAndEdges writes the BPMNShape for each node and the BPMNEdge for
-// each sequence flow, using the nodes' assigned coordinates.
-func renderShapesAndEdges(b *strings.Builder, nodes []layoutNode, idx map[string]int, flows []layoutFlow) {
-	for _, n := range nodes {
-		fmt.Fprintf(b, "      <bpmndi:BPMNShape id=\"%s\" bpmnElement=\"%s\">\n", attr(n.id+"_di"), attr(n.id))
-		fmt.Fprintf(b, "        <omgdc:Bounds x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\"/>\n",
-			n.x, n.y, n.kind.w, n.kind.h)
-		b.WriteString("      </bpmndi:BPMNShape>\n")
+// writeLaidOut renders a positioned container's shapes then its edges.
+func writeLaidOut(b *strings.Builder, lo laidOut) {
+	for _, s := range lo.shapes {
+		writeShape(b, s)
 	}
+	for _, e := range lo.edges {
+		writeEdge(b, e.id, e.pts)
+	}
+}
 
-	for _, f := range flows {
-		s, sok := idx[f.SourceRef]
-		t, tok := idx[f.TargetRef]
-		if !sok || !tok || f.Id == "" {
-			continue
-		}
-		x1 := nodes[s].x + nodes[s].kind.w
-		y1 := nodes[s].y + nodes[s].kind.h/2
-		x2 := nodes[t].x
-		y2 := nodes[t].y + nodes[t].kind.h/2
-		fmt.Fprintf(b, "      <bpmndi:BPMNEdge id=\"%s\" bpmnElement=\"%s\">\n", attr(f.Id+"_di"), attr(f.Id))
-		fmt.Fprintf(b, "        <omgdi:waypoint x=\"%d\" y=\"%d\"/>\n", x1, y1)
-		fmt.Fprintf(b, "        <omgdi:waypoint x=\"%d\" y=\"%d\"/>\n", x2, y2)
-		b.WriteString("      </bpmndi:BPMNEdge>\n")
+// writeShape renders one BPMNShape. An expanded subprocess carries isExpanded so
+// bpmn-js draws it as an open container with its children in-plane.
+func writeShape(b *strings.Builder, s placedShape) {
+	exp := ""
+	if s.expanded {
+		exp = ` isExpanded="true"`
 	}
+	fmt.Fprintf(b, "      <bpmndi:BPMNShape id=\"%s\" bpmnElement=\"%s\"%s>\n", attr(s.id+"_di"), attr(s.id), exp)
+	fmt.Fprintf(b, "        <omgdc:Bounds x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\"/>\n", s.x, s.y, s.w, s.h)
+	b.WriteString("      </bpmndi:BPMNShape>\n")
+}
+
+// writeEdge renders one BPMNEdge for a flow (or message flow) from its ordered
+// waypoints — two for a straight run, more for an orthogonal elbow.
+func writeEdge(b *strings.Builder, id string, pts []point) {
+	fmt.Fprintf(b, "      <bpmndi:BPMNEdge id=\"%s\" bpmnElement=\"%s\">\n", attr(id+"_di"), attr(id))
+	for _, p := range pts {
+		fmt.Fprintf(b, "        <omgdi:waypoint x=\"%d\" y=\"%d\"/>\n", p.x, p.y)
+	}
+	b.WriteString("      </bpmndi:BPMNEdge>\n")
 }
 
 var definitionsClose = regexp.MustCompile(`(?is)</\s*([a-z0-9_.]+:)?definitions\s*>`)
