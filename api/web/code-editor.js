@@ -433,6 +433,47 @@ export function attachCodeEditor(textarea, opts = {}) {
     hoverRaf = requestAnimationFrame(() => { hoverRaf = 0; updateTip(x, y); });
   };
 
+  // --- drag-and-drop insert (a variable dragged from the Variables panel) ---
+  // Panel rows carry the variable name as a text/plain payload; dropping one inserts
+  // it at the drop point. We handle it explicitly rather than lean on the textarea's
+  // native drop so the insertion lands where the pointer is (not at the old caret),
+  // never bites into the locked '=' prefix, and re-highlights and re-validates like
+  // any other edit. Only a plain-text drag is claimed — a file or richer payload
+  // falls through to the default handling.
+  const hasPlainText = (dt) => !!dt && Array.prototype.includes.call(dt.types || [], "text/plain");
+  function dropIndex(e) {
+    // Map the drop coordinates to a caret offset in the textarea; fall back to the
+    // current caret when the platform can't (or maps outside the text).
+    const doc = textarea.ownerDocument;
+    let pos = null;
+    if (doc.caretPositionFromPoint) {
+      const cp = doc.caretPositionFromPoint(e.clientX, e.clientY);
+      if (cp && cp.offsetNode === textarea) pos = cp.offset;
+    } else if (doc.caretRangeFromPoint) {
+      const r = doc.caretRangeFromPoint(e.clientX, e.clientY);
+      if (r) pos = r.startOffset;
+    }
+    if (pos == null || pos > textarea.value.length) pos = textarea.selectionStart;
+    return Math.max(lockLen(), Math.min(pos, textarea.value.length));
+  }
+  function onDragover(e) {
+    if (!hasPlainText(e.dataTransfer)) return;
+    e.preventDefault(); // required for the textarea to accept the drop
+    e.dataTransfer.dropEffect = "copy";
+  }
+  function onDrop(e) {
+    if (!hasPlainText(e.dataTransfer)) return;
+    const text = e.dataTransfer.getData("text/plain");
+    if (!text) return;
+    e.preventDefault();
+    const at = dropIndex(e);
+    textarea.setRangeText(text, at, at, "end");
+    textarea.focus();
+    closePopup();
+    afterEdit();
+    scheduleValidate();
+  }
+
   // --- events ---
   const onInput = () => { renderHighlight(); openCompletion(false); scheduleValidate(); hideTip(); };
   const onScroll = () => {
@@ -495,6 +536,8 @@ export function attachCodeEditor(textarea, opts = {}) {
   textarea.addEventListener("blur", onBlur);
   textarea.addEventListener("mousemove", onHover);
   textarea.addEventListener("mouseleave", hideTip);
+  textarea.addEventListener("dragover", onDragover);
+  textarea.addEventListener("drop", onDrop);
   if (lockPrefix) {
     textarea.addEventListener("beforeinput", onBeforeInput);
     textarea.addEventListener("keyup", clampCaret);
@@ -516,6 +559,8 @@ export function attachCodeEditor(textarea, opts = {}) {
       textarea.removeEventListener("blur", onBlur);
       textarea.removeEventListener("mousemove", onHover);
       textarea.removeEventListener("mouseleave", hideTip);
+      textarea.removeEventListener("dragover", onDragover);
+      textarea.removeEventListener("drop", onDrop);
       if (lockPrefix) {
         textarea.removeEventListener("beforeinput", onBeforeInput);
         textarea.removeEventListener("keyup", clampCaret);

@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas FEEL-editor drag-drop e2e harness</title>
+    <!-- Attaches the *real* api/web/feel.js editor (over api/web/code-editor.js) to
+         plain <textarea>s and exposes a drop helper, so the test can prove a variable
+         dragged from the Variables panel is inserted at the drop point — respecting
+         the locked '=' prefix — and the field re-highlights. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      body { margin: 24px; background: #fff; }
+      .fld { width: 320px; margin-bottom: 28px; }
+      textarea { width: 100%; height: 40px; font: 14px ui-monospace, monospace; }
+    </style>
+  </head>
+  <body>
+    <div class="fld"><textarea id="plain">a + </textarea></div>
+    <div class="fld"><textarea id="locked">=</textarea></div>
+    <script type="module">
+      import { attachFeelEditor } from "/feel.js";
+
+      const vars = ["total", "amount", "a"];
+      // A plain FEEL field (no '=' marker) and an fx field whose leading '=' is a
+      // locked, protected prefix (the drop must never land before it).
+      const plain = attachFeelEditor(document.getElementById("plain"), { variables: vars });
+      const locked = attachFeelEditor(document.getElementById("locked"), {
+        variables: vars,
+        lockPrefix: (v) => (v.startsWith("=") ? 1 : 0),
+      });
+
+      // drop dispatches a dragover then a drop of `name` (text/plain) at the given
+      // client point, exactly as dragging a Variables-panel row onto the field would.
+      window.__drop = (which, name, x, y) => {
+        const ta = document.getElementById(which);
+        const dt = new DataTransfer();
+        dt.setData("text/plain", name);
+        ta.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt, clientX: x, clientY: y }));
+        ta.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt, clientX: x, clientY: y }));
+      };
+      window.__value = (which) => document.getElementById(which).value;
+      window.__rect = (which) => {
+        const r = document.getElementById(which).getBoundingClientRect();
+        return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
+      };
+      window.__highlightText = (which) =>
+        document.getElementById(which).closest(".code-editor").querySelector(".ce-highlight code").textContent;
+      window.__cleanup = () => { plain.destroy(); locked.destroy(); };
+      window.__ready = true;
+    </script>
+  </body>
+</html>
