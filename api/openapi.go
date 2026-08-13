@@ -153,6 +153,10 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Validation problems and the engine version that produced them", schemaObj(map[string]any{
 				"version": tString(), "problems": tArray(),
 			}))}},
+		{"POST", "/api/v1/layout", s.handleLayout, apiOp{
+			summary: "Regenerate a BPMN model's diagram layout — discards any existing diagram interchange and returns the model with a freshly generated left-to-right layout, backing the Modeler's Auto-layout button. A pure transform: nothing is compiled, deployed, or stored.", tag: "Deployments",
+			req:  xmlBody("BPMN 2.0 XML"),
+			resp: xmlBody("BPMN 2.0 XML with regenerated diagram interchange")}},
 
 		{"GET", "/api/v1/processes", s.handleListProcesses, apiOp{
 			summary: "List deployed processes", tag: "Processes", resp: jsonBody("Processes", tArray())}},

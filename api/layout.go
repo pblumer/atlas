@@ -35,6 +35,45 @@ func ensureDiagramLayout(src []byte) []byte {
 	return injectBeforeDefinitionsClose(src, di)
 }
 
+// relayoutDiagram discards whatever diagram interchange the model already carries
+// and generates a fresh left-to-right layout in its place. It backs the Modeler's
+// "Auto-layout" button: a diagram a user has tangled by hand is re-flowed by the
+// same generator that lays out a layout-less deployed model. Only shape and edge
+// coordinates change — the semantic model (processes, flows, ids) is untouched.
+//
+// Best-effort, like ensureDiagramLayout: if a new layout can't be generated (the
+// XML won't parse, or the model has no layout-relevant nodes) src is returned
+// unchanged rather than stripped of the layout it had.
+func relayoutDiagram(src []byte) []byte {
+	// generateDI reads only the semantic elements, so it ignores any existing DI;
+	// generate first and only strip the old layout once we have a replacement.
+	di, ok := generateDI(src)
+	if !ok {
+		return src
+	}
+	return injectBeforeDefinitionsClose(stripDiagramLayout(src), di)
+}
+
+// BPMN diagram-interchange blocks to strip before regenerating layout. Two shapes
+// occur: a self-closing <BPMNDiagram .../> and a full <BPMNDiagram>…</BPMNDiagram>
+// container. The namespace prefix is arbitrary, so both patterns allow any. The
+// self-closing form is removed first: its [^>]* stops at the first '>' and so can
+// never swallow a container's contents, while the container's non-greedy body then
+// matches each remaining block up to its own closing tag.
+var (
+	bpmnDiagramSelfClose = regexp.MustCompile(`(?is)<\s*([a-z0-9_.]+:)?BPMNDiagram\b[^>]*/\s*>`)
+	bpmnDiagramBlock     = regexp.MustCompile(`(?is)<\s*([a-z0-9_.]+:)?BPMNDiagram\b.*?</\s*([a-z0-9_.]+:)?BPMNDiagram\s*>`)
+)
+
+// stripDiagramLayout removes every BPMN diagram-interchange block from src, leaving
+// the semantic model behind. Whitespace around a removed block is left as-is; the
+// regenerated layout is injected separately, before </definitions>.
+func stripDiagramLayout(src []byte) []byte {
+	src = bpmnDiagramSelfClose.ReplaceAll(src, nil)
+	src = bpmnDiagramBlock.ReplaceAll(src, nil)
+	return src
+}
+
 // --- parsing (independent of the compiler's own XML structs) ---
 
 type layoutDefs struct {

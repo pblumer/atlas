@@ -692,6 +692,27 @@ func (s *Server) handleProcessXML(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(ensureDiagramLayout(raw))
 }
 
+// handleLayout regenerates a posted model's diagram layout: it discards whatever
+// diagram interchange the BPMN carries and returns the model with a freshly
+// generated left-to-right layout, backing the Modeler's "Auto-layout" button. Like
+// validate it is a pure transform — no key minted, no definition registered, no
+// state touched — so it runs off the run-loop goroutine. A model whose layout can't
+// be regenerated (unparseable, or nodeless) comes back unchanged; only a missing or
+// unreadable body is a 4xx, matching the deploy and validate endpoints.
+func (s *Server) handleLayout(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	if len(body) == 0 {
+		writeError(w, http.StatusBadRequest, "empty request body: expected BPMN XML")
+		return
+	}
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	_, _ = w.Write(relayoutDiagram(body))
+}
+
 // handleDeleteProcess removes a deployed definition (one version). It refuses if
 // the definition still has running instances, since a live instance resolves its
 // definition by key on every batch.

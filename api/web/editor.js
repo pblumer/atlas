@@ -459,6 +459,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
         <div style="flex:1"></div>
         <button class="btn neutral sim-toggle" id="sim-toggle" title="Play tokens through the diagram to see how the control flow moves — no deploy, just a walkthrough" aria-pressed="false">&#9654; Token simulation</button>
         <button class="btn neutral" id="vars-toggle" title="Show the variables this diagram writes">Variables</button>
+        <button class="btn neutral" id="autolayout" title="Re-flow the diagram into a clean left-to-right layout">Auto-layout</button>
         <button class="btn neutral" id="save">Save</button>
         <button class="btn neutral" id="export">Export XML</button>
         <button class="btn" id="deploy">Deploy</button>
@@ -4570,6 +4571,28 @@ function wireActions(root, modeler, api, toast, projectId) {
       toast("save failed: " + e.message, "err");
     } finally {
       saveBtn.disabled = false;
+    }
+  });
+
+  // Auto-layout re-flows the diagram: the current model is sent to the server,
+  // which discards its diagram interchange and regenerates a clean left-to-right
+  // layout (the same generator that lays out a layout-less deployed model), then
+  // the reflowed model is re-imported. Purely a rendering convenience — it moves
+  // shapes and edges, never touching the semantic model — so a tangle of a
+  // hand-drawn diagram can be straightened out in one click.
+  const layoutBtn = root.querySelector("#autolayout");
+  layoutBtn.addEventListener("click", async () => {
+    layoutBtn.disabled = true;
+    try {
+      const { xml } = await modeler.saveXML({ format: true });
+      const relaid = await api("POST", "/api/v1/layout", xml, true);
+      await modeler.importXML(typeof relaid === "string" ? relaid : String(relaid));
+      modeler.get("canvas").zoom("fit-viewport");
+      toast("Diagram auto-laid out", "ok");
+    } catch (e) {
+      toast("auto-layout failed: " + e.message, "err");
+    } finally {
+      layoutBtn.disabled = false;
     }
   });
 
