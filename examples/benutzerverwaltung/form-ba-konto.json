@@ -4,7 +4,7 @@
   "components": [
     {
       "type": "text",
-      "text": "# 🔑 Konto anlegen\n\nLege das Atlas-Konto jetzt im Admin-Bereich an (**Benutzer → Neu**) mit den unten stehenden Daten und dem hier gesetzten Initialpasswort. Bestätige anschließend hier.\n\n> Die Anlage ist bewusst eine Admin-Handlung – die Benutzerverwaltung ist admin-gated (ADR-0044/0049). Dieser Prozess koordiniert und dokumentiert sie und versendet die Zugangs-Mail automatisch."
+      "text": "# 🔑 Antrag freigeben\n\nPrüfe den Aufnahme-Antrag. Bei **Freigabe** wird das Atlas-Konto automatisch angelegt (userConnector) und die Zugangsdaten werden per E-Mail versendet.\n\n> Die Anlage läuft über den gated, opt-in userConnector (ADR-0119/0120) — kein manueller Schritt im Admin-Bereich mehr. Ist die Provisionierung nicht aktiviert, wartet der Prozess, bis ein Operator sie einschaltet."
     },
     {
       "key": "vorname",
@@ -42,7 +42,7 @@
       "type": "radio",
       "label": "Entscheidung",
       "values": [
-        { "label": "Konto anlegen und Zugang versenden", "value": "anlegen" },
+        { "label": "Freigeben – Konto anlegen und Zugang versenden", "value": "anlegen" },
         { "label": "Antrag ablehnen", "value": "ablehnen" }
       ],
       "validate": { "required": true }
@@ -51,9 +51,9 @@
       "key": "initialpasswort",
       "type": "textfield",
       "label": "Initiales Passwort",
-      "description": "Wird dem Benutzer per E-Mail zugesendet. Muss beim ersten Login geändert werden.",
+      "description": "Mindestens 8 Zeichen. Wird dem Benutzer per E-Mail zugesendet; beim ersten Login zu ändern.",
       "conditional": { "hide": "=entscheidung != \"anlegen\"" },
-      "validate": { "required": true }
+      "validate": { "required": true, "minLength": 8 }
     },
     {
       "key": "ablehnungsgrund",

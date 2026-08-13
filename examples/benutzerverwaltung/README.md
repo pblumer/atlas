@@ -31,18 +31,20 @@ synchrone* Admin-/Break-glass-Oberfläche. Diese Prozesse sind die *Vordertür* 
 Ein Buttton wie „Disable" wird also **nicht** zum Prozess; der *Ablauf* rundherum
 (Offboarding mit Nachweis) schon.
 
-## Warum die privilegierte Aktion ein User-Task ist
+## Freigabe bleibt menschlich, Anlage ist automatisiert
 
-Die Atlas-Benutzerverwaltung (`api/users.go`) ist **admin-gated**, und die
-Automatisierungs-/MCP-Identität darf Benutzer **absichtlich nicht** selbst
-anlegen/sperren oder Passwörter self-service versenden (ADR-0044, ADR-0049). Ein
-Prozess, der `POST /api/users` selbst aufruft, würde diese dokumentierte
-Entscheidung aufweichen — gemäß `AGENTS.md` wird so etwas **geflaggt, nicht
-umgangen**. Deshalb: der Prozess koordiniert, ein Admin führt die privilegierte
-Aktion aus, nur die **Mail** ist automatisiert. Ein sanktionierter,
-vollautomatischer Schreibpfad (`restConnector` auf `/api/users` mit
-Vault-Credential) ist als eigene Folge-Entscheidung in ADR-0119 vermerkt und
-gehört dann in das geschützte System-Projekt.
+Die Atlas-Benutzerverwaltung (`api/users.go`) ist **admin-gated**. Bis ADR-0120
+blieb auch die Konto-Anlage eine reine Admin-Handhabung. Mit ADR-0120 gibt es
+einen **sanktionierten, engen** Schreibpfad: den `userConnector` (create /
+set-password / disable), der **nur** für Prozesse des geschützten System-Projekts
+(ADR-0119) und **nur bei aktivierter Provisionierung** (`--user-provisioning`)
+läuft, kein Credential im Modell trägt und dieselben Rails wie die Admin-API nutzt
+(Passwortlänge, Uniqueness, Last-Admin-Lockout).
+
+Damit gilt: die **Freigabe bleibt eine Admin-Handlung** (User-Task „Antrag
+freigeben"), die **Konto-Anlage selbst läuft automatisch** über den userConnector,
+und die **Mail** ebenfalls. Ist die Provisionierung nicht eingeschaltet, **parkt**
+der `Konto anlegen`-Task, bis ein Operator sie aktiviert — der sichere Default.
 
 ## Die drei Prozesse
 
@@ -50,8 +52,10 @@ gehört dann in das geschützte System-Projekt.
 ```
 Start (ba-antrag: Vorname, Nachname, E-Mail, Rolle, Abteilung, Begründung)
   → [Script] Zugangsdaten vorschlagen   – FEEL: benutzername = vorname.nachname
-  → 🔑 User-Task "Konto anlegen" (ba-konto) – Admin legt an, setzt Initialpasswort, entscheidet
-  → (X) Angelegt?  anlegen (Default) → Zugangs-Mail | ablehnen → Ablehnungs-Mail
+  → 🔑 User-Task "Antrag freigeben" (ba-konto) – Admin entscheidet, setzt Initialpasswort
+  → (X) Angelegt?
+        anlegen (Default) → [userConnector create] "Konto anlegen" → Zugangs-Mail
+        ablehnen          → Ablehnungs-Mail
   → Ende
 ```
 

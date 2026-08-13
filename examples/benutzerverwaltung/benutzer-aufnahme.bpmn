@@ -3,25 +3,24 @@
   Benutzerverwaltung: Benutzer aufnehmen
 
   Atlas bildet einen eigenen Verwaltungsprozess als BPMN + Formulare ab
-  (Dogfooding). Der Prozess koordiniert und dokumentiert die Aufnahme eines
-  neuen Benutzers; die privilegierte Konto-Anlage bleibt bewusst eine
-  Admin-Handlung (User-Task), weil die Atlas-Benutzerverwaltung admin-gated ist
-  und die Automatisierungs-Identitaet Benutzer absichtlich NICHT selbst anlegen
-  darf (ADR-0044, ADR-0049). Die Zugangs-/Ablehnungs-Mail laeuft automatisch
-  ueber den Mail-Connector.
+  (Dogfooding). Der Prozess koordiniert die Aufnahme eines neuen Benutzers; die
+  Freigabe bleibt eine Admin-Handlung (User-Task), die Konto-Anlage selbst laeuft
+  seit ADR-0120 automatisch ueber den userConnector (gated auf das System-Projekt,
+  opt-in via the user-provisioning flag). Ist die Provisionierung nicht aktiviert, parkt
+  der userConnector-Task, bis ein Operator sie einschaltet.
 
   Start (Formular ba-antrag: vorname, nachname, email, rolle, abteilung, begruendung)
    -> Script-Task "Zugangsdaten vorschlagen"  (FEEL schlaegt benutzername vor)
-   -> User-Task  "Konto anlegen"              (Formular ba-konto; Admin legt an,
-                                               setzt Initialpasswort, entscheidet)
-   -> (X) Gateway "Angelegt?"  (default: anlegen; entscheidung="ablehnen": Bypass)
-        [anlegen]  -> Service-Task "Zugangsdaten senden"  (Mail-Connector)
-        [ablehnen] -> Service-Task "Ablehnung senden"     (Mail-Connector, unten)
+   -> User-Task  "Antrag freigeben"           (Formular ba-konto; Admin entscheidet,
+                                               setzt Initialpasswort)
+   -> (X) Gateway "Angelegt?"  (default -> anlegen; entscheidung="ablehnen" -> Bypass)
+        [anlegen]  -> Service-Task "Konto anlegen" (userConnector create)
+                   -> Service-Task "Zugangsdaten senden" (Mail-Connector)
+        [ablehnen] -> Service-Task "Ablehnung senden"    (Mail-Connector, unten)
    -> (X) Join
    -> Ende "Aufnahme abgeschlossen"
 
-  Das BPMN-DI ist von Hand gesetzt: gerade Hauptachse bei y=120, der
-  Ablehnungs-Zweig auf einer eigenen Spur bei y=260, keine ueberlappenden Kanten.
+  BPMN-DI von Hand gesetzt: gerade Hauptachse bei y=120, Ablehnungs-Zweig bei y=260.
 -->
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
@@ -45,23 +44,36 @@
           expression="= lower case(vorname) + &quot;.&quot; + lower case(nachname)"/>
       </extensionElements>
       <incoming>f_start_vorschlag</incoming>
-      <outgoing>f_vorschlag_konto</outgoing>
+      <outgoing>f_vorschlag_freigabe</outgoing>
     </scriptTask>
 
-    <userTask id="konto_anlegen" name="Konto anlegen">
+    <userTask id="freigabe" name="Antrag freigeben">
       <extensionElements>
         <zeebe:assignmentDefinition candidateGroups="benutzerverwaltung"/>
         <zeebe:formDefinition formId="ba-konto"/>
       </extensionElements>
-      <incoming>f_vorschlag_konto</incoming>
-      <outgoing>f_konto_gw</outgoing>
+      <incoming>f_vorschlag_freigabe</incoming>
+      <outgoing>f_freigabe_gw</outgoing>
     </userTask>
 
     <exclusiveGateway id="entscheidung" name="Angelegt?" default="f_anlegen">
-      <incoming>f_konto_gw</incoming>
+      <incoming>f_freigabe_gw</incoming>
       <outgoing>f_anlegen</outgoing>
       <outgoing>f_ablehnen</outgoing>
     </exclusiveGateway>
+
+    <serviceTask id="konto_anlegen" name="Konto anlegen">
+      <extensionElements>
+        <atlas:userConnector operation="create"
+          username="=benutzername"
+          email="=email"
+          displayName="=vorname + &quot; &quot; + nachname"
+          roles="=rolle"
+          password="=initialpasswort"/>
+      </extensionElements>
+      <incoming>f_anlegen</incoming>
+      <outgoing>f_anlegen_mail</outgoing>
+    </serviceTask>
 
     <serviceTask id="zugang_mail" name="Zugangsdaten senden">
       <extensionElements>
@@ -70,7 +82,7 @@
           subject="Ihr Atlas-Zugang wurde angelegt"
           body="=&quot;Hallo &quot; + vorname + &quot; &quot; + nachname + &quot;,\n\nIhr Atlas-Zugang wurde angelegt.\n\nBenutzername: &quot; + benutzername + &quot;\nInitiales Passwort: &quot; + initialpasswort + &quot;\n\nBitte aendern Sie das Passwort nach dem ersten Login.\n\nViele Gruesse\nIhre Benutzerverwaltung&quot;"/>
       </extensionElements>
-      <incoming>f_anlegen</incoming>
+      <incoming>f_anlegen_mail</incoming>
       <outgoing>f_zugang_join</outgoing>
     </serviceTask>
 
@@ -96,12 +108,13 @@
     </endEvent>
 
     <sequenceFlow id="f_start_vorschlag" sourceRef="start" targetRef="vorschlag"/>
-    <sequenceFlow id="f_vorschlag_konto" sourceRef="vorschlag" targetRef="konto_anlegen"/>
-    <sequenceFlow id="f_konto_gw" sourceRef="konto_anlegen" targetRef="entscheidung"/>
-    <sequenceFlow id="f_anlegen" name="anlegen" sourceRef="entscheidung" targetRef="zugang_mail"/>
+    <sequenceFlow id="f_vorschlag_freigabe" sourceRef="vorschlag" targetRef="freigabe"/>
+    <sequenceFlow id="f_freigabe_gw" sourceRef="freigabe" targetRef="entscheidung"/>
+    <sequenceFlow id="f_anlegen" name="anlegen" sourceRef="entscheidung" targetRef="konto_anlegen"/>
     <sequenceFlow id="f_ablehnen" name="ablehnen" sourceRef="entscheidung" targetRef="ablehnung_mail">
       <conditionExpression>= entscheidung = "ablehnen"</conditionExpression>
     </sequenceFlow>
+    <sequenceFlow id="f_anlegen_mail" sourceRef="konto_anlegen" targetRef="zugang_mail"/>
     <sequenceFlow id="f_zugang_join" sourceRef="zugang_mail" targetRef="join"/>
     <sequenceFlow id="f_ablehnung_join" sourceRef="ablehnung_mail" targetRef="join"/>
     <sequenceFlow id="f_join_ende" sourceRef="join" targetRef="ende"/>
@@ -116,42 +129,48 @@
       <bpmndi:BPMNShape id="vorschlag_di" bpmnElement="vorschlag">
         <omgdc:Bounds x="240" y="80" width="100" height="80"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="konto_anlegen_di" bpmnElement="konto_anlegen">
+      <bpmndi:BPMNShape id="freigabe_di" bpmnElement="freigabe">
         <omgdc:Bounds x="390" y="80" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="entscheidung_di" bpmnElement="entscheidung" isMarkerVisible="true">
         <omgdc:Bounds x="560" y="95" width="50" height="50"/>
         <bpmndi:BPMNLabel><omgdc:Bounds x="548" y="62" width="74" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="zugang_mail_di" bpmnElement="zugang_mail">
+      <bpmndi:BPMNShape id="konto_anlegen_di" bpmnElement="konto_anlegen">
         <omgdc:Bounds x="680" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="zugang_mail_di" bpmnElement="zugang_mail">
+        <omgdc:Bounds x="830" y="80" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="ablehnung_mail_di" bpmnElement="ablehnung_mail">
         <omgdc:Bounds x="680" y="220" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="join_di" bpmnElement="join" isMarkerVisible="true">
-        <omgdc:Bounds x="860" y="95" width="50" height="50"/>
+        <omgdc:Bounds x="990" y="95" width="50" height="50"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="ende_di" bpmnElement="ende">
-        <omgdc:Bounds x="960" y="102" width="36" height="36"/>
-        <bpmndi:BPMNLabel><omgdc:Bounds x="936" y="145" width="86" height="14"/></bpmndi:BPMNLabel>
+        <omgdc:Bounds x="1090" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1066" y="145" width="86" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
 
       <bpmndi:BPMNEdge id="f_start_vorschlag_di" bpmnElement="f_start_vorschlag">
         <omgdi:waypoint x="188" y="120"/><omgdi:waypoint x="240" y="120"/>
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_vorschlag_konto_di" bpmnElement="f_vorschlag_konto">
+      <bpmndi:BPMNEdge id="f_vorschlag_freigabe_di" bpmnElement="f_vorschlag_freigabe">
         <omgdi:waypoint x="340" y="120"/><omgdi:waypoint x="390" y="120"/>
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_konto_gw_di" bpmnElement="f_konto_gw">
+      <bpmndi:BPMNEdge id="f_freigabe_gw_di" bpmnElement="f_freigabe_gw">
         <omgdi:waypoint x="490" y="120"/><omgdi:waypoint x="560" y="120"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_anlegen_di" bpmnElement="f_anlegen">
         <omgdi:waypoint x="610" y="120"/><omgdi:waypoint x="680" y="120"/>
         <bpmndi:BPMNLabel><omgdc:Bounds x="618" y="96" width="46" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_anlegen_mail_di" bpmnElement="f_anlegen_mail">
+        <omgdi:waypoint x="780" y="120"/><omgdi:waypoint x="830" y="120"/>
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_zugang_join_di" bpmnElement="f_zugang_join">
-        <omgdi:waypoint x="780" y="120"/><omgdi:waypoint x="860" y="120"/>
+        <omgdi:waypoint x="930" y="120"/><omgdi:waypoint x="990" y="120"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_ablehnen_di" bpmnElement="f_ablehnen">
         <omgdi:waypoint x="585" y="145"/>
@@ -161,11 +180,11 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_ablehnung_join_di" bpmnElement="f_ablehnung_join">
         <omgdi:waypoint x="780" y="260"/>
-        <omgdi:waypoint x="885" y="260"/>
-        <omgdi:waypoint x="885" y="145"/>
+        <omgdi:waypoint x="1015" y="260"/>
+        <omgdi:waypoint x="1015" y="145"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_join_ende_di" bpmnElement="f_join_ende">
-        <omgdi:waypoint x="910" y="120"/><omgdi:waypoint x="960" y="120"/>
+        <omgdi:waypoint x="1040" y="120"/><omgdi:waypoint x="1090" y="120"/>
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
