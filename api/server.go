@@ -276,6 +276,14 @@ type Server struct {
 	osExportCfg  opensearch.Config
 	exporter     *opensearch.Exporter
 	exporterPoll time.Duration
+	// exporterTicks, when non-nil, replaces the exporter loop's real ticker so a test
+	// drives each export pass explicitly rather than racing a wall-clock cadence.
+	// exporterTicked, when non-nil, receives once after each triggered pass completes,
+	// so a test awaits the pass it triggered without polling. Both are nil in
+	// production (a real ticker drives the loop, nothing observes it). Set together by
+	// withExporterTrigger — the same deterministic-test seam as the retention sweep.
+	exporterTicks  <-chan time.Time
+	exporterTicked chan struct{}
 
 	// Retention (ADR-0115): hard-delete finished-instance history older than
 	// retentionMaxAge, gated on the safe (exported, else durable) position so nothing
@@ -403,6 +411,18 @@ func WithOpenSearchExportInterval(d time.Duration) Option {
 		if d > 0 {
 			s.exporterPoll = d
 		}
+	}
+}
+
+// withExporterTrigger replaces the exporter loop's real ticker with an explicit tick
+// channel and, optionally, a completion channel signaled after each triggered export
+// pass. It is unexported — a test seam, not an operator knob — so a test drives export
+// passes deterministically: send on ticks, receive on ticked, then assert, with no
+// wall-clock cadence or polling (ADR-0114). Mirrors withRetentionTrigger.
+func withExporterTrigger(ticks <-chan time.Time, ticked chan struct{}) Option {
+	return func(s *Server) {
+		s.exporterTicks = ticks
+		s.exporterTicked = ticked
 	}
 }
 
@@ -733,19 +753,36 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 // (OpenSearch unreachable, a transient index failure) is logged and retried on the
 // next tick — the exporter leaves its high-water mark unadvanced on failure, so no
 // record is skipped and delivery stays at-least-once.
+//
+// The trigger is a seam for deterministic tests: production runs a real ticker,
+// while a test injects an explicit tick channel (withExporterTrigger) so an export
+// pass runs exactly when the test says — no cadence to race, no polling. When
+// exporterTicked is set the loop signals it after each triggered pass so the test can
+// await completion. This mirrors the retention sweep's clock/ticker seam.
 func (s *Server) exporterLoop(every time.Duration) {
 	defer s.wg.Done()
-	t := time.NewTicker(every)
-	defer t.Stop()
+	ticks := s.exporterTicks
+	if ticks == nil {
+		t := time.NewTicker(every)
+		defer t.Stop()
+		ticks = t.C
+	}
 	for {
 		select {
 		case <-s.quit:
 			return
-		case <-t.C:
+		case <-ticks:
 			if n, err := s.exporter.Tick(context.Background()); err != nil {
 				log.Printf("opensearch exporter: %v (will retry next tick)", err)
 			} else if n > 0 {
 				log.Printf("opensearch exporter: indexed %d record(s)", n)
+			}
+			if s.exporterTicked != nil {
+				select {
+				case s.exporterTicked <- struct{}{}:
+				case <-s.quit:
+					return
+				}
 			}
 		}
 	}
