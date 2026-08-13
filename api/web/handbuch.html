@@ -1162,6 +1162,53 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
 &lt;/definitions&gt;</code></pre>
         <p class="rz-how"><span data-l="de">Ein <code>compensateEventDefinition</code>-<b>Boundary-Event</b> an der Aufgabe verweist per <code>association</code> auf einen <code>isForCompensation="true"</code>-Handler (das „Undo“). Wirft später ein <code>intermediateThrowEvent</code> mit <code>compensateEventDefinition</code> die Kompensation (hier für <code>book</code>), führt Atlas den Handler für die bereits erledigte Arbeit aus. Der Undo-Task hängt an keinem normalen Fluss.</span><span data-l="en">A <code>compensateEventDefinition</code> <b>boundary event</b> on the task links via an <code>association</code> to an <code>isForCompensation="true"</code> handler (the "undo"). When an <code>intermediateThrowEvent</code> with a <code>compensateEventDefinition</code> later throws compensation (here for <code>book</code>), Atlas runs the handler for the work already done. The undo task sits on no normal flow.</span></p>
       </div>
+      <div class="recipe" id="rz-transaction">
+        <h4><span class="rz-emoji" aria-hidden="true">⚛️</span>
+          <span data-l="de">Transaktion &amp; Cancel-End-Event: alles oder nichts</span><span data-l="en">Transaction &amp; cancel end event: all or nothing</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Mehrere Schritte als atomare Einheit: kommt es zum Abbruch, wird die geleistete Arbeit automatisch kompensiert.</span><span data-l="en">Several steps as one atomic unit: on cancellation, the work done is compensated automatically.</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-transaction&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;process id=&quot;recipe-transaction&quot; name=&quot;Reservierung als Transaktion&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot;/&gt;
+    &lt;transaction id=&quot;reserve&quot; name=&quot;Reservieren&quot;&gt;
+      &lt;startEvent id=&quot;ts&quot;/&gt;
+      &lt;serviceTask id=&quot;seat&quot; name=&quot;Sitz reservieren&quot;&gt;
+        &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;reserve-seat&quot; retries=&quot;3&quot;/&gt;&lt;/extensionElements&gt;
+      &lt;/serviceTask&gt;
+      &lt;boundaryEvent id=&quot;seat_comp&quot; attachedToRef=&quot;seat&quot;&gt;
+        &lt;compensateEventDefinition/&gt;
+      &lt;/boundaryEvent&gt;
+      &lt;serviceTask id=&quot;release&quot; name=&quot;Sitz freigeben&quot; isForCompensation=&quot;true&quot;&gt;
+        &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;release-seat&quot; retries=&quot;3&quot;/&gt;&lt;/extensionElements&gt;
+      &lt;/serviceTask&gt;
+      &lt;exclusiveGateway id=&quot;paid&quot; name=&quot;Bezahlt?&quot; default=&quot;tf_commit&quot;/&gt;
+      &lt;endEvent id=&quot;cancelled&quot; name=&quot;Abgebrochen&quot;&gt;
+        &lt;cancelEventDefinition/&gt;
+      &lt;/endEvent&gt;
+      &lt;endEvent id=&quot;committed&quot;/&gt;
+      &lt;association id=&quot;a1&quot; sourceRef=&quot;seat_comp&quot; targetRef=&quot;release&quot;/&gt;
+      &lt;sequenceFlow id=&quot;tf1&quot; sourceRef=&quot;ts&quot; targetRef=&quot;seat&quot;/&gt;
+      &lt;sequenceFlow id=&quot;tf2&quot; sourceRef=&quot;seat&quot; targetRef=&quot;paid&quot;/&gt;
+      &lt;sequenceFlow id=&quot;tf_cancel&quot; name=&quot;nein&quot; sourceRef=&quot;paid&quot; targetRef=&quot;cancelled&quot;&gt;
+        &lt;conditionExpression&gt;= not(paid)&lt;/conditionExpression&gt;
+      &lt;/sequenceFlow&gt;
+      &lt;sequenceFlow id=&quot;tf_commit&quot; name=&quot;ja&quot; sourceRef=&quot;paid&quot; targetRef=&quot;committed&quot;/&gt;
+    &lt;/transaction&gt;
+    &lt;boundaryEvent id=&quot;onCancel&quot; name=&quot;Abgebrochen&quot; attachedToRef=&quot;reserve&quot;&gt;
+      &lt;cancelEventDefinition/&gt;
+    &lt;/boundaryEvent&gt;
+    &lt;endEvent id=&quot;done&quot;/&gt;
+    &lt;endEvent id=&quot;handled&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;start&quot; targetRef=&quot;reserve&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;reserve&quot; targetRef=&quot;done&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f3&quot; sourceRef=&quot;onCancel&quot; targetRef=&quot;handled&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de">Ein <code>&lt;transaction&gt;</code> ist ein Subprozess mit „alles oder nichts“-Semantik. Erreicht der Fluss ein End-Event mit <code>cancelEventDefinition</code>, wird die Transaktion <b>abgebrochen</b>: Atlas führt die Compensation-Handler für alle bereits erledigten Schritte darin aus und leitet über das <code>cancelEventDefinition</code>-<b>Boundary-Event</b> am Rand auf den Abbruch-Pfad. Ein normales End-Event committet. Unterschied zur reinen <a href="#rz-compensation">Compensation</a>: hier ist der Abbruch in eine atomare Einheit gekapselt.</span><span data-l="en">A <code>&lt;transaction&gt;</code> is a subprocess with all-or-nothing semantics. When the flow reaches an end event with a <code>cancelEventDefinition</code>, the transaction is <b>cancelled</b>: Atlas runs the compensation handlers for every completed step inside it and routes out through the <code>cancelEventDefinition</code> <b>boundary event</b> to the cancel path. A normal end event commits. Unlike plain <a href="#rz-compensation">compensation</a>, the rollback here is wrapped in one atomic unit.</span></p>
+      </div>
       <div class="note tip">
         <span class="lbl" data-l="de">Kombinieren</span><span class="lbl" data-l="en">Combine</span>
         <p data-l="de" style="margin:.3em 0 0">Echte Prozesse setzen diese Bausteine zusammen: ein Service-Task mit
