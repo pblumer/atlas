@@ -522,11 +522,13 @@ Adoption and polish.
   **three profiles**: the pure engine, the end-to-end HTTP/API path through
   `api.Server` (so the difference reads off the API-layer overhead), and a RAM-backed
   in-memory profile (so the difference from durable reads off the disk-`fsync`
-  latency, ~95% of the durable per-op time on the CI machine). They report `ns/op`
-  (→ instances/sec), `events/op`, `walB/op`, and allocations, with a Markdown-summary
-  script and a CI smoke run. Still to come: latency percentiles, a
-  recovery-from-N-events profile, a loopback-socket HTTP variant, and committed
-  machine-labelled baseline results ([`benchmarks/README.md`](benchmarks/README.md)).
+  latency, ~95% of the durable per-op time on the CI machine). It also covers the
+  **startup/recovery axis** — recovery benchmarks that replay a `b.N`-instance WAL
+  from genesis into a fresh state store, measuring the per-instance recovery cost.
+  They report `ns/op` (→ instances/sec), `events/op`, `walB/op`, and allocations, with
+  a Markdown-summary script and a CI smoke run. Still to come: latency percentiles, a
+  loopback-socket HTTP variant, and committed machine-labelled baseline results
+  ([`benchmarks/README.md`](benchmarks/README.md)).
 - 🔲 Documentation site, tutorials, examples
 - 🔲 1.0 API stability commitment
 

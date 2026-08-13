@@ -49,6 +49,16 @@ _Changed_ / _Removed_ for each version.
   measurement profile, not a durability mode; the benchmarks skip when no tmpfs is
   available (`ATLAS_BENCH_TMPFS` overrides the mount). Still test-only, so the
   coverage floor is untouched, and the `-bench=.` CI smoke step covers them.
+- **Recovery benchmark profile** (v0.2.0 programme B): the startup/recovery axis —
+  how fast a fresh engine rebuilds state by replaying the WAL from genesis (there is
+  no checkpoint yet). `BenchmarkRecoveryLinearCompleted` and
+  `BenchmarkRecoveryServiceTaskParked` populate a WAL with `b.N` instances (batched
+  into few fsyncs so setup stays cheap and is excluded from the timer), then measure
+  the replay into a fresh, empty state store. `ns/op` is the per-instance recovery
+  cost (so the derived instances/sec is the recovery rate, and recovery-events/sec =
+  `events/op` × instances/sec); the two workloads recover completed history and
+  parked instances-plus-jobs respectively. Test-only, so the coverage floor is
+  untouched; the `-bench=.` CI smoke step covers them.
 - **Deactivate a deployed process** ([ADR-0119](docs/adr/0119-deactivate-deployed-process.md)):
   a deployed definition can be paused so it stays deployed and keeps its running
   instances, but no longer auto-starts new ones from its timer, message, or signal

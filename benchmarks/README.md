@@ -32,13 +32,14 @@ Two axes, three profiles:
     measurement profile, not a durability mode — no claim that Atlas runs without
     `fsync` in production. The in-memory benchmarks skip when no tmpfs is available
     (set `ATLAS_BENCH_TMPFS` to a RAM-backed dir to force one).
-- **Steady state** — throughput of a warm engine. Start-up/recovery is a separate,
-  deferred axis.
+- **Steady state vs recovery** — most benchmarks measure a warm engine's
+  throughput; the recovery benchmarks instead measure **startup/recovery**: how fast
+  a fresh engine rebuilds state by replaying the WAL from genesis (there is no
+  checkpoint yet, so recovery replays everything).
 
 Deliberately **deferred** to later programme-B slices (see *Deferred* below):
-P50/P95/P99 latency, recovery-from-N-events, a parked-workload profile, a
-loopback-socket (real TCP) HTTP variant, service-task completion over HTTP, and
-published baseline result files.
+P50/P95/P99 latency, a loopback-socket (real TCP) HTTP variant, service-task
+completion over HTTP, an in-memory HTTP profile, and published baseline result files.
 
 ## Workloads
 
@@ -72,11 +73,23 @@ gap to the durable twin is the disk-`fsync` cost:
 | `BenchmarkInMemoryServiceTaskLifecycle` | `BenchmarkServiceTaskLifecycle` |
 | `BenchmarkInMemoryVariableGatewayRouting` | `BenchmarkVariableGatewayRouting` |
 
+Recovery (startup/recovery axis, programme workload #5). Each populates a WAL with
+`b.N` instances (batched into few fsyncs, excluded from timing) and measures the WAL
+replay into a fresh, empty state store — so `ns/op` is the per-instance recovery cost
+and the summary's derived instances/sec is the recovery rate:
+
+| Benchmark | Recovers |
+|---|---|
+| `BenchmarkRecoveryLinearCompleted` | `b.N` self-completing instances (full lifecycle replayed, land completed in history) |
+| `BenchmarkRecoveryServiceTaskParked` | `b.N` instances parked on an activatable job (active instances + jobs restored) |
+
 ## Running
 
 ```bash
-# Quick local run (a few seconds), memory stats on:
-go test -run=^$ -bench=. -benchmem ./benchmarks/
+# Quick local run (a few seconds), memory stats on. A fixed -benchtime keeps it
+# quick: without it the recovery benchmarks scale their instance count to ~1s of
+# replay and each takes ~10s.
+go test -run=^$ -bench=. -benchmem -benchtime=200x ./benchmarks/
 
 # Reproducible run: fixed iteration count, several repetitions, saved raw output.
 # The raw file is the machine-readable record (the format benchstat consumes).
@@ -156,6 +169,6 @@ this; record the rest alongside the raw file.
 - An in-memory profile for the HTTP path too (the RAM-backed profile currently
   covers the engine-level workloads only).
 - P50/P95/P99 end-to-end latency with a defensible sampling method.
-- Recovery-from-a-known-event-count and a parked-workload (many active
-  jobs/timers/messages) profile.
+- A large parked-workload steady-state profile (many active jobs/timers/messages
+  concurrently), beyond the parked instances the recovery benchmark restores.
 - A committed, dated baseline result file for a named reference machine.
