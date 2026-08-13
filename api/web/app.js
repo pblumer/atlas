@@ -2316,6 +2316,12 @@ async function viewInstances() {
       const sub = g.latest.name
         ? `<div class="muted" style="font-size:12px">${esc(g.processId)}</div>` : "";
       const tag = g.latest.versionTag ? ` <span class="ver-tag" title="Version tag">${esc(g.latest.versionTag)}</span>` : "";
+      // A deactivated definition stays deployed and keeps its running instances, but does
+      // not auto-start new ones from its timer/message/signal start events (ADR-0119).
+      // Flag it here too; the Activate/Deactivate toggle lives in the Modeler's Deployed list.
+      const inactiveBadge = g.latest.active === false
+        ? ` <span class="pill warn" title="Deployed but paused: no new instances auto-start from its timer, message, or signal start events">Inactive</span>`
+        : "";
       const versions = (g.versions.length === 1
         ? `v${g.latest.version}`
         : `${g.versions.length} versions <span class="muted">· latest v${g.latest.version}</span>`) + tag;
@@ -2329,7 +2335,7 @@ async function viewInstances() {
         ? `<button class="btn ghost danger sm" data-term-proc="${esc(g.processId)}" title="Terminate every running instance of this process">Terminate all running</button>`
         : "";
       return `<tr>
-        <td><a href="#/operations/p/${g.latest.key}"><b>${esc(label)}</b></a>${collab}${sub}</td>
+        <td><a href="#/operations/p/${g.latest.key}"><b>${esc(label)}</b></a>${inactiveBadge}${collab}${sub}</td>
         <td>${versions}</td>
         <td>${running}</td>
         <td>${s.finished || '<span class="muted">0</span>'}</td>
