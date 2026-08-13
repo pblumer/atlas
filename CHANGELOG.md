@@ -27,9 +27,18 @@ _Changed_ / _Removed_ for each version.
   CI), and [`benchmarks/README.md`](benchmarks/README.md) documents the commands,
   metrics, the environment metadata to record, and the standing caveat that results
   are specific to one machine and commit — not a product claim. All harness code
-  lives in `_test.go` files, so it adds nothing to the coverage floor. End-to-end
-  HTTP benchmarks, an in-memory/no-fsync profile, latency percentiles, and recovery
-  benchmarks are deferred to later programme-B slices.
+  lives in `_test.go` files, so it adds nothing to the coverage floor. An
+  in-memory/no-fsync profile, latency percentiles, and recovery benchmarks are
+  deferred to later programme-B slices.
+- **End-to-end HTTP benchmark profile** (v0.2.0 programme B): the benchmark harness
+  gained an API-layer profile that drives the same durable engine through
+  `api.Server`'s HTTP handlers (in-process via `ServeHTTP`, so TCP/client cost is
+  excluded). `BenchmarkHTTPLinearCreate` and `BenchmarkHTTPVariableGatewayCreate`
+  mirror the shapes of their engine-level twins, so the difference is the API-layer
+  overhead — the same `events/op`/`walB/op` with the extra `allocs/op`/`B/op` of
+  request decode, routing, the run-loop handoff, and response encode. The existing
+  `-bench=.` CI smoke step covers them; still deferred are a loopback-socket (real
+  TCP) variant and service-task completion over HTTP.
 - **Deactivate a deployed process** ([ADR-0119](docs/adr/0119-deactivate-deployed-process.md)):
   a deployed definition can be paused so it stays deployed and keeps its running
   instances, but no longer auto-starts new ones from its timer, message, or signal
