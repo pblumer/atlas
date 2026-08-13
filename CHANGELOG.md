@@ -23,6 +23,21 @@ _Changed_ / _Removed_ for each version.
   worker under the reserved `WebScrapeJobTypeIndex`. Authorable in the Modeler via the
   service-task connector catalog.
 
+### Changed
+
+- **Deterministic history-retention tests** (v0.2.0 reliability foundation): the
+  retention sweep (ADR-0115) gained two test seams — an injectable clock for its
+  eligibility cutoff and an explicit sweep trigger in place of the real ticker. The
+  black-box retention tests, which previously raced a wall-clock cadence and had to
+  widen a max age to 500ms so a sweep tick would not fire during setup (PR #313), are
+  replaced by deterministic ones that share a single fake clock with the engine (so a
+  finished instance's `CompletedAt` and the sweep's "now" are exact) and drive each
+  sweep through a channel handshake (no `time.Sleep`, no polling). They now assert the
+  exact age boundary and an exact one-per-tick drain, honoring the repository rule that
+  tests must not depend on wall-clock time or goroutine scheduling (invariant I4,
+  AGENTS.md). Production behavior is unchanged — a real ticker and the system clock
+  still drive the sweep in the running server.
+
 ## [0.1.0] — 2026-08-11
 
 The first tagged release: a **developer preview**. Atlas already runs a broad
