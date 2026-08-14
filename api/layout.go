@@ -464,7 +464,6 @@ func orderLayer(idxs []int, trunk []bool) []int {
 func placeNodes(nodes []lnode, trunk []bool) {
 	laneW := map[int]int{}
 	maxLayer := 0
-	byLayer := map[int][]int{}
 	for i := range nodes {
 		if nodes[i].bound {
 			continue
@@ -476,24 +475,75 @@ func placeNodes(nodes []lnode, trunk []bool) {
 		if l > maxLayer {
 			maxLayer = l
 		}
-		byLayer[l] = append(byLayer[l], i)
 	}
 	colX := make([]int, maxLayer+1)
 	for l := 1; l <= maxLayer; l++ {
 		colX[l] = colX[l-1] + laneW[l-1] + layoutGapX
 	}
-	for l := 0; l <= maxLayer; l++ {
-		var top int // running top edge; branches stack upward above the trunk
-		for row, i := range orderLayer(byLayer[l], trunk) {
-			if row == 0 {
-				nodes[i].y = -nodes[i].h / 2 // trunk row centered on the main axis
-			} else {
-				nodes[i].y = top - layoutGapY - nodes[i].h
-			}
-			nodes[i].x = colX[l] + (laneW[l]-nodes[i].w)/2
-			top = nodes[i].y
+
+	row := assignRows(nodes, trunk)
+	maxRow := 0
+	rowH := map[int]int{}
+	for i := range nodes {
+		if nodes[i].bound {
+			continue
+		}
+		if nodes[i].h > rowH[row[i]] {
+			rowH[row[i]] = nodes[i].h
+		}
+		if row[i] > maxRow {
+			maxRow = row[i]
 		}
 	}
+	// Row 0 (the trunk) straddles the main axis; higher rows stack above it, each as
+	// tall as its tallest node so a branch clears the happy path.
+	rowTop := make([]int, maxRow+1)
+	rowTop[0] = -rowH[0] / 2
+	for r := 1; r <= maxRow; r++ {
+		rowTop[r] = rowTop[r-1] - layoutGapY - rowH[r]
+	}
+	for i := range nodes {
+		if nodes[i].bound {
+			continue
+		}
+		l, r := nodes[i].layer, row[i]
+		nodes[i].x = colX[l] + (laneW[l]-nodes[i].w)/2
+		nodes[i].y = rowTop[r] + (rowH[r]-nodes[i].h)/2 // centered in its row band
+	}
+}
+
+// assignRows places the trunk on row 0 and every other node on the lowest row above
+// it that is still free in that node's column. A branch therefore keeps one row
+// across the columns it spans — so it runs straight instead of sagging toward the
+// happy path column by column — while two branches that never share a column pack
+// onto the same row. Boundary events get no row; placeBoundaries handles them.
+func assignRows(nodes []lnode, trunk []bool) []int {
+	row := make([]int, len(nodes))
+	used := map[int]map[int]bool{} // column -> rows already taken
+	take := func(col, r int) {
+		if used[col] == nil {
+			used[col] = map[int]bool{}
+		}
+		used[col][r] = true
+	}
+	for i := range nodes {
+		if !nodes[i].bound && trunk[i] {
+			take(nodes[i].layer, 0)
+		}
+	}
+	for i := range nodes {
+		if nodes[i].bound || trunk[i] {
+			continue
+		}
+		col := nodes[i].layer
+		r := 1
+		for used[col][r] {
+			r++
+		}
+		row[i] = r
+		take(col, r)
+	}
+	return row
 }
 
 // collectLanes flattens the container's lane sets into an ordered lane list and a
