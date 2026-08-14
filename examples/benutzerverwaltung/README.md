@@ -37,14 +37,17 @@ Die Atlas-Benutzerverwaltung (`api/users.go`) ist **admin-gated**. Bis ADR-0123
 blieb auch die Konto-Anlage eine reine Admin-Handhabung. Mit ADR-0123 gibt es
 einen **sanktionierten, engen** Schreibpfad: den `userConnector` (create /
 set-password / disable), der **nur** für Prozesse des geschützten System-Projekts
-(ADR-0122) und **nur bei aktivierter Provisionierung** (`--user-provisioning`)
-läuft, kein Credential im Modell trägt und dieselben Rails wie die Admin-API nutzt
-(Passwortlänge, Uniqueness, Last-Admin-Lockout).
+(ADR-0122) läuft, kein Credential im Modell trägt und dieselben Rails wie die
+Admin-API nutzt (Passwortlänge, Uniqueness, Last-Admin-Lockout). Seit dem
+Amendment vom 2026-08-14 ist die Provisionierung **standardmäßig aktiv (opt-out)** —
+abschaltbar mit `--user-provisioning=false`.
 
 Damit gilt: die **Freigabe bleibt eine Admin-Handlung** (User-Task „Antrag
 freigeben"), die **Konto-Anlage selbst läuft automatisch** über den userConnector,
-und die **Mail** ebenfalls. Ist die Provisionierung nicht eingeschaltet, **parkt**
-der `Konto anlegen`-Task, bis ein Operator sie aktiviert — der sichere Default.
+und die **Mail** ebenfalls. Die eigentlichen Sicherheitsgrenzen sind das
+System-Projekt-Gating und die menschliche Freigabe — ist die Provisionierung
+abgeschaltet, **parkt** der `Konto anlegen`-Task, bis ein Operator sie wieder
+aktiviert.
 
 ## Die drei Prozesse
 
