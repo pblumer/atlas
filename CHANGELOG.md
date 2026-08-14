@@ -59,6 +59,15 @@ _Changed_ / _Removed_ for each version.
   `events/op` × instances/sec); the two workloads recover completed history and
   parked instances-plus-jobs respectively. Test-only, so the coverage floor is
   untouched; the `-bench=.` CI smoke step covers them.
+- **Published benchmark baseline** (v0.2.0 programme B): the first committed,
+  reproducible Atlas performance baseline lives in [`benchmarks/results/`](benchmarks/results/)
+  — a machine-labelled raw `go test -bench` capture (`baseline-<commit>.txt`, with an
+  environment-metadata header) plus a `benchstat`-reduced Markdown summary
+  (`baseline-<commit>.md`, median ± 95% CI over 10 repetitions across all four
+  profiles: durable engine, HTTP, in-memory, recovery, and latency percentiles). It is
+  labelled as illustrative and `fsync`-dominated, captured on a shared, ephemeral VM —
+  not a product claim, hardware reference, or cross-engine comparison — and documents
+  the exact command to reproduce or refresh it.
 - **Latency-percentile benchmark profile** (v0.2.0 programme B): `ns/op` is a mean,
   which the skewed `fsync` latency understates, so `BenchmarkLatencyHTTPLinearCreate`
   and `BenchmarkLatencyEngineLinearSelfCompleting` sample each operation's wall-clock

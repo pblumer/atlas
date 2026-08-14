@@ -528,9 +528,12 @@ Adoption and polish.
   and **P50/P95/P99 latency** benchmarks that sample each operation so the `fsync`
   tail the mean hides is visible. They report `ns/op` (→ instances/sec), `events/op`,
   `walB/op`, allocations, and (for the latency benchmarks) the percentile
-  distribution, with a Markdown-summary script and a CI smoke run. Still to come: a
-  loopback-socket HTTP variant, a large parked-workload profile, and committed
-  machine-labelled baseline results ([`benchmarks/README.md`](benchmarks/README.md)).
+  distribution, with a Markdown-summary script and a CI smoke run. A first
+  **published, reproducible baseline** — machine-labelled raw capture plus a
+  `benchstat` summary — is committed under
+  [`benchmarks/results/`](benchmarks/results/). Still to come: a loopback-socket HTTP
+  variant and a large parked-workload profile
+  ([`benchmarks/README.md`](benchmarks/README.md)).
 - 🔲 Documentation site, tutorials, examples
 - 🔲 1.0 API stability commitment
 
