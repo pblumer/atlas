@@ -14,6 +14,23 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Deterministic crash-and-recovery harness** (v0.2.0 programme C): a new
+  engine-level test harness (`engine/crash_recovery_test.go`) that turns the
+  durability contract into checkable evidence. It runs a workload to a durable point,
+  edits the on-disk WAL to model a crash, recovers into a fresh, empty state store,
+  and compares the rebuilt state family by family (instances, element instances,
+  jobs, timers, incidents, variables, applied position) against a snapshot of the live
+  state. Modelling the crash on the WAL's own boundaries (Append buffers a batch;
+  one Sync per batch writes and fsyncs it, so a batch's frames land atomically at a
+  known offset) lets it drop an un-fsynced batch at a clean boundary with no
+  production fault hooks: it asserts that recovering the intact log equals the live
+  state (invariant I4), that an un-fsynced / torn / CRC-corrupt trailing batch is
+  absent while the acknowledged prefix stays fully consistent, and that restart is
+  idempotent. Test-only, so the coverage floor is untouched. Deferred to later
+  programme-C increments: in-process phase-boundary crash hooks for the exact
+  after-append/after-commit cut points, child-process (SIGKILL) crashes, the
+  no-side-effect-before-durability ordering assertion, and richer workloads (timers,
+  messages, incidents).
 - **Reproducible benchmark harness** (v0.2.0 programme B): a new
   [`benchmarks/`](benchmarks/) package measures the pure engine under the durable
   profile (a real segmented WAL with a group-commit `fsync` per batch and a real
