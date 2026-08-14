@@ -933,7 +933,7 @@ async function viewConsoleOrg() {
       endpoint is stored; the token is a <b>reference</b> resolved from the vault (or
       <code>ATLAS_CONNECTOR_&lt;REF&gt;_TOKEN</code>) at runtime — never stored here.</p>
       <div id="connector-form-slot" style="padding:0 18px"></div>
-      <table>
+      <table data-dt-key="connectors">
         <thead><tr><th>Connector</th><th>Status</th><th></th></tr></thead>
         <tbody id="connector-rows">${connectors.map(managedRow).join("")
           || `<tr><td colspan="3" class="muted" style="padding:14px 18px">None configured. Business rule tasks marked <i>External (temis connector)</i> resolve by name to these.</td></tr>`}</tbody>
@@ -973,7 +973,7 @@ async function viewConsoleOrg() {
         is <b>never</b> shown after it is set — only its name and metadata. A reference resolves
         from the vault first, then <code>ATLAS_CONNECTOR_&lt;REF&gt;_TOKEN</code>.</p>
         <div id="secret-form-slot" style="padding:0 18px"></div>
-        <table>
+        <table data-dt-key="secrets">
           <thead><tr><th>Secret</th><th></th></tr></thead>
           <tbody id="secret-rows">${secrets.map(secretRow).join("")
             || `<tr><td colspan="2" class="muted" style="padding:14px 18px">None stored. Add one, then point a connector's token reference at its name.</td></tr>`}</tbody>
@@ -1009,7 +1009,7 @@ async function viewConsoleOrg() {
           : "Login is <b>not</b> enforced — start the server with <code>--auth</code> to require these accounts."}
           Roles are the hook for finer permissions later; today only <span class="chip">admin</span> is enforced (it gates this page).</p>
         <div id="user-form-slot" style="padding:0 18px"></div>
-        <table>
+        <table data-dt-key="users">
           <thead><tr><th>User</th><th>Name</th><th>Roles</th><th>Status</th><th></th></tr></thead>
           <tbody id="user-rows">${(users || []).map(userRow).join("")
             || `<tr><td colspan="5" class="muted" style="padding:14px 18px">No users yet.</td></tr>`}</tbody>
@@ -1230,7 +1230,7 @@ async function viewModelerHome() {
       ])}
     </div>
     <div class="card" style="padding:0; margin-top:14px">
-      <table>
+      <table data-dt-key="projects">
         <thead><tr><th>Name</th><th>Artifacts</th><th>Last changed</th><th></th></tr></thead>
         <tbody id="proj-rows"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
       </table>
@@ -1522,7 +1522,7 @@ async function viewProjectDetail(id) {
       </div>
       <input class="filter-input" id="pd-filter" placeholder="Filter artifacts…" autocomplete="off">
       <div class="card" style="padding:0">
-        <table>
+        <table data-dt-key="project-artifacts">
           <thead><tr><th>Name</th><th>Type</th><th>Last changed</th><th></th></tr></thead>
           <tbody id="pd-rows">${bodyRows ||
             `<tr><td colspan="4" class="empty">${canWrite
@@ -2576,7 +2576,7 @@ async function viewInstances() {
     varPanel.innerHTML = `
       <p class="muted" style="font-size:12px;margin:0 2px 8px">${rows.length} instance${rows.length === 1 ? "" : "s"} matched${capped} · full scan</p>
       <div class="card" style="padding:0">
-        <table class="var-results">
+        <table class="var-results" data-dt-key="instance-search">
           <thead><tr><th>Process</th><th>Version</th><th>State</th><th>Started</th><th>Matched variable(s)</th><th></th></tr></thead>
           <tbody>${body}</tbody>
         </table>
@@ -2614,7 +2614,7 @@ async function viewDecisions() {
     inputs it saw, the outputs it produced, and the rule trace — or open a process to
     watch the instances that drove it.</p>
     <div class="card" style="padding:0">
-      <table>
+      <table data-dt-key="decisions">
         <thead><tr><th>Decision</th><th>Evaluation</th><th>Used by</th><th>Evaluations</th><th>Last evaluated</th></tr></thead>
         <tbody id="rows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
       </table>
@@ -2685,7 +2685,7 @@ async function viewCallActivities() {
     An override keys on the called process id, so it applies to every caller of that
     target listed here.</p>
     <div class="card" style="padding:0">
-      <table>
+      <table data-dt-key="call-activities">
         <thead><tr><th>Caller</th><th>Element</th><th>Calls</th><th>Binding</th><th>Variables</th><th>Resolves to</th><th>Override</th></tr></thead>
         <tbody id="rows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
       </table>
@@ -2817,7 +2817,7 @@ async function viewIncidents() {
     still fails.</p>
     <div id="inc-note"></div>
     <div class="card" style="padding:0">
-      <table>
+      <table data-dt-key="incidents">
         <thead><tr><th>Instance</th><th>Element</th><th>Cause</th><th>Raised</th><th>Message</th><th></th></tr></thead>
         <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
       </table>
@@ -2907,7 +2907,7 @@ async function viewDecisionDetail(id) {
     highlighted — a rule that never matches (a string compared against a number, a
     stray space, a wrong type) shows its condition in red.</p>
     <div class="card" style="padding:0">
-      <table>
+      <table data-dt-key="decision-evals">
         <thead><tr><th>When</th><th>Instance</th><th>Element</th><th>Inputs</th><th>Result</th></tr></thead>
         <tbody id="rows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
       </table>
