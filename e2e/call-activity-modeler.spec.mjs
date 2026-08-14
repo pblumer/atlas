@@ -16,6 +16,9 @@ test.beforeEach(async ({ page }) => {
   // Show the Implement tab, then select the call activity so its panel renders.
   await page.locator('[data-tab="implement"]').click();
   await page.evaluate(() => window.__selectCa());
+  // Property groups start collapsed on open except General, so expand "Called process"
+  // to reveal its Process ID picker before the tests drive it.
+  await page.locator(".pgroup-head", { hasText: "Called process" }).click();
 });
 
 test("the Process ID field offers deployed processes and drafts as suggestions", async ({ page }) => {
