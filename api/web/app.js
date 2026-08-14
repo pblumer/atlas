@@ -5,6 +5,7 @@ import {
   PRESETS, normalizeHex, currentAccent, applyAccent, applyCurrent,
   setServerAccent, resetServerAccent, syncFromServer,
 } from "./theme.js";
+import { enhanceTable } from "./table.js";
 
 const view = document.getElementById("view");
 
@@ -932,7 +933,7 @@ async function viewConsoleOrg() {
       endpoint is stored; the token is a <b>reference</b> resolved from the vault (or
       <code>ATLAS_CONNECTOR_&lt;REF&gt;_TOKEN</code>) at runtime — never stored here.</p>
       <div id="connector-form-slot" style="padding:0 18px"></div>
-      <table>
+      <table data-dt-key="connectors">
         <thead><tr><th>Connector</th><th>Status</th><th></th></tr></thead>
         <tbody id="connector-rows">${connectors.map(managedRow).join("")
           || `<tr><td colspan="3" class="muted" style="padding:14px 18px">None configured. Business rule tasks marked <i>External (temis connector)</i> resolve by name to these.</td></tr>`}</tbody>
@@ -972,7 +973,7 @@ async function viewConsoleOrg() {
         is <b>never</b> shown after it is set — only its name and metadata. A reference resolves
         from the vault first, then <code>ATLAS_CONNECTOR_&lt;REF&gt;_TOKEN</code>.</p>
         <div id="secret-form-slot" style="padding:0 18px"></div>
-        <table>
+        <table data-dt-key="secrets">
           <thead><tr><th>Secret</th><th></th></tr></thead>
           <tbody id="secret-rows">${secrets.map(secretRow).join("")
             || `<tr><td colspan="2" class="muted" style="padding:14px 18px">None stored. Add one, then point a connector's token reference at its name.</td></tr>`}</tbody>
@@ -1008,7 +1009,7 @@ async function viewConsoleOrg() {
           : "Login is <b>not</b> enforced — start the server with <code>--auth</code> to require these accounts."}
           Roles are the hook for finer permissions later; today only <span class="chip">admin</span> is enforced (it gates this page).</p>
         <div id="user-form-slot" style="padding:0 18px"></div>
-        <table>
+        <table data-dt-key="users">
           <thead><tr><th>User</th><th>Name</th><th>Roles</th><th>Status</th><th></th></tr></thead>
           <tbody id="user-rows">${(users || []).map(userRow).join("")
             || `<tr><td colspan="5" class="muted" style="padding:14px 18px">No users yet.</td></tr>`}</tbody>
@@ -1229,7 +1230,7 @@ async function viewModelerHome() {
       ])}
     </div>
     <div class="card" style="padding:0; margin-top:14px">
-      <table>
+      <table data-dt-key="projects">
         <thead><tr><th>Name</th><th>Artifacts</th><th>Last changed</th><th></th></tr></thead>
         <tbody id="proj-rows"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
       </table>
@@ -1271,9 +1272,9 @@ async function viewModelerHome() {
         { label: "Delete", icon: "🗑", act: "del", data: { id: p.id, name: p.name }, danger: true },
       );
       return `<tr>
-        <td><div class="artifact-name"><span class="mi-icon">📁</span><a href="${href}"><b>${esc(p.name)}</b></a>${visBadge(p)}</div></td>
+        <td data-filter="${esc(p.name)}"><div class="artifact-name"><span class="mi-icon">📁</span><a href="${href}"><b>${esc(p.name)}</b></a>${visBadge(p)}</div></td>
         <td class="muted">${n}</td>
-        <td class="muted">${esc(fmtTime(p.updatedAt))}</td>
+        <td class="muted" data-sort="${p.updatedAt || 0}">${esc(fmtTime(p.updatedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td>
       </tr>`;
     };
@@ -1327,7 +1328,7 @@ async function viewModelerHome() {
     </tr>`;
   };
   const deployTable = (gs) => `<div class="card" style="padding:0">
-      <table>
+      <table class="no-enhance">
         <thead><tr><th>Process</th><th>Latest</th><th>Deployed</th><th></th></tr></thead>
         <tbody>${gs.map(deployRow).join("")}</tbody>
       </table>
@@ -1458,7 +1459,7 @@ async function viewProjectDetail(id) {
       return `<tr data-name="${esc((d.name || d.processId).toLowerCase())}">
         ${nameCell("BPMN", d.name || d.processId, esc(d.processId), href)}
         <td class="muted">Diagram</td>
-        <td class="muted">${esc(fmtTime(d.savedAt))}</td>
+        <td class="muted" data-sort="${d.savedAt || 0}">${esc(fmtTime(d.savedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
     const refRow = (r) => {
@@ -1474,7 +1475,7 @@ async function viewProjectDetail(id) {
       return `<tr data-name="${esc(r.name.toLowerCase())}">
         ${nameCell("DMN", r.name, `temis model: ${esc(r.modelRef)} · <span data-refstatus="${esc(r.id)}">not validated</span>`, href)}
         <td class="muted">Decision ref</td>
-        <td class="muted">${esc(fmtTime(r.createdAt))}</td>
+        <td class="muted" data-sort="${r.createdAt || 0}">${esc(fmtTime(r.createdAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
     const formRow = (f) => {
@@ -1487,7 +1488,7 @@ async function viewProjectDetail(id) {
       return `<tr data-name="${esc((f.name || f.id).toLowerCase())}">
         ${nameCell("FORM", f.name || f.id, esc(f.id), href)}
         <td class="muted">Form</td>
-        <td class="muted">${esc(fmtTime(f.savedAt))}</td>
+        <td class="muted" data-sort="${f.savedAt || 0}">${esc(fmtTime(f.savedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
 
@@ -1521,7 +1522,7 @@ async function viewProjectDetail(id) {
       </div>
       <input class="filter-input" id="pd-filter" placeholder="Filter artifacts…" autocomplete="off">
       <div class="card" style="padding:0">
-        <table>
+        <table data-dt-key="project-artifacts">
           <thead><tr><th>Name</th><th>Type</th><th>Last changed</th><th></th></tr></thead>
           <tbody id="pd-rows">${bodyRows ||
             `<tr><td colspan="4" class="empty">${canWrite
@@ -2394,15 +2395,8 @@ async function viewInstances() {
     <p class="muted var-hint" style="font-size:12px;margin:-4px 2px 12px">Contains <code>=</code> → structured <code>name=value</code> (name exact, value substring); otherwise free text across variable names and values.</p>
     <div id="var-panel" hidden></div>
     <div class="card" id="proc-card" style="padding:0">
-      <table>
-        <thead><tr>
-          <th class="sortable" data-sort="proc"><button type="button" class="th-sort">Process<span class="sort-ind"></span></button></th>
-          <th class="sortable" data-sort="versions"><button type="button" class="th-sort">Versions<span class="sort-ind"></span></button></th>
-          <th class="sortable" data-sort="running"><button type="button" class="th-sort">Running<span class="sort-ind"></span></button></th>
-          <th class="sortable" data-sort="finished"><button type="button" class="th-sort">Finished<span class="sort-ind"></span></button></th>
-          <th class="sortable" data-sort="activity"><button type="button" class="th-sort">Last activity<span class="sort-ind"></span></button></th>
-          <th></th>
-        </tr></thead>
+      <table data-dt-key="instances">
+        <thead><tr><th>Process</th><th>Versions</th><th>Running</th><th>Finished</th><th>Last activity</th><th></th></tr></thead>
         <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>`;
@@ -2412,61 +2406,10 @@ async function viewInstances() {
   let summary = new Map();
   const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—"; // completedAt is ns
 
-  // Column sort: each key maps a process group to a comparable value. String keys
-  // sort lexically, the rest numerically; the process id breaks ties so equal rows
-  // keep a stable order. The chosen column/direction persists so it survives a
-  // refresh or a trip into a replay and back.
-  const summaryOf = (g) => summary.get(g.processId) || { running: 0, finished: 0, latestCompletedAt: 0 };
-  const SORTERS = {
-    proc: (g) => (g.latest.name || g.processId).toLowerCase(),
-    versions: (g) => g.versions.length,
-    running: (g) => summaryOf(g).running || 0,
-    finished: (g) => summaryOf(g).finished || 0,
-    activity: (g) => summaryOf(g).latestCompletedAt || 0,
-  };
-  let sortState = (() => {
-    try { const s = JSON.parse(localStorage.getItem("atlas.ops.sort")); if (s && SORTERS[s.key]) return s; } catch { /* ignore */ }
-    return { key: null, dir: "desc" };
-  })();
-  const saveSort = () => { try { localStorage.setItem("atlas.ops.sort", JSON.stringify(sortState)); } catch { /* ignore */ } };
-  function sortGroups(groups) {
-    if (!sortState.key) return groups; // natural registration order (newest deploy first)
-    const val = SORTERS[sortState.key];
-    const dir = sortState.dir === "asc" ? 1 : -1;
-    return [...groups].sort((a, b) => {
-      const va = val(a), vb = val(b);
-      let c = typeof va === "string" ? va.localeCompare(vb) : va - vb;
-      if (c === 0) c = a.processId.localeCompare(b.processId);
-      return c * dir;
-    });
-  }
-  function updateSortIndicators() {
-    for (const th of view.querySelectorAll("#proc-card th.sortable")) {
-      const ind = th.querySelector(".sort-ind");
-      if (sortState.key === th.dataset.sort) {
-        ind.textContent = sortState.dir === "asc" ? "▲" : "▼";
-        th.setAttribute("aria-sort", sortState.dir === "asc" ? "ascending" : "descending");
-      } else {
-        ind.textContent = "";
-        th.removeAttribute("aria-sort");
-      }
-    }
-  }
-  for (const th of view.querySelectorAll("#proc-card th.sortable")) {
-    th.querySelector(".th-sort").addEventListener("click", () => {
-      const key = th.dataset.sort;
-      if (sortState.key === key) sortState.dir = sortState.dir === "asc" ? "desc" : "asc";
-      else sortState = { key, dir: key === "proc" ? "asc" : "desc" }; // text A→Z, counts high→low
-      saveSort();
-      renderRows();
-    });
-  }
-
-  // renderRows draws the process rows, narrowed by the filter box (name or process
-  // id) and ordered by the chosen column sort. Kept separate from load so filtering
-  // and sorting never refetch.
+  // renderRows draws the process rows, narrowed by the top filter box (name or process
+  // id). Column sorting and per-column filtering are handled by the shared table
+  // enhancer over the rendered rows, so this only builds the rows and their sort keys.
   function renderRows() {
-    updateSortIndicators();
     if (!allGroups.length) {
       tbody.innerHTML = `<tr><td colspan="6" class="empty">
         No processes deployed. Click <b>Deploy demo</b> above, or create one in the
@@ -2481,8 +2424,7 @@ async function viewInstances() {
       tbody.innerHTML = `<tr><td colspan="6" class="empty">No processes match “${esc(q)}”.</td></tr>`;
       return;
     }
-    const groups = sortGroups(filtered);
-    tbody.innerHTML = groups.map((g) => {
+    tbody.innerHTML = filtered.map((g) => {
       const s = summary.get(g.processId) || { running: 0, finished: 0, latestCompletedAt: 0 };
       const label = g.latest.name || g.processId;
       const sub = g.latest.name
@@ -2507,11 +2449,11 @@ async function viewInstances() {
         ? `<button class="btn ghost danger sm" data-term-proc="${esc(g.processId)}" title="Terminate every running instance of this process">Terminate all running</button>`
         : "";
       return `<tr>
-        <td><a href="#/operations/p/${g.latest.key}"><b>${esc(label)}</b></a>${inactiveBadge}${collab}${sub}</td>
-        <td>${versions}</td>
-        <td>${running}</td>
-        <td>${s.finished || '<span class="muted">0</span>'}</td>
-        <td class="muted">${esc(fmtNano(s.latestCompletedAt))}</td>
+        <td data-filter="${esc(label + " " + g.processId)}"><a href="#/operations/p/${g.latest.key}"><b>${esc(label)}</b></a>${inactiveBadge}${collab}${sub}</td>
+        <td data-sort="${g.versions.length}">${versions}</td>
+        <td data-sort="${s.running || 0}">${running}</td>
+        <td data-sort="${s.finished || 0}">${s.finished || '<span class="muted">0</span>'}</td>
+        <td class="muted" data-sort="${s.latestCompletedAt || 0}">${esc(fmtNano(s.latestCompletedAt))}</td>
         <td style="text-align:right">${termAll}<a class="btn ghost" href="#/operations/p/${g.latest.key}">Open</a></td>
       </tr>`;
     }).join("");
@@ -2625,7 +2567,7 @@ async function viewInstances() {
         <td><b>${esc(label)}</b>${tag}<div class="muted" style="font-size:12px">${esc(String(r.key))}</div></td>
         <td>v${r.version}</td>
         <td>${state}</td>
-        <td class="muted">${esc(fmtNano(r.completedAt || r.createdAt))}</td>
+        <td class="muted" data-sort="${r.completedAt || r.createdAt || 0}">${esc(fmtNano(r.completedAt || r.createdAt))}</td>
         <td>${hits}</td>
         <td style="text-align:right"><a class="replay-link" href="#/operations/i/${r.key}">&#9654; Replay</a></td>
       </tr>`;
@@ -2634,7 +2576,7 @@ async function viewInstances() {
     varPanel.innerHTML = `
       <p class="muted" style="font-size:12px;margin:0 2px 8px">${rows.length} instance${rows.length === 1 ? "" : "s"} matched${capped} · full scan</p>
       <div class="card" style="padding:0">
-        <table class="var-results">
+        <table class="var-results" data-dt-key="instance-search">
           <thead><tr><th>Process</th><th>Version</th><th>State</th><th>Started</th><th>Matched variable(s)</th><th></th></tr></thead>
           <tbody>${body}</tbody>
         </table>
@@ -2672,7 +2614,7 @@ async function viewDecisions() {
     inputs it saw, the outputs it produced, and the rule trace — or open a process to
     watch the instances that drove it.</p>
     <div class="card" style="padding:0">
-      <table>
+      <table data-dt-key="decisions">
         <thead><tr><th>Decision</th><th>Evaluation</th><th>Used by</th><th>Evaluations</th><th>Last evaluated</th></tr></thead>
         <tbody id="rows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
       </table>
@@ -2708,7 +2650,7 @@ async function viewDecisions() {
           <td>${locus}</td>
           <td>${procs}</td>
           <td>${evals}</td>
-          <td class="muted">${esc(fmtNano(d.lastEvaluatedAt))}</td>
+          <td class="muted" data-sort="${d.lastEvaluatedAt || 0}">${esc(fmtNano(d.lastEvaluatedAt))}</td>
         </tr>`;
       }).join("");
     } catch (e) {
@@ -2743,7 +2685,7 @@ async function viewCallActivities() {
     An override keys on the called process id, so it applies to every caller of that
     target listed here.</p>
     <div class="card" style="padding:0">
-      <table>
+      <table data-dt-key="call-activities">
         <thead><tr><th>Caller</th><th>Element</th><th>Calls</th><th>Binding</th><th>Variables</th><th>Resolves to</th><th>Override</th></tr></thead>
         <tbody id="rows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
       </table>
@@ -2875,7 +2817,7 @@ async function viewIncidents() {
     still fails.</p>
     <div id="inc-note"></div>
     <div class="card" style="padding:0">
-      <table>
+      <table data-dt-key="incidents">
         <thead><tr><th>Instance</th><th>Element</th><th>Cause</th><th>Raised</th><th>Message</th><th></th></tr></thead>
         <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
       </table>
@@ -2907,7 +2849,7 @@ async function viewIncidents() {
           <td>${inst}</td>
           <td>${el}</td>
           <td>${cause}</td>
-          <td>${fmtNano(r.raisedAt)}</td>
+          <td data-sort="${r.raisedAt || 0}">${fmtNano(r.raisedAt)}</td>
           <td>${esc(r.message || "—")}</td>
           <td style="text-align:right"><button class="btn sm" data-resolve="${r.elementInstanceKey}">Resolve…</button></td>
         </tr>`;
@@ -2965,7 +2907,7 @@ async function viewDecisionDetail(id) {
     highlighted — a rule that never matches (a string compared against a number, a
     stray space, a wrong type) shows its condition in red.</p>
     <div class="card" style="padding:0">
-      <table>
+      <table data-dt-key="decision-evals">
         <thead><tr><th>When</th><th>Instance</th><th>Element</th><th>Inputs</th><th>Result</th></tr></thead>
         <tbody id="rows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
       </table>
@@ -3034,7 +2976,7 @@ async function viewDecisionDetail(id) {
               </div>`).join("")}</div>`
           : '<span class="muted">—</span>';
         return `<tr>
-          <td class="muted">${esc(fmtNano(r.at))}</td>
+          <td class="muted" data-sort="${r.at || 0}">${esc(fmtNano(r.at))}</td>
           <td><a href="#/operations/i/${r.instanceKey}" title="Replay this instance step by step">&#9654; ${r.instanceKey}</a></td>
           <td class="muted">${esc(r.elementId || "—")}</td>
           <td>${pills}</td>
@@ -4444,6 +4386,22 @@ async function route() {
     location.hash = "#/console";
   } catch (e) {
     view.innerHTML = `<div class="card empty"><h1>Something went wrong</h1><p class="muted">${esc(e.message)}</p></div>`;
+  } finally {
+    // One integration point for every data table: after a view renders, give each of
+    // its tables shared column sorting + a per-column filter row (table.js). A table
+    // opts out with class "no-enhance"; enhanceTable itself skips any table without a
+    // header row and never double-enhances, so this is safe to run on every route.
+    enhanceViewTables();
+  }
+}
+
+// enhanceViewTables applies the shared sort/filter enhancer to every eligible table
+// currently in the main view. It runs once per navigation (not as a live observer),
+// so it never watches the modeler's heavy SVG; each enhanced table then keeps itself
+// current via its own lightweight tbody observer as rows refresh.
+function enhanceViewTables() {
+  for (const t of view.querySelectorAll("table:not(.no-enhance)")) {
+    enhanceTable(t, { key: t.dataset.dtKey || undefined });
   }
 }
 
