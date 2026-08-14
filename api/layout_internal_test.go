@@ -457,7 +457,7 @@ func TestGenerateDIBoundaryHandlerBelowRidesBottom(t *testing.T) {
 	    </laneSet>
 	    <startEvent id="Start"/>
 	    <task id="Host"/>
-	    <boundaryEvent id="Guard" attachedToRef="Host"/>
+	    <boundaryEvent id="Guard" name="X" attachedToRef="Host"/>
 	    <task id="Handler"/>
 	    <endEvent id="Aborted"/>
 	    <sequenceFlow id="s1" sourceRef="Start" targetRef="Host"/>
@@ -479,6 +479,11 @@ func TestGenerateDIBoundaryHandlerBelowRidesBottom(t *testing.T) {
 	if handler.y+handler.h/2 <= host.y+host.h/2 {
 		t.Fatalf("test setup: handler should sit below the host, got handler cy=%d host cy=%d",
 			handler.y+handler.h/2, host.y+host.h/2)
+	}
+	// Its label rides below the host (the event is on the bottom edge), clear of the
+	// task box rather than over its title.
+	if lbl := boundaryLabelBox(t, di, "Guard"); lbl.y < host.bottom() {
+		t.Errorf("bottom-edge boundary label (y=%d) not clear below host bottom y=%d", lbl.y, host.bottom())
 	}
 	// The handler is below, so the boundary event rides the host's bottom edge.
 	if cy := be.y + be.h/2; cy != host.bottom() {
@@ -567,6 +572,84 @@ func TestGenerateDIHappyPathStaysStraight(t *testing.T) {
 		if pts := parseEdges(t, di)[b.flow]; len(pts) != 2 || pts[0].y != pts[1].y {
 			t.Errorf("branch flow %q should be one straight horizontal run, got %v", b.flow, pts)
 		}
+	}
+}
+
+// boundaryLabelBox extracts the explicit BPMNLabel bounds emitted inside one
+// boundary event's shape, so a test can assert where its caption sits.
+func boundaryLabelBox(t *testing.T, di, id string) shapeBox {
+	t.Helper()
+	re := regexp.MustCompile(`(?s)<bpmndi:BPMNShape id="` + id +
+		`_di".*?<bpmndi:BPMNLabel>\s*<omgdc:Bounds x="(-?\d+)" y="(-?\d+)" width="(\d+)" height="(\d+)"/>`)
+	m := re.FindStringSubmatch(di)
+	if m == nil {
+		t.Fatalf("no explicit label for boundary %q in DI:\n%s", id, di)
+	}
+	atoi := func(s string) int {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			t.Fatalf("bad number %q: %v", s, err)
+		}
+		return n
+	}
+	return shapeBox{x: atoi(m[1]), y: atoi(m[2]), w: atoi(m[3]), h: atoi(m[4])}
+}
+
+// TestGenerateDIBoundaryLabelClearsHost is the regression for a boundary event's
+// caption landing on top of its host's title. The generator emits an explicit label
+// box for a named boundary event, placed off the host — above it when it rides the
+// top edge — with the box's right edge at the event's center so the exception riser
+// runs along the label's edge rather than through it.
+func TestGenerateDIBoundaryLabelClearsHost(t *testing.T) {
+	src := []byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="P">
+	    <startEvent id="Start"/>
+	    <serviceTask id="Task"/>
+	    <boundaryEvent id="B" name="Timeout" attachedToRef="Task"/>
+	    <serviceTask id="Handler"/>
+	    <endEvent id="Done"/>
+	    <endEvent id="Aborted"/>
+	    <sequenceFlow id="s1" sourceRef="Start" targetRef="Task"/>
+	    <sequenceFlow id="s2" sourceRef="Task" targetRef="Done"/>
+	    <sequenceFlow id="s3" sourceRef="B" targetRef="Handler"/>
+	    <sequenceFlow id="s4" sourceRef="Handler" targetRef="Aborted"/>
+	  </process>
+	</definitions>`)
+	di, ok := generateDI(src)
+	if !ok {
+		t.Fatal("generateDI: want ok")
+	}
+	host := parseShapes(t, di)["Task"]
+	be := parseShapes(t, di)["B"]
+	lbl := boundaryLabelBox(t, di, "B")
+	// The handler is above, so the boundary rides the top edge and its label sits in
+	// the gap above the host, never over the task box.
+	if lbl.bottom() > host.y {
+		t.Errorf("boundary label (y %d..%d) not clear above host top y=%d", lbl.y, lbl.bottom(), host.y)
+	}
+	// The label's right edge is at the event's center-x, keeping the upward exception
+	// riser off the caption.
+	if lbl.right() != be.x+be.w/2 {
+		t.Errorf("label right edge %d not at event center-x %d", lbl.right(), be.x+be.w/2)
+	}
+	// Only the boundary event carries an explicit label; other events auto-place.
+	if n := strings.Count(di, "<bpmndi:BPMNLabel>"); n != 1 {
+		t.Errorf("want exactly one explicit label (the boundary), got %d", n)
+	}
+	// A boundary event with no name gets no explicit label box.
+	di2, _ := generateDI([]byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="P">
+	    <startEvent id="Start"/><serviceTask id="Task"/><endEvent id="Done"/><endEvent id="Ab"/>
+	    <boundaryEvent id="B" attachedToRef="Task"/>
+	    <serviceTask id="H"/>
+	    <sequenceFlow id="s1" sourceRef="Start" targetRef="Task"/>
+	    <sequenceFlow id="s2" sourceRef="Task" targetRef="Done"/>
+	    <sequenceFlow id="s3" sourceRef="B" targetRef="H"/>
+	    <sequenceFlow id="s4" sourceRef="H" targetRef="Ab"/>
+	  </process>
+	</definitions>`))
+	if strings.Contains(di2, "<bpmndi:BPMNLabel>") {
+		t.Errorf("an unnamed boundary event should not get an explicit label:\n%s", di2)
 	}
 }
 

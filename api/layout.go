@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 // BPMN DI namespace URIs. bpmn-js resolves diagram interchange by namespace URI,
@@ -151,6 +152,7 @@ type layoutElem struct {
 type layoutBoundary struct {
 	Id            string `xml:"id,attr"`
 	AttachedToRef string `xml:"attachedToRef,attr"`
+	Name          string `xml:"name,attr"`
 }
 
 type layoutFlow struct {
@@ -202,6 +204,8 @@ type lnode struct {
 	sub   *laidOut // non-nil for an expanded subprocess: its inner layout
 	bound bool     // a boundary event
 	host  string   // boundary: the activity id it is attached to
+	label string   // boundary: its name, emitted as an explicit label placed clear of the host
+	atTop bool     // boundary: riding the host's top edge (label goes above, else below)
 }
 
 // placedShape and placedEdge are the emitted diagram interchange for one container
@@ -211,6 +215,12 @@ type placedShape struct {
 	x, y, w, h int
 	expanded   bool // an expanded subprocess box
 	horizontal bool // a swimlane band (isHorizontal)
+
+	// An explicit label box (currently only boundary events get one, to keep their
+	// caption off the host). Zero when hasLabel is false: bpmn-js then auto-places.
+	hasLabel       bool
+	labelX, labelY int
+	labelW, labelH int
 }
 
 type point struct{ x, y int }
@@ -352,7 +362,7 @@ func containerNodes(c layoutContainer) (nodes []lnode, inner map[string]*laidOut
 		if be.Id == "" || !hosts[be.AttachedToRef] {
 			continue
 		}
-		nodes = append(nodes, lnode{id: be.Id, w: kindEvent.w, h: kindEvent.h, bound: true, host: be.AttachedToRef})
+		nodes = append(nodes, lnode{id: be.Id, w: kindEvent.w, h: kindEvent.h, bound: true, host: be.AttachedToRef, label: strings.TrimSpace(be.Name)})
 	}
 	return nodes, inner
 }
@@ -709,6 +719,7 @@ func placeBoundaries(nodes []lnode, idx map[string]int, flows []layoutFlow) {
 		} else {
 			nodes[i].y = host.y - nodes[i].h/2
 		}
+		nodes[i].atTop = !onBottom
 	}
 }
 
@@ -725,8 +736,34 @@ func emitShapes(lo *laidOut, nodes []lnode, inner map[string]*laidOut) {
 			lo.edges = append(lo.edges, shiftEdges(child.edges, n.x+subPadX, n.y+subHeaderTop)...)
 			continue
 		}
-		lo.shapes = append(lo.shapes, placedShape{id: n.id, x: n.x, y: n.y, w: n.w, h: n.h})
+		ps := placedShape{id: n.id, x: n.x, y: n.y, w: n.w, h: n.h}
+		if n.bound && n.label != "" {
+			ps.hasLabel = true
+			ps.labelW, ps.labelH = boundaryLabelWidth(n.label), 14
+			// Right edge at the event's center-x, so the exception riser (which leaves
+			// the event centered) runs along the label's edge, not through it; the box
+			// therefore extends left, into the open column gap.
+			ps.labelX = n.x + n.w/2 - ps.labelW
+			if n.atTop {
+				ps.labelY = n.y - ps.labelH - 4 // above the event, in the row gap
+			} else {
+				ps.labelY = n.y + n.h + 4 // below the event
+			}
+		}
+		lo.shapes = append(lo.shapes, ps)
 	}
+}
+
+// boundaryLabelWidth estimates the pixel width of a boundary event's caption so its
+// label box roughly fits the text (bpmn-js centers the caption on the box). A rough
+// per-rune estimate is enough — the box only needs to position the label, and the
+// renderer reflows the actual text.
+func boundaryLabelWidth(s string) int {
+	w := utf8.RuneCountInString(s) * 7
+	if w < 20 {
+		w = 20
+	}
+	return w
 }
 
 // emitEdges writes an edge for each sequence flow whose endpoints are both placed,
@@ -809,6 +846,10 @@ func shiftShapes(ss []placedShape, dx, dy int) []placedShape {
 	for i, s := range ss {
 		s.x += dx
 		s.y += dy
+		if s.hasLabel {
+			s.labelX += dx
+			s.labelY += dy
+		}
 		out[i] = s
 	}
 	return out
@@ -953,6 +994,11 @@ func writeShape(b *strings.Builder, s placedShape) {
 	}
 	fmt.Fprintf(b, "      <bpmndi:BPMNShape id=\"%s\" bpmnElement=\"%s\"%s>\n", attr(s.id+"_di"), attr(s.id), attrs)
 	fmt.Fprintf(b, "        <omgdc:Bounds x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\"/>\n", s.x, s.y, s.w, s.h)
+	if s.hasLabel {
+		b.WriteString("        <bpmndi:BPMNLabel>\n")
+		fmt.Fprintf(b, "          <omgdc:Bounds x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\"/>\n", s.labelX, s.labelY, s.labelW, s.labelH)
+		b.WriteString("        </bpmndi:BPMNLabel>\n")
+	}
 	b.WriteString("      </bpmndi:BPMNShape>\n")
 }
 
