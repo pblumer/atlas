@@ -553,6 +553,56 @@ func TestGenerateDIHappyPathStaysStraight(t *testing.T) {
 			t.Errorf("branch node %q y-center %d is not above the main axis %d", id, cy, wantCY)
 		}
 	}
+	// A branch runs straight along one row: each handler and the end event it flows
+	// into share a center line, so the connecting edge is a single horizontal run
+	// rather than sagging toward the happy-path column below.
+	for _, b := range []struct{ handler, end, flow string }{
+		{"HandleSessionError", "EndError1", "e2"},
+		{"HandleError", "EndError2", "e4"},
+	} {
+		h, end := shapes[b.handler], shapes[b.end]
+		if hcy, ecy := h.y+h.h/2, end.y+end.h/2; hcy != ecy {
+			t.Errorf("branch %q not on one row: %s cy=%d, %s cy=%d", b.flow, b.handler, hcy, b.end, ecy)
+		}
+		if pts := parseEdges(t, di)[b.flow]; len(pts) != 2 || pts[0].y != pts[1].y {
+			t.Errorf("branch flow %q should be one straight horizontal run, got %v", b.flow, pts)
+		}
+	}
+}
+
+// TestGenerateDIBranchesStackOnDistinctRows covers two side branches that share a
+// column: they cannot occupy the same row, so they stack onto distinct rows above
+// the trunk rather than overlapping.
+func TestGenerateDIBranchesStackOnDistinctRows(t *testing.T) {
+	src := []byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="P">
+	    <startEvent id="S"/>
+	    <task id="M1"/>
+	    <task id="M2"/>
+	    <endEvent id="E"/>
+	    <task id="A"/>
+	    <task id="B"/>
+	    <sequenceFlow id="m1" sourceRef="S" targetRef="M1"/>
+	    <sequenceFlow id="m2" sourceRef="M1" targetRef="M2"/>
+	    <sequenceFlow id="m3" sourceRef="M2" targetRef="E"/>
+	    <sequenceFlow id="a" sourceRef="S" targetRef="A"/>
+	    <sequenceFlow id="b" sourceRef="S" targetRef="B"/>
+	  </process>
+	</definitions>`)
+	di, ok := generateDI(src)
+	if !ok {
+		t.Fatal("generateDI: want ok")
+	}
+	shapes := parseShapes(t, di)
+	m1, a, b := shapes["M1"], shapes["A"], shapes["B"]
+	trunkCY := m1.y + m1.h/2
+	acy, bcy := a.y+a.h/2, b.y+b.h/2
+	if acy == bcy {
+		t.Errorf("A and B share a column and must not share a row, both cy=%d", acy)
+	}
+	if acy >= trunkCY || bcy >= trunkCY {
+		t.Errorf("branch rows must sit above the trunk (cy=%d); got A=%d B=%d", trunkCY, acy, bcy)
+	}
 }
 
 // TestGenerateDIOrthogonalRouting is the regression for diagonal branch edges: on a
