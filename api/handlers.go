@@ -1627,11 +1627,15 @@ func nativeVar(v *model.VariableValue) any {
 	}
 }
 
-// handleInstanceVariables returns a process instance's variables as a typed JSON
-// object ({"Name": "Patrick", ...}) — the shape the Tasks app feeds a bound form
-// so a field whose key matches a variable is prefilled (ADR-0028). An instance
-// with no variables (or an unknown key) yields an empty object, not a 404: the
-// endpoint is a convenience read, not an existence check.
+// handleInstanceVariables returns the variables visible at an instance scope as a
+// typed JSON object ({"Name": "Patrick", ...}) — the shape the Tasks app feeds a
+// bound form so a field whose key matches a variable is prefilled (ADR-0028). The
+// key may be a process-instance root or a task's element-instance scope; the read
+// resolves up the enclosing-scope chain (ADR-0068), so a user task without its own
+// input-mapped locals still prefills from the process variables it inherits — the
+// same set the token itself sees. An instance with no variables (or an unknown
+// key) yields an empty object, not a 404: the endpoint is a convenience read, not
+// an existence check.
 func (s *Server) handleInstanceVariables(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
@@ -1641,7 +1645,7 @@ func (s *Server) handleInstanceVariables(w http.ResponseWriter, r *http.Request)
 	out := map[string]any{}
 	var scanErr error
 	s.do(func() {
-		scanErr = s.store.VariablesOfScope(key, func(v *model.VariableValue) error {
+		scanErr = s.store.VisibleVariablesOfScope(key, func(v *model.VariableValue) error {
 			out[v.Name] = nativeVar(v)
 			return nil
 		})
