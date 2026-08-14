@@ -131,6 +131,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
 .tour-field input,.tour-field select{font:inherit;font-weight:400;color:var(--fg);background:var(--bg);
   border:1px solid var(--border);border-radius:8px;padding:8px 10px;min-width:190px}
 #tour-start{border:0;cursor:pointer}
+#tut-start{border:0;cursor:pointer}
 #tour-start:disabled{opacity:.6;cursor:default}
 .tour-status{margin-top:12px;font-size:14px;color:var(--muted);min-height:20px}
 .tour-status.ok{color:var(--ok);font-weight:600}
@@ -180,6 +181,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <h4 data-l="de">Bauen &amp; Betreiben</h4><h4 data-l="en">Build &amp; operate</h4>
     <a href="#designen"><span data-l="de">Prozesse designen</span><span data-l="en">Design processes</span></a>
     <a href="#rezepte"><span data-l="de">Rezepte</span><span data-l="en">Recipes</span></a>
+    <a href="#tutorial"><span data-l="de">End-to-End-Tutorial</span><span data-l="en">End-to-end tutorial</span></a>
     <a href="#formulare"><span data-l="de">Formulare &amp; Connectors</span><span data-l="en">Forms &amp; connectors</span></a>
     <a href="#laufen"><span data-l="de">Zum Laufen bringen</span><span data-l="en">Make it run</span></a>
     <a href="#testen"><span data-l="de">Testen &amp; Simulieren</span><span data-l="en">Test &amp; simulate</span></a>
@@ -1403,6 +1405,122 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
       </div>
     </section>
 
+    <!-- ==================== TUTORIAL ==================== -->
+    <section id="tutorial">
+      <h2 data-l="de">End-to-End-Tutorial: Bestellfreigabe</h2><h2 data-l="en">End-to-end tutorial: purchase approval</h2>
+      <p class="lead" data-l="de">Jetzt setzen wir die Bausteine zu einem echten Prozess zusammen: eine
+        <b>Bestellfreigabe</b>, die ein Formular aufnimmt, nach Betrag verzweigt, eine Freigabe einholt (mit
+        Erinnerung) und am Ende bestellt oder ablehnt. Am Ende kannst du sie mit einem Klick starten.</p>
+      <p class="lead" data-l="en">Now we assemble the building blocks into a real process: a <b>purchase approval</b>
+        that captures a form, branches on the amount, gets sign-off (with a reminder) and finally orders or rejects.
+        At the end you can start it with one click.</p>
+
+      <h3 data-l="de">In vier Schritten gedacht</h3><h3 data-l="en">Thought through in four steps</h3>
+      <ol class="steps">
+        <li><b data-l="de">Antrag aufnehmen</b><b data-l="en">Capture the request</b>
+          <p data-l="de">Ein <b>Start-Ereignis mit Formular</b> (<code>po-start</code>) sammelt Artikel und Betrag. Baustein: <a href="#formulare">Formulare</a>.</p><p data-l="en">A <b>start event with a form</b> (<code>po-start</code>) collects the item and amount. Block: <a href="#formulare">Forms</a>.</p></li>
+        <li><b data-l="de">Nach Betrag verzweigen</b><b data-l="en">Branch on the amount</b>
+          <p data-l="de">Ein <a href="#rz-xor">exklusives Gateway</a> schickt Anträge über 1000&nbsp;€ zur manuellen Freigabe, alles andere zur <a href="#rz-script-value">automatischen</a> (ein Script-Task setzt <code>approved = true</code>).</p><p data-l="en">An <a href="#rz-xor">exclusive gateway</a> routes requests over &euro;1000 to manual approval, everything else to <a href="#rz-script-value">auto-approval</a> (a script task sets <code>approved = true</code>).</p></li>
+        <li><b data-l="de">Freigeben lassen – mit Erinnerung</b><b data-l="en">Get approval – with a reminder</b>
+          <p data-l="de">Ein <a href="#rz-service">User-Task</a> (Formular <code>po-approve</code>) geht an die Gruppe <code>approvers</code>. Ein <a href="#rz-boundary-timer">nicht-unterbrechender Boundary-Timer</a> (P2D) st&ouml;&szlig;t nach zwei Tagen eine Erinnerung an, ohne die Aufgabe zu stoppen.</p><p data-l="en">A <a href="#rz-service">user task</a> (form <code>po-approve</code>) goes to the <code>approvers</code> group. A <a href="#rz-boundary-timer">non-interrupting boundary timer</a> (P2D) fires a reminder after two days without stopping the task.</p></li>
+        <li><b data-l="de">Entscheiden &amp; ausf&uuml;hren</b><b data-l="en">Decide &amp; act</b>
+          <p data-l="de">Beide Wege treffen sich; ein zweites <a href="#rz-xor">Gateway</a> pr&uuml;ft <code>approved</code> und f&uuml;hrt zu <a href="#rz-service">&bdquo;Bestellung anlegen&ldquo;</a> oder &bdquo;Ablehnung melden&ldquo;.</p><p data-l="en">Both paths merge; a second <a href="#rz-xor">gateway</a> checks <code>approved</code> and leads to <a href="#rz-service">"create order"</a> or "notify rejection".</p></li>
+      </ol>
+
+      <h3 data-l="de">Das vollst&auml;ndige Modell</h3><h3 data-l="en">The complete model</h3>
+      <p data-l="de">Kopiere es in den <a href="/#/modeler/new">Modeler</a> (Neues Diagramm &rarr; XML einf&uuml;gen) &ndash;
+        oder starte es gleich unten. Zwei Formulare geh&ouml;ren dazu (<code>po-start</code>, <code>po-approve</code>);
+        der Button unten legt sie mit an.</p>
+      <p data-l="en">Copy it into the <a href="/#/modeler/new">Modeler</a> (New diagram &rarr; paste XML) &ndash; or run it
+        right below. It comes with two forms (<code>po-start</code>, <code>po-approve</code>); the button below
+        creates them too.</p>
+      <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;tutorial-po&quot; targetNamespace=&quot;http://atlas/tutorial&quot;&gt;
+  &lt;process id=&quot;bestellfreigabe&quot; name=&quot;Bestellfreigabe&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot; name=&quot;Antrag&quot;&gt;
+      &lt;extensionElements&gt;&lt;zeebe:formDefinition formId=&quot;po-start&quot;/&gt;&lt;/extensionElements&gt;
+    &lt;/startEvent&gt;
+    &lt;exclusiveGateway id=&quot;gw_amount&quot; name=&quot;Betrag?&quot; default=&quot;f_auto&quot;/&gt;
+    &lt;userTask id=&quot;review&quot; name=&quot;Freigeben&quot;&gt;
+      &lt;extensionElements&gt;
+        &lt;zeebe:assignmentDefinition candidateGroups=&quot;approvers&quot;/&gt;
+        &lt;zeebe:formDefinition formId=&quot;po-approve&quot;/&gt;
+      &lt;/extensionElements&gt;
+    &lt;/userTask&gt;
+    &lt;boundaryEvent id=&quot;remindTimer&quot; name=&quot;Erinnerung&quot; attachedToRef=&quot;review&quot; cancelActivity=&quot;false&quot;&gt;
+      &lt;timerEventDefinition&gt;&lt;timeDuration&gt;P2D&lt;/timeDuration&gt;&lt;/timerEventDefinition&gt;
+    &lt;/boundaryEvent&gt;
+    &lt;serviceTask id=&quot;remind&quot; name=&quot;Erinnern&quot;&gt;
+      &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;notify&quot;/&gt;&lt;/extensionElements&gt;
+    &lt;/serviceTask&gt;
+    &lt;endEvent id=&quot;reminded&quot;/&gt;
+    &lt;scriptTask id=&quot;auto&quot; name=&quot;Automatisch freigeben&quot;&gt;
+      &lt;extensionElements&gt;&lt;zeebe:script expression=&quot;= true&quot; resultVariable=&quot;approved&quot;/&gt;&lt;/extensionElements&gt;
+    &lt;/scriptTask&gt;
+    &lt;exclusiveGateway id=&quot;merge&quot;/&gt;
+    &lt;exclusiveGateway id=&quot;gw_decision&quot; name=&quot;Freigegeben?&quot; default=&quot;f_reject&quot;/&gt;
+    &lt;serviceTask id=&quot;order&quot; name=&quot;Bestellung anlegen&quot;&gt;
+      &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;create-order&quot;/&gt;&lt;/extensionElements&gt;
+    &lt;/serviceTask&gt;
+    &lt;serviceTask id=&quot;notifyReject&quot; name=&quot;Ablehnung melden&quot;&gt;
+      &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;notify&quot;/&gt;&lt;/extensionElements&gt;
+    &lt;/serviceTask&gt;
+    &lt;endEvent id=&quot;done&quot; name=&quot;Bestellt&quot;/&gt;
+    &lt;endEvent id=&quot;rejected&quot; name=&quot;Abgelehnt&quot;/&gt;
+    &lt;sequenceFlow id=&quot;s0&quot; sourceRef=&quot;start&quot; targetRef=&quot;gw_amount&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f_review&quot; name=&quot;&gt; 1000&quot; sourceRef=&quot;gw_amount&quot; targetRef=&quot;review&quot;&gt;
+      &lt;conditionExpression&gt;= amount &gt; 1000&lt;/conditionExpression&gt;
+    &lt;/sequenceFlow&gt;
+    &lt;sequenceFlow id=&quot;f_auto&quot; name=&quot;sonst&quot; sourceRef=&quot;gw_amount&quot; targetRef=&quot;auto&quot;/&gt;
+    &lt;sequenceFlow id=&quot;r1&quot; sourceRef=&quot;review&quot; targetRef=&quot;merge&quot;/&gt;
+    &lt;sequenceFlow id=&quot;a1&quot; sourceRef=&quot;auto&quot; targetRef=&quot;merge&quot;/&gt;
+    &lt;sequenceFlow id=&quot;t1&quot; sourceRef=&quot;remindTimer&quot; targetRef=&quot;remind&quot;/&gt;
+    &lt;sequenceFlow id=&quot;t2&quot; sourceRef=&quot;remind&quot; targetRef=&quot;reminded&quot;/&gt;
+    &lt;sequenceFlow id=&quot;m1&quot; sourceRef=&quot;merge&quot; targetRef=&quot;gw_decision&quot;/&gt;
+    &lt;sequenceFlow id=&quot;d_ok&quot; name=&quot;ja&quot; sourceRef=&quot;gw_decision&quot; targetRef=&quot;order&quot;&gt;
+      &lt;conditionExpression&gt;= approved&lt;/conditionExpression&gt;
+    &lt;/sequenceFlow&gt;
+    &lt;sequenceFlow id=&quot;f_reject&quot; name=&quot;nein&quot; sourceRef=&quot;gw_decision&quot; targetRef=&quot;notifyReject&quot;/&gt;
+    &lt;sequenceFlow id=&quot;o1&quot; sourceRef=&quot;order&quot; targetRef=&quot;done&quot;/&gt;
+    &lt;sequenceFlow id=&quot;n1&quot; sourceRef=&quot;notifyReject&quot; targetRef=&quot;rejected&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+
+      <div class="card tour">
+        <div class="tour-controls">
+          <label class="tour-field">
+            <span data-l="de">Betrag (EUR)</span><span data-l="en">Amount (EUR)</span>
+            <input id="tut-amount" type="number" value="2000" min="0" step="100">
+          </label>
+          <button id="tut-start" class="pilllink" type="button">
+            <span data-l="de">🚀 Prozess deployen &amp; starten</span><span data-l="en">🚀 Deploy &amp; start the process</span>
+          </button>
+        </div>
+        <div id="tut-status" class="tour-status" role="status" aria-live="polite"></div>
+        <div id="tut-done" class="note tip" hidden style="margin:14px 0 0">
+          <a class="pilllink" href="/#/tasks"><span data-l="de">&rarr; Zum Posteingang</span><span data-l="en">&rarr; Go to the inbox</span></a>
+          <a class="pilllink ghost" href="/#/operations"><span data-l="de">&rarr; In Operations ansehen</span><span data-l="en">&rarr; Watch in Operations</span></a>
+          <p style="margin:.6em 0 0" data-l="de">Betrag &uuml;ber 1000: die Freigabe-Aufgabe wartet im Posteingang. Sonst l&auml;uft der
+            automatische Weg &ndash; sichtbar in Operations.</p>
+          <p style="margin:.6em 0 0" data-l="en">Amount over 1000: the approval task waits in the inbox. Otherwise the automatic
+            path runs &ndash; visible in Operations.</p>
+        </div>
+      </div>
+
+      <div class="note tip">
+        <span class="lbl" data-l="de">Weiterbauen</span><span class="lbl" data-l="en">Keep building</span>
+        <p data-l="de" style="margin:.3em 0 0">Von hier ist es ein kleiner Schritt: die Betragsgrenze durch eine
+          <a href="#rz-dmn">DMN-Entscheidung</a> ersetzen, &bdquo;Bestellung anlegen&ldquo; an einen
+          <a href="/#/modeler/marketplace">REST-Connector</a> h&auml;ngen, oder eine zweite Freigabestufe als
+          <a href="#rz-parallel">parallelen</a> Zweig erg&auml;nzen.</p>
+        <p data-l="en" style="margin:.3em 0 0">From here it's a small step: replace the amount threshold with a
+          <a href="#rz-dmn">DMN decision</a>, wire "create order" to a <a href="/#/modeler/marketplace">REST connector</a>,
+          or add a second approval level as a <a href="#rz-parallel">parallel</a> branch.</p>
+      </div>
+    </section>
+
     <!-- ==================== FORMS & CONNECTORS ==================== -->
     <section id="formulare">
       <h2 data-l="de">Formulare &amp; Connectors</h2><h2 data-l="en">Forms &amp; connectors</h2>
@@ -1680,6 +1798,62 @@ atlas_create_instance  key=&lt;definition key&gt;       → starts an instance</
     } finally {
       btn.disabled = false;
     }
+  });
+})();
+</script>
+<script type="application/json" id="tut-data">{"bpmn": "\u003c?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\u003cdefinitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n             xmlns:zeebe=\"http://camunda.org/schema/zeebe/1.0\"\n             id=\"tutorial-po\" targetNamespace=\"http://atlas/tutorial\">\n  \u003cprocess id=\"bestellfreigabe\" name=\"Bestellfreigabe\" isExecutable=\"true\">\n    \u003cstartEvent id=\"start\" name=\"Antrag\">\n      \u003cextensionElements>\u003czeebe:formDefinition formId=\"po-start\"/>\u003c/extensionElements>\n    \u003c/startEvent>\n    \u003cexclusiveGateway id=\"gw_amount\" name=\"Betrag?\" default=\"f_auto\"/>\n    \u003cuserTask id=\"review\" name=\"Freigeben\">\n      \u003cextensionElements>\n        \u003czeebe:assignmentDefinition candidateGroups=\"approvers\"/>\n        \u003czeebe:formDefinition formId=\"po-approve\"/>\n      \u003c/extensionElements>\n    \u003c/userTask>\n    \u003cboundaryEvent id=\"remindTimer\" name=\"Erinnerung\" attachedToRef=\"review\" cancelActivity=\"false\">\n      \u003ctimerEventDefinition>\u003ctimeDuration>P2D\u003c/timeDuration>\u003c/timerEventDefinition>\n    \u003c/boundaryEvent>\n    \u003cserviceTask id=\"remind\" name=\"Erinnern\">\n      \u003cextensionElements>\u003czeebe:taskDefinition type=\"notify\"/>\u003c/extensionElements>\n    \u003c/serviceTask>\n    \u003cendEvent id=\"reminded\"/>\n    \u003cscriptTask id=\"auto\" name=\"Automatisch freigeben\">\n      \u003cextensionElements>\u003czeebe:script expression=\"= true\" resultVariable=\"approved\"/>\u003c/extensionElements>\n    \u003c/scriptTask>\n    \u003cexclusiveGateway id=\"merge\"/>\n    \u003cexclusiveGateway id=\"gw_decision\" name=\"Freigegeben?\" default=\"f_reject\"/>\n    \u003cserviceTask id=\"order\" name=\"Bestellung anlegen\">\n      \u003cextensionElements>\u003czeebe:taskDefinition type=\"create-order\"/>\u003c/extensionElements>\n    \u003c/serviceTask>\n    \u003cserviceTask id=\"notifyReject\" name=\"Ablehnung melden\">\n      \u003cextensionElements>\u003czeebe:taskDefinition type=\"notify\"/>\u003c/extensionElements>\n    \u003c/serviceTask>\n    \u003cendEvent id=\"done\" name=\"Bestellt\"/>\n    \u003cendEvent id=\"rejected\" name=\"Abgelehnt\"/>\n    \u003csequenceFlow id=\"s0\" sourceRef=\"start\" targetRef=\"gw_amount\"/>\n    \u003csequenceFlow id=\"f_review\" name=\"> 1000\" sourceRef=\"gw_amount\" targetRef=\"review\">\n      \u003cconditionExpression>= amount > 1000\u003c/conditionExpression>\n    \u003c/sequenceFlow>\n    \u003csequenceFlow id=\"f_auto\" name=\"sonst\" sourceRef=\"gw_amount\" targetRef=\"auto\"/>\n    \u003csequenceFlow id=\"r1\" sourceRef=\"review\" targetRef=\"merge\"/>\n    \u003csequenceFlow id=\"a1\" sourceRef=\"auto\" targetRef=\"merge\"/>\n    \u003csequenceFlow id=\"t1\" sourceRef=\"remindTimer\" targetRef=\"remind\"/>\n    \u003csequenceFlow id=\"t2\" sourceRef=\"remind\" targetRef=\"reminded\"/>\n    \u003csequenceFlow id=\"m1\" sourceRef=\"merge\" targetRef=\"gw_decision\"/>\n    \u003csequenceFlow id=\"d_ok\" name=\"ja\" sourceRef=\"gw_decision\" targetRef=\"order\">\n      \u003cconditionExpression>= approved\u003c/conditionExpression>\n    \u003c/sequenceFlow>\n    \u003csequenceFlow id=\"f_reject\" name=\"nein\" sourceRef=\"gw_decision\" targetRef=\"notifyReject\"/>\n    \u003csequenceFlow id=\"o1\" sourceRef=\"order\" targetRef=\"done\"/>\n    \u003csequenceFlow id=\"n1\" sourceRef=\"notifyReject\" targetRef=\"rejected\"/>\n  \u003c/process>\n\u003c/definitions>", "forms": [{"id": "po-start", "name": "Bestellung – Antrag", "schema": {"type": "default", "id": "po-start", "components": [{"key": "item", "type": "textfield", "label": "Artikel", "validate": {"required": true}}, {"key": "amount", "type": "number", "label": "Betrag (EUR)", "validate": {"required": true}}, {"key": "requester", "type": "textfield", "label": "Antragsteller:in"}]}}, {"id": "po-approve", "name": "Bestellung – Freigabe", "schema": {"type": "default", "id": "po-approve", "components": [{"key": "approved", "type": "checkbox", "label": "Freigegeben"}]}}]}</script>
+<script>
+// ---- tutorial deploy & run: save the two forms, deploy the purchase-approval
+// model, and start one instance with the chosen amount. Same-origin REST, the
+// same pattern as the onboarding tour. Model + forms live in #tut-data above.
+(function initTutorial(){
+  const $ = (id) => document.getElementById(id);
+  const btn = $("tut-start");
+  if (!btn) return;
+  const statusEl = $("tut-status"), doneEl = $("tut-done");
+  const L = () => (document.documentElement.dataset.lang === "en" ? "en" : "de");
+  const T = (de, en) => (L() === "en" ? en : de);
+  const setStatus = (m, k) => { statusEl.textContent = m; statusEl.className = "tour-status" + (k ? " " + k : ""); };
+  async function apiCall(method, path, body, isXml){
+    const opts = { method, headers: {} };
+    if (body !== undefined){
+      opts.headers["Content-Type"] = isXml ? "application/xml" : "application/json";
+      opts.body = isXml ? body : JSON.stringify(body);
+    }
+    const res = await fetch(path, opts);
+    const text = await res.text();
+    if (!res.ok){
+      let msg = text;
+      try { const j = JSON.parse(text); msg = j.error || j.message || text; } catch (e) { /* keep text */ }
+      const err = new Error(msg || (res.status + " " + res.statusText));
+      err.status = res.status; throw err;
+    }
+    return text ? JSON.parse(text) : {};
+  }
+  btn.addEventListener("click", async () => {
+    btn.disabled = true; doneEl.hidden = true;
+    try {
+      const data = JSON.parse($("tut-data").textContent);
+      setStatus(T("Formulare speichern\u2026", "Saving forms\u2026"));
+      for (const f of data.forms) await apiCall("POST", "/api/v1/forms", { id: f.id, name: f.name, schema: f.schema });
+      setStatus(T("Prozess deployen\u2026", "Deploying the process\u2026"));
+      const dep = await apiCall("POST", "/api/v1/deployments", data.bpmn, true);
+      const match = (dep.deployments || []).find((d) => d.processId === "bestellfreigabe");
+      if (!match) throw new Error(T("Deploy lieferte keine Prozessdefinition.", "Deploy returned no process definition."));
+      setStatus(T("Instanz starten\u2026", "Starting an instance\u2026"));
+      const amount = Number($("tut-amount").value || 2000);
+      await apiCall("POST", "/api/v1/processes/" + match.key + "/instances", { variables: { item: "Beispiel-Artikel", amount } });
+      setStatus(T("\u2713 Bestellfreigabe l\u00e4uft \u2013 Betrag " + amount + " \u20ac.",
+                  "\u2713 Purchase approval is running \u2013 amount " + amount + " EUR."), "ok");
+      doneEl.hidden = false;
+    } catch (e){
+      if (e.status === 401 || e.status === 403){
+        setStatus(T("Bitte melde dich zuerst in der App an, dann versuche es erneut.",
+                    "Please sign in to the app first, then try again."), "err");
+      } else {
+        setStatus(T("Fehler: ", "Error: ") + e.message, "err");
+      }
+    } finally { btn.disabled = false; }
   });
 })();
 </script>
