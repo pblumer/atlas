@@ -11,6 +11,11 @@ here is specific to one machine and one commit. It is **not** a universal produc
 claim, and this harness must **not** be used to compare Atlas against another
 engine until the workloads are demonstrably equivalent.
 
+**Published baseline:** [`results/`](results/) holds the first committed, reproducible
+baseline — a machine-labelled raw capture plus a `benchstat` summary. See
+[`results/README.md`](results/README.md) and the latest
+[`results/baseline-5b1b9f2.md`](results/baseline-5b1b9f2.md).
+
 ## What this measures (and what it does not, yet)
 
 Two axes, three profiles:
