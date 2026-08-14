@@ -168,22 +168,24 @@ var (
 	kindGateway = nodeKind{50, 50}
 )
 
-// Layout spacing. gapX/gapY separate columns and rows; the sub* paddings size an
-// expanded subprocess around its laid-out children — a header strip on top for the
-// title, symmetric side and bottom padding — and the sub minimums keep an empty
-// subprocess readable as a container.
+// Layout spacing. gapX/gapY separate columns and rows; they are deliberately roomy
+// so a node's external label (an event's caption sits below its 36px circle, a
+// boundary event's beside it) has air instead of colliding with the neighbour. The
+// sub* paddings size an expanded subprocess around its laid-out children — a header
+// strip on top for the title, symmetric side and bottom padding — and the sub
+// minimums keep an empty subprocess readable as a container.
 const (
 	layoutMarginX  = 150
 	layoutMarginY  = 90
-	layoutGapX     = 50
-	layoutGapY     = 40
+	layoutGapX     = 80
+	layoutGapY     = 60
 	subPadX        = 30
 	subHeaderTop   = 40
 	subPadBottom   = 30
 	subMinW        = 200
 	subMinH        = 100
 	laneLabelStrip = 30 // lane title lane on the left
-	lanePadY       = 20 // vertical breathing room above/below a lane's content
+	lanePadY       = 25 // vertical breathing room above/below a lane's content
 	laneMinH       = 80 // a lane reads as a band even when nearly empty
 )
 
