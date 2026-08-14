@@ -6,8 +6,9 @@
   (Dogfooding). Der Prozess koordiniert die Aufnahme eines neuen Benutzers; die
   Freigabe bleibt eine Admin-Handlung (User-Task), die Konto-Anlage selbst laeuft
   seit ADR-0123 automatisch ueber den userConnector (gated auf das System-Projekt,
-  opt-in via the user-provisioning flag). Ist die Provisionierung nicht aktiviert, parkt
-  der userConnector-Task, bis ein Operator sie einschaltet.
+  standardmaessig aktiv / opt-out; abschaltbar mit der user-provisioning flag =false).
+  Ist die Provisionierung abgeschaltet, parkt der userConnector-Task, bis ein
+  Operator sie wieder einschaltet.
 
   Start (Formular ba-antrag: vorname, nachname, email, abteilung, begruendung)
    -> Script-Task "Zugangsdaten vorschlagen"  (FEEL schlaegt benutzername vor)

@@ -1,8 +1,21 @@
 # ADR-0123: A sanctioned automated user-provisioning path for system processes
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-08-14 — the shipped default flipped from opt-in to opt-out; see the amendment note below)
 - **Date:** 2026-08-13
 - **Deciders:** Atlas maintainers
+
+> **Amendment (2026-08-14): opt-out by default.** The original decision shipped
+> the connector **off by default** (an operator ran `--user-provisioning` to turn
+> it on). In practice that only stranded legitimate onboarding: an approved intake
+> request parked forever at "Konto anlegen" with no visible reason, because the
+> worker was absent. The two real security boundaries are unchanged and do the
+> actual gating — the capability acts **only** for the protected system project's
+> processes (ADR-0122), and **only after a human approves** the request at the
+> "Antrag freigeben" step. The startup flag now defaults to **on** (opt-out):
+> `--user-provisioning=false` disables it. The `WithUserProvisioning` api Option is
+> unchanged and still explicit, so embedders and tests opt in deliberately; only
+> the binary's default flipped. The "off by default" driver and the "Opt-in"
+> consequence below are superseded by this paragraph.
 
 ## Context and problem statement
 
@@ -50,8 +63,10 @@ the platform's own, non-editable processes.
 - **Auditable.** A privileged write made by a process must be attributable to
   that process instance, distinct from a human admin's action (ADR-0044's audit
   trail intent).
-- **Off by default.** An instance that does not want automated provisioning must
-  be unaffected — the same opt-in stance as ADR-0122's `WithSystemProcesses`.
+- **Disable-able.** An instance that does not want automated provisioning must be
+  able to switch it off cleanly. (Originally a stronger "off by default" driver;
+  the 2026-08-14 amendment flipped the shipped default to opt-out — the capability
+  is still fully disable-able with `--user-provisioning=false`.)
 
 ## Considered options
 
@@ -100,9 +115,11 @@ shape; a follow-up implements it test-first):
 - **Audited.** Each provisioning write records the acting process instance key as
   the actor, so the audit trail distinguishes "provisioned by intake instance X"
   from "changed by admin Y" (ADR-0044 follow-up: audit logging).
-- **Opt-in.** A server option (e.g. `WithUserProvisioning`) enables the flavor,
-  off by default; `WithSystemProcesses` does not imply it. An instance keeps the
-  human-in-the-loop ADR-0122 behavior until an operator opts in.
+- **Opt-out (amended).** A server option (`WithUserProvisioning`) enables the
+  flavor at the api layer and is explicit there — `WithSystemProcesses` does not
+  imply it. The shipped binary passes it by default (2026-08-14 amendment), so a
+  fresh instance provisions after the human approval step; `--user-provisioning=false`
+  restores the human-in-the-loop-only ADR-0122 behavior.
 
 This supersedes, for the system project only, the ADR-0044/0049 rule that no
 automated identity may manage users — and *only* there, with a bounded capability
@@ -115,7 +132,10 @@ remain valid and are unchanged.
   disable Atlas logins with the safety rails intact. No admin credential exists
   to leak or rotate (option 1's burden is avoided); no secret enters a model; the
   blast radius is a bounded, system-project-only capability rather than general
-  admin. Existing instances are untouched until they opt in.
+  admin. With the 2026-08-14 opt-out amendment, a fresh or upgraded instance
+  provisions automatically once a request clears the human approval step; the
+  system-project gate and that approval remain the boundaries, and
+  `--user-provisioning=false` opts out.
 - **Negative / trade-offs accepted:**
   - A new connector flavor plus its worker and gating is more code than wiring a
     REST connector to an admin credential (option 1).
