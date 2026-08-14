@@ -774,6 +774,39 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
 &lt;/definitions&gt;</code></pre>
         <p class="rz-how"><span data-l="de">Hinter dem Gateway stehen nur wartende Ereignisse (Nachricht, Timer, Signal). Es ist eine <i>deferred choice</i>: die Umgebung entscheidet, nicht die Daten. Klassisch für „warte auf Antwort, sonst Timeout“.</span><span data-l="en">Only waiting events (message, timer, signal) may follow the gateway. It's a <i>deferred choice</i>: the environment decides, not the data. The classic "wait for a reply, otherwise time out".</span></p>
       </div>
+      <div class="recipe" id="rz-inclusive">
+        <h4><span class="rz-emoji" aria-hidden="true">🔱</span>
+          <span data-l="de">Inklusives Gateway: mehrere Wege zugleich</span><span data-l="en">Inclusive gateway: several paths at once</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Alle zutreffenden Zweige gleichzeitig gehen – nicht nur einen, nicht immer alle.</span><span data-l="en">Take every matching branch at once – not just one, not always all.</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-inclusive&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;process id=&quot;recipe-inclusive&quot; name=&quot;Mehrfach-Benachrichtigung&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot;/&gt;
+    &lt;inclusiveGateway id=&quot;split&quot; name=&quot;Kanäle?&quot; default=&quot;f_log&quot;/&gt;
+    &lt;serviceTask id=&quot;email&quot; name=&quot;E-Mail&quot;&gt;&lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;email&quot;/&gt;&lt;/extensionElements&gt;&lt;/serviceTask&gt;
+    &lt;serviceTask id=&quot;sms&quot; name=&quot;SMS&quot;&gt;&lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;sms&quot;/&gt;&lt;/extensionElements&gt;&lt;/serviceTask&gt;
+    &lt;serviceTask id=&quot;log&quot; name=&quot;Protokollieren&quot;&gt;&lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;log&quot;/&gt;&lt;/extensionElements&gt;&lt;/serviceTask&gt;
+    &lt;inclusiveGateway id=&quot;join&quot;/&gt;
+    &lt;endEvent id=&quot;end&quot;/&gt;
+    &lt;sequenceFlow id=&quot;s0&quot; sourceRef=&quot;start&quot; targetRef=&quot;split&quot;/&gt;
+    &lt;sequenceFlow id=&quot;s_email&quot; name=&quot;hat E-Mail&quot; sourceRef=&quot;split&quot; targetRef=&quot;email&quot;&gt;
+      &lt;conditionExpression&gt;= customer.email != null&lt;/conditionExpression&gt;
+    &lt;/sequenceFlow&gt;
+    &lt;sequenceFlow id=&quot;s_sms&quot; name=&quot;hat Handy&quot; sourceRef=&quot;split&quot; targetRef=&quot;sms&quot;&gt;
+      &lt;conditionExpression&gt;= customer.phone != null&lt;/conditionExpression&gt;
+    &lt;/sequenceFlow&gt;
+    &lt;sequenceFlow id=&quot;f_log&quot; name=&quot;sonst&quot; sourceRef=&quot;split&quot; targetRef=&quot;log&quot;/&gt;
+    &lt;sequenceFlow id=&quot;j1&quot; sourceRef=&quot;email&quot; targetRef=&quot;join&quot;/&gt;
+    &lt;sequenceFlow id=&quot;j2&quot; sourceRef=&quot;sms&quot; targetRef=&quot;join&quot;/&gt;
+    &lt;sequenceFlow id=&quot;j3&quot; sourceRef=&quot;log&quot; targetRef=&quot;join&quot;/&gt;
+    &lt;sequenceFlow id=&quot;j4&quot; sourceRef=&quot;join&quot; targetRef=&quot;end&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de">Anders als das <a href="#rz-xor">exklusive</a> Gateway (genau einer) startet das inklusive <b>alle</b> Zweige, deren Bedingung wahr ist – hier E-Mail <i>und/oder</i> SMS. Der zugehörige inklusive <b>Join</b> wartet genau auf die Zweige, die tatsächlich gestartet wurden. Setze einen <code>default</code>, falls keine Bedingung greift.</span><span data-l="en">Unlike the <a href="#rz-xor">exclusive</a> gateway (exactly one), the inclusive one starts <b>every</b> branch whose condition is true – here e-mail <i>and/or</i> SMS. Its inclusive <b>join</b> waits for exactly the branches that actually started. Set a <code>default</code> in case no condition matches.</span></p>
+      </div>
       <h3 class="rz-group"><span data-l="de">Warten &amp; Reagieren</span><span data-l="en">Wait &amp; react</span></h3>
       <div class="recipe" id="rz-timer-wait">
         <h4><span class="rz-emoji" aria-hidden="true">⏱️</span>
@@ -985,6 +1018,43 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
         <p class="rz-how"><span data-l="de">Ein Worker kann einen <b>BPMN-Fehler</b> mit Code <code>DECLINED</code> werfen; das passende <code>errorEventDefinition</code> am Rand der Aufgabe fängt ihn und lenkt auf einen Fehlerpfad. Das ist erwartbares Verhalten – kein Incident.</span><span data-l="en">A worker can throw a <b>BPMN error</b> with code <code>DECLINED</code>; the matching <code>errorEventDefinition</code> on the task's edge catches it and diverts to an error path. That's expected behaviour – not an incident.</span></p>
+      </div>
+      <div class="recipe" id="rz-escalation">
+        <h4><span class="rz-emoji" aria-hidden="true">📣</span>
+          <span data-l="de">Escalation-Events: melden ohne zu stoppen</span><span data-l="en">Escalation events: raise without stopping</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Eine Situation nach oben melden (z.&nbsp;B. an eine:n Vorgesetzte:n), während die Arbeit normal weiterläuft.</span><span data-l="en">Raise a situation upward (e.g. to a manager) while the work keeps going.</span></p>
+        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;recipe-escalation&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;escalation id=&quot;Esc_mgr&quot; escalationCode=&quot;NEEDS_MANAGER&quot; name=&quot;Braucht Manager&quot;/&gt;
+  &lt;process id=&quot;recipe-escalation&quot; name=&quot;Bearbeiten mit Eskalation&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot;/&gt;
+    &lt;subProcess id=&quot;handle&quot; name=&quot;Fall bearbeiten&quot;&gt;
+      &lt;startEvent id=&quot;hs&quot;/&gt;
+      &lt;serviceTask id=&quot;assess&quot; name=&quot;Prüfen&quot;&gt;&lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;assess&quot;/&gt;&lt;/extensionElements&gt;&lt;/serviceTask&gt;
+      &lt;intermediateThrowEvent id=&quot;raise&quot; name=&quot;Eskalieren&quot;&gt;&lt;escalationEventDefinition escalationRef=&quot;Esc_mgr&quot;/&gt;&lt;/intermediateThrowEvent&gt;
+      &lt;serviceTask id=&quot;resolve&quot; name=&quot;Abschließen&quot;&gt;&lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;resolve&quot;/&gt;&lt;/extensionElements&gt;&lt;/serviceTask&gt;
+      &lt;endEvent id=&quot;he&quot;/&gt;
+      &lt;sequenceFlow id=&quot;h1&quot; sourceRef=&quot;hs&quot; targetRef=&quot;assess&quot;/&gt;
+      &lt;sequenceFlow id=&quot;h2&quot; sourceRef=&quot;assess&quot; targetRef=&quot;raise&quot;/&gt;
+      &lt;sequenceFlow id=&quot;h3&quot; sourceRef=&quot;raise&quot; targetRef=&quot;resolve&quot;/&gt;
+      &lt;sequenceFlow id=&quot;h4&quot; sourceRef=&quot;resolve&quot; targetRef=&quot;he&quot;/&gt;
+    &lt;/subProcess&gt;
+    &lt;boundaryEvent id=&quot;onEscalate&quot; name=&quot;An Manager&quot; attachedToRef=&quot;handle&quot; cancelActivity=&quot;false&quot;&gt;
+      &lt;escalationEventDefinition escalationRef=&quot;Esc_mgr&quot;/&gt;
+    &lt;/boundaryEvent&gt;
+    &lt;serviceTask id=&quot;notifyMgr&quot; name=&quot;Manager informieren&quot;&gt;&lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;notify-manager&quot;/&gt;&lt;/extensionElements&gt;&lt;/serviceTask&gt;
+    &lt;endEvent id=&quot;done&quot;/&gt;
+    &lt;endEvent id=&quot;notified&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;start&quot; targetRef=&quot;handle&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;handle&quot; targetRef=&quot;done&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f3&quot; sourceRef=&quot;onEscalate&quot; targetRef=&quot;notifyMgr&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f4&quot; sourceRef=&quot;notifyMgr&quot; targetRef=&quot;notified&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        <p class="rz-how"><span data-l="de">Ein <code>&lt;escalation&gt;</code> mit <code>escalationCode</code> wird per <code>escalationEventDefinition</code> geworfen (Throw- oder End-Event, hier aus dem Subprozess) und an einem <b>Boundary-Event</b> am Subprozess gefangen. Mit <code>cancelActivity="false"</code> ist es <b>nicht unterbrechend</b>: „Manager informieren“ startet, die Bearbeitung läuft ungestört weiter. Das ist der Unterschied zum <a href="#rz-boundary-error">Fehler</a> (bricht ab) – und eine ungefangene Eskalation propagiert nach oben (z.&nbsp;B. aus einer <a href="#rz-call-activity">Call-Activity</a> zum Aufrufer), statt einen Incident zu erzeugen.</span><span data-l="en">An <code>&lt;escalation&gt;</code> with an <code>escalationCode</code> is thrown via an <code>escalationEventDefinition</code> (throw or end event, here from inside the subprocess) and caught on a <b>boundary event</b> of the subprocess. With <code>cancelActivity="false"</code> it is <b>non-interrupting</b>: "notify manager" starts while the work keeps running. That's the difference from an <a href="#rz-boundary-error">error</a> (which aborts) – and an uncaught escalation propagates upward (e.g. from a <a href="#rz-call-activity">call activity</a> to the caller) instead of raising an incident.</span></p>
       </div>
       <h3 class="rz-group"><span data-l="de">Strukturieren &amp; Wiederverwenden</span><span data-l="en">Structure &amp; reuse</span></h3>
       <div class="recipe" id="rz-subprocess">
