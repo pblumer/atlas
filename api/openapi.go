@@ -432,6 +432,20 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/settings/theme", s.handleDeleteTheme, apiOp{
 			summary: "Reset the org-wide UI theme to the built-in default (admin-only when auth is on) (ADR-0113)", tag: "System", status: http.StatusNoContent}},
 
+		{"GET", "/api/v1/settings/registration", s.handleGetRegistration, apiOp{
+			summary: "Whether the login screen offers a self-service registration link, and its public URL (public; read before login) (ADR-0126)", tag: "System",
+			resp: jsonBody("Registration config", schemaObj(map[string]any{
+				"enabled": tBool(), "processId": tString(), "url": tString(),
+			}))}},
+		{"PUT", "/api/v1/settings/registration", s.handleSetRegistration, apiOp{
+			summary: "Configure the self-service registration process and mint its public link; empty processId disables it (admin-only when auth is on) (ADR-0126)", tag: "System",
+			req: jsonBody("Registration process", schemaObj(map[string]any{"processId": tString()})),
+			resp: jsonBody("Registration config", schemaObj(map[string]any{
+				"enabled": tBool(), "processId": tString(), "url": tString(),
+			}))}},
+		{"DELETE", "/api/v1/settings/registration", s.handleDeleteRegistration, apiOp{
+			summary: "Switch self-service registration off (admin-only when auth is on) (ADR-0126)", tag: "System", status: http.StatusNoContent}},
+
 		{"POST", "/api/v1/auth/login", s.handleLogin, apiOp{
 			summary: "Log in with a username and password", tag: "Auth",
 			req: jsonBody("Credentials", schemaObj(map[string]any{

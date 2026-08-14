@@ -126,7 +126,24 @@ function viewLogin() {
           account, then sign in with it.
         </p>
       </div>
+      <p id="register-line" class="muted" style="margin-top:10px" hidden>
+        Noch kein Konto? <a id="register-link" href="#">Registrieren</a>
+      </p>
     </div>`;
+  // Self-service registration (ADR-0126): the login screen asks the server whether
+  // registration is enabled and, if so, reveals a link to the public start form of
+  // the configured intake process. The endpoint is public (served before login),
+  // and a failure or a disabled instance simply leaves the link hidden.
+  (async () => {
+    try {
+      const cfg = await api("GET", "/api/v1/settings/registration");
+      if (cfg && cfg.enabled && cfg.url) {
+        const line = document.getElementById("register-line");
+        document.getElementById("register-link").setAttribute("href", cfg.url);
+        line.hidden = false;
+      }
+    } catch { /* registration off or unreachable — leave the link hidden */ }
+  })();
   const f = document.getElementById("login-form");
   // Password recovery on a self-hosted, admin-managed instance is an admin
   // action (POST /users/{id}/password), not a self-service email flow — there is
