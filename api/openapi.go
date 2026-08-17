@@ -380,6 +380,24 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/applications/{id}/deployments", s.handleApplicationDeployments, apiOp{
 			summary: "What this application currently has deployed on this server, with per-definition instance counts (ADR-0128)", tag: "Applications", resp: jsonBody("Application deployments", tObject())}},
 
+		{"POST", "/api/v1/applications/import", s.handleImportBundle, apiOp{
+			summary: "Receive a published application bundle from a peer Atlas: validate and deploy it all-or-nothing, then record the publisher's release (ADR-0129). The only operation a deploy token may reach.", tag: "Applications",
+			req: jsonBody("Bundle", schemaObj(map[string]any{
+				"application": tString(), "release": tObject(), "artifacts": tArray(),
+			}, "application", "release", "artifacts")),
+			resp: jsonBody("Import result", tObject())}},
+
+		{"POST", "/api/v1/deploy-tokens", s.handleCreateDeployToken, apiOp{
+			summary: "Mint a deploy token for a peer Atlas to publish here; the secret is returned once and never again (admin-only, ADR-0129)", tag: "Deploy tokens",
+			req:  jsonBody("Token name", schemaObj(map[string]any{"name": tString()}, "name")),
+			resp: jsonBody("Minted token, including its one-time secret", tObject())}},
+		{"GET", "/api/v1/deploy-tokens", s.handleListDeployTokens, apiOp{
+			summary: "List deploy tokens by identity and provenance; secrets are not stored and never returned (admin-only, ADR-0129)", tag: "Deploy tokens",
+			resp: jsonBody("Deploy tokens", tArray())}},
+		{"DELETE", "/api/v1/deploy-tokens/{id}", s.handleRevokeDeployToken, apiOp{
+			summary: "Revoke a deploy token, effective immediately (admin-only, ADR-0129)", tag: "Deploy tokens",
+			status: http.StatusNoContent}},
+
 		// Deprecated aliases (ADR-0128): the pre-rename /projects surface. Same
 		// handlers as /applications above; retained for one release for compat.
 		{"POST", "/api/v1/projects", s.handleCreateProject, apiOp{
