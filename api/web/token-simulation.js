@@ -133,7 +133,7 @@ const isMultiInstance = (el) => {
   const lc = loopChars(el);
   return !!(lc && lc.$type === "bpmn:MultiInstanceLoopCharacteristics");
 };
-// A standard loop (ADR-0132) is the other repetition marker: it repeats its activity while a
+// A standard loop (ADR-0133) is the other repetition marker: it repeats its activity while a
 // condition holds, one run at a time. The simulation does not evaluate the condition either,
 // so it visualises the loop the same way — a counted repetition, sequential by definition,
 // bounded by the modelled loopMaximum when there is one.

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// standardLoopXML is a service task marked with a BPMN standard loop (ADR-0132):
+// standardLoopXML is a service task marked with a BPMN standard loop (ADR-0133):
 // it repeats while <loopCondition> holds, checked before the first iteration
 // (testBefore) and capped by loopMaximum.
 const standardLoopXML = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
@@ -26,7 +26,7 @@ const standardLoopXML = `<definitions xmlns="http://www.omg.org/spec/BPMN/201005
 
 // TestParseStandardLoop checks that <standardLoopCharacteristics> compiles into a
 // MultiInstanceDetail marked Standard — the same loop table a multi-instance
-// activity uses, so the engine's body/iteration machinery runs it (ADR-0132) —
+// activity uses, so the engine's body/iteration machinery runs it (ADR-0133) —
 // while the node keeps its real activity type.
 func TestParseStandardLoop(t *testing.T) {
 	cp, err := Parse(1, 1, strings.NewReader(standardLoopXML))

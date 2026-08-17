@@ -31,7 +31,7 @@ _Changed_ / _Removed_ for each version.
   CRC) and validation, with round-trip and corruption/truncation/version tests at 100%
   coverage. No checkpoint is created and **no WAL segment is deleted** — those are the
   later ADR-0131 slices.
-- **Standard loop activities** (the ↻ marker, [ADR-0132](docs/adr/0132-standard-loop-activities.md)):
+- **Standard loop activities** (the ↻ marker, [ADR-0133](docs/adr/0133-standard-loop-activities.md)):
   `<standardLoopCharacteristics>` now runs — an activity repeats while a FEEL
   `loopCondition` holds, one run at a time, with `testBefore` choosing the while form
   (checked before the first run, so it may be skipped) or BPMN's default repeat-until

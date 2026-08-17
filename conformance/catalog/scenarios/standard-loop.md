@@ -1,6 +1,6 @@
 # standard-loop
 
-Conformance micro-fixture: a BPMN standard loop (ADR-0132).
+Conformance micro-fixture: a BPMN standard loop (ADR-0133).
 
 Start -&gt; script "seed" (n = 0) -&gt; script task "step" marked with a standard loop -&gt; End. "step" recomputes n = n + 1 and repeats while its &lt;loopCondition&gt; (n &lt; 3) holds, so it runs three times and the token leaves with n = 3 — the loop's own work is what ends it, which is the whole point of the marker. It is self-completing (inline FEEL, no worker), so no driver step is needed, and the trace shows the repetition directly: one activation of the loop body plus one per run.
 

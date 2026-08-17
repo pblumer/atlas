@@ -599,7 +599,6 @@ const UNSUPPORTED_TYPES = {
 };
 const UNSUPPORTED_EVENT_DEFS = {
   "bpmn:ConditionalEventDefinition": "Conditional events aren't supported yet",
-  "bpmn:LinkEventDefinition": "Link events aren't supported yet",
 };
 
 // unsupportedReason returns why a drawn element can't run on the Atlas engine yet, or
@@ -2215,7 +2214,7 @@ function saveIOMappings(modeler, element, inRows, outRows) {
 
 // loopMode reports which loop marker an activity carries — the value of the Mode
 // select and, one to one, the marker bpmn-js draws on the shape: "none" (no marker),
-// "loop" (bpmn:StandardLoopCharacteristics, the ↻ icon, ADR-0132), or "parallel" /
+// "loop" (bpmn:StandardLoopCharacteristics, the ↻ icon, ADR-0133), or "parallel" /
 // "sequential" (bpmn:MultiInstanceLoopCharacteristics, the ∥ / ≡ icons, ADR-0077).
 // Every reader of the loop section goes through this, so the panel can never disagree
 // with the icon: whatever set the characteristics — this panel, the context pad's
@@ -2229,7 +2228,7 @@ function loopMode(bo) {
 }
 
 // multiInstanceHTML renders the Loop section for an activity: the mode — a BPMN
-// standard loop (ADR-0132) or a parallel/sequential multi-instance (ADR-0077) — and
+// standard loop (ADR-0133) or a parallel/sequential multi-instance (ADR-0077) — and
 // the fields that mode needs. For a multi-instance: whether it runs over a collection
 // or a fixed count, the per-iteration input element, an optional output
 // collection/element, and an optional completion condition, read from the activity's
@@ -2298,7 +2297,7 @@ function multiInstanceHTML(bo) {
 }
 
 // standardLoopHTML renders the fields of a BPMN standard loop — the ↻ marker
-// (ADR-0132): the FEEL condition the loop repeats while, when that condition is
+// (ADR-0133): the FEEL condition the loop repeats while, when that condition is
 // checked (testBefore: before the first run makes it a while loop that may skip the
 // activity entirely; after each run is BPMN's default repeat-until, which always runs
 // once), and an optional iteration cap. sl is the bpmn:StandardLoopCharacteristics.
@@ -2333,7 +2332,7 @@ function saveMultiInstance(modeler, element, vals) {
     return;
   }
   const feel = (v) => { v = (v || "").trim(); return v === "" ? "" : (v.startsWith("=") ? v : "= " + v); };
-  // A standard loop is the other BPMN marker (ADR-0132) — its own element, with the
+  // A standard loop is the other BPMN marker (ADR-0133) — its own element, with the
   // condition, the testBefore flag, and the cap. Written whole like the multi-instance
   // one, so switching modes or clearing a field never leaves a stale sibling behind.
   if (vals.mode === "loop") {
@@ -2842,6 +2841,22 @@ function wireErrorsManager(body, modeler, rerenderRoot) {
 // escalationDefOf returns an event's bpmn:EscalationEventDefinition, or null.
 function escalationDefOf(bo) {
   return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:EscalationEventDefinition") || null;
+}
+
+// linkDefOf returns an event's bpmn:LinkEventDefinition, or null. A link intermediate throw
+// jumps to the link intermediate catch of the same name in the same scope — an off-page
+// connector / goto (ADR-0133).
+function linkDefOf(bo) {
+  return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:LinkEventDefinition") || null;
+}
+
+// linkFieldsHTML renders the link-name field for a link throw or catch. A throw jumps to the
+// catch of the same name in the same scope; the name is the whole configuration (ADR-0133).
+function linkFieldsHTML(led, hint) {
+  return `<h3>Link</h3>
+    <label class="field"><span>Link name</span>
+      <input type="text" id="f-linkname" value="${esc(led.name || "")}" placeholder="ProceedHere"/></label>
+    <p class="muted" style="font-size:12px">${hint}</p>`;
 }
 
 // listEscalations returns every <bpmn:escalation> declared on the model's definitions.
@@ -3758,6 +3773,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
+        const link = linkDefOf(bo);
         if (timer) {
           html += timerFieldsHTML(timer, ["duration", "date"], `The event waits, then continues (ADR-0054).
             <b>Duration</b> waits that long (<b>PT30S</b>, <b>PT5M</b>, <b>P1DT2H</b>); <b>Date &amp; time</b> waits until that instant.
@@ -3766,21 +3782,26 @@ function wireProperties(root, modeler, api, projectId, toast) {
           html += messageFieldsHTML(modeler, msg, "The event waits until this message is published with a matching correlation key.");
         } else if (sig) {
           html += signalFieldsHTML(modeler, sig, "The event waits until a signal with this name is broadcast (by a throw or signal end event, in this or any other instance).");
+        } else if (link) {
+          html += linkFieldsHTML(link, "This is the landing point of a <b>link throw</b> with the same name in the same scope (an off-page connector). It does not wait — a token arriving via the link flows straight on. Draw it with no incoming sequence flow.");
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, or <b>Signal</b> intermediate catch event, then configure it here.</p>`;
+          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, or <b>Link</b> intermediate catch event, then configure it here.</p>`;
         }
       } else if (bo.$type === "bpmn:IntermediateThrowEvent") {
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
         const escl = escalationDefOf(bo);
+        const link = linkDefOf(bo);
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "On reaching this event the message is published; any instance waiting on it with a matching correlation key continues.");
         } else if (sig) {
           html += signalFieldsHTML(modeler, sig, "On reaching this event the signal is broadcast to every event waiting on that signal name, across all instances. The token then continues.");
         } else if (escl) {
           html += escalationFieldsHTML(modeler, escl, "On reaching this event the escalation is raised, propagating up to the nearest matching escalation boundary or event subprocess, and the token then continues on its outgoing flow (unless an interrupting catch aborts it). Uncaught, it is harmless.");
+        } else if (link) {
+          html += linkFieldsHTML(link, "On reaching this event the token jumps to the <b>link catch</b> with the same name in the same scope — an off-page connector / goto, in place of a sequence flow. Draw it with no outgoing sequence flow; deploy fails if no matching link catch exists.");
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Message</b>, <b>Signal</b>, or <b>Escalation</b> throw event, then configure it here.</p>`;
+          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Message</b>, <b>Signal</b>, <b>Escalation</b>, or <b>Link</b> throw event, then configure it here.</p>`;
         }
       } else if (bo.$type === "bpmn:BoundaryEvent") {
         // A boundary event is attached to an activity and arms while it runs. Its
@@ -3932,7 +3953,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
     }
     // A loop marker on an element that has no Loop section above is one Atlas does not
     // run: the shape would show a ∥/≡/↻ icon the engine ignores. Say so rather than let
-    // the diagram claim behavior it doesn't have (ADR-0132).
+    // the diagram claim behavior it doesn't have (ADR-0133).
     if (bo.loopCharacteristics && !html.includes("f-mi-mode")) {
       html += `<h3>Loop</h3>
         <p class="muted" style="font-size:12px">This element carries a <b>loop marker</b> Atlas does not execute here — it will run <b>once</b>, whatever the icon suggests. Loops run on service, script and user tasks, call activities and subprocesses; remove the marker (the wrench icon on the shape) or move the work to one of those.</p>`;
@@ -4540,7 +4561,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
       }
     }
 
-    // Loop (ADR-0077 multi-instance, ADR-0132 standard loop): the whole loop
+    // Loop (ADR-0077 multi-instance, ADR-0133 standard loop): the whole loop
     // characteristics element is rewritten on any field change so editing one field
     // never leaves a stale sibling. Mode, the collection/count choice, and the
     // condition-check choice re-render the panel (fields appear/vanish); the text
@@ -4793,6 +4814,15 @@ function wireProperties(root, modeler, api, projectId, toast) {
       fesccode.addEventListener("change", () => {
         const eed = escalationDefOf(element.businessObject);
         if (eed && eed.escalationRef) eed.escalationRef.escalationCode = (fesccode.value || "").trim();
+      });
+    }
+    const flinkname = body.querySelector("#f-linkname");
+    if (flinkname) {
+      flinkname.addEventListener("change", () => {
+        const led = linkDefOf(element.businessObject);
+        if (led) {
+          try { modeling.updateModdleProperties(element, led, { name: (flinkname.value || "").trim() }); } catch { /* stale */ }
+        }
       });
     }
 

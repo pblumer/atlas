@@ -1,5 +1,5 @@
 // End-to-end coverage for the BPMN standard loop in the Modeler Implement panel
-// (api/web/editor.js, ADR-0132). Driven through the real vendored bpmn-js: the Loop
+// (api/web/editor.js, ADR-0133). Driven through the real vendored bpmn-js: the Loop
 // section reads the marker an imported model carries, writing the mode draws (and
 // clears) the marker on the shape, and the exported XML is what the engine compiles —
 // so the icon and the property can never drift apart.

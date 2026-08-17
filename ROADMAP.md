@@ -340,6 +340,17 @@ Making processes wait, react, and time out.
   panel (an escalation-code picker on escalation throw/end/boundary/event-subprocess events —
   keeping the interrupting toggle, unlike errors — plus a central escalations manager). Completes
   the throw/catch event family (message, error, signal, escalation).
+- ✅ **Link events** ([ADR-0133](docs/adr/0132-link-events.md)): BPMN's **off-page connector** — a
+  **link intermediate throw** ("go to X") and a **link intermediate catch** ("arrive at X"), paired
+  by **name within one flow scope**, that stand in for a sequence flow so a long or crossing diagram
+  stays readable. Reaching the throw is a **goto** to the matching catch, which flows straight on.
+  Atlas resolves the pair **entirely at compile time**: the throw→catch link compiles to a
+  **synthetic sequence flow** (`b.Connect`) and both events reuse the existing `passThroughBehavior`,
+  so a token flows throw ⇢ catch ⇢ the catch's outgoing flow exactly as through a none event — **no
+  new runtime behavior, value type, event, or recovery path**, just two identity types for the
+  Operations overlay. One catch per name (the destination) and one-or-more throws; a deploy rejects
+  an unmatched throw or a duplicate catch name. Recovery-tested; authored in the Modeler (a link-name
+  field on the throw/catch). The last common intermediate throw/catch event type.
 - ✅ Boundary events: timer and message, interrupting and non-interrupting,
   attached to waiting activities. An interrupting boundary cancels the host (and
   its job) and routes out its flow; a non-interrupting one spawns a parallel
@@ -456,7 +467,7 @@ Composition and reuse.
   Recovery-tested; authored in the Modeler's Implement panel (called process id, binding,
   propagation toggles, I/O mappings, and multi-instance) ([ADR-0076](docs/adr/0076-call-activities.md)).
 - ✅ **Multi-instance activities** (sequential and parallel): a `<multiInstanceLoopCharacteristics>` runs an activity — task, subprocess, or call activity — once per element of a FEEL input collection (or a fixed cardinality) as inner iterations scoped under a body, binding each iteration's `inputElement` and the standard `loopCounter`; parallel seeds all at once, sequential one at a time. It assembles an ordered `outputCollection` from each iteration's `outputElement`, honours a `completionCondition` (early exit, cancelling the rest), is interruptible (the body is a scope, so an interrupting boundary terminates every iteration and, for call-activity iterations, each child), and is authored in the Modeler's Implement panel. Reuses the ADR-0074 scope lifecycle wholesale — no new value type, counter, or recovery path; recovery-tested ([ADR-0077](docs/adr/0077-multi-instance-activities.md)).
-- ✅ **Standard loop activities** (the ↻ marker): a `<standardLoopCharacteristics>` repeats an activity while its FEEL `<loopCondition>` holds — one run at a time, each bound the 1-based `loopCounter` — with `testBefore` choosing the while form (checked before the first run, so the activity may be skipped) or BPMN's default repeat-until (always at least one run), and an optional `loopMaximum` as a hard cap; a loop with neither, an invalid maximum, or both loop markers on one activity is refused at deploy. It runs on the ADR-0077 body/iteration machinery as a sequential loop whose iteration set is a condition rather than a collection, so it adds no value type, counter, or recovery path; a run's result stays visible to the next run and to the loop condition and is promoted to the enclosing scope when the loop ends. Recovery-tested, covered by the conformance suite (WCP-21 Structured Loop), and authored in the Modeler's Implement panel, where the Mode property and the marker drawn on the shape are the same fact ([ADR-0132](docs/adr/0132-standard-loop-activities.md)).
+- ✅ **Standard loop activities** (the ↻ marker): a `<standardLoopCharacteristics>` repeats an activity while its FEEL `<loopCondition>` holds — one run at a time, each bound the 1-based `loopCounter` — with `testBefore` choosing the while form (checked before the first run, so the activity may be skipped) or BPMN's default repeat-until (always at least one run), and an optional `loopMaximum` as a hard cap; a loop with neither, an invalid maximum, or both loop markers on one activity is refused at deploy. It runs on the ADR-0077 body/iteration machinery as a sequential loop whose iteration set is a condition rather than a collection, so it adds no value type, counter, or recovery path; a run's result stays visible to the next run and to the loop condition and is promoted to the enclosing scope when the loop ends. Recovery-tested, covered by the conformance suite (WCP-21 Structured Loop), and authored in the Modeler's Implement panel, where the Mode property and the marker drawn on the shape are the same fact ([ADR-0133](docs/adr/0133-standard-loop-activities.md)).
 - ✅ **Compensation and compensation handlers**: a compensable activity carries a
   compensation boundary event (`<compensateEventDefinition/>`) linked by a BPMN
   `<association>` to an off-flow `isForCompensation` handler; the boundary is inert
@@ -496,7 +507,7 @@ What it takes to run this for real.
 - 🔲 Worker SDK (Go first)
 - 🔲 Metrics (throughput, batch size, fsync latency, queue depth), structured logs, OTel traces
 - 🚧 Log compaction / snapshotting so recovery doesn't replay from genesis
-  ([ADR-0132](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), v0.2.0
+  ([ADR-0133](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), v0.2.0
   programme D): the design is decided — a periodic Pebble checkpoint of the state store
   at a known applied log position plus an engine-owned manifest, so recovery replays
   only the suffix after the newest checkpoint and old WAL segments become deletable

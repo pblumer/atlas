@@ -82,6 +82,12 @@ func (p *Processor) registerBehaviors() {
 	// go uncaught, which is benign).
 	p.behaviors[compiler.TypeEscalationThrowEvent] = escalationThrowEventBehavior{}
 	p.behaviors[compiler.TypeEscalationEndEvent] = escalationEndEventBehavior{}
+	// Link throw/catch events are compile-time gotos (ADR-0133): the throw→catch pair is
+	// resolved to a synthetic sequence flow at compile, so both are pure pass-throughs — the
+	// token flows throw → synthetic edge → catch → the catch's real outgoing flow. No runtime
+	// of their own, exactly like a token passing through a none event.
+	p.behaviors[compiler.TypeLinkThrowEvent] = passThroughBehavior{}
+	p.behaviors[compiler.TypeLinkCatchEvent] = passThroughBehavior{}
 	p.behaviors[compiler.TypeCompensationThrowEvent] = compensationThrowEventBehavior{}
 	p.behaviors[compiler.TypeCompensationEndEvent] = compensationEndEventBehavior{}
 	p.behaviors[compiler.TypeCancelEndEvent] = cancelEndEventBehavior{}
@@ -1480,7 +1486,7 @@ func ioResultScope(cp *compiler.CompiledProcess, elementKey uint64, ei *model.El
 	// iterations are successive runs of one activity, not independent ones, so their
 	// results are *not* inner-scoped: they land on the body like an ordinary activity's
 	// (the next iteration and the loop condition read them up the chain) and the body
-	// promotes them when the loop ends (ADR-0132). Otherwise the local scope when the
+	// promotes them when the loop ends (ADR-0133). Otherwise the local scope when the
 	// node has output mappings, else the enclosing scope (ADR-0068).
 	if (ei.MultiInstance == miInner && !standardLoop(cp, ei.ElementId)) || cp.Node(ei.ElementId).IOOutCount > 0 {
 		return elementKey
@@ -3362,7 +3368,7 @@ func seedMultiInstance(c *ProcessingContext, bodyKey uint64, ei *model.ElementIn
 	cp := c.process(ei.ProcessDefKey)
 	d := cp.MultiInstance(cp.Node(ei.ElementId).MultiInstance)
 	if d.Standard {
-		// A standard loop's iteration set is a condition, not a collection (ADR-0132):
+		// A standard loop's iteration set is a condition, not a collection (ADR-0133):
 		// with testBefore the condition is checked before the first iteration — a while
 		// loop that may run zero times — otherwise the first iteration always runs and
 		// the condition decides on every next one, one at a time.
@@ -3419,7 +3425,7 @@ func seedMultiInstanceIteration(c *ProcessingContext, bodyKey uint64, body *mode
 }
 
 // standardLoopContinues reports whether a standard loop runs (another) iteration
-// (ADR-0132): its cap is not reached and its condition still holds. done is the number
+// (ADR-0133): its cap is not reached and its condition still holds. done is the number
 // of iterations already finished; scope starts the chain the condition is evaluated
 // over — the finished iteration's own scope, so the condition reads its loopCounter
 // and everything the iteration wrote, or the body's scope for the testBefore check
@@ -3441,7 +3447,7 @@ func standardLoopContinues(c *ProcessingContext, d *compiler.MultiInstanceDetail
 }
 
 // standardLoop reports whether a node's loop marker is a standard loop rather than a
-// multi-instance one (ADR-0132). The two share the compiled loop table and the body/
+// multi-instance one (ADR-0133). The two share the compiled loop table and the body/
 // iteration runtime, but differ in what an iteration's result means: multi-instance
 // iterations are independent (each result is its own, aggregated into the output
 // collection), while a standard loop's iterations are successive runs of one activity
@@ -3499,7 +3505,7 @@ func finishMultiInstanceIteration(c *ProcessingContext, key uint64, ei *model.El
 		}
 		setListElement(c, bodyKey, cp.Intern(d.OutputCollection), idx, val)
 	}
-	// The completion condition — for a standard loop, the loop condition (ADR-0132) —
+	// The completion condition — for a standard loop, the loop condition (ADR-0133) —
 	// is evaluated over this iteration's scope chain (so it can read loopCounter, the
 	// item, and the accumulating output collection at the body) before the iteration's
 	// locals are dropped (ADR-0077).
@@ -3549,7 +3555,7 @@ func promoteMultiInstanceOutput(c *ProcessingContext, bodyKey uint64, ei *model.
 	if d.Standard {
 		// A standard loop has no output collection: what its iterations wrote *is* its
 		// result, held at the body scope so each round could read the previous one's work
-		// (ADR-0132). Promoting all of it to the enclosing scope makes a looping activity
+		// (ADR-0133). Promoting all of it to the enclosing scope makes a looping activity
 		// leave behind exactly what the same activity would have left running once.
 		c.VariablesOfScope(bodyKey, func(v model.VariableValue) {
 			v.ScopeKey = ei.FlowScopeKey

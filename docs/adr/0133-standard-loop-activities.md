@@ -1,4 +1,4 @@
-# ADR-0132: Standard loop activities (the ↻ marker)
+# ADR-0133: Standard loop activities (the ↻ marker)
 
 - **Status:** Accepted
 - **Date:** 2026-08-17

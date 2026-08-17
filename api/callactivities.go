@@ -40,7 +40,7 @@ type callActivityRow struct {
 	MultiInstance      bool   `json:"multiInstance"`
 	// Loop marks a call activity that carries a standard loop marker instead of a
 	// multi-instance one: it calls the process repeatedly while a condition holds
-	// (ADR-0132).
+	// (ADR-0133).
 	Loop bool `json:"loop"`
 	// Override, when set, is the operator's per-server target override for this
 	// called process id; nil when the default `latest` resolution applies.

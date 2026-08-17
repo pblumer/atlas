@@ -360,8 +360,15 @@ func registerScope(
 			if err := register(ev.Id, b.AddSignalCatchEvent(name)); err != nil {
 				return err
 			}
+		case ev.Link != nil:
+			// A link catch is the landing point of a link throw of the same name (ADR-0133).
+			// It compiles to a bare pass-through node; connectScope wires the synthetic edge
+			// from each matching throw and validates the name.
+			if err := register(ev.Id, b.AddLinkCatchEvent()); err != nil {
+				return err
+			}
 		default:
-			return fmt.Errorf("compiler: intermediate catch event %q: only timer, message, and signal events are supported yet", ev.Id)
+			return fmt.Errorf("compiler: intermediate catch event %q: only timer, message, signal, and link events are supported yet", ev.Id)
 		}
 	}
 	for _, ev := range c.IntermediateThrowEvents {
@@ -396,8 +403,16 @@ func registerScope(
 			}
 			continue
 		}
+		if ev.Link != nil {
+			// A link throw is a goto to the link catch of the same name (ADR-0133). It compiles
+			// to a bare pass-through node; connectScope adds the synthetic edge to its catch.
+			if err := register(ev.Id, b.AddLinkThrowEvent()); err != nil {
+				return err
+			}
+			continue
+		}
 		if ev.Message == nil {
-			return fmt.Errorf("compiler: intermediate throw event %q: only message, signal, compensation, and escalation events are supported yet", ev.Id)
+			return fmt.Errorf("compiler: intermediate throw event %q: only message, signal, compensation, escalation, and link events are supported yet", ev.Id)
 		}
 		name, keyExpr, err := resolveMessage(ev.Id, ev.Message.MessageRef)
 		if err != nil {
@@ -833,6 +848,40 @@ func connectScope(b *Builder, ids map[string]int32, c *xmlFlowContent) error {
 		if err := markDefault("inclusive", g.Id, g.Default); err != nil {
 			return err
 		}
+	}
+	// Resolve link events within this scope (ADR-0133): a link throw is a goto to the link
+	// catch of the same name, which compiles to a synthetic sequence flow throw→catch. Index
+	// this scope's link catches by name (exactly one per name — a second is an ambiguous
+	// destination), then connect each link throw to its catch. Matching is scope-local, so the
+	// synthetic edge stays scope-consistent (checkScopes) and a throw and catch in different
+	// scopes do not pair.
+	linkCatch := make(map[string]int32)
+	for _, ev := range c.IntermediateCatchEvents {
+		if ev.Link == nil {
+			continue
+		}
+		name := strings.TrimSpace(ev.Link.Name)
+		if name == "" {
+			return fmt.Errorf("compiler: link catch event %q has no name", ev.Id)
+		}
+		if _, dup := linkCatch[name]; dup {
+			return fmt.Errorf("compiler: duplicate link catch name %q — a link name has at most one catch (its destination) per scope", name)
+		}
+		linkCatch[name] = ids[ev.Id]
+	}
+	for _, ev := range c.IntermediateThrowEvents {
+		if ev.Link == nil {
+			continue
+		}
+		name := strings.TrimSpace(ev.Link.Name)
+		if name == "" {
+			return fmt.Errorf("compiler: link throw event %q has no name", ev.Id)
+		}
+		catch, ok := linkCatch[name]
+		if !ok {
+			return fmt.Errorf("compiler: link throw event %q references link %q, which has no matching link catch in this scope", ev.Id, name)
+		}
+		b.Connect(ids[ev.Id], catch)
 	}
 	for i := range c.SubProcesses {
 		if err := connectScope(b, ids, &c.SubProcesses[i].xmlFlowContent); err != nil {

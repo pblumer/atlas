@@ -9,7 +9,7 @@ import (
 )
 
 // stdLoopScriptProcess builds start → setup(n = 0) → work → end, where work is a
-// script task marked with a BPMN standard loop (ADR-0132): it recomputes n from
+// script task marked with a BPMN standard loop (ADR-0133): it recomputes n from
 // script on every iteration and repeats while cond holds. The work node's element
 // index is returned so a test can count its activations.
 func stdLoopScriptProcess(t *testing.T, script, cond string, testBefore bool, max int32) (*compiler.CompiledProcess, int32) {
@@ -75,7 +75,7 @@ func instanceKey(t *testing.T, h *harness) uint64 {
 // default (testBefore absent): the activity runs, then the condition decides whether
 // to run it again. n counts up 1, 2, 3 and the loop stops when n < 3 no longer holds
 // — three iterations, and the value the last one produced escapes the loop into the
-// enclosing scope, so the rest of the process sees it (ADR-0132).
+// enclosing scope, so the rest of the process sees it (ADR-0133).
 func TestStandardLoopRepeatsWhileConditionHolds(t *testing.T) {
 	cp, work := stdLoopScriptProcess(t, "n + 1", "n < 3", false, 0)
 	h := runStdLoop(t, cp)
@@ -93,7 +93,7 @@ func TestStandardLoopRepeatsWhileConditionHolds(t *testing.T) {
 // TestStandardLoopTestBeforeSkipsWhenConditionFails checks the while-loop form:
 // with testBefore the condition is checked before the first iteration, so a loop
 // whose condition is already false runs zero times and the activity just completes,
-// taking its outgoing flow (ADR-0132).
+// taking its outgoing flow (ADR-0133).
 func TestStandardLoopTestBeforeSkipsWhenConditionFails(t *testing.T) {
 	cp, work := stdLoopScriptProcess(t, "n + 1", "n < 0", true, 0)
 	h := runStdLoop(t, cp)
@@ -117,7 +117,7 @@ func TestStandardLoopRepeatUntilRunsAtLeastOnce(t *testing.T) {
 
 // TestStandardLoopMaximumCaps checks that loopMaximum bounds a condition that would
 // otherwise never stop: the loop runs exactly loopMaximum times and then completes
-// like any activity, rather than spinning forever (ADR-0132).
+// like any activity, rather than spinning forever (ADR-0133).
 func TestStandardLoopMaximumCaps(t *testing.T) {
 	cp, work := stdLoopScriptProcess(t, "n + 1", "true", false, 3)
 	h := runStdLoop(t, cp)
@@ -168,7 +168,7 @@ func stdLoopServiceProcess(t *testing.T, cond string) (*compiler.CompiledProcess
 
 // TestStandardLoopRunsOneIterationAtATime drives a service-task standard loop: exactly
 // one job is live at a time, each iteration carries its 1-based loopCounter, and the
-// worker's output feeds the condition that decides on the next round (ADR-0132).
+// worker's output feeds the condition that decides on the next round (ADR-0133).
 func TestStandardLoopRunsOneIterationAtATime(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -206,7 +206,7 @@ func TestStandardLoopRunsOneIterationAtATime(t *testing.T) {
 // TestStandardLoopRecovers parks a standard loop mid-iteration, crashes, and recovers:
 // the body, the live iteration, and the scope counter rebuild from the log, so
 // completing the recovered job still decides the next round and finishes the loop
-// (ADR-0018 recovery contract, ADR-0132).
+// (ADR-0018 recovery contract, ADR-0133).
 func TestStandardLoopRecovers(t *testing.T) {
 	dir := t.TempDir()
 	cp, _, jobType := stdLoopServiceProcess(t, "not(approved)")
@@ -278,7 +278,7 @@ func TestStandardLoopCounterVisibleToCondition(t *testing.T) {
 // TestStandardLoopInterruptingBoundary tears the loop down when an interrupting
 // boundary timer on the looping activity fires: the body is a scope, so terminateScope
 // reaches the live iteration and the boundary's flow is taken instead of the loop's
-// (ADR-0132 — inherited from ADR-0077, asserted here because a loop that cannot be
+// (ADR-0133 — inherited from ADR-0077, asserted here because a loop that cannot be
 // interrupted would run until the instance is cancelled).
 func TestStandardLoopInterruptingBoundary(t *testing.T) {
 	h := openHarness(t, t.TempDir())

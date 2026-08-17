@@ -720,7 +720,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 
 	// Wire the loop characteristics of every activity in the scope tree, recursively,
 	// mirroring wireScopeIO — both BPMN markers: multi-instance (ADR-0077) and standard
-	// loop (ADR-0132). Each FEEL source compiles once at deploy (I5), and a loop with no
+	// loop (ADR-0133). Each FEEL source compiles once at deploy (I5), and a loop with no
 	// way to decide how many iterations to run is refused (a multi-instance with neither
 	// an input collection nor a cardinality; a standard loop with neither a condition nor
 	// a maximum). The compiler records the detail; the engine runs the iterations.
@@ -735,7 +735,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		return e, nil
 	}
-	// A standard loop is the other BPMN loop marker (ADR-0132): it repeats the activity
+	// A standard loop is the other BPMN loop marker (ADR-0133): it repeats the activity
 	// while its condition holds rather than once per collection element. It compiles into
 	// the same loop table (the engine runs it on the multi-instance body/iteration
 	// machinery), so an activity carries at most one of the two markers, and a loop with
@@ -1161,7 +1161,7 @@ type xmlMultiInstance struct {
 	Loop                xmlZeebeLoopChars `xml:"extensionElements>loopCharacteristics"`
 }
 
-// xmlStandardLoop is a <standardLoopCharacteristics> on an activity (ADR-0132): the
+// xmlStandardLoop is a <standardLoopCharacteristics> on an activity (ADR-0133): the
 // other BPMN loop marker — the circular-arrow icon — which repeats the activity while
 // its <loopCondition> holds. TestBefore checks the condition before the first
 // iteration (a while loop; absent means a repeat-until that always runs once) and
@@ -1362,13 +1362,17 @@ type xmlInclusiveGateway struct {
 	Default string `xml:"default,attr"`
 }
 
-// An intermediate catch event; the timer and message variants are executable.
+// An intermediate catch event; the timer, message, signal, and link variants are executable.
 // Each definition is a pointer so an absent one is detected as nil.
 type xmlIntermediateCatchEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Timer   *xmlTimerEventDefinition   `xml:"timerEventDefinition"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
 	Signal  *xmlSignalEventDefinition  `xml:"signalEventDefinition"`
+	// Link, when present, makes this a link catch event: the landing point of a link throw
+	// with the same name in the same scope — an off-page connector / goto (ADR-0133). A
+	// pointer so an absent one is nil.
+	Link *xmlLinkEventDefinition `xml:"linkEventDefinition"`
 }
 
 // An intermediate throw event; the message, signal, compensation, and escalation variants
@@ -1385,6 +1389,16 @@ type xmlIntermediateThrowEvent struct {
 	// referenced escalation, propagating up to the nearest matching handler, then continues
 	// on its outgoing flow (ADR-0125). A pointer so an absent one is nil.
 	Escalation *xmlEscalationEventDefinition `xml:"escalationEventDefinition"`
+	// Link, when present, makes this a link throw event: a goto to the link catch of the same
+	// name in the same scope — an off-page connector (ADR-0133). A pointer so an absent one is nil.
+	Link *xmlLinkEventDefinition `xml:"linkEventDefinition"`
+}
+
+// xmlLinkEventDefinition is a <linkEventDefinition name="…"> on an intermediate throw or
+// catch event (ADR-0133). A link is matched by Name within one flow scope: a throw jumps to
+// the catch of the same name. Only the name matters — a link carries no ref, code, or payload.
+type xmlLinkEventDefinition struct {
+	Name string `xml:"name,attr"`
 }
 
 // xmlCompensateEventDefinition is a <compensateEventDefinition> on a throw, end, or

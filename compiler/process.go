@@ -74,8 +74,11 @@ const (
 	TypeEscalationThrowEvent // an intermediate throw event that raises an escalation, propagating up to the nearest matching handler, then continues on its outgoing flow (ADR-0125); the continue-after-throw counterpart of TypeMessageThrowEvent
 	TypeEscalationEndEvent   // an end event that raises an escalation, propagating up to the nearest matching handler, then ends its path (ADR-0125); unlike an error end the catch may be non-interrupting and an uncaught escalation is benign (no incident)
 
+	TypeLinkThrowEvent // a link intermediate throw event: a goto to the link catch of the same name in the same scope (ADR-0133). Resolved at compile to a synthetic sequence flow to the catch; runs as a pass-through (no execution semantics of its own)
+	TypeLinkCatchEvent // a link intermediate catch event: the landing point of a link throw of the same name (ADR-0133). Reached only via the compile-time synthetic flow; runs as a pass-through, flowing on its real outgoing flow
+
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 38
+	numBpmnTypes = 40
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -157,6 +160,10 @@ func (t BpmnType) String() string {
 		return "EscalationThrowEvent"
 	case TypeEscalationEndEvent:
 		return "EscalationEndEvent"
+	case TypeLinkThrowEvent:
+		return "LinkThrowEvent"
+	case TypeLinkCatchEvent:
+		return "LinkCatchEvent"
 	default:
 		return "Unspecified"
 	}
@@ -252,7 +259,7 @@ type CallActivityDetail struct {
 // Cardinality is set — the deploy is refused otherwise.
 //
 // Standard marks the other BPMN loop marker, <standardLoopCharacteristics> — the
-// loop (circular arrow) icon (ADR-0132). It shares this struct because it shares the
+// loop (circular arrow) icon (ADR-0133). It shares this struct because it shares the
 // runtime: a standard loop is a sequential loop whose iteration set is not a
 // collection but a condition, so it has no InputCollection, Cardinality,
 // InputElement, or OutputCollection, and is driven instead by LoopCondition (nil
@@ -269,7 +276,7 @@ type MultiInstanceDetail struct {
 	OutputElement       *expr.Compiled // FEEL per-iteration contribution, nil if none
 	CompletionCondition *expr.Compiled // FEEL early-exit, nil if none
 	Sequential          bool           // one iteration at a time (else parallel)
-	Standard            bool           // a <standardLoopCharacteristics> loop (ADR-0132)
+	Standard            bool           // a <standardLoopCharacteristics> loop (ADR-0133)
 	TestBefore          bool           // standard loop: check the condition before iteration 1
 	LoopCondition       *expr.Compiled // standard loop: FEEL repeat-while, nil if none
 	LoopMaximum         int32          // standard loop: iteration cap, 0 = uncapped
@@ -1092,7 +1099,7 @@ type CallActivityRef struct {
 	PropagateAllChild  bool
 	MultiInstance      bool
 	// Loop is true when the call activity carries a standard loop marker instead —
-	// it calls the process again and again while a condition holds (ADR-0132), where
+	// it calls the process again and again while a condition holds (ADR-0133), where
 	// MultiInstance calls it once per collection element. At most one is ever true.
 	Loop bool
 }
@@ -1123,7 +1130,7 @@ func (p *CompiledProcess) CallActivities() []CallActivityRef {
 }
 
 // loops reports whether a node's loop marker is a standard loop rather than a
-// multi-instance one (ADR-0132) — the two share the loop table, so the flag on the
+// multi-instance one (ADR-0133) — the two share the loop table, so the flag on the
 // detail is what tells them apart.
 func (p *CompiledProcess) loops(node int32) bool {
 	idx := p.nodes[node].MultiInstance

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Conformance micro-fixture: a BPMN standard loop (ADR-0132).
+  Conformance micro-fixture: a BPMN standard loop (ADR-0133).
 
   Start -> script "seed" (n = 0) -> script task "step" marked with a standard loop
   -> End. "step" recomputes n = n + 1 and repeats while its <loopCondition> (n < 3)

@@ -367,7 +367,7 @@ func (b *Builder) SetMultiInstance(nodeID int32, sequential bool, inputElement, 
 	b.nodes[nodeID].MultiInstance = idx
 }
 
-// SetStandardLoop marks an already-added node a BPMN standard loop (ADR-0132): it
+// SetStandardLoop marks an already-added node a BPMN standard loop (ADR-0133): it
 // repeats its activity one iteration at a time while condition holds (nil = repeat
 // until the cap), checked before the first iteration when testBefore is set, and at
 // most loopMaximum times (0 = uncapped). It shares the multi-instance loop table and
@@ -1373,6 +1373,18 @@ func (b *Builder) AddEscalationEndEvent(escalationCode string) int32 {
 	b.escalations = append(b.escalations, EscalationDetail{EscalationCode: escalationCode})
 	return b.addNode(TypeEscalationEndEvent, detail)
 }
+
+// AddLinkThrowEvent adds a link intermediate throw event — a goto (ADR-0133). It carries no
+// detail: the link name matters only at compile, where connectScope resolves the pair to a
+// synthetic sequence flow to the matching link catch. At runtime it is a pass-through, taking
+// that synthetic flow. Returns its element id.
+func (b *Builder) AddLinkThrowEvent() int32 { return b.addNode(TypeLinkThrowEvent, -1) }
+
+// AddLinkCatchEvent adds a link intermediate catch event — the landing point of a link throw
+// of the same name (ADR-0133). Like the throw it carries no detail and runs as a pass-through,
+// flowing on its real outgoing sequence flow when the synthetic link edge activates it.
+// Returns its element id.
+func (b *Builder) AddLinkCatchEvent() int32 { return b.addNode(TypeLinkCatchEvent, -1) }
 
 // AddBoundaryEscalationEvent adds an escalation boundary event attached to host that catches
 // an escalation propagating up to the host whose code matches escalationCode ("" is a
