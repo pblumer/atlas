@@ -41,11 +41,15 @@ var mcpToolRoutes = map[string]string{
 	"atlas_create_project":        "POST /api/v1/projects",
 	"atlas_list_projects":         "GET /api/v1/projects",
 	"atlas_delete_project":        "DELETE /api/v1/projects/{id}",
+	"atlas_create_application":    "POST /api/v1/applications",
+	"atlas_list_applications":     "GET /api/v1/applications",
+	"atlas_delete_application":    "DELETE /api/v1/applications/{id}",
 	"atlas_save_draft":            "POST /api/v1/drafts",
 	"atlas_save_form":             "POST /api/v1/forms",
 	"atlas_upload_decision_model": "POST /api/v1/dmn-models",
 	"atlas_register_decision":     "POST /api/v1/dmnrefs",
 	"atlas_deploy_project":        "POST /api/v1/projects/{id}/deploy",
+	"atlas_deploy_application":    "POST /api/v1/applications/{id}/deploy",
 	"atlas_list_tasks":            "GET /api/v1/tasks",
 	"atlas_get_task":              "GET /api/v1/tasks/{key}",
 	"atlas_complete_task":         "POST /api/v1/tasks/{key}/complete",
@@ -160,20 +164,14 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/projects/{id}/members/{userId}": "access control is an admin/UI concern",
 	"POST /api/v1/projects/{id}/validate":           "modeler-time validation is a UI concern",
 
-	// Process applications (ADR-0127) are the project surface reframed: every
-	// /applications route binds to the same handler as its /projects twin. The MCP
-	// surface still proxies the /projects paths (atlas_*_project tools), so the
-	// /applications aliases carry no separate tool. Renaming the tools to
-	// atlas_*_application is a later Phase-1 slice; until then these are omitted as
-	// aliases, mirroring the classification of their /projects twins.
-	"POST /api/v1/applications":                         "alias of POST /api/v1/projects (ADR-0127); atlas_create_project covers this handler",
-	"GET /api/v1/applications":                          "alias of GET /api/v1/projects (ADR-0127); atlas_list_projects covers this handler",
-	"DELETE /api/v1/applications/{id}":                  "alias of DELETE /api/v1/projects/{id} (ADR-0127); atlas_delete_project covers this handler",
-	"POST /api/v1/applications/{id}/deploy":             "alias of POST /api/v1/projects/{id}/deploy (ADR-0127); atlas_deploy_project covers this handler",
-	"PATCH /api/v1/applications/{id}":                   "application metadata edit is a UI concern (alias of the /projects twin, ADR-0127)",
-	"PUT /api/v1/applications/{id}/members/{userId}":    "access control is an admin/UI concern (alias of the /projects twin, ADR-0127)",
-	"DELETE /api/v1/applications/{id}/members/{userId}": "access control is an admin/UI concern (alias of the /projects twin, ADR-0127)",
-	"POST /api/v1/applications/{id}/validate":           "modeler-time validation is a UI concern (alias of the /projects twin, ADR-0127)",
+	// Process application edit/membership (ADR-0127): the canonical /applications
+	// surface. Create/list/delete/deploy are exposed as atlas_*_application tools
+	// (see mcpToolRoutes); the rest mirror the omission of their /projects twins —
+	// metadata edit, access control, and modeler-time validation are UI concerns.
+	"PATCH /api/v1/applications/{id}":                   "application metadata edit is a UI concern",
+	"PUT /api/v1/applications/{id}/members/{userId}":    "access control is an admin/UI concern",
+	"DELETE /api/v1/applications/{id}/members/{userId}": "access control is an admin/UI concern",
+	"POST /api/v1/applications/{id}/validate":           "modeler-time validation is a UI concern",
 
 	// Connectors + inbound subscriptions: infrastructure config, admin-owned.
 	"GET /api/v1/connectors":                             "connector infrastructure is admin config",

@@ -250,9 +250,9 @@ func authoringTools() []Tool {
 	return []Tool{
 		{
 			Name: "atlas_create_project",
-			Description: "Create a project (a folder that groups a scenario's diagrams, forms, and " +
-				"decision references). Returns the project's id — pass it to the other authoring tools " +
-				"to file artifacts under this project.",
+			Description: "Deprecated — use atlas_create_application (ADR-0127). Create a project (a " +
+				"folder that groups a scenario's diagrams, forms, and decision references). Returns the " +
+				"project's id — pass it to the other authoring tools to file artifacts under this project.",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"name": stringProp("The project (folder) name, e.g. \"CSV_Test\".")},
@@ -269,7 +269,7 @@ func authoringTools() []Tool {
 		},
 		{
 			Name:        "atlas_list_projects",
-			Description: "List projects (folders) with their id, name, and metadata.",
+			Description: "Deprecated — use atlas_list_applications (ADR-0127). List projects (folders) with their id, name, and metadata.",
 			InputSchema: noArgs(),
 			Handler: func(c *Client, _ map[string]any) (string, error) {
 				return asText(c.get("/api/v1/projects"))
@@ -277,9 +277,10 @@ func authoringTools() []Tool {
 		},
 		{
 			Name: "atlas_delete_project",
-			Description: "Delete a design-time project by id. The operation is idempotent. It removes only " +
-				"the project folder; tagged drafts and decision references remain and become ungrouped. " +
-				"When authentication is enabled, the caller must have the project owner role.",
+			Description: "Deprecated — use atlas_delete_application (ADR-0127). Delete a design-time " +
+				"project by id. The operation is idempotent. It removes only the project folder; tagged " +
+				"drafts and decision references remain and become ungrouped. When authentication is " +
+				"enabled, the caller must have the project owner role.",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"id": stringProp("The project id from atlas_create_project or atlas_list_projects.")},
@@ -291,6 +292,58 @@ func authoringTools() []Tool {
 					return "", err
 				}
 				if _, err := c.del("/api/v1/projects/" + url.PathEscape(id)); err != nil {
+					return "", err
+				}
+				confirmation, _ := json.Marshal(map[string]any{"deleted": true, "id": id})
+				return string(confirmation), nil
+			},
+		},
+		// Process applications (ADR-0127): the canonical vocabulary for the project
+		// container. These tools proxy /api/v1/applications, the routes the
+		// atlas_*_project tools' /api/v1/projects paths are now deprecated aliases of.
+		{
+			Name: "atlas_create_application",
+			Description: "Create a process application (a container that groups a scenario's diagrams, " +
+				"forms, and decision references and publishes them together, ADR-0127). Returns the " +
+				"application's id — pass it to the other authoring tools to file artifacts under it.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"name": stringProp("The application name, e.g. \"Onboarding\".")},
+				"required":   []any{"name"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				name, err := argString(args, "name")
+				if err != nil {
+					return "", err
+				}
+				body, _ := json.Marshal(map[string]string{"name": name})
+				return asText(c.post("/api/v1/applications", "application/json", body))
+			},
+		},
+		{
+			Name:        "atlas_list_applications",
+			Description: "List process applications with their id, name, and metadata (ADR-0127).",
+			InputSchema: noArgs(),
+			Handler: func(c *Client, _ map[string]any) (string, error) {
+				return asText(c.get("/api/v1/applications"))
+			},
+		},
+		{
+			Name: "atlas_delete_application",
+			Description: "Delete a design-time process application by id. The operation is idempotent. It " +
+				"removes only the application container; tagged drafts and decision references remain and " +
+				"become unassigned. When authentication is enabled, the caller must have the owner role (ADR-0127).",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"id": stringProp("The application id from atlas_create_application or atlas_list_applications.")},
+				"required":   []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				if _, err := c.del("/api/v1/applications/" + url.PathEscape(id)); err != nil {
 					return "", err
 				}
 				confirmation, _ := json.Marshal(map[string]any{"deleted": true, "id": id})
@@ -479,9 +532,9 @@ func authoringTools() []Tool {
 		},
 		{
 			Name: "atlas_deploy_project",
-			Description: "Deploy a project by id: compiles its diagram draft(s) and bundles the decisions " +
-				"its registered references resolve, so a deployed business rule task can evaluate them. " +
-				"Returns the deployed definitions.",
+			Description: "Deprecated — use atlas_deploy_application (ADR-0127). Deploy a project by id: " +
+				"compiles its diagram draft(s) and bundles the decisions its registered references " +
+				"resolve, so a deployed business rule task can evaluate them. Returns the deployed definitions.",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"id": stringProp("The project id to deploy (from atlas_create_project).")},
@@ -493,6 +546,25 @@ func authoringTools() []Tool {
 					return "", err
 				}
 				return asText(c.post("/api/v1/projects/"+url.PathEscape(id)+"/deploy", "application/json", []byte("")))
+			},
+		},
+		{
+			Name: "atlas_deploy_application",
+			Description: "Publish a process application by id: validates and deploys its artifacts as one " +
+				"bundle — compiles its diagram draft(s) and bundles the decisions its registered " +
+				"references resolve, so a deployed business rule task can evaluate them. Returns the " +
+				"deployed definitions (ADR-0127).",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"id": stringProp("The application id to publish (from atlas_create_application).")},
+				"required":   []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/applications/"+url.PathEscape(id)+"/deploy", "application/json", []byte("")))
 			},
 		},
 		{
