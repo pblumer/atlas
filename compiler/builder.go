@@ -367,7 +367,7 @@ func (b *Builder) SetMultiInstance(nodeID int32, sequential bool, inputElement, 
 	b.nodes[nodeID].MultiInstance = idx
 }
 
-// SetStandardLoop marks an already-added node a BPMN standard loop (ADR-0131): it
+// SetStandardLoop marks an already-added node a BPMN standard loop (ADR-0132): it
 // repeats its activity one iteration at a time while condition holds (nil = repeat
 // until the cap), checked before the first iteration when testBefore is set, and at
 // most loopMaximum times (0 = uncapped). It shares the multi-instance loop table and

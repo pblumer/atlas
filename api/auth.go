@@ -239,15 +239,50 @@ func (s *Server) InternalToken() string { return s.internalToken }
 // administration, so a leaked token cannot manage accounts.
 const servicePrincipalName = "system:mcp"
 
+// RoleDeployAgent marks the principal a deploy token resolves to: a peer Atlas
+// publishing a bundle here (ADR-0129). It is deliberately not a user role — no
+// account carries it, it cannot be assigned, and it grants nothing on its own.
+// What it may reach is decided by deployAgentAllowed below.
+const RoleDeployAgent = "deploy-agent"
+
+// deployAgentPrincipalPrefix namespaces the synthetic user id a deploy token
+// resolves to, so an audit trail says which token acted.
+const deployAgentPrincipalPrefix = "system:deploy:"
+
+// deployAgentAllowed is the complete set of operations a deploy token may reach.
+//
+// This is a fail-closed allowlist rather than per-handler rejection, and that is
+// the point: a deploy token is a credential handed to another machine, so the
+// blast radius of it leaking must be provable by reading one short list, not by
+// auditing every handler for a role check somebody might have forgotten to add.
+// Anything absent here is refused in the middleware before a handler sees it.
+var deployAgentAllowed = map[string]bool{
+	"POST /api/v1/applications/import": true,
+}
+
+// isDeployAgent reports whether a principal is a peer authenticated by a deploy
+// token rather than a person or the in-process MCP adapter.
+func isDeployAgent(p *Principal) bool { return p != nil && p.hasRole(RoleDeployAgent) }
+
 // principalFor resolves a request to a Principal, or nil. It first honors a valid
 // internal bearer token (the MCP adapter's service identity), then a session
 // cookie. It reads only the session store and the in-memory token (never the user
 // store), so it is safe to call from a handler goroutine.
 func (s *Server) principalFor(r *http.Request) *Principal {
-	if s.internalToken != "" {
-		if tok, ok := bearerToken(r); ok &&
+	if tok, ok := bearerToken(r); ok {
+		if s.internalToken != "" &&
 			subtle.ConstantTimeCompare([]byte(tok), []byte(s.internalToken)) == 1 {
 			return &Principal{UserID: servicePrincipalName, Username: servicePrincipalName}
+		}
+		// A deploy token identifies a peer Atlas publishing here (ADR-0129). The
+		// index is an in-memory, mutex-guarded mirror of the durable records, so this
+		// stays safe to call from a handler goroutine and costs no disk read.
+		if rec, ok := s.deployTokens.match(tok); ok {
+			return &Principal{
+				UserID:   deployAgentPrincipalPrefix + rec.ID,
+				Username: rec.Name,
+				Roles:    []string{RoleDeployAgent},
+			}
 		}
 	}
 	c, err := r.Cookie(sessionCookie)
@@ -305,6 +340,14 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 		}
 		if s.authEnabled && requiresAuth(r.URL.Path) && principalFrom(r.Context()) == nil {
 			writeError(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+		// A deploy token authenticates a peer, not a user: it may reach exactly the
+		// operations on the allowlist and nothing else, whatever the path's own rules
+		// would otherwise permit. Enforced here, in one place, so the credential's
+		// reach is provable by reading deployAgentAllowed (ADR-0129).
+		if p := principalFrom(r.Context()); isDeployAgent(p) && !deployAgentAllowed[r.Method+" "+r.URL.Path] {
+			writeError(w, http.StatusForbidden, "a deploy token may only publish an application bundle")
 			return
 		}
 		next.ServeHTTP(w, r)

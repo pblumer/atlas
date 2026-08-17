@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Negative fixture: a standard loop with no way to end (ADR-0131).
+  Negative fixture: a standard loop with no way to end (ADR-0132).
 
   The activity carries a <standardLoopCharacteristics> with neither a
   <loopCondition> nor a loopMaximum, so nothing could ever stop it repeating. The

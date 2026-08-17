@@ -36,7 +36,7 @@
     <bpmn:sequenceFlow id="d1" sourceRef="StartD" targetRef="MIDefault" />
     <bpmn:sequenceFlow id="d2" sourceRef="MIDefault" targetRef="EndD" />
   </bpmn:process>
-  <!-- A standard loop (ADR-0131): the ↻ marker repeats the activity while its condition
+  <!-- A standard loop (ADR-0132): the ↻ marker repeats the activity while its condition
        holds. The simulation does not evaluate the condition, so it counts the modelled
        loopMaximum, one run at a time. -->
   <bpmn:process id="Process_L" isExecutable="true">

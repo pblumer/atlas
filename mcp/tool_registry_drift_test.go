@@ -194,6 +194,17 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/marketplace/installed":              "marketplace management is a UI concern",
 	"DELETE /api/v1/marketplace/installed/{id}":      "marketplace management is a UI concern",
 
+	// Peer deploy tokens and bundle import (ADR-0129): issuing a machine credential
+	// is credential storage (admin-gated, same category as secrets), and the import
+	// endpoint is a server-to-server transport authenticated by a deploy token — an
+	// MCP agent publishes through atlas_publish_application, never by hand-posting a
+	// bundle. Exposing either as a tool would hand an agent a capability the ADR
+	// deliberately scoped to peers and admins.
+	"POST /api/v1/deploy-tokens":        "issuing a peer credential is admin-only credential management, not an agent action",
+	"GET /api/v1/deploy-tokens":         "credential listing is admin-only, not an agent action",
+	"DELETE /api/v1/deploy-tokens/{id}": "credential revocation is admin-only, not an agent action",
+	"POST /api/v1/applications/import":  "server-to-server bundle transport authenticated by a deploy token; agents publish via atlas_publish_application",
+
 	// Secrets: credential storage; an agent must never read or write it.
 	"GET /api/v1/secrets":           "credential storage is not an agent capability",
 	"PUT /api/v1/secrets/{name}":    "credential storage is not an agent capability",

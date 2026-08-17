@@ -31,11 +31,17 @@ import (
 // fullBackupDirs is the whole-instance snapshot's directory set: the WAL first (so
 // the design-time and secret dirs captured after it are a superset of whatever the
 // WAL cut references — a deployment's sidecar is written before the WAL record that
-// starts an instance on it), then the design-time allowlist, then user accounts.
+// starts an instance on it), then the design-time allowlist, then the credential
+// dirs — user accounts and peer deploy tokens (ADR-0129).
+//
+// Deploy tokens ride in the snapshot but deliberately *not* in the design-time
+// backup (ADR-0107): a backup is a portable file meant to carry your models, and a
+// peer's credential is not part of your models. A snapshot, by contrast, exists to
+// reconstitute this exact engine elsewhere, which includes who may publish to it.
 var fullBackupDirs = func() []string {
 	dirs := []string{"wal"}
 	dirs = append(dirs, backupDirs...)
-	return append(dirs, "users")
+	return append(dirs, "users", "deploy-tokens")
 }()
 
 // fullBackupFiles are the top-level files (not directories) in the snapshot. The

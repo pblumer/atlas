@@ -14,7 +14,24 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
-- **Standard loop activities** (the ↻ marker, [ADR-0131](docs/adr/0131-standard-loop-activities.md)):
+- **Engine recovery checkpoints & WAL compaction — ADR + manifest primitives**
+  (v0.2.0 programme D, [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md)):
+  recovery replays the WAL from genesis, so it is O(total log) and no segment is ever
+  deletable. ADR-0131 decides the design — a periodic **Pebble checkpoint of the state
+  store at a known applied log position** plus an engine-owned **manifest**, taken on
+  the run loop at a batch boundary (single-writer-safe) after a durable flush,
+  published atomically (temp dir → fsync → rename → parent fsync); startup picks the
+  newest valid checkpoint and replays only the **suffix after its applied position**,
+  falling back to an older checkpoint or genesis on any corruption; a segment becomes
+  deletable only below both a durable checkpoint and every consumer watermark
+  (ADR-0114 exporter, ADR-0115 retention); it is explicitly **not** ADR-0109's
+  whole-instance backup. This first slice ships the **testable manifest format
+  primitives**: a new `checkpoint` package with a deterministic, versioned,
+  self-checksummed binary `Manifest` codec (magic + format version + fields + trailing
+  CRC) and validation, with round-trip and corruption/truncation/version tests at 100%
+  coverage. No checkpoint is created and **no WAL segment is deleted** — those are the
+  later ADR-0131 slices.
+- **Standard loop activities** (the ↻ marker, [ADR-0132](docs/adr/0132-standard-loop-activities.md)):
   `<standardLoopCharacteristics>` now runs — an activity repeats while a FEEL
   `loopCondition` holds, one run at a time, with `testBefore` choosing the while form
   (checked before the first run, so it may be skipped) or BPMN's default repeat-until
