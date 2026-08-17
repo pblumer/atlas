@@ -898,3 +898,25 @@ func getCopy(r reader, key []byte) ([]byte, bool, error) {
 	out := append([]byte(nil), v...)
 	return out, true, closer.Close()
 }
+
+// Snapshot writes a consistent, durable snapshot of the store into destDir, which
+// must not already exist (Pebble creates it). It is the state half of an engine
+// recovery checkpoint (ADR-0131).
+//
+// The memtable is flushed first, on purpose: ordinary transactions commit
+// pebble.NoSync (ADR-0005) because the WAL's fsync is the durability point, so
+// without the flush a snapshot could inherit that same trailing property and
+// silently omit recently applied state. Flushing means the snapshot's files
+// provably contain every write committed up to the caller's applied position.
+//
+// Like every other Store method it is called on the owning partition goroutine
+// (invariant I3) — for a checkpoint, at a batch boundary.
+func (s *Store) Snapshot(destDir string) error {
+	if err := s.db.Flush(); err != nil {
+		return fmt.Errorf("state: flush before snapshot: %w", err)
+	}
+	if err := s.db.Checkpoint(destDir, pebble.WithFlushedWAL()); err != nil {
+		return fmt.Errorf("state: snapshot: %w", err)
+	}
+	return nil
+}

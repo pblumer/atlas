@@ -179,12 +179,12 @@ func Unmarshal(b []byte) (*Manifest, error) {
 // Validate checks the semantic invariants a usable checkpoint manifest must hold,
 // independent of encoding. Recovery calls it after Unmarshal; a failure means skip the
 // checkpoint, not crash.
+//
+// Encodability is deliberately not checked here — that is Marshal's job, and a decoded
+// manifest cannot violate it anyway (the version string's length prefix is one byte).
 func (m *Manifest) Validate() error {
 	if m.HighestPosition < m.AppliedPosition {
 		return fmt.Errorf("%w: highest position %d < applied position %d", ErrInconsistent, m.HighestPosition, m.AppliedPosition)
-	}
-	if len(m.AtlasVersion) > maxAtlasVersion {
-		return fmt.Errorf("%w: atlas version %d bytes", ErrTooLong, len(m.AtlasVersion))
 	}
 	return nil
 }
