@@ -1521,16 +1521,26 @@ async function viewProjectDetail(id) {
           ${projItems.length ? dropdown("⋯", "icon-btn", projItems) : ""}
         </div>
       </div>
-      <input class="filter-input" id="pd-filter" placeholder="Filter artifacts…" autocomplete="off">
-      <div class="card" style="padding:0">
-        <table data-dt-key="project-artifacts">
-          <thead><tr><th>Name</th><th>Type</th><th>Last changed</th><th></th></tr></thead>
-          <tbody id="pd-rows">${bodyRows ||
-            `<tr><td colspan="4" class="empty">${canWrite
-              ? "No artifacts yet — use <b>Create new</b> to add one."
-              : "No artifacts in this application yet."}</td></tr>`}</tbody>
-        </table>
-      </div>`;
+      ${ungrouped ? "" : `<div class="tabs" id="pd-tabs">
+        <button data-pane="artifacts" class="active">Artifacts</button>
+        <button data-pane="deployments">Deployments</button>
+      </div>`}
+      <div id="pane-artifacts">
+        <input class="filter-input" id="pd-filter" placeholder="Filter artifacts…" autocomplete="off">
+        <div class="card" style="padding:0">
+          <table data-dt-key="project-artifacts">
+            <thead><tr><th>Name</th><th>Type</th><th>Last changed</th><th></th></tr></thead>
+            <tbody id="pd-rows">${bodyRows ||
+              `<tr><td colspan="4" class="empty">${canWrite
+                ? "No artifacts yet — use <b>Create new</b> to add one."
+                : "No artifacts in this application yet."}</td></tr>`}</tbody>
+          </table>
+        </div>
+      </div>
+      ${ungrouped ? "" : `<div id="pane-deployments" hidden>
+        <p class="muted" style="padding:2px 2px 12px">What this application currently has deployed on this server.</p>
+        <div id="pd-deployments"><p class="muted" style="padding:14px 2px">Loading…</p></div>
+      </div>`}`;
 
     const filter = document.getElementById("pd-filter");
     filter.addEventListener("input", () => {
@@ -1538,6 +1548,24 @@ async function viewProjectDetail(id) {
       for (const tr of root.querySelectorAll("#pd-rows tr[data-name]"))
         tr.hidden = q !== "" && !tr.dataset.name.includes(q);
     });
+
+    // Tabs: Artifacts (design-time) and Deployments (what's live for this
+    // application, ADR-0127). The deployments pane loads lazily on first open.
+    const tabs = document.getElementById("pd-tabs");
+    if (tabs) {
+      let loadedDeployments = false;
+      tabs.addEventListener("click", (e) => {
+        const b = e.target.closest("button[data-pane]");
+        if (!b) return;
+        for (const t of tabs.querySelectorAll("button")) t.classList.toggle("active", t === b);
+        document.getElementById("pane-artifacts").hidden = b.dataset.pane !== "artifacts";
+        document.getElementById("pane-deployments").hidden = b.dataset.pane !== "deployments";
+        if (b.dataset.pane === "deployments" && !loadedDeployments) {
+          loadedDeployments = true;
+          renderAppDeployments(id);
+        }
+      });
+    }
 
     onMenuAction(root, (act, b) => {
       switch (act) {
@@ -1557,9 +1585,66 @@ async function viewProjectDetail(id) {
       }
     });
     const deployBtn = document.getElementById("pd-deploy");
-    if (deployBtn) deployBtn.addEventListener("click", () => deployProject(id, render));
+    if (deployBtn) deployBtn.addEventListener("click", () => publishApplication(id, render));
   };
   await render();
+}
+
+// renderAppDeployments fills the Deployments tab: the application's published
+// version, its live definitions with per-definition instance counts, and its
+// release history (ADR-0127). One call each, both scoped to this application.
+async function renderAppDeployments(id) {
+  const host = document.getElementById("pd-deployments");
+  if (!host) return;
+  let view, releases;
+  try {
+    [view, releases] = await Promise.all([
+      api("GET", `/api/v1/applications/${encodeURIComponent(id)}/deployments`),
+      api("GET", `/api/v1/applications/${encodeURIComponent(id)}/releases`),
+    ]);
+  } catch (e) { host.innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
+
+  const defRow = (d) => `<tr>
+    <td><div class="artifact-name"><span class="mi-icon">⚙</span><a href="#/modeler/d/${encodeURIComponent(d.key)}"><b>${esc(d.name || d.processId)}</b></a></div>
+      <div class="muted" style="font-size:12px; padding-left:26px">${esc(d.processId)}</div></td>
+    <td><span class="chip">v${d.version}</span></td>
+    <td>${d.active ? `<span class="pill ok">active</span>` : `<span class="pill">paused</span>`}</td>
+    <td class="muted">${d.running}</td>
+    <td class="muted">${d.finished}</td>
+    <td class="muted" data-sort="${d.deployedAt || 0}">${esc(fmtTime(d.deployedAt))}</td>
+  </tr>`;
+
+  const relRow = (r) => `<tr>
+    <td><span class="chip">v${r.version}</span></td>
+    <td class="muted" data-sort="${r.publishedAt || 0}">${esc(fmtTime(r.publishedAt))}</td>
+    <td class="muted">${(r.members || []).length}</td>
+    <td class="muted">${esc(r.note || "—")}</td>
+  </tr>`;
+
+  host.innerHTML = `
+    <div class="card" style="margin-bottom:16px">
+      <div class="stats">
+        <div class="stat"><b>${view.version ? "v" + view.version : "—"}</b><span>Published version</span></div>
+        <div class="stat"><b>${view.definitions.length}</b><span>Deployed definitions</span></div>
+        <div class="stat"><b>${view.running}</b><span>Running instances</span></div>
+        <div class="stat"><b>${view.finished}</b><span>Finished instances</span></div>
+      </div>
+    </div>
+    <div class="card" style="padding:0">
+      <table>
+        <thead><tr><th>Definition</th><th>Version</th><th>State</th><th>Running</th><th>Finished</th><th>Deployed</th></tr></thead>
+        <tbody>${view.definitions.map(defRow).join("") ||
+          `<tr><td colspan="6" class="empty">Nothing deployed yet — use <b>Publish</b> to ship this application.</td></tr>`}</tbody>
+      </table>
+    </div>
+    <h2 style="margin:22px 0 10px; font-size:15px">Release history</h2>
+    <div class="card" style="padding:0">
+      <table>
+        <thead><tr><th>Version</th><th>Published</th><th>Artifacts</th><th>Note</th></tr></thead>
+        <tbody>${releases.map(relRow).join("") ||
+          `<tr><td colspan="4" class="empty">No releases yet.</td></tr>`}</tbody>
+      </table>
+    </div>`;
 }
 
 async function deleteDraft(processId, reload) {
@@ -2344,6 +2429,46 @@ async function deployProject(id, reload) {
     return;
   }
   // Refused (or a server error): show why and reflect any DMN results in place.
+  toast(rep.reason || rep.error || "Publish refused", "err");
+  for (const r of rep.references || []) applyRefStatus(r.id, r);
+}
+
+// publishApplication is the ADR-0127 headline action: ship the whole application as
+// one bundle and record the release it becomes. It shows the version the publish
+// will mint (v(n) → v(n+1)) and takes an optional changelog note. A refused bundle
+// deploys nothing and records no release, so the version does not advance.
+async function publishApplication(id, reload) {
+  let next = 1;
+  try {
+    const releases = await api("GET", `/api/v1/applications/${encodeURIComponent(id)}/releases`);
+    if (releases.length) next = releases[0].version + 1;
+  } catch { /* best-effort: fall back to "the next version" without a number */ }
+
+  const note = window.prompt(
+    `Publish this application as v${next}?\n\n` +
+    "Its DMN references are validated, then its artifacts are deployed together as " +
+    "one release.\n\nOptional note describing what changes:", "");
+  if (note == null) return; // cancelled
+
+  let rep;
+  try {
+    const res = await fetch(`/api/v1/applications/${encodeURIComponent(id)}/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note: note.trim() }),
+    });
+    rep = await res.json();
+    if (res.ok && rep.deployed) {
+      const n = (rep.definitions || []).length;
+      const v = rep.release ? `v${rep.release.version}` : "";
+      toast(`Published ${v} — ${n} definition${n === 1 ? "" : "s"}`, "ok");
+      await reload();
+      return;
+    }
+  } catch (e) {
+    toast("publish failed: " + e.message, "err");
+    return;
+  }
   toast(rep.reason || rep.error || "Publish refused", "err");
   for (const r of rep.references || []) applyRefStatus(r.id, r);
 }
