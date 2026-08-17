@@ -169,6 +169,7 @@ type Server struct {
 	releases         *releaseStore        // durable sidecar for application releases (ADR-0128)
 	deployTokenStore *deployTokenStore    // durable sidecar for peer deploy tokens (ADR-0129)
 	deployTokens     *deployTokenIndex    // in-memory hash->token index, read on the handler goroutine
+	targets          *targetStore         // durable sidecar for peer deployment targets (ADR-0129)
 	appVersions      map[string]int32     // applicationId → highest release version published (ADR-0128)
 	systemPIDs       map[string]bool      // process ids of the bootstrap-deployed platform processes, protected from deletion (ADR-0122)
 	deploySysProcs   bool                 // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
@@ -550,6 +551,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	targets, err := newTargetStore(filepath.Join(dataDir, "targets"))
+	if err != nil {
+		return nil, err
+	}
 	dmnrefs, err := newDmnRefStore(filepath.Join(dataDir, "dmnrefs"))
 	if err != nil {
 		return nil, err
@@ -608,6 +613,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		releases:          releases,
 		deployTokenStore:  deployTokenStore,
 		deployTokens:      newDeployTokenIndex(),
+		targets:           targets,
 		appVersions:       map[string]int32{},
 		dmnrefs:           dmnrefs,
 		connectors:        connectors,

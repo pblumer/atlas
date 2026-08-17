@@ -205,6 +205,17 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/deploy-tokens/{id}": "credential revocation is admin-only, not an agent action",
 	"POST /api/v1/applications/import":  "server-to-server bundle transport authenticated by a deploy token; agents publish via atlas_publish_application",
 
+	// Deployment targets and promotion (ADR-0129, sending side): a target names
+	// another server and the credential to reach it — admin config in the same
+	// category as connectors. Promotion ships work to a *different* engine, often a
+	// production one; that is an operator's decision with consequences outside this
+	// server, not a step an agent drives while building a scenario. An agent
+	// publishes locally via atlas_publish_application and stops there.
+	"POST /api/v1/targets":                                      "peer target configuration is admin config, not an agent action",
+	"GET /api/v1/targets":                                       "peer target configuration is admin config, not an agent action",
+	"DELETE /api/v1/targets/{id}":                               "peer target configuration is admin config, not an agent action",
+	"POST /api/v1/applications/{id}/releases/{version}/promote": "shipping a release to another server is an operator decision with off-server consequences, not an agent action",
+
 	// Secrets: credential storage; an agent must never read or write it.
 	"GET /api/v1/secrets":           "credential storage is not an agent capability",
 	"PUT /api/v1/secrets/{name}":    "credential storage is not an agent capability",
