@@ -361,7 +361,7 @@ func registerScope(
 				return err
 			}
 		case ev.Link != nil:
-			// A link catch is the landing point of a link throw of the same name (ADR-0132).
+			// A link catch is the landing point of a link throw of the same name (ADR-0133).
 			// It compiles to a bare pass-through node; connectScope wires the synthetic edge
 			// from each matching throw and validates the name.
 			if err := register(ev.Id, b.AddLinkCatchEvent()); err != nil {
@@ -404,7 +404,7 @@ func registerScope(
 			continue
 		}
 		if ev.Link != nil {
-			// A link throw is a goto to the link catch of the same name (ADR-0132). It compiles
+			// A link throw is a goto to the link catch of the same name (ADR-0133). It compiles
 			// to a bare pass-through node; connectScope adds the synthetic edge to its catch.
 			if err := register(ev.Id, b.AddLinkThrowEvent()); err != nil {
 				return err
@@ -849,7 +849,7 @@ func connectScope(b *Builder, ids map[string]int32, c *xmlFlowContent) error {
 			return err
 		}
 	}
-	// Resolve link events within this scope (ADR-0132): a link throw is a goto to the link
+	// Resolve link events within this scope (ADR-0133): a link throw is a goto to the link
 	// catch of the same name, which compiles to a synthetic sequence flow throw→catch. Index
 	// this scope's link catches by name (exactly one per name — a second is an ambiguous
 	// destination), then connect each link throw to its catch. Matching is scope-local, so the

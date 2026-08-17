@@ -31,6 +31,31 @@ _Changed_ / _Removed_ for each version.
   CRC) and validation, with round-trip and corruption/truncation/version tests at 100%
   coverage. No checkpoint is created and **no WAL segment is deleted** — those are the
   later ADR-0131 slices.
+- **Standard loop activities** (the ↻ marker, [ADR-0133](docs/adr/0133-standard-loop-activities.md)):
+  `<standardLoopCharacteristics>` now runs — an activity repeats while a FEEL
+  `loopCondition` holds, one run at a time, with `testBefore` choosing the while form
+  (checked before the first run, so it may be skipped) or BPMN's default repeat-until
+  (always at least one run), and an optional `loopMaximum` as a hard cap. Until now the
+  marker was silently dropped at parse: the activity ran **once** while the diagram
+  showed ↻. It runs on the existing multi-instance body/iteration machinery
+  ([ADR-0077](docs/adr/0077-multi-instance-activities.md)) — same scope lifecycle,
+  counter and recovery path, no new value type — on every activity kind multi-instance
+  already supported. Each run's result stays visible to the next run and to the loop
+  condition, and is promoted to the enclosing scope when the loop ends, so a looping
+  activity leaves behind what the same activity would leave running once. A loop with
+  neither a condition nor a maximum, an invalid maximum, or both loop markers on one
+  activity is refused at deploy.
+- **Loop authoring in the Modeler, in sync with the icon**: the Implement panel's
+  Multi-instance section is now a **Loop** section whose single Mode select covers all
+  four states (none, loop, multi-instance parallel, multi-instance sequential). It reads
+  and writes the very `loopCharacteristics` element bpmn-js draws the marker from, so
+  the property and the icon on the shape can no longer disagree — a marker set from the
+  context pad reads back as its mode, and choosing a mode redraws the shape. An element
+  carrying a loop marker Atlas does not execute now says so in the panel instead of
+  leaving the icon to imply behaviour. The Design-view token simulation counts a
+  standard loop like a sequential multi-instance, badged ↻ and bounded by the modelled
+  `loopMaximum`, and the Operations call-activity list labels a looping call activity
+  **loop** rather than **multi-instance**.
 - **Deterministic crash-and-recovery harness** (v0.2.0 programme C): a new
   engine-level test harness (`engine/crash_recovery_test.go`) that turns the
   durability contract into checkable evidence. It runs a workload to a durable point,

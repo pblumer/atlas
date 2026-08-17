@@ -1429,6 +1429,45 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         </details>
         <p class="rz-how"><span data-l="de"><code>inputCollection</code> ist die Liste, <code>inputElement</code> der Name je Durchlauf; die <code>outputElement</code>-Werte werden in <code>outputCollection</code> gesammelt. Für seriell statt parallel: <code>&lt;multiInstanceLoopCharacteristics isSequential="true"&gt;</code>.</span><span data-l="en"><code>inputCollection</code> is the list, <code>inputElement</code> the per-iteration name; the <code>outputElement</code> values are gathered into <code>outputCollection</code>. For sequential instead of parallel: <code>&lt;multiInstanceLoopCharacteristics isSequential="true"&gt;</code>.</span></p>
       </div>
+      <div class="recipe" id="rz-loop" data-proc="recipe-loop">
+        <h4><span class="rz-emoji" aria-hidden="true">↻</span>
+          <span data-l="de">Loop: wiederholen, bis es passt</span><span data-l="en">Loop: repeat until it fits</span></h4>
+        <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
+          <span data-l="de">Denselben Schritt so lange wiederholen, bis eine Bedingung nicht mehr gilt – prüfen bis in Ordnung, nachfassen bis jemand antwortet.</span><span data-l="en">Repeat the same step until a condition no longer holds – check until it passes, follow up until someone answers.</span></p>
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
+             xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             id=&quot;defs_recipe-loop&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;process id=&quot;recipe-loop&quot; name=&quot;Pruefen bis in Ordnung&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;start&quot;/&gt;
+    &lt;scriptTask id=&quot;init&quot; name=&quot;Zaehler starten&quot;&gt;
+      &lt;extensionElements&gt;&lt;zeebe:script expression=&quot;= 0&quot; resultVariable=&quot;versuche&quot;/&gt;&lt;/extensionElements&gt;
+    &lt;/scriptTask&gt;
+    &lt;scriptTask id=&quot;pruefen&quot; name=&quot;Pruefen&quot;&gt;
+      &lt;extensionElements&gt;&lt;zeebe:script expression=&quot;= versuche + 1&quot; resultVariable=&quot;versuche&quot;/&gt;&lt;/extensionElements&gt;
+      &lt;standardLoopCharacteristics loopMaximum=&quot;5&quot;&gt;
+        &lt;loopCondition&gt;= versuche &amp;lt; 3&lt;/loopCondition&gt;
+      &lt;/standardLoopCharacteristics&gt;
+    &lt;/scriptTask&gt;
+    &lt;endEvent id=&quot;end&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;start&quot; targetRef=&quot;init&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;init&quot; targetRef=&quot;pruefen&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f3&quot; sourceRef=&quot;pruefen&quot; targetRef=&quot;end&quot;/&gt;
+  &lt;/process&gt;
+&lt;/definitions&gt;</code></pre>
+        </details>
+        <p class="rz-how"><span data-l="de">Das <b>Loop</b>-Kennzeichen (↻) an einer Aktivität wiederholt sie, solange die <code>&lt;loopCondition&gt;</code> gilt – immer nur ein Durchlauf zur Zeit, jeder mit einem 1-basierten <code>loopCounter</code>. Ohne <code>testBefore="true"</code> wird erst <i>nach</i> dem Durchlauf geprüft, die Aktivität läuft also mindestens einmal; mit <code>testBefore="true"</code> vorher, sie kann also ganz übersprungen werden. <code>loopMaximum</code> ist die harte Obergrenze – mindestens eines von beidem muss gesetzt sein. Was ein Durchlauf schreibt, sieht der nächste (und der Prozess danach). Unterschied zur <a href="#rz-multi-instance">Multi-Instance</a>: die läuft <i>einmal pro Listenelement</i>, der Loop <i>so lange, bis es passt</i>.</span><span data-l="en">The <b>loop</b> marker (↻) on an activity repeats it while its <code>&lt;loopCondition&gt;</code> holds – one run at a time, each with a 1-based <code>loopCounter</code>. Without <code>testBefore="true"</code> the condition is checked <i>after</i> a run, so the activity always runs at least once; with it, before, so the activity may be skipped entirely. <code>loopMaximum</code> is the hard cap – at least one of the two must be set. What one run writes, the next run (and the rest of the process) sees. Unlike <a href="#rz-multi-instance">multi-instance</a>, which runs <i>once per list item</i>, a loop runs <i>until it fits</i>.</span></p>
+      </div>
       <div class="recipe" id="rz-event-sub" data-proc="recipe-event-sub">
         <h4><span class="rz-emoji" aria-hidden="true">🪝</span>
           <span data-l="de">Event-Subprozess: globaler Ereignis-Handler</span><span data-l="en">Event subprocess: a global event handler</span></h4>
@@ -2413,6 +2452,7 @@ const ELEMENTS = [
   {img:"call-activity",          cat:"advanced", de:["Call-Activity","Ruft einen eigenständigen, separat deployten Prozess auf."],       en:["Call activity","Calls a standalone, separately deployed process."]},
   {img:"multi-instance",         cat:"advanced", de:["Multi-Instance (parallel)","Führt eine Aktivität für jedes Element einer Liste aus."], en:["Multi-instance (parallel)","Runs an activity once per item in a list."]},
   {img:"multi-instance-sequential", cat:"advanced", de:["Multi-Instance (seriell)","Wie oben, aber nacheinander."],                     en:["Multi-instance (sequential)","As above, but one after another."]},
+  {img:"standard-loop",          cat:"advanced", de:["Loop","Wiederholt eine Aktivität, solange eine Bedingung gilt."],                  en:["Loop","Repeats an activity while a condition holds."]},
   {img:"compensation",           cat:"advanced", de:["Kompensation","Macht bereits getane Arbeit bei Abbruch rückgängig."],              en:["Compensation","Undoes already-done work on cancellation."]},
   {img:"transaction-cancel",     cat:"advanced", de:["Transaktion (Abbruch)","Transaktionaler Subprozess mit Cancel/Kompensation."],    en:["Transaction (cancel)","Transactional subprocess with cancel/compensation."]},
   {img:"data-object",            cat:"data",     de:["Datenobjekt","Strukturierte Daten, die die Instanz mit sich führt."],             en:["Data object","Structured data the instance carries."]},

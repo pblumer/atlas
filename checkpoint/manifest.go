@@ -1,12 +1,12 @@
 // Package checkpoint holds the on-disk format primitives for engine recovery
-// checkpoints (ADR-0131). A checkpoint is a consistent Pebble snapshot of the state
+// checkpoints (ADR-0133). A checkpoint is a consistent Pebble snapshot of the state
 // store at a known applied log position, from which recovery replays only the WAL
 // suffix instead of the whole log from genesis.
 //
 // This package currently provides only the Manifest — the small, engine-owned,
 // versioned descriptor that makes a checkpoint interpretable and verifiable — with a
 // deterministic binary codec and validation. Creating and publishing checkpoints,
-// restoring from them, and compacting WAL segments are later slices of ADR-0131; none
+// restoring from them, and compacting WAL segments are later slices of ADR-0133; none
 // of that lives here yet, and no WAL segment is deleted by anything in this package.
 package checkpoint
 
@@ -19,7 +19,7 @@ import (
 
 // FormatVersion is the manifest/checkpoint on-disk format version. Recovery ignores a
 // checkpoint whose version it does not understand and falls back to an older
-// checkpoint or genesis replay (ADR-0131): pre-1.0 there is no in-place migration.
+// checkpoint or genesis replay (ADR-0133): pre-1.0 there is no in-place migration.
 const FormatVersion uint32 = 1
 
 // magic prefixes every encoded manifest so a stray or foreign file is rejected before
@@ -54,7 +54,7 @@ type DeploymentRef struct {
 	Version int32
 }
 
-// Manifest is the engine-owned descriptor of a recovery checkpoint (ADR-0131). It is
+// Manifest is the engine-owned descriptor of a recovery checkpoint (ADR-0133). It is
 // self-describing and self-verifying: encoded with a magic prefix, the format
 // version, the fields below, and a trailing checksum over the whole body.
 type Manifest struct {
@@ -119,7 +119,7 @@ const fixedFields = 4 + 4 + 2 + 8 + 8 + 8 + 8 + 8 + 1
 // Unmarshal decodes a manifest and verifies its magic, format version, and trailing
 // checksum. A malformed, wrong-version, or corrupt manifest returns a sentinel error
 // (ErrBadMagic, ErrTruncated, ErrUnsupportedVersion, ErrChecksum) so recovery can skip
-// the checkpoint and fall back rather than fail (ADR-0131).
+// the checkpoint and fall back rather than fail (ADR-0133).
 func Unmarshal(b []byte) (*Manifest, error) {
 	if len(b) < 4 || [4]byte{b[0], b[1], b[2], b[3]} != magic {
 		return nil, ErrBadMagic

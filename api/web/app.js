@@ -2858,7 +2858,8 @@ async function viewCallActivities() {
         const caller = `<a href="#/operations/p/${r.callerKey}">${esc(r.callerName || r.callerProcessId)}</a>`
           + ` <span class="muted">v${r.callerVersion}</span>`;
         const binding = `<span class="pill">${esc(r.binding)}</span>`
-          + (r.multiInstance ? ' <span class="pill muted">multi-instance</span>' : "");
+          + (r.multiInstance ? ' <span class="pill muted">multi-instance</span>' : "")
+          + (r.loop ? ' <span class="pill muted">loop</span>' : "");
         // Propagation: "all" both ways is the Zeebe default; call it out only where a
         // direction is isolated (off), since that changes what crosses the boundary.
         const vars = (r.propagateAllParent && r.propagateAllChild)
