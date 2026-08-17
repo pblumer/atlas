@@ -135,6 +135,19 @@ var layoutCorpus = []layoutCase{
     <sequenceFlow id="f2" sourceRef="Sub" targetRef="End"/>
   </process></definitions>`},
 
+	// Gateway branches carry their condition as a flow name, and the reader has to
+	// be able to tell which caption belongs to which arrow — including when one
+	// branch steps up into another row.
+	{"labelled-branches", `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="P">
+    <startEvent id="Start"/><exclusiveGateway id="Gw" default="fLow"/>
+    <serviceTask id="High"/><serviceTask id="Low"/><endEvent id="End"/>
+    <sequenceFlow id="f0" sourceRef="Start" targetRef="Gw"/>
+    <sequenceFlow id="fHigh" name="over 1000" sourceRef="Gw" targetRef="High"/>
+    <sequenceFlow id="fLow" name="otherwise" sourceRef="Gw" targetRef="Low"/>
+    <sequenceFlow id="f1" sourceRef="High" targetRef="End"/>
+    <sequenceFlow id="f2" sourceRef="Low" targetRef="End"/>
+  </process></definitions>`},
+
 	// Activity shapes beyond the plain task list: a call activity delegating to
 	// another process, and the two message-carrying tasks. All are drawn as tasks.
 	{"call-and-message-tasks", `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="P">
@@ -339,6 +352,7 @@ func TestLayoutInvariants(t *testing.T) {
 			m.checkEdgesOrthogonal(t)
 			m.checkNoEdgeThroughShape(t)
 			m.checkLabelsClear(t)
+			m.checkNamedFlowsLabelled(t)
 			m.checkForwardEdgesReadLeftToRight(t)
 			m.checkTrunkCarriesLongestChain(t)
 		})
@@ -548,6 +562,23 @@ func (m *layoutModel) checkLabelsClear(t *testing.T) {
 	}
 }
 
+// checkNamedFlowsLabelled: a sequence flow that carries a name gets a label
+// position of its own. Without one the renderer has to guess, and its guess is the
+// polyline's midpoint — which for a branch that steps into another row lands on the
+// riser, stranded between two arrows and readable as belonging to either. Where the
+// caption then sits is covered by checkLabelsClear, which sees edge labels too.
+func (m *layoutModel) checkNamedFlowsLabelled(t *testing.T) {
+	t.Helper()
+	for _, f := range m.flows {
+		if f.Id == "" || f.Name == "" {
+			continue
+		}
+		if _, ok := m.labels[f.Id]; !ok {
+			t.Errorf("invariant[flow-label]: named flow %q (%q) has no label position", f.Id, f.Name)
+		}
+	}
+}
+
 // checkForwardEdgesReadLeftToRight: every sequence flow that does not close a cycle
 // advances to the right (or stays in the same column). A process reads left to
 // right, so a forward step that moves backwards means the layering lost the plot —
@@ -723,7 +754,9 @@ func findBackEdges(nodeIDs []string, flows []layoutFlow) map[string]bool {
 func parseLabels(t *testing.T, di string) map[string]shapeBox {
 	t.Helper()
 	out := map[string]shapeBox{}
-	for _, m := range labelShapeRe.FindAllStringSubmatch(di, -1) {
+	matches := labelShapeRe.FindAllStringSubmatch(di, -1)
+	matches = append(matches, labelEdgeRe.FindAllStringSubmatch(di, -1)...)
+	for _, m := range matches {
 		atoi := func(s string) int {
 			n, err := strconv.Atoi(s)
 			if err != nil {
@@ -739,6 +772,16 @@ func parseLabels(t *testing.T, di string) map[string]shapeBox {
 var labelShapeRe = regexp.MustCompile(
 	`(?s)<bpmndi:BPMNShape id="[^"]*" bpmnElement="([^"]*)"[^>]*>\s*` +
 		`<omgdc:Bounds[^/]*/>\s*<bpmndi:BPMNLabel>\s*` +
+		`<omgdc:Bounds x="(-?\d+)" y="(-?\d+)" width="(\d+)" height="(\d+)"/>`)
+
+// An edge's caption is a BPMNLabel after its waypoints. Parsed into the same map as
+// shape labels, so every label invariant applies to flow captions as well.
+// The waypoint run between the two anchors keeps the match inside one edge: a
+// wildcard would happily skip a label-less edge and pin the next edge's caption on
+// it. RE2 has no lookahead, so the structure does the fencing.
+var labelEdgeRe = regexp.MustCompile(
+	`(?s)<bpmndi:BPMNEdge id="[^"]*" bpmnElement="([^"]*)"[^>]*>` +
+		`(?:\s*<omgdi:waypoint[^>]*/>)+\s*<bpmndi:BPMNLabel>\s*` +
 		`<omgdc:Bounds x="(-?\d+)" y="(-?\d+)" width="(\d+)" height="(\d+)"/>`)
 
 // sortedKeys returns a map's keys in a stable order, so failures are reported
