@@ -660,6 +660,30 @@ func authoringTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_delete_draft",
+			Description: "Delete a saved BPMN diagram draft by its process id (from atlas_list_drafts). " +
+				"The operation is idempotent — deleting a draft that is not there succeeds. This is a " +
+				"design-time delete only: a definition already deployed from this draft keeps running and " +
+				"is unaffected (remove one with atlas_delete_process). Drafts are not versioned, so the " +
+				"diagram is gone; read it back with atlas_get_draft_xml first if it may be wanted again.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"id": stringProp("The draft's process id (from atlas_list_drafts).")},
+				"required":   []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				if _, err := c.del("/api/v1/drafts/" + url.PathEscape(id)); err != nil {
+					return "", err
+				}
+				confirmation, _ := json.Marshal(map[string]any{"deleted": true, "id": id})
+				return string(confirmation), nil
+			},
+		},
+		{
 			Name: "atlas_list_forms",
 			Description: "List saved form definitions (design-time), optionally filtered to one project. Each " +
 				"entry has the form id and name. Read a form's schema with atlas_get_form.",

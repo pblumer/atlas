@@ -77,6 +77,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_collaboration_runtime":   "GET /api/v1/collaborations/{key}/runtime",
 	"atlas_list_drafts":             "GET /api/v1/drafts",
 	"atlas_get_draft_xml":           "GET /api/v1/drafts/{id}/xml",
+	"atlas_delete_draft":            "DELETE /api/v1/drafts/{id}",
 	"atlas_join_session":            "POST /api/v1/drafts/{id}/session/join",
 	"atlas_session_poll":            "POST /api/v1/drafts/{id}/session/poll",
 	"atlas_session_lock":            "POST /api/v1/drafts/{id}/session/lock",
@@ -143,9 +144,11 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/instances/{key}/variables": "admin-gated live-state correction; the MCP service principal is deliberately non-admin",
 
 	// Design-time edit: agents create artifacts and can read them back (list/get
-	// are exposed), but mutating existing ones is the UI's job.
+	// are exposed), but mutating existing ones is the UI's job. Deleting a draft is
+	// the one exception (atlas_delete_draft): an agent can *create* drafts, so
+	// leaving it no way to remove one makes every generated or throwaway diagram
+	// permanent litter that only a human can clear.
 	"PATCH /api/v1/drafts/{id}":          "artifact editing is a UI concern",
-	"DELETE /api/v1/drafts/{id}":         "artifact editing is a UI concern",
 	"DELETE /api/v1/forms/{id}":          "artifact editing is a UI concern",
 	"PATCH /api/v1/dmnrefs/{id}":         "artifact editing is a UI concern",
 	"DELETE /api/v1/dmnrefs/{id}":        "artifact editing is a UI concern",
