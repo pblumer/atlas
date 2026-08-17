@@ -4,7 +4,7 @@
   "components": [
     {
       "type": "text",
-      "text": "# 👤 Benutzer aufnehmen\n\nBeantrage die Aufnahme eines neuen Atlas-Benutzers. Aus deinen Angaben wird ein Benutzername vorgeschlagen; ein Administrator legt das Konto anschließend an."
+      "text": "# 👤 Benutzer aufnehmen\n\nBeantrage die Aufnahme eines neuen Atlas-Benutzers. Aus deinen Angaben wird ein Benutzername vorgeschlagen; ein Administrator prüft den Antrag, legt das Konto an und vergibt die Rolle."
     },
     {
       "key": "vorname",
@@ -24,16 +24,6 @@
       "label": "E-Mail-Adresse",
       "description": "An diese Adresse werden die Zugangsdaten versendet.",
       "validate": { "required": true, "validationType": "email" }
-    },
-    {
-      "key": "rolle",
-      "type": "radio",
-      "label": "Rolle",
-      "values": [
-        { "label": "Benutzer (user)", "value": "user" },
-        { "label": "Administrator (admin)", "value": "admin" }
-      ],
-      "validate": { "required": true }
     },
     {
       "key": "abteilung",

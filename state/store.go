@@ -758,6 +758,40 @@ func (s *Store) VariablesOfScope(scope uint64, fn func(v *model.VariableValue) e
 	})
 }
 
+// VisibleVariablesOfScope calls fn with every variable *visible* at the given
+// scope: the scope's own variables plus those inherited from each enclosing scope,
+// walking up the FlowScopeKey chain to the process root, with the nearest scope
+// winning when a name is shadowed. This mirrors the engine's variable visibility
+// (ResolveVariable / bindInputsChain, ADR-0068): a token at an activity-local
+// scope sees its locals over anything inherited. Passing the process-instance root
+// key yields exactly the root's variables (it has no enclosing scope), so callers
+// reading a root instance are unaffected.
+func (s *Store) VisibleVariablesOfScope(scope uint64, fn func(v *model.VariableValue) error) error {
+	seen := map[string]bool{}
+	visited := map[uint64]bool{}
+	for scope != 0 && !visited[scope] {
+		visited[scope] = true
+		if err := s.VariablesOfScope(scope, func(v *model.VariableValue) error {
+			if seen[v.Name] {
+				return nil // a nearer scope already provided this name (shadowing)
+			}
+			seen[v.Name] = true
+			return fn(v)
+		}); err != nil {
+			return err
+		}
+		ei, ok, err := s.GetElementInstance(scope)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			break // reached the process root (no element instance record)
+		}
+		scope = ei.FlowScopeKey
+	}
+	return nil
+}
+
 // CompensablesOfScope calls fn with every completed compensable activity retained
 // under the given scope, in completion order (ADR-0103). Used to surface a scope's
 // pending compensations to operators and by tests to assert the index is cleaned when

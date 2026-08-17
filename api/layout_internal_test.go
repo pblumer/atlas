@@ -457,7 +457,7 @@ func TestGenerateDIBoundaryHandlerBelowRidesBottom(t *testing.T) {
 	    </laneSet>
 	    <startEvent id="Start"/>
 	    <task id="Host"/>
-	    <boundaryEvent id="Guard" attachedToRef="Host"/>
+	    <boundaryEvent id="Guard" name="X" attachedToRef="Host"/>
 	    <task id="Handler"/>
 	    <endEvent id="Aborted"/>
 	    <sequenceFlow id="s1" sourceRef="Start" targetRef="Host"/>
@@ -479,6 +479,11 @@ func TestGenerateDIBoundaryHandlerBelowRidesBottom(t *testing.T) {
 	if handler.y+handler.h/2 <= host.y+host.h/2 {
 		t.Fatalf("test setup: handler should sit below the host, got handler cy=%d host cy=%d",
 			handler.y+handler.h/2, host.y+host.h/2)
+	}
+	// Its label rides below the host (the event is on the bottom edge), clear of the
+	// task box rather than over its title.
+	if lbl := boundaryLabelBox(t, di, "Guard"); lbl.y < host.bottom() {
+		t.Errorf("bottom-edge boundary label (y=%d) not clear below host bottom y=%d", lbl.y, host.bottom())
 	}
 	// The handler is below, so the boundary event rides the host's bottom edge.
 	if cy := be.y + be.h/2; cy != host.bottom() {
@@ -552,6 +557,136 @@ func TestGenerateDIHappyPathStaysStraight(t *testing.T) {
 		if cy := s.y + s.h/2; cy >= wantCY {
 			t.Errorf("branch node %q y-center %d is not above the main axis %d", id, cy, wantCY)
 		}
+	}
+	// A branch runs straight along one row: each handler and the end event it flows
+	// into share a center line, so the connecting edge is a single horizontal run
+	// rather than sagging toward the happy-path column below.
+	for _, b := range []struct{ handler, end, flow string }{
+		{"HandleSessionError", "EndError1", "e2"},
+		{"HandleError", "EndError2", "e4"},
+	} {
+		h, end := shapes[b.handler], shapes[b.end]
+		if hcy, ecy := h.y+h.h/2, end.y+end.h/2; hcy != ecy {
+			t.Errorf("branch %q not on one row: %s cy=%d, %s cy=%d", b.flow, b.handler, hcy, b.end, ecy)
+		}
+		if pts := parseEdges(t, di)[b.flow]; len(pts) != 2 || pts[0].y != pts[1].y {
+			t.Errorf("branch flow %q should be one straight horizontal run, got %v", b.flow, pts)
+		}
+	}
+}
+
+// boundaryLabelBox extracts the explicit BPMNLabel bounds emitted inside one
+// boundary event's shape, so a test can assert where its caption sits.
+func boundaryLabelBox(t *testing.T, di, id string) shapeBox {
+	t.Helper()
+	re := regexp.MustCompile(`(?s)<bpmndi:BPMNShape id="` + id +
+		`_di".*?<bpmndi:BPMNLabel>\s*<omgdc:Bounds x="(-?\d+)" y="(-?\d+)" width="(\d+)" height="(\d+)"/>`)
+	m := re.FindStringSubmatch(di)
+	if m == nil {
+		t.Fatalf("no explicit label for boundary %q in DI:\n%s", id, di)
+	}
+	atoi := func(s string) int {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			t.Fatalf("bad number %q: %v", s, err)
+		}
+		return n
+	}
+	return shapeBox{x: atoi(m[1]), y: atoi(m[2]), w: atoi(m[3]), h: atoi(m[4])}
+}
+
+// TestGenerateDIBoundaryLabelClearsHost is the regression for a boundary event's
+// caption landing on top of its host's title (or tucked behind the exception riser).
+// The generator emits an explicit label box for a named boundary event, placed off
+// the host — above it when it rides the top edge — with the box's left edge just past
+// the event's right side, so the caption sits in the open pocket beside the event
+// instead of over the host or behind the upward riser (which leaves from the center).
+func TestGenerateDIBoundaryLabelClearsHost(t *testing.T) {
+	src := []byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="P">
+	    <startEvent id="Start"/>
+	    <serviceTask id="Task"/>
+	    <boundaryEvent id="B" name="Timeout" attachedToRef="Task"/>
+	    <serviceTask id="Handler"/>
+	    <endEvent id="Done"/>
+	    <endEvent id="Aborted"/>
+	    <sequenceFlow id="s1" sourceRef="Start" targetRef="Task"/>
+	    <sequenceFlow id="s2" sourceRef="Task" targetRef="Done"/>
+	    <sequenceFlow id="s3" sourceRef="B" targetRef="Handler"/>
+	    <sequenceFlow id="s4" sourceRef="Handler" targetRef="Aborted"/>
+	  </process>
+	</definitions>`)
+	di, ok := generateDI(src)
+	if !ok {
+		t.Fatal("generateDI: want ok")
+	}
+	host := parseShapes(t, di)["Task"]
+	be := parseShapes(t, di)["B"]
+	lbl := boundaryLabelBox(t, di, "B")
+	// The handler is above, so the boundary rides the top edge and its label sits in
+	// the gap above the host, never over the task box.
+	if lbl.bottom() > host.y {
+		t.Errorf("boundary label (y %d..%d) not clear above host top y=%d", lbl.y, lbl.bottom(), host.y)
+	}
+	// The label sits to the right of the event circle, so the upward exception riser
+	// (which leaves from the event's center) runs clear of the caption instead of
+	// through it.
+	if lbl.x < be.right() {
+		t.Errorf("label left edge %d not clear of the event's right side %d (caption crowds the riser)", lbl.x, be.right())
+	}
+	// Only the boundary event carries an explicit label; other events auto-place.
+	if n := strings.Count(di, "<bpmndi:BPMNLabel>"); n != 1 {
+		t.Errorf("want exactly one explicit label (the boundary), got %d", n)
+	}
+	// A boundary event with no name gets no explicit label box.
+	di2, _ := generateDI([]byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="P">
+	    <startEvent id="Start"/><serviceTask id="Task"/><endEvent id="Done"/><endEvent id="Ab"/>
+	    <boundaryEvent id="B" attachedToRef="Task"/>
+	    <serviceTask id="H"/>
+	    <sequenceFlow id="s1" sourceRef="Start" targetRef="Task"/>
+	    <sequenceFlow id="s2" sourceRef="Task" targetRef="Done"/>
+	    <sequenceFlow id="s3" sourceRef="B" targetRef="H"/>
+	    <sequenceFlow id="s4" sourceRef="H" targetRef="Ab"/>
+	  </process>
+	</definitions>`))
+	if strings.Contains(di2, "<bpmndi:BPMNLabel>") {
+		t.Errorf("an unnamed boundary event should not get an explicit label:\n%s", di2)
+	}
+}
+
+// TestGenerateDIBranchesStackOnDistinctRows covers two side branches that share a
+// column: they cannot occupy the same row, so they stack onto distinct rows above
+// the trunk rather than overlapping.
+func TestGenerateDIBranchesStackOnDistinctRows(t *testing.T) {
+	src := []byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="P">
+	    <startEvent id="S"/>
+	    <task id="M1"/>
+	    <task id="M2"/>
+	    <endEvent id="E"/>
+	    <task id="A"/>
+	    <task id="B"/>
+	    <sequenceFlow id="m1" sourceRef="S" targetRef="M1"/>
+	    <sequenceFlow id="m2" sourceRef="M1" targetRef="M2"/>
+	    <sequenceFlow id="m3" sourceRef="M2" targetRef="E"/>
+	    <sequenceFlow id="a" sourceRef="S" targetRef="A"/>
+	    <sequenceFlow id="b" sourceRef="S" targetRef="B"/>
+	  </process>
+	</definitions>`)
+	di, ok := generateDI(src)
+	if !ok {
+		t.Fatal("generateDI: want ok")
+	}
+	shapes := parseShapes(t, di)
+	m1, a, b := shapes["M1"], shapes["A"], shapes["B"]
+	trunkCY := m1.y + m1.h/2
+	acy, bcy := a.y+a.h/2, b.y+b.h/2
+	if acy == bcy {
+		t.Errorf("A and B share a column and must not share a row, both cy=%d", acy)
+	}
+	if acy >= trunkCY || bcy >= trunkCY {
+		t.Errorf("branch rows must sit above the trunk (cy=%d); got A=%d B=%d", trunkCY, acy, bcy)
 	}
 }
 

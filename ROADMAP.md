@@ -340,7 +340,7 @@ Making processes wait, react, and time out.
   panel (an escalation-code picker on escalation throw/end/boundary/event-subprocess events —
   keeping the interrupting toggle, unlike errors — plus a central escalations manager). Completes
   the throw/catch event family (message, error, signal, escalation).
-- ✅ **Link events** ([ADR-0126](docs/adr/0126-link-events.md)): BPMN's **off-page connector** — a
+- ✅ **Link events** ([ADR-0131](docs/adr/0131-link-events.md)): BPMN's **off-page connector** — a
   **link intermediate throw** ("go to X") and a **link intermediate catch** ("arrive at X"), paired
   by **name within one flow scope**, that stand in for a sequence flow so a long or crossing diagram
   stays readable. Reaching the throw is a **goto** to the matching catch, which flows straight on.
@@ -535,10 +535,15 @@ Adoption and polish.
   in-memory profile (so the difference from durable reads off the disk-`fsync`
   latency, ~95% of the durable per-op time on the CI machine). It also covers the
   **startup/recovery axis** — recovery benchmarks that replay a `b.N`-instance WAL
-  from genesis into a fresh state store, measuring the per-instance recovery cost.
-  They report `ns/op` (→ instances/sec), `events/op`, `walB/op`, and allocations, with
-  a Markdown-summary script and a CI smoke run. Still to come: latency percentiles, a
-  loopback-socket HTTP variant, and committed machine-labelled baseline results
+  from genesis into a fresh state store, measuring the per-instance recovery cost —
+  and **P50/P95/P99 latency** benchmarks that sample each operation so the `fsync`
+  tail the mean hides is visible. They report `ns/op` (→ instances/sec), `events/op`,
+  `walB/op`, allocations, and (for the latency benchmarks) the percentile
+  distribution, with a Markdown-summary script and a CI smoke run. A first
+  **published, reproducible baseline** — machine-labelled raw capture plus a
+  `benchstat` summary — is committed under
+  [`benchmarks/results/`](benchmarks/results/). Still to come: a loopback-socket HTTP
+  variant and a large parked-workload profile
   ([`benchmarks/README.md`](benchmarks/README.md)).
 - 🔲 Documentation site, tutorials, examples
 - 🔲 1.0 API stability commitment

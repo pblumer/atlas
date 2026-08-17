@@ -464,7 +464,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
         <button class="btn neutral" id="autolayout" title="Re-flow the diagram into a clean left-to-right layout (F8)">Auto-layout</button>
         <button class="btn neutral" id="save">Save</button>
         <button class="btn neutral" id="export">Export XML</button>
-        <button class="btn" id="deploy">Deploy</button>
+        <button class="btn neutral" id="deploy" title="Deploy this single diagram. To ship a whole process application, use Publish on the application (ADR-0128).">Deploy</button>
       </div>
       <div class="sim-bar" id="sim-bar" hidden>
         <button class="btn play" id="sim-play">&#9654; Play</button>
@@ -1301,6 +1301,15 @@ function wireEditorVars(root, modeler, api) {
   const list = root.querySelector("#vars-list");
   if (!panel || !toggle || !list) return;
 
+  // Which variable groups (Form / Process) the author collapsed — persisted so the
+  // choice sticks across edits and reopening. Groups are collapsible only when there
+  // is more than one (a linked form splits Form from Process), so a header doubles as
+  // its toggle.
+  const GKEY = "atlas.vars.collapsedGroups";
+  let collapsedCats;
+  try { collapsedCats = new Set(JSON.parse(localStorage.getItem(GKEY) || "[]")); } catch { collapsedCats = new Set(); }
+  const saveCats = () => { try { localStorage.setItem(GKEY, JSON.stringify([...collapsedCats])); } catch { /* ignore */ } };
+
   // One variable row. Draggable so its name can be dropped into any text field to
   // insert it (a FEEL expression, a mapping source, …) — a plain-text payload, so
   // the browser's native drop-to-insert does the work with no per-field wiring.
@@ -1351,9 +1360,17 @@ function wireEditorVars(root, modeler, api) {
     const cats = [...groups.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
     list.innerHTML = cats.length === 1
       ? groups.get(cats[0]).map(rowHTML).join("")
-      : cats.map((cat) =>
-          `<div class="vars-group"><div class="vars-group-head">${esc(cat)}</div>${groups.get(cat).map(rowHTML).join("")}</div>`
-        ).join("");
+      : cats.map((cat) => {
+          const col = collapsedCats.has(cat);
+          return `<div class="vars-group${col ? " collapsed" : ""}" data-cat="${esc(cat)}">
+            <button type="button" class="vars-group-head" aria-expanded="${col ? "false" : "true"}">
+              <span class="vg-chevron" aria-hidden="true">▸</span>
+              <span class="vg-title">${esc(cat)}</span>
+              <span class="vg-count">${groups.get(cat).length}</span>
+            </button>
+            <div class="vars-group-body">${groups.get(cat).map(rowHTML).join("")}</div>
+          </div>`;
+        }).join("");
   };
 
   toggle.addEventListener("click", () => {
@@ -1367,6 +1384,18 @@ function wireEditorVars(root, modeler, api) {
   });
   filter.addEventListener("input", render);
   list.addEventListener("click", (e) => {
+    const gh = e.target.closest(".vars-group-head");
+    if (gh) {
+      const grp = gh.closest(".vars-group");
+      const cat = grp && grp.dataset.cat;
+      if (cat) {
+        const col = grp.classList.toggle("collapsed");
+        gh.setAttribute("aria-expanded", col ? "false" : "true");
+        if (col) collapsedCats.add(cat); else collapsedCats.delete(cat);
+        saveCats();
+      }
+      return;
+    }
     const o = e.target.closest(".var-origin");
     if (!o) return;
     const el = modeler.get("elementRegistry").get(o.dataset.el);
@@ -2120,7 +2149,7 @@ function mappingGroupHTML(kind, params) {
     : { title: "Output mapping", wrap: "io-outputs",
         hint: "Each mapping promotes a value to the <b>process scope</b> from a FEEL expression over the activity's local scope (e.g. its result). With no output mapping the task's result merges into the process scope as-is." };
   const cards = params.map((p, i) => ioMapCardHTML(kind, i, p.source, p.target)).join("");
-  return `<div class="io-group" data-kind="${kind}" data-standalone-group="1">
+  return `<div class="io-group" data-kind="${kind}" data-group="${meta.title}" data-standalone-group="1">
     <div class="io-group-head">
       <span class="io-group-title">${meta.title}</span>
       <button type="button" class="io-group-add" title="Add mapping" aria-label="Add mapping">＋</button>
@@ -2757,13 +2786,13 @@ function escalationDefOf(bo) {
 
 // linkDefOf returns an event's bpmn:LinkEventDefinition, or null. A link intermediate throw
 // jumps to the link intermediate catch of the same name in the same scope — an off-page
-// connector / goto (ADR-0126).
+// connector / goto (ADR-0131).
 function linkDefOf(bo) {
   return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:LinkEventDefinition") || null;
 }
 
 // linkFieldsHTML renders the link-name field for a link throw or catch. A throw jumps to the
-// catch of the same name in the same scope; the name is the whole configuration (ADR-0126).
+// catch of the same name in the same scope; the name is the whole configuration (ADR-0131).
 function linkFieldsHTML(led, hint) {
   return `<h3>Link</h3>
     <label class="field"><span>Link name</span>
@@ -3114,7 +3143,7 @@ function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn()) {
 // collapsible body. It works on the already-rendered panel, so every element type's
 // markup is grouped by one function instead of each branch knowing about grouping.
 // Nodes are moved as whole subtrees, so field listeners and rich editors survive.
-function groupifyPanel(body, collapsed) {
+function groupifyPanel(body, ctl) {
   const heads = [...body.children].filter((n) => n.tagName === "H3");
   if (!heads.length) return;
   // A section absorbs everything up to the next <h3>, but a standalone group (e.g.
@@ -3124,7 +3153,8 @@ function groupifyPanel(body, collapsed) {
   for (const h3 of heads) {
     const title = h3.textContent.trim();
     const group = document.createElement("div");
-    group.className = "pgroup" + (collapsed.has(title) ? " collapsed" : "");
+    group.className = "pgroup" + (ctl.isCollapsed(title) ? " collapsed" : "");
+    group.dataset.group = title;
     const bodyWrap = document.createElement("div");
     bodyWrap.className = "pgroup-body";
     let n = h3.nextSibling;
@@ -3149,14 +3179,25 @@ function groupifyPanel(body, collapsed) {
       dot.title = "has content";
       head.appendChild(dot);
     }
-    head.addEventListener("click", () => {
-      const isCol = group.classList.toggle("collapsed");
-      if (isCol) collapsed.add(title); else collapsed.delete(title);
-    });
+    head.addEventListener("click", () => ctl.onToggle(title, group.classList.toggle("collapsed")));
     body.insertBefore(group, h3);
     group.appendChild(head);
     group.appendChild(bodyWrap);
     body.removeChild(h3);
+  }
+  // A subtle expand-all / collapse-all control, added once there is more than one
+  // collapsible group (the <h3> sections plus any standalone I/O-mapping groups), so
+  // the author can open or clear the whole panel in one click.
+  const total = body.querySelectorAll(".pgroup, .io-group").length;
+  if (total >= 2 && !body.querySelector(".pgroup-tools")) {
+    const tools = document.createElement("div");
+    tools.className = "pgroup-tools";
+    tools.innerHTML = `<button type="button" class="pgroup-all" data-all="expand">Expand all</button>`
+      + `<span class="pgroup-all-sep" aria-hidden="true">·</span>`
+      + `<button type="button" class="pgroup-all" data-all="collapse">Collapse all</button>`;
+    tools.querySelector('[data-all="expand"]').addEventListener("click", () => ctl.setAll(false));
+    tools.querySelector('[data-all="collapse"]').addEventListener("click", () => ctl.setAll(true));
+    body.insertBefore(tools, body.firstChild);
   }
 }
 
@@ -3172,12 +3213,31 @@ function wireProperties(root, modeler, api, projectId, toast) {
   // with a chevron and a filled dot when it carries content. groupifyPanel runs
   // after each (re-)render via a MutationObserver, so no per-element branch has to
   // know about grouping; collapse state persists across renders in `collapsed`.
-  const collapsed = new Set();
+  // Property groups start collapsed on open — all but General — so a freshly selected
+  // element shows its identity, not every section at once (the author's request).
+  // `choice` remembers explicit toggles for this editing session, shared across element
+  // selections; untouched groups fall back to the default. It resets when the editor
+  // remounts, so reopening a file collapses the panel again.
+  const DEFAULT_OPEN = new Set(["General"]);
+  const choice = new Map(); // group title -> true(collapsed)/false(open), only when toggled
+  const groupCtl = {
+    isCollapsed: (title) => choice.has(title) ? choice.get(title) : !DEFAULT_OPEN.has(title),
+    onToggle: (title, col) => choice.set(title, col),
+    // Expand/collapse every group now on screen (both <h3> sections and standalone
+    // I/O-mapping groups) and record each so re-renders keep the chosen state.
+    setAll: (col) => {
+      for (const g of body.querySelectorAll(".pgroup, .io-group")) {
+        g.classList.toggle("collapsed", col);
+        const t = (g.dataset.group || "").trim();
+        if (t) choice.set(t, col);
+      }
+    },
+  };
   let groupifying = false;
   const panelObserver = new MutationObserver(() => {
     if (groupifying) return;
     groupifying = true;
-    try { groupifyPanel(body, collapsed); } finally { groupifying = false; }
+    try { groupifyPanel(body, groupCtl); } finally { groupifying = false; }
   });
   panelObserver.observe(body, { childList: true });
 
@@ -4307,16 +4367,20 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const kind = group.dataset.kind;
         const wrap = group.querySelector(".io-map-list");
         [...wrap.querySelectorAll(".io-map")].forEach((card) => wireCard(card, group));
+        // Start collapsed on open like the other groups (all but General), and share the
+        // panel's collapse memory so a re-render keeps the author's chosen state.
+        group.classList.toggle("collapsed", groupCtl.isCollapsed(group.dataset.group || ""));
         // Section collapse: clicking the head toggles it, but not via the add button.
         group.querySelector(".io-group-head").addEventListener("click", (e) => {
           if (e.target.closest(".io-group-add")) return;
-          group.classList.toggle("collapsed");
+          groupCtl.onToggle((group.dataset.group || "").trim(), group.classList.toggle("collapsed"));
         });
         // Add an auto-named, expanded card (Camunda-style) and focus its name so the
         // author can rename it immediately; save so it persists even if left as-is.
         group.querySelector(".io-group-add").addEventListener("click", (e) => {
           e.stopPropagation();
           group.classList.remove("collapsed");
+          groupCtl.onToggle((group.dataset.group || "").trim(), false);
           const idx = wrap.querySelectorAll(".io-map").length;
           const tmp = document.createElement("div");
           tmp.innerHTML = ioMapCardHTML(kind, idx, "", ioMapDefaultName(kind));

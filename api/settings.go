@@ -6,7 +6,23 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 )
+
+// defaultRegistrationProcessID is the process the login screen's "Registrieren"
+// link starts when an operator has not configured registration (ADR-0126). It is
+// Atlas's own bootstrap-deployed intake process (ADR-0122), whose start form
+// deliberately carries no role field, so an anonymous registrant can never request
+// an elevated account — the admin assigns the role at the approval step.
+const defaultRegistrationProcessID = "proc_benutzer_aufnahme"
+
+// registrationConfig is the public shape the login screen reads: whether a
+// "Registrieren" link should be shown and, if so, the public URL it points at.
+type registrationConfig struct {
+	Enabled   bool   `json:"enabled"`
+	ProcessID string `json:"processId,omitempty"`
+	URL       string `json:"url,omitempty"`
+}
 
 // maxThemeBytes bounds the theme request body — it carries a single short colour
 // string, so a tiny cap is plenty and fails a bloated body fast.
@@ -92,6 +108,175 @@ func (s *Server) handleDeleteTheme(w http.ResponseWriter, r *http.Request) {
 	s.do(func() { clearErr = s.settings.clearTheme() })
 	if clearErr != nil {
 		writeError(w, http.StatusInternalServerError, "clear theme: "+clearErr.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// effectiveRegistrationPID resolves the configured registration process id: the
+// stored value when a record exists (an empty string means an operator switched
+// registration off), else the built-in default. Must be called on the run-loop
+// goroutine (it reads the settings store through s.do at the call site).
+func (s *Server) effectiveRegistrationPID() (string, error) {
+	r, ok, err := s.settings.getRegistration()
+	if err != nil {
+		return "", err
+	}
+	if ok {
+		return r.ProcessID, nil // "" here means explicitly disabled
+	}
+	return defaultRegistrationProcessID, nil
+}
+
+// registrationLinkForLocked returns the public-start URL for pid, minting a public
+// link (ADR-0029) if the process is deployed with a start form and none exists
+// yet. It returns "" (no error) when pid is empty or the process is not a
+// publishable public form, so registration silently stays hidden until an operator
+// deploys a suitable process. Idempotent: an existing link for pid is reused.
+// Runs on the run-loop goroutine (bootstrap or inside s.do): it reads the
+// deployment registry and mutates the public-link store directly.
+func (s *Server) registrationLinkForLocked(pid string, now int64) (string, error) {
+	if pid == "" {
+		return "", nil
+	}
+	d := s.latestDeploymentByProcessID(pid)
+	if d == nil || d.cp == nil || !d.cp.IsExecutable() || d.cp.StartFormId() == "" {
+		return "", nil
+	}
+	links, err := s.publicLinks.loadAll()
+	if err != nil {
+		return "", err
+	}
+	for _, l := range links {
+		if l.ProcessID == pid {
+			return "/public/forms/" + l.Token, nil
+		}
+	}
+	token, err := newPublicToken()
+	if err != nil {
+		return "", err
+	}
+	l := publicLink{Token: token, ProcessID: pid, FormID: d.cp.StartFormId(), CreatedAt: now}
+	if err := s.publicLinks.save(l); err != nil {
+		return "", err
+	}
+	return "/public/forms/" + l.Token, nil
+}
+
+// ensureRegistrationLink mints the public link for the effective registration
+// process at bootstrap, so a fresh instance shows the "Registrieren" link with no
+// manual publishing step (ADR-0126). A disabled or not-yet-deployable registration
+// is a no-op. Runs on the constructing goroutine before the loop serves, within
+// the same single-writer discipline as ensureSystemProcesses.
+func (s *Server) ensureRegistrationLink(now int64) error {
+	pid, err := s.effectiveRegistrationPID()
+	if err != nil {
+		return err
+	}
+	_, err = s.registrationLinkForLocked(pid, now)
+	return err
+}
+
+// handleGetRegistration reports whether the login screen should offer a
+// "Registrieren" link and, if so, the public URL it opens (ADR-0126). It is public
+// (like /info and the theme) so the pre-auth login screen can read it, and it is
+// read-only: the link is minted at bootstrap or when an admin configures it, never
+// on an anonymous GET.
+func (s *Server) handleGetRegistration(w http.ResponseWriter, _ *http.Request) {
+	var (
+		out   registrationConfig
+		opErr error
+	)
+	s.do(func() {
+		pid, err := s.effectiveRegistrationPID()
+		if err != nil {
+			opErr = err
+			return
+		}
+		if pid == "" {
+			return // explicitly disabled → enabled:false
+		}
+		url, err := s.registrationLinkForLocked(pid, time.Now().Unix())
+		if err != nil {
+			opErr = err
+			return
+		}
+		if url == "" {
+			return // process not (yet) publishable → enabled:false
+		}
+		out = registrationConfig{Enabled: true, ProcessID: pid, URL: url}
+	})
+	if opErr != nil {
+		writeError(w, http.StatusInternalServerError, "read registration: "+opErr.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// handleSetRegistration configures the self-service registration process and mints
+// its public link (ADR-0126). Admin-gated: it opens an unauthenticated start path
+// into a process. Body: {"processId": "..."}; an empty processId switches
+// registration off. 400 if the named process is not a publishable public form, so
+// an operator gets immediate feedback rather than a silently dead link.
+func (s *Server) handleSetRegistration(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxThemeBytes))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	var p struct {
+		ProcessID string `json:"processId"`
+	}
+	if err := json.Unmarshal(body, &p); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return
+	}
+	pid := strings.TrimSpace(p.ProcessID)
+	var (
+		out        registrationConfig
+		notPublish bool
+		opErr      error
+	)
+	s.do(func() {
+		if pid != "" {
+			url, err := s.registrationLinkForLocked(pid, time.Now().Unix())
+			if err != nil {
+				opErr = err
+				return
+			}
+			if url == "" {
+				notPublish = true
+				return
+			}
+			out = registrationConfig{Enabled: true, ProcessID: pid, URL: url}
+		}
+		opErr = s.settings.saveRegistration(registrationSetting{ProcessID: pid})
+	})
+	switch {
+	case opErr != nil:
+		writeError(w, http.StatusInternalServerError, "save registration: "+opErr.Error())
+	case notPublish:
+		writeError(w, http.StatusBadRequest, "process is not deployed with a start form and cannot be published for registration")
+	default:
+		writeJSON(w, http.StatusOK, out)
+	}
+}
+
+// handleDeleteRegistration switches self-service registration off by storing an
+// empty process id (ADR-0126). Admin-gated. It stores a record rather than
+// removing the file, so the "off" choice sticks instead of reverting to the
+// built-in default on the next read.
+func (s *Server) handleDeleteRegistration(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	var saveErr error
+	s.do(func() { saveErr = s.settings.saveRegistration(registrationSetting{ProcessID: ""}) })
+	if saveErr != nil {
+		writeError(w, http.StatusInternalServerError, "disable registration: "+saveErr.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

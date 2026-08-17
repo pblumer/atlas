@@ -16,7 +16,7 @@ func linkTargets(cp *CompiledProcess, node int32) []int32 {
 
 // TestParseLinkThrowCatch checks that a link throw and a link catch of the same name compile
 // to TypeLinkThrowEvent / TypeLinkCatchEvent and are wired by a synthetic sequence flow from
-// the throw to the catch — the goto (ADR-0126). The throw has no real outgoing flow in the XML;
+// the throw to the catch — the goto (ADR-0131). The throw has no real outgoing flow in the XML;
 // the only edge leaving it is the synthetic one to the catch.
 func TestParseLinkThrowCatch(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
@@ -54,7 +54,7 @@ func TestParseLinkThrowCatch(t *testing.T) {
 }
 
 // TestParseLinkManyThrowsOneCatch checks that several link throws with the same name all wire
-// to the one catch — many gotos, one label (ADR-0126).
+// to the one catch — many gotos, one label (ADR-0131).
 func TestParseLinkManyThrowsOneCatch(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
 	  <process id="p" isExecutable="true">
@@ -84,7 +84,7 @@ func TestParseLinkManyThrowsOneCatch(t *testing.T) {
 }
 
 // TestParseLinkInsideSubprocess checks that a link pair inside a subprocess resolves within
-// that scope — the throw wires to the catch drawn in the same subprocess (ADR-0126).
+// that scope — the throw wires to the catch drawn in the same subprocess (ADR-0131).
 func TestParseLinkInsideSubprocess(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
 	  <process id="p" isExecutable="true">
@@ -114,7 +114,7 @@ func TestParseLinkInsideSubprocess(t *testing.T) {
 }
 
 // TestParseLinkErrors rejects an unmatched link throw and a duplicate link catch name
-// (ADR-0126).
+// (ADR-0131).
 func TestParseLinkErrors(t *testing.T) {
 	wrap := func(body string) string {
 		return `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
@@ -150,7 +150,7 @@ func TestParseLinkErrors(t *testing.T) {
 }
 
 // TestParseLinkAndMessageNamesCoexist proves a link name and a message of the same name do not
-// collide — the name spaces are separate (ADR-0126).
+// collide — the name spaces are separate (ADR-0131).
 func TestParseLinkAndMessageNamesCoexist(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
 	             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">

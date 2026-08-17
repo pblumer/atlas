@@ -11,7 +11,7 @@ import (
 )
 
 // linkProcess builds Start → linkThrow ⇢ linkCatch → End, wired by the compile-time synthetic
-// goto (ADR-0126). It uses the raw builder API: b.AddLinkThrowEvent / b.AddLinkCatchEvent are
+// goto (ADR-0131). It uses the raw builder API: b.AddLinkThrowEvent / b.AddLinkCatchEvent are
 // bare pass-through nodes, and b.Connect(throw, catch) is the synthetic edge connectScope emits
 // from the XML link names.
 func linkProcess(t testing.TB, key uint64) (cp *compiler.CompiledProcess, throw, catch, end int32) {
@@ -33,7 +33,7 @@ func linkProcess(t testing.TB, key uint64) (cp *compiler.CompiledProcess, throw,
 
 // TestLinkGotoRunsThroughCatch runs Start → linkThrow ⇢ linkCatch → End: the token flows
 // through the throw, jumps to the catch, and reaches the end, visiting both link events (so the
-// Operations overlay lights them up) and completing the instance (ADR-0126).
+// Operations overlay lights them up) and completing the instance (ADR-0131).
 func TestLinkGotoRunsThroughCatch(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -66,7 +66,7 @@ func TestLinkGotoRunsThroughCatch(t *testing.T) {
 // TestLinkGotoAcrossJobRecovers parks on a job before the link throw, replays the log into a
 // fresh store, then completes the job — the token then flows through the link throw ⇢ catch to
 // the end. Proves the compile-time goto is present after recovery (the synthetic edge lives in
-// the CompiledProcess, re-derived on Deploy) — ADR-0126, invariant I6.
+// the CompiledProcess, re-derived on Deploy) — ADR-0131, invariant I6.
 func TestLinkGotoAcrossJobRecovers(t *testing.T) {
 	dir := t.TempDir()
 

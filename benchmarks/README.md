@@ -11,6 +11,11 @@ here is specific to one machine and one commit. It is **not** a universal produc
 claim, and this harness must **not** be used to compare Atlas against another
 engine until the workloads are demonstrably equivalent.
 
+**Published baseline:** [`results/`](results/) holds the first committed, reproducible
+baseline — a machine-labelled raw capture plus a `benchstat` summary. See
+[`results/README.md`](results/README.md) and the latest
+[`results/baseline-5b1b9f2.md`](results/baseline-5b1b9f2.md).
+
 ## What this measures (and what it does not, yet)
 
 Two axes, three profiles:
@@ -36,9 +41,12 @@ Two axes, three profiles:
   throughput; the recovery benchmarks instead measure **startup/recovery**: how fast
   a fresh engine rebuilds state by replaying the WAL from genesis (there is no
   checkpoint yet, so recovery replays everything).
+- **Throughput vs latency distribution** — `ns/op` is a mean, which the skewed
+  `fsync` latency understates. The latency benchmarks sample each operation and
+  report **P50/P95/P99 (and max)**, so the tail a client actually sees is visible.
 
 Deliberately **deferred** to later programme-B slices (see *Deferred* below):
-P50/P95/P99 latency, a loopback-socket (real TCP) HTTP variant, service-task
+a loopback-socket (real TCP) HTTP variant, service-task
 completion over HTTP, an in-memory HTTP profile, and published baseline result files.
 
 ## Workloads
@@ -82,6 +90,17 @@ and the summary's derived instances/sec is the recovery rate:
 |---|---|
 | `BenchmarkRecoveryLinearCompleted` | `b.N` self-completing instances (full lifecycle replayed, land completed in history) |
 | `BenchmarkRecoveryServiceTaskParked` | `b.N` instances parked on an activatable job (active instances + jobs restored) |
+
+Latency distribution (`Benchmark­Latency…`) — the same create-to-completion work as
+their throughput twins, but each op is timed and the run reports P50/P95/P99/max
+instead of only the mean. They intentionally **do not** report `events/op`/`walB/op`
+(see the throughput twin for those), so those columns are blank in the summary table;
+the percentiles show in the raw `-bench` output and via `benchstat`.
+
+| Benchmark | Layer |
+|---|---|
+| `BenchmarkLatencyHTTPLinearCreate` | end-to-end HTTP create-to-completion latency |
+| `BenchmarkLatencyEngineLinearSelfCompleting` | pure-engine per-instance latency (subtract to attribute the API-layer tail) |
 
 ## Running
 
@@ -128,6 +147,16 @@ The harness adds two custom per-op metrics:
 - **`walB/op`** — on-disk WAL bytes grown per instance. WAL segments grow by
   append (no preallocation), so this is real storage growth per instance.
 
+The latency benchmarks add the distribution instead of throughput metrics:
+
+- **`p50-ms`, `p95-ms`, `p99-ms`, `max-ms`** — the operation-latency distribution in
+  milliseconds. Computed by **nearest-rank** on the sorted per-op samples: the sample
+  at position `ceil(p/100 × N)`. One sample per iteration, so a run collects `N = b.N`
+  samples — the tail is only meaningful with a large `N` (P99 needs ≥100 samples;
+  it stabilizes around a few thousand), so run these with `-benchtime=2000x` or more.
+  These appear in the raw `-bench` output and in `benchstat`, which renders every
+  metric.
+
 ## Interpretation & method
 
 - **Warm-up.** `b.ResetTimer()` runs after deploy + recovery, so setup is excluded.
@@ -168,7 +197,6 @@ this; record the rest alongside the raw file.
   completion driven over HTTP, on top of the in-process create benchmarks here.
 - An in-memory profile for the HTTP path too (the RAM-backed profile currently
   covers the engine-level workloads only).
-- P50/P95/P99 end-to-end latency with a defensible sampling method.
 - A large parked-workload steady-state profile (many active jobs/timers/messages
   concurrently), beyond the parked instances the recovery benchmark restores.
 - A committed, dated baseline result file for a named reference machine.

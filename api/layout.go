@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 // BPMN DI namespace URIs. bpmn-js resolves diagram interchange by namespace URI,
@@ -113,9 +114,17 @@ type layoutContainer struct {
 	UserTasks    []layoutElem `xml:"userTask"`
 	ManualTasks  []layoutElem `xml:"manualTask"`
 	BizRuleTasks []layoutElem `xml:"businessRuleTask"`
-	ExclusiveGws []layoutElem `xml:"exclusiveGateway"`
-	ParallelGws  []layoutElem `xml:"parallelGateway"`
-	InclusiveGws []layoutElem `xml:"inclusiveGateway"`
+	ReceiveTasks []layoutElem `xml:"receiveTask"`
+	SendTasks    []layoutElem `xml:"sendTask"`
+
+	// A call activity delegates to another process. It is drawn as an activity in
+	// this plane — the called process has its own diagram.
+	CallActivities []layoutElem `xml:"callActivity"`
+
+	ExclusiveGws  []layoutElem `xml:"exclusiveGateway"`
+	ParallelGws   []layoutElem `xml:"parallelGateway"`
+	InclusiveGws  []layoutElem `xml:"inclusiveGateway"`
+	EventBasedGws []layoutElem `xml:"eventBasedGateway"`
 
 	IntermediateCatchEvents []layoutElem `xml:"intermediateCatchEvent"`
 	IntermediateThrowEvents []layoutElem `xml:"intermediateThrowEvent"`
@@ -123,6 +132,12 @@ type layoutContainer struct {
 	// Expanded subprocesses laid out inline: each is sized to its own contents and
 	// its children rendered in the same plane, offset into the box.
 	SubProcesses []layoutContainer `xml:"subProcess"`
+
+	// A transaction and an ad-hoc subprocess are subprocesses with extra execution
+	// semantics; for layout they are the same shape class — an expanded container
+	// whose children are laid out inside it.
+	Transactions      []layoutContainer `xml:"transaction"`
+	AdHocSubProcesses []layoutContainer `xml:"adHocSubProcess"`
 
 	// Boundary events attach to an activity in this container via attachedToRef and
 	// ride its border rather than a grid cell.
@@ -133,6 +148,21 @@ type layoutContainer struct {
 	LaneSets []layoutLaneSet `xml:"laneSet"`
 
 	Flows []layoutFlow `xml:"sequenceFlow"`
+}
+
+// subContainers is every child that is laid out as an expanded container: plain
+// subprocesses plus the variants that only differ in execution semantics. Both
+// the generator and the layout invariants walk this, so neither can go blind to a
+// container class the other knows about.
+func (c layoutContainer) subContainers() []layoutContainer {
+	if len(c.Transactions) == 0 && len(c.AdHocSubProcesses) == 0 {
+		return c.SubProcesses
+	}
+	subs := make([]layoutContainer, 0, len(c.SubProcesses)+len(c.Transactions)+len(c.AdHocSubProcesses))
+	subs = append(subs, c.SubProcesses...)
+	subs = append(subs, c.Transactions...)
+	subs = append(subs, c.AdHocSubProcesses...)
+	return subs
 }
 
 type layoutLaneSet struct {
@@ -151,10 +181,12 @@ type layoutElem struct {
 type layoutBoundary struct {
 	Id            string `xml:"id,attr"`
 	AttachedToRef string `xml:"attachedToRef,attr"`
+	Name          string `xml:"name,attr"`
 }
 
 type layoutFlow struct {
 	Id        string `xml:"id,attr"`
+	Name      string `xml:"name,attr"`
 	SourceRef string `xml:"sourceRef,attr"`
 	TargetRef string `xml:"targetRef,attr"`
 }
@@ -168,22 +200,26 @@ var (
 	kindGateway = nodeKind{50, 50}
 )
 
-// Layout spacing. gapX/gapY separate columns and rows; the sub* paddings size an
-// expanded subprocess around its laid-out children — a header strip on top for the
-// title, symmetric side and bottom padding — and the sub minimums keep an empty
-// subprocess readable as a container.
+// Layout spacing. gapX/gapY separate columns and rows. gapX is 50, which with the
+// 100px task width puts columns on the 150px pitch AGENTS.md prescribes for
+// hand-authored models — the spacing a reader is used to, and what the diagrams in
+// this repository already use. gapY stays roomier: rows carry the horizontal
+// corridors that exception flows run along, and an event's caption sits below its
+// 36px circle. The sub* paddings size an expanded subprocess around its laid-out
+// children — a header strip on top for the title, symmetric side and bottom padding
+// — and the sub minimums keep an empty subprocess readable as a container.
 const (
 	layoutMarginX  = 150
 	layoutMarginY  = 90
 	layoutGapX     = 50
-	layoutGapY     = 40
+	layoutGapY     = 60
 	subPadX        = 30
 	subHeaderTop   = 40
 	subPadBottom   = 30
 	subMinW        = 200
 	subMinH        = 100
 	laneLabelStrip = 30 // lane title lane on the left
-	lanePadY       = 20 // vertical breathing room above/below a lane's content
+	lanePadY       = 25 // vertical breathing room above/below a lane's content
 	laneMinH       = 80 // a lane reads as a band even when nearly empty
 )
 
@@ -200,6 +236,13 @@ type lnode struct {
 	sub   *laidOut // non-nil for an expanded subprocess: its inner layout
 	bound bool     // a boundary event
 	host  string   // boundary: the activity id it is attached to
+	label string   // boundary: its name, emitted as an explicit label placed clear of the host
+	atTop bool     // boundary: riding the host's top edge (label goes above, else below)
+
+	// boundary: the center-x of the next boundary event along the same host, or 0
+	// when this is the last one. Its exception flow rises from exactly there, so the
+	// caption has to stop short of it.
+	nextRiser int
 }
 
 // placedShape and placedEdge are the emitted diagram interchange for one container
@@ -209,6 +252,12 @@ type placedShape struct {
 	x, y, w, h int
 	expanded   bool // an expanded subprocess box
 	horizontal bool // a swimlane band (isHorizontal)
+
+	// An explicit label box (currently only boundary events get one, to keep their
+	// caption off the host). Zero when hasLabel is false: bpmn-js then auto-places.
+	hasLabel       bool
+	labelX, labelY int
+	labelW, labelH int
 }
 
 type point struct{ x, y int }
@@ -216,6 +265,14 @@ type point struct{ x, y int }
 type placedEdge struct {
 	id  string
 	pts []point
+
+	// The flow's caption and where it sits. Zero when hasLabel is false: bpmn-js
+	// then falls back to the polyline's midpoint, which for a branch stepping into
+	// another row lands on the riser between two arrows.
+	label          string
+	hasLabel       bool
+	labelX, labelY int
+	labelW, labelH int
 }
 
 // laidOut is a fully positioned container: its shapes and edges in one coordinate
@@ -273,23 +330,39 @@ func layoutOf(c layoutContainer) laidOut {
 	for i, n := range nodes {
 		idx[n.id] = i
 	}
-	assignLayers(nodes, idx, c.Flows)
-	trunk := markTrunk(nodes, idx, c.Flows)
+	back := backEdgeIDs(nodes, idx, c.Flows)
+	assignLayers(nodes, idx, c.Flows, back)
+	trunk := markTrunk(nodes, idx, c.Flows, back)
 
 	var laneShapes []placedShape
 	if lanes, laneOf := collectLanes(c, nodes); len(lanes) > 0 {
 		laneShapes = placeLaned(nodes, lanes, laneOf, trunk)
 	} else {
-		placeNodes(nodes, trunk)
+		placeNodes(nodes, trunk, c.Flows, idx)
 	}
 	placeBoundaries(nodes, idx, c.Flows)
 
 	var lo laidOut
 	lo.shapes = append(lo.shapes, laneShapes...) // lane bands before the nodes they hold
 	emitShapes(&lo, nodes, inner)
-	emitEdges(&lo, nodes, idx, c.Flows)
+	emitEdges(&lo, nodes, idx, c.Flows, back, columnRight(nodes), loopChannelY(nodes))
+	placeFlowLabels(&lo) // after both shapes and edges exist: placement avoids them
 	normalize(&lo)
 	return lo
+}
+
+// loopChannelY picks the y of the horizontal lane a back edge runs along: below
+// every node in the container, with a full row gap of clearance. Side branches
+// stack upward (see placeNodes), so the space beneath the trunk is free and a loop
+// drawn there crosses nothing.
+func loopChannelY(nodes []lnode) int {
+	bottom := 0
+	for i := range nodes {
+		if b := nodes[i].y + nodes[i].h; b > bottom {
+			bottom = b
+		}
+	}
+	return bottom + layoutGapY
 }
 
 // containerNodes gathers the layout nodes of one container: its simple flow nodes
@@ -317,12 +390,17 @@ func containerNodes(c layoutContainer) (nodes []lnode, inner map[string]*laidOut
 	add(c.UserTasks, kindTask)
 	add(c.ManualTasks, kindTask)
 	add(c.BizRuleTasks, kindTask)
+	add(c.ReceiveTasks, kindTask)
+	add(c.SendTasks, kindTask)
+	add(c.CallActivities, kindTask)
 	add(c.ExclusiveGws, kindGateway)
 	add(c.ParallelGws, kindGateway)
 	add(c.InclusiveGws, kindGateway)
+	add(c.EventBasedGws, kindGateway)
 
-	for i := range c.SubProcesses {
-		sp := c.SubProcesses[i]
+	subs := c.subContainers()
+	for i := range subs {
+		sp := subs[i]
 		if sp.Id == "" {
 			continue
 		}
@@ -350,16 +428,74 @@ func containerNodes(c layoutContainer) (nodes []lnode, inner map[string]*laidOut
 		if be.Id == "" || !hosts[be.AttachedToRef] {
 			continue
 		}
-		nodes = append(nodes, lnode{id: be.Id, w: kindEvent.w, h: kindEvent.h, bound: true, host: be.AttachedToRef})
+		nodes = append(nodes, lnode{id: be.Id, w: kindEvent.w, h: kindEvent.h, bound: true, host: be.AttachedToRef, label: strings.TrimSpace(be.Name)})
 	}
 	return nodes, inner
 }
 
+// backEdgeIDs reports which sequence flows close a cycle, keyed by their index in
+// flows. A BPMN model is routinely cyclic — a rework loop sends a case back to an
+// earlier task — but layering is only meaningful on a DAG: fed a cycle, the
+// longest-path relaxation below keeps pushing the loop's target one column further
+// on every pass, so a reviewed-and-returned task ends up drawn to the right of the
+// nodes that follow it. Classifying the returning flow as a back edge takes it out
+// of the forward pass; it is drawn afterwards as an explicit loop.
+//
+// Detection is a depth-first colouring: an edge into a node still on the recursion
+// stack (grey) closes a loop. Roots are visited first and nodes in slice order, so
+// which edge of a cycle is called the back edge is deterministic.
+func backEdgeIDs(nodes []lnode, idx map[string]int, flows []layoutFlow) map[int]bool {
+	back := map[int]bool{}
+	adj := make([][]int, len(nodes)) // node index -> outgoing flow indices
+	indeg := make([]int, len(nodes))
+	for fi, f := range flows {
+		s, sok := idx[f.SourceRef]
+		t, tok := idx[f.TargetRef]
+		if !sok || !tok {
+			continue
+		}
+		adj[s] = append(adj[s], fi)
+		indeg[t]++
+	}
+	const (
+		white = 0
+		grey  = 1
+		black = 2
+	)
+	color := make([]int, len(nodes))
+	var visit func(int)
+	visit = func(n int) {
+		color[n] = grey
+		for _, fi := range adj[n] {
+			t := idx[flows[fi].TargetRef]
+			switch color[t] {
+			case grey:
+				back[fi] = true // target is still open: this flow returns into it
+			case white:
+				visit(t)
+			}
+		}
+		color[n] = black
+	}
+	for i := range nodes {
+		if indeg[i] == 0 && color[i] == white {
+			visit(i) // entry points first, so loops are cut at the returning edge
+		}
+	}
+	for i := range nodes {
+		if color[i] == white {
+			visit(i) // a component reachable only from within a cycle
+		}
+	}
+	return back
+}
+
 // assignLayers computes each node's column via longest-path layering over the
-// sequence flows, plus an attachment rule that pins a boundary event to its host's
-// layer so the exception flow leaving it lands one column past the host. Iteration
-// is capped at the node count so a cyclic model still terminates.
-func assignLayers(nodes []lnode, idx map[string]int, flows []layoutFlow) {
+// forward sequence flows (back edges are excluded — see backEdgeIDs — so a loop
+// cannot inflate its target's column), plus an attachment rule that pins a boundary
+// event to its host's layer so the exception flow leaving it lands one column past
+// the host. Iteration is capped at the node count as a belt-and-braces bound.
+func assignLayers(nodes []lnode, idx map[string]int, flows []layoutFlow, back map[int]bool) {
 	for iter := 0; iter < len(nodes); iter++ {
 		changed := false
 		for i := range nodes {
@@ -371,7 +507,10 @@ func assignLayers(nodes []lnode, idx map[string]int, flows []layoutFlow) {
 				changed = true
 			}
 		}
-		for _, f := range flows {
+		for fi, f := range flows {
+			if back[fi] {
+				continue
+			}
 			s, sok := idx[f.SourceRef]
 			t, tok := idx[f.TargetRef]
 			if !sok || !tok {
@@ -398,11 +537,14 @@ func assignLayers(nodes []lnode, idx map[string]int, flows []layoutFlow) {
 // happy-path task and bend the main line into a staircase. Boundary events never
 // join the trunk; they ride their host. Iteration is capped by the node count so a
 // cyclic model still terminates.
-func markTrunk(nodes []lnode, idx map[string]int, flows []layoutFlow) []bool {
+func markTrunk(nodes []lnode, idx map[string]int, flows []layoutFlow, back map[int]bool) []bool {
 	trunk := make([]bool, len(nodes))
 	succ := make([][]int, len(nodes))
 	indeg := make([]int, len(nodes))
-	for _, f := range flows {
+	for fi, f := range flows {
+		if back[fi] {
+			continue // a loop's returning edge is not a way onward through the model
+		}
 		s, sok := idx[f.SourceRef]
 		t, tok := idx[f.TargetRef]
 		if !sok || !tok {
@@ -429,21 +571,54 @@ func markTrunk(nodes []lnode, idx map[string]int, flows []layoutFlow) []bool {
 			}
 		}
 	}
-	// Walk forward, always continuing to the successor that reaches the furthest
-	// layer (ties keep flow-declaration order), until the path ends or loops back.
-	// Boundary events are never sequence-flow targets, so a successor is always a
-	// normal flow node.
+	// Walk forward, always continuing to the successor with the longest run still
+	// ahead of it (ties keep flow-declaration order), until the path ends or loops
+	// back. Boundary events are never sequence-flow targets, so a successor is always
+	// a normal flow node.
+	//
+	// The choice is by remaining path length, not by the successor's own column: a
+	// bypass edge jumps straight to a node deep in the model, so "furthest column"
+	// picks the shortcut and makes the one-hop detour the happy path, exiling the
+	// real sequence to a branch row. Longest-run-ahead follows the main line.
+	depth := depthFrom(succ)
 	for cur := start; cur != -1 && !trunk[cur]; {
 		trunk[cur] = true
 		next := -1
 		for _, t := range succ[cur] {
-			if next == -1 || nodes[t].layer > nodes[next].layer {
+			if next == -1 || depth[t] > depth[next] {
 				next = t
 			}
 		}
 		cur = next
 	}
 	return trunk
+}
+
+// depthFrom returns, for each node, how many nodes lie on the longest path
+// starting there. succ carries only forward flows (back edges are already
+// excluded), so this is a DAG walk; the memo doubles as a guard should a cycle
+// survive, keeping the recursion finite.
+func depthFrom(succ [][]int) []int {
+	depth := make([]int, len(succ))
+	var walk func(int) int
+	walk = func(n int) int {
+		if depth[n] != 0 {
+			return depth[n]
+		}
+		depth[n] = 1
+		best := 1
+		for _, t := range succ[n] {
+			if v := 1 + walk(t); v > best {
+				best = v
+			}
+		}
+		depth[n] = best
+		return best
+	}
+	for n := range succ {
+		walk(n)
+	}
+	return depth
 }
 
 // orderLayer returns the indices of one layer's non-boundary nodes with the trunk
@@ -461,10 +636,9 @@ func orderLayer(idxs []int, trunk []bool) []int {
 // heights differ, and side branches — error handlers and the like — rise above it
 // rather than dropping below. Boundary events are skipped here and positioned by
 // placeBoundaries.
-func placeNodes(nodes []lnode, trunk []bool) {
+func placeNodes(nodes []lnode, trunk []bool, flows []layoutFlow, idx map[string]int) {
 	laneW := map[int]int{}
 	maxLayer := 0
-	byLayer := map[int][]int{}
 	for i := range nodes {
 		if nodes[i].bound {
 			continue
@@ -476,24 +650,130 @@ func placeNodes(nodes []lnode, trunk []bool) {
 		if l > maxLayer {
 			maxLayer = l
 		}
-		byLayer[l] = append(byLayer[l], i)
 	}
 	colX := make([]int, maxLayer+1)
 	for l := 1; l <= maxLayer; l++ {
 		colX[l] = colX[l-1] + laneW[l-1] + layoutGapX
 	}
-	for l := 0; l <= maxLayer; l++ {
-		var top int // running top edge; branches stack upward above the trunk
-		for row, i := range orderLayer(byLayer[l], trunk) {
-			if row == 0 {
-				nodes[i].y = -nodes[i].h / 2 // trunk row centered on the main axis
-			} else {
-				nodes[i].y = top - layoutGapY - nodes[i].h
-			}
-			nodes[i].x = colX[l] + (laneW[l]-nodes[i].w)/2
-			top = nodes[i].y
+
+	row := assignRows(nodes, trunk, flows, idx)
+	maxRow := 0
+	rowH := map[int]int{}
+	for i := range nodes {
+		if nodes[i].bound {
+			continue
+		}
+		if nodes[i].h > rowH[row[i]] {
+			rowH[row[i]] = nodes[i].h
+		}
+		if row[i] > maxRow {
+			maxRow = row[i]
 		}
 	}
+	// Row 0 (the trunk) straddles the main axis; higher rows stack above it, each as
+	// tall as its tallest node so a branch clears the happy path.
+	rowTop := make([]int, maxRow+1)
+	rowTop[0] = -rowH[0] / 2
+	for r := 1; r <= maxRow; r++ {
+		rowTop[r] = rowTop[r-1] - layoutGapY - rowH[r]
+	}
+	for i := range nodes {
+		if nodes[i].bound {
+			continue
+		}
+		l, r := nodes[i].layer, row[i]
+		nodes[i].x = colX[l] + (laneW[l]-nodes[i].w)/2
+		nodes[i].y = rowTop[r] + (rowH[r]-nodes[i].h)/2 // centered in its row band
+	}
+}
+
+// assignRows places the trunk on row 0 and every other node on the lowest row above
+// it that is free across the node's whole footprint. A branch therefore keeps one
+// row across the columns it spans — so it runs straight instead of sagging toward
+// the happy path column by column — while two branches that never share a column
+// pack onto the same row. Boundary events get no row; placeBoundaries handles them.
+//
+// A node's footprint is wider than the column it stands in: an edge arriving from
+// several columns back travels horizontally at *this* node's row, so those columns
+// have to stay clear too. Reserving only the node's own column is what let an
+// unrelated branch settle into the corridor of a shared error handler — the
+// handler that eight exception flows fan into — leaving the flows nowhere to run.
+//
+// Footprints are claimed widest first, so the long corridor takes the row nearest
+// the trunk and short branches stack above it, rather than a one-column branch
+// taking the low row and forcing the corridor to detour around it.
+func assignRows(nodes []lnode, trunk []bool, flows []layoutFlow, idx map[string]int) []int {
+	row := make([]int, len(nodes))
+	used := map[int]map[int]bool{} // column -> rows already taken
+	take := func(col, r int) {
+		if used[col] == nil {
+			used[col] = map[int]bool{}
+		}
+		used[col][r] = true
+	}
+	for i := range nodes {
+		if !nodes[i].bound && trunk[i] {
+			take(nodes[i].layer, 0)
+		}
+	}
+
+	lo, hi := footprints(nodes, flows, idx)
+	order := make([]int, 0, len(nodes))
+	for i := range nodes {
+		if !nodes[i].bound && !trunk[i] {
+			order = append(order, i)
+		}
+	}
+	sort.SliceStable(order, func(a, b int) bool {
+		return hi[order[a]]-lo[order[a]] > hi[order[b]]-lo[order[b]]
+	})
+
+	for _, i := range order {
+		r := 1
+		for !freeAcross(used, lo[i], hi[i], r) {
+			r++
+		}
+		row[i] = r
+		for c := lo[i]; c <= hi[i]; c++ {
+			take(c, r)
+		}
+	}
+	return row
+}
+
+// footprints returns each node's column span: the column it stands in, widened to
+// take in every column an incoming multi-column edge crosses on its way here. Such
+// an edge runs horizontally at this node's row, so it needs the same row kept clear
+// the whole way. An edge from the adjacent column is left out — it is a short elbow
+// in the column gap, not a corridor, and counting it would break a two-node branch
+// (handler → end event) apart onto separate rows.
+func footprints(nodes []lnode, flows []layoutFlow, idx map[string]int) (lo, hi []int) {
+	lo = make([]int, len(nodes))
+	hi = make([]int, len(nodes))
+	for i := range nodes {
+		lo[i], hi[i] = nodes[i].layer, nodes[i].layer
+	}
+	for _, f := range flows {
+		s, sok := idx[f.SourceRef]
+		t, tok := idx[f.TargetRef]
+		if !sok || !tok {
+			continue
+		}
+		if nodes[s].layer+1 < nodes[t].layer && nodes[s].layer < lo[t] {
+			lo[t] = nodes[s].layer
+		}
+	}
+	return lo, hi
+}
+
+// freeAcross reports whether row r is untaken in every column of [lo,hi].
+func freeAcross(used map[int]map[int]bool, lo, hi, r int) bool {
+	for c := lo; c <= hi; c++ {
+		if used[c][r] {
+			return false
+		}
+	}
+	return true
 }
 
 // collectLanes flattens the container's lane sets into an ordered lane list and a
@@ -646,7 +926,7 @@ func placeBoundaries(nodes []lnode, idx map[string]int, flows []layoutFlow) {
 		host := nodes[h]
 		k := seen[nodes[i].host]
 		seen[nodes[i].host]++
-		cx := host.x + host.w*(k+1)/(count[nodes[i].host]+1)
+		cx := boundaryCenterX(host, k, count[nodes[i].host], nodes[i].w)
 		nodes[i].x = cx - nodes[i].w/2
 		onBottom := false // default to the top edge (branches rise above the trunk)
 		if t, ok := target[nodes[i].id]; ok && nodes[t].y+nodes[t].h/2 > host.y+host.h/2 {
@@ -657,7 +937,41 @@ func placeBoundaries(nodes []lnode, idx map[string]int, flows []layoutFlow) {
 		} else {
 			nodes[i].y = host.y - nodes[i].h/2
 		}
+		nodes[i].atTop = !onBottom
 	}
+	// Each boundary event learns where its right-hand neighbour's exception flow
+	// rises, so emitShapes can stop the caption short of it instead of letting the
+	// two collide.
+	for i := range nodes {
+		if !nodes[i].bound {
+			continue
+		}
+		for j := range nodes {
+			if !nodes[j].bound || i == j || nodes[j].host != nodes[i].host {
+				continue
+			}
+			cx := nodes[j].x + nodes[j].w/2
+			if cx > nodes[i].x+nodes[i].w/2 && (nodes[i].nextRiser == 0 || cx < nodes[i].nextRiser) {
+				nodes[i].nextRiser = cx
+			}
+		}
+	}
+}
+
+// boundaryCenterX places the k-th of n boundary events along its host's top or
+// bottom edge. Events are spread evenly across the border, but never closer than
+// one event width plus a hair — the even spread alone puts two 36px events on a
+// 100px task only 33px apart, so they overlap. When the minimum pitch no longer
+// fits inside the border the group is centered on the host and allowed to reach
+// slightly past its corners: an event a little off the edge reads far better than
+// two drawn on top of each other.
+func boundaryCenterX(host lnode, k, n, w int) int {
+	pitch := host.w / (n + 1)
+	if min := w + 8; pitch < min {
+		pitch = min // too tight to draw: fall back to the minimum, overflowing if need be
+	}
+	span := pitch * (n - 1) // center-to-center width of the whole run
+	return host.x + host.w/2 - span/2 + k*pitch
 }
 
 // emitShapes writes a shape for every placed node. A subprocess box is marked
@@ -673,8 +987,49 @@ func emitShapes(lo *laidOut, nodes []lnode, inner map[string]*laidOut) {
 			lo.edges = append(lo.edges, shiftEdges(child.edges, n.x+subPadX, n.y+subHeaderTop)...)
 			continue
 		}
-		lo.shapes = append(lo.shapes, placedShape{id: n.id, x: n.x, y: n.y, w: n.w, h: n.h})
+		ps := placedShape{id: n.id, x: n.x, y: n.y, w: n.w, h: n.h}
+		if n.bound && n.label != "" {
+			ps.hasLabel = true
+			ps.labelW, ps.labelH = boundaryLabelWidth(n.label), 14
+			// With a neighbour further along the same border, the caption has to fit in
+			// the gap before that neighbour's exception flow rises; bpmn-js wraps the
+			// text to whatever width it is given.
+			if n.nextRiser != 0 {
+				if avail := n.nextRiser - (n.x + n.w) - 8; avail < ps.labelW {
+					ps.labelW = maxInt(avail, 20)
+				}
+			}
+			// Left edge just past the event's right side, so the caption sits in the open
+			// pocket beside the event — on the side the exception flow departs toward its
+			// handler — rather than tucked behind the upward riser (which leaves from the
+			// event's center) or crowding the host's title. The box extends right, into
+			// the column gap, clear of the host box below.
+			ps.labelX = n.x + n.w + 4
+			if n.atTop {
+				ps.labelY = n.y - ps.labelH - 4 // above the event, in the row gap
+			} else {
+				ps.labelY = n.y + n.h + 4 // below the event
+			}
+		}
+		lo.shapes = append(lo.shapes, ps)
 	}
+}
+
+// boundaryLabelWidth estimates the pixel width of a boundary event's caption so its
+// label box roughly fits the text (bpmn-js centers the caption on the box). A rough
+// per-rune estimate is enough — the box only needs to position the label, and the
+// renderer reflows the actual text.
+func boundaryLabelWidth(s string) int {
+	// 5.5px per rune. bpmn-js writes measured label bounds back into the DI, and in
+	// hand-drawn models those come out near 5.2px per rune for the default external-
+	// label font ("Session Error" → 67px). Guessing high is not the safe direction:
+	// the renderer centers the caption in whatever box it is given, so an oversized
+	// box pushes the visible text off the anchor rather than reserving slack.
+	w := utf8.RuneCountInString(s) * 11 / 2
+	if w < 20 {
+		w = 20
+	}
+	return w
 }
 
 // emitEdges writes an edge for each sequence flow whose endpoints are both placed,
@@ -683,15 +1038,115 @@ func emitShapes(lo *laidOut, nodes []lnode, inner map[string]*laidOut) {
 // a single straight segment; a branch to another row is an elbow — out, across,
 // then in — so the alternate path reads as its own lane instead of a diagonal that
 // clips the boxes it passes.
-func emitEdges(lo *laidOut, nodes []lnode, idx map[string]int, flows []layoutFlow) {
-	for _, f := range flows {
+func emitEdges(lo *laidOut, nodes []lnode, idx map[string]int, flows []layoutFlow, back map[int]bool, colRight map[int]int, channelY int) {
+	lane := 0 // each channel-routed edge gets its own horizontal lane below the nodes
+	for fi, f := range flows {
 		s, sok := idx[f.SourceRef]
 		t, tok := idx[f.TargetRef]
 		if !sok || !tok || f.Id == "" {
 			continue
 		}
-		lo.edges = append(lo.edges, placedEdge{id: f.Id, pts: routeFlow(nodes[s], nodes[t])})
+		pts := routeFlow(nodes[s], nodes[t])
+		// A back edge always detours; a forward edge only when its direct route would
+		// cut through a node it does not connect — a bypass that skips several columns
+		// would otherwise be drawn straight across everything in between.
+		if back[fi] || crossesForeignNode(pts, nodes, s, t) {
+			y := channelY + lane*layoutGapY/2
+			lane++
+			pts = routeChannel(nodes[s], nodes[t], colRight[nodes[s].layer]+layoutGapX/2, y)
+		}
+		lo.edges = append(lo.edges, placedEdge{id: f.Id, pts: pts, label: strings.TrimSpace(f.Name)})
 	}
+}
+
+// crossesForeignNode reports whether any segment of pts passes through the interior
+// of a node other than the edge's own endpoints. Boundary events are skipped: one
+// rides its host's border, so an edge leaving the host necessarily brushes it.
+func crossesForeignNode(pts []point, nodes []lnode, src, tgt int) bool {
+	for i := range nodes {
+		if i == src || i == tgt || nodes[i].bound {
+			continue
+		}
+		for k := 1; k < len(pts); k++ {
+			if segmentCutsNode(pts[k-1], pts[k], nodes[i]) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// segmentCutsNode reports whether the axis-aligned segment p->q passes through n's
+// interior. Touching or running along a border does not count — that is how an edge
+// meets the node it enters.
+func segmentCutsNode(p, q point, n lnode) bool {
+	left, right, top, bottom := n.x, n.x+n.w, n.y, n.y+n.h
+	if p.y == q.y {
+		if p.y <= top || p.y >= bottom {
+			return false
+		}
+		return maxInt(minInt(p.x, q.x), left) < minInt(maxInt(p.x, q.x), right)
+	}
+	if p.x == q.x {
+		if p.x <= left || p.x >= right {
+			return false
+		}
+		return maxInt(minInt(p.y, q.y), top) < minInt(maxInt(p.y, q.y), bottom)
+	}
+	return false
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// routeChannel draws an edge as a U beneath the diagram: out of the source's right
+// edge into the gutter past its column, down to a clear channel below every node,
+// along it, then up into the target's bottom. It serves the two cases a direct
+// route cannot: a loop's returning edge (whose target sits to the left, so a
+// forward route would run back across the nodes it loops over) and a bypass that
+// skips columns (whose straight line would cross everything in between).
+//
+// The descent uses the gutter rather than the source's own center-x because such an
+// edge often starts on a branch row above the trunk: dropping straight down from
+// there would cut through whatever sits on the trunk in the same column. The gutter
+// is column-free by construction, and the space below the trunk is free because
+// branches stack upward (see placeNodes), so both legs cross nothing.
+func routeChannel(src, tgt lnode, gutterX, channelY int) []point {
+	sy := src.y + src.h/2
+	tx := tgt.x + tgt.w/2
+	return []point{
+		{src.x + src.w, sy},
+		{gutterX, sy},
+		{gutterX, channelY},
+		{tx, channelY},
+		{tx, tgt.y + tgt.h},
+	}
+}
+
+// columnRight returns each layer's right-most node edge, so a back edge can drop
+// through the gap after a column instead of through the column itself.
+func columnRight(nodes []lnode) map[int]int {
+	out := map[int]int{}
+	for i := range nodes {
+		if nodes[i].bound {
+			continue
+		}
+		if r := nodes[i].x + nodes[i].w; r > out[nodes[i].layer] {
+			out[nodes[i].layer] = r
+		}
+	}
+	return out
 }
 
 // routeFlow builds the orthogonal waypoints from src to tgt. A normal source leaves
@@ -737,6 +1192,18 @@ func normalize(lo *laidOut) {
 			minY = s.y
 		}
 	}
+	// Edges are measured too: a loop's channel runs below every node, so a container
+	// sized to its shapes alone would let the returning edge spill out of the box.
+	for _, e := range lo.edges {
+		for _, p := range e.pts {
+			if p.x < minX {
+				minX = p.x
+			}
+			if p.y < minY {
+				minY = p.y
+			}
+		}
+	}
 	lo.shapes = shiftShapes(lo.shapes, -minX, -minY)
 	lo.edges = shiftEdges(lo.edges, -minX, -minY)
 	for _, s := range lo.shapes {
@@ -745,6 +1212,16 @@ func normalize(lo *laidOut) {
 		}
 		if b := s.y + s.h; b > lo.h {
 			lo.h = b
+		}
+	}
+	for _, e := range lo.edges {
+		for _, p := range e.pts {
+			if p.x > lo.w {
+				lo.w = p.x
+			}
+			if p.y > lo.h {
+				lo.h = p.y
+			}
 		}
 	}
 }
@@ -757,9 +1234,94 @@ func shiftShapes(ss []placedShape, dx, dy int) []placedShape {
 	for i, s := range ss {
 		s.x += dx
 		s.y += dy
+		if s.hasLabel {
+			s.labelX += dx
+			s.labelY += dy
+		}
 		out[i] = s
 	}
 	return out
+}
+
+// flowLabelH is a caption's line height; its width comes from the same rune
+// estimate boundary-event labels use.
+const flowLabelH = 14
+
+// flowLabelGap is how far a caption sits off its own line — close enough to read as
+// belonging to it, far enough not to be struck by it.
+const flowLabelGap = 4
+
+// placeFlowLabels gives every named flow a caption box. A label with no position is
+// left to the renderer, which puts it at the polyline's midpoint: for a branch that
+// steps into another row that is the middle of the riser, stranded between two
+// arrows and readable as belonging to either. Candidates run from the source end
+// outwards — a gateway's branches are read at the fork — and the first one that
+// clears every shape and every other edge wins.
+func placeFlowLabels(lo *laidOut) {
+	for i := range lo.edges {
+		e := &lo.edges[i]
+		if e.label == "" || len(e.pts) < 2 {
+			continue
+		}
+		w, h := boundaryLabelWidth(e.label), flowLabelH
+		cands := flowLabelCandidates(e.pts, w, h)
+		for _, c := range cands {
+			if flowLabelClear(c, w, h, lo) {
+				e.hasLabel, e.labelX, e.labelY, e.labelW, e.labelH = true, c.x, c.y, w, h
+				break
+			}
+		}
+		// Nothing clear: take the first candidate anyway. A caption that sits by its
+		// own line beats one the renderer drops on the riser.
+		if !e.hasLabel && len(cands) > 0 {
+			e.hasLabel, e.labelX, e.labelY, e.labelW, e.labelH = true, cands[0].x, cands[0].y, w, h
+		}
+	}
+}
+
+// flowLabelCandidates lists caption positions along a polyline, best first: beside
+// each segment from the source end, the far side of the line before the near one.
+func flowLabelCandidates(pts []point, w, h int) []point {
+	var out []point
+	for k := 1; k < len(pts); k++ {
+		p, q := pts[k-1], pts[k]
+		switch {
+		case p.y == q.y && p.x != q.x: // horizontal: above, then below
+			midX := (p.x + q.x) / 2
+			out = append(out,
+				point{midX - w/2, p.y - flowLabelGap - h},
+				point{midX - w/2, p.y + flowLabelGap})
+		case p.x == q.x && p.y != q.y: // vertical: right, then left
+			midY := (p.y + q.y) / 2
+			out = append(out,
+				point{p.x + flowLabelGap, midY - h/2},
+				point{p.x - flowLabelGap - w, midY - h/2})
+		}
+	}
+	return out
+}
+
+// flowLabelClear reports whether a caption box at p avoids every shape and is
+// struck by no edge. Containers are skipped — a label inside an expanded subprocess
+// or a lane band is where it belongs — matching the layout invariants.
+func flowLabelClear(p point, w, h int, lo *laidOut) bool {
+	box := lnode{x: p.x, y: p.y, w: w, h: h}
+	for _, s := range lo.shapes {
+		if s.expanded || s.horizontal {
+			continue
+		}
+		if p.x < s.x+s.w && s.x < p.x+w && p.y < s.y+s.h && s.y < p.y+h {
+			return false
+		}
+	}
+	for _, e := range lo.edges {
+		for k := 1; k < len(e.pts); k++ {
+			if segmentCutsNode(e.pts[k-1], e.pts[k], box) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func shiftEdges(es []placedEdge, dx, dy int) []placedEdge {
@@ -769,7 +1331,11 @@ func shiftEdges(es []placedEdge, dx, dy int) []placedEdge {
 		for j, p := range e.pts {
 			pts[j] = point{p.x + dx, p.y + dy}
 		}
-		out[i] = placedEdge{id: e.id, pts: pts}
+		out[i] = e
+		out[i].pts = pts
+		if e.hasLabel {
+			out[i].labelX, out[i].labelY = e.labelX+dx, e.labelY+dy
+		}
 	}
 	return out
 }
@@ -845,10 +1411,10 @@ func generateCollaborationDI(defs layoutDefs) (string, bool) {
 		if !sok || !tok || mf.Id == "" {
 			continue
 		}
-		writeEdge(&b, mf.Id, []point{
+		writeEdge(&b, placedEdge{id: mf.Id, pts: []point{
 			{src.x + src.w/2, src.y + src.h},
 			{tgt.x + tgt.w/2, tgt.y},
-		})
+		}})
 	}
 
 	closePlane(&b)
@@ -884,7 +1450,7 @@ func writeLaidOut(b *strings.Builder, lo laidOut) {
 		writeShape(b, s)
 	}
 	for _, e := range lo.edges {
-		writeEdge(b, e.id, e.pts)
+		writeEdge(b, e)
 	}
 }
 
@@ -901,15 +1467,25 @@ func writeShape(b *strings.Builder, s placedShape) {
 	}
 	fmt.Fprintf(b, "      <bpmndi:BPMNShape id=\"%s\" bpmnElement=\"%s\"%s>\n", attr(s.id+"_di"), attr(s.id), attrs)
 	fmt.Fprintf(b, "        <omgdc:Bounds x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\"/>\n", s.x, s.y, s.w, s.h)
+	if s.hasLabel {
+		b.WriteString("        <bpmndi:BPMNLabel>\n")
+		fmt.Fprintf(b, "          <omgdc:Bounds x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\"/>\n", s.labelX, s.labelY, s.labelW, s.labelH)
+		b.WriteString("        </bpmndi:BPMNLabel>\n")
+	}
 	b.WriteString("      </bpmndi:BPMNShape>\n")
 }
 
 // writeEdge renders one BPMNEdge for a flow (or message flow) from its ordered
 // waypoints — two for a straight run, more for an orthogonal elbow.
-func writeEdge(b *strings.Builder, id string, pts []point) {
-	fmt.Fprintf(b, "      <bpmndi:BPMNEdge id=\"%s\" bpmnElement=\"%s\">\n", attr(id+"_di"), attr(id))
-	for _, p := range pts {
+func writeEdge(b *strings.Builder, e placedEdge) {
+	fmt.Fprintf(b, "      <bpmndi:BPMNEdge id=\"%s\" bpmnElement=\"%s\">\n", attr(e.id+"_di"), attr(e.id))
+	for _, p := range e.pts {
 		fmt.Fprintf(b, "        <omgdi:waypoint x=\"%d\" y=\"%d\"/>\n", p.x, p.y)
+	}
+	if e.hasLabel {
+		b.WriteString("        <bpmndi:BPMNLabel>\n")
+		fmt.Fprintf(b, "          <omgdc:Bounds x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\"/>\n", e.labelX, e.labelY, e.labelW, e.labelH)
+		b.WriteString("        </bpmndi:BPMNLabel>\n")
 	}
 	b.WriteString("      </bpmndi:BPMNEdge>\n")
 }

@@ -223,13 +223,29 @@ tr.done { opacity: .72; } /* finished instances are de-emphasized vs running one
 /* Tables */
 table { border-collapse: collapse; width: 100%; }
 thead th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 8px 12px; background: var(--bg); border-bottom: 1px solid var(--border); }
-/* Sortable column headers: the whole cell is a click target that toggles the sort.
-   The button fills the cell so the padding stays consistent with a plain th. */
-thead th.sortable { padding: 0; }
-thead th.sortable .th-sort { display: inline-flex; align-items: center; gap: 5px; width: 100%; padding: 8px 12px; background: none; border: 0; cursor: pointer; font: inherit; color: inherit; font-weight: 600; }
-thead th.sortable .th-sort:hover { color: var(--text); }
-thead th.sortable[aria-sort] .th-sort { color: var(--text); }
-thead th.sortable .sort-ind { font-size: 9px; line-height: 1; opacity: .8; }
+/* Shared data-table enhancer (table.js): click-to-sort headers plus a per-column
+   filter row beneath the header. Used by every data table so they behave alike. */
+thead th.dt-sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+thead th.dt-sortable:hover { color: var(--text); }
+thead th.dt-sortable[aria-sort] { color: var(--text); }
+th.dt-sortable .dt-ind { display: inline-block; width: 9px; font-size: 9px; line-height: 1; margin-left: 5px; opacity: .85; }
+/* The funnel toggle reveals/hides the filter row, which is collapsed by default so it
+   costs no space until wanted; the funnel highlights while any filter is set. */
+.dt-filter-toggle { display: inline-flex; align-items: center; justify-content: center; background: none; border: none; cursor: pointer; color: var(--muted); padding: 2px; border-radius: 4px; line-height: 0; vertical-align: middle; }
+.dt-filter-toggle:hover { color: var(--text); background: var(--bg); }
+.dt-filter-toggle.dt-has-filters, table.dt-filters-open .dt-filter-toggle { color: var(--accent); }
+th.dt-toggle-cell { text-align: right; }
+th.dt-toggle-host .dt-filter-toggle { margin-right: 6px; }
+thead tr.dt-filter-row { display: none; }
+table.dt-filters-open thead tr.dt-filter-row { display: table-row; }
+thead tr.dt-filter-row th { padding: 3px 8px 7px; background: var(--bg); border-bottom: 1px solid var(--border); }
+.dt-filter {
+  width: 100%; min-width: 0; box-sizing: border-box; padding: 4px 7px;
+  border: 1px solid var(--border); border-radius: 5px;
+  font: inherit; font-size: 12px; font-weight: 400; color: var(--text); background: var(--surface);
+}
+.dt-filter::placeholder { color: var(--muted); opacity: .7; }
+.dt-filter:focus { outline: none; border-color: var(--accent); }
 tbody td { padding: 11px 12px; border-bottom: 1px solid var(--border); }
 tbody tr:hover { background: #fafbfc; }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
@@ -1594,6 +1610,9 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   display: inline-flex; align-items: center; gap: 6px; min-width: 60px;
 }
 .artifact-name { display: flex; align-items: center; gap: 10px; }
+/* A superseded deployment version: still listed and still addressable, but no
+   longer the one that starts instances, so it recedes behind the current row. */
+.muted-row > td { opacity: .62; }
 .filter-input { max-width: 280px; margin: 14px 0 12px; }
 tr[hidden] { display: none; }
 
@@ -1633,8 +1652,18 @@ tr[hidden] { display: none; }
 /* Collapsible property groups (Camunda-style tidy panel). A generic groupify
    turns each <h3> section in the properties panel into a header that toggles its
    fields, with a chevron and a filled dot when the group carries content. */
+/* A subtle expand-all / collapse-all control above the property groups. */
+.pgroup-tools { display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 4px 2px 2px; }
+.pgroup-all {
+  background: none; border: none; cursor: pointer; padding: 2px; font-size: 11px;
+  color: var(--muted); letter-spacing: .01em;
+}
+.pgroup-all:hover { color: var(--accent); text-decoration: underline; }
+.pgroup-all-sep { color: var(--border-strong); font-size: 11px; }
+
 .pgroup { border-top: 1px solid var(--border); }
 .pgroup:first-child { border-top: none; }
+.pgroup-tools + .pgroup { border-top: none; }
 .pgroup-head {
   display: flex; align-items: center; gap: 8px; width: 100%;
   background: none; border: none; cursor: pointer; text-align: left;
@@ -1772,11 +1801,25 @@ tr[hidden] { display: none; }
 .var-origin { color: var(--accent); cursor: pointer; }
 .var-origin:hover { text-decoration: underline; }
 .vars-empty { padding: 14px; color: var(--muted); font-size: 13px; line-height: 1.5; }
-.vars-group + .vars-group { margin-top: 4px; }
+/* Origin groups (Form / Process): a clear separator plus a click-to-collapse header
+   with a chevron and a count, so the two scopes read as distinct sections. */
+.vars-group { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 2px; }
+.vars-group:first-child { border-top: none; margin-top: 0; }
 .vars-group-head {
-  padding: 9px 8px 3px; font-size: 11px; font-weight: 700; letter-spacing: .04em;
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  background: none; border: none; cursor: pointer; text-align: left;
+  padding: 9px 8px 6px; font-size: 11px; font-weight: 700; letter-spacing: .05em;
   text-transform: uppercase; color: var(--muted);
 }
+.vars-group-head:hover { color: var(--text); }
+.vg-chevron { font-size: 9px; width: 10px; flex: none; color: var(--muted); transition: transform .12s ease; }
+.vars-group:not(.collapsed) .vg-chevron { transform: rotate(90deg); }
+.vg-title { flex: 1; }
+.vg-count {
+  font-weight: 600; font-size: 10px; letter-spacing: 0; color: var(--muted);
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 0 6px;
+}
+.vars-group.collapsed .vars-group-body { display: none; }
 .var-row[draggable="true"] { cursor: grab; }
 .var-row[draggable="true"]:active { cursor: grabbing; }
 #vars-toggle.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }

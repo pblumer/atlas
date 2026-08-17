@@ -1315,7 +1315,7 @@ type xmlIntermediateCatchEvent struct {
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
 	Signal  *xmlSignalEventDefinition  `xml:"signalEventDefinition"`
 	// Link, when present, makes this a link catch event: the landing point of a link throw
-	// with the same name in the same scope — an off-page connector / goto (ADR-0126). A
+	// with the same name in the same scope — an off-page connector / goto (ADR-0131). A
 	// pointer so an absent one is nil.
 	Link *xmlLinkEventDefinition `xml:"linkEventDefinition"`
 }
@@ -1335,12 +1335,12 @@ type xmlIntermediateThrowEvent struct {
 	// on its outgoing flow (ADR-0125). A pointer so an absent one is nil.
 	Escalation *xmlEscalationEventDefinition `xml:"escalationEventDefinition"`
 	// Link, when present, makes this a link throw event: a goto to the link catch of the same
-	// name in the same scope — an off-page connector (ADR-0126). A pointer so an absent one is nil.
+	// name in the same scope — an off-page connector (ADR-0131). A pointer so an absent one is nil.
 	Link *xmlLinkEventDefinition `xml:"linkEventDefinition"`
 }
 
 // xmlLinkEventDefinition is a <linkEventDefinition name="…"> on an intermediate throw or
-// catch event (ADR-0126). A link is matched by Name within one flow scope: a throw jumps to
+// catch event (ADR-0131). A link is matched by Name within one flow scope: a throw jumps to
 // the catch of the same name. Only the name matters — a link carries no ref, code, or payload.
 type xmlLinkEventDefinition struct {
 	Name string `xml:"name,attr"`

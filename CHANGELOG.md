@@ -14,6 +14,23 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Deterministic crash-and-recovery harness** (v0.2.0 programme C): a new
+  engine-level test harness (`engine/crash_recovery_test.go`) that turns the
+  durability contract into checkable evidence. It runs a workload to a durable point,
+  edits the on-disk WAL to model a crash, recovers into a fresh, empty state store,
+  and compares the rebuilt state family by family (instances, element instances,
+  jobs, timers, incidents, variables, applied position) against a snapshot of the live
+  state. Modelling the crash on the WAL's own boundaries (Append buffers a batch;
+  one Sync per batch writes and fsyncs it, so a batch's frames land atomically at a
+  known offset) lets it drop an un-fsynced batch at a clean boundary with no
+  production fault hooks: it asserts that recovering the intact log equals the live
+  state (invariant I4), that an un-fsynced / torn / CRC-corrupt trailing batch is
+  absent while the acknowledged prefix stays fully consistent, and that restart is
+  idempotent. Test-only, so the coverage floor is untouched. Deferred to later
+  programme-C increments: in-process phase-boundary crash hooks for the exact
+  after-append/after-commit cut points, child-process (SIGKILL) crashes, the
+  no-side-effect-before-durability ordering assertion, and richer workloads (timers,
+  messages, incidents).
 - **Reproducible benchmark harness** (v0.2.0 programme B): a new
   [`benchmarks/`](benchmarks/) package measures the pure engine under the durable
   profile (a real segmented WAL with a group-commit `fsync` per batch and a real
@@ -58,6 +75,25 @@ _Changed_ / _Removed_ for each version.
   cost (so the derived instances/sec is the recovery rate, and recovery-events/sec =
   `events/op` × instances/sec); the two workloads recover completed history and
   parked instances-plus-jobs respectively. Test-only, so the coverage floor is
+  untouched; the `-bench=.` CI smoke step covers them.
+- **Published benchmark baseline** (v0.2.0 programme B): the first committed,
+  reproducible Atlas performance baseline lives in [`benchmarks/results/`](benchmarks/results/)
+  — a machine-labelled raw `go test -bench` capture (`baseline-<commit>.txt`, with an
+  environment-metadata header) plus a `benchstat`-reduced Markdown summary
+  (`baseline-<commit>.md`, median ± 95% CI over 10 repetitions across all four
+  profiles: durable engine, HTTP, in-memory, recovery, and latency percentiles). It is
+  labelled as illustrative and `fsync`-dominated, captured on a shared, ephemeral VM —
+  not a product claim, hardware reference, or cross-engine comparison — and documents
+  the exact command to reproduce or refresh it.
+- **Latency-percentile benchmark profile** (v0.2.0 programme B): `ns/op` is a mean,
+  which the skewed `fsync` latency understates, so `BenchmarkLatencyHTTPLinearCreate`
+  and `BenchmarkLatencyEngineLinearSelfCompleting` sample each operation's wall-clock
+  latency and report **P50/P95/P99 and max** (computed by nearest-rank on the sorted
+  samples). They make the tail visible — on the CI machine the durable HTTP create's
+  median is ~2 ms but its max is ~50 ms — and cover both the end-to-end HTTP path and
+  the pure engine, so the API-layer tail can be attributed. Run with `-benchtime=Nx`
+  for a fixed, meaningful sample count (P99 wants a few thousand); the percentiles
+  appear in the raw `-bench` output and via `benchstat`. Test-only, coverage floor
   untouched; the `-bench=.` CI smoke step covers them.
 - **Deactivate a deployed process** ([ADR-0119](docs/adr/0119-deactivate-deployed-process.md)):
   a deployed definition can be paused so it stays deployed and keeps its running
