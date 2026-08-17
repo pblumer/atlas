@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Negative fixture: a standard loop with no way to end (ADR-0130).
+
+  The activity carries a <standardLoopCharacteristics> with neither a
+  <loopCondition> nor a loopMaximum, so nothing could ever stop it repeating. The
+  compiler refuses the deploy rather than accepting a model whose only outcome is an
+  instance that runs forever — "garbage refused at deploy" (invariant I5).
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_neg_loop_unbounded" targetNamespace="http://atlas/conformance">
+  <process id="neg-loop-unbounded" name="Unbounded standard loop" isExecutable="true">
+    <startEvent id="start" name="Start"/>
+    <scriptTask id="step" name="Step">
+      <extensionElements>
+        <zeebe:script expression="= 1" resultVariable="n"/>
+      </extensionElements>
+      <standardLoopCharacteristics/>
+    </scriptTask>
+    <endEvent id="end" name="Done"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="step"/>
+    <sequenceFlow id="f2" sourceRef="step" targetRef="end"/>
+  </process>
+</definitions>

@@ -1,0 +1,6 @@
+{
+  "name": "neg-loop-unbounded",
+  "model": "neg-loop-unbounded.bpmn",
+  "rejected": true,
+  "reason": "a standard loop has neither a loop condition nor a loop maximum, so it could never end"
+}

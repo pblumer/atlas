@@ -250,6 +250,17 @@ type CallActivityDetail struct {
 // early-exit evaluated after each iteration. Sequential runs one iteration at a time;
 // parallel (the default) seeds them all at once. Exactly one of InputCollection or
 // Cardinality is set — the deploy is refused otherwise.
+//
+// Standard marks the other BPMN loop marker, <standardLoopCharacteristics> — the
+// loop (circular arrow) icon (ADR-0130). It shares this struct because it shares the
+// runtime: a standard loop is a sequential loop whose iteration set is not a
+// collection but a condition, so it has no InputCollection, Cardinality,
+// InputElement, or OutputCollection, and is driven instead by LoopCondition (nil
+// means "repeat until LoopMaximum"), TestBefore (check the condition before the first
+// iteration — a while loop; else a repeat-until that always runs at least once), and
+// LoopMaximum (a hard iteration cap; 0 means uncapped). At least one of LoopCondition
+// and LoopMaximum is set — the deploy is refused otherwise, since a loop with neither
+// has no way to end.
 type MultiInstanceDetail struct {
 	InputCollection     *expr.Compiled // FEEL list to iterate; nil when Cardinality is used
 	Cardinality         *expr.Compiled // FEEL count; nil when InputCollection is used
@@ -258,6 +269,10 @@ type MultiInstanceDetail struct {
 	OutputElement       *expr.Compiled // FEEL per-iteration contribution, nil if none
 	CompletionCondition *expr.Compiled // FEEL early-exit, nil if none
 	Sequential          bool           // one iteration at a time (else parallel)
+	Standard            bool           // a <standardLoopCharacteristics> loop (ADR-0130)
+	TestBefore          bool           // standard loop: check the condition before iteration 1
+	LoopCondition       *expr.Compiled // standard loop: FEEL repeat-while, nil if none
+	LoopMaximum         int32          // standard loop: iteration cap, 0 = uncapped
 }
 
 // DecisionInputMapping is one explicit input to a DMN decision: the decision's
@@ -1076,6 +1091,10 @@ type CallActivityRef struct {
 	PropagateAllParent bool
 	PropagateAllChild  bool
 	MultiInstance      bool
+	// Loop is true when the call activity carries a standard loop marker instead —
+	// it calls the process again and again while a condition holds (ADR-0130), where
+	// MultiInstance calls it once per collection element. At most one is ever true.
+	Loop bool
 }
 
 // CallActivities returns every call activity in this process, in node order —
@@ -1096,10 +1115,19 @@ func (p *CompiledProcess) CallActivities() []CallActivityRef {
 			Binding:            d.Binding,
 			PropagateAllParent: d.PropagateAllParent,
 			PropagateAllChild:  d.PropagateAllChild,
-			MultiInstance:      p.nodes[i].MultiInstance >= 0,
+			MultiInstance:      p.nodes[i].MultiInstance >= 0 && !p.loops(int32(i)),
+			Loop:               p.loops(int32(i)),
 		})
 	}
 	return out
+}
+
+// loops reports whether a node's loop marker is a standard loop rather than a
+// multi-instance one (ADR-0130) — the two share the loop table, so the flag on the
+// detail is what tells them apart.
+func (p *CompiledProcess) loops(node int32) bool {
+	idx := p.nodes[node].MultiInstance
+	return idx >= 0 && p.multiInstances[idx].Standard
 }
 
 // MultiInstance returns the loop characteristics at the given table index — the

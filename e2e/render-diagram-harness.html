@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Conformance diagram renderer</title>
+    <!-- Renders a conformance fixture with the vendored bpmn-js so its gallery PNG
+         (api/web/conformance-diagrams/<name>.png) is produced by the same renderer the
+         Modeler uses. Not a test: a one-off asset tool, driven by a Playwright script. -->
+    <link rel="stylesheet" href="/vendor/bpmn/assets/diagram-js.css" />
+    <link rel="stylesheet" href="/vendor/bpmn/assets/bpmn-js.css" />
+    <link rel="stylesheet" href="/vendor/bpmn/assets/bpmn-font/css/bpmn-embedded.css" />
+    <style>
+      html, body { margin: 0; background: #fff; }
+      #c { width: 1032px; height: 240px; background: #fff; }
+      .djs-palette, .djs-context-pad, .bjs-powered-by { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div id="c"></div>
+    <script src="/vendor/bpmn/bpmn-modeler.js"></script>
+    <script>
+      window.__render = async (xml) => {
+        const zeebe = await fetch("/vendor/bpmn/zeebe.json").then((r) => r.json());
+        const viewer = new window.BpmnJS({ container: "#c", moddleExtensions: { zeebe } });
+        await viewer.importXML(xml);
+        const canvas = viewer.get("canvas");
+        canvas.zoom("fit-viewport", "auto");
+        // fit-viewport stops at 1:1, and these fixtures are small; set the viewbox to the
+        // diagram's own bounds plus a margin so the drawing fills the frame the way the
+        // committed gallery images do.
+        const inner = canvas.viewbox().inner;
+        const pad = 24;
+        canvas.viewbox({
+          x: inner.x - pad, y: inner.y - pad,
+          width: inner.width + 2 * pad, height: inner.height + 2 * pad,
+        });
+        return true;
+      };
+      window.__ready = true;
+    </script>
+  </body>
+</html>

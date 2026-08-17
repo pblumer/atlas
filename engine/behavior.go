@@ -1476,9 +1476,13 @@ func hasIOMappings(cp *compiler.CompiledProcess, elementId int32) bool {
 func ioResultScope(cp *compiler.CompiledProcess, elementKey uint64, ei *model.ElementInstanceValue) uint64 {
 	// A multi-instance iteration's result is its own — inner-scoped, so each iteration's
 	// output element reads this iteration's value and it is dropped with the iteration
-	// rather than colliding at the shared body scope (ADR-0077). Otherwise the local
-	// scope when the node has output mappings, else the enclosing scope (ADR-0068).
-	if ei.MultiInstance == miInner || cp.Node(ei.ElementId).IOOutCount > 0 {
+	// rather than colliding at the shared body scope (ADR-0077). A standard loop's
+	// iterations are successive runs of one activity, not independent ones, so their
+	// results are *not* inner-scoped: they land on the body like an ordinary activity's
+	// (the next iteration and the loop condition read them up the chain) and the body
+	// promotes them when the loop ends (ADR-0130). Otherwise the local scope when the
+	// node has output mappings, else the enclosing scope (ADR-0068).
+	if (ei.MultiInstance == miInner && !standardLoop(cp, ei.ElementId)) || cp.Node(ei.ElementId).IOOutCount > 0 {
 		return elementKey
 	}
 	return ei.FlowScopeKey
@@ -3357,6 +3361,18 @@ const loopCounterVar = "loopCounter"
 func seedMultiInstance(c *ProcessingContext, bodyKey uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	d := cp.MultiInstance(cp.Node(ei.ElementId).MultiInstance)
+	if d.Standard {
+		// A standard loop's iteration set is a condition, not a collection (ADR-0130):
+		// with testBefore the condition is checked before the first iteration — a while
+		// loop that may run zero times — otherwise the first iteration always runs and
+		// the condition decides on every next one, one at a time.
+		if d.TestBefore && !standardLoopContinues(c, d, bodyKey, 0) {
+			c.AppendElementCommand(bodyKey, model.IntentCompleting, *ei)
+			return
+		}
+		seedMultiInstanceIteration(c, bodyKey, ei, cp, d, 0, expr.Null)
+		return
+	}
 	items := multiInstanceItems(c, d, bodyKey)
 	if d.OutputCollection >= 0 {
 		writeList(c, bodyKey, cp.Intern(d.OutputCollection), nullList(len(items)))
@@ -3400,6 +3416,39 @@ func seedMultiInstanceIteration(c *ProcessingContext, bodyKey uint64, body *mode
 			ScopeKey: k, Name: inputElem, Kind: toVarKind(kind), Bool: b, Text: text,
 		})
 	}
+}
+
+// standardLoopContinues reports whether a standard loop runs (another) iteration
+// (ADR-0130): its cap is not reached and its condition still holds. done is the number
+// of iterations already finished; scope starts the chain the condition is evaluated
+// over — the finished iteration's own scope, so the condition reads its loopCounter
+// and everything the iteration wrote, or the body's scope for the testBefore check
+// before the first iteration, where loopCounter is bound to 0. A condition-less loop
+// is bounded by the cap alone; an evaluation error ends the loop rather than spinning.
+func standardLoopContinues(c *ProcessingContext, d *compiler.MultiInstanceDetail, scope uint64, done int32) bool {
+	if d.LoopMaximum > 0 && done >= d.LoopMaximum {
+		return false
+	}
+	if d.LoopCondition == nil {
+		return true
+	}
+	vars := bindInputsChain(c, d.LoopCondition.Inputs(), scope)
+	if _, ok := vars[loopCounterVar]; !ok && vars != nil {
+		vars[loopCounterVar] = expr.FromStored(expr.KindNumber, false, strconv.FormatInt(int64(done), 10))
+	}
+	v, err := d.LoopCondition.Eval(vars)
+	return err == nil && expr.IsTrue(v)
+}
+
+// standardLoop reports whether a node's loop marker is a standard loop rather than a
+// multi-instance one (ADR-0130). The two share the compiled loop table and the body/
+// iteration runtime, but differ in what an iteration's result means: multi-instance
+// iterations are independent (each result is its own, aggregated into the output
+// collection), while a standard loop's iterations are successive runs of one activity
+// whose state carries forward and escapes the loop.
+func standardLoop(cp *compiler.CompiledProcess, elementId int32) bool {
+	idx := cp.Node(elementId).MultiInstance
+	return idx >= 0 && cp.MultiInstance(idx).Standard
 }
 
 // multiInstanceItems evaluates a loop's iteration set over the body's scope chain to a
@@ -3450,11 +3499,15 @@ func finishMultiInstanceIteration(c *ProcessingContext, key uint64, ei *model.El
 		}
 		setListElement(c, bodyKey, cp.Intern(d.OutputCollection), idx, val)
 	}
-	// The completion condition is evaluated over this iteration's scope chain (so it can
-	// read loopCounter, the item, and the accumulating output collection at the body)
-	// before the iteration's locals are dropped (ADR-0077).
-	done := false
-	if d.CompletionCondition != nil {
+	// The completion condition — for a standard loop, the loop condition (ADR-0130) —
+	// is evaluated over this iteration's scope chain (so it can read loopCounter, the
+	// item, and the accumulating output collection at the body) before the iteration's
+	// locals are dropped (ADR-0077).
+	done, again := false, false
+	switch {
+	case d.Standard:
+		again = standardLoopContinues(c, d, key, int32(idx)+1)
+	case d.CompletionCondition != nil:
 		v, err := d.CompletionCondition.Eval(bindInputsChain(c, d.CompletionCondition.Inputs(), key))
 		done = err == nil && expr.IsTrue(v)
 	}
@@ -3467,7 +3520,15 @@ func finishMultiInstanceIteration(c *ProcessingContext, key uint64, ei *model.El
 		completeScope(c, bodyKey)
 		return
 	}
-	if d.Sequential {
+	if d.Standard {
+		// The condition still holds (and the cap is not reached): run the activity again.
+		if again {
+			if body := c.GetElementInstance(bodyKey); body != nil {
+				seedMultiInstanceIteration(c, bodyKey, body, cp, d, idx+1, expr.Null)
+				return // the body completes after this next iteration, not yet
+			}
+		}
+	} else if d.Sequential {
 		if items := multiInstanceItems(c, d, bodyKey); idx+1 < len(items) {
 			if body := c.GetElementInstance(bodyKey); body != nil {
 				seedMultiInstanceIteration(c, bodyKey, body, cp, d, idx+1, items[idx+1])
@@ -3485,6 +3546,18 @@ func finishMultiInstanceIteration(c *ProcessingContext, key uint64, ei *model.El
 func promoteMultiInstanceOutput(c *ProcessingContext, bodyKey uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	d := cp.MultiInstance(cp.Node(ei.ElementId).MultiInstance)
+	if d.Standard {
+		// A standard loop has no output collection: what its iterations wrote *is* its
+		// result, held at the body scope so each round could read the previous one's work
+		// (ADR-0130). Promoting all of it to the enclosing scope makes a looping activity
+		// leave behind exactly what the same activity would have left running once.
+		c.VariablesOfScope(bodyKey, func(v model.VariableValue) {
+			v.ScopeKey = ei.FlowScopeKey
+			c.AppendVariableEvent(model.IntentVariableCreated, v)
+		})
+		dropLocalScope(c, bodyKey)
+		return
+	}
 	if d.OutputCollection >= 0 {
 		if v := c.GetVariable(bodyKey, cp.Intern(d.OutputCollection)); v != nil {
 			out := *v

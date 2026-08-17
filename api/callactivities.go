@@ -38,6 +38,10 @@ type callActivityRow struct {
 	PropagateAllParent bool   `json:"propagateAllParent"`
 	PropagateAllChild  bool   `json:"propagateAllChild"`
 	MultiInstance      bool   `json:"multiInstance"`
+	// Loop marks a call activity that carries a standard loop marker instead of a
+	// multi-instance one: it calls the process repeatedly while a condition holds
+	// (ADR-0130).
+	Loop bool `json:"loop"`
 	// Override, when set, is the operator's per-server target override for this
 	// called process id; nil when the default `latest` resolution applies.
 	Override *rowOverride `json:"override,omitempty"`
@@ -84,6 +88,7 @@ func (s *Server) handleCallActivities(w http.ResponseWriter, _ *http.Request) {
 					PropagateAllParent: ref.PropagateAllParent,
 					PropagateAllChild:  ref.PropagateAllChild,
 					MultiInstance:      ref.MultiInstance,
+					Loop:               ref.Loop,
 				}
 				var ovPtr *callOverride
 				if ov, ok := ovByPID[ref.CalledProcessId]; ok {

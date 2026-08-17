@@ -50,3 +50,30 @@ test("a data-driven multi-instance activity uses the configurable default count"
   );
   expect(await miBadge(page)).toContain("5/5");
 });
+
+test("a standard loop counts its modelled maximum and releases one token", async ({ page }) => {
+  await open(page, "multi-instance.bpmn");
+  await spawn(page, "StartL");
+  await call(page, "step"); // Start -> LoopMax (standard loop, loopMaximum = 2)
+
+  // The badge reads the modelled maximum with the loop glyph: 2 of 2 runs to go.
+  await page.waitForFunction(
+    () => /↻\s*2\/2/.test(document.querySelector(".atlas-sim-mi")?.textContent || ""),
+    null,
+    { timeout: 8000 },
+  );
+
+  // One run per move; the token stays on the activity until the last one.
+  await call(page, "step");
+  await page.waitForFunction(
+    () => /↻\s*1\/2/.test(document.querySelector(".atlas-sim-mi")?.textContent || ""),
+    null,
+    { timeout: 8000 },
+  );
+
+  await call(page, "play");
+  await waitForStats(page, () => {
+    const s = window.__sim.stats();
+    return s.completed === 1 && s.live === 0;
+  });
+});

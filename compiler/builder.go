@@ -367,6 +367,30 @@ func (b *Builder) SetMultiInstance(nodeID int32, sequential bool, inputElement, 
 	b.nodes[nodeID].MultiInstance = idx
 }
 
+// SetStandardLoop marks an already-added node a BPMN standard loop (ADR-0130): it
+// repeats its activity one iteration at a time while condition holds (nil = repeat
+// until the cap), checked before the first iteration when testBefore is set, and at
+// most loopMaximum times (0 = uncapped). It shares the multi-instance loop table and
+// the node's MultiInstance index because it shares the runtime — a standard loop is a
+// sequential loop whose iteration set is a condition rather than a collection — so a
+// node carries at most one of the two markers (the parser refuses both).
+func (b *Builder) SetStandardLoop(nodeID int32, testBefore bool, loopMaximum int32, condition *expr.Compiled) {
+	if !b.validNode(nodeID) {
+		return
+	}
+	idx := int32(len(b.multiInstances))
+	b.multiInstances = append(b.multiInstances, MultiInstanceDetail{
+		InputElement:     -1,
+		OutputCollection: -1,
+		Sequential:       true, // a standard loop is one iteration at a time, by definition
+		Standard:         true,
+		TestBefore:       testBefore,
+		LoopCondition:    condition,
+		LoopMaximum:      loopMaximum,
+	})
+	b.nodes[nodeID].MultiInstance = idx
+}
+
 // AddSubProcess adds an embedded subprocess container node and returns its element
 // id. It carries no detail; its inner flow lives in the flat node/flow arrays,
 // linked back to it only by the children's FlowScope. Create it first, then
