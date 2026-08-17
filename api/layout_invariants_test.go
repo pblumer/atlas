@@ -132,6 +132,47 @@ var layoutCorpus = []layoutCase{
     <sequenceFlow id="f1" sourceRef="Start" targetRef="Sub"/>
     <sequenceFlow id="f2" sourceRef="Sub" targetRef="End"/>
   </process></definitions>`},
+
+	// Activity shapes beyond the plain task list: a call activity delegating to
+	// another process, and the two message-carrying tasks. All are drawn as tasks.
+	{"call-and-message-tasks", `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="P">
+    <startEvent id="Start"/><callActivity id="Call"/><receiveTask id="Await"/>
+    <sendTask id="Notify"/><endEvent id="End"/>
+    <sequenceFlow id="f1" sourceRef="Start" targetRef="Call"/>
+    <sequenceFlow id="f2" sourceRef="Call" targetRef="Await"/>
+    <sequenceFlow id="f3" sourceRef="Await" targetRef="Notify"/>
+    <sequenceFlow id="f4" sourceRef="Notify" targetRef="End"/>
+  </process></definitions>`},
+
+	// An event-based gateway racing a message against a timer: the deferred choice
+	// fans out like any other gateway.
+	{"event-based-gateway", `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="P">
+    <startEvent id="Start"/><eventBasedGateway id="Race"/>
+    <intermediateCatchEvent id="Reply"/><intermediateCatchEvent id="Timeout"/>
+    <endEvent id="EndReply"/><endEvent id="EndTimeout"/>
+    <sequenceFlow id="f1" sourceRef="Start" targetRef="Race"/>
+    <sequenceFlow id="f2" sourceRef="Race" targetRef="Reply"/>
+    <sequenceFlow id="f3" sourceRef="Race" targetRef="Timeout"/>
+    <sequenceFlow id="f4" sourceRef="Reply" targetRef="EndReply"/>
+    <sequenceFlow id="f5" sourceRef="Timeout" targetRef="EndTimeout"/>
+  </process></definitions>`},
+
+	// A transaction: a container that holds its own flow, like a subprocess, and
+	// carries a compensation handler off to the side.
+	{"transaction", `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="P">
+    <startEvent id="Start"/>
+    <transaction id="Book">
+      <startEvent id="TStart"/><serviceTask id="Reserve"/><endEvent id="TEnd"/>
+      <sequenceFlow id="t1" sourceRef="TStart" targetRef="Reserve"/>
+      <sequenceFlow id="t2" sourceRef="Reserve" targetRef="TEnd"/>
+    </transaction>
+    <boundaryEvent id="Cancelled" name="Cancelled" attachedToRef="Book"/>
+    <serviceTask id="Undo"/><endEvent id="EndUndo"/><endEvent id="End"/>
+    <sequenceFlow id="f1" sourceRef="Start" targetRef="Book"/>
+    <sequenceFlow id="f2" sourceRef="Book" targetRef="End"/>
+    <sequenceFlow id="c1" sourceRef="Cancelled" targetRef="Undo"/>
+    <sequenceFlow id="c2" sourceRef="Undo" targetRef="EndUndo"/>
+  </process></definitions>`},
 }
 
 // TestLayoutInvariants runs every invariant over every corpus model. A failure
@@ -200,8 +241,9 @@ func newLayoutModel(t *testing.T, src, di string) *layoutModel {
 func (m *layoutModel) collect(c layoutContainer) {
 	for _, group := range [][]layoutElem{
 		c.StartEvents, c.EndEvents, c.Tasks, c.ServiceTasks, c.ScriptTasks,
-		c.UserTasks, c.ManualTasks, c.BizRuleTasks, c.ExclusiveGws, c.ParallelGws,
-		c.InclusiveGws, c.IntermediateCatchEvents, c.IntermediateThrowEvents,
+		c.UserTasks, c.ManualTasks, c.BizRuleTasks, c.ReceiveTasks, c.SendTasks,
+		c.CallActivities, c.ExclusiveGws, c.ParallelGws, c.InclusiveGws,
+		c.EventBasedGws, c.IntermediateCatchEvents, c.IntermediateThrowEvents,
 	} {
 		for _, e := range group {
 			if e.Id != "" {
@@ -219,7 +261,7 @@ func (m *layoutModel) collect(c layoutContainer) {
 	if len(c.LaneSets) > 0 {
 		m.hasLanes = true
 	}
-	for _, sp := range c.SubProcesses {
+	for _, sp := range c.subContainers() {
 		if sp.Id != "" {
 			m.nodeIDs = append(m.nodeIDs, sp.Id)
 		}

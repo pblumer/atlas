@@ -114,9 +114,17 @@ type layoutContainer struct {
 	UserTasks    []layoutElem `xml:"userTask"`
 	ManualTasks  []layoutElem `xml:"manualTask"`
 	BizRuleTasks []layoutElem `xml:"businessRuleTask"`
-	ExclusiveGws []layoutElem `xml:"exclusiveGateway"`
-	ParallelGws  []layoutElem `xml:"parallelGateway"`
-	InclusiveGws []layoutElem `xml:"inclusiveGateway"`
+	ReceiveTasks []layoutElem `xml:"receiveTask"`
+	SendTasks    []layoutElem `xml:"sendTask"`
+
+	// A call activity delegates to another process. It is drawn as an activity in
+	// this plane — the called process has its own diagram.
+	CallActivities []layoutElem `xml:"callActivity"`
+
+	ExclusiveGws  []layoutElem `xml:"exclusiveGateway"`
+	ParallelGws   []layoutElem `xml:"parallelGateway"`
+	InclusiveGws  []layoutElem `xml:"inclusiveGateway"`
+	EventBasedGws []layoutElem `xml:"eventBasedGateway"`
 
 	IntermediateCatchEvents []layoutElem `xml:"intermediateCatchEvent"`
 	IntermediateThrowEvents []layoutElem `xml:"intermediateThrowEvent"`
@@ -124,6 +132,12 @@ type layoutContainer struct {
 	// Expanded subprocesses laid out inline: each is sized to its own contents and
 	// its children rendered in the same plane, offset into the box.
 	SubProcesses []layoutContainer `xml:"subProcess"`
+
+	// A transaction and an ad-hoc subprocess are subprocesses with extra execution
+	// semantics; for layout they are the same shape class — an expanded container
+	// whose children are laid out inside it.
+	Transactions      []layoutContainer `xml:"transaction"`
+	AdHocSubProcesses []layoutContainer `xml:"adHocSubProcess"`
 
 	// Boundary events attach to an activity in this container via attachedToRef and
 	// ride its border rather than a grid cell.
@@ -134,6 +148,21 @@ type layoutContainer struct {
 	LaneSets []layoutLaneSet `xml:"laneSet"`
 
 	Flows []layoutFlow `xml:"sequenceFlow"`
+}
+
+// subContainers is every child that is laid out as an expanded container: plain
+// subprocesses plus the variants that only differ in execution semantics. Both
+// the generator and the layout invariants walk this, so neither can go blind to a
+// container class the other knows about.
+func (c layoutContainer) subContainers() []layoutContainer {
+	if len(c.Transactions) == 0 && len(c.AdHocSubProcesses) == 0 {
+		return c.SubProcesses
+	}
+	subs := make([]layoutContainer, 0, len(c.SubProcesses)+len(c.Transactions)+len(c.AdHocSubProcesses))
+	subs = append(subs, c.SubProcesses...)
+	subs = append(subs, c.Transactions...)
+	subs = append(subs, c.AdHocSubProcesses...)
+	return subs
 }
 
 type layoutLaneSet struct {
@@ -349,12 +378,17 @@ func containerNodes(c layoutContainer) (nodes []lnode, inner map[string]*laidOut
 	add(c.UserTasks, kindTask)
 	add(c.ManualTasks, kindTask)
 	add(c.BizRuleTasks, kindTask)
+	add(c.ReceiveTasks, kindTask)
+	add(c.SendTasks, kindTask)
+	add(c.CallActivities, kindTask)
 	add(c.ExclusiveGws, kindGateway)
 	add(c.ParallelGws, kindGateway)
 	add(c.InclusiveGws, kindGateway)
+	add(c.EventBasedGws, kindGateway)
 
-	for i := range c.SubProcesses {
-		sp := c.SubProcesses[i]
+	subs := c.subContainers()
+	for i := range subs {
+		sp := subs[i]
 		if sp.Id == "" {
 			continue
 		}
