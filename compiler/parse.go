@@ -832,6 +832,24 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 				return err
 			}
 		}
+		for _, brt := range c.BusinessRuleTasks {
+			if err := wireLoop(brt.Id, brt.MultiInstance, brt.StandardLoop); err != nil {
+				return err
+			}
+		}
+		// An undefined task and a manual task have no implementation, but they are
+		// activities: a loop marker on one repeats the (pass-through) step, which is what
+		// the diagram says it does.
+		for _, t := range c.Tasks {
+			if err := wireLoop(t.Id, t.MultiInstance, t.StandardLoop); err != nil {
+				return err
+			}
+		}
+		for _, t := range c.ManualTasks {
+			if err := wireLoop(t.Id, t.MultiInstance, t.StandardLoop); err != nil {
+				return err
+			}
+		}
 		for _, st := range c.SendTasks {
 			if strings.TrimSpace(st.MessageRef) != "" {
 				continue // a message-kind send task is a throw, not an activity (ADR-0112)
@@ -999,8 +1017,8 @@ type xmlFlowContent struct {
 
 	Flows []xmlSequenceFlow `xml:"sequenceFlow"`
 
-	Tasks              []xmlNode             `xml:"task"`
-	ManualTasks        []xmlNode             `xml:"manualTask"`
+	Tasks              []xmlPlainTask        `xml:"task"`
+	ManualTasks        []xmlPlainTask        `xml:"manualTask"`
 	ParallelGateways   []xmlNode             `xml:"parallelGateway"`
 	InclusiveGateways  []xmlInclusiveGateway `xml:"inclusiveGateway"`
 	EventBasedGateways []xmlNode             `xml:"eventBasedGateway"` // deferred choice; only its id matters (ADR-0110)
@@ -1505,6 +1523,19 @@ type xmlNode struct {
 	DataIn  []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
 
+// xmlPlainTask is an undefined <task> or a <manualTask>: an activity with no
+// execution semantics of its own (the engine runs it as a pass-through), but an
+// activity all the same — so it carries the loop markers (ADR-0077, ADR-0133) as well
+// as data associations. It is a separate shape from xmlNode precisely so those markers
+// stay off the gateways that share xmlNode: a looping gateway is not a thing.
+type xmlPlainTask struct {
+	Id            string                     `xml:"id,attr"`
+	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
+	DataIn        []xmlDataInputAssociation  `xml:"dataInputAssociation"`
+	MultiInstance *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
+	StandardLoop  *xmlStandardLoop           `xml:"standardLoopCharacteristics"`
+}
+
 // A user task parks a token for human completion (ADR-0028). It optionally
 // carries a zeebe:assignmentDefinition for assignee/candidateGroups.
 type xmlUserTask struct {
@@ -1863,6 +1894,8 @@ type xmlBusinessRuleTask struct {
 	// (ADR-0050). The pointer is nil when the <atlas:temisConnector> extension is
 	// absent, i.e. the decision is evaluated locally.
 	TemisConnector *xmlTemisConnector         `xml:"extensionElements>temisConnector"`
+	MultiInstance  *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
+	StandardLoop   *xmlStandardLoop           `xml:"standardLoopCharacteristics"`
 	DataOut        []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
 	DataIn         []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }

@@ -1,6 +1,6 @@
 # ADR-0077: Multi-instance activities (parallel and sequential)
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-08-17: the marker runs on every activity kind)
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 
@@ -85,6 +85,16 @@
 > and routing out its flow; a multi-instance subprocess assembling an output collection;
 > and a multi-instance call activity fanning out children and, on interrupt, terminating
 > every child.
+>
+> **Amendment (2026-08-17, with [ADR-0133](0133-standard-loop-activities.md)).** The
+> activity set below (service, script, user, receive and job-kind send tasks, call
+> activities, subprocesses) left business rule, manual and undefined tasks silently
+> dropping a `<multiInstanceLoopCharacteristics>` — they deployed and ran once with the
+> ∥/≡ icon on the diagram. They are now wired like every other activity: the compiler
+> parses the marker on them (the loop fields sit on the task shapes, never on the
+> `xmlNode` gateways share) and the runtime needed no change, since the body/iteration
+> dispatch already runs whatever behavior the node has. The Modeler offers the Loop
+> section on them accordingly.
 >
 > **Delivered (Phase 5, Modeler):** the Implement panel gains a **Multi-instance**
 > section on service, script, and user tasks, call activities, and subprocesses (the

@@ -14,6 +14,20 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Every activity kind can loop** ([ADR-0133](docs/adr/0133-standard-loop-activities.md)
+  amended, [ADR-0077](docs/adr/0077-multi-instance-activities.md) amended): business
+  rule, manual and undefined tasks now honour both BPMN loop markers, closing the last
+  place where a marker drawn on the diagram was silently dropped and the activity ran
+  **once**. A looping business rule task re-evaluates its decision per round (one job at
+  a time, its result feeding the loop condition); a looping manual or undefined task
+  repeats its pass-through, so a routing draft loops before its tasks are implemented.
+  The engine needed no change — the multi-instance body/iteration dispatch already runs
+  whatever behavior the node has — and the same deploy-time refusals apply (an unbounded
+  standard loop, both markers on one activity). In the compiler the loop fields moved
+  onto the task shapes, so the node shape gateways share carries none: a gateway still
+  cannot parse a loop marker. The Modeler offers the Loop section on these tasks, and
+  its "Atlas does not run this marker here" note is now reserved for the genuinely
+  non-activity cases.
 - **Engine recovery checkpoints & WAL compaction — ADR + manifest primitives**
   (v0.2.0 programme D, [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md)):
   recovery replays the WAL from genesis, so it is O(total log) and no segment is ever

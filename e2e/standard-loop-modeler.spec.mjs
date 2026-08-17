@@ -85,3 +85,24 @@ test("switching from a standard loop to a multi-instance replaces the marker", a
   expect(task).not.toContain("standardLoopCharacteristics");
   expect(page.__errors).toEqual([]);
 });
+
+test("a business rule task offers the Loop section and draws the marker", async ({ page }) => {
+  // Business rule, manual and undefined tasks used to ignore both loop markers, so the
+  // panel had to warn instead of offering the section; they now run the loop like any
+  // other activity (ADR-0133, amended).
+  await openLoop(page, "Activity_rule");
+  await expect(page.locator("#f-mi-mode")).toHaveValue("none");
+
+  await page.locator("#f-mi-mode").selectOption("loop");
+  await page.locator("#f-mi-loopcond").fill("stufe != \"ok\"");
+  await page.locator("#f-mi-loopcond").blur();
+
+  await expect(page.locator('[data-element-id="Activity_rule"] [data-marker="loop"]')).toHaveCount(1);
+  const xml = await page.evaluate(() => window.__xml());
+  const task = /<bpmn:businessRuleTask id="Activity_rule"[\s\S]*?<\/bpmn:businessRuleTask>/.exec(xml)[0];
+  expect(task).toContain("standardLoopCharacteristics");
+  expect(task).toMatch(/<bpmn:loopCondition[^>]*>= stufe != "ok"<\/bpmn:loopCondition>/);
+  // The decision it loops over is untouched by the loop edit.
+  expect(task).toContain('decisionId="stufe"');
+  expect(page.__errors).toEqual([]);
+});
