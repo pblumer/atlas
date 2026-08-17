@@ -63,6 +63,12 @@ func armedConditionOf(c *ProcessingContext, ei *model.ElementInstanceValue) *exp
 		if d := cp.BoundaryEvent(node.Detail); d.Kind == compiler.BoundaryConditional {
 			return d.Condition
 		}
+	case compiler.TypeEventSubProcessStart:
+		// A conditional event subprocess trigger arms inert and is found by the same
+		// variable-change re-check as a conditional boundary (ADR-0134).
+		if d := cp.EventSubProcess(node.EventSub); d.Kind == compiler.BoundaryConditional {
+			return d.Condition
+		}
 	}
 	return nil
 }

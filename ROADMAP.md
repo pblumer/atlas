@@ -351,6 +351,24 @@ Making processes wait, react, and time out.
   Operations overlay. One catch per name (the destination) and one-or-more throws; a deploy rejects
   an unmatched throw or a duplicate catch name. Recovery-tested; authored in the Modeler (a link-name
   field on the throw/catch). The last common intermediate throw/catch event type.
+- ✅ **Conditional events** ([ADR-0134](docs/adr/0134-conditional-events.md)): the one BPMN event
+  family triggered by **process data** rather than a message, timer, signal, or throw — a
+  **conditional intermediate catch** (wait until a boolean condition holds), a **conditional boundary
+  event** (fire while the host activity runs), and a **conditional event subprocess** (fire while the
+  scope runs), each carrying a boolean **FEEL condition over the instance's variables**. The condition
+  compiles to FEEL at deploy (the same machinery as a gateway condition) and is **re-evaluated when a
+  variable it reads changes**: every committed write funnels through the one `AppendVariableEvent`
+  chokepoint, which marks the instance dirty and schedules a transient command-path `ConditionRecheck`
+  follow-up that fires the armed conditionals now true — reusing the **inert-armed catch** +
+  `AppendElementCommand(IntentCompleting)` pattern that error (ADR-0089) and escalation (ADR-0125)
+  boundaries established. It also self-evaluates at arm (firing at once if already true), opens **no
+  subscription**, and reacts correctly to an **external `SetVariables`** with no activity completing.
+  The re-check runs **live only** and its fire is an ordinary persisted event, so recovery replays it
+  identically (I6); a process with no conditional pays nothing on a variable write. Interrupting forms
+  and the intermediate catch fire once; non-interrupting forms currently fire once per arm (repeatable
+  false→true edge-triggering is a documented follow-up). Recovery-tested; authored in the Modeler (a
+  FEEL condition field on the catch/boundary/event-subprocess start). The last unimplemented BPMN
+  intermediate-event trigger, and the first that reacts to variable state.
 - ✅ Boundary events: timer and message, interrupting and non-interrupting,
   attached to waiting activities. An interrupting boundary cancels the host (and
   its job) and routes out its flow; a non-interrupting one spawns a parallel

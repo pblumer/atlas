@@ -1,10 +1,12 @@
 # ADR-0134: Conditional events (data-triggered catch/boundary)
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-17
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Proposed. A **conditional event** (`<conditionalEventDefinition><condition>`)
+> **Implementation status.** Accepted and implemented (non-interrupting fires once per arm;
+> repeatable false→true edge-triggering is a documented follow-up — see *Interrupting vs
+> non-interrupting*). A **conditional event** (`<conditionalEventDefinition><condition>`)
 > is a catch that fires when a **boolean FEEL condition over the process's variables becomes true** —
 > not on a message, a timer, or a signal, but on **data change**. Three forms: a **conditional
 > intermediate catch** (waits until the condition holds, then flows on), a **conditional boundary
@@ -164,13 +166,23 @@ logic is (a) parsing `<conditionalEventDefinition><condition>` and compiling the
 - **Interrupting boundary / intermediate catch (fire-once).** Evaluate at arm and on each relevant
   change; the first true fires. Interrupting `interruptHost`s the activity and routes the recovery
   flow; the catch `completeAndTakeFlows`. No transition-tracking is needed — it fires exactly once.
-- **Non-interrupting boundary / event subprocess (edge-triggered).** A non-interrupting conditional
-  may fire many times, but must fire only when the condition **transitions false→true**, not while it
-  stays true (else a single true condition would re-fire on every unrelated write). The armed instance
-  stores a durable `conditionMet` flag: each evaluation computes `now`, fires only when `now &&
-  !conditionMet`, and records `conditionMet = now`. Firing spawns the handler alongside the
-  still-running host/scope (reusing the ADR-0040/0082 non-interrupting path) and the trigger re-arms
-  with `conditionMet` carried, so it fires again on the next false→true.
+- **Non-interrupting boundary / event subprocess (fire-once, as shipped).** A non-interrupting
+  conditional fires when its condition **first becomes true** and spawns the handler alongside the
+  still-running host/scope (reusing the ADR-0040/0082 non-interrupting path). The boundary takes its
+  handler flow and is consumed; the event-sub trigger completes and is not re-armed. It therefore
+  fires **exactly once per arm** — a subsequent write while the condition stays true does not re-fire
+  it, and neither does a fresh false→true after it has fired. This subset is fully deterministic and
+  recovers with no extra state (no durable flag, no element-instance codec change): the fire is the
+  same persisted `Completing`→`Completed` chain the interrupting form uses.
+
+  **Repeatable false→true edge-triggering is a deferred follow-up.** BPMN allows a non-interrupting
+  conditional to fire many times — once per false→true transition. Doing so correctly needs the armed
+  instance to carry a durable `conditionMet` flag (each evaluation computes `now`, fires only when
+  `now && !conditionMet`, records `conditionMet = now`) so a re-armed trigger does not immediately
+  re-fire while the condition stays true and so a post-crash false→true still edge-triggers. That is a
+  durable `ElementInstanceValue` codec change plus a re-arm-with-carried-flag path; it is intentionally
+  **not** in this ADR's shipped scope. The fire-once behavior above is the correct, recoverable subset
+  it will layer onto.
 
 ### Compiler
 
@@ -210,12 +222,16 @@ logic is (a) parsing `<conditionalEventDefinition><condition>` and compiling the
   crosses a threshold (host cancelled, recovery flow taken) and one that fires **immediately** because
   the condition holds at arm; an empty condition is a deploy error; a **recovery test** — a parked
   conditional re-arms on replay and fires on a post-recovery variable change.
-- **Phase 2 — Non-interrupting + event subprocess.** Edge-triggering (`conditionMet`); a
-  **non-interrupting** conditional boundary whose handler runs while the host keeps going and fires
-  again only on a fresh false→true; a **conditional event subprocess** (interrupting and
-  non-interrupting). *Tests:* a non-interrupting boundary that fires once per false→true and **not**
-  on unrelated writes while the condition stays true; a non-interrupting event subprocess re-arming;
-  recovery of the `conditionMet` flag.
+- **Phase 2 — Non-interrupting + event subprocess.** A **conditional event subprocess** (interrupting
+  and non-interrupting), reusing the ADR-0082 event-sub arm/fire machinery — it arms inert, the
+  re-check finds it, and its `OnCompleting` honors `isInterrupting` (interrupting tears down the parent
+  scope; non-interrupting runs the handler alongside). A **non-interrupting** conditional boundary
+  whose handler runs while the host keeps going. Both fire **once per arm** (see the note above);
+  repeatable false→true edge-triggering (`conditionMet`) is a deferred follow-up. *Tests:* an
+  interrupting conditional event subprocess that fires on a variable change (host torn down, handler
+  runs); a non-interrupting one that runs alongside the still-running main flow; a non-interrupting
+  conditional boundary that fires once and **not** again on an unrelated write while the condition
+  stays true.
 - **Phase 3 — Modeler + docs.** Drop `bpmn:ConditionalEventDefinition` from `UNSUPPORTED_EVENT_DEFS`;
   a condition (FEEL) field + the interrupting toggle on conditional boundary/catch/event-sub in the
   Implement panel; accept this ADR and update the ROADMAP. bpmn-js draws the conditional marker and

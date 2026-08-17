@@ -13,7 +13,7 @@ import (
 // has none (ADR-0082, ADR-0088, ADR-0089).
 func eventSubStart(sub *xmlSubProcess) *xmlStartEvent {
 	for i := range sub.StartEvents {
-		if s := &sub.StartEvents[i]; s.Message != nil || s.Timer != nil || s.Signal != nil || s.Error != nil || s.Escalation != nil {
+		if s := &sub.StartEvents[i]; s.Message != nil || s.Timer != nil || s.Signal != nil || s.Error != nil || s.Escalation != nil || s.Conditional != nil {
 			return s
 		}
 	}
@@ -583,7 +583,7 @@ func registerScope(
 		if sub.TriggeredByEvent == "true" {
 			st := eventSubStart(sub)
 			if st == nil {
-				return fmt.Errorf("compiler: event subprocess %q must have a start event with a message, timer, signal, error, or escalation event definition", sub.Id)
+				return fmt.Errorf("compiler: event subprocess %q must have a start event with a message, timer, signal, error, escalation, or conditional event definition", sub.Id)
 			}
 			d := EventSubProcessDetail{StartNode: ids[st.Id], Interrupting: st.IsInterrupting != "false"}
 			switch {
@@ -624,6 +624,17 @@ func registerScope(
 					return fmt.Errorf("compiler: event subprocess %q timer: %w", sub.Id, err)
 				}
 				d.Kind, d.Schedule = BoundaryTimer, schedule
+			case st.Conditional != nil:
+				// A conditional event subprocess arms inert and fires when its FEEL condition
+				// over the parent scope's variables becomes true (ADR-0134) — the event-sub
+				// analog of a conditional boundary. Like escalation it honors isInterrupting;
+				// unlike error it is not always interrupting. It is re-checked on every variable
+				// change in its scope, not driven by a throw.
+				cond, err := compileCondition(st.Id, st.Conditional.Condition)
+				if err != nil {
+					return err
+				}
+				d.Kind, d.Condition = BoundaryConditional, cond
 			}
 			b.SetEventSubProcess(subID, d)
 		}

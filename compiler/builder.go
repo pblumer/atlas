@@ -1737,7 +1737,8 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 	for i := range b.nodes {
 		n := &b.nodes[i]
 		if n.Type == TypeConditionalCatchEvent ||
-			(n.Type == TypeBoundaryEvent && b.boundaryEventDets[n.Detail].Kind == BoundaryConditional) {
+			(n.Type == TypeBoundaryEvent && b.boundaryEventDets[n.Detail].Kind == BoundaryConditional) ||
+			(n.EventSub >= 0 && b.eventSubProcesses[n.EventSub].Kind == BoundaryConditional) {
 			hasConditional = true
 			break
 		}

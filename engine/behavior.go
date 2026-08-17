@@ -3331,6 +3331,15 @@ func (eventSubProcessStartBehavior) OnActivated(c *ProcessingContext, key uint64
 		// An error event subprocess arms inert — it opens nothing, waiting only to be found
 		// by propagateError when an error is thrown in its scope, then driven to Completing
 		// (ADR-0089). Always interrupting, so firing terminates the scope and runs the handler.
+	case compiler.BoundaryConditional:
+		// A conditional event subprocess arms inert too — it opens nothing and is driven to
+		// Completing by a variable-change re-check when its FEEL condition over the parent
+		// scope's variables becomes true (ADR-0134). It self-evaluates now: if the condition
+		// already holds when the scope is entered, it fires at once. OnCompleting honors
+		// d.Interrupting.
+		if conditionHolds(c, d.Condition, ei.FlowScopeKey) {
+			c.AppendElementCommand(key, model.IntentCompleting, *ei)
+		}
 	}
 	// Stays Activated: waits until the trigger fires.
 }

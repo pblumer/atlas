@@ -126,6 +126,48 @@ func TestParseConditionalEmptyIsError(t *testing.T) {
 	}
 }
 
+// TestParseConditionalEventSubprocess checks that a conditional event subprocess compiles to a
+// BoundaryConditional-kind event-sub carrying its FEEL condition and — like escalation, unlike
+// error — honors isInterrupting="false" as non-interrupting (ADR-0134).
+func TestParseConditionalEventSubprocess(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="p" isExecutable="true">
+	    <startEvent id="s"/><userTask id="t"/><endEvent id="e"/>
+	    <sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+	    <sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+	    <subProcess id="handler" triggeredByEvent="true">
+	      <startEvent id="hs" isInterrupting="false"><conditionalEventDefinition><condition>=alert</condition></conditionalEventDefinition></startEvent>
+	      <endEvent id="he"/>
+	      <sequenceFlow id="hf" sourceRef="hs" targetRef="he"/>
+	    </subProcess>
+	  </process>
+	</definitions>`
+	cp, err := Parse(1, 1, strings.NewReader(xml))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	handler := nodeByBpmnId(t, cp, "handler")
+	if !cp.IsEventSubProcess(handler.ElementId) {
+		t.Fatalf("handler is not an event subprocess (EventSub=%d)", handler.EventSub)
+	}
+	d := cp.EventSubProcess(handler.EventSub)
+	if d.Kind != BoundaryConditional {
+		t.Errorf("Kind = %v, want BoundaryConditional", d.Kind)
+	}
+	if d.Condition == nil {
+		t.Fatal("conditional event subprocess has no compiled condition")
+	}
+	if ins := d.Condition.Inputs(); len(ins) != 1 || ins[0] != "alert" {
+		t.Errorf("condition inputs = %v, want [alert]", ins)
+	}
+	if d.Interrupting {
+		t.Errorf("Interrupting = true, want false (isInterrupting=\"false\" honored)")
+	}
+	if !cp.HasConditionalEvents() {
+		t.Error("HasConditionalEvents = false, want true")
+	}
+}
+
 // TestParseNoConditional: a process without a conditional event has HasConditionalEvents false
 // (ADR-0134) — so the runtime pays nothing on a variable write.
 func TestParseNoConditional(t *testing.T) {

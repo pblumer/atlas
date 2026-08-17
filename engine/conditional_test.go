@@ -192,6 +192,191 @@ func TestConditionalBoundaryFiresImmediatelyIfTrue(t *testing.T) {
 	}
 }
 
+// TestConditionalBoundaryNonInterruptingFiresOnce: a non-interrupting conditional boundary fires
+// when its condition becomes true and takes its handler flow while the host job keeps running
+// (ADR-0134). It fires exactly once — a later unrelated write while the condition stays true does
+// not re-fire it — and the host completes normally when its job is done.
+func TestConditionalBoundaryNonInterruptingFiresOnce(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	b := compiler.NewBuilder(107, "cond-boundary-nonint", 1)
+	start := b.AddStartEvent()
+	work := b.AddServiceTask("work", 3)
+	boundary := b.AddBoundaryConditionalEvent(work, mustCompile(t, "flag"), false)
+	done := b.AddEndEvent()
+	notified := b.AddEndEvent()
+	b.Connect(start, work)
+	b.Connect(work, done)
+	b.Connect(boundary, notified)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ServiceTask(cp.Node(work).Detail).JobType
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	// The condition becomes true: the non-interrupting boundary fires alongside the job.
+	p.SetVariables(model.NewKey(1, 1), 0, "operator", boolVar("flag", true))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (after set): %v", err)
+	}
+	if v := elementVisits(t, h.store, cp.Key)[notified]; v != 1 {
+		t.Fatalf("notified visits = %d, want 1 (non-interrupting boundary fired)", v)
+	}
+	if jobGone(t, h.store, jobType) {
+		t.Fatal("the non-interrupting conditional boundary cancelled the host job")
+	}
+	// A later write while the condition stays true must not re-fire the (consumed) boundary.
+	p.SetVariables(model.NewKey(1, 1), 0, "operator", boolVar("other", true))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (after 2nd set): %v", err)
+	}
+	if v := elementVisits(t, h.store, cp.Key)[notified]; v != 1 {
+		t.Errorf("notified visits = %d, want 1 (fired once, no re-fire while condition stays true)", v)
+	}
+	// Completing the job finishes the host and drains the instance.
+	p.CompleteJob(singleActivatableJob(t, h.store, jobType))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (after job): %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after job: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+	if v := elementVisits(t, h.store, cp.Key)[done]; v != 1 {
+		t.Errorf("done visits = %d, want 1 (host completed normally)", v)
+	}
+}
+
+// TestConditionalEventSubInterrupting: an interrupting conditional event subprocess fires when a
+// variable makes its condition true — it tears down the main flow (the waiting job) and runs the
+// handler (ADR-0134), reusing the event-subprocess arm/fire machinery (ADR-0082).
+func TestConditionalEventSubInterrupting(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	b := compiler.NewBuilder(105, "cond-eventsub-int", 1)
+	start := b.AddStartEvent()
+	work := b.AddServiceTask("work", 3)
+	mainEnd := b.AddEndEvent()
+	b.Connect(start, work)
+	b.Connect(work, mainEnd)
+	handler := b.AddSubProcess()
+	b.PushScope(handler)
+	hStart := b.AddStartEvent()
+	hEnd := b.AddEndEvent()
+	b.Connect(hStart, hEnd)
+	b.PopScope()
+	b.SetEventSubProcess(handler, compiler.EventSubProcessDetail{
+		StartNode: hStart, Interrupting: true, Kind: compiler.BoundaryConditional, Condition: mustCompile(t, "alert"),
+	})
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if !cp.HasConditionalEvents() {
+		t.Fatal("HasConditionalEvents = false, want true (conditional event subprocess)")
+	}
+	jobType := cp.ServiceTask(cp.Node(work).Detail).JobType
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	// A variable makes the condition true; the interrupting event subprocess fires.
+	p.SetVariables(model.NewKey(1, 1), 0, "operator", boolVar("alert", true))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (after set): %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after set: process=%d element=%d, want 0 and 0 (handler ran, main flow torn down)", pi, ei)
+	}
+	v := elementVisits(t, h.store, cp.Key)
+	if v[hEnd] != 1 {
+		t.Errorf("handler end visits = %d, want 1 (conditional event subprocess fired)", v[hEnd])
+	}
+	if v[mainEnd] != 0 {
+		t.Errorf("main end visits = %d, want 0 (interrupting handler tore down the main flow)", v[mainEnd])
+	}
+	if !jobGone(t, h.store, jobType) {
+		t.Error("main-flow job survived the interrupting conditional event subprocess")
+	}
+}
+
+// TestConditionalEventSubNonInterrupting: a non-interrupting conditional event subprocess fires
+// when its condition becomes true and runs the handler alongside the still-running main flow —
+// the waiting job is untouched (ADR-0134). It fires once; the main flow completes on its own.
+func TestConditionalEventSubNonInterrupting(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	b := compiler.NewBuilder(106, "cond-eventsub-nonint", 1)
+	start := b.AddStartEvent()
+	work := b.AddServiceTask("work", 3)
+	mainEnd := b.AddEndEvent()
+	b.Connect(start, work)
+	b.Connect(work, mainEnd)
+	handler := b.AddSubProcess()
+	b.PushScope(handler)
+	hStart := b.AddStartEvent()
+	hEnd := b.AddEndEvent()
+	b.Connect(hStart, hEnd)
+	b.PopScope()
+	b.SetEventSubProcess(handler, compiler.EventSubProcessDetail{
+		StartNode: hStart, Interrupting: false, Kind: compiler.BoundaryConditional, Condition: mustCompile(t, "alert"),
+	})
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ServiceTask(cp.Node(work).Detail).JobType
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	// A variable makes the condition true; the non-interrupting handler runs alongside.
+	p.SetVariables(model.NewKey(1, 1), 0, "operator", boolVar("alert", true))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (after set): %v", err)
+	}
+	if v := elementVisits(t, h.store, cp.Key)[hEnd]; v != 1 {
+		t.Errorf("handler end visits = %d, want 1 (non-interrupting conditional event subprocess ran)", v)
+	}
+	if jobGone(t, h.store, jobType) {
+		t.Fatal("the non-interrupting conditional handler cancelled the main-flow job")
+	}
+	// Completing the main-flow job drains the instance; the fired-once trigger is gone.
+	p.CompleteJob(singleActivatableJob(t, h.store, jobType))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (after job): %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after main flow completes: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+	if v := elementVisits(t, h.store, cp.Key)[mainEnd]; v != 1 {
+		t.Errorf("main end visits = %d, want 1 (main flow completed on its own)", v)
+	}
+}
+
 // TestConditionalCatchRecovers proves an armed conditional catch survives a crash: it parks with
 // its condition false; after replaying the log into a fresh store the catch is rebuilt, so a
 // post-recovery variable change re-checks it and fires it (ADR-0134, invariant I6).
