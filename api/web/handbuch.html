@@ -685,7 +685,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;tier&quot; targetRef=&quot;end&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
-        <p class="rz-how"><span data-l="de"><code>calledDecision</code> verweist auf die DMN-Entscheidung <code>discountTier</code>; die <code>ioMapping</code>-Inputs füttern sie, das Ergebnis landet in <code>discount</code>. Deploye die DMN gemeinsam mit dem Prozess in <b>einem Projekt</b> (siehe <a href="#dmn">DMN lernen</a>).</span><span data-l="en"><code>calledDecision</code> points to the DMN decision <code>discountTier</code>; the <code>ioMapping</code> inputs feed it and the result lands in <code>discount</code>. Deploy the DMN together with the process in <b>one project</b> (see <a href="#dmn">Learn DMN</a>).</span></p>
+        <p class="rz-how"><span data-l="de"><code>calledDecision</code> verweist auf die DMN-Entscheidung <code>discountTier</code>; die <code>ioMapping</code>-Inputs füttern sie, das Ergebnis landet in <code>discount</code>. Deploye die DMN gemeinsam mit dem Prozess in <b>einer Applikation</b> (siehe <a href="#dmn">DMN lernen</a>).</span><span data-l="en"><code>calledDecision</code> points to the DMN decision <code>discountTier</code>; the <code>ioMapping</code> inputs feed it and the result lands in <code>discount</code>. Deploy the DMN together with the process in <b>one application</b> (see <a href="#dmn">Learn DMN</a>).</span></p>
       </div>
       <h3 class="rz-group"><span data-l="de">Verzweigen &amp; Zusammenführen</span><span data-l="en">Branch &amp; merge</span></h3>
       <div class="recipe" id="rz-xor">
@@ -1587,11 +1587,13 @@ curl -X POST https://YOUR-INSTANCE/api/v1/instances \
         <a href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a> (if enabled).</p>
 
       <h3 data-l="de">3 · Über die MCP-Tools (für Automatisierung/KI)</h3><h3 data-l="en">3 · Via the MCP tools (for automation/AI)</h3>
-      <pre><code>atlas_create_project   name="Mein Projekt"        → projectId
-atlas_save_form        id=…  projectId=…          (optional)
-atlas_save_draft       xml=&lt;prozess.bpmn&gt;  projectId=…
-atlas_deploy_project   id=&lt;projectId&gt;             → definition key
-atlas_create_instance  key=&lt;definition key&gt;       → starts an instance</code></pre>
+      <pre><code>atlas_create_application  name="Meine Applikation"  → applicationId
+atlas_save_form           id=…  projectId=…          (optional)
+atlas_save_draft          xml=&lt;prozess.bpmn&gt;  projectId=…
+atlas_publish_application id=&lt;applicationId&gt;    → definitions + release
+atlas_create_instance     key=&lt;definition key&gt;      → starts an instance</code></pre>
+      <p class="muted" style="font-size:13px" data-l="de">Der Artefakt-Parameter heisst weiterhin <code>projectId</code>: umbenannt wurden die Applikations-Werkzeuge, nicht die Artefakt-Zuordnung. Die alten <code>atlas_*_project</code>-Werkzeuge funktionieren weiter, sind aber abgekündigt.</p>
+      <p class="muted" style="font-size:13px" data-l="en">The artifact parameter is still <code>projectId</code>: the application tools were renamed, not the artifact tag. The old <code>atlas_*_project</code> tools keep working but are deprecated.</p>
     </section>
 
     <!-- ==================== TEST & SIMULATE ==================== -->

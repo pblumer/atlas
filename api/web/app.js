@@ -1211,16 +1211,17 @@ function toggleSection(id, btn) {
   try { localStorage.setItem("atlas.sec." + id, open ? "1" : "0"); } catch { /* ignore */ }
 }
 
-// viewModelerHome is the project landscape: a clean table of projects (each a
-// container of artifacts, ADR-0034) plus a collapsible list of deployed
-// definitions. Artifact editing happens inside a project (viewProjectDetail),
-// which keeps this overview tidy. "Create new" is a single dropdown.
+// viewModelerHome is the application landscape: a clean table of process
+// applications (each a container of artifacts — the ADR-0034 project reframed by
+// ADR-0128) plus a collapsible list of deployed definitions. Artifact editing
+// happens inside an application (viewProjectDetail), which keeps this overview
+// tidy. "Create new" is a single dropdown.
 async function viewModelerHome() {
   view.innerHTML = `
     <div class="between">
-      <h1>Modeler</h1>
+      <h1>Applications</h1>
       ${dropdown("Create new", "btn", [
-        { label: "New project", icon: "📁", act: "new-project" },
+        { label: "New application", icon: "📦", act: "new-project" },
         { sep: true },
         { header: "Blank resources" },
         { label: "BPMN diagram", icon: "⚙", href: "#/modeler/new" },
@@ -1248,7 +1249,7 @@ async function viewModelerHome() {
     let projects = [], drafts = [], refs = [], forms = [];
     try {
       [projects, drafts, refs, forms] = await Promise.all([
-        api("GET", "/api/v1/projects"),
+        api("GET", "/api/v1/applications"),
         api("GET", "/api/v1/drafts"),
         api("GET", "/api/v1/dmnrefs"),
         api("GET", "/api/v1/forms"),
@@ -1272,20 +1273,20 @@ async function viewModelerHome() {
         { label: "Delete", icon: "🗑", act: "del", data: { id: p.id, name: p.name }, danger: true },
       );
       return `<tr>
-        <td data-filter="${esc(p.name)}"><div class="artifact-name"><span class="mi-icon">📁</span><a href="${href}"><b>${esc(p.name)}</b></a>${visBadge(p)}</div></td>
+        <td data-filter="${esc(p.name)}"><div class="artifact-name"><span class="mi-icon">📦</span><a href="${href}"><b>${esc(p.name)}</b></a>${visBadge(p)}</div></td>
         <td class="muted">${n}</td>
         <td class="muted" data-sort="${p.updatedAt || 0}">${esc(fmtTime(p.updatedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td>
       </tr>`;
     };
     const ungroupedRow = ungrouped.length ? `<tr>
-        <td><div class="artifact-name"><span class="mi-icon">🗂</span><a href="#/modeler/p/ungrouped">Ungrouped</a>
-          <span class="muted" style="font-size:12px">· not in a project</span></div></td>
+        <td><div class="artifact-name"><span class="mi-icon">🗂</span><a href="#/modeler/p/ungrouped">Not assigned</a>
+          <span class="muted" style="font-size:12px">· not in an application</span></div></td>
         <td class="muted">${ungrouped.length}</td><td class="muted">—</td><td></td>
       </tr>` : "";
 
     projRows.innerHTML = (projects.map(projectRow).join("") + ungroupedRow) ||
-      `<tr><td colspan="4" class="empty">No projects yet. Use <b>Create new</b> to add one.</td></tr>`;
+      `<tr><td colspan="4" class="empty">No applications yet. Use <b>Create new</b> to add one.</td></tr>`;
     onMenuAction(projRows, (act, b) => {
       if (act === "rename") renameProject(b.dataset.id, b.dataset.name, renderProjects);
       if (act === "del") deleteProject(b.dataset.id, b.dataset.name, renderProjects);
@@ -1338,7 +1339,7 @@ async function viewModelerHome() {
     try {
       const [procs, projects] = await Promise.all([
         api("GET", "/api/v1/processes"),
-        api("GET", "/api/v1/projects"),
+        api("GET", "/api/v1/applications"),
       ]);
       const groups = groupByProcess(procs);
       if (!groups.length) {
@@ -1360,9 +1361,9 @@ async function viewModelerHome() {
       }
       const buckets = [];
       for (const p of projects) {
-        if (byProject.has(p.id)) buckets.push({ id: p.id, name: p.name, icon: "📁", groups: byProject.get(p.id) });
+        if (byProject.has(p.id)) buckets.push({ id: p.id, name: p.name, icon: "📦", groups: byProject.get(p.id) });
       }
-      if (byProject.has("")) buckets.push({ id: "ungrouped", name: "Ungrouped", icon: "🗂", groups: byProject.get("") });
+      if (byProject.has("")) buckets.push({ id: "ungrouped", name: "Not assigned", icon: "🗂", groups: byProject.get("") });
 
       if (buckets.length === 1 && buckets[0].id === "ungrouped") {
         rows.innerHTML = deployTable(buckets[0].groups);
@@ -1411,7 +1412,7 @@ async function viewProjectDetail(id) {
     let projects = [], drafts = [], refs = [], forms = [];
     try {
       [projects, drafts, refs, forms] = await Promise.all([
-        api("GET", "/api/v1/projects"),
+        api("GET", "/api/v1/applications"),
         api("GET", "/api/v1/drafts"),
         api("GET", "/api/v1/dmnrefs"),
         api("GET", "/api/v1/forms"),
@@ -1419,12 +1420,12 @@ async function viewProjectDetail(id) {
     } catch (e) { root.innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
 
     const known = new Set(projects.map((p) => p.id));
-    const proj = ungrouped ? { id: "ungrouped", name: "Ungrouped" } : projects.find((p) => p.id === id);
+    const proj = ungrouped ? { id: "ungrouped", name: "Not assigned" } : projects.find((p) => p.id === id);
     if (!proj) {
-      root.innerHTML = `<div class="card empty">This project no longer exists. <a href="#/modeler">Back to Modeler</a></div>`;
+      root.innerHTML = `<div class="card empty">This application no longer exists. <a href="#/modeler">Back to Modeler</a></div>`;
       return;
     }
-    setTitle(`${proj.name || "Project"} · Modeler`);
+    setTitle(`${proj.name || "Application"} · Modeler`);
     const mine = (a) => ungrouped ? (!a.projectId || !known.has(a.projectId)) : a.projectId === id;
     const dl = drafts.filter(mine), rl = refs.filter(mine), fl = forms.filter(mine);
 
@@ -1438,7 +1439,7 @@ async function viewProjectDetail(id) {
     // the current one marked. Forms have no move endpoint, so only drafts/refs get it.
     const moveItems = (currentPid, act, key) => [
       { header: "Move to" },
-      { label: "Ungrouped", icon: currentPid ? "" : "•", act, data: { pid: "", key } },
+      { label: "Not assigned", icon: currentPid ? "" : "•", act, data: { pid: "", key } },
       ...projects.map((p) => ({ label: p.name, icon: p.id === currentPid ? "•" : "", act, data: { pid: p.id, key } })),
     ];
 
@@ -1507,29 +1508,39 @@ async function viewProjectDetail(id) {
     const projItems = ungrouped ? [] : [
       ...(rl.length ? [{ label: "Validate DMN", icon: "✔", act: "valproj" }] : []),
       ...(AUTH.enabled && isOwner ? [{ label: "Share…", icon: "👤", act: "shareproj" }] : []),
-      ...(isOwner ? [{ label: "Rename project", icon: "✎", act: "renproj" }] : []),
-      ...(isOwner ? [{ sep: true }, { label: "Delete project", icon: "🗑", act: "delproj", danger: true }] : []),
+      ...(isOwner ? [{ label: "Rename application", icon: "✎", act: "renproj" }] : []),
+      ...(isOwner ? [{ sep: true }, { label: "Delete application", icon: "🗑", act: "delproj", danger: true }] : []),
     ];
     root.innerHTML = `
       <div class="crumb"><a href="#/modeler">Home</a> › ${esc(proj.name)}</div>
       <div class="between">
         <h1>${esc(proj.name)}${ungrouped ? "" : " " + visBadge(proj)}</h1>
         <div class="row">
-          ${(!ungrouped && canWrite) ? `<button class="btn" id="pd-deploy">Deploy</button>` : ""}
+          ${(!ungrouped && canWrite) ? `<button class="btn" id="pd-deploy">Publish</button>` : ""}
           ${canWrite ? dropdown("Create new", "btn neutral", createItems) : ""}
           ${projItems.length ? dropdown("⋯", "icon-btn", projItems) : ""}
         </div>
       </div>
-      <input class="filter-input" id="pd-filter" placeholder="Filter artifacts…" autocomplete="off">
-      <div class="card" style="padding:0">
-        <table data-dt-key="project-artifacts">
-          <thead><tr><th>Name</th><th>Type</th><th>Last changed</th><th></th></tr></thead>
-          <tbody id="pd-rows">${bodyRows ||
-            `<tr><td colspan="4" class="empty">${canWrite
-              ? "No artifacts yet — use <b>Create new</b> to add one."
-              : "No artifacts in this project yet."}</td></tr>`}</tbody>
-        </table>
-      </div>`;
+      ${ungrouped ? "" : `<div class="tabs" id="pd-tabs">
+        <button data-pane="artifacts" class="active">Artifacts</button>
+        <button data-pane="deployments">Deployments</button>
+      </div>`}
+      <div id="pane-artifacts">
+        <input class="filter-input" id="pd-filter" placeholder="Filter artifacts…" autocomplete="off">
+        <div class="card" style="padding:0">
+          <table data-dt-key="project-artifacts">
+            <thead><tr><th>Name</th><th>Type</th><th>Last changed</th><th></th></tr></thead>
+            <tbody id="pd-rows">${bodyRows ||
+              `<tr><td colspan="4" class="empty">${canWrite
+                ? "No artifacts yet — use <b>Create new</b> to add one."
+                : "No artifacts in this application yet."}</td></tr>`}</tbody>
+          </table>
+        </div>
+      </div>
+      ${ungrouped ? "" : `<div id="pane-deployments" hidden>
+        <p class="muted" style="padding:2px 2px 12px">What this application currently has deployed on this server.</p>
+        <div id="pd-deployments"><p class="muted" style="padding:14px 2px">Loading…</p></div>
+      </div>`}`;
 
     const filter = document.getElementById("pd-filter");
     filter.addEventListener("input", () => {
@@ -1537,6 +1548,24 @@ async function viewProjectDetail(id) {
       for (const tr of root.querySelectorAll("#pd-rows tr[data-name]"))
         tr.hidden = q !== "" && !tr.dataset.name.includes(q);
     });
+
+    // Tabs: Artifacts (design-time) and Deployments (what's live for this
+    // application, ADR-0128). The deployments pane loads lazily on first open.
+    const tabs = document.getElementById("pd-tabs");
+    if (tabs) {
+      let loadedDeployments = false;
+      tabs.addEventListener("click", (e) => {
+        const b = e.target.closest("button[data-pane]");
+        if (!b) return;
+        for (const t of tabs.querySelectorAll("button")) t.classList.toggle("active", t === b);
+        document.getElementById("pane-artifacts").hidden = b.dataset.pane !== "artifacts";
+        document.getElementById("pane-deployments").hidden = b.dataset.pane !== "deployments";
+        if (b.dataset.pane === "deployments" && !loadedDeployments) {
+          loadedDeployments = true;
+          renderAppDeployments(id);
+        }
+      });
+    }
 
     onMenuAction(root, (act, b) => {
       switch (act) {
@@ -1556,9 +1585,66 @@ async function viewProjectDetail(id) {
       }
     });
     const deployBtn = document.getElementById("pd-deploy");
-    if (deployBtn) deployBtn.addEventListener("click", () => deployProject(id, render));
+    if (deployBtn) deployBtn.addEventListener("click", () => publishApplication(id, render));
   };
   await render();
+}
+
+// renderAppDeployments fills the Deployments tab: the application's published
+// version, its live definitions with per-definition instance counts, and its
+// release history (ADR-0128). One call each, both scoped to this application.
+async function renderAppDeployments(id) {
+  const host = document.getElementById("pd-deployments");
+  if (!host) return;
+  let view, releases;
+  try {
+    [view, releases] = await Promise.all([
+      api("GET", `/api/v1/applications/${encodeURIComponent(id)}/deployments`),
+      api("GET", `/api/v1/applications/${encodeURIComponent(id)}/releases`),
+    ]);
+  } catch (e) { host.innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
+
+  const defRow = (d) => `<tr>
+    <td><div class="artifact-name"><span class="mi-icon">⚙</span><a href="#/modeler/d/${encodeURIComponent(d.key)}"><b>${esc(d.name || d.processId)}</b></a></div>
+      <div class="muted" style="font-size:12px; padding-left:26px">${esc(d.processId)}</div></td>
+    <td><span class="chip">v${d.version}</span></td>
+    <td>${d.active ? `<span class="pill ok">active</span>` : `<span class="pill">paused</span>`}</td>
+    <td class="muted">${d.running}</td>
+    <td class="muted">${d.finished}</td>
+    <td class="muted" data-sort="${d.deployedAt || 0}">${esc(fmtTime(d.deployedAt))}</td>
+  </tr>`;
+
+  const relRow = (r) => `<tr>
+    <td><span class="chip">v${r.version}</span></td>
+    <td class="muted" data-sort="${r.publishedAt || 0}">${esc(fmtTime(r.publishedAt))}</td>
+    <td class="muted">${(r.members || []).length}</td>
+    <td class="muted">${esc(r.note || "—")}</td>
+  </tr>`;
+
+  host.innerHTML = `
+    <div class="card" style="margin-bottom:16px">
+      <div class="stats">
+        <div class="stat"><b>${view.version ? "v" + view.version : "—"}</b><span>Published version</span></div>
+        <div class="stat"><b>${view.definitions.length}</b><span>Deployed definitions</span></div>
+        <div class="stat"><b>${view.running}</b><span>Running instances</span></div>
+        <div class="stat"><b>${view.finished}</b><span>Finished instances</span></div>
+      </div>
+    </div>
+    <div class="card" style="padding:0">
+      <table>
+        <thead><tr><th>Definition</th><th>Version</th><th>State</th><th>Running</th><th>Finished</th><th>Deployed</th></tr></thead>
+        <tbody>${view.definitions.map(defRow).join("") ||
+          `<tr><td colspan="6" class="empty">Nothing deployed yet — use <b>Publish</b> to ship this application.</td></tr>`}</tbody>
+      </table>
+    </div>
+    <h2 style="margin:22px 0 10px; font-size:15px">Release history</h2>
+    <div class="card" style="padding:0">
+      <table>
+        <thead><tr><th>Version</th><th>Published</th><th>Artifacts</th><th>Note</th></tr></thead>
+        <tbody>${releases.map(relRow).join("") ||
+          `<tr><td colspan="4" class="empty">No releases yet.</td></tr>`}</tbody>
+      </table>
+    </div>`;
 }
 
 async function deleteDraft(processId, reload) {
@@ -1602,37 +1688,41 @@ async function toggleProcessActive(key, inactive, reload) {
   await reload();
 }
 
-// ---------- Projects (ADR-0034) ----------
+// ---------- Applications (ADR-0034 project, reframed by ADR-0128) ----------
+// These call the canonical /api/v1/applications endpoints. The pre-rename
+// project paths still work as deprecated aliases for external callers, but the
+// UI is on the new names. The artifact tag stays `projectId` — ADR-0128 renames
+// the API/UI boundary only, not the on-disk shape.
 async function createProject(reload) {
-  const name = window.prompt("Project name");
+  const name = window.prompt("Application name");
   if (name == null) return; // cancelled
   const trimmed = name.trim();
-  if (!trimmed) { toast("Project name is required", "err"); return; }
+  if (!trimmed) { toast("Application name is required", "err"); return; }
   try {
-    await api("POST", "/api/v1/projects", { name: trimmed });
-    toast(`Created project "${trimmed}"`, "ok");
-  } catch (e) { toast("could not create project: " + e.message, "err"); }
+    await api("POST", "/api/v1/applications", { name: trimmed });
+    toast(`Created application "${trimmed}"`, "ok");
+  } catch (e) { toast("could not create application: " + e.message, "err"); }
   await reload();
 }
 
 async function renameProject(id, current, reload) {
-  const name = window.prompt("Rename project", current);
+  const name = window.prompt("Rename application", current);
   if (name == null) return;
   const trimmed = name.trim();
-  if (!trimmed) { toast("Project name is required", "err"); return; }
+  if (!trimmed) { toast("Application name is required", "err"); return; }
   try {
-    await api("PATCH", `/api/v1/projects/${encodeURIComponent(id)}`, { name: trimmed });
-    toast("Renamed project", "ok");
-  } catch (e) { toast("could not rename project: " + e.message, "err"); }
+    await api("PATCH", `/api/v1/applications/${encodeURIComponent(id)}`, { name: trimmed });
+    toast("Renamed application", "ok");
+  } catch (e) { toast("could not rename application: " + e.message, "err"); }
   await reload();
 }
 
 async function deleteProject(id, name, reload) {
-  if (!window.confirm(`Delete project "${name}"? Its diagrams are kept and become Ungrouped.`)) return;
+  if (!window.confirm(`Delete application "${name}"? Its artifacts are kept and become Not assigned.`)) return;
   try {
-    await api("DELETE", `/api/v1/projects/${encodeURIComponent(id)}`);
-    toast(`Deleted project "${name}"`, "ok");
-  } catch (e) { toast("could not delete project: " + e.message, "err"); }
+    await api("DELETE", `/api/v1/applications/${encodeURIComponent(id)}`);
+    toast(`Deleted application "${name}"`, "ok");
+  } catch (e) { toast("could not delete application: " + e.message, "err"); }
   await reload();
 }
 
@@ -1808,11 +1898,11 @@ function openShareModal(proj, users, degraded, reload) {
 
   const apply = async (fn) => { try { p = await fn(); renderBody(); } catch (e) { toast(e.message, "err"); } };
   const setVisibility = (v) => apply(() =>
-    api("PATCH", `/api/v1/projects/${encodeURIComponent(p.id)}`, { visibility: v }));
+    api("PATCH", `/api/v1/applications/${encodeURIComponent(p.id)}`, { visibility: v }));
   const setMember = (uid, role) => uid && apply(() =>
-    api("PUT", `/api/v1/projects/${encodeURIComponent(p.id)}/members/${encodeURIComponent(uid)}`, { role }));
+    api("PUT", `/api/v1/applications/${encodeURIComponent(p.id)}/members/${encodeURIComponent(uid)}`, { role }));
   const removeMember = (uid) => apply(() =>
-    api("DELETE", `/api/v1/projects/${encodeURIComponent(p.id)}/members/${encodeURIComponent(uid)}`));
+    api("DELETE", `/api/v1/applications/${encodeURIComponent(p.id)}/members/${encodeURIComponent(uid)}`));
 
   function wire() {
     for (const b of body.querySelectorAll("[data-vis]"))
@@ -2308,37 +2398,78 @@ async function validateDmnRef(id) {
 // reference — and reflects each result plus an overall verdict.
 async function validateProject(projectId) {
   try {
-    const rep = await api("POST", `/api/v1/projects/${encodeURIComponent(projectId)}/validate`);
+    const rep = await api("POST", `/api/v1/applications/${encodeURIComponent(projectId)}/validate`);
     for (const r of rep.references) applyRefStatus(r.id, r);
     toast(rep.ok ? "All DMN references are valid" : "Some DMN references are unresolved or invalid",
       rep.ok ? "ok" : "err");
-  } catch (e) { toast("could not validate project: " + e.message, "err"); }
+  } catch (e) { toast("could not validate application: " + e.message, "err"); }
 }
 
-// deployProject deploys the whole project: the server validates its DMN
+// deployProject publishes the whole application: the server validates its DMN
 // references (the deploy-time gate) and, only if all pass, deploys its BPMN
-// diagrams as runnable definitions. A refusal (409) carries the reason and the
-// per-reference results, which we surface without a reload; a success reloads so
-// the new definitions show under "Deployed". Uses a raw fetch so the refusal
-// body (which is not an {error} shape) is read instead of thrown away.
+// diagrams together as runnable definitions (the ADR-0128 headline "Publish"
+// action). A refusal (409) carries the reason and the per-reference results,
+// which we surface without a reload; a success reloads so the new definitions
+// show under "Deployed". Uses a raw fetch so the refusal body (which is not an
+// {error} shape) is read instead of thrown away.
 async function deployProject(id, reload) {
-  if (!window.confirm("Deploy this project? Its DMN references are validated, then its BPMN diagrams are deployed as runnable definitions.")) return;
+  if (!window.confirm("Publish this application? Its DMN references are validated, then its BPMN diagrams are deployed together as runnable definitions.")) return;
   let rep;
   try {
-    const res = await fetch(`/api/v1/projects/${encodeURIComponent(id)}/deploy`, { method: "POST" });
+    const res = await fetch(`/api/v1/applications/${encodeURIComponent(id)}/deploy`, { method: "POST" });
     rep = await res.json();
     if (res.ok && rep.deployed) {
       const n = (rep.definitions || []).length;
-      toast(n ? `Deployed ${n} definition${n === 1 ? "" : "s"}` : "Nothing to deploy in this project", "ok");
+      toast(n ? `Published ${n} definition${n === 1 ? "" : "s"}` : "Nothing to publish in this application", "ok");
       await reload();
       return;
     }
   } catch (e) {
-    toast("deploy failed: " + e.message, "err");
+    toast("publish failed: " + e.message, "err");
     return;
   }
   // Refused (or a server error): show why and reflect any DMN results in place.
-  toast(rep.reason || rep.error || "Deploy refused", "err");
+  toast(rep.reason || rep.error || "Publish refused", "err");
+  for (const r of rep.references || []) applyRefStatus(r.id, r);
+}
+
+// publishApplication is the ADR-0128 headline action: ship the whole application as
+// one bundle and record the release it becomes. It shows the version the publish
+// will mint (v(n) → v(n+1)) and takes an optional changelog note. A refused bundle
+// deploys nothing and records no release, so the version does not advance.
+async function publishApplication(id, reload) {
+  let next = 1;
+  try {
+    const releases = await api("GET", `/api/v1/applications/${encodeURIComponent(id)}/releases`);
+    if (releases.length) next = releases[0].version + 1;
+  } catch { /* best-effort: fall back to "the next version" without a number */ }
+
+  const note = window.prompt(
+    `Publish this application as v${next}?\n\n` +
+    "Its DMN references are validated, then its artifacts are deployed together as " +
+    "one release.\n\nOptional note describing what changes:", "");
+  if (note == null) return; // cancelled
+
+  let rep;
+  try {
+    const res = await fetch(`/api/v1/applications/${encodeURIComponent(id)}/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note: note.trim() }),
+    });
+    rep = await res.json();
+    if (res.ok && rep.deployed) {
+      const n = (rep.definitions || []).length;
+      const v = rep.release ? `v${rep.release.version}` : "";
+      toast(`Published ${v} — ${n} definition${n === 1 ? "" : "s"}`, "ok");
+      await reload();
+      return;
+    }
+  } catch (e) {
+    toast("publish failed: " + e.message, "err");
+    return;
+  }
+  toast(rep.reason || rep.error || "Publish refused", "err");
   for (const r of rep.references || []) applyRefStatus(r.id, r);
 }
 
@@ -3926,7 +4057,7 @@ function viewComingSoon(appId) {
 async function resolveProject(projectId) {
   if (!projectId) return null;
   try {
-    const projects = await api("GET", "/api/v1/projects");
+    const projects = await api("GET", "/api/v1/applications");
     const p = projects.find((x) => x.id === projectId);
     return p ? { id: p.id, name: p.name } : null;
   } catch { return null; }
@@ -4017,7 +4148,7 @@ async function viewDmnViewer(refId) {
   const resolveBack = async () => {
     if (!projId) return;
     try {
-      const projects = await api("GET", "/api/v1/projects");
+      const projects = await api("GET", "/api/v1/applications");
       const p = (projects || []).find((x) => x.id === projId);
       const el = document.getElementById("dmn-back");
       if (p && el && !superseded(gen)) el.textContent = `← ${p.name}`;

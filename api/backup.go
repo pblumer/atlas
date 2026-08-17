@@ -31,6 +31,7 @@ var backupDirs = []string{
 	"drafts",
 	"forms",
 	"projects",
+	"releases",
 	"dmnrefs",
 	"dmn-models",
 	"public-links",
