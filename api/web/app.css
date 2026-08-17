@@ -1610,6 +1610,9 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   display: inline-flex; align-items: center; gap: 6px; min-width: 60px;
 }
 .artifact-name { display: flex; align-items: center; gap: 10px; }
+/* A superseded deployment version: still listed and still addressable, but no
+   longer the one that starts instances, so it recedes behind the current row. */
+.muted-row > td { opacity: .62; }
 .filter-input { max-width: 280px; margin: 14px 0 12px; }
 tr[hidden] { display: none; }
 

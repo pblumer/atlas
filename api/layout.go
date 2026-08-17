@@ -114,9 +114,17 @@ type layoutContainer struct {
 	UserTasks    []layoutElem `xml:"userTask"`
 	ManualTasks  []layoutElem `xml:"manualTask"`
 	BizRuleTasks []layoutElem `xml:"businessRuleTask"`
-	ExclusiveGws []layoutElem `xml:"exclusiveGateway"`
-	ParallelGws  []layoutElem `xml:"parallelGateway"`
-	InclusiveGws []layoutElem `xml:"inclusiveGateway"`
+	ReceiveTasks []layoutElem `xml:"receiveTask"`
+	SendTasks    []layoutElem `xml:"sendTask"`
+
+	// A call activity delegates to another process. It is drawn as an activity in
+	// this plane — the called process has its own diagram.
+	CallActivities []layoutElem `xml:"callActivity"`
+
+	ExclusiveGws  []layoutElem `xml:"exclusiveGateway"`
+	ParallelGws   []layoutElem `xml:"parallelGateway"`
+	InclusiveGws  []layoutElem `xml:"inclusiveGateway"`
+	EventBasedGws []layoutElem `xml:"eventBasedGateway"`
 
 	IntermediateCatchEvents []layoutElem `xml:"intermediateCatchEvent"`
 	IntermediateThrowEvents []layoutElem `xml:"intermediateThrowEvent"`
@@ -124,6 +132,12 @@ type layoutContainer struct {
 	// Expanded subprocesses laid out inline: each is sized to its own contents and
 	// its children rendered in the same plane, offset into the box.
 	SubProcesses []layoutContainer `xml:"subProcess"`
+
+	// A transaction and an ad-hoc subprocess are subprocesses with extra execution
+	// semantics; for layout they are the same shape class — an expanded container
+	// whose children are laid out inside it.
+	Transactions      []layoutContainer `xml:"transaction"`
+	AdHocSubProcesses []layoutContainer `xml:"adHocSubProcess"`
 
 	// Boundary events attach to an activity in this container via attachedToRef and
 	// ride its border rather than a grid cell.
@@ -134,6 +148,21 @@ type layoutContainer struct {
 	LaneSets []layoutLaneSet `xml:"laneSet"`
 
 	Flows []layoutFlow `xml:"sequenceFlow"`
+}
+
+// subContainers is every child that is laid out as an expanded container: plain
+// subprocesses plus the variants that only differ in execution semantics. Both
+// the generator and the layout invariants walk this, so neither can go blind to a
+// container class the other knows about.
+func (c layoutContainer) subContainers() []layoutContainer {
+	if len(c.Transactions) == 0 && len(c.AdHocSubProcesses) == 0 {
+		return c.SubProcesses
+	}
+	subs := make([]layoutContainer, 0, len(c.SubProcesses)+len(c.Transactions)+len(c.AdHocSubProcesses))
+	subs = append(subs, c.SubProcesses...)
+	subs = append(subs, c.Transactions...)
+	subs = append(subs, c.AdHocSubProcesses...)
+	return subs
 }
 
 type layoutLaneSet struct {
@@ -157,6 +186,7 @@ type layoutBoundary struct {
 
 type layoutFlow struct {
 	Id        string `xml:"id,attr"`
+	Name      string `xml:"name,attr"`
 	SourceRef string `xml:"sourceRef,attr"`
 	TargetRef string `xml:"targetRef,attr"`
 }
@@ -170,16 +200,18 @@ var (
 	kindGateway = nodeKind{50, 50}
 )
 
-// Layout spacing. gapX/gapY separate columns and rows; they are deliberately roomy
-// so a node's external label (an event's caption sits below its 36px circle, a
-// boundary event's beside it) has air instead of colliding with the neighbour. The
-// sub* paddings size an expanded subprocess around its laid-out children — a header
-// strip on top for the title, symmetric side and bottom padding — and the sub
-// minimums keep an empty subprocess readable as a container.
+// Layout spacing. gapX/gapY separate columns and rows. gapX is 50, which with the
+// 100px task width puts columns on the 150px pitch AGENTS.md prescribes for
+// hand-authored models — the spacing a reader is used to, and what the diagrams in
+// this repository already use. gapY stays roomier: rows carry the horizontal
+// corridors that exception flows run along, and an event's caption sits below its
+// 36px circle. The sub* paddings size an expanded subprocess around its laid-out
+// children — a header strip on top for the title, symmetric side and bottom padding
+// — and the sub minimums keep an empty subprocess readable as a container.
 const (
 	layoutMarginX  = 150
 	layoutMarginY  = 90
-	layoutGapX     = 80
+	layoutGapX     = 50
 	layoutGapY     = 60
 	subPadX        = 30
 	subHeaderTop   = 40
@@ -233,6 +265,14 @@ type point struct{ x, y int }
 type placedEdge struct {
 	id  string
 	pts []point
+
+	// The flow's caption and where it sits. Zero when hasLabel is false: bpmn-js
+	// then falls back to the polyline's midpoint, which for a branch stepping into
+	// another row lands on the riser between two arrows.
+	label          string
+	hasLabel       bool
+	labelX, labelY int
+	labelW, labelH int
 }
 
 // laidOut is a fully positioned container: its shapes and edges in one coordinate
@@ -298,7 +338,7 @@ func layoutOf(c layoutContainer) laidOut {
 	if lanes, laneOf := collectLanes(c, nodes); len(lanes) > 0 {
 		laneShapes = placeLaned(nodes, lanes, laneOf, trunk)
 	} else {
-		placeNodes(nodes, trunk)
+		placeNodes(nodes, trunk, c.Flows, idx)
 	}
 	placeBoundaries(nodes, idx, c.Flows)
 
@@ -306,6 +346,7 @@ func layoutOf(c layoutContainer) laidOut {
 	lo.shapes = append(lo.shapes, laneShapes...) // lane bands before the nodes they hold
 	emitShapes(&lo, nodes, inner)
 	emitEdges(&lo, nodes, idx, c.Flows, back, columnRight(nodes), loopChannelY(nodes))
+	placeFlowLabels(&lo) // after both shapes and edges exist: placement avoids them
 	normalize(&lo)
 	return lo
 }
@@ -349,12 +390,17 @@ func containerNodes(c layoutContainer) (nodes []lnode, inner map[string]*laidOut
 	add(c.UserTasks, kindTask)
 	add(c.ManualTasks, kindTask)
 	add(c.BizRuleTasks, kindTask)
+	add(c.ReceiveTasks, kindTask)
+	add(c.SendTasks, kindTask)
+	add(c.CallActivities, kindTask)
 	add(c.ExclusiveGws, kindGateway)
 	add(c.ParallelGws, kindGateway)
 	add(c.InclusiveGws, kindGateway)
+	add(c.EventBasedGws, kindGateway)
 
-	for i := range c.SubProcesses {
-		sp := c.SubProcesses[i]
+	subs := c.subContainers()
+	for i := range subs {
+		sp := subs[i]
 		if sp.Id == "" {
 			continue
 		}
@@ -590,7 +636,7 @@ func orderLayer(idxs []int, trunk []bool) []int {
 // heights differ, and side branches — error handlers and the like — rise above it
 // rather than dropping below. Boundary events are skipped here and positioned by
 // placeBoundaries.
-func placeNodes(nodes []lnode, trunk []bool) {
+func placeNodes(nodes []lnode, trunk []bool, flows []layoutFlow, idx map[string]int) {
 	laneW := map[int]int{}
 	maxLayer := 0
 	for i := range nodes {
@@ -610,7 +656,7 @@ func placeNodes(nodes []lnode, trunk []bool) {
 		colX[l] = colX[l-1] + laneW[l-1] + layoutGapX
 	}
 
-	row := assignRows(nodes, trunk)
+	row := assignRows(nodes, trunk, flows, idx)
 	maxRow := 0
 	rowH := map[int]int{}
 	for i := range nodes {
@@ -642,11 +688,21 @@ func placeNodes(nodes []lnode, trunk []bool) {
 }
 
 // assignRows places the trunk on row 0 and every other node on the lowest row above
-// it that is still free in that node's column. A branch therefore keeps one row
-// across the columns it spans — so it runs straight instead of sagging toward the
-// happy path column by column — while two branches that never share a column pack
-// onto the same row. Boundary events get no row; placeBoundaries handles them.
-func assignRows(nodes []lnode, trunk []bool) []int {
+// it that is free across the node's whole footprint. A branch therefore keeps one
+// row across the columns it spans — so it runs straight instead of sagging toward
+// the happy path column by column — while two branches that never share a column
+// pack onto the same row. Boundary events get no row; placeBoundaries handles them.
+//
+// A node's footprint is wider than the column it stands in: an edge arriving from
+// several columns back travels horizontally at *this* node's row, so those columns
+// have to stay clear too. Reserving only the node's own column is what let an
+// unrelated branch settle into the corridor of a shared error handler — the
+// handler that eight exception flows fan into — leaving the flows nowhere to run.
+//
+// Footprints are claimed widest first, so the long corridor takes the row nearest
+// the trunk and short branches stack above it, rather than a one-column branch
+// taking the low row and forcing the corridor to detour around it.
+func assignRows(nodes []lnode, trunk []bool, flows []layoutFlow, idx map[string]int) []int {
 	row := make([]int, len(nodes))
 	used := map[int]map[int]bool{} // column -> rows already taken
 	take := func(col, r int) {
@@ -660,19 +716,64 @@ func assignRows(nodes []lnode, trunk []bool) []int {
 			take(nodes[i].layer, 0)
 		}
 	}
+
+	lo, hi := footprints(nodes, flows, idx)
+	order := make([]int, 0, len(nodes))
 	for i := range nodes {
-		if nodes[i].bound || trunk[i] {
-			continue
+		if !nodes[i].bound && !trunk[i] {
+			order = append(order, i)
 		}
-		col := nodes[i].layer
+	}
+	sort.SliceStable(order, func(a, b int) bool {
+		return hi[order[a]]-lo[order[a]] > hi[order[b]]-lo[order[b]]
+	})
+
+	for _, i := range order {
 		r := 1
-		for used[col][r] {
+		for !freeAcross(used, lo[i], hi[i], r) {
 			r++
 		}
 		row[i] = r
-		take(col, r)
+		for c := lo[i]; c <= hi[i]; c++ {
+			take(c, r)
+		}
 	}
 	return row
+}
+
+// footprints returns each node's column span: the column it stands in, widened to
+// take in every column an incoming multi-column edge crosses on its way here. Such
+// an edge runs horizontally at this node's row, so it needs the same row kept clear
+// the whole way. An edge from the adjacent column is left out — it is a short elbow
+// in the column gap, not a corridor, and counting it would break a two-node branch
+// (handler → end event) apart onto separate rows.
+func footprints(nodes []lnode, flows []layoutFlow, idx map[string]int) (lo, hi []int) {
+	lo = make([]int, len(nodes))
+	hi = make([]int, len(nodes))
+	for i := range nodes {
+		lo[i], hi[i] = nodes[i].layer, nodes[i].layer
+	}
+	for _, f := range flows {
+		s, sok := idx[f.SourceRef]
+		t, tok := idx[f.TargetRef]
+		if !sok || !tok {
+			continue
+		}
+		if nodes[s].layer+1 < nodes[t].layer && nodes[s].layer < lo[t] {
+			lo[t] = nodes[s].layer
+		}
+	}
+	return lo, hi
+}
+
+// freeAcross reports whether row r is untaken in every column of [lo,hi].
+func freeAcross(used map[int]map[int]bool, lo, hi, r int) bool {
+	for c := lo; c <= hi; c++ {
+		if used[c][r] {
+			return false
+		}
+	}
+	return true
 }
 
 // collectLanes flattens the container's lane sets into an ordered lane list and a
@@ -919,7 +1020,12 @@ func emitShapes(lo *laidOut, nodes []lnode, inner map[string]*laidOut) {
 // per-rune estimate is enough — the box only needs to position the label, and the
 // renderer reflows the actual text.
 func boundaryLabelWidth(s string) int {
-	w := utf8.RuneCountInString(s) * 7
+	// 5.5px per rune. bpmn-js writes measured label bounds back into the DI, and in
+	// hand-drawn models those come out near 5.2px per rune for the default external-
+	// label font ("Session Error" → 67px). Guessing high is not the safe direction:
+	// the renderer centers the caption in whatever box it is given, so an oversized
+	// box pushes the visible text off the anchor rather than reserving slack.
+	w := utf8.RuneCountInString(s) * 11 / 2
 	if w < 20 {
 		w = 20
 	}
@@ -949,7 +1055,7 @@ func emitEdges(lo *laidOut, nodes []lnode, idx map[string]int, flows []layoutFlo
 			lane++
 			pts = routeChannel(nodes[s], nodes[t], colRight[nodes[s].layer]+layoutGapX/2, y)
 		}
-		lo.edges = append(lo.edges, placedEdge{id: f.Id, pts: pts})
+		lo.edges = append(lo.edges, placedEdge{id: f.Id, pts: pts, label: strings.TrimSpace(f.Name)})
 	}
 }
 
@@ -1137,6 +1243,87 @@ func shiftShapes(ss []placedShape, dx, dy int) []placedShape {
 	return out
 }
 
+// flowLabelH is a caption's line height; its width comes from the same rune
+// estimate boundary-event labels use.
+const flowLabelH = 14
+
+// flowLabelGap is how far a caption sits off its own line — close enough to read as
+// belonging to it, far enough not to be struck by it.
+const flowLabelGap = 4
+
+// placeFlowLabels gives every named flow a caption box. A label with no position is
+// left to the renderer, which puts it at the polyline's midpoint: for a branch that
+// steps into another row that is the middle of the riser, stranded between two
+// arrows and readable as belonging to either. Candidates run from the source end
+// outwards — a gateway's branches are read at the fork — and the first one that
+// clears every shape and every other edge wins.
+func placeFlowLabels(lo *laidOut) {
+	for i := range lo.edges {
+		e := &lo.edges[i]
+		if e.label == "" || len(e.pts) < 2 {
+			continue
+		}
+		w, h := boundaryLabelWidth(e.label), flowLabelH
+		cands := flowLabelCandidates(e.pts, w, h)
+		for _, c := range cands {
+			if flowLabelClear(c, w, h, lo) {
+				e.hasLabel, e.labelX, e.labelY, e.labelW, e.labelH = true, c.x, c.y, w, h
+				break
+			}
+		}
+		// Nothing clear: take the first candidate anyway. A caption that sits by its
+		// own line beats one the renderer drops on the riser.
+		if !e.hasLabel && len(cands) > 0 {
+			e.hasLabel, e.labelX, e.labelY, e.labelW, e.labelH = true, cands[0].x, cands[0].y, w, h
+		}
+	}
+}
+
+// flowLabelCandidates lists caption positions along a polyline, best first: beside
+// each segment from the source end, the far side of the line before the near one.
+func flowLabelCandidates(pts []point, w, h int) []point {
+	var out []point
+	for k := 1; k < len(pts); k++ {
+		p, q := pts[k-1], pts[k]
+		switch {
+		case p.y == q.y && p.x != q.x: // horizontal: above, then below
+			midX := (p.x + q.x) / 2
+			out = append(out,
+				point{midX - w/2, p.y - flowLabelGap - h},
+				point{midX - w/2, p.y + flowLabelGap})
+		case p.x == q.x && p.y != q.y: // vertical: right, then left
+			midY := (p.y + q.y) / 2
+			out = append(out,
+				point{p.x + flowLabelGap, midY - h/2},
+				point{p.x - flowLabelGap - w, midY - h/2})
+		}
+	}
+	return out
+}
+
+// flowLabelClear reports whether a caption box at p avoids every shape and is
+// struck by no edge. Containers are skipped — a label inside an expanded subprocess
+// or a lane band is where it belongs — matching the layout invariants.
+func flowLabelClear(p point, w, h int, lo *laidOut) bool {
+	box := lnode{x: p.x, y: p.y, w: w, h: h}
+	for _, s := range lo.shapes {
+		if s.expanded || s.horizontal {
+			continue
+		}
+		if p.x < s.x+s.w && s.x < p.x+w && p.y < s.y+s.h && s.y < p.y+h {
+			return false
+		}
+	}
+	for _, e := range lo.edges {
+		for k := 1; k < len(e.pts); k++ {
+			if segmentCutsNode(e.pts[k-1], e.pts[k], box) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func shiftEdges(es []placedEdge, dx, dy int) []placedEdge {
 	out := make([]placedEdge, len(es))
 	for i, e := range es {
@@ -1144,7 +1331,11 @@ func shiftEdges(es []placedEdge, dx, dy int) []placedEdge {
 		for j, p := range e.pts {
 			pts[j] = point{p.x + dx, p.y + dy}
 		}
-		out[i] = placedEdge{id: e.id, pts: pts}
+		out[i] = e
+		out[i].pts = pts
+		if e.hasLabel {
+			out[i].labelX, out[i].labelY = e.labelX+dx, e.labelY+dy
+		}
 	}
 	return out
 }
@@ -1220,10 +1411,10 @@ func generateCollaborationDI(defs layoutDefs) (string, bool) {
 		if !sok || !tok || mf.Id == "" {
 			continue
 		}
-		writeEdge(&b, mf.Id, []point{
+		writeEdge(&b, placedEdge{id: mf.Id, pts: []point{
 			{src.x + src.w/2, src.y + src.h},
 			{tgt.x + tgt.w/2, tgt.y},
-		})
+		}})
 	}
 
 	closePlane(&b)
@@ -1259,7 +1450,7 @@ func writeLaidOut(b *strings.Builder, lo laidOut) {
 		writeShape(b, s)
 	}
 	for _, e := range lo.edges {
-		writeEdge(b, e.id, e.pts)
+		writeEdge(b, e)
 	}
 }
 
@@ -1286,10 +1477,15 @@ func writeShape(b *strings.Builder, s placedShape) {
 
 // writeEdge renders one BPMNEdge for a flow (or message flow) from its ordered
 // waypoints — two for a straight run, more for an orthogonal elbow.
-func writeEdge(b *strings.Builder, id string, pts []point) {
-	fmt.Fprintf(b, "      <bpmndi:BPMNEdge id=\"%s\" bpmnElement=\"%s\">\n", attr(id+"_di"), attr(id))
-	for _, p := range pts {
+func writeEdge(b *strings.Builder, e placedEdge) {
+	fmt.Fprintf(b, "      <bpmndi:BPMNEdge id=\"%s\" bpmnElement=\"%s\">\n", attr(e.id+"_di"), attr(e.id))
+	for _, p := range e.pts {
 		fmt.Fprintf(b, "        <omgdi:waypoint x=\"%d\" y=\"%d\"/>\n", p.x, p.y)
+	}
+	if e.hasLabel {
+		b.WriteString("        <bpmndi:BPMNLabel>\n")
+		fmt.Fprintf(b, "          <omgdc:Bounds x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\"/>\n", e.labelX, e.labelY, e.labelW, e.labelH)
+		b.WriteString("        </bpmndi:BPMNLabel>\n")
 	}
 	b.WriteString("      </bpmndi:BPMNEdge>\n")
 }

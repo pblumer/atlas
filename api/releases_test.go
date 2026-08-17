@@ -319,6 +319,69 @@ func TestDeletingApplicationClearsItsReleases(t *testing.T) {
 	}
 }
 
+// TestDeploymentsViewMarksSupersededVersions pins the lifecycle the engine already
+// enforces: redeploying a process id supersedes its previous version, and only the
+// newest one still starts instances on its own (its message/signal/timer start
+// subscriptions replace the older version's — engine/processor.go). The view must
+// say which version that is, rather than showing every version as equally live.
+func TestDeploymentsViewMarksSupersededVersions(t *testing.T) {
+	ts := newTestServer(t)
+	app := mkApp(t, ts, "Versioned")
+
+	if code, _ := doReq(t, ts, http.MethodPost, "/api/v1/drafts?projectId="+app, releasableBPMN("vproc"), "application/xml"); code != http.StatusOK {
+		t.Fatal("save draft")
+	}
+	// Three publishes of the same process id → v1, v2, v3 of that definition.
+	for i := range 3 {
+		if code, res := publishApp(t, ts, app, ""); code != http.StatusOK || !res.Deployed {
+			t.Fatalf("publish %d = %d", i+1, code)
+		}
+	}
+
+	code, raw := doReq(t, ts, http.MethodGet, "/api/v1/applications/"+app+"/deployments", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("deployments status=%d body=%s", code, raw)
+	}
+	var view struct {
+		Processes   int `json:"processes"`
+		Definitions []struct {
+			ProcessID string `json:"processId"`
+			Version   int32  `json:"version"`
+			Active    bool   `json:"active"`
+			Current   bool   `json:"current"`
+		} `json:"definitions"`
+	}
+	if err := json.Unmarshal(raw, &view); err != nil {
+		t.Fatalf("decode deployments view: %v (%s)", err, raw)
+	}
+	if len(view.Definitions) != 3 {
+		t.Fatalf("definitions = %+v, want three versions", view.Definitions)
+	}
+	// Exactly one is current — the highest version — and the rest are superseded.
+	current := 0
+	for _, d := range view.Definitions {
+		if d.Current {
+			current++
+			if d.Version != 3 {
+				t.Errorf("current definition is v%d, want the newest (v3)", d.Version)
+			}
+		}
+		// Superseded is not the same as paused: nobody deactivated these, so the
+		// operator flag stays true throughout (ADR-0119).
+		if !d.Active {
+			t.Errorf("v%d reads as paused, but no operator deactivated it", d.Version)
+		}
+	}
+	if current != 1 {
+		t.Fatalf("%d definitions marked current, want exactly 1", current)
+	}
+	// The headline count is processes, not versions: three versions of one process
+	// is one process, which is what an operator actually runs.
+	if view.Processes != 1 {
+		t.Errorf("processes = %d, want 1 (three versions of one process id)", view.Processes)
+	}
+}
+
 // TestPublishRecordsPublisherUnderAuth covers the attribution branch: with auth on
 // the release records who published it, so the history says more than "someone".
 func TestPublishRecordsPublisherUnderAuth(t *testing.T) {
