@@ -692,20 +692,36 @@ func (p *Processor) notifyJobAvailable(jobType int32) {
 // same applyToState used live (invariant I4), and restores the key counter and
 // log position from what the log already froze (invariant I6). Call once after
 // New, before processing.
-func (p *Processor) Recover() error {
+func (p *Processor) Recover() error { return p.RecoverFrom("") }
+
+// RecoverFrom is Recover with a recovery-checkpoint root (ADR-0131). When the root
+// holds a checkpoint this processor may skip past, replay starts after the position
+// that checkpoint covers instead of at genesis, and the highest log position and key
+// counter it recorded seed what the skipped prefix would have contributed.
+//
+// An empty root, or no usable checkpoint, replays the whole log exactly as before:
+// falling back is always correct, only slower, so a missing, corrupt, foreign, or
+// too-new checkpoint can never produce wrong state (invariant I2 is untouched — the
+// WAL remains the source of truth).
+func (p *Processor) RecoverFrom(checkpointRoot string) error {
 	lastApplied, err := p.store.LastAppliedPosition()
 	if err != nil {
 		return err
 	}
+	after, seedPos, seedCounter := p.checkpointSeed(checkpointRoot, lastApplied)
+
 	tx := p.store.NewTransaction()
 	defer tx.Close()
 
 	maxPos := lastApplied
+	if seedPos > maxPos {
+		maxPos = seedPos
+	}
 	maxApplied := lastApplied
-	var maxCounter uint64
+	maxCounter := seedCounter
 	applied := false
 
-	if err := p.log.Replay(func(data []byte) error {
+	onRecord := func(data []byte) error {
 		rec, err := model.ReadRecord(data)
 		if err != nil {
 			return err
@@ -731,7 +747,16 @@ func (p *Processor) Recover() error {
 			maxApplied = h.Position
 		}
 		return nil
-	}); err != nil {
+	}
+
+	// Skipping the prefix needs a record's position, which only the model layer can
+	// decode; the wal package asks for it through this.
+	if after == 0 {
+		err = p.log.Replay(onRecord)
+	} else {
+		err = p.log.ReplayFrom(after, recordPosition, onRecord)
+	}
+	if err != nil {
 		return err
 	}
 
