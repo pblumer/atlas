@@ -147,6 +147,27 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
   color:var(--accent);margin-right:8px}
 .recipe pre{margin:6px 0}
 .rz-how{margin:10px 0 0;font-size:14px}
+
+/* ---- recipe: diagram, actions, collapsed XML ---- */
+.rz-diagram{background:#fff;border:1px solid var(--border);border-radius:10px;margin:4px 0 12px;
+  min-height:132px;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:8px}
+.rz-diagram svg{width:100%;max-width:100%;height:auto;max-height:300px;display:block}
+.rz-dhint{font-size:13px;color:#7a828c}
+.rz-diagram.failed{min-height:0;padding:10px;background:var(--chip);border-style:dashed}
+.rz-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+.rz-btn{cursor:pointer;border:0;border-radius:9px;padding:8px 14px;font:inherit;font-weight:600;font-size:14px;
+  background:var(--accent);color:var(--accent-fg)}
+.rz-btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--border)}
+.rz-btn:disabled{opacity:.6;cursor:default}
+.rz-status{font-size:13.5px;color:var(--muted);min-height:0;margin-bottom:6px}
+.rz-status:not(:empty){min-height:20px}
+.rz-status.ok{color:var(--ok);font-weight:600}
+.rz-status.err{color:var(--err);font-weight:600}
+.rz-status a{margin-left:8px}
+.rz-hint{margin:0 0 8px;font-size:13.5px;color:var(--muted)}
+.rz-xml{margin:2px 0 0}
+.rz-xml>summary{cursor:pointer;font-size:13.5px;color:var(--muted);padding:4px 0;list-style-position:inside}
+.rz-xml>summary:hover{color:var(--accent)}
 </style>
 </head>
 <body>
@@ -581,25 +602,28 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <!-- ==================== RECIPES ==================== -->
     <section id="rezepte">
       <h2 data-l="de">Rezepte</h2><h2 data-l="en">Recipes</h2>
-      <p class="lead" data-l="de">Fertige, kopierbare Bausteine für die wichtigsten BPMN-Muster – jeder ist ein
-        vollständiges, lauffähiges Modell. Kopiere das XML und importiere es im <a href="/#/modeler/new">Modeler</a>
-        (Neues Diagramm → XML einfügen); das Layout erzeugt Atlas beim Deploy automatisch. Alle Prozess-Snippets
-        deployen unverändert gegen die Atlas-Engine – nur das DMN-Rezept braucht zusätzlich seine Entscheidung
-        (siehe Hinweis dort).</p>
-      <p class="lead" data-l="en">Ready-made, copy-paste building blocks for the essential BPMN patterns – each one is a
-        complete, runnable model. Copy the XML and import it in the <a href="/#/modeler/new">Modeler</a>
-        (New diagram → paste XML); Atlas lays it out automatically on deploy. Every process snippet deploys as-is
-        against the Atlas engine – only the DMN recipe additionally needs its decision (see the note there).</p>
+      <p class="lead" data-l="de">Fertige Bausteine für die wichtigsten BPMN-Muster. Jedes Rezept zeigt dir zuerst das <b>Diagramm</b> — du kannst es mit einem Klick <b>ausprobieren</b> (Atlas deployt und startet es in dieser Instanz) oder <b>im Modeler öffnen</b> und umbauen. Das XML dahinter ist eingeklappt: du brauchst es nur, wenn du Modelle von Hand bearbeitest.</p>
+      <p class="lead" data-l="en">Ready-made building blocks for the essential BPMN patterns. Every recipe leads with its <b>diagram</b> — <b>try it</b> in one click (Atlas deploys and starts it in this instance) or <b>open it in the Modeler</b> and rebuild it. The XML behind it is collapsed: you only need it if you edit models by hand.</p>
       <h3 class="rz-group"><span data-l="de">Automatisieren</span><span data-l="en">Automate</span></h3>
-      <div class="recipe" id="rz-script-value">
+      <div class="recipe" id="rz-script-value" data-proc="recipe-script-value">
         <h4><span class="rz-emoji" aria-hidden="true">🧮</span>
           <span data-l="de">Script-Task: einen Wert berechnen</span><span data-l="en">Script task: compute a value</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Ein Zwischenergebnis aus vorhandenen Variablen ableiten – ganz ohne externen Worker.</span><span data-l="en">Derive an intermediate value from existing variables – with no external worker.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-script-value&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-script-value&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-script-value&quot; name=&quot;Netto berechnen&quot; isExecutable=&quot;true&quot;&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;scriptTask id=&quot;net&quot; name=&quot;Netto&quot;&gt;
@@ -612,17 +636,28 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;net&quot; targetRef=&quot;end&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de">Der <code>zeebe:script</code>-Ausdruck (FEEL, beginnt mit <code>=</code>) läuft in der Engine und schreibt sein Ergebnis nach <code>resultVariable</code>. Kein Token parkt – die Instanz läuft durch.</span><span data-l="en">The <code>zeebe:script</code> expression (FEEL, starts with <code>=</code>) runs inside the engine and writes its result to <code>resultVariable</code>. No token parks – the instance runs straight through.</span></p>
       </div>
-      <div class="recipe" id="rz-script-list">
+      <div class="recipe" id="rz-script-list" data-proc="recipe-script-list">
         <h4><span class="rz-emoji" aria-hidden="true">📊</span>
           <span data-l="de">Script-Task: Listen &amp; Objekte</span><span data-l="en">Script task: lists &amp; objects</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Über eine Liste rechnen, filtern und ein strukturiertes Ergebnis bauen.</span><span data-l="en">Compute over a list, filter it, and build a structured result.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-script-list&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-script-list&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-script-list&quot; name=&quot;Warenkorb summieren&quot; isExecutable=&quot;true&quot;&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;scriptTask id=&quot;sum&quot; name=&quot;Summe&quot;&gt;
@@ -635,17 +670,28 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;sum&quot; targetRef=&quot;end&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de">FEEL kann Listen durchlaufen (<code>for … return …</code>), filtern (<code>positions[price &gt; 100]</code>) und Objekte bauen (<code>{ … }</code>). Das Ergebnis landet als verschachteltes Objekt in <code>cart</code>.</span><span data-l="en">FEEL iterates lists (<code>for … return …</code>), filters them (<code>positions[price &gt; 100]</code>) and builds objects (<code>{ … }</code>). The result lands as a nested object in <code>cart</code>.</span></p>
       </div>
-      <div class="recipe" id="rz-service">
+      <div class="recipe" id="rz-service" data-proc="recipe-service">
         <h4><span class="rz-emoji" aria-hidden="true">⚙️</span>
           <span data-l="de">Service-Task: Arbeit auslagern</span><span data-l="en">Service task: offload work</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Einen automatischen Schritt an einen Worker oder Connector übergeben.</span><span data-l="en">Hand an automatic step to a worker or connector.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-service&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-service&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-service&quot; name=&quot;Zahlung einziehen&quot; isExecutable=&quot;true&quot;&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;serviceTask id=&quot;charge&quot; name=&quot;Karte belasten&quot;&gt;
@@ -658,17 +704,28 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;charge&quot; targetRef=&quot;end&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de">Der Token parkt als <b>Job</b> vom Typ <code>payment</code>, bis ein Worker ihn abschließt; scheitert er, wird bis <code>retries</code>-mal erneut versucht, danach entsteht ein Incident. Für REST, E-Mail, SharePoint &amp; Co. nimm die fertigen Connector-Vorlagen aus dem <a href="/#/modeler/marketplace">Marketplace</a>.</span><span data-l="en">The token parks as a <b>job</b> of type <code>payment</code> until a worker completes it; on failure it retries up to <code>retries</code> times, then raises an incident. For REST, e-mail, SharePoint &amp; co. use the ready-made connector templates in the <a href="/#/modeler/marketplace">Marketplace</a>.</span></p>
       </div>
-      <div class="recipe" id="rz-dmn">
+      <div class="recipe" id="rz-dmn" data-proc="recipe-dmn">
         <h4><span class="rz-emoji" aria-hidden="true">📐</span>
           <span data-l="de">Business-Rule-Task: Entscheidung via DMN</span><span data-l="en">Business rule task: decide via DMN</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Komplexe Regeln in eine DMN-Tabelle auslagern statt in ein Gewirr aus Gateways.</span><span data-l="en">Move complex rules into a DMN table instead of a maze of gateways.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <p class="rz-hint"><span data-l="de">Dieses Rezept braucht zusätzlich seine DMN-Entscheidung <code>discountTier</code> — lege sie an (siehe <a href="#dmn">DMN lernen</a>), dann läuft es.</span><span data-l="en">This recipe additionally needs its DMN decision <code>discountTier</code> — create it (see <a href="#dmn">Learn DMN</a>) and it will run.</span></p>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-dmn&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-dmn&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-dmn&quot; name=&quot;Rabatt bestimmen&quot; isExecutable=&quot;true&quot;&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;businessRuleTask id=&quot;tier&quot; name=&quot;Rabattstufe&quot;&gt;
@@ -685,18 +742,29 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;tier&quot; targetRef=&quot;end&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de"><code>calledDecision</code> verweist auf die DMN-Entscheidung <code>discountTier</code>; die <code>ioMapping</code>-Inputs füttern sie, das Ergebnis landet in <code>discount</code>. Deploye die DMN gemeinsam mit dem Prozess in <b>einer Applikation</b> (siehe <a href="#dmn">DMN lernen</a>).</span><span data-l="en"><code>calledDecision</code> points to the DMN decision <code>discountTier</code>; the <code>ioMapping</code> inputs feed it and the result lands in <code>discount</code>. Deploy the DMN together with the process in <b>one application</b> (see <a href="#dmn">Learn DMN</a>).</span></p>
       </div>
       <h3 class="rz-group"><span data-l="de">Verzweigen &amp; Zusammenführen</span><span data-l="en">Branch &amp; merge</span></h3>
-      <div class="recipe" id="rz-xor">
+      <div class="recipe" id="rz-xor" data-proc="recipe-xor">
         <h4><span class="rz-emoji" aria-hidden="true">🔀</span>
           <span data-l="de">Exklusives Gateway: bedingtes Routing</span><span data-l="en">Exclusive gateway: conditional routing</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Genau einen Weg abhängig von den Daten wählen – mit sicherem Default.</span><span data-l="en">Pick exactly one path based on the data – with a safe default.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-xor&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-xor&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-xor&quot; name=&quot;Freigabe nötig?&quot; isExecutable=&quot;true&quot;&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;exclusiveGateway id=&quot;gw&quot; name=&quot;Betrag?&quot; default=&quot;f_auto&quot;/&gt;
@@ -714,17 +782,28 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;auto&quot; targetRef=&quot;end&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de">Das Gateway prüft die <code>conditionExpression</code>-Ausdrücke der Ausgänge von oben und nimmt den ersten wahren; trifft keiner zu, greift der <code>default</code>-Fluss. <b>Setze immer einen Default</b>, sonst kann der Token stecken bleiben.</span><span data-l="en">The gateway evaluates the outgoing flows' <code>conditionExpression</code>s and takes the first true one; if none match, the <code>default</code> flow fires. <b>Always set a default</b>, or the token can get stuck.</span></p>
       </div>
-      <div class="recipe" id="rz-parallel">
+      <div class="recipe" id="rz-parallel" data-proc="recipe-parallel">
         <h4><span class="rz-emoji" aria-hidden="true">⏸️</span>
           <span data-l="de">Paralleles Gateway: gleichzeitig &amp; zusammenführen</span><span data-l="en">Parallel gateway: fork &amp; join</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Mehrere Schritte gleichzeitig laufen lassen und erst weiter, wenn alle fertig sind.</span><span data-l="en">Run several steps at once and continue only when all are done.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-parallel&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-parallel&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-parallel&quot; name=&quot;Parallel prüfen&quot; isExecutable=&quot;true&quot;&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;parallelGateway id=&quot;fork&quot;/&gt;
@@ -744,17 +823,28 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f6&quot; sourceRef=&quot;join&quot; targetRef=&quot;end&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de">Der <code>fork</code> erzeugt für jeden Ausgang einen Token; der <code>join</code> wartet, bis <b>alle</b> eingehenden Token da sind, und führt dann einen einzigen weiter. Fork und Join gehören paarweise zusammen.</span><span data-l="en">The <code>fork</code> creates a token per outgoing flow; the <code>join</code> waits until <b>all</b> incoming tokens have arrived, then continues a single one. Fork and join come in pairs.</span></p>
       </div>
-      <div class="recipe" id="rz-event-gateway">
+      <div class="recipe" id="rz-event-gateway" data-proc="recipe-event-gw">
         <h4><span class="rz-emoji" aria-hidden="true">🎲</span>
           <span data-l="de">Event-based Gateway: erstes Ereignis gewinnt</span><span data-l="en">Event-based gateway: first event wins</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Auf mehrere mögliche Ereignisse warten – das erste entscheidet, der Rest wird verworfen.</span><span data-l="en">Wait for several possible events – the first decides, the rest are discarded.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-event-gw&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-event-gw&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;message id=&quot;Msg_go&quot; name=&quot;go&quot;/&gt;
   &lt;process id=&quot;recipe-event-gw&quot; name=&quot;Antwort oder Timeout&quot; isExecutable=&quot;true&quot;&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
@@ -774,17 +864,28 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f5&quot; sourceRef=&quot;timeout&quot; targetRef=&quot;end_timeout&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de">Hinter dem Gateway stehen nur wartende Ereignisse (Nachricht, Timer, Signal). Es ist eine <i>deferred choice</i>: die Umgebung entscheidet, nicht die Daten. Klassisch für „warte auf Antwort, sonst Timeout“.</span><span data-l="en">Only waiting events (message, timer, signal) may follow the gateway. It's a <i>deferred choice</i>: the environment decides, not the data. The classic "wait for a reply, otherwise time out".</span></p>
       </div>
-      <div class="recipe" id="rz-inclusive">
+      <div class="recipe" id="rz-inclusive" data-proc="recipe-inclusive">
         <h4><span class="rz-emoji" aria-hidden="true">🔱</span>
           <span data-l="de">Inklusives Gateway: mehrere Wege zugleich</span><span data-l="en">Inclusive gateway: several paths at once</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Alle zutreffenden Zweige gleichzeitig gehen – nicht nur einen, nicht immer alle.</span><span data-l="en">Take every matching branch at once – not just one, not always all.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-inclusive&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-inclusive&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-inclusive&quot; name=&quot;Mehrfach-Benachrichtigung&quot; isExecutable=&quot;true&quot;&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;inclusiveGateway id=&quot;split&quot; name=&quot;Kanäle?&quot; default=&quot;f_log&quot;/&gt;
@@ -807,18 +908,29 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;j4&quot; sourceRef=&quot;join&quot; targetRef=&quot;end&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de">Anders als das <a href="#rz-xor">exklusive</a> Gateway (genau einer) startet das inklusive <b>alle</b> Zweige, deren Bedingung wahr ist – hier E-Mail <i>und/oder</i> SMS. Der zugehörige inklusive <b>Join</b> wartet genau auf die Zweige, die tatsächlich gestartet wurden. Setze einen <code>default</code>, falls keine Bedingung greift.</span><span data-l="en">Unlike the <a href="#rz-xor">exclusive</a> gateway (exactly one), the inclusive one starts <b>every</b> branch whose condition is true – here e-mail <i>and/or</i> SMS. Its inclusive <b>join</b> waits for exactly the branches that actually started. Set a <code>default</code> in case no condition matches.</span></p>
       </div>
       <h3 class="rz-group"><span data-l="de">Warten &amp; Reagieren</span><span data-l="en">Wait &amp; react</span></h3>
-      <div class="recipe" id="rz-timer-wait">
+      <div class="recipe" id="rz-timer-wait" data-proc="recipe-timer">
         <h4><span class="rz-emoji" aria-hidden="true">⏱️</span>
           <span data-l="de">Timer: warten / verzögern</span><span data-l="en">Timer: wait / delay</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Den Ablauf für eine Dauer oder bis zu einem Zeitpunkt pausieren.</span><span data-l="en">Pause the flow for a duration or until a point in time.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-timer&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-timer&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-timer&quot; name=&quot;Erinnerung nach 2 Tagen&quot; isExecutable=&quot;true&quot;&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;intermediateCatchEvent id=&quot;wait&quot; name=&quot;2 Tage warten&quot;&gt;
@@ -833,17 +945,28 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f3&quot; sourceRef=&quot;remind&quot; targetRef=&quot;end&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de">ISO-8601: <code>&lt;timeDuration&gt;P2D&lt;/timeDuration&gt;</code> (Dauer), <code>&lt;timeDate&gt;</code> (fixer Zeitpunkt) oder <code>&lt;timeCycle&gt;</code> (Wiederholung). Alle drei akzeptieren auch FEEL-Ausdrücke, z.&nbsp;B. <code>= duration(slaFrist)</code>.</span><span data-l="en">ISO-8601: <code>&lt;timeDuration&gt;P2D&lt;/timeDuration&gt;</code> (duration), <code>&lt;timeDate&gt;</code> (a fixed instant) or <code>&lt;timeCycle&gt;</code> (repetition). All three also accept FEEL expressions, e.g. <code>= duration(slaLimit)</code>.</span></p>
       </div>
-      <div class="recipe" id="rz-timer-start">
+      <div class="recipe" id="rz-timer-start" data-proc="recipe-timer-start">
         <h4><span class="rz-emoji" aria-hidden="true">🌙</span>
           <span data-l="de">Timer-Start: geplant starten</span><span data-l="en">Timer start: run on a schedule</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Einen Prozess automatisch zu einer Zeit oder in einem Rhythmus starten.</span><span data-l="en">Start a process automatically at a time or on a cycle.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-timer-start&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-timer-start&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-timer-start&quot; name=&quot;Nächtlicher Report&quot; isExecutable=&quot;true&quot;&gt;
     &lt;startEvent id=&quot;nightly&quot; name=&quot;Jede Nacht 02:00&quot;&gt;
       &lt;timerEventDefinition&gt;&lt;timeCycle&gt;R/PT24H&lt;/timeCycle&gt;&lt;/timerEventDefinition&gt;
@@ -856,17 +979,28 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;report&quot; targetRef=&quot;end&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de">Ein Start-Event mit <code>timerEventDefinition</code> braucht kein <code>CreateInstance</code> – die Engine startet die Instanzen selbst. <code>R/PT24H</code> heißt „alle 24&nbsp;Stunden, unbegrenzt oft“.</span><span data-l="en">A start event with a <code>timerEventDefinition</code> needs no <code>CreateInstance</code> – the engine starts the instances itself. <code>R/PT24H</code> means "every 24 hours, indefinitely".</span></p>
       </div>
-      <div class="recipe" id="rz-boundary-timer">
+      <div class="recipe" id="rz-boundary-timer" data-proc="recipe-boundary-timer">
         <h4><span class="rz-emoji" aria-hidden="true">⏰</span>
           <span data-l="de">Boundary-Timer: Timeout &amp; Eskalation</span><span data-l="en">Boundary timer: timeout &amp; escalation</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Eine Aufgabe abbrechen, wenn sie zu lange dauert, und stattdessen eskalieren.</span><span data-l="en">Cancel a task if it takes too long and escalate instead.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-boundary-timer&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-boundary-timer&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-boundary-timer&quot; name=&quot;Freigabe mit Frist&quot; isExecutable=&quot;true&quot;&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;userTask id=&quot;review&quot; name=&quot;Freigeben&quot;&gt;
@@ -882,17 +1016,28 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f3&quot; sourceRef=&quot;overdue&quot; targetRef=&quot;escalated&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de">Ein <code>boundaryEvent</code> mit <code>attachedToRef</code> hängt an der Aufgabe. Interrupting (Standard) bricht sie beim Auslösen ab; mit <code>cancelActivity="false"</code> läuft die Aufgabe weiter und der Zweig startet zusätzlich.</span><span data-l="en">A <code>boundaryEvent</code> with <code>attachedToRef</code> attaches to the task. Interrupting (default) cancels it when it fires; with <code>cancelActivity="false"</code> the task keeps running and the branch fires alongside it.</span></p>
       </div>
-      <div class="recipe" id="rz-message-catch">
+      <div class="recipe" id="rz-message-catch" data-proc="recipe-msg-catch">
         <h4><span class="rz-emoji" aria-hidden="true">📨</span>
           <span data-l="de">Nachricht empfangen</span><span data-l="en">Receive a message</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Auf ein Ereignis von außen warten – korreliert auf die richtige Instanz.</span><span data-l="en">Wait for an outside event – correlated to the right instance.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-msg-catch&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-msg-catch&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;message id=&quot;Msg_paid&quot; name=&quot;payment-received&quot;&gt;
     &lt;extensionElements&gt;&lt;zeebe:subscription correlationKey=&quot;=orderId&quot;/&gt;&lt;/extensionElements&gt;
   &lt;/message&gt;
@@ -906,17 +1051,28 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;await&quot; targetRef=&quot;end&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de">Die <code>correlationKey</code>-Angabe bestimmt, welche wartende Instanz eine eingehende Nachricht bekommt (hier über <code>orderId</code>). Nachrichten werden per <code>Publish-Message</code> (REST/MCP) mit passendem Schlüssel eingespielt.</span><span data-l="en">The <code>correlationKey</code> decides which waiting instance an incoming message reaches (here via <code>orderId</code>). Messages are delivered with a matching key via <code>publish-message</code> (REST/MCP).</span></p>
       </div>
-      <div class="recipe" id="rz-message-start">
+      <div class="recipe" id="rz-message-start" data-proc="recipe-msg-start">
         <h4><span class="rz-emoji" aria-hidden="true">🚪</span>
           <span data-l="de">Nachricht-Start: durch ein Ereignis starten</span><span data-l="en">Message start: start from an event</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Eine neue Instanz automatisch anlegen, wenn eine Nachricht eintrifft.</span><span data-l="en">Create a new instance automatically when a message arrives.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-msg-start&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-msg-start&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;message id=&quot;Msg_order&quot; name=&quot;order-placed&quot;/&gt;
   &lt;process id=&quot;recipe-msg-start&quot; name=&quot;Bestellung eingegangen&quot; isExecutable=&quot;true&quot;&gt;
     &lt;startEvent id=&quot;placed&quot; name=&quot;Bestellung&quot;&gt;
@@ -930,17 +1086,28 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;fulfil&quot; targetRef=&quot;end&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de">Ein Nachrichten-Start braucht keinen <code>correlationKey</code> – jede passende Nachricht startet eine <i>neue</i> Instanz. Ideal als Einstieg für ereignisgetriebene Prozesse.</span><span data-l="en">A message start needs no <code>correlationKey</code> – each matching message starts a <i>new</i> instance. Ideal as the entry point for event-driven processes.</span></p>
       </div>
-      <div class="recipe" id="rz-boundary-message">
+      <div class="recipe" id="rz-boundary-message" data-proc="recipe-boundary-msg">
         <h4><span class="rz-emoji" aria-hidden="true">🔔</span>
           <span data-l="de">Boundary-Nachricht (nicht unterbrechend)</span><span data-l="en">Boundary message (non-interrupting)</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Auf ein Zwischenereignis reagieren, ohne die laufende Aufgabe zu stoppen.</span><span data-l="en">React to an interim event without stopping the running task.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-boundary-msg&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-boundary-msg&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;message id=&quot;Msg_nudge&quot; name=&quot;nudge&quot;&gt;
     &lt;extensionElements&gt;&lt;zeebe:subscription correlationKey=&quot;=caseId&quot;/&gt;&lt;/extensionElements&gt;
   &lt;/message&gt;
@@ -959,17 +1126,28 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f3&quot; sourceRef=&quot;nudged&quot; targetRef=&quot;logged&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de">Mit <code>cancelActivity="false"</code> ist das Boundary-Event <b>nicht unterbrechend</b>: Jede eingehende Nachricht startet den Nebenzweig, während die Aufgabe unberührt weiterläuft – gut für „Zwischenstand melden“ oder Reminder.</span><span data-l="en">With <code>cancelActivity="false"</code> the boundary event is <b>non-interrupting</b>: each incoming message spawns the side branch while the task keeps running untouched – good for "send a status" or reminders.</span></p>
       </div>
-      <div class="recipe" id="rz-signal">
+      <div class="recipe" id="rz-signal" data-proc="recipe-signal">
         <h4><span class="rz-emoji" aria-hidden="true">📡</span>
           <span data-l="de">Signal: Broadcast werfen &amp; fangen</span><span data-l="en">Signal: broadcast throw &amp; catch</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Ein Ereignis an alle interessierten Stellen zugleich senden.</span><span data-l="en">Send one event to every interested place at once.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-signal&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-signal&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;signal id=&quot;Sig_stop&quot; name=&quot;stop-all&quot;/&gt;
   &lt;process id=&quot;recipe-signal&quot; name=&quot;Stopp-Signal&quot; isExecutable=&quot;true&quot;&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
@@ -990,17 +1168,28 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f6&quot; sourceRef=&quot;join&quot; targetRef=&quot;end&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de">Anders als eine Nachricht (1:1, korreliert) ist ein Signal ein <b>Broadcast</b> (1:n, ohne Schlüssel): ein geworfenes Signal erreicht alle wartenden Fänger – auch in anderen Prozessen.</span><span data-l="en">Unlike a message (1:1, correlated) a signal is a <b>broadcast</b> (1:n, keyless): one thrown signal reaches every waiting catcher – across processes too.</span></p>
       </div>
-      <div class="recipe" id="rz-boundary-error">
+      <div class="recipe" id="rz-boundary-error" data-proc="recipe-boundary-error">
         <h4><span class="rz-emoji" aria-hidden="true">🧯</span>
           <span data-l="de">Boundary-Fehler abfangen</span><span data-l="en">Catch an error with a boundary event</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Einen fachlichen Fehler einer Aufgabe kontrolliert behandeln statt in einen Incident zu laufen.</span><span data-l="en">Handle a business error from a task deliberately instead of running into an incident.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-boundary-error&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-boundary-error&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;error id=&quot;Err_declined&quot; errorCode=&quot;DECLINED&quot; name=&quot;Declined&quot;/&gt;
   &lt;process id=&quot;recipe-boundary-error&quot; name=&quot;Zahlung mit Fehlerpfad&quot; isExecutable=&quot;true&quot;&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
@@ -1019,17 +1208,28 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f4&quot; sourceRef=&quot;retry&quot; targetRef=&quot;handled&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de">Ein Worker kann einen <b>BPMN-Fehler</b> mit Code <code>DECLINED</code> werfen; das passende <code>errorEventDefinition</code> am Rand der Aufgabe fängt ihn und lenkt auf einen Fehlerpfad. Das ist erwartbares Verhalten – kein Incident.</span><span data-l="en">A worker can throw a <b>BPMN error</b> with code <code>DECLINED</code>; the matching <code>errorEventDefinition</code> on the task's edge catches it and diverts to an error path. That's expected behaviour – not an incident.</span></p>
       </div>
-      <div class="recipe" id="rz-escalation">
+      <div class="recipe" id="rz-escalation" data-proc="recipe-escalation">
         <h4><span class="rz-emoji" aria-hidden="true">📣</span>
           <span data-l="de">Escalation-Events: melden ohne zu stoppen</span><span data-l="en">Escalation events: raise without stopping</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Eine Situation nach oben melden (z.&nbsp;B. an eine:n Vorgesetzte:n), während die Arbeit normal weiterläuft.</span><span data-l="en">Raise a situation upward (e.g. to a manager) while the work keeps going.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-escalation&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-escalation&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;escalation id=&quot;Esc_mgr&quot; escalationCode=&quot;NEEDS_MANAGER&quot; name=&quot;Braucht Manager&quot;/&gt;
   &lt;process id=&quot;recipe-escalation&quot; name=&quot;Bearbeiten mit Eskalation&quot; isExecutable=&quot;true&quot;&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
@@ -1056,18 +1256,29 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f4&quot; sourceRef=&quot;notifyMgr&quot; targetRef=&quot;notified&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de">Ein <code>&lt;escalation&gt;</code> mit <code>escalationCode</code> wird per <code>escalationEventDefinition</code> geworfen (Throw- oder End-Event, hier aus dem Subprozess) und an einem <b>Boundary-Event</b> am Subprozess gefangen. Mit <code>cancelActivity="false"</code> ist es <b>nicht unterbrechend</b>: „Manager informieren“ startet, die Bearbeitung läuft ungestört weiter. Das ist der Unterschied zum <a href="#rz-boundary-error">Fehler</a> (bricht ab) – und eine ungefangene Eskalation propagiert nach oben (z.&nbsp;B. aus einer <a href="#rz-call-activity">Call-Activity</a> zum Aufrufer), statt einen Incident zu erzeugen.</span><span data-l="en">An <code>&lt;escalation&gt;</code> with an <code>escalationCode</code> is thrown via an <code>escalationEventDefinition</code> (throw or end event, here from inside the subprocess) and caught on a <b>boundary event</b> of the subprocess. With <code>cancelActivity="false"</code> it is <b>non-interrupting</b>: "notify manager" starts while the work keeps running. That's the difference from an <a href="#rz-boundary-error">error</a> (which aborts) – and an uncaught escalation propagates upward (e.g. from a <a href="#rz-call-activity">call activity</a> to the caller) instead of raising an incident.</span></p>
       </div>
       <h3 class="rz-group"><span data-l="de">Strukturieren &amp; Wiederverwenden</span><span data-l="en">Structure &amp; reuse</span></h3>
-      <div class="recipe" id="rz-subprocess">
+      <div class="recipe" id="rz-subprocess" data-proc="recipe-subprocess">
         <h4><span class="rz-emoji" aria-hidden="true">📦</span>
           <span data-l="de">Eingebetteter Subprozess</span><span data-l="en">Embedded subprocess</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Mehrere Schritte zu einer Einheit bündeln – z.&nbsp;B. für einen gemeinsamen Boundary-Timer.</span><span data-l="en">Bundle several steps into one unit – e.g. to share a boundary timer.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-subprocess&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-subprocess&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-subprocess&quot; name=&quot;Prüfblock mit Frist&quot; isExecutable=&quot;true&quot;&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;subProcess id=&quot;checks&quot; name=&quot;Prüfungen&quot;&gt;
@@ -1089,14 +1300,26 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f3&quot; sourceRef=&quot;tooLong&quot; targetRef=&quot;aborted&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de">Ein <code>subProcess</code> hat eigenes Start-/End-Event und kapselt seinen Inhalt. Ein Boundary-Event am Subprozess wirkt auf <b>alles darin</b> – praktisch für eine gemeinsame Frist über mehrere Schritte.</span><span data-l="en">A <code>subProcess</code> has its own start/end event and encapsulates its contents. A boundary event on the subprocess applies to <b>everything inside</b> – handy for one deadline across several steps.</span></p>
       </div>
-      <div class="recipe" id="rz-call-activity">
+      <div class="recipe" id="rz-call-activity" data-proc="recipe-caller">
         <h4><span class="rz-emoji" aria-hidden="true">🔗</span>
           <span data-l="de">Call-Activity: Prozess wiederverwenden</span><span data-l="en">Call activity: reuse a process</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Einen eigenständig deployten Prozess aus einem anderen aufrufen.</span><span data-l="en">Call a separately deployed process from another one.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <p class="rz-hint"><span data-l="de">Der aufgerufene Prozess <code>kyc-check</code> muss ebenfalls deployt sein — sonst pausiert die Instanz mit einem Incident (was du in Operations gut sehen kannst).</span><span data-l="en">The called process <code>kyc-check</code> must be deployed too — otherwise the instance pauses with an incident (which you can inspect nicely in Operations).</span></p>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
              id=&quot;recipe-call&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
@@ -1110,14 +1333,25 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;run&quot; targetRef=&quot;end&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de"><code>calledElement processId</code> verweist auf einen anderen deployten Prozess (hier <code>kyc-check</code>). Der Aufrufer wartet, bis die Kind-Instanz fertig ist. So teilst du wiederkehrende Abläufe zwischen mehreren Prozessen.</span><span data-l="en"><code>calledElement processId</code> points to another deployed process (here <code>kyc-check</code>). The caller waits until the child instance finishes. This shares recurring flows across processes.</span></p>
       </div>
-      <div class="recipe" id="rz-collaboration">
+      <div class="recipe" id="rz-collaboration" data-proc="customer">
         <h4><span class="rz-emoji" aria-hidden="true">🤝</span>
           <span data-l="de">Collaboration: Pools &amp; Message-Flows</span><span data-l="en">Collaboration: pools &amp; message flows</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Zwei eigenständige Prozesse (Pools) koordinieren, die über Nachrichten miteinander reden.</span><span data-l="en">Coordinate two independent processes (pools) that talk to each other via messages.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
              id=&quot;recipe-collab&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
@@ -1154,17 +1388,28 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;sf3&quot; sourceRef=&quot;s_confirm&quot; targetRef=&quot;s_end&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de">Ein <code>&lt;collaboration&gt;</code> bündelt mehrere <code>participant</code>-Pools (je ein eigener Prozess). Ein <code>&lt;messageFlow&gt;</code> verbindet ein Sende-Ereignis im einen Pool mit einem Empfangs-Ereignis im anderen – ausgeführt wird die Zustellung über korrelierte Nachrichten (throw → catch, hier auf <code>orderId</code>). Jeder Pool läuft als <b>eigene Instanz</b>; die <a href="/#/operations">Operations</a>-Ansicht zeigt beide und ihre Nachrichten.</span><span data-l="en">A <code>&lt;collaboration&gt;</code> groups several <code>participant</code> pools (each its own process). A <code>&lt;messageFlow&gt;</code> connects a sending event in one pool to a receiving event in the other – delivery runs via correlated messages (throw → catch, here on <code>orderId</code>). Each pool runs as its <b>own instance</b>; the <a href="/#/operations">Operations</a> view shows both and their messages.</span></p>
       </div>
-      <div class="recipe" id="rz-multi-instance">
+      <div class="recipe" id="rz-multi-instance" data-proc="recipe-mi">
         <h4><span class="rz-emoji" aria-hidden="true">🧵</span>
           <span data-l="de">Multi-Instance: pro Listenelement</span><span data-l="en">Multi-instance: once per list item</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Denselben Schritt für jedes Element einer Liste ausführen – parallel oder seriell.</span><span data-l="en">Run the same step for each item in a list – parallel or sequential.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-mi&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-mi&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-mi&quot; name=&quot;Jede Position bearbeiten&quot; isExecutable=&quot;true&quot;&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;serviceTask id=&quot;ship&quot; name=&quot;Position versenden&quot;&gt;
@@ -1181,17 +1426,28 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;ship&quot; targetRef=&quot;end&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de"><code>inputCollection</code> ist die Liste, <code>inputElement</code> der Name je Durchlauf; die <code>outputElement</code>-Werte werden in <code>outputCollection</code> gesammelt. Für seriell statt parallel: <code>&lt;multiInstanceLoopCharacteristics isSequential="true"&gt;</code>.</span><span data-l="en"><code>inputCollection</code> is the list, <code>inputElement</code> the per-iteration name; the <code>outputElement</code> values are gathered into <code>outputCollection</code>. For sequential instead of parallel: <code>&lt;multiInstanceLoopCharacteristics isSequential="true"&gt;</code>.</span></p>
       </div>
-      <div class="recipe" id="rz-event-sub">
+      <div class="recipe" id="rz-event-sub" data-proc="recipe-event-sub">
         <h4><span class="rz-emoji" aria-hidden="true">🪝</span>
           <span data-l="de">Event-Subprozess: globaler Ereignis-Handler</span><span data-l="en">Event subprocess: a global event handler</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Auf ein Ereignis reagieren, das jederzeit während des Prozesses eintreffen kann – z.&nbsp;B. „Abbruch“.</span><span data-l="en">React to an event that can arrive at any time during the process – e.g. "cancel".</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-event-sub&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-event-sub&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;message id=&quot;Msg_cancel&quot; name=&quot;cancel&quot;&gt;
     &lt;extensionElements&gt;&lt;zeebe:subscription correlationKey=&quot;=orderId&quot;/&gt;&lt;/extensionElements&gt;
   &lt;/message&gt;
@@ -1216,18 +1472,29 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;/subProcess&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de">Ein <code>subProcess triggeredByEvent="true"</code> hat keinen eingehenden Fluss – er startet, wenn sein Start-Ereignis feuert. <b>Interrupting</b> (<code>isInterrupting="true"</code>) bricht den laufenden Prozess ab und übernimmt; <b>non-interrupting</b> (<code>false</code>, z.&nbsp;B. mit Timer) läuft nebenher und kann mehrfach auslösen – ideal für wiederkehrende Erinnerungen.</span><span data-l="en">A <code>subProcess triggeredByEvent="true"</code> has no incoming flow – it starts when its start event fires. <b>Interrupting</b> (<code>isInterrupting="true"</code>) aborts the running process and takes over; <b>non-interrupting</b> (<code>false</code>, e.g. with a timer) runs alongside and can fire repeatedly – ideal for recurring reminders.</span></p>
       </div>
       <h3 class="rz-group"><span data-l="de">Daten &amp; Variablen</span><span data-l="en">Data &amp; variables</span></h3>
-      <div class="recipe" id="rz-iomapping">
+      <div class="recipe" id="rz-iomapping" data-proc="recipe-iomapping">
         <h4><span class="rz-emoji" aria-hidden="true">🔧</span>
           <span data-l="de">ioMapping: Variablen rein &amp; raus</span><span data-l="en">ioMapping: variables in &amp; out</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Einer Aufgabe genau die Daten geben, die sie braucht – und ihr Ergebnis gezielt ablegen.</span><span data-l="en">Give a task exactly the data it needs – and place its result where you want it.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-iomapping&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-iomapping&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-iomapping&quot; name=&quot;Ein-/Ausgabe-Mapping&quot; isExecutable=&quot;true&quot;&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;serviceTask id=&quot;score&quot; name=&quot;Score berechnen&quot;&gt;
@@ -1245,17 +1512,28 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;score&quot; targetRef=&quot;end&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de"><code>zeebe:input</code> wertet <code>source</code> (FEEL) im Instanz-Kontext aus und legt es unter <code>target</code> <b>lokal für die Aufgabe</b> ab – so sieht der Worker nur <code>income</code>/<code>age</code> statt des ganzen <code>applicant</code>. <code>zeebe:output</code> schreibt das Ergebnis zurück in den Instanz-Kontext, hier verschachtelt nach <code>scoring.value</code>. So bleiben Aufgaben entkoppelt und wiederverwendbar.</span><span data-l="en"><code>zeebe:input</code> evaluates <code>source</code> (FEEL) in the instance scope and binds it under <code>target</code> <b>locally to the task</b> – so the worker sees only <code>income</code>/<code>age</code>, not the whole <code>applicant</code>. <code>zeebe:output</code> writes the result back into the instance scope, here nested under <code>scoring.value</code>. This keeps tasks decoupled and reusable.</span></p>
       </div>
-      <div class="recipe" id="rz-dataobject">
+      <div class="recipe" id="rz-dataobject" data-proc="recipe-dataobject">
         <h4><span class="rz-emoji" aria-hidden="true">🗂️</span>
           <span data-l="de">Datenobjekte: Daten im Prozess ablegen</span><span data-l="en">Data objects: hold data in the process</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Strukturierte Daten explizit im Diagramm modellieren – schreiben an einer Stelle, lesen an einer anderen.</span><span data-l="en">Model structured data explicitly in the diagram – written in one place, read in another.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-dataobject&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-dataobject&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-dataobject&quot; name=&quot;Datenobjekt&quot; isExecutable=&quot;true&quot;&gt;
     &lt;dataObject id=&quot;DO_order&quot; name=&quot;order&quot;/&gt;
     &lt;dataObjectReference id=&quot;Ref_order&quot; name=&quot;order&quot; dataObjectRef=&quot;DO_order&quot;/&gt;
@@ -1285,18 +1563,29 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f4&quot; sourceRef=&quot;use&quot; targetRef=&quot;end&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de">Ein <code>dataObject</code> ist ein benannter Datenspeicher im Prozess; eine <code>dataObjectReference</code> zeigt darauf. Eine <code>dataOutputAssociation</code> <b>schreibt</b> ein Feld (<code>from</code>-Ausdruck → <code>to</code>-Feld), eine <code>dataInputAssociation</code> <b>liest</b> es (<code>sourceRef</code> → Variable). Nutze Datenobjekte, wenn der Datenfluss im Diagramm sichtbar sein soll; für einfaches „Variable setzen“ genügt ein <a href="#rz-script-value">Script-Task</a>.</span><span data-l="en">A <code>dataObject</code> is a named data store in the process; a <code>dataObjectReference</code> points at it. A <code>dataOutputAssociation</code> <b>writes</b> a field (<code>from</code> expression → <code>to</code> field), a <code>dataInputAssociation</code> <b>reads</b> it (<code>sourceRef</code> → variable). Use data objects when the data flow should be visible in the diagram; for a simple "set a variable" a <a href="#rz-script-value">script task</a> is enough.</span></p>
       </div>
       <h3 class="rz-group"><span data-l="de">Robustheit</span><span data-l="en">Robustness</span></h3>
-      <div class="recipe" id="rz-incident">
+      <div class="recipe" id="rz-incident" data-proc="recipe-incident">
         <h4><span class="rz-emoji" aria-hidden="true">🚑</span>
           <span data-l="de">Incident &amp; Retry</span><span data-l="en">Incident &amp; retry</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Verstehen, was passiert, wenn ein Schritt scheitert – und wie er weiterläuft.</span><span data-l="en">Understand what happens when a step fails – and how it recovers.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-incident&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-incident&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-incident&quot; name=&quot;Riskanter Schritt&quot; isExecutable=&quot;true&quot;&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;serviceTask id=&quot;risky&quot; name=&quot;Externer Aufruf&quot;&gt;
@@ -1307,17 +1596,28 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;risky&quot; targetRef=&quot;end&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de">Scheitert der Job, zählt <code>retries</code> herunter; bei 0 entsteht ein <b>Incident</b> und der Token <i>pausiert sicher</i> – nichts geht verloren. Du behebst die Ursache und löst ihn in <a href="/#/operations/incidents">Operations → Incidents</a> auf; die Instanz läuft weiter.</span><span data-l="en">If the job fails, <code>retries</code> counts down; at 0 an <b>incident</b> is raised and the token <i>pauses safely</i> – nothing is lost. You fix the cause and resolve it in <a href="/#/operations/incidents">Operations → Incidents</a>; the instance resumes.</span></p>
       </div>
-      <div class="recipe" id="rz-compensation">
+      <div class="recipe" id="rz-compensation" data-proc="recipe-compensation">
         <h4><span class="rz-emoji" aria-hidden="true">↩️</span>
           <span data-l="de">Compensation: getane Arbeit rückgängig machen</span><span data-l="en">Compensation: undo work already done</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Bereits abgeschlossene Schritte sauber zurückrollen, wenn der Vorgang später scheitert.</span><span data-l="en">Cleanly roll back already-completed steps when the case fails later.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-compensation&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-compensation&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-compensation&quot; name=&quot;Buchung mit Storno&quot; isExecutable=&quot;true&quot;&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;serviceTask id=&quot;book&quot; name=&quot;Hotel buchen&quot;&gt;
@@ -1345,17 +1645,28 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f3&quot; sourceRef=&quot;undo&quot; targetRef=&quot;failed&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de">Ein <code>compensateEventDefinition</code>-<b>Boundary-Event</b> an der Aufgabe verweist per <code>association</code> auf einen <code>isForCompensation="true"</code>-Handler (das „Undo“). Wirft später ein <code>intermediateThrowEvent</code> mit <code>compensateEventDefinition</code> die Kompensation (hier für <code>book</code>), führt Atlas den Handler für die bereits erledigte Arbeit aus. Der Undo-Task hängt an keinem normalen Fluss.</span><span data-l="en">A <code>compensateEventDefinition</code> <b>boundary event</b> on the task links via an <code>association</code> to an <code>isForCompensation="true"</code> handler (the "undo"). When an <code>intermediateThrowEvent</code> with a <code>compensateEventDefinition</code> later throws compensation (here for <code>book</code>), Atlas runs the handler for the work already done. The undo task sits on no normal flow.</span></p>
       </div>
-      <div class="recipe" id="rz-transaction">
+      <div class="recipe" id="rz-transaction" data-proc="recipe-transaction">
         <h4><span class="rz-emoji" aria-hidden="true">⚛️</span>
           <span data-l="de">Transaktion &amp; Cancel-End-Event: alles oder nichts</span><span data-l="en">Transaction &amp; cancel end event: all or nothing</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
           <span data-l="de">Mehrere Schritte als atomare Einheit: kommt es zum Abbruch, wird die geleistete Arbeit automatisch kompensiert.</span><span data-l="en">Several steps as one atomic unit: on cancellation, the work done is compensated automatically.</span></p>
-        <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+                <div class="rz-diagram">
+          <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
+        </div>
+        <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
+          <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
+        </div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="rz-xml">
+          <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
+          <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
-             id=&quot;recipe-transaction&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
+             id=&quot;defs_recipe-transaction&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-transaction&quot; name=&quot;Reservierung als Transaktion&quot; isExecutable=&quot;true&quot;&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;transaction id=&quot;reserve&quot; name=&quot;Reservieren&quot;&gt;
@@ -1392,6 +1703,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;sequenceFlow id=&quot;f3&quot; sourceRef=&quot;onCancel&quot; targetRef=&quot;handled&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
+        </details>
         <p class="rz-how"><span data-l="de">Ein <code>&lt;transaction&gt;</code> ist ein Subprozess mit „alles oder nichts“-Semantik. Erreicht der Fluss ein End-Event mit <code>cancelEventDefinition</code>, wird die Transaktion <b>abgebrochen</b>: Atlas führt die Compensation-Handler für alle bereits erledigten Schritte darin aus und leitet über das <code>cancelEventDefinition</code>-<b>Boundary-Event</b> am Rand auf den Abbruch-Pfad. Ein normales End-Event committet. Unterschied zur reinen <a href="#rz-compensation">Compensation</a>: hier ist der Abbruch in eine atomare Einheit gekapselt.</span><span data-l="en">A <code>&lt;transaction&gt;</code> is a subprocess with all-or-nothing semantics. When the flow reaches an end event with a <code>cancelEventDefinition</code>, the transaction is <b>cancelled</b>: Atlas runs the compensation handlers for every completed step inside it and routes out through the <code>cancelEventDefinition</code> <b>boundary event</b> to the cancel path. A normal end event commits. Unlike plain <a href="#rz-compensation">compensation</a>, the rollback here is wrapped in one atomic unit.</span></p>
       </div>
       <div class="note tip">
@@ -1856,6 +2168,203 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
         setStatus(T("Fehler: ", "Error: ") + e.message, "err");
       }
     } finally { btn.disabled = false; }
+  });
+})();
+</script>
+<script>
+// ---- recipes: render each model as a diagram, and let the reader run it or open
+// it in the Modeler. The snippets ship without BPMN-DI, so the server's layout
+// endpoint (POST /api/v1/layout) supplies coordinates; bpmn-js then renders once
+// and we keep only the exported SVG (no live viewer per card, so 27 diagrams stay
+// cheap). Diagrams render lazily as cards scroll into view.
+(function initRecipes(){
+  const cards = Array.from(document.querySelectorAll("#rezepte .recipe"));
+  if (!cards.length) return;
+  const L = () => (document.documentElement.dataset.lang === "en" ? "en" : "de");
+  const T = (de, en) => (L() === "en" ? en : de);
+  const xmlOf = (card) => {
+    const el = card.querySelector(".rz-xml code");
+    return el ? el.textContent : "";
+  };
+  const setStatus = (card, msg, kind) => {
+    const s = card.querySelector(".rz-status");
+    if (!s) return;
+    s.textContent = msg || "";
+    s.className = "rz-status" + (kind ? " " + kind : "");
+  };
+  const addLink = (card, href, label) => {
+    const s = card.querySelector(".rz-status");
+    if (!s) return;
+    const a = document.createElement("a");
+    a.href = href; a.textContent = label;
+    s.appendChild(a);
+  };
+
+  async function call(method, path, body, isXml, asText){
+    const opts = { method, headers: {} };
+    if (body !== undefined){
+      opts.headers["Content-Type"] = isXml ? "application/xml" : "application/json";
+      opts.body = isXml ? body : JSON.stringify(body);
+    }
+    const res = await fetch(path, opts);
+    const text = await res.text();
+    if (!res.ok){
+      let msg = text;
+      try { const j = JSON.parse(text); msg = j.error || j.message || text; } catch (e) { /* keep text */ }
+      const err = new Error(msg || (res.status + " " + res.statusText));
+      err.status = res.status; throw err;
+    }
+    if (asText) return text;
+    return text ? JSON.parse(text) : {};
+  }
+
+  // --- bpmn-js loader (same assets the Modeler uses) ---
+  const BPMN_CSS = ["vendor/bpmn/assets/diagram-js.css", "vendor/bpmn/assets/bpmn-js.css",
+                    "vendor/bpmn/assets/bpmn-font/css/bpmn-embedded.css"];
+  let bpmnReady;
+  function loadBpmn(){
+    if (bpmnReady) return bpmnReady;
+    bpmnReady = new Promise((resolve, reject) => {
+      for (const href of BPMN_CSS){
+        if (document.querySelector('link[href="' + href + '"]')) continue;
+        const l = document.createElement("link");
+        l.rel = "stylesheet"; l.href = href;
+        document.head.appendChild(l);
+      }
+      const s = document.createElement("script");
+      s.src = "vendor/bpmn/bpmn-modeler.js";
+      s.onload = () => resolve(window.BpmnJS);
+      s.onerror = () => reject(new Error("bpmn assets"));
+      document.head.appendChild(s);
+    });
+    return bpmnReady;
+  }
+
+  // Render one card's model into a static SVG: lay it out server-side, import it
+  // into an off-screen viewer, export the SVG, then throw the viewer away.
+  const sandbox = document.createElement("div");
+  sandbox.style.cssText = "position:absolute;left:-10000px;top:0;width:900px;height:420px";
+  document.body.appendChild(sandbox);
+  async function renderDiagram(card){
+    const host = card.querySelector(".rz-diagram");
+    if (!host || host.dataset.done) return;
+    host.dataset.done = "1";
+    try {
+      const BpmnJS = await loadBpmn();
+      const Viewer = (BpmnJS && (BpmnJS.NavigatedViewer || BpmnJS.Viewer)) || BpmnJS;
+      const src = xmlOf(card);
+      const laidOut = await call("POST", "/api/v1/layout", src, true, true);
+      // The generated layout does not yet cover every element type (a transaction's
+      // contents, for instance). Rendering a partial picture would misinform, so
+      // count what the layout placed against the model's flow nodes and bail out
+      // to an honest note when shapes are missing.
+      const NODES = /<(?:bpmn:)?(?:startEvent|endEvent|task|userTask|serviceTask|scriptTask|businessRuleTask|receiveTask|sendTask|manualTask|callActivity|subProcess|transaction|exclusiveGateway|parallelGateway|inclusiveGateway|eventBasedGateway|intermediateCatchEvent|intermediateThrowEvent|boundaryEvent)[\s>/]/g;
+      const nodes = (src.match(NODES) || []).length;
+      const shapes = (laidOut.match(/<bpmndi:BPMNShape/g) || []).length;
+      if (nodes && shapes < nodes) throw new Error("layout incomplete");
+      const viewer = new Viewer({ container: sandbox });
+      await viewer.importXML(laidOut);
+      const out = await viewer.saveSVG();
+      viewer.destroy();
+      host.innerHTML = (out && out.svg) || "";
+      // The exported viewBox is the canvas viewport, which clips anything drawn
+      // past its edge (boundary events and their labels sit above the host
+      // activity). Re-fit it to the real content bounds — measurable only once
+      // the SVG is in the document — and let CSS scale it to the card width.
+      // Measure the ROOT svg: the export has no single wrapper group, just one
+      // <g class="djs-group"> per element, so measuring the first group would fit
+      // the viewBox to one shape.
+      const svg = host.querySelector("svg");
+      if (svg && svg.getBBox){
+        const bb = svg.getBBox(), pad = 14;
+        if (bb.width && bb.height){
+          svg.setAttribute("viewBox",
+            (bb.x - pad) + " " + (bb.y - pad) + " " + (bb.width + 2 * pad) + " " + (bb.height + 2 * pad));
+          svg.removeAttribute("width");
+          svg.removeAttribute("height");
+        }
+      }
+    } catch (e) {
+      host.classList.add("failed");
+      host.innerHTML = "";
+      const p = document.createElement("span");
+      p.className = "rz-dhint";
+      p.textContent = T("Für dieses Muster erzeugt Atlas noch kein vollständiges Layout — "
+                        + "öffne es im Modeler, um es anzuordnen.",
+                        "Atlas cannot lay this pattern out completely yet — "
+                        + "open it in the Modeler to arrange it.");
+      host.appendChild(p);
+    }
+  }
+
+  // Render every card once the chapter comes into reach, sequentially: the
+  // diagrams are cheap individually but each needs a round trip, and doing them
+  // one at a time keeps the page responsive while guaranteeing that all of them
+  // arrive (a per-card observer left the last cards unrendered when the reader
+  // jumped straight to the bottom).
+  let started = false;
+  async function renderAll(){
+    if (started) return;
+    started = true;
+    for (const c of cards) await renderDiagram(c);
+  }
+  const section = document.getElementById("rezepte");
+  const io = new IntersectionObserver((entries) => {
+    if (entries.some((en) => en.isIntersecting)) { io.disconnect(); renderAll(); }
+  }, { rootMargin: "600px 0px" });
+  io.observe(section);
+  // Deep link straight into a recipe (…#rz-xyz) — render immediately.
+  if (location.hash.startsWith("#rz-")) renderAll();
+
+  // --- actions ---
+  async function runRecipe(card, btn){
+    const proc = card.dataset.proc;
+    btn.disabled = true;
+    setStatus(card, T("Deployen…", "Deploying…"));
+    try {
+      const dep = await call("POST", "/api/v1/deployments", xmlOf(card), true);
+      const match = (dep.deployments || []).find((d) => d.processId === proc) || (dep.deployments || [])[0];
+      if (!match) throw new Error(T("Deploy lieferte keine Prozessdefinition.", "Deploy returned no process definition."));
+      setStatus(card, T("Instanz starten…", "Starting an instance…"));
+      await call("POST", "/api/v1/processes/" + match.key + "/instances", { variables: {} });
+      setStatus(card, T("✓ Läuft! Sieh dir die Instanz an:", "✓ Running! Inspect the instance:"), "ok");
+      addLink(card, "/#/operations/p/" + match.key, T("→ In Operations ansehen", "→ Watch in Operations"));
+    } catch (e) {
+      if (e.status === 401 || e.status === 403){
+        setStatus(card, T("Bitte melde dich zuerst in der App an.", "Please sign in to the app first."), "err");
+      } else {
+        setStatus(card, T("Fehler: ", "Error: ") + e.message, "err");
+      }
+    } finally { btn.disabled = false; }
+  }
+
+  async function openInModeler(card, btn){
+    btn.disabled = true;
+    setStatus(card, T("Entwurf anlegen…", "Creating a draft…"));
+    try {
+      // Recipes ship without BPMN-DI to keep the XML readable, but the Modeler
+      // needs a diagram to display — so lay the model out first and store that.
+      let xml = xmlOf(card);
+      try { xml = await call("POST", "/api/v1/layout", xml, true, true); }
+      catch (e) { /* fall back to the raw model rather than not opening at all */ }
+      const d = await call("POST", "/api/v1/drafts", xml, true);
+      const id = d.processId || card.dataset.proc;
+      setStatus(card, T("✓ Entwurf angelegt — wird geöffnet…", "✓ Draft created — opening…"), "ok");
+      window.location.href = "/#/modeler/draft/" + encodeURIComponent(id);
+    } catch (e) {
+      if (e.status === 401 || e.status === 403){
+        setStatus(card, T("Bitte melde dich zuerst in der App an.", "Please sign in to the app first."), "err");
+      } else {
+        setStatus(card, T("Fehler: ", "Error: ") + e.message, "err");
+      }
+    } finally { btn.disabled = false; }
+  }
+
+  document.getElementById("rezepte").addEventListener("click", (ev) => {
+    const card = ev.target.closest(".recipe");
+    if (!card) return;
+    if (ev.target.closest(".rz-run")) runRecipe(card, ev.target.closest(".rz-run"));
+    else if (ev.target.closest(".rz-open")) openInModeler(card, ev.target.closest(".rz-open"));
   });
 })();
 </script>
