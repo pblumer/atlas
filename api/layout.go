@@ -740,10 +740,12 @@ func emitShapes(lo *laidOut, nodes []lnode, inner map[string]*laidOut) {
 		if n.bound && n.label != "" {
 			ps.hasLabel = true
 			ps.labelW, ps.labelH = boundaryLabelWidth(n.label), 14
-			// Right edge at the event's center-x, so the exception riser (which leaves
-			// the event centered) runs along the label's edge, not through it; the box
-			// therefore extends left, into the open column gap.
-			ps.labelX = n.x + n.w/2 - ps.labelW
+			// Left edge just past the event's right side, so the caption sits in the open
+			// pocket beside the event — on the side the exception flow departs toward its
+			// handler — rather than tucked behind the upward riser (which leaves from the
+			// event's center) or crowding the host's title. The box extends right, into
+			// the column gap, clear of the host box below.
+			ps.labelX = n.x + n.w + 4
 			if n.atTop {
 				ps.labelY = n.y - ps.labelH - 4 // above the event, in the row gap
 			} else {
