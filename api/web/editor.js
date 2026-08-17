@@ -2786,13 +2786,13 @@ function escalationDefOf(bo) {
 
 // linkDefOf returns an event's bpmn:LinkEventDefinition, or null. A link intermediate throw
 // jumps to the link intermediate catch of the same name in the same scope — an off-page
-// connector / goto (ADR-0131).
+// connector / goto (ADR-0132).
 function linkDefOf(bo) {
   return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:LinkEventDefinition") || null;
 }
 
 // linkFieldsHTML renders the link-name field for a link throw or catch. A throw jumps to the
-// catch of the same name in the same scope; the name is the whole configuration (ADR-0131).
+// catch of the same name in the same scope; the name is the whole configuration (ADR-0132).
 function linkFieldsHTML(led, hint) {
   return `<h3>Link</h3>
     <label class="field"><span>Link name</span>

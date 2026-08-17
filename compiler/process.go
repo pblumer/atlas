@@ -74,8 +74,8 @@ const (
 	TypeEscalationThrowEvent // an intermediate throw event that raises an escalation, propagating up to the nearest matching handler, then continues on its outgoing flow (ADR-0125); the continue-after-throw counterpart of TypeMessageThrowEvent
 	TypeEscalationEndEvent   // an end event that raises an escalation, propagating up to the nearest matching handler, then ends its path (ADR-0125); unlike an error end the catch may be non-interrupting and an uncaught escalation is benign (no incident)
 
-	TypeLinkThrowEvent // a link intermediate throw event: a goto to the link catch of the same name in the same scope (ADR-0131). Resolved at compile to a synthetic sequence flow to the catch; runs as a pass-through (no execution semantics of its own)
-	TypeLinkCatchEvent // a link intermediate catch event: the landing point of a link throw of the same name (ADR-0131). Reached only via the compile-time synthetic flow; runs as a pass-through, flowing on its real outgoing flow
+	TypeLinkThrowEvent // a link intermediate throw event: a goto to the link catch of the same name in the same scope (ADR-0132). Resolved at compile to a synthetic sequence flow to the catch; runs as a pass-through (no execution semantics of its own)
+	TypeLinkCatchEvent // a link intermediate catch event: the landing point of a link throw of the same name (ADR-0132). Reached only via the compile-time synthetic flow; runs as a pass-through, flowing on its real outgoing flow
 
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
 	numBpmnTypes = 40

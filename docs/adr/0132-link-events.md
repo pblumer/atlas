@@ -1,4 +1,4 @@
-# ADR-0131: Link events (intra-scope goto — a compile-time synthetic flow)
+# ADR-0132: Link events (intra-scope goto — a compile-time synthetic flow)
 
 - **Status:** Accepted
 - **Date:** 2026-08-13

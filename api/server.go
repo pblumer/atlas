@@ -167,6 +167,8 @@ type Server struct {
 	publicRate       *rateLimiter         // throttles the unauthenticated public endpoints
 	projects         *projectStore        // durable sidecar for projects grouping artifacts (ADR-0034)
 	releases         *releaseStore        // durable sidecar for application releases (ADR-0128)
+	deployTokenStore *deployTokenStore    // durable sidecar for peer deploy tokens (ADR-0129)
+	deployTokens     *deployTokenIndex    // in-memory hash->token index, read on the handler goroutine
 	appVersions      map[string]int32     // applicationId → highest release version published (ADR-0128)
 	systemPIDs       map[string]bool      // process ids of the bootstrap-deployed platform processes, protected from deletion (ADR-0122)
 	deploySysProcs   bool                 // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
@@ -544,6 +546,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	deployTokenStore, err := newDeployTokenStore(filepath.Join(dataDir, "deploy-tokens"))
+	if err != nil {
+		return nil, err
+	}
 	dmnrefs, err := newDmnRefStore(filepath.Join(dataDir, "dmnrefs"))
 	if err != nil {
 		return nil, err
@@ -600,6 +606,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		publicRate:        newRateLimiter(20, 1),
 		projects:          projects,
 		releases:          releases,
+		deployTokenStore:  deployTokenStore,
+		deployTokens:      newDeployTokenIndex(),
 		appVersions:       map[string]int32{},
 		dmnrefs:           dmnrefs,
 		connectors:        connectors,
@@ -730,6 +738,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// Rebuild the per-application release counter from the durable release records,
 	// so the next publish after a restart continues the sequence (ADR-0128).
 	if err := s.loadReleaseVersions(); err != nil {
+		return nil, err
+	}
+	// Peer deploy tokens (ADR-0129) into the in-memory index the auth middleware
+	// reads, so a peer's credential keeps working across a restart.
+	if err := s.loadDeployTokens(); err != nil {
 		return nil, err
 	}
 	// Push per-server call-activity overrides into the processor. Runs after
