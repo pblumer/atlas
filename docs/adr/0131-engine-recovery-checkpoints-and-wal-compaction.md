@@ -215,15 +215,32 @@ opening Pebble.
   snapshot with an exact position needs extra coordination that reintroduces
   single-writer complexity for no real gain given Pebble checkpoints are cheap.
 
-## First slice (this change)
+## Implementation status
 
-Per the suggested sequence, this change delivers **only**:
+The design is delivered in the focused slices below, in order. **No WAL segment is
+deleted until slice 4**, and until slice 3 a checkpoint is written but never read, so
+recovery behaves exactly as it did before.
 
-1. this **accepted ADR**;
-2. the **manifest format primitives** — a `checkpoint.Manifest` type with a
-   deterministic, versioned, self-checksummed binary codec and validation, plus
-   round-trip and corruption/truncation/version tests.
-
-No checkpoint is created, no state is snapshotted, and **no WAL segment is deleted**.
-Creation-and-publish (with crash tests), restore-and-suffix-replay, compaction, and
-operator controls are the later slices in the sequence above.
+1. **Landed** — this accepted ADR plus the **manifest format primitives**: a
+   `checkpoint.Manifest` with a deterministic, versioned, self-checksummed binary
+   codec and validation.
+2. **Landed** — **create and atomically publish** a checkpoint:
+   - `state.Store.Snapshot` flushes the memtable (so the snapshot cannot inherit the
+     `NoSync` trailing property) and writes a Pebble checkpoint;
+   - `checkpoint.Publish` runs that snapshot into a `tmp-` directory, records a
+     content checksum in the manifest, fsyncs the manifest and the directory, and
+     **renames** it to its published name before fsyncing the parent — the rename is
+     the publication point, so a crash anywhere earlier leaves only an ignorable
+     temporary directory;
+   - `checkpoint.List` / `Load` / `Verify` enumerate and validate published
+     checkpoints (`Verify` re-hashes the state files against the manifest), and
+     `Prune` bounds disk by keeping the newest N, never fewer than one;
+   - `engine.Processor.Checkpoint` gathers the applied position, highest position, key
+     counter, partition, and deployment references **on the single-writer goroutine at
+     a batch boundary**, which is what makes the recorded position exact.
+3. **Next** — restore from the newest valid checkpoint and replay only the suffix,
+   falling back to an older checkpoint or genesis.
+4. Compact eligible WAL segments once a checkpoint is durable and every consumer
+   watermark allows it.
+5. Expose checkpoint/compaction status and operator controls, and choose the
+   production cadence at which the server takes checkpoints.

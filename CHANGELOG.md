@@ -70,6 +70,23 @@ _Changed_ / _Removed_ for each version.
   standard loop like a sequential multi-instance, badged ↻ and bounded by the modelled
   `loopMaximum`, and the Operations call-activity list labels a looping call activity
   **loop** rather than **multi-instance**.
+- **Engine recovery checkpoints — create and atomically publish** (v0.2.0 programme D,
+  [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 2):
+  the engine can now *produce* a recovery checkpoint. `state.Store.Snapshot` flushes the
+  memtable — ordinary commits are `pebble.NoSync`, so without the flush a snapshot could
+  inherit that trailing property and silently omit applied state — then writes a Pebble
+  checkpoint. `checkpoint.Publish` runs that snapshot into a `tmp-` directory, records a
+  content checksum in the manifest, fsyncs the manifest and directory, and **renames** it
+  into place before fsyncing the parent: the rename is the publication point, so a crash
+  at any earlier step leaves only an ignorable temporary directory and the next attempt
+  clears it. `checkpoint.List`/`Load`/`Verify` enumerate and validate published
+  checkpoints (re-hashing the state files against the manifest), and `Prune` bounds disk
+  by keeping the newest N, never fewer than one. `engine.Processor.Checkpoint` gathers the
+  applied position, highest position, key counter, partition, and deployment refs **on the
+  single-writer goroutine at a batch boundary** — which is what makes the recorded position
+  exact — and is purely additive to durability: a failed checkpoint costs a slower
+  recovery, never correctness. Nothing reads a checkpoint yet and **no WAL segment is
+  deleted**; restore-and-suffix-replay and compaction are the next ADR-0131 slices.
 - **Deterministic crash-and-recovery harness** (v0.2.0 programme C): a new
   engine-level test harness (`engine/crash_recovery_test.go`) that turns the
   durability contract into checkable evidence. It runs a workload to a durable point,

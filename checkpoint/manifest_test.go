@@ -85,10 +85,11 @@ func TestManifestValidate(t *testing.T) {
 	if err := bad.Validate(); !errors.Is(err, ErrInconsistent) {
 		t.Fatalf("Validate highest<applied err = %v, want ErrInconsistent", err)
 	}
-	// An over-long version is rejected by Validate too (independent of encoding).
+	// Encodability is Marshal's concern, not Validate's: an over-long version string is
+	// semantically fine and is caught when the manifest is written.
 	long := Manifest{AtlasVersion: strings.Repeat("y", maxAtlasVersion+1)}
-	if err := long.Validate(); !errors.Is(err, ErrTooLong) {
-		t.Fatalf("Validate over-long version err = %v, want ErrTooLong", err)
+	if err := long.Validate(); err != nil {
+		t.Fatalf("Validate over-long version = %v, want nil (Marshal enforces encodability)", err)
 	}
 	// Equal positions are valid (a checkpoint with nothing un-applied beyond it).
 	if err := (&Manifest{AppliedPosition: 5, HighestPosition: 5}).Validate(); err != nil {
