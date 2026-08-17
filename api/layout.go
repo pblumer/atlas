@@ -186,6 +186,7 @@ type layoutBoundary struct {
 
 type layoutFlow struct {
 	Id        string `xml:"id,attr"`
+	Name      string `xml:"name,attr"`
 	SourceRef string `xml:"sourceRef,attr"`
 	TargetRef string `xml:"targetRef,attr"`
 }
@@ -264,6 +265,14 @@ type point struct{ x, y int }
 type placedEdge struct {
 	id  string
 	pts []point
+
+	// The flow's caption and where it sits. Zero when hasLabel is false: bpmn-js
+	// then falls back to the polyline's midpoint, which for a branch stepping into
+	// another row lands on the riser between two arrows.
+	label          string
+	hasLabel       bool
+	labelX, labelY int
+	labelW, labelH int
 }
 
 // laidOut is a fully positioned container: its shapes and edges in one coordinate
@@ -337,6 +346,7 @@ func layoutOf(c layoutContainer) laidOut {
 	lo.shapes = append(lo.shapes, laneShapes...) // lane bands before the nodes they hold
 	emitShapes(&lo, nodes, inner)
 	emitEdges(&lo, nodes, idx, c.Flows, back, columnRight(nodes), loopChannelY(nodes))
+	placeFlowLabels(&lo) // after both shapes and edges exist: placement avoids them
 	normalize(&lo)
 	return lo
 }
@@ -1045,7 +1055,7 @@ func emitEdges(lo *laidOut, nodes []lnode, idx map[string]int, flows []layoutFlo
 			lane++
 			pts = routeChannel(nodes[s], nodes[t], colRight[nodes[s].layer]+layoutGapX/2, y)
 		}
-		lo.edges = append(lo.edges, placedEdge{id: f.Id, pts: pts})
+		lo.edges = append(lo.edges, placedEdge{id: f.Id, pts: pts, label: strings.TrimSpace(f.Name)})
 	}
 }
 
@@ -1233,6 +1243,87 @@ func shiftShapes(ss []placedShape, dx, dy int) []placedShape {
 	return out
 }
 
+// flowLabelH is a caption's line height; its width comes from the same rune
+// estimate boundary-event labels use.
+const flowLabelH = 14
+
+// flowLabelGap is how far a caption sits off its own line — close enough to read as
+// belonging to it, far enough not to be struck by it.
+const flowLabelGap = 4
+
+// placeFlowLabels gives every named flow a caption box. A label with no position is
+// left to the renderer, which puts it at the polyline's midpoint: for a branch that
+// steps into another row that is the middle of the riser, stranded between two
+// arrows and readable as belonging to either. Candidates run from the source end
+// outwards — a gateway's branches are read at the fork — and the first one that
+// clears every shape and every other edge wins.
+func placeFlowLabels(lo *laidOut) {
+	for i := range lo.edges {
+		e := &lo.edges[i]
+		if e.label == "" || len(e.pts) < 2 {
+			continue
+		}
+		w, h := boundaryLabelWidth(e.label), flowLabelH
+		cands := flowLabelCandidates(e.pts, w, h)
+		for _, c := range cands {
+			if flowLabelClear(c, w, h, lo) {
+				e.hasLabel, e.labelX, e.labelY, e.labelW, e.labelH = true, c.x, c.y, w, h
+				break
+			}
+		}
+		// Nothing clear: take the first candidate anyway. A caption that sits by its
+		// own line beats one the renderer drops on the riser.
+		if !e.hasLabel && len(cands) > 0 {
+			e.hasLabel, e.labelX, e.labelY, e.labelW, e.labelH = true, cands[0].x, cands[0].y, w, h
+		}
+	}
+}
+
+// flowLabelCandidates lists caption positions along a polyline, best first: beside
+// each segment from the source end, the far side of the line before the near one.
+func flowLabelCandidates(pts []point, w, h int) []point {
+	var out []point
+	for k := 1; k < len(pts); k++ {
+		p, q := pts[k-1], pts[k]
+		switch {
+		case p.y == q.y && p.x != q.x: // horizontal: above, then below
+			midX := (p.x + q.x) / 2
+			out = append(out,
+				point{midX - w/2, p.y - flowLabelGap - h},
+				point{midX - w/2, p.y + flowLabelGap})
+		case p.x == q.x && p.y != q.y: // vertical: right, then left
+			midY := (p.y + q.y) / 2
+			out = append(out,
+				point{p.x + flowLabelGap, midY - h/2},
+				point{p.x - flowLabelGap - w, midY - h/2})
+		}
+	}
+	return out
+}
+
+// flowLabelClear reports whether a caption box at p avoids every shape and is
+// struck by no edge. Containers are skipped — a label inside an expanded subprocess
+// or a lane band is where it belongs — matching the layout invariants.
+func flowLabelClear(p point, w, h int, lo *laidOut) bool {
+	box := lnode{x: p.x, y: p.y, w: w, h: h}
+	for _, s := range lo.shapes {
+		if s.expanded || s.horizontal {
+			continue
+		}
+		if p.x < s.x+s.w && s.x < p.x+w && p.y < s.y+s.h && s.y < p.y+h {
+			return false
+		}
+	}
+	for _, e := range lo.edges {
+		for k := 1; k < len(e.pts); k++ {
+			if segmentCutsNode(e.pts[k-1], e.pts[k], box) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func shiftEdges(es []placedEdge, dx, dy int) []placedEdge {
 	out := make([]placedEdge, len(es))
 	for i, e := range es {
@@ -1240,7 +1331,11 @@ func shiftEdges(es []placedEdge, dx, dy int) []placedEdge {
 		for j, p := range e.pts {
 			pts[j] = point{p.x + dx, p.y + dy}
 		}
-		out[i] = placedEdge{id: e.id, pts: pts}
+		out[i] = e
+		out[i].pts = pts
+		if e.hasLabel {
+			out[i].labelX, out[i].labelY = e.labelX+dx, e.labelY+dy
+		}
 	}
 	return out
 }
@@ -1316,10 +1411,10 @@ func generateCollaborationDI(defs layoutDefs) (string, bool) {
 		if !sok || !tok || mf.Id == "" {
 			continue
 		}
-		writeEdge(&b, mf.Id, []point{
+		writeEdge(&b, placedEdge{id: mf.Id, pts: []point{
 			{src.x + src.w/2, src.y + src.h},
 			{tgt.x + tgt.w/2, tgt.y},
-		})
+		}})
 	}
 
 	closePlane(&b)
@@ -1355,7 +1450,7 @@ func writeLaidOut(b *strings.Builder, lo laidOut) {
 		writeShape(b, s)
 	}
 	for _, e := range lo.edges {
-		writeEdge(b, e.id, e.pts)
+		writeEdge(b, e)
 	}
 }
 
@@ -1382,10 +1477,15 @@ func writeShape(b *strings.Builder, s placedShape) {
 
 // writeEdge renders one BPMNEdge for a flow (or message flow) from its ordered
 // waypoints — two for a straight run, more for an orthogonal elbow.
-func writeEdge(b *strings.Builder, id string, pts []point) {
-	fmt.Fprintf(b, "      <bpmndi:BPMNEdge id=\"%s\" bpmnElement=\"%s\">\n", attr(id+"_di"), attr(id))
-	for _, p := range pts {
+func writeEdge(b *strings.Builder, e placedEdge) {
+	fmt.Fprintf(b, "      <bpmndi:BPMNEdge id=\"%s\" bpmnElement=\"%s\">\n", attr(e.id+"_di"), attr(e.id))
+	for _, p := range e.pts {
 		fmt.Fprintf(b, "        <omgdi:waypoint x=\"%d\" y=\"%d\"/>\n", p.x, p.y)
+	}
+	if e.hasLabel {
+		b.WriteString("        <bpmndi:BPMNLabel>\n")
+		fmt.Fprintf(b, "          <omgdc:Bounds x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\"/>\n", e.labelX, e.labelY, e.labelW, e.labelH)
+		b.WriteString("        </bpmndi:BPMNLabel>\n")
 	}
 	b.WriteString("      </bpmndi:BPMNEdge>\n")
 }
