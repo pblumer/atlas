@@ -300,7 +300,18 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 			forbidden, fmsg = code, msg
 			return
 		}
-		delErr = s.projects.delete(id)
+		if delErr = s.projects.delete(id); delErr != nil {
+			return
+		}
+		// Drop the application's release history with it (ADR-0127). Unlike the
+		// artifacts — which deliberately survive and fall back to Ungrouped — a
+		// release is metadata *about* this application, reachable only through its
+		// id, so leaving the records behind would accumulate unreachable files. The
+		// deployed definitions themselves are untouched, as they always were.
+		if delErr = s.releases.deleteForApplication(id); delErr != nil {
+			return
+		}
+		delete(s.appVersions, id)
 	})
 	switch {
 	case getErr != nil:

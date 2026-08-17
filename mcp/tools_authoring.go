@@ -568,6 +568,69 @@ func authoringTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_publish_application",
+			Description: "Publish a process application by id: deploy its artifacts as one bundle and " +
+				"record the next application release — a versioned manifest of what shipped together. " +
+				"Optionally carries a note describing the change. Returns the deployed definitions and " +
+				"the minted release (ADR-0127). A bundle that does not validate deploys nothing and " +
+				"records no release.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":   stringProp("The application id to publish (from atlas_create_application)."),
+					"note": stringProp("Optional changelog note describing what this release changes."),
+				},
+				"required": []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				payload := map[string]string{}
+				if note, ok := args["note"].(string); ok && note != "" {
+					payload["note"] = note
+				}
+				body, _ := json.Marshal(payload)
+				return asText(c.post("/api/v1/applications/"+url.PathEscape(id)+"/publish", "application/json", body))
+			},
+		},
+		{
+			Name: "atlas_application_releases",
+			Description: "List a process application's release history, newest first: each release's " +
+				"version, publish time, note, and the artifacts (with their versions) that shipped in it (ADR-0127).",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"id": stringProp("The application id whose releases to list.")},
+				"required":   []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/applications/" + url.PathEscape(id) + "/releases"))
+			},
+		},
+		{
+			Name: "atlas_application_deployments",
+			Description: "Report what a process application currently has deployed on this server: its " +
+				"published version and each definition's version, active flag, and running/finished " +
+				"instance counts (ADR-0127).",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"id": stringProp("The application id whose deployments to report.")},
+				"required":   []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/applications/" + url.PathEscape(id) + "/deployments"))
+			},
+		},
+		{
 			Name: "atlas_list_drafts",
 			Description: "List saved BPMN diagram drafts (design-time), optionally filtered to one project. " +
 				"Each entry has the process id, name, project, and save time. Read a draft's XML with atlas_get_draft_xml.",

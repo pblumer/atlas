@@ -370,7 +370,15 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"POST", "/api/v1/applications/{id}/validate", s.handleValidateProject, apiOp{
 			summary: "Validate an application's artifacts", tag: "Applications", resp: jsonBody("Validation result", tObject())}},
 		{"POST", "/api/v1/applications/{id}/deploy", s.handleDeployProject, apiOp{
-			summary: "Publish an application: validate and deploy its artifacts as one bundle (ADR-0127)", tag: "Applications", resp: jsonBody("Deploy result", tObject())}},
+			summary: "Deploy an application's artifacts as one bundle, without recording a release (ADR-0127)", tag: "Applications", resp: jsonBody("Deploy result", tObject())}},
+		{"POST", "/api/v1/applications/{id}/publish", s.handlePublishApplication, apiOp{
+			summary: "Publish an application: deploy its artifacts as one bundle and record the next application release (ADR-0127)", tag: "Applications",
+			req:  jsonBody("Publish options", schemaObj(map[string]any{"note": tString()})),
+			resp: jsonBody("Publish result with the minted release", tObject())}},
+		{"GET", "/api/v1/applications/{id}/releases", s.handleListReleases, apiOp{
+			summary: "An application's release history, newest first (ADR-0127)", tag: "Applications", resp: jsonBody("Releases", tArray())}},
+		{"GET", "/api/v1/applications/{id}/deployments", s.handleApplicationDeployments, apiOp{
+			summary: "What this application currently has deployed on this server, with per-definition instance counts (ADR-0127)", tag: "Applications", resp: jsonBody("Application deployments", tObject())}},
 
 		// Deprecated aliases (ADR-0127): the pre-rename /projects surface. Same
 		// handlers as /applications above; retained for one release for compat.

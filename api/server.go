@@ -166,6 +166,8 @@ type Server struct {
 	publicLinks      *publicLinkStore     // durable sidecar for public start links (ADR-0029)
 	publicRate       *rateLimiter         // throttles the unauthenticated public endpoints
 	projects         *projectStore        // durable sidecar for projects grouping artifacts (ADR-0034)
+	releases         *releaseStore        // durable sidecar for application releases (ADR-0127)
+	appVersions      map[string]int32     // applicationId → highest release version published (ADR-0127)
 	systemPIDs       map[string]bool      // process ids of the bootstrap-deployed platform processes, protected from deletion (ADR-0122)
 	deploySysProcs   bool                 // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
 	userProvisioning bool                 // opt-in: enable the user-provisioning connector for system processes (ADR-0123)
@@ -538,6 +540,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	releases, err := newReleaseStore(filepath.Join(dataDir, "releases"))
+	if err != nil {
+		return nil, err
+	}
 	dmnrefs, err := newDmnRefStore(filepath.Join(dataDir, "dmnrefs"))
 	if err != nil {
 		return nil, err
@@ -593,6 +599,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		// generous for a human intake form, throttling for a script (ADR-0029).
 		publicRate:        newRateLimiter(20, 1),
 		projects:          projects,
+		releases:          releases,
+		appVersions:       map[string]int32{},
 		dmnrefs:           dmnrefs,
 		connectors:        connectors,
 		callOverrides:     callOverrides,
@@ -717,6 +725,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		s.jobRunner.Handle(compiler.UserConnectorJobTypeIndex, s.userConnectorHandler(s.store))
 	}
 	if err := s.loadDeployments(); err != nil {
+		return nil, err
+	}
+	// Rebuild the per-application release counter from the durable release records,
+	// so the next publish after a restart continues the sequence (ADR-0127).
+	if err := s.loadReleaseVersions(); err != nil {
 		return nil, err
 	}
 	// Push per-server call-activity overrides into the processor. Runs after
