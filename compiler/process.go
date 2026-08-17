@@ -252,7 +252,7 @@ type CallActivityDetail struct {
 // Cardinality is set — the deploy is refused otherwise.
 //
 // Standard marks the other BPMN loop marker, <standardLoopCharacteristics> — the
-// loop (circular arrow) icon (ADR-0130). It shares this struct because it shares the
+// loop (circular arrow) icon (ADR-0131). It shares this struct because it shares the
 // runtime: a standard loop is a sequential loop whose iteration set is not a
 // collection but a condition, so it has no InputCollection, Cardinality,
 // InputElement, or OutputCollection, and is driven instead by LoopCondition (nil
@@ -269,7 +269,7 @@ type MultiInstanceDetail struct {
 	OutputElement       *expr.Compiled // FEEL per-iteration contribution, nil if none
 	CompletionCondition *expr.Compiled // FEEL early-exit, nil if none
 	Sequential          bool           // one iteration at a time (else parallel)
-	Standard            bool           // a <standardLoopCharacteristics> loop (ADR-0130)
+	Standard            bool           // a <standardLoopCharacteristics> loop (ADR-0131)
 	TestBefore          bool           // standard loop: check the condition before iteration 1
 	LoopCondition       *expr.Compiled // standard loop: FEEL repeat-while, nil if none
 	LoopMaximum         int32          // standard loop: iteration cap, 0 = uncapped
@@ -1092,7 +1092,7 @@ type CallActivityRef struct {
 	PropagateAllChild  bool
 	MultiInstance      bool
 	// Loop is true when the call activity carries a standard loop marker instead —
-	// it calls the process again and again while a condition holds (ADR-0130), where
+	// it calls the process again and again while a condition holds (ADR-0131), where
 	// MultiInstance calls it once per collection element. At most one is ever true.
 	Loop bool
 }
@@ -1123,7 +1123,7 @@ func (p *CompiledProcess) CallActivities() []CallActivityRef {
 }
 
 // loops reports whether a node's loop marker is a standard loop rather than a
-// multi-instance one (ADR-0130) — the two share the loop table, so the flag on the
+// multi-instance one (ADR-0131) — the two share the loop table, so the flag on the
 // detail is what tells them apart.
 func (p *CompiledProcess) loops(node int32) bool {
 	idx := p.nodes[node].MultiInstance

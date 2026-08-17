@@ -720,7 +720,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 
 	// Wire the loop characteristics of every activity in the scope tree, recursively,
 	// mirroring wireScopeIO — both BPMN markers: multi-instance (ADR-0077) and standard
-	// loop (ADR-0130). Each FEEL source compiles once at deploy (I5), and a loop with no
+	// loop (ADR-0131). Each FEEL source compiles once at deploy (I5), and a loop with no
 	// way to decide how many iterations to run is refused (a multi-instance with neither
 	// an input collection nor a cardinality; a standard loop with neither a condition nor
 	// a maximum). The compiler records the detail; the engine runs the iterations.
@@ -735,7 +735,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		return e, nil
 	}
-	// A standard loop is the other BPMN loop marker (ADR-0130): it repeats the activity
+	// A standard loop is the other BPMN loop marker (ADR-0131): it repeats the activity
 	// while its condition holds rather than once per collection element. It compiles into
 	// the same loop table (the engine runs it on the multi-instance body/iteration
 	// machinery), so an activity carries at most one of the two markers, and a loop with
@@ -1161,7 +1161,7 @@ type xmlMultiInstance struct {
 	Loop                xmlZeebeLoopChars `xml:"extensionElements>loopCharacteristics"`
 }
 
-// xmlStandardLoop is a <standardLoopCharacteristics> on an activity (ADR-0130): the
+// xmlStandardLoop is a <standardLoopCharacteristics> on an activity (ADR-0131): the
 // other BPMN loop marker — the circular-arrow icon — which repeats the activity while
 // its <loopCondition> holds. TestBefore checks the condition before the first
 // iteration (a while loop; absent means a repeat-until that always runs once) and

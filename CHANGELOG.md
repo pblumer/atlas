@@ -14,7 +14,7 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
-- **Standard loop activities** (the ↻ marker, [ADR-0130](docs/adr/0130-standard-loop-activities.md)):
+- **Standard loop activities** (the ↻ marker, [ADR-0131](docs/adr/0131-standard-loop-activities.md)):
   `<standardLoopCharacteristics>` now runs — an activity repeats while a FEEL
   `loopCondition` holds, one run at a time, with `testBefore` choosing the while form
   (checked before the first run, so it may be skipped) or BPMN's default repeat-until

@@ -54,7 +54,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   existing callees (deployed processes and drafts), and "＋ Create new process" saves the caller,
   POSTs a starter draft keyed by the entered id, and navigates to it. Drives the real
   `mountEditor` against a mock `api`.
-- **`standard-loop-modeler.spec.mjs`** (ADR-0130): the **Loop section** in the Modeler's
+- **`standard-loop-modeler.spec.mjs`** (ADR-0131): the **Loop section** in the Modeler's
   Implement panel — the panel reads the ↻ standard loop an imported activity carries,
   choosing a mode draws (or clears) the marker on the shape and exports the matching
   `<standardLoopCharacteristics>`, and switching to a multi-instance replaces one marker
