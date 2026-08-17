@@ -1604,15 +1604,37 @@ async function renderAppDeployments(id) {
     ]);
   } catch (e) { host.innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
 
-  const defRow = (d) => `<tr>
+  // Two independent facts, shown as two pills rather than one merged "state":
+  // whether this is the version that still starts instances (current vs
+  // superseded — deploying a new version retires the previous one's message,
+  // signal, and timer starts), and whether an operator paused it (ADR-0119).
+  // A superseded version keeps its running instances and can still be targeted
+  // deliberately, e.g. by a pinned call activity (ADR-0105).
+  const stateCell = (d) => {
+    const life = d.current
+      ? `<span class="pill ok" title="Newest version — starts new instances">current</span>`
+      : `<span class="pill" title="A newer version has taken over; running instances continue, this one no longer starts any by itself">superseded</span>`;
+    const paused = d.active ? "" :
+      ` <span class="pill warn" title="An operator paused this definition (ADR-0119)">paused</span>`;
+    return `<td>${life}${paused}</td>`;
+  };
+
+  const defRow = (d) => `<tr${d.current ? "" : ' class="muted-row"'}>
     <td><div class="artifact-name"><span class="mi-icon">⚙</span><a href="#/modeler/d/${encodeURIComponent(d.key)}"><b>${esc(d.name || d.processId)}</b></a></div>
       <div class="muted" style="font-size:12px; padding-left:26px">${esc(d.processId)}</div></td>
     <td><span class="chip">v${d.version}</span></td>
-    <td>${d.active ? `<span class="pill ok">active</span>` : `<span class="pill">paused</span>`}</td>
+    ${stateCell(d)}
     <td class="muted">${d.running}</td>
     <td class="muted">${d.finished}</td>
     <td class="muted" data-sort="${d.deployedAt || 0}">${esc(fmtTime(d.deployedAt))}</td>
   </tr>`;
+
+  // Current versions first, then each process's superseded versions newest-first,
+  // so the versions that actually run head the table instead of being buried.
+  const orderedDefs = [...view.definitions].sort((a, b) =>
+    (b.current - a.current) ||
+    a.processId.localeCompare(b.processId) ||
+    (b.version - a.version));
 
   const relRow = (r) => `<tr>
     <td><span class="chip">v${r.version}</span></td>
@@ -1625,7 +1647,7 @@ async function renderAppDeployments(id) {
     <div class="card" style="margin-bottom:16px">
       <div class="stats">
         <div class="stat"><b>${view.version ? "v" + view.version : "—"}</b><span>Published version</span></div>
-        <div class="stat"><b>${view.definitions.length}</b><span>Deployed definitions</span></div>
+        <div class="stat"><b>${view.processes}</b><span>Process${view.processes === 1 ? "" : "es"}</span></div>
         <div class="stat"><b>${view.running}</b><span>Running instances</span></div>
         <div class="stat"><b>${view.finished}</b><span>Finished instances</span></div>
       </div>
@@ -1633,7 +1655,7 @@ async function renderAppDeployments(id) {
     <div class="card" style="padding:0">
       <table>
         <thead><tr><th>Definition</th><th>Version</th><th>State</th><th>Running</th><th>Finished</th><th>Deployed</th></tr></thead>
-        <tbody>${view.definitions.map(defRow).join("") ||
+        <tbody>${orderedDefs.map(defRow).join("") ||
           `<tr><td colspan="6" class="empty">Nothing deployed yet — use <b>Publish</b> to ship this application.</td></tr>`}</tbody>
       </table>
     </div>

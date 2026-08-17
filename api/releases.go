@@ -146,16 +146,36 @@ func (s *Server) handleListReleases(w http.ResponseWriter, r *http.Request) {
 // deployed definitions but no recorded release (e.g. deployed before Phase 2, or via
 // the lower-level deploy route).
 type applicationDeploymentsResp struct {
-	ID          string                  `json:"id"`
-	Name        string                  `json:"name"`
-	Version     int32                   `json:"version"`
-	PublishedAt int64                   `json:"publishedAt,omitempty"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Version is the latest published release version, 0 when none was recorded.
+	Version     int32 `json:"version"`
+	PublishedAt int64 `json:"publishedAt,omitempty"`
+	// Processes counts distinct process ids, not deployed definitions: three
+	// versions of one process is one process an operator runs. The per-version
+	// detail is in Definitions.
+	Processes   int                     `json:"processes"`
 	Running     int                     `json:"running"`
 	Finished    int                     `json:"finished"`
 	Definitions []applicationDefinition `json:"definitions"`
 }
 
 // applicationDefinition is one deployed definition belonging to an application.
+//
+// Two independent flags, deliberately not merged into one "state":
+//
+//   - Current is the *version lifecycle*: this is the newest deployed version of
+//     its process id. Deploying a new version retires the previous one's message,
+//     signal, and timer start subscriptions (engine/processor.go), so only the
+//     current version still starts instances of its own accord. A superseded
+//     version keeps its running instances and stays addressable by key — an
+//     operator may deliberately pin a call activity to it (ADR-0105) — it simply
+//     no longer starts anything by itself.
+//   - Active is the *operator gate* (ADR-0119): false only when someone explicitly
+//     paused this definition. It is true for every definition nobody has touched.
+//
+// Reporting only Active made every version of a process look equally live, which
+// is what this pair exists to correct.
 type applicationDefinition struct {
 	Key          uint64 `json:"key"`
 	ProcessID    string `json:"processId"`
@@ -163,6 +183,7 @@ type applicationDefinition struct {
 	Version      int32  `json:"version"`
 	DeployedAt   int64  `json:"deployedAt"`
 	Active       bool   `json:"active"`
+	Current      bool   `json:"current"`
 	Running      int    `json:"running"`
 	Finished     int    `json:"finished"`
 	LastActivity int64  `json:"lastActivity,omitempty"`
@@ -181,6 +202,18 @@ func (s *Server) handleApplicationDeployments(w http.ResponseWriter, r *http.Req
 	out := applicationDeploymentsResp{ID: proj.ID, Name: proj.Name, Definitions: []applicationDefinition{}}
 	var loadErr error
 	s.do(func() {
+		// Highest deployed version per process id, over this application's
+		// definitions only. Derived from what is actually deployed rather than from
+		// s.versions (which is a monotonic high-water mark and would leave a process
+		// with no current version if its newest deployment were deleted).
+		newest := map[string]int32{}
+		for _, key := range s.order {
+			if d := s.deployments[key]; d.ProjectID == id && d.Version > newest[d.ProcessID] {
+				newest[d.ProcessID] = d.Version
+			}
+		}
+		out.Processes = len(newest)
+
 		for _, key := range s.order {
 			d := s.deployments[key]
 			if d.ProjectID != id {
@@ -196,6 +229,7 @@ func (s *Server) handleApplicationDeployments(w http.ResponseWriter, r *http.Req
 			out.Definitions = append(out.Definitions, applicationDefinition{
 				Key: key, ProcessID: d.ProcessID, Name: d.Name, Version: d.Version,
 				DeployedAt: d.DeployedAt, Active: !d.inactive,
+				Current: d.Version == newest[d.ProcessID],
 				Running: active, Finished: completed, LastActivity: lastAct,
 			})
 			out.Running += active
