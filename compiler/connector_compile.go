@@ -19,7 +19,7 @@ import (
 type connectorCompiler struct {
 	// present reports whether st carries this connector's extension.
 	present func(st xmlServiceTask) bool
-	// retries reads this connector extension's own retries attribute (ADR-0134),
+	// retries reads this connector extension's own retries attribute (ADR-0135),
 	// which overrides a <zeebe:taskDefinition retries> on the same task. It is called
 	// only when present(st) is true, so it may dereference the extension pointer
 	// directly; an empty string means the attribute was omitted.
@@ -73,7 +73,7 @@ var connectorCompilers = []connectorCompiler{
 
 // firstNonBlank returns the first value that is not empty once trimmed — the
 // precedence rule for an attribute a task can carry in more than one place (a
-// connector's own retries over its task definition's, ADR-0134).
+// connector's own retries over its task definition's, ADR-0135).
 func firstNonBlank(vals ...string) string {
 	for _, v := range vals {
 		if strings.TrimSpace(v) != "" {
@@ -85,7 +85,7 @@ func firstNonBlank(vals ...string) string {
 
 // parseRetries interprets a task's authored retries attribute — the number of
 // attempts the engine grants the task's job before an exhausted failure parks the
-// token behind an incident (ADR-0061/0134). An omitted (blank) attribute means
+// token behind an incident (ADR-0061/0135). An omitted (blank) attribute means
 // defaultRetries. label names the element ("service task", "script task", …) and id
 // identifies it, so every task kind reports the same diagnostic.
 //
@@ -111,7 +111,7 @@ func parseRetries(label, id, attr string) (int32, error) {
 // serviceTaskRetries reads the retries count from a job-worker task's
 // <taskDefinition>, defaulting to defaultRetries when it is omitted. label names the
 // element ("service task"/"send task") for diagnostics. A connector extension on the
-// same task may override it with its own retries attribute (ADR-0134).
+// same task may override it with its own retries attribute (ADR-0135).
 func serviceTaskRetries(st xmlServiceTask, label string) (int32, error) {
 	return parseRetries(label, st.Id, st.TaskDefinition.Retries)
 }

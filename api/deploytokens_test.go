@@ -198,6 +198,26 @@ func TestDeployTokenReachesOnlyTheImportEndpoint(t *testing.T) {
 	if code, body := bearerReq(t, ts, http.MethodPost, "/api/v1/applications/import", `{}`, secret); code == http.StatusUnauthorized || code == http.StatusForbidden {
 		t.Fatalf("deploy token rejected on the import endpoint: %d %s", code, body)
 	}
+
+	// A deploy agent carries the viewer role so it can read back what it shipped,
+	// but the allowlist — not the scope — is what bounds it. Prove both halves on
+	// one real application: the deployments read is allowed, the release history of
+	// that very same application is not.
+	code, raw := bearerReq(t, ts, http.MethodPost, "/api/v1/applications/import",
+		importBody("Reachable", 1, "", "reachproc"), secret)
+	if code != http.StatusOK {
+		t.Fatalf("import = %d body=%s", code, raw)
+	}
+	var res importResult
+	if err := json.Unmarshal(raw, &res); err != nil {
+		t.Fatalf("decode import: %v", err)
+	}
+	if code, _ := bearerReq(t, ts, http.MethodGet, "/api/v1/applications/"+res.ApplicationID+"/deployments", "", secret); code != http.StatusOK {
+		t.Errorf("deploy token reading its own deployments = %d, want 200", code)
+	}
+	if code, _ := bearerReq(t, ts, http.MethodGet, "/api/v1/applications/"+res.ApplicationID+"/releases", "", secret); code != http.StatusForbidden {
+		t.Errorf("deploy token reading the release history = %d, want 403 (the allowlist bounds it, not the scope)", code)
+	}
 }
 
 // TestRevokedDeployTokenIsRejected proves revocation takes effect immediately.

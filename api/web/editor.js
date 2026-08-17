@@ -81,7 +81,7 @@ function loadBpmn() {
 }
 
 // patchZeebeModdle declares the handful of attributes Atlas reads from a zeebe
-// extension element that the upstream descriptor does not know (ADR-0134): a
+// extension element that the upstream descriptor does not know (ADR-0135): a
 // business rule task's <zeebe:calledDecision retries="…">, the retry budget the
 // compiler has always parsed there. The vendored zeebe.json stays a pristine copy of
 // zeebe-bpmn-moddle (see vendor/bpmn/README.md), so the difference lives here, in
@@ -1700,7 +1700,7 @@ function removeExt(modeler, element, type) {
   modeling.updateProperties(element, { extensionElements: ext });
 }
 
-// RETRIES_FIELD is the retry budget every job-backed task carries (ADR-0134): how
+// RETRIES_FIELD is the retry budget every job-backed task carries (ADR-0135): how
 // many attempts the engine grants the job before a failure parks the token behind an
 // incident (ADR-0061). It is one field description appended to every catalog kind,
 // so the property reads, saves and validates identically whichever implementation a
@@ -2055,7 +2055,7 @@ function sendTaskKindHTML(modeler, bo) {
 function applyServiceTaskKind(modeler, element, kindId) {
   const kind = SERVICE_TASK_KINDS.find((k) => k.id === kindId) || SERVICE_TASK_KINDS[0];
   // The retry budget is a property of the task, not of the implementation it happens
-  // to have (ADR-0134), so it survives a switch of kind even though each kind stores
+  // to have (ADR-0135), so it survives a switch of kind even though each kind stores
   // it on its own extension — swapping a job worker for a REST connector must not
   // silently reset the task to the default three attempts.
   const prev = findExt(element.businessObject, serviceTaskKind(element.businessObject).ext) || {};
@@ -4159,7 +4159,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         source: fpsbody.value || "",
         resultVariable: (fpsresult.value || "").trim(),
         // A script runs as a job, so it carries the same retry budget as any other
-        // job-backed task (ADR-0134); cleared means the engine's default, written as
+        // job-backed task (ADR-0135); cleared means the engine's default, written as
         // no attribute at all.
         retries: ((fpsretries && fpsretries.value) || "").trim() || undefined,
       });
@@ -4283,7 +4283,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
       resultVariable: (fresultvar.value || "").trim(),
       bindingType: currentBinding(),
       // Evaluating a decision is a job like any other, so the task carries the same
-      // retry budget (ADR-0134); cleared means the engine's default, written as no
+      // retry budget (ADR-0135); cleared means the engine's default, written as no
       // attribute at all.
       retries: ((fbrtretries && fbrtretries.value) || "").trim() || undefined,
     });

@@ -15,7 +15,7 @@ _Changed_ / _Removed_ for each version.
 ### Added
 
 - **Retries is a property of every job-backed task**
-  ([ADR-0134](docs/adr/0134-retries-as-a-task-property.md)): the retry budget the incident
+  ([ADR-0135](docs/adr/0135-retries-as-a-task-property.md)): the retry budget the incident
   model spends (ADR-0061) can now be authored on **every task that creates a job** — the
   job-worker service and send task, each connector task (its own `retries` attribute,
   overriding a `<zeebe:taskDefinition>` on the same element), the polyglot script task
@@ -83,6 +83,24 @@ _Changed_ / _Removed_ for each version.
   standard loop like a sequential multi-instance, badged ↻ and bounded by the modelled
   `loopMaximum`, and the Operations call-activity list labels a looping call activity
   **loop** rather than **multi-instance**.
+- **Engine recovery checkpoints — restore and suffix replay** (v0.2.0 programme D,
+  [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 3):
+  recovery can now *use* a checkpoint, which is what turns O(total log) startup into
+  O(suffix). `wal.Log.ReplayFrom` skips whole segment files — log positions increase
+  monotonically, so a segment lies entirely below the cut whenever the next one starts
+  just past it, and only each segment's first record is read to find out.
+  `engine.Processor.RecoverFrom(root)` picks the newest checkpoint for this partition
+  whose applied position is at or below the store's, replays only past it, and seeds the
+  highest log position and key counter from the manifest — the values the skipped prefix
+  would otherwise have supplied (without them a restored engine would restart its key
+  counter and mint keys that collide with live instances). `Recover()` is now
+  `RecoverFrom("")`, so every existing caller keeps replaying from genesis unchanged. A
+  checkpoint that is corrupt, for another partition, or *ahead* of the store is refused
+  in favour of an older one and ultimately genesis — always correct, only slower, so
+  durability (I2) is untouched. Only the manifest is read, never the snapshot's state
+  files, since a suffix replay does not touch them. Nothing wires this into the server
+  yet and **no WAL segment is deleted**; compaction and the operator surface are the
+  remaining ADR-0131 slices.
 - **Engine recovery checkpoints — create and atomically publish** (v0.2.0 programme D,
   [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 2):
   the engine can now *produce* a recovery checkpoint. `state.Store.Snapshot` flushes the
@@ -202,7 +220,7 @@ _Changed_ / _Removed_ for each version.
 ### Changed
 
 - **A retry budget below 1 is refused at deploy**
-  ([ADR-0134](docs/adr/0134-retries-as-a-task-property.md)): `retries="0"` (or a negative
+  ([ADR-0135](docs/adr/0135-retries-as-a-task-property.md)): `retries="0"` (or a negative
   count) used to deploy and then hang — a job is on the activatable index only while it has
   retries left, so it was never handed to a worker, never failed, and never raised the incident
   an operator could resolve. It is now a compile error naming the element, alongside the

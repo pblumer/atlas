@@ -1,5 +1,5 @@
 // End-to-end coverage for the task retry budget in the Modeler Implement panel
-// (api/web/editor.js, ADR-0134). Driven through the real vendored bpmn-js: every
+// (api/web/editor.js, ADR-0135). Driven through the real vendored bpmn-js: every
 // job-backed task kind offers one Retries property, reads what the imported model
 // carries, and writes it back onto the extension the compiler reads — so what the
 // panel shows and what the engine grants the job cannot drift apart.

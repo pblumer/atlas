@@ -1,4 +1,4 @@
-# ADR-0134: Retries as a property of every job-backed task
+# ADR-0135: Retries as a property of every job-backed task
 
 - **Status:** Accepted
 - **Date:** 2026-08-17

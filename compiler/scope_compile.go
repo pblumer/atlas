@@ -115,7 +115,7 @@ func registerScope(
 				continue
 			}
 			// The connector's own retries attribute is where an author configures the
-			// budget (the Modeler writes it there, ADR-0134); a <zeebe:taskDefinition
+			// budget (the Modeler writes it there, ADR-0135); a <zeebe:taskDefinition
 			// retries> on the same task stays honoured as the fallback.
 			retries, err := parseRetries(label, st.Id, firstNonBlank(cc.retries(st), st.TaskDefinition.Retries))
 			if err != nil {
@@ -213,7 +213,7 @@ func registerScope(
 				return fmt.Errorf("compiler: script task %q has no result variable", st.Id)
 			}
 			// A script job fails like any other job, so it carries its own retry budget
-			// (ADR-0134) authored on the <atlas:jobScript> extension.
+			// (ADR-0135) authored on the <atlas:jobScript> extension.
 			retries, err := parseRetries("script task", st.Id, js.Retries)
 			if err != nil {
 				return err
