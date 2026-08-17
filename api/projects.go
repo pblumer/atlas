@@ -300,15 +300,21 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 			forbidden, fmsg = code, msg
 			return
 		}
-		if delErr = s.projects.delete(id); delErr != nil {
+		// Drop the application's release history *before* the application itself
+		// (ADR-0127). Unlike the artifacts — which deliberately survive and fall back
+		// to Ungrouped — a release is metadata *about* this application, reachable
+		// only through its id, so leaving the records behind would accumulate
+		// unreachable files. The deployed definitions themselves are untouched.
+		//
+		// The order matters for the failure case: releases first means a failed
+		// cleanup leaves the application intact, so a retry deletes both and
+		// self-heals. Deleting the application first would make the very orphans
+		// this cleanup exists to prevent, permanently — the retry would take the
+		// idempotent "already gone" path and never revisit the records.
+		if delErr = s.releases.deleteForApplication(id); delErr != nil {
 			return
 		}
-		// Drop the application's release history with it (ADR-0127). Unlike the
-		// artifacts — which deliberately survive and fall back to Ungrouped — a
-		// release is metadata *about* this application, reachable only through its
-		// id, so leaving the records behind would accumulate unreachable files. The
-		// deployed definitions themselves are untouched, as they always were.
-		if delErr = s.releases.deleteForApplication(id); delErr != nil {
+		if delErr = s.projects.delete(id); delErr != nil {
 			return
 		}
 		delete(s.appVersions, id)

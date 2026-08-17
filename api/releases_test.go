@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -226,6 +227,23 @@ func TestApplicationDeploymentsView(t *testing.T) {
 	if view.Running != 0 || view.Finished != 0 {
 		t.Errorf("counts = running %d finished %d, want 0/0 with no instances started", view.Running, view.Finished)
 	}
+
+	// A second application's definitions must not leak into this view: the whole
+	// point of the per-application view is that it is scoped to one application.
+	other := mkApp(t, ts, "Other")
+	if code, _ := doReq(t, ts, http.MethodPost, "/api/v1/drafts?projectId="+other, releasableBPMN("otherproc"), "application/xml"); code != http.StatusOK {
+		t.Fatal("save other draft")
+	}
+	if code, res := publishApp(t, ts, other, ""); code != http.StatusOK || !res.Deployed {
+		t.Fatalf("publish other = %d", code)
+	}
+	_, raw = doReq(t, ts, http.MethodGet, "/api/v1/applications/"+app+"/deployments", "", "")
+	if err := json.Unmarshal(raw, &view); err != nil {
+		t.Fatalf("decode deployments view: %v (%s)", err, raw)
+	}
+	if len(view.Definitions) != 1 || view.Definitions[0].ProcessID != "liveproc" {
+		t.Fatalf("view leaked another application's definitions: %+v", view.Definitions)
+	}
 }
 
 // TestReleasesSurviveRestart is the recovery test (first-class per AGENTS.md): the
@@ -298,6 +316,63 @@ func TestDeletingApplicationClearsItsReleases(t *testing.T) {
 	}
 	if code, res := publishApp(t, ts, app2, ""); code != http.StatusOK || res.Release == nil || res.Release.Version != 1 {
 		t.Fatalf("successor publish = status %d release %+v, want version 1", code, res.Release)
+	}
+}
+
+// TestPublishRecordsPublisherUnderAuth covers the attribution branch: with auth on
+// the release records who published it, so the history says more than "someone".
+func TestPublishRecordsPublisherUnderAuth(t *testing.T) {
+	ts, _ := newAuthServer(t, "admin", "password1")
+	c := newClient(t)
+	if code := login(t, c, ts, "admin", "password1"); code != http.StatusOK {
+		t.Fatalf("login = %d", code)
+	}
+
+	code, body := cReq(t, c, ts, http.MethodPost, "/api/v1/applications", `{"name":"Attributed"}`)
+	if code != http.StatusOK {
+		t.Fatalf("create application = %d body=%s", code, body)
+	}
+	var app struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &app); err != nil {
+		t.Fatalf("decode application: %v", err)
+	}
+
+	// The draft goes in as XML, which cReq's JSON content type would not carry.
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/drafts?projectId="+app.ID,
+		strings.NewReader(releasableBPMN("attributed")))
+	if err != nil {
+		t.Fatalf("new draft request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/xml")
+	res, err := c.Do(req)
+	if err != nil {
+		t.Fatalf("save draft: %v", err)
+	}
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("save draft = %d", res.StatusCode)
+	}
+
+	code, body = cReq(t, c, ts, http.MethodPost, "/api/v1/applications/"+app.ID+"/publish", `{"note":"attributed"}`)
+	if code != http.StatusOK {
+		t.Fatalf("publish = %d body=%s", code, body)
+	}
+	var out struct {
+		Release *struct {
+			Version     int32  `json:"version"`
+			PublishedBy string `json:"publishedBy"`
+		} `json:"release"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatalf("decode publish: %v (%s)", err, body)
+	}
+	if out.Release == nil || out.Release.Version != 1 {
+		t.Fatalf("release = %+v, want version 1", out.Release)
+	}
+	if out.Release.PublishedBy == "" {
+		t.Error("release does not record who published it under auth")
 	}
 }
 

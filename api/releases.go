@@ -183,7 +183,7 @@ func (s *Server) handleApplicationDeployments(w http.ResponseWriter, r *http.Req
 	s.do(func() {
 		for _, key := range s.order {
 			d := s.deployments[key]
-			if d == nil || d.ProjectID != id {
+			if d.ProjectID != id {
 				continue
 			}
 			// Each is an O(1) point read of a maintained counter (ADR-0080/0083); this
