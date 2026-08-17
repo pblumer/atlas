@@ -19,11 +19,33 @@ plan (unlike the immutable ADR) and may be edited as slices land.
 
 ---
 
-## Phase 1 — Reframe (no behaviour change)
+## Phase 1 — Reframe (no behaviour change) — ✅ shipped
 
 **Goal:** the concept is "application" everywhere a user or API client sees it;
 bundle deploy is the headline Publish path. Zero behavioural change to storage or
 the engine.
+
+**Delivered.** API, MCP tools, and the UI all speak "process application"; the
+pre-rename surface stays registered as deprecated aliases for one release. What
+landed, against the plan below:
+
+- `/api/v1/applications*` registered on the same handlers as their `/projects*`
+  twins; the eight `/projects*` routes marked `deprecated` in the OpenAPI doc
+  (new `deprecated` field on `apiOp`).
+- MCP gained `atlas_create_application`, `atlas_list_applications`,
+  `atlas_delete_application`, `atlas_deploy_application`; the four
+  `atlas_*_project` tools keep working with deprecation notices in their
+  descriptions. Both MCP guards (drift + contract) stay green.
+- UI relabelled (home "Applications", 📦, "Not assigned", "Publish" as the
+  app-level action) **and** moved onto the canonical `/api/v1/applications`
+  paths; the per-diagram Deploy in `editor.js` is now a secondary button.
+- Storage untouched: still `projects/` on disk and `projectId` on artifacts.
+
+**Deliberately deferred out of Phase 1:** renaming the Go identifiers
+(`project`, `projectView`, `handleCreateProject`, `deployProject`, …) and the
+`data-dt-key`/route slugs (`#/modeler/p/…`). They are internal names with no
+user-visible surface; a mechanical rename is its own low-risk slice, best done
+when Phase 2 touches these files anyway.
 
 ### Backend (`api/`)
 
