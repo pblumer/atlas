@@ -1211,16 +1211,17 @@ function toggleSection(id, btn) {
   try { localStorage.setItem("atlas.sec." + id, open ? "1" : "0"); } catch { /* ignore */ }
 }
 
-// viewModelerHome is the project landscape: a clean table of projects (each a
-// container of artifacts, ADR-0034) plus a collapsible list of deployed
-// definitions. Artifact editing happens inside a project (viewProjectDetail),
-// which keeps this overview tidy. "Create new" is a single dropdown.
+// viewModelerHome is the application landscape: a clean table of process
+// applications (each a container of artifacts — the ADR-0034 project reframed by
+// ADR-0127) plus a collapsible list of deployed definitions. Artifact editing
+// happens inside an application (viewProjectDetail), which keeps this overview
+// tidy. "Create new" is a single dropdown.
 async function viewModelerHome() {
   view.innerHTML = `
     <div class="between">
-      <h1>Modeler</h1>
+      <h1>Applications</h1>
       ${dropdown("Create new", "btn", [
-        { label: "New project", icon: "📁", act: "new-project" },
+        { label: "New application", icon: "📦", act: "new-project" },
         { sep: true },
         { header: "Blank resources" },
         { label: "BPMN diagram", icon: "⚙", href: "#/modeler/new" },
@@ -1272,20 +1273,20 @@ async function viewModelerHome() {
         { label: "Delete", icon: "🗑", act: "del", data: { id: p.id, name: p.name }, danger: true },
       );
       return `<tr>
-        <td data-filter="${esc(p.name)}"><div class="artifact-name"><span class="mi-icon">📁</span><a href="${href}"><b>${esc(p.name)}</b></a>${visBadge(p)}</div></td>
+        <td data-filter="${esc(p.name)}"><div class="artifact-name"><span class="mi-icon">📦</span><a href="${href}"><b>${esc(p.name)}</b></a>${visBadge(p)}</div></td>
         <td class="muted">${n}</td>
         <td class="muted" data-sort="${p.updatedAt || 0}">${esc(fmtTime(p.updatedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td>
       </tr>`;
     };
     const ungroupedRow = ungrouped.length ? `<tr>
-        <td><div class="artifact-name"><span class="mi-icon">🗂</span><a href="#/modeler/p/ungrouped">Ungrouped</a>
-          <span class="muted" style="font-size:12px">· not in a project</span></div></td>
+        <td><div class="artifact-name"><span class="mi-icon">🗂</span><a href="#/modeler/p/ungrouped">Not assigned</a>
+          <span class="muted" style="font-size:12px">· not in an application</span></div></td>
         <td class="muted">${ungrouped.length}</td><td class="muted">—</td><td></td>
       </tr>` : "";
 
     projRows.innerHTML = (projects.map(projectRow).join("") + ungroupedRow) ||
-      `<tr><td colspan="4" class="empty">No projects yet. Use <b>Create new</b> to add one.</td></tr>`;
+      `<tr><td colspan="4" class="empty">No applications yet. Use <b>Create new</b> to add one.</td></tr>`;
     onMenuAction(projRows, (act, b) => {
       if (act === "rename") renameProject(b.dataset.id, b.dataset.name, renderProjects);
       if (act === "del") deleteProject(b.dataset.id, b.dataset.name, renderProjects);
@@ -1360,9 +1361,9 @@ async function viewModelerHome() {
       }
       const buckets = [];
       for (const p of projects) {
-        if (byProject.has(p.id)) buckets.push({ id: p.id, name: p.name, icon: "📁", groups: byProject.get(p.id) });
+        if (byProject.has(p.id)) buckets.push({ id: p.id, name: p.name, icon: "📦", groups: byProject.get(p.id) });
       }
-      if (byProject.has("")) buckets.push({ id: "ungrouped", name: "Ungrouped", icon: "🗂", groups: byProject.get("") });
+      if (byProject.has("")) buckets.push({ id: "ungrouped", name: "Not assigned", icon: "🗂", groups: byProject.get("") });
 
       if (buckets.length === 1 && buckets[0].id === "ungrouped") {
         rows.innerHTML = deployTable(buckets[0].groups);
@@ -1419,12 +1420,12 @@ async function viewProjectDetail(id) {
     } catch (e) { root.innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
 
     const known = new Set(projects.map((p) => p.id));
-    const proj = ungrouped ? { id: "ungrouped", name: "Ungrouped" } : projects.find((p) => p.id === id);
+    const proj = ungrouped ? { id: "ungrouped", name: "Not assigned" } : projects.find((p) => p.id === id);
     if (!proj) {
-      root.innerHTML = `<div class="card empty">This project no longer exists. <a href="#/modeler">Back to Modeler</a></div>`;
+      root.innerHTML = `<div class="card empty">This application no longer exists. <a href="#/modeler">Back to Modeler</a></div>`;
       return;
     }
-    setTitle(`${proj.name || "Project"} · Modeler`);
+    setTitle(`${proj.name || "Application"} · Modeler`);
     const mine = (a) => ungrouped ? (!a.projectId || !known.has(a.projectId)) : a.projectId === id;
     const dl = drafts.filter(mine), rl = refs.filter(mine), fl = forms.filter(mine);
 
@@ -1438,7 +1439,7 @@ async function viewProjectDetail(id) {
     // the current one marked. Forms have no move endpoint, so only drafts/refs get it.
     const moveItems = (currentPid, act, key) => [
       { header: "Move to" },
-      { label: "Ungrouped", icon: currentPid ? "" : "•", act, data: { pid: "", key } },
+      { label: "Not assigned", icon: currentPid ? "" : "•", act, data: { pid: "", key } },
       ...projects.map((p) => ({ label: p.name, icon: p.id === currentPid ? "•" : "", act, data: { pid: p.id, key } })),
     ];
 
@@ -1507,15 +1508,15 @@ async function viewProjectDetail(id) {
     const projItems = ungrouped ? [] : [
       ...(rl.length ? [{ label: "Validate DMN", icon: "✔", act: "valproj" }] : []),
       ...(AUTH.enabled && isOwner ? [{ label: "Share…", icon: "👤", act: "shareproj" }] : []),
-      ...(isOwner ? [{ label: "Rename project", icon: "✎", act: "renproj" }] : []),
-      ...(isOwner ? [{ sep: true }, { label: "Delete project", icon: "🗑", act: "delproj", danger: true }] : []),
+      ...(isOwner ? [{ label: "Rename application", icon: "✎", act: "renproj" }] : []),
+      ...(isOwner ? [{ sep: true }, { label: "Delete application", icon: "🗑", act: "delproj", danger: true }] : []),
     ];
     root.innerHTML = `
       <div class="crumb"><a href="#/modeler">Home</a> › ${esc(proj.name)}</div>
       <div class="between">
         <h1>${esc(proj.name)}${ungrouped ? "" : " " + visBadge(proj)}</h1>
         <div class="row">
-          ${(!ungrouped && canWrite) ? `<button class="btn" id="pd-deploy">Deploy</button>` : ""}
+          ${(!ungrouped && canWrite) ? `<button class="btn" id="pd-deploy">Publish</button>` : ""}
           ${canWrite ? dropdown("Create new", "btn neutral", createItems) : ""}
           ${projItems.length ? dropdown("⋯", "icon-btn", projItems) : ""}
         </div>
@@ -1527,7 +1528,7 @@ async function viewProjectDetail(id) {
           <tbody id="pd-rows">${bodyRows ||
             `<tr><td colspan="4" class="empty">${canWrite
               ? "No artifacts yet — use <b>Create new</b> to add one."
-              : "No artifacts in this project yet."}</td></tr>`}</tbody>
+              : "No artifacts in this application yet."}</td></tr>`}</tbody>
         </table>
       </div>`;
 
@@ -1602,37 +1603,40 @@ async function toggleProcessActive(key, inactive, reload) {
   await reload();
 }
 
-// ---------- Projects (ADR-0034) ----------
+// ---------- Applications (ADR-0034 project, reframed by ADR-0127) ----------
+// The UI still calls the /api/v1/projects endpoints, which ADR-0127 keeps as
+// working (deprecated) aliases of /api/v1/applications; migrating these fetch
+// paths to the canonical /applications names is a follow-up.
 async function createProject(reload) {
-  const name = window.prompt("Project name");
+  const name = window.prompt("Application name");
   if (name == null) return; // cancelled
   const trimmed = name.trim();
-  if (!trimmed) { toast("Project name is required", "err"); return; }
+  if (!trimmed) { toast("Application name is required", "err"); return; }
   try {
     await api("POST", "/api/v1/projects", { name: trimmed });
-    toast(`Created project "${trimmed}"`, "ok");
-  } catch (e) { toast("could not create project: " + e.message, "err"); }
+    toast(`Created application "${trimmed}"`, "ok");
+  } catch (e) { toast("could not create application: " + e.message, "err"); }
   await reload();
 }
 
 async function renameProject(id, current, reload) {
-  const name = window.prompt("Rename project", current);
+  const name = window.prompt("Rename application", current);
   if (name == null) return;
   const trimmed = name.trim();
-  if (!trimmed) { toast("Project name is required", "err"); return; }
+  if (!trimmed) { toast("Application name is required", "err"); return; }
   try {
     await api("PATCH", `/api/v1/projects/${encodeURIComponent(id)}`, { name: trimmed });
-    toast("Renamed project", "ok");
-  } catch (e) { toast("could not rename project: " + e.message, "err"); }
+    toast("Renamed application", "ok");
+  } catch (e) { toast("could not rename application: " + e.message, "err"); }
   await reload();
 }
 
 async function deleteProject(id, name, reload) {
-  if (!window.confirm(`Delete project "${name}"? Its diagrams are kept and become Ungrouped.`)) return;
+  if (!window.confirm(`Delete application "${name}"? Its artifacts are kept and become Not assigned.`)) return;
   try {
     await api("DELETE", `/api/v1/projects/${encodeURIComponent(id)}`);
-    toast(`Deleted project "${name}"`, "ok");
-  } catch (e) { toast("could not delete project: " + e.message, "err"); }
+    toast(`Deleted application "${name}"`, "ok");
+  } catch (e) { toast("could not delete application: " + e.message, "err"); }
   await reload();
 }
 
@@ -2312,33 +2316,34 @@ async function validateProject(projectId) {
     for (const r of rep.references) applyRefStatus(r.id, r);
     toast(rep.ok ? "All DMN references are valid" : "Some DMN references are unresolved or invalid",
       rep.ok ? "ok" : "err");
-  } catch (e) { toast("could not validate project: " + e.message, "err"); }
+  } catch (e) { toast("could not validate application: " + e.message, "err"); }
 }
 
-// deployProject deploys the whole project: the server validates its DMN
+// deployProject publishes the whole application: the server validates its DMN
 // references (the deploy-time gate) and, only if all pass, deploys its BPMN
-// diagrams as runnable definitions. A refusal (409) carries the reason and the
-// per-reference results, which we surface without a reload; a success reloads so
-// the new definitions show under "Deployed". Uses a raw fetch so the refusal
-// body (which is not an {error} shape) is read instead of thrown away.
+// diagrams together as runnable definitions (the ADR-0127 headline "Publish"
+// action). A refusal (409) carries the reason and the per-reference results,
+// which we surface without a reload; a success reloads so the new definitions
+// show under "Deployed". Uses a raw fetch so the refusal body (which is not an
+// {error} shape) is read instead of thrown away.
 async function deployProject(id, reload) {
-  if (!window.confirm("Deploy this project? Its DMN references are validated, then its BPMN diagrams are deployed as runnable definitions.")) return;
+  if (!window.confirm("Publish this application? Its DMN references are validated, then its BPMN diagrams are deployed together as runnable definitions.")) return;
   let rep;
   try {
     const res = await fetch(`/api/v1/projects/${encodeURIComponent(id)}/deploy`, { method: "POST" });
     rep = await res.json();
     if (res.ok && rep.deployed) {
       const n = (rep.definitions || []).length;
-      toast(n ? `Deployed ${n} definition${n === 1 ? "" : "s"}` : "Nothing to deploy in this project", "ok");
+      toast(n ? `Published ${n} definition${n === 1 ? "" : "s"}` : "Nothing to publish in this application", "ok");
       await reload();
       return;
     }
   } catch (e) {
-    toast("deploy failed: " + e.message, "err");
+    toast("publish failed: " + e.message, "err");
     return;
   }
   // Refused (or a server error): show why and reflect any DMN results in place.
-  toast(rep.reason || rep.error || "Deploy refused", "err");
+  toast(rep.reason || rep.error || "Publish refused", "err");
   for (const r of rep.references || []) applyRefStatus(r.id, r);
 }
 
