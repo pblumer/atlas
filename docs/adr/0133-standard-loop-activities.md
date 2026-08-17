@@ -1,17 +1,36 @@
 # ADR-0133: Standard loop activities (the ↻ marker)
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-08-17: every activity kind loops)
 - **Date:** 2026-08-17
 - **Deciders:** Atlas engine team
 
+> **Amendment (2026-08-17).** The supported activity set below was inherited from
+> ADR-0077 and left business rule, manual and undefined tasks ignoring *both* loop
+> markers; the follow-up noted at the end of this ADR is now done. Those three kinds
+> carry the markers too, so **every BPMN activity Atlas executes can loop**, and the
+> "this element carries a marker Atlas does not run" note in the Modeler is left for
+> the genuinely non-activity cases (a message-kind send task, an event, a gateway).
+> It needed no engine change at all — the body/iteration dispatch already runs the
+> node's real behavior, so a looping business rule task re-evaluates its decision on
+> the job path and a looping manual/undefined task repeats its pass-through. In the
+> compiler the loop fields moved onto the two plain-task shapes (a new `xmlPlainTask`
+> for `<task>`/`<manualTask>`, so the `xmlNode` shared with gateways keeps none) and
+> onto `xmlBusinessRuleTask`, and the scope walk wires all three. Verified: the markers
+> compile on each kind, the deploy refusals apply there too, a gateway still cannot
+> parse one, a standard loop repeats a pass-through task and a business rule task's
+> decision (one round at a time, the result feeding the condition), a multi-instance
+> fans a pass-through task out over a collection, and the Modeler offers the Loop
+> section on a business rule task in a real browser.
+>
 > **Implementation status.** Delivered end to end: `<standardLoopCharacteristics>` is
 > parsed and compiled, runs on the ADR-0077 multi-instance body/iteration machinery,
 > and is authored in the Modeler's Implement panel — where the loop **marker on the
 > shape and the Mode property are one and the same fact**, in both directions.
 >
-> **Compiler.** The marker parses on exactly the activities multi-instance already
-> covers (service, script, user, receive and job-kind send tasks, call activities,
-> subprocesses) and compiles into the existing `MultiInstanceDetail` table, marked
+> **Compiler.** The marker parses on every activity multi-instance covers — service,
+> script, user, business rule, manual, undefined, receive and job-kind send tasks, call
+> activities, subprocesses (the last three kinds added by the amendment above) — and
+> compiles into the existing `MultiInstanceDetail` table, marked
 > `Standard`, with `LoopCondition` (compiled once at deploy, I5), `TestBefore`, and
 > `LoopMaximum`. The node keeps its real activity type and its single `MultiInstance`
 > index, so no new compiled field, node type, or table was added. Refused at deploy: a
@@ -152,9 +171,11 @@ run a marker at all, the panel says so rather than leaving the icon to imply beh
   task) that is a busy loop on the partition, the same exposure a cyclic sequence flow
   already carries. An activity cannot carry both markers — a deploy-time refusal, not a
   silent pick.
-- **Follow-ups / risks to watch:** the supported activity set is inherited from
+- **Follow-ups / risks to watch:** ~~the supported activity set is inherited from
   ADR-0077, so business rule, manual and undefined tasks still ignore *both* markers —
-  the panel now says so, but running them there is future work. The token simulation
+  the panel now says so, but running them there is future work.~~ **Done** (amendment
+  above): all three kinds loop, so no activity Atlas executes ignores a marker. The
+  token simulation
   counts a standard loop by `loopMaximum` (or the configurable default) because it does
   not evaluate FEEL; that is a teaching aid's approximation, labelled as such in the
   badge tooltip.

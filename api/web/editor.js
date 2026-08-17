@@ -3722,8 +3722,13 @@ function wireProperties(root, modeler, api, projectId, toast) {
         // with their own editor above, so it is excluded here.
         if (t === "bpmn:ServiceTask" || t === "bpmn:ScriptTask" || t === "bpmn:UserTask") {
           html += ioMappingsHTML(bo);
-          html += multiInstanceHTML(bo); // ADR-0077: run this task once per collection element
         }
+        // Every task kind can carry a loop marker (ADR-0077 multi-instance, ADR-0133
+        // standard loop) — including the ones with no implementation of their own: an
+        // undefined or manual task repeats its pass-through, a business rule task
+        // re-evaluates its decision. The section is offered wherever the engine honours
+        // the marker, so the panel and the icon agree on every activity.
+        html += multiInstanceHTML(bo);
       } else if (bo.$type === "bpmn:SubProcess") {
         // An embedded subprocess is a scope, so it takes the same generic
         // zeebe:ioMapping editor as a task (ADR-0074) — but no task-type selector, a
@@ -3956,7 +3961,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
     // the diagram claim behavior it doesn't have (ADR-0133).
     if (bo.loopCharacteristics && !html.includes("f-mi-mode")) {
       html += `<h3>Loop</h3>
-        <p class="muted" style="font-size:12px">This element carries a <b>loop marker</b> Atlas does not execute here — it will run <b>once</b>, whatever the icon suggests. Loops run on service, script and user tasks, call activities and subprocesses; remove the marker (the wrench icon on the shape) or move the work to one of those.</p>`;
+        <p class="muted" style="font-size:12px">This element carries a <b>loop marker</b> Atlas does not execute here — it will run <b>once</b>, whatever the icon suggests. Loops run on <b>activities</b>: every task kind, call activities and subprocesses (a message-kind send task is a throw, not an activity). Remove the marker (the wrench icon on the shape) or move the work to one of those.</p>`;
     }
     body.innerHTML = html;
 
