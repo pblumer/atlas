@@ -170,16 +170,18 @@ var (
 	kindGateway = nodeKind{50, 50}
 )
 
-// Layout spacing. gapX/gapY separate columns and rows; they are deliberately roomy
-// so a node's external label (an event's caption sits below its 36px circle, a
-// boundary event's beside it) has air instead of colliding with the neighbour. The
-// sub* paddings size an expanded subprocess around its laid-out children — a header
-// strip on top for the title, symmetric side and bottom padding — and the sub
-// minimums keep an empty subprocess readable as a container.
+// Layout spacing. gapX/gapY separate columns and rows. gapX is 50, which with the
+// 100px task width puts columns on the 150px pitch AGENTS.md prescribes for
+// hand-authored models — the spacing a reader is used to, and what the diagrams in
+// this repository already use. gapY stays roomier: rows carry the horizontal
+// corridors that exception flows run along, and an event's caption sits below its
+// 36px circle. The sub* paddings size an expanded subprocess around its laid-out
+// children — a header strip on top for the title, symmetric side and bottom padding
+// — and the sub minimums keep an empty subprocess readable as a container.
 const (
 	layoutMarginX  = 150
 	layoutMarginY  = 90
-	layoutGapX     = 80
+	layoutGapX     = 50
 	layoutGapY     = 60
 	subPadX        = 30
 	subHeaderTop   = 40
@@ -974,7 +976,12 @@ func emitShapes(lo *laidOut, nodes []lnode, inner map[string]*laidOut) {
 // per-rune estimate is enough — the box only needs to position the label, and the
 // renderer reflows the actual text.
 func boundaryLabelWidth(s string) int {
-	w := utf8.RuneCountInString(s) * 7
+	// 5.5px per rune. bpmn-js writes measured label bounds back into the DI, and in
+	// hand-drawn models those come out near 5.2px per rune for the default external-
+	// label font ("Session Error" → 67px). Guessing high is not the safe direction:
+	// the renderer centers the caption in whatever box it is given, so an oversized
+	// box pushes the visible text off the anchor rather than reserving slack.
+	w := utf8.RuneCountInString(s) * 11 / 2
 	if w < 20 {
 		w = 20
 	}
