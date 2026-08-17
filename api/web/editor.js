@@ -69,7 +69,7 @@ function loadBpmn() {
           fetch("vendor/bpmn/zeebe.json").then((r) => r.json()),
           fetch("atlas-moddle.json").then((r) => r.json()),
         ]);
-        resolve({ BpmnJS: window.BpmnJS, moddle: { zeebe, atlas } });
+        resolve({ BpmnJS: window.BpmnJS, moddle: { zeebe: patchZeebeModdle(zeebe), atlas } });
       } catch (e) {
         reject(new Error("failed to load the moddle extensions: " + e.message));
       }
@@ -78,6 +78,22 @@ function loadBpmn() {
     document.head.appendChild(s);
   });
   return bpmnReady;
+}
+
+// patchZeebeModdle declares the handful of attributes Atlas reads from a zeebe
+// extension element that the upstream descriptor does not know (ADR-0134): a
+// business rule task's <zeebe:calledDecision retries="…">, the retry budget the
+// compiler has always parsed there. The vendored zeebe.json stays a pristine copy of
+// zeebe-bpmn-moddle (see vendor/bpmn/README.md), so the difference lives here, in
+// code, where it is visible — rather than as an invisible edit to a vendored file.
+// Declaring it as a plain attribute (not an atlas:-prefixed one) is what keeps the
+// round-trip honest: a hand-authored retries="5" is read back into the panel.
+function patchZeebeModdle(zeebe) {
+  const cd = (zeebe.types || []).find((t) => t.name === "CalledDecision");
+  if (cd && !(cd.properties || []).some((p) => p.name === "retries")) {
+    cd.properties.push({ name: "retries", type: "String", isAttr: true });
+  }
+  return zeebe;
 }
 
 // newModeler/newViewer construct a bpmn-js instance with the moddle extensions
@@ -1684,6 +1700,26 @@ function removeExt(modeler, element, type) {
   modeling.updateProperties(element, { extensionElements: ext });
 }
 
+// RETRIES_FIELD is the retry budget every job-backed task carries (ADR-0134): how
+// many attempts the engine grants the job before a failure parks the token behind an
+// incident (ADR-0061). It is one field description appended to every catalog kind,
+// so the property reads, saves and validates identically whichever implementation a
+// task has — the plain job worker stores it on <zeebe:taskDefinition retries>, a
+// connector on its own extension's retries attribute, and the compiler reads both.
+const RETRIES_FIELD = {
+  key: "retries", label: "Retries", type: "number", min: 1, placeholder: "3",
+  hint: "How often the engine hands this task's job to a worker before giving up — the first attempt plus one per remaining count. When they are used up the failure raises an incident that parks the token until an operator resolves it. Leave empty for the default (3); 1 means a single attempt with no retry.",
+};
+
+// withRetries appends the retry-budget section to a catalog kind's fields. Every
+// kind that runs as a job takes it; the mockup kind does not (ADR-0120: the engine
+// simulates that task itself and creates no job, so there is nothing to hand out
+// again — its failure simulation raises the incident directly).
+function withRetries(kind) {
+  if (kind.id === "mockup") return kind;
+  return { ...kind, fields: [...kind.fields, { group: "Failure handling" }, RETRIES_FIELD] };
+}
+
 // SERVICE_TASK_KINDS is the catalog of service-task connector kinds the modeler
 // can author (ADR-0067). Each entry maps a human-facing kind to the extension
 // element the compiler reads and the typed fields that configure it. Adding a
@@ -1868,7 +1904,7 @@ const SERVICE_TASK_KINDS = [
       { key: "failMessage", label: "Incident message", placeholder: "umsystem unavailable", hint: "The incident message when a failure raises an incident (i.e. when no error code is set)." },
     ],
   },
-];
+].map(withRetries);
 
 // serviceTaskKind returns the catalog entry a service task currently represents,
 // detected by which connector extension it carries; the plain job worker is the
@@ -1933,6 +1969,12 @@ function stKindFieldsHTML(cur, ext) {
           <div class="st-map-rows">${rowsHTML}</div>
           <button type="button" class="st-map-add" style="margin-top:2px">+ Add</button>
         </div></div>`;
+    } else if (f.type === "number") {
+      // A count, not free text (the retry budget): a spinner with the engine's own
+      // lower bound, so the field cannot express a value the compiler refuses.
+      fields += `<label class="field"><span>${esc(f.label)}</span>
+        <input type="number" id="f-st-${f.key}" ${f.min === undefined ? "" : `min="${esc(String(f.min))}"`} step="1"
+               value="${esc(ext[f.key] || "")}" placeholder="${esc(f.placeholder || "")}"/></label>`;
     } else if (f.type === "select") {
       const chosen = ext[f.key] || "";
       const opts = f.options.map((o) => {
@@ -2012,10 +2054,16 @@ function sendTaskKindHTML(modeler, bo) {
 // extension, so the compiler sees exactly one connector kind (ADR-0067).
 function applyServiceTaskKind(modeler, element, kindId) {
   const kind = SERVICE_TASK_KINDS.find((k) => k.id === kindId) || SERVICE_TASK_KINDS[0];
+  // The retry budget is a property of the task, not of the implementation it happens
+  // to have (ADR-0134), so it survives a switch of kind even though each kind stores
+  // it on its own extension — swapping a job worker for a REST connector must not
+  // silently reset the task to the default three attempts.
+  const prev = findExt(element.businessObject, serviceTaskKind(element.businessObject).ext) || {};
   for (const other of SERVICE_TASK_KINDS) {
     if (other.id !== kind.id) removeExt(modeler, element, other.ext);
   }
   const defaults = {};
+  if (prev.retries && kind.fields.some((f) => f.key === "retries")) defaults.retries = prev.retries;
   for (const f of kind.fields) {
     if (f.type === "select" && f.options && f.options.length) {
       const v = selectOption(f.options[0]).v;
@@ -3631,6 +3679,10 @@ function wireProperties(root, modeler, api, projectId, toast) {
               <label class="field"><span>Result variable</span>
                 <input type="text" id="f-psresult" value="${esc((js && js.resultVariable) || "")}" placeholder="Greeting"/></label>
               <p class="muted" style="font-size:12px">${meta.hint}</p>
+              <h3>Failure handling</h3>
+              <label class="field"><span>Retries</span>
+                <input type="number" id="f-psretries" min="1" step="1" value="${esc((js && js.retries) || "")}" placeholder="3"/></label>
+              <p class="muted" style="font-size:12px">${RETRIES_FIELD.hint}</p>
               <div class="feel-test" data-run-lang="${lang}">
                 <label class="field"><span>Test — sample variables (JSON)</span>
                   <textarea class="ps-run-vars" rows="2" spellcheck="false" placeholder='{ "Vorname": "Anna" }'></textarea></label>
@@ -3685,6 +3737,10 @@ function wireProperties(root, modeler, api, projectId, toast) {
             <label class="field"><span>Result variable</span>
               <input type="text" id="f-resultvar" value="${esc(cd.resultVariable || "")}" placeholder="dish"/></label>${bindingField}
             <p class="muted" style="font-size:12px">Pick a decision to auto-fill its id, inputs and result variable. <b>Latest</b> evaluates the newest deployed version; <b>Deployment</b> pins to the version deployed with this process.</p>
+            <h3>Failure handling</h3>
+            <label class="field"><span>Retries</span>
+              <input type="number" id="f-brt-retries" min="1" step="1" value="${esc(cd.retries || "")}" placeholder="3"/></label>
+            <p class="muted" style="font-size:12px">${RETRIES_FIELD.hint}</p>
             <h3>Decision inputs</h3>
             <p class="muted" style="font-size:12px">Each row feeds one decision input. Pick a variable from the list or type any FEEL expression over the instance's variables. Leave a row's name blank to drop it.</p>
             <div id="dmn-inputs">${inputs.map((p, i) => decisionInputRowHTML(i, p.source, p.target)).join("")}${decisionInputRowHTML(inputs.length, "", "")}</div>
@@ -4093,6 +4149,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
 
     const fpsbody = body.querySelector("#f-psbody");
     const fpsresult = body.querySelector("#f-psresult");
+    const fpsretries = body.querySelector("#f-psretries");
     const saveJobScript = () => savePreservingPanel(() => {
       // The selected language is the source of truth; keep it on the extension so
       // the compiler maps it to the right worker's job type.
@@ -4101,10 +4158,15 @@ function wireProperties(root, modeler, api, projectId, toast) {
         language,
         source: fpsbody.value || "",
         resultVariable: (fpsresult.value || "").trim(),
+        // A script runs as a job, so it carries the same retry budget as any other
+        // job-backed task (ADR-0134); cleared means the engine's default, written as
+        // no attribute at all.
+        retries: ((fpsretries && fpsretries.value) || "").trim() || undefined,
       });
     });
     if (fpsbody) fpsbody.addEventListener("change", saveJobScript);
     if (fpsresult) fpsresult.addEventListener("change", saveJobScript);
+    if (fpsretries) fpsretries.addEventListener("change", saveJobScript);
 
     // The script field is upgraded to the shared code editor (highlighting,
     // completion, gutter, error markers) and its Run panel wired in the Implement
@@ -4156,7 +4218,11 @@ function wireProperties(root, modeler, api, projectId, toast) {
         if (f.type === "map") { props[f.key] = readMapField(f); continue; }
         // A showIf-hidden field isn't rendered; leave its stored value untouched.
         const el = body.querySelector("#f-st-" + f.key);
-        if (el) props[f.key] = (el.value || "").trim();
+        if (!el) continue;
+        const v = (el.value || "").trim();
+        // A cleared count means "the engine's default" — drop the attribute rather
+        // than write an empty one, so the exported XML says what the task means.
+        props[f.key] = (f.type === "number" && v === "") ? undefined : v;
       }
       upsertExt(modeler, element, stKind.ext, props);
     });
@@ -4208,6 +4274,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
     const fdecision = body.querySelector("#f-decisionid");
     const fresultvar = body.querySelector("#f-resultvar");
     const fbinding = body.querySelector("#f-brt-binding");
+    const fbrtretries = body.querySelector("#f-brt-retries");
     // currentBinding preserves the decision binding (ADR-0063) across every save of
     // the called decision, so editing the id/result variable never drops it.
     const currentBinding = () => (fbinding && fbinding.value === "deployment") ? "deployment" : "latest";
@@ -4215,6 +4282,10 @@ function wireProperties(root, modeler, api, projectId, toast) {
       decisionId: (fdecision.value || "").trim(),
       resultVariable: (fresultvar.value || "").trim(),
       bindingType: currentBinding(),
+      // Evaluating a decision is a job like any other, so the task carries the same
+      // retry budget (ADR-0134); cleared means the engine's default, written as no
+      // attribute at all.
+      retries: ((fbrtretries && fbrtretries.value) || "").trim() || undefined,
     });
     const saveDecision = () => savePreservingPanel(() => {
       upsertExt(modeler, element, "zeebe:CalledDecision", calledDecisionProps());
@@ -4222,6 +4293,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
     if (fdecision) fdecision.addEventListener("change", saveDecision);
     if (fresultvar) fresultvar.addEventListener("change", saveDecision);
     if (fbinding) fbinding.addEventListener("change", saveDecision);
+    if (fbrtretries) fbrtretries.addEventListener("change", saveDecision);
 
     // Evaluation mode: local (embedded DMN) vs a temis connector (central). The
     // choice is the presence of the atlas:temisConnector extension the compiler
@@ -4319,9 +4391,11 @@ function wireProperties(root, modeler, api, projectId, toast) {
         }
         savePreservingPanel(() => {
           upsertExt(modeler, element, "zeebe:CalledDecision", {
+            // Picking a decision fills in the id and result variable; everything else
+            // the task already carries (binding, retry budget) survives the pick.
+            ...calledDecisionProps(),
             decisionId: d.id,
             resultVariable: (fresultvar.value || "").trim() || (d.output && d.output.name) || d.id,
-            bindingType: currentBinding(),
           });
           const rows = (d.inputs || []).map((inp) => ({ target: inp.name, source: prev[inp.name] || inp.name }));
           saveDecisionInputs(modeler, element, rows);
