@@ -123,6 +123,75 @@ var layoutCorpus = []layoutCase{
 
 	{"shared-error-handler", sharedErrorHandlerSrc},
 
+	// Two independent shared handlers whose corridors compete for the same columns.
+	// Only one can have the row nearest the trunk, so the other's exception flows
+	// have to reach a higher row without cutting through the handler on the row in
+	// between — the case that forces channel-routed edges to use gutters at both
+	// ends rather than the columns their endpoints stand in.
+	{"two-corridors", `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="P">
+    <startEvent id="S"/>
+    <scriptTask id="T1"/><scriptTask id="T2"/><scriptTask id="T3"/><scriptTask id="T4"/>
+    <scriptTask id="T5"/><scriptTask id="T6"/><endEvent id="E"/>
+    <boundaryEvent id="a1" name="A" attachedToRef="T1"/>
+    <boundaryEvent id="a2" name="A" attachedToRef="T2"/>
+    <boundaryEvent id="b1" name="B" attachedToRef="T3"/>
+    <boundaryEvent id="b2" name="B" attachedToRef="T4"/>
+    <scriptTask id="HA"/><endEvent id="EA"/>
+    <scriptTask id="HB"/><endEvent id="EB"/>
+    <sequenceFlow id="f1" sourceRef="S" targetRef="T1"/>
+    <sequenceFlow id="f2" sourceRef="T1" targetRef="T2"/>
+    <sequenceFlow id="f3" sourceRef="T2" targetRef="T3"/>
+    <sequenceFlow id="f4" sourceRef="T3" targetRef="T4"/>
+    <sequenceFlow id="f5" sourceRef="T4" targetRef="T5"/>
+    <sequenceFlow id="f6" sourceRef="T5" targetRef="T6"/>
+    <sequenceFlow id="f7" sourceRef="T6" targetRef="E"/>
+    <sequenceFlow id="x1" sourceRef="a1" targetRef="HA"/>
+    <sequenceFlow id="x2" sourceRef="a2" targetRef="HA"/>
+    <sequenceFlow id="x3" sourceRef="HA" targetRef="EA"/>
+    <sequenceFlow id="y1" sourceRef="b1" targetRef="HB"/>
+    <sequenceFlow id="y2" sourceRef="b2" targetRef="HB"/>
+    <sequenceFlow id="y3" sourceRef="HB" targetRef="EB"/>
+  </process></definitions>`},
+
+	// Branch wiring that crosses: each branch of a fan feeds the *opposite* branch of
+	// the next stage. Placing each node on the lowest free row would order the second
+	// stage against the first and draw two risers on top of each other in one column
+	// gap; the row nearest the predecessors keeps every branch straight.
+	{"crossed-wiring", `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="P">
+    <startEvent id="S"/><exclusiveGateway id="Split"/>
+    <serviceTask id="A"/><serviceTask id="B"/><serviceTask id="C"/>
+    <serviceTask id="X"/><serviceTask id="Y"/><serviceTask id="Z"/>
+    <exclusiveGateway id="Join"/><endEvent id="E"/>
+    <sequenceFlow id="f1" sourceRef="S" targetRef="Split"/>
+    <sequenceFlow id="s1" sourceRef="Split" targetRef="A"/>
+    <sequenceFlow id="s2" sourceRef="Split" targetRef="B"/>
+    <sequenceFlow id="s3" sourceRef="Split" targetRef="C"/>
+    <sequenceFlow id="w1" sourceRef="A" targetRef="Z"/>
+    <sequenceFlow id="w2" sourceRef="B" targetRef="Y"/>
+    <sequenceFlow id="w3" sourceRef="C" targetRef="X"/>
+    <sequenceFlow id="j1" sourceRef="X" targetRef="Join"/>
+    <sequenceFlow id="j2" sourceRef="Y" targetRef="Join"/>
+    <sequenceFlow id="j3" sourceRef="Z" targetRef="Join"/>
+    <sequenceFlow id="f9" sourceRef="Join" targetRef="E"/>
+  </process></definitions>`},
+
+	{"three-way-fan", `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="P">
+    <startEvent id="S"/><inclusiveGateway id="G"/>
+    <serviceTask id="A1"/><serviceTask id="A2"/><serviceTask id="B1"/><serviceTask id="B2"/>
+    <serviceTask id="C1"/><serviceTask id="C2"/><inclusiveGateway id="J"/><endEvent id="E"/>
+    <sequenceFlow id="f1" sourceRef="S" targetRef="G"/>
+    <sequenceFlow id="a1" sourceRef="G" targetRef="A1"/>
+    <sequenceFlow id="a2" sourceRef="A1" targetRef="A2"/>
+    <sequenceFlow id="a3" sourceRef="A2" targetRef="J"/>
+    <sequenceFlow id="b1" sourceRef="G" targetRef="B1"/>
+    <sequenceFlow id="b2" sourceRef="B1" targetRef="B2"/>
+    <sequenceFlow id="b3" sourceRef="B2" targetRef="J"/>
+    <sequenceFlow id="c1" sourceRef="G" targetRef="C1"/>
+    <sequenceFlow id="c2" sourceRef="C1" targetRef="C2"/>
+    <sequenceFlow id="c3" sourceRef="C2" targetRef="J"/>
+    <sequenceFlow id="f9" sourceRef="J" targetRef="E"/>
+  </process></definitions>`},
+
 	{"nested-subprocess", `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="P">
     <startEvent id="Start"/>
     <subProcess id="Sub">
@@ -357,6 +426,110 @@ func TestLayoutInvariants(t *testing.T) {
 			m.checkTrunkCarriesLongestChain(t)
 		})
 	}
+}
+
+// crossingBudget caps how many edge crossings a corpus model may be drawn with.
+// Absent means zero. A budget is not a target: it is an admission that a shape has
+// no crossing-free drawing under this layout model, and the number is the price.
+//
+// two-corridors: two independent shared handlers whose corridors compete for the
+// same columns. Only one gets the row nearest the trunk; the other's flows have to
+// reach a higher row from below, and any route from below the main axis to a
+// handler above it crosses that axis once. Ordering cannot remove it.
+var crossingBudget = map[string]int{"two-corridors": 1}
+
+// TestLayoutScore scores every corpus model on edge crossings and on edges drawn
+// on top of one another, and fails a model that exceeds its budget. The invariants
+// say a layout is *sound* — nothing collides. These say it is *legible*: two edges
+// sharing a line read as one, and a crossing costs the reader a moment. Scoring the
+// whole corpus is what makes a layout change judgeable as an improvement rather
+// than a change, which coordinate assertions on one diagram never showed.
+func TestLayoutScore(t *testing.T) {
+	for _, tc := range layoutCorpus {
+		t.Run(tc.name, func(t *testing.T) {
+			di, ok := generateDI([]byte(tc.src))
+			if !ok {
+				t.Fatalf("generateDI returned not-ok for %q", tc.name)
+			}
+			m := newLayoutModel(t, tc.src, di)
+			cross, overlap := m.score()
+			if want := crossingBudget[tc.name]; cross > want {
+				t.Errorf("score[crossings]: %d, budget %d", cross, want)
+			}
+			if overlap > 0 {
+				t.Errorf("score[overlaps]: %d edge pairs are drawn on top of one another "+
+					"(they read as a single line)", overlap)
+			}
+		})
+	}
+}
+
+// score counts crossings and collinear overlaps between edges that share no
+// endpoint. Edges that do share one are excluded: a fan-out leaving a gateway and a
+// fan-in arriving at a shared handler run together by design — that is a bus, not a
+// defect — and a boundary event counts as its host for this purpose.
+func (m *layoutModel) score() (cross, overlap int) {
+	ends := map[string][2]string{}
+	for _, f := range m.flows {
+		ends[f.Id] = [2]string{f.SourceRef, f.TargetRef}
+	}
+	norm := func(id string) string {
+		if h := m.host[id]; h != "" {
+			return h
+		}
+		return id
+	}
+	shares := func(a, b string) bool {
+		x, y := ends[a], ends[b]
+		for _, p := range []string{norm(x[0]), norm(x[1])} {
+			for _, q := range []string{norm(y[0]), norm(y[1])} {
+				if p == q {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	type seg struct {
+		a, b point
+		id   string
+	}
+	var segs []seg
+	for _, id := range sortedKeys(m.edges) {
+		pts := m.edges[id]
+		for k := 1; k < len(pts); k++ {
+			segs = append(segs, seg{pts[k-1], pts[k], id})
+		}
+	}
+	horiz := func(s seg) bool { return s.a.y == s.b.y }
+	for i := 0; i < len(segs); i++ {
+		for j := i + 1; j < len(segs); j++ {
+			s, u := segs[i], segs[j]
+			if s.id == u.id || shares(s.id, u.id) {
+				continue
+			}
+			if horiz(s) != horiz(u) {
+				h, v := s, u
+				if !horiz(s) {
+					h, v = u, s
+				}
+				if mini(h.a.x, h.b.x) < v.a.x && v.a.x < maxi(h.a.x, h.b.x) &&
+					mini(v.a.y, v.b.y) < h.a.y && h.a.y < maxi(v.a.y, v.b.y) {
+					cross++
+				}
+				continue
+			}
+			if horiz(s) && s.a.y == u.a.y &&
+				mini(s.a.x, s.b.x) < maxi(u.a.x, u.b.x) && mini(u.a.x, u.b.x) < maxi(s.a.x, s.b.x) {
+				overlap++
+			}
+			if !horiz(s) && s.a.x == u.a.x &&
+				mini(s.a.y, s.b.y) < maxi(u.a.y, u.b.y) && mini(u.a.y, u.b.y) < maxi(s.a.y, s.b.y) {
+				overlap++
+			}
+		}
+	}
+	return cross, overlap
 }
 
 // layoutModel pairs the generated geometry with the semantic roles that decide
