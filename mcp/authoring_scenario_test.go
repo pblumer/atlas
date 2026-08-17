@@ -73,6 +73,7 @@ func TestAuthoringToolErrors(t *testing.T) {
 	}{
 		{"atlas_create_project", map[string]any{}},                                // missing name
 		{"atlas_save_draft", map[string]any{}},                                    // missing xml
+		{"atlas_delete_draft", map[string]any{}},                                  // missing id
 		{"atlas_save_form", map[string]any{}},                                     // missing id
 		{"atlas_save_form", map[string]any{"id": "f"}},                            // missing schema
 		{"atlas_save_form", map[string]any{"id": "f", "schema": "not-an-object"}}, // schema not an object
