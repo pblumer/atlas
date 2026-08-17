@@ -90,10 +90,32 @@ when Phase 2 touches these files anyway.
 
 ---
 
-## Phase 2 — Application releases
+## Phase 2 — Application releases — ✅ shipped
 
 **Goal:** publishing mints a versioned, listable release; the app shows its local
 live version and running instances.
+
+**Delivered**, close to the plan below. Notable decisions taken while building:
+
+- `handleDeployProject` was refactored to share its logic through
+  `deployApplicationBundle` returning a `bundleOutcome`, so `/deploy` and
+  `/publish` run identical validation and the deploy route's behaviour is
+  unchanged. `/deploy` stays as the lower-level "deploy without recording a
+  release" route.
+- **Deleting an application drops its releases.** Unlike artifacts (which
+  deliberately survive as Ungrouped, ADR-0034), a release is metadata *about* the
+  application and reachable only through its id, so leaving the records would
+  accumulate unreachable files. Deployed definitions are untouched, as before.
+- `releases/` joined the ADR-0107 backup allowlist.
+- MCP gained `atlas_publish_application`, `atlas_application_releases`,
+  `atlas_application_deployments`.
+- UI: the detail view gained Artifacts | Deployments tabs (lazy-loading pane) and
+  the app button now runs the publish flow showing v(n) → v(n+1) plus a note.
+
+**Not built in Phase 2:** a release does not yet capture DMN/form members
+(`releaseMember.Kind` is `"process"` today) — the bundle deploy only registers
+BPMN definitions, so there is nothing else to snapshot until forms/decisions join
+the deploy bundle. `PublishedBy` is recorded but not yet surfaced in the UI.
 
 ### New sidecar store
 
