@@ -1249,7 +1249,7 @@ async function viewModelerHome() {
     let projects = [], drafts = [], refs = [], forms = [];
     try {
       [projects, drafts, refs, forms] = await Promise.all([
-        api("GET", "/api/v1/projects"),
+        api("GET", "/api/v1/applications"),
         api("GET", "/api/v1/drafts"),
         api("GET", "/api/v1/dmnrefs"),
         api("GET", "/api/v1/forms"),
@@ -1339,7 +1339,7 @@ async function viewModelerHome() {
     try {
       const [procs, projects] = await Promise.all([
         api("GET", "/api/v1/processes"),
-        api("GET", "/api/v1/projects"),
+        api("GET", "/api/v1/applications"),
       ]);
       const groups = groupByProcess(procs);
       if (!groups.length) {
@@ -1412,7 +1412,7 @@ async function viewProjectDetail(id) {
     let projects = [], drafts = [], refs = [], forms = [];
     try {
       [projects, drafts, refs, forms] = await Promise.all([
-        api("GET", "/api/v1/projects"),
+        api("GET", "/api/v1/applications"),
         api("GET", "/api/v1/drafts"),
         api("GET", "/api/v1/dmnrefs"),
         api("GET", "/api/v1/forms"),
@@ -1604,16 +1604,17 @@ async function toggleProcessActive(key, inactive, reload) {
 }
 
 // ---------- Applications (ADR-0034 project, reframed by ADR-0127) ----------
-// The UI still calls the /api/v1/projects endpoints, which ADR-0127 keeps as
-// working (deprecated) aliases of /api/v1/applications; migrating these fetch
-// paths to the canonical /applications names is a follow-up.
+// These call the canonical /api/v1/applications endpoints. The pre-rename
+// project paths still work as deprecated aliases for external callers, but the
+// UI is on the new names. The artifact tag stays `projectId` — ADR-0127 renames
+// the API/UI boundary only, not the on-disk shape.
 async function createProject(reload) {
   const name = window.prompt("Application name");
   if (name == null) return; // cancelled
   const trimmed = name.trim();
   if (!trimmed) { toast("Application name is required", "err"); return; }
   try {
-    await api("POST", "/api/v1/projects", { name: trimmed });
+    await api("POST", "/api/v1/applications", { name: trimmed });
     toast(`Created application "${trimmed}"`, "ok");
   } catch (e) { toast("could not create application: " + e.message, "err"); }
   await reload();
@@ -1625,7 +1626,7 @@ async function renameProject(id, current, reload) {
   const trimmed = name.trim();
   if (!trimmed) { toast("Application name is required", "err"); return; }
   try {
-    await api("PATCH", `/api/v1/projects/${encodeURIComponent(id)}`, { name: trimmed });
+    await api("PATCH", `/api/v1/applications/${encodeURIComponent(id)}`, { name: trimmed });
     toast("Renamed application", "ok");
   } catch (e) { toast("could not rename application: " + e.message, "err"); }
   await reload();
@@ -1634,7 +1635,7 @@ async function renameProject(id, current, reload) {
 async function deleteProject(id, name, reload) {
   if (!window.confirm(`Delete application "${name}"? Its artifacts are kept and become Not assigned.`)) return;
   try {
-    await api("DELETE", `/api/v1/projects/${encodeURIComponent(id)}`);
+    await api("DELETE", `/api/v1/applications/${encodeURIComponent(id)}`);
     toast(`Deleted application "${name}"`, "ok");
   } catch (e) { toast("could not delete application: " + e.message, "err"); }
   await reload();
@@ -1812,11 +1813,11 @@ function openShareModal(proj, users, degraded, reload) {
 
   const apply = async (fn) => { try { p = await fn(); renderBody(); } catch (e) { toast(e.message, "err"); } };
   const setVisibility = (v) => apply(() =>
-    api("PATCH", `/api/v1/projects/${encodeURIComponent(p.id)}`, { visibility: v }));
+    api("PATCH", `/api/v1/applications/${encodeURIComponent(p.id)}`, { visibility: v }));
   const setMember = (uid, role) => uid && apply(() =>
-    api("PUT", `/api/v1/projects/${encodeURIComponent(p.id)}/members/${encodeURIComponent(uid)}`, { role }));
+    api("PUT", `/api/v1/applications/${encodeURIComponent(p.id)}/members/${encodeURIComponent(uid)}`, { role }));
   const removeMember = (uid) => apply(() =>
-    api("DELETE", `/api/v1/projects/${encodeURIComponent(p.id)}/members/${encodeURIComponent(uid)}`));
+    api("DELETE", `/api/v1/applications/${encodeURIComponent(p.id)}/members/${encodeURIComponent(uid)}`));
 
   function wire() {
     for (const b of body.querySelectorAll("[data-vis]"))
@@ -2312,7 +2313,7 @@ async function validateDmnRef(id) {
 // reference — and reflects each result plus an overall verdict.
 async function validateProject(projectId) {
   try {
-    const rep = await api("POST", `/api/v1/projects/${encodeURIComponent(projectId)}/validate`);
+    const rep = await api("POST", `/api/v1/applications/${encodeURIComponent(projectId)}/validate`);
     for (const r of rep.references) applyRefStatus(r.id, r);
     toast(rep.ok ? "All DMN references are valid" : "Some DMN references are unresolved or invalid",
       rep.ok ? "ok" : "err");
@@ -2330,7 +2331,7 @@ async function deployProject(id, reload) {
   if (!window.confirm("Publish this application? Its DMN references are validated, then its BPMN diagrams are deployed together as runnable definitions.")) return;
   let rep;
   try {
-    const res = await fetch(`/api/v1/projects/${encodeURIComponent(id)}/deploy`, { method: "POST" });
+    const res = await fetch(`/api/v1/applications/${encodeURIComponent(id)}/deploy`, { method: "POST" });
     rep = await res.json();
     if (res.ok && rep.deployed) {
       const n = (rep.definitions || []).length;
@@ -3931,7 +3932,7 @@ function viewComingSoon(appId) {
 async function resolveProject(projectId) {
   if (!projectId) return null;
   try {
-    const projects = await api("GET", "/api/v1/projects");
+    const projects = await api("GET", "/api/v1/applications");
     const p = projects.find((x) => x.id === projectId);
     return p ? { id: p.id, name: p.name } : null;
   } catch { return null; }
@@ -4022,7 +4023,7 @@ async function viewDmnViewer(refId) {
   const resolveBack = async () => {
     if (!projId) return;
     try {
-      const projects = await api("GET", "/api/v1/projects");
+      const projects = await api("GET", "/api/v1/applications");
       const p = (projects || []).find((x) => x.id === projId);
       const el = document.getElementById("dmn-back");
       if (p && el && !superseded(gen)) el.textContent = `← ${p.name}`;

@@ -464,7 +464,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
         <button class="btn neutral" id="autolayout" title="Re-flow the diagram into a clean left-to-right layout (F8)">Auto-layout</button>
         <button class="btn neutral" id="save">Save</button>
         <button class="btn neutral" id="export">Export XML</button>
-        <button class="btn" id="deploy">Deploy</button>
+        <button class="btn neutral" id="deploy" title="Deploy this single diagram. To ship a whole process application, use Publish on the application (ADR-0127).">Deploy</button>
       </div>
       <div class="sim-bar" id="sim-bar" hidden>
         <button class="btn play" id="sim-play">&#9654; Play</button>
