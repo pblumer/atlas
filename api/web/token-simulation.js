@@ -133,16 +133,34 @@ const isMultiInstance = (el) => {
   const lc = loopChars(el);
   return !!(lc && lc.$type === "bpmn:MultiInstanceLoopCharacteristics");
 };
+// A standard loop (ADR-0133) is the other repetition marker: it repeats its activity while a
+// condition holds, one run at a time. The simulation does not evaluate the condition either,
+// so it visualises the loop the same way — a counted repetition, sequential by definition,
+// bounded by the modelled loopMaximum when there is one.
+const isStandardLoop = (el) => {
+  const lc = loopChars(el);
+  return !!(lc && lc.$type === "bpmn:StandardLoopCharacteristics");
+};
+// isRepeating covers both loop markers: an activity whose body runs several times before the
+// token moves on. Every simulation step that has to count runs goes through it, so an
+// activity with a loop icon repeats in the simulation whichever marker drew the icon.
+const isRepeating = (el) => isMultiInstance(el) || isStandardLoop(el);
 const isSequentialMI = (el) => {
   const lc = loopChars(el);
-  return !!(lc && lc.isSequential === true);
+  return !!(lc && (lc.isSequential === true || lc.$type === "bpmn:StandardLoopCharacteristics"));
 };
-// literalCardinality reads a modelled fixed loop cardinality — a `<loopCardinality>` that is
-// a plain positive integer (optionally FEEL-prefixed `=3`). A data-driven or expression
-// cardinality returns null, so the caller falls back to the configurable default.
+// literalCardinality reads a modelled fixed repetition count — a `<loopCardinality>` that is
+// a plain positive integer (optionally FEEL-prefixed `=3`), or a standard loop's
+// `loopMaximum`. A data-driven or expression cardinality returns null, so the caller falls
+// back to the configurable default.
 const literalCardinality = (el) => {
   const lc = loopChars(el);
-  const body = lc && lc.loopCardinality && lc.loopCardinality.body;
+  if (!lc) return null;
+  if (isStandardLoop(el)) {
+    const n = parseInt(lc.loopMaximum, 10);
+    return n > 0 ? n : null;
+  }
+  const body = lc.loopCardinality && lc.loopCardinality.body;
   if (body == null) return null;
   const m = String(body).replace(/^=\s*/, "").trim();
   if (!/^\d+$/.test(m)) return null;
@@ -492,7 +510,7 @@ TokenSimulation.prototype._emit = function (el) {
   if (this._scopes.has(el.id)) return; // a running subprocess's held token waits for quiescence
   // Multi-instance: consume one instance per move, keeping the token on the activity until
   // the last instance is done — so a step / Play visibly counts the body running N times.
-  if (isMultiInstance(el)) {
+  if (isRepeating(el)) {
     let mi = this._miRemaining.get(el.id);
     if (mi === undefined) {
       const total = this._miInstancesFor(el); // seed for a token spawned straight onto it
@@ -768,7 +786,7 @@ TokenSimulation.prototype._arrive = function (target, viaFlow) {
   }
   // A multi-instance activity runs its body several times before the token moves on; seed
   // the instance counter so the badge shows the multiplicity from the moment it arrives.
-  if (isMultiInstance(target) && !this._miRemaining.has(target.id)) {
+  if (isRepeating(target) && !this._miRemaining.has(target.id)) {
     const total = this._miInstancesFor(target);
     this._miRemaining.set(target.id, { left: total, total });
   }
@@ -852,7 +870,7 @@ TokenSimulation.prototype._canReach = function (fromId, toId) {
 // _innerStartsOf comes back empty) and a multi-instance subprocess keeps its instance-count
 // visualisation instead — both fall through to the pass-over path.
 TokenSimulation.prototype._isEnterableScope = function (el) {
-  if (!isSubProcessShape(el) || isEventSubProcess(el) || isMultiInstance(el)) return false;
+  if (!isSubProcessShape(el) || isEventSubProcess(el) || isRepeating(el)) return false;
   return this._innerStartsOf(el).length > 0;
 };
 
@@ -1131,20 +1149,25 @@ TokenSimulation.prototype._render = function () {
       /* skip */
     }
   }
-  // Multi-instance badge: how many instances are still to run of the total for this activity
-  // (from a modelled cardinality, else the configured default).
+  // Repetition badge: how many runs are still to go of the total for this activity (from a
+  // modelled cardinality or loop maximum, else the configured default). The glyph mirrors
+  // the marker on the shape — ↻ for a standard loop, ≡ / ‖ for a multi-instance.
   for (const [id, mi] of this._miRemaining) {
     if (!mi || mi.left <= 0) continue;
     const el = this._registry.get(id);
     if (!el) continue;
+    const std = isStandardLoop(el);
     const seq = isSequentialMI(el);
     const modelled = literalCardinality(el) != null;
-    const src = modelled ? "modelled cardinality" : "simulated";
+    const src = std
+      ? (modelled ? "modelled loop maximum" : "simulated — the loop condition is not evaluated")
+      : (modelled ? "modelled cardinality" : "simulated");
+    const what = std ? "loop" : (seq ? "sequential multi-instance" : "parallel multi-instance");
     try {
       this._overlayIds.push(
         this._overlays.add(id, "atlas-sim-mi", {
           position: { bottom: 4, left: 4 },
-          html: `<span class="atlas-sim-mi" title="${seq ? "sequential" : "parallel"} multi-instance — ${mi.left} of ${mi.total} left (${src})">${seq ? "≡" : "‖"} ${mi.left}/${mi.total}</span>`,
+          html: `<span class="atlas-sim-mi" title="${what} — ${mi.left} of ${mi.total} left (${src})">${std ? "↻" : (seq ? "≡" : "‖")} ${mi.left}/${mi.total}</span>`,
         }),
       );
     } catch {

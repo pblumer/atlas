@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/pblumer/atlas/expr"
@@ -717,11 +718,12 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		return nil, err
 	}
 
-	// Wire multi-instance loop characteristics for every activity in the scope tree,
-	// recursively, mirroring wireScopeIO (ADR-0077). Each FEEL source compiles once at
-	// deploy (I5); a loop with neither an input collection nor a cardinality is refused
-	// (it has no way to know how many iterations to run). The compiler records the
-	// detail; the engine runs the iterations.
+	// Wire the loop characteristics of every activity in the scope tree, recursively,
+	// mirroring wireScopeIO — both BPMN markers: multi-instance (ADR-0077) and standard
+	// loop (ADR-0133). Each FEEL source compiles once at deploy (I5), and a loop with no
+	// way to decide how many iterations to run is refused (a multi-instance with neither
+	// an input collection nor a cardinality; a standard loop with neither a condition nor
+	// a maximum). The compiler records the detail; the engine runs the iterations.
 	compileMI := func(ownerId, what, source string) (*expr.Compiled, error) {
 		text := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(source), "="))
 		if text == "" {
@@ -729,11 +731,38 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		e, err := expr.CompileAuto(text)
 		if err != nil {
-			return nil, fmt.Errorf("compiler: multi-instance %s on %q: %w", what, ownerId, err)
+			return nil, fmt.Errorf("compiler: loop %s on %q: %w", what, ownerId, err)
 		}
 		return e, nil
 	}
-	wireMI := func(ownerId string, mi *xmlMultiInstance) error {
+	// A standard loop is the other BPMN loop marker (ADR-0133): it repeats the activity
+	// while its condition holds rather than once per collection element. It compiles into
+	// the same loop table (the engine runs it on the multi-instance body/iteration
+	// machinery), so an activity carries at most one of the two markers, and a loop with
+	// neither a condition nor a maximum is refused — it could never end.
+	wireStandardLoop := func(ownerId string, sl *xmlStandardLoop) error {
+		if sl == nil {
+			return nil
+		}
+		cond, err := compileMI(ownerId, "loopCondition", sl.LoopCondition)
+		if err != nil {
+			return err
+		}
+		var max int32
+		if text := strings.TrimSpace(sl.LoopMaximum); text != "" {
+			n, err := strconv.Atoi(text)
+			if err != nil || n <= 0 {
+				return fmt.Errorf("compiler: loop activity %q has an invalid loopMaximum %q (want a positive whole number)", ownerId, sl.LoopMaximum)
+			}
+			max = int32(n)
+		}
+		if cond == nil && max == 0 {
+			return fmt.Errorf("compiler: loop activity %q needs a loopCondition or a loopMaximum", ownerId)
+		}
+		b.SetStandardLoop(ids[ownerId], strings.TrimSpace(sl.TestBefore) == "true", max, cond)
+		return nil
+	}
+	wireMultiInstance := func(ownerId string, mi *xmlMultiInstance) error {
 		if mi == nil {
 			return nil
 		}
@@ -764,30 +793,60 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			coll, card, out, cond)
 		return nil
 	}
+	// An activity carries at most one loop marker: BPMN draws them as different icons
+	// (∥/≡ for a multi-instance, ↻ for a standard loop) and they mean different things,
+	// so a model with both is refused rather than silently running one of them.
+	wireLoop := func(ownerId string, mi *xmlMultiInstance, sl *xmlStandardLoop) error {
+		if mi != nil && sl != nil {
+			return fmt.Errorf("compiler: activity %q has both a multiInstanceLoopCharacteristics and a standardLoopCharacteristics (use one)", ownerId)
+		}
+		if err := wireMultiInstance(ownerId, mi); err != nil {
+			return err
+		}
+		return wireStandardLoop(ownerId, sl)
+	}
 	var wireScopeMI func(c *xmlFlowContent) error
 	wireScopeMI = func(c *xmlFlowContent) error {
 		for _, st := range c.ServiceTasks {
-			if err := wireMI(st.Id, st.MultiInstance); err != nil {
+			if err := wireLoop(st.Id, st.MultiInstance, st.StandardLoop); err != nil {
 				return err
 			}
 		}
 		for _, st := range c.ScriptTasks {
-			if err := wireMI(st.Id, st.MultiInstance); err != nil {
+			if err := wireLoop(st.Id, st.MultiInstance, st.StandardLoop); err != nil {
 				return err
 			}
 		}
 		for _, ut := range c.UserTasks {
-			if err := wireMI(ut.Id, ut.MultiInstance); err != nil {
+			if err := wireLoop(ut.Id, ut.MultiInstance, ut.StandardLoop); err != nil {
 				return err
 			}
 		}
 		for _, ca := range c.CallActivities {
-			if err := wireMI(ca.Id, ca.MultiInstance); err != nil {
+			if err := wireLoop(ca.Id, ca.MultiInstance, ca.StandardLoop); err != nil {
 				return err
 			}
 		}
 		for _, rt := range c.ReceiveTasks {
-			if err := wireMI(rt.Id, rt.MultiInstance); err != nil {
+			if err := wireLoop(rt.Id, rt.MultiInstance, rt.StandardLoop); err != nil {
+				return err
+			}
+		}
+		for _, brt := range c.BusinessRuleTasks {
+			if err := wireLoop(brt.Id, brt.MultiInstance, brt.StandardLoop); err != nil {
+				return err
+			}
+		}
+		// An undefined task and a manual task have no implementation, but they are
+		// activities: a loop marker on one repeats the (pass-through) step, which is what
+		// the diagram says it does.
+		for _, t := range c.Tasks {
+			if err := wireLoop(t.Id, t.MultiInstance, t.StandardLoop); err != nil {
+				return err
+			}
+		}
+		for _, t := range c.ManualTasks {
+			if err := wireLoop(t.Id, t.MultiInstance, t.StandardLoop); err != nil {
 				return err
 			}
 		}
@@ -795,13 +854,13 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			if strings.TrimSpace(st.MessageRef) != "" {
 				continue // a message-kind send task is a throw, not an activity (ADR-0112)
 			}
-			if err := wireMI(st.Id, st.MultiInstance); err != nil {
+			if err := wireLoop(st.Id, st.MultiInstance, st.StandardLoop); err != nil {
 				return err
 			}
 		}
 		for i := range c.SubProcesses {
 			sub := &c.SubProcesses[i]
-			if err := wireMI(sub.Id, sub.MultiInstance); err != nil {
+			if err := wireLoop(sub.Id, sub.MultiInstance, sub.StandardLoop); err != nil {
 				return err
 			}
 			if err := wireScopeMI(&sub.xmlFlowContent); err != nil {
@@ -958,8 +1017,8 @@ type xmlFlowContent struct {
 
 	Flows []xmlSequenceFlow `xml:"sequenceFlow"`
 
-	Tasks              []xmlNode             `xml:"task"`
-	ManualTasks        []xmlNode             `xml:"manualTask"`
+	Tasks              []xmlPlainTask        `xml:"task"`
+	ManualTasks        []xmlPlainTask        `xml:"manualTask"`
 	ParallelGateways   []xmlNode             `xml:"parallelGateway"`
 	InclusiveGateways  []xmlInclusiveGateway `xml:"inclusiveGateway"`
 	EventBasedGateways []xmlNode             `xml:"eventBasedGateway"` // deferred choice; only its id matters (ADR-0110)
@@ -1081,6 +1140,7 @@ type xmlReceiveTask struct {
 	MessageRef    string                     `xml:"messageRef,attr"`
 	IOMapping     xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
 	MultiInstance *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
+	StandardLoop  *xmlStandardLoop           `xml:"standardLoopCharacteristics"`
 	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
 	DataIn        []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
@@ -1094,6 +1154,7 @@ type xmlCallActivity struct {
 	CalledElement xmlZeebeCalledEl  `xml:"extensionElements>calledElement"`
 	IOMapping     xmlZeebeIOMapping `xml:"extensionElements>ioMapping"`
 	MultiInstance *xmlMultiInstance `xml:"multiInstanceLoopCharacteristics"`
+	StandardLoop  *xmlStandardLoop  `xml:"standardLoopCharacteristics"`
 }
 
 // xmlZeebeCalledEl is the <zeebe:calledElement> of a call activity: the called
@@ -1118,6 +1179,17 @@ type xmlMultiInstance struct {
 	Loop                xmlZeebeLoopChars `xml:"extensionElements>loopCharacteristics"`
 }
 
+// xmlStandardLoop is a <standardLoopCharacteristics> on an activity (ADR-0133): the
+// other BPMN loop marker — the circular-arrow icon — which repeats the activity while
+// its <loopCondition> holds. TestBefore checks the condition before the first
+// iteration (a while loop; absent means a repeat-until that always runs once) and
+// LoopMaximum caps the iteration count. Both are plain BPMN, no Zeebe extension.
+type xmlStandardLoop struct {
+	TestBefore    string `xml:"testBefore,attr"`
+	LoopMaximum   string `xml:"loopMaximum,attr"`
+	LoopCondition string `xml:"loopCondition"`
+}
+
 // xmlZeebeLoopChars is the <zeebe:loopCharacteristics> of a multi-instance activity:
 // the FEEL input collection, the per-iteration input element, and the output
 // collection/element that assemble each iteration's result into a list (ADR-0077).
@@ -1140,6 +1212,7 @@ type xmlSubProcess struct {
 	// scope runs. "true" makes it an event subprocess; empty/absent is an ordinary one.
 	TriggeredByEvent string            `xml:"triggeredByEvent,attr"`
 	MultiInstance    *xmlMultiInstance `xml:"multiInstanceLoopCharacteristics"`
+	StandardLoop     *xmlStandardLoop  `xml:"standardLoopCharacteristics"`
 	// IsTransaction marks a subprocess that was parsed from a <transaction> element (never from
 	// XML — set by foldTransactions). The compiler marks its compiled node so the runtime and
 	// validation know it may host a cancel boundary and hold a cancel end event (ADR-0108).
@@ -1307,13 +1380,17 @@ type xmlInclusiveGateway struct {
 	Default string `xml:"default,attr"`
 }
 
-// An intermediate catch event; the timer and message variants are executable.
+// An intermediate catch event; the timer, message, signal, and link variants are executable.
 // Each definition is a pointer so an absent one is detected as nil.
 type xmlIntermediateCatchEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Timer   *xmlTimerEventDefinition   `xml:"timerEventDefinition"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
 	Signal  *xmlSignalEventDefinition  `xml:"signalEventDefinition"`
+	// Link, when present, makes this a link catch event: the landing point of a link throw
+	// with the same name in the same scope — an off-page connector / goto (ADR-0133). A
+	// pointer so an absent one is nil.
+	Link *xmlLinkEventDefinition `xml:"linkEventDefinition"`
 }
 
 // An intermediate throw event; the message, signal, compensation, and escalation variants
@@ -1330,6 +1407,16 @@ type xmlIntermediateThrowEvent struct {
 	// referenced escalation, propagating up to the nearest matching handler, then continues
 	// on its outgoing flow (ADR-0125). A pointer so an absent one is nil.
 	Escalation *xmlEscalationEventDefinition `xml:"escalationEventDefinition"`
+	// Link, when present, makes this a link throw event: a goto to the link catch of the same
+	// name in the same scope — an off-page connector (ADR-0133). A pointer so an absent one is nil.
+	Link *xmlLinkEventDefinition `xml:"linkEventDefinition"`
+}
+
+// xmlLinkEventDefinition is a <linkEventDefinition name="…"> on an intermediate throw or
+// catch event (ADR-0133). A link is matched by Name within one flow scope: a throw jumps to
+// the catch of the same name. Only the name matters — a link carries no ref, code, or payload.
+type xmlLinkEventDefinition struct {
+	Name string `xml:"name,attr"`
 }
 
 // xmlCompensateEventDefinition is a <compensateEventDefinition> on a throw, end, or
@@ -1436,6 +1523,19 @@ type xmlNode struct {
 	DataIn  []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
 
+// xmlPlainTask is an undefined <task> or a <manualTask>: an activity with no
+// execution semantics of its own (the engine runs it as a pass-through), but an
+// activity all the same — so it carries the loop markers (ADR-0077, ADR-0133) as well
+// as data associations. It is a separate shape from xmlNode precisely so those markers
+// stay off the gateways that share xmlNode: a looping gateway is not a thing.
+type xmlPlainTask struct {
+	Id            string                     `xml:"id,attr"`
+	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
+	DataIn        []xmlDataInputAssociation  `xml:"dataInputAssociation"`
+	MultiInstance *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
+	StandardLoop  *xmlStandardLoop           `xml:"standardLoopCharacteristics"`
+}
+
 // A user task parks a token for human completion (ADR-0028). It optionally
 // carries a zeebe:assignmentDefinition for assignee/candidateGroups.
 type xmlUserTask struct {
@@ -1447,6 +1547,7 @@ type xmlUserTask struct {
 	Schedule      xmlTaskSchedule            `xml:"extensionElements>taskSchedule"`
 	IOMapping     xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
 	MultiInstance *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
+	StandardLoop  *xmlStandardLoop           `xml:"standardLoopCharacteristics"`
 	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
 	DataIn        []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
@@ -1525,6 +1626,7 @@ type xmlServiceTask struct {
 	Mockup        *xmlMockupConnector        `xml:"extensionElements>mockupConnector"`
 	IOMapping     xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
 	MultiInstance *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
+	StandardLoop  *xmlStandardLoop           `xml:"standardLoopCharacteristics"`
 	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
 	DataIn        []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
@@ -1746,6 +1848,7 @@ type xmlScriptTask struct {
 	JobScript     *xmlAtlasScript            `xml:"extensionElements>jobScript"`
 	IOMapping     xmlZeebeIOMapping          `xml:"extensionElements>ioMapping"`
 	MultiInstance *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
+	StandardLoop  *xmlStandardLoop           `xml:"standardLoopCharacteristics"`
 	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
 	DataIn        []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }
@@ -1791,6 +1894,8 @@ type xmlBusinessRuleTask struct {
 	// (ADR-0050). The pointer is nil when the <atlas:temisConnector> extension is
 	// absent, i.e. the decision is evaluated locally.
 	TemisConnector *xmlTemisConnector         `xml:"extensionElements>temisConnector"`
+	MultiInstance  *xmlMultiInstance          `xml:"multiInstanceLoopCharacteristics"`
+	StandardLoop   *xmlStandardLoop           `xml:"standardLoopCharacteristics"`
 	DataOut        []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
 	DataIn         []xmlDataInputAssociation  `xml:"dataInputAssociation"`
 }

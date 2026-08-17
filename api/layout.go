@@ -345,7 +345,8 @@ func layoutOf(c layoutContainer) laidOut {
 	var lo laidOut
 	lo.shapes = append(lo.shapes, laneShapes...) // lane bands before the nodes they hold
 	emitShapes(&lo, nodes, inner)
-	emitEdges(&lo, nodes, idx, c.Flows, back, columnRight(nodes), loopChannelY(nodes))
+	colRight, colLeft := columnEdges(nodes)
+	emitEdges(&lo, nodes, idx, c.Flows, back, colRight, colLeft, loopChannelY(nodes))
 	placeFlowLabels(&lo) // after both shapes and edges exist: placement avoids them
 	normalize(&lo)
 	return lo
@@ -724,21 +725,92 @@ func assignRows(nodes []lnode, trunk []bool, flows []layoutFlow, idx map[string]
 			order = append(order, i)
 		}
 	}
+	// Widest footprint first, so a long corridor claims the row nearest the trunk.
+	// Among equal footprints, left to right: a node's row is chosen relative to its
+	// predecessors, so those want to be settled first.
 	sort.SliceStable(order, func(a, b int) bool {
-		return hi[order[a]]-lo[order[a]] > hi[order[b]]-lo[order[b]]
+		x, y := order[a], order[b]
+		if wx, wy := hi[x]-lo[x], hi[y]-lo[y]; wx != wy {
+			return wx > wy
+		}
+		return nodes[x].layer < nodes[y].layer
 	})
 
-	for _, i := range order {
-		r := 1
-		for !freeAcross(used, lo[i], hi[i], r) {
-			r++
+	pred := predecessors(nodes, flows, idx)
+	assigned := make([]bool, len(nodes))
+	for i := range nodes {
+		if !nodes[i].bound && trunk[i] {
+			assigned[i] = true // the trunk is already on row 0
 		}
-		row[i] = r
+	}
+	for _, i := range order {
+		want := preferredRow(i, pred, row, assigned, nodes, idx)
+		row[i] = nearestFreeRow(used, lo[i], hi[i], want)
+		assigned[i] = true
 		for c := lo[i]; c <= hi[i]; c++ {
-			take(c, r)
+			take(c, row[i])
 		}
 	}
 	return row
+}
+
+// preferredRow is the row a node would sit on to line up with what flows into it:
+// the median row of its already-placed predecessors. Lining a node up with its
+// predecessor turns the connecting edge into a straight run instead of a bend, and
+// keeps two branches from swapping rows midway and drawing their risers on top of
+// each other in the same column gap. With nothing placed to guide it, the node
+// falls back to the row closest to the trunk.
+func preferredRow(i int, pred [][]int, row []int, assigned []bool, nodes []lnode, idx map[string]int) int {
+	var rows []int
+	for _, p := range pred[i] {
+		// A boundary event rides its host, so it predicts its host's row.
+		if nodes[p].bound {
+			if h, ok := idx[nodes[p].host]; ok {
+				p = h
+			}
+		}
+		if assigned[p] {
+			rows = append(rows, row[p])
+		}
+	}
+	if len(rows) == 0 {
+		return 1
+	}
+	sort.Ints(rows)
+	if m := rows[len(rows)/2]; m > 1 {
+		return m
+	}
+	return 1 // row 0 is the trunk's; the nearest a branch can get is 1
+}
+
+// nearestFreeRow returns the row nearest want (never below 1) that is free across
+// [lo,hi], preferring the lower row when two are equally near.
+func nearestFreeRow(used map[int]map[int]bool, lo, hi, want int) int {
+	if want < 1 {
+		want = 1
+	}
+	for d := 0; ; d++ {
+		if r := want - d; r >= 1 && freeAcross(used, lo, hi, r) {
+			return r
+		}
+		if r := want + d; d > 0 && freeAcross(used, lo, hi, r) {
+			return r
+		}
+	}
+}
+
+// predecessors lists, per node, the nodes that flow into it, in declaration order.
+func predecessors(nodes []lnode, flows []layoutFlow, idx map[string]int) [][]int {
+	pred := make([][]int, len(nodes))
+	for _, f := range flows {
+		s, sok := idx[f.SourceRef]
+		t, tok := idx[f.TargetRef]
+		if !sok || !tok {
+			continue
+		}
+		pred[t] = append(pred[t], s)
+	}
+	return pred
 }
 
 // footprints returns each node's column span: the column it stands in, widened to
@@ -1038,7 +1110,7 @@ func boundaryLabelWidth(s string) int {
 // a single straight segment; a branch to another row is an elbow — out, across,
 // then in — so the alternate path reads as its own lane instead of a diagonal that
 // clips the boxes it passes.
-func emitEdges(lo *laidOut, nodes []lnode, idx map[string]int, flows []layoutFlow, back map[int]bool, colRight map[int]int, channelY int) {
+func emitEdges(lo *laidOut, nodes []lnode, idx map[string]int, flows []layoutFlow, back map[int]bool, colRight, colLeft map[int]int, channelY int) {
 	lane := 0 // each channel-routed edge gets its own horizontal lane below the nodes
 	for fi, f := range flows {
 		s, sok := idx[f.SourceRef]
@@ -1053,7 +1125,8 @@ func emitEdges(lo *laidOut, nodes []lnode, idx map[string]int, flows []layoutFlo
 		if back[fi] || crossesForeignNode(pts, nodes, s, t) {
 			y := channelY + lane*layoutGapY/2
 			lane++
-			pts = routeChannel(nodes[s], nodes[t], colRight[nodes[s].layer]+layoutGapX/2, y)
+			pts = routeChannel(nodes[s], nodes[t],
+				colRight[nodes[s].layer]+layoutGapX/2, colLeft[nodes[t].layer]-layoutGapX/2, y)
 		}
 		lo.edges = append(lo.edges, placedEdge{id: f.Id, pts: pts, label: strings.TrimSpace(f.Name)})
 	}
@@ -1117,36 +1190,43 @@ func maxInt(a, b int) int {
 // forward route would run back across the nodes it loops over) and a bypass that
 // skips columns (whose straight line would cross everything in between).
 //
-// The descent uses the gutter rather than the source's own center-x because such an
-// edge often starts on a branch row above the trunk: dropping straight down from
-// there would cut through whatever sits on the trunk in the same column. The gutter
-// is column-free by construction, and the space below the trunk is free because
-// branches stack upward (see placeNodes), so both legs cross nothing.
-func routeChannel(src, tgt lnode, gutterX, channelY int) []point {
+// Both vertical legs run in gutters — the gaps after the source's column and before
+// the target's — rather than in the columns themselves. A column may hold a node at
+// any row, so a leg drawn inside one cuts whatever shares it: descending at the
+// source's own center-x cuts the trunk node beneath a branch, and climbing at the
+// target's center-x cuts the trunk node beneath a handler that sits above it. A
+// gutter is column-free by construction, so neither leg can cross anything.
+func routeChannel(src, tgt lnode, gutterOut, gutterIn, channelY int) []point {
 	sy := src.y + src.h/2
-	tx := tgt.x + tgt.w/2
+	ty := tgt.y + tgt.h/2
 	return []point{
 		{src.x + src.w, sy},
-		{gutterX, sy},
-		{gutterX, channelY},
-		{tx, channelY},
-		{tx, tgt.y + tgt.h},
+		{gutterOut, sy},
+		{gutterOut, channelY},
+		{gutterIn, channelY},
+		{gutterIn, ty},
+		{tgt.x, ty},
 	}
 }
 
-// columnRight returns each layer's right-most node edge, so a back edge can drop
-// through the gap after a column instead of through the column itself.
-func columnRight(nodes []lnode) map[int]int {
-	out := map[int]int{}
+// columnEdges returns each layer's right-most and left-most node edge, so a
+// channel-routed edge can run its vertical legs through the gaps beside a column
+// instead of through the column itself.
+func columnEdges(nodes []lnode) (right, left map[int]int) {
+	right, left = map[int]int{}, map[int]int{}
 	for i := range nodes {
 		if nodes[i].bound {
 			continue
 		}
-		if r := nodes[i].x + nodes[i].w; r > out[nodes[i].layer] {
-			out[nodes[i].layer] = r
+		l := nodes[i].layer
+		if r, seen := right[l]; !seen || nodes[i].x+nodes[i].w > r {
+			right[l] = nodes[i].x + nodes[i].w
+		}
+		if x, seen := left[l]; !seen || nodes[i].x < x {
+			left[l] = nodes[i].x
 		}
 	}
-	return out
+	return right, left
 }
 
 // routeFlow builds the orthogonal waypoints from src to tgt. A normal source leaves

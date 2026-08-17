@@ -14,6 +14,79 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Every activity kind can loop** ([ADR-0133](docs/adr/0133-standard-loop-activities.md)
+  amended, [ADR-0077](docs/adr/0077-multi-instance-activities.md) amended): business
+  rule, manual and undefined tasks now honour both BPMN loop markers, closing the last
+  place where a marker drawn on the diagram was silently dropped and the activity ran
+  **once**. A looping business rule task re-evaluates its decision per round (one job at
+  a time, its result feeding the loop condition); a looping manual or undefined task
+  repeats its pass-through, so a routing draft loops before its tasks are implemented.
+  The engine needed no change — the multi-instance body/iteration dispatch already runs
+  whatever behavior the node has — and the same deploy-time refusals apply (an unbounded
+  standard loop, both markers on one activity). In the compiler the loop fields moved
+  onto the task shapes, so the node shape gateways share carries none: a gateway still
+  cannot parse a loop marker. The Modeler offers the Loop section on these tasks, and
+  its "Atlas does not run this marker here" note is now reserved for the genuinely
+  non-activity cases.
+- **Engine recovery checkpoints & WAL compaction — ADR + manifest primitives**
+  (v0.2.0 programme D, [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md)):
+  recovery replays the WAL from genesis, so it is O(total log) and no segment is ever
+  deletable. ADR-0131 decides the design — a periodic **Pebble checkpoint of the state
+  store at a known applied log position** plus an engine-owned **manifest**, taken on
+  the run loop at a batch boundary (single-writer-safe) after a durable flush,
+  published atomically (temp dir → fsync → rename → parent fsync); startup picks the
+  newest valid checkpoint and replays only the **suffix after its applied position**,
+  falling back to an older checkpoint or genesis on any corruption; a segment becomes
+  deletable only below both a durable checkpoint and every consumer watermark
+  (ADR-0114 exporter, ADR-0115 retention); it is explicitly **not** ADR-0109's
+  whole-instance backup. This first slice ships the **testable manifest format
+  primitives**: a new `checkpoint` package with a deterministic, versioned,
+  self-checksummed binary `Manifest` codec (magic + format version + fields + trailing
+  CRC) and validation, with round-trip and corruption/truncation/version tests at 100%
+  coverage. No checkpoint is created and **no WAL segment is deleted** — those are the
+  later ADR-0131 slices.
+- **Standard loop activities** (the ↻ marker, [ADR-0133](docs/adr/0133-standard-loop-activities.md)):
+  `<standardLoopCharacteristics>` now runs — an activity repeats while a FEEL
+  `loopCondition` holds, one run at a time, with `testBefore` choosing the while form
+  (checked before the first run, so it may be skipped) or BPMN's default repeat-until
+  (always at least one run), and an optional `loopMaximum` as a hard cap. Until now the
+  marker was silently dropped at parse: the activity ran **once** while the diagram
+  showed ↻. It runs on the existing multi-instance body/iteration machinery
+  ([ADR-0077](docs/adr/0077-multi-instance-activities.md)) — same scope lifecycle,
+  counter and recovery path, no new value type — on every activity kind multi-instance
+  already supported. Each run's result stays visible to the next run and to the loop
+  condition, and is promoted to the enclosing scope when the loop ends, so a looping
+  activity leaves behind what the same activity would leave running once. A loop with
+  neither a condition nor a maximum, an invalid maximum, or both loop markers on one
+  activity is refused at deploy.
+- **Loop authoring in the Modeler, in sync with the icon**: the Implement panel's
+  Multi-instance section is now a **Loop** section whose single Mode select covers all
+  four states (none, loop, multi-instance parallel, multi-instance sequential). It reads
+  and writes the very `loopCharacteristics` element bpmn-js draws the marker from, so
+  the property and the icon on the shape can no longer disagree — a marker set from the
+  context pad reads back as its mode, and choosing a mode redraws the shape. An element
+  carrying a loop marker Atlas does not execute now says so in the panel instead of
+  leaving the icon to imply behaviour. The Design-view token simulation counts a
+  standard loop like a sequential multi-instance, badged ↻ and bounded by the modelled
+  `loopMaximum`, and the Operations call-activity list labels a looping call activity
+  **loop** rather than **multi-instance**.
+- **Engine recovery checkpoints — create and atomically publish** (v0.2.0 programme D,
+  [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 2):
+  the engine can now *produce* a recovery checkpoint. `state.Store.Snapshot` flushes the
+  memtable — ordinary commits are `pebble.NoSync`, so without the flush a snapshot could
+  inherit that trailing property and silently omit applied state — then writes a Pebble
+  checkpoint. `checkpoint.Publish` runs that snapshot into a `tmp-` directory, records a
+  content checksum in the manifest, fsyncs the manifest and directory, and **renames** it
+  into place before fsyncing the parent: the rename is the publication point, so a crash
+  at any earlier step leaves only an ignorable temporary directory and the next attempt
+  clears it. `checkpoint.List`/`Load`/`Verify` enumerate and validate published
+  checkpoints (re-hashing the state files against the manifest), and `Prune` bounds disk
+  by keeping the newest N, never fewer than one. `engine.Processor.Checkpoint` gathers the
+  applied position, highest position, key counter, partition, and deployment refs **on the
+  single-writer goroutine at a batch boundary** — which is what makes the recorded position
+  exact — and is purely additive to durability: a failed checkpoint costs a slower
+  recovery, never correctness. Nothing reads a checkpoint yet and **no WAL segment is
+  deleted**; restore-and-suffix-replay and compaction are the next ADR-0131 slices.
 - **Deterministic crash-and-recovery harness** (v0.2.0 programme C): a new
   engine-level test harness (`engine/crash_recovery_test.go`) that turns the
   durability contract into checkable evidence. It runs a workload to a durable point,

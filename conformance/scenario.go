@@ -28,6 +28,7 @@ var Patterns = []Pattern{
 	{"WCP-6", "Multi-Choice"},
 	{"WCP-7", "Structured Synchronizing Merge"},
 	{"WCP-16", "Deferred Choice"},
+	{"WCP-21", "Structured Loop"},
 }
 
 // Feature is one BPMN execution feature the engine must cover. Patterns lists the
@@ -63,6 +64,7 @@ var Features = []Feature{
 	{"embedded-subprocess", "Embedded subprocess", nil},
 	{"multi-instance", "Parallel multi-instance activity with output collection", nil},
 	{"multi-instance-sequential", "Sequential multi-instance activity", nil},
+	{"standard-loop", "Standard loop activity (repeat while a condition holds)", []string{"WCP-21"}},
 	{"call-activity", "Call activity invoking a child process", nil},
 	{"compensation", "Compensation via a boundary and a compensation throw", nil},
 	{"signal-boundary", "Interrupting boundary signal event", nil},
@@ -142,6 +144,10 @@ var Scenarios = []Scenario{
 	{Name: "multi-instance-sequential", Model: "multi-instance-sequential.bpmn", Features: []string{"multi-instance-sequential"},
 		Driver: []Step{Complete("step"), Complete("step"), Complete("step")}},
 
+	// Standard loop: the activity repeats while its condition holds — self-completing,
+	// because each run's own result is what eventually falsifies the condition.
+	{Name: "standard-loop", Model: "standard-loop.bpmn", Features: []string{"standard-loop"}},
+
 	// Call activity: a two-process model; instantiate the parent, child self-completes.
 	{Name: "call-activity", Model: "call-activity.bpmn", Features: []string{"call-activity"}, Root: "call-parent"},
 
@@ -188,6 +194,7 @@ var NegativeModels = []NegativeModel{
 	{"neg-dangling-flow", "neg-dangling-flow.bpmn", "a sequence flow targets an element that does not exist"},
 	{"neg-boundary-bad-host", "neg-boundary-bad-host.bpmn", "a boundary event attaches to a host that does not exist"},
 	{"neg-unknown-message", "neg-unknown-message.bpmn", "a receive task references a message that is not declared"},
+	{"neg-loop-unbounded", "neg-loop-unbounded.bpmn", "a standard loop has neither a loop condition nor a loop maximum, so it could never end"},
 }
 
 func (n NegativeModel) load() ([]byte, error) {

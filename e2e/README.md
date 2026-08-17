@@ -54,8 +54,29 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   existing callees (deployed processes and drafts), and "＋ Create new process" saves the caller,
   POSTs a starter draft keyed by the entered id, and navigates to it. Drives the real
   `mountEditor` against a mock `api`.
+- **`standard-loop-modeler.spec.mjs`** (ADR-0133): the **Loop section** in the Modeler's
+  Implement panel — the panel reads the ↻ standard loop an imported activity carries,
+  choosing a mode draws (or clears) the marker on the shape and exports the matching
+  `<standardLoopCharacteristics>`, and switching to a multi-instance replaces one marker
+  with the other. This is the icon-and-property sync check: both directions, in a real
+  browser, against the vendored bpmn-js.
 
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
+
+## Rendering a conformance gallery diagram
+
+`render-diagram.mjs` + `render-diagram-harness.html` turn a conformance fixture into its
+catalog image (`api/web/conformance-diagrams/<name>.png`), rendered by the same vendored
+bpmn-js the Modeler uses so the picture shows the real markers. It is a hand-run asset
+tool, not part of the suite:
+
+```bash
+node server.mjs &
+node render-diagram.mjs ../conformance/models/standard-loop.bpmn \
+     ../api/web/conformance-diagrams/standard-loop.png
+```
+
+The fixture needs hand-authored BPMN-DI — bpmn-js renders nothing without it.
 
 ## CI
 
