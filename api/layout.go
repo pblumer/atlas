@@ -199,16 +199,18 @@ var (
 	kindGateway = nodeKind{50, 50}
 )
 
-// Layout spacing. gapX/gapY separate columns and rows; they are deliberately roomy
-// so a node's external label (an event's caption sits below its 36px circle, a
-// boundary event's beside it) has air instead of colliding with the neighbour. The
-// sub* paddings size an expanded subprocess around its laid-out children — a header
-// strip on top for the title, symmetric side and bottom padding — and the sub
-// minimums keep an empty subprocess readable as a container.
+// Layout spacing. gapX/gapY separate columns and rows. gapX is 50, which with the
+// 100px task width puts columns on the 150px pitch AGENTS.md prescribes for
+// hand-authored models — the spacing a reader is used to, and what the diagrams in
+// this repository already use. gapY stays roomier: rows carry the horizontal
+// corridors that exception flows run along, and an event's caption sits below its
+// 36px circle. The sub* paddings size an expanded subprocess around its laid-out
+// children — a header strip on top for the title, symmetric side and bottom padding
+// — and the sub minimums keep an empty subprocess readable as a container.
 const (
 	layoutMarginX  = 150
 	layoutMarginY  = 90
-	layoutGapX     = 80
+	layoutGapX     = 50
 	layoutGapY     = 60
 	subPadX        = 30
 	subHeaderTop   = 40
@@ -327,7 +329,7 @@ func layoutOf(c layoutContainer) laidOut {
 	if lanes, laneOf := collectLanes(c, nodes); len(lanes) > 0 {
 		laneShapes = placeLaned(nodes, lanes, laneOf, trunk)
 	} else {
-		placeNodes(nodes, trunk)
+		placeNodes(nodes, trunk, c.Flows, idx)
 	}
 	placeBoundaries(nodes, idx, c.Flows)
 
@@ -624,7 +626,7 @@ func orderLayer(idxs []int, trunk []bool) []int {
 // heights differ, and side branches — error handlers and the like — rise above it
 // rather than dropping below. Boundary events are skipped here and positioned by
 // placeBoundaries.
-func placeNodes(nodes []lnode, trunk []bool) {
+func placeNodes(nodes []lnode, trunk []bool, flows []layoutFlow, idx map[string]int) {
 	laneW := map[int]int{}
 	maxLayer := 0
 	for i := range nodes {
@@ -644,7 +646,7 @@ func placeNodes(nodes []lnode, trunk []bool) {
 		colX[l] = colX[l-1] + laneW[l-1] + layoutGapX
 	}
 
-	row := assignRows(nodes, trunk)
+	row := assignRows(nodes, trunk, flows, idx)
 	maxRow := 0
 	rowH := map[int]int{}
 	for i := range nodes {
@@ -676,11 +678,21 @@ func placeNodes(nodes []lnode, trunk []bool) {
 }
 
 // assignRows places the trunk on row 0 and every other node on the lowest row above
-// it that is still free in that node's column. A branch therefore keeps one row
-// across the columns it spans — so it runs straight instead of sagging toward the
-// happy path column by column — while two branches that never share a column pack
-// onto the same row. Boundary events get no row; placeBoundaries handles them.
-func assignRows(nodes []lnode, trunk []bool) []int {
+// it that is free across the node's whole footprint. A branch therefore keeps one
+// row across the columns it spans — so it runs straight instead of sagging toward
+// the happy path column by column — while two branches that never share a column
+// pack onto the same row. Boundary events get no row; placeBoundaries handles them.
+//
+// A node's footprint is wider than the column it stands in: an edge arriving from
+// several columns back travels horizontally at *this* node's row, so those columns
+// have to stay clear too. Reserving only the node's own column is what let an
+// unrelated branch settle into the corridor of a shared error handler — the
+// handler that eight exception flows fan into — leaving the flows nowhere to run.
+//
+// Footprints are claimed widest first, so the long corridor takes the row nearest
+// the trunk and short branches stack above it, rather than a one-column branch
+// taking the low row and forcing the corridor to detour around it.
+func assignRows(nodes []lnode, trunk []bool, flows []layoutFlow, idx map[string]int) []int {
 	row := make([]int, len(nodes))
 	used := map[int]map[int]bool{} // column -> rows already taken
 	take := func(col, r int) {
@@ -694,19 +706,64 @@ func assignRows(nodes []lnode, trunk []bool) []int {
 			take(nodes[i].layer, 0)
 		}
 	}
+
+	lo, hi := footprints(nodes, flows, idx)
+	order := make([]int, 0, len(nodes))
 	for i := range nodes {
-		if nodes[i].bound || trunk[i] {
-			continue
+		if !nodes[i].bound && !trunk[i] {
+			order = append(order, i)
 		}
-		col := nodes[i].layer
+	}
+	sort.SliceStable(order, func(a, b int) bool {
+		return hi[order[a]]-lo[order[a]] > hi[order[b]]-lo[order[b]]
+	})
+
+	for _, i := range order {
 		r := 1
-		for used[col][r] {
+		for !freeAcross(used, lo[i], hi[i], r) {
 			r++
 		}
 		row[i] = r
-		take(col, r)
+		for c := lo[i]; c <= hi[i]; c++ {
+			take(c, r)
+		}
 	}
 	return row
+}
+
+// footprints returns each node's column span: the column it stands in, widened to
+// take in every column an incoming multi-column edge crosses on its way here. Such
+// an edge runs horizontally at this node's row, so it needs the same row kept clear
+// the whole way. An edge from the adjacent column is left out — it is a short elbow
+// in the column gap, not a corridor, and counting it would break a two-node branch
+// (handler → end event) apart onto separate rows.
+func footprints(nodes []lnode, flows []layoutFlow, idx map[string]int) (lo, hi []int) {
+	lo = make([]int, len(nodes))
+	hi = make([]int, len(nodes))
+	for i := range nodes {
+		lo[i], hi[i] = nodes[i].layer, nodes[i].layer
+	}
+	for _, f := range flows {
+		s, sok := idx[f.SourceRef]
+		t, tok := idx[f.TargetRef]
+		if !sok || !tok {
+			continue
+		}
+		if nodes[s].layer+1 < nodes[t].layer && nodes[s].layer < lo[t] {
+			lo[t] = nodes[s].layer
+		}
+	}
+	return lo, hi
+}
+
+// freeAcross reports whether row r is untaken in every column of [lo,hi].
+func freeAcross(used map[int]map[int]bool, lo, hi, r int) bool {
+	for c := lo; c <= hi; c++ {
+		if used[c][r] {
+			return false
+		}
+	}
+	return true
 }
 
 // collectLanes flattens the container's lane sets into an ordered lane list and a
@@ -953,7 +1010,12 @@ func emitShapes(lo *laidOut, nodes []lnode, inner map[string]*laidOut) {
 // per-rune estimate is enough — the box only needs to position the label, and the
 // renderer reflows the actual text.
 func boundaryLabelWidth(s string) int {
-	w := utf8.RuneCountInString(s) * 7
+	// 5.5px per rune. bpmn-js writes measured label bounds back into the DI, and in
+	// hand-drawn models those come out near 5.2px per rune for the default external-
+	// label font ("Session Error" → 67px). Guessing high is not the safe direction:
+	// the renderer centers the caption in whatever box it is given, so an oversized
+	// box pushes the visible text off the anchor rather than reserving slack.
+	w := utf8.RuneCountInString(s) * 11 / 2
 	if w < 20 {
 		w = 20
 	}

@@ -121,6 +121,8 @@ var layoutCorpus = []layoutCase{
     <sequenceFlow id="f3" sourceRef="Approve" targetRef="Done"/>
   </process></definitions>`},
 
+	{"shared-error-handler", sharedErrorHandlerSrc},
+
 	{"nested-subprocess", `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="P">
     <startEvent id="Start"/>
     <subProcess id="Sub">
@@ -173,6 +175,152 @@ var layoutCorpus = []layoutCase{
     <sequenceFlow id="c1" sourceRef="Cancelled" targetRef="Undo"/>
     <sequenceFlow id="c2" sourceRef="Undo" targetRef="EndUndo"/>
   </process></definitions>`},
+}
+
+// sharedErrorHandlerSrc is a real automation process — the mailbox-copy job —
+// reduced to what layout depends on: its exact flow nodes, boundary attachments and
+// sequence flows, with the scripts and the hand-drawn DI dropped. A long linear run
+// whose steps each carry an error boundary, all eight fanning into one shared
+// handler near the end, plus an early step with its own separate handler.
+//
+// It is in the corpus because this is the shape a hand-drawn diagram solves with a
+// single horizontal corridor — every exception flow rising to one shared line — and
+// the generator has to arrive at the same picture. See
+// TestLayoutSharedErrorCorridor for the structural assertions.
+const sharedErrorHandlerSrc = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="Process_Start-MailboxCopyContentJob">
+    <startEvent id="startEvent_1" name="Start"/>
+    <scriptTask id="scriptTask_2" name="Initialize Variables"/>
+    <scriptTask id="scriptTask_4" name="Resolve Exchange Target System"/>
+    <scriptTask id="scriptTask_6" name="Establish Exchange Session"/>
+    <boundaryEvent id="boundaryEvent_6" name="Session Error" attachedToRef="scriptTask_6"/>
+    <scriptTask id="scriptTask_8" name="Prepare Status File"/>
+    <boundaryEvent id="boundaryEvent_8" name="Error" attachedToRef="scriptTask_8"/>
+    <scriptTask id="scriptTask_10" name="Get Source Mailbox Info"/>
+    <boundaryEvent id="boundaryEvent_10" name="Error" attachedToRef="scriptTask_10"/>
+    <scriptTask id="scriptTask_12" name="Get Target Mailbox Info"/>
+    <boundaryEvent id="boundaryEvent_12" name="Error" attachedToRef="scriptTask_12"/>
+    <scriptTask id="scriptTask_14" name="Validate Mailbox GUIDs"/>
+    <boundaryEvent id="boundaryEvent_14" name="Error" attachedToRef="scriptTask_14"/>
+    <scriptTask id="scriptTask_16" name="Disable Source Mailbox"/>
+    <boundaryEvent id="boundaryEvent_16" name="Error" attachedToRef="scriptTask_16"/>
+    <scriptTask id="scriptTask_18" name="Update Store Mailbox State"/>
+    <boundaryEvent id="boundaryEvent_18" name="Error" attachedToRef="scriptTask_18"/>
+    <scriptTask id="scriptTask_20" name="Start Mailbox Restore Request"/>
+    <boundaryEvent id="boundaryEvent_20" name="Error" attachedToRef="scriptTask_20"/>
+    <scriptTask id="scriptTask_22" name="Set LegacyExchangeDN"/>
+    <boundaryEvent id="boundaryEvent_22" name="Error" attachedToRef="scriptTask_22"/>
+    <scriptTask id="scriptTask_24" name="Log Success and Commit"/>
+    <scriptTask id="scriptTask_26" name="Cleanup Remove PSSession"/>
+    <endEvent id="endEvent_28" name="End Success"/>
+    <scriptTask id="scriptTask_30" name="Handle Session Error"/>
+    <endEvent id="endEvent_32" name="End Error Session"/>
+    <scriptTask id="scriptTask_40" name="Cleanup on Error"/>
+    <scriptTask id="scriptTask_42" name="Handle Error"/>
+    <endEvent id="endEvent_44" name="End Error"/>
+    <sequenceFlow id="Flow_01" sourceRef="startEvent_1" targetRef="scriptTask_2"/>
+    <sequenceFlow id="Flow_02" sourceRef="scriptTask_2" targetRef="scriptTask_4"/>
+    <sequenceFlow id="Flow_03" sourceRef="scriptTask_4" targetRef="scriptTask_6"/>
+    <sequenceFlow id="Flow_04" sourceRef="scriptTask_6" targetRef="scriptTask_8"/>
+    <sequenceFlow id="Flow_05" sourceRef="scriptTask_8" targetRef="scriptTask_10"/>
+    <sequenceFlow id="Flow_06" sourceRef="scriptTask_10" targetRef="scriptTask_12"/>
+    <sequenceFlow id="Flow_07" sourceRef="scriptTask_12" targetRef="scriptTask_14"/>
+    <sequenceFlow id="Flow_08" sourceRef="scriptTask_14" targetRef="scriptTask_16"/>
+    <sequenceFlow id="Flow_09" sourceRef="scriptTask_16" targetRef="scriptTask_18"/>
+    <sequenceFlow id="Flow_10" sourceRef="scriptTask_18" targetRef="scriptTask_20"/>
+    <sequenceFlow id="Flow_11" sourceRef="scriptTask_20" targetRef="scriptTask_22"/>
+    <sequenceFlow id="Flow_12" sourceRef="scriptTask_22" targetRef="scriptTask_24"/>
+    <sequenceFlow id="Flow_13" sourceRef="scriptTask_24" targetRef="scriptTask_26"/>
+    <sequenceFlow id="Flow_14" sourceRef="scriptTask_26" targetRef="endEvent_28"/>
+    <sequenceFlow id="Flow_20" sourceRef="boundaryEvent_6" targetRef="scriptTask_30"/>
+    <sequenceFlow id="Flow_21" sourceRef="scriptTask_30" targetRef="endEvent_32"/>
+    <sequenceFlow id="Flow_30" sourceRef="boundaryEvent_8" targetRef="scriptTask_40"/>
+    <sequenceFlow id="Flow_31" sourceRef="boundaryEvent_10" targetRef="scriptTask_40"/>
+    <sequenceFlow id="Flow_32" sourceRef="boundaryEvent_12" targetRef="scriptTask_40"/>
+    <sequenceFlow id="Flow_33" sourceRef="boundaryEvent_14" targetRef="scriptTask_40"/>
+    <sequenceFlow id="Flow_34" sourceRef="boundaryEvent_16" targetRef="scriptTask_40"/>
+    <sequenceFlow id="Flow_35" sourceRef="boundaryEvent_18" targetRef="scriptTask_40"/>
+    <sequenceFlow id="Flow_36" sourceRef="boundaryEvent_20" targetRef="scriptTask_40"/>
+    <sequenceFlow id="Flow_37" sourceRef="boundaryEvent_22" targetRef="scriptTask_40"/>
+    <sequenceFlow id="Flow_38" sourceRef="scriptTask_40" targetRef="scriptTask_42"/>
+    <sequenceFlow id="Flow_39" sourceRef="scriptTask_42" targetRef="endEvent_44"/>
+  </process>
+</definitions>`
+
+// TestLayoutSharedErrorCorridor pins the structure a hand-drawn diagram of this
+// process uses, which the invariants alone do not capture: they forbid collisions
+// but permit an ugly-yet-legal picture, and this shape has a clearly right answer.
+//
+// Every exception flow must reach the shared handler along **one** horizontal
+// corridor, and the branch that has its own handler must sit on a *different*,
+// higher row so the corridor passes cleanly beneath it. Getting this wrong is not
+// cosmetic: with both branches on one row, an unrelated end event lands directly
+// above a boundary event and blocks the flow leaving it.
+func TestLayoutSharedErrorCorridor(t *testing.T) {
+	di, ok := generateDI([]byte(sharedErrorHandlerSrc))
+	if !ok {
+		t.Fatal("generateDI: want ok")
+	}
+	shapes := parseShapes(t, di)
+	edges := parseEdges(t, di)
+
+	handler, ok := shapes["scriptTask_40"]
+	if !ok {
+		t.Fatal("shared error handler has no shape")
+	}
+	exceptions := []string{"Flow_30", "Flow_31", "Flow_32", "Flow_33", "Flow_34", "Flow_35", "Flow_36", "Flow_37"}
+
+	// One corridor: every exception flow ends with a horizontal run at the same y,
+	// arriving at the handler's left edge.
+	corridor := -1
+	for _, f := range exceptions {
+		pts := edges[f]
+		if len(pts) < 2 {
+			t.Fatalf("exception flow %q has %d waypoint(s)", f, len(pts))
+		}
+		last, prev := pts[len(pts)-1], pts[len(pts)-2]
+		if last.y != prev.y {
+			t.Errorf("exception flow %q does not arrive horizontally: %v", f, pts)
+			continue
+		}
+		if last.x != handler.x {
+			t.Errorf("exception flow %q arrives at x=%d, not the handler's left edge x=%d", f, last.x, handler.x)
+		}
+		if corridor == -1 {
+			corridor = last.y
+		} else if last.y != corridor {
+			t.Errorf("exception flow %q runs at y=%d, but the corridor is at y=%d — "+
+				"all exception flows must share one line", f, last.y, corridor)
+		}
+	}
+
+	// The separately-handled branch sits on its own row above the corridor, so the
+	// corridor runs beneath it rather than around it.
+	sess := shapes["scriptTask_30"]
+	sessEnd := shapes["endEvent_32"]
+	if sess.y+sess.h/2 == handler.y+handler.h/2 {
+		t.Errorf("the session-error branch shares the shared handler's row (cy=%d); "+
+			"it must sit on its own row so the corridor stays clear", handler.y+handler.h/2)
+	}
+	if sessEnd.bottom() >= corridor {
+		t.Errorf("session branch end event (y..%d) reaches the corridor at y=%d", sessEnd.bottom(), corridor)
+	}
+
+	// And the main line stays one straight run underneath it all.
+	trunk := []string{"startEvent_1", "scriptTask_2", "scriptTask_4", "scriptTask_6", "scriptTask_8",
+		"scriptTask_10", "scriptTask_12", "scriptTask_14", "scriptTask_16", "scriptTask_18",
+		"scriptTask_20", "scriptTask_22", "scriptTask_24", "scriptTask_26", "endEvent_28"}
+	want := shapes[trunk[0]]
+	wantCY := want.y + want.h/2
+	for _, id := range trunk {
+		s := shapes[id]
+		if cy := s.y + s.h/2; cy != wantCY {
+			t.Errorf("main-line node %q center y=%d, want %d", id, cy, wantCY)
+		}
+	}
+	if corridor >= wantCY {
+		t.Errorf("corridor y=%d is not above the main line at y=%d", corridor, wantCY)
+	}
 }
 
 // TestLayoutInvariants runs every invariant over every corpus model. A failure
