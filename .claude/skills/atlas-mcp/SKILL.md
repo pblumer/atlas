@@ -64,6 +64,7 @@ endpoint behind an authenticating reverse proxy.
 | `atlas_save_draft` | `xml`, `projectId?` | saved BPMN draft |
 | `atlas_list_drafts` | `projectId?` | saved diagram drafts |
 | `atlas_get_draft_xml` | `id` | a draft's BPMN XML (by process id) |
+| `atlas_delete_draft` | `id` | `{deleted:true,id}` — design-time only, idempotent |
 | `atlas_save_form` | `id`, `schema`, `name?`, `projectId?` | saved form-js form |
 | `atlas_list_forms` | `projectId?` | saved form definitions |
 | `atlas_get_form` | `id` | a form's schema |
@@ -123,12 +124,22 @@ page. `limit` defaults to 500 and is capped by the HTTP API at 5000.
 `processInstance` restricts the lookup to one instance. A scoped lookup may be
 truncated but has no continuation cursor. Do not invent one.
 
-## Project deletion is not process deletion
+## Three things can be deleted, and they are not each other
 
 `atlas_delete_project {id}` deletes only the design-time grouping folder. It is
 idempotent. Drafts and decision references remain and become ungrouped.
 Deployed definitions and process instances are unaffected. With API
 authentication enabled, the caller must satisfy the project owner rule.
+
+`atlas_delete_draft {id}` deletes one saved diagram, by **process id** — not by
+project. It is idempotent, and design-time only: a definition already deployed
+from that draft keeps running. Drafts are not versioned, so the diagram is gone;
+read it back with `atlas_get_draft_xml` first if it may be wanted again. Use this
+to clear away a scratch or throwaway diagram rather than leaving it for a human.
+
+Deleting a *project* to get rid of its drafts does not work and is destructive in
+the wrong direction — the folder goes, every draft in it stays. Delete the drafts
+you mean, by id.
 
 To delete a deployed process definition, first terminate every active instance
 of that definition and then call `atlas_delete_process`. The API rejects process
