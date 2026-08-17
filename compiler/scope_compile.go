@@ -20,6 +20,22 @@ func eventSubStart(sub *xmlSubProcess) *xmlStartEvent {
 	return nil
 }
 
+// compileCondition compiles a conditional event's <condition> body to a boolean FEEL
+// expression (ADR-0134), mirroring how a gateway condition is compiled (connectScope). It
+// strips a leading Zeebe FEEL "=" and trims; an empty condition is a deploy error (a
+// conditional event with no predicate can never fire). id names the event for the error.
+func compileCondition(id, raw string) (*expr.Compiled, error) {
+	cond := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(raw), "="))
+	if cond == "" {
+		return nil, fmt.Errorf("compiler: conditional event %q has no condition", id)
+	}
+	ce, err := expr.CompileAuto(cond)
+	if err != nil {
+		return nil, fmt.Errorf("compiler: conditional event %q condition: %w", id, err)
+	}
+	return ce, nil
+}
+
 // registerScope registers every flow node of one scope — the process root or an
 // embedded subprocess — into the flat node array and the shared id map, then
 // recurses into nested subprocesses under a pushed scope so their children carry
@@ -367,8 +383,19 @@ func registerScope(
 			if err := register(ev.Id, b.AddLinkCatchEvent()); err != nil {
 				return err
 			}
+		case ev.Conditional != nil:
+			// A conditional catch waits until its boolean FEEL condition becomes true, then
+			// flows on (ADR-0134). It arms inert and is driven to Completing by a re-check on
+			// variable change.
+			cond, err := compileCondition(ev.Id, ev.Conditional.Condition)
+			if err != nil {
+				return err
+			}
+			if err := register(ev.Id, b.AddConditionalCatchEvent(cond)); err != nil {
+				return err
+			}
 		default:
-			return fmt.Errorf("compiler: intermediate catch event %q: only timer, message, signal, and link events are supported yet", ev.Id)
+			return fmt.Errorf("compiler: intermediate catch event %q: only timer, message, signal, link, and conditional events are supported yet", ev.Id)
 		}
 	}
 	for _, ev := range c.IntermediateThrowEvents {
@@ -680,8 +707,20 @@ func registerScope(
 			if err := register(ev.Id, b.AddBoundaryCancelEvent(host)); err != nil {
 				return err
 			}
+		case ev.Conditional != nil:
+			// A conditional boundary fires while the host runs when its boolean FEEL condition
+			// becomes true (ADR-0134). It honors cancelActivity — interrupting tears the host
+			// down, non-interrupting runs the handler alongside. It opens no subscription and is
+			// re-evaluated on variable change.
+			cond, err := compileCondition(ev.Id, ev.Conditional.Condition)
+			if err != nil {
+				return err
+			}
+			if err := register(ev.Id, b.AddBoundaryConditionalEvent(host, cond, interrupting)); err != nil {
+				return err
+			}
 		default:
-			return fmt.Errorf("compiler: boundary event %q: only timer, message, signal, error, escalation, compensation, and cancel boundary events are supported yet", ev.Id)
+			return fmt.Errorf("compiler: boundary event %q: only timer, message, signal, error, escalation, conditional, compensation, and cancel boundary events are supported yet", ev.Id)
 		}
 	}
 	// Report an unsupported element with a clear message rather than letting it

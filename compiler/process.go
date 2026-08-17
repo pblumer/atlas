@@ -77,8 +77,10 @@ const (
 	TypeLinkThrowEvent // a link intermediate throw event: a goto to the link catch of the same name in the same scope (ADR-0133). Resolved at compile to a synthetic sequence flow to the catch; runs as a pass-through (no execution semantics of its own)
 	TypeLinkCatchEvent // a link intermediate catch event: the landing point of a link throw of the same name (ADR-0133). Reached only via the compile-time synthetic flow; runs as a pass-through, flowing on its real outgoing flow
 
+	TypeConditionalCatchEvent // a conditional intermediate catch event: waits until its boolean FEEL condition over the process's variables becomes true, then flows on (ADR-0134). Arms inert (no subscription) and is driven to Completing by a variable-change re-check; a conditional boundary/event-sub reuses TypeBoundaryEvent/TypeEventSubProcessStart with BoundaryConditional
+
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 40
+	numBpmnTypes = 41
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -164,6 +166,8 @@ func (t BpmnType) String() string {
 		return "LinkThrowEvent"
 	case TypeLinkCatchEvent:
 		return "LinkCatchEvent"
+	case TypeConditionalCatchEvent:
+		return "ConditionalCatchEvent"
 	default:
 		return "Unspecified"
 	}
@@ -627,6 +631,7 @@ type EventSubProcessDetail struct {
 	SignalName     string         // BoundarySignal: the signal it subscribes to (ADR-0088)
 	ErrorCode      string         // BoundaryError: the error code it catches; "" is a catch-all (ADR-0089)
 	EscalationCode string         // BoundaryEscalation: the escalation code it catches; "" is a catch-all (ADR-0125)
+	Condition      *expr.Compiled // BoundaryConditional: the boolean FEEL condition it fires on (ADR-0134)
 }
 
 // BoundaryEventKind discriminates what a boundary event waits on.
@@ -640,6 +645,7 @@ const (
 	BoundaryCompensation                          // links a host activity to its compensation handler; inert — never armed as an element instance, only read on host completion to record the activity as compensable (ADR-0103)
 	BoundaryCancel                                // on a transaction only: catches the transaction's cancellation and routes its recovery flow; armed inert like an error boundary, and always interrupting (ADR-0108)
 	BoundaryEscalation                            // catches an escalation propagating up to it by code, then fires; honors cancelActivity — may be interrupting or non-interrupting (ADR-0125)
+	BoundaryConditional                           // fires while the host runs when its boolean FEEL condition becomes true; armed inert (no subscription), re-evaluated on variable change; honors cancelActivity — may be interrupting or non-interrupting (ADR-0134)
 )
 
 // BoundaryEventDetail is the per-boundary-event data a behavior needs at runtime.
@@ -657,6 +663,7 @@ type BoundaryEventDetail struct {
 	SignalName     string         // BoundarySignal: the signal it subscribes to (ADR-0088)
 	ErrorCode      string         // BoundaryError: the error code it catches; "" is a catch-all (ADR-0089)
 	EscalationCode string         // BoundaryEscalation: the escalation code it catches; "" is a catch-all (ADR-0125)
+	Condition      *expr.Compiled // BoundaryConditional: the boolean FEEL condition it fires on (ADR-0134)
 	// CompensationHandler is the ElementId of the compensation handler activity this
 	// boundary links its host to (BoundaryCompensation, ADR-0103). It is resolved at
 	// compile time from the BPMN <association> joining the boundary to the handler;
@@ -685,6 +692,15 @@ type ErrorEndDetail struct {
 // code-less escalation raises "", which a code-less catch-all catches.
 type EscalationDetail struct {
 	EscalationCode string
+}
+
+// ConditionalDetail is the per-conditional-catch-event data the runtime needs: the boolean
+// FEEL condition it waits on (ADR-0134). A conditional intermediate catch arms inert and is
+// driven to Completing when a variable-change re-check finds the condition true. (Conditional
+// boundaries and event subprocesses carry their condition on BoundaryEventDetail /
+// EventSubProcessDetail instead.)
+type ConditionalDetail struct {
+	Condition *expr.Compiled
 }
 
 // CompiledDataObject is one BPMN data object declared by a process: a typed,
@@ -754,6 +770,10 @@ type CompiledProcess struct {
 	BpmnProcessId int32  // interned
 	Version       int32
 
+	// hasConditional is true if any node is a conditional event (ADR-0134); the runtime
+	// only re-checks conditionals for instances of a process that has one.
+	hasConditional bool
+
 	nodes []CompiledNode
 	flows []CompiledFlow
 
@@ -783,6 +803,7 @@ type CompiledProcess struct {
 	signalStarts       []SignalDetail
 	errorEnds          []ErrorEndDetail     // error end events (ADR-0089)
 	escalations        []EscalationDetail   // shared by escalation throw and end events (ADR-0125)
+	conditionals       []ConditionalDetail  // conditional intermediate catch events (ADR-0134)
 	compensationThrows []CompensationDetail // shared by compensation throw and end events (ADR-0103)
 	timerStarts        []TimerStartDetail
 	dataObjects        []CompiledDataObject
@@ -1009,6 +1030,15 @@ func (p *CompiledProcess) ErrorEnd(detail int32) *ErrorEndDetail { return &p.err
 
 // Escalation returns the escalation-event detail (throw or end) at the given table index (ADR-0125).
 func (p *CompiledProcess) Escalation(detail int32) *EscalationDetail { return &p.escalations[detail] }
+
+// Conditional returns the conditional-catch detail at the given table index (ADR-0134).
+func (p *CompiledProcess) Conditional(detail int32) *ConditionalDetail {
+	return &p.conditionals[detail]
+}
+
+// HasConditionalEvents reports whether the process contains any conditional event, so the
+// runtime only re-checks conditionals for instances that can have one (ADR-0134).
+func (p *CompiledProcess) HasConditionalEvents() bool { return p.hasConditional }
 
 // CompensationThrow returns the compensation-throw detail at the given table index —
 // shared by the compensation throw and end events (ADR-0103).

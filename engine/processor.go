@@ -95,6 +95,11 @@ type Processor struct {
 	encBuf       []byte
 	fatalErr     error
 
+	// condDirty collects the process instances whose variables changed this batch, so the
+	// batch loop can schedule a conditional re-check for each (ADR-0134). Reused, not
+	// reallocated; drained and cleared at the end of Phase 1.
+	condDirty []uint64
+
 	// startsThisBatch remembers the (defKey, correlationKey) pairs a singleton message
 	// start has already scheduled a create for in the current batch (ADR-0094). The
 	// durable ActiveStartKey counter only reflects an instance once its Activated
@@ -591,10 +596,25 @@ func (p *Processor) RunUntilIdle() error {
 	return nil
 }
 
+// scheduleConditionRechecks enqueues a transient ConditionRecheck follow-up for each instance
+// whose variables changed this batch and that has conditional events (ADR-0134). The re-check
+// runs in the next batch and reads the now-committed variables; its firing is the persisted
+// Completing chain, so it is deterministic and never runs on replay (I6).
+func (p *Processor) scheduleConditionRechecks() {
+	for _, piKey := range p.condDirty {
+		p.followups = append(p.followups, Command{
+			Key:       piKey,
+			ValueType: model.VTProcessInstance,
+			Intent:    model.IntentConditionRecheck,
+		})
+	}
+}
+
 func (p *Processor) processBatch() error {
 	p.batchRecords = p.batchRecords[:0]
 	p.followups = p.followups[:0]
 	p.sideEffects = p.sideEffects[:0]
+	p.condDirty = p.condDirty[:0]
 	p.fatalErr = nil
 	for k := range p.startsThisBatch {
 		delete(p.startsThisBatch, k) // reuse the map; empty by the next batch (ADR-0094)
@@ -614,6 +634,11 @@ func (p *Processor) processBatch() error {
 			return p.fatalErr
 		}
 	}
+
+	// A variable write in an instance with conditional events schedules a re-check of that
+	// instance's armed conditionals as a follow-up (ADR-0134). It runs in the next batch, on
+	// the live command path only (never replay, I6); firing is the persisted Completing chain.
+	p.scheduleConditionRechecks()
 
 	if len(p.batchRecords) == 0 {
 		// Nothing durable to write (e.g. a command with no handler). Advance

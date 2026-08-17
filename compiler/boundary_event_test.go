@@ -143,13 +143,13 @@ func TestParseBoundaryErrors(t *testing.T) {
   <process id="p" isExecutable="true">
     <startEvent id="s"/>
     <serviceTask id="t"><extensionElements><zeebe:taskDefinition type="x"/></extensionElements></serviceTask>
-    <boundaryEvent id="b" attachedToRef="t"><conditionalEventDefinition/></boundaryEvent>
+    <boundaryEvent id="b" attachedToRef="t"></boundaryEvent>
     <endEvent id="e"/>
     <sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
     <sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
   </process>
 </definitions>`,
-			want: "only timer, message, signal, error, escalation, compensation, and cancel",
+			want: "only timer, message, signal, error, escalation, conditional, compensation, and cancel",
 		},
 	}
 	for _, tc := range cases {

@@ -285,6 +285,15 @@ const (
 	// (invariants I4/I6). Appended at the end so every prior intent keeps its numeric
 	// value on the log.
 	IntentPurged
+
+	// IntentConditionRecheck is a command-only intent (never persisted as an event), like
+	// IntentJobErrorThrown: after a batch writes one or more variables in an instance, the
+	// processor schedules a re-check of that instance's armed conditional events (ADR-0134).
+	// Its handler evaluates each armed conditional's FEEL condition over its scope chain and
+	// drives the ones now true to Completing. Because commands are not replayed (invariant
+	// I6) — the fire is the persisted Completing→Completed chain — its numeric value never
+	// reaches the log. Appended at the end so every prior intent keeps its numeric value.
+	IntentConditionRecheck
 )
 
 func (i Intent) String() string {
@@ -363,6 +372,8 @@ func (i Intent) String() string {
 		return "Purging"
 	case IntentPurged:
 		return "Purged"
+	case IntentConditionRecheck:
+		return "ConditionRecheck"
 	default:
 		return "Intent(?)"
 	}

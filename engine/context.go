@@ -303,6 +303,28 @@ func (c *ProcessingContext) AppendTimerEvent(key uint64, intent model.Intent, v 
 // strings — variables are runtime data, not hot-path token movement.
 func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.VariableValue) {
 	c.appendEvent(v.ScopeKey, model.VTVariable, intent, inflightValue{variable: v})
+	c.markConditionDirty(v.ScopeKey)
+}
+
+// markConditionDirty notes that a variable changed in the given scope, so the batch loop will
+// schedule a re-check of the instance's conditional events (ADR-0134). It resolves the scope to
+// its process instance and records it (deduplicated); an instance whose process has no
+// conditional event records nothing, so a conditional-free process pays nothing on a write.
+func (c *ProcessingContext) markConditionDirty(scopeKey uint64) {
+	piKey := scopeKey
+	if ei := c.GetElementInstance(scopeKey); ei != nil {
+		piKey = ei.ProcessInstanceKey
+	}
+	pi := c.GetProcessInstance(piKey)
+	if pi == nil || !c.process(pi.ProcessDefKey).HasConditionalEvents() {
+		return
+	}
+	for _, k := range c.p.condDirty {
+		if k == piKey {
+			return
+		}
+	}
+	c.p.condDirty = append(c.p.condDirty, piKey)
 }
 
 // AppendDataObjectEvent records a data-object write (created or state-changed).
