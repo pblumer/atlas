@@ -596,10 +596,11 @@ func boundaryLabelBox(t *testing.T, di, id string) shapeBox {
 }
 
 // TestGenerateDIBoundaryLabelClearsHost is the regression for a boundary event's
-// caption landing on top of its host's title. The generator emits an explicit label
-// box for a named boundary event, placed off the host — above it when it rides the
-// top edge — with the box's right edge at the event's center so the exception riser
-// runs along the label's edge rather than through it.
+// caption landing on top of its host's title (or tucked behind the exception riser).
+// The generator emits an explicit label box for a named boundary event, placed off
+// the host — above it when it rides the top edge — with the box's left edge just past
+// the event's right side, so the caption sits in the open pocket beside the event
+// instead of over the host or behind the upward riser (which leaves from the center).
 func TestGenerateDIBoundaryLabelClearsHost(t *testing.T) {
 	src := []byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
 	  <process id="P">
@@ -627,10 +628,11 @@ func TestGenerateDIBoundaryLabelClearsHost(t *testing.T) {
 	if lbl.bottom() > host.y {
 		t.Errorf("boundary label (y %d..%d) not clear above host top y=%d", lbl.y, lbl.bottom(), host.y)
 	}
-	// The label's right edge is at the event's center-x, keeping the upward exception
-	// riser off the caption.
-	if lbl.right() != be.x+be.w/2 {
-		t.Errorf("label right edge %d not at event center-x %d", lbl.right(), be.x+be.w/2)
+	// The label sits to the right of the event circle, so the upward exception riser
+	// (which leaves from the event's center) runs clear of the caption instead of
+	// through it.
+	if lbl.x < be.right() {
+		t.Errorf("label left edge %d not clear of the event's right side %d (caption crowds the riser)", lbl.x, be.right())
 	}
 	// Only the boundary event carries an explicit label; other events auto-place.
 	if n := strings.Count(di, "<bpmndi:BPMNLabel>"); n != 1 {
