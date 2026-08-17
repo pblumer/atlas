@@ -31,11 +31,12 @@ type apiRoute struct {
 // (the drift test enforces non-empty). req/resp bodies are filled in where they
 // add value and default to a permissive object otherwise (ADR-0043).
 type apiOp struct {
-	summary string
-	tag     string
-	status  int       // primary success status; 0 means 200 OK
-	req     *bodySpec // request body, or nil when the route takes none
-	resp    *bodySpec // success response body, or nil when it returns no content
+	summary    string
+	tag        string
+	status     int       // primary success status; 0 means 200 OK
+	deprecated bool      // renders openapi `deprecated: true` (e.g. an alias kept for compat)
+	req        *bodySpec // request body, or nil when the route takes none
+	resp       *bodySpec // success response body, or nil when it returns no content
 }
 
 // bodySpec is one request or response payload: a media type and an optional
@@ -343,26 +344,56 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/public-links/{token}", s.handleRevokePublicLink, apiOp{
 			summary: "Revoke a public start link", tag: "Forms", resp: jsonBody("Revoked token", tObject())}},
 
+		// Process applications (ADR-0127) are the ADR-0034 project reframed as the
+		// design-time unit of bundling, versioning, and portability. The canonical
+		// surface is /api/v1/applications; each route binds to the same handler as
+		// its /api/v1/projects twin below, which is kept as a deprecated alias for
+		// one release so existing callers and saved MCP scripts keep working. The
+		// on-disk store stays `projects/` and the artifact tag stays `projectId`
+		// (zero migration) — the rename is at the API/UI boundary only.
+		{"POST", "/api/v1/applications", s.handleCreateProject, apiOp{
+			summary: "Create a process application (ADR-0127)", tag: "Applications", req: jsonBody("Application", tObject()), resp: jsonBody("Created application", tObject())}},
+		{"GET", "/api/v1/applications", s.handleListProjects, apiOp{
+			summary: "List process applications", tag: "Applications", resp: jsonBody("Applications", tArray())}},
+		{"PATCH", "/api/v1/applications/{id}", s.handleUpdateProject, apiOp{
+			summary: "Update an application: rename, set visibility (private/shared), or transfer ownership (ADR-0071)", tag: "Applications",
+			req:  jsonBody("Update", schemaObj(map[string]any{"name": tString(), "visibility": tString(), "ownerId": tString()})),
+			resp: jsonBody("Updated application", tObject())}},
+		{"DELETE", "/api/v1/applications/{id}", s.handleDeleteProject, apiOp{
+			summary: "Delete a process application", tag: "Applications", status: http.StatusNoContent}},
+		{"PUT", "/api/v1/applications/{id}/members/{userId}", s.handleSetProjectMember, apiOp{
+			summary: "Share an application with a user, or change their role (ADR-0071)", tag: "Applications",
+			req:  jsonBody("Member role", schemaObj(map[string]any{"role": tString()}, "role")),
+			resp: jsonBody("Updated application", tObject())}},
+		{"DELETE", "/api/v1/applications/{id}/members/{userId}", s.handleRemoveProjectMember, apiOp{
+			summary: "Revoke a user's membership on an application (ADR-0071)", tag: "Applications", resp: jsonBody("Updated application", tObject())}},
+		{"POST", "/api/v1/applications/{id}/validate", s.handleValidateProject, apiOp{
+			summary: "Validate an application's artifacts", tag: "Applications", resp: jsonBody("Validation result", tObject())}},
+		{"POST", "/api/v1/applications/{id}/deploy", s.handleDeployProject, apiOp{
+			summary: "Publish an application: validate and deploy its artifacts as one bundle (ADR-0127)", tag: "Applications", resp: jsonBody("Deploy result", tObject())}},
+
+		// Deprecated aliases (ADR-0127): the pre-rename /projects surface. Same
+		// handlers as /applications above; retained for one release for compat.
 		{"POST", "/api/v1/projects", s.handleCreateProject, apiOp{
-			summary: "Create a project", tag: "Projects", req: jsonBody("Project", tObject()), resp: jsonBody("Created project", tObject())}},
+			summary: "Create a project (deprecated: use POST /api/v1/applications)", tag: "Projects", deprecated: true, req: jsonBody("Project", tObject()), resp: jsonBody("Created project", tObject())}},
 		{"GET", "/api/v1/projects", s.handleListProjects, apiOp{
-			summary: "List projects", tag: "Projects", resp: jsonBody("Projects", tArray())}},
+			summary: "List projects (deprecated: use GET /api/v1/applications)", tag: "Projects", deprecated: true, resp: jsonBody("Projects", tArray())}},
 		{"PATCH", "/api/v1/projects/{id}", s.handleUpdateProject, apiOp{
-			summary: "Update a project: rename, set visibility (private/shared), or transfer ownership (ADR-0071)", tag: "Projects",
+			summary: "Update a project (deprecated: use PATCH /api/v1/applications/{id})", tag: "Projects", deprecated: true,
 			req:  jsonBody("Update", schemaObj(map[string]any{"name": tString(), "visibility": tString(), "ownerId": tString()})),
 			resp: jsonBody("Updated project", tObject())}},
 		{"DELETE", "/api/v1/projects/{id}", s.handleDeleteProject, apiOp{
-			summary: "Delete a project", tag: "Projects", status: http.StatusNoContent}},
+			summary: "Delete a project (deprecated: use DELETE /api/v1/applications/{id})", tag: "Projects", deprecated: true, status: http.StatusNoContent}},
 		{"PUT", "/api/v1/projects/{id}/members/{userId}", s.handleSetProjectMember, apiOp{
-			summary: "Share a project with a user, or change their role (ADR-0071)", tag: "Projects",
+			summary: "Share a project with a user (deprecated: use PUT /api/v1/applications/{id}/members/{userId})", tag: "Projects", deprecated: true,
 			req:  jsonBody("Member role", schemaObj(map[string]any{"role": tString()}, "role")),
 			resp: jsonBody("Updated project", tObject())}},
 		{"DELETE", "/api/v1/projects/{id}/members/{userId}", s.handleRemoveProjectMember, apiOp{
-			summary: "Revoke a user's membership on a project (ADR-0071)", tag: "Projects", resp: jsonBody("Updated project", tObject())}},
+			summary: "Revoke a user's membership on a project (deprecated: use DELETE /api/v1/applications/{id}/members/{userId})", tag: "Projects", deprecated: true, resp: jsonBody("Updated project", tObject())}},
 		{"POST", "/api/v1/projects/{id}/validate", s.handleValidateProject, apiOp{
-			summary: "Validate a project's artifacts", tag: "Projects", resp: jsonBody("Validation result", tObject())}},
+			summary: "Validate a project's artifacts (deprecated: use POST /api/v1/applications/{id}/validate)", tag: "Projects", deprecated: true, resp: jsonBody("Validation result", tObject())}},
 		{"POST", "/api/v1/projects/{id}/deploy", s.handleDeployProject, apiOp{
-			summary: "Deploy a project's artifacts", tag: "Projects", resp: jsonBody("Deploy result", tObject())}},
+			summary: "Deploy a project's artifacts (deprecated: use POST /api/v1/applications/{id}/deploy)", tag: "Projects", deprecated: true, resp: jsonBody("Deploy result", tObject())}},
 
 		{"POST", "/api/v1/dmnrefs", s.handleCreateDmnRef, apiOp{
 			summary: "Create a DMN reference artifact", tag: "DMN References", req: jsonBody("DMN reference", tObject()), resp: jsonBody("Created reference", tObject())}},
@@ -546,6 +577,9 @@ func operationDoc(r apiRoute) map[string]any {
 		"summary":     r.op.summary,
 		"operationId": operationID(r),
 		"tags":        []any{r.op.tag},
+	}
+	if r.op.deprecated {
+		op["deprecated"] = true
 	}
 	if params := pathParams(r.pattern); len(params) > 0 {
 		op["parameters"] = params
