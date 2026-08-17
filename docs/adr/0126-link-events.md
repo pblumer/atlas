@@ -1,10 +1,10 @@
 # ADR-0126: Link events (intra-scope goto — a compile-time synthetic flow)
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-13
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Proposed. A **link event** is BPMN's **off-page connector**: a
+> **Implementation status.** Delivered (both phases). A **link event** is BPMN's **off-page connector**: a
 > **link intermediate throw event** (`<intermediateThrowEvent><linkEventDefinition name="X"/>`) and a
 > **link intermediate catch event** (`<intermediateCatchEvent><linkEventDefinition name="X"/>`),
 > paired **by name within one flow scope**, that stand in for a sequence flow — reaching the throw is

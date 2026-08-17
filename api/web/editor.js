@@ -599,7 +599,6 @@ const UNSUPPORTED_TYPES = {
 };
 const UNSUPPORTED_EVENT_DEFS = {
   "bpmn:ConditionalEventDefinition": "Conditional events aren't supported yet",
-  "bpmn:LinkEventDefinition": "Link events aren't supported yet",
 };
 
 // unsupportedReason returns why a drawn element can't run on the Atlas engine yet, or
@@ -2756,6 +2755,22 @@ function escalationDefOf(bo) {
   return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:EscalationEventDefinition") || null;
 }
 
+// linkDefOf returns an event's bpmn:LinkEventDefinition, or null. A link intermediate throw
+// jumps to the link intermediate catch of the same name in the same scope — an off-page
+// connector / goto (ADR-0126).
+function linkDefOf(bo) {
+  return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:LinkEventDefinition") || null;
+}
+
+// linkFieldsHTML renders the link-name field for a link throw or catch. A throw jumps to the
+// catch of the same name in the same scope; the name is the whole configuration (ADR-0126).
+function linkFieldsHTML(led, hint) {
+  return `<h3>Link</h3>
+    <label class="field"><span>Link name</span>
+      <input type="text" id="f-linkname" value="${esc(led.name || "")}" placeholder="ProceedHere"/></label>
+    <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
 // listEscalations returns every <bpmn:escalation> declared on the model's definitions.
 function listEscalations(modeler) {
   const defs = definitionsOf(modeler);
@@ -3634,6 +3649,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
+        const link = linkDefOf(bo);
         if (timer) {
           html += timerFieldsHTML(timer, ["duration", "date"], `The event waits, then continues (ADR-0054).
             <b>Duration</b> waits that long (<b>PT30S</b>, <b>PT5M</b>, <b>P1DT2H</b>); <b>Date &amp; time</b> waits until that instant.
@@ -3642,21 +3658,26 @@ function wireProperties(root, modeler, api, projectId, toast) {
           html += messageFieldsHTML(modeler, msg, "The event waits until this message is published with a matching correlation key.");
         } else if (sig) {
           html += signalFieldsHTML(modeler, sig, "The event waits until a signal with this name is broadcast (by a throw or signal end event, in this or any other instance).");
+        } else if (link) {
+          html += linkFieldsHTML(link, "This is the landing point of a <b>link throw</b> with the same name in the same scope (an off-page connector). It does not wait — a token arriving via the link flows straight on. Draw it with no incoming sequence flow.");
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, or <b>Signal</b> intermediate catch event, then configure it here.</p>`;
+          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, or <b>Link</b> intermediate catch event, then configure it here.</p>`;
         }
       } else if (bo.$type === "bpmn:IntermediateThrowEvent") {
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
         const escl = escalationDefOf(bo);
+        const link = linkDefOf(bo);
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "On reaching this event the message is published; any instance waiting on it with a matching correlation key continues.");
         } else if (sig) {
           html += signalFieldsHTML(modeler, sig, "On reaching this event the signal is broadcast to every event waiting on that signal name, across all instances. The token then continues.");
         } else if (escl) {
           html += escalationFieldsHTML(modeler, escl, "On reaching this event the escalation is raised, propagating up to the nearest matching escalation boundary or event subprocess, and the token then continues on its outgoing flow (unless an interrupting catch aborts it). Uncaught, it is harmless.");
+        } else if (link) {
+          html += linkFieldsHTML(link, "On reaching this event the token jumps to the <b>link catch</b> with the same name in the same scope — an off-page connector / goto, in place of a sequence flow. Draw it with no outgoing sequence flow; deploy fails if no matching link catch exists.");
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Message</b>, <b>Signal</b>, or <b>Escalation</b> throw event, then configure it here.</p>`;
+          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Message</b>, <b>Signal</b>, <b>Escalation</b>, or <b>Link</b> throw event, then configure it here.</p>`;
         }
       } else if (bo.$type === "bpmn:BoundaryEvent") {
         // A boundary event is attached to an activity and arms while it runs. Its
@@ -4652,6 +4673,15 @@ function wireProperties(root, modeler, api, projectId, toast) {
       fesccode.addEventListener("change", () => {
         const eed = escalationDefOf(element.businessObject);
         if (eed && eed.escalationRef) eed.escalationRef.escalationCode = (fesccode.value || "").trim();
+      });
+    }
+    const flinkname = body.querySelector("#f-linkname");
+    if (flinkname) {
+      flinkname.addEventListener("change", () => {
+        const led = linkDefOf(element.businessObject);
+        if (led) {
+          try { modeling.updateModdleProperties(element, led, { name: (flinkname.value || "").trim() }); } catch { /* stale */ }
+        }
       });
     }
 
