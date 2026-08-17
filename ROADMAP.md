@@ -494,7 +494,14 @@ What it takes to run this for real.
 - 🔲 gRPC job-worker protocol (streaming pull, leases, fencing) — ADR-0007
 - 🔲 Worker SDK (Go first)
 - 🔲 Metrics (throughput, batch size, fsync latency, queue depth), structured logs, OTel traces
-- 🔲 Log compaction / snapshotting so recovery doesn't replay from genesis
+- 🚧 Log compaction / snapshotting so recovery doesn't replay from genesis
+  ([ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), v0.2.0
+  programme D): the design is decided — a periodic Pebble checkpoint of the state store
+  at a known applied log position plus an engine-owned manifest, so recovery replays
+  only the suffix after the newest checkpoint and old WAL segments become deletable
+  (gated on the exporter/retention watermarks). The `checkpoint` package's versioned,
+  self-checksummed manifest format primitives landed first; creating/publishing a
+  checkpoint, restoring from it, and deleting segments are the remaining slices.
 - 🔲 Exported-log stream for downstream analytics
 - 🔲 Operator tooling: list/inspect instances, incidents, jobs
 
