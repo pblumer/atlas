@@ -1,4 +1,4 @@
-# ADR-0127: Process applications — the project, elevated into a deployable, versioned, portable unit
+# ADR-0128: Process applications — the project, elevated into a deployable, versioned, portable unit
 
 - **Status:** Proposed
 - **Date:** 2026-08-17

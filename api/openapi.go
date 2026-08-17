@@ -344,7 +344,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/public-links/{token}", s.handleRevokePublicLink, apiOp{
 			summary: "Revoke a public start link", tag: "Forms", resp: jsonBody("Revoked token", tObject())}},
 
-		// Process applications (ADR-0127) are the ADR-0034 project reframed as the
+		// Process applications (ADR-0128) are the ADR-0034 project reframed as the
 		// design-time unit of bundling, versioning, and portability. The canonical
 		// surface is /api/v1/applications; each route binds to the same handler as
 		// its /api/v1/projects twin below, which is kept as a deprecated alias for
@@ -352,7 +352,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		// on-disk store stays `projects/` and the artifact tag stays `projectId`
 		// (zero migration) — the rename is at the API/UI boundary only.
 		{"POST", "/api/v1/applications", s.handleCreateProject, apiOp{
-			summary: "Create a process application (ADR-0127)", tag: "Applications", req: jsonBody("Application", tObject()), resp: jsonBody("Created application", tObject())}},
+			summary: "Create a process application (ADR-0128)", tag: "Applications", req: jsonBody("Application", tObject()), resp: jsonBody("Created application", tObject())}},
 		{"GET", "/api/v1/applications", s.handleListProjects, apiOp{
 			summary: "List process applications", tag: "Applications", resp: jsonBody("Applications", tArray())}},
 		{"PATCH", "/api/v1/applications/{id}", s.handleUpdateProject, apiOp{
@@ -370,17 +370,17 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"POST", "/api/v1/applications/{id}/validate", s.handleValidateProject, apiOp{
 			summary: "Validate an application's artifacts", tag: "Applications", resp: jsonBody("Validation result", tObject())}},
 		{"POST", "/api/v1/applications/{id}/deploy", s.handleDeployProject, apiOp{
-			summary: "Deploy an application's artifacts as one bundle, without recording a release (ADR-0127)", tag: "Applications", resp: jsonBody("Deploy result", tObject())}},
+			summary: "Deploy an application's artifacts as one bundle, without recording a release (ADR-0128)", tag: "Applications", resp: jsonBody("Deploy result", tObject())}},
 		{"POST", "/api/v1/applications/{id}/publish", s.handlePublishApplication, apiOp{
-			summary: "Publish an application: deploy its artifacts as one bundle and record the next application release (ADR-0127)", tag: "Applications",
+			summary: "Publish an application: deploy its artifacts as one bundle and record the next application release (ADR-0128)", tag: "Applications",
 			req:  jsonBody("Publish options", schemaObj(map[string]any{"note": tString()})),
 			resp: jsonBody("Publish result with the minted release", tObject())}},
 		{"GET", "/api/v1/applications/{id}/releases", s.handleListReleases, apiOp{
-			summary: "An application's release history, newest first (ADR-0127)", tag: "Applications", resp: jsonBody("Releases", tArray())}},
+			summary: "An application's release history, newest first (ADR-0128)", tag: "Applications", resp: jsonBody("Releases", tArray())}},
 		{"GET", "/api/v1/applications/{id}/deployments", s.handleApplicationDeployments, apiOp{
-			summary: "What this application currently has deployed on this server, with per-definition instance counts (ADR-0127)", tag: "Applications", resp: jsonBody("Application deployments", tObject())}},
+			summary: "What this application currently has deployed on this server, with per-definition instance counts (ADR-0128)", tag: "Applications", resp: jsonBody("Application deployments", tObject())}},
 
-		// Deprecated aliases (ADR-0127): the pre-rename /projects surface. Same
+		// Deprecated aliases (ADR-0128): the pre-rename /projects surface. Same
 		// handlers as /applications above; retained for one release for compat.
 		{"POST", "/api/v1/projects", s.handleCreateProject, apiOp{
 			summary: "Create a project (deprecated: use POST /api/v1/applications)", tag: "Projects", deprecated: true, req: jsonBody("Project", tObject()), resp: jsonBody("Created project", tObject())}},

@@ -1,11 +1,11 @@
-# Implementation plan — Process applications (ADR-0127)
+# Implementation plan — Process applications (ADR-0128)
 
-Companion to [ADR-0127](../adr/0127-process-applications.md). The ADR fixes the
+Companion to [ADR-0128](../adr/0128-process-applications.md). The ADR fixes the
 *decision and shape*; this document is the *engineering plan* — file-by-file
 changes, new types, endpoints, and the test obligations per phase. It is a living
 plan (unlike the immutable ADR) and may be edited as slices land.
 
-**Ground rules carried from ADR-0127 and AGENTS.md**
+**Ground rules carried from ADR-0128 and AGENTS.md**
 
 - Everything here is **design-time, below the HTTP API**. No change to `engine/`,
   `wal/`, `state/`, `compiler/`, `applyToState`, or the six invariants.
@@ -177,7 +177,7 @@ type releaseMember struct {
 ## Phase 3 — Remote deployment targets
 
 **Goal:** deploy an application to another Atlas server; see per-target live state.
-**Note:** ADR-0127 flags this as a candidate for its own ADR (remote auth,
+**Note:** ADR-0128 flags this as a candidate for its own ADR (remote auth,
 transport, partial-failure). Land the ADR before/with this slice.
 
 ### New sidecar store
@@ -283,4 +283,4 @@ JSON the backup archive serializes (ADR-0107). **Candidate for its own ADR**
 - Backward-compat guard across all phases: the deprecated `/api/v1/projects*`
   routes and `atlas_*_project` tools keep passing their existing tests until a
   future release removes them (track that removal as a separate task so the alias
-  doesn't ossify — ADR-0127 follow-up).
+  doesn't ossify — ADR-0128 follow-up).

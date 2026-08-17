@@ -167,7 +167,7 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/projects/{id}/members/{userId}": "access control is an admin/UI concern",
 	"POST /api/v1/projects/{id}/validate":           "modeler-time validation is a UI concern",
 
-	// Process application edit/membership (ADR-0127): the canonical /applications
+	// Process application edit/membership (ADR-0128): the canonical /applications
 	// surface. Create/list/delete/deploy are exposed as atlas_*_application tools
 	// (see mcpToolRoutes); the rest mirror the omission of their /projects twins —
 	// metadata edit, access control, and modeler-time validation are UI concerns.

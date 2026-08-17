@@ -166,8 +166,8 @@ type Server struct {
 	publicLinks      *publicLinkStore     // durable sidecar for public start links (ADR-0029)
 	publicRate       *rateLimiter         // throttles the unauthenticated public endpoints
 	projects         *projectStore        // durable sidecar for projects grouping artifacts (ADR-0034)
-	releases         *releaseStore        // durable sidecar for application releases (ADR-0127)
-	appVersions      map[string]int32     // applicationId → highest release version published (ADR-0127)
+	releases         *releaseStore        // durable sidecar for application releases (ADR-0128)
+	appVersions      map[string]int32     // applicationId → highest release version published (ADR-0128)
 	systemPIDs       map[string]bool      // process ids of the bootstrap-deployed platform processes, protected from deletion (ADR-0122)
 	deploySysProcs   bool                 // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
 	userProvisioning bool                 // opt-in: enable the user-provisioning connector for system processes (ADR-0123)
@@ -728,7 +728,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		return nil, err
 	}
 	// Rebuild the per-application release counter from the durable release records,
-	// so the next publish after a restart continues the sequence (ADR-0127).
+	// so the next publish after a restart continues the sequence (ADR-0128).
 	if err := s.loadReleaseVersions(); err != nil {
 		return nil, err
 	}

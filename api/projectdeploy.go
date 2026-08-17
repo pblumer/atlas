@@ -40,7 +40,7 @@ func (s *Server) handleDeployProject(w http.ResponseWriter, r *http.Request) {
 }
 
 // bundleOutcome is the result of one bundle-deploy attempt, kept separate from the
-// writing of it so both the deploy route and the ADR-0127 publish route can drive
+// writing of it so both the deploy route and the ADR-0128 publish route can drive
 // the same logic and then render it their own way (publish additionally mints a
 // release). Exactly one of errMsg / resp is meaningful: a non-empty errMsg is an
 // {error} payload at status, otherwise resp is written as JSON at status.

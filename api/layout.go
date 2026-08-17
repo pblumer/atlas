@@ -206,6 +206,11 @@ type lnode struct {
 	host  string   // boundary: the activity id it is attached to
 	label string   // boundary: its name, emitted as an explicit label placed clear of the host
 	atTop bool     // boundary: riding the host's top edge (label goes above, else below)
+
+	// boundary: the center-x of the next boundary event along the same host, or 0
+	// when this is the last one. Its exception flow rises from exactly there, so the
+	// caption has to stop short of it.
+	nextRiser int
 }
 
 // placedShape and placedEdge are the emitted diagram interchange for one container
@@ -285,8 +290,9 @@ func layoutOf(c layoutContainer) laidOut {
 	for i, n := range nodes {
 		idx[n.id] = i
 	}
-	assignLayers(nodes, idx, c.Flows)
-	trunk := markTrunk(nodes, idx, c.Flows)
+	back := backEdgeIDs(nodes, idx, c.Flows)
+	assignLayers(nodes, idx, c.Flows, back)
+	trunk := markTrunk(nodes, idx, c.Flows, back)
 
 	var laneShapes []placedShape
 	if lanes, laneOf := collectLanes(c, nodes); len(lanes) > 0 {
@@ -299,9 +305,23 @@ func layoutOf(c layoutContainer) laidOut {
 	var lo laidOut
 	lo.shapes = append(lo.shapes, laneShapes...) // lane bands before the nodes they hold
 	emitShapes(&lo, nodes, inner)
-	emitEdges(&lo, nodes, idx, c.Flows)
+	emitEdges(&lo, nodes, idx, c.Flows, back, columnRight(nodes), loopChannelY(nodes))
 	normalize(&lo)
 	return lo
+}
+
+// loopChannelY picks the y of the horizontal lane a back edge runs along: below
+// every node in the container, with a full row gap of clearance. Side branches
+// stack upward (see placeNodes), so the space beneath the trunk is free and a loop
+// drawn there crosses nothing.
+func loopChannelY(nodes []lnode) int {
+	bottom := 0
+	for i := range nodes {
+		if b := nodes[i].y + nodes[i].h; b > bottom {
+			bottom = b
+		}
+	}
+	return bottom + layoutGapY
 }
 
 // containerNodes gathers the layout nodes of one container: its simple flow nodes
@@ -367,11 +387,69 @@ func containerNodes(c layoutContainer) (nodes []lnode, inner map[string]*laidOut
 	return nodes, inner
 }
 
+// backEdgeIDs reports which sequence flows close a cycle, keyed by their index in
+// flows. A BPMN model is routinely cyclic — a rework loop sends a case back to an
+// earlier task — but layering is only meaningful on a DAG: fed a cycle, the
+// longest-path relaxation below keeps pushing the loop's target one column further
+// on every pass, so a reviewed-and-returned task ends up drawn to the right of the
+// nodes that follow it. Classifying the returning flow as a back edge takes it out
+// of the forward pass; it is drawn afterwards as an explicit loop.
+//
+// Detection is a depth-first colouring: an edge into a node still on the recursion
+// stack (grey) closes a loop. Roots are visited first and nodes in slice order, so
+// which edge of a cycle is called the back edge is deterministic.
+func backEdgeIDs(nodes []lnode, idx map[string]int, flows []layoutFlow) map[int]bool {
+	back := map[int]bool{}
+	adj := make([][]int, len(nodes)) // node index -> outgoing flow indices
+	indeg := make([]int, len(nodes))
+	for fi, f := range flows {
+		s, sok := idx[f.SourceRef]
+		t, tok := idx[f.TargetRef]
+		if !sok || !tok {
+			continue
+		}
+		adj[s] = append(adj[s], fi)
+		indeg[t]++
+	}
+	const (
+		white = 0
+		grey  = 1
+		black = 2
+	)
+	color := make([]int, len(nodes))
+	var visit func(int)
+	visit = func(n int) {
+		color[n] = grey
+		for _, fi := range adj[n] {
+			t := idx[flows[fi].TargetRef]
+			switch color[t] {
+			case grey:
+				back[fi] = true // target is still open: this flow returns into it
+			case white:
+				visit(t)
+			}
+		}
+		color[n] = black
+	}
+	for i := range nodes {
+		if indeg[i] == 0 && color[i] == white {
+			visit(i) // entry points first, so loops are cut at the returning edge
+		}
+	}
+	for i := range nodes {
+		if color[i] == white {
+			visit(i) // a component reachable only from within a cycle
+		}
+	}
+	return back
+}
+
 // assignLayers computes each node's column via longest-path layering over the
-// sequence flows, plus an attachment rule that pins a boundary event to its host's
-// layer so the exception flow leaving it lands one column past the host. Iteration
-// is capped at the node count so a cyclic model still terminates.
-func assignLayers(nodes []lnode, idx map[string]int, flows []layoutFlow) {
+// forward sequence flows (back edges are excluded — see backEdgeIDs — so a loop
+// cannot inflate its target's column), plus an attachment rule that pins a boundary
+// event to its host's layer so the exception flow leaving it lands one column past
+// the host. Iteration is capped at the node count as a belt-and-braces bound.
+func assignLayers(nodes []lnode, idx map[string]int, flows []layoutFlow, back map[int]bool) {
 	for iter := 0; iter < len(nodes); iter++ {
 		changed := false
 		for i := range nodes {
@@ -383,7 +461,10 @@ func assignLayers(nodes []lnode, idx map[string]int, flows []layoutFlow) {
 				changed = true
 			}
 		}
-		for _, f := range flows {
+		for fi, f := range flows {
+			if back[fi] {
+				continue
+			}
 			s, sok := idx[f.SourceRef]
 			t, tok := idx[f.TargetRef]
 			if !sok || !tok {
@@ -410,11 +491,14 @@ func assignLayers(nodes []lnode, idx map[string]int, flows []layoutFlow) {
 // happy-path task and bend the main line into a staircase. Boundary events never
 // join the trunk; they ride their host. Iteration is capped by the node count so a
 // cyclic model still terminates.
-func markTrunk(nodes []lnode, idx map[string]int, flows []layoutFlow) []bool {
+func markTrunk(nodes []lnode, idx map[string]int, flows []layoutFlow, back map[int]bool) []bool {
 	trunk := make([]bool, len(nodes))
 	succ := make([][]int, len(nodes))
 	indeg := make([]int, len(nodes))
-	for _, f := range flows {
+	for fi, f := range flows {
+		if back[fi] {
+			continue // a loop's returning edge is not a way onward through the model
+		}
 		s, sok := idx[f.SourceRef]
 		t, tok := idx[f.TargetRef]
 		if !sok || !tok {
@@ -441,21 +525,54 @@ func markTrunk(nodes []lnode, idx map[string]int, flows []layoutFlow) []bool {
 			}
 		}
 	}
-	// Walk forward, always continuing to the successor that reaches the furthest
-	// layer (ties keep flow-declaration order), until the path ends or loops back.
-	// Boundary events are never sequence-flow targets, so a successor is always a
-	// normal flow node.
+	// Walk forward, always continuing to the successor with the longest run still
+	// ahead of it (ties keep flow-declaration order), until the path ends or loops
+	// back. Boundary events are never sequence-flow targets, so a successor is always
+	// a normal flow node.
+	//
+	// The choice is by remaining path length, not by the successor's own column: a
+	// bypass edge jumps straight to a node deep in the model, so "furthest column"
+	// picks the shortcut and makes the one-hop detour the happy path, exiling the
+	// real sequence to a branch row. Longest-run-ahead follows the main line.
+	depth := depthFrom(succ)
 	for cur := start; cur != -1 && !trunk[cur]; {
 		trunk[cur] = true
 		next := -1
 		for _, t := range succ[cur] {
-			if next == -1 || nodes[t].layer > nodes[next].layer {
+			if next == -1 || depth[t] > depth[next] {
 				next = t
 			}
 		}
 		cur = next
 	}
 	return trunk
+}
+
+// depthFrom returns, for each node, how many nodes lie on the longest path
+// starting there. succ carries only forward flows (back edges are already
+// excluded), so this is a DAG walk; the memo doubles as a guard should a cycle
+// survive, keeping the recursion finite.
+func depthFrom(succ [][]int) []int {
+	depth := make([]int, len(succ))
+	var walk func(int) int
+	walk = func(n int) int {
+		if depth[n] != 0 {
+			return depth[n]
+		}
+		depth[n] = 1
+		best := 1
+		for _, t := range succ[n] {
+			if v := 1 + walk(t); v > best {
+				best = v
+			}
+		}
+		depth[n] = best
+		return best
+	}
+	for n := range succ {
+		walk(n)
+	}
+	return depth
 }
 
 // orderLayer returns the indices of one layer's non-boundary nodes with the trunk
@@ -708,7 +825,7 @@ func placeBoundaries(nodes []lnode, idx map[string]int, flows []layoutFlow) {
 		host := nodes[h]
 		k := seen[nodes[i].host]
 		seen[nodes[i].host]++
-		cx := host.x + host.w*(k+1)/(count[nodes[i].host]+1)
+		cx := boundaryCenterX(host, k, count[nodes[i].host], nodes[i].w)
 		nodes[i].x = cx - nodes[i].w/2
 		onBottom := false // default to the top edge (branches rise above the trunk)
 		if t, ok := target[nodes[i].id]; ok && nodes[t].y+nodes[t].h/2 > host.y+host.h/2 {
@@ -721,6 +838,39 @@ func placeBoundaries(nodes []lnode, idx map[string]int, flows []layoutFlow) {
 		}
 		nodes[i].atTop = !onBottom
 	}
+	// Each boundary event learns where its right-hand neighbour's exception flow
+	// rises, so emitShapes can stop the caption short of it instead of letting the
+	// two collide.
+	for i := range nodes {
+		if !nodes[i].bound {
+			continue
+		}
+		for j := range nodes {
+			if !nodes[j].bound || i == j || nodes[j].host != nodes[i].host {
+				continue
+			}
+			cx := nodes[j].x + nodes[j].w/2
+			if cx > nodes[i].x+nodes[i].w/2 && (nodes[i].nextRiser == 0 || cx < nodes[i].nextRiser) {
+				nodes[i].nextRiser = cx
+			}
+		}
+	}
+}
+
+// boundaryCenterX places the k-th of n boundary events along its host's top or
+// bottom edge. Events are spread evenly across the border, but never closer than
+// one event width plus a hair — the even spread alone puts two 36px events on a
+// 100px task only 33px apart, so they overlap. When the minimum pitch no longer
+// fits inside the border the group is centered on the host and allowed to reach
+// slightly past its corners: an event a little off the edge reads far better than
+// two drawn on top of each other.
+func boundaryCenterX(host lnode, k, n, w int) int {
+	pitch := host.w / (n + 1)
+	if min := w + 8; pitch < min {
+		pitch = min // too tight to draw: fall back to the minimum, overflowing if need be
+	}
+	span := pitch * (n - 1) // center-to-center width of the whole run
+	return host.x + host.w/2 - span/2 + k*pitch
 }
 
 // emitShapes writes a shape for every placed node. A subprocess box is marked
@@ -740,10 +890,20 @@ func emitShapes(lo *laidOut, nodes []lnode, inner map[string]*laidOut) {
 		if n.bound && n.label != "" {
 			ps.hasLabel = true
 			ps.labelW, ps.labelH = boundaryLabelWidth(n.label), 14
-			// Right edge at the event's center-x, so the exception riser (which leaves
-			// the event centered) runs along the label's edge, not through it; the box
-			// therefore extends left, into the open column gap.
-			ps.labelX = n.x + n.w/2 - ps.labelW
+			// With a neighbour further along the same border, the caption has to fit in
+			// the gap before that neighbour's exception flow rises; bpmn-js wraps the
+			// text to whatever width it is given.
+			if n.nextRiser != 0 {
+				if avail := n.nextRiser - (n.x + n.w) - 8; avail < ps.labelW {
+					ps.labelW = maxInt(avail, 20)
+				}
+			}
+			// Left edge just past the event's right side, so the caption sits in the open
+			// pocket beside the event — on the side the exception flow departs toward its
+			// handler — rather than tucked behind the upward riser (which leaves from the
+			// event's center) or crowding the host's title. The box extends right, into
+			// the column gap, clear of the host box below.
+			ps.labelX = n.x + n.w + 4
 			if n.atTop {
 				ps.labelY = n.y - ps.labelH - 4 // above the event, in the row gap
 			} else {
@@ -772,15 +932,115 @@ func boundaryLabelWidth(s string) int {
 // a single straight segment; a branch to another row is an elbow — out, across,
 // then in — so the alternate path reads as its own lane instead of a diagonal that
 // clips the boxes it passes.
-func emitEdges(lo *laidOut, nodes []lnode, idx map[string]int, flows []layoutFlow) {
-	for _, f := range flows {
+func emitEdges(lo *laidOut, nodes []lnode, idx map[string]int, flows []layoutFlow, back map[int]bool, colRight map[int]int, channelY int) {
+	lane := 0 // each channel-routed edge gets its own horizontal lane below the nodes
+	for fi, f := range flows {
 		s, sok := idx[f.SourceRef]
 		t, tok := idx[f.TargetRef]
 		if !sok || !tok || f.Id == "" {
 			continue
 		}
-		lo.edges = append(lo.edges, placedEdge{id: f.Id, pts: routeFlow(nodes[s], nodes[t])})
+		pts := routeFlow(nodes[s], nodes[t])
+		// A back edge always detours; a forward edge only when its direct route would
+		// cut through a node it does not connect — a bypass that skips several columns
+		// would otherwise be drawn straight across everything in between.
+		if back[fi] || crossesForeignNode(pts, nodes, s, t) {
+			y := channelY + lane*layoutGapY/2
+			lane++
+			pts = routeChannel(nodes[s], nodes[t], colRight[nodes[s].layer]+layoutGapX/2, y)
+		}
+		lo.edges = append(lo.edges, placedEdge{id: f.Id, pts: pts})
 	}
+}
+
+// crossesForeignNode reports whether any segment of pts passes through the interior
+// of a node other than the edge's own endpoints. Boundary events are skipped: one
+// rides its host's border, so an edge leaving the host necessarily brushes it.
+func crossesForeignNode(pts []point, nodes []lnode, src, tgt int) bool {
+	for i := range nodes {
+		if i == src || i == tgt || nodes[i].bound {
+			continue
+		}
+		for k := 1; k < len(pts); k++ {
+			if segmentCutsNode(pts[k-1], pts[k], nodes[i]) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// segmentCutsNode reports whether the axis-aligned segment p->q passes through n's
+// interior. Touching or running along a border does not count — that is how an edge
+// meets the node it enters.
+func segmentCutsNode(p, q point, n lnode) bool {
+	left, right, top, bottom := n.x, n.x+n.w, n.y, n.y+n.h
+	if p.y == q.y {
+		if p.y <= top || p.y >= bottom {
+			return false
+		}
+		return maxInt(minInt(p.x, q.x), left) < minInt(maxInt(p.x, q.x), right)
+	}
+	if p.x == q.x {
+		if p.x <= left || p.x >= right {
+			return false
+		}
+		return maxInt(minInt(p.y, q.y), top) < minInt(maxInt(p.y, q.y), bottom)
+	}
+	return false
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// routeChannel draws an edge as a U beneath the diagram: out of the source's right
+// edge into the gutter past its column, down to a clear channel below every node,
+// along it, then up into the target's bottom. It serves the two cases a direct
+// route cannot: a loop's returning edge (whose target sits to the left, so a
+// forward route would run back across the nodes it loops over) and a bypass that
+// skips columns (whose straight line would cross everything in between).
+//
+// The descent uses the gutter rather than the source's own center-x because such an
+// edge often starts on a branch row above the trunk: dropping straight down from
+// there would cut through whatever sits on the trunk in the same column. The gutter
+// is column-free by construction, and the space below the trunk is free because
+// branches stack upward (see placeNodes), so both legs cross nothing.
+func routeChannel(src, tgt lnode, gutterX, channelY int) []point {
+	sy := src.y + src.h/2
+	tx := tgt.x + tgt.w/2
+	return []point{
+		{src.x + src.w, sy},
+		{gutterX, sy},
+		{gutterX, channelY},
+		{tx, channelY},
+		{tx, tgt.y + tgt.h},
+	}
+}
+
+// columnRight returns each layer's right-most node edge, so a back edge can drop
+// through the gap after a column instead of through the column itself.
+func columnRight(nodes []lnode) map[int]int {
+	out := map[int]int{}
+	for i := range nodes {
+		if nodes[i].bound {
+			continue
+		}
+		if r := nodes[i].x + nodes[i].w; r > out[nodes[i].layer] {
+			out[nodes[i].layer] = r
+		}
+	}
+	return out
 }
 
 // routeFlow builds the orthogonal waypoints from src to tgt. A normal source leaves
@@ -826,6 +1086,18 @@ func normalize(lo *laidOut) {
 			minY = s.y
 		}
 	}
+	// Edges are measured too: a loop's channel runs below every node, so a container
+	// sized to its shapes alone would let the returning edge spill out of the box.
+	for _, e := range lo.edges {
+		for _, p := range e.pts {
+			if p.x < minX {
+				minX = p.x
+			}
+			if p.y < minY {
+				minY = p.y
+			}
+		}
+	}
 	lo.shapes = shiftShapes(lo.shapes, -minX, -minY)
 	lo.edges = shiftEdges(lo.edges, -minX, -minY)
 	for _, s := range lo.shapes {
@@ -834,6 +1106,16 @@ func normalize(lo *laidOut) {
 		}
 		if b := s.y + s.h; b > lo.h {
 			lo.h = b
+		}
+	}
+	for _, e := range lo.edges {
+		for _, p := range e.pts {
+			if p.x > lo.w {
+				lo.w = p.x
+			}
+			if p.y > lo.h {
+				lo.h = p.y
+			}
 		}
 	}
 }

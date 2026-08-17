@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// The ADR-0127 application tools drive the whole design-time loop an agent needs:
+// The ADR-0128 application tools drive the whole design-time loop an agent needs:
 // create an application, file a draft into it, publish it as a versioned release,
 // then read the release history and what is deployed. The registry tests only
 // prove these tools are advertised and dispatchable; this drives them against a

@@ -301,7 +301,7 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Drop the application's release history *before* the application itself
-		// (ADR-0127). Unlike the artifacts — which deliberately survive and fall back
+		// (ADR-0128). Unlike the artifacts — which deliberately survive and fall back
 		// to Ungrouped — a release is metadata *about* this application, reachable
 		// only through its id, so leaving the records behind would accumulate
 		// unreachable files. The deployed definitions themselves are untouched.

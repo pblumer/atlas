@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// ADR-0127 Phase 2: publishing an application mints an *application release* — a
+// ADR-0128 Phase 2: publishing an application mints an *application release* — a
 // design-time manifest of "what we shipped together", versioned by a per-application
 // counter that sits above the ADR-0019 per-processId version. These tests pin the
 // publish → release → history → deployments-view loop, including the all-or-nothing
@@ -180,7 +180,7 @@ func TestRefusedPublishMintsNoRelease(t *testing.T) {
 
 // TestApplicationDeploymentsView proves the per-application live view: what is
 // deployed for this application right now, with its instance counts. This is the
-// "deployed apps are visible inside the application" ask of ADR-0127.
+// "deployed apps are visible inside the application" ask of ADR-0128.
 func TestApplicationDeploymentsView(t *testing.T) {
 	ts := newTestServer(t)
 	app := mkApp(t, ts, "Live")

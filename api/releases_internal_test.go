@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// Error and edge paths of the ADR-0127 release layer: the store's skip/decode
+// Error and edge paths of the ADR-0128 release layer: the store's skip/decode
 // branches, and the handler branches that only fire when a store read or write
 // fails. The happy paths live in releases_test.go; these are the ones a passing
 // publish never reaches.

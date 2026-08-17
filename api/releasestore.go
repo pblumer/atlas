@@ -11,7 +11,7 @@ import (
 )
 
 // applicationRelease is one publish of a process application: the manifest of what
-// shipped together, at which artifact versions (ADR-0127).
+// shipped together, at which artifact versions (ADR-0128).
 //
 // It is design-time metadata, not an engine fact — publishing does not put a record
 // in the event log, and a release never participates in replay. The per-processId
@@ -25,7 +25,7 @@ import (
 type applicationRelease struct {
 	ID string `json:"id"`
 	// ApplicationID is the owning application. On disk this is the ADR-0034
-	// projectId — ADR-0127 renames the API/UI boundary, not the stored shape.
+	// projectId — ADR-0128 renames the API/UI boundary, not the stored shape.
 	ApplicationID string          `json:"applicationId"`
 	Version       int32           `json:"version"` // per-application counter, 1-based
 	PublishedAt   int64           `json:"publishedAt"`

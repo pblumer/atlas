@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Application releases (ADR-0127 Phase 2). Publishing an application runs the
+// Application releases (ADR-0128 Phase 2). Publishing an application runs the
 // ADR-0034 bundle deploy and, only when the whole bundle registered, records an
 // applicationRelease: the manifest of what shipped together at which artifact
 // versions, numbered by a per-application counter layered above the ADR-0019
@@ -43,7 +43,7 @@ type publishResp struct {
 	Release *applicationRelease `json:"release,omitempty"`
 }
 
-// handlePublishApplication is the headline ADR-0127 action: validate and deploy the
+// handlePublishApplication is the headline ADR-0128 action: validate and deploy the
 // application's artifacts as one bundle, then mint the next application release.
 // Body (optional): {"note": "what changed"}.
 func (s *Server) handlePublishApplication(w http.ResponseWriter, r *http.Request) {
@@ -139,7 +139,7 @@ func (s *Server) handleListReleases(w http.ResponseWriter, r *http.Request) {
 
 // applicationDeploymentsResp is the per-application live view: which of this
 // application's definitions are deployed right now, at which version, and how many
-// instances they are carrying. This is what ADR-0127 moves *into* the application
+// instances they are carrying. This is what ADR-0128 moves *into* the application
 // from the global deployed list.
 //
 // Version is the latest published release version, or 0 for an application that has

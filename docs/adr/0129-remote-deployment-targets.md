@@ -1,4 +1,4 @@
-# ADR-0128: Remote deployment targets — publish an application to another Atlas server
+# ADR-0129: Remote deployment targets — publish an application to another Atlas server
 
 - **Status:** Proposed
 - **Date:** 2026-08-17
@@ -6,7 +6,7 @@
 
 ## Context and problem statement
 
-[ADR-0127](0127-process-applications.md) made the process application the unit of
+[ADR-0128](0128-process-applications.md) made the process application the unit of
 bundling and versioning: Phase 2 ships `POST /api/v1/applications/{id}/publish`,
 which validates the application's artifacts, deploys them together, and records an
 `applicationRelease` — a versioned manifest of what shipped. Phase 2 also moved the
@@ -20,11 +20,11 @@ neither is repeatable as a routine action, and both require someone to drive a
 restore on the far side.
 
 Users think in environments: *Test* and *Produktion* are places the same
-application runs at possibly different versions. ADR-0127 named this Phase 3 and
+application runs at possibly different versions. ADR-0128 named this Phase 3 and
 deferred the transport and trust questions to their own ADR — this one.
 
 Two findings from the codebase shape the problem, and neither was obvious when
-ADR-0127 was written:
+ADR-0128 was written:
 
 1. **Atlas has no machine-to-machine credential.** Authentication is opt-in
    (ADR-0044) and, when on, is local password + an **in-memory** opaque session
@@ -155,7 +155,7 @@ to take effect.
 
 The models travel **already resolved**, from the local release snapshot: the remote
 must not be required to reach the same temis instance, and a release is supposed to
-be the frozen thing that shipped (ADR-0127).
+be the frozen thing that shipped (ADR-0128).
 
 ### Release versions travel with the bundle
 
@@ -184,7 +184,7 @@ Phase 2 already ships. The per-target rows in the application's Deployments view
 are those reads, one per bound target.
 
 A portable application key (option C2) is the tidier long-term identity and is
-probably required by ADR-0127 Phase 4 (git), where one repository is one
+probably required by ADR-0128 Phase 4 (git), where one repository is one
 application and the id must survive a clone into an empty server. It is deliberately
 **not** decided here: introducing a global identity for applications is Phase 4's
 question, and the binding record works without it and remains valid underneath it.
@@ -275,7 +275,7 @@ one is far beyond what the problem warrants.
 
 ## Links
 
-- implements Phase 3 of [ADR-0127](0127-process-applications.md) (process
+- implements Phase 3 of [ADR-0128](0128-process-applications.md) (process
   applications — the release this publishes, and the deployments view it fills)
 - relates to [ADR-0049](0049-internal-service-auth-for-mcp.md) (the bearer →
   principal mechanism the deploy token extends, and the "don't impersonate a human

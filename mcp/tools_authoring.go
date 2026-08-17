@@ -250,7 +250,7 @@ func authoringTools() []Tool {
 	return []Tool{
 		{
 			Name: "atlas_create_project",
-			Description: "Deprecated — use atlas_create_application (ADR-0127). Create a project (a " +
+			Description: "Deprecated — use atlas_create_application (ADR-0128). Create a project (a " +
 				"folder that groups a scenario's diagrams, forms, and decision references). Returns the " +
 				"project's id — pass it to the other authoring tools to file artifacts under this project.",
 			InputSchema: map[string]any{
@@ -269,7 +269,7 @@ func authoringTools() []Tool {
 		},
 		{
 			Name:        "atlas_list_projects",
-			Description: "Deprecated — use atlas_list_applications (ADR-0127). List projects (folders) with their id, name, and metadata.",
+			Description: "Deprecated — use atlas_list_applications (ADR-0128). List projects (folders) with their id, name, and metadata.",
 			InputSchema: noArgs(),
 			Handler: func(c *Client, _ map[string]any) (string, error) {
 				return asText(c.get("/api/v1/projects"))
@@ -277,7 +277,7 @@ func authoringTools() []Tool {
 		},
 		{
 			Name: "atlas_delete_project",
-			Description: "Deprecated — use atlas_delete_application (ADR-0127). Delete a design-time " +
+			Description: "Deprecated — use atlas_delete_application (ADR-0128). Delete a design-time " +
 				"project by id. The operation is idempotent. It removes only the project folder; tagged " +
 				"drafts and decision references remain and become ungrouped. When authentication is " +
 				"enabled, the caller must have the project owner role.",
@@ -298,13 +298,13 @@ func authoringTools() []Tool {
 				return string(confirmation), nil
 			},
 		},
-		// Process applications (ADR-0127): the canonical vocabulary for the project
+		// Process applications (ADR-0128): the canonical vocabulary for the project
 		// container. These tools proxy /api/v1/applications, the routes the
 		// atlas_*_project tools' /api/v1/projects paths are now deprecated aliases of.
 		{
 			Name: "atlas_create_application",
 			Description: "Create a process application (a container that groups a scenario's diagrams, " +
-				"forms, and decision references and publishes them together, ADR-0127). Returns the " +
+				"forms, and decision references and publishes them together, ADR-0128). Returns the " +
 				"application's id — pass it to the other authoring tools to file artifacts under it.",
 			InputSchema: map[string]any{
 				"type":       "object",
@@ -322,7 +322,7 @@ func authoringTools() []Tool {
 		},
 		{
 			Name:        "atlas_list_applications",
-			Description: "List process applications with their id, name, and metadata (ADR-0127).",
+			Description: "List process applications with their id, name, and metadata (ADR-0128).",
 			InputSchema: noArgs(),
 			Handler: func(c *Client, _ map[string]any) (string, error) {
 				return asText(c.get("/api/v1/applications"))
@@ -332,7 +332,7 @@ func authoringTools() []Tool {
 			Name: "atlas_delete_application",
 			Description: "Delete a design-time process application by id. The operation is idempotent. It " +
 				"removes only the application container; tagged drafts and decision references remain and " +
-				"become unassigned. When authentication is enabled, the caller must have the owner role (ADR-0127).",
+				"become unassigned. When authentication is enabled, the caller must have the owner role (ADR-0128).",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"id": stringProp("The application id from atlas_create_application or atlas_list_applications.")},
@@ -532,7 +532,7 @@ func authoringTools() []Tool {
 		},
 		{
 			Name: "atlas_deploy_project",
-			Description: "Deprecated — use atlas_deploy_application (ADR-0127). Deploy a project by id: " +
+			Description: "Deprecated — use atlas_deploy_application (ADR-0128). Deploy a project by id: " +
 				"compiles its diagram draft(s) and bundles the decisions its registered references " +
 				"resolve, so a deployed business rule task can evaluate them. Returns the deployed definitions.",
 			InputSchema: map[string]any{
@@ -553,7 +553,7 @@ func authoringTools() []Tool {
 			Description: "Publish a process application by id: validates and deploys its artifacts as one " +
 				"bundle — compiles its diagram draft(s) and bundles the decisions its registered " +
 				"references resolve, so a deployed business rule task can evaluate them. Returns the " +
-				"deployed definitions (ADR-0127).",
+				"deployed definitions (ADR-0128).",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"id": stringProp("The application id to publish (from atlas_create_application).")},
@@ -572,7 +572,7 @@ func authoringTools() []Tool {
 			Description: "Publish a process application by id: deploy its artifacts as one bundle and " +
 				"record the next application release — a versioned manifest of what shipped together. " +
 				"Optionally carries a note describing the change. Returns the deployed definitions and " +
-				"the minted release (ADR-0127). A bundle that does not validate deploys nothing and " +
+				"the minted release (ADR-0128). A bundle that does not validate deploys nothing and " +
 				"records no release.",
 			InputSchema: map[string]any{
 				"type": "object",
@@ -598,7 +598,7 @@ func authoringTools() []Tool {
 		{
 			Name: "atlas_application_releases",
 			Description: "List a process application's release history, newest first: each release's " +
-				"version, publish time, note, and the artifacts (with their versions) that shipped in it (ADR-0127).",
+				"version, publish time, note, and the artifacts (with their versions) that shipped in it (ADR-0128).",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"id": stringProp("The application id whose releases to list.")},
@@ -616,7 +616,7 @@ func authoringTools() []Tool {
 			Name: "atlas_application_deployments",
 			Description: "Report what a process application currently has deployed on this server: its " +
 				"published version and each definition's version, active flag, and running/finished " +
-				"instance counts (ADR-0127).",
+				"instance counts (ADR-0128).",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"id": stringProp("The application id whose deployments to report.")},

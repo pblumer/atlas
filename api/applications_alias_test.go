@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// The ADR-0034 "project" is being reframed as the ADR-0127 "process application":
+// The ADR-0034 "project" is being reframed as the ADR-0128 "process application":
 // the HTTP surface gains /api/v1/applications routes bound to the very same
 // handlers as /api/v1/projects, and the legacy /projects routes stay as
 // deprecated aliases for one release so existing callers keep working. These
@@ -60,7 +60,7 @@ func TestApplicationAliasMirrorsProjects(t *testing.T) {
 
 // TestApplicationDeployAliasExists proves the bundle-deploy route is reachable
 // under the application path (the headline "publish application" action of
-// ADR-0127). An empty application deploys nothing but returns 200.
+// ADR-0128). An empty application deploys nothing but returns 200.
 func TestApplicationDeployAliasExists(t *testing.T) {
 	ts := newTestServer(t)
 

@@ -1213,7 +1213,7 @@ function toggleSection(id, btn) {
 
 // viewModelerHome is the application landscape: a clean table of process
 // applications (each a container of artifacts — the ADR-0034 project reframed by
-// ADR-0127) plus a collapsible list of deployed definitions. Artifact editing
+// ADR-0128) plus a collapsible list of deployed definitions. Artifact editing
 // happens inside an application (viewProjectDetail), which keeps this overview
 // tidy. "Create new" is a single dropdown.
 async function viewModelerHome() {
@@ -1550,7 +1550,7 @@ async function viewProjectDetail(id) {
     });
 
     // Tabs: Artifacts (design-time) and Deployments (what's live for this
-    // application, ADR-0127). The deployments pane loads lazily on first open.
+    // application, ADR-0128). The deployments pane loads lazily on first open.
     const tabs = document.getElementById("pd-tabs");
     if (tabs) {
       let loadedDeployments = false;
@@ -1592,7 +1592,7 @@ async function viewProjectDetail(id) {
 
 // renderAppDeployments fills the Deployments tab: the application's published
 // version, its live definitions with per-definition instance counts, and its
-// release history (ADR-0127). One call each, both scoped to this application.
+// release history (ADR-0128). One call each, both scoped to this application.
 async function renderAppDeployments(id) {
   const host = document.getElementById("pd-deployments");
   if (!host) return;
@@ -1688,10 +1688,10 @@ async function toggleProcessActive(key, inactive, reload) {
   await reload();
 }
 
-// ---------- Applications (ADR-0034 project, reframed by ADR-0127) ----------
+// ---------- Applications (ADR-0034 project, reframed by ADR-0128) ----------
 // These call the canonical /api/v1/applications endpoints. The pre-rename
 // project paths still work as deprecated aliases for external callers, but the
-// UI is on the new names. The artifact tag stays `projectId` — ADR-0127 renames
+// UI is on the new names. The artifact tag stays `projectId` — ADR-0128 renames
 // the API/UI boundary only, not the on-disk shape.
 async function createProject(reload) {
   const name = window.prompt("Application name");
@@ -2407,7 +2407,7 @@ async function validateProject(projectId) {
 
 // deployProject publishes the whole application: the server validates its DMN
 // references (the deploy-time gate) and, only if all pass, deploys its BPMN
-// diagrams together as runnable definitions (the ADR-0127 headline "Publish"
+// diagrams together as runnable definitions (the ADR-0128 headline "Publish"
 // action). A refusal (409) carries the reason and the per-reference results,
 // which we surface without a reload; a success reloads so the new definitions
 // show under "Deployed". Uses a raw fetch so the refusal body (which is not an
@@ -2433,7 +2433,7 @@ async function deployProject(id, reload) {
   for (const r of rep.references || []) applyRefStatus(r.id, r);
 }
 
-// publishApplication is the ADR-0127 headline action: ship the whole application as
+// publishApplication is the ADR-0128 headline action: ship the whole application as
 // one bundle and record the release it becomes. It shows the version the publish
 // will mint (v(n) → v(n+1)) and takes an optional changelog note. A refused bundle
 // deploys nothing and records no release, so the version does not advance.
