@@ -235,6 +235,7 @@ type lnode struct {
 	x, y  int      // local position, filled during placement
 	sub   *laidOut // non-nil for an expanded subprocess: its inner layout
 	bound bool     // a boundary event
+	gwy   bool     // drawn as a diamond, so it has vertices to leave from
 	host  string   // boundary: the activity id it is attached to
 	label string   // boundary: its name, emitted as an explicit label placed clear of the host
 	atTop bool     // boundary: riding the host's top edge (label goes above, else below)
@@ -399,10 +400,17 @@ func containerNodes(c layoutContainer) (nodes []lnode, inner map[string]*laidOut
 	add(c.ReceiveTasks, kindTask)
 	add(c.SendTasks, kindTask)
 	add(c.CallActivities, kindTask)
-	add(c.ExclusiveGws, kindGateway)
-	add(c.ParallelGws, kindGateway)
-	add(c.InclusiveGws, kindGateway)
-	add(c.EventBasedGws, kindGateway)
+	addGateway := func(elems []layoutElem) {
+		for _, e := range elems {
+			if e.Id != "" {
+				nodes = append(nodes, lnode{id: e.Id, w: kindGateway.w, h: kindGateway.h, gwy: true})
+			}
+		}
+	}
+	addGateway(c.ExclusiveGws)
+	addGateway(c.ParallelGws)
+	addGateway(c.InclusiveGws)
+	addGateway(c.EventBasedGws)
 
 	subs := c.subContainers()
 	for i := range subs {
@@ -1223,6 +1231,20 @@ func routeFlow(src, tgt lnode) []point {
 	sx, sy := src.x+src.w, src.y+src.h/2 // source exit: right-center
 	if sy == ty {
 		return []point{{sx, sy}, {tx, ty}}
+	}
+	// A diamond has four vertices and BPMN uses them: the branch that carries on
+	// leaves the side, the one that steps to another row leaves the top or the
+	// bottom. Sharing the side exit draws both along one line for the width of the
+	// gap, so the fork reads as a single edge that splits somewhere out in the open.
+	if src.gwy {
+		vx, vy := src.x+src.w/2, src.y // target above: leave from the top
+		if ty > sy {
+			vy = src.y + src.h // below: from the bottom
+		}
+		if vx == tx {
+			return []point{{vx, vy}, {tx, ty}}
+		}
+		return []point{{vx, vy}, {vx, ty}, {tx, ty}}
 	}
 	midX := (sx + tx) / 2
 	return []point{{sx, sy}, {midX, sy}, {midX, ty}, {tx, ty}}

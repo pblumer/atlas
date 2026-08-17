@@ -476,6 +476,7 @@ func TestLayoutInvariants(t *testing.T) {
 			m.checkNamedFlowsLabelled(t)
 			m.checkForwardEdgesReadLeftToRight(t)
 			m.checkTrunkCarriesLongestChain(t)
+			m.checkGatewayBranchesLeaveSeparately(t)
 		})
 	}
 }
@@ -613,6 +614,7 @@ type layoutModel struct {
 	flows    []layoutFlow      // every sequence flow, all nesting levels
 	nodeIDs  []string          // every flow node that should have a shape
 	backEdge map[string]bool   // flow ids that close a cycle
+	gateways map[string]bool   // ids drawn as a diamond, which has vertices to leave from
 	hasLanes bool              // swimlanes: the flow is meant to step between bands
 }
 
@@ -623,11 +625,12 @@ func newLayoutModel(t *testing.T, src, di string) *layoutModel {
 		t.Fatalf("corpus model does not parse: %v", err)
 	}
 	m := &layoutModel{
-		di:     di,
-		shapes: parseShapes(t, di),
-		labels: parseLabels(t, di),
-		edges:  parseEdges(t, di),
-		host:   map[string]string{},
+		di:       di,
+		shapes:   parseShapes(t, di),
+		labels:   parseLabels(t, di),
+		edges:    parseEdges(t, di),
+		host:     map[string]string{},
+		gateways: map[string]bool{},
 	}
 	for _, p := range defs.Processes {
 		m.collect(p)
@@ -648,6 +651,13 @@ func (m *layoutModel) collect(c layoutContainer) {
 		for _, e := range group {
 			if e.Id != "" {
 				m.nodeIDs = append(m.nodeIDs, e.Id)
+			}
+		}
+	}
+	for _, group := range [][]layoutElem{c.ExclusiveGws, c.ParallelGws, c.InclusiveGws, c.EventBasedGws} {
+		for _, e := range group {
+			if e.Id != "" {
+				m.gateways[e.Id] = true
 			}
 		}
 	}
@@ -847,6 +857,81 @@ func (m *layoutModel) checkForwardEdgesReadLeftToRight(t *testing.T) {
 		if tgt.x < src.x {
 			t.Errorf("invariant[left-to-right]: forward flow %q runs backwards: %q at x=%d -> %q at x=%d",
 				f.Id, f.SourceRef, src.x, f.TargetRef, tgt.x)
+		}
+	}
+}
+
+// collinearRun returns how far two axis-aligned segments run along the same line.
+// Zero means they meet at a point or not at all, which is what leaving a diamond by
+// two different vertices looks like.
+func collinearRun(a1, a2, b1, b2 point) int {
+	if a1.y == a2.y && b1.y == b2.y && a1.y == b1.y { // both horizontal, same line
+		lo := maxInt(minInt(a1.x, a2.x), minInt(b1.x, b2.x))
+		hi := minInt(maxInt(a1.x, a2.x), maxInt(b1.x, b2.x))
+		return maxInt(hi-lo, 0)
+	}
+	if a1.x == a2.x && b1.x == b2.x && a1.x == b1.x { // both vertical, same line
+		lo := maxInt(minInt(a1.y, a2.y), minInt(b1.y, b2.y))
+		hi := minInt(maxInt(a1.y, a2.y), maxInt(b1.y, b2.y))
+		return maxInt(hi-lo, 0)
+	}
+	return 0
+}
+
+// isGateway reports whether an id is drawn as a diamond. Read from the same parser
+// the generator uses, so the two cannot disagree about what an element is.
+func (m *layoutModel) isGateway(id string) bool { return m.gateways[id] }
+
+// checkGatewayBranchesLeaveSeparately: two flows out of the same gateway must not
+// begin with a collinear run. A diamond has four vertices and BPMN uses them: the
+// branch that carries on leaves the side, the one that steps to another row leaves
+// the top or the bottom. Sharing the side exit draws both on one line for the width
+// of the gap — the reader sees a single edge that splits somewhere out in the open,
+// and the caption of one branch sits over the stub of the other.
+//
+// This is narrower than the score's overlap count, which excludes edges sharing an
+// endpoint as "a bus, not a defect". A fan-in to a shared handler genuinely is a
+// bus: those edges have nowhere else to go. A gateway has three other vertices.
+func (m *layoutModel) checkGatewayBranchesLeaveSeparately(t *testing.T) {
+	t.Helper()
+	bySource := map[string][]string{}
+	dir := map[string]int{} // -1 up, 0 same row, +1 down, relative to the gateway
+	for _, f := range m.flows {
+		if f.Id == "" || m.backEdge[f.Id] || !m.isGateway(f.SourceRef) {
+			continue
+		}
+		s, sok := m.shapes[f.SourceRef]
+		t, tok := m.shapes[f.TargetRef]
+		if !sok || !tok {
+			continue
+		}
+		switch sc, tc := s.y+s.h/2, t.y+t.h/2; {
+		case tc < sc:
+			dir[f.Id] = -1
+		case tc > sc:
+			dir[f.Id] = 1
+		}
+		bySource[f.SourceRef] = append(bySource[f.SourceRef], f.Id)
+	}
+	for _, src := range sortedKeys(bySource) {
+		ids := bySource[src]
+		for i := 0; i < len(ids); i++ {
+			for j := i + 1; j < len(ids); j++ {
+				if dir[ids[i]] == dir[ids[j]] {
+					continue // both go the same way: a fan, and it may share its stub
+				}
+				a, b := m.edges[ids[i]], m.edges[ids[j]]
+				if len(a) < 2 || len(b) < 2 {
+					continue
+				}
+				// The stubs need not be identical to read as one line: it is enough
+				// that they run along each other, which is what happens when a branch
+				// shares the side exit and only turns off partway across the gap.
+				if n := collinearRun(a[0], a[1], b[0], b[1]); n > 0 {
+					t.Errorf("invariant[gateway-exits]: flows %q and %q leave gateway %q along the same line for %dpx (%v->%v and %v->%v)",
+						ids[i], ids[j], src, n, a[0], a[1], b[0], b[1])
+				}
+			}
 		}
 	}
 }
