@@ -215,6 +215,7 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/targets":                                       "peer target configuration is admin config, not an agent action",
 	"DELETE /api/v1/targets/{id}":                               "peer target configuration is admin config, not an agent action",
 	"POST /api/v1/applications/{id}/releases/{version}/promote": "shipping a release to another server is an operator decision with off-server consequences, not an agent action",
+	"GET /api/v1/applications/{id}/targets":                     "per-peer status of admin-configured targets; an agent reads this server's own state via atlas_application_deployments",
 
 	// Secrets: credential storage; an agent must never read or write it.
 	"GET /api/v1/secrets":           "credential storage is not an agent capability",

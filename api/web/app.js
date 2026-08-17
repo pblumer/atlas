@@ -1636,11 +1636,56 @@ async function renderAppDeployments(id) {
     a.processId.localeCompare(b.processId) ||
     (b.version - a.version));
 
+  // Deployment targets (ADR-0129): what each peer server runs for this
+  // application. Fetched separately from the local view because it makes an
+  // outbound call per bound target — a peer being slow or down must not delay or
+  // empty the rest of the page, so a failure here renders as an unreachable row.
+  let targets = [];
+  try {
+    targets = await api("GET", `/api/v1/applications/${encodeURIComponent(id)}/targets`);
+  } catch { /* best-effort: the local view still renders without the target section */ }
+
+  const targetRow = (t) => {
+    // Three distinct states, because they mean different things operationally:
+    // never shipped there, shipped and answering, shipped and not answering.
+    let state, detail;
+    if (!t.bound) {
+      state = `<span class="pill">not deployed</span>`;
+      detail = `<span class="muted">—</span>`;
+    } else if (t.reachable) {
+      state = `<span class="pill ok">live</span>`;
+      detail = `<span class="chip">v${t.version || "?"}</span>`;
+    } else {
+      state = `<span class="pill err">unreachable</span>`;
+      detail = `<span class="muted" title="${esc(t.error || "")}">${esc(t.error || "no answer")}</span>`;
+    }
+    return `<tr${t.bound ? "" : ' class="muted-row"'}>
+      <td><div class="artifact-name"><span class="mi-icon">🛰</span><b>${esc(t.targetName)}</b></div>
+        <div class="muted" style="font-size:12px; padding-left:26px">${esc(t.baseUrl)}</div></td>
+      <td>${state}</td>
+      <td>${detail}</td>
+      <td class="muted">${t.reachable ? t.running : "—"}</td>
+      <td class="muted">${t.reachable ? t.finished : "—"}</td>
+    </tr>`;
+  };
+
+  const targetsSection = targets.length ? `
+    <h2 style="margin:22px 0 10px; font-size:15px">Deployment targets</h2>
+    <div class="card" style="padding:0">
+      <table>
+        <thead><tr><th>Target</th><th>State</th><th>Version</th><th>Running</th><th>Finished</th></tr></thead>
+        <tbody>${targets.map(targetRow).join("")}</tbody>
+      </table>
+    </div>` : "";
+
   const relRow = (r) => `<tr>
     <td><span class="chip">v${r.version}</span></td>
     <td class="muted" data-sort="${r.publishedAt || 0}">${esc(fmtTime(r.publishedAt))}</td>
     <td class="muted">${(r.members || []).length}</td>
     <td class="muted">${esc(r.note || "—")}</td>
+    <td class="row-actions">${targets.length
+      ? `<button class="btn ghost sm" data-promote="${r.version}">Promote…</button>`
+      : ""}</td>
   </tr>`;
 
   host.innerHTML = `
@@ -1659,14 +1704,43 @@ async function renderAppDeployments(id) {
           `<tr><td colspan="6" class="empty">Nothing deployed yet — use <b>Publish</b> to ship this application.</td></tr>`}</tbody>
       </table>
     </div>
+    ${targetsSection}
     <h2 style="margin:22px 0 10px; font-size:15px">Release history</h2>
-    <div class="card" style="padding:0">
+    <div class="card" style="padding:0" id="pd-releases">
       <table>
-        <thead><tr><th>Version</th><th>Published</th><th>Artifacts</th><th>Note</th></tr></thead>
+        <thead><tr><th>Version</th><th>Published</th><th>Artifacts</th><th>Note</th><th></th></tr></thead>
         <tbody>${releases.map(relRow).join("") ||
-          `<tr><td colspan="4" class="empty">No releases yet.</td></tr>`}</tbody>
+          `<tr><td colspan="5" class="empty">No releases yet.</td></tr>`}</tbody>
       </table>
     </div>`;
+
+  for (const b of host.querySelectorAll("button[data-promote]"))
+    b.addEventListener("click", () => promoteRelease(id, Number(b.dataset.promote), targets));
+}
+
+// promoteRelease ships an existing release to a chosen target (ADR-0129). The
+// release is already frozen, so this sends exactly what was published — the user
+// picks *where*, never *what*. Results come back per target, so a refusal by one
+// peer is reported as that peer's, not as a failed action.
+async function promoteRelease(appID, version, targets) {
+  const names = targets.map((t, i) => `${i + 1}) ${t.targetName}`).join("\n");
+  const answer = window.prompt(
+    `Promote v${version} to which target?\n\n${names}\n\nEnter a number:`, "1");
+  if (answer == null) return;
+  const pick = targets[Number(answer) - 1];
+  if (!pick) { toast("No such target", "err"); return; }
+
+  try {
+    const res = await api("POST",
+      `/api/v1/applications/${encodeURIComponent(appID)}/releases/${version}/promote`,
+      { targetIds: [pick.targetId] });
+    const r = (res.results || [])[0];
+    if (r && r.ok) toast(`Promoted v${version} to ${pick.targetName}`, "ok");
+    else toast(`${pick.targetName}: ${(r && r.error) || "promotion failed"}`, "err");
+  } catch (e) {
+    toast("promotion failed: " + e.message, "err");
+  }
+  await renderAppDeployments(appID);
 }
 
 async function deleteDraft(processId, reload) {

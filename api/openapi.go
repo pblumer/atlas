@@ -392,6 +392,10 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  jsonBody("Targets", schemaObj(map[string]any{"targetIds": tArray()}, "targetIds")),
 			resp: jsonBody("Per-target promotion results", tObject())}},
 
+		{"GET", "/api/v1/applications/{id}/targets", s.handleApplicationTargets, apiOp{
+			summary: "What each configured deployment target currently runs for this application; best-effort, an unreachable peer is reported as such (ADR-0129)", tag: "Applications",
+			resp: jsonBody("Per-target status", tArray())}},
+
 		{"POST", "/api/v1/targets", s.handleCreateTarget, apiOp{
 			summary: "Register a deployment target: a peer Atlas this server can promote releases to; the credential is stored by reference, never by value (admin-only, ADR-0129)", tag: "Deployment targets",
 			req: jsonBody("Target", schemaObj(map[string]any{

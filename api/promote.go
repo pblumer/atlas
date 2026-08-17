@@ -34,6 +34,10 @@ import (
 // does not hold the request open indefinitely.
 const promoteTimeout = 60 * time.Second
 
+// targetStatusTimeout bounds one peer status read. Much shorter than a promotion:
+// this is a display refresh, and a slow peer must not hold the view open.
+const targetStatusTimeout = 10 * time.Second
+
 // targetView is a target as returned to a caller: configuration and learned
 // bindings, never a resolved credential. CredentialRef is a vault *handle*, not a
 // secret, and is shown so an operator can see which entry a target uses.
@@ -381,4 +385,125 @@ func (s *Server) pushBundle(ctx context.Context, tgt deploymentTarget, credentia
 		out.Error = fmt.Sprintf("target refused the bundle (HTTP %d)", resp.StatusCode)
 	}
 	return out
+}
+
+// targetStatus is one peer's answer about this application: whether it has ever
+// been promoted there (Bound), whether the peer answered just now (Reachable), and
+// what it reports running.
+//
+// Bound and Reachable are separate on purpose. "Never shipped here" and "shipped
+// here but the peer is down" are different operational situations, and collapsing
+// them into one blank row would hide an outage behind what looks like an unused
+// environment.
+type targetStatus struct {
+	TargetID    string `json:"targetId"`
+	TargetName  string `json:"targetName"`
+	BaseURL     string `json:"baseUrl"`
+	Bound       bool   `json:"bound"`
+	Reachable   bool   `json:"reachable"`
+	Error       string `json:"error,omitempty"`
+	Version     int32  `json:"version,omitempty"`
+	Running     int    `json:"running,omitempty"`
+	Finished    int    `json:"finished,omitempty"`
+	Definitions int    `json:"definitions,omitempty"`
+}
+
+// handleApplicationTargets reports what each configured peer currently runs for
+// this application.
+//
+// It is deliberately a separate endpoint from the local deployments view: this one
+// makes an outbound call per bound target, so it is as slow as the slowest peer and
+// can partially fail. Folding it into the local read would make every page load
+// wait on the network. Reads are best-effort by design — a peer that is down is
+// reported as unreachable, never an error that empties the whole view.
+func (s *Server) handleApplicationTargets(w http.ResponseWriter, r *http.Request) {
+	appID := r.PathValue("id")
+	if _, code, msg := s.authorizeProject(r, appID, ScopeRoleViewer); code != 0 {
+		writeError(w, code, msg)
+		return
+	}
+
+	// Phase 1 (on-loop): the targets, their bindings for this application, and
+	// their credentials.
+	var (
+		targets []deploymentTarget
+		creds   map[string]string
+		loadErr error
+	)
+	s.do(func() {
+		if targets, loadErr = s.targets.loadAll(); loadErr != nil {
+			return
+		}
+		creds = make(map[string]string, len(targets))
+		for _, tgt := range targets {
+			if tgt.Bindings[appID] != "" {
+				creds[tgt.ID] = s.resolveConnectorSecret(tgt.CredentialRef)
+			}
+		}
+	})
+	if loadErr != nil {
+		writeError(w, http.StatusInternalServerError, "list targets: "+loadErr.Error())
+		return
+	}
+
+	// Phase 2 (off-loop): ask each bound peer.
+	out := make([]targetStatus, 0, len(targets))
+	for _, tgt := range targets {
+		st := targetStatus{TargetID: tgt.ID, TargetName: tgt.Name, BaseURL: tgt.BaseURL}
+		remoteID := tgt.Bindings[appID]
+		if remoteID == "" {
+			// Never promoted here: nothing to ask, and no failure to report.
+			out = append(out, st)
+			continue
+		}
+		st.Bound = true
+		s.fillRemoteStatus(r.Context(), &st, tgt, remoteID, creds[tgt.ID])
+		out = append(out, st)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// fillRemoteStatus asks one peer for its deployments view of an application and
+// folds the answer into st. Every failure is recorded on st rather than returned:
+// one peer being unreachable says nothing about the others.
+func (s *Server) fillRemoteStatus(ctx context.Context, st *targetStatus, tgt deploymentTarget, remoteAppID, credential string) {
+	reqCtx, cancel := context.WithTimeout(ctx, targetStatusTimeout)
+	defer cancel()
+
+	url := tgt.BaseURL + "/api/v1/applications/" + remoteAppID + "/deployments"
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
+	if err != nil {
+		st.Error = err.Error()
+		return
+	}
+	if credential != "" {
+		req.Header.Set("Authorization", "Bearer "+credential)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		st.Error = "unreachable: " + err.Error()
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		// A deploy token may not read this endpoint (it is allowlisted to import
+		// only), so say what happened rather than showing a blank row.
+		st.Error = fmt.Sprintf("peer answered HTTP %d", resp.StatusCode)
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxXMLBytes))
+	if err != nil {
+		st.Error = "read reply: " + err.Error()
+		return
+	}
+	var view applicationDeploymentsResp
+	if err := json.Unmarshal(body, &view); err != nil {
+		st.Error = "unreadable reply from peer"
+		return
+	}
+	st.Reachable = true
+	st.Version = view.Version
+	st.Running = view.Running
+	st.Finished = view.Finished
+	st.Definitions = len(view.Definitions)
 }

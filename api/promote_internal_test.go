@@ -385,3 +385,80 @@ func TestPushBundleFailureModes(t *testing.T) {
 		t.Errorf("unbuildable request = %+v, want a reported failure", res)
 	}
 }
+
+// TestFillRemoteStatusFailureModes drives the status read against stand-in peers.
+// Every failure must land on the status row rather than propagating: one peer
+// being unhappy says nothing about the others, and the view has to render anyway.
+func TestFillRemoteStatusFailureModes(t *testing.T) {
+	srv := newServerForErrors(t)
+
+	cases := []struct {
+		name          string
+		status        int
+		body          string
+		wantReachable bool
+		wantError     string
+	}{
+		{"answers", http.StatusOK, `{"version":3,"running":7,"finished":2,"definitions":[{"processId":"p"}]}`, true, ""},
+		{"forbidden", http.StatusForbidden, ``, false, "HTTP 403"},
+		{"not found", http.StatusNotFound, ``, false, "HTTP 404"},
+		{"unreadable payload", http.StatusOK, `<html>nope</html>`, false, "unreadable reply"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			peer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer peer.Close()
+
+			st := targetStatus{Bound: true}
+			srv.fillRemoteStatus(context.Background(), &st,
+				deploymentTarget{ID: "t", Name: tc.name, BaseURL: peer.URL}, "remote-1", "tok")
+
+			if st.Reachable != tc.wantReachable {
+				t.Fatalf("reachable = %v, want %v (error %q)", st.Reachable, tc.wantReachable, st.Error)
+			}
+			if tc.wantError != "" && !strings.Contains(st.Error, tc.wantError) {
+				t.Errorf("error = %q, want it to mention %q", st.Error, tc.wantError)
+			}
+			if tc.wantReachable {
+				if st.Version != 3 || st.Running != 7 || st.Finished != 2 || st.Definitions != 1 {
+					t.Errorf("status = %+v, want the peer's numbers folded in", st)
+				}
+			}
+		})
+	}
+
+	// A malformed URL fails before any request; an unreachable host after it.
+	st := targetStatus{Bound: true}
+	srv.fillRemoteStatus(context.Background(), &st, deploymentTarget{BaseURL: "://nope"}, "r", "")
+	if st.Reachable || st.Error == "" {
+		t.Errorf("unbuildable request = %+v, want a reported failure", st)
+	}
+}
+
+// TestApplicationTargetsStoreError covers the 500 branch of the status view.
+func TestApplicationTargetsStoreError(t *testing.T) {
+	srv := newServerForErrors(t)
+	h := srv.Handler()
+
+	seed := httptest.NewRecorder()
+	h.ServeHTTP(seed, httptest.NewRequest(http.MethodPost, "/api/v1/applications", strings.NewReader(`{"name":"S"}`)))
+	if seed.Code != http.StatusOK {
+		t.Fatalf("seed = %d", seed.Code)
+	}
+	var app struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(seed.Body.Bytes(), &app); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	srv.targets = &targetStore{dir: filepath.Join(t.TempDir(), "gone")}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/applications/"+app.ID+"/targets", nil))
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("target status with a broken store = %d, want 500", rec.Code)
+	}
+}
