@@ -82,6 +82,12 @@ func (p *Processor) registerBehaviors() {
 	// go uncaught, which is benign).
 	p.behaviors[compiler.TypeEscalationThrowEvent] = escalationThrowEventBehavior{}
 	p.behaviors[compiler.TypeEscalationEndEvent] = escalationEndEventBehavior{}
+	// Link throw/catch events are compile-time gotos (ADR-0132): the throw→catch pair is
+	// resolved to a synthetic sequence flow at compile, so both are pure pass-throughs — the
+	// token flows throw → synthetic edge → catch → the catch's real outgoing flow. No runtime
+	// of their own, exactly like a token passing through a none event.
+	p.behaviors[compiler.TypeLinkThrowEvent] = passThroughBehavior{}
+	p.behaviors[compiler.TypeLinkCatchEvent] = passThroughBehavior{}
 	p.behaviors[compiler.TypeCompensationThrowEvent] = compensationThrowEventBehavior{}
 	p.behaviors[compiler.TypeCompensationEndEvent] = compensationEndEventBehavior{}
 	p.behaviors[compiler.TypeCancelEndEvent] = cancelEndEventBehavior{}

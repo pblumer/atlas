@@ -340,6 +340,17 @@ Making processes wait, react, and time out.
   panel (an escalation-code picker on escalation throw/end/boundary/event-subprocess events —
   keeping the interrupting toggle, unlike errors — plus a central escalations manager). Completes
   the throw/catch event family (message, error, signal, escalation).
+- ✅ **Link events** ([ADR-0132](docs/adr/0132-link-events.md)): BPMN's **off-page connector** — a
+  **link intermediate throw** ("go to X") and a **link intermediate catch** ("arrive at X"), paired
+  by **name within one flow scope**, that stand in for a sequence flow so a long or crossing diagram
+  stays readable. Reaching the throw is a **goto** to the matching catch, which flows straight on.
+  Atlas resolves the pair **entirely at compile time**: the throw→catch link compiles to a
+  **synthetic sequence flow** (`b.Connect`) and both events reuse the existing `passThroughBehavior`,
+  so a token flows throw ⇢ catch ⇢ the catch's outgoing flow exactly as through a none event — **no
+  new runtime behavior, value type, event, or recovery path**, just two identity types for the
+  Operations overlay. One catch per name (the destination) and one-or-more throws; a deploy rejects
+  an unmatched throw or a duplicate catch name. Recovery-tested; authored in the Modeler (a link-name
+  field on the throw/catch). The last common intermediate throw/catch event type.
 - ✅ Boundary events: timer and message, interrupting and non-interrupting,
   attached to waiting activities. An interrupting boundary cancels the host (and
   its job) and routes out its flow; a non-interrupting one spawns a parallel

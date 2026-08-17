@@ -1307,13 +1307,17 @@ type xmlInclusiveGateway struct {
 	Default string `xml:"default,attr"`
 }
 
-// An intermediate catch event; the timer and message variants are executable.
+// An intermediate catch event; the timer, message, signal, and link variants are executable.
 // Each definition is a pointer so an absent one is detected as nil.
 type xmlIntermediateCatchEvent struct {
 	Id      string                     `xml:"id,attr"`
 	Timer   *xmlTimerEventDefinition   `xml:"timerEventDefinition"`
 	Message *xmlMessageEventDefinition `xml:"messageEventDefinition"`
 	Signal  *xmlSignalEventDefinition  `xml:"signalEventDefinition"`
+	// Link, when present, makes this a link catch event: the landing point of a link throw
+	// with the same name in the same scope — an off-page connector / goto (ADR-0132). A
+	// pointer so an absent one is nil.
+	Link *xmlLinkEventDefinition `xml:"linkEventDefinition"`
 }
 
 // An intermediate throw event; the message, signal, compensation, and escalation variants
@@ -1330,6 +1334,16 @@ type xmlIntermediateThrowEvent struct {
 	// referenced escalation, propagating up to the nearest matching handler, then continues
 	// on its outgoing flow (ADR-0125). A pointer so an absent one is nil.
 	Escalation *xmlEscalationEventDefinition `xml:"escalationEventDefinition"`
+	// Link, when present, makes this a link throw event: a goto to the link catch of the same
+	// name in the same scope — an off-page connector (ADR-0132). A pointer so an absent one is nil.
+	Link *xmlLinkEventDefinition `xml:"linkEventDefinition"`
+}
+
+// xmlLinkEventDefinition is a <linkEventDefinition name="…"> on an intermediate throw or
+// catch event (ADR-0132). A link is matched by Name within one flow scope: a throw jumps to
+// the catch of the same name. Only the name matters — a link carries no ref, code, or payload.
+type xmlLinkEventDefinition struct {
+	Name string `xml:"name,attr"`
 }
 
 // xmlCompensateEventDefinition is a <compensateEventDefinition> on a throw, end, or
