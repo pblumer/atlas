@@ -884,3 +884,36 @@ func TestGenerateDILaneNoIdOmitsShape(t *testing.T) {
 		t.Errorf("Start should still be laid out:\n%s", di)
 	}
 }
+
+// TestVertexRouteLeavesByFacingEdge pins the shared contract of the two sources that
+// hang off the middle of a shape rather than its side: a boundary event and a gateway
+// branch that steps off its row. Both have to leave by the horizontal edge the target
+// faces, so the stub points at where the edge is going instead of doubling back.
+func TestVertexRouteLeavesByFacingEdge(t *testing.T) {
+	src := lnode{x: 100, y: 100, w: 50, h: 50} // center (125,125)
+	tests := []struct {
+		name   string
+		tx, ty int
+		want   []point
+	}{
+		{"target above leaves by the top", 300, 40, []point{{125, 100}, {125, 40}, {300, 40}}},
+		{"target below leaves by the bottom", 300, 210, []point{{125, 150}, {125, 210}, {300, 210}}},
+		{"target dead above needs no elbow", 125, 40, []point{{125, 100}, {125, 40}}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := vertexRoute(src, tc.tx, tc.ty)
+			if len(got) != len(tc.want) {
+				t.Fatalf("vertexRoute = %v, want %v", got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Fatalf("vertexRoute = %v, want %v", got, tc.want)
+				}
+			}
+			if !isOrthogonal(got) {
+				t.Errorf("vertexRoute = %v, want an orthogonal path", got)
+			}
+		})
+	}
+}
