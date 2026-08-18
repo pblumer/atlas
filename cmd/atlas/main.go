@@ -153,6 +153,13 @@ func runServe(args []string) error {
 	// the exporter and retention there is nothing here to opt into.
 	checkpointInterval := fs.Duration("checkpoint-interval", 5*time.Minute, "how often to snapshot applied state so a restart replays only the log past it (ADR-0131); 0 disables checkpointing")
 	checkpointKeep := fs.Int("checkpoint-keep", 3, "how many recovery checkpoints to keep; each pins the state files it captured, so this bounds their disk (ADR-0131)")
+	// WAL compaction (ADR-0131): opt-in, off by default. Unlike checkpointing it deletes
+	// data, so — like history retention (ADR-0115) — an operator turns it on deliberately.
+	compactWAL := fs.Bool("compact-wal", false, "delete WAL segments already covered by a recovery checkpoint and every consumer watermark (ADR-0131), bounding the log's disk; off by default because it is irreversible. Requires checkpointing")
+	// Prometheus metrics (ADR-0142): on by default. The exposition carries only
+	// bounded-cardinality aggregates, so the cost of having it is a path an operator may
+	// not want reachable rather than data leaking.
+	metricsOn := fs.Bool("metrics", true, "serve the Prometheus exposition at /metrics (ADR-0142); pass --metrics=false to disable. It is unauthenticated like /healthz — put a reverse proxy in front of anything exposed beyond the host")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -163,7 +170,7 @@ func runServe(args []string) error {
 		Password: os.Getenv("ATLAS_OPENSEARCH_PASSWORD"),
 		Index:    strings.TrimSpace(*osIndex),
 	}
-	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, *retentionAge, *checkpointInterval, *checkpointKeep)
+	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, *retentionAge, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -185,7 +192,7 @@ func envDuration(key string) time.Duration {
 	return 0
 }
 
-func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retentionMaxAge time.Duration, checkpointInterval time.Duration, checkpointKeep int) error {
+func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retentionMaxAge time.Duration, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -237,6 +244,9 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 	if !docs {
 		apiOpts = append(apiOpts, api.WithoutDocs())
 	}
+	if !metricsOn {
+		apiOpts = append(apiOpts, api.WithoutMetrics())
+	}
 	// Mirror the durable event log into OpenSearch when configured (ADR-0114).
 	if osExport.Enabled() {
 		apiOpts = append(apiOpts, api.WithOpenSearchExporter(osExport))
@@ -256,6 +266,13 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 	if checkpointInterval > 0 {
 		apiOpts = append(apiOpts, api.WithCheckpoints(checkpointInterval), api.WithCheckpointRetention(checkpointKeep))
 		log.Printf("recovery checkpoints enabled: snapshotting applied state every %s, keeping %d", checkpointInterval, checkpointKeep)
+		// Compaction rides the checkpoint tick, so it needs one to ride (ADR-0131).
+		if compactWAL {
+			apiOpts = append(apiOpts, api.WithWALCompaction())
+			log.Printf("wal compaction enabled: deleting segments already covered by a checkpoint and every consumer watermark")
+		}
+	} else if compactWAL {
+		log.Printf("WARNING: --compact-wal has no effect without checkpointing; set --checkpoint-interval to a positive duration to enable it (ADR-0131)")
 	}
 	if auth {
 		apiOpts = append(apiOpts, api.WithAuth())
@@ -319,6 +336,9 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 		log.Printf("listening on %s (UI at %s/, MCP at %s/mcp)", addr, base, base)
 		if docs {
 			log.Printf("API explorer at %s/api/docs (OpenAPI at %s/api/v1/openapi.json)", base, base)
+		}
+		if metricsOn {
+			log.Printf("Prometheus metrics at %s/metrics (unauthenticated; proxy it if exposed beyond the host)", base)
 		}
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err

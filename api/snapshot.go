@@ -103,6 +103,14 @@ func (s *Server) handleBackupFull(w http.ResponseWriter, r *http.Request) {
 	if !s.requireAdmin(w, r) {
 		return
 	}
+	// Hold off WAL compaction for the duration (ADR-0131). This is raised *before* the
+	// checkpoint below is chosen, which is what makes the guard sound rather than
+	// merely likely: a compaction pass that reads zero here is one whose deletion
+	// happens before this backup picks its checkpoint, so the suffix that checkpoint
+	// needs starts at or above whatever was cut.
+	s.backupsInFlight.Add(1)
+	defer s.backupsInFlight.Add(-1)
+
 	w.Header().Set("Content-Type", "application/gzip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fullBackupFilename()))
 	// Pick the checkpoint before reading the WAL, so the WAL copy is a superset of the

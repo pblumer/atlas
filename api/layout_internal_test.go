@@ -917,3 +917,152 @@ func TestVertexRouteLeavesByFacingEdge(t *testing.T) {
 		})
 	}
 }
+
+// TestGenerateDISubProcessMinimumSize covers the floor an expanded subprocess is
+// drawn at. Its frame is normally its content plus padding, but a subprocess
+// holding one small element — or nothing at all, which a model being built up in
+// the Modeler goes through — would otherwise come out as a box too small to read
+// its own title, let alone drop an element into.
+func TestGenerateDISubProcessMinimumSize(t *testing.T) {
+	src := []byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="P">
+	    <startEvent id="S"/>
+	    <subProcess id="Sub" name="Handle it">
+	      <startEvent id="Inner"/>
+	    </subProcess>
+	    <endEvent id="E"/>
+	    <sequenceFlow id="f1" sourceRef="S" targetRef="Sub"/>
+	    <sequenceFlow id="f2" sourceRef="Sub" targetRef="E"/>
+	  </process>
+	</definitions>`)
+	di, ok := generateDI(src)
+	if !ok {
+		t.Fatal("generateDI: want ok")
+	}
+	sub := parseShapes(t, di)["Sub"]
+	if sub.w < subMinW || sub.h < subMinH {
+		t.Errorf("subprocess frame = %dx%d, want at least %dx%d", sub.w, sub.h, subMinW, subMinH)
+	}
+	if !sub.expanded {
+		t.Error("subprocess with a child should be drawn expanded")
+	}
+	if inner, ok := parseShapes(t, di)["Inner"]; !ok || !sub.contains(inner) {
+		t.Errorf("inner element %+v should sit inside the frame %+v", inner, sub)
+	}
+}
+
+// TestGenerateDISubProcessWithoutIdSkipped covers a subprocess carrying no id.
+// Nothing can reference it, so no shape can be emitted for it — the rest of the
+// model still has to lay out rather than the whole diagram failing.
+func TestGenerateDISubProcessWithoutIdSkipped(t *testing.T) {
+	src := []byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="P">
+	    <startEvent id="S"/>
+	    <subProcess name="nameless"><task id="Buried"/></subProcess>
+	    <endEvent id="E"/>
+	    <sequenceFlow id="f1" sourceRef="S" targetRef="E"/>
+	  </process>
+	</definitions>`)
+	di, ok := generateDI(src)
+	if !ok {
+		t.Fatal("generateDI: want ok — the id-less subprocess must not sink the diagram")
+	}
+	shapes := parseShapes(t, di)
+	for _, want := range []string{"S", "E"} {
+		if _, drawn := shapes[want]; !drawn {
+			t.Errorf("%s should still be laid out:\n%s", want, di)
+		}
+	}
+	if _, drawn := shapes["Buried"]; drawn {
+		t.Error("an element inside an unreferenceable subprocess must not be placed on the root plane")
+	}
+}
+
+// TestGenerateDIPureCycleLaysOut covers a model where every node has an incoming
+// flow, so there is no entry point to start the main axis from — a closed loop,
+// which is malformed BPMN but arrives from hand-edited XML. The layouter has to
+// seed the trunk anyway and terminate rather than spin looking for a start.
+func TestGenerateDIPureCycleLaysOut(t *testing.T) {
+	src := []byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="P">
+	    <task id="A"/><task id="B"/><task id="C"/>
+	    <sequenceFlow id="f1" sourceRef="A" targetRef="B"/>
+	    <sequenceFlow id="f2" sourceRef="B" targetRef="C"/>
+	    <sequenceFlow id="f3" sourceRef="C" targetRef="A"/>
+	  </process>
+	</definitions>`)
+	di, ok := generateDI(src)
+	if !ok {
+		t.Fatal("generateDI: want ok for a closed loop")
+	}
+	shapes := parseShapes(t, di)
+	if len(shapes) != 3 {
+		t.Fatalf("shapes = %d, want all 3 nodes placed:\n%s", len(shapes), di)
+	}
+	for id, s := range shapes {
+		if s.w <= 0 || s.h <= 0 {
+			t.Errorf("%s has empty bounds %+v", id, s)
+		}
+	}
+	for id, pts := range parseEdges(t, di) {
+		if !isOrthogonal(pts) {
+			t.Errorf("edge %s is not orthogonal: %v", id, pts)
+		}
+	}
+}
+
+// TestSegmentCutsNode pins the predicate crossesForeignNode is built on. The
+// distinction that matters is the one in its doc comment: an edge that runs along
+// a node's border, or stops on it, is meeting that node — only passing through the
+// interior counts as cutting it.
+func TestSegmentCutsNode(t *testing.T) {
+	n := lnode{x: 100, y: 100, w: 100, h: 80} // x 100..200, y 100..180
+	tests := []struct {
+		name string
+		p, q point
+		want bool
+	}{
+		{"horizontal through the middle", point{50, 140}, point{250, 140}, true},
+		{"vertical through the middle", point{150, 50}, point{150, 250}, true},
+		{"horizontal along the top border", point{50, 100}, point{250, 100}, false},
+		{"horizontal along the bottom border", point{50, 180}, point{250, 180}, false},
+		{"vertical along the left border", point{100, 50}, point{100, 250}, false},
+		{"vertical along the right border", point{200, 50}, point{200, 250}, false},
+		{"horizontal clear above", point{50, 40}, point{250, 40}, false},
+		{"horizontal stopping short", point{20, 140}, point{100, 140}, false},
+		{"vertical stopping short", point{150, 20}, point{150, 100}, false},
+		{"diagonal is not an orthogonal segment", point{50, 50}, point{250, 250}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := segmentCutsNode(tc.p, tc.q, n); got != tc.want {
+				t.Errorf("segmentCutsNode(%v, %v) = %v, want %v", tc.p, tc.q, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestWrapWidth covers the label-column estimate at both ends. It divides the
+// available width by the line count, then refuses to promise a column narrower
+// than a short word — and that floor must never widen the result past the space
+// actually available.
+func TestWrapWidth(t *testing.T) {
+	tests := []struct {
+		name              string
+		full, lines, want int
+	}{
+		{"single line takes the full width", 120, 1, 120},
+		{"zero lines is treated as one", 120, 0, 120},
+		{"two lines split the width", 120, 2, 60},
+		{"rounds up so the last line fits", 200, 3, 67},
+		{"floors at a short word's width", 100, 8, 36},
+		{"the floor never exceeds the width available", 30, 4, 30},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := wrapWidth(tc.full, tc.lines); got != tc.want {
+				t.Errorf("wrapWidth(%d, %d) = %d, want %d", tc.full, tc.lines, got, tc.want)
+			}
+		})
+	}
+}

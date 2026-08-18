@@ -1,4 +1,4 @@
-# ADR-0103: Live collaborative modeling sessions — real-time co-editing of drafts by people and AI agents
+# ADR-0140: Live collaborative modeling sessions — real-time co-editing of drafts by people and AI agents
 
 - **Status:** Proposed
 - **Date:** 2026-08-07

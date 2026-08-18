@@ -164,7 +164,7 @@ func HasErrors(ps []Problem) bool {
 // Problem, not an error — but the signature keeps an error so a future source
 // that does I/O can report a read failure distinctly from a modeling one.
 func ValidateModel(r io.Reader) ([]Problem, error) {
-	defs, err := decodeDefinitions(r)
+	defs, docs, err := decodeDefinitions(r)
 	if err != nil {
 		return []Problem{{Severity: SeverityError, Rule: RuleParse, Message: err.Error()}}, nil
 	}
@@ -182,7 +182,7 @@ func ValidateModel(r io.Reader) ([]Problem, error) {
 		// The key is irrelevant to a dry run — the compiled process is inspected and
 		// discarded, never registered — so a per-pool ordinal keeps it deterministic
 		// without touching the server's key counter.
-		cp, cerr := compileProcess(uint64(executable), 1, proc, resolveMsg, resolveSig, resolveErr, resolveEsc, resolveOp)
+		cp, cerr := compileProcess(uint64(executable), 1, proc, resolveMsg, resolveSig, resolveErr, resolveEsc, resolveOp, docs)
 		executable++
 		if cerr != nil {
 			// A graph-level failure carries its element-anchored Problems; hand them

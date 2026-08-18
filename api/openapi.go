@@ -74,7 +74,7 @@ func xmlBody(desc string) *bodySpec {
 
 // eventStreamBody describes a Server-Sent Events response — a long-lived
 // text/event-stream of newline-delimited frames rather than a single JSON body
-// (ADR-0103's live collaboration transport).
+// (ADR-0140's live collaboration transport).
 func eventStreamBody(desc string) *bodySpec {
 	return &bodySpec{mediaType: "text/event-stream", schema: tString(), desc: desc}
 }
@@ -117,6 +117,20 @@ func (s *Server) apiRoutes() []apiRoute {
 			req: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip tar archive produced by GET /api/v1/backup/full"},
 			resp: jsonBody("Restore staging summary", schemaObj(map[string]any{
 				"restored": tInteger(), "restartRequired": tBool(), "note": tString(),
+			}))}},
+
+		{"GET", "/api/v1/checkpoints", s.handleCheckpointStatus, apiOp{
+			summary: "Recovery-checkpoint and WAL-compaction status: what is configured, every published checkpoint and whether it still verifies, the last pass's outcome, and the WAL's current footprint (admin-only when auth is on) (ADR-0131)", tag: "System",
+			resp: jsonBody("Checkpoint status", schemaObj(map[string]any{
+				"enabled": tBool(), "intervalSeconds": tInteger(), "keep": tInteger(),
+				"compaction": tBool(), "root": tString(), "checkpoints": tArray(),
+				"lastPass": tObject(), "walSegments": tInteger(), "walBytes": tInteger(),
+			}))}},
+		{"POST", "/api/v1/checkpoints", s.handleCheckpointNow, apiOp{
+			summary: "Take a recovery checkpoint now — and compact the WAL if compaction is enabled — instead of waiting for the next scheduled pass; 409 when checkpointing is disabled (admin-only when auth is on) (ADR-0131)", tag: "System",
+			resp: jsonBody("What the pass did", schemaObj(map[string]any{
+				"at": tInteger(), "position": tInteger(), "checkpointError": tString(),
+				"segmentsRemoved": tInteger(), "compactionError": tString(), "note": tString(),
 			}))}},
 
 		{"POST", "/api/v1/feel/validate", s.handleValidateFeel, apiOp{
@@ -294,34 +308,34 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Delete a draft", tag: "Drafts", status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/drafts/{id}/session", s.handleDraftSession, apiOp{
-			summary: "Join a draft's live collaboration session — a Server-Sent Events stream of sync, presence, lock, and change frames for real-time co-editing by people and AI agents (ADR-0103)", tag: "Live Sessions",
+			summary: "Join a draft's live collaboration session — a Server-Sent Events stream of sync, presence, lock, and change frames for real-time co-editing by people and AI agents (ADR-0140)", tag: "Live Sessions",
 			resp: eventStreamBody("SSE stream of session frames")}},
 		{"POST", "/api/v1/drafts/{id}/session/join", s.handleDraftSessionJoin, apiOp{
-			summary: "Join a draft's live session without an event stream — for an AI agent over MCP that cannot hold an SSE connection; returns the sync snapshot (self id, roster, locks) and is driven with poll/presence/lock/change (ADR-0103 M2)", tag: "Live Sessions",
+			summary: "Join a draft's live session without an event stream — for an AI agent over MCP that cannot hold an SSE connection; returns the sync snapshot (self id, roster, locks) and is driven with poll/presence/lock/change (ADR-0140 M2)", tag: "Live Sessions",
 			req:  jsonBody("Optional display name", schemaObj(map[string]any{"name": tString()})),
 			resp: jsonBody("Sync snapshot with the joined participant's id", tObject())}},
 		{"POST", "/api/v1/drafts/{id}/session/poll", s.handleDraftSessionPoll, apiOp{
-			summary: "Drain a participant's buffered frames and read the current roster and locks — the request/response read side for an agent with no live stream, and its liveness signal (ADR-0103 M2)", tag: "Live Sessions",
+			summary: "Drain a participant's buffered frames and read the current roster and locks — the request/response read side for an agent with no live stream, and its liveness signal (ADR-0140 M2)", tag: "Live Sessions",
 			req:  jsonBody("Polling participant", schemaObj(map[string]any{"participantId": tString()}, "participantId")),
 			resp: jsonBody("Roster, locks, and buffered events", tObject())}},
 		{"POST", "/api/v1/drafts/{id}/session/leave", s.handleDraftSessionLeave, apiOp{
-			summary: "Leave a draft's live session, releasing the participant's locks — idempotent (ADR-0103 M2)", tag: "Live Sessions",
+			summary: "Leave a draft's live session, releasing the participant's locks — idempotent (ADR-0140 M2)", tag: "Live Sessions",
 			req:    jsonBody("Leaving participant", schemaObj(map[string]any{"participantId": tString()}, "participantId")),
 			status: http.StatusNoContent}},
 		{"POST", "/api/v1/drafts/{id}/session/presence", s.handleDraftSessionPresence, apiOp{
-			summary: "Update a participant's presence (selected element) in a draft's live session (ADR-0103)", tag: "Live Sessions",
+			summary: "Update a participant's presence (selected element) in a draft's live session (ADR-0140)", tag: "Live Sessions",
 			req: jsonBody("Presence update", schemaObj(map[string]any{
 				"participantId": tString(), "selection": tString(),
 			}, "participantId")),
 			status: http.StatusNoContent}},
 		{"POST", "/api/v1/drafts/{id}/session/lock", s.handleDraftSessionLock, apiOp{
-			summary: "Acquire or release a per-element edit lock in a draft's live session; acquiring an element another participant holds is a 409 (ADR-0103)", tag: "Live Sessions",
+			summary: "Acquire or release a per-element edit lock in a draft's live session; acquiring an element another participant holds is a 409 (ADR-0140)", tag: "Live Sessions",
 			req: jsonBody("Lock action", schemaObj(map[string]any{
 				"participantId": tString(), "elementId": tString(), "action": tString(),
 			}, "participantId", "elementId", "action")),
 			status: http.StatusNoContent}},
 		{"POST", "/api/v1/drafts/{id}/session/change", s.handleDraftSessionChange, apiOp{
-			summary: "Broadcast an element change to a draft's live session participants — relayed live, not persisted (ADR-0103)", tag: "Live Sessions",
+			summary: "Broadcast an element change to a draft's live session participants — relayed live, not persisted (ADR-0140)", tag: "Live Sessions",
 			req: jsonBody("Element change", schemaObj(map[string]any{
 				"participantId": tString(), "elementId": tString(), "xml": tString(),
 			}, "participantId", "elementId")),

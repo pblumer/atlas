@@ -1,8 +1,19 @@
 # ADR-0105: Per-server call-activity target overrides
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-10
 - **Deciders:** Atlas engine team
+
+> **Implementation status.** Delivered. The engine resolves an override ahead of the
+> default `latestProcess` lookup (`ProcessingContext.resolveCallTarget`, driven by
+> `Processor.SetCallTargetOverride`/`ClearCallTargetOverride`), the `callOverrideStore`
+> sidecar persists the operator's intent, `loadCallOverrides` translates each record into
+> a directive at startup once deployments are loaded, `PUT`/`DELETE
+> /api/v1/call-activities/overrides/{processId}` are admin-gated, the
+> `GET /api/v1/call-activities` inventory reports the override and the effective
+> resolution, the modeler's management view edits it inline, and the MCP surface stays
+> read-only as decided. The follow-ups recorded under *Consequences* — an incident for a
+> disabled/parked call, per-caller-element granularity — remain open.
 
 ## Context and problem statement
 
