@@ -219,6 +219,14 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Handbook: umlauts in the loop recipe's labels** ([ADR-0133](docs/adr/0133-standard-loop-activities.md)):
+  the ↻ recipe shipped ASCII-fied German — "Zaehler starten", "Pruefen", and a process
+  named "Pruefen bis in Ordnung" — while every other recipe in the German handbook uses
+  umlauts. They now read **"Zähler starten"**, **"Prüfen"** and **"Prüfen bis es passt"**
+  (matching the recipe's own heading), both on the rendered card and in the process name
+  the deploy reports. Labels only: the recipe's XML structure and its loop
+  characteristics are untouched, and it still deploys and runs from the card.
+
 - **A retry budget below 1 is refused at deploy**
   ([ADR-0135](docs/adr/0135-retries-as-a-task-property.md)): `retries="0"` (or a negative
   count) used to deploy and then hang — a job is on the activatable index only while it has
