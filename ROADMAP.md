@@ -540,7 +540,7 @@ What it takes to run this for real.
 - 🔲 gRPC job-worker protocol (streaming pull, leases, fencing) — ADR-0007
 - 🔲 Worker SDK (Go first)
 - 🔲 Metrics (throughput, batch size, fsync latency, queue depth), structured logs, OTel traces
-- 🚧 Log compaction / snapshotting so recovery doesn't replay from genesis
+- ✅ Log compaction / snapshotting so recovery doesn't replay from genesis
   ([ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), v0.2.0
   programme D): the mechanism is complete. A checkpoint is a Pebble snapshot of the state
   store at a known applied log position plus a versioned, self-checksummed manifest,
@@ -549,14 +549,15 @@ What it takes to run this for real.
   (falling back to an older checkpoint or genesis on anything untrustworthy); and
   `CompactLog` deletes the segments that become redundant, gated on a fully verified
   checkpoint **and** every consumer watermark (ADR-0114 exporter, ADR-0115 retention).
-  Checkpointing is now **on in the server**: `atlas serve` snapshots every
+  Both halves now run in the server. `atlas serve` checkpoints every
   `--checkpoint-interval` (default 5m, keeping 3) and recovers through
   `<data-dir>/checkpoints` at startup, so restart time follows the cadence rather than
-  the log's length. The whole-instance snapshot (ADR-0109, amended) carries a verified
-  checkpoint and installs it on restore, so backup/restore survives a compacted log —
-  the last consumer deletion could have undercut. Remaining: feed `CompactLog` the live
-  export/retention watermarks so segments are actually deleted, plus the operator status
-  and controls.
+  the log's length; `--compact-wal` (opt-in, because deletion is irreversible) then
+  deletes the segments that checkpoint and every consumer watermark make redundant, so
+  the log's disk is bounded too. The whole-instance snapshot (ADR-0109, amended) carries
+  a verified checkpoint and installs it on restore, so backup/restore survives a
+  compacted log. Remaining: surface checkpoint and compaction status, and on-demand
+  controls, over the API — today they are visible only in the log.
 - 🔲 Exported-log stream for downstream analytics
 - 🔲 Operator tooling: list/inspect instances, incidents, jobs
 

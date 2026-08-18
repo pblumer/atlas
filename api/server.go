@@ -39,6 +39,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pblumer/atlas/checkpoint"
@@ -344,6 +345,24 @@ type Server struct {
 	checkpointTicks <-chan time.Time
 	checkpointDone  chan struct{}
 
+	// compactWAL enables deleting the WAL segments a checkpoint and every consumer
+	// watermark make redundant (ADR-0131), on the same tick that takes the checkpoint —
+	// a fresh checkpoint is what licenses new deletion, so there is nothing to schedule
+	// separately. Opt-in (WithWALCompaction), like history retention (ADR-0115) and for
+	// the same reason: it is the one irreversible operation here.
+	compactWAL bool
+	// backupsInFlight counts whole-instance snapshots currently streaming (ADR-0109).
+	// A snapshot reads the WAL files off the run loop, so a compaction underneath one
+	// could delete a segment the archive still needs; a pass that sees a non-zero count
+	// skips and retries on the next tick.
+	//
+	// The ordering is what makes a zero reading safe rather than merely likely: a backup
+	// increments *before* it picks the checkpoint it will carry, so a pass that reads
+	// zero is one whose deletion the backup's later choice of checkpoint already accounts
+	// for — its suffix starts at or above the cut. Atomic because the two run on
+	// different goroutines.
+	backupsInFlight atomic.Int64
+
 	// docsEnabled gates the OpenAPI spec and the Scalar API explorer. On by
 	// default (opt-out), consistent with the already-open web UI and MCP
 	// endpoint; an operator who does not want the interactive surface disables
@@ -571,6 +590,21 @@ func WithCheckpointRetention(keep int) Option {
 			s.checkpointKeep = keep
 		}
 	}
+}
+
+// WithWALCompaction deletes the WAL segments a recovery checkpoint and every consumer
+// watermark make redundant (ADR-0131), bounding the log's disk instead of letting it
+// grow with all history. It has no effect without WithCheckpoints: the cut is derived
+// from a checkpoint, and compaction runs on the tick that takes one.
+//
+// It is opt-in, unlike checkpointing, for the same reason history retention is
+// (ADR-0115): this is the one step here that destroys data. The cut itself is
+// conservative — the newest **fully verified** checkpoint (manifest and state files) at
+// or below the store, floored by every consumer watermark, with a corrupt, foreign, or
+// ahead-of-store checkpoint licensing no deletion at all — but a conservative cut is
+// still a deletion, and an operator should choose it.
+func WithWALCompaction() Option {
+	return func(s *Server) { s.compactWAL = true }
 }
 
 // withCheckpointTrigger replaces the checkpoint loop's real ticker with an explicit
@@ -1078,6 +1112,11 @@ func (s *Server) checkpointLoop(every time.Duration) {
 				last = pos
 				log.Printf("checkpoint: published at log position %d (recovery replays only past it)", pos)
 			}
+			// Compaction rides the same tick: the checkpoint just taken is what licenses
+			// any new deletion, and running it here keeps the two in one order.
+			if s.compactWAL {
+				s.compactLog()
+			}
 			if s.checkpointDone != nil {
 				select {
 				case s.checkpointDone <- struct{}{}:
@@ -1118,6 +1157,62 @@ func (s *Server) takeCheckpoint() uint64 {
 		log.Printf("checkpoint: prune: %v (will retry next tick)", err)
 	}
 	return pos
+}
+
+// compactLog deletes the WAL segments the newest verified checkpoint and every consumer
+// watermark make redundant (ADR-0131). Everything about it is fail-closed: a watermark
+// that cannot be read, a snapshot in flight, or an error anywhere skips the pass
+// entirely, because the cost of skipping is disk and the cost of proceeding is a segment
+// recovery still needs.
+//
+// The deletion runs on the run loop (do): the WAL belongs to the single writer, which
+// may be rolling a segment at the same moment (invariant I3). It is bounded work — a few
+// unlinks and one directory fsync — and only for segments already proven redundant.
+func (s *Server) compactLog() {
+	// A whole-instance snapshot streams the WAL files off the run loop; deleting
+	// underneath one would ship an archive with a hole (ADR-0109). Skipping costs a tick.
+	if s.backupsInFlight.Load() > 0 {
+		return
+	}
+	limits, err := s.consumerWatermarks()
+	if err != nil {
+		log.Printf("wal compaction: consumer watermark unavailable: %v (skipping this tick)", err)
+		return
+	}
+	var removed int
+	s.do(func() { removed, err = s.proc.CompactLog(s.checkpointRoot, limits) })
+	if err != nil {
+		log.Printf("wal compaction: %v (will retry next tick)", err)
+		return
+	}
+	if removed > 0 {
+		log.Printf("wal compaction: deleted %d WAL segment(s) already covered by a checkpoint and every consumer", removed)
+	}
+}
+
+// consumerWatermarks is the highest position each consumer of the durable log has
+// provably read, which compaction may not delete past. It returns an error rather than a
+// short list when one cannot be read: a missing watermark must hold the log, never
+// silently stop constraining it.
+//
+// Only the OpenSearch exporter (ADR-0114) actually tails the WAL. History retention
+// (ADR-0115) reads the state store rather than the log, so its safe position never binds
+// tighter than the exporter's — it *is* the exporter's high-water mark when export is on
+// — but it is included when retention is enabled so the gate matches ADR-0131's rule
+// literally rather than by an argument that could stop holding.
+func (s *Server) consumerWatermarks() ([]uint64, error) {
+	var limits []uint64
+	if s.exporter != nil {
+		limits = append(limits, s.exporter.HighWaterMark())
+	}
+	if s.retentionMaxAge > 0 {
+		pos, err := s.retentionSafePosition()
+		if err != nil {
+			return nil, err
+		}
+		limits = append(limits, pos)
+	}
+	return limits, nil
 }
 
 // processLookup resolves a def key to its compiled process for the DMN worker. It
