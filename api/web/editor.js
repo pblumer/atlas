@@ -1697,6 +1697,61 @@ function removeExt(modeler, element, type) {
   modeling.updateProperties(element, { extensionElements: ext });
 }
 
+// Documentation is BPMN's own place for prose about an element: a <bpmn:documentation>
+// child that every process, pool, task, gateway, event, sequence flow and data object
+// may carry. Atlas treats it as pure passthrough (ADR-0025) — the compiler ignores it
+// and the codec preserves it — so documenting a model never changes what it runs. It is
+// the one property *every* element has, which is why the panel offers it beside the name
+// and id of whatever is selected rather than as a per-type section.
+
+// readDocumentation returns a business object's documentation as one string. BPMN allows
+// several <documentation> children (one per text format); an imported model may carry
+// them, so read them all — joined by a blank line — even though the panel writes one.
+function readDocumentation(bo) {
+  return ((bo && bo.documentation) || [])
+    .map((d) => (d && d.text) || "")
+    .filter((t) => t.trim() !== "")
+    .join("\n\n");
+}
+
+// writeDocumentation stores text as the business object's single <bpmn:documentation>
+// child, dropping the child entirely when the text is blank so an emptied field leaves
+// no empty element behind in the XML. It goes through the modeling API, so documenting
+// an element joins undo/redo and marks the diagram dirty like any other edit —
+// updateProperties when the documented object is the selected shape itself, and
+// updateModdleProperties when it is not (the process a pool executes).
+function writeDocumentation(modeler, element, bo, text) {
+  const modeling = modeler.get("modeling");
+  const value = (text || "").trim();
+  let docs = [];
+  if (value) {
+    const doc = modeler.get("moddle").create("bpmn:Documentation", { text: value });
+    doc.$parent = bo;
+    docs = [doc];
+  }
+  if (bo === element.businessObject) modeling.updateProperties(element, { documentation: docs });
+  else modeling.updateModdleProperties(element, bo, { documentation: docs });
+}
+
+// documentationField renders the documentation editor for one business object. `id`
+// keeps the field unique when a panel documents two things at once (a pool and the
+// process it executes); `placeholder` names what is worth writing there.
+function documentationField(bo, id = "f-doc", placeholder = "What this step is for, when it applies, who owns it…") {
+  return `<label class="field doc-field"><span>Documentation</span>
+      <textarea id="${id}" rows="3" placeholder="${esc(placeholder)}">${esc(readDocumentation(bo))}</textarea></label>`;
+}
+
+// wireDocumentation binds a documentation field rendered by documentationField. Like
+// the name field it saves on change (blur), not per keystroke, so typing a paragraph
+// isn't interrupted by a panel rebuild.
+function wireDocumentation(body, modeler, element, bo, id = "f-doc") {
+  const f = body.querySelector("#" + id);
+  if (!f) return;
+  f.addEventListener("change", (e) => {
+    try { writeDocumentation(modeler, element, bo, e.target.value); } catch { /* stale */ }
+  });
+}
+
 // RETRIES_FIELD is the retry budget every job-backed task carries (ADR-0135): how
 // many attempts the engine grants the job before a failure parks the token behind an
 // incident (ADR-0061). It is one field description appended to every catalog kind,
@@ -3402,7 +3457,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
     const poolFields = `
       <h3>Pool</h3>
       <label class="field"><span>Name</span><input type="text" id="f-poolname" value="${esc(bo.name || "")}" placeholder="Teilnehmer"/></label>
-      <label class="field"><span>Pool ID</span><input type="text" id="f-poolid" value="${esc(bo.id || "")}" spellcheck="false"/></label>`;
+      <label class="field"><span>Pool ID</span><input type="text" id="f-poolid" value="${esc(bo.id || "")}" spellcheck="false"/></label>
+      ${documentationField(bo, "f-doc", "Who this participant is, what they are responsible for…")}`;
 
     if (!proc) {
       body.innerHTML = `${poolFields}
@@ -3414,6 +3470,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
       });
       wirePoolId(body, element);
+      wireDocumentation(body, modeler, element, bo);
       body.querySelector("#f-addproc").addEventListener("click", () => addProcessToPool(element));
       return;
     }
@@ -3433,6 +3490,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
       <label class="field"><span>Process name</span><input type="text" id="f-procname" value="${esc(proc.name || "")}" placeholder="Order fulfillment"/></label>
       <label class="field"><span>Process ID</span><input type="text" id="f-procid" value="${esc(proc.id || "")}" placeholder="order-fulfillment"/></label>
       <p class="muted" style="font-size:12px">Each pool deploys as its own process; the <b>Process ID</b> is that deployment's identity — instances group by it, and renaming it deploys a new process rather than a new version.</p>
+      ${documentationField(proc, "f-procdoc", "What this process achieves, who it serves, when it runs…")}
+      <p class="muted" style="font-size:12px">Two descriptions, two subjects: the one above documents the <b>pool</b> (the participant), this one the <b>process</b> it executes. Every element inside takes its own.</p>
       ${startVarsHTML}`;
     body.querySelector("#f-poolname").addEventListener("change", (e) => {
       try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
@@ -3445,6 +3504,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
       const v = (e.target.value || "").trim();
       if (v) { try { modeling.updateModdleProperties(element, proc, { id: v }); } catch { toast("invalid process id", "err"); } }
     });
+    wireDocumentation(body, modeler, element, bo);
+    wireDocumentation(body, modeler, element, proc, "f-procdoc");
     if (activeTab(root) === "implement") wireStartVars(body, modeler, element, proc, savePreservingPanel);
   }
 
@@ -3487,6 +3548,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
           <label class="field"><span>Name</span><input type="text" id="f-pname" value="${esc(rootBo.name || "")}" placeholder="Order fulfillment"/></label>
           <label class="field"><span>Process ID</span><input type="text" id="f-pid" value="${esc(rootBo.id || "")}" placeholder="order-fulfillment"/></label>
           <p class="muted" style="font-size:12px">The Process ID is the identity deployments and instances are grouped by. Renaming it and deploying creates a new process rather than a new version.</p>
+          ${documentationField(rootBo, "f-doc", "What this process achieves, who it serves, when it runs…")}
+          <p class="muted" style="font-size:12px">The <b>Documentation</b> is the process's own description — the place for the summary a reader needs before following the diagram. Every element takes one too; select it to write its part.</p>
           <label class="field"><span>Version tag</span><input type="text" id="f-pver" value="${esc(rootBo.versionTag || "")}" placeholder="1.0.0"/></label>
           <label class="pcheck"><input type="checkbox" id="f-pexec"${rootBo.isExecutable !== false ? " checked" : ""}/> <span>Executable</span></label>
           <p class="muted" style="font-size:12px">An <b>executable</b> process can be started and offered in the start lists; leave it off for a descriptive-only diagram. <b>Version tag</b> is an optional label for this revision.</p>
@@ -3521,6 +3584,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         body.querySelector("#f-pexec").addEventListener("change", (e) => {
           try { modeling.updateProperties(rootEl, { isExecutable: e.target.checked }); } catch { /* ignore */ }
         });
+        wireDocumentation(body, modeler, rootEl, rootBo);
         wireStartVars(body, modeler);
         wireMessagesManager(body, modeler, () => show(null));
         wireSignalsManager(body, modeler, () => show(null));
@@ -3532,13 +3596,17 @@ function wireProperties(root, modeler, api, projectId, toast) {
       // (participant) executes its own process, configured by selecting the pool.
       if (isCollaborationRoot(modeler)) {
         icon.textContent = "CO"; typename.textContent = "Collaboration"; nameEl.textContent = "(collaboration)";
+        const collabEl = modeler.get("canvas").getRootElement();
         body.innerHTML = `
           <h3>Collaboration</h3>
           <p class="muted" style="font-size:12px">This diagram has several <b>pools</b>. A pool is a <b>participant</b> that <i>executes a process</i> — the process holds the flow, the pool just names who runs it, and each deploys as its own process. Select a pool to name it and configure the process it runs, or an element inside a pool to configure it. Pools talk to each other through <b>message events</b>: a throw event in one pool and a catch event in another that reference the <b>same message</b> below.</p>
+          ${documentationField(collabEl.businessObject, "f-doc", "What this collaboration is about, who the participants are…")}
+          <p class="muted" style="font-size:12px">The <b>Documentation</b> describes the collaboration as a whole; each pool and each element inside it takes its own.</p>
           ${messagesManagerHTML(modeler)}
           ${signalsManagerHTML(modeler)}
           ${errorsManagerHTML(modeler)}
           ${escalationsManagerHTML(modeler)}`;
+        wireDocumentation(body, modeler, collabEl, collabEl.businessObject);
         wireMessagesManager(body, modeler, () => show(null));
         wireSignalsManager(body, modeler, () => show(null));
         wireErrorsManager(body, modeler, () => show(null));
@@ -3591,7 +3659,9 @@ function wireProperties(root, modeler, api, projectId, toast) {
     let html = `
       <h3>General</h3>
       <label class="field"><span>${isSeqFlow ? "Label" : "Name"}</span><input type="text" id="f-name" value="${esc(bo.name || "")}"${isSeqFlow ? ' placeholder="Großauftrag"' : ""}/></label>
-      <label class="field"><span>ID</span><input type="text" id="f-id" value="${esc(bo.id || "")}" spellcheck="false"/></label>`;
+      <label class="field"><span>ID</span><input type="text" id="f-id" value="${esc(bo.id || "")}" spellcheck="false"/></label>
+      ${documentationField(bo, "f-doc", isSeqFlow ? "When this path is taken, and why…" : "What this step is for, when it applies, who owns it…")}
+      <p class="muted" style="font-size:12px">The <b>Documentation</b> is prose about this element — what it is for, the rule behind it, who owns it. It is documentation only: the engine never reads it, but it is part of the model, so it travels with every deploy, export and version.</p>`;
 
     // A data object is the data a process carries — first-class in Atlas, not just
     // decoration (ADR-0053). Its name is the engine's variable-like identity and its
@@ -4078,6 +4148,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
         }
       } catch { /* stale */ }
     });
+
+    wireDocumentation(body, modeler, element, bo);
 
     // Element IDs are editable, mirroring the Process ID field. bpmn-js validates the
     // new id (unique, a valid identifier) and rewrites the references that point at this

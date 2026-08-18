@@ -14,6 +14,20 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Every element takes a Documentation property**
+  ([ADR-0025](docs/adr/0025-full-properties-panel.md)): the Modeler's Details panel now
+  offers a **Documentation** field on whatever is selected — every task, gateway, event,
+  sequence flow, data object and subprocess, plus the process itself (with nothing
+  selected), each pool and the process it executes, and the collaboration as a whole. It
+  reads and writes BPMN's own `<bpmn:documentation>` child, beside the element's name and
+  id, so the description of *why* a step exists lives on the step rather than in a
+  separate document. Documentation is **passthrough** — the compiler ignores it and the
+  model preserves it — so documenting a process never changes what it runs: a documented
+  model compiles to exactly the graph its undocumented twin compiles to, and the prose
+  survives deploy, the served XML (including a server-generated layout) and auto-layout.
+  Emptying the field removes the element rather than leaving an empty one behind, and the
+  edit joins undo/redo like any other.
+
 - **A runaway loop parks instead of spinning** ([ADR-0133](docs/adr/0133-standard-loop-activities.md)
   amended, reversing its "no hidden ceiling" decision): a standard loop that states no
   `loopMaximum` is bounded only by a FEEL condition, and a condition that is simply

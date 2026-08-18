@@ -263,6 +263,11 @@ label.field { display: block; margin: 10px 0; }
    repainting them muted. */
 label.field > span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 
+/* A documentation field holds prose, not code — the panel's textareas default to a
+   monospace face for FEEL and scripts, which reads badly for a paragraph. Give the
+   documentation editor the UI font and let it grow vertically instead. */
+.doc-field textarea { font-family: inherit; resize: vertical; min-height: 56px; }
+
 /* Toast */
 #toast {
   position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);

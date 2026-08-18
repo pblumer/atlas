@@ -60,6 +60,12 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   `<standardLoopCharacteristics>`, and switching to a multi-instance replaces one marker
   with the other. This is the icon-and-property sync check: both directions, in a real
   browser, against the vendored bpmn-js.
+- **`documentation-modeler.spec.mjs`** (ADR-0025): the **Documentation** property — every
+  element (task, gateway, event, sequence flow, data object) shows the `<bpmn:documentation>`
+  its model carries and writes an edit back onto that element, blanking it drops the child
+  entirely, and the edit is undoable; the process (nothing selected), a pool *and* the process
+  it executes, a black-box pool and the collaboration each take their own. Assertions are on
+  the exported XML, because passthrough is the whole contract.
 
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
 

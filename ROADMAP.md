@@ -755,8 +755,9 @@ panel only ever authors what the engine actually runs. The ADRs below are
 **Properties panel** ([ADR-0025](docs/adr/0025-full-properties-panel.md)) — extend
 the hand-written Details panel one vertical slice at a time:
 - 🔲 General: element id, name.
-- 🔲 Documentation: `<bpmn:documentation>` as passthrough (compiler ignores it,
-  codec preserves it).
+- ✅ Documentation: `<bpmn:documentation>` as passthrough (compiler ignores it,
+  codec preserves it) — a Documentation field beside every element's name and id, on
+  the process, each pool and the process it executes, and the collaboration itself.
 - ✅ Input/output variable mappings (`zeebe:ioMapping`) — the properties-panel
   editor (input/output lists on service, script, and user tasks) landed with the
   Milestone 1 variable subsystem ([ADR-0068](docs/adr/0068-task-io-variable-mappings.md)).
