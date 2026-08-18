@@ -70,6 +70,16 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   what was written. Only a real browser can settle these — string encoding, `btoa`, and the
   canvas JPEG encoder all behave differently outside one.
 
+- **`process-doc.spec.mjs`** (ADR-0138): the **documentation collector and layout**
+  (`api/web/process-doc.js`) against the real vendored bpmn-js — per-element
+  `<documentation>` and the `<textAnnotation>` notes associated with an element reach the
+  document, an annotation attached to nothing becomes a general note, lanes and unnamed
+  flows are left out, and the rasterized diagram is cropped to what is actually drawn.
+- **`doc-export-modeler.spec.mjs`** (ADR-0138): the **Documentation panel** in the Modeler
+  toolbar — publishing a numbered version with the model's prose and a real PDF, the
+  history reading newest first, and the per-version public link being minted and revoked.
+  Drives the real `mountEditor` against a mock `api` that keeps the versions in memory.
+
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
 
 ## Rendering a conformance gallery diagram
