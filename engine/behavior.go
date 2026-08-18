@@ -115,6 +115,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeTimerStartEvent] = startEventBehavior{}
 	p.behaviors[compiler.TypeMessageEndEvent] = messageEndEventBehavior{}
 	p.behaviors[compiler.TypeSubProcess] = subProcessBehavior{}
+	p.behaviors[compiler.TypeAdHocSubProcess] = adHocSubProcessBehavior{}
 	p.behaviors[compiler.TypeCallActivity] = callActivityBehavior{}
 	p.behaviors[compiler.TypeEventSubProcessStart] = eventSubProcessStartBehavior{}
 }
@@ -373,6 +374,11 @@ func handleElementCompleting(c *ProcessingContext) {
 	if c.process(ei.ProcessDefKey).Node(ei.ElementId).BoundaryCount > 0 {
 		disarmBoundaryEvents(c, c.cmd.Key, ei.ProcessInstanceKey)
 	}
+	// A contained activity of an ad-hoc subprocess completing is that ad-hoc's completion
+	// checkpoint: re-evaluate its FEEL completion condition and, if it now holds, cancel the
+	// remaining work and complete the ad-hoc (ADR-0138). A no-op for every element whose flow
+	// scope is not an ad-hoc with a condition.
+	checkAdHocCompletion(c, ei.FlowScopeKey)
 }
 
 // applyDataOutputAssociations evaluates a completing activity's data-output
