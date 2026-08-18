@@ -146,6 +146,12 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 			}
 			now := time.Now().Unix()
 			rec := project{ID: id, Name: name, Visibility: VisibilityPrivate, CreatedAt: now, UpdatedAt: now}
+			// Give it a portable key like any other new application (ADR-0134), so a
+			// receiving server's copy is identifiable across servers too.
+			if rec.Key, err = s.deriveApplicationKey(rec); err != nil {
+				opErr = err
+				return
+			}
 			if err := s.projects.save(rec); err != nil {
 				opErr = err
 				return
