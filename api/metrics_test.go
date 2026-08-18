@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/pblumer/atlas/checkpoint"
+	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/metrics"
 	"github.com/pblumer/atlas/opensearch"
 )
 
@@ -163,6 +165,11 @@ func TestMetricsCarryOnlyAllowlistedLabels(t *testing.T) {
 		"revision":  true,
 		"partition": true, // fixed by the deployment, not by the data
 		"outcome":   true, // a closed enum
+		// A histogram's bucket boundaries and a summary's quantiles are chosen in the
+		// code, so their series count is fixed at compile time — the rule is that a
+		// label's values must not come from the data, not that no label may exist.
+		"le":       true,
+		"quantile": true,
 	}
 	dir := t.TempDir()
 	h := newCompactionHarness(t, dir)
@@ -268,5 +275,95 @@ func TestMetricsCountACorruptCheckpointButDoNotCreditIt(t *testing.T) {
 	}
 	if hasMetric(after, "atlas_checkpoint_age_seconds") {
 		t.Error("an age is reported for a checkpoint that does not verify")
+	}
+}
+
+// TestEngineMetricsReportTheBatchLoop: the counters the engine pushes reach the
+// exposition, and they describe work that actually happened.
+func TestEngineMetricsReportTheBatchLoop(t *testing.T) {
+	dir := t.TempDir()
+	h := newCompactionHarness(t, dir)
+	h.deploy()
+	h.create(3)
+
+	exposition := scrape(t, h)
+	batches := sampleValue(t, exposition, "atlas_batches_total")
+	commands := sampleValue(t, exposition, "atlas_commands_processed_total")
+	events := sampleValue(t, exposition, "atlas_events_written_total")
+	if batches == 0 || commands == 0 || events == 0 {
+		t.Fatalf("batches=%v commands=%v events=%v after real work, want all non-zero", batches, commands, events)
+	}
+	// Every event went through a batch, and every batch consumed at least one command.
+	if batches > commands {
+		t.Errorf("more batches (%v) than commands (%v)", batches, commands)
+	}
+	// The counter cannot exceed what the durable applied position says was written.
+	if applied := sampleValue(t, exposition, "atlas_applied_log_position"); events > applied {
+		t.Errorf("counted %v events but the store applied only through %v", events, applied)
+	}
+	// The fsync histogram observed every batch that wrote something.
+	if got := sampleValue(t, exposition, "atlas_wal_sync_seconds_count"); got == 0 {
+		t.Error("no fsync durations were observed")
+	}
+	if !hasMetric(exposition, "atlas_batch_events") {
+		t.Error("batch size is not exposed")
+	}
+	// Nothing failed, so the failure counters exist at zero — present, so an alert rule
+	// can reference them, rather than absent until the first failure.
+	for _, name := range []string{"atlas_wal_sync_failures_total", "atlas_state_commit_failures_total"} {
+		if got := sampleValue(t, exposition, name); got != 0 {
+			t.Errorf("%s = %v on a healthy server, want 0", name, got)
+		}
+	}
+	if !hasMetric(exposition, "atlas_command_queue_depth") {
+		t.Error("command queue depth is not exposed")
+	}
+}
+
+// TestEngineMetricsReportNoAlloc is the ADR-0142 rule-1 guard against the *real*
+// implementation. engine/alloc_test.go proves the call shape is free; this proves the
+// Prometheus handles behind it are too — which is what a future metric added with a
+// per-batch WithLabelValues lookup would break.
+func TestEngineMetricsReportNoAlloc(t *testing.T) {
+	m := newEngineMetrics()
+	stats := engine.BatchStats{Commands: 12, Events: 30, QueueDepth: 4, SyncSeconds: 0.001, CommitSeconds: 0.0002}
+
+	allocs := testing.AllocsPerRun(1000, func() {
+		m.BatchCommitted(stats)
+		m.SyncFailed()
+		m.CommitFailed()
+	})
+	if allocs != 0 {
+		t.Errorf("recording a batch into Prometheus allocated %v times per run, want 0 "+
+			"(every handle must be resolved at construction, never looked up per batch)", allocs)
+	}
+}
+
+// TestEngineMetricsSkipDurationsForAnEmptyBatch: a batch that wrote nothing had no fsync
+// and no commit, so observing its zero durations would report a p99 no real write ever
+// achieved. Its commands still count — they were consumed.
+func TestEngineMetricsSkipDurationsForAnEmptyBatch(t *testing.T) {
+	m := newEngineMetrics()
+	m.BatchCommitted(engine.BatchStats{Commands: 4, QueueDepth: 1})
+
+	reg := metrics.NewRegistry()
+	if err := reg.Register(m.collectors()...); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	families, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("Gather: %v", err)
+	}
+	for _, f := range families {
+		switch f.GetName() {
+		case "atlas_wal_sync_seconds", "atlas_state_commit_seconds", "atlas_batch_events":
+			if n := f.GetMetric()[0].GetHistogram().GetSampleCount(); n != 0 {
+				t.Errorf("%s observed %d samples for an empty batch, want none", f.GetName(), n)
+			}
+		case "atlas_commands_processed_total":
+			if v := f.GetMetric()[0].GetCounter().GetValue(); v != 4 {
+				t.Errorf("commands = %v for an empty batch, want the 4 it consumed", v)
+			}
+		}
 	}
 }
