@@ -66,3 +66,33 @@ func TestSweepRetentionSelection(t *testing.T) {
 		}
 	}
 }
+
+// TestRetentionCadenceOptions pins the sweep's cadence and per-tick batch as a
+// configuration surface (ADR-0115): a fresh server starts at the exported defaults —
+// which the CLI shows as its --retention-interval/--retention-batch defaults — each
+// option overrides its own value, and a non-positive value leaves the default standing
+// so an unset flag can be passed through unconditionally.
+func TestRetentionCadenceOptions(t *testing.T) {
+	srv, _ := newSystemServer(t)
+	if srv.retentionInterval != DefaultRetentionInterval {
+		t.Errorf("default interval = %s, want %s", srv.retentionInterval, DefaultRetentionInterval)
+	}
+	if srv.retentionBatch != DefaultRetentionBatch {
+		t.Errorf("default batch = %d, want %d", srv.retentionBatch, DefaultRetentionBatch)
+	}
+
+	WithRetentionInterval(5 * time.Minute)(srv)
+	WithRetentionBatch(50)(srv)
+	if srv.retentionInterval != 5*time.Minute {
+		t.Errorf("interval after override = %s, want 5m", srv.retentionInterval)
+	}
+	if srv.retentionBatch != 50 {
+		t.Errorf("batch after override = %d, want 50", srv.retentionBatch)
+	}
+
+	WithRetentionInterval(0)(srv)
+	WithRetentionBatch(-1)(srv)
+	if srv.retentionInterval != 5*time.Minute || srv.retentionBatch != 50 {
+		t.Errorf("non-positive values must not change the configuration: interval=%s batch=%d", srv.retentionInterval, srv.retentionBatch)
+	}
+}

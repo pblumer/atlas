@@ -383,7 +383,9 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--checkpoint-keep` | `3` | How many checkpoints to retain |
 | `--opensearch-url` | `$ATLAS_OPENSEARCH_URL` | Mirror the event log into OpenSearch; empty disables |
 | `--opensearch-index` | `$ATLAS_OPENSEARCH_INDEX` | Index the exporter writes to |
-| `--retention-max-age` | `$ATLAS_RETENTION_MAX_AGE` | Hard-delete finished instances older than this once exported, e.g. `720h`; `0` disables |
+| `--retention-max-age` | `$ATLAS_RETENTION_MAX_AGE` | Hard-delete finished instances older than this once exported, e.g. `720h`; `0` disables. A process may override it with its own `atlas:historyTtl` (ADR-0144) |
+| `--retention-interval` | `1m` | How often the retention sweep runs |
+| `--retention-batch` | `1000` | Finished instances one sweep evaluates; with `--retention-interval` this bounds how fast a backlog drains |
 
 The boolean flags above are all **on by default**, so they are turned off with an
 explicit `=false` — `--vault=false`, not `--no-vault`.
@@ -413,6 +415,8 @@ history.
 | `ATLAS_OPENSEARCH_INDEX` | Default for `--opensearch-index` |
 | `ATLAS_OPENSEARCH_USERNAME`, `ATLAS_OPENSEARCH_PASSWORD` | Exporter credentials (env-only) |
 | `ATLAS_RETENTION_MAX_AGE` | Default for `--retention-max-age` |
+| `ATLAS_RETENTION_INTERVAL` | Default for `--retention-interval` |
+| `ATLAS_RETENTION_BATCH` | Default for `--retention-batch` |
 | `ATLAS_DMN_RESOLVER_URL`, `ATLAS_DMN_RESOLVER_TOKEN` | Resolve DMN models from a remote service instead of `<data-dir>/dmn-models` |
 | `ATLAS_TEMIS_CONNECTORS` | Comma-separated connector names, each configured by `ATLAS_TEMIS_<NAME>_URL` and `ATLAS_TEMIS_<NAME>_TOKEN` |
 | `ATLAS_CONNECTOR_<REF>_TOKEN` | Bearer token for the REST connector named `<REF>` |
