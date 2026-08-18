@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/model"
 )
@@ -152,6 +153,68 @@ func TestCSVRowsFromVars(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := csvRowsFromVars(tc.in)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want substring %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestCSVRowsFromConnector covers the connector-task path (ADR-0090). Its sibling
+// csvRowsFromVars is well covered; this one reads its layout from the compiled
+// detail rather than a columnConfig variable, so it has its own input contract:
+// the documented csvText/rows defaults when the authoring left the names unset,
+// and a distinct error for each way the input can be wrong.
+func TestCSVRowsFromConnector(t *testing.T) {
+	// A zero CompiledProcess interns every index to "", which is exactly the
+	// "authored nothing" case: source, result and delimiter all fall back.
+	cp := &compiler.CompiledProcess{}
+	withText := func(text string) fakeVarStore {
+		return fakeVarStore{vars: map[uint64][]model.VariableValue{
+			1: {{Name: csvSourceVar, Kind: model.VarString, Text: text}},
+		}}
+	}
+
+	t.Run("defaults to csvText and rows", func(t *testing.T) {
+		detail := &compiler.ConnectorTaskDetail{CsvHasHeader: true}
+		out, err := csvRowsFromConnector(withText("email,group\nada@x.io,users\nbob@x.io,ops\n"), cp, detail, 1)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(out) != 2 || out[0].Name != csvRowsVar || out[1].Name != csvRowCountVar {
+			t.Fatalf("outputs = %+v, want %s + %s", out, csvRowsVar, csvRowCountVar)
+		}
+		if out[1].Text != "2" {
+			t.Errorf("rowCount = %q, want 2", out[1].Text)
+		}
+		if out[0].Kind != model.VarJSON || !strings.Contains(out[0].Text, `"email":"ada@x.io"`) {
+			t.Errorf("rows = %+v, want a JSON array with ada@x.io", out[0])
+		}
+	})
+
+	errCases := []struct {
+		name   string
+		store  csvVarStore
+		detail *compiler.ConnectorTaskDetail
+		want   string
+	}{
+		{"no detail", withText("a\n1\n"), nil, "no detail"},
+		{"variable read fails", fakeVarStore{varsErr: errors.New("boom")}, &compiler.ConnectorTaskDetail{}, "read variables"},
+		{"source variable missing", fakeVarStore{}, &compiler.ConnectorTaskDetail{}, csvSourceVar},
+		{"source variable empty", withText(""), &compiler.ConnectorTaskDetail{}, csvSourceVar},
+		{
+			"source variable wrong kind",
+			fakeVarStore{vars: map[uint64][]model.VariableValue{1: {{Name: csvSourceVar, Kind: model.VarNumber, Text: "1"}}}},
+			&compiler.ConnectorTaskDetail{},
+			csvSourceVar,
+		},
+		// No header row and no authored columns leaves the parser nothing to name
+		// the fields with.
+		{"no columns to parse against", withText("ada@x.io,users\n"), &compiler.ConnectorTaskDetail{}, "at least one column"},
+	}
+	for _, tc := range errCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := csvRowsFromConnector(tc.store, cp, tc.detail, 1); err == nil ||
+				!strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("error = %v, want substring %q", err, tc.want)
 			}
 		})

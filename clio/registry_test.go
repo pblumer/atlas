@@ -3,10 +3,12 @@ package clio
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/model"
@@ -447,4 +449,63 @@ func (f *fakeClient) Query(context.Context, string, string) (any, error) { retur
 
 func (f *fakeClient) ReadEvents(context.Context, ReadEventsRequest) ([]InboundEvent, error) {
 	return nil, f.err
+}
+
+// TestWithLeadingSlash covers the subject normalizer. A task may author a subject
+// with or without the leading slash; clio subjects are always absolute, and the
+// empty subject is the root rather than an error.
+func TestWithLeadingSlash(t *testing.T) {
+	for in, want := range map[string]string{
+		"":            "/",
+		"/":           "/",
+		"orders/new":  "/orders/new",
+		"/orders/new": "/orders/new",
+	} {
+		if got := withLeadingSlash(in); got != want {
+			t.Errorf("withLeadingSlash(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestEscapeSubjectPath covers the state-route path segment. Each segment is
+// escaped independently so the slashes between them survive as route separators —
+// escaping the whole subject at once would turn a nested subject into one literal
+// segment. The root subject contributes no segment at all.
+func TestEscapeSubjectPath(t *testing.T) {
+	for in, want := range map[string]string{
+		"":                "",
+		"/":               "",
+		"orders":          "orders",
+		"/orders/new":     "orders/new",
+		"/orders/a b":     "orders/a%20b",
+		"/orders/a+b/c%d": "orders/a+b/c%25d",
+	} {
+		if got := escapeSubjectPath(in); got != want {
+			t.Errorf("escapeSubjectPath(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestScanNDJSONSkipsBlankLines covers the stream reader's tolerance for the
+// blank lines a chunked NDJSON response can carry — a trailing newline, or a
+// keepalive gap between records. A blank line is not a record, so it must not
+// reach the callback as one.
+func TestScanNDJSONSkipsBlankLines(t *testing.T) {
+	const stream = "\n{\"a\":1}\n\n   \n{\"b\":2}\n\n"
+	var got []string
+	if err := scanNDJSON(strings.NewReader(stream), func(line []byte) error {
+		got = append(got, string(line))
+		return nil
+	}); err != nil {
+		t.Fatalf("scanNDJSON: %v", err)
+	}
+	if len(got) != 2 || got[0] != `{"a":1}` || got[1] != `{"b":2}` {
+		t.Fatalf("lines = %q, want just the two records", got)
+	}
+
+	// A callback error stops the scan and is returned.
+	wantErr := errors.New("stop")
+	if err := scanNDJSON(strings.NewReader(stream), func([]byte) error { return wantErr }); !errors.Is(err, wantErr) {
+		t.Errorf("scanNDJSON error = %v, want the callback's error", err)
+	}
 }
