@@ -143,6 +143,11 @@ export class PdfDocument {
 
   get contentWidth() { return this.width - 2 * this.margin; }
 
+  // bottom is the y past which content must break to a new page. Everything that
+  // decides about a break reads it, so a widow check and the break it is trying
+  // to predict can never disagree.
+  get bottom() { return this.height - this.margin - (this.footer ? 18 : 0); }
+
   newPage() {
     this.current = { ops: [], images: [] };
     this.pages.push(this.current);
@@ -153,7 +158,7 @@ export class PdfDocument {
   // space reserves vertical room, breaking to a new page when the block would
   // cross the bottom margin.
   space(h) {
-    if (this.y + h > this.height - this.margin - (this.footer ? 18 : 0)) this.newPage();
+    if (this.y + h > this.bottom) this.newPage();
     const top = this.y;
     this.y += h;
     return top;
@@ -180,12 +185,20 @@ export class PdfDocument {
     if (opts.after !== 0) this.y += opts.after ?? 4;
   }
 
-  heading(text, level = 1) {
+  // reserve breaks to a new page unless `points` of vertical space are left. It
+  // is how a caller keeps a block together: only the caller knows how much of
+  // what follows must stay with what it is about to write.
+  reserve(points) {
+    if (this.y + points > this.bottom) this.newPage();
+  }
+
+  // heading writes a section title. `keep` is the height of the block that must
+  // not be orphaned from it — pass what the section actually needs; the default
+  // holds the title with two following lines.
+  heading(text, level = 1, { keep } = {}) {
     const size = level === 1 ? 18 : level === 2 ? 13 : 11;
     this.y += level === 1 ? 6 : 10;
-    // Keep a heading with at least the first line of what it introduces, so a
-    // section title never sits alone at the foot of a page.
-    if (this.y + size * 1.35 * 3 > this.height - this.margin) this.newPage();
+    this.reserve(keep ?? size * 1.35 + 2 * 13.5);
     this.paragraph(text, { size, bold: true, after: level === 1 ? 8 : 4 });
   }
 
@@ -230,9 +243,9 @@ export class PdfDocument {
     let h = pixelHeight * scale;
     // If it cannot fit in what is left of this page, start a fresh one rather
     // than shrinking the diagram to a stamp.
-    if (this.y + h > this.height - this.margin) {
+    if (this.y + h > this.bottom) {
       this.newPage();
-      const fit = Math.min(maxWidth / pixelWidth, (this.height - 2 * this.margin) / pixelHeight, 1);
+      const fit = Math.min(maxWidth / pixelWidth, (this.bottom - this.margin) / pixelHeight, 1);
       w = pixelWidth * fit;
       h = pixelHeight * fit;
     }

@@ -111,6 +111,24 @@ test("content longer than a page flows onto further pages", async ({ page }) => 
   expect(raw).toContain(count + " / " + count);
 });
 
+test("a heading is not stranded at the foot of a page from what it introduces", async ({ page }) => {
+  // Fill a page to within one line of the bottom, then start a section. The
+  // heading must move to the next page with its body rather than sitting alone.
+  const pages = await page.evaluate(() => {
+    const doc = new window.__pdf.PdfDocument({ title: "t", footer: "f" });
+    while (doc.y < doc.bottom - 70) doc.paragraph("filler");
+    const before = doc.pages.length;
+    doc.heading("Flug buchen", 3, { keep: 58 });
+    const headingPage = doc.pages.length;
+    doc.paragraph("Service task · id: Task_buchen");
+    doc.paragraph("Ruft das Buchungssystem der Airline auf.");
+    return { before, headingPage, after: doc.pages.length };
+  });
+
+  expect(pages.headingPage, "the heading broke to a new page").toBe(pages.before + 1);
+  expect(pages.after, "and its body followed it there").toBe(pages.headingPage);
+});
+
 test("a diagram raster is embedded untranscoded and declared on its page", async ({ page }) => {
   const { raw, jpegHead, jpegLength } = await page.evaluate(async () => {
     const { bytes, jpeg } = await window.__docWithImage();
