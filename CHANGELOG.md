@@ -12,8 +12,129 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-08-18
+
+Milestone 1's BPMN surface is essentially complete: this release lands the last
+unimplemented **intermediate-event trigger** (conditional), the last major
+**structural** element (ad-hoc subprocesses), plus link, escalation and terminate
+events, lanes, and the loop markers on every activity kind. Alongside it the
+platform grew **process applications** — versioned, deployable, git-backed and
+publishable to another server — and the engine gained **recovery checkpoints**
+so restart no longer replays from genesis.
+
 ### Added
 
+- **Ad-hoc subprocesses** ([ADR-0138](docs/adr/0138-adhoc-subprocesses.md)): the last major
+  **structural** BPMN element — an `<adHocSubProcess>` whose contained activities are **not driven
+  by sequence flow**. Entering it activates every **entry activity** (a contained node with no
+  incoming flow) **at once**, each an independent token in its scope; contained activities may still
+  be wired to each other and a token then flows on inside the scope. It finishes either when its
+  scope **drains** or, if it carries a boolean **FEEL completion condition**, the first time that
+  condition holds at the checkpoint run after each contained activity completes — cancelling the
+  still-running activities (`cancelRemainingInstances`, the BPMN default) or, with `"false"`, letting
+  them finish. This is BPMN's construct for **flexible / case-management** work. Built on the
+  existing subprocess scope (ADR-0074) and the multi-instance completion-condition eval plus
+  `terminateScope` cancel (ADR-0077), so it adds **no value type, event, or recovery path** —
+  boundary events on it, interrupts, and recovery come for free (recovery-tested). Authored in the
+  Modeler. `ordering="Sequential"` is **refused at deploy** rather than silently run as parallel.
+
+- **Conditional events** ([ADR-0137](docs/adr/0137-conditional-events.md)): the one BPMN event
+  family triggered by **process data** rather than a message, timer, signal, or throw — a
+  conditional **intermediate catch**, **boundary event**, and **event subprocess**, each carrying a
+  boolean **FEEL condition over the instance's variables**. The condition compiles at deploy (the
+  gateway-condition machinery) and is **re-evaluated when a variable it reads changes**: every
+  committed write funnels through the one `AppendVariableEvent` chokepoint, which marks the instance
+  dirty and schedules a transient, command-path-only re-check that fires the armed conditionals now
+  true. It self-evaluates at arm, opens **no subscription**, and reacts correctly to an external
+  `SetVariables` with no activity completing. The re-check runs live only and the fire is an ordinary
+  persisted event, so recovery replays it identically; a process with no conditional pays nothing on
+  a variable write. Interrupting forms fire once; non-interrupting forms fire once per arm
+  (repeatable false→true edge-triggering is a documented follow-up). The last unimplemented BPMN
+  intermediate-event trigger.
+
+- **Link events** ([ADR-0132](docs/adr/0132-link-events.md)): BPMN's **off-page connector** — a link
+  intermediate **throw** ("go to X") and **catch** ("arrive at X"), paired by name within one flow
+  scope, standing in for a sequence flow so a long or crossing diagram stays readable. Atlas resolves
+  the pair **entirely at compile time**: the throw→catch link becomes a **synthetic sequence flow**
+  and both events reuse the existing pass-through behavior, so a token flows throw ⇢ catch ⇢ onward
+  exactly as through a none event — **no new runtime behavior, value type, event, or recovery path**.
+  A deploy rejects an unmatched throw or a duplicate catch name. Authored in the Modeler.
+
+- **Escalation events** ([ADR-0125](docs/adr/0125-escalation-events.md)): an **escalation** is a
+  matter raised up the scope chain — an escalation **throw** or **end event** raises it and the
+  nearest enclosing escalation **boundary** or **event subprocess** with a matching code catches it.
+  Unlike an error it may be caught **non-interrupting** (the activity keeps running while the handler
+  runs alongside), an **intermediate throw continues** on its outgoing flow, and an **uncaught
+  escalation is benign** — no incident. Codes match by value, a code-less catch is a catch-all, and
+  an escalation **propagates out of a call activity** to the caller. Authored in the Modeler, with a
+  shared escalation manager.
+
+- **Terminate end events** ([ADR-0116](docs/adr/0116-terminate-end-events.md)): a
+  `<terminateEventDefinition/>` on an end event ends its **enclosing flow scope** at once — every
+  other live token in that scope is terminated and its jobs cancelled, then the scope completes. At
+  the process root that ends the instance; inside an embedded subprocess it ends that subprocess and
+  the parent continues on its outgoing flow. It reuses the existing scope-teardown wholesale, adding
+  one element type and a two-method behavior with **no new subscription, value type, or recovery
+  path**. Previously refused at deploy.
+
+- **BPMN lanes** ([ADR-0121](docs/adr/0121-bpmn-lanes.md), Layer A): a `<laneSet>`/`<lane>`
+  partitions a process's flow nodes into **organizational lanes** — the role, team, or system
+  responsible. Atlas adopts them as **metadata with no execution semantics** (spec-faithful): the
+  compiler records each node's lane and exposes it over the API and in the Tasks app; the engine,
+  `applyToState`, and token flow are untouched. Lane→group assignment defaults and instance-level
+  access control are designed but deferred.
+
+- **Mockup (engine-simulated) service tasks** ([ADR-0120](docs/adr/0120-mockup-service-task.md)):
+  a service task can be marked as simulated by the engine itself — on activation it writes an
+  optional FEEL result and waits a random duration, then completes, or raises an incident per a
+  configured failure probability. No external worker or connector is needed, so a process with
+  service tasks can be exercised end to end before any of them is implemented.
+
+- **Bulk-terminate running instances** ([ADR-0090](docs/adr/0090-bulk-terminate-instances.md)):
+  an operator can terminate many instances at once — an explicit selection, or every instance
+  matching the current filter — instead of one key at a time.
+
+- **Process applications** ([ADR-0128](docs/adr/0128-process-applications.md)): the project is
+  elevated into a **deployable, versioned, portable unit** — its BPMN, DMN and form artifacts are
+  validated and deployed **together** as one release, with the deployment recorded so an application
+  has a history rather than a scatter of individual deploys.
+
+- **Git-backed applications** ([ADR-0134](docs/adr/0134-git-backed-applications.md)): a repository
+  becomes an application's **source** — a curated layout of real `.bpmn`/`.dmn`/form files plus a
+  manifest, so changes diff legibly, rather than the opaque sidecar JSON a backup wants. Uses
+  `go-git`, so the binary stays CGO-free and self-contained. **Atlas never merges**: a diverged
+  branch is refused rather than three-way merged, because a plausible-looking BPMN merge can deploy
+  and be silently wrong. A **portable application key** in the manifest survives a clone.
+
+- **Remote deployment targets** ([ADR-0129](docs/adr/0129-remote-deployment-targets.md)): an
+  application can be **published to another Atlas server** — promoting what is deployed from one
+  environment to the next, rather than re-uploading artifacts by hand.
+
+- **Deprecating a process version** ([ADR-0130](docs/adr/0130-deprecating-a-process-version.md)):
+  a deployed version can be marked **deprecated** — a *drain* state distinct from pausing: running
+  instances finish, but no new instance starts on it, so an application's Deployments view can retire
+  old versions without terminating work in flight.
+
+- **Server-side diagram auto-layout** ([ADR-0124](docs/adr/0124-server-side-diagram-auto-layout.md),
+  [ADR-0127](docs/adr/0127-layered-layout-pipeline-and-invariants.md)): Atlas generates BPMN diagram
+  interchange (DI) in Go on the server, so a model that carries no layout still renders, and the
+  Modeler's **Auto-layout** button (**F8**) re-flows one from scratch. ADR-0127 restructured the
+  generator into a **layered pipeline with executable layout invariants**, measured phase by phase,
+  after ADR-0124's hand-written generator hit the edge cases it predicted.
+
+- **A protected system project and bootstrap-deployed platform processes**
+  ([ADR-0122](docs/adr/0122-protected-system-project-and-bootstrap-deployment.md)): Atlas models its
+  own operations — user intake, access review, offboarding — as Atlas processes, bootstrap-deployed
+  into a protected project that ordinary project management cannot delete or corrupt.
+
+- **A sanctioned user-provisioning path for system processes**
+  ([ADR-0123](docs/adr/0123-sanctioned-user-provisioning-for-system-processes.md)): the platform
+  processes above stop short of the privileged act; this gives them one **narrow, audited** way to
+  actually provision an account, instead of a general-purpose "create any user" capability.
+
+- **Self-service registration link** ([ADR-0126](docs/adr/0126-self-service-registration-link.md)):
+  the login screen can offer a registration link that starts the user-intake process, so a request
+  for access is a modeled, approvable flow rather than an out-of-band email.
 - **Every element takes a Documentation property, and a user task shows it to the person
   doing the work** ([ADR-0025](docs/adr/0025-full-properties-panel.md) amended, reversing
   its "the compiler ignores it" clause): the Modeler's Details panel now offers a
@@ -552,5 +673,6 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/pblumer/atlas/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/pblumer/atlas/releases/tag/v0.1.0
