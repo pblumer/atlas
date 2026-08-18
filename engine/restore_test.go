@@ -380,3 +380,16 @@ func TestRecoverFromCheckpointSeedsKeyCounter(t *testing.T) {
 		t.Fatalf("active instances after creating one more = %d, want %d — a reset key counter overwrote a recovered instance", got, before+1)
 	}
 }
+
+// TestRecoverFromUnusableRootFallsBackToGenesis: recovery must never fail because the
+// checkpoint root is unusable — a root that is a file rather than a directory simply
+// yields no checkpoint, and the log is replayed whole.
+func TestRecoverFromUnusableRootFallsBackToGenesis(t *testing.T) {
+	dir, _, cp, _, live := checkpointedRun(t)
+	notADir := filepath.Join(t.TempDir(), "checkpoints")
+	if err := os.WriteFile(notADir, []byte("in the way"), 0o644); err != nil {
+		t.Fatalf("seed file: %v", err)
+	}
+	fresh := filepath.Join(t.TempDir(), "state-fresh")
+	assertSnapshotEqual(t, recoverInto(t, dir, fresh, notADir, cp), live, "genesis replay past an unusable root")
+}

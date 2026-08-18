@@ -507,13 +507,16 @@ What it takes to run this for real.
 - 🔲 Worker SDK (Go first)
 - 🔲 Metrics (throughput, batch size, fsync latency, queue depth), structured logs, OTel traces
 - 🚧 Log compaction / snapshotting so recovery doesn't replay from genesis
-  ([ADR-0133](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), v0.2.0
-  programme D): the design is decided — a periodic Pebble checkpoint of the state store
-  at a known applied log position plus an engine-owned manifest, so recovery replays
-  only the suffix after the newest checkpoint and old WAL segments become deletable
-  (gated on the exporter/retention watermarks). The `checkpoint` package's versioned,
-  self-checksummed manifest format primitives landed first; creating/publishing a
-  checkpoint, restoring from it, and deleting segments are the remaining slices.
+  ([ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), v0.2.0
+  programme D): the mechanism is complete. A checkpoint is a Pebble snapshot of the state
+  store at a known applied log position plus a versioned, self-checksummed manifest,
+  taken on the run loop at a batch boundary and published atomically by rename;
+  `RecoverFrom` restores the newest usable one and replays only the WAL suffix past it
+  (falling back to an older checkpoint or genesis on anything untrustworthy); and
+  `CompactLog` deletes the segments that become redundant, gated on a fully verified
+  checkpoint **and** every consumer watermark (ADR-0114 exporter, ADR-0115 retention).
+  Remaining: wire it into the server — the checkpoint cadence, restoring at startup, and
+  the operator status/controls — which is what turns it on in production.
 - 🔲 Exported-log stream for downstream analytics
 - 🔲 Operator tooling: list/inspect instances, incidents, jobs
 

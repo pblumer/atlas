@@ -258,7 +258,16 @@ recovery behaves exactly as it did before.
    - Only the manifest is read, not the snapshot's state files: its own checksum makes
      the seeded fields trustworthy, and a suffix replay never touches the snapshot.
      Verifying the state checksum belongs to whatever installs those files.
-4. Compact eligible WAL segments once a checkpoint is durable and every consumer
-   watermark allows it.
+4. **Landed** — **compact eligible WAL segments**. `wal.Log.Compact` deletes segments
+   using the *same* helper `ReplayFrom` uses to skip them, so the deleted set and the
+   skipped set can never drift apart; the active segment is structurally undeletable
+   (the skip rule cannot advance past the last segment, which nothing follows to bound).
+   `engine.Processor.CompactLog(root, consumerLimits)` derives the cut as the minimum of
+   the newest **fully verified** checkpoint — manifest *and* state files, stricter than
+   `RecoverFrom`, because once the prefix is gone those files are the only way to rebuild
+   it — and every consumer watermark the caller supplies (ADR-0114 exporter, ADR-0115
+   retention; the caller owns that list because only it knows which consumers exist). A
+   checkpoint that is corrupt, foreign, or ahead of the store licenses **no** deletion,
+   so the log is never trimmed on a promise that cannot be checked.
 5. Expose checkpoint/compaction status and operator controls, and choose the
    production cadence at which the server takes checkpoints.
