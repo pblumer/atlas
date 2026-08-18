@@ -99,6 +99,22 @@ _Changed_ / _Removed_ for each version.
   standard loop like a sequential multi-instance, badged ↻ and bounded by the modelled
   `loopMaximum`, and the Operations call-activity list labels a looping call activity
   **loop** rather than **multi-instance**.
+- **WAL compaction — old segments finally become deletable** (v0.2.0 programme D,
+  [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 4):
+  the log no longer grows without bound. `wal.Log.Compact` deletes the segments a replay
+  would skip, computed by the *same* rule `ReplayFrom` uses, so the deleted set and the
+  skipped set cannot drift apart; the segment being written is structurally undeletable.
+  `engine.Processor.CompactLog(root, consumerLimits)` gates the cut on the newest
+  **fully verified** checkpoint — manifest *and* state files, a stricter check than
+  recovery makes, because once the prefix is deleted those files are the only way to
+  rebuild it — and on every consumer watermark the caller passes (the exported-log
+  high-water mark, ADR-0114, and the retention safe position, ADR-0115). A checkpoint
+  that is corrupt, for another partition, or ahead of the store licenses **no** deletion,
+  and with no usable checkpoint nothing is deleted at all: the log stays the sole
+  recovery source rather than being trimmed on an unverifiable promise. Compaction is an
+  optimization like the checkpoint itself — skipping it costs disk, never correctness.
+  Nothing wires this into the server yet; the cadence and the operator surface are the
+  last ADR-0131 slice.
 - **Engine recovery checkpoints — restore and suffix replay** (v0.2.0 programme D,
   [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 3):
   recovery can now *use* a checkpoint, which is what turns O(total log) startup into

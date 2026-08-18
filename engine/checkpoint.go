@@ -108,3 +108,69 @@ func (p *Processor) checkpointSeed(root string, lastApplied uint64) (after, high
 	}
 	return 0, 0, 0
 }
+
+// CompactLog deletes the WAL segments no longer needed for recovery and returns how
+// many were removed (ADR-0131). It must be called on the single-writer goroutine.
+//
+// A segment is removed only when it lies entirely at or below the **compaction cut**,
+// which is the minimum of:
+//
+//   - the newest checkpoint for this partition that **fully verifies** — manifest *and*
+//     state files — and whose applied position is at or below the store's. Verification
+//     is stricter here than in RecoverFrom on purpose: once the prefix is deleted, that
+//     checkpoint's state files become the only way to rebuild it, so a corrupt snapshot
+//     must never license a deletion. Requiring it to be at or below the store's applied
+//     position matters just as much: recovery refuses a checkpoint ahead of the store
+//     (it skips reading a prefix, it does not install state files), so deleting below
+//     such a checkpoint would strand recovery with a gap it can no longer replay.
+//   - every consumerLimit the caller passes — the exported-log high-water mark
+//     (ADR-0114) and the retention safe position (ADR-0115) when those are enabled. The
+//     caller owns this list because only it knows which consumers exist; passing nil
+//     means "no consumers", so pass every enabled consumer's watermark or risk deleting
+//     records it has not read yet.
+//
+// If no checkpoint qualifies the cut is zero and **nothing is deleted** — the log stays
+// the sole recovery source rather than being trimmed on a promise that cannot be
+// checked. Compaction is an optimization like the checkpoint itself: skipping it costs
+// disk, never correctness.
+func (p *Processor) CompactLog(checkpointRoot string, consumerLimits []uint64) (int, error) {
+	cut, err := p.compactionCut(checkpointRoot, consumerLimits)
+	if err != nil || cut == 0 {
+		return 0, err
+	}
+	return p.log.Compact(cut, recordPosition)
+}
+
+// compactionCut resolves the highest position that is provably redundant, or zero when
+// nothing may be deleted.
+func (p *Processor) compactionCut(root string, consumerLimits []uint64) (uint64, error) {
+	if root == "" {
+		return 0, nil
+	}
+	lastApplied, err := p.store.LastAppliedPosition()
+	if err != nil {
+		return 0, err
+	}
+	positions, err := checkpoint.List(root)
+	if err != nil {
+		return 0, err
+	}
+	cut := uint64(0)
+	for i := len(positions) - 1; i >= 0; i-- { // newest first
+		m, verr := checkpoint.Verify(root, positions[i])
+		if verr != nil || m.Partition != p.partition || m.AppliedPosition > lastApplied {
+			continue // corrupt, foreign, or ahead of the store: it licenses no deletion
+		}
+		cut = m.AppliedPosition
+		break
+	}
+	if cut == 0 {
+		return 0, nil
+	}
+	for _, limit := range consumerLimits {
+		if limit < cut {
+			cut = limit
+		}
+	}
+	return cut, nil
+}
