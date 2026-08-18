@@ -660,3 +660,114 @@ func TestConditionalDirtyTrackingSkipsPlainProcess(t *testing.T) {
 		t.Fatalf("after job: process=%d element=%d, want 0 and 0", pi, ei)
 	}
 }
+
+// TestConditionalEventSubInterruptingFiresAtArm is a regression test for an orphaned-element bug:
+// an interrupting conditional event subprocess whose condition already holds when its scope is
+// entered must fire cleanly, leaving no live element behind (ADR-0137). Firing synchronously at
+// arm interrupted the scope while its inner flow was still activating in the same wave, so a
+// not-yet-activated inner task (here `work`) was orphaned — the instance finished with a stray
+// element. The at-arm fire is now deferred to a re-check that runs once the inner flow has
+// settled, so terminateScope tears the whole scope down.
+func TestConditionalEventSubInterruptingFiresAtArm(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	b := compiler.NewBuilder(113, "cond-eventsub-int-atarm", 1)
+	start := b.AddStartEvent()
+	sub := b.AddSubProcess()
+	outerEnd := b.AddEndEvent()
+	b.Connect(start, sub)
+	b.Connect(sub, outerEnd)
+	b.PushScope(sub)
+	iStart := b.AddStartEvent()
+	work := b.AddServiceTask("work", 3)
+	iEnd := b.AddEndEvent()
+	b.Connect(iStart, work)
+	b.Connect(work, iEnd)
+	handler := b.AddSubProcess()
+	b.PushScope(handler)
+	hStart := b.AddStartEvent()
+	hEnd := b.AddEndEvent()
+	b.Connect(hStart, hEnd)
+	b.PopScope()
+	b.SetEventSubProcess(handler, compiler.EventSubProcessDetail{
+		StartNode: hStart, Interrupting: true, Kind: compiler.BoundaryConditional, Condition: mustCompile(t, "alert"),
+	})
+	b.PopScope()
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ServiceTask(cp.Node(work).Detail).JobType
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key, boolVar("alert", true))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after create: process=%d element=%d, want 0 and 0 (fired at arm, scope fully torn down — no orphan)", pi, ei)
+	}
+	v := elementVisits(t, h.store, cp.Key)
+	if v[hEnd] != 1 || v[outerEnd] != 1 || v[iEnd] != 0 {
+		t.Errorf("visits handler=%d outer=%d innerEnd=%d, want 1, 1, 0", v[hEnd], v[outerEnd], v[iEnd])
+	}
+	if !jobGone(t, h.store, jobType) {
+		t.Error("inner job survived the interrupting conditional event subprocess (orphaned element)")
+	}
+}
+
+// TestConditionalBoundaryInterruptingOnSubprocessFiresAtArm is the boundary counterpart of the
+// orphaned-element regression: an interrupting conditional boundary on a subprocess host whose
+// condition holds at arm must tear the whole host scope down, not leave its still-activating inner
+// task behind (ADR-0137).
+func TestConditionalBoundaryInterruptingOnSubprocessFiresAtArm(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	b := compiler.NewBuilder(114, "cond-bnd-sub-atarm", 1)
+	start := b.AddStartEvent()
+	sub := b.AddSubProcess()
+	done := b.AddEndEvent()
+	recovered := b.AddEndEvent()
+	boundary := b.AddBoundaryConditionalEvent(sub, mustCompile(t, "alert"), true)
+	b.Connect(start, sub)
+	b.Connect(sub, done)
+	b.Connect(boundary, recovered)
+	b.PushScope(sub)
+	iStart := b.AddStartEvent()
+	work := b.AddServiceTask("work", 3)
+	iEnd := b.AddEndEvent()
+	b.Connect(iStart, work)
+	b.Connect(work, iEnd)
+	b.PopScope()
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ServiceTask(cp.Node(work).Detail).JobType
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key, boolVar("alert", true))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after create: process=%d element=%d, want 0 and 0 (boundary tore the host scope down — no orphan)", pi, ei)
+	}
+	v := elementVisits(t, h.store, cp.Key)
+	if v[recovered] != 1 || v[done] != 0 {
+		t.Errorf("visits recovered=%d done=%d, want 1 and 0", v[recovered], v[done])
+	}
+	if !jobGone(t, h.store, jobType) {
+		t.Error("inner job survived the interrupting conditional boundary (orphaned element)")
+	}
+}

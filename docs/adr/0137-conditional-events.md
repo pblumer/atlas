@@ -157,9 +157,15 @@ logic is (a) parsing `<conditionalEventDefinition><condition>` and compiling the
   all armed conditionals in the instance, since evaluation is a pure read and a fire-once event that
   was already true would have fired at arm.)
 - **At arm.** A conditional's `OnActivated` performs an **immediate self-evaluation** (the same eval);
-  if already true it fires at once — a catch the token arrives at with the condition already satisfied
-  passes straight through; a boundary true the moment its host activates interrupts immediately. This
-  is BPMN-faithful (evaluate on entry).
+  if already true it fires — a catch the token arrives at with the condition already satisfied passes
+  straight through; a boundary or event subprocess true the moment its scope is entered fires too.
+  This is BPMN-faithful (evaluate on entry). One subtlety: a **catch** fires synchronously (it is a
+  single element — completing it just flows the token on), but an **interrupting boundary/event
+  subprocess on a scope** does **not** fire synchronously at arm — it **defers** to a re-check (marks
+  the instance dirty). Firing synchronously would tear the scope down while its inner flow is still
+  activating in the same batch wave, orphaning the not-yet-activated inner elements; deferring one
+  batch lets the inner flow settle so `terminateScope` tears the whole scope down cleanly. The
+  variable-change re-check path is unchanged.
 
 ### Interrupting vs non-interrupting
 

@@ -3143,10 +3143,14 @@ func (boundaryEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *m
 	case compiler.BoundaryConditional:
 		// A conditional boundary opens nothing either — it arms inert and is driven to
 		// Completing by a variable-change re-check when its FEEL condition becomes true
-		// (ADR-0137). It self-evaluates now: if the condition already holds the moment the
-		// host activates, it fires at once. Its OnCompleting honors d.Interrupting.
+		// (ADR-0137). If the condition already holds the moment the host activates, defer the
+		// fire to a re-check (mark the instance dirty) rather than firing synchronously: an
+		// interrupting boundary on a subprocess host would otherwise tear the host down while
+		// its inner flow is still activating in the same wave, orphaning the not-yet-activated
+		// inner elements. The re-check runs on the next batch, once the host has settled, so
+		// interruptHost tears it down cleanly. Its OnCompleting honors d.Interrupting.
 		if conditionHolds(c, d.Condition, ei.FlowScopeKey) {
-			c.AppendElementCommand(key, model.IntentCompleting, *ei)
+			c.markConditionDirty(ei.FlowScopeKey)
 		}
 	}
 	// Stays Activated: waits until the timer fires, the message correlates, the signal
@@ -3337,11 +3341,15 @@ func (eventSubProcessStartBehavior) OnActivated(c *ProcessingContext, key uint64
 	case compiler.BoundaryConditional:
 		// A conditional event subprocess arms inert too — it opens nothing and is driven to
 		// Completing by a variable-change re-check when its FEEL condition over the parent
-		// scope's variables becomes true (ADR-0137). It self-evaluates now: if the condition
-		// already holds when the scope is entered, it fires at once. OnCompleting honors
-		// d.Interrupting.
+		// scope's variables becomes true (ADR-0137). Unlike a boundary (which arms on an
+		// already-established host and may fire at once), this trigger arms while its scope's
+		// inner flow is still activating in the same wave, so firing synchronously here would
+		// interrupt the scope mid-activation and orphan the not-yet-activated inner elements.
+		// If the condition already holds, defer the fire to a re-check (mark the instance dirty):
+		// it runs on the next batch, once the inner flow has settled and terminateScope can tear
+		// it down cleanly. OnCompleting honors d.Interrupting.
 		if conditionHolds(c, d.Condition, ei.FlowScopeKey) {
-			c.AppendElementCommand(key, model.IntentCompleting, *ei)
+			c.markConditionDirty(ei.FlowScopeKey)
 		}
 	}
 	// Stays Activated: waits until the trigger fires.
