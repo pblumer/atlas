@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api"
+	"github.com/pblumer/atlas/checkpoint"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/mcp"
 	"github.com/pblumer/atlas/opensearch"
@@ -146,6 +147,12 @@ func runServe(args []string) error {
 	osIndex := fs.String("opensearch-index", envOr("ATLAS_OPENSEARCH_INDEX", opensearch.DefaultIndex), "OpenSearch index the exporter writes events to")
 	// History retention (ADR-0115): opt-in, off unless a positive max-age is set.
 	retentionAge := fs.Duration("retention-max-age", envDuration("ATLAS_RETENTION_MAX_AGE"), "hard-delete finished process instances older than this once their events are exported (ADR-0115), e.g. 720h; 0 disables retention")
+	// Recovery checkpoints (ADR-0131): on by default, because bounded restart time is
+	// the point of them. They only ever add a shortcut — the WAL stays the source of
+	// truth and a missing or unusable checkpoint just means a full replay — so unlike
+	// the exporter and retention there is nothing here to opt into.
+	checkpointInterval := fs.Duration("checkpoint-interval", 5*time.Minute, "how often to snapshot applied state so a restart replays only the log past it (ADR-0131); 0 disables checkpointing")
+	checkpointKeep := fs.Int("checkpoint-keep", 3, "how many recovery checkpoints to keep; each pins the state files it captured, so this bounds their disk (ADR-0131)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -156,7 +163,7 @@ func runServe(args []string) error {
 		Password: os.Getenv("ATLAS_OPENSEARCH_PASSWORD"),
 		Index:    strings.TrimSpace(*osIndex),
 	}
-	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, *retentionAge)
+	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, *retentionAge, *checkpointInterval, *checkpointKeep)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -178,7 +185,7 @@ func envDuration(key string) time.Duration {
 	return 0
 }
 
-func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retentionMaxAge time.Duration) error {
+func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retentionMaxAge time.Duration, checkpointInterval time.Duration, checkpointKeep int) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -214,10 +221,15 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 	}
 	defer store.Close()
 
-	// One partition for now (single-node). Recover replays the log into the
-	// store before we accept traffic.
+	// One partition for now (single-node). Recovery replays the log into the store
+	// before we accept traffic, starting after the newest usable checkpoint under
+	// <data-dir>/checkpoints instead of at genesis (ADR-0131). The root is resolved
+	// through checkpoint.Dir, the same function the server's checkpoint cadence
+	// publishes through, so the two can never point at different directories. A
+	// missing, corrupt, or too-new checkpoint simply falls back to a full replay.
+	engine.BuildVersion = api.Version // metadata recorded in the checkpoints we publish
 	proc := engine.New(1, wl, store, nil)
-	if err := proc.Recover(); err != nil {
+	if err := proc.RecoverFrom(checkpoint.Dir(dataDir)); err != nil {
 		return err
 	}
 
@@ -238,6 +250,12 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 			gate = "OpenSearch export"
 		}
 		log.Printf("history retention enabled: purging finished instances older than %s, gated on %s", retentionMaxAge, gate)
+	}
+	// Periodic recovery checkpoints keep restart time a function of the cadence rather
+	// than of the whole log's length (ADR-0131). Nothing is deleted by them.
+	if checkpointInterval > 0 {
+		apiOpts = append(apiOpts, api.WithCheckpoints(checkpointInterval), api.WithCheckpointRetention(checkpointKeep))
+		log.Printf("recovery checkpoints enabled: snapshotting applied state every %s, keeping %d", checkpointInterval, checkpointKeep)
 	}
 	if auth {
 		apiOpts = append(apiOpts, api.WithAuth())

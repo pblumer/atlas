@@ -269,5 +269,33 @@ recovery behaves exactly as it did before.
    retention; the caller owns that list because only it knows which consumers exist). A
    checkpoint that is corrupt, foreign, or ahead of the store licenses **no** deletion,
    so the log is never trimmed on a promise that cannot be checked.
-5. Expose checkpoint/compaction status and operator controls, and choose the
-   production cadence at which the server takes checkpoints.
+5. **Landed** — **turn checkpointing on in the server**. `api.WithCheckpoints(every)`
+   starts a loop that takes a checkpoint on a cadence and prunes to
+   `WithCheckpointRetention(keep)`; `cmd/atlas serve` enables it by default at
+   `--checkpoint-interval 5m`, keeping `--checkpoint-keep 3`, and recovers at startup
+   with `RecoverFrom`. Two properties carry the wiring:
+   - the snapshot runs **on the run loop** (`Server.do`), because a checkpoint's
+     position is only exact at a batch boundary (invariant I3); pruning runs off it,
+     since only the checkpoint goroutine ever publishes into the root.
+   - the publish path and the recovery path both resolve the root through
+     `checkpoint.Dir(dataDir)`, so a checkpoint cannot be written somewhere recovery
+     does not look.
+
+   It is on by default because bounded restart time is the point of the mechanism and
+   this slice deletes nothing: a failed, missing, or unusable checkpoint costs a full
+   replay and nothing else. An idle server publishes nothing rather than an empty
+   checkpoint, and a failing pass is logged and retried on the next tick.
+
+   Reading checkpoints at startup gives them one new interaction: a whole-instance
+   restore (ADR-0109) **replaces the WAL**, so checkpoints of the replaced log now
+   describe a log that no longer exists. Recovery refuses such a checkpoint only while
+   the rebuilt store still trails its position; once the restored log advanced past it,
+   it would pass every guard and seed recovery from an unrelated log's state.
+   `ApplyPendingRestore` therefore drops the checkpoint directory along with the state
+   store — both are derivable, and a restore already implies a full replay. Checkpoints
+   are likewise absent from the snapshot itself, which allowlists only what is not
+   derivable.
+6. Feed `CompactLog` the live consumer watermarks (ADR-0114 export, ADR-0115 retention)
+   so redundant segments are actually deleted, and expose checkpoint/compaction status
+   and operator controls. Deletion is deliberately held back to its own slice: it is the
+   one irreversible step, and it should land after the cadence that feeds it has run.

@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/pblumer/atlas/checkpoint"
 )
 
 // A full snapshot (ADR-0109) is the whole-instance backup: unlike the design-time
@@ -297,8 +299,16 @@ func ApplyPendingRestore(dataDir string) (bool, error) {
 	}
 	// The snapshot omits the derivable state store; drop any existing state so it is
 	// rebuilt from the restored WAL on recovery, and remove the now-consumed staging.
+	//
+	// Recovery checkpoints go with it (ADR-0131). They describe positions in the log
+	// this restore just replaced, and their state files come from it: recovery refuses
+	// one only while the rebuilt store still trails it, so once the restored log
+	// advanced past that position a stale checkpoint would pass every guard and seed
+	// recovery from an unrelated log. Dropping them costs one full replay — which a
+	// restore does regardless — and the cadence publishes a fresh one shortly after.
 	return true, errors.Join(
 		os.RemoveAll(filepath.Join(dataDir, "state")),
+		os.RemoveAll(checkpoint.Dir(dataDir)),
 		os.RemoveAll(staging),
 	)
 }

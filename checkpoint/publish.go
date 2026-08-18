@@ -37,6 +37,12 @@ func DirName(appliedPos uint64) string {
 	return fmt.Sprintf("%0*d", dirNameWidth, appliedPos)
 }
 
+// Dir is the checkpoint root inside an Atlas data directory, alongside the WAL and the
+// state store. The server's checkpoint cadence and the recovery that reads what it
+// publishes both resolve the path through this one function, so a checkpoint can never
+// be written somewhere recovery does not look (ADR-0131).
+func Dir(dataDir string) string { return filepath.Join(dataDir, "checkpoints") }
+
 // Publish creates a checkpoint under root and publishes it atomically (ADR-0131).
 //
 // snapshot is called with a fresh, non-existent temporary directory path that it must
