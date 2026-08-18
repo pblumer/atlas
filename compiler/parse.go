@@ -466,6 +466,20 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		b.SetInstanceTtl(nanos)
 	}
+	// A per-definition history TTL (ADR-0144): how long a finished instance of this
+	// definition is kept before retention hard-deletes it. Validated up front for the
+	// same reason as the instance TTL — a typo must fail the deploy, not silently leave
+	// the history unbounded.
+	if ttl := strings.TrimSpace(proc.HistoryTtl); ttl != "" {
+		nanos, err := parseISO8601Duration(ttl)
+		if err != nil {
+			return nil, fmt.Errorf("compiler: process %q: invalid historyTtl %q: %w", proc.Id, ttl, err)
+		}
+		if nanos <= 0 {
+			return nil, fmt.Errorf("compiler: process %q: historyTtl %q must be a positive duration", proc.Id, ttl)
+		}
+		b.SetHistoryTtl(nanos)
+	}
 	ids := make(map[string]int32, len(proc.StartEvents)+len(proc.ServiceTasks)+len(proc.EndEvents))
 	reg := &registrar{b: b, ids: ids, docs: docs}
 
@@ -563,76 +577,77 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		return "", "", fmt.Errorf("compiler: data output association on %q has unknown targetRef %q", ownerId, targetRef)
 	}
-	wireDataOut := func(ownerId string, assocs []xmlDataOutputAssociation) error {
+	// The four wiring passes below each repeat one shape at every activity kind they
+	// handle — around thirty call sites of "wire it, propagate the rejection". keepWire
+	// holds the first rejection instead, so each call site is one statement and the
+	// passes are checked once at the end.
+	//
+	// Like the registrar's, the passes carry on after a rejection: registration already
+	// succeeded, so every remaining association still wires against a complete id table
+	// and no later pass can report a second failure caused by the first. The kept one is
+	// the first, and nothing between here and the check can return ahead of it.
+	var wireErr error
+	keepWire := func(err error) {
+		if err != nil && wireErr == nil {
+			wireErr = err
+		}
+	}
+	wireDataOut := func(ownerId string, assocs []xmlDataOutputAssociation) {
 		for _, a := range assocs {
 			name, state, err := resolveDataTarget(ownerId, a.TargetRef)
 			if err != nil {
-				return err
+				keepWire(err)
+				return
 			}
 			var valExpr *expr.Compiled
 			if from := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(a.Assignment.From), "=")); from != "" {
 				ce, err := expr.CompileAuto(from)
 				if err != nil {
-					return fmt.Errorf("compiler: data output association on %q assignment: %w", ownerId, err)
+					keepWire(fmt.Errorf("compiler: data output association on %q assignment: %w", ownerId, err))
+					return
 				}
 				valExpr = ce
 			}
 			b.AddDataOutputAssociation(ids[ownerId], name, valExpr, state, strings.TrimSpace(a.Assignment.To))
 		}
-		return nil
 	}
 	for _, st := range proc.ServiceTasks {
-		if err := wireDataOut(st.Id, st.DataOut); err != nil {
-			return nil, err
-		}
+		wireDataOut(st.Id, st.DataOut)
 	}
 	for _, st := range proc.ScriptTasks {
-		if err := wireDataOut(st.Id, st.DataOut); err != nil {
-			return nil, err
-		}
+		wireDataOut(st.Id, st.DataOut)
 	}
 	for _, brt := range proc.BusinessRuleTasks {
-		if err := wireDataOut(brt.Id, brt.DataOut); err != nil {
-			return nil, err
-		}
+		wireDataOut(brt.Id, brt.DataOut)
 	}
 	for _, ut := range proc.UserTasks {
-		if err := wireDataOut(ut.Id, ut.DataOut); err != nil {
-			return nil, err
-		}
+		wireDataOut(ut.Id, ut.DataOut)
 	}
 	for _, t := range proc.Tasks {
-		if err := wireDataOut(t.Id, t.DataOut); err != nil {
-			return nil, err
-		}
+		wireDataOut(t.Id, t.DataOut)
 	}
 	for _, t := range proc.ManualTasks {
-		if err := wireDataOut(t.Id, t.DataOut); err != nil {
-			return nil, err
-		}
+		wireDataOut(t.Id, t.DataOut)
 	}
 	for _, rt := range proc.ReceiveTasks {
-		if err := wireDataOut(rt.Id, rt.DataOut); err != nil {
-			return nil, err
-		}
+		wireDataOut(rt.Id, rt.DataOut)
 	}
 	for _, st := range proc.SendTasks {
 		if strings.TrimSpace(st.MessageRef) != "" {
 			continue // a message-kind send task is a throw, not an activity (ADR-0112)
 		}
-		if err := wireDataOut(st.Id, st.DataOut); err != nil {
-			return nil, err
-		}
+		wireDataOut(st.Id, st.DataOut)
 	}
 
 	// Wire data-input associations: a sourceRef names the data object read (resolved
 	// like an output target, its state ignored on a read); a targetRef is the process
 	// variable the read value is written into (ADR-0059).
-	wireDataIn := func(ownerId string, assocs []xmlDataInputAssociation) error {
+	wireDataIn := func(ownerId string, assocs []xmlDataInputAssociation) {
 		for _, a := range assocs {
 			name, _, err := resolveDataTarget(ownerId, a.SourceRef)
 			if err != nil {
-				return fmt.Errorf("compiler: data input association on %q source: %w", ownerId, err)
+				keepWire(fmt.Errorf("compiler: data input association on %q source: %w", ownerId, err))
+				return
 			}
 			// The target variable is the assignment's <to> (a free string the Modeler
 			// writes — a drawn association's own <targetRef> is a generated data-input
@@ -643,62 +658,47 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 				variable = strings.TrimSpace(a.TargetRef)
 			}
 			if variable == "" {
-				return fmt.Errorf("compiler: data input association on %q has no target variable (set the assignment's <to>)", ownerId)
+				keepWire(fmt.Errorf("compiler: data input association on %q has no target variable (set the assignment's <to>)", ownerId))
+				return
 			}
 			var valExpr *expr.Compiled
 			if from := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(a.Assignment.From), "=")); from != "" {
 				ce, err := expr.CompileAuto(from)
 				if err != nil {
-					return fmt.Errorf("compiler: data input association on %q assignment: %w", ownerId, err)
+					keepWire(fmt.Errorf("compiler: data input association on %q assignment: %w", ownerId, err))
+					return
 				}
 				valExpr = ce
 			}
 			b.AddDataInputAssociation(ids[ownerId], name, variable, valExpr)
 		}
-		return nil
 	}
 	for _, st := range proc.ServiceTasks {
-		if err := wireDataIn(st.Id, st.DataIn); err != nil {
-			return nil, err
-		}
+		wireDataIn(st.Id, st.DataIn)
 	}
 	for _, st := range proc.ScriptTasks {
-		if err := wireDataIn(st.Id, st.DataIn); err != nil {
-			return nil, err
-		}
+		wireDataIn(st.Id, st.DataIn)
 	}
 	for _, brt := range proc.BusinessRuleTasks {
-		if err := wireDataIn(brt.Id, brt.DataIn); err != nil {
-			return nil, err
-		}
+		wireDataIn(brt.Id, brt.DataIn)
 	}
 	for _, ut := range proc.UserTasks {
-		if err := wireDataIn(ut.Id, ut.DataIn); err != nil {
-			return nil, err
-		}
+		wireDataIn(ut.Id, ut.DataIn)
 	}
 	for _, t := range proc.Tasks {
-		if err := wireDataIn(t.Id, t.DataIn); err != nil {
-			return nil, err
-		}
+		wireDataIn(t.Id, t.DataIn)
 	}
 	for _, t := range proc.ManualTasks {
-		if err := wireDataIn(t.Id, t.DataIn); err != nil {
-			return nil, err
-		}
+		wireDataIn(t.Id, t.DataIn)
 	}
 	for _, rt := range proc.ReceiveTasks {
-		if err := wireDataIn(rt.Id, rt.DataIn); err != nil {
-			return nil, err
-		}
+		wireDataIn(rt.Id, rt.DataIn)
 	}
 	for _, st := range proc.SendTasks {
 		if strings.TrimSpace(st.MessageRef) != "" {
 			continue // a message-kind send task is a throw, not an activity (ADR-0112)
 		}
-		if err := wireDataIn(st.Id, st.DataIn); err != nil {
-			return nil, err
-		}
+		wireDataIn(st.Id, st.DataIn)
 	}
 
 	// Wire generic zeebe:ioMapping input/output mappings (ADR-0068). Each source is a
@@ -716,91 +716,73 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		return e, nil
 	}
-	wireIO := func(ownerId string, iom xmlZeebeIOMapping) error {
+	wireIO := func(ownerId string, iom xmlZeebeIOMapping) {
 		for _, in := range iom.Inputs {
 			target := strings.TrimSpace(in.Target)
 			if target == "" {
-				return fmt.Errorf("compiler: task %q has an ioMapping input with no target", ownerId)
+				keepWire(fmt.Errorf("compiler: task %q has an ioMapping input with no target", ownerId))
+				return
 			}
 			e, err := compileSource(ownerId, "input", target, in.Source)
 			if err != nil {
-				return err
+				keepWire(err)
+				return
 			}
 			b.AddInputMapping(ids[ownerId], target, e)
 		}
 		for _, out := range iom.Outputs {
 			target := strings.TrimSpace(out.Target)
 			if target == "" {
-				return fmt.Errorf("compiler: task %q has an ioMapping output with no target", ownerId)
+				keepWire(fmt.Errorf("compiler: task %q has an ioMapping output with no target", ownerId))
+				return
 			}
 			e, err := compileSource(ownerId, "output", target, out.Source)
 			if err != nil {
-				return err
+				keepWire(err)
+				return
 			}
 			b.AddOutputMapping(ids[ownerId], target, e)
 		}
-		return nil
 	}
 	// Wire I/O mappings for every scope, recursively: a subprocess's own ioMapping
 	// (input mappings write its scope on entry, output mappings promote to the
 	// parent on completion — the engine applies both generically) and the mappings
 	// on the activities inside it (ADR-0074 Phase 4).
-	var wireScopeIO func(c *xmlFlowContent) error
-	wireScopeIO = func(c *xmlFlowContent) error {
+	var wireScopeIO func(c *xmlFlowContent)
+	wireScopeIO = func(c *xmlFlowContent) {
 		for _, st := range c.ServiceTasks {
-			if err := wireIO(st.Id, st.IOMapping); err != nil {
-				return err
-			}
+			wireIO(st.Id, st.IOMapping)
 		}
 		for _, st := range c.ScriptTasks {
-			if err := wireIO(st.Id, st.IOMapping); err != nil {
-				return err
-			}
+			wireIO(st.Id, st.IOMapping)
 		}
 		for _, ut := range c.UserTasks {
-			if err := wireIO(ut.Id, ut.IOMapping); err != nil {
-				return err
-			}
+			wireIO(ut.Id, ut.IOMapping)
 		}
 		for _, ca := range c.CallActivities {
-			if err := wireIO(ca.Id, ca.IOMapping); err != nil {
-				return err
-			}
+			wireIO(ca.Id, ca.IOMapping)
 		}
 		for _, rt := range c.ReceiveTasks {
-			if err := wireIO(rt.Id, rt.IOMapping); err != nil {
-				return err
-			}
+			wireIO(rt.Id, rt.IOMapping)
 		}
 		for _, st := range c.SendTasks {
 			if strings.TrimSpace(st.MessageRef) != "" {
 				continue // a message-kind send task is a throw, not an activity (ADR-0112)
 			}
-			if err := wireIO(st.Id, st.IOMapping); err != nil {
-				return err
-			}
+			wireIO(st.Id, st.IOMapping)
 		}
 		for i := range c.SubProcesses {
 			sub := &c.SubProcesses[i]
-			if err := wireIO(sub.Id, sub.IOMapping); err != nil {
-				return err
-			}
-			if err := wireScopeIO(&sub.xmlFlowContent); err != nil {
-				return err
-			}
+			wireIO(sub.Id, sub.IOMapping)
+			wireScopeIO(&sub.xmlFlowContent)
 		}
 		// An ad-hoc subprocess is a scope too: recurse so its contained activities'
 		// I/O mappings are wired like any other scope's (ADR-0138).
 		for i := range c.AdHocSubProcesses {
-			if err := wireScopeIO(&c.AdHocSubProcesses[i].xmlFlowContent); err != nil {
-				return err
-			}
+			wireScopeIO(&c.AdHocSubProcesses[i].xmlFlowContent)
 		}
-		return nil
 	}
-	if err := wireScopeIO(&proc.xmlFlowContent); err != nil {
-		return nil, err
-	}
+	wireScopeIO(&proc.xmlFlowContent)
 
 	// Wire the loop characteristics of every activity in the scope tree, recursively,
 	// mirroring wireScopeIO — both BPMN markers: multi-instance (ADR-0077) and standard
@@ -880,88 +862,71 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	// An activity carries at most one loop marker: BPMN draws them as different icons
 	// (∥/≡ for a multi-instance, ↻ for a standard loop) and they mean different things,
 	// so a model with both is refused rather than silently running one of them.
-	wireLoop := func(ownerId string, mi *xmlMultiInstance, sl *xmlStandardLoop) error {
+	wireLoop := func(ownerId string, mi *xmlMultiInstance, sl *xmlStandardLoop) {
 		if mi != nil && sl != nil {
-			return fmt.Errorf("compiler: activity %q has both a multiInstanceLoopCharacteristics and a standardLoopCharacteristics (use one)", ownerId)
+			keepWire(fmt.Errorf("compiler: activity %q has both a multiInstanceLoopCharacteristics and a standardLoopCharacteristics (use one)", ownerId))
+			return
 		}
 		if err := wireMultiInstance(ownerId, mi); err != nil {
-			return err
+			keepWire(err)
+			return
 		}
-		return wireStandardLoop(ownerId, sl)
+		keepWire(wireStandardLoop(ownerId, sl))
 	}
-	var wireScopeMI func(c *xmlFlowContent) error
-	wireScopeMI = func(c *xmlFlowContent) error {
+	var wireScopeMI func(c *xmlFlowContent)
+	wireScopeMI = func(c *xmlFlowContent) {
 		for _, st := range c.ServiceTasks {
-			if err := wireLoop(st.Id, st.MultiInstance, st.StandardLoop); err != nil {
-				return err
-			}
+			wireLoop(st.Id, st.MultiInstance, st.StandardLoop)
 		}
 		for _, st := range c.ScriptTasks {
-			if err := wireLoop(st.Id, st.MultiInstance, st.StandardLoop); err != nil {
-				return err
-			}
+			wireLoop(st.Id, st.MultiInstance, st.StandardLoop)
 		}
 		for _, ut := range c.UserTasks {
-			if err := wireLoop(ut.Id, ut.MultiInstance, ut.StandardLoop); err != nil {
-				return err
-			}
+			wireLoop(ut.Id, ut.MultiInstance, ut.StandardLoop)
 		}
 		for _, ca := range c.CallActivities {
-			if err := wireLoop(ca.Id, ca.MultiInstance, ca.StandardLoop); err != nil {
-				return err
-			}
+			wireLoop(ca.Id, ca.MultiInstance, ca.StandardLoop)
 		}
 		for _, rt := range c.ReceiveTasks {
-			if err := wireLoop(rt.Id, rt.MultiInstance, rt.StandardLoop); err != nil {
-				return err
-			}
+			wireLoop(rt.Id, rt.MultiInstance, rt.StandardLoop)
 		}
 		for _, brt := range c.BusinessRuleTasks {
-			if err := wireLoop(brt.Id, brt.MultiInstance, brt.StandardLoop); err != nil {
-				return err
-			}
+			wireLoop(brt.Id, brt.MultiInstance, brt.StandardLoop)
 		}
 		// An undefined task and a manual task have no implementation, but they are
 		// activities: a loop marker on one repeats the (pass-through) step, which is what
 		// the diagram says it does.
 		for _, t := range c.Tasks {
-			if err := wireLoop(t.Id, t.MultiInstance, t.StandardLoop); err != nil {
-				return err
-			}
+			wireLoop(t.Id, t.MultiInstance, t.StandardLoop)
 		}
 		for _, t := range c.ManualTasks {
-			if err := wireLoop(t.Id, t.MultiInstance, t.StandardLoop); err != nil {
-				return err
-			}
+			wireLoop(t.Id, t.MultiInstance, t.StandardLoop)
 		}
 		for _, st := range c.SendTasks {
 			if strings.TrimSpace(st.MessageRef) != "" {
 				continue // a message-kind send task is a throw, not an activity (ADR-0112)
 			}
-			if err := wireLoop(st.Id, st.MultiInstance, st.StandardLoop); err != nil {
-				return err
-			}
+			wireLoop(st.Id, st.MultiInstance, st.StandardLoop)
 		}
 		for i := range c.SubProcesses {
 			sub := &c.SubProcesses[i]
-			if err := wireLoop(sub.Id, sub.MultiInstance, sub.StandardLoop); err != nil {
-				return err
-			}
-			if err := wireScopeMI(&sub.xmlFlowContent); err != nil {
-				return err
-			}
+			wireLoop(sub.Id, sub.MultiInstance, sub.StandardLoop)
+			wireScopeMI(&sub.xmlFlowContent)
 		}
 		// Recurse into ad-hoc scopes so a contained activity's loop markers are wired
 		// exactly as in any other scope (ADR-0138).
 		for i := range c.AdHocSubProcesses {
-			if err := wireScopeMI(&c.AdHocSubProcesses[i].xmlFlowContent); err != nil {
-				return err
-			}
+			wireScopeMI(&c.AdHocSubProcesses[i].xmlFlowContent)
 		}
-		return nil
 	}
-	if err := wireScopeMI(&proc.xmlFlowContent); err != nil {
-		return nil, err
+	wireScopeMI(&proc.xmlFlowContent)
+
+	// The four wiring passes are done; report the first thing any of them rejected.
+	// Nothing between the first pass and here returns an error of its own, so this is
+	// the same error, at the same point in the deploy, that returning from the failing
+	// call site used to produce.
+	if wireErr != nil {
+		return nil, wireErr
 	}
 
 	cp, err := b.Build()
@@ -1082,6 +1047,7 @@ type xmlProcess struct {
 	IsExecutable string `xml:"isExecutable,attr"`
 	VersionTag   string `xml:"versionTag,attr"`
 	InstanceTtl  string `xml:"instanceTtl,attr"` // ISO-8601 duration; self-cleaning TTL (ADR-0085), empty = off
+	HistoryTtl   string `xml:"historyTtl,attr"`  // ISO-8601 duration; finished-instance retention (ADR-0144), empty = off
 
 	xmlFlowContent // the process root's flow nodes and sequence flows
 

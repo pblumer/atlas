@@ -196,7 +196,8 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 
 const shortType = (t) => (t || "").replace(/^bpmn:/, "");
 
-// isValidTtl mirrors the engine's instance-TTL parser (ADR-0085, compiler/duration.go):
+// isValidTtl mirrors the engine's TTL parser (ADR-0085 instance TTL, ADR-0145 history
+// TTL; compiler/duration.go):
 // the day-and-time subset of ISO-8601 durations (P[nD]T[nH][nM][nS]), and it must be
 // positive — the empty duration "P"/"PT" and an all-zero "PT0S" are rejected. Used only
 // to warn while authoring; the deploy is the authority that rejects a bad value.
@@ -1192,7 +1193,7 @@ function variablesForCompletion(modeler, element) {
 }
 
 // devVariables is variablesForCompletion's richer sibling for the Developer View
-// (ADR-0144): the same static analysis, but each variable also carries *which scope*
+// (ADR-0145): the same static analysis, but each variable also carries *which scope*
 // it belongs to, so the modal can group them the way a developer thinks about them —
 // what this element reads, what it writes, and what the instance carries. The
 // element-local scopes are collected first and win the de-duplication, so a name that
@@ -1602,7 +1603,7 @@ function enhanceFeel(body, sel, vars, validate, evaluate) {
   const wrap = ta.closest(".code-editor");
   if (!wrap) return;
   // F2 lifts the expression into the Developer View — the same editor with the
-  // in-scope variables, the FEEL function reference and its help pages (ADR-0144).
+  // in-scope variables, the FEEL function reference and its help pages (ADR-0145).
   markDevField(ta, "feel");
 
   const hint = document.createElement("p");
@@ -3743,7 +3744,9 @@ function wireProperties(root, modeler, api, projectId, toast) {
           <label class="pcheck"><input type="checkbox" id="f-pexec"${rootBo.isExecutable !== false ? " checked" : ""}/> <span>Executable</span></label>
           <p class="muted" style="font-size:12px">An <b>executable</b> process can be started and offered in the start lists; leave it off for a descriptive-only diagram. <b>Version tag</b> is an optional label for this revision.</p>
           <label class="field"><span>Instance TTL</span><input type="text" id="f-pttl" value="${esc(rootBo.instanceTtl || "")}" placeholder="P7D"/></label>
-          <p class="muted" style="font-size:12px">A self-cleaning <b>time-to-live</b> for instances of this process, as an ISO-8601 duration (e.g. <code>P7D</code> = 7 days, <code>PT12H</code> = 12 hours, <code>PT30M</code> = 30 minutes). An instance that outlives its TTL is automatically terminated and moved to history — where it stays queryable and can still be exported. Leave empty for no TTL (instances live until they complete or are cancelled). Set it above the longest run you legitimately expect.</p>
+          <p class="muted" style="font-size:12px">A self-cleaning <b>time-to-live</b> for instances of this process, as an ISO-8601 duration (e.g. <code>P7D</code> = 7 days, <code>PT12H</code> = 12 hours, <code>PT30M</code> = 30 minutes). An instance that outlives its TTL is automatically terminated and moved to history — where it stays queryable and can still be exported. It bounds how long an instance may <i>run</i>, not how long its record is kept; <b>History TTL</b> below decides that. Leave empty for no TTL (instances live until they complete or are cancelled). Set it above the longest run you legitimately expect.</p>
+          <label class="field"><span>History TTL</span><input type="text" id="f-phttl" value="${esc(rootBo.historyTtl || "")}" placeholder="P30D"/></label>
+          <p class="muted" style="font-size:12px">How long a <b>finished</b> instance of this process is kept before it is deleted for good, as an ISO-8601 duration (e.g. <code>P30D</code> = 30 days). Completed and terminated instances stay listed, queryable and exportable until it elapses; then retention removes the instance and everything it carried — variables, step history, decisions. Leave empty to fall back to the server-wide retention age, if the operator configured one. The delete is permanent and only ever happens once the instance's events are safely exported.</p>
           ${startVarsHTML}
           ${messagesManagerHTML(modeler)}
           ${signalsManagerHTML(modeler)}
@@ -3769,6 +3772,13 @@ function wireProperties(root, modeler, api, projectId, toast) {
           // so the field never silently drops the user's value.
           if (v && !isValidTtl(v)) toast("Instance TTL must be a positive ISO-8601 duration, e.g. P7D or PT12H", "err");
           try { modeling.updateProperties(rootEl, { instanceTtl: v || undefined }); } catch { /* ignore */ }
+        });
+        body.querySelector("#f-phttl").addEventListener("change", (e) => {
+          const v = (e.target.value || "").trim();
+          // Validated exactly like the instance TTL: warn while authoring, but store what
+          // was typed — the deploy is the authority that rejects a bad value (ADR-0145).
+          if (v && !isValidTtl(v)) toast("History TTL must be a positive ISO-8601 duration, e.g. P30D or PT12H", "err");
+          try { modeling.updateProperties(rootEl, { historyTtl: v || undefined }); } catch { /* ignore */ }
         });
         body.querySelector("#f-pexec").addEventListener("change", (e) => {
           try { modeling.updateProperties(rootEl, { isExecutable: e.target.checked }); } catch { /* ignore */ }
@@ -5316,7 +5326,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
     }
   }
 
-  // F2 in any code-bearing field of this page opens the Developer View (ADR-0144).
+  // F2 in any code-bearing field of this page opens the Developer View (ADR-0145).
   // The context is resolved at press time, so it always describes the element that
   // is selected now rather than whatever was rendered when the panel was built.
   installDevShortcut(document, (field) => devViewContext(modeler, api, field));

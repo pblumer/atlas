@@ -145,7 +145,7 @@ export function attachJSONEditor(textarea, opts = {}) {
   wrap.appendChild(textarea);
   wrap.appendChild(toolbar);
   textarea.classList.add("json-input");
-  // A JSON value is a code field: F2 opens it in the Developer View (ADR-0144).
+  // A JSON value is a code field: F2 opens it in the Developer View (ADR-0145).
   // Declared by attribute rather than by importing dev-view.js, which would close a
   // cycle — dev-lang.js reads this module's tokenizer.
   textarea.dataset.devlang = "json";

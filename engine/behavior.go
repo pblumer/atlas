@@ -689,8 +689,14 @@ func handleIncidentResolved(c *ProcessingContext) {
 // whose FEEL schedule failed and raised an incident (ADR-0064). Re-evaluated
 // against the instance's current variables, the schedule either resolves — a
 // timer is created and the token waits normally — or fails again, raising a fresh
-// incident (resolve is a genuine retry, not a blind clear). A vanished element
-// (its instance was canceled) is a harmless no-op.
+// incident (resolve is a genuine retry, not a blind clear).
+//
+// The element cannot actually be gone here, despite what the check below reads
+// like: this is only reached from handleIncidentResolved once it has found the
+// incident, and terminating an element deletes the incident it carried (applyToState),
+// so an incident never outlives its element. The check stays because the processor
+// loop has no recover() — if that invariant ever shifts, returning is a no-op while
+// dereferencing nil would take the whole partition down with it.
 func rearmTimerElement(c *ProcessingContext, elKey uint64) {
 	ei := c.GetElementInstance(elKey)
 	if ei == nil {
@@ -842,6 +848,11 @@ func fireRecurringBoundary(c *ProcessingContext, timer model.TimerValue, ei *mod
 	if timer.Repetitions == 0 {
 		return // finite cycle exhausted: stop arming, leave the boundary idle
 	}
+	// NextDue only reports !ok for a one-shot schedule, which cannot reach here: the
+	// caller gates on Repeats(), and resolving a FEEL cycle goes through parseTimeCycle,
+	// which yields only cycle kinds. The check stays because the alternative is arming a
+	// timer at the zero due date — permanently overdue, re-firing and re-arming on every
+	// tick — which is a far worse failure than returning.
 	next, ok := sched.NextDue(c.Now())
 	if !ok {
 		return
@@ -886,6 +897,11 @@ func fireRecurringEventSub(c *ProcessingContext, timer model.TimerValue, ei *mod
 	if timer.Repetitions == 0 {
 		return // finite cycle exhausted: stop arming, leave the trigger idle
 	}
+	// NextDue only reports !ok for a one-shot schedule, which cannot reach here: the
+	// caller gates on Repeats(), and resolving a FEEL cycle goes through parseTimeCycle,
+	// which yields only cycle kinds. The check stays because the alternative is arming a
+	// timer at the zero due date — permanently overdue, re-firing and re-arming on every
+	// tick — which is a far worse failure than returning.
 	next, ok := sched.NextDue(c.Now())
 	if !ok {
 		return
@@ -934,6 +950,11 @@ func fireStartTimer(c *ProcessingContext, timer model.TimerValue) {
 	if !ok {
 		return
 	}
+	// NextDue only reports !ok for a one-shot schedule, and a one-shot start timer
+	// carries Repetitions 0 and returned above — so only a recurring one gets here, and
+	// a recurring schedule always has a next occurrence. The check stays because the
+	// alternative is arming a timer at the zero due date: permanently overdue, re-firing
+	// and re-arming on every tick, which is a far worse failure than returning.
 	next, ok := sched.NextDue(c.Now())
 	if !ok {
 		return

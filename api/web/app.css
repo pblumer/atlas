@@ -2117,7 +2117,7 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .theme-preview { display: inline-flex; align-items: center; gap: 12px; }
 .theme-preview .theme-link { color: var(--accent); font-weight: 600; }
 
-/* ---------- Developer View (dev-view.js, ADR-0144) ---------- */
+/* ---------- Developer View (dev-view.js, ADR-0145) ---------- */
 /* A full-screen modal that lifts one code-bearing field out of the property panel:
    the same code-editor.js surface, plus the in-scope variables, the language's
    function reference, its help pages and ready-made examples. Opened with F2. */

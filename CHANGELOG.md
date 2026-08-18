@@ -14,7 +14,7 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
-- **A Developer View for code-bearing fields** ([ADR-0144](docs/adr/0144-developer-view-for-code-fields.md)):
+- **A Developer View for code-bearing fields** ([ADR-0145](docs/adr/0145-developer-view-for-code-fields.md)):
   <kbd>F2</kbd> in a field that holds code — a FEEL expression, a PowerShell/Python/JavaScript job
   script, a JSON value, a Markdown documentation text — lifts it into a full-screen editor with room
   for what a property column cannot hold. The code area is the **same `code-editor.js` surface as
@@ -47,6 +47,28 @@ publishable to another server — and the engine gained **recovery checkpoints**
 so restart no longer replays from genesis.
 
 ### Added
+
+- **Export a process as a document** ([ADR-0143](docs/adr/0143-process-documentation-export.md)):
+  a BPMN model used to be readable only inside Atlas, which left out exactly the people who most
+  need to read a process — auditors, a compliance officer, a new employee, the business owner
+  signing it off — none of whom have a Modeler open, and often no account at all. The Modeler's
+  toolbar now has a **Documentation** panel that collects the process's prose (the element
+  documentation above), lays it out as a document with the diagram, and **publishes it as a PDF**
+  anyone can be handed.
+
+  The picture is rendered **in the browser and stored on the server**: the export reuses the very
+  bpmn-js canvas the modeller is looking at, so the diagram in the document cannot drift from the
+  one in the Modeler — the alternatives re-derive it, and would have cost either a Chromium binary
+  in the container or a second BPMN renderer in Go to keep faithful. The PDF is written by a small
+  **dependency-free** writer shipped with the web UI (`api/web/pdf.js`) rather than a vendored PDF
+  library: pages, the standard Helvetica faces, wrapped paragraphs, element-prose tables and one
+  embedded diagram raster are a small subset of PDF, and a focused writer is cheaper to own than a
+  general one. The diagram goes in as a JPEG embedded untranscoded (`DCTDecode`).
+
+  A **process documentation version** is an immutable record with a per-process, 1-based counter —
+  the same layering process applications use above deployment versions — stored as a JSON sidecar
+  with the PDF beside it, so "which documented state of this process is that?" has an answer, and a
+  published document can be shared by link.
 
 - **Ad-hoc subprocesses** ([ADR-0138](docs/adr/0138-adhoc-subprocesses.md)): the last major
   **structural** BPMN element — an `<adHocSubProcess>` whose contained activities are **not driven

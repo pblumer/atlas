@@ -401,7 +401,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
     ta.value = pretty(schema);
     p.editor = attachJSONEditor(ta, {});
     // The schema and the sample-input box are JSON: F2 opens either in the Developer
-    // View (ADR-0144). The form designer knows no process variables, so the context
+    // View (ADR-0145). The form designer knows no process variables, so the context
     // is the language alone.
     installDevShortcut(document, () => ({}));
   }

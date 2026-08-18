@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -146,7 +147,12 @@ func runServe(args []string) error {
 	osURL := fs.String("opensearch-url", os.Getenv("ATLAS_OPENSEARCH_URL"), "base URL of an OpenSearch cluster to mirror the event log into (ADR-0114); empty disables the exporter. Credentials come from ATLAS_OPENSEARCH_USERNAME/ATLAS_OPENSEARCH_PASSWORD")
 	osIndex := fs.String("opensearch-index", envOr("ATLAS_OPENSEARCH_INDEX", opensearch.DefaultIndex), "OpenSearch index the exporter writes events to")
 	// History retention (ADR-0115): opt-in, off unless a positive max-age is set.
-	retentionAge := fs.Duration("retention-max-age", envDuration("ATLAS_RETENTION_MAX_AGE"), "hard-delete finished process instances older than this once their events are exported (ADR-0115), e.g. 720h; 0 disables retention")
+	retentionAge := fs.Duration("retention-max-age", envDuration("ATLAS_RETENTION_MAX_AGE"), "hard-delete finished process instances older than this once their events are exported (ADR-0115), e.g. 720h; 0 disables the server-wide age, and retention then applies only to processes declaring their own atlas:historyTtl (ADR-0144)")
+	// The sweep's cadence and per-tick batch bound how fast a backlog drains: batch per
+	// interval. The defaults suit steady state; a bulk run that leaves tens of thousands
+	// of finished instances behind is why they are reachable at all.
+	retentionInterval := fs.Duration("retention-interval", envDurationOr("ATLAS_RETENTION_INTERVAL", api.DefaultRetentionInterval), "how often the retention sweep runs (ADR-0115); with --retention-batch this bounds the drain rate of a backlog")
+	retentionBatch := fs.Int("retention-batch", envIntOr("ATLAS_RETENTION_BATCH", api.DefaultRetentionBatch), "how many finished instances one retention sweep evaluates (ADR-0115); the cap keeps a sweep from blocking the run loop, so raise it with the loop's headroom in mind")
 	// Recovery checkpoints (ADR-0131): on by default, because bounded restart time is
 	// the point of them. They only ever add a shortcut — the WAL stays the source of
 	// truth and a missing or unusable checkpoint just means a full replay — so unlike
@@ -170,7 +176,8 @@ func runServe(args []string) error {
 		Password: os.Getenv("ATLAS_OPENSEARCH_PASSWORD"),
 		Index:    strings.TrimSpace(*osIndex),
 	}
-	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, *retentionAge, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn)
+	retention := retentionConfig{maxAge: *retentionAge, interval: *retentionInterval, batch: *retentionBatch}
+	return serve(*addr, *dataDir, *shutdownTimeout, *docs, *auth, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -183,16 +190,43 @@ func envOr(key, def string) string {
 
 // envDuration parses a duration from the environment variable, or 0 when it is
 // unset, empty, or malformed.
-func envDuration(key string) time.Duration {
+func envDuration(key string) time.Duration { return envDurationOr(key, 0) }
+
+// envDurationOr parses a duration from the environment variable, or def when it is
+// unset, empty, or malformed. A flag whose default is a real value (rather than "off")
+// uses this, so a typo in the environment leaves the documented default standing
+// instead of silently zeroing the setting.
+func envDurationOr(key string, def time.Duration) time.Duration {
 	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			return d
 		}
 	}
-	return 0
+	return def
 }
 
-func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retentionMaxAge time.Duration, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool) error {
+// envIntOr parses an int from the environment variable, or def when it is unset,
+// empty, or malformed. The integer counterpart of envDurationOr.
+func envIntOr(key string, def int) int {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return def
+}
+
+// retentionConfig is the history-retention configuration the CLI assembles: the
+// server-wide max age (ADR-0115), plus the sweep's cadence and per-tick batch, which
+// together bound how fast a backlog of finished instances drains. Grouped because they
+// are one operator decision, and because they are only ever passed on together.
+type retentionConfig struct {
+	maxAge   time.Duration
+	interval time.Duration
+	batch    int
+}
+
+func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -253,13 +287,17 @@ func serve(addr, dataDir string, shutdownTimeout time.Duration, docs, auth, vaul
 		log.Printf("opensearch exporter enabled: indexing events into %s at %s", osExport.Index, osExport.URL)
 	}
 	// Hard-delete finished-instance history past the max age, gated on export (ADR-0115).
-	if retentionMaxAge > 0 {
-		apiOpts = append(apiOpts, api.WithRetention(retentionMaxAge))
+	// The cadence and batch apply either way: retention also runs for a process that
+	// declares its own atlas:historyTtl, with no server-wide age set (ADR-0144).
+	apiOpts = append(apiOpts, api.WithRetentionInterval(retention.interval), api.WithRetentionBatch(retention.batch))
+	if retention.maxAge > 0 {
 		gate := "durable position"
 		if osExport.Enabled() {
 			gate = "OpenSearch export"
 		}
-		log.Printf("history retention enabled: purging finished instances older than %s, gated on %s", retentionMaxAge, gate)
+		apiOpts = append(apiOpts, api.WithRetention(retention.maxAge))
+		log.Printf("history retention enabled: purging finished instances older than %s, gated on %s, up to %d per %s",
+			retention.maxAge, gate, retention.batch, retention.interval)
 	}
 	// Periodic recovery checkpoints keep restart time a function of the cadence rather
 	// than of the whole log's length (ADR-0131). Nothing is deleted by them.

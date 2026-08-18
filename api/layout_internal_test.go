@@ -1066,3 +1066,31 @@ func TestWrapWidth(t *testing.T) {
 		})
 	}
 }
+
+// TestRouteCorridorDegenerateCases covers the two shapes routeCorridor guards
+// against, both of which the corpus models never produce: columns so close that no
+// gap is left to rise in, and a corridor that already sits on both endpoints' line.
+func TestRouteCorridorDegenerateCases(t *testing.T) {
+	src := lnode{x: 0, y: 0, w: 100, h: 80}
+
+	// Target immediately after the source: the two gutters land on top of each
+	// other, so there is no room for a riser and a drop and the corridor route gives
+	// way to the ordinary elbow.
+	near := lnode{x: 110, y: 200, w: 100, h: 80}
+	got := routeCorridor(src, near, 40, 105, 105)
+	want := routeFlow(src, near)
+	if len(got) != len(want) {
+		t.Fatalf("cramped columns: got %v, want the plain route %v", got, want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("cramped columns: got %v, want the plain route %v", got, want)
+		}
+	}
+
+	// Source, corridor and target on one line: a straight run, no risers.
+	level := lnode{x: 400, y: 0, w: 100, h: 80}
+	if got := routeCorridor(src, level, 40, 125, 375); len(got) != 2 {
+		t.Errorf("level run: got %v, want two waypoints", got)
+	}
+}
