@@ -556,8 +556,9 @@ What it takes to run this for real.
   deletes the segments that checkpoint and every consumer watermark make redundant, so
   the log's disk is bounded too. The whole-instance snapshot (ADR-0109, amended) carries
   a verified checkpoint and installs it on restore, so backup/restore survives a
-  compacted log. Remaining: surface checkpoint and compaction status, and on-demand
-  controls, over the API — today they are visible only in the log.
+  compacted log. `GET`/`POST /api/v1/checkpoints` expose the status — published
+  checkpoints and whether they still verify, the last pass, the WAL's footprint — and a
+  checkpoint-now control for a planned restart. **ADR-0131 is complete.**
 - 🔲 Exported-log stream for downstream analytics
 - 🔲 Operator tooling: list/inspect instances, incidents, jobs
 

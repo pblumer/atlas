@@ -109,6 +109,13 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/backup/full":   "admin whole-instance snapshot download, not an agent action",
 	"POST /api/v1/restore/full": "admin whole-instance snapshot upload, not an agent action",
 
+	// Recovery checkpoints and WAL compaction (ADR-0131): storage housekeeping an
+	// operator watches and occasionally forces before a restart. Same category as
+	// backup/restore — it concerns the data directory, not the processes running in it,
+	// and the control deletes WAL segments when compaction is on.
+	"GET /api/v1/checkpoints":  "admin recovery-checkpoint status, not an agent action",
+	"POST /api/v1/checkpoints": "admin on-demand checkpoint/compaction, not an agent action",
+
 	// Per-server call-activity target overrides (ADR-0105): admin operator config,
 	// like connectors — an agent reads the resolution via atlas_call_activities but
 	// does not set server-local routing. requireAdmin-gated.

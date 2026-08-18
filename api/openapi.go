@@ -119,6 +119,20 @@ func (s *Server) apiRoutes() []apiRoute {
 				"restored": tInteger(), "restartRequired": tBool(), "note": tString(),
 			}))}},
 
+		{"GET", "/api/v1/checkpoints", s.handleCheckpointStatus, apiOp{
+			summary: "Recovery-checkpoint and WAL-compaction status: what is configured, every published checkpoint and whether it still verifies, the last pass's outcome, and the WAL's current footprint (admin-only when auth is on) (ADR-0131)", tag: "System",
+			resp: jsonBody("Checkpoint status", schemaObj(map[string]any{
+				"enabled": tBool(), "intervalSeconds": tInteger(), "keep": tInteger(),
+				"compaction": tBool(), "root": tString(), "checkpoints": tArray(),
+				"lastPass": tObject(), "walSegments": tInteger(), "walBytes": tInteger(),
+			}))}},
+		{"POST", "/api/v1/checkpoints", s.handleCheckpointNow, apiOp{
+			summary: "Take a recovery checkpoint now — and compact the WAL if compaction is enabled — instead of waiting for the next scheduled pass; 409 when checkpointing is disabled (admin-only when auth is on) (ADR-0131)", tag: "System",
+			resp: jsonBody("What the pass did", schemaObj(map[string]any{
+				"at": tInteger(), "position": tInteger(), "checkpointError": tString(),
+				"segmentsRemoved": tInteger(), "compactionError": tString(), "note": tString(),
+			}))}},
+
 		{"POST", "/api/v1/feel/validate", s.handleValidateFeel, apiOp{
 			summary: "Validate a FEEL expression compiles", tag: "FEEL",
 			req: jsonBody("FEEL expression", schemaObj(map[string]any{"expression": tString()}, "expression")),

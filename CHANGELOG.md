@@ -99,6 +99,24 @@ _Changed_ / _Removed_ for each version.
   standard loop like a sequential multi-instance, badged ↻ and bounded by the modelled
   `loopMaximum`, and the Operations call-activity list labels a looping call activity
   **loop** rather than **multi-instance**.
+- **Checkpoint and compaction status, and a checkpoint-now control** (v0.2.0 programme D,
+  [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 8 —
+  completing the ADR): everything checkpointing and compaction did was visible only in the
+  server log, so an operator could not answer the two questions that actually come up.
+  Now `GET /api/v1/checkpoints` reports what is configured, every published checkpoint
+  with **whether it still verifies**, the last pass's outcome, and the WAL's current
+  segment count and bytes — so "how much log would a restart replay?" and "why has my log
+  stopped shrinking?" have answers without shell access. A checkpoint whose state files no
+  longer match its manifest is flagged rather than listed as if healthy: that is exactly
+  the one that licenses no deletion and would not carry a restore.
+
+  `POST /api/v1/checkpoints` takes one on demand — and compacts, when compaction is on —
+  for an operator about to restart who would rather replay seconds of log than hours. The
+  pass runs on the checkpoint goroutine rather than beside it, so an on-demand pass and a
+  scheduled one serialize by construction and are the same code; with checkpointing
+  disabled the endpoint says so (409) instead of hanging or quietly doing nothing. Both
+  endpoints are admin-gated like backup/restore, and neither is an MCP tool: this is
+  storage housekeeping, not something an agent drives a scenario with.
 - **The WAL stops growing forever — compaction runs in the server** (v0.2.0 programme D,
   [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 7):
   `atlas serve --compact-wal` deletes the WAL segments a recovery checkpoint and every
