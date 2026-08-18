@@ -61,6 +61,15 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   with the other. This is the icon-and-property sync check: both directions, in a real
   browser, against the vendored bpmn-js.
 
+- **`pdf-writer.spec.mjs`** (ADR-0138): the dependency-free **PDF writer** behind the process
+  documentation export (`api/web/pdf.js`). A PDF is only valid if its cross-reference table
+  points at the exact byte offset of every object, so these build documents in the browser
+  and parse the bytes back: the xref lands on each object header, German text is encoded as
+  WinAnsi (not mojibake), `(`/`)`/`\` are escaped, long content flows onto numbered pages,
+  and a canvas JPEG is embedded untranscoded (`DCTDecode`) with a `/Length` that matches
+  what was written. Only a real browser can settle these — string encoding, `btoa`, and the
+  canvas JPEG encoder all behave differently outside one.
+
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
 
 ## Rendering a conformance gallery diagram
