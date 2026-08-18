@@ -518,11 +518,15 @@ func withExporterTrigger(ticks <-chan time.Time, ticked chan struct{}) Option {
 }
 
 const (
-	// retentionSweepInterval is the default cadence of the history-retention sweep.
-	retentionSweepInterval = time.Minute
-	// retentionBatchDefault bounds how many finished instances one sweep tick evaluates,
+	// DefaultRetentionInterval is the default cadence of the history-retention sweep.
+	// Exported so the CLI can show it as the default of --retention-interval rather
+	// than restate a number that would drift from this one.
+	DefaultRetentionInterval = time.Minute
+	// DefaultRetentionBatch bounds how many finished instances one sweep tick evaluates,
 	// so the scan never blocks the run loop (ADR-0115 / ADR-0085 no-full-scan rule).
-	retentionBatchDefault = 1000
+	// Together the two bound the drain rate of a backlog: DefaultRetentionBatch per
+	// DefaultRetentionInterval. Exported for the CLI, like DefaultRetentionInterval.
+	DefaultRetentionBatch = 1000
 )
 
 // WithRetention enables history retention (ADR-0115): a finished instance whose
@@ -767,13 +771,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		marketplaceStore:  marketplaceStore,
 		inboundSubs:       inboundSubs,
 		settings:          settings,
-		inboundPoll:       2 * time.Second,        // default cadence; WithInboundPollInterval overrides, 0 disables
-		inboundBatch:      defaultInboundBatch,    // per-poll ReadEvents cap; WithInboundBatchLimit overrides
-		exporterPoll:      5 * time.Second,        // OpenSearch export cadence; WithOpenSearchExportInterval overrides (ADR-0114)
-		retentionInterval: retentionSweepInterval, // history-retention sweep cadence; WithRetentionInterval overrides (ADR-0115)
-		retentionBatch:    retentionBatchDefault,  // finished instances evaluated per sweep tick
-		checkpointKeep:    checkpointKeepDefault,  // published checkpoints kept; WithCheckpointRetention overrides (ADR-0131)
-		vaultEnabled:      true,                   // opt-out: built unless WithoutVault is passed (ADR-0070)
+		inboundPoll:       2 * time.Second,          // default cadence; WithInboundPollInterval overrides, 0 disables
+		inboundBatch:      defaultInboundBatch,      // per-poll ReadEvents cap; WithInboundBatchLimit overrides
+		exporterPoll:      5 * time.Second,          // OpenSearch export cadence; WithOpenSearchExportInterval overrides (ADR-0114)
+		retentionInterval: DefaultRetentionInterval, // history-retention sweep cadence; WithRetentionInterval overrides (ADR-0115)
+		retentionBatch:    DefaultRetentionBatch,    // finished instances evaluated per sweep tick
+		checkpointKeep:    checkpointKeepDefault,    // published checkpoints kept; WithCheckpointRetention overrides (ADR-0131)
+		vaultEnabled:      true,                     // opt-out: built unless WithoutVault is passed (ADR-0070)
 		users:             users,
 		sessions:          newSessionStore(defaultSessionTTL),
 		collab:            newCollabRegistry(),

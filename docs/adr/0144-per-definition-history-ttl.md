@@ -83,6 +83,17 @@ unbounded.
   definition carrying a TTL can be deployed at any moment, so the standing tick is what
   lets that deploy take effect; a tick with neither a server-wide age nor any declaring
   definition returns after one map walk — no store read, no scan.
+- **The drain rate is configurable.** What bounds how fast a backlog of finished
+  instances actually disappears is the sweep's cadence and per-tick batch — 1000 per
+  minute by default. A bulk run leaving tens of thousands of finished instances is
+  precisely the case this ADR serves, and at the defaults such a backlog drains over
+  hours, so both are now operator settings: `--retention-interval` / `--retention-batch`
+  (`ATLAS_RETENTION_INTERVAL` / `ATLAS_RETENTION_BATCH`), defaulting to the engine's own
+  `api.DefaultRetentionInterval` / `api.DefaultRetentionBatch` so the CLI's help text
+  cannot drift from the values the server uses. The batch stays a cap for the reason
+  ADR-0115 gave it one: the sweep runs on the single-writer loop, so a raised batch buys
+  drain rate with loop time.
+
 - **Two orthogonal knobs.** `instanceTtl` bounds how long an instance may *run*;
   `historyTtl` bounds how long its *finished record* is kept. A definition may carry
   either, both, or neither. The Modeler shows them as adjacent fields, and the instance-TTL
@@ -103,12 +114,11 @@ unbounded.
   back to the server-wide age, since the compiled TTL is gone with the deployment; a
   shortened TTL applies to already-finished instances at the next sweep, because the age is
   resolved at sweep time rather than frozen on the instance.
-- **Follow-ups / risks to watch:** exposing the sweep's cadence and per-tick batch as flags
-  (the defaults, 1000 per minute, bound a bulk backlog's drain rate); surfacing a
-  definition's effective retention in Operations, so an operator can see why a record is
-  about to vanish; the runtime override of option 4; and the standing ADR-0115 note that
-  purging reclaims the *state store*, not the WAL — log space needs `--compact-wal`
-  (ADR-0131).
+- **Follow-ups / risks to watch:** surfacing a definition's effective retention in
+  Operations, so an operator can see why a record is about to vanish; the runtime override
+  of option 4; a purge-now action for the impatient case the sweep's drain rate does not
+  cover; and the standing ADR-0115 note that purging reclaims the *state store*, not the
+  WAL — log space needs `--compact-wal` (ADR-0131).
 
 ## Pros and cons of the options
 
