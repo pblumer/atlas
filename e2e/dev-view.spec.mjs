@@ -249,17 +249,52 @@ test("the Test panel is prefilled from the instance, and can be refilled", async
 });
 
 test("a process that has never run says so instead of failing", async ({ page }) => {
-  await page.evaluate(() => { window.__samples = null; });
+  await page.evaluate(() => { window.__instances = []; });
   await openFeel(page);
   await expect(page.locator(".dev-sample-strip")).toContainText("No instance to read values from yet");
   await expect(page.locator(".dev-pane-vars .dev-item-value")).toHaveCount(0);
   // Reload asks again — and this time an instance exists.
   await page.evaluate(() => {
-    window.__samples = { instance: { key: 9, state: "completed" }, values: { amount: { value: "7", kind: "number" } } };
+    window.__instances = [{ key: 9, state: "completed", values: { amount: { value: "7", kind: "number" } } }];
   });
   await page.locator(".dev-sample-reload").click();
-  await expect(page.locator(".dev-sample-strip")).toContainText("instance 9");
+  await expect(page.locator(".dev-sample-strip")).toContainText("9 · completed");
   expect(await page.evaluate(() => window.__sampleCalls.map((c) => c.force))).toEqual([false, true]);
+});
+
+test("the instance the values come from can be picked", async ({ page }) => {
+  await openFeel(page);
+  await page.locator(".dev-test-toggle").click();
+
+  // Defaults to the running instance, and offers the finished one beside it.
+  await expect(page.locator(".dev-sample-pick")).toHaveValue("4711");
+  await expect(page.locator(".dev-sample-pick option")).toHaveText(["4711 · active · v3", "4088 · completed · v2"]);
+  const row = (name) => page.locator(".dev-pane-vars .dev-item", { hasText: name });
+  await expect(row("amount").locator(".dev-item-value")).toHaveText("= 1250.5");
+
+  // Switching reads that instance's values — in the pane and in the Test sample.
+  await page.locator(".dev-sample-pick").selectOption("4088");
+  await expect(page.locator(".dev-sample-pick")).toHaveValue("4088");
+  await expect(row("amount").locator(".dev-item-value")).toHaveText("= 12");
+  await expect(row("orderId").locator(".dev-item-value")).toHaveText('= "A-2025-0007"');
+  // The finished instance never carried `email`, so that row loses its value.
+  await expect(row("email").locator(".dev-item-value")).toHaveCount(0);
+  expect(JSON.parse(await page.evaluate(() => document.querySelector(".dev-run-vars").value)))
+    .toEqual({ amount: 12, orderId: "A-2025-0007" });
+
+  // Reload keeps the picked instance rather than jumping back to the newest.
+  await page.locator(".dev-sample-reload").click();
+  await expect(page.locator(".dev-sample-pick")).toHaveValue("4088");
+  expect(await page.evaluate(() => window.__sampleCalls.at(-1))).toEqual({ force: true, instanceKey: 4088 });
+});
+
+test("a sample the author edited survives switching instances", async ({ page }) => {
+  await openFeel(page);
+  await page.locator(".dev-test-toggle").click();
+  await page.locator(".dev-run-vars").fill('{ "amount": 1 }');
+  await page.locator(".dev-sample-pick").selectOption("4088");
+  await expect(page.locator(".dev-sample-pick")).toHaveValue("4088");
+  expect(await page.evaluate(() => document.querySelector(".dev-run-vars").value)).toBe('{ "amount": 1 }');
 });
 
 test("the side panel folds away and the choice is remembered", async ({ page }) => {

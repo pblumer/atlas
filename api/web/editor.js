@@ -1236,15 +1236,19 @@ function devVariables(modeler, element) {
 
 // sampleCache memoizes the live-values lookup per process id for this editing
 // session: opening the Developer View on ten fields of one diagram is one pair of
-// requests, not ten. The Reload button passes force:true to bypass it, which is how
-// an author picks up an instance they started while the Modeler was open.
-const sampleCache = new Map(); // processId -> Promise<{ instance, values } | null>
+// requests, not ten, and switching between the instances in the picker costs
+// nothing at all. The Reload button passes force:true to bypass it, which is how an
+// author picks up an instance they started while the Modeler was open.
+const sampleCache = new Map(); // processId -> Promise<instanceSample[]>
+
+// How many instances the picker offers. Enough to find the one that took the branch
+// being written about, few enough that the <select> stays usable.
+const MAX_SAMPLE_INSTANCES = 50;
 
 // instanceSamples reads the values the diagram's variables actually hold, from a
-// real instance of this very process: the newest deployed definition of the root
-// process id, then its most relevant instance (a running one first, else the newest
-// finished one). The list endpoint already returns each instance's root-scope
-// variables, so this is two requests and no per-variable round trip.
+// real instance of this very process. `opts.instanceKey` picks one of the offered
+// instances (default: the most relevant one — a running instance first, else the
+// newest finished one); `opts.force` re-reads from the server.
 // Returns null when the process was never deployed or has never run — the modal
 // treats that as "no samples", not as an error.
 async function instanceSamples(modeler, api, opts = {}) {
@@ -1253,38 +1257,53 @@ async function instanceSamples(modeler, api, opts = {}) {
   if (!processId || !api) return null;
   if (opts.force) sampleCache.delete(processId);
   if (!sampleCache.has(processId)) sampleCache.set(processId, fetchSamples(api, processId));
-  try { return await sampleCache.get(processId); }
+
+  let rows;
+  try { rows = await sampleCache.get(processId); }
   catch (e) { sampleCache.delete(processId); throw e; }
+  if (!rows || !rows.length) return null;
+
+  const chosen = rows.find((r) => r.key === opts.instanceKey) || rows[0];
+  return {
+    instance: { key: chosen.key, state: chosen.state, version: chosen.version, createdAt: chosen.createdAt },
+    values: chosen.values,
+    // The picker only needs each instance's identity; the values ride along in the
+    // cache so switching is a re-render, not a fetch.
+    instances: rows.map((r) => ({ key: r.key, state: r.state, version: r.version, createdAt: r.createdAt })),
+  };
 }
 
+// fetchSamples resolves the diagram's process id to deployed versions and reads one
+// version's instances. GET /instances?process= already returns each instance's
+// root-scope variables, so this is two requests and no per-variable round trip.
+// The newest version is preferred, but a version deployed a minute ago has no
+// instances yet — then its predecessor's values still describe the same variables,
+// so the walk continues rather than reporting nothing.
 async function fetchSamples(api, processId) {
   const procs = await api("GET", "/api/v1/processes");
   const versions = (procs || [])
     .filter((p) => p.processId === processId)
     .sort((a, b) => b.version - a.version);
-  if (!versions.length) return null;
 
-  // Look at the newest version first, but fall back to older ones: a version
-  // deployed a minute ago has no instances yet, and its predecessor's values still
-  // describe the same variables.
   for (const v of versions) {
     let rows;
     try { rows = await api("GET", "/api/v1/instances?process=" + encodeURIComponent(v.key)); }
-    catch { return null; }
-    const inst = (rows || [])
+    catch { return []; }
+    const found = (rows || [])
       .filter((r) => r.processDefKey === v.key)
-      .sort((a, b) => (a.state === b.state ? b.key - a.key : a.state === "active" ? -1 : 1))[0];
-    if (!inst) continue;
-    const values = {};
-    for (const vv of inst.variables || []) {
-      if (vv && vv.name) values[vv.name] = { value: vv.value, kind: vv.kind };
-    }
-    return {
-      instance: { key: inst.key, state: inst.state, version: inst.version, createdAt: inst.createdAt },
-      values,
-    };
+      // Running instances first (their values are the live ones), then newest first.
+      .sort((a, b) => (a.state === b.state ? b.key - a.key : a.state === "active" ? -1 : 1))
+      .slice(0, MAX_SAMPLE_INSTANCES)
+      .map((r) => {
+        const values = {};
+        for (const vv of r.variables || []) {
+          if (vv && vv.name) values[vv.name] = { value: vv.value, kind: vv.kind };
+        }
+        return { key: r.key, state: r.state, version: r.version, createdAt: r.createdAt, values };
+      });
+    if (found.length) return found;
   }
-  return null;
+  return [];
 }
 
 // devViewContext answers "what does the Developer View need to know" at the moment

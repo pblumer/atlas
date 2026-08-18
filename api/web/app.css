@@ -2247,6 +2247,12 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
   font-size: 11px; color: var(--muted);
 }
 .dev-sample-strip b { color: var(--text); }
+.dev-sample-pick {
+  font: 600 11px/1.4 ui-monospace, monospace; color: var(--text);
+  border: 1px solid var(--border-strong); border-radius: 5px;
+  background: var(--surface); padding: 1px 4px; max-width: 190px;
+}
+.dev-sample-pick:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 /* A reference row: the row itself opens the help page, the "+" inserts the call. */
 .dev-row { display: flex; align-items: center; gap: 2px; }
 .dev-row .dev-item { flex: 1 1 auto; min-width: 0; }

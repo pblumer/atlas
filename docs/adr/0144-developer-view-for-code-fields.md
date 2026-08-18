@@ -107,9 +107,11 @@ Option 2 gets the room without any of that. Concretely:
   actually holds in a real instance of this process, and the Test panel's sample
   is prefilled from the same instance. The lookup is the newest deployed version
   of the root process id, then its most relevant instance (running first, else the
-  newest finished one); the list endpoint already returns each instance's
-  root-scope variables, so it is two requests, memoized per process id for the
-  session, and explicitly refreshable. It is lazy and best-effort: a process that
+  newest finished one), which a picker in the pane can change — the instance that
+  took the branch being written about is not always the newest one. The list
+  endpoint already returns each instance's root-scope variables, so it is two
+  requests, memoized per process id for the session (switching instances is then a
+  re-render, not a fetch), and explicitly refreshable. It is lazy and best-effort: a process that
   was never deployed or never ran says so, and the modal is fully usable without
   it. This is a read of design-time-adjacent *operational* data — the same query
   the Operations view makes — not a new coupling: the engine is untouched.

@@ -204,6 +204,12 @@ function sampleJSON(values) {
   return out;
 }
 
+// instanceLabel names one instance in the picker: its key, whether it is still
+// running, and which version of the process it runs.
+function instanceLabel(i) {
+  return `${i.key}${i.state ? " · " + i.state : ""}${i.version ? " · v" + i.version : ""}`;
+}
+
 // matches is the pane filter: a case-insensitive substring over the visible text.
 const matches = (q, ...fields) => !q || fields.some((f) => String(f || "").toLowerCase().includes(q));
 
@@ -214,8 +220,10 @@ const matches = (q, ...fields) => !q || fields.some((f) => String(f || "").toLow
 //   validate   (src) -> Promise<{ ok, error }>   live validation, as inline
 //   evaluate   (src, vars) -> Promise<{ ok, result, error }>   the Test panel (FEEL)
 //   run        (src, vars) -> Promise<{ ok, result, error }>   the Test panel (script)
-//   samples    () -> Promise<{ instance, values } | null>   live values for the
-//              variables, read from a real instance of this process
+//   samples    ({ force, instanceKey }) -> Promise<{ instance, values, instances }
+//              | null>   live values for the variables, read from a real instance of
+//              this process; `instances` is what the picker offers, `instanceKey`
+//              asks for one of them, `force` bypasses the caller's cache
 //   lockPrefix (value) -> protected leading length (the fx '=' marker)
 //   onApply    (value) -> void, after the field has been written
 // Returns a handle { close, apply, el } or null when the field isn't a code field.
@@ -313,19 +321,20 @@ export function openDevView(field, opts = {}) {
   // idle (never asked) → loading → ready (an instance was found) / none (the process
   // has no instance yet, or isn't deployed) / error. Loading is lazy and best-effort:
   // the modal is fully usable before, during and after a failed load.
-  let samples = { state: opts.samples ? "loading" : "idle", instance: null, values: {} };
+  let lastFilled = null; // the Test sample we put in the box, so we know it is ours
+  let samples = { state: opts.samples ? "loading" : "idle", instance: null, values: {}, instances: [] };
 
-  async function loadSamples(force) {
+  async function loadSamples(req = {}) {
     if (!opts.samples) return;
     samples = { ...samples, state: "loading" };
     if (tab === "vars") renderVars();
     let got = null;
-    try { got = await opts.samples({ force: !!force }); }
-    catch { samples = { state: "error", instance: null, values: {} }; if (tab === "vars") renderVars(); return; }
+    try { got = await opts.samples({ force: !!req.force, instanceKey: req.instanceKey }); }
+    catch { samples = { state: "error", instance: null, values: {}, instances: [] }; if (tab === "vars") renderVars(); return; }
     if (!document.contains(overlay)) return; // closed while we were waiting
     samples = got && got.instance
-      ? { state: "ready", instance: got.instance, values: got.values || {} }
-      : { state: "none", instance: null, values: {} };
+      ? { state: "ready", instance: got.instance, values: got.values || {}, instances: got.instances || [got.instance] }
+      : { state: "none", instance: null, values: {}, instances: [] };
     if (tab === "vars") renderVars();
     // An empty Test box is filled with the real instance's variables — the sample a
     // developer would otherwise type by hand, only correct. A box the author has
@@ -333,7 +342,13 @@ export function openDevView(field, opts = {}) {
     // button is how they ask for that.
     if (canTest && samples.state === "ready") {
       const box = q(".dev-run-vars");
-      if (box && !box.value.trim()) box.value = JSON.stringify(sampleJSON(samples.values), null, 2);
+      // Untouched, or still holding exactly what a previous load put there (which is
+      // the case right after switching instances) — refill it. Anything the author
+      // edited stays theirs.
+      if (box && (!box.value.trim() || box.value === lastFilled)) {
+        lastFilled = JSON.stringify(sampleJSON(samples.values), null, 2);
+        box.value = lastFilled;
+      }
       const fill = q(".dev-run-fill");
       if (fill) fill.hidden = false;
     }
@@ -351,8 +366,17 @@ export function openDevView(field, opts = {}) {
     }
     if (samples.state === "ready") {
       const i = samples.instance;
+      const list = samples.instances.length ? samples.instances : [i];
+      // More than one instance to choose from: the values are a *sample*, and which
+      // sample matters — the one that took the branch being written about is not
+      // always the newest one.
+      const picker = list.length > 1
+        ? `<select class="dev-sample-pick" aria-label="Instance to read values from">${
+            list.map((r) => `<option value="${esc(String(r.key))}"${r.key === i.key ? " selected" : ""}>${esc(instanceLabel(r))}</option>`).join("")
+          }</select>`
+        : `<b>${esc(instanceLabel(i))}</b>`;
       const when = i.createdAt ? new Date(i.createdAt).toLocaleString() : "";
-      return `<div class="dev-sample-strip ready" title="${esc(when)}">Values from instance <b>${esc(String(i.key))}</b>${i.state ? ` · ${esc(i.state)}` : ""}${i.version ? ` · v${esc(String(i.version))}` : ""} · ${reload}</div>`;
+      return `<div class="dev-sample-strip ready" title="${esc(when)}">Values from instance ${picker} · ${reload}</div>`;
     }
     return "";
   }
@@ -507,7 +531,7 @@ export function openDevView(field, opts = {}) {
     const snip = e.target.closest(".dev-ins-snip");
     if (snip) { insertText(ta, snippets[Number(snip.dataset.i)].code); return; }
 
-    if (e.target.closest(".dev-sample-reload")) { loadSamples(true); return; }
+    if (e.target.closest(".dev-sample-reload")) { loadSamples({ force: true, instanceKey: samples.instance && samples.instance.key }); return; }
 
     const item = e.target.closest(".dev-item:not(.dev-fn)");
     if (item) { insertText(ta, item.dataset.insert); return; }
@@ -529,6 +553,13 @@ export function openDevView(field, opts = {}) {
     if (!item || !e.dataTransfer) return;
     e.dataTransfer.setData("text/plain", item.dataset.insert || "");
     e.dataTransfer.effectAllowed = "copy";
+  });
+
+  // Picking another instance re-reads the values from it. The caller answers from
+  // its own cache, so this is normally not a request.
+  paneVars.addEventListener("change", (e) => {
+    const pick = e.target.closest(".dev-sample-pick");
+    if (pick) loadSamples({ instanceKey: Number(pick.value) });
   });
 
   filter.addEventListener("input", () => renderers[tab]());
@@ -572,7 +603,8 @@ export function openDevView(field, opts = {}) {
     const fillBtn = q(".dev-run-fill");
     fillBtn.title = "Replace the sample with this instance's actual variables";
     fillBtn.addEventListener("click", () => {
-      q(".dev-run-vars").value = JSON.stringify(sampleJSON(samples.values), null, 2);
+      lastFilled = JSON.stringify(sampleJSON(samples.values), null, 2);
+      q(".dev-run-vars").value = lastFilled;
     });
     q(".dev-run-btn").addEventListener("click", async () => {
       let vars = {};
@@ -691,7 +723,7 @@ export function openDevView(field, opts = {}) {
   try { startCollapsed = localStorage.getItem(SIDE_KEY) === "collapsed"; } catch { /* no storage */ }
   showTab("vars");
   setSide(startCollapsed, false);
-  loadSamples(false); // lazy and best-effort: the modal is already usable
+  loadSamples({}); // lazy and best-effort: the modal is already usable
   renderHelp();
   refreshStatus();
   ta.focus();

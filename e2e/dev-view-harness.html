@@ -63,17 +63,35 @@
       // Stands in for the live-values lookup (processes → instances → variables).
       // __samples lets a test make it empty, slow or broken.
       window.__sampleCalls = [];
-      window.__samples = {
-        instance: { key: 4711, state: "active", version: 3, createdAt: 1755500000000 },
-        values: {
-          amount: { value: "1250.5", kind: "number" },
-          orderId: { value: "A-2026-0042", kind: "string" },
-          email: { value: '{"to":"anna@example.com","cc":[]}', kind: "json" },
+      // Two instances of the process, as the Modeler's lookup would return them:
+      // the running one first, an older finished one after it.
+      window.__instances = [
+        {
+          key: 4711, state: "active", version: 3, createdAt: 1755500000000,
+          values: {
+            amount: { value: "1250.5", kind: "number" },
+            orderId: { value: "A-2026-0042", kind: "string" },
+            email: { value: '{"to":"anna@example.com","cc":[]}', kind: "json" },
+          },
         },
-      };
-      const samples = async (o) => {
-        window.__sampleCalls.push(o || {});
-        return window.__samples;
+        {
+          key: 4088, state: "completed", version: 2, createdAt: 1755100000000,
+          values: {
+            amount: { value: "12", kind: "number" },
+            orderId: { value: "A-2025-0007", kind: "string" },
+          },
+        },
+      ];
+      const samples = async (o = {}) => {
+        window.__sampleCalls.push(o);
+        const rows = window.__instances;
+        if (!rows || !rows.length) return null;
+        const chosen = rows.find((r) => r.key === o.instanceKey) || rows[0];
+        return {
+          instance: { key: chosen.key, state: chosen.state, version: chosen.version, createdAt: chosen.createdAt },
+          values: chosen.values,
+          instances: rows.map(({ values, ...meta }) => meta),
+        };
       };
 
       installDevShortcut(document, (field) =>

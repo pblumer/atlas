@@ -32,8 +32,9 @@ _Changed_ / _Removed_ for each version.
   variable also shows **the value it actually holds in a real instance** of the process (newest
   deployed version, running instance first), and the Test panel's sample variables are prefilled from
   that same instance — so "what shape is this thing?" is answered by the running system instead of
-  guessed from the name. Lazy, memoized per process and refreshable; a process that has never run
-  simply says so.
+  guessed from the name. **Which** instance is a picker in the pane, since the one that took the
+  branch being written about is not always the newest. Lazy, memoized per process (switching
+  instances costs no request) and refreshable; a process that has never run simply says so.
 
 ## [0.2.0] — 2026-08-18
 
