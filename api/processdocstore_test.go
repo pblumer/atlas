@@ -82,6 +82,25 @@ func TestProcessDocStoreRejectsUnsafeID(t *testing.T) {
 		if err := s.save(processDoc{ID: id, ProcessID: "p"}, []byte("x")); err == nil {
 			t.Errorf("save(%q) = nil error, want a refusal", id)
 		}
+		if err := s.saveRecord(processDoc{ID: id, ProcessID: "p"}); err == nil {
+			t.Errorf("saveRecord(%q) = nil error, want a refusal", id)
+		}
+		if _, err := s.pdf(id); err == nil {
+			t.Errorf("pdf(%q) = nil error, want a refusal", id)
+		}
+	}
+}
+
+// TestNewProcessDocStoreRefusesUnusableDir proves a store whose directory cannot
+// be created reports it at construction, rather than failing later on the first
+// export.
+func TestNewProcessDocStoreRefusesUnusableDir(t *testing.T) {
+	blocked := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(blocked, []byte("x"), 0o644); err != nil {
+		t.Fatalf("write blocker: %v", err)
+	}
+	if _, err := newProcessDocStore(filepath.Join(blocked, "docs")); err == nil {
+		t.Fatal("newProcessDocStore under a file = nil error, want a failure")
 	}
 }
 
@@ -111,6 +130,25 @@ func TestProcessDocStoreForProcessNewestFirst(t *testing.T) {
 		if got[i].Version != want {
 			t.Errorf("position %d = v%d, want v%d (not newest first)", i, got[i].Version, want)
 		}
+	}
+}
+
+// TestProcessDocStoreOrderIsDeterministic proves two records that tie on process
+// and version still read in a fixed order, so a history listing does not shuffle
+// between requests.
+func TestProcessDocStoreOrderIsDeterministic(t *testing.T) {
+	s := newProcessDocs(t)
+	for _, id := range []string{"cc", "aa", "bb"} {
+		if err := s.save(processDoc{ID: id, ProcessID: "order", Version: 1}, []byte("%PDF")); err != nil {
+			t.Fatalf("save %s: %v", id, err)
+		}
+	}
+	got, err := s.forProcess("order")
+	if err != nil {
+		t.Fatalf("forProcess: %v", err)
+	}
+	if len(got) != 3 || got[0].ID != "aa" || got[1].ID != "bb" || got[2].ID != "cc" {
+		t.Fatalf("tie-break order = %+v, want aa, bb, cc", got)
 	}
 }
 
