@@ -243,6 +243,7 @@ type Builder struct {
 	signalStarts       []SignalDetail
 	errorEnds          []ErrorEndDetail     // error end events (ADR-0089)
 	escalations        []EscalationDetail   // shared by escalation throw and end events (ADR-0125)
+	conditionals       []ConditionalDetail  // conditional intermediate catch events (ADR-0137)
 	compensationThrows []CompensationDetail // shared by compensation throw and end events (ADR-0103)
 	timerStarts        []TimerStartDetail
 	dataObjects        []CompiledDataObject
@@ -1403,6 +1404,32 @@ func (b *Builder) AddBoundaryEscalationEvent(host int32, escalationCode string, 
 	return b.addNode(TypeBoundaryEvent, detail)
 }
 
+// AddConditionalCatchEvent adds a conditional intermediate catch event that waits until the
+// given boolean FEEL condition over the process's variables becomes true, then flows on
+// (ADR-0137). It arms inert (opens no subscription) and is driven to Completing by a
+// variable-change re-check. Returns its element id.
+func (b *Builder) AddConditionalCatchEvent(condition *expr.Compiled) int32 {
+	detail := int32(len(b.conditionals))
+	b.conditionals = append(b.conditionals, ConditionalDetail{Condition: condition})
+	return b.addNode(TypeConditionalCatchEvent, detail)
+}
+
+// AddBoundaryConditionalEvent adds a conditional boundary event attached to host that fires
+// while the host runs when the given boolean FEEL condition becomes true (ADR-0137). It honors
+// interrupting: an interrupting conditional boundary tears the host down on fire, a
+// non-interrupting one runs the handler alongside the still-running host. It opens no
+// subscription and is re-evaluated on variable change. Returns its element id.
+func (b *Builder) AddBoundaryConditionalEvent(host int32, condition *expr.Compiled, interrupting bool) int32 {
+	detail := int32(len(b.boundaryEventDets))
+	b.boundaryEventDets = append(b.boundaryEventDets, BoundaryEventDetail{
+		HostNode:     host,
+		Interrupting: interrupting,
+		Kind:         BoundaryConditional,
+		Condition:    condition,
+	})
+	return b.addNode(TypeBoundaryEvent, detail)
+}
+
 // AddCompensationThrowEvent adds an intermediate throw event that, on activation, triggers
 // compensation — running the handlers of completed compensable activities in its scope (or
 // of the single activity later set via SetCompensationActivityRef) — then flows on (ADR-0103).
@@ -1703,10 +1730,25 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		}
 	}
 
+	// Does this process contain any conditional event? The runtime only schedules a
+	// variable-change re-check for instances of a process that has one (ADR-0137), so a
+	// process without conditionals pays nothing on a variable write.
+	hasConditional := false
+	for i := range b.nodes {
+		n := &b.nodes[i]
+		if n.Type == TypeConditionalCatchEvent ||
+			(n.Type == TypeBoundaryEvent && b.boundaryEventDets[n.Detail].Kind == BoundaryConditional) ||
+			(n.EventSub >= 0 && b.eventSubProcesses[n.EventSub].Kind == BoundaryConditional) {
+			hasConditional = true
+			break
+		}
+	}
+
 	return &CompiledProcess{
 		Key:                b.key,
 		BpmnProcessId:      b.intern(b.bpmnProcessId),
 		Version:            b.version,
+		hasConditional:     hasConditional,
 		nodes:              b.nodes,
 		flows:              b.flows,
 		outgoingFlows:      outgoing,
@@ -1735,6 +1777,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		signalStarts:       b.signalStarts,
 		errorEnds:          b.errorEnds,
 		escalations:        b.escalations,
+		conditionals:       b.conditionals,
 		compensationThrows: b.compensationThrows,
 		timerStarts:        b.timerStarts,
 		dataObjects:        b.dataObjects,

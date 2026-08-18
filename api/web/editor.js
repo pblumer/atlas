@@ -613,9 +613,7 @@ const UNSUPPORTED_TYPES = {
   "bpmn:AdHocSubProcess": "Ad-hoc subprocesses aren't supported yet",
   "bpmn:DataStoreReference": "Data stores aren't supported yet",
 };
-const UNSUPPORTED_EVENT_DEFS = {
-  "bpmn:ConditionalEventDefinition": "Conditional events aren't supported yet",
-};
+const UNSUPPORTED_EVENT_DEFS = {};
 
 // unsupportedReason returns why a drawn element can't run on the Atlas engine yet, or
 // null if it can. It keys off the element type and any event definitions it carries.
@@ -2907,6 +2905,24 @@ function linkFieldsHTML(led, hint) {
     <p class="muted" style="font-size:12px">${hint}</p>`;
 }
 
+// conditionalDefOf returns an event's bpmn:ConditionalEventDefinition, or null. A conditional
+// event fires when its boolean FEEL condition over the process's variables becomes true —
+// re-evaluated on every variable change (ADR-0137).
+function conditionalDefOf(bo) {
+  return (bo && bo.eventDefinitions || []).find((d) => d.$type === "bpmn:ConditionalEventDefinition") || null;
+}
+
+// conditionalFieldsHTML renders the FEEL condition field for a conditional catch, boundary, or
+// event-subprocess start. The condition is a boolean FEEL expression over the scope's variables;
+// the event fires when it becomes true (ADR-0137). ced is the bpmn:ConditionalEventDefinition.
+function conditionalFieldsHTML(ced, hint) {
+  const condText = ((ced.condition && ced.condition.body) || "").replace(/^=\s*/, "");
+  return `<h3>Condition (FEEL)</h3>
+    <label class="field"><span>Expression</span>
+      <textarea id="f-condition" rows="2" placeholder="amount > 100">${esc(condText)}</textarea></label>
+    <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
 // listEscalations returns every <bpmn:escalation> declared on the model's definitions.
 function listEscalations(modeler) {
   const defs = definitionsOf(modeler);
@@ -3835,6 +3851,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
         const link = linkDefOf(bo);
+        const cond = conditionalDefOf(bo);
         if (timer) {
           html += timerFieldsHTML(timer, ["duration", "date"], `The event waits, then continues (ADR-0054).
             <b>Duration</b> waits that long (<b>PT30S</b>, <b>PT5M</b>, <b>P1DT2H</b>); <b>Date &amp; time</b> waits until that instant.
@@ -3845,8 +3862,10 @@ function wireProperties(root, modeler, api, projectId, toast) {
           html += signalFieldsHTML(modeler, sig, "The event waits until a signal with this name is broadcast (by a throw or signal end event, in this or any other instance).");
         } else if (link) {
           html += linkFieldsHTML(link, "This is the landing point of a <b>link throw</b> with the same name in the same scope (an off-page connector). It does not wait — a token arriving via the link flows straight on. Draw it with no incoming sequence flow.");
+        } else if (cond) {
+          html += conditionalFieldsHTML(cond, "The event waits until this boolean condition over the instance's variables becomes true — re-evaluated on every variable change — then continues. If it already holds when the token arrives, it passes straight through.");
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, or <b>Link</b> intermediate catch event, then configure it here.</p>`;
+          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, <b>Conditional</b>, or <b>Link</b> intermediate catch event, then configure it here.</p>`;
         }
       } else if (bo.$type === "bpmn:IntermediateThrowEvent") {
         const msg = messageDefOf(bo);
@@ -3874,6 +3893,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const sig = signalDefOf(bo);
         const err = errorDefOf(bo);
         const escl = escalationDefOf(bo);
+        const cond = conditionalDefOf(bo);
         const cancel = cancelDefOf(bo);
         if (err) {
           // An error boundary is always interrupting — no cancelActivity toggle (ADR-0089).
@@ -3908,8 +3928,10 @@ function wireProperties(root, modeler, api, projectId, toast) {
             html += signalFieldsHTML(modeler, sig, "The event fires when a signal with this name is broadcast (in this or any other instance) while the activity runs.");
           } else if (escl) {
             html += escalationFieldsHTML(modeler, escl, "The event fires when the attached activity raises a matching escalation — an escalation throw/end event inside it, or one propagating up from a called process. Interrupting cancels the activity and routes out this event; non-interrupting runs the handler while the activity keeps going.");
+          } else if (cond) {
+            html += conditionalFieldsHTML(cond, "The event fires while the activity runs, when this boolean condition over the instance's variables becomes true — re-evaluated on every variable change. Interrupting cancels the activity and routes out this event; non-interrupting runs the handler once while the activity keeps going.");
           } else {
-            html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, <b>Error</b>, or <b>Escalation</b> boundary event, then configure its trigger here.</p>`;
+            html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, <b>Error</b>, <b>Escalation</b>, or <b>Conditional</b> boundary event, then configure its trigger here.</p>`;
           }
         }
       } else if (bo.$type === "bpmn:StartEvent" && isEventSubStart(element)) {
@@ -3922,6 +3944,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         const sig = signalDefOf(bo);
         const err = errorDefOf(bo);
         const escl = escalationDefOf(bo);
+        const cond = conditionalDefOf(bo);
         if (err) {
           // An error event subprocess is always interrupting — no toggle (ADR-0089).
           html += `<h3>Event subprocess trigger</h3>
@@ -3950,8 +3973,10 @@ function wireProperties(root, modeler, api, projectId, toast) {
             html += signalFieldsHTML(modeler, sig, "The event subprocess fires when a signal with this name is broadcast while its scope runs. A non-interrupting trigger re-arms and can fire again.");
           } else if (escl) {
             html += escalationFieldsHTML(modeler, escl, "The event subprocess fires when its enclosing scope raises a matching escalation. Interrupting terminates the scope's other work first; non-interrupting runs this handler alongside the still-running scope.");
+          } else if (cond) {
+            html += conditionalFieldsHTML(cond, "The event subprocess fires when this boolean condition over the scope's variables becomes true — re-evaluated on every variable change. Interrupting terminates the scope's other work first; non-interrupting runs this handler once alongside the still-running scope.");
           } else {
-            html += `<p class="muted" style="font-size:12px">Use the wrench icon on this start event to give it a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, <b>Error</b>, or <b>Escalation</b> trigger, then configure it here.</p>`;
+            html += `<p class="muted" style="font-size:12px">Use the wrench icon on this start event to give it a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, <b>Error</b>, <b>Escalation</b>, or <b>Conditional</b> trigger, then configure it here.</p>`;
           }
         }
       } else if (bo.$type === "bpmn:StartEvent") {
@@ -4937,6 +4962,26 @@ function wireProperties(root, modeler, api, projectId, toast) {
       }));
     }
 
+    // A conditional event's FEEL predicate lives on its bpmn:ConditionalEventDefinition as a
+    // <condition> FormalExpression body (ADR-0137). Clearing it removes the condition (the
+    // compiler then rejects the empty predicate at deploy, surfaced in the Problems panel).
+    const fcondition = body.querySelector("#f-condition");
+    if (fcondition) {
+      fcondition.addEventListener("change", () => savePreservingPanel(() => {
+        const ced = conditionalDefOf(element.businessObject);
+        if (!ced) return;
+        const raw = (fcondition.value || "").trim();
+        if (raw === "") {
+          try { modeling.updateModdleProperties(element, ced, { condition: undefined }); } catch { /* stale */ }
+          return;
+        }
+        const moddle = modeler.get("moddle");
+        const cexpr = moddle.create("bpmn:FormalExpression", { body: raw.startsWith("=") ? raw : "= " + raw });
+        cexpr.$parent = ced;
+        try { modeling.updateModdleProperties(element, ced, { condition: cexpr }); } catch { /* stale */ }
+      }));
+    }
+
     // Upgrade every FEEL field in this panel into a code editor (highlighting +
     // completion + live validation + a Test panel). The textareas keep their
     // identity, so the change-to-save handlers wired above are untouched.
@@ -4948,6 +4993,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
       const evaluate = api ? (expression, variables) => api("POST", "/api/v1/feel/evaluate", { expression, variables }) : null;
       enhanceFeel(body, "#f-expr", feelVars, validate, evaluate);
       enhanceFeel(body, "#f-cond", feelVars, validate, evaluate);
+      enhanceFeel(body, "#f-condition", feelVars, validate, evaluate);
       enhanceFeel(body, "#f-corrkey", feelVars, validate, evaluate);
       enhanceScript(body, modeler, api, feelVars);
       // Value-or-expression fields carry a Camunda-style fx toggle: switch them to

@@ -30,20 +30,21 @@ func handlerKey(vt model.ValueType, intent model.Intent) uint16 {
 
 func (p *Processor) registerHandlers() {
 	p.handlers = map[uint16]func(*ProcessingContext){
-		handlerKey(model.VTProcessInstance, model.IntentActivating):  handleProcessInstanceActivating,
-		handlerKey(model.VTProcessInstance, model.IntentTerminating): handleProcessInstanceTerminating,
-		handlerKey(model.VTProcessInstance, model.IntentPurging):     handleProcessInstancePurging,
-		handlerKey(model.VTElementInstance, model.IntentActivating):  handleElementActivating,
-		handlerKey(model.VTElementInstance, model.IntentCompleting):  handleElementCompleting,
-		handlerKey(model.VTJob, model.IntentJobCompleted):            handleJobCompleted,
-		handlerKey(model.VTJob, model.IntentJobFailed):               handleJobFailed,
-		handlerKey(model.VTJob, model.IntentJobErrorThrown):          handleJobError,
-		handlerKey(model.VTJob, model.IntentJobAssigned):             handleJobAssigned,
-		handlerKey(model.VTIncident, model.IntentIncidentResolved):   handleIncidentResolved,
-		handlerKey(model.VTTimer, model.IntentTimerTriggered):        handleTimerTriggered,
-		handlerKey(model.VTTimer, model.IntentTimerStartArm):         handleTimerStartArm,
-		handlerKey(model.VTMessage, model.IntentMessagePublished):    handleMessagePublished,
-		handlerKey(model.VTVariable, model.IntentVariableModify):     handleVariablesModify,
+		handlerKey(model.VTProcessInstance, model.IntentActivating):       handleProcessInstanceActivating,
+		handlerKey(model.VTProcessInstance, model.IntentTerminating):      handleProcessInstanceTerminating,
+		handlerKey(model.VTProcessInstance, model.IntentPurging):          handleProcessInstancePurging,
+		handlerKey(model.VTProcessInstance, model.IntentConditionRecheck): handleConditionRecheck,
+		handlerKey(model.VTElementInstance, model.IntentActivating):       handleElementActivating,
+		handlerKey(model.VTElementInstance, model.IntentCompleting):       handleElementCompleting,
+		handlerKey(model.VTJob, model.IntentJobCompleted):                 handleJobCompleted,
+		handlerKey(model.VTJob, model.IntentJobFailed):                    handleJobFailed,
+		handlerKey(model.VTJob, model.IntentJobErrorThrown):               handleJobError,
+		handlerKey(model.VTJob, model.IntentJobAssigned):                  handleJobAssigned,
+		handlerKey(model.VTIncident, model.IntentIncidentResolved):        handleIncidentResolved,
+		handlerKey(model.VTTimer, model.IntentTimerTriggered):             handleTimerTriggered,
+		handlerKey(model.VTTimer, model.IntentTimerStartArm):              handleTimerStartArm,
+		handlerKey(model.VTMessage, model.IntentMessagePublished):         handleMessagePublished,
+		handlerKey(model.VTVariable, model.IntentVariableModify):          handleVariablesModify,
 	}
 }
 
@@ -88,6 +89,10 @@ func (p *Processor) registerBehaviors() {
 	// of their own, exactly like a token passing through a none event.
 	p.behaviors[compiler.TypeLinkThrowEvent] = passThroughBehavior{}
 	p.behaviors[compiler.TypeLinkCatchEvent] = passThroughBehavior{}
+	// A conditional catch arms inert and waits until its FEEL condition becomes true
+	// (ADR-0137): OnActivated self-evaluates, else a variable-change re-check drives it to
+	// Completing. Conditional boundaries reuse boundaryEventBehavior with BoundaryConditional.
+	p.behaviors[compiler.TypeConditionalCatchEvent] = conditionalCatchBehavior{}
 	p.behaviors[compiler.TypeCompensationThrowEvent] = compensationThrowEventBehavior{}
 	p.behaviors[compiler.TypeCompensationEndEvent] = compensationEndEventBehavior{}
 	p.behaviors[compiler.TypeCancelEndEvent] = cancelEndEventBehavior{}
@@ -3141,9 +3146,21 @@ func (boundaryEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *m
 		// propagateEscalation walking the scope chain when an escalation is raised, then driven
 		// to Completing (ADR-0125). Its OnCompleting path already honors d.Interrupting, so a
 		// non-interrupting escalation boundary runs its handler while the host keeps running.
+	case compiler.BoundaryConditional:
+		// A conditional boundary opens nothing either — it arms inert and is driven to
+		// Completing by a variable-change re-check when its FEEL condition becomes true
+		// (ADR-0137). If the condition already holds the moment the host activates, defer the
+		// fire to a re-check (mark the instance dirty) rather than firing synchronously: an
+		// interrupting boundary on a subprocess host would otherwise tear the host down while
+		// its inner flow is still activating in the same wave, orphaning the not-yet-activated
+		// inner elements. The re-check runs on the next batch, once the host has settled, so
+		// interruptHost tears it down cleanly. Its OnCompleting honors d.Interrupting.
+		if conditionHolds(c, d.Condition, ei.FlowScopeKey) {
+			c.markConditionDirty(ei.FlowScopeKey)
+		}
 	}
 	// Stays Activated: waits until the timer fires, the message correlates, the signal
-	// broadcasts, or (for an error boundary) an error propagates up to it.
+	// broadcasts, or (for an error/escalation/conditional boundary) it is found/fires.
 }
 
 func (boundaryEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
@@ -3327,6 +3344,19 @@ func (eventSubProcessStartBehavior) OnActivated(c *ProcessingContext, key uint64
 		// An error event subprocess arms inert — it opens nothing, waiting only to be found
 		// by propagateError when an error is thrown in its scope, then driven to Completing
 		// (ADR-0089). Always interrupting, so firing terminates the scope and runs the handler.
+	case compiler.BoundaryConditional:
+		// A conditional event subprocess arms inert too — it opens nothing and is driven to
+		// Completing by a variable-change re-check when its FEEL condition over the parent
+		// scope's variables becomes true (ADR-0137). Unlike a boundary (which arms on an
+		// already-established host and may fire at once), this trigger arms while its scope's
+		// inner flow is still activating in the same wave, so firing synchronously here would
+		// interrupt the scope mid-activation and orphan the not-yet-activated inner elements.
+		// If the condition already holds, defer the fire to a re-check (mark the instance dirty):
+		// it runs on the next batch, once the inner flow has settled and terminateScope can tear
+		// it down cleanly. OnCompleting honors d.Interrupting.
+		if conditionHolds(c, d.Condition, ei.FlowScopeKey) {
+			c.markConditionDirty(ei.FlowScopeKey)
+		}
 	}
 	// Stays Activated: waits until the trigger fires.
 }
