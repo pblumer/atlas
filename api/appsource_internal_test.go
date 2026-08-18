@@ -719,16 +719,65 @@ func TestExportApplicationSourceReportsStoreFailures(t *testing.T) {
 }
 
 // TestApplicationKeyForReportsSaveFailure: the backfill persists the key it
-// derived, and a failure there must not return a key the store does not hold.
+// derived, and a failure there must not return a key the store does not hold —
+// a key nobody can match on afterwards is worse than none.
 func TestApplicationKeyForReportsSaveFailure(t *testing.T) {
+	// The store reads fine; only the write of this one record fails, because its
+	// record path is occupied by a directory.
 	s := storesFor(t)
-	dir := s.projects.dir
+	if err := os.MkdirAll(s.projects.fileFor("a1"), 0o755); err != nil {
+		t.Fatalf("mkdir over record: %v", err)
+	}
+	if _, err := s.applicationKeyFor(project{ID: "a1", Name: "App"}); err == nil {
+		t.Fatal("a failed key save was reported as success")
+	}
+
+	// And the same when the store cannot be read at all.
+	broken := storesFor(t)
+	dir := broken.projects.dir
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatalf("rmdir: %v", err)
 	}
-	s.projects = &projectStore{dir: dir}
-	if _, err := s.applicationKeyFor(project{ID: "a1", Name: "App"}); err == nil {
-		t.Fatal("a failed key save was reported as success")
+	broken.projects = &projectStore{dir: dir}
+	if _, err := broken.applicationKeyFor(project{ID: "a1", Name: "App"}); err == nil {
+		t.Fatal("an unreadable store was reported as success")
+	}
+}
+
+// TestApplySourceTreeReportsArtifactWriteFailure: a tree whose artifacts cannot be
+// written is an error, not a success with a smaller count. Each store is a
+// separate write, so each one is checked.
+func TestApplySourceTreeReportsArtifactWriteFailure(t *testing.T) {
+	man := sourceManifest{
+		FormatVersion: 1, Key: "app", Name: "App",
+		Processes: []sourceProcess{{ID: "p1", Name: "P", Path: "processes/p.bpmn"}},
+		Forms:     []sourceForm{{ID: "f1", Name: "F", Path: "forms/f.form.json"}},
+		Decisions: []sourceDecision{{ID: "r1", Name: "R", ModelRef: "m"}},
+	}
+	files := map[string][]byte{
+		"processes/p.bpmn":  []byte("<x/>\n"),
+		"forms/f.form.json": []byte("{}\n"),
+	}
+	// Each case occupies exactly one record path with a directory, so the store
+	// still reads cleanly and only that one write fails.
+	cases := map[string]func(*Server) string{
+		"process":  func(s *Server) string { return s.drafts.fileFor("p1") },
+		"form":     func(s *Server) string { return s.forms.fileFor("f1") },
+		"decision": func(s *Server) string { return s.dmnrefs.fileFor("r1") },
+	}
+	for name, occupy := range cases {
+		t.Run(name, func(t *testing.T) {
+			s := storesFor(t)
+			if err := s.projects.save(project{ID: "a1", Name: "App", Key: "app"}); err != nil {
+				t.Fatalf("save project: %v", err)
+			}
+			if err := os.MkdirAll(occupy(s), 0o755); err != nil {
+				t.Fatalf("mkdir over record: %v", err)
+			}
+			if _, err := s.applySourceTree(man, files, "", allow); err == nil {
+				t.Fatalf("a failed %s write was reported as success", name)
+			}
+		})
 	}
 }
 

@@ -229,6 +229,16 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/applications/{id}/source": "bulk source-tree download; an agent reads artifacts individually via atlas_get_draft_xml / atlas_get_form",
 	"POST /api/v1/applications/source":     "bulk source-tree upload that rewrites a whole application; an agent authors via atlas_save_draft / atlas_save_form",
 
+	// Git binding (ADR-0134): the repository an application's source lives in, and
+	// the credential to reach it — operator config in the same category as a
+	// deployment target. A commit is a deliberate, attributed act with an audience
+	// outside this server; an agent building a scenario has no business making one.
+	"GET /api/v1/applications/{id}/git":         "git binding is operator config; an agent reads artifacts through the authoring tools",
+	"PUT /api/v1/applications/{id}/git":         "binding a repository and naming its credential is admin/operator config, not an agent action",
+	"DELETE /api/v1/applications/{id}/git":      "binding a repository is admin/operator config, not an agent action",
+	"POST /api/v1/applications/{id}/git/import": "pulling a whole application from a repository is an operator decision; an agent authors via atlas_save_draft / atlas_save_form",
+	"POST /api/v1/applications/{id}/git/commit": "a commit is an attributed act with an audience outside this server, not a step an agent drives",
+
 	// Secrets: credential storage; an agent must never read or write it.
 	"GET /api/v1/secrets":           "credential storage is not an agent capability",
 	"PUT /api/v1/secrets/{name}":    "credential storage is not an agent capability",

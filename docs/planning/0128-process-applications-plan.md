@@ -265,24 +265,45 @@ Import **never deletes**: artifacts the tree omits are reported as `untracked` a
 left alone. Foreign artifacts (a process id owned by another application) are a
 409, checked before anything is written.
 
-### Slice 4b — the git binding itself *(next)*
+### Slice 4b — the git binding itself *(shipped)*
 
 ### Backend
 
-- **`api/gitbinding.go`** — bind info on the application (repo URL, branch,
-  credential vault handle). Persisted on the project sidecar (additive optional
-  fields) or a small `<data-dir>/git-bindings/` store.
+- **`api/gitbindingstore.go`** — one binding per application in
+  `<data-dir>/git-bindings/`: repo URL, branch, credential vault handle, and
+  `lastCommit` — the commit Atlas last saw, which is what makes
+  fast-forward-or-refuse real.
 - **`api/gitsync.go`** — the layout from slice 4a is what travels; this slice only
-  moves it.
-  - **Import:** clone/pull to a scratch working copy, read it as a `[]sourceFile`,
-    and hand it to `parseSourceTree` + `applySourceTree` — the same path the
-    upload endpoint takes, so git adds a transport and no second import rule.
-  - **Commit/push:** `buildSourceTree` into the working copy, commit, push.
-    Fast-forward or refuse; Atlas never merges (ADR-0134).
+  moves it. Cloned into **memory** (memfs + memory storer), so there is no working
+  copy to leave behind and no scratch directory to secure.
+  - **Import:** clone the branch, read it as a `[]sourceFile`, hand it to
+    `parseSourceTree` + `applySourceTree` — the same path the upload endpoint
+    takes, so git adds a transport and no second import rule.
+  - **Commit/push:** `buildSourceTree` into the worktree, commit, push. Refused
+    unless the branch still points at `lastCommit`; Atlas never merges (ADR-0134).
+    Only the paths Atlas owns (`atlas.json`, `processes/`, `forms/`) are rewritten,
+    so a README or CI config in the same repository survives.
   - Pure design-time server side effect; no engine, no hot path. `go-git`, for the
     CGO-free single binary (ADR-0010/0011).
-- Endpoints: `POST /api/v1/applications/{id}/git/bind`, `.../git/import`,
-  `.../git/commit`, `GET .../git/status`.
+- **`api/gitbinding.go`** — `GET/PUT/DELETE /api/v1/applications/{id}/git`,
+  `POST .../git/import`, `POST .../git/commit`. Three-phase throughout (resolve on
+  the loop → git I/O off it → record back on it), like ADR-0129's promotion.
+
+**Decisions taken while building it:**
+
+- **Commits are explicit** (the ADR's open question 1). Atlas does not commit on
+  save: a history with one commit per keystroke is a history nobody reads, and a
+  repository's value is a record somebody can review.
+- **Transport is https only.** ssh is refused outright rather than accepted with
+  unverified host keys; `file://` is allowed for local and air-gapped remotes but
+  is admin-gated, because it is the one scheme that reaches the server's own disk.
+- **A bound import must match.** The repository's key has to name the application
+  the binding is on, or the import is refused — creating a second application on
+  the side would leave the operator with an empty application and a binding that
+  never fills it. An application with no key yet adopts the repository's, if free.
+- **Bindings are in neither backup set**, matching how ADR-0129 treats deployment
+  targets: a restored or cloned instance that silently re-bound to a production
+  repository and pushed to it is a hazard, not a convenience.
 
 ### Frontend
 
@@ -309,6 +330,10 @@ left alone. Foreign artifacts (a process id owned by another application) are a
 | 3 Remote targets | deploy to other servers, per-target status | outbound HTTP | **yes** | L |
 | 4a Source layout | portable key + source tree export/import | none | (ADR-0134) | M |
 | 4b Git binding | bind, import, commit/push | outbound git | (ADR-0134) | L |
+
+Open questions 2 and 3 from ADR-0134 remain open and unbuilt: one repository per
+application is what 4b assumes (a monorepo would change the manifest's shape), and
+a git-backed application is still fully editable in the Modeler on every server.
 
 - Phases 1–2 are self-contained and low-risk (no new network, no new trust
   boundary) — land them first; they already deliver the "application that publishes

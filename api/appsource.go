@@ -594,3 +594,21 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 	sort.Strings(res.Untracked)
 	return res, nil
 }
+
+// keyIsFree reports whether no application other than exceptID answers to a key.
+// It is what stops an import from pointing two applications at one identity, which
+// would make the next clone ambiguous.
+//
+// Runs on the run loop.
+func (s *Server) keyIsFree(key, exceptID string) (bool, error) {
+	all, err := s.projects.loadAll()
+	if err != nil {
+		return false, err
+	}
+	for _, p := range all {
+		if p.Key == key && p.ID != exceptID {
+			return false, nil
+		}
+	}
+	return true, nil
+}

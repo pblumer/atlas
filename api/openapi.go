@@ -400,6 +400,25 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip tar of a source tree, as produced by GET /api/v1/applications/{id}/source"},
 			resp: jsonBody("Import result", tObject())}},
 
+		{"GET", "/api/v1/applications/{id}/git", s.handleGetGitBinding, apiOp{
+			summary: "An application's git binding and, best-effort, where the remote branch currently is — which is what says whether a commit would go through or be refused (ADR-0134)", tag: "Applications",
+			resp: jsonBody("Git binding", tObject())}},
+		{"PUT", "/api/v1/applications/{id}/git", s.handleSetGitBinding, apiOp{
+			summary: "Bind an application to a git repository. https only (plaintext for loopback); ssh is not supported yet; a file:// remote reaches this server's own disk and is admin-only. The credential is stored by reference, never by value (ADR-0134).", tag: "Applications",
+			req: jsonBody("Binding", schemaObj(map[string]any{
+				"repoUrl": tString(), "branch": tString(), "credentialRef": tString(),
+			}, "repoUrl")),
+			resp: jsonBody("Git binding", tObject())}},
+		{"DELETE", "/api/v1/applications/{id}/git", s.handleDeleteGitBinding, apiOp{
+			summary: "Unbind an application from its repository. Atlas forgets the repository; the repository itself is untouched (ADR-0134)", tag: "Applications", status: http.StatusNoContent}},
+		{"POST", "/api/v1/applications/{id}/git/import", s.handleGitImport, apiOp{
+			summary: "Read the bound repository's branch into this server, through the same rules an uploaded source tree takes: never deletes, and refuses an artifact owned by another application (ADR-0134)", tag: "Applications",
+			resp: jsonBody("Import result with the commit it came from", tObject())}},
+		{"POST", "/api/v1/applications/{id}/git/commit", s.handleGitCommit, apiOp{
+			summary: "Write the application's current source into the bound repository as one commit. Refused when the branch moved since the last sync — Atlas never merges (ADR-0134).", tag: "Applications",
+			req:  jsonBody("Commit options", schemaObj(map[string]any{"message": tString()})),
+			resp: jsonBody("Commit result", tObject())}},
+
 		{"GET", "/api/v1/applications/{id}/targets", s.handleApplicationTargets, apiOp{
 			summary: "What each configured deployment target currently runs for this application; best-effort, an unreachable peer is reported as such (ADR-0129)", tag: "Applications",
 			resp: jsonBody("Per-target status", tArray())}},

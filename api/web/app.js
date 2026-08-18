@@ -1509,6 +1509,7 @@ async function viewProjectDetail(id) {
 
     const projItems = ungrouped ? [] : [
       { label: "Download source…", icon: "🗂", act: "srcexport" },
+      ...(canWrite ? [{ label: "Git repository…", icon: "🔗", act: "gitbind" }] : []),
       ...(rl.length ? [{ label: "Validate DMN", icon: "✔", act: "valproj" }] : []),
       ...(AUTH.enabled && isOwner ? [{ label: "Share…", icon: "👤", act: "shareproj" }] : []),
       ...(isOwner ? [{ label: "Rename application", icon: "✎", act: "renproj" }] : []),
@@ -1527,6 +1528,7 @@ async function viewProjectDetail(id) {
       ${ungrouped ? "" : `<div class="tabs" id="pd-tabs">
         <button data-pane="artifacts" class="active">Artifacts</button>
         <button data-pane="deployments">Deployments</button>
+        <button data-pane="git">Git</button>
       </div>`}
       <div id="pane-artifacts">
         <input class="filter-input" id="pd-filter" placeholder="Filter artifacts…" autocomplete="off">
@@ -1543,6 +1545,11 @@ async function viewProjectDetail(id) {
       ${ungrouped ? "" : `<div id="pane-deployments" hidden>
         <p class="muted" style="padding:2px 2px 12px">What this application currently has deployed on this server.</p>
         <div id="pd-deployments"><p class="muted" style="padding:14px 2px">Loading…</p></div>
+      </div>
+      <div id="pane-git" hidden>
+        <p class="muted" style="padding:2px 2px 12px">The repository this application's <b>source</b> lives in — its diagrams, forms and
+        decision references. Deployments and releases stay on the server; they are records of what happened here, not source to review.</p>
+        <div id="pd-git"><p class="muted" style="padding:14px 2px">Loading…</p></div>
       </div>`}`;
 
     const filter = document.getElementById("pd-filter");
@@ -1556,16 +1563,22 @@ async function viewProjectDetail(id) {
     // application, ADR-0128). The deployments pane loads lazily on first open.
     const tabs = document.getElementById("pd-tabs");
     if (tabs) {
-      let loadedDeployments = false;
+      let loadedDeployments = false, loadedGit = false;
       tabs.addEventListener("click", (e) => {
         const b = e.target.closest("button[data-pane]");
         if (!b) return;
         for (const t of tabs.querySelectorAll("button")) t.classList.toggle("active", t === b);
-        document.getElementById("pane-artifacts").hidden = b.dataset.pane !== "artifacts";
-        document.getElementById("pane-deployments").hidden = b.dataset.pane !== "deployments";
+        for (const pane of ["artifacts", "deployments", "git"])
+          document.getElementById("pane-" + pane).hidden = b.dataset.pane !== pane;
         if (b.dataset.pane === "deployments" && !loadedDeployments) {
           loadedDeployments = true;
           renderAppDeployments(id);
+        }
+        // The git pane asks the remote where its branch is, so it loads only when
+        // opened — a slow remote must never hold up the artifacts view.
+        if (b.dataset.pane === "git" && !loadedGit) {
+          loadedGit = true;
+          renderAppGit(id, canWrite);
         }
       });
     }
@@ -1574,6 +1587,7 @@ async function viewProjectDetail(id) {
       switch (act) {
         case "import": importArtifact(ungrouped ? "" : id, render); break;
         case "srcexport": downloadApplicationSource(id); break;
+        case "gitbind": bindApplicationGit(id, render); break;
         case "newref": createDmnRef(ungrouped ? "" : id, render); break;
         case "shareproj": shareProject(proj, render); break;
         case "renproj": renameProject(id, proj.name, render); break;
@@ -2531,6 +2545,131 @@ async function deployProject(id, reload) {
   // Refused (or a server error): show why and reflect any DMN results in place.
   toast(rep.reason || rep.error || "Publish refused", "err");
   for (const r of rep.references || []) applyRefStatus(r.id, r);
+}
+
+// renderAppGit fills the Git tab: where the application's source is bound, where
+// the remote branch currently is, and the two actions — import and commit
+// (ADR-0134). Commits are explicit by design: Atlas does not commit on save,
+// because a history with one commit per keystroke is a history nobody reads.
+async function renderAppGit(id, canWrite) {
+  const host = document.getElementById("pd-git");
+  if (!host) return;
+  let g;
+  try {
+    g = await api("GET", `/api/v1/applications/${encodeURIComponent(id)}/git`);
+  } catch (e) {
+    host.innerHTML = `<p class="empty">${esc(e.message)}</p>`;
+    return;
+  }
+  if (!g.bound) {
+    host.innerHTML = `<div class="card">
+      <p class="muted">This application is not bound to a repository.</p>
+      ${canWrite ? `<button class="btn" id="git-bind">Bind a repository…</button>` : ""}
+    </div>`;
+    const b = document.getElementById("git-bind");
+    if (b) b.addEventListener("click", () => bindApplicationGit(id, () => renderAppGit(id, canWrite)));
+    return;
+  }
+
+  // Three states worth telling apart: the remote could not be reached, the branch
+  // moved since the last sync (a commit would be refused), or everything is level.
+  const state = g.remoteError
+    ? `<span class="pill warn">unreachable</span> <span class="muted">${esc(g.remoteError)}</span>`
+    : g.diverged
+      ? `<span class="pill warn">branch moved</span> <span class="muted">Import before committing — Atlas never merges.</span>`
+      : `<span class="pill ok">in sync</span>`;
+  const shortSha = (h) => (h ? esc(h.slice(0, 8)) : "—");
+  host.innerHTML = `<div class="card">
+      <div class="between"><h3 style="margin:0">${esc(g.repoUrl)}</h3><div>${state}</div></div>
+      <table style="margin-top:10px">
+        <tbody>
+          <tr><td class="muted">Branch</td><td><code>${esc(g.branch)}</code></td></tr>
+          <tr><td class="muted">Last sync</td><td>${g.lastSyncAt
+            ? `${esc(g.lastAction || "sync")} · ${esc(fmtTime(g.lastSyncAt))} · <code>${shortSha(g.lastCommit)}</code>`
+            : "<span class=\"muted\">never</span>"}</td></tr>
+          <tr><td class="muted">Remote branch</td><td><code>${shortSha(g.remoteCommit)}</code></td></tr>
+          ${g.credentialRef ? `<tr><td class="muted">Credential</td><td><code>${esc(g.credentialRef)}</code> <span class="muted">(vault handle)</span></td></tr>` : ""}
+        </tbody>
+      </table>
+      ${canWrite ? `<div class="row" style="gap:10px; margin-top:14px">
+        <button class="btn neutral" id="git-import">Import from git</button>
+        <button class="btn" id="git-commit">Commit &amp; push…</button>
+        <button class="btn neutral" id="git-rebind">Change repository…</button>
+        <button class="btn ghost danger" id="git-unbind">Unbind</button>
+      </div>` : ""}
+    </div>`;
+
+  const reload = () => renderAppGit(id, canWrite);
+  const wire = (btnID, fn) => {
+    const b = document.getElementById(btnID);
+    if (b) b.addEventListener("click", fn);
+  };
+  wire("git-import", () => importApplicationGit(id, reload));
+  wire("git-commit", () => commitApplicationGit(id, reload));
+  wire("git-rebind", () => bindApplicationGit(id, reload, g));
+  wire("git-unbind", async () => {
+    if (!window.confirm("Unbind this application from its repository?\n\nThe repository itself is untouched — Atlas simply stops tracking it.")) return;
+    try {
+      await api("DELETE", `/api/v1/applications/${encodeURIComponent(id)}/git`);
+      toast("Unbound", "ok");
+      await reload();
+    } catch (e) { toast("Unbind failed: " + e.message, "err"); }
+  });
+}
+
+// bindApplicationGit binds an application to a repository. https only; the
+// credential is named, never entered here — it is a vault handle (ADR-0069), so
+// the secret lives in the vault and this form only points at it.
+async function bindApplicationGit(id, reload, current) {
+  const repoUrl = window.prompt(
+    "Repository URL (https).\n\nThe application's source — diagrams, forms, decision references — is committed here.",
+    (current && current.repoUrl) || "https://");
+  if (repoUrl == null) return;
+  const branch = window.prompt("Branch:", (current && current.branch) || "main");
+  if (branch == null) return;
+  const credentialRef = window.prompt(
+    "Vault entry holding the access token (leave empty for a public or local repository).\n\n" +
+    "This is the entry's name, not the token itself.",
+    (current && current.credentialRef) || "");
+  if (credentialRef == null) return;
+  try {
+    await api("PUT", `/api/v1/applications/${encodeURIComponent(id)}/git`,
+      { repoUrl: repoUrl.trim(), branch: branch.trim(), credentialRef: credentialRef.trim() });
+    toast("Repository bound", "ok");
+    await reload();
+  } catch (e) { toast("Bind failed: " + e.message, "err"); }
+}
+
+// importApplicationGit pulls the bound branch into this server. It never deletes:
+// artifacts the repository does not mention are reported and left alone.
+async function importApplicationGit(id, reload) {
+  try {
+    const res = await api("POST", `/api/v1/applications/${encodeURIComponent(id)}/git/import`, {});
+    const n = (res.processes || 0) + (res.forms || 0) + (res.decisions || 0);
+    toast(
+      `Imported ${n} artifact${n === 1 ? "" : "s"} from ${res.commit.slice(0, 8)}` +
+      (res.untracked && res.untracked.length
+        ? ` · ${res.untracked.length} local artifact${res.untracked.length === 1 ? "" : "s"} not in the repository, kept`
+        : ""),
+      "ok");
+    await reload();
+  } catch (e) { toast("Import failed: " + e.message, "err"); }
+}
+
+// commitApplicationGit writes the application's current source to the repository as
+// one commit. A branch that moved since the last sync is refused, not merged.
+async function commitApplicationGit(id, reload) {
+  const message = window.prompt(
+    "Commit message — what changed in this application?", "");
+  if (message == null) return;
+  try {
+    const res = await api("POST", `/api/v1/applications/${encodeURIComponent(id)}/git/commit`,
+      { message: message.trim() });
+    toast(res.changed
+      ? `Committed ${res.commit.slice(0, 8)}`
+      : "Nothing to commit — the repository already matches", res.changed ? "ok" : "");
+    await reload();
+  } catch (e) { toast("Commit failed: " + e.message, "err"); }
 }
 
 // downloadApplicationSource downloads the application's source tree (ADR-0134): a
