@@ -720,12 +720,12 @@ type ConditionalDetail struct {
 // CompletionCondition is an optional boolean FEEL expression re-evaluated after each contained
 // activity completes; nil means the ad-hoc completes when its scope drains instead. When it
 // holds, CancelRemaining (the BPMN cancelRemainingInstances default, true) decides whether the
-// still-running contained activities are cancelled. Sequential runs one entry activity at a
-// time; the default is parallel — every entry activity is activated at once.
+// still-running contained activities are cancelled. Ordering is always the BPMN default,
+// parallel — every entry activity is activated at once; a model asking for sequential ordering
+// is refused at deploy until that driver lands, so no flag is carried for it.
 type AdHocDetail struct {
 	CompletionCondition *expr.Compiled
 	CancelRemaining     bool
-	Sequential          bool
 }
 
 // CompiledDataObject is one BPMN data object declared by a process: a typed,

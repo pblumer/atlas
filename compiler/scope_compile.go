@@ -568,11 +568,18 @@ func registerScope(
 	// condition and its ordering / cancel-remaining flags, then recurse into its flow content.
 	for i := range c.AdHocSubProcesses {
 		ah := &c.AdHocSubProcesses[i]
+		// Sequential ordering runs one contained activity at a time. The engine implements
+		// the parallel form (ADR-0138); rather than silently running a Sequential ad-hoc as
+		// parallel — which would run every activity at once, not what the model says — it is
+		// refused at deploy until the sequential driver lands.
+		if ah.Ordering == "Sequential" {
+			return fmt.Errorf("compiler: ad-hoc subprocess %q uses ordering=\"Sequential\", which Atlas can't execute yet "+
+				"(only the default parallel ordering, where every entry activity is activated at once, is supported)", ah.Id)
+		}
 		d := AdHocDetail{
 			// BPMN defaults: cancel the remaining activities when the completion condition
 			// holds, and run the entry activities in parallel.
 			CancelRemaining: ah.CancelRemainingInstances != "false",
-			Sequential:      ah.Ordering == "Sequential",
 		}
 		if cond := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(ah.CompletionCondition), "=")); cond != "" {
 			ce, err := expr.CompileAuto(cond)

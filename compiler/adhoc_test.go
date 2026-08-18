@@ -48,26 +48,23 @@ func TestParseAdHocSubProcess(t *testing.T) {
 	if !d.CancelRemaining {
 		t.Error("CancelRemaining = false, want true (BPMN default)")
 	}
-	if d.Sequential {
-		t.Error("Sequential = true, want false (parallel is the BPMN default ordering)")
-	}
 	// The contained activities are scoped by the ad-hoc container, like any subprocess scope.
 	if fs := cp.Node(nodeByBpmnId(t, cp, "a").ElementId).FlowScope; fs != adhoc.ElementId {
 		t.Errorf("contained activity FlowScope = %d, want %d (the ad-hoc container)", fs, adhoc.ElementId)
 	}
 }
 
-// TestParseAdHocCompletionConditionAndOrdering checks the ad-hoc's configuration compiles: the
-// <completionCondition> to a boolean FEEL expression that knows the variables it reads, plus
-// ordering="Sequential" and cancelRemainingInstances="false" (ADR-0138).
-func TestParseAdHocCompletionConditionAndOrdering(t *testing.T) {
+// TestParseAdHocCompletionConditionAndCancel checks the ad-hoc's configuration compiles: the
+// <completionCondition> to a boolean FEEL expression that knows the variables it reads, and
+// cancelRemainingInstances="false" (ADR-0138).
+func TestParseAdHocCompletionConditionAndCancel(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
 	             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
 	  <process id="p" isExecutable="true">
 	    <startEvent id="s"/><endEvent id="e"/>
 	    <sequenceFlow id="f1" sourceRef="s" targetRef="adhoc"/>
 	    <sequenceFlow id="f2" sourceRef="adhoc" targetRef="e"/>
-	    <adHocSubProcess id="adhoc" ordering="Sequential" cancelRemainingInstances="false">
+	    <adHocSubProcess id="adhoc" cancelRemainingInstances="false">
 	      <completionCondition>=done</completionCondition>
 	      <serviceTask id="a"><extensionElements><zeebe:taskDefinition type="ta"/></extensionElements></serviceTask>
 	    </adHocSubProcess>
@@ -84,11 +81,34 @@ func TestParseAdHocCompletionConditionAndOrdering(t *testing.T) {
 	if ins := d.CompletionCondition.Inputs(); len(ins) != 1 || ins[0] != "done" {
 		t.Errorf("completion condition inputs = %v, want [done]", ins)
 	}
-	if !d.Sequential {
-		t.Error("Sequential = false, want true (ordering=\"Sequential\")")
-	}
 	if d.CancelRemaining {
 		t.Error("CancelRemaining = true, want false (cancelRemainingInstances=\"false\")")
+	}
+}
+
+// TestParseAdHocSequentialRejected: sequential ordering runs one contained activity at a time,
+// which the engine does not implement yet — it is refused at deploy rather than silently run as
+// parallel (which would start every activity at once, not what the model says) (ADR-0138).
+func TestParseAdHocSequentialRejected(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+	             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+	  <process id="p" isExecutable="true">
+	    <startEvent id="s"/><endEvent id="e"/>
+	    <sequenceFlow id="f1" sourceRef="s" targetRef="adhoc"/>
+	    <sequenceFlow id="f2" sourceRef="adhoc" targetRef="e"/>
+	    <adHocSubProcess id="adhoc" ordering="Sequential">
+	      <serviceTask id="a"><extensionElements><zeebe:taskDefinition type="ta"/></extensionElements></serviceTask>
+	    </adHocSubProcess>
+	  </process>
+	</definitions>`
+	_, err := Parse(1, 1, strings.NewReader(xml))
+	if err == nil {
+		t.Fatal("Parse succeeded, want an error for ordering=\"Sequential\"")
+	}
+	for _, want := range []string{"adhoc", "Sequential", "parallel"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q should mention %q", err.Error(), want)
+		}
 	}
 }
 
