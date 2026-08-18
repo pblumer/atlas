@@ -14,6 +14,7 @@
 // lazily so non-editor pages stay light, mirroring the BPMN editor (editor.js).
 
 import { attachJSONEditor } from "./json-editor.js";
+import { installDevShortcut } from "./dev-view.js";
 
 const FORM_CSS = "vendor/form-js/form-playground.css";
 const VIEWER_CSS = "vendor/form-js/form-js.css";
@@ -399,6 +400,10 @@ export async function mountFormEditor(root, { api, toast, formId, projectId }) {
     const ta = p.el.querySelector("#fv-schema");
     ta.value = pretty(schema);
     p.editor = attachJSONEditor(ta, {});
+    // The schema and the sample-input box are JSON: F2 opens either in the Developer
+    // View (ADR-0145). The form designer knows no process variables, so the context
+    // is the language alone.
+    installDevShortcut(document, () => ({}));
   }
 
   // ---- Resizer helper ------------------------------------------------------

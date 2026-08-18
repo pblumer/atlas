@@ -443,6 +443,21 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .tok-parameter { color: #0550ae; }
 .tok-type      { color: #116329; }
 .tok-member    { color: var(--text); }
+.tok-text      { color: var(--text); }
+.tok-error     { color: var(--danger); text-decoration: wavy underline; }
+/* Markdown: structure markers stand out, prose stays plain (dev-lang.js). */
+.tok-md-head  { color: #0550ae; font-weight: 700; }
+.tok-md-bold  { color: var(--text); font-weight: 700; }
+.tok-md-em    { color: var(--text); font-style: italic; }
+.tok-md-code  { color: #0a7c5a; }
+.tok-md-link  { color: var(--accent); }
+.tok-md-list  { color: #cf222e; }
+.tok-md-quote { color: #6e7781; }
+.tok-md-rule  { color: #6e7781; }
+/* HTML fragments (dev-lang.js). */
+.tok-html-tag    { color: #116329; }
+.tok-html-attr   { color: #8250df; }
+.tok-html-entity { color: #953800; }
 
 /* Completion popup. */
 .feel-pop {
@@ -2101,3 +2116,183 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
    the page. */
 .theme-preview { display: inline-flex; align-items: center; gap: 12px; }
 .theme-preview .theme-link { color: var(--accent); font-weight: 600; }
+
+/* ---------- Developer View (dev-view.js, ADR-0145) ---------- */
+/* A full-screen modal that lifts one code-bearing field out of the property panel:
+   the same code-editor.js surface, plus the in-scope variables, the language's
+   function reference, its help pages and ready-made examples. Opened with F2. */
+.dev-overlay {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(20, 22, 26, 0.45);
+  display: grid; place-items: center; padding: 24px;
+}
+.dev-modal {
+  width: min(1180px, 96vw); height: min(760px, 92vh);
+  display: flex; flex-direction: column;
+  background: var(--surface); border-radius: 10px;
+  box-shadow: 0 18px 60px rgba(20, 22, 26, 0.35); overflow: hidden;
+}
+.dev-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--surface);
+}
+.dev-head-sp, .dev-foot-sp { flex: 1 1 auto; }
+.dev-badge {
+  flex: 0 0 auto; font: 700 10px/1 system-ui, sans-serif; text-transform: uppercase;
+  letter-spacing: 0.04em; color: #fff; background: var(--accent);
+  border-radius: 4px; padding: 4px 6px;
+}
+.dev-title { font-size: 14px; }
+.dev-dirty { color: var(--warn); font-size: 11px; }
+.dev-body { flex: 1 1 auto; min-height: 0; display: flex; }
+.dev-main {
+  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column;
+  padding: 12px; gap: 10px; background: var(--bg);
+}
+.dev-editor { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.dev-editor .code-editor { flex: 1 1 auto; min-height: 0; }
+.dev-editor .ce-input { height: 100%; resize: none; }
+.dev-editor .feel-status { margin-top: 6px; }
+
+/* Test panel — the same evaluate/run round trip as the inline field, in place. */
+.dev-run {
+  flex: 0 0 auto; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); padding: 10px; display: grid; gap: 6px;
+}
+.dev-run-label { font-size: 12px; color: var(--muted); }
+/* Tall enough for a prefilled instance sample (a pretty-printed object), capped so
+   the code area keeps the room. */
+.dev-run-vars {
+  width: 100%; font: 12px/1.5 ui-monospace, monospace; padding: 6px 8px;
+  border: 1px solid var(--border-strong); border-radius: 6px; background: var(--bg);
+  resize: vertical; max-height: 30vh;
+}
+.dev-run-row { display: flex; align-items: center; gap: 10px; }
+.dev-run-out { font: 12px/1.5 ui-monospace, monospace; color: var(--muted); }
+.dev-run-out.ok { color: var(--ok); }
+.dev-run-out.err { color: var(--danger); }
+.dev-run-detail {
+  margin: 0; max-height: 140px; overflow: auto; white-space: pre-wrap;
+  font: 12px/1.5 ui-monospace, monospace; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 6px; padding: 8px;
+}
+.dev-run-detail.err { color: var(--danger); border-color: #f3c9c4; background: var(--danger-soft); }
+
+/* Side panel: tabs + one filter + the active pane. */
+.dev-side {
+  flex: 0 0 320px; min-width: 0; display: flex; flex-direction: column;
+  border-left: 1px solid var(--border); background: var(--surface);
+}
+.dev-tabs { display: flex; align-items: stretch; gap: 2px; padding: 8px 8px 0; border-bottom: 1px solid var(--border); }
+/* The fold-away control: the panel is a reference, and a wide script sometimes
+   wants the whole modal. */
+.dev-side-toggle {
+  flex: 0 0 auto; border: 0; background: none; cursor: pointer; padding: 0 6px 6px;
+  color: var(--muted); font: 600 14px/1 system-ui, sans-serif;
+}
+.dev-side-toggle:hover { color: var(--text); }
+.dev-side.collapsed { flex-basis: 42px; }
+.dev-side.collapsed .dev-filter, .dev-side.collapsed .dev-pane { display: none; }
+.dev-side.collapsed .dev-tabs {
+  flex-direction: column; align-items: center; gap: 8px;
+  padding: 8px 0; border-bottom: 0;
+}
+.dev-side.collapsed .dev-tab {
+  writing-mode: vertical-rl; padding: 10px 3px;
+  border-bottom: 0; border-left: 2px solid transparent;
+}
+.dev-side.collapsed .dev-tab.active { border-left-color: var(--accent); }
+.dev-side.collapsed .dev-side-toggle { padding: 0 0 4px; }
+.dev-tab {
+  flex: 1 1 auto; padding: 6px 4px; border: 0; background: none; cursor: pointer;
+  font: 600 12px/1.4 system-ui, sans-serif; color: var(--muted);
+  border-bottom: 2px solid transparent;
+}
+.dev-tab:hover { color: var(--text); }
+.dev-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.dev-filter {
+  margin: 8px; padding: 6px 8px; border: 1px solid var(--border-strong);
+  border-radius: 6px; background: var(--bg); font-size: 12px;
+}
+.dev-filter:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.dev-pane { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 0 8px 12px; }
+.dev-empty { color: var(--muted); font-size: 12px; padding: 8px 4px; }
+.dev-group { margin-bottom: 10px; }
+.dev-group h4 {
+  margin: 8px 4px 4px; font: 700 10px/1.4 system-ui, sans-serif;
+  text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted);
+}
+.dev-item {
+  display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left;
+  padding: 5px 6px; border: 0; border-radius: 5px; background: none; cursor: pointer;
+}
+.dev-item:hover { background: var(--accent-soft); }
+.dev-item-name { flex: 0 0 auto; font: 600 12px/1.5 ui-monospace, monospace; color: var(--text); }
+.dev-item-detail {
+  flex: 1 1 auto; min-width: 0; font-size: 11px; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right;
+}
+/* A row that also shows the value the variable holds in a real instance stacks:
+   name + origin on top, the live value under it. */
+.dev-item.stacked { flex-direction: column; align-items: stretch; gap: 1px; }
+.dev-item-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.dev-item-value {
+  font: 11px/1.4 ui-monospace, monospace; color: #0a7c5a;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left;
+}
+/* Where the live values came from, and how to ask again. */
+.dev-sample-strip {
+  margin: 0 4px 6px; padding: 5px 6px; border-radius: 5px;
+  background: var(--bg); border: 1px solid var(--border);
+  font-size: 11px; color: var(--muted);
+}
+.dev-sample-strip b { color: var(--text); }
+.dev-sample-pick {
+  font: 600 11px/1.4 ui-monospace, monospace; color: var(--text);
+  border: 1px solid var(--border-strong); border-radius: 5px;
+  background: var(--surface); padding: 1px 4px; max-width: 190px;
+}
+.dev-sample-pick:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+/* A reference row: the row itself opens the help page, the "+" inserts the call. */
+.dev-row { display: flex; align-items: center; gap: 2px; }
+.dev-row .dev-item { flex: 1 1 auto; min-width: 0; }
+.dev-quick {
+  flex: 0 0 auto; width: 22px; height: 22px; border: 0; border-radius: 5px;
+  background: none; color: var(--muted); cursor: pointer; opacity: 0;
+  font: 700 14px/1 ui-monospace, monospace;
+}
+.dev-row:hover .dev-quick, .dev-quick:focus { opacity: 1; }
+.dev-quick:hover { color: var(--accent); background: var(--accent-soft); }
+.dev-help-about, .dev-help-fn { padding: 8px 4px; }
+.dev-help-fn { border-top: 1px solid var(--border); margin-top: 8px; }
+.dev-pane h4 { margin: 4px 0 6px; font-size: 13px; }
+.dev-pane h5 { margin: 10px 0 4px; font: 700 10px/1.4 system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.dev-pane p { margin: 0 0 8px; font-size: 12px; color: var(--text); }
+.dev-help-sig, .dev-help-ex, .dev-snip pre {
+  margin: 0 0 8px; padding: 8px; overflow: auto; white-space: pre-wrap;
+  font: 12px/1.5 ui-monospace, monospace; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 6px;
+}
+.dev-help-fn .btn { margin-right: 6px; }
+.dev-snip { padding: 8px 4px; border-bottom: 1px solid var(--border); }
+.dev-snip h4 { margin: 0 0 2px; }
+.dev-foot {
+  display: flex; align-items: center; gap: 12px;
+  padding: 7px 12px; border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--muted); background: var(--surface);
+}
+.dev-foot kbd {
+  font: 600 10px/1.4 ui-monospace, monospace; border: 1px solid var(--border-strong);
+  border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--bg); color: var(--text);
+}
+.dev-confirm { color: var(--warn); font-weight: 600; }
+/* The inline affordance on an upgraded field: a quiet "</>" that opens the view,
+   shown once the field is hovered or focused so it never competes with the code. */
+.code-editor .dev-open {
+  position: absolute; top: 4px; right: 4px; z-index: 3;
+  border: 1px solid var(--border); border-radius: 5px; background: var(--surface);
+  color: var(--muted); font: 600 10px/1 ui-monospace, monospace; padding: 3px 5px;
+  cursor: pointer; opacity: 0; transition: opacity 0.12s ease;
+}
+.code-editor:hover .dev-open, .code-editor:focus-within .dev-open { opacity: 1; }
+.code-editor .dev-open:hover { color: var(--accent); border-color: var(--accent); }

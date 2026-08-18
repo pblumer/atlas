@@ -6,6 +6,7 @@ import { attachFeelEditor } from "./feel.js";
 import { attachCodeEditor } from "./code-editor.js";
 import { moduleFor } from "./powershell.js";
 import { attachJSONEditor } from "./json-editor.js";
+import { installDevShortcut, markDevField } from "./dev-view.js";
 import { openDmnEditor } from "./dmn-editor.js";
 import { tokenSimulationModule } from "./token-simulation.js";
 import { attachCollab } from "./collab.js";
@@ -195,7 +196,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 
 const shortType = (t) => (t || "").replace(/^bpmn:/, "");
 
-// isValidTtl mirrors the engine's TTL parser (ADR-0085 instance TTL, ADR-0144 history
+// isValidTtl mirrors the engine's TTL parser (ADR-0085 instance TTL, ADR-0145 history
 // TTL; compiler/duration.go):
 // the day-and-time subset of ISO-8601 durations (P[nD]T[nH][nM][nS]), and it must be
 // positive — the empty duration "P"/"PT" and an all-zero "PT0S" are rejected. Used only
@@ -1191,6 +1192,147 @@ function variablesForCompletion(modeler, element) {
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// devVariables is variablesForCompletion's richer sibling for the Developer View
+// (ADR-0145): the same static analysis, but each variable also carries *which scope*
+// it belongs to, so the modal can group them the way a developer thinks about them —
+// what this element reads, what it writes, and what the instance carries. The
+// element-local scopes are collected first and win the de-duplication, so a name that
+// is both an input mapping here and a process variable shows where it matters.
+function devVariables(modeler, element) {
+  const out = [];
+  const seen = new Set();
+  const push = (name, detail, scope) => {
+    name = (name || "").trim();
+    if (!name || seen.has(name)) return;
+    seen.add(name);
+    out.push({ name, detail, scope });
+  };
+  try {
+    const bo = element && element.businessObject;
+    const io = bo && findExt(bo, "zeebe:IoMapping");
+    for (const p of (io && io.inputParameters) || []) {
+      push(p.target, p.source ? "input mapping ← " + p.source : "input mapping", "input");
+    }
+    for (const p of (io && io.outputParameters) || []) {
+      push(p.target, p.source ? "output mapping ← " + p.source : "output mapping", "output");
+    }
+    const s = bo && findExt(bo, "zeebe:Script");
+    if (s && s.resultVariable) push(s.resultVariable, "FEEL script result", "output");
+    const js = bo && findExt(bo, "atlas:JobScript");
+    if (js && js.resultVariable) push(js.resultVariable, (js.language || "job") + " script result", "output");
+    const cd = bo && findExt(bo, "zeebe:CalledDecision");
+    if (cd && cd.resultVariable) push(cd.resultVariable, "decision result", "output");
+  } catch { /* best-effort */ }
+  try {
+    for (const v of collectDiagramVariables(modeler)) {
+      const scope = v.category === "Form" ? "form"
+        : /^data object/.test(v.source || "") ? "data"
+        : "process";
+      const detail = v.originId && v.origin ? `${v.source} · ${v.origin}` : v.source;
+      push(v.name, detail, scope);
+    }
+  } catch { /* best-effort */ }
+  return out;
+}
+
+// sampleCache memoizes the live-values lookup per process id for this editing
+// session: opening the Developer View on ten fields of one diagram is one pair of
+// requests, not ten, and switching between the instances in the picker costs
+// nothing at all. The Reload button passes force:true to bypass it, which is how an
+// author picks up an instance they started while the Modeler was open.
+const sampleCache = new Map(); // processId -> Promise<instanceSample[]>
+
+// How many instances the picker offers. Enough to find the one that took the branch
+// being written about, few enough that the <select> stays usable.
+const MAX_SAMPLE_INSTANCES = 50;
+
+// instanceSamples reads the values the diagram's variables actually hold, from a
+// real instance of this very process. `opts.instanceKey` picks one of the offered
+// instances (default: the most relevant one — a running instance first, else the
+// newest finished one); `opts.force` re-reads from the server.
+// Returns null when the process was never deployed or has never run — the modal
+// treats that as "no samples", not as an error.
+async function instanceSamples(modeler, api, opts = {}) {
+  const bo = rootProcess(modeler);
+  const processId = bo && bo.id;
+  if (!processId || !api) return null;
+  if (opts.force) sampleCache.delete(processId);
+  if (!sampleCache.has(processId)) sampleCache.set(processId, fetchSamples(api, processId));
+
+  let rows;
+  try { rows = await sampleCache.get(processId); }
+  catch (e) { sampleCache.delete(processId); throw e; }
+  if (!rows || !rows.length) return null;
+
+  const chosen = rows.find((r) => r.key === opts.instanceKey) || rows[0];
+  return {
+    instance: { key: chosen.key, state: chosen.state, version: chosen.version, createdAt: chosen.createdAt },
+    values: chosen.values,
+    // The picker only needs each instance's identity; the values ride along in the
+    // cache so switching is a re-render, not a fetch.
+    instances: rows.map((r) => ({ key: r.key, state: r.state, version: r.version, createdAt: r.createdAt })),
+  };
+}
+
+// fetchSamples resolves the diagram's process id to deployed versions and reads one
+// version's instances. GET /instances?process= already returns each instance's
+// root-scope variables, so this is two requests and no per-variable round trip.
+// The newest version is preferred, but a version deployed a minute ago has no
+// instances yet — then its predecessor's values still describe the same variables,
+// so the walk continues rather than reporting nothing.
+async function fetchSamples(api, processId) {
+  const procs = await api("GET", "/api/v1/processes");
+  const versions = (procs || [])
+    .filter((p) => p.processId === processId)
+    .sort((a, b) => b.version - a.version);
+
+  for (const v of versions) {
+    let rows;
+    try { rows = await api("GET", "/api/v1/instances?process=" + encodeURIComponent(v.key)); }
+    catch { return []; }
+    const found = (rows || [])
+      .filter((r) => r.processDefKey === v.key)
+      // Running instances first (their values are the live ones), then newest first.
+      .sort((a, b) => (a.state === b.state ? b.key - a.key : a.state === "active" ? -1 : 1))
+      .slice(0, MAX_SAMPLE_INSTANCES)
+      .map((r) => {
+        const values = {};
+        for (const vv of r.variables || []) {
+          if (vv && vv.name) values[vv.name] = { value: vv.value, kind: vv.kind };
+        }
+        return { key: r.key, state: r.state, version: r.version, createdAt: r.createdAt, values };
+      });
+    if (found.length) return found;
+  }
+  return [];
+}
+
+// devViewContext answers "what does the Developer View need to know" at the moment
+// F2 is pressed: the variables in scope for the current selection, and the server
+// round trips the field's language offers — FEEL validates and evaluates in the
+// engine, a job script runs through the real interpreter.
+function devViewContext(modeler, api, field) {
+  const element = (() => {
+    try { return (modeler.get("selection").get() || [])[0]; } catch { return null; }
+  })();
+  const ctx = { variables: devVariables(modeler, element) };
+  const lang = field.dataset.devlang;
+  if (!api) return ctx;
+  // Live values for those variables, read lazily from a real instance of this
+  // process — what the names actually hold beats guessing from the name.
+  ctx.samples = (o) => instanceSamples(modeler, api, o);
+  if (lang === "feel") {
+    ctx.validate = (expression) => api("POST", "/api/v1/feel/validate", { expression });
+    ctx.evaluate = (expression, variables) => api("POST", "/api/v1/feel/evaluate", { expression, variables });
+    // An fx field stores its expression '=' prefixed; the marker stays dimmed and
+    // protected in the modal exactly as it is inline (ADR-0067).
+    if (field.dataset.fxOn === "1") ctx.lockPrefix = (v) => (/^\s*=\s*/.exec(v) || [""])[0].length;
+  } else if (lang === "powershell" || lang === "python" || lang === "javascript") {
+    ctx.run = (source, variables) => api("POST", "/api/v1/scripts/run", { language: lang, source, variables });
+  }
+  return ctx;
+}
+
 // formFieldCache maps a linked form's id to its input-field keys once fetched:
 // null marks a fetch in flight (so each form is requested once), otherwise
 // { name, fields } — the form's display name and its variable-bearing field keys.
@@ -1460,10 +1602,13 @@ function enhanceFeel(body, sel, vars, validate, evaluate) {
   attachFeelEditor(ta, { variables: vars, validate });
   const wrap = ta.closest(".code-editor");
   if (!wrap) return;
+  // F2 lifts the expression into the Developer View — the same editor with the
+  // in-scope variables, the FEEL function reference and its help pages (ADR-0145).
+  markDevField(ta, "feel");
 
   const hint = document.createElement("p");
   hint.className = "feel-hint";
-  hint.innerHTML = "FEEL — <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions";
+  hint.innerHTML = "FEEL — <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions · <kbd>F2</kbd> developer view";
   if (evaluate) hint.innerHTML += ' &middot; <button type="button" class="linklike" data-feel-test>Test</button>';
   wrap.after(hint);
   if (!evaluate) return;
@@ -1557,9 +1702,11 @@ function enhanceScript(body, modeler, api, variables) {
   const language = (flang && flang.value) || "powershell";
   const editor = attachCodeEditor(ta, { lang: moduleFor(language), variables: variables || [], gutter: true, wrap: false });
 
+  markDevField(ta, language);
+
   const shortcut = language === "powershell"
-    ? "<code>$name</code> / <code>$env:</code> &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent"
-    : "instance variables by name &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent";
+    ? "<code>$name</code> / <code>$env:</code> &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent, <kbd>F2</kbd> developer view"
+    : "instance variables by name &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent, <kbd>F2</kbd> developer view";
   const hint = document.createElement("p");
   hint.className = "feel-hint";
   hint.innerHTML = shortcut;
@@ -1640,6 +1787,10 @@ export function attachExpressionToggle(el, opts = {}) {
     const expr = isExpr();
     btn.classList.toggle("active", expr);
     btn.setAttribute("aria-pressed", expr ? "true" : "false");
+    // Only an expression field is a code field: a literal value has nothing for the
+    // Developer View to help with, so F2 stays inert until fx is on.
+    if (expr) markDevField(el, "feel");
+    else delete el.dataset.devlang;
     if (expr && !feelHandle) {
       // The leading '=' stays in the field value (the save wiring and compiler key on
       // it), but is shown as a dimmed, read-only prefix — it can't be typed away, and
@@ -1762,6 +1913,9 @@ function documentationField(bo, id = "f-doc", placeholder = "What this step is f
 function wireDocumentation(body, modeler, element, bo, id = "f-doc") {
   const f = body.querySelector("#" + id);
   if (!f) return;
+  // Documentation is prose that ends up in the task view, the replay and the
+  // exported process document (ADR-0143) — Markdown, and worth a real editor.
+  markDevField(f, "markdown", { title: "Documentation" });
   f.addEventListener("change", (e) => {
     try { writeDocumentation(modeler, element, bo, e.target.value); } catch { /* stale */ }
   });
@@ -3622,7 +3776,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
         body.querySelector("#f-phttl").addEventListener("change", (e) => {
           const v = (e.target.value || "").trim();
           // Validated exactly like the instance TTL: warn while authoring, but store what
-          // was typed — the deploy is the authority that rejects a bad value (ADR-0144).
+          // was typed — the deploy is the authority that rejects a bad value (ADR-0145).
           if (v && !isValidTtl(v)) toast("History TTL must be a positive ISO-8601 duration, e.g. P30D or PT12H", "err");
           try { modeling.updateProperties(rootEl, { historyTtl: v || undefined }); } catch { /* ignore */ }
         });
@@ -5171,6 +5325,11 @@ function wireProperties(root, modeler, api, projectId, toast) {
       }
     }
   }
+
+  // F2 in any code-bearing field of this page opens the Developer View (ADR-0145).
+  // The context is resolved at press time, so it always describes the element that
+  // is selected now rather than whatever was rendered when the panel was built.
+  installDevShortcut(document, (field) => devViewContext(modeler, api, field));
 
   modeler.on("selection.changed", (e) => show((e.newSelection || [])[0]));
 

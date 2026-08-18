@@ -12,6 +12,30 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **A Developer View for code-bearing fields** ([ADR-0145](docs/adr/0145-developer-view-for-code-fields.md)):
+  <kbd>F2</kbd> in a field that holds code — a FEEL expression, a PowerShell/Python/JavaScript job
+  script, a JSON value, a Markdown documentation text — lifts it into a full-screen editor with room
+  for what a property column cannot hold. The code area is the **same `code-editor.js` surface as
+  inline** (same highlighting, <kbd>Ctrl</kbd>+<kbd>Space</kbd> completion, live validation, gutter,
+  variable drops), so nothing new has to be learned; the modal adds a side panel with the **variables
+  in scope grouped by where they come from** (this element's input mappings, what it writes, process
+  scope, linked-form fields, data objects — click or drag to insert at the caret), a browsable
+  **function reference** with signatures, **help pages** with worked examples, ready-made **example
+  snippets**, and the existing FEEL-evaluate / script-run round trips as a **Test panel**. Markdown
+  and HTML gained syntax highlighting on the way. Apply writes the value back through the field's own
+  `input`/`change` events, so the property panel stays the only writer and undo/redo is unchanged;
+  <kbd>Esc</kbd> with unsaved changes asks before discarding. A field opts in with one
+  `data-devlang` attribute, which is how every JSON editor in the app got it at once. The side panel
+  folds away to a rail when a wide script wants the whole modal, and remembers that choice. Each
+  variable also shows **the value it actually holds in a real instance** of the process (newest
+  deployed version, running instance first), and the Test panel's sample variables are prefilled from
+  that same instance — so "what shape is this thing?" is answered by the running system instead of
+  guessed from the name. **Which** instance is a picker in the pane, since the one that took the
+  branch being written about is not always the newest. Lazy, memoized per process (switching
+  instances costs no request) and refreshable; a process that has never run simply says so.
+
 ## [0.2.0] — 2026-08-18
 
 Milestone 1's BPMN surface is essentially complete: this release lands the last
