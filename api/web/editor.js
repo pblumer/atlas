@@ -3647,6 +3647,9 @@ function wireProperties(root, modeler, api, projectId, toast) {
 
     const tab = activeTab(root);
     const isSeqFlow = /:SequenceFlow$/.test(bo.$type || "");
+    // A user task's documentation is read by a person at runtime (the Tasks app shows it
+    // as the work instruction, ADR-0025), so the field is framed for that audience.
+    const isUserTask = bo.$type === "bpmn:UserTask";
     const src = bo.sourceRef;
     // A conditional branch is a flow out of an exclusive/inclusive gateway. Its
     // name is the descriptive label (Design); its conditionExpression is the FEEL
@@ -3660,8 +3663,8 @@ function wireProperties(root, modeler, api, projectId, toast) {
       <h3>General</h3>
       <label class="field"><span>${isSeqFlow ? "Label" : "Name"}</span><input type="text" id="f-name" value="${esc(bo.name || "")}"${isSeqFlow ? ' placeholder="Großauftrag"' : ""}/></label>
       <label class="field"><span>ID</span><input type="text" id="f-id" value="${esc(bo.id || "")}" spellcheck="false"/></label>
-      ${documentationField(bo, "f-doc", isSeqFlow ? "When this path is taken, and why…" : "What this step is for, when it applies, who owns it…")}
-      <p class="muted" style="font-size:12px">The <b>Documentation</b> is prose about this element — what it is for, the rule behind it, who owns it. It is documentation only: the engine never reads it, but it is part of the model, so it travels with every deploy, export and version.</p>`;
+      ${documentationField(bo, "f-doc", isUserTask ? "What the assignee has to check, decide or attach…" : isSeqFlow ? "When this path is taken, and why…" : "What this step is for, when it applies, who owns it…")}
+      <p class="muted" style="font-size:12px">The <b>Documentation</b> is prose about this element — what it is for, the rule behind it, who owns it. The engine never acts on it, but it is part of the model, so it travels with every deploy, export and version.${isUserTask ? " On a <b>user task</b> it is more than a note: the Tasks app shows it to the assignee as the <b>work instruction</b>, above the form — so write it to the person who will do the work." : ""}</p>`;
 
     // A data object is the data a process carries — first-class in Atlas, not just
     // decoration (ADR-0053). Its name is the engine's variable-like identity and its

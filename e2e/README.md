@@ -66,6 +66,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   entirely, and the edit is undoable; the process (nothing selected), a pool *and* the process
   it executes, a black-box pool and the collaboration each take their own. Assertions are on
   the exported XML, because passthrough is the whole contract.
+- **`tasks-documentation.spec.mjs`** (ADR-0025 amended): a user task's documentation in the
+  **Tasks app** — the detail pane leads with the modeler's instruction (above the metadata
+  rows and the form), keeps the author's paragraph breaks, and shows no block at all for a
+  task whose element carries none. Drives the real app shell against a mocked `/api/v1`.
 
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
 

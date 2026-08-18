@@ -843,6 +843,8 @@ type CompiledProcess struct {
 	instanceTtlNanos   int64        // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
 	isExecutable       bool         // bpmn:isExecutable — a non-executable process can't be started
 	elementIds         []int32      // interned source BPMN id per node id (-1 if unset)
+	elementDocs        []int32      // interned <bpmn:documentation> per node id (-1 if undocumented, ADR-0025)
+	documentation      int32        // interned <bpmn:documentation> of the process itself, -1 if none
 	lanes              []LaneDetail // organizational lanes (ADR-0121); a node's CompiledNode.Lane indexes this
 	strings            []string     // intern table (index → string), for debug/export
 }
@@ -1360,3 +1362,20 @@ func (p *CompiledProcess) ElementBpmnId(id int32) string {
 	}
 	return p.Intern(p.elementIds[id])
 }
+
+// ElementDocumentation returns the prose an author wrote about a node — its
+// <bpmn:documentation> (ADR-0025) — or "" when the node is undocumented or the index is
+// out of range. It is design-time metadata the engine never reads: it changes no
+// execution, and is carried so a surface that shows an element to a person can read it
+// here rather than re-parsing the model. The Tasks app uses it as a user task's work
+// instruction.
+func (p *CompiledProcess) ElementDocumentation(id int32) string {
+	if id < 0 || int(id) >= len(p.elementDocs) {
+		return ""
+	}
+	return p.Intern(p.elementDocs[id])
+}
+
+// Documentation returns the process's own <bpmn:documentation> — the summary that
+// describes the process as a whole — or "" if it has none.
+func (p *CompiledProcess) Documentation() string { return p.Intern(p.documentation) }

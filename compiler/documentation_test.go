@@ -1,22 +1,26 @@
 package compiler
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
 
 // Documentation is BPMN's own place for prose about an element — a <bpmn:documentation>
 // child every process, pool, flow node, sequence flow and data object may carry, which
-// the Modeler's properties panel authors (ADR-0025). Atlas treats it as pure passthrough:
-// the model carries it, the compiler ignores it. That is a guarantee worth pinning down,
-// because it is what lets authors document a process freely — a documented model must
-// deploy, and must compile to exactly the graph its undocumented twin compiles to. If the
-// parser ever started tripping over documentation (or, worse, quietly changing the graph
-// because of it), these tests fail rather than a user's deploy.
+// the Modeler's properties panel authors (ADR-0025). The compiler *carries* it as
+// design-time metadata (so a surface such as the Tasks app can show a user task's
+// documentation to the person doing the work) but never *acts* on it. Those are two
+// separate guarantees, and both are pinned down here: a documented model compiles to
+// exactly the graph its undocumented twin compiles to, and the prose it carries comes
+// back out per element. If the parser ever started tripping over documentation — or
+// quietly changing the graph because of it — these tests fail rather than a user's deploy.
 
 // documentedModel is one model exercising every element kind the panel documents. With
-// doc=true each element carries a <bpmn:documentation> child; with doc=false the very
-// same model carries none. Everything else about the two is byte-identical.
+// doc=true each element carries a <bpmn:documentation> child — except the "merge"
+// gateway, deliberately left blank, because a real author documents what needs
+// explaining and skips the obvious. With doc=false the very same model carries none;
+// everything else about the two is byte-identical.
 func documentedModel(doc bool) string {
 	d := func(text string) string {
 		if !doc {
@@ -48,7 +52,7 @@ func documentedModel(doc bool) string {
     <bpmn:scriptTask id="calc">` + d("Rechnet die Gebühr aus.") + `
       <bpmn:extensionElements><zeebe:script expression="= 1 + 1" resultVariable="gebuehr"/></bpmn:extensionElements>
     </bpmn:scriptTask>
-    <bpmn:exclusiveGateway id="merge">` + d("Führt beide Wege wieder zusammen.") + `</bpmn:exclusiveGateway>
+    <bpmn:exclusiveGateway id="merge"/>
     <bpmn:parallelGateway id="fork">` + d("Wartefrist und Nacharbeit laufen parallel.") + `</bpmn:parallelGateway>
     <bpmn:intermediateCatchEvent id="wait">` + d("Gesetzliche Wartefrist.") + `
       <bpmn:timerEventDefinition><bpmn:timeDuration>PT30M</bpmn:timeDuration></bpmn:timerEventDefinition>
@@ -138,15 +142,89 @@ func TestDocumentationDoesNotChangeTheCompiledGraph(t *testing.T) {
 		}
 	}
 
-	// The documentation itself is not compiled into anything the runtime can read —
-	// it lives in the model, and the model alone.
 	if got := documented.ProcessId(); got != plain.ProcessId() {
 		t.Errorf("process id = %q, want %q", got, plain.ProcessId())
 	}
-	for _, s := range documented.strings {
-		if strings.Contains(s, "Bearbeitet Anträge") || strings.Contains(s, "Vier-Augen-Prinzip") {
-			t.Errorf("documentation text %q was interned into the compiled process", s)
+	// The undocumented twin carries no prose at all: documentation is the only thing
+	// that differs between the two models, and it is metadata beside the graph.
+	if got := plain.Documentation(); got != "" {
+		t.Errorf("undocumented model reports process documentation %q", got)
+	}
+	for i := range plain.nodes {
+		if got := plain.ElementDocumentation(int32(i)); got != "" {
+			t.Errorf("undocumented node %d reports documentation %q", i, got)
 		}
+	}
+}
+
+// nodeOf returns the node id of a source BPMN element id, for tests that address a
+// node by the id the model gives it.
+func nodeOf(t *testing.T, cp *CompiledProcess, bpmnID string) int32 {
+	t.Helper()
+	for i := range cp.nodes {
+		if cp.ElementBpmnId(int32(i)) == bpmnID {
+			return int32(i)
+		}
+	}
+	t.Fatalf("no node with element id %q", bpmnID)
+	return -1
+}
+
+// The compiler carries each element's documentation into the compiled process, so a
+// runtime surface can show it without re-reading the model's XML (ADR-0025 amended, and
+// invariant I5: the XML is parsed once, at deploy). The engine never reads it — see the
+// graph-equality test above — but the API does, for a user task's work instruction.
+func TestElementDocumentationIsRetained(t *testing.T) {
+	cp, err := Parse(7, 1, strings.NewReader(documentedModel(true)))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+
+	if got, want := cp.Documentation(), "Bearbeitet Anträge von der Prüfung bis zur Auszahlung."; got != want {
+		t.Errorf("Documentation() = %q, want %q", got, want)
+	}
+	cases := map[string]string{
+		"review":   "Vier-Augen-Prinzip: eine zweite Person prüft.",
+		"pay":      "Zahlt über den Zahlungsdienst aus.",
+		"split":    "Genehmigt, wenn alle Unterlagen vorliegen.",
+		"start":    "Startet, sobald der Antrag eingeht.",
+		"end":      "Der Antrag ist abgeschlossen.",
+		"bnd":      "Nach einer Stunde ohne Prüfung eskalieren.",
+		"sub":      "Nacharbeit, gekapselt als eigener Abschnitt.",
+		"wait":     "Gesetzliche Wartefrist.",
+		"substart": "Beginn der Nacharbeit.",
+	}
+	for bpmnID, want := range cases {
+		if got := cp.ElementDocumentation(nodeOf(t, cp, bpmnID)); got != want {
+			t.Errorf("ElementDocumentation(%q) = %q, want %q", bpmnID, got, want)
+		}
+	}
+
+	// An undocumented element reports nothing, and so does a node id that is not one.
+	// -1 is what the runtime passes for "no element", so it must not index the table.
+	if got := cp.ElementDocumentation(nodeOf(t, cp, "merge")); got != "" {
+		t.Errorf("undocumented element reports %q, want \"\"", got)
+	}
+	for _, id := range []int32{-1, int32(len(cp.nodes)), 1 << 20} {
+		if got := cp.ElementDocumentation(id); got != "" {
+			t.Errorf("ElementDocumentation(%d) = %q, want \"\" for an out-of-range node", id, got)
+		}
+	}
+}
+
+// A process with no <bpmn:documentation> anywhere reports empty strings rather than a
+// stray interned value — the -1 sentinel must not be confused with intern index 0,
+// which is a reserved job type.
+func TestUndocumentedProcessReportsNothing(t *testing.T) {
+	cp, err := Parse(7, 1, strings.NewReader(documentedModel(false)))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := cp.Documentation(); got != "" {
+		t.Errorf("Documentation() = %q, want empty", got)
+	}
+	if got := cp.ElementDocumentation(nodeOf(t, cp, "review")); got != "" {
+		t.Errorf("ElementDocumentation(review) = %q, want empty", got)
 	}
 }
 
@@ -194,3 +272,102 @@ func TestDocumentationOnCollaborationIsPassthrough(t *testing.T) {
 		}
 	}
 }
+
+// elementDocumentation is the generic walk that indexes documentation by element id.
+// It runs over every deployed model, so its edges are worth stating: several
+// <documentation> children join, an element without an id records nothing (there is no
+// key to record it under), a foreign-namespace <documentation> belongs to whatever
+// extension declared it, and whitespace-only prose is not documentation.
+func TestElementDocumentationIndex(t *testing.T) {
+	const model = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:other="http://example.com/other" id="defs">
+  <bpmn:documentation>The model as a whole.</bpmn:documentation>
+  <bpmn:process id="p">
+    <bpmn:documentation>First paragraph.</bpmn:documentation>
+    <bpmn:documentation textFormat="text/html">Second paragraph.</bpmn:documentation>
+    <bpmn:startEvent id="start"><bpmn:documentation>   Trimmed.   </bpmn:documentation></bpmn:startEvent>
+    <bpmn:endEvent id="blank"><bpmn:documentation>   </bpmn:documentation></bpmn:endEvent>
+    <bpmn:task><bpmn:documentation>Nowhere to file this.</bpmn:documentation></bpmn:task>
+    <bpmn:userTask id="foreign"><other:documentation>Not the element's own prose.</other:documentation></bpmn:userTask>
+  </bpmn:process>
+</bpmn:definitions>`
+
+	docs := elementDocumentation([]byte(model))
+	want := map[string]string{
+		"defs":  "The model as a whole.",
+		"p":     "First paragraph.\n\nSecond paragraph.",
+		"start": "Trimmed.",
+	}
+	for id, w := range want {
+		if got := docs[id]; got != w {
+			t.Errorf("docs[%q] = %q, want %q", id, got, w)
+		}
+	}
+	for _, id := range []string{"blank", "foreign"} {
+		if got, ok := docs[id]; ok {
+			t.Errorf("docs[%q] = %q, want no entry", id, got)
+		}
+	}
+	if len(docs) != len(want) {
+		t.Errorf("indexed %d elements (%v), want exactly %d", len(docs), docs, len(want))
+	}
+
+	// A <documentation> with no element around it belongs to nothing; it is recorded
+	// under no key rather than panicking on an empty owner stack.
+	if got := elementDocumentation([]byte(`<documentation>Orphan.</documentation>`)); len(got) != 0 {
+		t.Errorf("root-level documentation indexed %v, want nothing", got)
+	}
+}
+
+// The walk is best-effort by design: decodeDefinitions has already rejected malformed
+// XML, so a truncated document here returns what it found rather than failing a deploy
+// over metadata.
+func TestElementDocumentationToleratesTruncatedXML(t *testing.T) {
+	const truncated = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <bpmn:process id="p"><bpmn:documentation>Kept.</bpmn:documentation>
+    <bpmn:startEvent id="start"><bpmn:doc`
+	docs := elementDocumentation([]byte(truncated))
+	if got := docs["p"]; got != "Kept." {
+		t.Errorf("docs[p] = %q, want %q", got, "Kept.")
+	}
+}
+
+// SetElementDocumentation ignores a node id that is not one, like the other node
+// setters — a caller mistake must not panic mid-deploy.
+func TestSetElementDocumentationIgnoresUnknownNode(t *testing.T) {
+	b := NewBuilder(1, "p", 1)
+	start := b.AddStartEvent()
+	b.SetElementDocumentation(start, "Kept.")
+	b.SetElementDocumentation(-1, "Dropped.")
+	b.SetElementDocumentation(99, "Dropped.")
+
+	b.AddEndEvent()
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if got := cp.ElementDocumentation(start); got != "Kept." {
+		t.Errorf("ElementDocumentation(start) = %q, want %q", got, "Kept.")
+	}
+}
+
+// A model that cannot be read at all fails the parse with the read error rather than
+// compiling an empty process — decodeDefinitions reads the whole model into memory to
+// walk it twice, so the read itself is now a failure point worth naming.
+func TestParseReportsAReadFailure(t *testing.T) {
+	_, err := Parse(1, 1, failingReader{})
+	if err == nil {
+		t.Fatal("Parse over a failing reader returned no error")
+	}
+	if !strings.Contains(err.Error(), "read BPMN") {
+		t.Errorf("error = %v, want it to name the read failure", err)
+	}
+}
+
+// failingReader fails on the first read, standing in for a truncated upload.
+type failingReader struct{}
+
+func (failingReader) Read([]byte) (int, error) { return 0, errRead }
+
+var errRead = errors.New("connection reset")

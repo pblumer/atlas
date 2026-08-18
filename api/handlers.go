@@ -2736,9 +2736,13 @@ type taskResp struct {
 	ProcessID          string `json:"processId,omitempty"`
 	ElementID          string `json:"elementId,omitempty"`
 	Name               string `json:"name,omitempty"`
-	Assignee           string `json:"assignee,omitempty"`
-	CandidateGroups    string `json:"candidateGroups,omitempty"`
-	FormID             string `json:"formId,omitempty"`
+	// Documentation is the element's <bpmn:documentation> — the work instruction the
+	// modeler wrote for whoever picks the task up (ADR-0025). Design-time metadata: the
+	// engine never reads it, the Tasks app shows it above the form.
+	Documentation   string `json:"documentation,omitempty"`
+	Assignee        string `json:"assignee,omitempty"`
+	CandidateGroups string `json:"candidateGroups,omitempty"`
+	FormID          string `json:"formId,omitempty"`
 	// Priority is the task's importance from the model (default 50); the inbox
 	// sorts by it. DueDate is the absolute due instant in Unix milliseconds, or 0
 	// when the task has no due date (ADR-0091).
@@ -2888,7 +2892,8 @@ func (s *Server) listTasksForInstance(w http.ResponseWriter, raw string, limit i
 
 // enrichTask turns a user-task job into the response row the inbox and the
 // single-task lookup both return: the job's key and instance, plus the element's
-// name, assignment metadata, form, priority and due date from the compiled process.
+// name, documentation, assignment metadata, form, priority and due date from the
+// compiled process.
 // It is the one place that shape is built, so the list and the by-key fetch can never
 // drift. Callers run it inside s.do (it reads the store and the deployments map).
 func (s *Server) enrichTask(jobKey uint64, jv *model.JobValue) taskResp {
@@ -2912,6 +2917,9 @@ func (s *Server) enrichTask(jobKey uint64, jv *model.JobValue) taskResp {
 			if n := cp.Node(ei.ElementId); n.Type == compiler.TypeUserTask {
 				detail := cp.UserTask(n.Detail)
 				tr.Name = cp.Intern(detail.Name)
+				// What the task is actually asking the person to do, if the modeler
+				// wrote it down (ADR-0025).
+				tr.Documentation = cp.ElementDocumentation(ei.ElementId)
 				// The assignee is the job's runtime value (claim/unclaim rewrite it,
 				// ADR-0042); candidate groups stay the compile-time attribute.
 				tr.Assignee = jv.Assignee

@@ -1388,6 +1388,16 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tasks-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .tasks-detail-head h1 { margin: 0; font-size: 20px; }
 .tasks-detail-actions { display: flex; gap: 8px; flex-shrink: 0; }
+/* The task's documentation — the modeler's instruction for the person doing the work
+   (ADR-0025). Prose, so it keeps the author's line breaks (pre-wrap) and the reading
+   font, and it sits between the title and the metadata rows where it is read first. */
+.tasks-doc {
+  margin: 0 0 20px; padding: 12px 14px; max-width: 70ch;
+  border-left: 3px solid var(--accent); border-radius: 0 var(--radius) var(--radius) 0;
+  background: var(--bg);
+}
+.tasks-doc h2 { margin: 0 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.tasks-doc p { margin: 0; white-space: pre-wrap; line-height: 1.55; }
 .tasks-fields { display: flex; flex-direction: column; gap: 10px; max-width: 520px; }
 .tasks-field { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 12px; }
 .tasks-field-label { font-size: 13px; }

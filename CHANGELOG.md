@@ -14,19 +14,30 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
-- **Every element takes a Documentation property**
-  ([ADR-0025](docs/adr/0025-full-properties-panel.md)): the Modeler's Details panel now
-  offers a **Documentation** field on whatever is selected — every task, gateway, event,
-  sequence flow, data object and subprocess, plus the process itself (with nothing
-  selected), each pool and the process it executes, and the collaboration as a whole. It
-  reads and writes BPMN's own `<bpmn:documentation>` child, beside the element's name and
-  id, so the description of *why* a step exists lives on the step rather than in a
-  separate document. Documentation is **passthrough** — the compiler ignores it and the
-  model preserves it — so documenting a process never changes what it runs: a documented
-  model compiles to exactly the graph its undocumented twin compiles to, and the prose
-  survives deploy, the served XML (including a server-generated layout) and auto-layout.
+- **Every element takes a Documentation property, and a user task shows it to the person
+  doing the work** ([ADR-0025](docs/adr/0025-full-properties-panel.md) amended, reversing
+  its "the compiler ignores it" clause): the Modeler's Details panel now offers a
+  **Documentation** field on whatever is selected — every task, gateway, event, sequence
+  flow, data object and subprocess, plus the process itself (with nothing selected), each
+  pool and the process it executes, and the collaboration as a whole. It reads and writes
+  BPMN's own `<bpmn:documentation>` child, beside the element's name and id, so the
+  description of *why* a step exists lives on the step rather than in a separate document.
   Emptying the field removes the element rather than leaving an empty one behind, and the
   edit joins undo/redo like any other.
+
+  Documentation used to be invisible outside the model file, which meant only someone
+  opening the Modeler could read it. The compiler now **carries** it — interned per
+  element, `CompiledProcess.ElementDocumentation` / `Documentation` — and the **Tasks app
+  shows a user task's documentation as the work instruction**, above the form, where the
+  assignee reads it before doing anything. `GET /api/v1/tasks` and `/api/v1/tasks/{key}`
+  (and so `atlas_list_tasks` / `atlas_get_task`) carry it as `documentation`.
+
+  Documenting a process still never changes what it runs, and that is now tested rather
+  than assumed: a documented model compiles to *exactly* the graph its undocumented twin
+  compiles to, and the prose survives deploy, the served XML (including a
+  server-generated layout) and auto-layout. The processor reads none of it; nothing about
+  the event log, the record format or recovery changes, since the compiled process is
+  rebuilt from the stored XML.
 
 - **A runaway loop parks instead of spinning** ([ADR-0133](docs/adr/0133-standard-loop-activities.md)
   amended, reversing its "no hidden ceiling" decision): a standard loop that states no
