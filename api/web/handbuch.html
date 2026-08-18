@@ -2027,6 +2027,39 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
         <p data-l="en" style="margin:.3em 0 0">An incident is not data loss – the instance <i>pauses</i> safely at
           exactly that spot. Nothing is lost while you investigate.</p>
       </div>
+
+      <h3 data-l="de">Atlas installieren &amp; betreiben</h3><h3 data-l="en">Installing &amp; operating Atlas</h3>
+      <p data-l="de">Atlas ist <b>ein einziges, in sich geschlossenes Binary</b> – keine Datenbank, kein Broker,
+        keine Laufzeit-Abhängigkeiten. Engine, HTTP-API und diese ganze Oberfläche stecken darin. Herunterladen,
+        Prüfsumme verifizieren, starten.</p>
+      <p data-l="en">Atlas is <b>one self-contained binary</b> – no database, no broker, no runtime dependencies.
+        The engine, the HTTP API and this entire UI are compiled into it. Download it, verify the checksum, run it.</p>
+      <ul>
+        <li data-l="de"><b>Genau ein Prozess pro Datenverzeichnis.</b> Atlas ist eine Single-Writer-Engine – zwei
+          Server auf demselben Verzeichnis beschädigen es.</li>
+        <li data-l="en"><b>Exactly one process per data directory.</b> Atlas is a single-writer engine – two servers
+          on the same directory will corrupt it.</li>
+        <li data-l="de"><b>Atlas spricht kein TLS.</b> Vor dem Server gehört ein Reverse Proxy, der TLS
+          terminiert, bevor jemand von aussen darauf zugreifen kann.</li>
+        <li data-l="en"><b>Atlas speaks no TLS.</b> Put a TLS-terminating reverse proxy in front of it before anyone
+          outside the host can reach it.</li>
+        <li data-l="de"><b>Sichere den Vault-Key.</b> Ein Datenverzeichnis ohne seinen <code>vault.key</code> ist
+          nicht wiederherstellbar – die darin gespeicherten Connector-Secrets sind dann nicht mehr lesbar.</li>
+        <li data-l="en"><b>Back up the vault key.</b> A data directory without its <code>vault.key</code> is not
+          recoverable – the connector secrets in it can no longer be read.</li>
+      </ul>
+      <p data-l="de">Die Schritt-für-Schritt-Anleitung – Linux mit systemd-Unit, Windows Server, macOS,
+        Authentifizierung einschalten, TLS, Backups, Upgrades und die vollständige Referenz aller Flags und
+        Umgebungsvariablen – steht im Repository unter
+        <a class="applink" href="https://github.com/pblumer/atlas/blob/main/docs/install.md" target="_blank" rel="noopener"><code>docs/install.md</code>&nbsp;↗</a>.
+        Für Container und Kubernetes:
+        <a class="applink" href="https://github.com/pblumer/atlas/blob/main/deploy/README.md" target="_blank" rel="noopener"><code>deploy/</code>&nbsp;↗</a>.</p>
+      <p data-l="en">The step-by-step guide – Linux with a systemd unit, Windows Server, macOS, turning on
+        authentication, TLS, backups, upgrades and the full reference of every flag and environment variable – is in
+        the repository at
+        <a class="applink" href="https://github.com/pblumer/atlas/blob/main/docs/install.md" target="_blank" rel="noopener"><code>docs/install.md</code>&nbsp;↗</a>.
+        For containers and Kubernetes:
+        <a class="applink" href="https://github.com/pblumer/atlas/blob/main/deploy/README.md" target="_blank" rel="noopener"><code>deploy/</code>&nbsp;↗</a>.</p>
     </section>
 
     <!-- ==================== GLOSSARY ==================== -->
@@ -2074,6 +2107,10 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
         <div class="card"><b data-l="de">Architektur &amp; Warum</b><b data-l="en">Architecture &amp; why</b>
           <p class="lead"><code>docs/ARCHITECTURE.md</code>, <code>docs/adr/</code>,
              <code>docs/architecture/glossary.md</code></p>
+        </div>
+        <div class="card"><b data-l="de">Installieren &amp; betreiben</b><b data-l="en">Install &amp; operate</b>
+          <p><a class="applink" href="https://github.com/pblumer/atlas/blob/main/docs/install.md" target="_blank" rel="noopener"><span data-l="de">Installationsanleitung</span><span data-l="en">Installation guide</span> ↗</a> ·
+             <a class="applink" href="https://github.com/pblumer/atlas/blob/main/deploy/README.md" target="_blank" rel="noopener">Docker &amp; Kubernetes ↗</a></p>
         </div>
       </div>
     </section>
