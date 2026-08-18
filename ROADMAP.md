@@ -536,8 +536,11 @@ What it takes to run this for real.
   Checkpointing is now **on in the server**: `atlas serve` snapshots every
   `--checkpoint-interval` (default 5m, keeping 3) and recovers through
   `<data-dir>/checkpoints` at startup, so restart time follows the cadence rather than
-  the log's length. Remaining: feed `CompactLog` the live export/retention watermarks so
-  segments are actually deleted, plus the operator status and controls.
+  the log's length. The whole-instance snapshot (ADR-0109, amended) carries a verified
+  checkpoint and installs it on restore, so backup/restore survives a compacted log —
+  the last consumer deletion could have undercut. Remaining: feed `CompactLog` the live
+  export/retention watermarks so segments are actually deleted, plus the operator status
+  and controls.
 - 🔲 Exported-log stream for downstream analytics
 - 🔲 Operator tooling: list/inspect instances, incidents, jobs
 

@@ -292,10 +292,38 @@ recovery behaves exactly as it did before.
    the rebuilt store still trails its position; once the restored log advanced past it,
    it would pass every guard and seed recovery from an unrelated log's state.
    `ApplyPendingRestore` therefore drops the checkpoint directory along with the state
-   store — both are derivable, and a restore already implies a full replay. Checkpoints
-   are likewise absent from the snapshot itself, which allowlists only what is not
-   derivable.
-6. Feed `CompactLog` the live consumer watermarks (ADR-0114 export, ADR-0115 retention)
+   store — both are derivable, and a restore already implies a full replay. (Slice 6
+   refines this: the archive's own checkpoint entry, empty when it carried none,
+   replaces the local root instead.)
+6. **Landed** — **make backup/restore survive a compacted log** (ADR-0109 amended). This
+   is the last consumer named in the decision drivers above, and the one deletion would
+   otherwise undercut silently: the whole-instance snapshot carries `wal/` and not
+   `state/` precisely because `state == replay(WAL)`, which stops being true the moment a
+   prefix is deleted. An archive of a compacted log would restore an engine missing every
+   instance whose events were below the cut, with nothing to signal it.
+
+   The snapshot therefore carries the **newest fully verified checkpoint** — exactly one,
+   selected *before* the WAL is read so the WAL copy is a superset of the suffix it needs
+   — and `ApplyPendingRestore` installs it as the state store. A published checkpoint is
+   itself a complete Pebble directory, so installing is a copy, not a conversion; it is
+   copied rather than moved so recovery still finds the checkpoint and can seed the
+   highest position and key counter that a deleted prefix can no longer supply.
+
+   Two rules make it safe:
+   - **A staging always carries a checkpoint entry**, empty when the archive had none, so
+     the apply's rename pass replaces the local checkpoint root unconditionally and
+     nothing from the replaced log can survive. Settling this at staging time rather than
+     in the apply is what keeps the apply idempotent: a crash mid-apply re-runs against a
+     staging whose moved entries are simply absent, with no "did it carry one?" question
+     left to answer.
+   - **An archive whose checkpoints do not verify is refused.** Degrading to a plain
+     replay is right for a whole log and silently lossy for a compacted one, and the
+     restore cannot tell which it holds. Refusing to start is the only answer that is
+     never wrong.
+
+   The cost is archive size: it now grows by roughly the state store, against a 1 GiB
+   restore-upload cap. Still no segment is deleted anywhere.
+7. Feed `CompactLog` the live consumer watermarks (ADR-0114 export, ADR-0115 retention)
    so redundant segments are actually deleted, and expose checkpoint/compaction status
    and operator controls. Deletion is deliberately held back to its own slice: it is the
-   one irreversible step, and it should land after the cadence that feeds it has run.
+   one irreversible step, and every consumer it could undercut is now covered.
