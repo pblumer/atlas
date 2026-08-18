@@ -253,7 +253,9 @@ type Builder struct {
 	ioInputs           []pendingIO      // zeebe:ioMapping inputs, grouped by node in Build
 	ioOutputs          []pendingIO      // zeebe:ioMapping outputs, grouped by node in Build
 	elementIds         []int32          // interned source BPMN id per node, -1 if unset
+	elementDocs        []int32          // interned <bpmn:documentation> per node, -1 if undocumented (ADR-0025)
 	lanes              []LaneDetail     // organizational lanes (ADR-0121)
+	documentation      int32            // interned <bpmn:documentation> of the process itself, -1 if none
 	startFormId        int32            // interned start-form id (ADR-0028), -1 if the process has none
 	versionTag         int32            // interned atlas:versionTag revision label, -1 if none
 	instanceTtlNanos   int64            // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
@@ -278,6 +280,7 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 		key:           key,
 		bpmnProcessId: bpmnProcessId,
 		version:       version,
+		documentation: -1,
 		startFormId:   -1,
 		versionTag:    -1,
 		isExecutable:  true, // BPMN default; the parser sets false only for isExecutable="false"
@@ -327,7 +330,8 @@ func (b *Builder) addNode(t BpmnType, detail int32) int32 {
 		EventSub:      -1, // not event-triggered unless SetEventSubProcess marks it (ADR-0082)
 		Lane:          -1, // in no lane unless SetLane assigns one (ADR-0121)
 	})
-	b.elementIds = append(b.elementIds, -1) // kept in lockstep with nodes
+	b.elementIds = append(b.elementIds, -1)   // kept in lockstep with nodes
+	b.elementDocs = append(b.elementDocs, -1) // likewise: -1 = undocumented
 	return id
 }
 
@@ -450,6 +454,23 @@ func (b *Builder) SetElementBpmnId(nodeID int32, bpmnID string) {
 		b.elementIds[nodeID] = b.intern(bpmnID)
 	}
 }
+
+// SetElementDocumentation records a node's <bpmn:documentation> — the prose an author
+// writes about the element in the Modeler (ADR-0025). It is design-time metadata: the
+// processor never reads it, so it changes no execution; it is carried so a surface that
+// shows an element to a person (the Tasks app, for a user task's work instruction) can
+// read it from the compiled process instead of re-parsing the model (invariant I5).
+// Empty text interns to -1, so an undocumented node costs nothing.
+func (b *Builder) SetElementDocumentation(nodeID int32, text string) {
+	if b.validNode(nodeID) {
+		b.elementDocs[nodeID] = b.intern(text)
+	}
+}
+
+// SetDocumentation records the process's own <bpmn:documentation> — the summary a reader
+// wants before following the diagram. Design-time metadata, like the element-level
+// documentation above.
+func (b *Builder) SetDocumentation(text string) { b.documentation = b.intern(text) }
 
 // AddStartEvent adds a none start event and returns its element id.
 func (b *Builder) AddStartEvent() int32 { return b.addNode(TypeStartEvent, -1) }
@@ -1816,7 +1837,9 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		ioOutputs:          ioOut,
 		startEvents:        startEvents,
 		elementIds:         b.elementIds,
+		elementDocs:        b.elementDocs,
 		lanes:              b.lanes,
+		documentation:      b.documentation,
 		startFormId:        b.startFormId,
 		versionTag:         b.versionTag,
 		instanceTtlNanos:   b.instanceTtlNanos,

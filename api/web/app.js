@@ -3813,6 +3813,13 @@ async function viewTasks(preselectKey) {
           <div id="tp-vars-body"><p class="tp-msg muted">Loading&hellip;</p></div>
         </div>
       </div>`;
+    // The element's <bpmn:documentation> (ADR-0025) is the modeler's instruction for
+    // whoever picks the task up — what to check, which rule applies, when to refuse. It
+    // leads the detail, above the metadata rows, because it is what the assignee needs
+    // before doing anything; a task whose element carries none simply shows no block.
+    const docBlock = (t.documentation || "").trim()
+      ? `<div class="tasks-doc"><h2>What to do</h2><p>${esc(t.documentation.trim())}</p></div>`
+      : "";
     detailEl.innerHTML = `
       <header class="tasks-detail-head">
         <h1>${esc(taskTitle(t))}</h1>
@@ -3822,6 +3829,7 @@ async function viewTasks(preselectKey) {
           <button class="btn" id="task-complete" title="Complete (Ctrl/⌘ + Enter)">Complete task</button>
         </div>
       </header>
+      ${docBlock}
       <div class="tasks-fields">
         ${row("Process", esc(t.processId || "—"))}
         ${row("Element", `<span class="chip">${esc(t.elementId || "—")}</span>`)}

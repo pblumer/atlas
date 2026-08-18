@@ -49,7 +49,10 @@ func compileCondition(id, raw string) (*expr.Compiled, error) {
 type registrar struct {
 	b   *Builder
 	ids map[string]int32
-	err error
+	// docs is the model-wide element-id → <bpmn:documentation> index, so a node's prose
+	// is recorded with its id in one place rather than at each element kind (ADR-0025).
+	docs map[string]string
+	err  error
 }
 
 // node registers nodeID under its BPMN id.
@@ -63,7 +66,8 @@ func (r *registrar) node(id string, nodeID int32) {
 		return
 	}
 	r.ids[id] = nodeID
-	r.b.SetElementBpmnId(nodeID, id) // retain for the live diagram overlay
+	r.b.SetElementBpmnId(nodeID, id)                // retain for the live diagram overlay
+	r.b.SetElementDocumentation(nodeID, r.docs[id]) // the author's prose about this element (ADR-0025)
 }
 
 // reject keeps the first rejection; later ones are almost always its fallout.
