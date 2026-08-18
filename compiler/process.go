@@ -246,6 +246,15 @@ type CallActivityDetail struct {
 	PropagateAllChild  bool // return all child variables to the caller (default true)
 }
 
+// SafeLoopCeiling is how many runs a standard loop that states no loopMaximum gets
+// before the engine stops it and raises an incident (ADR-0133, amended). It is a
+// safety net for the one construct that can spin on its own — a FEEL loop condition
+// that never turns false — not a semantic limit: a loop that states its own
+// loopMaximum is bounded by that number alone, however large, because the author said
+// it out loud and the deploy validated it. The engine enforces the ceiling; the
+// compiler names it in the loop.unbounded warning, so both read the same number.
+const SafeLoopCeiling = 1000
+
 // MultiInstanceDetail is the per-multi-instance-activity data a behavior needs at
 // runtime (ADR-0077). A multi-instance activity runs its node N times — once per
 // element of InputCollection (a FEEL list), or Cardinality times — as inner element
