@@ -1682,10 +1682,10 @@ type xmlServiceTask struct {
 	// (ADR-0123). The pointer is nil when the <atlas:userConnector> extension is absent.
 	User *xmlUserConnector `xml:"extensionElements>userConnector"`
 	// Csv, when present, marks this service task a CSV-to-JSON connector task
-	// (ADR-0090). The pointer is nil when the <atlas:csvConnector> extension is absent.
+	// (ADR-0139). The pointer is nil when the <atlas:csvConnector> extension is absent.
 	Csv *xmlCsvConnector `xml:"extensionElements>csvConnector"`
 	// SharePoint, when present, marks this service task a SharePoint connector task
-	// (ADR-0105). The pointer is nil when the <atlas:sharepointConnector> extension is
+	// (ADR-0141). The pointer is nil when the <atlas:sharepointConnector> extension is
 	// absent.
 	SharePoint *xmlSharePointConnector `xml:"extensionElements>sharepointConnector"`
 	// Remedy, when present, marks this service task a BMC Remedy connector task
@@ -1804,7 +1804,7 @@ type xmlUserConnector struct {
 }
 
 // A CSV-to-JSON connector task's parameters, carried on a service task as an
-// <atlas:csvConnector source="..." delimiter="," .../> extension element (ADR-0090).
+// <atlas:csvConnector source="..." delimiter="," .../> extension element (ADR-0139).
 // source names the process variable holding the raw CSV text (default "csvText");
 // delimiter is the single-character field separator (default ","); hasHeader is
 // "true"/"false" (default true) — whether the first row is a header; columns is an
@@ -1823,7 +1823,7 @@ type xmlCsvConnector struct {
 // splitCSVColumns turns a csvConnector's comma-separated columns attribute into a
 // trimmed list of field names, dropping empty entries so a trailing comma or an
 // unset attribute yields no phantom column. An empty result means "derive the
-// columns from the header row" (ADR-0090).
+// columns from the header row" (ADR-0139).
 func splitCSVColumns(s string) []string {
 	if strings.TrimSpace(s) == "" {
 		return nil
@@ -1848,7 +1848,7 @@ func csvHasHeader(attr string) bool {
 
 // A SharePoint connector task's parameters, carried on a service task as an
 // <atlas:sharepointConnector connector="..." site="..." list="..."> extension
-// element (ADR-0105). connector names a server-registered SharePoint provider (its
+// element (ADR-0141). connector names a server-registered SharePoint provider (its
 // Graph base and OAuth credential live on the server, never in the model). site
 // (required) addresses the SharePoint site ("host,/sites/path" or a site id); list
 // (required) is the list name or id the item is created in; resultVariable, if set,

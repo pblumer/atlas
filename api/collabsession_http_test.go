@@ -405,7 +405,7 @@ func TestDraftSessionJoinAnonymous(t *testing.T) {
 
 // TestDraftSessionKeepalive confirms an idle SSE stream emits periodic keepalive
 // comments — the write that lets the server detect a half-open (zombie) browser
-// connection and reap its participant (ADR-0103).
+// connection and reap its participant (ADR-0140).
 func TestDraftSessionKeepalive(t *testing.T) {
 	ts := newTestServerWith(t, api.WithCollabKeepaliveInterval(15*time.Millisecond))
 	saveDraft(t, ts)

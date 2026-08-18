@@ -146,7 +146,7 @@ func registerScope(
 		// A service task bearing an <atlas:csvConnector> extension is a CSV-to-JSON
 		// connector task: the in-process CSV worker parses the named source variable's
 		// text against the model-authored layout into a rows collection via the job
-		// path (ADR-0090), rather than reading a columnConfig variable (ADR-0087). The
+		// path (ADR-0139), rather than reading a columnConfig variable (ADR-0087). The
 		// whole layout lives in the model; only the file arrives at runtime.
 		if cn := st.Csv; cn != nil {
 			retries, err := parseRetries(label, st.Id, firstNonBlank(cn.Retries, st.TaskDefinition.Retries))
@@ -156,7 +156,7 @@ func registerScope(
 			cols := splitCSVColumns(cn.Columns)
 			hasHeader := csvHasHeader(cn.HasHeader)
 			// A headerless file maps columns by position, so it must name them; a header
-			// file may omit them to derive the columns from the header row (ADR-0090).
+			// file may omit them to derive the columns from the header row (ADR-0139).
 			if !hasHeader && len(cols) == 0 {
 				return fmt.Errorf("compiler: csv connector task %q without a header row must list its columns", st.Id)
 			}

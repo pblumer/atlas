@@ -1164,7 +1164,7 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   pointer-events: auto; cursor: default;
 }
 
-/* ---------- Live collaboration sessions (ADR-0103) ---------- */
+/* ---------- Live collaboration sessions (ADR-0140) ---------- */
 /* A floating roster of co-editors, centered over the canvas, plus a lock badge on
    each element another participant is editing and a brief pulse on a remote edit. */
 .editor-body { position: relative; }

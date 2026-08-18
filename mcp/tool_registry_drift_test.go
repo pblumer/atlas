@@ -157,7 +157,7 @@ var mcpOmittedRoutes = map[string]string{
 	// The SSE join stream is a browser transport: an MCP agent cannot hold an
 	// event stream, so it joins via the non-streaming atlas_join_session and reads
 	// with atlas_session_poll instead. The stream endpoint itself carries no tool.
-	"GET /api/v1/drafts/{id}/session": "live SSE co-editing transport for browsers; agents use atlas_join_session + atlas_session_poll (ADR-0103)",
+	"GET /api/v1/drafts/{id}/session": "live SSE co-editing transport for browsers; agents use atlas_join_session + atlas_session_poll (ADR-0140)",
 
 	// Public start links: a human-sharing feature, not an agent action.
 	"POST /api/v1/public-links":           "human share links, not an agent action",

@@ -25,7 +25,7 @@ const csvImportBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524
 </definitions>`
 
 // csvConnectorBPMN drives the CSV worker through a first-class csvConnector task
-// (ADR-0090): the layout lives on the task (source variable + derive-from-header +
+// (ADR-0139): the layout lives on the task (source variable + derive-from-header +
 // a renamed result variable), so only the file (csvText) is seeded at runtime — no
 // columnConfig variable, no preceding script task.
 const csvConnectorBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
@@ -43,7 +43,7 @@ const csvConnectorBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100
   </process>
 </definitions>`
 
-// TestCSVConnectorServiceTask proves the first-class csvConnector path (ADR-0090):
+// TestCSVConnectorServiceTask proves the first-class csvConnector path (ADR-0139):
 // with the layout authored on the task, seeding only csvText runs the worker to
 // completion and writes the derived rows into the authored result variable.
 func TestCSVConnectorServiceTask(t *testing.T) {

@@ -4,6 +4,8 @@ This directory records the significant architectural decisions made on Atlas, us
 
 An ADR captures a decision, the context that forced it, the options considered, and the consequences accepted. ADRs are immutable once accepted: if a decision changes, a new ADR supersedes the old one rather than editing it.
 
+A number belongs to exactly one decision. Take the next free one when you add a record — two branches each taking "the next number" is how 0090, 0103 and 0105 came to be shared by unrelated ADRs (the later record of each pair now lives at 0139, 0140 and 0141). `go test ./docs/adr` enforces unique, gapless numbers and keeps the index below in step with the directory.
+
 ## Index
 
 | ADR | Title | Status |
@@ -36,7 +38,7 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0026](0026-problems-panel-and-versioned-validation.md) | A Problems panel with validation targeted at an engine version | Proposed |
 | [0027](0027-element-templates.md) | Element templates for pre-configured, reusable elements | Proposed |
 | [0028](0028-forms-and-the-tasks-app.md) | User tasks, forms, and the Tasks app | Proposed |
-| [0029](0029-public-process-start-links.md) | Public process start via a published form link | Proposed |
+| [0029](0029-public-process-start-links.md) | Public process start via a published form link | Accepted |
 | [0030](0030-play-mode-simulation.md) | Play mode — ephemeral in-Modeler process simulation | Proposed |
 | [0031](0031-diagram-version-history.md) | Diagram version history in the Modeler | Proposed |
 | [0032](0032-modeler-ai-copilot.md) | In-Modeler AI copilot over the MCP/HTTP surface | Proposed |
@@ -110,10 +112,9 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0100](0100-token-simulation-configurable-multi-instance-count.md) | Token simulation — configurable multi-instance count, modelled cardinality wins | Accepted |
 | [0101](0101-token-simulation-throw-delivers-to-waiting-catch.md) | Token simulation — a thrown message/signal delivers to (fires) a waiting catch | Accepted |
 | [0102](0102-receive-tasks.md) | Receive tasks — an activity that waits for a correlating message, reusing the message-catch machinery | Accepted |
-| [0103](0103-live-collaborative-modeling-sessions.md) | Live collaborative modeling sessions — real-time co-editing of drafts by people and AI agents | Proposed |
+| [0103](0103-compensation.md) | Compensation and compensation handlers | Accepted |
 | [0104](0104-token-simulation-embedded-subprocesses.md) | Token simulation — entering and running expanded embedded subprocesses as scopes | Accepted |
 | [0105](0105-per-server-call-activity-target-overrides.md) | Per-server call-activity target overrides — route, pin, or disable a call activity's target on one server | Proposed |
-| [0105](0105-sharepoint-connector.md) | SharePoint connector — create a list item via Microsoft Graph, provider managed and OAuth credential in the vault | Accepted |
 | [0106](0106-bmc-remedy-connector.md) | A BMC Remedy connector — server-registered ITSM entry creation via the AR System REST API | Accepted |
 | [0107](0107-backup-and-restore.md) | Backup and restore — a one-file gzip-tar download of the design-time data directory, secrets excluded | Accepted |
 | [0108](0108-bpmn-transactions.md) | BPMN transactions — a transaction subprocess whose cancel end event compensates completed work in reverse order, then routes out an always-interrupting cancel boundary | Accepted |
@@ -147,6 +148,9 @@ An ADR captures a decision, the context that forced it, the options considered, 
 | [0136](0136-terminated-tokens-in-the-replay.md) | Terminated tokens in the step-by-step replay — the ADR-0046 fold deferred every element consumption until the activation it caused appeared, but a **terminated** element (interrupting boundary, cancelled instance, terminate end) hands its token to no one, so the deferral never resolved and a ghost token outlived the instance itself; `applyToState` now records termination under its own action code (`state.ReplayTerminated`) and the fold retires such a token at once, exactly as it does a leaf. Also fixes flow-less activations (armed boundary, armed event-subprocess trigger, compensation handler) recording `SourceFlowId = 0` — a real flow index — instead of the `-1` start events already used | Accepted |
 | [0137](0137-conditional-events.md) | Conditional events — a catch/boundary/event-subprocess-start that fires when a **boolean FEEL condition over process variables becomes true** (data-triggered, not message/timer/signal). The condition compiles to FEEL at deploy (a gateway condition) and is re-evaluated when a variable it reads changes: every committed write funnels through `AppendVariableEvent`, which marks the instance dirty and schedules a transient command-path `ConditionRecheck` follow-up that fires armed conditionals now true — reusing the inert-armed-catch + `AppendElementCommand(IntentCompleting)` pattern from ADR-0089/0125. Interrupting/catch fire once; non-interrupting fires once per arm (repeatable false→true edge-triggering deferred). No subscription; catches external `SetVariables`. Chosen over polling and completion-checkpoint evaluation | Accepted |
 | [0138](0138-adhoc-subprocesses.md) | Ad-hoc subprocesses — `<adHocSubProcess>`, a container whose contained activities run **on demand, in any order, zero or more times** (flexible / case-management work), not driven by sequence flow. A new `TypeAdHocSubProcess` **scope** activates every **entry activity** (a contained node with `IncomingCount == 0`) at once (parallel ordering) and, after each contained activity completes, re-evaluates an optional boolean FEEL **completion condition**; the first time it holds it `terminateScope`s the rest (`cancelRemainingInstances`, default true) and `completeScope`s — else it completes on plain scope-drain. Reuses the ADR-0074 subprocess scope and the ADR-0077 completion-condition eval + cancel; no new value type or recovery path. Ships the parallel ordering and both `cancelRemainingInstances` modes; sequential ordering is **refused at deploy** rather than silently run as parallel (a follow-up, since a "which entries have started" cursor needs durable state). Chosen over keeping it unsupported and over desugaring to a parallel gateway (which loses zero-or-more / any-order / cancel-the-rest) | Accepted |
+| [0139](0139-csv-to-json-connector.md) | A first-class "CSV to JSON" connector kind with model-authored layout (renumbered from a duplicate 0090) | Accepted |
+| [0140](0140-live-collaborative-modeling-sessions.md) | Live collaborative modeling sessions — real-time co-editing of drafts by people and AI agents (renumbered from a duplicate 0103) | Proposed |
+| [0141](0141-sharepoint-connector.md) | SharePoint connector — create a list item via Microsoft Graph, provider managed and OAuth credential in the vault (renumbered from a duplicate 0105) | Accepted |
 ## Status values
 
 - **Proposed** — under discussion

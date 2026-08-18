@@ -16,7 +16,7 @@ import (
 const graphDefaultBase = "https://graph.microsoft.com/v1.0"
 
 // GraphClient creates SharePoint list items through the Microsoft Graph API
-// (ADR-0105). It POSTs {fields:{…}} to /sites/{site}/lists/{list}/items with a bearer
+// (ADR-0141). It POSTs {fields:{…}} to /sites/{site}/lists/{list}/items with a bearer
 // token from its TokenSource, and returns the created item as decoded JSON.
 type GraphClient struct {
 	http    *http.Client
