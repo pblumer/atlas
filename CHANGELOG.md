@@ -99,6 +99,33 @@ _Changed_ / _Removed_ for each version.
   standard loop like a sequential multi-instance, badged ↻ and bounded by the modelled
   `loopMaximum`, and the Operations call-activity list labels a looping call activity
   **loop** rather than **multi-instance**.
+- **Prometheus metrics at `/metrics`** (v0.2.0 programme E,
+  [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 1): Atlas had no metrics at all —
+  everything observable was a JSON read of the present moment or a line in the log, so
+  "was the engine slow at 03:00 last night?" had no answer. The server now serves a
+  Prometheus exposition beside `/healthz`, on its **own registry** rather than the
+  process-wide default, so what an operator scrapes is what Atlas registered and not
+  whatever else in the binary happened to publish.
+
+  This first slice exports the **durability** metrics: the applied log position, the
+  checkpoints on disk and the position and age of the newest that **still verifies**, the
+  last checkpoint pass's timestamp, failure and segments removed, the WAL's segments and
+  bytes, and — only when an exporter is configured — its position and lag. Every one is
+  read from durable state *when Prometheus scrapes*, which is the design rather than an
+  implementation detail: there is no in-memory counter that could run ahead of the disk,
+  so a metric cannot claim more than is durable, and the engine's hot path is untouched.
+  A corrupt checkpoint is counted (it occupies disk) but never credited with a position
+  or an age — it shortens no restart, and saying otherwise would be the one lie that
+  matters.
+
+  Two rules ADR-0142 fixes and a test enforces: labels must be bounded by the code and
+  never by the data (no instance, job or correlation key, no process id or URL — a
+  per-definition breakdown is an API query, which can paginate, not a time series), and
+  every labeled handle is resolved once at construction so a future hot-path counter
+  touches a `Counter` and not a `*Vec`. `prometheus/client_golang` was already in the
+  module graph via Pebble, so this promotes an existing dependency rather than adding
+  one. `/metrics` is on by default and unauthenticated like `/healthz` — it carries only
+  aggregates — with `--metrics=false` to turn it off.
 - **Checkpoint and compaction status, and a checkpoint-now control** (v0.2.0 programme D,
   [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 8 —
   completing the ADR): everything checkpointing and compaction did was visible only in the
