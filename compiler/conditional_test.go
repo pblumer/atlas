@@ -185,3 +185,30 @@ func TestParseNoConditional(t *testing.T) {
 		t.Error("HasConditionalEvents = true, want false (no conditional events)")
 	}
 }
+
+// TestParseConditionalInvalidFeel rejects a conditional event whose condition is not a valid FEEL
+// expression (ADR-0137): the predicate is compiled at deploy, so a malformed one is a deploy error
+// naming the event, on both a conditional catch and a conditional event subprocess.
+func TestParseConditionalInvalidFeel(t *testing.T) {
+	cases := map[string]string{
+		"catch": `<startEvent id="s"/><intermediateCatchEvent id="w"><conditionalEventDefinition><condition>= 1 +</condition></conditionalEventDefinition></intermediateCatchEvent>
+		          <sequenceFlow id="f" sourceRef="s" targetRef="w"/>`,
+		"eventsub": `<startEvent id="s"/><userTask id="t"/><endEvent id="e"/>
+		          <sequenceFlow id="f1" sourceRef="s" targetRef="t"/><sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+		          <subProcess id="handler" triggeredByEvent="true">
+		            <startEvent id="hs"><conditionalEventDefinition><condition>= 1 +</condition></conditionalEventDefinition></startEvent>
+		            <endEvent id="he"/><sequenceFlow id="hf" sourceRef="hs" targetRef="he"/>
+		          </subProcess>`,
+	}
+	for name, body := range cases {
+		xml := `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p" isExecutable="true">` + body + `</process></definitions>`
+		_, err := Parse(1, 1, strings.NewReader(xml))
+		if err == nil {
+			t.Errorf("%s: Parse succeeded, want an error for a malformed FEEL condition", name)
+			continue
+		}
+		if !strings.Contains(err.Error(), "condition") {
+			t.Errorf("%s: error %q should mention the condition", name, err.Error())
+		}
+	}
+}

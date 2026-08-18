@@ -439,3 +439,224 @@ func TestConditionalCatchRecovers(t *testing.T) {
 		t.Errorf("end visits = %d, want 1 (recovered catch fired on the variable change)", v)
 	}
 }
+
+// TestConditionalCatchInSubprocess: a conditional catch nested in an embedded subprocess reads the
+// enclosing scope's variables (ADR-0137/0086). Parked inside the subprocess with its condition
+// false, it fires — and the subprocess and instance complete — when a later SetVariables makes it
+// true, proving the re-check reaches a conditional whose flow scope is the subprocess, not the root.
+func TestConditionalCatchInSubprocess(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	b := compiler.NewBuilder(109, "cond-catch-sub", 1)
+	start := b.AddStartEvent()
+	sub := b.AddSubProcess()
+	outerEnd := b.AddEndEvent()
+	b.Connect(start, sub)
+	b.Connect(sub, outerEnd)
+	b.PushScope(sub)
+	iStart := b.AddStartEvent()
+	wait := b.AddConditionalCatchEvent(mustCompile(t, "ready"))
+	iEnd := b.AddEndEvent()
+	b.Connect(iStart, wait)
+	b.Connect(wait, iEnd)
+	b.PopScope()
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	// Parked at the conditional catch inside the subprocess (condition false).
+	if pi, ei := counts(t, h.store); pi != 1 || ei != 2 {
+		t.Fatalf("parked: process=%d element=%d, want 1 and 2 (subprocess + inner catch)", pi, ei)
+	}
+	// A variable write at the root becomes true up the scope chain; the re-check fires the catch.
+	p.SetVariables(model.NewKey(1, 1), 0, "operator", boolVar("ready", true))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (after set): %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after set: process=%d element=%d, want 0 and 0 (catch fired, subprocess drained)", pi, ei)
+	}
+	if v := elementVisits(t, h.store, cp.Key)[outerEnd]; v != 1 {
+		t.Errorf("outer end visits = %d, want 1 (subprocess completed after the catch fired)", v)
+	}
+}
+
+// TestConditionalUnrelatedWriteFiresNothing: a parked conditional catch is re-checked on every
+// variable write in its instance, but a write of an unrelated variable — the condition still false —
+// fires nothing (ADR-0137, follow-up: an unrelated write must not trip a conditional). Only the
+// write that makes the predicate true fires it.
+func TestConditionalUnrelatedWriteFiresNothing(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	b := compiler.NewBuilder(110, "cond-unrelated", 1)
+	start := b.AddStartEvent()
+	wait := b.AddConditionalCatchEvent(mustCompile(t, "ready"))
+	end := b.AddEndEvent()
+	b.Connect(start, wait)
+	b.Connect(wait, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	// An unrelated write triggers a re-check, but the condition (ready) is still false: nothing fires.
+	p.SetVariables(model.NewKey(1, 1), 0, "operator", boolVar("other", true))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (after unrelated set): %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 1 || ei != 1 {
+		t.Fatalf("after unrelated set: process=%d element=%d, want 1 and 1 (still parked)", pi, ei)
+	}
+	if v := elementVisits(t, h.store, cp.Key)[end]; v != 0 {
+		t.Fatalf("end visits = %d, want 0 (unrelated write fired nothing)", v)
+	}
+	// The write that makes the predicate true fires it. Two variables are written in the one batch,
+	// so the instance is marked dirty twice — the second write hits the dedup guard, scheduling a
+	// single re-check rather than two (ADR-0137).
+	p.SetVariables(model.NewKey(1, 1), 0, "operator", boolVar("ready", true), boolVar("also", true))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (after set): %v", err)
+	}
+	if v := elementVisits(t, h.store, cp.Key)[end]; v != 1 {
+		t.Errorf("end visits = %d, want 1 (the relevant write fired the catch)", v)
+	}
+}
+
+// TestConditionalEventSubNonInterruptingFiresAtArm: a non-interrupting conditional event subprocess
+// nested in an embedded subprocess whose condition already holds when that subprocess is entered
+// fires at once (ADR-0137) — its arm-time self-evaluation runs the handler alongside the still-
+// running inner task, which then completes normally. Being non-interrupting, firing at arm tears
+// nothing down, so the inner flow is untouched.
+func TestConditionalEventSubNonInterruptingFiresAtArm(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	b := compiler.NewBuilder(111, "cond-eventsub-atarm-ni", 1)
+	start := b.AddStartEvent()
+	sub := b.AddSubProcess()
+	outerEnd := b.AddEndEvent()
+	b.Connect(start, sub)
+	b.Connect(sub, outerEnd)
+	b.PushScope(sub)
+	iStart := b.AddStartEvent()
+	work := b.AddServiceTask("work", 3)
+	iEnd := b.AddEndEvent()
+	b.Connect(iStart, work)
+	b.Connect(work, iEnd)
+	handler := b.AddSubProcess()
+	b.PushScope(handler)
+	hStart := b.AddStartEvent()
+	hEnd := b.AddEndEvent()
+	b.Connect(hStart, hEnd)
+	b.PopScope()
+	b.SetEventSubProcess(handler, compiler.EventSubProcessDetail{
+		StartNode: hStart, Interrupting: false, Kind: compiler.BoundaryConditional, Condition: mustCompile(t, "alert"),
+	})
+	b.PopScope()
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	jobType := cp.ServiceTask(cp.Node(work).Detail).JobType
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	// Seed alert=true: when the subprocess is entered the event-sub arms and, on its self-evaluation,
+	// finds the condition already true and runs the handler alongside the inner task.
+	p.CreateInstance(cp.Key, boolVar("alert", true))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if v := elementVisits(t, h.store, cp.Key)[hEnd]; v != 1 {
+		t.Fatalf("handler end visits = %d, want 1 (non-interrupting event-sub fired at arm)", v)
+	}
+	if jobGone(t, h.store, jobType) {
+		t.Fatal("the non-interrupting handler cancelled the inner job")
+	}
+	// The inner task completes on its own; the subprocess and instance then drain.
+	p.CompleteJob(singleActivatableJob(t, h.store, jobType))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (after job): %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after job: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+	if v := elementVisits(t, h.store, cp.Key)[outerEnd]; v != 1 {
+		t.Errorf("outer end visits = %d, want 1", v)
+	}
+}
+
+// TestConditionalDirtyTrackingSkipsPlainProcess: a process with no conditional event pays nothing
+// on a variable write — markConditionDirty resolves the instance, sees HasConditionalEvents is
+// false, and records nothing, so no re-check is scheduled (ADR-0137). This pins the early-out that
+// keeps conditional-free processes on the same write path they had before conditional events.
+func TestConditionalDirtyTrackingSkipsPlainProcess(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	b := compiler.NewBuilder(112, "plain-no-cond", 1)
+	start := b.AddStartEvent()
+	work := b.AddServiceTask("work", 3)
+	end := b.AddEndEvent()
+	b.Connect(start, work)
+	b.Connect(work, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if cp.HasConditionalEvents() {
+		t.Fatal("HasConditionalEvents = true, want false (no conditional events)")
+	}
+	jobType := cp.ServiceTask(cp.Node(work).Detail).JobType
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	// A variable write on a conditional-free instance goes through markConditionDirty, which sees
+	// no conditional events and records nothing; the instance stays parked on its job.
+	p.SetVariables(model.NewKey(1, 1), 0, "operator", boolVar("anything", true))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (after set): %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 1 || ei != 1 {
+		t.Fatalf("after set: process=%d element=%d, want 1 and 1 (still parked, no re-check)", pi, ei)
+	}
+	// The instance still completes normally on job completion.
+	p.CompleteJob(singleActivatableJob(t, h.store, jobType))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (after job): %v", err)
+	}
+	if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+		t.Fatalf("after job: process=%d element=%d, want 0 and 0", pi, ei)
+	}
+}
