@@ -239,10 +239,6 @@ type lnode struct {
 	label string   // boundary: its name, emitted as an explicit label placed clear of the host
 	atTop bool     // boundary: riding the host's top edge (label goes above, else below)
 
-	// boundary: the center-x of the next boundary event along the same host, or 0
-	// when this is the last one. Its exception flow rises from exactly there, so the
-	// caption has to stop short of it.
-	nextRiser int
 }
 
 // placedShape and placedEdge are the emitted diagram interchange for one container
@@ -253,8 +249,14 @@ type placedShape struct {
 	expanded   bool // an expanded subprocess box
 	horizontal bool // a swimlane band (isHorizontal)
 
-	// An explicit label box (currently only boundary events get one, to keep their
-	// caption off the host). Zero when hasLabel is false: bpmn-js then auto-places.
+	// The caption this shape needs placed off itself (currently only boundary events:
+	// left to bpmn-js, theirs lands on the host's title). placeShapeLabels turns it
+	// into a box; labelUp asks for the side the event faces, since it rides one of
+	// its host's horizontal borders and the free space is on that side.
+	label   string
+	labelUp bool
+
+	// The placed label box. Zero when hasLabel is false: bpmn-js then auto-places.
 	hasLabel       bool
 	labelX, labelY int
 	labelW, labelH int
@@ -347,7 +349,10 @@ func layoutOf(c layoutContainer) laidOut {
 	emitShapes(&lo, nodes, inner)
 	colRight, colLeft := columnEdges(nodes)
 	emitEdges(&lo, nodes, idx, c.Flows, back, colRight, colLeft, loopChannelY(nodes))
-	placeFlowLabels(&lo) // after both shapes and edges exist: placement avoids them
+	// Captions last, once every shape and edge is placed: both placers fit a box
+	// against the finished picture, shapes first because they are more constrained.
+	placeShapeLabels(&lo)
+	placeFlowLabels(&lo)
 	normalize(&lo)
 	return lo
 }
@@ -1011,23 +1016,6 @@ func placeBoundaries(nodes []lnode, idx map[string]int, flows []layoutFlow) {
 		}
 		nodes[i].atTop = !onBottom
 	}
-	// Each boundary event learns where its right-hand neighbour's exception flow
-	// rises, so emitShapes can stop the caption short of it instead of letting the
-	// two collide.
-	for i := range nodes {
-		if !nodes[i].bound {
-			continue
-		}
-		for j := range nodes {
-			if !nodes[j].bound || i == j || nodes[j].host != nodes[i].host {
-				continue
-			}
-			cx := nodes[j].x + nodes[j].w/2
-			if cx > nodes[i].x+nodes[i].w/2 && (nodes[i].nextRiser == 0 || cx < nodes[i].nextRiser) {
-				nodes[i].nextRiser = cx
-			}
-		}
-	}
 }
 
 // boundaryCenterX places the k-th of n boundary events along its host's top or
@@ -1061,27 +1049,11 @@ func emitShapes(lo *laidOut, nodes []lnode, inner map[string]*laidOut) {
 		}
 		ps := placedShape{id: n.id, x: n.x, y: n.y, w: n.w, h: n.h}
 		if n.bound && n.label != "" {
-			ps.hasLabel = true
-			ps.labelW, ps.labelH = boundaryLabelWidth(n.label), 14
-			// With a neighbour further along the same border, the caption has to fit in
-			// the gap before that neighbour's exception flow rises; bpmn-js wraps the
-			// text to whatever width it is given.
-			if n.nextRiser != 0 {
-				if avail := n.nextRiser - (n.x + n.w) - 8; avail < ps.labelW {
-					ps.labelW = maxInt(avail, 20)
-				}
-			}
-			// Left edge just past the event's right side, so the caption sits in the open
-			// pocket beside the event — on the side the exception flow departs toward its
-			// handler — rather than tucked behind the upward riser (which leaves from the
-			// event's center) or crowding the host's title. The box extends right, into
-			// the column gap, clear of the host box below.
-			ps.labelX = n.x + n.w + 4
-			if n.atTop {
-				ps.labelY = n.y - ps.labelH - 4 // above the event, in the row gap
-			} else {
-				ps.labelY = n.y + n.h + 4 // below the event
-			}
+			// Only record what the caption is and which way the event faces; where it
+			// goes is placeShapeLabels' job, once every shape and edge exists to be
+			// avoided. Computing it here — before the exception flows are routed — is
+			// what put a caption under a neighbour's riser.
+			ps.label, ps.labelUp = n.label, n.atTop
 		}
 		lo.shapes = append(lo.shapes, ps)
 	}
@@ -1327,6 +1299,29 @@ func shiftShapes(ss []placedShape, dx, dy int) []placedShape {
 // estimate boundary-event labels use.
 const flowLabelH = 14
 
+// labelWraps is how many lines a caption may be reflowed onto, in the order tried.
+// Beyond three the box is taller than the line it labels and stops reading as a
+// caption, so the search gives up rather than going narrower still.
+var labelWraps = []int{1, 2, 3}
+
+// wrapWidth is the box width that reflows a caption of full width onto n lines.
+// It is an estimate over an estimate — the renderer breaks at word boundaries, not
+// at an exact fraction — so it floors at a width that still fits a short word
+// rather than promising a column no text could occupy.
+func wrapWidth(full, lines int) int {
+	if lines <= 1 {
+		return full
+	}
+	w := (full + lines - 1) / lines
+	if w < 36 {
+		w = 36
+	}
+	if w > full {
+		w = full
+	}
+	return w
+}
+
 // flowLabelGap is how far a caption sits off its own line — close enough to read as
 // belonging to it, far enough not to be struck by it.
 const flowLabelGap = 4
@@ -1337,24 +1332,107 @@ const flowLabelGap = 4
 // arrows and readable as belonging to either. Candidates run from the source end
 // outwards — a gateway's branches are read at the fork — and the first one that
 // clears every shape and every other edge wins.
+// placeShapeLabels positions the captions shapes carry — today a boundary event's
+// name, which bpmn-js would otherwise drop onto the host's title. It runs after
+// shapes and edges are placed, so a caption is fitted against the finished picture
+// rather than against a guess: the pocket beside an event may be taken by a
+// neighbour's exception riser, by another caption, or by the host itself, and only
+// the complete layout knows which.
+//
+// Shape captions are placed before flow captions because they are the more
+// constrained of the two — a boundary caption has to stay next to its event, while
+// a flow caption may slide anywhere along its line.
+func placeShapeLabels(lo *laidOut) {
+	for i := range lo.shapes {
+		s := &lo.shapes[i]
+		if s.label == "" {
+			continue
+		}
+		box := lnode{x: s.x, y: s.y, w: s.w, h: s.h}
+		if x, y, w, h, ok := fitLabel(shapeLabelCandidates, box, s.labelUp, s.label, lo); ok {
+			s.hasLabel, s.labelX, s.labelY, s.labelW, s.labelH = true, x, y, w, h
+			continue
+		}
+		// Nothing clear anywhere: sit beside the event on the side it faces. An
+		// imperfect caption beats leaving it to land on the host's title.
+		w, h := boundaryLabelWidth(s.label), flowLabelH
+		s.hasLabel, s.labelW, s.labelH = true, w, h
+		s.labelX = s.x + s.w + flowLabelGap
+		if s.labelUp {
+			s.labelY = s.y - h - flowLabelGap
+		} else {
+			s.labelY = s.y + s.h + flowLabelGap
+		}
+	}
+}
+
+// shapeLabelCandidates rings a shape with caption positions, best first: the side
+// the shape faces before the other, and beside it before above or below — a
+// boundary caption reads as belonging to its event when it sits next to it.
+func shapeLabelCandidates(box lnode, up bool, w, h int) []point {
+	near, far := box.y-h-flowLabelGap, box.y+box.h+flowLabelGap // above, below
+	if !up {
+		near, far = far, near
+	}
+	right, left := box.x+box.w+flowLabelGap, box.x-w-flowLabelGap
+	midY := box.y + box.h/2 - h/2
+	return []point{
+		{right, near}, {left, near}, // beside, on the facing side
+		{right, midY}, {left, midY}, // level with the event
+		{box.x + box.w/2 - w/2, near}, // centred on the facing side
+		{right, far}, {left, far},     // the far side, last
+	}
+}
+
+// fitLabel finds a caption box: for each wrap shape in turn, the first candidate
+// position that clears every shape, every edge, and every caption already placed.
+// Reports whether anything fitted at all.
+//
+// Trying the wrap shapes outermost means a caption stays on one line wherever one
+// line fits, and only reflows where the picture is tight — the renderer wraps text
+// into whatever box it is given, so the width is the placer's to spend.
+func fitLabel(cands func(lnode, bool, int, int) []point, box lnode, up bool, text string, lo *laidOut) (x, y, w, h int, ok bool) {
+	full := boundaryLabelWidth(text)
+	for _, lines := range labelWraps {
+		w, h := wrapWidth(full, lines), flowLabelH*lines
+		for _, c := range cands(box, up, w, h) {
+			if labelBoxClear(c, w, h, lo) {
+				return c.x, c.y, w, h, true
+			}
+		}
+	}
+	return 0, 0, 0, 0, false
+}
+
 func placeFlowLabels(lo *laidOut) {
 	for i := range lo.edges {
 		e := &lo.edges[i]
 		if e.label == "" || len(e.pts) < 2 {
 			continue
 		}
-		w, h := boundaryLabelWidth(e.label), flowLabelH
-		cands := flowLabelCandidates(e.pts, w, h)
-		for _, c := range cands {
-			if flowLabelClear(c, w, h, lo) {
-				e.hasLabel, e.labelX, e.labelY, e.labelW, e.labelH = true, c.x, c.y, w, h
+		full := boundaryLabelWidth(e.label)
+		// A caption's width is a choice, not a constraint: bpmn-js reflows the text
+		// into whatever box it is given, so a caption too wide for the gap beside its
+		// line can be asked to wrap and try again. Widen the search over shapes of the
+		// same caption — one line, then two, then three — before settling.
+		for _, lines := range labelWraps {
+			w, h := wrapWidth(full, lines), flowLabelH*lines
+			for _, c := range flowLabelCandidates(e.pts, w, h) {
+				if labelBoxClear(c, w, h, lo) {
+					e.hasLabel, e.labelX, e.labelY, e.labelW, e.labelH = true, c.x, c.y, w, h
+					break
+				}
+			}
+			if e.hasLabel {
 				break
 			}
 		}
-		// Nothing clear: take the first candidate anyway. A caption that sits by its
-		// own line beats one the renderer drops on the riser.
-		if !e.hasLabel && len(cands) > 0 {
-			e.hasLabel, e.labelX, e.labelY, e.labelW, e.labelH = true, cands[0].x, cands[0].y, w, h
+		// Nothing fits at any shape: take the first candidate anyway. A caption that
+		// sits by its own line beats one the renderer drops on the riser.
+		if !e.hasLabel {
+			if cands := flowLabelCandidates(e.pts, full, flowLabelH); len(cands) > 0 {
+				e.hasLabel, e.labelX, e.labelY, e.labelW, e.labelH = true, cands[0].x, cands[0].y, full, flowLabelH
+			}
 		}
 	}
 }
@@ -1367,34 +1445,60 @@ func flowLabelCandidates(pts []point, w, h int) []point {
 		p, q := pts[k-1], pts[k]
 		switch {
 		case p.y == q.y && p.x != q.x: // horizontal: above, then below
-			midX := (p.x + q.x) / 2
-			out = append(out,
-				point{midX - w/2, p.y - flowLabelGap - h},
-				point{midX - w/2, p.y + flowLabelGap})
+			above, below := p.y-flowLabelGap-h, p.y+flowLabelGap
+			for _, x := range alongSegment(p.x, q.x, w) {
+				out = append(out, point{x, above}, point{x, below})
+			}
 		case p.x == q.x && p.y != q.y: // vertical: right, then left
-			midY := (p.y + q.y) / 2
-			out = append(out,
-				point{p.x + flowLabelGap, midY - h/2},
-				point{p.x - flowLabelGap - w, midY - h/2})
+			right, left := p.x+flowLabelGap, p.x-flowLabelGap-w
+			for _, y := range alongSegment(p.y, q.y, h) {
+				out = append(out, point{right, y}, point{left, y})
+			}
 		}
 	}
 	return out
 }
 
-// flowLabelClear reports whether a caption box at p avoids every shape and is
-// struck by no edge. Containers are skipped — a label inside an expanded subprocess
-// or a lane band is where it belongs — matching the layout invariants.
-func flowLabelClear(p point, w, h int, lo *laidOut) bool {
+// alongSegment lists where a caption of extent size may start along a segment
+// running from a to b: centred first, then slid to either end. A caption pinned to
+// the midpoint has nowhere to go when something crosses the line exactly there —
+// another branch's riser through the gap beside a gateway does precisely that — and
+// reflowing it narrower does not help, because a narrower box centred on the same
+// point still straddles the crossing.
+func alongSegment(a, b, size int) []int {
+	lo, hi := minInt(a, b), maxInt(a, b)
+	mid := (lo+hi)/2 - size/2
+	if hi-lo <= size {
+		return []int{mid} // no room to slide
+	}
+	return []int{mid, hi - size, lo}
+}
+
+// labelBoxClear reports whether a caption box at p avoids every shape, is struck by
+// no edge, and does not land on a caption already placed. Containers are skipped —
+// a label inside an expanded subprocess or a lane band is where it belongs —
+// matching the layout invariants.
+//
+// Checking captions against each other is what lets the two placers share this: a
+// boundary caption and a flow caption competing for the same gap would otherwise
+// each be "clear" of everything the other could see.
+func labelBoxClear(p point, w, h int, lo *laidOut) bool {
 	box := lnode{x: p.x, y: p.y, w: w, h: h}
+	overlaps := func(x, y, bw, bh int) bool {
+		return p.x < x+bw && x < p.x+w && p.y < y+bh && y < p.y+h
+	}
 	for _, s := range lo.shapes {
-		if s.expanded || s.horizontal {
-			continue
+		if !s.expanded && !s.horizontal && overlaps(s.x, s.y, s.w, s.h) {
+			return false
 		}
-		if p.x < s.x+s.w && s.x < p.x+w && p.y < s.y+s.h && s.y < p.y+h {
+		if s.hasLabel && overlaps(s.labelX, s.labelY, s.labelW, s.labelH) {
 			return false
 		}
 	}
 	for _, e := range lo.edges {
+		if e.hasLabel && overlaps(e.labelX, e.labelY, e.labelW, e.labelH) {
+			return false
+		}
 		for k := 1; k < len(e.pts); k++ {
 			if segmentCutsNode(e.pts[k-1], e.pts[k], box) {
 				return false
