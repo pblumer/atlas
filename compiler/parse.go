@@ -388,17 +388,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		b.SetInstanceTtl(nanos)
 	}
 	ids := make(map[string]int32, len(proc.StartEvents)+len(proc.ServiceTasks)+len(proc.EndEvents))
-	register := func(id string, nodeID int32) error {
-		if id == "" {
-			return fmt.Errorf("compiler: element with empty id")
-		}
-		if _, dup := ids[id]; dup {
-			return fmt.Errorf("compiler: duplicate element id %q", id)
-		}
-		ids[id] = nodeID
-		b.SetElementBpmnId(nodeID, id) // retain for the live diagram overlay
-		return nil
-	}
+	reg := &registrar{b: b, ids: ids}
 
 	// Fold <transaction> subprocesses into SubProcesses (marked IsTransaction) before any
 	// scope walk, so a transaction is registered, wired, and validated as the subprocess it
@@ -413,8 +403,16 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	// Register every flow node — the process root and, recursively, each embedded
 	// subprocess scope — then require a root-scope start event before wiring flows.
 	// Data objects and I/O mappings below stay process-scoped (ADR-0074).
-	if err := registerScope(b, ids, register, resolveMessage, resolveSignal, resolveError, resolveEscalation, &proc.xmlFlowContent); err != nil {
-		return nil, err
+	walkErr := registerScope(b, reg, resolveMessage, resolveSignal, resolveError, resolveEscalation, &proc.xmlFlowContent)
+	// A rejected id is reported ahead of whatever else the walk found. Every step
+	// after registration resolves elements through ids, so an error raised once an
+	// id has been rejected is more likely a consequence of that rejection than an
+	// independent problem — and the author has to fix the id either way.
+	if reg.err != nil {
+		return nil, reg.err
+	}
+	if walkErr != nil {
+		return nil, walkErr
 	}
 
 	if !b.hasStartEvent() {
