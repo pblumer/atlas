@@ -2362,7 +2362,7 @@ function standardLoopHTML(sl, strip) {
       </select></label>
     <label class="field"><span>Max iterations <span class="muted">(optional)</span></span>
       <input type="number" min="1" id="f-mi-loopmax" value="${esc(max)}" placeholder="no limit"/></label>
-    <p class="muted" style="font-size:12px">Runs the activity again and again while <b>repeat while</b> holds — one run at a time, each with a 1-based <code>loopCounter</code> the condition can read. What a run writes stays visible to the next run and to the rest of the process, so the loop can work towards its own exit. <b>Max iterations</b> is a hard stop; give a condition, a cap, or both.</p>`;
+    <p class="muted" style="font-size:12px">Runs the activity again and again while <b>repeat while</b> holds — one run at a time, each with a 1-based <code>loopCounter</code> the condition can read. What a run writes stays visible to the next run and to the rest of the process, so the loop can work towards its own exit. <b>Max iterations</b> is a hard stop; give a condition, a cap, or both. Without a cap the engine stops a loop after <b>1000</b> runs with an incident you can resolve to grant 1000 more — a backstop for a condition that never turns false, not a limit on a cap you set yourself.</p>`;
 }
 
 // saveMultiInstance writes (or clears) an activity's bpmn:MultiInstanceLoopCharacteristics

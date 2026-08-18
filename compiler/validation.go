@@ -76,6 +76,12 @@ const (
 	// A start-event FEEL schedule is compiler-constant (references no variables, ADR-0056), so it
 	// evaluates the same way at deploy as at arm and can be checked without an instance.
 	RuleTimerStartSchedule = "timer.start-schedule"
+	// RuleLoopUnbounded marks a standard loop whose only bound is its FEEL condition
+	// (ADR-0133): nothing in the model says how often it may run, so a condition that
+	// never turns false loops until the instance is cancelled. A warning, not an error
+	// — such a loop is legal BPMN and often correct — and the engine's safety ceiling
+	// stops a runaway; the warning is what turns the bound into a stated decision.
+	RuleLoopUnbounded = "loop.unbounded"
 )
 
 // Rule slugs for whole-model dry-run findings that [ValidateModel] raises outside
@@ -122,6 +128,7 @@ func Validate(cp *CompiledProcess) []Problem {
 	ps = append(ps, checkErrorHandling(cp)...)
 	ps = append(ps, checkTransactions(cp)...)
 	ps = append(ps, checkTimerStartSchedules(cp)...)
+	ps = append(ps, checkLoopBounds(cp)...)
 	return ps
 }
 
@@ -545,6 +552,33 @@ func checkTimerStartSchedules(cp *CompiledProcess) []Problem {
 				fmt.Sprintf("%s has a constant FEEL timer schedule that does not resolve: %s",
 					describeNode(cp, s.ElementId), err)))
 		}
+	}
+	return ps
+}
+
+// checkLoopBounds warns about a standard loop that states no bound of its own
+// (ADR-0133): with a <loopCondition> but no loopMaximum, how often the activity runs
+// is decided entirely at runtime, and a condition that never turns false would repeat
+// until the instance is cancelled. The engine caps such a loop with a safety ceiling
+// and raises an incident rather than spinning, so this is a warning — the model still
+// deploys and runs — nudging the author to say the bound out loud instead of leaning
+// on the engine's backstop. A multi-instance needs no such warning: its collection or
+// cardinality is the bound.
+func checkLoopBounds(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	for id := range cp.nodes {
+		idx := cp.nodes[id].MultiInstance
+		if idx < 0 {
+			continue
+		}
+		d := &cp.multiInstances[idx]
+		if !d.Standard || d.LoopMaximum > 0 {
+			continue
+		}
+		ps = append(ps, problem(cp, int32(id), SeverityWarning, RuleLoopUnbounded,
+			fmt.Sprintf("%s repeats while its loop condition holds and sets no maximum: "+
+				"if the condition never turns false the engine stops it after %d runs with an incident. "+
+				"Set a loop maximum to state the bound.", describeNode(cp, int32(id)), SafeLoopCeiling)))
 	}
 	return ps
 }

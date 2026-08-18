@@ -1,9 +1,41 @@
 # ADR-0133: Standard loop activities (the ↻ marker)
 
-- **Status:** Accepted (amended 2026-08-17: every activity kind loops)
+- **Status:** Accepted (amended 2026-08-17: every activity kind loops; 2026-08-18: a safety ceiling for an unbounded loop)
 - **Date:** 2026-08-17
 - **Deciders:** Atlas engine team
 
+> **Amendment (2026-08-18) — a safety ceiling, reversing the "no hidden ceiling"
+> decision below.** The original reasoning was symmetry: a cyclic sequence flow can
+> already loop forever, so singling out the ↻ marker for a cut-off would be arbitrary.
+> That symmetry is real for the *engine* but not for the *author*. A cycle is drawn —
+> you can see the edge going back — while a standard loop's repetition lives inside a
+> marker and its bound is a FEEL condition evaluated at runtime, where a typo or an
+> unset variable yields a condition that is simply always true, with nothing on the
+> diagram to show it. (An evaluation *error* already ends the loop; it is the
+> successfully-true condition that runs away.) Such a loop over an activity with no
+> external wait — a script task — spins the partition's single writer, so it does not
+> just burn its own instance.
+>
+> So a standard loop that states **no** `loopMaximum` now gets `SafeLoopCeiling` (1000)
+> runs, after which it **parks with an incident** on its body: the loop is stopped, not
+> finished — the body takes no outgoing flow, so nothing downstream runs on a result it
+> never reached — and the incident says how many runs happened and what resolving it
+> does. Resolving grants another 1000, counting on from where it stopped rather than
+> restarting, so a legitimately long loop can be carried through by hand while a broken
+> one keeps stopping. The count rides on the body scope as the standard `loopCounter`
+> (shadowed by each iteration's own, dropped rather than promoted when the loop ends),
+> so it is a persisted event and survives replay like everything else; the incident is
+> job-less, resolved through the same path a timer-schedule incident uses.
+>
+> The ceiling is a backstop for an *unstated* bound, never a limit on a stated one: a
+> loop that says `loopMaximum` is governed by that number alone, however far past 1000,
+> because the author said it out loud and the deploy validated it. Complementing the
+> runtime net, the compiler now raises a `loop.unbounded` **warning** (never an error)
+> for a condition-only loop, naming the ceiling — so the bound becomes a decision the
+> author makes rather than a backstop they discover. Cyclic sequence flows remain
+> unprotected: that is a known asymmetry, and closing it would need a general cycle
+> budget, which this ADR does not attempt.
+>
 > **Amendment (2026-08-17).** The supported activity set below was inherited from
 > ADR-0077 and left business rule, manual and undefined tasks ignoring *both* loop
 > markers; the follow-up noted at the end of this ADR is now done. Those three kinds
@@ -145,10 +177,13 @@ rule is: *a looping activity leaves behind what the same activity would have lef
 running once.*
 
 The bound is `loopMaximum`, an optional hard cap; a loop with neither a condition nor a
-maximum is refused at deploy. Atlas does **not** impose a hidden global iteration
+maximum is refused at deploy. ~~Atlas does **not** impose a hidden global iteration
 ceiling: a cyclic sequence flow can already loop forever and BPMN allows it, so a
 silent cut-off would be a surprise of a different kind. The cap is the author's, stated
-in the model.
+in the model.~~ **Superseded by the 2026-08-18 amendment above:** a loop that states no
+maximum now parks with an incident after `SafeLoopCeiling` runs. The cut-off is not
+silent, which is what the original objection was really about, and a stated cap is
+still the author's alone.
 
 For the Modeler, the section became one **Mode** select over all four states, reading
 `loopCharacteristics` by `$type`. Because bpmn-js draws the marker from exactly the

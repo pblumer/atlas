@@ -14,6 +14,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A runaway loop parks instead of spinning** ([ADR-0133](docs/adr/0133-standard-loop-activities.md)
+  amended, reversing its "no hidden ceiling" decision): a standard loop that states no
+  `loopMaximum` is bounded only by a FEEL condition, and a condition that is simply
+  always true — a typo, an unset variable — repeated forever, spinning the partition's
+  single writer for an activity with no external wait. Such a loop now gets **1000**
+  runs and then **parks with an incident** on its body: stopped, not finished, so
+  nothing downstream runs on a result it never reached, and the incident says how many
+  runs happened. Resolving it grants another 1000, counting on from where it stopped
+  rather than restarting, so a legitimately long loop can be carried through by hand.
+  The ceiling never limits a bound the model states: a loop with `loopMaximum` is
+  governed by that number alone, however far past 1000. Alongside it the compiler warns
+  (`loop.unbounded`, never an error) about a condition-only loop, naming the ceiling, so
+  the bound becomes a decision rather than a backstop discovered at runtime. The count
+  survives restarts like any other state; a cyclic sequence flow remains unprotected, a
+  known asymmetry noted in the ADR.
+
 - **Retries is a property of every job-backed task**
   ([ADR-0135](docs/adr/0135-retries-as-a-task-property.md)): the retry budget the incident
   model spends (ADR-0061) can now be authored on **every task that creates a job** — the

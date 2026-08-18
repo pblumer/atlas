@@ -689,6 +689,12 @@ func rearmTimerElement(c *ProcessingContext, elKey uint64) {
 	if cp == nil {
 		return
 	}
+	// A parked runaway loop carries a job-less incident too (ADR-0133, amended), on the
+	// loop body rather than on a timer element: resolving it resumes the loop.
+	if ei.MultiInstance == miBody && standardLoop(cp, ei.ElementId) {
+		resumeStandardLoop(c, elKey, ei)
+		return
+	}
 	node := cp.Node(ei.ElementId)
 	switch node.Type {
 	case compiler.TypeMockupTask:
@@ -3449,6 +3455,46 @@ func standardLoopContinues(c *ProcessingContext, d *compiler.MultiInstanceDetail
 	return err == nil && expr.IsTrue(v)
 }
 
+// parkRunawayLoop stops a standard loop that has run SafeLoopCeiling times without
+// stating a maximum, and raises an incident on its body (ADR-0133, amended). The body
+// stays active and takes no outgoing flow — the loop is parked, not finished, so
+// nothing downstream runs on a result the loop never reached. done (the number of runs
+// so far) is written to the body's own scope so a resolve resumes the count instead of
+// restarting it; it rides there as the standard loopCounter, shadowed by each
+// iteration's own, and is dropped rather than promoted when the loop ends.
+func parkRunawayLoop(c *ProcessingContext, bodyKey uint64, body *model.ElementInstanceValue, done int) {
+	c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+		ScopeKey: bodyKey, Name: loopCounterVar, Kind: model.VarNumber, Text: strconv.Itoa(done),
+	})
+	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+		ProcessInstanceKey: body.ProcessInstanceKey,
+		ElementInstanceKey: bodyKey,
+		ElementId:          body.ElementId,
+		RaisedAt:           c.Now(),
+		Message: "loop ran " + strconv.Itoa(done) +
+			" times without a loop maximum; resolve to run " + strconv.Itoa(compiler.SafeLoopCeiling) + " more",
+	})
+}
+
+// resumeStandardLoop continues a parked runaway loop when its incident is resolved: it
+// seeds the next iteration, counting on from where the loop stopped (the body scope's
+// loopCounter), so the operator grants another SafeLoopCeiling runs rather than
+// restarting the loop. A vanished body — its instance was cancelled — is a no-op.
+func resumeStandardLoop(c *ProcessingContext, bodyKey uint64, ei *model.ElementInstanceValue) {
+	cp := c.process(ei.ProcessDefKey)
+	d := cp.MultiInstance(cp.Node(ei.ElementId).MultiInstance)
+	// The body scope holds the *count* of finished runs, which is already the next
+	// iteration's 0-based index — unlike an iteration's own 1-based loopCounter, so this
+	// deliberately does not go through iterationIndex.
+	next := 0
+	if v := c.GetVariable(bodyKey, loopCounterVar); v != nil {
+		if n, err := strconv.Atoi(v.Text); err == nil && n > 0 {
+			next = n
+		}
+	}
+	seedMultiInstanceIteration(c, bodyKey, ei, cp, d, next, expr.Null)
+}
+
 // standardLoop reports whether a node's loop marker is a standard loop rather than a
 // multi-instance one (ADR-0133). The two share the compiled loop table and the body/
 // iteration runtime, but differ in what an iteration's result means: multi-instance
@@ -3533,6 +3579,15 @@ func finishMultiInstanceIteration(c *ProcessingContext, key uint64, ei *model.El
 		// The condition still holds (and the cap is not reached): run the activity again.
 		if again {
 			if body := c.GetElementInstance(bodyKey); body != nil {
+				// A loop that states no maximum is bounded only by a FEEL condition, which
+				// may never turn false. Every SafeLoopCeiling runs it parks with an incident
+				// rather than spinning on the partition (ADR-0133, amended): the operator
+				// sees why it stopped and resolves it to grant another ceiling's worth. A
+				// loop that states its own maximum is governed by that number instead.
+				if d.LoopMaximum == 0 && (idx+1)%compiler.SafeLoopCeiling == 0 {
+					parkRunawayLoop(c, bodyKey, body, idx+1)
+					return
+				}
 				seedMultiInstanceIteration(c, bodyKey, body, cp, d, idx+1, expr.Null)
 				return // the body completes after this next iteration, not yet
 			}
@@ -3561,6 +3616,9 @@ func promoteMultiInstanceOutput(c *ProcessingContext, bodyKey uint64, ei *model.
 		// (ADR-0133). Promoting all of it to the enclosing scope makes a looping activity
 		// leave behind exactly what the same activity would have left running once.
 		c.VariablesOfScope(bodyKey, func(v model.VariableValue) {
+			if v.Name == loopCounterVar {
+				return // the parked-run bookkeeping of parkRunawayLoop, not the loop's work
+			}
 			v.ScopeKey = ei.FlowScopeKey
 			c.AppendVariableEvent(model.IntentVariableCreated, v)
 		})
