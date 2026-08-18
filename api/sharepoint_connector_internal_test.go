@@ -12,7 +12,7 @@ import (
 )
 
 // TestSharePointConnectorValidationAndCreate covers the create endpoint's
-// SharePoint-specific input checks and a successful create (ADR-0140).
+// SharePoint-specific input checks and a successful create (ADR-0141).
 func TestSharePointConnectorValidationAndCreate(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	h := srv.Handler()
@@ -46,7 +46,7 @@ func TestSharePointConnectorValidationAndCreate(t *testing.T) {
 
 // TestBuildSharePointClients proves buildSharePointClients builds a Graph client from a
 // valid OAuth bundle and skips a disabled, non-sharepoint, or malformed-bundle record
-// (its tasks park) rather than failing the whole rebuild (ADR-0140).
+// (its tasks park) rather than failing the whole rebuild (ADR-0141).
 func TestBuildSharePointClients(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	t.Setenv("ATLAS_CONNECTOR_SP_BUNDLE_TOKEN", `{"method":"clientCredentials","tenantId":"t","clientId":"c","clientSecret":"s"}`)
@@ -83,7 +83,7 @@ func TestBuildSharePointClientsLoadError(t *testing.T) {
 
 // TestSharePointConnectorLifecycle drives a SharePoint connector through create, list,
 // and delete, exercising the create branch and the sharepoint arm of the registry
-// rebuild end to end (ADR-0140).
+// rebuild end to end (ADR-0141).
 func TestSharePointConnectorLifecycle(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	h := srv.Handler()

@@ -162,7 +162,7 @@ function calleeXML(pid, name) {
 let current; // active modeler/viewer, destroyed on remount
 let onLayoutKey; // document-level F8 handler for auto-layout, removed on remount
 let liveTimer; // active live-overlay poll, cleared on remount/leave
-let collab; // active live collaboration session (ADR-0139), closed on remount
+let collab; // active live collaboration session (ADR-0140), closed on remount
 // generation is bumped by cleanup() on every navigation/remount. A mount captures
 // it right after its own cleanup() and re-checks it after each await, so a slow
 // mount that a newer navigation has superseded bails out *before* it builds a
@@ -599,7 +599,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   wireTokenSim(root, modeler);
 
   // Only a saved draft has a stable id to key a live session on; a fresh unsaved
-  // diagram or a read-only deployment does not co-edit (ADR-0139).
+  // diagram or a read-only deployment does not co-edit (ADR-0140).
   if (draftId != null) collab = attachCollab(modeler, api, draftId, toast);
 }
 
@@ -610,7 +610,6 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
 // elements (compiler/scope_compile.go, compiler/parse.go).
 const UNSUPPORTED_TYPES = {
   "bpmn:ComplexGateway": "Complex gateways aren't supported yet",
-  "bpmn:AdHocSubProcess": "Ad-hoc subprocesses aren't supported yet",
   "bpmn:DataStoreReference": "Data stores aren't supported yet",
 };
 const UNSUPPORTED_EVENT_DEFS = {};
@@ -3810,6 +3809,27 @@ function wireProperties(root, modeler, api, projectId, toast) {
         html += `<p class="muted" style="font-size:12px">Pass variables in and out of this subprocess. <b>Input mappings</b> create variables its inner elements see (its local scope); <b>output mappings</b> promote selected values back to the enclosing scope when it completes.</p>`;
         html += ioMappingsHTML(bo);
         html += multiInstanceHTML(bo); // ADR-0077: run this subprocess once per collection element
+      } else if (bo.$type === "bpmn:AdHocSubProcess") {
+        // An ad-hoc subprocess is a scope whose contained activities run on demand, in any
+        // order, rather than being sequenced from a start event (ADR-0138). What it needs
+        // configuring is how it *finishes*: an optional boolean FEEL completion condition
+        // re-evaluated after each contained activity completes, and whether a holding
+        // condition cancels the still-running activities. Ordering is parallel — every entry
+        // activity starts at once; sequential is refused at deploy, so it is not offered.
+        const cancelRemaining = bo.cancelRemainingInstances !== false;
+        html += `<h3>Ad-hoc subprocess</h3>
+          <p class="muted" style="font-size:12px">Its contained activities are <b>not</b> connected by sequence flows: every activity with no incoming flow starts <b>at once</b> when the subprocess is entered, and runs independently. Use it for flexible, case-management work. With no completion condition below, it finishes when all of them are done.</p>`;
+        html += `<h3>Completion condition (FEEL)</h3>
+          <label class="field"><span>Expression</span>
+            <textarea id="f-adhoccond" rows="2" placeholder="approvals >= 2">${esc((bo.completionCondition && bo.completionCondition.body || "").replace(/^=\s*/, ""))}</textarea></label>
+          <p class="muted" style="font-size:12px">Re-evaluated each time a contained activity completes. The first time it is true the subprocess finishes. Leave empty to finish only when every contained activity is done.</p>`;
+        html += `<label class="field"><span>When it completes</span>
+            <select id="f-adhoccancel">
+              <option value="true" ${cancelRemaining ? "selected" : ""}>Cancel the activities still running</option>
+              <option value="false" ${cancelRemaining ? "" : "selected"}>Let them finish first</option>
+            </select></label>
+          <p class="muted" style="font-size:12px">Applies when the completion condition becomes true while other contained activities are still running.</p>`;
+        html += ioMappingsHTML(bo);
       } else if (bo.$type === "bpmn:CallActivity") {
         // A call activity invokes a *separate* deployed process as a child instance
         // (ADR-0076). It is configured by its <zeebe:calledElement>: which process to
@@ -4982,6 +5002,33 @@ function wireProperties(root, modeler, api, projectId, toast) {
       }));
     }
 
+    // An ad-hoc subprocess's completion condition lives on the container as a
+    // <completionCondition> FormalExpression, and cancelRemainingInstances is a plain
+    // attribute (ADR-0138). Clearing the condition removes it, so the subprocess finishes
+    // when every contained activity is done.
+    const fadhoccond = body.querySelector("#f-adhoccond");
+    if (fadhoccond) {
+      fadhoccond.addEventListener("change", () => savePreservingPanel(() => {
+        const raw = (fadhoccond.value || "").trim();
+        if (raw === "") {
+          try { modeling.updateProperties(element, { completionCondition: undefined }); } catch { /* stale */ }
+          return;
+        }
+        const moddle = modeler.get("moddle");
+        const cexpr = moddle.create("bpmn:FormalExpression", { body: raw.startsWith("=") ? raw : "= " + raw });
+        cexpr.$parent = element.businessObject;
+        try { modeling.updateProperties(element, { completionCondition: cexpr }); } catch { /* stale */ }
+      }));
+    }
+    const fadhoccancel = body.querySelector("#f-adhoccancel");
+    if (fadhoccancel) {
+      fadhoccancel.addEventListener("change", () => savePreservingPanel(() => {
+        // Only the non-default (false) is written, so a default ad-hoc stays attribute-free.
+        const cancel = fadhoccancel.value === "true";
+        try { modeling.updateProperties(element, { cancelRemainingInstances: cancel ? undefined : false }); } catch { /* stale */ }
+      }));
+    }
+
     // Upgrade every FEEL field in this panel into a code editor (highlighting +
     // completion + live validation + a Test panel). The textareas keep their
     // identity, so the change-to-save handlers wired above are untouched.
@@ -4994,6 +5041,7 @@ function wireProperties(root, modeler, api, projectId, toast) {
       enhanceFeel(body, "#f-expr", feelVars, validate, evaluate);
       enhanceFeel(body, "#f-cond", feelVars, validate, evaluate);
       enhanceFeel(body, "#f-condition", feelVars, validate, evaluate);
+      enhanceFeel(body, "#f-adhoccond", feelVars, validate, evaluate);
       enhanceFeel(body, "#f-corrkey", feelVars, validate, evaluate);
       enhanceScript(body, modeler, api, feelVars);
       // Value-or-expression fields carry a Camunda-style fx toggle: switch them to
@@ -5158,7 +5206,7 @@ function wireActions(root, modeler, api, toast, projectId) {
       docTitle(`${d.name || d.processId || "Draft"} · Modeler`);
       toast(`Saved draft “${d.name || d.processId}”`, "ok");
       // Draft is now persisted: clear the collab unsaved-work guard so a co-editor's
-      // deferred change (held back to protect these edits) can sync in (ADR-0139).
+      // deferred change (held back to protect these edits) can sync in (ADR-0140).
       if (collab && collab.markSaved) collab.markSaved();
     } catch (e) {
       toast("save failed: " + e.message, "err");

@@ -22,14 +22,14 @@ type csvVarStore interface {
 
 // csvProcessLookup resolves a process-definition key to its compiled process, so the
 // worker can read a CSV connector task's authored layout from the model it belongs to
-// (ADR-0138) — mirroring the mail/rest/DMN workers' ProcessLookup.
+// (ADR-0139) — mirroring the mail/rest/DMN workers' ProcessLookup.
 type csvProcessLookup func(defKey uint64) *compiler.CompiledProcess
 
 // csvSourceVar / csvConfigVar / csvRowsVar / csvRowCountVar are the conventional
 // variable names the CSV-import worker reads and writes on the legacy path (ADR-0087):
 // the upload user-task form supplies csvSourceVar; a preceding script task supplies
 // csvConfigVar. csvSourceVar and csvRowsVar are also the defaults a csvConnector uses
-// when its source/result variables are unset (ADR-0138).
+// when its source/result variables are unset (ADR-0139).
 const (
 	csvSourceVar   = "csvText"
 	csvConfigVar   = "columnConfig"
@@ -48,7 +48,7 @@ const csvMaxScopeDepth = 64
 //
 // It serves two authoring shapes on the one reserved job type:
 //
-//   - A first-class CSV-to-JSON connector task (ADR-0138): the source variable,
+//   - A first-class CSV-to-JSON connector task (ADR-0139): the source variable,
 //     delimiter, header handling, columns, and result variable are authored on the
 //     task and compiled into a connector detail, which the worker reads from the
 //     compiled process (like the mail/rest workers). This is preferred when present.
@@ -68,7 +68,7 @@ func csvImportHandler(store csvVarStore, lookup csvProcessLookup) job.OutputHand
 		if !ok {
 			return nil, nil // element instance gone (e.g. already completed); nothing to do
 		}
-		// Prefer the compiled connector detail (ADR-0138) when the task is an
+		// Prefer the compiled connector detail (ADR-0139) when the task is an
 		// atlas:csvConnector; fall back to the ADR-0087 variable convention otherwise.
 		// The runner dispatches this worker by the CSV job type alone, so a
 		// TypeConnectorTask reaching it is always a CSV connector.
@@ -87,7 +87,7 @@ func csvImportHandler(store csvVarStore, lookup csvProcessLookup) job.OutputHand
 	}
 }
 
-// csvRowsFromConnector runs a CSV-to-JSON connector task (ADR-0138): it reads the raw
+// csvRowsFromConnector runs a CSV-to-JSON connector task (ADR-0139): it reads the raw
 // text from the authored source variable up the task's scope chain, builds the column
 // layout from the compiled detail (delimiter, header flag, columns), parses it with
 // the same parser the endpoint uses, and returns the JSON rows under the authored

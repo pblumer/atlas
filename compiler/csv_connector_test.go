@@ -6,7 +6,7 @@ import (
 )
 
 // A service task bearing an <atlas:csvConnector> extension is a CSV-to-JSON
-// connector task (ADR-0138): the in-process CSV worker parses the named source
+// connector task (ADR-0139): the in-process CSV worker parses the named source
 // variable's text against the model-authored layout into a rows collection via the
 // job path, the whole layout living in the model rather than a columnConfig variable.
 const csvConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>

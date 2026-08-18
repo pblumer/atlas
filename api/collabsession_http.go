@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// HTTP surface for live collaborative modeling sessions (ADR-0139). One SSE
+// HTTP surface for live collaborative modeling sessions (ADR-0140). One SSE
 // stream (join) plus three POST endpoints (presence, lock, change) form the
 // transport: server→client fan-out rides the one-directional event stream, and a
 // client's own actions ride ordinary POSTs. All of it is design-time — it reads
@@ -23,7 +23,7 @@ func sseFrame(w io.Writer, event string, seq uint64, data []byte) {
 }
 
 // draftSessionAccess authorizes a request to join a draft's live session and
-// reports whether it may edit (ADR-0139/0071). A session inherits the sharing
+// reports whether it may edit (ADR-0140/0071). A session inherits the sharing
 // scope of the draft's project: at least viewer to watch, editor/owner to
 // co-edit. A draft with no project (Ungrouped), or whose project no longer
 // exists, stays open — exactly as the draft-content handlers are today, so
@@ -156,12 +156,12 @@ func (s *Server) handleDraftSession(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDraftSessionJoin is the non-streaming way to join a session, for a
-// participant that cannot hold an SSE stream — an AI agent over MCP (ADR-0139
+// participant that cannot hold an SSE stream — an AI agent over MCP (ADR-0140
 // M2). It registers the participant and returns the same sync snapshot the SSE
 // stream sends first (self id, roster, locks); the agent then drives the session
 // with the presence / lock / change POSTs and reads what others did by polling.
 // The agent must call the leave endpoint when done — unlike an SSE client, there
-// is no disconnect to reap it (a TTL reaper is an ADR-0139 follow-up).
+// is no disconnect to reap it (a TTL reaper is an ADR-0140 follow-up).
 func (s *Server) handleDraftSessionJoin(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
@@ -196,7 +196,7 @@ func (s *Server) handleDraftSessionJoin(w http.ResponseWriter, r *http.Request) 
 
 	// A joined-over-MCP participant has no SSE stream to reap it on disconnect, so
 	// it joins detached and is kept alive by polling; the reaper evicts it if it
-	// falls silent (ADR-0139). Its project role decides whether it may edit.
+	// falls silent (ADR-0140). Its project role decides whether it may edit.
 	_, sync := s.collab.joinDetachedAs(id, userID, name, canEdit)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
@@ -204,7 +204,7 @@ func (s *Server) handleDraftSessionJoin(w http.ResponseWriter, r *http.Request) 
 }
 
 // handleDraftSessionPoll drains a participant's buffered frames and returns them
-// with the current roster and locks (ADR-0139 M2). It is the agent's read side —
+// with the current roster and locks (ADR-0140 M2). It is the agent's read side —
 // the request/response substitute for the SSE stream — and its liveness signal.
 func (s *Server) handleDraftSessionPoll(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
@@ -228,7 +228,7 @@ func (s *Server) handleDraftSessionPoll(w http.ResponseWriter, r *http.Request) 
 	_, _ = w.Write(out)
 }
 
-// handleDraftSessionLeave removes a participant and releases its locks (ADR-0139
+// handleDraftSessionLeave removes a participant and releases its locks (ADR-0140
 // M2). It is idempotent: leaving a session you are not in still returns 204, so a
 // retrying agent never wedges on cleanup.
 func (s *Server) handleDraftSessionLeave(w http.ResponseWriter, r *http.Request) {
@@ -291,7 +291,7 @@ func (s *Server) handleDraftSessionPresence(w http.ResponseWriter, r *http.Reque
 
 // handleDraftSessionLock acquires or releases a per-element edit lock. Acquiring
 // an element another participant holds is a 409 Conflict — the boundary the
-// first-cut concurrency model enforces (ADR-0139).
+// first-cut concurrency model enforces (ADR-0140).
 func (s *Server) handleDraftSessionLock(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var body struct {

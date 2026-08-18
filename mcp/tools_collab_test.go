@@ -23,7 +23,7 @@ const collabDraftBPMN = `<?xml version="1.0" encoding="UTF-8"?>
   </bpmn:process>
 </bpmn:definitions>`
 
-// TestCollabSessionToolScenario drives the ADR-0139 M2 flow entirely through MCP
+// TestCollabSessionToolScenario drives the ADR-0140 M2 flow entirely through MCP
 // tools: save a draft, join its live session as an agent, poll, lock, change,
 // announce presence, and leave.
 func TestCollabSessionToolScenario(t *testing.T) {

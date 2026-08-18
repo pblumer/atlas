@@ -142,7 +142,7 @@ const CsvImportJobTypeIndex int32 = 11
 // SharePointJobType is the reserved job type a SharePoint connector task carries.
 // The in-process SharePoint connector worker subscribes to it to create a list item
 // in a model-authored SharePoint site/list through a server-registered SharePoint
-// provider (Microsoft Graph) off the hot path (ADR-0140), the same way the mail
+// provider (Microsoft Graph) off the hot path (ADR-0141), the same way the mail
 // worker subscribes to MailJobType.
 const SharePointJobType = "io.atlas.sharepoint.createitem"
 
@@ -150,7 +150,7 @@ const SharePointJobType = "io.atlas.sharepoint.createitem"
 // occupy in every compiled process: NewBuilder reserves it thirteenth (after the
 // twelve job types above), so it is always 12. This lets a single in-process
 // SharePoint worker subscribe by one global index across every deployed process, the
-// same way the mail worker uses MailJobTypeIndex (ADR-0140).
+// same way the mail worker uses MailJobTypeIndex (ADR-0141).
 const SharePointJobTypeIndex int32 = 12
 
 // RemedyJobType is the reserved job type a BMC Remedy connector task carries. The
@@ -244,6 +244,7 @@ type Builder struct {
 	errorEnds          []ErrorEndDetail     // error end events (ADR-0089)
 	escalations        []EscalationDetail   // shared by escalation throw and end events (ADR-0125)
 	conditionals       []ConditionalDetail  // conditional intermediate catch events (ADR-0137)
+	adHocs             []AdHocDetail        // ad-hoc subprocess containers (ADR-0138)
 	compensationThrows []CompensationDetail // shared by compensation throw and end events (ADR-0103)
 	timerStarts        []TimerStartDetail
 	dataObjects        []CompiledDataObject
@@ -397,6 +398,18 @@ func (b *Builder) SetStandardLoop(nodeID int32, testBefore bool, loopMaximum int
 // linked back to it only by the children's FlowScope. Create it first, then
 // PushScope(its id) before adding its children so they land in its scope (ADR-0074).
 func (b *Builder) AddSubProcess() int32 { return b.addNode(TypeSubProcess, -1) }
+
+// AddAdHocSubProcess adds an ad-hoc subprocess container node and returns its element id
+// (ADR-0138). Like an embedded subprocess it is a scope whose inner flow lives in the flat
+// node/flow arrays — create it first, then PushScope(its id) before adding its children — but
+// its contained activities are not sequenced from a start event: on entry the runtime activates
+// every entry activity (a contained node with no incoming flow) at once. d carries the optional
+// FEEL completion condition, the cancel-remaining flag, and the ordering.
+func (b *Builder) AddAdHocSubProcess(d AdHocDetail) int32 {
+	detail := int32(len(b.adHocs))
+	b.adHocs = append(b.adHocs, d)
+	return b.addNode(TypeAdHocSubProcess, detail)
+}
 
 // PushScope opens scope id: every node added until the matching PopScope carries id
 // as its FlowScope. Scopes nest, so the outer scope is saved and restored.
@@ -867,7 +880,7 @@ func (b *Builder) AddUserConnectorTask(cfg UserConnectorConfig) int32 {
 }
 
 // CsvConfig is the deploy-time configuration of a CSV-to-JSON connector task
-// (ADR-0138). Source names the process variable holding the raw CSV text
+// (ADR-0139). Source names the process variable holding the raw CSV text
 // (empty → the worker's default "csvText"); Result the variable the parsed rows
 // are written to (empty → "rows"); Delimiter the field delimiter (empty → ",");
 // HasHeader whether the first row is a header; Columns the field names (empty →
@@ -886,7 +899,7 @@ type CsvConfig struct {
 // the reserved CsvImportJobType so the in-process CSV worker picks it up, reads the
 // raw text from the named source variable, parses it against the authored
 // delimiter/header/columns with the same parser the ingestion endpoint uses, and
-// writes the JSON rows (and a rowCount) into the result variable (ADR-0138). The
+// writes the JSON rows (and a rowCount) into the result variable (ADR-0139). The
 // layout lives in the model — unlike the ADR-0087 convention, which read it from a
 // columnConfig variable — so nothing but the file arrives at runtime.
 func (b *Builder) AddCsvConnectorTask(cfg CsvConfig) int32 {
@@ -916,7 +929,7 @@ func (b *Builder) AddCsvConnectorTask(cfg CsvConfig) int32 {
 }
 
 // SharePointConfig is the deploy-time configuration of a SharePoint connector task
-// (ADR-0140). Connector names the server-registered SharePoint provider (its Graph
+// (ADR-0141). Connector names the server-registered SharePoint provider (its Graph
 // base and OAuth credential live server-side, never in the model); Site and List
 // address the target list, and Fields are the created item's column values — all
 // literal-or-FEEL values (the parser compiles the FEEL ones) evaluated over the
@@ -936,7 +949,7 @@ type SharePointConfig struct {
 // the reserved SharePointJobType so the in-process SharePoint worker picks it up,
 // evaluates any FEEL site/list/field values over the instance's variables, resolves
 // the named connector's Graph client, creates the list item, writes the created
-// item's JSON into ResultVar, and completes the job (ADR-0140). The Graph base and
+// item's JSON into ResultVar, and completes the job (ADR-0141). The Graph base and
 // credentials are resolved server-side from the named connector, never authored in
 // the model — mirroring the mail connector (ADR-0079).
 func (b *Builder) AddSharePointConnectorTask(cfg SharePointConfig) int32 {
@@ -1611,6 +1624,13 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		n.BoundaryCount = int32(len(boundary)) - n.BoundaryStart
 	}
 
+	// Count incoming flows per node, so a parallel join knows how many tokens to
+	// wait for — and so the ad-hoc grouping below can tell an entry activity (nothing
+	// sequences into it) from one a contained flow reaches (ADR-0138).
+	for _, f := range b.flows {
+		b.nodes[f.Target].IncomingCount++
+	}
+
 	// Group nested start events by their enclosing subprocess into one shared array,
 	// mirroring the boundary-event grouping, so a subprocess behavior seeds its
 	// scope's entry points as an allocation-free slice at runtime. A start event's
@@ -1620,10 +1640,24 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 	for i := range b.nodes {
 		n := &b.nodes[i]
 		n.ScopeStartStart = int32(len(scopeStarts))
-		if n.Type == TypeSubProcess {
+		switch n.Type {
+		case TypeSubProcess:
 			for j := range b.nodes {
 				s := &b.nodes[j]
 				if isStartEvent(s.Type) && s.FlowScope == n.ElementId {
+					scopeStarts = append(scopeStarts, s.ElementId)
+				}
+			}
+		case TypeAdHocSubProcess:
+			// An ad-hoc subprocess has no start event: its scope's entry points are its
+			// *entry activities* — the contained flow nodes nothing sequences into, which
+			// the runtime activates on entry (ADR-0138). A node targeted by a flow inside
+			// the ad-hoc is reached by that flow instead, a boundary event arms on its host,
+			// and an event-subprocess handler is armed as a trigger — none are entries.
+			for j := range b.nodes {
+				s := &b.nodes[j]
+				if s.FlowScope == n.ElementId && s.IncomingCount == 0 &&
+					s.Type != TypeBoundaryEvent && s.EventSub < 0 {
 					scopeStarts = append(scopeStarts, s.ElementId)
 				}
 			}
@@ -1640,7 +1674,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 	for i := range b.nodes {
 		n := &b.nodes[i]
 		n.EventSubStart = int32(len(eventSubs))
-		if n.Type == TypeSubProcess {
+		if n.Type == TypeSubProcess || n.Type == TypeAdHocSubProcess {
 			for j := range b.nodes {
 				h := &b.nodes[j]
 				if h.EventSub >= 0 && h.FlowScope == n.ElementId {
@@ -1713,12 +1747,6 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		n.IOOutCount = int32(len(ioOut)) - n.IOOutStart
 	}
 
-	// Count incoming flows per node, so a parallel join knows how many tokens to
-	// wait for.
-	for _, f := range b.flows {
-		b.nodes[f.Target].IncomingCount++
-	}
-
 	// Only root-scope start events are process entry points — the engine seeds a
 	// token at each when an instance starts. A start event nested in a subprocess is
 	// that scope's entry and is seeded by the subprocess behavior, not at instance
@@ -1778,6 +1806,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		errorEnds:          b.errorEnds,
 		escalations:        b.escalations,
 		conditionals:       b.conditionals,
+		adHocs:             b.adHocs,
 		compensationThrows: b.compensationThrows,
 		timerStarts:        b.timerStarts,
 		dataObjects:        b.dataObjects,

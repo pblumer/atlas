@@ -180,7 +180,7 @@ func (s *Server) buildMailClients() (map[string]mail.Client, error) {
 
 // buildSharePointClients assembles the SharePoint connector clients from the enabled
 // managed connector instances of kind "sharepoint", resolving each instance's OAuth
-// credential bundle from its credentialsRef via the vault (ADR-0140/0041). It reads
+// credential bundle from its credentialsRef via the vault (ADR-0141/0041). It reads
 // the connector store, so callers run it on the run-loop goroutine (the store's
 // owner). It mirrors buildMailClients; provider construction (Graph base + token
 // source) lives in sharepoint.NewProviderClient, and a record whose credential bundle
@@ -202,7 +202,7 @@ func (s *Server) buildSharePointClients() (map[string]sharepoint.Client, error) 
 			Secret:   s.resolveConnectorSecret(c.CredentialsRef),
 		})
 		if err != nil {
-			continue // misconfigured credential: its tasks park until it is fixed (ADR-0140)
+			continue // misconfigured credential: its tasks park until it is fixed (ADR-0141)
 		}
 		clients[c.Name] = client
 	}

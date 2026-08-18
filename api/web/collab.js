@@ -1,4 +1,4 @@
-// collab.js — live collaborative-modeling client (ADR-0139).
+// collab.js — live collaborative-modeling client (ADR-0140).
 //
 // Binds a Modeler canvas to a draft's Server-Sent Events session so co-editors
 // appear in real time: their presence (who is here, what they have selected) and
@@ -8,7 +8,7 @@
 // stream, POST .../session/{presence,lock,change} for actions) — the engine and
 // its invariants are never involved.
 //
-// Concurrency follows the server's first cut (ADR-0139): selecting an element
+// Concurrency follows the server's first cut (ADR-0140): selecting an element
 // acquires a soft lock on it; an element another participant holds is refused
 // (409) and surfaced as a hint, not enforced in the canvas. A peer's change is
 // applied by re-importing the saved draft into the live canvas (viewport and

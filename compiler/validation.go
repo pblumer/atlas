@@ -286,6 +286,14 @@ func checkReachability(cp *CompiledProcess) []Problem {
 				}
 			}
 		}
+		// An ad-hoc subprocess has no start event: entering it activates its entry
+		// activities, so a reached ad-hoc makes those reached and the walk continues
+		// from each (ADR-0138).
+		if cp.nodes[n].Type == TypeAdHocSubProcess {
+			for _, id := range cp.AdHocEntries(n) {
+				push(id)
+			}
+		}
 	}
 	var ps []Problem
 	for id := range cp.nodes {
@@ -636,7 +644,7 @@ func isActivity(t BpmnType) bool {
 	switch t {
 	case TypeServiceTask, TypeScriptTask, TypeScriptJobTask, TypeBusinessRuleTask,
 		TypeUserTask, TypeConnectorTask, TypeTask, TypeReceiveTask, TypeSendTask,
-		TypeMockupTask, TypeSubProcess, TypeCallActivity:
+		TypeMockupTask, TypeSubProcess, TypeAdHocSubProcess, TypeCallActivity:
 		return true
 	default:
 		return false

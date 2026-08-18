@@ -310,7 +310,7 @@ const CONNECTORS = [
   {
     id: "sharepoint", name: "SharePoint", kind: "List item",
     desc: "Creates a list item in a Microsoft SharePoint site from a service task off the processor loop via the Graph API (OAuth2 app-only or refresh-token). The site, list, and item fields are model-authored (FEEL-capable) and the created item's JSON is written into a result variable; the Graph base and credentials are managed below and resolved from the vault. Authored via the SharePoint Connector service-task type.",
-    refs: "ADR-0041 · ADR-0093 · ADR-0140", status: "active", statusLabel: "configurable",
+    refs: "ADR-0041 · ADR-0093 · ADR-0141", status: "active", statusLabel: "configurable",
   },
   {
     id: "remedy", name: "BMC Remedy", kind: "ITSM",

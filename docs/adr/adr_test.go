@@ -7,7 +7,9 @@
 // comment pointing at that number is then ambiguous, and the ambiguity spreads
 // through the code as later work cites it. Numbers 0090, 0103 and 0105 each
 // collided that way before this test existed; the later ADR of each pair was
-// renumbered to 0138, 0139 and 0140.
+// renumbered to 0139, 0140 and 0141. The branch that did so then collided with a
+// fresh 0138 on main while it was open — which is the whole argument for a test
+// that runs before the merge rather than a convention that runs after it.
 package adr
 
 import (

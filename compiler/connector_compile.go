@@ -297,7 +297,7 @@ func compileUserConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 
 // compileSharePointConnectorTask compiles an <atlas:sharepointConnector> task: it
 // creates a list item in a model-authored site/list through a server-registered
-// SharePoint provider (Microsoft Graph) via the job path (ADR-0140). The provider
+// SharePoint provider (Microsoft Graph) via the job path (ADR-0141). The provider
 // (Graph base, OAuth credential) is resolved server-side by connector name, like mail;
 // only the target (site, list, item fields) lives in the model.
 func compileSharePointConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {

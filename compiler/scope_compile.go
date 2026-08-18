@@ -146,7 +146,7 @@ func registerScope(
 		// A service task bearing an <atlas:csvConnector> extension is a CSV-to-JSON
 		// connector task: the in-process CSV worker parses the named source variable's
 		// text against the model-authored layout into a rows collection via the job
-		// path (ADR-0138), rather than reading a columnConfig variable (ADR-0087). The
+		// path (ADR-0139), rather than reading a columnConfig variable (ADR-0087). The
 		// whole layout lives in the model; only the file arrives at runtime.
 		if cn := st.Csv; cn != nil {
 			retries, err := parseRetries(label, st.Id, firstNonBlank(cn.Retries, st.TaskDefinition.Retries))
@@ -156,7 +156,7 @@ func registerScope(
 			cols := splitCSVColumns(cn.Columns)
 			hasHeader := csvHasHeader(cn.HasHeader)
 			// A headerless file maps columns by position, so it must name them; a header
-			// file may omit them to derive the columns from the header row (ADR-0138).
+			// file may omit them to derive the columns from the header row (ADR-0139).
 			if !hasHeader && len(cols) == 0 {
 				return fmt.Errorf("compiler: csv connector task %q without a header row must list its columns", st.Id)
 			}
@@ -561,6 +561,43 @@ func registerScope(
 			return err
 		}
 	}
+	// Ad-hoc subprocesses: a container scope like an embedded subprocess, but its contained
+	// activities are not sequenced from a start event — the runtime activates its entry
+	// activities (the contained nodes with no incoming flow) on entry (ADR-0138). Register the
+	// container first so its children can be scoped to it, compile its optional FEEL completion
+	// condition and its ordering / cancel-remaining flags, then recurse into its flow content.
+	for i := range c.AdHocSubProcesses {
+		ah := &c.AdHocSubProcesses[i]
+		// Sequential ordering runs one contained activity at a time. The engine implements
+		// the parallel form (ADR-0138); rather than silently running a Sequential ad-hoc as
+		// parallel — which would run every activity at once, not what the model says — it is
+		// refused at deploy until the sequential driver lands.
+		if ah.Ordering == "Sequential" {
+			return fmt.Errorf("compiler: ad-hoc subprocess %q uses ordering=\"Sequential\", which Atlas can't execute yet "+
+				"(only the default parallel ordering, where every entry activity is activated at once, is supported)", ah.Id)
+		}
+		d := AdHocDetail{
+			// BPMN defaults: cancel the remaining activities when the completion condition
+			// holds, and run the entry activities in parallel.
+			CancelRemaining: ah.CancelRemainingInstances != "false",
+		}
+		if cond := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(ah.CompletionCondition), "=")); cond != "" {
+			ce, err := expr.CompileAuto(cond)
+			if err != nil {
+				return fmt.Errorf("compiler: ad-hoc subprocess %q completion condition: %w", ah.Id, err)
+			}
+			d.CompletionCondition = ce
+		}
+		adhocID := b.AddAdHocSubProcess(d)
+		if err := register(ah.Id, adhocID); err != nil {
+			return err
+		}
+		b.PushScope(adhocID)
+		if err := registerScope(b, ids, register, resolveMessage, resolveSignal, resolveError, resolveEscalation, &ah.xmlFlowContent); err != nil {
+			return err
+		}
+		b.PopScope()
+	}
 	// Nested subprocesses: register the container node, then push its scope so its
 	// own flow nodes (registered by recursion) carry it as their FlowScope. The
 	// container is created before its children so it has an ElementId to scope them
@@ -742,16 +779,17 @@ func registerScope(
 	}
 	// Report an unsupported element with a clear message rather than letting it
 	// surface later as a confusing "unknown targetRef" when a flow points at it.
+	// (Ad-hoc subprocesses used to be listed here; they execute now — ADR-0138.)
 	for _, u := range []struct {
 		label string
 		nodes []xmlNode
 	}{
-		{"adHocSubProcess", c.AdHocSubProcesses},
+		{"complexGateway", c.ComplexGateways},
 	} {
 		if len(u.nodes) > 0 {
 			return fmt.Errorf("compiler: element %q is a <%s>, which Atlas can't execute yet "+
 				"(supported: start/end events, tasks (undefined/manual pass-through, service, script, "+
-				"business rule, user), embedded subprocesses, exclusive/parallel/inclusive gateways, and timer/message intermediate events)", u.nodes[0].Id, u.label)
+				"business rule, user), embedded and ad-hoc subprocesses, exclusive/parallel/inclusive gateways, and timer/message intermediate events)", u.nodes[0].Id, u.label)
 		}
 	}
 	return nil
@@ -771,6 +809,9 @@ func resolveCompensation(b *Builder, ids map[string]int32, root *xmlFlowContent)
 		scopes = append(scopes, fc)
 		for i := range fc.SubProcesses {
 			walk(&fc.SubProcesses[i].xmlFlowContent)
+		}
+		for i := range fc.AdHocSubProcesses {
+			walk(&fc.AdHocSubProcesses[i].xmlFlowContent)
 		}
 	}
 	walk(root)
@@ -941,6 +982,14 @@ func connectScope(b *Builder, ids map[string]int32, c *xmlFlowContent) error {
 	}
 	for i := range c.SubProcesses {
 		if err := connectScope(b, ids, &c.SubProcesses[i].xmlFlowContent); err != nil {
+			return err
+		}
+	}
+	// An ad-hoc subprocess's contained sequence flows are wired like any other scope's
+	// (ADR-0138) — contained activities may still be connected to each other, and a
+	// boundary event on one routes out normally.
+	for i := range c.AdHocSubProcesses {
+		if err := connectScope(b, ids, &c.AdHocSubProcesses[i].xmlFlowContent); err != nil {
 			return err
 		}
 	}

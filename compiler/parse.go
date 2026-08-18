@@ -712,6 +712,13 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 				return err
 			}
 		}
+		// An ad-hoc subprocess is a scope too: recurse so its contained activities'
+		// I/O mappings are wired like any other scope's (ADR-0138).
+		for i := range c.AdHocSubProcesses {
+			if err := wireScopeIO(&c.AdHocSubProcesses[i].xmlFlowContent); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 	if err := wireScopeIO(&proc.xmlFlowContent); err != nil {
@@ -864,6 +871,13 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 				return err
 			}
 			if err := wireScopeMI(&sub.xmlFlowContent); err != nil {
+				return err
+			}
+		}
+		// Recurse into ad-hoc scopes so a contained activity's loop markers are wired
+		// exactly as in any other scope (ADR-0138).
+		for i := range c.AdHocSubProcesses {
+			if err := wireScopeMI(&c.AdHocSubProcesses[i].xmlFlowContent); err != nil {
 				return err
 			}
 		}
@@ -1041,9 +1055,16 @@ type xmlFlowContent struct {
 	// sub-elements. It parses into the very same shape, so xmlSendTask is an alias.
 	SendTasks []xmlSendTask `xml:"sendTask"`
 
-	// Captured only to give a clear "unsupported element" error (see registerScope); not
-	// executable yet.
-	AdHocSubProcesses []xmlNode `xml:"adHocSubProcess"`
+	// Captured only to give a clear "unsupported element" error (see registerScope) rather
+	// than a confusing "unknown targetRef" when a flow points at one; not executable.
+	ComplexGateways []xmlNode `xml:"complexGateway"`
+
+	// AdHocSubProcesses are <adHocSubProcess> containers: a scope whose contained activities
+	// run on demand, in any order, zero or more times, rather than being driven by sequence
+	// flow from a start event (ADR-0138). They share xmlSubProcess's shape (they nest the same
+	// flow content) plus the ad-hoc's own ordering / cancelRemainingInstances /
+	// <completionCondition>.
+	AdHocSubProcesses []xmlAdHocSubProcess `xml:"adHocSubProcess"`
 
 	// Associations are BPMN <association> artifacts declared in this scope. Atlas reads
 	// them only to link a compensation boundary event to its handler (ADR-0103).
@@ -1123,6 +1144,11 @@ func resolveLanes(b *Builder, ids map[string]int32, fc *xmlFlowContent) error {
 		}
 		for i := range c.SubProcesses {
 			if err := walkScope(&c.SubProcesses[i].xmlFlowContent); err != nil {
+				return err
+			}
+		}
+		for i := range c.AdHocSubProcesses {
+			if err := walkScope(&c.AdHocSubProcesses[i].xmlFlowContent); err != nil {
 				return err
 			}
 		}
@@ -1220,6 +1246,27 @@ type xmlSubProcess struct {
 	xmlFlowContent
 }
 
+// xmlAdHocSubProcess is an <adHocSubProcess>: a container whose contained activities are not
+// sequenced from a start event but run on demand, in any order, zero or more times (ADR-0138).
+// It nests the same flow content as an embedded subprocess — its own activities, sequence flows,
+// boundary events and nested subprocesses compile into the flat node array scoped by it — and
+// adds the ad-hoc's own configuration:
+//
+//   - Ordering "Sequential" runs one contained activity at a time; anything else (including the
+//     absent default) is parallel: every entry activity is activated at once.
+//   - CancelRemainingInstances "false" lets the still-running activities finish when the
+//     completion condition holds; absent/"true" is the BPMN default (cancel them).
+//   - CompletionCondition is an optional boolean FEEL expression re-evaluated after each
+//     contained activity completes; absent means the ad-hoc completes when its scope drains.
+type xmlAdHocSubProcess struct {
+	Id                       string `xml:"id,attr"`
+	Name                     string `xml:"name,attr"`
+	Ordering                 string `xml:"ordering,attr"`
+	CancelRemainingInstances string `xml:"cancelRemainingInstances,attr"`
+	CompletionCondition      string `xml:"completionCondition"`
+	xmlFlowContent
+}
+
 // foldTransactions merges each scope's <transaction> subprocesses into its SubProcesses
 // slice, marked IsTransaction, recursively down the scope tree. A transaction is
 // structurally an embedded subprocess with cancellation added (ADR-0108); folding it into
@@ -1235,6 +1282,9 @@ func foldTransactions(fc *xmlFlowContent) {
 	fc.Transactions = nil
 	for i := range fc.SubProcesses {
 		foldTransactions(&fc.SubProcesses[i].xmlFlowContent)
+	}
+	for i := range fc.AdHocSubProcesses {
+		foldTransactions(&fc.AdHocSubProcesses[i].xmlFlowContent)
 	}
 }
 
@@ -1262,6 +1312,11 @@ func resolveSendTaskOperations(fc *xmlFlowContent, resolveOperation func(ownerId
 	}
 	for i := range fc.SubProcesses {
 		if err := resolveSendTaskOperations(&fc.SubProcesses[i].xmlFlowContent, resolveOperation); err != nil {
+			return err
+		}
+	}
+	for i := range fc.AdHocSubProcesses {
+		if err := resolveSendTaskOperations(&fc.AdHocSubProcesses[i].xmlFlowContent, resolveOperation); err != nil {
 			return err
 		}
 	}
@@ -1627,10 +1682,10 @@ type xmlServiceTask struct {
 	// (ADR-0123). The pointer is nil when the <atlas:userConnector> extension is absent.
 	User *xmlUserConnector `xml:"extensionElements>userConnector"`
 	// Csv, when present, marks this service task a CSV-to-JSON connector task
-	// (ADR-0138). The pointer is nil when the <atlas:csvConnector> extension is absent.
+	// (ADR-0139). The pointer is nil when the <atlas:csvConnector> extension is absent.
 	Csv *xmlCsvConnector `xml:"extensionElements>csvConnector"`
 	// SharePoint, when present, marks this service task a SharePoint connector task
-	// (ADR-0140). The pointer is nil when the <atlas:sharepointConnector> extension is
+	// (ADR-0141). The pointer is nil when the <atlas:sharepointConnector> extension is
 	// absent.
 	SharePoint *xmlSharePointConnector `xml:"extensionElements>sharepointConnector"`
 	// Remedy, when present, marks this service task a BMC Remedy connector task
@@ -1749,7 +1804,7 @@ type xmlUserConnector struct {
 }
 
 // A CSV-to-JSON connector task's parameters, carried on a service task as an
-// <atlas:csvConnector source="..." delimiter="," .../> extension element (ADR-0138).
+// <atlas:csvConnector source="..." delimiter="," .../> extension element (ADR-0139).
 // source names the process variable holding the raw CSV text (default "csvText");
 // delimiter is the single-character field separator (default ","); hasHeader is
 // "true"/"false" (default true) — whether the first row is a header; columns is an
@@ -1768,7 +1823,7 @@ type xmlCsvConnector struct {
 // splitCSVColumns turns a csvConnector's comma-separated columns attribute into a
 // trimmed list of field names, dropping empty entries so a trailing comma or an
 // unset attribute yields no phantom column. An empty result means "derive the
-// columns from the header row" (ADR-0138).
+// columns from the header row" (ADR-0139).
 func splitCSVColumns(s string) []string {
 	if strings.TrimSpace(s) == "" {
 		return nil
@@ -1793,7 +1848,7 @@ func csvHasHeader(attr string) bool {
 
 // A SharePoint connector task's parameters, carried on a service task as an
 // <atlas:sharepointConnector connector="..." site="..." list="..."> extension
-// element (ADR-0140). connector names a server-registered SharePoint provider (its
+// element (ADR-0141). connector names a server-registered SharePoint provider (its
 // Graph base and OAuth credential live on the server, never in the model). site
 // (required) addresses the SharePoint site ("host,/sites/path" or a site id); list
 // (required) is the list name or id the item is created in; resultVariable, if set,

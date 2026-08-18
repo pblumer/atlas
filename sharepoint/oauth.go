@@ -19,7 +19,7 @@ type TokenSource interface {
 	Token(ctx context.Context) (string, error)
 }
 
-// OAuth2 grant methods a SharePoint connector supports (ADR-0140). clientCredentials
+// OAuth2 grant methods a SharePoint connector supports (ADR-0141). clientCredentials
 // is app-only (a confidential client acts as itself, the norm for server workflows);
 // refreshToken exchanges a pre-obtained refresh token (works for delegated /
 // consumer scenarios). These mirror the native mail providers' grants (ADR-0093);
@@ -30,7 +30,7 @@ const (
 )
 
 // credentialBundle is the JSON an operator stores in the vault under a SharePoint
-// connector's credentialsRef (ADR-0140). method selects the OAuth2 grant; the
+// connector's credentialsRef (ADR-0141). method selects the OAuth2 grant; the
 // remaining fields configure it. Non-secret fields (ids, tenant) and secret fields
 // (clientSecret, refreshToken) live together in this one vault secret, so a model
 // never carries any of them (I6). tokenUrl and scope are optional overrides; the

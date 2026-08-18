@@ -266,7 +266,7 @@ func TestParseCSVRowsErrors(t *testing.T) {
 // test csvConfig literal.
 func csvBoolPtr(b bool) *bool { return &b }
 
-// TestParseCSVRowsDeriveColumns covers ADR-0138's header-derivation mode: with a
+// TestParseCSVRowsDeriveColumns covers ADR-0139's header-derivation mode: with a
 // header row and no explicit column layout, every distinct non-blank header cell
 // becomes a string field, and duplicate/blank header cells are skipped.
 func TestParseCSVRowsDeriveColumns(t *testing.T) {
