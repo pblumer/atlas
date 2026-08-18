@@ -323,7 +323,31 @@ recovery behaves exactly as it did before.
 
    The cost is archive size: it now grows by roughly the state store, against a 1 GiB
    restore-upload cap. Still no segment is deleted anywhere.
-7. Feed `CompactLog` the live consumer watermarks (ADR-0114 export, ADR-0115 retention)
-   so redundant segments are actually deleted, and expose checkpoint/compaction status
-   and operator controls. Deletion is deliberately held back to its own slice: it is the
-   one irreversible step, and every consumer it could undercut is now covered.
+7. **Landed** — **compaction runs in the server**. `api.WithWALCompaction()`
+   (`atlas serve --compact-wal`) deletes the segments a checkpoint and every consumer
+   watermark make redundant, on the same tick that takes the checkpoint: a fresh
+   checkpoint is what licenses new deletion, so there is nothing to schedule separately.
+
+   Unlike checkpointing it is **opt-in and off by default**, for the reason history
+   retention (ADR-0115) is: it is the one step here that destroys data, so an operator
+   chooses it. The cut is already conservative — the newest fully verified checkpoint at
+   or below the store, floored by every watermark — and the wiring is fail-closed on top:
+   a watermark that cannot be read, a snapshot in flight, or an error anywhere skips the
+   pass, because the cost of skipping is disk and the cost of proceeding is a segment
+   recovery still needs. The deletion itself runs on the run loop (`do`), since the WAL
+   belongs to the single writer, which may be rolling a segment at that moment (I3).
+
+   The watermarks: the exporter's high-water mark (ADR-0114) when export is on, and the
+   retention safe position (ADR-0115) when retention is on. Only the exporter actually
+   tails the WAL — retention reads the state store — so its position never binds tighter,
+   but it is passed anyway so the gate matches the rule above literally rather than by an
+   argument that could stop holding.
+
+   The snapshot race slice 6 left open is closed here: `GET /api/v1/backup/full` raises an
+   in-flight count **before** it picks the checkpoint it will carry, and a compaction pass
+   that sees a non-zero count skips. A pass that reads zero is therefore one whose deletion
+   precedes the backup's choice of checkpoint, so the suffix that checkpoint needs starts
+   at or above whatever was cut.
+8. Expose checkpoint and compaction status, and operator controls, over the API — what was
+   last checkpointed, what was last compacted, and a way to ask for either on demand.
+   Everything above is visible only in the log today.

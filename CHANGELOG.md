@@ -99,6 +99,25 @@ _Changed_ / _Removed_ for each version.
   standard loop like a sequential multi-instance, badged ↻ and bounded by the modelled
   `loopMaximum`, and the Operations call-activity list labels a looping call activity
   **loop** rather than **multi-instance**.
+- **The WAL stops growing forever — compaction runs in the server** (v0.2.0 programme D,
+  [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 7):
+  `atlas serve --compact-wal` deletes the WAL segments a recovery checkpoint and every
+  consumer watermark make redundant, on the same tick that takes the checkpoint. Recovery
+  time was bounded in slice 5; the log's disk is bounded now.
+
+  It is **off by default**, unlike checkpointing and for the same reason history retention
+  (ADR-0115) is: this is the one step in the feature that destroys data, so an operator
+  turns it on deliberately. Everything about the wiring is fail-closed — a consumer
+  watermark that cannot be read, a whole-instance snapshot streaming the WAL, or an error
+  anywhere skips the pass, because the cost of skipping is disk and the cost of proceeding
+  is a segment recovery still needs. The cut itself is unchanged from slice 4: the newest
+  **fully verified** checkpoint at or below the store, floored by the exporter's
+  high-water mark (ADR-0114) and the retention safe position (ADR-0115).
+
+  Taking a whole-instance backup now holds compaction off for its duration, and raises
+  that hold *before* it picks the checkpoint it carries — so a pass that sees no backup is
+  one whose deletion the backup's later choice already accounts for. `--compact-wal`
+  without checkpointing warns and does nothing; the cut comes from a checkpoint.
 - **Whole-instance backup survives a compacted log** (v0.2.0 programme D,
   [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 6;
   [ADR-0109](docs/adr/0109-full-instance-snapshot.md) amended): the whole-instance
