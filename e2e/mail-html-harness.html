@@ -1,0 +1,71 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas mail HTML body e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountEditor against a mock `api`, with a
+         diagram holding one mail connector task, to verify the HTML body field
+         (ADR-0079 amended): it renders as an HTML code editor, opens in the Developer
+         View with F2 (ADR-0145), and writes back to <atlas:mailConnector bodyHtml>
+         where the compiler reads it. Mounted in deployment mode (key set, draftId
+         null) so no live collaboration SSE is attached. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountEditor } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+
+      // Activity_mail carries a plain-text body and an authored HTML one, so the panel
+      // must show both and round-trip the markup unmangled.
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:atlas="http://atlas/schema/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_mail" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="mailer" name="Test Mail" isExecutable="true">
+    <bpmn:startEvent id="Start_1" name="Start"><bpmn:outgoing>f0</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:serviceTask id="Activity_mail" name="Benachrichtigen">
+      <bpmn:extensionElements>
+        <atlas:mailConnector connector="office365" to="ops@example.com" subject="Bestellung unterwegs"
+                             body="Ihre Bestellung ist unterwegs."
+                             bodyHtml="&lt;p&gt;Ihre Bestellung ist &lt;b&gt;unterwegs&lt;/b&gt;.&lt;/p&gt;"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_1" name="End"><bpmn:incoming>f1</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="Activity_mail"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="Activity_mail" targetRef="End_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="mailer">
+    <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Activity_mail_di" bpmnElement="Activity_mail"><dc:Bounds x="260" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="420" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="260" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="360" y="138"/><di:waypoint x="420" y="138"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      const api = async (method, url) => {
+        if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (method === "GET" && /\/processes$/.test(url)) return [];
+        if (method === "GET" && /\/drafts$/.test(url)) return [];
+        if (method === "GET" && /\/decisions/.test(url)) return [];
+        if (method === "GET" && /\/instances/.test(url)) return [];
+        if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
+        return {};
+      };
+
+      window.__mount = () => mountEditor(view, { api, toast: noop, key: 42 });
+      window.__select = (id) =>
+        window.__atlasModeler.get("selection").select(window.__atlasModeler.get("elementRegistry").get(id));
+      // The exported XML is what the deploy sends, so the tests assert against it.
+      window.__xml = async () => (await window.__atlasModeler.saveXML({ format: true })).xml;
+      window.__ready = true;
+    </script>
+  </body>
+</html>

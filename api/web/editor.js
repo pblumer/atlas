@@ -7,6 +7,7 @@ import { attachCodeEditor } from "./code-editor.js";
 import { moduleFor } from "./powershell.js";
 import { attachJSONEditor } from "./json-editor.js";
 import { installDevShortcut, markDevField } from "./dev-view.js";
+import { devLang } from "./dev-lang.js";
 import { openDmnEditor } from "./dmn-editor.js";
 import { tokenSimulationModule } from "./token-simulation.js";
 import { attachCollab } from "./collab.js";
@@ -21,6 +22,10 @@ import { collectDocumentation, exportDocumentation } from "./process-doc.js";
 // glyph shown on the task shape in the Implement view so the executable language is
 // legible at a glance — a plain bpmn:ScriptTask looks identical whatever language
 // it runs (see makeImplementBadges).
+// The HTML language descriptor, used for the markup fields in the connector catalog
+// (the mail body). Resolved once — the registry is static.
+const htmlLang = devLang("html");
+
 const JOB_LANGS = {
   powershell: {
     label: "PowerShell (job worker)", short: "PowerShell",
@@ -2027,6 +2032,7 @@ const SERVICE_TASK_KINDS = [
       { key: "from", label: "From", placeholder: "leave empty for the connector's default sender", fx: true },
       { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true },
       { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, rows: 8, hint: "Plain-text body, or a FEEL expression (fx) composed from the instance's variables — switch on fx, then press Ctrl+Space for variable completion." },
+      { key: "bodyHtml", label: "HTML body", type: "html", rows: 10, placeholder: "<p>Your order is <b>on its way</b>.</p>", hint: "Optional. With both bodies the mail goes out as multipart/alternative — this markup for clients that render HTML, the plain text above for those that don't. A leading '=' makes it a FEEL expression composing the markup from variables. Press F2 for the developer view." },
     ],
   },
   {
@@ -2203,6 +2209,11 @@ function stKindFieldsHTML(cur, ext) {
         return `<option value="${esc(v)}" ${v === chosen ? "selected" : ""}>${esc(l)}</option>`;
       }).join("");
       fields += `<label class="field"><span>${esc(f.label)}</span><select id="f-st-${f.key}">${opts}</select></label>`;
+    } else if (f.type === "html") {
+      // A markup field: the same textarea the save wiring reads, upgraded to an HTML
+      // code editor below (and F2-able into the Developer View, ADR-0145).
+      fields += `<label class="field"><span>${esc(f.label)}</span>
+        <textarea id="f-st-${f.key}" rows="${f.rows || 4}" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
     } else if (f.fx) {
       // A textarea — 1 row by default, taller for prose like an e-mail body — so the
       // fx toggle can host the FEEL editor in place at that size.
@@ -4566,6 +4577,19 @@ function wireProperties(root, modeler, api, projectId, toast) {
     for (const f of stKind.fields) {
       if (f.group || f.type === "map" || !f.fx) continue;
       stAttachFx(body.querySelector("#f-st-" + f.key));
+    }
+    // Markup fields (the mail connector's HTML body) get the shared code editor with
+    // the HTML language module — tag/attribute colouring and variable completion
+    // inline, the full Developer View on F2 (ADR-0145).
+    for (const f of stKind.fields) {
+      if (f.type !== "html") continue;
+      const el = body.querySelector("#f-st-" + f.key);
+      if (!el) continue;
+      // Wrapped and gutterless, like the FEEL fields inline: markup lines are long and
+      // the property column is narrow, so horizontal scrolling would hide most of the
+      // template. The Developer View is where it gets a gutter and the full width.
+      attachCodeEditor(el, { lang: htmlLang.module, variables: stFeelVars, gutter: false, wrap: true });
+      markDevField(el, "html", { title: f.label });
     }
 
     // Map editors: a name/value row list with add/remove. Edits and removals save;

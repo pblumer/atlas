@@ -199,7 +199,8 @@ func compileRestConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 // compileMailConnectorTask compiles an <atlas:mailConnector> task: it sends a
 // model-authored message through a server-registered mail provider via the job path
 // (ADR-0079). The provider (host, credentials) is resolved server-side by connector
-// name, like clio; only the message (recipients, subject, body) lives in the model.
+// name, like clio; only the message (recipients, subject, and the text and/or HTML
+// body) lives in the model.
 func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.Mail
 	if strings.TrimSpace(cn.Connector) == "" {
@@ -232,6 +233,10 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	if err != nil {
 		return 0, err
 	}
+	bodyHTML, err := restValue(st.Id, "bodyHtml", cn.BodyHtml)
+	if err != nil {
+		return 0, err
+	}
 	return b.AddMailConnectorTask(MailConfig{
 		Connector: strings.TrimSpace(cn.Connector),
 		To:        to,
@@ -240,6 +245,7 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 		From:      from,
 		Subject:   subject,
 		Body:      body,
+		BodyHTML:  bodyHTML,
 		Retries:   retries,
 	}), nil
 }

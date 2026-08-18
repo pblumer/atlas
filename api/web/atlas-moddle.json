@@ -93,6 +93,7 @@
         { "name": "from", "type": "String", "isAttr": true },
         { "name": "subject", "type": "String", "isAttr": true },
         { "name": "body", "type": "String", "isAttr": true },
+        { "name": "bodyHtml", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true }
       ]
     },

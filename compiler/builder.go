@@ -828,6 +828,7 @@ type MailConfig struct {
 	From      RestExpr
 	Subject   RestExpr
 	Body      RestExpr
+	BodyHTML  RestExpr
 	Retries   int32
 }
 
@@ -856,6 +857,7 @@ func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
 		From:        cfg.From,
 		MailSubject: cfg.Subject,
 		Body:        cfg.Body,
+		BodyHTML:    cfg.BodyHTML,
 		Retries:     cfg.Retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
