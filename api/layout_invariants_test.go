@@ -477,6 +477,7 @@ func TestLayoutInvariants(t *testing.T) {
 			m.checkForwardEdgesReadLeftToRight(t)
 			m.checkTrunkCarriesLongestChain(t)
 			m.checkGatewayBranchesLeaveSeparately(t)
+			m.checkForwardEdgesStayInBand(t)
 		})
 	}
 }
@@ -931,6 +932,67 @@ func (m *layoutModel) checkGatewayBranchesLeaveSeparately(t *testing.T) {
 					t.Errorf("invariant[gateway-exits]: flows %q and %q leave gateway %q along the same line for %dpx (%v->%v and %v->%v)",
 						ids[i], ids[j], src, n, a[0], a[1], b[0], b[1])
 				}
+			}
+		}
+	}
+}
+
+// TestLayoutIsDeterministic runs the generator repeatedly over the whole corpus and
+// requires byte-identical DI every time. ADR-0127 names this as phase 2's standing
+// risk: the ordering sweeps and the dummy chains are keyed by flow, and a single
+// range over a map would make a diagram's rows depend on Go's randomized map order
+// — reordering a picture between two fetches of the same model.
+func TestLayoutIsDeterministic(t *testing.T) {
+	for _, tc := range layoutCorpus {
+		t.Run(tc.name, func(t *testing.T) {
+			first, ok := generateDI([]byte(tc.src))
+			if !ok {
+				t.Fatalf("generateDI returned not-ok for %q", tc.name)
+			}
+			for i := 0; i < 20; i++ {
+				again, ok := generateDI([]byte(tc.src))
+				if !ok {
+					t.Fatalf("run %d: generateDI returned not-ok", i)
+				}
+				if again != first {
+					t.Fatalf("run %d differs from the first layout of the same model", i)
+				}
+			}
+		})
+	}
+}
+
+// checkForwardEdgesStayInBand: a forward flow is drawn among the nodes, not around
+// them. An edge skipping several columns used to be sent down to a channel beneath
+// the whole diagram — a symptom-level mitigation for having no reserved space in
+// the layers it passes over (ADR-0127, phase 2). With dummy nodes holding that
+// space the detour is no longer needed, and a forward edge that still dips below
+// the lowest shape means the corridor was not reserved. Back edges are exempt: a
+// loop returning under the diagram is a legitimate drawing.
+func (m *layoutModel) checkForwardEdgesStayInBand(t *testing.T) {
+	t.Helper()
+	bottom := 0
+	for _, id := range sortedKeys(m.shapes) {
+		if b := m.shapes[id].y + m.shapes[id].h; b > bottom {
+			bottom = b
+		}
+	}
+	for _, f := range m.flows {
+		if f.Id == "" || m.backEdge[f.Id] {
+			continue
+		}
+		// An exception flow is not a bypass: it leaves a host's border rather than a
+		// grid cell, and reaching a shared handler several rows away legitimately
+		// runs through the channel (see the two-corridors model). Corridors are built
+		// for node-to-node flows, and this states only what they promise.
+		if m.host[f.SourceRef] != "" || m.host[f.TargetRef] != "" {
+			continue
+		}
+		for _, p := range m.edges[f.Id] {
+			if p.y > bottom {
+				t.Errorf("invariant[edge-in-band]: forward flow %q detours to y=%d, below the lowest shape (y=%d)",
+					f.Id, p.y, bottom)
+				break
 			}
 		}
 	}

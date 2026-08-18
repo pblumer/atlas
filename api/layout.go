@@ -236,6 +236,7 @@ type lnode struct {
 	sub   *laidOut // non-nil for an expanded subprocess: its inner layout
 	bound bool     // a boundary event
 	gwy   bool     // drawn as a diamond, so it has vertices to leave from
+	dummy bool     // a virtual node: reserves space in a layer, emits no shape
 	host  string   // boundary: the activity id it is attached to
 	label string   // boundary: its name, emitted as an explicit label placed clear of the host
 	atTop bool     // boundary: riding the host's top edge (label goes above, else below)
@@ -338,10 +339,17 @@ func layoutOf(c layoutContainer) laidOut {
 	trunk := markTrunk(nodes, idx, c.Flows, back)
 
 	var laneShapes []placedShape
+	chains := map[int][]int{}
 	if lanes, laneOf := collectLanes(c, nodes); len(lanes) > 0 {
+		// Swimlanes own the vertical axis: a node's row is its lane, so there is no
+		// free row for a corridor to claim and the lane bands keep edges apart.
 		laneShapes = placeLaned(nodes, lanes, laneOf, trunk)
 	} else {
-		placeNodes(nodes, trunk, c.Flows, idx)
+		chains = insertDummies(&nodes, idx, c.Flows, back)
+		for len(trunk) < len(nodes) {
+			trunk = append(trunk, false) // a corridor never holds the main axis
+		}
+		placeNodes(nodes, trunk, c.Flows, idx, chains)
 	}
 	placeBoundaries(nodes, idx, c.Flows)
 
@@ -349,7 +357,7 @@ func layoutOf(c layoutContainer) laidOut {
 	lo.shapes = append(lo.shapes, laneShapes...) // lane bands before the nodes they hold
 	emitShapes(&lo, nodes, inner)
 	colRight, colLeft := columnEdges(nodes)
-	emitEdges(&lo, nodes, idx, c.Flows, back, colRight, colLeft, loopChannelY(nodes))
+	emitEdges(&lo, nodes, idx, c.Flows, back, colRight, colLeft, loopChannelY(nodes), chains)
 	// Captions last, once every shape and edge is placed: both placers fit a box
 	// against the finished picture, shapes first because they are more constrained.
 	placeShapeLabels(&lo)
@@ -638,6 +646,47 @@ func depthFrom(succ [][]int) []int {
 // orderLayer returns the indices of one layer's non-boundary nodes with the trunk
 // node first, so it takes the main axis; the rest keep their existing relative
 // order below it.
+// insertDummies gives every forward flow that skips a layer a virtual node in each
+// layer it passes over (ADR-0127, phase 2). The dummies emit no shape; they exist
+// to claim a row across those columns, so the edge has a reserved corridor to run
+// along instead of being detoured beneath the whole diagram. The returned map is
+// flow index -> its dummy node indices, in layer order.
+//
+// Flows touching a boundary event are left out: one leaves its host's border rather
+// than a grid cell, and its handler sits in the next column anyway.
+func insertDummies(nodes *[]lnode, idx map[string]int, flows []layoutFlow, back map[int]bool) map[int][]int {
+	chains := map[int][]int{}
+	for fi, f := range flows {
+		if back[fi] || f.Id == "" {
+			continue
+		}
+		s, sok := idx[f.SourceRef]
+		t, tok := idx[f.TargetRef]
+		if !sok || !tok || (*nodes)[s].bound || (*nodes)[t].bound {
+			continue
+		}
+		from, to := (*nodes)[s].layer+1, (*nodes)[t].layer-1
+		if to < from {
+			continue // adjacent columns: a short elbow, no corridor needed
+		}
+		var chain []int
+		for l := from; l <= to; l++ {
+			*nodes = append(*nodes, lnode{id: fmt.Sprintf("\x00dummy:%d:%d", fi, l), layer: l, dummy: true})
+			chain = append(chain, len(*nodes)-1)
+		}
+		chains[fi] = chain
+	}
+	return chains
+}
+
+// layoutUnit is one thing that claims a row: a single node, or a dummy chain that
+// has to keep the same row across every column it spans so its corridor runs
+// straight.
+type layoutUnit struct {
+	members []int // node indices
+	lo, hi  int   // column span
+}
+
 func orderLayer(idxs []int, trunk []bool) []int {
 	sort.SliceStable(idxs, func(a, b int) bool { return trunk[idxs[a]] && !trunk[idxs[b]] })
 	return idxs
@@ -650,7 +699,7 @@ func orderLayer(idxs []int, trunk []bool) []int {
 // heights differ, and side branches — error handlers and the like — rise above it
 // rather than dropping below. Boundary events are skipped here and positioned by
 // placeBoundaries.
-func placeNodes(nodes []lnode, trunk []bool, flows []layoutFlow, idx map[string]int) {
+func placeNodes(nodes []lnode, trunk []bool, flows []layoutFlow, idx map[string]int, chains map[int][]int) {
 	laneW := map[int]int{}
 	maxLayer := 0
 	for i := range nodes {
@@ -670,7 +719,7 @@ func placeNodes(nodes []lnode, trunk []bool, flows []layoutFlow, idx map[string]
 		colX[l] = colX[l-1] + laneW[l-1] + layoutGapX
 	}
 
-	row := assignRows(nodes, trunk, flows, idx)
+	row := assignRows(nodes, trunk, flows, idx, chains)
 	maxRow := 0
 	rowH := map[int]int{}
 	for i := range nodes {
@@ -716,7 +765,7 @@ func placeNodes(nodes []lnode, trunk []bool, flows []layoutFlow, idx map[string]
 // Footprints are claimed widest first, so the long corridor takes the row nearest
 // the trunk and short branches stack above it, rather than a one-column branch
 // taking the low row and forcing the corridor to detour around it.
-func assignRows(nodes []lnode, trunk []bool, flows []layoutFlow, idx map[string]int) []int {
+func assignRows(nodes []lnode, trunk []bool, flows []layoutFlow, idx map[string]int, chains map[int][]int) []int {
 	row := make([]int, len(nodes))
 	used := map[int]map[int]bool{} // column -> rows already taken
 	take := func(col, r int) {
@@ -731,22 +780,48 @@ func assignRows(nodes []lnode, trunk []bool, flows []layoutFlow, idx map[string]
 		}
 	}
 
+	// Rows are claimed by units, not by single nodes: a dummy chain has to keep one
+	// row across every column it spans, or its corridor would zig-zag.
 	lo, hi := footprints(nodes, flows, idx)
-	order := make([]int, 0, len(nodes))
-	for i := range nodes {
-		if !nodes[i].bound && !trunk[i] {
-			order = append(order, i)
+	units := make([]layoutUnit, 0, len(nodes))
+	inChain := make([]bool, len(nodes))
+	// Sorted, never map order: the row a corridor ends up on must not depend on Go's
+	// map iteration (ADR-0127 requires the generator stay deterministic).
+	chainFlows := make([]int, 0, len(chains))
+	for fi := range chains {
+		chainFlows = append(chainFlows, fi)
+	}
+	sort.Ints(chainFlows)
+	for _, fi := range chainFlows {
+		chain := chains[fi]
+		if len(chain) == 0 {
+			continue
+		}
+		units = append(units, layoutUnit{members: chain, lo: nodes[chain[0]].layer, hi: nodes[chain[len(chain)-1]].layer})
+		for _, n := range chain {
+			inChain[n] = true
 		}
 	}
+	for i := range nodes {
+		if nodes[i].bound || trunk[i] || inChain[i] {
+			continue
+		}
+		units = append(units, layoutUnit{members: []int{i}, lo: lo[i], hi: hi[i]})
+	}
+
 	// Widest footprint first, so a long corridor claims the row nearest the trunk.
-	// Among equal footprints, left to right: a node's row is chosen relative to its
+	// Among equal footprints, left to right: a unit's row is chosen relative to its
 	// predecessors, so those want to be settled first.
+	order := make([]int, len(units))
+	for i := range order {
+		order[i] = i
+	}
 	sort.SliceStable(order, func(a, b int) bool {
-		x, y := order[a], order[b]
-		if wx, wy := hi[x]-lo[x], hi[y]-lo[y]; wx != wy {
+		x, y := units[order[a]], units[order[b]]
+		if wx, wy := x.hi-x.lo, y.hi-y.lo; wx != wy {
 			return wx > wy
 		}
-		return nodes[x].layer < nodes[y].layer
+		return x.lo < y.lo
 	})
 
 	pred := predecessors(nodes, flows, idx)
@@ -756,12 +831,22 @@ func assignRows(nodes []lnode, trunk []bool, flows []layoutFlow, idx map[string]
 			assigned[i] = true // the trunk is already on row 0
 		}
 	}
-	for _, i := range order {
-		want := preferredRow(i, pred, row, assigned, nodes, idx)
-		row[i] = nearestFreeRow(used, lo[i], hi[i], want)
-		assigned[i] = true
-		for c := lo[i]; c <= hi[i]; c++ {
-			take(c, row[i])
+	for _, ui := range order {
+		u := units[ui]
+		// A corridor carries no node of its own, so nothing flows into it to line up
+		// with: it takes the row nearest the trunk. A real node lines up with what
+		// flows into it.
+		want := 1
+		if len(u.members) == 1 {
+			want = preferredRow(u.members[0], pred, row, assigned, nodes, idx)
+		}
+		r := nearestFreeRow(used, u.lo, u.hi, want)
+		for _, n := range u.members {
+			row[n] = r
+			assigned[n] = true
+		}
+		for c := u.lo; c <= u.hi; c++ {
+			take(c, r)
 		}
 	}
 	return row
@@ -1048,6 +1133,9 @@ func boundaryCenterX(host lnode, k, n, w int) int {
 func emitShapes(lo *laidOut, nodes []lnode, inner map[string]*laidOut) {
 	for i := range nodes {
 		n := nodes[i]
+		if n.dummy {
+			continue // a virtual node holds a corridor open; it draws nothing
+		}
 		if n.sub != nil {
 			lo.shapes = append(lo.shapes, placedShape{id: n.id, x: n.x, y: n.y, w: n.w, h: n.h, expanded: true})
 			child := inner[n.id]
@@ -1090,7 +1178,7 @@ func boundaryLabelWidth(s string) int {
 // a single straight segment; a branch to another row is an elbow — out, across,
 // then in — so the alternate path reads as its own lane instead of a diagonal that
 // clips the boxes it passes.
-func emitEdges(lo *laidOut, nodes []lnode, idx map[string]int, flows []layoutFlow, back map[int]bool, colRight, colLeft map[int]int, channelY int) {
+func emitEdges(lo *laidOut, nodes []lnode, idx map[string]int, flows []layoutFlow, back map[int]bool, colRight, colLeft map[int]int, channelY int, chains map[int][]int) {
 	lane := 0 // each channel-routed edge gets its own horizontal lane below the nodes
 	for fi, f := range flows {
 		s, sok := idx[f.SourceRef]
@@ -1099,9 +1187,18 @@ func emitEdges(lo *laidOut, nodes []lnode, idx map[string]int, flows []layoutFlo
 			continue
 		}
 		pts := routeFlow(nodes[s], nodes[t])
-		// A back edge always detours; a forward edge only when its direct route would
-		// cut through a node it does not connect — a bypass that skips several columns
-		// would otherwise be drawn straight across everything in between.
+		// A forward edge that skips columns runs along the corridor its dummy chain
+		// reserved (ADR-0127, phase 2), so it stays among the nodes instead of being
+		// sent under the diagram.
+		if chain, ok := chains[fi]; ok && len(chain) > 0 && !back[fi] {
+			through := routeCorridor(nodes[s], nodes[t], nodes[chain[0]].y,
+				colRight[nodes[s].layer]+layoutGapX/2, colLeft[nodes[t].layer]-layoutGapX/2)
+			if !crossesForeignNode(through, nodes, s, t) {
+				pts = through
+			}
+		}
+		// What is left for the channel: a loop's returning edge, and the rare forward
+		// route that still cuts a node it does not connect.
 		if back[fi] || crossesForeignNode(pts, nodes, s, t) {
 			y := channelY + lane*layoutGapY/2
 			lane++
@@ -1186,6 +1283,58 @@ func routeChannel(src, tgt lnode, gutterOut, gutterIn, channelY int) []point {
 		{gutterIn, channelY},
 		{gutterIn, ty},
 		{tgt.x, ty},
+	}
+}
+
+// routeCorridor draws a forward edge along the row its dummy chain reserved: out of
+// the source's right edge, up (or down) to the corridor in the gap after the
+// source's column, across every column the chain spans, then down into the target's
+// left edge from the gap before it. Both risers stand in a column gap, which holds
+// no node by construction, and the horizontal run is on the reserved row — so the
+// whole path crosses nothing.
+//
+// The risers come from the column edges (gutterOut/gutterIn), the same ones
+// routeChannel uses, not from the endpoints' own x. An endpoint is only the extreme
+// node of its column by coincidence: on labelled-detours the target end event starts
+// 32px right of the task sharing its column, so a riser measured from the event
+// would have stood inside that task and the route would have been rejected for
+// cutting it.
+func routeCorridor(src, tgt lnode, corridorY, gutterOut, gutterIn int) []point {
+	sx, sy := src.x+src.w, src.y+src.h/2
+	tx, ty := tgt.x, tgt.y+tgt.h/2
+	riserX, dropX := gutterOut, gutterIn
+	if dropX <= riserX {
+		return routeFlow(src, tgt)
+	}
+	if sy == corridorY && corridorY == ty {
+		return []point{{sx, sy}, {tx, ty}}
+	}
+	// A gateway rises out of the vertex facing the corridor rather than out of its
+	// side, the same rule routeFlow applies to a branch that steps off the row. That
+	// keeps the riser inside the gateway's own column instead of standing in the gap
+	// after it — and the gap after a gateway is exactly where its other branches'
+	// captions have to fit. On labelled-detours the gap is 50px and the caption of
+	// the branch alongside needs 36 of them, so the two cannot share it.
+	if src.gwy {
+		vx, vy := src.x+src.w/2, src.y
+		if corridorY > sy {
+			vy = src.y + src.h
+		}
+		return []point{
+			{vx, vy},
+			{vx, corridorY},
+			{dropX, corridorY},
+			{dropX, ty},
+			{tx, ty},
+		}
+	}
+	return []point{
+		{sx, sy},
+		{riserX, sy},
+		{riserX, corridorY},
+		{dropX, corridorY},
+		{dropX, ty},
+		{tx, ty},
 	}
 }
 
