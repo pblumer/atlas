@@ -112,3 +112,81 @@ func TestParseRegistersEveryValidIdDespiteARejection(t *testing.T) {
 		}
 	}
 }
+
+// TestParseReportsFirstWiringRejection pins which error an author sees when a
+// model has more than one wiring problem. The four wiring passes (data
+// associations, io mappings, loop characteristics) no longer return at the
+// failing call site — they keep going so every valid association still wires
+// against a complete id table — so more than one rejection can exist by the time
+// the passes finish. The first one wins, which is the one the old code would
+// have returned at.
+func TestParseReportsFirstWiringRejection(t *testing.T) {
+	// Two ioMapping inputs with no target, on two different tasks. The first task
+	// in the walk is the one reported.
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+	             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+	  <process id="p" isExecutable="true">
+	    <startEvent id="s"/>
+	    <serviceTask id="first">
+	      <extensionElements>
+	        <zeebe:taskDefinition type="t"/>
+	        <zeebe:ioMapping><zeebe:input source="= 1" target=""/></zeebe:ioMapping>
+	      </extensionElements>
+	    </serviceTask>
+	    <serviceTask id="second">
+	      <extensionElements>
+	        <zeebe:taskDefinition type="t"/>
+	        <zeebe:ioMapping><zeebe:input source="= 2" target=""/></zeebe:ioMapping>
+	      </extensionElements>
+	    </serviceTask>
+	    <endEvent id="e"/>
+	    <sequenceFlow id="f1" sourceRef="s" targetRef="first"/>
+	    <sequenceFlow id="f2" sourceRef="first" targetRef="second"/>
+	    <sequenceFlow id="f3" sourceRef="second" targetRef="e"/>
+	  </process>
+	</definitions>`
+	_, err := Parse(1, 1, strings.NewReader(xml))
+	if err == nil {
+		t.Fatal("Parse: want an error for the target-less ioMapping input, got nil")
+	}
+	if !strings.Contains(err.Error(), `"first"`) {
+		t.Errorf("error = %q, want the first offending task reported", err.Error())
+	}
+	if strings.Contains(err.Error(), `"second"`) {
+		t.Errorf("error = %q, want only the first rejection, not the later one", err.Error())
+	}
+}
+
+// TestParseWiringRejectionSurvivesLaterPasses checks a rejection raised by an
+// early wiring pass is still the error reported after the later passes have run.
+// The passes carry on past a rejection, so a bug that let a later pass overwrite
+// or swallow the kept error would otherwise only show up as a confusing message
+// on a model with two unrelated problems.
+func TestParseWiringRejectionSurvivesLaterPasses(t *testing.T) {
+	// A data output association naming an unknown target (first pass) plus an
+	// activity carrying both loop markers (last pass).
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+	             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+	  <process id="p" isExecutable="true">
+	    <startEvent id="s"/>
+	    <serviceTask id="task">
+	      <extensionElements><zeebe:taskDefinition type="t"/></extensionElements>
+	      <dataOutputAssociation id="doa"><targetRef>ghost</targetRef></dataOutputAssociation>
+	      <multiInstanceLoopCharacteristics>
+	        <extensionElements><zeebe:loopCharacteristics inputCollection="= [1]"/></extensionElements>
+	      </multiInstanceLoopCharacteristics>
+	      <standardLoopCharacteristics/>
+	    </serviceTask>
+	    <endEvent id="e"/>
+	    <sequenceFlow id="f1" sourceRef="s" targetRef="task"/>
+	    <sequenceFlow id="f2" sourceRef="task" targetRef="e"/>
+	  </process>
+	</definitions>`
+	_, err := Parse(1, 1, strings.NewReader(xml))
+	if err == nil {
+		t.Fatal("Parse: want an error, got nil")
+	}
+	if !strings.Contains(err.Error(), "targetRef") {
+		t.Errorf("error = %q, want the data-association rejection from the first pass", err.Error())
+	}
+}
