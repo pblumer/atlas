@@ -15,6 +15,8 @@
 package engine
 
 import (
+	"time"
+
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
@@ -32,6 +34,10 @@ type Processor struct {
 	store     *state.Store
 	clock     Clock
 	keygen    *keyGen
+
+	// metrics observes each batch (ADR-0142). Nil — the default — means the loop reports
+	// nothing and never even reads the clock, so an uninstrumented processor pays nothing.
+	metrics Metrics
 
 	processes map[uint64]*compiler.CompiledProcess
 	handlers  map[uint16]func(*ProcessingContext)
@@ -645,6 +651,11 @@ func (p *Processor) processBatch() error {
 		// past the consumed commands and queue any followups.
 		tx.Close()
 		p.advanceQueue(n)
+		// Still a batch, and its commands were still consumed — but with no events there
+		// is no fsync and no commit to time, so the durations stay zero (ADR-0142).
+		if p.metrics != nil {
+			p.metrics.BatchCommitted(BatchStats{Commands: n, QueueDepth: len(p.queue)})
+		}
 		return nil
 	}
 
@@ -658,9 +669,21 @@ func (p *Processor) processBatch() error {
 			return err
 		}
 	}
+	var syncSeconds, commitSeconds float64
+	var started time.Time
+	if p.metrics != nil {
+		started = time.Now()
+	}
 	if err := p.log.Sync(); err != nil {
+		if p.metrics != nil {
+			p.metrics.SyncFailed()
+		}
 		tx.Close()
 		return err
+	}
+	if p.metrics != nil {
+		syncSeconds = time.Since(started).Seconds()
+		started = time.Now()
 	}
 
 	// Phase 3: make state visible, recording the applied position atomically.
@@ -670,13 +693,31 @@ func (p *Processor) processBatch() error {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
+		if p.metrics != nil {
+			p.metrics.CommitFailed()
+		}
 		tx.Close()
 		return err
 	}
 	tx.Close()
+	if p.metrics != nil {
+		commitSeconds = time.Since(started).Seconds()
+	}
 
 	// Phase 4: followups go to the next batch; Phase 5: side effects post-fsync.
 	p.advanceQueue(n)
+	// Everything this batch wrote is now durable and visible, which is the earliest
+	// point at which counting it is honest (invariant I2, ADR-0142). QueueDepth is read
+	// after advanceQueue so it includes the follow-ups this batch scheduled.
+	if p.metrics != nil {
+		p.metrics.BatchCommitted(BatchStats{
+			Commands:      n,
+			Events:        len(p.batchRecords),
+			QueueDepth:    len(p.queue),
+			SyncSeconds:   syncSeconds,
+			CommitSeconds: commitSeconds,
+		})
+	}
 	for _, se := range p.sideEffects {
 		p.notifyJobAvailable(se.jobType)
 	}

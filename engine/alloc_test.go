@@ -78,3 +78,53 @@ func TestAdvanceQueueNoAllocWhenWarm(t *testing.T) {
 		t.Errorf("advanceQueue allocated %v times per run, want 0 once warmed", allocs)
 	}
 }
+
+// TestReportBatchNoAlloc pins the second ADR-0142 hot-path rule: reporting a batch is
+// one interface call passing a plain struct by value, so it must not allocate. This is
+// the test that catches a future metric added with a label lookup (`WithLabelValues` per
+// batch) or a boxed argument — the two ways instrumentation quietly starts taxing the
+// throughput path it exists to measure.
+func TestReportBatchNoAlloc(t *testing.T) {
+	p := &Processor{metrics: discardMetrics{}}
+	stats := BatchStats{Commands: 12, Events: 30, QueueDepth: 4, SyncSeconds: 0.001, CommitSeconds: 0.0002}
+
+	allocs := testing.AllocsPerRun(1000, func() {
+		p.metrics.BatchCommitted(stats)
+		p.metrics.SyncFailed()
+		p.metrics.CommitFailed()
+	})
+	if allocs != 0 {
+		t.Errorf("reporting a batch allocated %v times per run, want 0", allocs)
+	}
+}
+
+// TestUninstrumentedBatchReportCostsNothing: with no Metrics attached the loop must not
+// even read the clock, so an operator who disables metrics pays nothing at all.
+func TestUninstrumentedBatchReportNoAlloc(t *testing.T) {
+	p := &Processor{}
+	allocs := testing.AllocsPerRun(1000, func() {
+		if p.metrics != nil {
+			p.metrics.BatchCommitted(BatchStats{})
+		}
+	})
+	if allocs != 0 {
+		t.Errorf("the nil-metrics path allocated %v times per run, want 0", allocs)
+	}
+}
+
+// discardMetrics is a Metrics that does the least a real one can: it keeps the values
+// live (so the compiler cannot optimise the call away) without allocating.
+type discardMetrics struct{}
+
+func (discardMetrics) BatchCommitted(s BatchStats) {
+	sinkCommands += s.Commands
+	sinkEvents += s.Events
+}
+func (discardMetrics) SyncFailed()   { sinkFailures++ }
+func (discardMetrics) CommitFailed() { sinkFailures++ }
+
+var (
+	sinkCommands int
+	sinkEvents   int
+	sinkFailures int
+)

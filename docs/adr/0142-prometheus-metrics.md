@@ -127,8 +127,11 @@ counter behind it does not become a metric until it does.
 ### Cardinality
 
 Labels are an **allowlist**, and the allowed dimensions are ones whose value set is
-fixed by the code, not by the data: the partition id, and a small closed enum where a
-metric genuinely has variants (e.g. an outcome of `success` / `failure`).
+fixed by the code, not by the data: the partition id, a small closed enum where a metric
+genuinely has variants (e.g. an outcome of `success` / `failure`), and the `le` /
+`quantile` labels a histogram or summary generates from bucket boundaries chosen in the
+source. The rule is that a label's values must not come from the data — not that no
+label may exist.
 
 Never a label: instance key, element instance key, job key, correlation key, message
 name, process id, definition key, element id, user, tenant, URL, or any other
@@ -172,9 +175,29 @@ This ADR is **not implemented in one change**. The slices:
    holds trivially. They also reuse the collectors ADR-0131 slice 8 already built for
    `GET /api/v1/checkpoints` rather than introducing a second way to read the same
    facts.
-2. Engine hot-path counters and histograms — commands and events processed, batch size,
-   fsync and state-commit duration and failures, queue depth — with the allocation
-   benchmark that proves rule 3.
+2. **Landed** — **engine hot-path counters and histograms**. The batch loop reports each
+   committed batch through a small `engine.Metrics` interface — commands consumed, events
+   made durable, queue depth after the batch, and the fsync and state-commit durations —
+   and the server maps those onto pre-resolved Prometheus handles. The engine never
+   imports Prometheus: it hands out plain numbers, so the exposition format, the buckets
+   and the naming stay out of the partition's writer.
+
+   Three properties carry it, each with a test rather than an assertion in prose:
+   - **Reported only once durable.** `BatchCommitted` is called after the state commit;
+     a batch whose fsync or commit fails is reported as a *failure* and never counted as
+     committed. A counter that ran ahead of the log would claim work a crash then loses.
+   - **Free on the hot path.** One interface call per *batch*, passing a struct by value.
+     `engine.TestReportBatchNoAlloc` pins the call shape and
+     `api.TestEngineMetricsReportNoAlloc` pins the real Prometheus implementation — the
+     latter is what fails if a future metric is added with a per-batch `WithLabelValues`.
+     A nil `Metrics` means the loop does not even read the clock.
+   - **No zero observations.** A batch that produced no events had nothing to fsync and
+     nothing to commit, so its durations are not observed; feeding a latency histogram
+     zeros would report a p99 no real write ever achieved. Its commands still count.
+
+   The overhead is measured, not asserted: `BenchmarkInstrumented` against
+   `BenchmarkUninstrumented` in `benchmarks/` shows identical `allocs/op`, with `ns/op`
+   inside the fsync's own run-to-run spread.
 3. Runtime gauges — active instances, element instances, jobs, timers, messages,
    incidents — which first need O(1) maintained counters wherever only a scan exists
    today.

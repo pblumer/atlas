@@ -255,6 +255,32 @@ so restart no longer replays from genesis.
   standard loop like a sequential multi-instance, badged ↻ and bounded by the modelled
   `loopMaximum`, and the Operations call-activity list labels a looping call activity
   **loop** rather than **multi-instance**.
+- **Engine throughput and latency metrics** (v0.2.0 programme E,
+  [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 2): `/metrics` now reports what
+  the partition writer is actually doing — `atlas_batches_total`,
+  `atlas_commands_processed_total`, `atlas_events_written_total`, the events-per-batch
+  histogram, and the two that matter when the engine feels slow:
+  **`atlas_wal_sync_seconds`** (the one group-commit fsync per batch, the usual
+  bottleneck) and **`atlas_state_commit_seconds`**, with
+  `atlas_wal_sync_failures_total` / `atlas_state_commit_failures_total` beside them and
+  `atlas_command_queue_depth` as the backpressure signal. None of these can be read off
+  disk, so unlike slice 1's gauges they are pushed from the batch loop.
+
+  That puts them on the hot path, under three rules each pinned by a test rather than a
+  comment. They are reported **after** the state commit, so a counter never claims work
+  a crash then loses; a batch whose fsync fails is reported as a failure and is *not*
+  counted as committed. Reporting is one interface call per **batch** passing a struct by
+  value, and two allocation tests hold it there — one on the call shape, one on the real
+  Prometheus handles, which is what fails if a future metric is added with a per-batch
+  label lookup. And a batch that wrote nothing observes no durations, because feeding a
+  latency histogram zeros would report a p99 no real write ever achieved.
+
+  The engine never imports Prometheus: it hands out plain numbers through a small
+  `engine.Metrics` interface and the server maps them onto pre-resolved handles, so the
+  exposition format and the bucket choices stay out of the single writer. The overhead is
+  measured rather than asserted — `BenchmarkInstrumented` against
+  `BenchmarkUninstrumented` in `benchmarks/` shows **identical `allocs/op`**, with
+  `ns/op` inside the fsync's own run-to-run spread.
 - **Prometheus metrics at `/metrics`** (v0.2.0 programme E,
   [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 1): Atlas had no metrics at all —
   everything observable was a JSON read of the present moment or a line in the log, so

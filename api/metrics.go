@@ -5,6 +5,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/metrics"
 )
 
@@ -157,6 +158,14 @@ func (s *Server) buildMetrics() error {
 	if err := reg.Register(metrics.BuildInfo(b.Version, b.Revision), newDurabilityCollector(s)); err != nil {
 		return err
 	}
+	// The engine's hot-path counters, pushed from the batch loop rather than read at
+	// scrape time — nothing on disk records how many batches ran or how long their
+	// fsyncs took (ADR-0142 slice 2).
+	em := newEngineMetrics()
+	if err := reg.Register(em.collectors()...); err != nil {
+		return err
+	}
+	s.proc.SetMetrics(em)
 	s.metrics = reg
 	return nil
 }
@@ -168,3 +177,83 @@ func (s *Server) buildMetrics() error {
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	s.metrics.Handler().ServeHTTP(w, r)
 }
+
+// engineMetrics is the engine's hot-path instrumentation (ADR-0142 slice 2): the
+// pre-resolved handles the batch loop pushes into. Every one is resolved *here*, at
+// construction, so `BatchCommitted` touches a `prometheus.Counter` and never a `*Vec` —
+// no label lookup, no map, no allocation on the single writer's path (invariant I1).
+//
+// It satisfies engine.Metrics structurally, so the engine never imports Prometheus: it
+// hands out plain numbers and the naming, buckets and exposition stay here.
+type engineMetrics struct {
+	batches        prometheus.Counter
+	commands       prometheus.Counter
+	events         prometheus.Counter
+	batchEvents    prometheus.Histogram
+	syncSeconds    prometheus.Histogram
+	commitSeconds  prometheus.Histogram
+	syncFailures   prometheus.Counter
+	commitFailures prometheus.Counter
+	queueDepth     prometheus.Gauge
+}
+
+func newEngineMetrics() *engineMetrics {
+	counter := func(name, help string) prometheus.Counter {
+		return prometheus.NewCounter(prometheus.CounterOpts{Namespace: metrics.Namespace, Name: name, Help: help})
+	}
+	histogram := func(name, help string, buckets []float64) prometheus.Histogram {
+		return prometheus.NewHistogram(prometheus.HistogramOpts{
+			Namespace: metrics.Namespace, Name: name, Help: help, Buckets: buckets,
+		})
+	}
+	return &engineMetrics{
+		batches:  counter("batches_total", "Batches the partition writer has durably committed."),
+		commands: counter("commands_processed_total", "Commands the partition writer has consumed."),
+		events:   counter("events_written_total", "Events the partition writer has made durable."),
+		// A batch is capped at 1024 commands, so the buckets stop there: a wider range
+		// would only add series that can never be filled.
+		batchEvents: histogram("batch_events", "Events per committed batch.",
+			prometheus.ExponentialBuckets(1, 2, 11)),
+		// One fsync per batch is the durability point and the usual bottleneck, so the
+		// buckets span a fast NVMe (~100µs) to a badly degraded disk (~1.6s).
+		syncSeconds: histogram("wal_sync_seconds", "Duration of a batch's single group-commit fsync.",
+			prometheus.ExponentialBuckets(0.0001, 2, 15)),
+		commitSeconds: histogram("state_commit_seconds", "Duration of making a batch's state visible.",
+			prometheus.ExponentialBuckets(0.0001, 2, 15)),
+		syncFailures:   counter("wal_sync_failures_total", "Batches whose group-commit fsync failed; nothing they wrote is durable."),
+		commitFailures: counter("state_commit_failures_total", "Batches whose events are durable but whose state commit failed."),
+		queueDepth: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: metrics.Namespace, Name: "command_queue_depth",
+			Help: "Commands queued for the partition writer after the last batch, including its follow-ups.",
+		}),
+	}
+}
+
+func (m *engineMetrics) collectors() []prometheus.Collector {
+	return []prometheus.Collector{
+		m.batches, m.commands, m.events, m.batchEvents, m.syncSeconds,
+		m.commitSeconds, m.syncFailures, m.commitFailures, m.queueDepth,
+	}
+}
+
+// BatchCommitted records a durably committed batch. The engine calls it after the state
+// commit, so everything counted here is already on disk (invariant I2).
+//
+// A batch that produced no events had nothing to fsync and nothing to commit, so its
+// zero durations are *not* observed: a latency histogram fed zeros for empty batches
+// would report a p99 that no real write ever achieved.
+func (m *engineMetrics) BatchCommitted(s engine.BatchStats) {
+	m.batches.Inc()
+	m.commands.Add(float64(s.Commands))
+	m.queueDepth.Set(float64(s.QueueDepth))
+	if s.Events == 0 {
+		return
+	}
+	m.events.Add(float64(s.Events))
+	m.batchEvents.Observe(float64(s.Events))
+	m.syncSeconds.Observe(s.SyncSeconds)
+	m.commitSeconds.Observe(s.CommitSeconds)
+}
+
+func (m *engineMetrics) SyncFailed()   { m.syncFailures.Inc() }
+func (m *engineMetrics) CommitFailed() { m.commitFailures.Inc() }

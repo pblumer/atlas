@@ -545,10 +545,12 @@ What it takes to run this for real.
   applied log position, checkpoints and the position/age of the newest that still
   verifies, the last pass's outcome, WAL segments and bytes, exporter position and lag —
   all collected at scrape time from durable state, so they cannot over-report and cost
-  the engine nothing. Remaining: engine hot-path counters (commands, events, batch size,
-  fsync duration) with the allocation benchmark that proves they are free; runtime gauges
-  once the counters behind them are O(1); job-protocol counters; recovery duration;
-  readiness distinct from liveness; then structured log event names and OTel traces.
+  the engine nothing. The **engine batch metrics** landed too: batches, commands and
+  events processed, events per batch, fsync and state-commit duration and failures, and
+  command queue depth, reported after each batch is durable and proven allocation-free by
+  two tests and a paired benchmark. Remaining: runtime gauges once the counters behind
+  them are O(1); job-protocol counters; recovery duration; readiness distinct from
+  liveness; then structured log event names and OTel traces.
 - ✅ Log compaction / snapshotting so recovery doesn't replay from genesis
   ([ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), v0.2.0
   programme D): the mechanism is complete. A checkpoint is a Pebble snapshot of the state

@@ -102,6 +102,25 @@ the percentiles show in the raw `-bench` output and via `benchstat`.
 | `BenchmarkLatencyHTTPLinearCreate` | end-to-end HTTP create-to-completion latency |
 | `BenchmarkLatencyEngineLinearSelfCompleting` | pure-engine per-instance latency (subtract to attribute the API-layer tail) |
 
+Instrumentation overhead ([ADR-0142](../docs/adr/0142-prometheus-metrics.md)) — the same
+service-task workload with and without the engine's batch metrics, so the cost of
+observability is measured rather than assumed:
+
+| Benchmark | Layer |
+|---|---|
+| `BenchmarkUninstrumented` | baseline, no `SetMetrics` |
+| `BenchmarkInstrumented` | the same run with the server's real Prometheus handles attached |
+
+```bash
+go test ./benchmarks -bench 'Instrumented|Uninstrumented' -benchmem -benchtime=300x -count=6
+```
+
+Read **`allocs/op` first**: it must be identical. Instrumentation is two clock reads and
+a handful of atomic adds per *batch* — a batch that has just performed an fsync — so any
+difference in `ns/op` should sit inside the run-to-run spread of the fsync itself. A
+non-zero `allocs/op` delta means a metric handle is being resolved per batch instead of
+at construction, which `TestEngineMetricsReportNoAlloc` also fails on.
+
 ## Running
 
 ```bash
