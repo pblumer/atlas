@@ -6446,7 +6446,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
         </div>
         <div style="flex:1"></div>
         <a class="btn neutral" id="rp-live" title="Open this instance's live view">Live view</a>
-        <a class="btn neutral" href="#/operations">&larr; Instances</a>
+        <a class="btn neutral" id="rp-instances" href="#/operations" title="Back to this process's instances">&larr; Instances</a>
       </div>
       <div class="replay-bar">
         <button class="btn play" id="play">&#9654; Play</button>
@@ -6520,6 +6520,10 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // the DOM, which now belongs to the newer mount.
   if (gen !== generation) return;
   root.querySelector("#rp-live").href = `#/operations/p/${tl.processDefKey}/i/${key}`;
+  // Return to this process's instance view — the Live view the replay was opened from —
+  // rather than all the way to the top-level Instances list (still one click away in the
+  // nav bar). Deep-linking straight to a replay lands there too, on the instance's process.
+  root.querySelector("#rp-instances").href = `#/operations/p/${tl.processDefKey}`;
 
   const viewer = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
   current = viewer;
