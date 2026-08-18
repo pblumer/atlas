@@ -202,3 +202,60 @@ func TestParseAdHocNoLongerRejected(t *testing.T) {
 		t.Errorf("empty ad-hoc entries = %v, want none", cp.AdHocEntries(n.ElementId))
 	}
 }
+
+// TestParseAdHocNestedContentIsValidated: an ad-hoc subprocess is a scope like any other, so the
+// compiler walks *into* it — sequence-flow wiring, I/O mappings, loop markers, lanes, and node
+// registration all apply to its contained elements (ADR-0138). Each case puts a fault inside an
+// ad-hoc that the compiler catches anywhere else, proving the recursion is really wired rather
+// than the content being silently skipped.
+func TestParseAdHocNestedContentIsValidated(t *testing.T) {
+	wrap := func(inner string) string {
+		return `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+		        xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+		  <process id="p" isExecutable="true">
+		    <startEvent id="s"/><endEvent id="e"/>
+		    <sequenceFlow id="f1" sourceRef="s" targetRef="adhoc"/>
+		    <sequenceFlow id="f2" sourceRef="adhoc" targetRef="e"/>
+		    <adHocSubProcess id="adhoc">` + inner + `</adHocSubProcess>
+		  </process>
+		</definitions>`
+	}
+	cases := map[string]struct{ inner, want string }{
+		// registerScope recursion: a contained node with a duplicate id is rejected as it is
+		// anywhere else (the id map is process-wide).
+		"duplicate contained id": {
+			inner: `<serviceTask id="s"><extensionElements><zeebe:taskDefinition type="ta"/></extensionElements></serviceTask>`,
+			want:  "duplicate",
+		},
+		// registerScope recursion: a contained service task with no implementation is rejected.
+		"contained task without implementation": {
+			inner: `<serviceTask id="a"/>`,
+			want:  "a",
+		},
+		// connectScope recursion: a contained flow pointing at an unknown node is rejected.
+		"contained flow to unknown target": {
+			inner: `<serviceTask id="a"><extensionElements><zeebe:taskDefinition type="ta"/></extensionElements></serviceTask>
+			        <sequenceFlow id="bad" sourceRef="a" targetRef="ghost"/>`,
+			want: "ghost",
+		},
+		// wireScopeMI recursion: a contained activity's multi-instance marker is validated.
+		"contained multi-instance without a collection": {
+			inner: `<serviceTask id="a">
+			          <extensionElements><zeebe:taskDefinition type="ta"/></extensionElements>
+			          <multiInstanceLoopCharacteristics/>
+			        </serviceTask>`,
+			want: "a",
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := Parse(1, 1, strings.NewReader(wrap(tc.inner)))
+			if err == nil {
+				t.Fatalf("Parse succeeded, want an error — content inside an ad-hoc must be validated")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error %q should mention %q", err.Error(), tc.want)
+			}
+		})
+	}
+}

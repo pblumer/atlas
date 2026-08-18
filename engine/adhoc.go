@@ -68,9 +68,8 @@ func (adHocSubProcessBehavior) OnCompleting(c *ProcessingContext, key uint64, ei
 // its scope has drained. A no-op for every element whose scope is not a conditional ad-hoc, so a
 // plain ad-hoc keeps the ordinary scope-drain completion.
 func checkAdHocCompletion(c *ProcessingContext, scopeKey uint64) {
-	if scopeKey == 0 {
-		return
-	}
+	// A root-scope element's scope key is its process instance, which is not an element
+	// instance, so the lookup below returns nil and this falls straight through.
 	scope := c.GetElementInstance(scopeKey)
 	if scope == nil || scope.BpmnElementType != uint8(compiler.TypeAdHocSubProcess) {
 		return

@@ -1,10 +1,12 @@
 # ADR-0138: Ad-hoc subprocesses (on-demand, unordered contained activities)
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-18
 - **Deciders:** Atlas engine team
 
-> **Implementation status.** Proposed. An **ad-hoc subprocess** (`<adHocSubProcess>`) is a container
+> **Implementation status.** Accepted and implemented, with the **parallel** ordering (the BPMN
+> default). **Sequential ordering is refused at deploy** rather than silently run as parallel —
+> that driver is a documented follow-up. An **ad-hoc subprocess** (`<adHocSubProcess>`) is a container
 > scope whose contained activities are **not driven by sequence flow from a start event** but run
 > **on demand, in any order, zero or more times** — the BPMN construct for flexible / case-management
 > work ("do any of these, in whatever order, until we're done"). It carries an optional boolean FEEL
@@ -190,9 +192,12 @@ checkpoint.
 - **Phase 3 — Modeler + docs + remaining ordering options.** Drop `bpmn:AdHocSubProcess` from
   `UNSUPPORTED_TYPES`; add a completion-condition (FEEL) field + an ordering select +
   `cancelRemainingInstances` toggle to the ad-hoc in the Implement panel. Accept this ADR and update
-  the ROADMAP. If tractable, **sequential ordering** (activate one entry activity at a time, the next
-  on each completion) and **`cancelRemainingInstances="false"`** (let active activities finish before
-  the ad-hoc completes) land here; otherwise they are documented follow-ups.
+  the ROADMAP. **`cancelRemainingInstances="false"`** (let the active activities finish before the
+  ad-hoc completes) landed in Phase 2. **Sequential ordering** did not: running one entry activity
+  at a time needs a durable "which entries have started" cursor on the container — the same
+  codec-change trap as a conditional event's `conditionMet` flag — so a model asking for it is
+  **refused at deploy** with a clear message instead of being silently run as parallel (which would
+  start every contained activity at once, not what the model says). It is a documented follow-up.
 
 ### Consequences
 

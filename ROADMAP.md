@@ -369,6 +369,22 @@ Making processes wait, react, and time out.
   false→true edge-triggering is a documented follow-up). Recovery-tested; authored in the Modeler (a
   FEEL condition field on the catch/boundary/event-subprocess start). The last unimplemented BPMN
   intermediate-event trigger, and the first that reacts to variable state.
+- ✅ **Ad-hoc subprocesses** ([ADR-0138](docs/adr/0138-adhoc-subprocesses.md)): the last major
+  **structural** BPMN element — a container whose contained activities are **not driven by sequence
+  flow**. Entering it activates every **entry activity** (a contained node with no incoming flow)
+  **at once**, each an independent token in the ad-hoc's scope; contained activities may still be
+  wired to each other, and a token then flows on inside the scope like anywhere else. It finishes
+  either when its scope **drains** — the ordinary embedded-subprocess rule — or, if it carries an
+  optional boolean **FEEL completion condition**, the first time that condition holds at the
+  checkpoint run **after each contained activity completes**: the still-running activities are then
+  cancelled (`cancelRemainingInstances`, the BPMN default) or, with `"false"`, left to finish. It is
+  built on the **existing scope machinery** (ADR-0074) and the multi-instance **completion-condition
+  eval + `terminateScope` cancel** (ADR-0077), so it adds **no value type, event, or recovery path** —
+  boundary events on it, interrupts, and recovery come for free (all recovery-tested). This is what
+  BPMN offers for **flexible / case-management** work: "do any of these, in whatever order, until
+  we're done." Authored in the Modeler (completion condition + cancel-remaining). **Sequential
+  ordering is refused at deploy** rather than silently run as parallel — a documented follow-up,
+  since a "which entries have started" cursor needs durable state.
 - ✅ Boundary events: timer and message, interrupting and non-interrupting,
   attached to waiting activities. An interrupting boundary cancels the host (and
   its job) and routes out its flow; a non-interrupting one spawns a parallel
