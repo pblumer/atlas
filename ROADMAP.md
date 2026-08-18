@@ -539,7 +539,16 @@ What it takes to run this for real.
 - 🔲 Public API surface (deploy, create instance, publish message, complete job, queries)
 - 🔲 gRPC job-worker protocol (streaming pull, leases, fencing) — ADR-0007
 - 🔲 Worker SDK (Go first)
-- 🔲 Metrics (throughput, batch size, fsync latency, queue depth), structured logs, OTel traces
+- 🚧 Metrics (throughput, batch size, fsync latency, queue depth), structured logs, OTel traces
+  ([ADR-0142](docs/adr/0142-prometheus-metrics.md), v0.2.0 programme E): a Prometheus
+  exposition at `/metrics` on Atlas's own registry. The **durability** metrics landed —
+  applied log position, checkpoints and the position/age of the newest that still
+  verifies, the last pass's outcome, WAL segments and bytes, exporter position and lag —
+  all collected at scrape time from durable state, so they cannot over-report and cost
+  the engine nothing. Remaining: engine hot-path counters (commands, events, batch size,
+  fsync duration) with the allocation benchmark that proves they are free; runtime gauges
+  once the counters behind them are O(1); job-protocol counters; recovery duration;
+  readiness distinct from liveness; then structured log event names and OTel traces.
 - ✅ Log compaction / snapshotting so recovery doesn't replay from genesis
   ([ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), v0.2.0
   programme D): the mechanism is complete. A checkpoint is a Pebble snapshot of the state
@@ -556,8 +565,9 @@ What it takes to run this for real.
   deletes the segments that checkpoint and every consumer watermark make redundant, so
   the log's disk is bounded too. The whole-instance snapshot (ADR-0109, amended) carries
   a verified checkpoint and installs it on restore, so backup/restore survives a
-  compacted log. Remaining: surface checkpoint and compaction status, and on-demand
-  controls, over the API — today they are visible only in the log.
+  compacted log. `GET`/`POST /api/v1/checkpoints` expose the status — published
+  checkpoints and whether they still verify, the last pass, the WAL's footprint — and a
+  checkpoint-now control for a planned restart. **ADR-0131 is complete.**
 - 🔲 Exported-log stream for downstream analytics
 - 🔲 Operator tooling: list/inspect instances, incidents, jobs
 

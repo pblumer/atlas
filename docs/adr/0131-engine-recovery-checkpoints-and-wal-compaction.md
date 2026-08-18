@@ -348,6 +348,18 @@ recovery behaves exactly as it did before.
    that sees a non-zero count skips. A pass that reads zero is therefore one whose deletion
    precedes the backup's choice of checkpoint, so the suffix that checkpoint needs starts
    at or above whatever was cut.
-8. Expose checkpoint and compaction status, and operator controls, over the API — what was
-   last checkpointed, what was last compacted, and a way to ask for either on demand.
-   Everything above is visible only in the log today.
+8. **Landed** — **the operator surface**, which completes this ADR.
+   `GET /api/v1/checkpoints` reports what is configured, every published checkpoint with
+   whether it **still verifies**, the last pass's outcome, and the WAL's current segment
+   count and bytes — enough to answer "how much log would a restart replay?" and "why has
+   my log stopped shrinking?" without shell access. `POST /api/v1/checkpoints` runs one
+   pass on demand, for an operator about to restart.
+
+   The control runs its pass **on the checkpoint goroutine**, not beside it: an on-demand
+   pass and a scheduled one then serialize by construction rather than by a lock, and both
+   run the same code. With checkpointing disabled there is no goroutine to ask, which is a
+   409 rather than a hang or a silent no-op.
+
+   Both are admin-gated like backup/restore, and both are deliberately **not** MCP tools:
+   this is storage housekeeping over the data directory, not something an agent drives a
+   scenario with, and the control deletes WAL segments when compaction is on.

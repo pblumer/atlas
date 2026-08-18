@@ -822,3 +822,64 @@ func TestReadSourceArchiveSkipsAndRefuses(t *testing.T) {
 		t.Errorf("oversized archive: err = %v, want a too-many-entries refusal", err)
 	}
 }
+
+// shortWriter accepts n bytes and then fails, standing in for a client that
+// disconnects partway through a download.
+type shortWriter struct {
+	budget int
+}
+
+func (s *shortWriter) Write(p []byte) (int, error) {
+	if len(p) > s.budget {
+		n := s.budget
+		s.budget = 0
+		return n, errors.New("connection reset")
+	}
+	s.budget -= len(p)
+	return len(p), nil
+}
+
+// TestWriteSourceArchiveSurfacesWriteFailure covers the export stream giving up
+// when the destination stops accepting bytes — a browser cancelling a download,
+// or a proxy timing out. Wherever in the stream the connection dies, the archive
+// must report it rather than return nil: a truncated tar.gz that claims success
+// is a backup someone only discovers is unusable when they try to restore from
+// it.
+func TestWriteSourceArchiveSurfacesWriteFailure(t *testing.T) {
+	// Incompressible content, so a byte budget on the destination is a budget on
+	// the compressed stream too and gzip has to flush through to the writer.
+	noise := func(n int) []byte {
+		b := make([]byte, n)
+		x := uint32(12345)
+		for i := range b {
+			x = x*1664525 + 1013904223 // deterministic, so the test cannot flake
+			b[i] = byte(x >> 24)
+		}
+		return b
+	}
+	files := []sourceFile{{Path: "atlas.json", Data: []byte(`{"key":"app"}`)}}
+	for i := 0; i < 12; i++ {
+		files = append(files, sourceFile{
+			Path: "processes/p" + strconv.Itoa(i) + ".bpmn",
+			Data: noise(40000),
+		})
+	}
+
+	// A spread of budgets so the failure lands at different points in the stream —
+	// on a header write for some, mid-content for others, at close for the rest.
+	for _, budget := range []int{0, 1, 4096, 40000, 120000, 300000} {
+		if err := writeSourceArchive(&shortWriter{budget: budget}, files); err == nil {
+			t.Errorf("budget %d: writeSourceArchive = nil, want the write failure surfaced", budget)
+		}
+	}
+
+	// The same tree written to a writer that accepts everything still succeeds, so
+	// the cases above fail for the reason they claim.
+	var ok bytes.Buffer
+	if err := writeSourceArchive(&ok, files); err != nil {
+		t.Fatalf("writeSourceArchive to a working writer: %v", err)
+	}
+	if ok.Len() == 0 {
+		t.Error("archive is empty")
+	}
+}

@@ -114,7 +114,7 @@ A number belongs to exactly one decision. Take the next free one when you add a 
 | [0102](0102-receive-tasks.md) | Receive tasks — an activity that waits for a correlating message, reusing the message-catch machinery | Accepted |
 | [0103](0103-compensation.md) | Compensation and compensation handlers | Accepted |
 | [0104](0104-token-simulation-embedded-subprocesses.md) | Token simulation — entering and running expanded embedded subprocesses as scopes | Accepted |
-| [0105](0105-per-server-call-activity-target-overrides.md) | Per-server call-activity target overrides — route, pin, or disable a call activity's target on one server | Proposed |
+| [0105](0105-per-server-call-activity-target-overrides.md) | Per-server call-activity target overrides — route, pin, or disable a call activity's target on one server | Accepted |
 | [0106](0106-bmc-remedy-connector.md) | A BMC Remedy connector — server-registered ITSM entry creation via the AR System REST API | Accepted |
 | [0107](0107-backup-and-restore.md) | Backup and restore — a one-file gzip-tar download of the design-time data directory, secrets excluded | Accepted |
 | [0108](0108-bpmn-transactions.md) | BPMN transactions — a transaction subprocess whose cancel end event compensates completed work in reverse order, then routes out an always-interrupting cancel boundary | Accepted |
@@ -151,6 +151,8 @@ A number belongs to exactly one decision. Take the next free one when you add a 
 | [0139](0139-csv-to-json-connector.md) | A first-class "CSV to JSON" connector kind with model-authored layout (renumbered from a duplicate 0090) | Accepted |
 | [0140](0140-live-collaborative-modeling-sessions.md) | Live collaborative modeling sessions — real-time co-editing of drafts by people and AI agents (renumbered from a duplicate 0103) | Proposed |
 | [0141](0141-sharepoint-connector.md) | SharePoint connector — create a list item via Microsoft Graph, provider managed and OAuth credential in the vault (renumbered from a duplicate 0105) | Accepted |
+| [0142](0142-prometheus-metrics.md) | Operational metrics over a Prometheus endpoint — the reference `client_golang` (already in the module graph via Pebble, so a promotion rather than a new dependency) on an **owned registry**, never `DefaultRegisterer`, so what is scraped is a decision rather than a side effect of the import graph. Two sources by what a metric *is*: a gauge over durable state is collected **at scrape time** from the store, the checkpoint root and the WAL directory, which satisfies durable-before-visible by construction (there is no in-memory number that could run ahead of disk) and costs nothing unscraped; a counter over work done is incremented by the engine **after** the durability point it describes. Two rules make it safe: labels must be fixed by the code and never by the data (no instance/job/correlation key, process id, URL — a per-definition breakdown is an API query, which can paginate, not a time series), and every labeled handle is resolved once at construction so the hot path touches a `Counter` and not a `*Vec` (invariant I1, proven by an allocation benchmark). A metric with no O(1) source waits for one rather than being approximated by a scan | Accepted |
+
 ## Status values
 
 - **Proposed** — under discussion

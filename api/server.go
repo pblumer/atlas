@@ -49,6 +49,7 @@ import (
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/mail"
+	"github.com/pblumer/atlas/metrics"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/opensearch"
 	"github.com/pblumer/atlas/remedy"
@@ -351,6 +352,17 @@ type Server struct {
 	// separately. Opt-in (WithWALCompaction), like history retention (ADR-0115) and for
 	// the same reason: it is the one irreversible operation here.
 	compactWAL bool
+	// checkpointRequests carries on-demand pass requests from a handler to the checkpoint
+	// goroutine, each with its own reply channel (ADR-0131). Running them *on that
+	// goroutine* is the point: an operator's pass and a scheduled one then serialize by
+	// construction rather than by a lock, and both run the same code. It is nil when
+	// checkpointing is off, which is what makes the endpoint's refusal honest.
+	checkpointRequests chan chan checkpointPass
+	// lastPass is the most recent pass's outcome, for the status endpoint. Written by the
+	// checkpoint goroutine, read by handler goroutines, hence the mutex.
+	lastPassMu sync.Mutex
+	lastPass   *checkpointPass
+
 	// backupsInFlight counts whole-instance snapshots currently streaming (ADR-0109).
 	// A snapshot reads the WAL files off the run loop, so a compaction underneath one
 	// could delete a segment the archive still needs; a pass that sees a non-zero count
@@ -362,6 +374,14 @@ type Server struct {
 	// for — its suffix starts at or above the cut. Atomic because the two run on
 	// different goroutines.
 	backupsInFlight atomic.Int64
+
+	// metricsEnabled gates the Prometheus exposition at /metrics, and metrics is the
+	// registry it serves (ADR-0142). On by default (opt-out, like the API docs): the
+	// exposition carries only bounded-cardinality aggregates, so the cost of having it
+	// is a port an operator may not want open rather than data leaking. Built once at
+	// construction — a duplicate registration then fails the boot, not a scrape.
+	metricsEnabled bool
+	metrics        *metrics.Registry
 
 	// docsEnabled gates the OpenAPI spec and the Scalar API explorer. On by
 	// default (opt-out), consistent with the already-open web UI and MCP
@@ -592,6 +612,14 @@ func WithCheckpointRetention(keep int) Option {
 	}
 }
 
+// WithoutMetrics turns off the Prometheus exposition at /metrics (ADR-0142). It is
+// served by default — a system meant to be operated should be observable without extra
+// configuration, and the exposition carries only bounded-cardinality aggregates — so
+// this is for an operator who does not want the surface open at all.
+func WithoutMetrics() Option {
+	return func(s *Server) { s.metricsEnabled = false }
+}
+
 // WithWALCompaction deletes the WAL segments a recovery checkpoint and every consumer
 // watermark make redundant (ADR-0131), bounding the log's disk instead of letting it
 // grow with all history. It has no effect without WithCheckpoints: the cut is derived
@@ -741,6 +769,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		dmnValidator:      dmn.NewValidator(resolver),
 		dmnRegistry:       dmn.NewRegistry(),
 		docsEnabled:       true, // opt-out: served unless WithoutDocs is passed (ADR-0043)
+		metricsEnabled:    true, // opt-out: served unless WithoutMetrics is passed (ADR-0142)
 	}
 	// The retention sweep reads its eligibility cutoff from the system clock by
 	// default; the options below may replace it (withClock) for a deterministic
@@ -939,7 +968,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// configured. Unlike the pollers above, this one's actual work happens *on* the run
 	// loop — a snapshot is only exact at a batch boundary (invariant I3) — so the
 	// goroutine exists to own the cadence and the off-loop pruning, not the snapshot.
+	if s.metricsEnabled {
+		if err := s.buildMetrics(); err != nil {
+			return nil, err
+		}
+	}
 	if s.checkpointInterval > 0 {
+		s.checkpointRequests = make(chan chan checkpointPass)
 		s.wg.Add(1)
 		go s.checkpointLoop(s.checkpointInterval)
 	}
@@ -1107,16 +1142,18 @@ func (s *Server) checkpointLoop(every time.Duration) {
 		select {
 		case <-s.quit:
 			return
+		case reply := <-s.checkpointRequests:
+			// An operator asked for a pass (ADR-0131 slice 8). It runs *here*, on the same
+			// goroutine as the cadence, so an on-demand pass and a scheduled one can never
+			// overlap — and it is the same pass, not a second code path.
+			res := s.runCheckpointPass(&last)
+			select {
+			case reply <- res:
+			case <-s.quit:
+				return
+			}
 		case <-ticks:
-			if pos := s.takeCheckpoint(); pos != 0 && pos != last {
-				last = pos
-				log.Printf("checkpoint: published at log position %d (recovery replays only past it)", pos)
-			}
-			// Compaction rides the same tick: the checkpoint just taken is what licenses
-			// any new deletion, and running it here keeps the two in one order.
-			if s.compactWAL {
-				s.compactLog()
-			}
+			s.runCheckpointPass(&last)
 			if s.checkpointDone != nil {
 				select {
 				case s.checkpointDone <- struct{}{}:
@@ -1128,6 +1165,40 @@ func (s *Server) checkpointLoop(every time.Duration) {
 	}
 }
 
+// runCheckpointPass takes a checkpoint and, when compaction is enabled, compacts on the
+// same pass: the checkpoint just taken is what licenses any new deletion, so running the
+// two together keeps them in one order. It records the result for the status endpoint
+// and returns it for the operator who asked.
+//
+// last carries the position most recently *logged* as published. An idle server
+// re-publishes nothing (Publish is a no-op at an existing position), so tracking it keeps
+// the cadence from logging the same line forever. Only the checkpoint goroutine touches
+// it, so it needs no lock.
+func (s *Server) runCheckpointPass(last *uint64) checkpointPass {
+	res := checkpointPass{At: s.now()}
+	pos, err := s.takeCheckpoint()
+	res.Position = pos
+	if err != nil {
+		res.CheckpointError = err.Error()
+	}
+	if pos != 0 && pos != *last {
+		*last = pos
+		log.Printf("checkpoint: published at log position %d (recovery replays only past it)", pos)
+	}
+	if s.compactWAL {
+		removed, note, cerr := s.compactLog()
+		res.SegmentsRemoved = removed
+		res.Note = note
+		if cerr != nil {
+			res.CompactionError = cerr.Error()
+		}
+	}
+	s.lastPassMu.Lock()
+	s.lastPass = &res
+	s.lastPassMu.Unlock()
+	return res
+}
+
 // takeCheckpoint publishes one checkpoint and prunes older ones, returning the position
 // it captured (zero when nothing was published — an idle server or a failed pass).
 //
@@ -1136,7 +1207,7 @@ func (s *Server) checkpointLoop(every time.Duration) {
 // checkpoint's consistency boundary meaningful (invariant I3). Pruning then runs off
 // the loop, keeping directory removal and an fsync out of the writer's way; it is safe
 // there because only this goroutine ever publishes into the root.
-func (s *Server) takeCheckpoint() uint64 {
+func (s *Server) takeCheckpoint() (uint64, error) {
 	var pos uint64
 	var err error
 	s.do(func() {
@@ -1148,15 +1219,18 @@ func (s *Server) takeCheckpoint() uint64 {
 	})
 	if err != nil {
 		log.Printf("checkpoint: %v (will retry next tick)", err)
-		return 0
+		return 0, err
 	}
 	if pos == 0 {
-		return 0
+		return 0, nil
 	}
 	if err := checkpoint.Prune(s.checkpointRoot, s.checkpointKeep); err != nil {
+		// The checkpoint is published either way; a failed prune costs disk, not recovery,
+		// so it is reported without discarding the position that was captured.
 		log.Printf("checkpoint: prune: %v (will retry next tick)", err)
+		return pos, err
 	}
-	return pos
+	return pos, nil
 }
 
 // compactLog deletes the WAL segments the newest verified checkpoint and every consumer
@@ -1168,26 +1242,30 @@ func (s *Server) takeCheckpoint() uint64 {
 // The deletion runs on the run loop (do): the WAL belongs to the single writer, which
 // may be rolling a segment at the same moment (invariant I3). It is bounded work — a few
 // unlinks and one directory fsync — and only for segments already proven redundant.
-func (s *Server) compactLog() {
+// It returns how many segments went, and a note naming why a pass did nothing when the
+// reason is a deliberate hold rather than an error — so an operator who asked for a pass
+// gets an answer, not a silent zero.
+func (s *Server) compactLog() (int, string, error) {
 	// A whole-instance snapshot streams the WAL files off the run loop; deleting
 	// underneath one would ship an archive with a hole (ADR-0109). Skipping costs a tick.
 	if s.backupsInFlight.Load() > 0 {
-		return
+		return 0, "skipped: a whole-instance snapshot is streaming the WAL", nil
 	}
 	limits, err := s.consumerWatermarks()
 	if err != nil {
 		log.Printf("wal compaction: consumer watermark unavailable: %v (skipping this tick)", err)
-		return
+		return 0, "", err
 	}
 	var removed int
 	s.do(func() { removed, err = s.proc.CompactLog(s.checkpointRoot, limits) })
 	if err != nil {
 		log.Printf("wal compaction: %v (will retry next tick)", err)
-		return
+		return 0, "", err
 	}
 	if removed > 0 {
 		log.Printf("wal compaction: deleted %d WAL segment(s) already covered by a checkpoint and every consumer", removed)
 	}
+	return removed, "", nil
 }
 
 // consumerWatermarks is the highest position each consumer of the durable log has
@@ -1371,6 +1449,11 @@ func (s *Server) Close() {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
+	// The Prometheus exposition sits beside /healthz: same process, same port, and
+	// ungated for the same reason (ADR-0142).
+	if s.metricsEnabled {
+		mux.HandleFunc("GET /metrics", s.handleMetrics)
+	}
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte("ok\n"))
