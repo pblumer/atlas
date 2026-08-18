@@ -1322,6 +1322,12 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		// consumes every waiting arrival in a single transition. Only a leaf
 		// completion (an end event, no outgoing flow) removes its token at once,
 		// yielding the one legitimate empty frame that marks the instance done.
+		//
+		// A *termination* is never deferred. An element torn down by an interrupting
+		// boundary event, a cancelled instance, or a terminate end event hands its
+		// token to no one — its outgoing flow is never taken — so waiting for a
+		// successor would leave a ghost token parked on it forever, outliving the
+		// instance itself (ADR-0136).
 		active := map[uint64]timelineToken{}
 		pending := map[uint64]state.ElementReplayValue{} // completions awaiting their successor
 		activations := map[uint64]state.ElementReplayValue{}
@@ -1341,7 +1347,8 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		}
 		for _, rr := range replayRows {
 			v := rr.v
-			if v.Action == 1 {
+			switch {
+			case v.Action == state.ReplayActivated:
 				activations[rr.pos] = v
 				// This activation is the successor of any deferred completion on its
 				// incoming flow's source node: those tokens move into it now.
@@ -1361,17 +1368,28 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				}
 				active[v.ElementInstanceKey] = timelineToken{TokenID: v.TokenID, ElementID: d.cp.ElementBpmnId(v.ElementID), ElementInstanceKey: v.ElementInstanceKey, State: stateName}
 				emitFrame(rr.pos, rr.at)
-			} else if d.cp.Node(v.ElementID).OutgoingCount == 0 {
-				// A leaf has no successor to move into: remove it at once.
+			case v.Action == state.ReplayTerminated, d.cp.Node(v.ElementID).OutgoingCount == 0:
+				// Nothing will activate from here — a termination hands its token on to
+				// no one, and a leaf has no successor to move into — so remove it at once.
 				endAt[v.ElementInstanceKey] = rr.at
 				delete(pending, v.ElementInstanceKey)
 				delete(active, v.ElementInstanceKey)
 				emitFrame(rr.pos, rr.at)
-			} else {
+			default:
 				// Defer: keep the token visible until its successor activates.
 				endAt[v.ElementInstanceKey] = rr.at
 				pending[v.ElementInstanceKey] = v
 			}
+		}
+		// A finished instance holds no element instance, so it can hold no token: drop
+		// anything still deferred and show the empty terminal frame. Live folds resolve
+		// every deferral above; this catches history written before terminations were
+		// recorded distinctly (ADR-0136), which would otherwise strand a ghost token on
+		// the last frame of an already-completed instance.
+		if len(active) > 0 && pi.State != model.PIActive && len(replayRows) > 0 {
+			last := replayRows[len(replayRows)-1]
+			active = map[uint64]timelineToken{}
+			emitFrame(last.pos, last.at)
 		}
 
 		// Walk the steps in order, advancing through every variable change at or
