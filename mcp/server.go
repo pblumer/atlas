@@ -13,9 +13,9 @@ const serverName = "atlas-mcp"
 
 // serverVersion is reported alongside serverName in the initialize handshake. It
 // is a var, not a const, so a release build can stamp the tag into it with
-// -ldflags "-X github.com/pblumer/atlas/mcp.serverVersion=0.1.0", matching the
+// -ldflags "-X github.com/pblumer/atlas/mcp.serverVersion=0.2.0", matching the
 // product version the api package reports.
-var serverVersion = "0.1.0-dev"
+var serverVersion = "0.2.0-dev"
 
 const (
 	// defaultProtocolVersion is the MCP revision we advertise when a client does
