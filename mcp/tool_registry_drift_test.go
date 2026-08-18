@@ -220,6 +220,15 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/applications/{id}/releases/{version}/promote": "shipping a release to another server is an operator decision with off-server consequences, not an agent action",
 	"GET /api/v1/applications/{id}/targets":                     "per-peer status of admin-configured targets; an agent reads this server's own state via atlas_application_deployments",
 
+	// Source-tree export/import (ADR-0134): a gzip-tar file transfer of an
+	// application's whole working set, in the same category as backup/restore. An
+	// agent authors through the granular tools it already has (atlas_save_draft,
+	// atlas_save_form, atlas_register_decision), where each change is one legible
+	// step; handing it an archive that silently rewrites every artifact of an
+	// application at once is neither reviewable nor something an agent needs.
+	"GET /api/v1/applications/{id}/source": "bulk source-tree download; an agent reads artifacts individually via atlas_get_draft_xml / atlas_get_form",
+	"POST /api/v1/applications/source":     "bulk source-tree upload that rewrites a whole application; an agent authors via atlas_save_draft / atlas_save_form",
+
 	// Secrets: credential storage; an agent must never read or write it.
 	"GET /api/v1/secrets":           "credential storage is not an agent capability",
 	"PUT /api/v1/secrets/{name}":    "credential storage is not an agent capability",

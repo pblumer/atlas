@@ -1132,6 +1132,7 @@ func armBoundaryEvents(c *ProcessingContext, hostKey uint64, ei *model.ElementIn
 			FlowScopeKey:       ei.FlowScopeKey,
 			BpmnElementType:    uint8(compiler.TypeBoundaryEvent),
 			AttachedToKey:      hostKey,
+			SourceFlowId:       -1, // attached to its host, not entered over a flow
 		})
 	}
 }
@@ -2592,6 +2593,7 @@ func activateCompensationHandler(c *ProcessingContext, v *model.CompensableValue
 		BpmnElementType:    uint8(target.Type),
 		MultiInstance:      miRole,
 		TokenID:            key,
+		SourceFlowId:       -1, // reached by a compensation throw, not over a flow
 	})
 }
 
@@ -3247,6 +3249,7 @@ func armEventSubTrigger(c *ProcessingContext, piKey, defKey, scopeKey uint64, ha
 		ElementId:          handlerNode, // the handler container; its EventSub detail names the trigger
 		FlowScopeKey:       scopeKey,
 		BpmnElementType:    uint8(compiler.TypeEventSubProcessStart),
+		SourceFlowId:       -1, // armed with its scope, not entered over a flow
 	})
 }
 

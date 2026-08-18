@@ -230,24 +230,57 @@ type deploymentTarget struct {
 
 ## Phase 4 — Git source binding
 
-**Goal:** bind an application to a git repo; import/sync/commit the same sidecar
-JSON the backup archive serializes (ADR-0107). **Candidate for its own ADR**
-(transport, conflicts, credentials).
+**Goal:** bind an application to a git repo; import/sync/commit its source.
+Decided in **[ADR-0134](../adr/0134-git-backed-applications.md)**, which settled
+four things this sketch had left open: a *curated source layout* (not the sidecar
+JSON — ADR-0107's reasoning does not carry to a repository), `go-git`, never
+merging (fast-forward or refuse), and a portable application key.
+
+### Slice 4a — the source layout and the portable key *(shipped)*
+
+The serialization first, transport-agnostic, so the git slice has something to
+commit and the format is testable on its own.
+
+- **`api/appsource.go`** — the layout, as pure functions of the records:
+  `buildSourceTree` / `parseSourceTree` / `applySourceTree`, plus
+  `applicationKeyFor` (lazy key derivation, unique per server).
+- **`api/appsource_http.go`** — `GET /api/v1/applications/{id}/source` and
+  `POST /api/v1/applications/source`, carrying the tree as a gzip tar (the
+  ADR-0107 archive format, so an operator meets one and not two).
+- **`project.Key`** — additive and `omitempty`; every pre-0134 application reads
+  back with no key and gets one derived the first time something needs it.
+
+**Two refinements to the illustrative tree in ADR-0134, made when building it:**
+
+- *The manifest is the index.* Every artifact appears in `atlas.json` with its id,
+  name, and file path; the files carry native content only. A `.bpmn` opens in any
+  modeler and a `.form.json` in any form editor, and neither has to be parsed to
+  learn which artifact it is.
+- *DMN references have no file.* Atlas stores a handle to a model authored in
+  temis, never the model (ADR-0014/0034), so `decisions/*.dmn` would mean copying
+  a temis-owned model into the repository and claiming it. A reference is a name
+  plus a handle — manifest data.
+
+Import **never deletes**: artifacts the tree omits are reported as `untracked` and
+left alone. Foreign artifacts (a process id owned by another application) are a
+409, checked before anything is written.
+
+### Slice 4b — the git binding itself *(next)*
 
 ### Backend
 
 - **`api/gitbinding.go`** — bind info on the application (repo URL, branch,
   credential vault handle). Persisted on the project sidecar (additive optional
   fields) or a small `<data-dir>/git-bindings/` store.
-- **`api/gitsync.go`** —
-  - **Import:** clone/pull to a scratch working copy, read the application's
-    artifact files (the ADR-0107 allowlisted shapes: drafts, dmnrefs, forms), write
-    them into the sidecar stores tagged with this application.
-  - **Commit/push:** serialize the application's current artifacts (reuse the
-    ADR-0107 export serialization) into the working copy, commit, push.
-  - Pure design-time server side effect; no engine, no hot path. Use a CGO-free git
-    approach (e.g. `go-git`) to preserve the single-binary/no-CGO constraint
-    (ADR-0010) — confirm in the Phase-4 ADR.
+- **`api/gitsync.go`** — the layout from slice 4a is what travels; this slice only
+  moves it.
+  - **Import:** clone/pull to a scratch working copy, read it as a `[]sourceFile`,
+    and hand it to `parseSourceTree` + `applySourceTree` — the same path the
+    upload endpoint takes, so git adds a transport and no second import rule.
+  - **Commit/push:** `buildSourceTree` into the working copy, commit, push.
+    Fast-forward or refuse; Atlas never merges (ADR-0134).
+  - Pure design-time server side effect; no engine, no hot path. `go-git`, for the
+    CGO-free single binary (ADR-0010/0011).
 - Endpoints: `POST /api/v1/applications/{id}/git/bind`, `.../git/import`,
   `.../git/commit`, `GET .../git/status`.
 
@@ -259,9 +292,11 @@ JSON the backup archive serializes (ADR-0107). **Candidate for its own ADR**
 ### Tests
 
 - `api/gitsync_test.go` — against a local bare repo fixture: bind → import
-  populates artifacts; local edit → commit/push writes them back; round-trip
-  (export→import) is stable; credential from vault, never logged; conflict handling
-  per the Phase-4 ADR.
+  populates artifacts; local edit → commit/push writes them back; a diverged branch
+  is refused with what diverged, never merged; credential from vault, never logged.
+- The round-trip property (export → import → export is byte-stable) is already
+  pinned by slice 4a's `TestApplicationSourceRoundTripAcrossServers`, so the git
+  slice inherits it rather than re-asserting it.
 
 ---
 
@@ -272,7 +307,8 @@ JSON the backup archive serializes (ADR-0107). **Candidate for its own ADR**
 | 1 Reframe | rename + headline publish | none | no | S |
 | 2 Releases | app version + history + local deployments view | none | no | M |
 | 3 Remote targets | deploy to other servers, per-target status | outbound HTTP | **yes** | L |
-| 4 Git binding | import/sync/commit | outbound git | **yes** | L |
+| 4a Source layout | portable key + source tree export/import | none | (ADR-0134) | M |
+| 4b Git binding | bind, import, commit/push | outbound git | (ADR-0134) | L |
 
 - Phases 1–2 are self-contained and low-risk (no new network, no new trust
   boundary) — land them first; they already deliver the "application that publishes

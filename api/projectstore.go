@@ -23,8 +23,15 @@ import (
 // keeps deserializing and reads as an ownerless, legacy project (see
 // effectiveRole), needing no migration.
 type project struct {
-	ID         string          `json:"id"`
-	Name       string          `json:"name"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Key is the portable application key (ADR-0134): a stable slug that identifies
+	// the application *across servers*, so a repository cloned into a server that
+	// has never seen it lands in the right place. The ID above stays what it always
+	// was — random and local — so nothing migrates. Empty on every application that
+	// predates ADR-0134; one is derived and saved the first time something needs it
+	// (applicationKeyFor).
+	Key        string          `json:"key,omitempty"`
 	OwnerID    string          `json:"ownerId,omitempty"`
 	Visibility string          `json:"visibility,omitempty"`
 	Members    []projectMember `json:"members,omitempty"`

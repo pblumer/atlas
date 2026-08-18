@@ -233,6 +233,27 @@ _Changed_ / _Removed_ for each version.
   worker under the reserved `WebScrapeJobTypeIndex`. Authorable in the Modeler via the
   service-task connector catalog.
 
+### Fixed
+
+- **An interrupted activity no longer leaves a ghost token in the replay**
+  ([ADR-0136](docs/adr/0136-terminated-tokens-in-the-replay.md)): when an interrupting
+  boundary event fired, the Operations replay kept drawing a live token on the activity the
+  interrupt had torn down — it survived to the last frame, so a `completed` instance appeared
+  to still hold a token. The replay's token fold defers an element's consumption until the
+  activation it causes appears (so a token does not flicker between two log positions), but a
+  *terminated* element takes no outgoing flow, so that deferral never resolved. Termination is
+  now recorded as its own fact, distinct from completion, and such a token is retired at once.
+  A finished instance ends with no token, as its live counters always said. Instances that
+  finished before this change keep their ghost token on intermediate frames; their final frame
+  is repaired on read.
+
+- **Attached and armed elements no longer claim a phantom predecessor**
+  ([ADR-0136](docs/adr/0136-terminated-tokens-in-the-replay.md)): an armed boundary event, an
+  armed event-subprocess trigger and a compensation handler are not entered over a sequence
+  flow, but recorded flow index `0` — a real flow — instead of "none". The replay animated
+  such a token along an edge that does not exist, and the frame fold could retire an unrelated
+  live token by mistaking the arming for that edge's successor.
+
 ### Changed
 
 - **Handbook: umlauts in the loop recipe's labels** ([ADR-0133](docs/adr/0133-standard-loop-activities.md)):

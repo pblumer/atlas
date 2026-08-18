@@ -17,8 +17,10 @@ import (
 // controls (hide "Share" from a viewer, "Delete" from a non-owner, …) without
 // re-deriving the rule client-side.
 type projectView struct {
-	ID         string          `json:"id"`
-	Name       string          `json:"name"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Key is the portable application key (ADR-0134), empty until one is derived.
+	Key        string          `json:"key,omitempty"`
 	OwnerID    string          `json:"ownerId,omitempty"`
 	Visibility string          `json:"visibility"`
 	Members    []projectMember `json:"members"`
@@ -45,6 +47,7 @@ func (s *Server) projectViewFor(r *http.Request, p project, artifacts int) proje
 	return projectView{
 		ID:         p.ID,
 		Name:       p.Name,
+		Key:        p.Key,
 		OwnerID:    p.OwnerID,
 		Visibility: vis,
 		Members:    members,
@@ -101,7 +104,15 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		rec.OwnerID = p.UserID
 	}
 	var saveErr error
-	s.do(func() { saveErr = s.projects.save(rec) })
+	s.do(func() {
+		// The portable key (ADR-0134) is assigned here so a new application has one
+		// from the start; it is derived from the name once and then never changes,
+		// because it is the identity a repository is matched on across servers.
+		if rec.Key, saveErr = s.deriveApplicationKey(rec); saveErr != nil {
+			return
+		}
+		saveErr = s.projects.save(rec)
+	})
 	if saveErr != nil {
 		writeError(w, http.StatusInternalServerError, "create project: "+saveErr.Error())
 		return

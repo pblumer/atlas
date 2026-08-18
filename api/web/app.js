@@ -1228,6 +1228,7 @@ async function viewModelerHome() {
         { label: "Form", icon: "▤", href: "#/modeler/form/new" },
         { sep: true },
         { label: "Import file…", icon: "📥", act: "import" },
+        { label: "Import source tree…", icon: "🗂", act: "import-source" },
       ])}
     </div>
     <div class="card" style="padding:0; margin-top:14px">
@@ -1296,6 +1297,7 @@ async function viewModelerHome() {
   onMenuAction(view, (act) => {
     if (act === "new-project") createProject(renderProjects);
     if (act === "import") importArtifact("", renderProjects);
+    if (act === "import-source") importApplicationSource(renderProjects);
   });
 
   // One deployed process = one row. A process may have several deployed versions;
@@ -1506,6 +1508,7 @@ async function viewProjectDetail(id) {
     ];
 
     const projItems = ungrouped ? [] : [
+      { label: "Download source…", icon: "🗂", act: "srcexport" },
       ...(rl.length ? [{ label: "Validate DMN", icon: "✔", act: "valproj" }] : []),
       ...(AUTH.enabled && isOwner ? [{ label: "Share…", icon: "👤", act: "shareproj" }] : []),
       ...(isOwner ? [{ label: "Rename application", icon: "✎", act: "renproj" }] : []),
@@ -1570,6 +1573,7 @@ async function viewProjectDetail(id) {
     onMenuAction(root, (act, b) => {
       switch (act) {
         case "import": importArtifact(ungrouped ? "" : id, render); break;
+        case "srcexport": downloadApplicationSource(id); break;
         case "newref": createDmnRef(ungrouped ? "" : id, render); break;
         case "shareproj": shareProject(proj, render); break;
         case "renproj": renameProject(id, proj.name, render); break;
@@ -2527,6 +2531,49 @@ async function deployProject(id, reload) {
   // Refused (or a server error): show why and reflect any DMN results in place.
   toast(rep.reason || rep.error || "Publish refused", "err");
   for (const r of rep.references || []) applyRefStatus(r.id, r);
+}
+
+// downloadApplicationSource downloads the application's source tree (ADR-0134): a
+// manifest plus its drafts and forms as native .bpmn and .form.json files, in one
+// .tar.gz. A plain same-origin navigation, so the session cookie authenticates it,
+// exactly as the console's backup download does.
+function downloadApplicationSource(id) {
+  window.location.href = `/api/v1/applications/${encodeURIComponent(id)}/source`;
+}
+
+// importApplicationSource reads a source tree back in. Which application it lands
+// in is not this dialog's choice: the tree's manifest carries the portable key, so
+// the server updates the application that key names or creates it when this server
+// has never seen it (ADR-0134). An import never deletes — artifacts the tree omits
+// are reported back and left alone.
+function importApplicationSource(reload) {
+  const picker = document.createElement("input");
+  picker.type = "file";
+  picker.accept = ".gz,.tgz,application/gzip";
+  picker.addEventListener("change", async () => {
+    const file = picker.files[0];
+    if (!file) return;
+    try {
+      const res = await fetch("/api/v1/applications/source", {
+        method: "POST",
+        headers: { "Content-Type": "application/gzip" },
+        body: file,
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error((data && data.error) || res.statusText);
+      const n = (data.processes || 0) + (data.forms || 0) + (data.decisions || 0);
+      toast(
+        `${data.created ? "Created" : "Updated"} ${data.name} — ${n} artifact${n === 1 ? "" : "s"}` +
+        (data.untracked && data.untracked.length
+          ? ` · ${data.untracked.length} local artifact${data.untracked.length === 1 ? "" : "s"} not in the tree, kept`
+          : ""),
+        "ok");
+      await reload();
+    } catch (e) {
+      toast("Import failed: " + (e && e.message || e), "err");
+    }
+  });
+  picker.click();
 }
 
 // publishApplication is the ADR-0128 headline action: ship the whole application as

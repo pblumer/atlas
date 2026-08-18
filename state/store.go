@@ -633,6 +633,18 @@ func (s *Store) ElementStepHistory(piKey uint64, fn func(ts int64, pos uint64, e
 	})
 }
 
+// The action codes of an ElementReplayValue — what the token did at this element.
+// Completion and termination are deliberately distinct: a completed element hands
+// its token on to a successor, a terminated one (interrupted by a boundary event,
+// torn down with its scope, cancelled) does not, so a replay must not wait for a
+// successor that will never activate (ADR-0136). Codes are persisted, so their
+// numeric values are part of the on-disk history format and must not be reused.
+const (
+	ReplayActivated  byte = 1 // the token entered the element
+	ReplayCompleted  byte = 2 // the element finished; its successor takes the token
+	ReplayTerminated byte = 3 // the element was torn down; the token dies with it
+)
+
 // ElementReplayValue is one durable causal token-lifecycle fact.
 type ElementReplayValue struct {
 	ElementID, SourceFlowID                    int32

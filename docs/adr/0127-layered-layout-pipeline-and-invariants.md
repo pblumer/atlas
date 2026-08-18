@@ -1,8 +1,8 @@
 # ADR-0127: A layered layout pipeline and executable layout invariants
 
-- **Status:** Accepted (amended 2026-08-17 — phase 2 was measured before being built, and mostly
-  dropped; see the amendment note below). Invariant gate, phases 0–1, and phase 2 *as amended* are in
-  place; phase 3 remains proposed
+- **Status:** Accepted (amended 2026-08-17 and 2026-08-18 — phases 2 and 3 were each measured before
+  being built, and each mostly dropped in favour of a smaller fix; see the amendment notes below).
+  Invariant gate and phases 0–3 in place, phases 2 and 3 *as amended*
 - **Date:** 2026-08-17
 - **Deciders:** Atlas engine team
 
@@ -48,6 +48,45 @@
 > gateways, dense cross-links) could still want real crossing minimization, and the score is how that
 > would show up. And a zero-crossing score does not mean a layout is *good*; the invariants and the
 > score together bound soundness and legibility, not beauty.
+
+> **Amendment (2026-08-18): phase 3 measured, and the port model dropped.** Phase 3 was proposed as a
+> **port model** — named attachment points carrying edge ends and labels — so that a caption's position
+> stops being an offset recomputed per case. Measuring first, on four models built to crowd captions,
+> confirmed the label class was still live but showed the defects are about **space, not anchors**.
+>
+> **The measurement.** Two of the four failed. Four named branches off one gateway put every caption on
+> the gateway, on the task, and under three sibling risers; a caption on a column-skipping bypass did
+> the same. In both, the run available was one column gap wide and every caption was wider than it.
+> Naming the anchor changes nothing about that. Two assumptions did: a caption's width is a *choice*,
+> because the renderer reflows text into whatever box it is given, and a caption may *slide along* the
+> line it labels rather than only flip across it. Both were treated as fixed, so a caption that fitted
+> nowhere was placed overlapping anyway by an explicit fallback.
+>
+> **What phase 3 became instead.** Captions are fitted rather than positioned: for one line, then two,
+> then three, each candidate position is tried and the first box that clears every shape, every edge and
+> every caption already placed wins, with candidates sliding to either end of a segment. Boundary
+> captions moved into that same placer — they had been computed from the event's own box *before the
+> exception flows existed to be avoided*, which is precisely why they needed a special case to stop
+> short of the next boundary event's riser. That special case is gone. This is the phase's stated intent
+> — one placer, no per-case offsets — reached without a port graph. The label invariant now also checks
+> captions against each other, since the shared placer guarantees it.
+>
+> **What this supersedes.** Row 3 of the phase table, and the paragraph below it describing phase 3 as
+> making a label's position "a property of the port it hangs from". The *Implementation status* note is
+> stale in full: every phase is now settled, none by adding the machinery it named.
+>
+> **A caveat and a debt.** The same limits apply as to phase 2: the corpus is 19 models, not a proof,
+> and captions fitting bounds legibility, not beauty. And one model, `labelled-detours`, carries a
+> budgeted crossing *and* the first budgeted overlap — a loop's returning edge and a bypass in one small
+> process are both channel-routed and both approach along the trunk row. Giving each channel-routed edge
+> its own offset within the column gutters was tried and reverted: it removed the overlap and added a
+> crossing. Separating them needs per-edge routing lanes end to end, which no measurement yet argues is
+> worth building.
+>
+> **On this ADR's own record.** Both phases this ADR proposed on reasoning were, on measurement, not
+> what the generator needed — twice the real defect was smaller and elsewhere. The phase structure was
+> still what made that legible, and the invariant gate is what made either call decidable. Read the
+> table below as the diagnosis it was, not as a plan that was executed.
 
 > **Implementation status.** The invariant gate and phases 0–1 are in place in
 > [`api/layout.go`](../../api/layout.go) and
