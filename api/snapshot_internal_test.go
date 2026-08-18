@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 	"testing/fstest"
+
+	"github.com/pblumer/atlas/checkpoint"
 )
 
 // These internal tests reach the defensive error branches of the full-snapshot
@@ -164,5 +166,43 @@ func TestApplyPendingRestoreMovesEntriesAndDropsState(t *testing.T) {
 	}
 	if _, err := os.Stat(staging); !os.IsNotExist(err) {
 		t.Errorf("staging not removed after apply (err=%v)", err)
+	}
+}
+
+// TestApplyPendingRestoreDropsCheckpoints: a whole-instance restore replaces the WAL
+// with a different log (ADR-0108), so any checkpoint left over from the old one
+// describes positions in a log that no longer exists. Recovery only refuses such a
+// checkpoint while the rebuilt store still trails it; once the restored log advances
+// past that position the stale checkpoint would pass every guard and seed recovery from
+// another log's state. Dropping them alongside the state store is what keeps that
+// impossible — at the cost of one full replay, which is exactly what a restore does
+// anyway (ADR-0131).
+func TestApplyPendingRestoreDropsCheckpoints(t *testing.T) {
+	dir := t.TempDir()
+	staging := filepath.Join(dir, restorePendingDir)
+	if err := os.MkdirAll(filepath.Join(staging, "wal"), 0o755); err != nil {
+		t.Fatalf("mkdir staged wal: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(staging, "wal", "0000000001.wal"), []byte("restored"), 0o644); err != nil {
+		t.Fatalf("write staged wal: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(staging, restoreReady), []byte("1"), 0o600); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+	// A checkpoint published against the log this restore is about to replace.
+	stale := filepath.Join(checkpoint.Dir(dir), checkpoint.DirName(42))
+	if err := os.MkdirAll(stale, 0o755); err != nil {
+		t.Fatalf("mkdir stale checkpoint: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(stale, checkpoint.ManifestName), []byte("old"), 0o644); err != nil {
+		t.Fatalf("write stale manifest: %v", err)
+	}
+
+	applied, err := ApplyPendingRestore(dir)
+	if err != nil || !applied {
+		t.Fatalf("apply: applied=%v err=%v, want true/nil", applied, err)
+	}
+	if _, err := os.Stat(checkpoint.Dir(dir)); !os.IsNotExist(err) {
+		t.Fatalf("checkpoints of the replaced log survived the restore (err=%v)", err)
 	}
 }

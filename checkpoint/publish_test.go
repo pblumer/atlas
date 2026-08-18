@@ -599,3 +599,31 @@ func TestSyncDirMissing(t *testing.T) {
 		t.Fatal("syncDir on a missing directory returned no error")
 	}
 }
+
+// TestDirIsADedicatedSubdirectoryOfTheDataDir pins the on-disk layout the server and
+// startup recovery share. Both resolve the checkpoint root through Dir, so this is the
+// one place the path is decided; the assertions are the properties that make sharing
+// it safe — it sits inside the data dir, and it is a directory of its own rather than
+// the data dir itself, which already holds the WAL and the state store.
+func TestDirIsADedicatedSubdirectoryOfTheDataDir(t *testing.T) {
+	dataDir := t.TempDir()
+	root := Dir(dataDir)
+	if root == dataDir {
+		t.Fatalf("Dir(%q) returned the data dir itself; checkpoints would mix with the WAL and state store", dataDir)
+	}
+	if parent := filepath.Dir(root); parent != dataDir {
+		t.Errorf("Dir(%q) = %q, which lives under %q rather than the data dir", dataDir, root, parent)
+	}
+	// And a checkpoint published at that path is found again at that same path — the
+	// round trip a restart depends on.
+	if _, err := Publish(root, testManifest(8), fakeSnapshot("s")); err != nil {
+		t.Fatalf("Publish into Dir(dataDir): %v", err)
+	}
+	positions, err := List(Dir(dataDir))
+	if err != nil {
+		t.Fatalf("List(Dir(dataDir)): %v", err)
+	}
+	if len(positions) != 1 || positions[0] != 8 {
+		t.Fatalf("List(Dir(dataDir)) = %v, want [8]", positions)
+	}
+}

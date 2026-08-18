@@ -533,8 +533,11 @@ What it takes to run this for real.
   (falling back to an older checkpoint or genesis on anything untrustworthy); and
   `CompactLog` deletes the segments that become redundant, gated on a fully verified
   checkpoint **and** every consumer watermark (ADR-0114 exporter, ADR-0115 retention).
-  Remaining: wire it into the server — the checkpoint cadence, restoring at startup, and
-  the operator status/controls — which is what turns it on in production.
+  Checkpointing is now **on in the server**: `atlas serve` snapshots every
+  `--checkpoint-interval` (default 5m, keeping 3) and recovers through
+  `<data-dir>/checkpoints` at startup, so restart time follows the cadence rather than
+  the log's length. Remaining: feed `CompactLog` the live export/retention watermarks so
+  segments are actually deleted, plus the operator status and controls.
 - 🔲 Exported-log stream for downstream analytics
 - 🔲 Operator tooling: list/inspect instances, incidents, jobs
 

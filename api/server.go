@@ -41,6 +41,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pblumer/atlas/checkpoint"
 	"github.com/pblumer/atlas/clio"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/dmn"
@@ -321,6 +322,28 @@ type Server struct {
 	retentionTicks <-chan time.Time
 	retentionSwept chan struct{}
 
+	// Recovery checkpoints (ADR-0131): on a fixed cadence, snapshot the applied state
+	// so a restart replays only the WAL suffix past it instead of the whole log — the
+	// bounded-recovery-time property. Off unless checkpointInterval > 0
+	// (WithCheckpoints); checkpointKeep bounds how many published checkpoints survive,
+	// since each one hard-links the SSTables it captured and so pins their disk.
+	// checkpointRoot is derived from the data dir through checkpoint.Dir, the same
+	// function startup recovery resolves, so the two can never disagree.
+	//
+	// The snapshot itself runs on the run loop (via do), which is what makes its
+	// position exact: no batch can be half-applied while it is taken (invariant I3).
+	// Pruning runs off the loop — it only removes directories this goroutine published.
+	checkpointRoot     string
+	checkpointInterval time.Duration
+	checkpointKeep     int
+	// checkpointTicks, when non-nil, replaces the checkpoint loop's real ticker so a
+	// test takes each checkpoint explicitly rather than racing a wall-clock cadence.
+	// checkpointDone, when non-nil, receives once after each triggered pass completes.
+	// Both are nil in production. Set together by withCheckpointTrigger — the same
+	// deterministic-test seam as the retention sweep and the exporter.
+	checkpointTicks <-chan time.Time
+	checkpointDone  chan struct{}
+
 	// docsEnabled gates the OpenAPI spec and the Scalar API explorer. On by
 	// default (opt-out), consistent with the already-open web UI and MCP
 	// endpoint; an operator who does not want the interactive surface disables
@@ -515,6 +538,53 @@ func withRetentionTrigger(ticks <-chan time.Time, swept chan struct{}) Option {
 	}
 }
 
+const (
+	// checkpointKeepDefault is how many published checkpoints survive a prune. More
+	// than one so a checkpoint found to be corrupt at restore time still has an older
+	// one behind it; few enough that the SSTables they pin stay bounded (ADR-0131).
+	checkpointKeepDefault = 3
+)
+
+// WithCheckpoints enables periodic recovery checkpoints at the given cadence
+// (ADR-0131). Each one snapshots the applied state, so a restart replays only the log
+// past it rather than from genesis — recovery time becomes a function of the cadence
+// instead of the log's whole length.
+//
+// It is purely additive: nothing is deleted, the WAL stays the source of truth, and a
+// missing, failed, or corrupt checkpoint only makes the next recovery slower (invariant
+// I2). A non-positive cadence leaves checkpointing off.
+func WithCheckpoints(every time.Duration) Option {
+	return func(s *Server) {
+		if every > 0 {
+			s.checkpointInterval = every
+		}
+	}
+}
+
+// WithCheckpointRetention sets how many published checkpoints are kept (ADR-0131). A
+// checkpoint hard-links the SSTables it captured, so keeping every one would pin every
+// file the store ever wrote; keeping a few leaves a fallback if the newest is corrupt.
+// A non-positive value restores the default.
+func WithCheckpointRetention(keep int) Option {
+	return func(s *Server) {
+		if keep > 0 {
+			s.checkpointKeep = keep
+		}
+	}
+}
+
+// withCheckpointTrigger replaces the checkpoint loop's real ticker with an explicit
+// tick channel and, optionally, a completion channel signaled after each triggered
+// pass. It is unexported — a test seam, not an operator knob — so a test takes
+// checkpoints deterministically: send on ticks, receive on done, then assert, with no
+// wall-clock cadence or polling. Mirrors withRetentionTrigger.
+func withCheckpointTrigger(ticks <-chan time.Time, done chan struct{}) Option {
+	return func(s *Server) {
+		s.checkpointTicks = ticks
+		s.checkpointDone = done
+	}
+}
+
 // New builds a Server over an already-recovered processor and its store and
 // starts the run-loop goroutine. dataDir is the base data directory; the durable
 // deployment and draft sidecar stores live in its "deployments" and "drafts"
@@ -627,6 +697,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		exporterPoll:      5 * time.Second,        // OpenSearch export cadence; WithOpenSearchExportInterval overrides (ADR-0114)
 		retentionInterval: retentionSweepInterval, // history-retention sweep cadence; WithRetentionInterval overrides (ADR-0115)
 		retentionBatch:    retentionBatchDefault,  // finished instances evaluated per sweep tick
+		checkpointKeep:    checkpointKeepDefault,  // published checkpoints kept; WithCheckpointRetention overrides (ADR-0131)
 		vaultEnabled:      true,                   // opt-out: built unless WithoutVault is passed (ADR-0070)
 		users:             users,
 		sessions:          newSessionStore(defaultSessionTTL),
@@ -642,6 +713,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// test. Set here rather than in the literal above to keep the literal's comment
 	// alignment intact (invariant I4).
 	s.now = func() int64 { return time.Now().UnixNano() }
+	// The checkpoint root is derived, not configurable: recovery resolves the same
+	// path through checkpoint.Dir, and a knob here could only make them disagree
+	// (ADR-0131). Set outside the literal for the same alignment reason as above.
+	s.checkpointRoot = checkpoint.Dir(dataDir)
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -826,6 +901,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		s.wg.Add(1)
 		go s.retentionSweeper(s.retentionInterval)
 	}
+	// Recovery checkpoints bound restart time (ADR-0131). Off unless a cadence is
+	// configured. Unlike the pollers above, this one's actual work happens *on* the run
+	// loop — a snapshot is only exact at a batch boundary (invariant I3) — so the
+	// goroutine exists to own the cadence and the off-loop pruning, not the snapshot.
+	if s.checkpointInterval > 0 {
+		s.wg.Add(1)
+		go s.checkpointLoop(s.checkpointInterval)
+	}
 	return s, nil
 }
 
@@ -962,6 +1045,79 @@ func (s *Server) retentionSafePosition() (uint64, error) {
 		return s.exporter.HighWaterMark(), nil
 	}
 	return s.store.LastAppliedPosition()
+}
+
+// checkpointLoop publishes a recovery checkpoint on a fixed cadence and prunes the
+// ones it makes redundant (ADR-0131). A failed pass is logged and retried on the next
+// tick: a checkpoint is an optimization over the WAL, never a durability step, so
+// losing one costs a slower recovery and nothing else (invariant I2).
+//
+// The trigger is the same seam the retention sweep and exporter use — production runs
+// a real ticker, a test injects an explicit channel (withCheckpointTrigger) so a
+// checkpoint is taken exactly when the test says. When checkpointDone is set the loop
+// signals it after each triggered pass so the test can await completion.
+func (s *Server) checkpointLoop(every time.Duration) {
+	defer s.wg.Done()
+	ticks := s.checkpointTicks
+	if ticks == nil {
+		t := time.NewTicker(every)
+		defer t.Stop()
+		ticks = t.C
+	}
+	// last is the position most recently reported as published. An idle server
+	// re-publishes nothing (Publish is a no-op at an existing position), so tracking it
+	// keeps the cadence from logging the same line forever. Only this goroutine reads
+	// or writes it, so it stays a local.
+	var last uint64
+	for {
+		select {
+		case <-s.quit:
+			return
+		case <-ticks:
+			if pos := s.takeCheckpoint(); pos != 0 && pos != last {
+				last = pos
+				log.Printf("checkpoint: published at log position %d (recovery replays only past it)", pos)
+			}
+			if s.checkpointDone != nil {
+				select {
+				case s.checkpointDone <- struct{}{}:
+				case <-s.quit:
+					return
+				}
+			}
+		}
+	}
+}
+
+// takeCheckpoint publishes one checkpoint and prunes older ones, returning the position
+// it captured (zero when nothing was published — an idle server or a failed pass).
+//
+// The snapshot hops onto the run loop via do(): between batches, the store's applied
+// position and the state it holds agree exactly, which is precisely what makes a
+// checkpoint's consistency boundary meaningful (invariant I3). Pruning then runs off
+// the loop, keeping directory removal and an fsync out of the writer's way; it is safe
+// there because only this goroutine ever publishes into the root.
+func (s *Server) takeCheckpoint() uint64 {
+	var pos uint64
+	var err error
+	s.do(func() {
+		var applied uint64
+		if applied, err = s.store.LastAppliedPosition(); err != nil || applied == 0 {
+			return // nothing durable yet: there is no state worth snapshotting
+		}
+		pos, err = s.proc.Checkpoint(s.checkpointRoot)
+	})
+	if err != nil {
+		log.Printf("checkpoint: %v (will retry next tick)", err)
+		return 0
+	}
+	if pos == 0 {
+		return 0
+	}
+	if err := checkpoint.Prune(s.checkpointRoot, s.checkpointKeep); err != nil {
+		log.Printf("checkpoint: prune: %v (will retry next tick)", err)
+	}
+	return pos
 }
 
 // processLookup resolves a def key to its compiled process for the DMN worker. It

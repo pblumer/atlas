@@ -99,6 +99,29 @@ _Changed_ / _Removed_ for each version.
   standard loop like a sequential multi-instance, badged ↻ and bounded by the modelled
   `loopMaximum`, and the Operations call-activity list labels a looping call activity
   **loop** rather than **multi-instance**.
+- **Bounded restart time — the server now takes recovery checkpoints** (v0.2.0
+  programme D, [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md),
+  slice 5): the mechanism built by the previous slices is switched on. `atlas serve`
+  snapshots the applied state every `--checkpoint-interval` (default **5m**, `0`
+  disables), keeps `--checkpoint-keep` of them (default **3**), and at startup replays
+  only the log past the newest usable one instead of from genesis — so restart time
+  follows the cadence rather than the whole log's length. The server publishes into,
+  and startup recovery reads from, `<data-dir>/checkpoints`, both resolved through one
+  function so they cannot disagree.
+
+  It is on by default because nothing here is deleted: the WAL remains the source of
+  truth, and a missing, failed, or corrupt checkpoint only means a full replay. The
+  snapshot itself is taken on the run loop, between batches, which is what makes the
+  position it records exact (invariant I3); an idle server publishes nothing, and a
+  failed pass is logged and retried on the next tick. WAL segments are still **never
+  deleted** — feeding compaction the live export/retention watermarks, and the operator
+  status and controls, are the remaining ADR-0131 slice.
+
+  One consequence for **whole-instance restores** ([ADR-0109](docs/adr/0109-full-instance-snapshot.md)):
+  applying one now also drops `<data-dir>/checkpoints`. A restore replaces the WAL, so
+  checkpoints taken against the replaced log describe a log that no longer exists — and
+  once the restored log advanced past their position they would look usable. Dropping
+  them costs the full replay a restore performs anyway.
 - **WAL compaction — old segments finally become deletable** (v0.2.0 programme D,
   [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 4):
   the log no longer grows without bound. `wal.Log.Compact` deletes the segments a replay
