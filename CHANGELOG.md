@@ -99,6 +99,29 @@ _Changed_ / _Removed_ for each version.
   standard loop like a sequential multi-instance, badged ↻ and bounded by the modelled
   `loopMaximum`, and the Operations call-activity list labels a looping call activity
   **loop** rather than **multi-instance**.
+- **Whole-instance backup survives a compacted log** (v0.2.0 programme D,
+  [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 6;
+  [ADR-0109](docs/adr/0109-full-instance-snapshot.md) amended): the whole-instance
+  snapshot carries `wal/` and not `state/` because `state == replay(WAL)` — which stops
+  being true the moment compaction deletes a WAL prefix. An archive taken then would have
+  restored an engine **silently missing** every instance whose events were below the cut.
+
+  The snapshot now also carries the **newest fully verified checkpoint** (exactly one,
+  picked before the WAL is read so the WAL copy is a superset of the suffix it needs), and
+  applying a restore installs it as the state store before recovery replays the rest. A
+  published checkpoint is itself a complete Pebble directory, so this is a copy rather
+  than a conversion, and the checkpoint is kept so recovery can still seed the highest log
+  position and key counter that a deleted prefix no longer supplies. An archive with no
+  checkpoint restores exactly as before.
+
+  Two rules keep it safe: a staged restore **always** carries a checkpoint entry — empty
+  when the archive had none — so applying it replaces the local checkpoint root and
+  nothing from the replaced log survives; and an archive whose checkpoints do not verify
+  is **refused** rather than degraded to a plain replay, which would be right for a whole
+  log and silently lossy for a compacted one. The cost is archive size: a snapshot now
+  grows by roughly the state store, against the 1 GiB restore-upload cap. Still no WAL
+  segment is deleted anywhere — that is the last ADR-0131 slice, and this was the last
+  consumer standing in its way.
 - **Bounded restart time — the server now takes recovery checkpoints** (v0.2.0
   programme D, [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md),
   slice 5): the mechanism built by the previous slices is switched on. `atlas serve`

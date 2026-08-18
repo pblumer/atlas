@@ -1,6 +1,6 @@
 # ADR-0109: Whole-instance snapshot — a full backup that includes running instances
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-08-18: the snapshot also carries a recovery checkpoint, so it survives a compacted WAL — option B, layered on as foreseen)
 - **Date:** 2026-08-10
 - **Deciders:** Atlas engine team
 
@@ -97,12 +97,39 @@ them — the two features serve different purposes.)
 - **Positive:** running instances survive a backup/restore; DR and migration in one file;
   no engine changes; invariants untouched; consistency without pausing the writer.
 - **Negative / trade-offs accepted:** restore requires a **restart** (inherent to the
-  open single-writer stores); recovery replays the whole WAL from genesis on restore
-  (slower than a checkpoint-based tail replay — acceptable for a rare DR action, option B
-  can layer on later); the snapshot file contains secrets.
-- **Follow-ups / risks to watch:** for very large WALs, a Pebble state checkpoint (option
-  B) would speed restore; a supervisor-driven auto-restart after staging would remove the
-  manual restart step.
+  open single-writer stores); the snapshot file contains secrets; with a checkpoint
+  along (see the amendment below) the archive grows by roughly the state store's size,
+  which counts against the 1 GiB restore-upload cap.
+- **Follow-ups / risks to watch:** a supervisor-driven auto-restart after staging would
+  remove the manual restart step.
+
+## Amendment (2026-08-18): the snapshot carries a recovery checkpoint
+
+Option A rests on `state == replay(WAL)`, which holds only while the WAL still begins at
+genesis. ADR-0131 makes WAL segments below a recovery checkpoint deletable, and once a
+prefix is gone an archive of `wal/` alone would restore a **silently partial** engine:
+an instance whose events lived in the deleted prefix would not come back, with nothing
+to signal the loss.
+
+So the snapshot now also carries the **newest fully verified checkpoint** (exactly one),
+and `ApplyPendingRestore` installs it as the state store before recovery replays the
+remaining suffix. This is option B, which this ADR deferred only for want of a checkpoint
+API; ADR-0131 built one, and a published checkpoint is itself a complete Pebble directory,
+so installing it is a copy rather than a conversion. The checkpoint is selected *before*
+the WAL is read, so the WAL copy is always a superset of the suffix it needs.
+
+Two consequences are deliberate:
+
+- **A staging always carries a checkpoint entry**, empty when the archive had none, so
+  applying a restore replaces the local checkpoint root unconditionally. Checkpoints of
+  the log a restore replaced must never survive it, and settling that at staging time
+  keeps the apply idempotent across a crash.
+- **An archive whose checkpoints do not verify is refused**, not degraded to a plain
+  replay. Replaying is right for a whole log and silently lossy for a compacted one, and
+  a restore cannot tell which it holds; refusing to start is the only answer that is
+  never wrong.
+
+An archive with no checkpoint restores exactly as before.
 
 ## Links
 
