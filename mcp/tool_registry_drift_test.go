@@ -77,6 +77,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_collaboration_runtime":   "GET /api/v1/collaborations/{key}/runtime",
 	"atlas_list_drafts":             "GET /api/v1/drafts",
 	"atlas_get_draft_xml":           "GET /api/v1/drafts/{id}/xml",
+	"atlas_delete_draft":            "DELETE /api/v1/drafts/{id}",
 	"atlas_join_session":            "POST /api/v1/drafts/{id}/session/join",
 	"atlas_session_poll":            "POST /api/v1/drafts/{id}/session/poll",
 	"atlas_session_lock":            "POST /api/v1/drafts/{id}/session/lock",
@@ -143,9 +144,11 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/instances/{key}/variables": "admin-gated live-state correction; the MCP service principal is deliberately non-admin",
 
 	// Design-time edit: agents create artifacts and can read them back (list/get
-	// are exposed), but mutating existing ones is the UI's job.
+	// are exposed), but mutating existing ones is the UI's job. Deleting a draft is
+	// the one exception (atlas_delete_draft): an agent can *create* drafts, so
+	// leaving it no way to remove one makes every generated or throwaway diagram
+	// permanent litter that only a human can clear.
 	"PATCH /api/v1/drafts/{id}":          "artifact editing is a UI concern",
-	"DELETE /api/v1/drafts/{id}":         "artifact editing is a UI concern",
 	"DELETE /api/v1/forms/{id}":          "artifact editing is a UI concern",
 	"PATCH /api/v1/dmnrefs/{id}":         "artifact editing is a UI concern",
 	"DELETE /api/v1/dmnrefs/{id}":        "artifact editing is a UI concern",
@@ -204,6 +207,27 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/deploy-tokens":         "credential listing is admin-only, not an agent action",
 	"DELETE /api/v1/deploy-tokens/{id}": "credential revocation is admin-only, not an agent action",
 	"POST /api/v1/applications/import":  "server-to-server bundle transport authenticated by a deploy token; agents publish via atlas_publish_application",
+
+	// Deployment targets and promotion (ADR-0129, sending side): a target names
+	// another server and the credential to reach it — admin config in the same
+	// category as connectors. Promotion ships work to a *different* engine, often a
+	// production one; that is an operator's decision with consequences outside this
+	// server, not a step an agent drives while building a scenario. An agent
+	// publishes locally via atlas_publish_application and stops there.
+	"POST /api/v1/targets":                                      "peer target configuration is admin config, not an agent action",
+	"GET /api/v1/targets":                                       "peer target configuration is admin config, not an agent action",
+	"DELETE /api/v1/targets/{id}":                               "peer target configuration is admin config, not an agent action",
+	"POST /api/v1/applications/{id}/releases/{version}/promote": "shipping a release to another server is an operator decision with off-server consequences, not an agent action",
+	"GET /api/v1/applications/{id}/targets":                     "per-peer status of admin-configured targets; an agent reads this server's own state via atlas_application_deployments",
+
+	// Source-tree export/import (ADR-0134): a gzip-tar file transfer of an
+	// application's whole working set, in the same category as backup/restore. An
+	// agent authors through the granular tools it already has (atlas_save_draft,
+	// atlas_save_form, atlas_register_decision), where each change is one legible
+	// step; handing it an archive that silently rewrites every artifact of an
+	// application at once is neither reviewable nor something an agent needs.
+	"GET /api/v1/applications/{id}/source": "bulk source-tree download; an agent reads artifacts individually via atlas_get_draft_xml / atlas_get_form",
+	"POST /api/v1/applications/source":     "bulk source-tree upload that rewrites a whole application; an agent authors via atlas_save_draft / atlas_save_form",
 
 	// Secrets: credential storage; an agent must never read or write it.
 	"GET /api/v1/secrets":           "credential storage is not an agent capability",

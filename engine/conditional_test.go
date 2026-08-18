@@ -12,7 +12,7 @@ import (
 )
 
 // TestConditionalCatchAlreadyTrue: a conditional catch whose condition already holds when the
-// token arrives fires at once and passes straight through (ADR-0134). The instance is seeded
+// token arrives fires at once and passes straight through (ADR-0137). The instance is seeded
 // with ready=true, so the catch's arm-time self-evaluation completes it immediately.
 func TestConditionalCatchAlreadyTrue(t *testing.T) {
 	h := openHarness(t, t.TempDir())
@@ -48,7 +48,7 @@ func TestConditionalCatchAlreadyTrue(t *testing.T) {
 
 // TestConditionalCatchWaitsThenFires: a conditional catch whose condition is false at arrival
 // parks, then fires when a later SetVariables makes it true — proving the variable-change
-// re-check drives an armed conditional (ADR-0134), including via an external SetVariables with
+// re-check drives an armed conditional (ADR-0137), including via an external SetVariables with
 // no activity completing.
 func TestConditionalCatchWaitsThenFires(t *testing.T) {
 	h := openHarness(t, t.TempDir())
@@ -96,7 +96,7 @@ func TestConditionalCatchWaitsThenFires(t *testing.T) {
 
 // TestConditionalBoundaryInterruptingFires: an interrupting conditional boundary on a waiting
 // service task fires when a variable makes its condition true — cancelling the host and routing
-// the recovery flow (ADR-0134).
+// the recovery flow (ADR-0137).
 func TestConditionalBoundaryInterruptingFires(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -150,7 +150,7 @@ func TestConditionalBoundaryInterruptingFires(t *testing.T) {
 }
 
 // TestConditionalBoundaryFiresImmediatelyIfTrue: a conditional boundary whose condition already
-// holds when its host activates fires at once (ADR-0134) — the host never really runs.
+// holds when its host activates fires at once (ADR-0137) — the host never really runs.
 func TestConditionalBoundaryFiresImmediatelyIfTrue(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -194,7 +194,7 @@ func TestConditionalBoundaryFiresImmediatelyIfTrue(t *testing.T) {
 
 // TestConditionalBoundaryNonInterruptingFiresOnce: a non-interrupting conditional boundary fires
 // when its condition becomes true and takes its handler flow while the host job keeps running
-// (ADR-0134). It fires exactly once — a later unrelated write while the condition stays true does
+// (ADR-0137). It fires exactly once — a later unrelated write while the condition stays true does
 // not re-fire it — and the host completes normally when its job is done.
 func TestConditionalBoundaryNonInterruptingFiresOnce(t *testing.T) {
 	h := openHarness(t, t.TempDir())
@@ -258,7 +258,7 @@ func TestConditionalBoundaryNonInterruptingFiresOnce(t *testing.T) {
 
 // TestConditionalEventSubInterrupting: an interrupting conditional event subprocess fires when a
 // variable makes its condition true — it tears down the main flow (the waiting job) and runs the
-// handler (ADR-0134), reusing the event-subprocess arm/fire machinery (ADR-0082).
+// handler (ADR-0137), reusing the event-subprocess arm/fire machinery (ADR-0082).
 func TestConditionalEventSubInterrupting(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -318,7 +318,7 @@ func TestConditionalEventSubInterrupting(t *testing.T) {
 
 // TestConditionalEventSubNonInterrupting: a non-interrupting conditional event subprocess fires
 // when its condition becomes true and runs the handler alongside the still-running main flow —
-// the waiting job is untouched (ADR-0134). It fires once; the main flow completes on its own.
+// the waiting job is untouched (ADR-0137). It fires once; the main flow completes on its own.
 func TestConditionalEventSubNonInterrupting(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
@@ -379,7 +379,7 @@ func TestConditionalEventSubNonInterrupting(t *testing.T) {
 
 // TestConditionalCatchRecovers proves an armed conditional catch survives a crash: it parks with
 // its condition false; after replaying the log into a fresh store the catch is rebuilt, so a
-// post-recovery variable change re-checks it and fires it (ADR-0134, invariant I6).
+// post-recovery variable change re-checks it and fires it (ADR-0137, invariant I6).
 func TestConditionalCatchRecovers(t *testing.T) {
 	dir := t.TempDir()
 

@@ -1228,6 +1228,7 @@ async function viewModelerHome() {
         { label: "Form", icon: "▤", href: "#/modeler/form/new" },
         { sep: true },
         { label: "Import file…", icon: "📥", act: "import" },
+        { label: "Import source tree…", icon: "🗂", act: "import-source" },
       ])}
     </div>
     <div class="card" style="padding:0; margin-top:14px">
@@ -1296,6 +1297,7 @@ async function viewModelerHome() {
   onMenuAction(view, (act) => {
     if (act === "new-project") createProject(renderProjects);
     if (act === "import") importArtifact("", renderProjects);
+    if (act === "import-source") importApplicationSource(renderProjects);
   });
 
   // One deployed process = one row. A process may have several deployed versions;
@@ -1506,6 +1508,7 @@ async function viewProjectDetail(id) {
     ];
 
     const projItems = ungrouped ? [] : [
+      { label: "Download source…", icon: "🗂", act: "srcexport" },
       ...(rl.length ? [{ label: "Validate DMN", icon: "✔", act: "valproj" }] : []),
       ...(AUTH.enabled && isOwner ? [{ label: "Share…", icon: "👤", act: "shareproj" }] : []),
       ...(isOwner ? [{ label: "Rename application", icon: "✎", act: "renproj" }] : []),
@@ -1570,6 +1573,7 @@ async function viewProjectDetail(id) {
     onMenuAction(root, (act, b) => {
       switch (act) {
         case "import": importArtifact(ungrouped ? "" : id, render); break;
+        case "srcexport": downloadApplicationSource(id); break;
         case "newref": createDmnRef(ungrouped ? "" : id, render); break;
         case "shareproj": shareProject(proj, render); break;
         case "renproj": renameProject(id, proj.name, render); break;
@@ -1636,11 +1640,56 @@ async function renderAppDeployments(id) {
     a.processId.localeCompare(b.processId) ||
     (b.version - a.version));
 
+  // Deployment targets (ADR-0129): what each peer server runs for this
+  // application. Fetched separately from the local view because it makes an
+  // outbound call per bound target — a peer being slow or down must not delay or
+  // empty the rest of the page, so a failure here renders as an unreachable row.
+  let targets = [];
+  try {
+    targets = await api("GET", `/api/v1/applications/${encodeURIComponent(id)}/targets`);
+  } catch { /* best-effort: the local view still renders without the target section */ }
+
+  const targetRow = (t) => {
+    // Three distinct states, because they mean different things operationally:
+    // never shipped there, shipped and answering, shipped and not answering.
+    let state, detail;
+    if (!t.bound) {
+      state = `<span class="pill">not deployed</span>`;
+      detail = `<span class="muted">—</span>`;
+    } else if (t.reachable) {
+      state = `<span class="pill ok">live</span>`;
+      detail = `<span class="chip">v${t.version || "?"}</span>`;
+    } else {
+      state = `<span class="pill err">unreachable</span>`;
+      detail = `<span class="muted" title="${esc(t.error || "")}">${esc(t.error || "no answer")}</span>`;
+    }
+    return `<tr${t.bound ? "" : ' class="muted-row"'}>
+      <td><div class="artifact-name"><span class="mi-icon">🛰</span><b>${esc(t.targetName)}</b></div>
+        <div class="muted" style="font-size:12px; padding-left:26px">${esc(t.baseUrl)}</div></td>
+      <td>${state}</td>
+      <td>${detail}</td>
+      <td class="muted">${t.reachable ? t.running : "—"}</td>
+      <td class="muted">${t.reachable ? t.finished : "—"}</td>
+    </tr>`;
+  };
+
+  const targetsSection = targets.length ? `
+    <h2 style="margin:22px 0 10px; font-size:15px">Deployment targets</h2>
+    <div class="card" style="padding:0">
+      <table>
+        <thead><tr><th>Target</th><th>State</th><th>Version</th><th>Running</th><th>Finished</th></tr></thead>
+        <tbody>${targets.map(targetRow).join("")}</tbody>
+      </table>
+    </div>` : "";
+
   const relRow = (r) => `<tr>
     <td><span class="chip">v${r.version}</span></td>
     <td class="muted" data-sort="${r.publishedAt || 0}">${esc(fmtTime(r.publishedAt))}</td>
     <td class="muted">${(r.members || []).length}</td>
     <td class="muted">${esc(r.note || "—")}</td>
+    <td class="row-actions">${targets.length
+      ? `<button class="btn ghost sm" data-promote="${r.version}">Promote…</button>`
+      : ""}</td>
   </tr>`;
 
   host.innerHTML = `
@@ -1659,14 +1708,43 @@ async function renderAppDeployments(id) {
           `<tr><td colspan="6" class="empty">Nothing deployed yet — use <b>Publish</b> to ship this application.</td></tr>`}</tbody>
       </table>
     </div>
+    ${targetsSection}
     <h2 style="margin:22px 0 10px; font-size:15px">Release history</h2>
-    <div class="card" style="padding:0">
+    <div class="card" style="padding:0" id="pd-releases">
       <table>
-        <thead><tr><th>Version</th><th>Published</th><th>Artifacts</th><th>Note</th></tr></thead>
+        <thead><tr><th>Version</th><th>Published</th><th>Artifacts</th><th>Note</th><th></th></tr></thead>
         <tbody>${releases.map(relRow).join("") ||
-          `<tr><td colspan="4" class="empty">No releases yet.</td></tr>`}</tbody>
+          `<tr><td colspan="5" class="empty">No releases yet.</td></tr>`}</tbody>
       </table>
     </div>`;
+
+  for (const b of host.querySelectorAll("button[data-promote]"))
+    b.addEventListener("click", () => promoteRelease(id, Number(b.dataset.promote), targets));
+}
+
+// promoteRelease ships an existing release to a chosen target (ADR-0129). The
+// release is already frozen, so this sends exactly what was published — the user
+// picks *where*, never *what*. Results come back per target, so a refusal by one
+// peer is reported as that peer's, not as a failed action.
+async function promoteRelease(appID, version, targets) {
+  const names = targets.map((t, i) => `${i + 1}) ${t.targetName}`).join("\n");
+  const answer = window.prompt(
+    `Promote v${version} to which target?\n\n${names}\n\nEnter a number:`, "1");
+  if (answer == null) return;
+  const pick = targets[Number(answer) - 1];
+  if (!pick) { toast("No such target", "err"); return; }
+
+  try {
+    const res = await api("POST",
+      `/api/v1/applications/${encodeURIComponent(appID)}/releases/${version}/promote`,
+      { targetIds: [pick.targetId] });
+    const r = (res.results || [])[0];
+    if (r && r.ok) toast(`Promoted v${version} to ${pick.targetName}`, "ok");
+    else toast(`${pick.targetName}: ${(r && r.error) || "promotion failed"}`, "err");
+  } catch (e) {
+    toast("promotion failed: " + e.message, "err");
+  }
+  await renderAppDeployments(appID);
 }
 
 async function deleteDraft(processId, reload) {
@@ -2453,6 +2531,49 @@ async function deployProject(id, reload) {
   // Refused (or a server error): show why and reflect any DMN results in place.
   toast(rep.reason || rep.error || "Publish refused", "err");
   for (const r of rep.references || []) applyRefStatus(r.id, r);
+}
+
+// downloadApplicationSource downloads the application's source tree (ADR-0134): a
+// manifest plus its drafts and forms as native .bpmn and .form.json files, in one
+// .tar.gz. A plain same-origin navigation, so the session cookie authenticates it,
+// exactly as the console's backup download does.
+function downloadApplicationSource(id) {
+  window.location.href = `/api/v1/applications/${encodeURIComponent(id)}/source`;
+}
+
+// importApplicationSource reads a source tree back in. Which application it lands
+// in is not this dialog's choice: the tree's manifest carries the portable key, so
+// the server updates the application that key names or creates it when this server
+// has never seen it (ADR-0134). An import never deletes — artifacts the tree omits
+// are reported back and left alone.
+function importApplicationSource(reload) {
+  const picker = document.createElement("input");
+  picker.type = "file";
+  picker.accept = ".gz,.tgz,application/gzip";
+  picker.addEventListener("change", async () => {
+    const file = picker.files[0];
+    if (!file) return;
+    try {
+      const res = await fetch("/api/v1/applications/source", {
+        method: "POST",
+        headers: { "Content-Type": "application/gzip" },
+        body: file,
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error((data && data.error) || res.statusText);
+      const n = (data.processes || 0) + (data.forms || 0) + (data.decisions || 0);
+      toast(
+        `${data.created ? "Created" : "Updated"} ${data.name} — ${n} artifact${n === 1 ? "" : "s"}` +
+        (data.untracked && data.untracked.length
+          ? ` · ${data.untracked.length} local artifact${data.untracked.length === 1 ? "" : "s"} not in the tree, kept`
+          : ""),
+        "ok");
+      await reload();
+    } catch (e) {
+      toast("Import failed: " + (e && e.message || e), "err");
+    }
+  });
+  picker.click();
 }
 
 // publishApplication is the ADR-0128 headline action: ship the whole application as

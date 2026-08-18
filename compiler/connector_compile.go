@@ -19,6 +19,11 @@ import (
 type connectorCompiler struct {
 	// present reports whether st carries this connector's extension.
 	present func(st xmlServiceTask) bool
+	// retries reads this connector extension's own retries attribute (ADR-0135),
+	// which overrides a <zeebe:taskDefinition retries> on the same task. It is called
+	// only when present(st) is true, so it may dereference the extension pointer
+	// directly; an empty string means the attribute was omitted.
+	retries func(st xmlServiceTask) string
 	// compile validates the extension's fields and adds the connector-task node,
 	// returning its node id. It is called only when present(st) is true, so it may
 	// dereference the extension pointer directly.
@@ -29,28 +34,86 @@ type connectorCompiler struct {
 // can take. registerJobWorkerTask consults it before falling through to the plain
 // external-worker task.
 var connectorCompilers = []connectorCompiler{
-	{present: func(st xmlServiceTask) bool { return st.Clio != nil }, compile: compileClioConnectorTask},
-	{present: func(st xmlServiceTask) bool { return st.Rest != nil }, compile: compileRestConnectorTask},
-	{present: func(st xmlServiceTask) bool { return st.Mail != nil }, compile: compileMailConnectorTask},
-	{present: func(st xmlServiceTask) bool { return st.User != nil }, compile: compileUserConnectorTask},
-	{present: func(st xmlServiceTask) bool { return st.SharePoint != nil }, compile: compileSharePointConnectorTask},
-	{present: func(st xmlServiceTask) bool { return st.Remedy != nil }, compile: compileRemedyConnectorTask},
-	{present: func(st xmlServiceTask) bool { return st.WebScrape != nil }, compile: compileWebScrapeConnectorTask},
+	{
+		present: func(st xmlServiceTask) bool { return st.Clio != nil },
+		retries: func(st xmlServiceTask) string { return st.Clio.Retries },
+		compile: compileClioConnectorTask,
+	},
+	{
+		present: func(st xmlServiceTask) bool { return st.Rest != nil },
+		retries: func(st xmlServiceTask) string { return st.Rest.Retries },
+		compile: compileRestConnectorTask,
+	},
+	{
+		present: func(st xmlServiceTask) bool { return st.Mail != nil },
+		retries: func(st xmlServiceTask) string { return st.Mail.Retries },
+		compile: compileMailConnectorTask,
+	},
+	{
+		present: func(st xmlServiceTask) bool { return st.User != nil },
+		retries: func(st xmlServiceTask) string { return st.User.Retries },
+		compile: compileUserConnectorTask,
+	},
+	{
+		present: func(st xmlServiceTask) bool { return st.SharePoint != nil },
+		retries: func(st xmlServiceTask) string { return st.SharePoint.Retries },
+		compile: compileSharePointConnectorTask,
+	},
+	{
+		present: func(st xmlServiceTask) bool { return st.Remedy != nil },
+		retries: func(st xmlServiceTask) string { return st.Remedy.Retries },
+		compile: compileRemedyConnectorTask,
+	},
+	{
+		present: func(st xmlServiceTask) bool { return st.WebScrape != nil },
+		retries: func(st xmlServiceTask) string { return st.WebScrape.Retries },
+		compile: compileWebScrapeConnectorTask,
+	},
+}
+
+// firstNonBlank returns the first value that is not empty once trimmed — the
+// precedence rule for an attribute a task can carry in more than one place (a
+// connector's own retries over its task definition's, ADR-0135).
+func firstNonBlank(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// parseRetries interprets a task's authored retries attribute — the number of
+// attempts the engine grants the task's job before an exhausted failure parks the
+// token behind an incident (ADR-0061/0135). An omitted (blank) attribute means
+// defaultRetries. label names the element ("service task", "script task", …) and id
+// identifies it, so every task kind reports the same diagnostic.
+//
+// A budget below 1 is refused at deploy time (invariant I5): a job is on the
+// activatable index only while it has retries left (state.PutJob), so a task
+// authored with no attempts would create a job no worker is ever offered — a token
+// parked forever with no incident to resolve.
+func parseRetries(label, id, attr string) (int32, error) {
+	s := strings.TrimSpace(attr)
+	if s == "" {
+		return defaultRetries, nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, fmt.Errorf("compiler: %s %q has invalid retries %q: %w", label, id, s, err)
+	}
+	if n < 1 {
+		return 0, fmt.Errorf("compiler: %s %q has retries %d: a job needs at least one attempt — use retries=\"1\" for a single try (no retry)", label, id, n)
+	}
+	return int32(n), nil
 }
 
 // serviceTaskRetries reads the retries count from a job-worker task's
 // <taskDefinition>, defaulting to defaultRetries when it is omitted. label names the
-// element ("service task"/"send task") for diagnostics.
+// element ("service task"/"send task") for diagnostics. A connector extension on the
+// same task may override it with its own retries attribute (ADR-0135).
 func serviceTaskRetries(st xmlServiceTask, label string) (int32, error) {
-	retries := int32(defaultRetries)
-	if r := st.TaskDefinition.Retries; r != "" {
-		n, err := strconv.Atoi(r)
-		if err != nil {
-			return 0, fmt.Errorf("compiler: %s %q has invalid retries %q: %w", label, st.Id, r, err)
-		}
-		retries = int32(n)
-	}
-	return retries, nil
+	return parseRetries(label, st.Id, st.TaskDefinition.Retries)
 }
 
 // compileClioConnectorTask compiles an <atlas:clioConnector> task: it delegates to a

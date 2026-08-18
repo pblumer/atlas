@@ -1365,7 +1365,7 @@ type xmlStartEvent struct {
 	Escalation *xmlEscalationEventDefinition `xml:"escalationEventDefinition"`
 	// Conditional, when present on an event-subprocess start event, makes it a
 	// conditional-triggered event subprocess: it fires while its scope runs when its boolean
-	// FEEL condition becomes true (ADR-0134). May be interrupting or non-interrupting per
+	// FEEL condition becomes true (ADR-0137). May be interrupting or non-interrupting per
 	// IsInterrupting. A pointer so an absent one is nil.
 	Conditional *xmlConditionalEventDefinition `xml:"conditionalEventDefinition"`
 	// IsInterrupting is the event-subprocess start event's cancel flag (ADR-0082):
@@ -1398,12 +1398,12 @@ type xmlIntermediateCatchEvent struct {
 	Link *xmlLinkEventDefinition `xml:"linkEventDefinition"`
 	// Conditional, when present, makes this a conditional catch event: it waits until its
 	// boolean FEEL condition over the process's variables becomes true, then flows on
-	// (ADR-0134). A pointer so an absent one is nil.
+	// (ADR-0137). A pointer so an absent one is nil.
 	Conditional *xmlConditionalEventDefinition `xml:"conditionalEventDefinition"`
 }
 
 // xmlConditionalEventDefinition is a <conditionalEventDefinition> on an intermediate catch,
-// boundary, or event-subprocess start event (ADR-0134). Its <condition> is a boolean FEEL
+// boundary, or event-subprocess start event (ADR-0137). Its <condition> is a boolean FEEL
 // expression over the process's variables; the event fires when it becomes true. Only the
 // condition matters — a conditional event carries no ref, code, or name.
 type xmlConditionalEventDefinition struct {
@@ -1528,7 +1528,7 @@ type xmlBoundaryEvent struct {
 	Cancel *xmlCancelEventDefinition `xml:"cancelEventDefinition"`
 	// Conditional, when present, makes this a conditional boundary event: it fires while its
 	// host activity runs when its boolean FEEL condition becomes true. Honors CancelActivity —
-	// interrupting or non-interrupting (ADR-0134). A pointer so an absent one is nil.
+	// interrupting or non-interrupting (ADR-0137). A pointer so an absent one is nil.
 	Conditional *xmlConditionalEventDefinition `xml:"conditionalEventDefinition"`
 }
 
@@ -1678,6 +1678,9 @@ type xmlClioConnector struct {
 	ReduceSpec     string `xml:"reduceSpec,attr"`
 	Limit          string `xml:"limit,attr"`
 	ResultVariable string `xml:"resultVariable,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
 }
 
 // An HTTP-REST connector task's parameters, carried on a service task as an
@@ -1698,6 +1701,9 @@ type xmlRestConnector struct {
 	AuthSecret     string      `xml:"authSecret,attr"`
 	Headers        []xmlHTTPKV `xml:"httpHeader"`
 	QueryParams    []xmlHTTPKV `xml:"queryParam"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
 }
 
 // xmlHTTPKV is one name/value pair in a REST connector's headers or query
@@ -1722,6 +1728,9 @@ type xmlMailConnector struct {
 	From      string `xml:"from,attr"`
 	Subject   string `xml:"subject,attr"`
 	Body      string `xml:"body,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
 }
 
 // xmlUserConnector is the <atlas:userConnector> extension of a user-provisioning
@@ -1734,6 +1743,9 @@ type xmlUserConnector struct {
 	DisplayName string `xml:"displayName,attr"`
 	Roles       string `xml:"roles,attr"`
 	Password    string `xml:"password,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
 }
 
 // A CSV-to-JSON connector task's parameters, carried on a service task as an
@@ -1794,6 +1806,9 @@ type xmlSharePointConnector struct {
 	List           string      `xml:"list,attr"`
 	ResultVariable string      `xml:"resultVariable,attr"`
 	Fields         []xmlHTTPKV `xml:"itemField"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
 }
 
 // A BMC Remedy connector task's parameters, carried on a service task as an
@@ -1810,6 +1825,9 @@ type xmlRemedyConnector struct {
 	Form           string      `xml:"form,attr"`
 	ResultVariable string      `xml:"resultVariable,attr"`
 	Fields         []xmlHTTPKV `xml:"remedyField"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
 }
 
 // A web-scraping connector task's parameters, carried on a service task as an
@@ -1883,10 +1901,12 @@ type xmlZeebeScript struct {
 // extension: a script task in a general-purpose language (ADR-0047). language
 // selects the interpreter/worker (and thus the reserved job type), resultVariable
 // is the process variable the script's result is written back into, and the
-// element text is the script source.
+// element text is the script source. retries is the script job's retry budget
+// (ADR-0135) — a script fails like any other job — blank meaning the default.
 type xmlAtlasScript struct {
 	Language       string `xml:"language,attr"`
 	ResultVariable string `xml:"resultVariable,attr"`
+	Retries        string `xml:"retries,attr"`
 	Source         string `xml:",chardata"`
 }
 

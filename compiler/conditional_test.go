@@ -7,7 +7,7 @@ import (
 
 // TestParseConditionalCatch checks that a conditional intermediate catch event compiles to
 // TypeConditionalCatchEvent with its FEEL condition, and that the compiled condition knows the
-// variable it reads (ADR-0134).
+// variable it reads (ADR-0137).
 func TestParseConditionalCatch(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
 	  <process id="p" isExecutable="true">
@@ -40,7 +40,7 @@ func TestParseConditionalCatch(t *testing.T) {
 
 // TestParseConditionalBoundary checks that a conditional boundary event compiles to a
 // BoundaryConditional boundary carrying its FEEL condition, and — like an escalation boundary —
-// HONORS cancelActivity="false" as non-interrupting (ADR-0134).
+// HONORS cancelActivity="false" as non-interrupting (ADR-0137).
 func TestParseConditionalBoundary(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
 	             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
@@ -103,7 +103,7 @@ func TestParseConditionalBoundaryInterruptingDefault(t *testing.T) {
 }
 
 // TestParseConditionalEmptyIsError rejects a conditional event with no condition — a predicate
-// that can never fire (ADR-0134).
+// that can never fire (ADR-0137).
 func TestParseConditionalEmptyIsError(t *testing.T) {
 	cases := map[string]string{
 		"catch": `<startEvent id="s"/><intermediateCatchEvent id="w"><conditionalEventDefinition><condition></condition></conditionalEventDefinition></intermediateCatchEvent>
@@ -128,7 +128,7 @@ func TestParseConditionalEmptyIsError(t *testing.T) {
 
 // TestParseConditionalEventSubprocess checks that a conditional event subprocess compiles to a
 // BoundaryConditional-kind event-sub carrying its FEEL condition and — like escalation, unlike
-// error — honors isInterrupting="false" as non-interrupting (ADR-0134).
+// error — honors isInterrupting="false" as non-interrupting (ADR-0137).
 func TestParseConditionalEventSubprocess(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
 	  <process id="p" isExecutable="true">
@@ -169,7 +169,7 @@ func TestParseConditionalEventSubprocess(t *testing.T) {
 }
 
 // TestParseNoConditional: a process without a conditional event has HasConditionalEvents false
-// (ADR-0134) — so the runtime pays nothing on a variable write.
+// (ADR-0137) — so the runtime pays nothing on a variable write.
 func TestParseNoConditional(t *testing.T) {
 	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
 	  <process id="p" isExecutable="true">

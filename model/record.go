@@ -288,7 +288,7 @@ const (
 
 	// IntentConditionRecheck is a command-only intent (never persisted as an event), like
 	// IntentJobErrorThrown: after a batch writes one or more variables in an instance, the
-	// processor schedules a re-check of that instance's armed conditional events (ADR-0134).
+	// processor schedules a re-check of that instance's armed conditional events (ADR-0137).
 	// Its handler evaluates each armed conditional's FEEL condition over its scope chain and
 	// drives the ones now true to Completing. Because commands are not replayed (invariant
 	// I6) — the fire is the persisted Completing→Completed chain — its numeric value never

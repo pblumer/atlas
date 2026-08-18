@@ -21,7 +21,7 @@ func eventSubStart(sub *xmlSubProcess) *xmlStartEvent {
 }
 
 // compileCondition compiles a conditional event's <condition> body to a boolean FEEL
-// expression (ADR-0134), mirroring how a gateway condition is compiled (connectScope). It
+// expression (ADR-0137), mirroring how a gateway condition is compiled (connectScope). It
 // strips a leading Zeebe FEEL "=" and trims; an empty condition is a deploy error (a
 // conditional event with no predicate can never fire). id names the event for the error.
 func compileCondition(id, raw string) (*expr.Compiled, error) {
@@ -130,6 +130,13 @@ func registerScope(
 			if !cc.present(st) {
 				continue
 			}
+			// The connector's own retries attribute is where an author configures the
+			// budget (the Modeler writes it there, ADR-0135); a <zeebe:taskDefinition
+			// retries> on the same task stays honoured as the fallback.
+			retries, err := parseRetries(label, st.Id, firstNonBlank(cc.retries(st), st.TaskDefinition.Retries))
+			if err != nil {
+				return err
+			}
 			id, err := cc.compile(b, st, retries)
 			if err != nil {
 				return err
@@ -142,12 +149,9 @@ func registerScope(
 		// path (ADR-0090), rather than reading a columnConfig variable (ADR-0087). The
 		// whole layout lives in the model; only the file arrives at runtime.
 		if cn := st.Csv; cn != nil {
-			if r := strings.TrimSpace(cn.Retries); r != "" {
-				n, err := strconv.Atoi(r)
-				if err != nil {
-					return fmt.Errorf("compiler: csv connector task %q has invalid retries %q: %w", st.Id, r, err)
-				}
-				retries = int32(n)
+			retries, err := parseRetries(label, st.Id, firstNonBlank(cn.Retries, st.TaskDefinition.Retries))
+			if err != nil {
+				return err
 			}
 			cols := splitCSVColumns(cn.Columns)
 			hasHeader := csvHasHeader(cn.HasHeader)
@@ -224,7 +228,13 @@ func registerScope(
 			if js.ResultVariable == "" {
 				return fmt.Errorf("compiler: script task %q has no result variable", st.Id)
 			}
-			node := b.AddScriptJobTask(jobType, strings.ToLower(strings.TrimSpace(js.Language)), source, js.ResultVariable, defaultRetries)
+			// A script job fails like any other job, so it carries its own retry budget
+			// (ADR-0135) authored on the <atlas:jobScript> extension.
+			retries, err := parseRetries("script task", st.Id, js.Retries)
+			if err != nil {
+				return err
+			}
+			node := b.AddScriptJobTask(jobType, strings.ToLower(strings.TrimSpace(js.Language)), source, js.ResultVariable, retries)
 			if err := register(st.Id, node); err != nil {
 				return err
 			}
@@ -254,13 +264,9 @@ func registerScope(
 		if brt.CalledDecision.DecisionId == "" {
 			return fmt.Errorf("compiler: business rule task %q has no calledDecision decisionId", brt.Id)
 		}
-		retries := int32(defaultRetries)
-		if r := brt.CalledDecision.Retries; r != "" {
-			n, err := strconv.Atoi(r)
-			if err != nil {
-				return fmt.Errorf("compiler: business rule task %q has invalid retries %q: %w", brt.Id, r, err)
-			}
-			retries = int32(n)
+		retries, err := parseRetries("business rule task", brt.Id, brt.CalledDecision.Retries)
+		if err != nil {
+			return err
 		}
 		inputs, err := decisionInputs(brt.Inputs)
 		if err != nil {
@@ -385,7 +391,7 @@ func registerScope(
 			}
 		case ev.Conditional != nil:
 			// A conditional catch waits until its boolean FEEL condition becomes true, then
-			// flows on (ADR-0134). It arms inert and is driven to Completing by a re-check on
+			// flows on (ADR-0137). It arms inert and is driven to Completing by a re-check on
 			// variable change.
 			cond, err := compileCondition(ev.Id, ev.Conditional.Condition)
 			if err != nil {
@@ -626,7 +632,7 @@ func registerScope(
 				d.Kind, d.Schedule = BoundaryTimer, schedule
 			case st.Conditional != nil:
 				// A conditional event subprocess arms inert and fires when its FEEL condition
-				// over the parent scope's variables becomes true (ADR-0134) — the event-sub
+				// over the parent scope's variables becomes true (ADR-0137) — the event-sub
 				// analog of a conditional boundary. Like escalation it honors isInterrupting;
 				// unlike error it is not always interrupting. It is re-checked on every variable
 				// change in its scope, not driven by a throw.
@@ -720,7 +726,7 @@ func registerScope(
 			}
 		case ev.Conditional != nil:
 			// A conditional boundary fires while the host runs when its boolean FEEL condition
-			// becomes true (ADR-0134). It honors cancelActivity — interrupting tears the host
+			// becomes true (ADR-0137). It honors cancelActivity — interrupting tears the host
 			// down, non-interrupting runs the handler alongside. It opens no subscription and is
 			// re-evaluated on variable change.
 			cond, err := compileCondition(ev.Id, ev.Conditional.Condition)

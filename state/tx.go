@@ -733,6 +733,7 @@ func (t *Tx) RecordElementStep(piKey uint64, ts int64, pos uint64, elementId int
 
 // RecordElementReplay retains an activation or consumption with its durable
 // token lineage. It is derived only from the lifecycle event by applyToState.
+// action is one of ReplayActivated / ReplayCompleted / ReplayTerminated.
 func (t *Tx) RecordElementReplay(piKey uint64, ts int64, pos uint64, elementID int32, elementKey, tokenID, parentTokenID uint64, sourceFlowID int32, action byte) error {
 	t.scratch = appendBE32(t.scratch[:0], uint32(elementID))
 	t.scratch = appendBE64(t.scratch, elementKey)

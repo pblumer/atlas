@@ -1,8 +1,92 @@
 # ADR-0127: A layered layout pipeline and executable layout invariants
 
-- **Status:** Accepted (invariant gate, phases 0–1) — phases 2–3 proposed
+- **Status:** Accepted (amended 2026-08-17 and 2026-08-18 — phases 2 and 3 were each measured before
+  being built, and each mostly dropped in favour of a smaller fix; see the amendment notes below).
+  Invariant gate and phases 0–3 in place, phases 2 and 3 *as amended*
 - **Date:** 2026-08-17
 - **Deciders:** Atlas engine team
+
+> **Amendment (2026-08-17): phase 2 measured, and mostly dropped.** Phase 2 was proposed as **dummy
+> nodes with crossing minimization**. Building it was preceded by scoring the corpus for edge crossings
+> and for edges drawn collinear on top of one another, and the score says most of that work is not
+> warranted here.
+>
+> **The measurement.** Zero crossings across the corpus — including three models added specifically to
+> provoke them, one wiring each branch of a fan into the *opposite* branch of the next stage. Dummy
+> nodes exist to reserve space for multi-layer edges and to give those edges positions for an ordering
+> pass to work on. The footprint row reservation that landed with phase 1's follow-up already does the
+> first (`no-edge-through-shape` holds across the whole corpus), and with no crossings to minimize the
+> second has nothing to order. The reason is structural rather than lucky: this generator fixes the
+> happy path on one axis and stacks everything else around it in reserved row intervals, so the layer
+> ordering that Sugiyama's crossing minimization exists to fix is already largely determined.
+>
+> **What phase 2 became instead.** The score did find two real defects, both fixed:
+>
+> - Two branches whose wiring crosses had their risers drawn on top of each other in one column gap,
+>   reading as a single edge. A node now takes the free row nearest the **median row of its
+>   already-placed predecessors** — the median heuristic adapted to this layout model, without dummy
+>   nodes. Widest-footprint-first still applies first, so corridors keep the row nearest the trunk.
+> - A channel-routed edge climbed into its target through the target's own column, cutting whatever sat
+>   below. Both vertical legs now run in **gutters** — the gap after the source's column and the gap
+>   before the target's — which are column-free by construction.
+>
+> The score itself is now a test, budgeted per model, with each budget documented as a price rather than
+> a target. That is the "corpus + score" half of this ADR's gate finally in place: it makes a layout
+> change judgeable as an *improvement* rather than merely a change.
+>
+> **What this supersedes.** The *Implementation status* note below still reads "phases 2–3 … not built";
+> phase 2 is settled as described here, and only phase 3 remains open. In the phase table, row 2 is
+> superseded by the two fixes above; the paragraph calling phase 2 "the largest and the one that lifts
+> ADR-0124's stated quality ceiling" no longer holds, and the channel detour it describes as a stopgap
+> to be *replaced* is instead **kept and hardened** with gutter legs. In *Consequences*, "phase 2
+> changes the node model (dummy nodes take part in placement…)" and the follow-up "phase 2 must preserve
+> determinism — sweep order and tie-breaks…" are moot. ADR-0124's quality ceiling stands as recorded: it
+> was not lifted, and on the evidence here it is not what these models are hitting. **Phase 3 (a port
+> model) is untouched by this amendment**; nothing measured here bears on label placement.
+>
+> Two caveats worth keeping. The corpus is 16 models, not a proof — a genuinely dense model (many-way
+> gateways, dense cross-links) could still want real crossing minimization, and the score is how that
+> would show up. And a zero-crossing score does not mean a layout is *good*; the invariants and the
+> score together bound soundness and legibility, not beauty.
+
+> **Amendment (2026-08-18): phase 3 measured, and the port model dropped.** Phase 3 was proposed as a
+> **port model** — named attachment points carrying edge ends and labels — so that a caption's position
+> stops being an offset recomputed per case. Measuring first, on four models built to crowd captions,
+> confirmed the label class was still live but showed the defects are about **space, not anchors**.
+>
+> **The measurement.** Two of the four failed. Four named branches off one gateway put every caption on
+> the gateway, on the task, and under three sibling risers; a caption on a column-skipping bypass did
+> the same. In both, the run available was one column gap wide and every caption was wider than it.
+> Naming the anchor changes nothing about that. Two assumptions did: a caption's width is a *choice*,
+> because the renderer reflows text into whatever box it is given, and a caption may *slide along* the
+> line it labels rather than only flip across it. Both were treated as fixed, so a caption that fitted
+> nowhere was placed overlapping anyway by an explicit fallback.
+>
+> **What phase 3 became instead.** Captions are fitted rather than positioned: for one line, then two,
+> then three, each candidate position is tried and the first box that clears every shape, every edge and
+> every caption already placed wins, with candidates sliding to either end of a segment. Boundary
+> captions moved into that same placer — they had been computed from the event's own box *before the
+> exception flows existed to be avoided*, which is precisely why they needed a special case to stop
+> short of the next boundary event's riser. That special case is gone. This is the phase's stated intent
+> — one placer, no per-case offsets — reached without a port graph. The label invariant now also checks
+> captions against each other, since the shared placer guarantees it.
+>
+> **What this supersedes.** Row 3 of the phase table, and the paragraph below it describing phase 3 as
+> making a label's position "a property of the port it hangs from". The *Implementation status* note is
+> stale in full: every phase is now settled, none by adding the machinery it named.
+>
+> **A caveat and a debt.** The same limits apply as to phase 2: the corpus is 19 models, not a proof,
+> and captions fitting bounds legibility, not beauty. And one model, `labelled-detours`, carries a
+> budgeted crossing *and* the first budgeted overlap — a loop's returning edge and a bypass in one small
+> process are both channel-routed and both approach along the trunk row. Giving each channel-routed edge
+> its own offset within the column gutters was tried and reverted: it removed the overlap and added a
+> crossing. Separating them needs per-edge routing lanes end to end, which no measurement yet argues is
+> worth building.
+>
+> **On this ADR's own record.** Both phases this ADR proposed on reasoning were, on measurement, not
+> what the generator needed — twice the real defect was smaller and elsewhere. The phase structure was
+> still what made that legible, and the invariant gate is what made either call decidable. Read the
+> table below as the diagnosis it was, not as a plan that was executed.
 
 > **Implementation status.** The invariant gate and phases 0–1 are in place in
 > [`api/layout.go`](../../api/layout.go) and

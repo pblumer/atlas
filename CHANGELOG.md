@@ -14,6 +14,19 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Retries is a property of every job-backed task**
+  ([ADR-0135](docs/adr/0135-retries-as-a-task-property.md)): the retry budget the incident
+  model spends (ADR-0061) can now be authored on **every task that creates a job** — the
+  job-worker service and send task, each connector task (its own `retries` attribute,
+  overriding a `<zeebe:taskDefinition>` on the same element), the polyglot script task
+  (`<atlas:jobScript retries>`) and the business rule task. Before this, a script task was
+  hard-coded to three attempts and a connector task modeled in the Modeler could not express
+  the property at all — the kind picker removes the task definition that used to hold it — and
+  the Modeler offered no Retries field anywhere. It now shows one *Failure handling → Retries*
+  field on every one of those kinds, carried across a switch of implementation kind, and an
+  authored `<atlas:webscrapeConnector retries>` is honoured instead of silently ignored. The
+  engine, the log and recovery are untouched: the compiled details already carried the field.
+
 - **Every activity kind can loop** ([ADR-0133](docs/adr/0133-standard-loop-activities.md)
   amended, [ADR-0077](docs/adr/0077-multi-instance-activities.md) amended): business
   rule, manual and undefined tasks now honour both BPMN loop markers, closing the last
@@ -70,6 +83,24 @@ _Changed_ / _Removed_ for each version.
   standard loop like a sequential multi-instance, badged ↻ and bounded by the modelled
   `loopMaximum`, and the Operations call-activity list labels a looping call activity
   **loop** rather than **multi-instance**.
+- **Engine recovery checkpoints — restore and suffix replay** (v0.2.0 programme D,
+  [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 3):
+  recovery can now *use* a checkpoint, which is what turns O(total log) startup into
+  O(suffix). `wal.Log.ReplayFrom` skips whole segment files — log positions increase
+  monotonically, so a segment lies entirely below the cut whenever the next one starts
+  just past it, and only each segment's first record is read to find out.
+  `engine.Processor.RecoverFrom(root)` picks the newest checkpoint for this partition
+  whose applied position is at or below the store's, replays only past it, and seeds the
+  highest log position and key counter from the manifest — the values the skipped prefix
+  would otherwise have supplied (without them a restored engine would restart its key
+  counter and mint keys that collide with live instances). `Recover()` is now
+  `RecoverFrom("")`, so every existing caller keeps replaying from genesis unchanged. A
+  checkpoint that is corrupt, for another partition, or *ahead* of the store is refused
+  in favour of an older one and ultimately genesis — always correct, only slower, so
+  durability (I2) is untouched. Only the manifest is read, never the snapshot's state
+  files, since a suffix replay does not touch them. Nothing wires this into the server
+  yet and **no WAL segment is deleted**; compaction and the operator surface are the
+  remaining ADR-0131 slices.
 - **Engine recovery checkpoints — create and atomically publish** (v0.2.0 programme D,
   [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 2):
   the engine can now *produce* a recovery checkpoint. `state.Store.Snapshot` flushes the
@@ -186,7 +217,44 @@ _Changed_ / _Removed_ for each version.
   worker under the reserved `WebScrapeJobTypeIndex`. Authorable in the Modeler via the
   service-task connector catalog.
 
+### Fixed
+
+- **An interrupted activity no longer leaves a ghost token in the replay**
+  ([ADR-0136](docs/adr/0136-terminated-tokens-in-the-replay.md)): when an interrupting
+  boundary event fired, the Operations replay kept drawing a live token on the activity the
+  interrupt had torn down — it survived to the last frame, so a `completed` instance appeared
+  to still hold a token. The replay's token fold defers an element's consumption until the
+  activation it causes appears (so a token does not flicker between two log positions), but a
+  *terminated* element takes no outgoing flow, so that deferral never resolved. Termination is
+  now recorded as its own fact, distinct from completion, and such a token is retired at once.
+  A finished instance ends with no token, as its live counters always said. Instances that
+  finished before this change keep their ghost token on intermediate frames; their final frame
+  is repaired on read.
+
+- **Attached and armed elements no longer claim a phantom predecessor**
+  ([ADR-0136](docs/adr/0136-terminated-tokens-in-the-replay.md)): an armed boundary event, an
+  armed event-subprocess trigger and a compensation handler are not entered over a sequence
+  flow, but recorded flow index `0` — a real flow — instead of "none". The replay animated
+  such a token along an edge that does not exist, and the frame fold could retire an unrelated
+  live token by mistaking the arming for that edge's successor.
+
 ### Changed
+
+- **Handbook: umlauts in the loop recipe's labels** ([ADR-0133](docs/adr/0133-standard-loop-activities.md)):
+  the ↻ recipe shipped ASCII-fied German — "Zaehler starten", "Pruefen", and a process
+  named "Pruefen bis in Ordnung" — while every other recipe in the German handbook uses
+  umlauts. They now read **"Zähler starten"**, **"Prüfen"** and **"Prüfen bis es passt"**
+  (matching the recipe's own heading), both on the rendered card and in the process name
+  the deploy reports. Labels only: the recipe's XML structure and its loop
+  characteristics are untouched, and it still deploys and runs from the card.
+
+- **A retry budget below 1 is refused at deploy**
+  ([ADR-0135](docs/adr/0135-retries-as-a-task-property.md)): `retries="0"` (or a negative
+  count) used to deploy and then hang — a job is on the activatable index only while it has
+  retries left, so it was never handed to a worker, never failed, and never raised the incident
+  an operator could resolve. It is now a compile error naming the element, alongside the
+  existing "invalid retries" error, which every task kind now words identically. Use
+  `retries="1"` for a single attempt with no retry.
 
 - **Deterministic history-retention tests** (v0.2.0 reliability foundation): the
   retention sweep (ADR-0115) gained two test seams — an injectable clock for its

@@ -307,7 +307,7 @@ func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.Var
 }
 
 // markConditionDirty notes that a variable changed in the given scope, so the batch loop will
-// schedule a re-check of the instance's conditional events (ADR-0134). It resolves the scope to
+// schedule a re-check of the instance's conditional events (ADR-0137). It resolves the scope to
 // its process instance and records it (deduplicated); an instance whose process has no
 // conditional event records nothing, so a conditional-free process pays nothing on a write.
 func (c *ProcessingContext) markConditionDirty(scopeKey uint64) {

@@ -387,6 +387,35 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "application", "release", "artifacts")),
 			resp: jsonBody("Import result", tObject())}},
 
+		{"POST", "/api/v1/applications/{id}/releases/{version}/promote", s.handlePromoteRelease, apiOp{
+			summary: "Promote an existing release to one or more deployment targets: ship the frozen artifacts to peer Atlas servers, reported per target (ADR-0129)", tag: "Applications",
+			req:  jsonBody("Targets", schemaObj(map[string]any{"targetIds": tArray()}, "targetIds")),
+			resp: jsonBody("Per-target promotion results", tObject())}},
+
+		{"GET", "/api/v1/applications/{id}/source", s.handleExportApplicationSource, apiOp{
+			summary: "Download an application's source — its drafts, forms, and decision references — as the curated source layout (a manifest plus native .bpmn and .form.json files) in a gzip tar (ADR-0134)", tag: "Applications",
+			resp: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip-compressed tar of the application's source tree"}}},
+		{"POST", "/api/v1/applications/source", s.handleImportApplicationSource, apiOp{
+			summary: "Read a source tree into this server. The application is identified by the portable key in the manifest — created when this server has never seen it, updated in place when it has. Never deletes: local artifacts the tree omits are reported, not removed (ADR-0134).", tag: "Applications",
+			req:  &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip tar of a source tree, as produced by GET /api/v1/applications/{id}/source"},
+			resp: jsonBody("Import result", tObject())}},
+
+		{"GET", "/api/v1/applications/{id}/targets", s.handleApplicationTargets, apiOp{
+			summary: "What each configured deployment target currently runs for this application; best-effort, an unreachable peer is reported as such (ADR-0129)", tag: "Applications",
+			resp: jsonBody("Per-target status", tArray())}},
+
+		{"POST", "/api/v1/targets", s.handleCreateTarget, apiOp{
+			summary: "Register a deployment target: a peer Atlas this server can promote releases to; the credential is stored by reference, never by value (admin-only, ADR-0129)", tag: "Deployment targets",
+			req: jsonBody("Target", schemaObj(map[string]any{
+				"name": tString(), "baseUrl": tString(), "kind": tString(), "credentialRef": tString(),
+			}, "name", "baseUrl")),
+			resp: jsonBody("Created target", tObject())}},
+		{"GET", "/api/v1/targets", s.handleListTargets, apiOp{
+			summary: "List deployment targets and the application bindings learned from them (ADR-0129)", tag: "Deployment targets",
+			resp: jsonBody("Targets", tArray())}},
+		{"DELETE", "/api/v1/targets/{id}", s.handleDeleteTarget, apiOp{
+			summary: "Remove a deployment target (admin-only, ADR-0129)", tag: "Deployment targets", status: http.StatusNoContent}},
+
 		{"POST", "/api/v1/deploy-tokens", s.handleCreateDeployToken, apiOp{
 			summary: "Mint a deploy token for a peer Atlas to publish here; the secret is returned once and never again (admin-only, ADR-0129)", tag: "Deploy tokens",
 			req:  jsonBody("Token name", schemaObj(map[string]any{"name": tString()}, "name")),

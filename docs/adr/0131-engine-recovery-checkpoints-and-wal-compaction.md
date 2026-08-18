@@ -238,8 +238,26 @@ recovery behaves exactly as it did before.
    - `engine.Processor.Checkpoint` gathers the applied position, highest position, key
      counter, partition, and deployment references **on the single-writer goroutine at
      a batch boundary**, which is what makes the recorded position exact.
-3. **Next** — restore from the newest valid checkpoint and replay only the suffix,
-   falling back to an older checkpoint or genesis.
+3. **Landed** — **restore from the newest usable checkpoint and replay only the
+   suffix**:
+   - `wal.Log.ReplayFrom` skips whole segment files. Positions increase monotonically
+     in append order, so a segment is entirely at or below the cut whenever the *next*
+     segment starts one past it; ReplayFrom reads just the first record of each segment
+     to learn where it starts. The boundary segment (and the final one, which has no
+     successor to bound it) is replayed whole, so filtering the few records at or below
+     the cut stays the caller's job.
+   - `engine.Processor.RecoverFrom(root)` consults the newest checkpoint that is for
+     this partition and whose applied position is **at or below the store's**, replays
+     only past it, and seeds the highest log position and key counter from the manifest
+     — the values the skipped prefix would otherwise have supplied. `Recover()` is now
+     `RecoverFrom("")`, i.e. genesis, so every existing caller is unchanged.
+   - A checkpoint *ahead* of the store is refused: this slice skips **reading** a
+     prefix, it does not install state files, so the store must already hold what the
+     prefix produced. Anything unreadable, foreign, or too new falls back to an older
+     checkpoint and ultimately to genesis — always correct, only slower.
+   - Only the manifest is read, not the snapshot's state files: its own checksum makes
+     the seeded fields trustworthy, and a suffix replay never touches the snapshot.
+     Verifying the state checksum belongs to whatever installs those files.
 4. Compact eligible WAL segments once a checkpoint is durable and every consumer
    watermark allows it.
 5. Expose checkpoint/compaction status and operator controls, and choose the

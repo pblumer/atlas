@@ -249,15 +249,40 @@ const RoleDeployAgent = "deploy-agent"
 // resolves to, so an audit trail says which token acted.
 const deployAgentPrincipalPrefix = "system:deploy:"
 
-// deployAgentAllowed is the complete set of operations a deploy token may reach.
+// deployAgentAllowed is the complete set of operations a deploy token may reach:
+// push a bundle, and read back what this server now runs for that application.
+// Both are what ADR-0129 scoped the credential to — a publisher has to see the
+// result of what it shipped, or its own per-target view is blind.
 //
 // This is a fail-closed allowlist rather than per-handler rejection, and that is
 // the point: a deploy token is a credential handed to another machine, so the
 // blast radius of it leaking must be provable by reading one short list, not by
 // auditing every handler for a role check somebody might have forgotten to add.
-// Anything absent here is refused in the middleware before a handler sees it.
-var deployAgentAllowed = map[string]bool{
-	"POST /api/v1/applications/import": true,
+//
+// Matching goes through an http.ServeMux rather than hand-rolled path comparison,
+// so wildcards are resolved by the same matcher that routes the real request —
+// hand-written path parsing is exactly where an allowlist springs a leak.
+var deployAgentAllowed = []string{
+	"POST /api/v1/applications/import",
+	"GET /api/v1/applications/{id}/deployments",
+}
+
+// deployAgentMux resolves a request against deployAgentAllowed. It carries no
+// handlers; only whether a pattern matched is consulted.
+var deployAgentMux = func() *http.ServeMux {
+	m := http.NewServeMux()
+	nop := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
+	for _, pattern := range deployAgentAllowed {
+		m.Handle(pattern, nop)
+	}
+	return m
+}()
+
+// deployAgentMayReach reports whether a deploy token may perform this request.
+// An unmatched request yields an empty pattern, so anything not listed is refused.
+func deployAgentMayReach(r *http.Request) bool {
+	_, pattern := deployAgentMux.Handler(r)
+	return pattern != ""
 }
 
 // isDeployAgent reports whether a principal is a peer authenticated by a deploy
@@ -346,8 +371,8 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 		// operations on the allowlist and nothing else, whatever the path's own rules
 		// would otherwise permit. Enforced here, in one place, so the credential's
 		// reach is provable by reading deployAgentAllowed (ADR-0129).
-		if p := principalFrom(r.Context()); isDeployAgent(p) && !deployAgentAllowed[r.Method+" "+r.URL.Path] {
-			writeError(w, http.StatusForbidden, "a deploy token may only publish an application bundle")
+		if p := principalFrom(r.Context()); isDeployAgent(p) && !deployAgentMayReach(r) {
+			writeError(w, http.StatusForbidden, "a deploy token may only publish an application bundle and read its deployments")
 			return
 		}
 		next.ServeHTTP(w, r)

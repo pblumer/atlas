@@ -90,7 +90,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeLinkThrowEvent] = passThroughBehavior{}
 	p.behaviors[compiler.TypeLinkCatchEvent] = passThroughBehavior{}
 	// A conditional catch arms inert and waits until its FEEL condition becomes true
-	// (ADR-0134): OnActivated self-evaluates, else a variable-change re-check drives it to
+	// (ADR-0137): OnActivated self-evaluates, else a variable-change re-check drives it to
 	// Completing. Conditional boundaries reuse boundaryEventBehavior with BoundaryConditional.
 	p.behaviors[compiler.TypeConditionalCatchEvent] = conditionalCatchBehavior{}
 	p.behaviors[compiler.TypeCompensationThrowEvent] = compensationThrowEventBehavior{}
@@ -1131,6 +1131,7 @@ func armBoundaryEvents(c *ProcessingContext, hostKey uint64, ei *model.ElementIn
 			FlowScopeKey:       ei.FlowScopeKey,
 			BpmnElementType:    uint8(compiler.TypeBoundaryEvent),
 			AttachedToKey:      hostKey,
+			SourceFlowId:       -1, // attached to its host, not entered over a flow
 		})
 	}
 }
@@ -2591,6 +2592,7 @@ func activateCompensationHandler(c *ProcessingContext, v *model.CompensableValue
 		BpmnElementType:    uint8(target.Type),
 		MultiInstance:      miRole,
 		TokenID:            key,
+		SourceFlowId:       -1, // reached by a compensation throw, not over a flow
 	})
 }
 
@@ -3141,7 +3143,7 @@ func (boundaryEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *m
 	case compiler.BoundaryConditional:
 		// A conditional boundary opens nothing either — it arms inert and is driven to
 		// Completing by a variable-change re-check when its FEEL condition becomes true
-		// (ADR-0134). It self-evaluates now: if the condition already holds the moment the
+		// (ADR-0137). It self-evaluates now: if the condition already holds the moment the
 		// host activates, it fires at once. Its OnCompleting honors d.Interrupting.
 		if conditionHolds(c, d.Condition, ei.FlowScopeKey) {
 			c.AppendElementCommand(key, model.IntentCompleting, *ei)
@@ -3254,6 +3256,7 @@ func armEventSubTrigger(c *ProcessingContext, piKey, defKey, scopeKey uint64, ha
 		ElementId:          handlerNode, // the handler container; its EventSub detail names the trigger
 		FlowScopeKey:       scopeKey,
 		BpmnElementType:    uint8(compiler.TypeEventSubProcessStart),
+		SourceFlowId:       -1, // armed with its scope, not entered over a flow
 	})
 }
 
@@ -3334,7 +3337,7 @@ func (eventSubProcessStartBehavior) OnActivated(c *ProcessingContext, key uint64
 	case compiler.BoundaryConditional:
 		// A conditional event subprocess arms inert too — it opens nothing and is driven to
 		// Completing by a variable-change re-check when its FEEL condition over the parent
-		// scope's variables becomes true (ADR-0134). It self-evaluates now: if the condition
+		// scope's variables becomes true (ADR-0137). It self-evaluates now: if the condition
 		// already holds when the scope is entered, it fires at once. OnCompleting honors
 		// d.Interrupting.
 		if conditionHolds(c, d.Condition, ei.FlowScopeKey) {

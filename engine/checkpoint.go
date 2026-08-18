@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/pblumer/atlas/checkpoint"
+	"github.com/pblumer/atlas/model"
 )
 
 // BuildVersion is the Atlas build recorded in checkpoint manifests for diagnostics
@@ -64,4 +65,46 @@ func (p *Processor) deploymentRefs() []checkpoint.DeploymentRef {
 	}
 	sort.Slice(refs, func(i, j int) bool { return refs[i].Key < refs[j].Key })
 	return refs
+}
+
+// recordPosition decodes just a record's log position, so the wal package can locate
+// the segment a suffix replay must start from without knowing the record format.
+func recordPosition(data []byte) (uint64, error) {
+	rec, err := model.ReadRecord(data)
+	if err != nil {
+		return 0, err
+	}
+	return rec.Header.Position, nil
+}
+
+// checkpointSeed picks the newest checkpoint under root that recovery may skip past,
+// returning the position to replay after plus the highest position and key counter it
+// recorded for the prefix it replaces. Zeros mean "replay from genesis" (ADR-0131).
+//
+// A checkpoint is usable only when it is for this partition and its applied position
+// is at or below the store's: the store must already hold the state the skipped prefix
+// produced, because this slice skips *reading* a prefix, it does not restore state
+// files. A checkpoint ahead of the store would leave the gap between them unapplied,
+// so it is refused and an older one — ultimately genesis — is used instead. Anything
+// unreadable is likewise skipped rather than fatal.
+//
+// Only the manifest is read, not the state snapshot: its own checksum makes the fields
+// consumed here trustworthy, and the snapshot's files are not touched by a suffix
+// replay. Verifying their checksum belongs to the slice that actually restores them.
+func (p *Processor) checkpointSeed(root string, lastApplied uint64) (after, highest, counter uint64) {
+	if root == "" {
+		return 0, 0, 0
+	}
+	positions, err := checkpoint.List(root)
+	if err != nil {
+		return 0, 0, 0
+	}
+	for i := len(positions) - 1; i >= 0; i-- { // newest first
+		m, err := checkpoint.Load(root, positions[i])
+		if err != nil || m.Partition != p.partition || m.AppliedPosition > lastApplied {
+			continue
+		}
+		return m.AppliedPosition, m.HighestPosition, m.KeyCounter
+	}
+	return 0, 0, 0
 }

@@ -96,7 +96,7 @@ type Processor struct {
 	fatalErr     error
 
 	// condDirty collects the process instances whose variables changed this batch, so the
-	// batch loop can schedule a conditional re-check for each (ADR-0134). Reused, not
+	// batch loop can schedule a conditional re-check for each (ADR-0137). Reused, not
 	// reallocated; drained and cleared at the end of Phase 1.
 	condDirty []uint64
 
@@ -597,7 +597,7 @@ func (p *Processor) RunUntilIdle() error {
 }
 
 // scheduleConditionRechecks enqueues a transient ConditionRecheck follow-up for each instance
-// whose variables changed this batch and that has conditional events (ADR-0134). The re-check
+// whose variables changed this batch and that has conditional events (ADR-0137). The re-check
 // runs in the next batch and reads the now-committed variables; its firing is the persisted
 // Completing chain, so it is deterministic and never runs on replay (I6).
 func (p *Processor) scheduleConditionRechecks() {
@@ -636,7 +636,7 @@ func (p *Processor) processBatch() error {
 	}
 
 	// A variable write in an instance with conditional events schedules a re-check of that
-	// instance's armed conditionals as a follow-up (ADR-0134). It runs in the next batch, on
+	// instance's armed conditionals as a follow-up (ADR-0137). It runs in the next batch, on
 	// the live command path only (never replay, I6); firing is the persisted Completing chain.
 	p.scheduleConditionRechecks()
 
@@ -717,20 +717,36 @@ func (p *Processor) notifyJobAvailable(jobType int32) {
 // same applyToState used live (invariant I4), and restores the key counter and
 // log position from what the log already froze (invariant I6). Call once after
 // New, before processing.
-func (p *Processor) Recover() error {
+func (p *Processor) Recover() error { return p.RecoverFrom("") }
+
+// RecoverFrom is Recover with a recovery-checkpoint root (ADR-0131). When the root
+// holds a checkpoint this processor may skip past, replay starts after the position
+// that checkpoint covers instead of at genesis, and the highest log position and key
+// counter it recorded seed what the skipped prefix would have contributed.
+//
+// An empty root, or no usable checkpoint, replays the whole log exactly as before:
+// falling back is always correct, only slower, so a missing, corrupt, foreign, or
+// too-new checkpoint can never produce wrong state (invariant I2 is untouched — the
+// WAL remains the source of truth).
+func (p *Processor) RecoverFrom(checkpointRoot string) error {
 	lastApplied, err := p.store.LastAppliedPosition()
 	if err != nil {
 		return err
 	}
+	after, seedPos, seedCounter := p.checkpointSeed(checkpointRoot, lastApplied)
+
 	tx := p.store.NewTransaction()
 	defer tx.Close()
 
 	maxPos := lastApplied
+	if seedPos > maxPos {
+		maxPos = seedPos
+	}
 	maxApplied := lastApplied
-	var maxCounter uint64
+	maxCounter := seedCounter
 	applied := false
 
-	if err := p.log.Replay(func(data []byte) error {
+	onRecord := func(data []byte) error {
 		rec, err := model.ReadRecord(data)
 		if err != nil {
 			return err
@@ -756,7 +772,16 @@ func (p *Processor) Recover() error {
 			maxApplied = h.Position
 		}
 		return nil
-	}); err != nil {
+	}
+
+	// Skipping the prefix needs a record's position, which only the model layer can
+	// decode; the wal package asks for it through this.
+	if after == 0 {
+		err = p.log.Replay(onRecord)
+	} else {
+		err = p.log.ReplayFrom(after, recordPosition, onRecord)
+	}
+	if err != nil {
 		return err
 	}
 

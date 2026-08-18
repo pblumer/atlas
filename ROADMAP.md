@@ -351,7 +351,7 @@ Making processes wait, react, and time out.
   Operations overlay. One catch per name (the destination) and one-or-more throws; a deploy rejects
   an unmatched throw or a duplicate catch name. Recovery-tested; authored in the Modeler (a link-name
   field on the throw/catch). The last common intermediate throw/catch event type.
-- ✅ **Conditional events** ([ADR-0134](docs/adr/0134-conditional-events.md)): the one BPMN event
+- ✅ **Conditional events** ([ADR-0137](docs/adr/0137-conditional-events.md)): the one BPMN event
   family triggered by **process data** rather than a message, timer, signal, or throw — a
   **conditional intermediate catch** (wait until a boolean condition holds), a **conditional boundary
   event** (fire while the host activity runs), and a **conditional event subprocess** (fire while the
