@@ -14,6 +14,19 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Retries is a property of every job-backed task**
+  ([ADR-0135](docs/adr/0135-retries-as-a-task-property.md)): the retry budget the incident
+  model spends (ADR-0061) can now be authored on **every task that creates a job** — the
+  job-worker service and send task, each connector task (its own `retries` attribute,
+  overriding a `<zeebe:taskDefinition>` on the same element), the polyglot script task
+  (`<atlas:jobScript retries>`) and the business rule task. Before this, a script task was
+  hard-coded to three attempts and a connector task modeled in the Modeler could not express
+  the property at all — the kind picker removes the task definition that used to hold it — and
+  the Modeler offered no Retries field anywhere. It now shows one *Failure handling → Retries*
+  field on every one of those kinds, carried across a switch of implementation kind, and an
+  authored `<atlas:webscrapeConnector retries>` is honoured instead of silently ignored. The
+  engine, the log and recovery are untouched: the compiled details already carried the field.
+
 - **Every activity kind can loop** ([ADR-0133](docs/adr/0133-standard-loop-activities.md)
   amended, [ADR-0077](docs/adr/0077-multi-instance-activities.md) amended): business
   rule, manual and undefined tasks now honour both BPMN loop markers, closing the last
@@ -205,6 +218,14 @@ _Changed_ / _Removed_ for each version.
   service-task connector catalog.
 
 ### Changed
+
+- **A retry budget below 1 is refused at deploy**
+  ([ADR-0135](docs/adr/0135-retries-as-a-task-property.md)): `retries="0"` (or a negative
+  count) used to deploy and then hang — a job is on the activatable index only while it has
+  retries left, so it was never handed to a worker, never failed, and never raised the incident
+  an operator could resolve. It is now a compile error naming the element, alongside the
+  existing "invalid retries" error, which every task kind now words identically. Use
+  `retries="1"` for a single attempt with no retry.
 
 - **Deterministic history-retention tests** (v0.2.0 reliability foundation): the
   retention sweep (ADR-0115) gained two test seams — an injectable clock for its

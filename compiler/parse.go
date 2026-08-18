@@ -1657,6 +1657,9 @@ type xmlClioConnector struct {
 	ReduceSpec     string `xml:"reduceSpec,attr"`
 	Limit          string `xml:"limit,attr"`
 	ResultVariable string `xml:"resultVariable,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
 }
 
 // An HTTP-REST connector task's parameters, carried on a service task as an
@@ -1677,6 +1680,9 @@ type xmlRestConnector struct {
 	AuthSecret     string      `xml:"authSecret,attr"`
 	Headers        []xmlHTTPKV `xml:"httpHeader"`
 	QueryParams    []xmlHTTPKV `xml:"queryParam"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
 }
 
 // xmlHTTPKV is one name/value pair in a REST connector's headers or query
@@ -1701,6 +1707,9 @@ type xmlMailConnector struct {
 	From      string `xml:"from,attr"`
 	Subject   string `xml:"subject,attr"`
 	Body      string `xml:"body,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
 }
 
 // xmlUserConnector is the <atlas:userConnector> extension of a user-provisioning
@@ -1713,6 +1722,9 @@ type xmlUserConnector struct {
 	DisplayName string `xml:"displayName,attr"`
 	Roles       string `xml:"roles,attr"`
 	Password    string `xml:"password,attr"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
 }
 
 // A CSV-to-JSON connector task's parameters, carried on a service task as an
@@ -1773,6 +1785,9 @@ type xmlSharePointConnector struct {
 	List           string      `xml:"list,attr"`
 	ResultVariable string      `xml:"resultVariable,attr"`
 	Fields         []xmlHTTPKV `xml:"itemField"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
 }
 
 // A BMC Remedy connector task's parameters, carried on a service task as an
@@ -1789,6 +1804,9 @@ type xmlRemedyConnector struct {
 	Form           string      `xml:"form,attr"`
 	ResultVariable string      `xml:"resultVariable,attr"`
 	Fields         []xmlHTTPKV `xml:"remedyField"`
+	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
 }
 
 // A web-scraping connector task's parameters, carried on a service task as an
@@ -1862,10 +1880,12 @@ type xmlZeebeScript struct {
 // extension: a script task in a general-purpose language (ADR-0047). language
 // selects the interpreter/worker (and thus the reserved job type), resultVariable
 // is the process variable the script's result is written back into, and the
-// element text is the script source.
+// element text is the script source. retries is the script job's retry budget
+// (ADR-0135) — a script fails like any other job — blank meaning the default.
 type xmlAtlasScript struct {
 	Language       string `xml:"language,attr"`
 	ResultVariable string `xml:"resultVariable,attr"`
+	Retries        string `xml:"retries,attr"`
 	Source         string `xml:",chardata"`
 }
 

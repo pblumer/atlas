@@ -114,6 +114,13 @@ func registerScope(
 			if !cc.present(st) {
 				continue
 			}
+			// The connector's own retries attribute is where an author configures the
+			// budget (the Modeler writes it there, ADR-0135); a <zeebe:taskDefinition
+			// retries> on the same task stays honoured as the fallback.
+			retries, err := parseRetries(label, st.Id, firstNonBlank(cc.retries(st), st.TaskDefinition.Retries))
+			if err != nil {
+				return err
+			}
 			id, err := cc.compile(b, st, retries)
 			if err != nil {
 				return err
@@ -126,12 +133,9 @@ func registerScope(
 		// path (ADR-0090), rather than reading a columnConfig variable (ADR-0087). The
 		// whole layout lives in the model; only the file arrives at runtime.
 		if cn := st.Csv; cn != nil {
-			if r := strings.TrimSpace(cn.Retries); r != "" {
-				n, err := strconv.Atoi(r)
-				if err != nil {
-					return fmt.Errorf("compiler: csv connector task %q has invalid retries %q: %w", st.Id, r, err)
-				}
-				retries = int32(n)
+			retries, err := parseRetries(label, st.Id, firstNonBlank(cn.Retries, st.TaskDefinition.Retries))
+			if err != nil {
+				return err
 			}
 			cols := splitCSVColumns(cn.Columns)
 			hasHeader := csvHasHeader(cn.HasHeader)
@@ -208,7 +212,13 @@ func registerScope(
 			if js.ResultVariable == "" {
 				return fmt.Errorf("compiler: script task %q has no result variable", st.Id)
 			}
-			node := b.AddScriptJobTask(jobType, strings.ToLower(strings.TrimSpace(js.Language)), source, js.ResultVariable, defaultRetries)
+			// A script job fails like any other job, so it carries its own retry budget
+			// (ADR-0135) authored on the <atlas:jobScript> extension.
+			retries, err := parseRetries("script task", st.Id, js.Retries)
+			if err != nil {
+				return err
+			}
+			node := b.AddScriptJobTask(jobType, strings.ToLower(strings.TrimSpace(js.Language)), source, js.ResultVariable, retries)
 			if err := register(st.Id, node); err != nil {
 				return err
 			}
@@ -238,13 +248,9 @@ func registerScope(
 		if brt.CalledDecision.DecisionId == "" {
 			return fmt.Errorf("compiler: business rule task %q has no calledDecision decisionId", brt.Id)
 		}
-		retries := int32(defaultRetries)
-		if r := brt.CalledDecision.Retries; r != "" {
-			n, err := strconv.Atoi(r)
-			if err != nil {
-				return fmt.Errorf("compiler: business rule task %q has invalid retries %q: %w", brt.Id, r, err)
-			}
-			retries = int32(n)
+		retries, err := parseRetries("business rule task", brt.Id, brt.CalledDecision.Retries)
+		if err != nil {
+			return err
 		}
 		inputs, err := decisionInputs(brt.Inputs)
 		if err != nil {
