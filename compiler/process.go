@@ -79,8 +79,10 @@ const (
 
 	TypeConditionalCatchEvent // a conditional intermediate catch event: waits until its boolean FEEL condition over the process's variables becomes true, then flows on (ADR-0137). Arms inert (no subscription) and is driven to Completing by a variable-change re-check; a conditional boundary/event-sub reuses TypeBoundaryEvent/TypeEventSubProcessStart with BoundaryConditional
 
+	TypeAdHocSubProcess // an ad-hoc subprocess: a container scope whose contained activities run on demand, in any order, zero or more times — not driven by sequence flow from a start event (ADR-0138). On entry it activates every entry activity (a contained node with no incoming flow) at once; after each contained activity completes an optional boolean FEEL completion condition is re-evaluated, and the first time it holds the remaining work is cancelled and the ad-hoc completes (else it completes on scope-drain)
+
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 41
+	numBpmnTypes = 42
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -130,6 +132,8 @@ func (t BpmnType) String() string {
 		return "MessageEndEvent"
 	case TypeSubProcess:
 		return "SubProcess"
+	case TypeAdHocSubProcess:
+		return "AdHocSubProcess"
 	case TypeCallActivity:
 		return "CallActivity"
 	case TypeEventSubProcessStart:
@@ -712,6 +716,18 @@ type ConditionalDetail struct {
 	Condition *expr.Compiled
 }
 
+// AdHocDetail is the per-ad-hoc-subprocess configuration the runtime needs (ADR-0138).
+// CompletionCondition is an optional boolean FEEL expression re-evaluated after each contained
+// activity completes; nil means the ad-hoc completes when its scope drains instead. When it
+// holds, CancelRemaining (the BPMN cancelRemainingInstances default, true) decides whether the
+// still-running contained activities are cancelled. Sequential runs one entry activity at a
+// time; the default is parallel — every entry activity is activated at once.
+type AdHocDetail struct {
+	CompletionCondition *expr.Compiled
+	CancelRemaining     bool
+	Sequential          bool
+}
+
 // CompiledDataObject is one BPMN data object declared by a process: a typed,
 // named datum with an optional declared structure and initial data state. Unlike
 // a CompiledNode it is not a flow node — no token flows through it (ADR-0053) — so
@@ -813,6 +829,7 @@ type CompiledProcess struct {
 	errorEnds          []ErrorEndDetail     // error end events (ADR-0089)
 	escalations        []EscalationDetail   // shared by escalation throw and end events (ADR-0125)
 	conditionals       []ConditionalDetail  // conditional intermediate catch events (ADR-0137)
+	adHocs             []AdHocDetail        // ad-hoc subprocess containers (ADR-0138)
 	compensationThrows []CompensationDetail // shared by compensation throw and end events (ADR-0103)
 	timerStarts        []TimerStartDetail
 	dataObjects        []CompiledDataObject
@@ -1048,6 +1065,18 @@ func (p *CompiledProcess) Conditional(detail int32) *ConditionalDetail {
 // HasConditionalEvents reports whether the process contains any conditional event, so the
 // runtime only re-checks conditionals for instances that can have one (ADR-0137).
 func (p *CompiledProcess) HasConditionalEvents() bool { return p.hasConditional }
+
+// AdHoc returns the ad-hoc subprocess detail at the given table index (ADR-0138).
+func (p *CompiledProcess) AdHoc(detail int32) *AdHocDetail { return &p.adHocs[detail] }
+
+// AdHocEntries returns the element ids of an ad-hoc subprocess's entry activities — the
+// contained flow nodes with no incoming sequence flow, which the runtime activates when the
+// ad-hoc is entered (ADR-0138). Like ScopeStartEvents it is a slice into the shared topology
+// array (no allocation); empty for a non-ad-hoc node or an ad-hoc with no contained activity.
+func (p *CompiledProcess) AdHocEntries(id int32) []int32 {
+	n := &p.nodes[id]
+	return p.scopeStarts[n.ScopeStartStart : n.ScopeStartStart+n.ScopeStartCount]
+}
 
 // CompensationThrow returns the compensation-throw detail at the given table index —
 // shared by the compensation throw and end events (ADR-0103).
