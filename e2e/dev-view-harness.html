@@ -60,8 +60,26 @@
         return { ok: true, result: 42, kind: "number" };
       };
 
+      // Stands in for the live-values lookup (processes → instances → variables).
+      // __samples lets a test make it empty, slow or broken.
+      window.__sampleCalls = [];
+      window.__samples = {
+        instance: { key: 4711, state: "active", version: 3, createdAt: 1755500000000 },
+        values: {
+          amount: { value: "1250.5", kind: "number" },
+          orderId: { value: "A-2026-0042", kind: "string" },
+          email: { value: '{"to":"anna@example.com","cc":[]}', kind: "json" },
+        },
+      };
+      const samples = async (o) => {
+        window.__sampleCalls.push(o || {});
+        return window.__samples;
+      };
+
       installDevShortcut(document, (field) =>
-        field.dataset.devlang === "feel" ? { variables, validate, evaluate } : { variables });
+        field.dataset.devlang === "feel"
+          ? { variables, validate, evaluate, samples }
+          : { variables, samples });
 
       // Records what the panel's save wiring would see.
       window.__changes = [];

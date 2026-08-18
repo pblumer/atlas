@@ -206,6 +206,62 @@ test("a JSON field can be formatted from the modal", async ({ page }) => {
   expect(await page.evaluate(() => document.querySelector("#json-fld").value)).toBe('{\n  "a": 1\n}');
 });
 
+test("variables carry the value they hold in a real instance", async ({ page }) => {
+  await openFeel(page);
+
+  // The strip says where the values came from.
+  await expect(page.locator(".dev-sample-strip")).toContainText("instance 4711");
+  await expect(page.locator(".dev-sample-strip")).toContainText("active");
+
+  // A number, a string (quoted so an empty one is visible) and a flattened JSON.
+  const row = (name) => page.locator(".dev-pane-vars .dev-item", { hasText: name });
+  await expect(row("amount").locator(".dev-item-value")).toHaveText("= 1250.5");
+  await expect(row("orderId").locator(".dev-item-value")).toHaveText('= "A-2026-0042"');
+  await expect(row("email").locator(".dev-item-value")).toContainText("anna@example.com");
+  // A variable the instance does not carry simply has no value line.
+  await expect(row("gross").locator(".dev-item-value")).toHaveCount(0);
+
+  // Clicking still inserts the *name* — the value is context, not the payload.
+  await row("orderId").click();
+  expect(await page.evaluate(() => document.querySelector(".dev-ta").value)).toBe("amountorderId");
+});
+
+test("the Test panel is prefilled from the instance, and can be refilled", async ({ page }) => {
+  await openFeel(page);
+  await page.locator(".dev-test-toggle").click();
+
+  // Typed values, not the server's string form.
+  const prefilled = await page.evaluate(() => document.querySelector(".dev-run-vars").value);
+  expect(JSON.parse(prefilled)).toEqual({
+    amount: 1250.5,
+    orderId: "A-2026-0042",
+    email: { to: "anna@example.com", cc: [] },
+  });
+
+  // What the author typed is never overwritten behind their back…
+  await page.locator(".dev-run-vars").fill('{ "amount": 1 }');
+  await page.locator(".dev-sample-reload").click();
+  await expect(page.locator(".dev-sample-strip")).toContainText("instance 4711");
+  expect(await page.evaluate(() => document.querySelector(".dev-run-vars").value)).toBe('{ "amount": 1 }');
+  // …until they ask for it.
+  await page.locator(".dev-run-fill").click();
+  expect(JSON.parse(await page.evaluate(() => document.querySelector(".dev-run-vars").value)).amount).toBe(1250.5);
+});
+
+test("a process that has never run says so instead of failing", async ({ page }) => {
+  await page.evaluate(() => { window.__samples = null; });
+  await openFeel(page);
+  await expect(page.locator(".dev-sample-strip")).toContainText("No instance to read values from yet");
+  await expect(page.locator(".dev-pane-vars .dev-item-value")).toHaveCount(0);
+  // Reload asks again — and this time an instance exists.
+  await page.evaluate(() => {
+    window.__samples = { instance: { key: 9, state: "completed" }, values: { amount: { value: "7", kind: "number" } } };
+  });
+  await page.locator(".dev-sample-reload").click();
+  await expect(page.locator(".dev-sample-strip")).toContainText("instance 9");
+  expect(await page.evaluate(() => window.__sampleCalls.map((c) => c.force))).toEqual([false, true]);
+});
+
 test("the side panel folds away and the choice is remembered", async ({ page }) => {
   await openFeel(page);
   await expect(page.locator(".dev-pane-vars")).toBeVisible();

@@ -16,6 +16,9 @@
 //   Variables  the in-scope names grouped by where they come from — the activity's
 //              own input mappings, what it writes back, the process scope, linked
 //              form fields, data objects. Click to insert at the caret, or drag.
+//              Each carries the value it actually holds in a real instance of this
+//              process, so "what shape is this thing?" is answered by the running
+//              system rather than guessed from the name.
 //   Functions  the language's function catalogue, grouped, with signatures.
 //   Help       an overview of the language plus the selected function's page:
 //              signature, description, a worked example that can be inserted.
@@ -177,6 +180,30 @@ function groupVariables(list) {
     .filter((s) => s.items.length);
 }
 
+// sampleText renders a variable's live value for the one line a row can spare:
+// JSON and long strings are cut, the full value stays in the row's title.
+function sampleText(sample) {
+  if (!sample) return "";
+  const raw = sample.kind === "string" ? JSON.stringify(sample.value) : String(sample.value ?? "");
+  const flat = raw.replace(/\s+/g, " ").trim();
+  return flat.length > 60 ? flat.slice(0, 59) + "…" : flat;
+}
+
+// sampleJSON turns the instance's typed variable views into the plain JSON object
+// the Test panel wants. A value the server could not type stays a string, which is
+// what it already is.
+function sampleJSON(values) {
+  const out = {};
+  for (const [name, s] of Object.entries(values || {})) {
+    if (!s) continue;
+    if (s.kind === "json") { try { out[name] = JSON.parse(s.value); continue; } catch { /* keep the text */ } }
+    if (s.kind === "number") { const n = Number(s.value); out[name] = Number.isNaN(n) ? s.value : n; continue; }
+    if (s.kind === "boolean") { out[name] = s.value === "true" || s.value === true; continue; }
+    out[name] = s.value;
+  }
+  return out;
+}
+
 // matches is the pane filter: a case-insensitive substring over the visible text.
 const matches = (q, ...fields) => !q || fields.some((f) => String(f || "").toLowerCase().includes(q));
 
@@ -187,6 +214,8 @@ const matches = (q, ...fields) => !q || fields.some((f) => String(f || "").toLow
 //   validate   (src) -> Promise<{ ok, error }>   live validation, as inline
 //   evaluate   (src, vars) -> Promise<{ ok, result, error }>   the Test panel (FEEL)
 //   run        (src, vars) -> Promise<{ ok, result, error }>   the Test panel (script)
+//   samples    () -> Promise<{ instance, values } | null>   live values for the
+//              variables, read from a real instance of this process
 //   lockPrefix (value) -> protected leading length (the fx '=' marker)
 //   onApply    (value) -> void, after the field has been written
 // Returns a handle { close, apply, el } or null when the field isn't a code field.
@@ -222,9 +251,10 @@ export function openDevView(field, opts = {}) {
           ${canTest ? `
           <div class="dev-run" hidden>
             <label class="dev-run-label" for="dev-run-vars">Sample variables (JSON)</label>
-            <textarea id="dev-run-vars" class="dev-run-vars" rows="2" spellcheck="false" placeholder='{ "amount": 100 }'></textarea>
+            <textarea id="dev-run-vars" class="dev-run-vars" rows="4" spellcheck="false" placeholder='{ "amount": 100 }'></textarea>
             <div class="dev-run-row">
               <button type="button" class="btn neutral small dev-run-btn">Run</button>
+              <button type="button" class="btn ghost small dev-run-fill" hidden>From instance</button>
               <span class="dev-run-out" aria-live="polite"></span>
             </div>
             <pre class="dev-run-detail" hidden></pre>
@@ -279,11 +309,60 @@ export function openDevView(field, opts = {}) {
   const filter = q(".dev-filter");
   let selectedItem = null; // the reference item the Help pane is showing
 
+  // Live sample values. `state` drives the strip at the top of the Variables pane:
+  // idle (never asked) → loading → ready (an instance was found) / none (the process
+  // has no instance yet, or isn't deployed) / error. Loading is lazy and best-effort:
+  // the modal is fully usable before, during and after a failed load.
+  let samples = { state: opts.samples ? "loading" : "idle", instance: null, values: {} };
+
+  async function loadSamples(force) {
+    if (!opts.samples) return;
+    samples = { ...samples, state: "loading" };
+    if (tab === "vars") renderVars();
+    let got = null;
+    try { got = await opts.samples({ force: !!force }); }
+    catch { samples = { state: "error", instance: null, values: {} }; if (tab === "vars") renderVars(); return; }
+    if (!document.contains(overlay)) return; // closed while we were waiting
+    samples = got && got.instance
+      ? { state: "ready", instance: got.instance, values: got.values || {} }
+      : { state: "none", instance: null, values: {} };
+    if (tab === "vars") renderVars();
+    // An empty Test box is filled with the real instance's variables — the sample a
+    // developer would otherwise type by hand, only correct. A box the author has
+    // already written in is never overwritten behind their back; the "From instance"
+    // button is how they ask for that.
+    if (canTest && samples.state === "ready") {
+      const box = q(".dev-run-vars");
+      if (box && !box.value.trim()) box.value = JSON.stringify(sampleJSON(samples.values), null, 2);
+      const fill = q(".dev-run-fill");
+      if (fill) fill.hidden = false;
+    }
+  }
+
+  // sampleStripHTML is the Variables pane's header: which instance the values come
+  // from, and a way to ask again once the process has run.
+  function sampleStripHTML() {
+    if (!opts.samples) return "";
+    const reload = `<button type="button" class="linklike dev-sample-reload">Reload</button>`;
+    if (samples.state === "loading") return `<div class="dev-sample-strip">Reading a live instance…</div>`;
+    if (samples.state === "error") return `<div class="dev-sample-strip">Live values unavailable · ${reload}</div>`;
+    if (samples.state === "none") {
+      return `<div class="dev-sample-strip">No instance to read values from yet — deploy and run the process once · ${reload}</div>`;
+    }
+    if (samples.state === "ready") {
+      const i = samples.instance;
+      const when = i.createdAt ? new Date(i.createdAt).toLocaleString() : "";
+      return `<div class="dev-sample-strip ready" title="${esc(when)}">Values from instance <b>${esc(String(i.key))}</b>${i.state ? ` · ${esc(i.state)}` : ""}${i.version ? ` · v${esc(String(i.version))}` : ""} · ${reload}</div>`;
+    }
+    return "";
+  }
+
   function renderVars() {
     const query = filter.value.trim().toLowerCase();
     const sections = groupVariables(opts.variables);
+    const strip = sampleStripHTML();
     if (!sections.length) {
-      paneVars.innerHTML = `<p class="dev-empty">No variables are known for this element yet. They appear as the model declares them — start variables, form fields, script and decision results, output mappings.</p>`;
+      paneVars.innerHTML = strip + `<p class="dev-empty">No variables are known for this element yet. They appear as the model declares them — start variables, form fields, script and decision results, output mappings.</p>`;
       return;
     }
     let html = "";
@@ -292,13 +371,17 @@ export function openDevView(field, opts = {}) {
       if (!rows.length) continue;
       html += `<div class="dev-group"><h4 title="${esc(s.hint)}">${esc(s.title)}</h4>`;
       for (const v of rows) {
-        html += `<button type="button" class="dev-item" draggable="true" data-insert="${esc(varInsert(lang.id, v.name))}">
-          <span class="dev-item-name">${esc(v.name)}</span>
-          <span class="dev-item-detail">${esc(v.detail)}</span></button>`;
+        const sample = samples.values[v.name];
+        const shown = sampleText(sample);
+        html += `<button type="button" class="dev-item${shown ? " stacked" : ""}" draggable="true" data-insert="${esc(varInsert(lang.id, v.name))}">
+          <span class="dev-item-head">
+            <span class="dev-item-name">${esc(v.name)}</span>
+            <span class="dev-item-detail">${esc(v.detail)}</span>
+          </span>${shown ? `<span class="dev-item-value" title="${esc(String(sample.value))}">= ${esc(shown)}</span>` : ""}</button>`;
       }
       html += `</div>`;
     }
-    paneVars.innerHTML = html || `<p class="dev-empty">No variable matches the filter.</p>`;
+    paneVars.innerHTML = strip + (html || `<p class="dev-empty">No variable matches the filter.</p>`);
   }
 
   function renderFns() {
@@ -424,6 +507,8 @@ export function openDevView(field, opts = {}) {
     const snip = e.target.closest(".dev-ins-snip");
     if (snip) { insertText(ta, snippets[Number(snip.dataset.i)].code); return; }
 
+    if (e.target.closest(".dev-sample-reload")) { loadSamples(true); return; }
+
     const item = e.target.closest(".dev-item:not(.dev-fn)");
     if (item) { insertText(ta, item.dataset.insert); return; }
   });
@@ -484,6 +569,11 @@ export function openDevView(field, opts = {}) {
       detail.className = "dev-run-detail" + (cls ? " " + cls : "");
       detail.textContent = text || "";
     };
+    const fillBtn = q(".dev-run-fill");
+    fillBtn.title = "Replace the sample with this instance's actual variables";
+    fillBtn.addEventListener("click", () => {
+      q(".dev-run-vars").value = JSON.stringify(sampleJSON(samples.values), null, 2);
+    });
     q(".dev-run-btn").addEventListener("click", async () => {
       let vars = {};
       const raw = (q(".dev-run-vars").value || "").trim();
@@ -601,6 +691,7 @@ export function openDevView(field, opts = {}) {
   try { startCollapsed = localStorage.getItem(SIDE_KEY) === "collapsed"; } catch { /* no storage */ }
   showTab("vars");
   setSide(startCollapsed, false);
+  loadSamples(false); // lazy and best-effort: the modal is already usable
   renderHelp();
   refreshStatus();
   ta.focus();

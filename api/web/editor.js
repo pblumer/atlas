@@ -1234,6 +1234,59 @@ function devVariables(modeler, element) {
   return out;
 }
 
+// sampleCache memoizes the live-values lookup per process id for this editing
+// session: opening the Developer View on ten fields of one diagram is one pair of
+// requests, not ten. The Reload button passes force:true to bypass it, which is how
+// an author picks up an instance they started while the Modeler was open.
+const sampleCache = new Map(); // processId -> Promise<{ instance, values } | null>
+
+// instanceSamples reads the values the diagram's variables actually hold, from a
+// real instance of this very process: the newest deployed definition of the root
+// process id, then its most relevant instance (a running one first, else the newest
+// finished one). The list endpoint already returns each instance's root-scope
+// variables, so this is two requests and no per-variable round trip.
+// Returns null when the process was never deployed or has never run — the modal
+// treats that as "no samples", not as an error.
+async function instanceSamples(modeler, api, opts = {}) {
+  const bo = rootProcess(modeler);
+  const processId = bo && bo.id;
+  if (!processId || !api) return null;
+  if (opts.force) sampleCache.delete(processId);
+  if (!sampleCache.has(processId)) sampleCache.set(processId, fetchSamples(api, processId));
+  try { return await sampleCache.get(processId); }
+  catch (e) { sampleCache.delete(processId); throw e; }
+}
+
+async function fetchSamples(api, processId) {
+  const procs = await api("GET", "/api/v1/processes");
+  const versions = (procs || [])
+    .filter((p) => p.processId === processId)
+    .sort((a, b) => b.version - a.version);
+  if (!versions.length) return null;
+
+  // Look at the newest version first, but fall back to older ones: a version
+  // deployed a minute ago has no instances yet, and its predecessor's values still
+  // describe the same variables.
+  for (const v of versions) {
+    let rows;
+    try { rows = await api("GET", "/api/v1/instances?process=" + encodeURIComponent(v.key)); }
+    catch { return null; }
+    const inst = (rows || [])
+      .filter((r) => r.processDefKey === v.key)
+      .sort((a, b) => (a.state === b.state ? b.key - a.key : a.state === "active" ? -1 : 1))[0];
+    if (!inst) continue;
+    const values = {};
+    for (const vv of inst.variables || []) {
+      if (vv && vv.name) values[vv.name] = { value: vv.value, kind: vv.kind };
+    }
+    return {
+      instance: { key: inst.key, state: inst.state, version: inst.version, createdAt: inst.createdAt },
+      values,
+    };
+  }
+  return null;
+}
+
 // devViewContext answers "what does the Developer View need to know" at the moment
 // F2 is pressed: the variables in scope for the current selection, and the server
 // round trips the field's language offers — FEEL validates and evaluates in the
@@ -1245,6 +1298,9 @@ function devViewContext(modeler, api, field) {
   const ctx = { variables: devVariables(modeler, element) };
   const lang = field.dataset.devlang;
   if (!api) return ctx;
+  // Live values for those variables, read lazily from a real instance of this
+  // process — what the names actually hold beats guessing from the name.
+  ctx.samples = (o) => instanceSamples(modeler, api, o);
   if (lang === "feel") {
     ctx.validate = (expression) => api("POST", "/api/v1/feel/validate", { expression });
     ctx.evaluate = (expression, variables) => api("POST", "/api/v1/feel/evaluate", { expression, variables });

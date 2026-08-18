@@ -103,6 +103,16 @@ Option 2 gets the room without any of that. Concretely:
   process scope, form fields, data objects — which `devVariables` derives from the
   same static analysis as the Variables panel (`collectDiagramVariables`), so the
   two cannot drift.
+- **The variables carry their live values.** Each row shows what that name
+  actually holds in a real instance of this process, and the Test panel's sample
+  is prefilled from the same instance. The lookup is the newest deployed version
+  of the root process id, then its most relevant instance (running first, else the
+  newest finished one); the list endpoint already returns each instance's
+  root-scope variables, so it is two requests, memoized per process id for the
+  session, and explicitly refreshable. It is lazy and best-effort: a process that
+  was never deployed or never ran says so, and the modal is fully usable without
+  it. This is a read of design-time-adjacent *operational* data — the same query
+  the Operations view makes — not a new coupling: the engine is untouched.
 - **The side panel folds away** to a rail of tab labels, and the choice is
   remembered in `localStorage` — a wide script can have the whole modal, and a
   developer who works without the reference does not re-collapse it every time.

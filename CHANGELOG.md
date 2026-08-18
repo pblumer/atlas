@@ -28,7 +28,12 @@ _Changed_ / _Removed_ for each version.
   `input`/`change` events, so the property panel stays the only writer and undo/redo is unchanged;
   <kbd>Esc</kbd> with unsaved changes asks before discarding. A field opts in with one
   `data-devlang` attribute, which is how every JSON editor in the app got it at once. The side panel
-  folds away to a rail when a wide script wants the whole modal, and remembers that choice.
+  folds away to a rail when a wide script wants the whole modal, and remembers that choice. Each
+  variable also shows **the value it actually holds in a real instance** of the process (newest
+  deployed version, running instance first), and the Test panel's sample variables are prefilled from
+  that same instance — so "what shape is this thing?" is answered by the running system instead of
+  guessed from the name. Lazy, memoized per process and refreshable; a process that has never run
+  simply says so.
 
 ## [0.2.0] — 2026-08-18
 
