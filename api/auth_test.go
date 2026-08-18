@@ -120,6 +120,9 @@ func TestRequiresAuth(t *testing.T) {
 		{"/", false},
 		{"/index.html", false},
 		{"/healthz", false},
+		// A Prometheus scrape carries no session, so gating /metrics would silently
+		// break monitoring the moment --auth is turned on (ADR-0142).
+		{"/metrics", false},
 		{"/api/v1/auth/login", false},
 		{"/api/v1/info", false},
 		{"/api/v1/openapi.json", false},

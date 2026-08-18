@@ -49,6 +49,7 @@ import (
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/mail"
+	"github.com/pblumer/atlas/metrics"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/opensearch"
 	"github.com/pblumer/atlas/remedy"
@@ -374,6 +375,14 @@ type Server struct {
 	// different goroutines.
 	backupsInFlight atomic.Int64
 
+	// metricsEnabled gates the Prometheus exposition at /metrics, and metrics is the
+	// registry it serves (ADR-0142). On by default (opt-out, like the API docs): the
+	// exposition carries only bounded-cardinality aggregates, so the cost of having it
+	// is a port an operator may not want open rather than data leaking. Built once at
+	// construction — a duplicate registration then fails the boot, not a scrape.
+	metricsEnabled bool
+	metrics        *metrics.Registry
+
 	// docsEnabled gates the OpenAPI spec and the Scalar API explorer. On by
 	// default (opt-out), consistent with the already-open web UI and MCP
 	// endpoint; an operator who does not want the interactive surface disables
@@ -603,6 +612,14 @@ func WithCheckpointRetention(keep int) Option {
 	}
 }
 
+// WithoutMetrics turns off the Prometheus exposition at /metrics (ADR-0142). It is
+// served by default — a system meant to be operated should be observable without extra
+// configuration, and the exposition carries only bounded-cardinality aggregates — so
+// this is for an operator who does not want the surface open at all.
+func WithoutMetrics() Option {
+	return func(s *Server) { s.metricsEnabled = false }
+}
+
 // WithWALCompaction deletes the WAL segments a recovery checkpoint and every consumer
 // watermark make redundant (ADR-0131), bounding the log's disk instead of letting it
 // grow with all history. It has no effect without WithCheckpoints: the cut is derived
@@ -752,6 +769,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		dmnValidator:      dmn.NewValidator(resolver),
 		dmnRegistry:       dmn.NewRegistry(),
 		docsEnabled:       true, // opt-out: served unless WithoutDocs is passed (ADR-0043)
+		metricsEnabled:    true, // opt-out: served unless WithoutMetrics is passed (ADR-0142)
 	}
 	// The retention sweep reads its eligibility cutoff from the system clock by
 	// default; the options below may replace it (withClock) for a deterministic
@@ -950,6 +968,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// configured. Unlike the pollers above, this one's actual work happens *on* the run
 	// loop — a snapshot is only exact at a batch boundary (invariant I3) — so the
 	// goroutine exists to own the cadence and the off-loop pruning, not the snapshot.
+	if s.metricsEnabled {
+		if err := s.buildMetrics(); err != nil {
+			return nil, err
+		}
+	}
 	if s.checkpointInterval > 0 {
 		s.checkpointRequests = make(chan chan checkpointPass)
 		s.wg.Add(1)
@@ -1426,6 +1449,11 @@ func (s *Server) Close() {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
+	// The Prometheus exposition sits beside /healthz: same process, same port, and
+	// ungated for the same reason (ADR-0142).
+	if s.metricsEnabled {
+		mux.HandleFunc("GET /metrics", s.handleMetrics)
+	}
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte("ok\n"))
