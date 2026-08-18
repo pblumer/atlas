@@ -6,7 +6,7 @@ import (
 )
 
 // A service task bearing an <atlas:sharepointConnector> extension is a SharePoint
-// connector task (ADR-0105): it creates a list item in a model-authored site/list
+// connector task (ADR-0140): it creates a list item in a model-authored site/list
 // through a server-registered SharePoint provider (Microsoft Graph) via the job
 // path, mirroring the mail connector (the Graph base and OAuth credential live
 // server-side, never in the model) while the target (site, list, item fields) is

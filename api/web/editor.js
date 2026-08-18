@@ -162,7 +162,7 @@ function calleeXML(pid, name) {
 let current; // active modeler/viewer, destroyed on remount
 let onLayoutKey; // document-level F8 handler for auto-layout, removed on remount
 let liveTimer; // active live-overlay poll, cleared on remount/leave
-let collab; // active live collaboration session (ADR-0103), closed on remount
+let collab; // active live collaboration session (ADR-0139), closed on remount
 // generation is bumped by cleanup() on every navigation/remount. A mount captures
 // it right after its own cleanup() and re-checks it after each await, so a slow
 // mount that a newer navigation has superseded bails out *before* it builds a
@@ -599,7 +599,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   wireTokenSim(root, modeler);
 
   // Only a saved draft has a stable id to key a live session on; a fresh unsaved
-  // diagram or a read-only deployment does not co-edit (ADR-0103).
+  // diagram or a read-only deployment does not co-edit (ADR-0139).
   if (draftId != null) collab = attachCollab(modeler, api, draftId, toast);
 }
 
@@ -5158,7 +5158,7 @@ function wireActions(root, modeler, api, toast, projectId) {
       docTitle(`${d.name || d.processId || "Draft"} · Modeler`);
       toast(`Saved draft “${d.name || d.processId}”`, "ok");
       // Draft is now persisted: clear the collab unsaved-work guard so a co-editor's
-      // deferred change (held back to protect these edits) can sync in (ADR-0103).
+      // deferred change (held back to protect these edits) can sync in (ADR-0139).
       if (collab && collab.markSaved) collab.markSaved();
     } catch (e) {
       toast("save failed: " + e.message, "err");

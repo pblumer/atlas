@@ -191,7 +191,7 @@ type Server struct {
 	sessions *sessionStore
 
 	// collab holds live collaborative-editing sessions on drafts in memory
-	// (ADR-0103). Like sessions it is reached from concurrent handler goroutines
+	// (ADR-0139). Like sessions it is reached from concurrent handler goroutines
 	// (SSE streams and POSTs), guards itself with a mutex, and never persists or
 	// touches the engine — it is design-time coordination around a draft, not
 	// engine state.
@@ -253,7 +253,7 @@ type Server struct {
 	mailRegistry *mail.Registry
 
 	// sharePointRegistry resolves a connector name to the Microsoft Graph client for
-	// SharePoint connector tasks (ADR-0105), built from the managed connector store at
+	// SharePoint connector tasks (ADR-0140), built from the managed connector store at
 	// startup and rebuilt on every connector change, with each connector's OAuth
 	// credential resolved from the vault (ADR-0041). Read only while driving jobs on
 	// the run loop, so it needs no lock.
@@ -397,7 +397,7 @@ func WithInboundPollInterval(d time.Duration) Option {
 
 // WithCollabKeepaliveInterval sets how often an idle collaboration SSE stream
 // writes a keepalive comment, the mechanism that detects a half-open browser
-// connection so its session participant is reaped (ADR-0103). A non-positive
+// connection so its session participant is reaped (ADR-0139). A non-positive
 // value restores the default (15s). Tests pass a short interval to exercise it.
 func WithCollabKeepaliveInterval(d time.Duration) Option {
 	return func(s *Server) {
@@ -872,7 +872,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	go s.loop()
 	go s.timerScheduler(time.Second)
 	// The collaboration reaper evicts idle detached session participants (MCP
-	// agents that stopped polling) and releases their locks (ADR-0103). It runs off
+	// agents that stopped polling) and releases their locks (ADR-0139). It runs off
 	// the run loop — the collab registry is its own mutex-guarded, engine-independent
 	// state — so it never touches the processor or the invariants.
 	go s.collabReaper(collabReapInterval)
@@ -1216,7 +1216,7 @@ func (s *Server) timerScheduler(every time.Duration) {
 // collabReaper periodically evicts detached collaboration-session participants
 // (AI agents that joined over MCP and stopped polling) that have gone silent past
 // the TTL, releasing their locks so a crashed or forgotten agent never holds an
-// element forever (ADR-0103). Browser SSE participants are reaped on disconnect
+// element forever (ADR-0139). Browser SSE participants are reaped on disconnect
 // instead and are exempt. It runs off the run loop — the collab registry is its
 // own mutex-guarded, engine-independent state — so it never touches the processor.
 func (s *Server) collabReaper(every time.Duration) {
@@ -1229,7 +1229,7 @@ func (s *Server) collabReaper(every time.Duration) {
 			return
 		case <-t.C:
 			if n := s.collab.reap(); n > 0 {
-				log.Printf("collab: reaped %d idle session participant(s) past the %s TTL (ADR-0103)", n, collabParticipantTTL)
+				log.Printf("collab: reaped %d idle session participant(s) past the %s TTL (ADR-0139)", n, collabParticipantTTL)
 			}
 		}
 	}

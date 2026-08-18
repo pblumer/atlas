@@ -243,7 +243,7 @@ type collabTestErr struct{}
 
 func (*collabTestErr) Error() string { return "boom" }
 
-// TestCollabPoll covers the non-streaming read side (ADR-0103 M2): a detached
+// TestCollabPoll covers the non-streaming read side (ADR-0139 M2): a detached
 // participant drains its buffered frames and reads the current roster and locks.
 func TestCollabPoll(t *testing.T) {
 	reg := newCollabRegistry()
@@ -299,7 +299,7 @@ func TestCollabPoll(t *testing.T) {
 }
 
 // TestCollabCanEdit covers the per-participant edit capability snapshotted at
-// join from the project role (ADR-0103/0071).
+// join from the project role (ADR-0139/0071).
 func TestCollabCanEdit(t *testing.T) {
 	reg := newCollabRegistry()
 	ed, _, _ := reg.joinStream("d", "u1", "Ed", true)
@@ -324,7 +324,7 @@ func TestCollabCanEdit(t *testing.T) {
 	}
 }
 
-// TestCollabReaper covers the TTL reaper (ADR-0103): any participant that falls
+// TestCollabReaper covers the TTL reaper (ADR-0139): any participant that falls
 // silent past the TTL is evicted and its locks released — a detached MCP agent, and
 // now a streaming browser too (the backstop for a half-open connection the keepalive
 // never catches). A participant kept fresh survives: an agent by polling, a browser

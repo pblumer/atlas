@@ -1,4 +1,4 @@
-# ADR-0090: A first-class "CSV to JSON" connector kind with model-authored layout
+# ADR-0138: A first-class "CSV to JSON" connector kind with model-authored layout
 
 - **Status:** Accepted
 - **Date:** 2026-08-11

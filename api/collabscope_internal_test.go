@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// TestDraftSessionAccess exercises the session scope gate (ADR-0103/0071): a
+// TestDraftSessionAccess exercises the session scope gate (ADR-0139/0071): a
 // session inherits the sharing scope of the draft's project — at least viewer to
 // watch, editor/owner to co-edit — while an Ungrouped draft stays open.
 func TestDraftSessionAccess(t *testing.T) {

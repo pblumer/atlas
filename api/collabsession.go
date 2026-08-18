@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// This file implements the first slice of ADR-0103: live collaborative modeling
+// This file implements the first slice of ADR-0139: live collaborative modeling
 // sessions. A collaboration session is an ephemeral, design-time coordination
 // object attached to a draft (by process id). It tracks who is present, which
 // BPMN element each participant has locked, and fans out presence / lock /
@@ -20,18 +20,18 @@ import (
 // the run loop, so it guards itself with a mutex and sits entirely outside the
 // six invariants.
 //
-// Concurrency model (ADR-0103, first cut): per-element soft locks. An editor
+// Concurrency model (ADR-0139, first cut): per-element soft locks. An editor
 // acquires an element before mutating it; a second acquire of a held element is
 // refused. Edits to different elements proceed in parallel. This is always
 // correct — there is no merge algorithm to get wrong — and leaves the transport
 // and session API unchanged when a later slice upgrades to an operation
 // log / CRDT.
 
-// Collaboration event types fanned out on a session's stream. Mirrors ADR-0103:
+// Collaboration event types fanned out on a session's stream. Mirrors ADR-0139:
 // sync is the full snapshot a newcomer receives on join; presence, lock, and
 // change are the incremental frames. presence and lock frames each carry the
 // *entire* current roster / lock set, so a dropped frame self-heals on the next
-// one (reconnect/replay is an ADR-0103 follow-up, not needed for correctness).
+// one (reconnect/replay is an ADR-0139 follow-up, not needed for correctness).
 const (
 	collabEventSync     = "sync"
 	collabEventPresence = "presence"
@@ -53,7 +53,7 @@ const (
 
 // collabEvent is one frame delivered to a participant's SSE stream. Data is the
 // already-marshaled JSON payload; Seq is a per-session monotonic counter carried
-// as the SSE id so a future reconnect can resume (ADR-0103 follow-up).
+// as the SSE id so a future reconnect can resume (ADR-0139 follow-up).
 type collabEvent struct {
 	Type string
 	Data []byte
@@ -83,7 +83,7 @@ type collabParticipant struct {
 }
 
 // canEdit reports whether a participant may mutate the session (lock/change/
-// presence), snapshotted from its project role at join time (ADR-0103/0071). ok
+// presence), snapshotted from its project role at join time (ADR-0139/0071). ok
 // is false when the session or participant is unknown. Like ADR-0044's role
 // snapshot, a role change takes effect on the participant's next join.
 func (reg *collabRegistry) canEdit(draftID, participantID string) (canEdit, ok bool) {
@@ -166,7 +166,7 @@ const collabKeepaliveInterval = 15 * time.Second
 
 // collabRegistry holds every live draft session in memory. It is mutex-guarded
 // because concurrent HTTP handlers (SSE streams and POSTs) reach it directly; it
-// is not engine state and never persists (ADR-0103).
+// is not engine state and never persists (ADR-0139).
 type collabRegistry struct {
 	mu       sync.Mutex
 	sessions map[string]*collabSession
@@ -206,7 +206,7 @@ func (sess *collabSession) lockListLocked() []collabLock {
 
 // join adds a streaming (browser SSE) participant that may edit — the default for
 // an open (auth-off) session. joinStream is the scope-aware variant the HTTP
-// handler uses to pass the draft's project role (ADR-0103/0071).
+// handler uses to pass the draft's project role (ADR-0139/0071).
 func (reg *collabRegistry) join(draftID, userID, name string) (*collabParticipant, []byte, func()) {
 	return reg.joinStream(draftID, userID, name, true)
 }
@@ -231,7 +231,7 @@ func (reg *collabRegistry) joinDetached(draftID, userID, name string) (*collabPa
 }
 
 // joinDetachedAs adds a participant with no live stream (an AI agent over MCP,
-// ADR-0103 M2), carrying its edit capability. It returns the participant and its
+// ADR-0139 M2), carrying its edit capability. It returns the participant and its
 // sync snapshot but no leave closure: such a participant leaves explicitly, or
 // the reaper evicts it once it falls silent past the TTL.
 func (reg *collabRegistry) joinDetachedAs(draftID, userID, name string, canEdit bool) (*collabParticipant, []byte) {
@@ -458,7 +458,7 @@ func (reg *collabRegistry) change(draftID, participantID, elementID, xml string)
 
 // pollEvent is one buffered frame handed back by poll: the same shape as an SSE
 // frame, but delivered in a request/response batch for a participant that has no
-// live stream (an AI agent over MCP, ADR-0103 M2).
+// live stream (an AI agent over MCP, ADR-0139 M2).
 type pollEvent struct {
 	Type string          `json:"type"`
 	Data json.RawMessage `json:"data"`

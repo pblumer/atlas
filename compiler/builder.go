@@ -142,7 +142,7 @@ const CsvImportJobTypeIndex int32 = 11
 // SharePointJobType is the reserved job type a SharePoint connector task carries.
 // The in-process SharePoint connector worker subscribes to it to create a list item
 // in a model-authored SharePoint site/list through a server-registered SharePoint
-// provider (Microsoft Graph) off the hot path (ADR-0105), the same way the mail
+// provider (Microsoft Graph) off the hot path (ADR-0140), the same way the mail
 // worker subscribes to MailJobType.
 const SharePointJobType = "io.atlas.sharepoint.createitem"
 
@@ -150,7 +150,7 @@ const SharePointJobType = "io.atlas.sharepoint.createitem"
 // occupy in every compiled process: NewBuilder reserves it thirteenth (after the
 // twelve job types above), so it is always 12. This lets a single in-process
 // SharePoint worker subscribe by one global index across every deployed process, the
-// same way the mail worker uses MailJobTypeIndex (ADR-0105).
+// same way the mail worker uses MailJobTypeIndex (ADR-0140).
 const SharePointJobTypeIndex int32 = 12
 
 // RemedyJobType is the reserved job type a BMC Remedy connector task carries. The
@@ -867,7 +867,7 @@ func (b *Builder) AddUserConnectorTask(cfg UserConnectorConfig) int32 {
 }
 
 // CsvConfig is the deploy-time configuration of a CSV-to-JSON connector task
-// (ADR-0090). Source names the process variable holding the raw CSV text
+// (ADR-0138). Source names the process variable holding the raw CSV text
 // (empty → the worker's default "csvText"); Result the variable the parsed rows
 // are written to (empty → "rows"); Delimiter the field delimiter (empty → ",");
 // HasHeader whether the first row is a header; Columns the field names (empty →
@@ -886,7 +886,7 @@ type CsvConfig struct {
 // the reserved CsvImportJobType so the in-process CSV worker picks it up, reads the
 // raw text from the named source variable, parses it against the authored
 // delimiter/header/columns with the same parser the ingestion endpoint uses, and
-// writes the JSON rows (and a rowCount) into the result variable (ADR-0090). The
+// writes the JSON rows (and a rowCount) into the result variable (ADR-0138). The
 // layout lives in the model — unlike the ADR-0087 convention, which read it from a
 // columnConfig variable — so nothing but the file arrives at runtime.
 func (b *Builder) AddCsvConnectorTask(cfg CsvConfig) int32 {
@@ -916,7 +916,7 @@ func (b *Builder) AddCsvConnectorTask(cfg CsvConfig) int32 {
 }
 
 // SharePointConfig is the deploy-time configuration of a SharePoint connector task
-// (ADR-0105). Connector names the server-registered SharePoint provider (its Graph
+// (ADR-0140). Connector names the server-registered SharePoint provider (its Graph
 // base and OAuth credential live server-side, never in the model); Site and List
 // address the target list, and Fields are the created item's column values — all
 // literal-or-FEEL values (the parser compiles the FEEL ones) evaluated over the
@@ -936,7 +936,7 @@ type SharePointConfig struct {
 // the reserved SharePointJobType so the in-process SharePoint worker picks it up,
 // evaluates any FEEL site/list/field values over the instance's variables, resolves
 // the named connector's Graph client, creates the list item, writes the created
-// item's JSON into ResultVar, and completes the job (ADR-0105). The Graph base and
+// item's JSON into ResultVar, and completes the job (ADR-0140). The Graph base and
 // credentials are resolved server-side from the named connector, never authored in
 // the model — mirroring the mail connector (ADR-0079).
 func (b *Builder) AddSharePointConnectorTask(cfg SharePointConfig) int32 {
