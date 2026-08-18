@@ -1016,6 +1016,12 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .ops-props dt { color: var(--muted); }
 .ops-props dd { margin: 0; color: var(--text); word-break: break-word; }
 .ops-props dt.hint { grid-column: 1 / -1; color: var(--muted); font-style: italic; margin-top: 8px; }
+/* The element's documentation in the replay's Details tab (ADR-0025) — what the modeler
+   wrote about this step, below its properties. Prose, so it keeps the author's line
+   breaks and reads at a comfortable measure rather than in the property grid. */
+.ops-doc { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.ops-doc h4 { margin: 0 0 6px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.ops-doc p { margin: 0; font-size: 13px; line-height: 1.55; white-space: pre-wrap; max-width: 70ch; }
 .ops-empty { color: var(--muted); font-size: 13px; padding: 8px 2px; }
 .ops-live { color: var(--accent); font-weight: 600; }
 

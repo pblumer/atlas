@@ -70,6 +70,12 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   **Tasks app** — the detail pane leads with the modeler's instruction (above the metadata
   rows and the form), keeps the author's paragraph breaks, and shows no block at all for a
   task whose element carries none. Drives the real app shell against a mocked `/api/v1`.
+- **`ops-documentation.spec.mjs`** (ADR-0025 amended): element documentation in the
+  **Operations instance replay** — the Details tab shows what the modeler wrote about the
+  selected element (paragraph breaks intact), the process's own when nothing is selected,
+  nothing at all for an undocumented element, and — for a branch this instance never took
+  — the element's identity plus its documentation instead of the old silent fallback to
+  the process panel. Reads it off the rendered model; no server call involved.
 
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
 

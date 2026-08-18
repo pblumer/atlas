@@ -3088,6 +3088,27 @@ function rootProcess(modeler) {
   } catch { return null; }
 }
 
+// processBusinessObject returns the <bpmn:process> business object a rendered diagram
+// holds for the given process id: the root itself when the diagram is a single process,
+// or the matching pool's processRef when it is a collaboration — a running instance
+// always belongs to exactly one of a collaboration's processes. Falls back to the first
+// pool that carries a process, so a diagram whose ids have drifted still shows something
+// rather than nothing.
+function processBusinessObject(viewer, processId) {
+  const bo = rootProcess(viewer);
+  if (bo) return bo;
+  let first = null, match = null;
+  try {
+    viewer.get("elementRegistry").forEach((el) => {
+      const p = el.businessObject;
+      if (!p || !/:Participant$/.test(p.$type || "") || !p.processRef) return;
+      if (!first) first = p.processRef;
+      if (processId && p.processRef.id === processId) match = p.processRef;
+    });
+  } catch { return null; }
+  return match || first;
+}
+
 // isCollaborationRoot reports whether the diagram root is a collaboration (pools),
 // rather than a single process.
 function isCollaborationRoot(modeler) {
@@ -6827,17 +6848,44 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     }
   }
 
+  // docOf reads an element's <bpmn:documentation> — what the modeler wrote about this
+  // step — straight off the rendered model (ADR-0025). The replay already imported the
+  // diagram, so the prose is in the browser: answering "what is this element for?" in
+  // Operations costs no extra request and works for every element, run or not.
+  const docOf = (elId) => {
+    const el = elId ? registry.get(elId) : null;
+    return el ? readDocumentation(el.businessObject) : "";
+  };
+  // docBlock renders that prose below the property list — a block, not a <dd>, because
+  // it is paragraphs rather than a value. Nothing at all when the element is undocumented.
+  const docBlock = (text) => (text ? `<div class="ops-doc"><h4>Documentation</h4><p>${esc(text)}</p></div>` : "");
+
   // renderDetail fills the Details tab for the selected element instance (or the
   // process instance when nothing is selected), mirroring Operate's element panel.
   function renderDetail() {
     if (!selEik) {
+      // An element the operator clicked that this instance never reached has no step to
+      // report — but it does have an identity and, often, the documentation explaining
+      // what it would have done. Show that instead of silently falling back to the
+      // process panel, which looked like the click had missed.
+      if (selElId) {
+        const el = registry.get(selElId);
+        const bo = (el && el.businessObject) || {};
+        detailEl.innerHTML = `<dl class="ops-props">
+          <dt>Element</dt><dd>${esc(bo.name || selElId)}</dd>
+          <dt>Type</dt><dd>${esc(shortType(bo.$type) || "—")}</dd>
+          <dt>Element ID</dt><dd class="mono">${esc(selElId)}</dd>
+          <dt class="hint" colspan>Not reached in this instance.</dt>
+        </dl>${docBlock(docOf(selElId))}`;
+        return;
+      }
       detailEl.innerHTML = `<dl class="ops-props">
         <dt>Process</dt><dd>${esc(titleEl.textContent)}</dd>
         <dt>Instance Key</dt><dd class="mono">${esc(String(key))}</dd>
         <dt>State</dt><dd>${esc(stateEl.textContent)}</dd>
         <dt>Elements executed</dt><dd>${steps.length}</dd>
         <dt class="hint" colspan>Select an element in the diagram or the history to inspect it.</dt>
-      </dl>`;
+      </dl>${docBlock(readDocumentation(processBusinessObject(viewer, tl.processId)))}`;
       return;
     }
     const s = stepByEik(selEik);
@@ -6858,7 +6906,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       <dt>Start Date</dt><dd>${esc(fmtDateTime(s.at))}</dd>
       <dt>End Date</dt><dd>${s.endAt ? esc(fmtDateTime(s.endAt)) : '<span class="ops-live">active</span>'}</dd>
       ${from}${rel}${child}
-    </dl>`;
+    </dl>${docBlock(docOf(s.elementId))}`;
   }
 
   // A JSON variable's stored value is a JSON string; these read its shape without

@@ -26,11 +26,21 @@ _Changed_ / _Removed_ for each version.
   edit joins undo/redo like any other.
 
   Documentation used to be invisible outside the model file, which meant only someone
-  opening the Modeler could read it. The compiler now **carries** it — interned per
-  element, `CompiledProcess.ElementDocumentation` / `Documentation` — and the **Tasks app
-  shows a user task's documentation as the work instruction**, above the form, where the
-  assignee reads it before doing anything. `GET /api/v1/tasks` and `/api/v1/tasks/{key}`
-  (and so `atlas_list_tasks` / `atlas_get_task`) carry it as `documentation`.
+  opening the Modeler could read it. It is now read where the process is *run*, not just
+  where it is drawn:
+
+  - The **Tasks app** shows a user task's documentation as the **work instruction**, above
+    the form, where the assignee reads it before doing anything. For that the compiler
+    **carries** the prose — interned per element, `CompiledProcess.ElementDocumentation` /
+    `Documentation` — and `GET /api/v1/tasks` and `/api/v1/tasks/{key}` (and so
+    `atlas_list_tasks` / `atlas_get_task`) return it as `documentation`.
+  - The **Operations instance replay** shows it in the Details tab of the selected
+    element, and the process's own below the instance summary. That surface already
+    imports the diagram to draw it, so it reads the prose straight off the rendered model
+    — no request, and it covers **every** element. Including one the instance never
+    reached: selecting an un-taken branch used to fall back to the process panel, and now
+    names the element, says *Not reached in this instance*, and shows what it would have
+    done.
 
   Documenting a process still never changes what it runs, and that is now tested rather
   than assumed: a documented model compiles to *exactly* the graph its undocumented twin

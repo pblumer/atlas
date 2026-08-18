@@ -19,6 +19,14 @@
 > `Documentation` hand it back. The Tasks app shows a user task's documentation above the
 > form; `GET /api/v1/tasks` and `/tasks/{key}` carry it as `documentation`.
 >
+> Two reading surfaces, two sources — deliberately. The **Tasks app** never loads the
+> model, so it needs the compiled value over the API. The **Operations instance replay**
+> already imports the diagram to draw it, so its Details panel reads the documentation
+> straight off the rendered business object: no request, no endpoint, and it covers every
+> element rather than only the ones the API happens to expose — including an element the
+> instance never reached, whose prose is the answer to "what would this branch have done?".
+> Prefer that pattern for any future surface that already holds the model.
+>
 > The execution guarantee is unchanged and now tested rather than assumed: a documented
 > model compiles to *exactly* the graph its undocumented twin compiles to. "Passthrough"
 > becomes the narrower, truer statement — the **processor** never reads documentation.
