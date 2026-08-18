@@ -392,6 +392,14 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  jsonBody("Targets", schemaObj(map[string]any{"targetIds": tArray()}, "targetIds")),
 			resp: jsonBody("Per-target promotion results", tObject())}},
 
+		{"GET", "/api/v1/applications/{id}/source", s.handleExportApplicationSource, apiOp{
+			summary: "Download an application's source — its drafts, forms, and decision references — as the curated source layout (a manifest plus native .bpmn and .form.json files) in a gzip tar (ADR-0134)", tag: "Applications",
+			resp: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip-compressed tar of the application's source tree"}}},
+		{"POST", "/api/v1/applications/source", s.handleImportApplicationSource, apiOp{
+			summary: "Read a source tree into this server. The application is identified by the portable key in the manifest — created when this server has never seen it, updated in place when it has. Never deletes: local artifacts the tree omits are reported, not removed (ADR-0134).", tag: "Applications",
+			req:  &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip tar of a source tree, as produced by GET /api/v1/applications/{id}/source"},
+			resp: jsonBody("Import result", tObject())}},
+
 		{"GET", "/api/v1/applications/{id}/targets", s.handleApplicationTargets, apiOp{
 			summary: "What each configured deployment target currently runs for this application; best-effort, an unreachable peer is reported as such (ADR-0129)", tag: "Applications",
 			resp: jsonBody("Per-target status", tArray())}},
