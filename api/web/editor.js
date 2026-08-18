@@ -6,6 +6,7 @@ import { attachFeelEditor } from "./feel.js";
 import { attachCodeEditor } from "./code-editor.js";
 import { moduleFor } from "./powershell.js";
 import { attachJSONEditor } from "./json-editor.js";
+import { installDevShortcut, markDevField } from "./dev-view.js";
 import { openDmnEditor } from "./dmn-editor.js";
 import { tokenSimulationModule } from "./token-simulation.js";
 import { attachCollab } from "./collab.js";
@@ -1190,6 +1191,72 @@ function variablesForCompletion(modeler, element) {
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// devVariables is variablesForCompletion's richer sibling for the Developer View
+// (ADR-0144): the same static analysis, but each variable also carries *which scope*
+// it belongs to, so the modal can group them the way a developer thinks about them —
+// what this element reads, what it writes, and what the instance carries. The
+// element-local scopes are collected first and win the de-duplication, so a name that
+// is both an input mapping here and a process variable shows where it matters.
+function devVariables(modeler, element) {
+  const out = [];
+  const seen = new Set();
+  const push = (name, detail, scope) => {
+    name = (name || "").trim();
+    if (!name || seen.has(name)) return;
+    seen.add(name);
+    out.push({ name, detail, scope });
+  };
+  try {
+    const bo = element && element.businessObject;
+    const io = bo && findExt(bo, "zeebe:IoMapping");
+    for (const p of (io && io.inputParameters) || []) {
+      push(p.target, p.source ? "input mapping ← " + p.source : "input mapping", "input");
+    }
+    for (const p of (io && io.outputParameters) || []) {
+      push(p.target, p.source ? "output mapping ← " + p.source : "output mapping", "output");
+    }
+    const s = bo && findExt(bo, "zeebe:Script");
+    if (s && s.resultVariable) push(s.resultVariable, "FEEL script result", "output");
+    const js = bo && findExt(bo, "atlas:JobScript");
+    if (js && js.resultVariable) push(js.resultVariable, (js.language || "job") + " script result", "output");
+    const cd = bo && findExt(bo, "zeebe:CalledDecision");
+    if (cd && cd.resultVariable) push(cd.resultVariable, "decision result", "output");
+  } catch { /* best-effort */ }
+  try {
+    for (const v of collectDiagramVariables(modeler)) {
+      const scope = v.category === "Form" ? "form"
+        : /^data object/.test(v.source || "") ? "data"
+        : "process";
+      const detail = v.originId && v.origin ? `${v.source} · ${v.origin}` : v.source;
+      push(v.name, detail, scope);
+    }
+  } catch { /* best-effort */ }
+  return out;
+}
+
+// devViewContext answers "what does the Developer View need to know" at the moment
+// F2 is pressed: the variables in scope for the current selection, and the server
+// round trips the field's language offers — FEEL validates and evaluates in the
+// engine, a job script runs through the real interpreter.
+function devViewContext(modeler, api, field) {
+  const element = (() => {
+    try { return (modeler.get("selection").get() || [])[0]; } catch { return null; }
+  })();
+  const ctx = { variables: devVariables(modeler, element) };
+  const lang = field.dataset.devlang;
+  if (!api) return ctx;
+  if (lang === "feel") {
+    ctx.validate = (expression) => api("POST", "/api/v1/feel/validate", { expression });
+    ctx.evaluate = (expression, variables) => api("POST", "/api/v1/feel/evaluate", { expression, variables });
+    // An fx field stores its expression '=' prefixed; the marker stays dimmed and
+    // protected in the modal exactly as it is inline (ADR-0067).
+    if (field.dataset.fxOn === "1") ctx.lockPrefix = (v) => (/^\s*=\s*/.exec(v) || [""])[0].length;
+  } else if (lang === "powershell" || lang === "python" || lang === "javascript") {
+    ctx.run = (source, variables) => api("POST", "/api/v1/scripts/run", { language: lang, source, variables });
+  }
+  return ctx;
+}
+
 // formFieldCache maps a linked form's id to its input-field keys once fetched:
 // null marks a fetch in flight (so each form is requested once), otherwise
 // { name, fields } — the form's display name and its variable-bearing field keys.
@@ -1459,10 +1526,13 @@ function enhanceFeel(body, sel, vars, validate, evaluate) {
   attachFeelEditor(ta, { variables: vars, validate });
   const wrap = ta.closest(".code-editor");
   if (!wrap) return;
+  // F2 lifts the expression into the Developer View — the same editor with the
+  // in-scope variables, the FEEL function reference and its help pages (ADR-0144).
+  markDevField(ta, "feel");
 
   const hint = document.createElement("p");
   hint.className = "feel-hint";
-  hint.innerHTML = "FEEL — <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions";
+  hint.innerHTML = "FEEL — <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions · <kbd>F2</kbd> developer view";
   if (evaluate) hint.innerHTML += ' &middot; <button type="button" class="linklike" data-feel-test>Test</button>';
   wrap.after(hint);
   if (!evaluate) return;
@@ -1556,9 +1626,11 @@ function enhanceScript(body, modeler, api, variables) {
   const language = (flang && flang.value) || "powershell";
   const editor = attachCodeEditor(ta, { lang: moduleFor(language), variables: variables || [], gutter: true, wrap: false });
 
+  markDevField(ta, language);
+
   const shortcut = language === "powershell"
-    ? "<code>$name</code> / <code>$env:</code> &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent"
-    : "instance variables by name &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent";
+    ? "<code>$name</code> / <code>$env:</code> &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent, <kbd>F2</kbd> developer view"
+    : "instance variables by name &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent, <kbd>F2</kbd> developer view";
   const hint = document.createElement("p");
   hint.className = "feel-hint";
   hint.innerHTML = shortcut;
@@ -1639,6 +1711,10 @@ export function attachExpressionToggle(el, opts = {}) {
     const expr = isExpr();
     btn.classList.toggle("active", expr);
     btn.setAttribute("aria-pressed", expr ? "true" : "false");
+    // Only an expression field is a code field: a literal value has nothing for the
+    // Developer View to help with, so F2 stays inert until fx is on.
+    if (expr) markDevField(el, "feel");
+    else delete el.dataset.devlang;
     if (expr && !feelHandle) {
       // The leading '=' stays in the field value (the save wiring and compiler key on
       // it), but is shown as a dimmed, read-only prefix — it can't be typed away, and
@@ -1761,6 +1837,9 @@ function documentationField(bo, id = "f-doc", placeholder = "What this step is f
 function wireDocumentation(body, modeler, element, bo, id = "f-doc") {
   const f = body.querySelector("#" + id);
   if (!f) return;
+  // Documentation is prose that ends up in the task view, the replay and the
+  // exported process document (ADR-0143) — Markdown, and worth a real editor.
+  markDevField(f, "markdown", { title: "Documentation" });
   f.addEventListener("change", (e) => {
     try { writeDocumentation(modeler, element, bo, e.target.value); } catch { /* stale */ }
   });
@@ -5161,6 +5240,11 @@ function wireProperties(root, modeler, api, projectId, toast) {
       }
     }
   }
+
+  // F2 in any code-bearing field of this page opens the Developer View (ADR-0144).
+  // The context is resolved at press time, so it always describes the element that
+  // is selected now rather than whatever was rendered when the panel was built.
+  installDevShortcut(document, (field) => devViewContext(modeler, api, field));
 
   modeler.on("selection.changed", (e) => show((e.newSelection || [])[0]));
 

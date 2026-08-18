@@ -1,0 +1,609 @@
+// The Developer View (ADR-0144): a full-screen modal for editing a code-bearing
+// field, opened with F2 from the field itself.
+//
+// The Modeler's property panel is a form. A form is the right shape for a name, a
+// due date or a retry budget, and the wrong shape for the fields that hold *code* —
+// a FEEL expression, a PowerShell/Python/JavaScript job script, a JSON value, a
+// Markdown documentation text, an HTML fragment. Those are edited in a 3-row box
+// with no room for the two things the author actually needs beside the code: which
+// variables are in scope, and what the language's functions do.
+//
+// F2 lifts exactly that field into a modal that has room for both. The code itself
+// is the same code-editor.js surface as inline (same highlighting, completion,
+// validation, drag-and-drop targets — nothing new to learn), so the modal only adds
+// what the panel has no space for:
+//
+//   Variables  the in-scope names grouped by where they come from — the activity's
+//              own input mappings, what it writes back, the process scope, linked
+//              form fields, data objects. Click to insert at the caret, or drag.
+//   Functions  the language's function catalogue, grouped, with signatures.
+//   Help       an overview of the language plus the selected function's page:
+//              signature, description, a worked example that can be inserted.
+//   Examples   ready-made snippets for the language.
+//   Test       the existing FEEL evaluate / script run endpoints, in place.
+//
+// Nothing here is persistent state: the modal edits a copy and writes it back to the
+// field on Apply, dispatching the same input/change events a keystroke would, so the
+// panel's existing save wiring runs unchanged and undo/redo behaves as always.
+//
+// Buildless and self-contained (ADR-0012, ADR-0013).
+
+import { attachCodeEditor } from "./code-editor.js";
+import { devLang, snippetsFor } from "./dev-lang.js";
+
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// The scope sections of the Variables pane, in the order they are shown: closest to
+// the edited element first, widest last. A variable with an unknown scope falls into
+// "Process".
+const SCOPES = [
+  { key: "input", title: "Input", hint: "Read by this element (its input mappings)" },
+  { key: "output", title: "Output", hint: "Written by this element" },
+  { key: "process", title: "Process scope", hint: "Available anywhere in the instance" },
+  { key: "form", title: "Form fields", hint: "Contributed by a linked form" },
+  { key: "data", title: "Data objects", hint: "Per-instance data objects (ADR-0053)" },
+];
+
+// Where the side panel's collapsed/expanded choice is remembered.
+const SIDE_KEY = "atlas.devview.side";
+
+let openView = null; // the single live Developer View, if any
+
+// devViewOpen reports whether a Developer View is currently on screen — the F2
+// handler uses it so the shortcut inside the modal isn't the shortcut that opened it.
+export function devViewOpen() {
+  return !!openView;
+}
+
+// closeDevView closes the live view, if any, without applying. Exported for hosts
+// that tear their page down under it (a route change, a re-render).
+export function closeDevView() {
+  if (openView) openView.close();
+}
+
+// markDevField declares a field as code-bearing: it records the language so F2 can
+// find it, gives it an accessible title for the modal header, and — when the field
+// has already been upgraded to a code editor — adds a small "open" affordance so the
+// shortcut is discoverable without reading a hint line.
+// Returns the field, so it composes with the enhance* helpers in editor.js.
+export function markDevField(field, lang, opts = {}) {
+  if (!field || !devLang(lang)) return field;
+  field.dataset.devlang = lang;
+  if (opts.title) field.dataset.devtitle = opts.title;
+  const wrap = field.closest(".code-editor");
+  if (wrap && !wrap.querySelector(".dev-open")) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "dev-open";
+    btn.title = "Open the developer view (F2)";
+    btn.setAttribute("aria-label", "Open the developer view");
+    btn.textContent = "</>";
+    // mousedown, not click: the field must not lose the caret before we read it.
+    btn.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      field.focus();
+      field.dispatchEvent(new CustomEvent("dev-view-open", { bubbles: true }));
+    });
+    wrap.appendChild(btn);
+  }
+  return field;
+}
+
+// installDevShortcut wires F2 (and the "</>" button's dev-view-open event) on a
+// root. `resolve(field)` supplies the per-field context — variables, validate,
+// evaluate, run — at the moment the view opens, so it always reflects the current
+// selection rather than whatever was true when the panel was rendered.
+// Idempotent per root.
+const resolvers = new WeakMap();
+
+export function installDevShortcut(root = document, resolve = () => ({})) {
+  if (!root) return;
+  // Re-installing replaces the resolver rather than stacking another listener: the
+  // Modeler remounts (a different draft, a different project) and the new mount's
+  // modeler must be the one the view reads from.
+  resolvers.set(root, resolve);
+  if (root.__devShortcut) return;
+  root.__devShortcut = true;
+
+  const openFor = (field) => {
+    if (!field || devViewOpen()) return;
+    let ctx = {};
+    try { ctx = (resolvers.get(root) || (() => ({})))(field) || {}; } catch { ctx = {}; }
+    openDevView(field, ctx);
+  };
+
+  // Capture phase: the code editor's own keydown handler runs on the field, and F2
+  // must win over anything the page binds later.
+  root.addEventListener("keydown", (e) => {
+    if (e.key !== "F2" || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+    if (devViewOpen()) return;
+    const el = document.activeElement;
+    const field = el && el.closest ? el.closest("[data-devlang]") : null;
+    if (!field) return;
+    e.preventDefault();
+    openFor(field);
+  }, true);
+
+  root.addEventListener("dev-view-open", (e) => {
+    const field = e.target && e.target.closest ? e.target.closest("[data-devlang]") : null;
+    openFor(field);
+  });
+}
+
+// fieldTitle names the edited field in the modal header: an explicit data-devtitle,
+// else the property panel label it sits under, else its accessible name.
+function fieldTitle(field) {
+  if (field.dataset.devtitle) return field.dataset.devtitle;
+  const label = field.closest("label");
+  const span = label && label.querySelector("span");
+  const text = span && span.textContent.trim();
+  if (text) return text;
+  return field.getAttribute("aria-label") || field.placeholder || "Value";
+}
+
+// insertText is how every pane writes into the editor: splice at the caret, restore
+// a sensible selection, then fire `input` so the highlighter, the gutter and the
+// validator all update exactly as they would for a keystroke.
+function insertText(ta, text, caretOffset) {
+  const start = ta.selectionStart ?? ta.value.length;
+  const end = ta.selectionEnd ?? start;
+  ta.value = ta.value.slice(0, start) + text + ta.value.slice(end);
+  const caret = start + (caretOffset === undefined ? text.length : caretOffset);
+  ta.focus();
+  ta.setSelectionRange(caret, caret);
+  ta.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+// varInsert renders a variable reference the way the language reads it: PowerShell
+// takes the instance's variables as `$name`, every other language by bare name.
+function varInsert(lang, name) {
+  return lang === "powershell" ? "$" + name : name;
+}
+
+// groupVariables buckets the caller's variables into the SCOPES sections.
+function groupVariables(list) {
+  const byScope = new Map(SCOPES.map((s) => [s.key, []]));
+  for (const v of list || []) {
+    const name = typeof v === "string" ? v : v && v.name;
+    if (!name) continue;
+    const scope = (typeof v === "object" && v.scope) || "process";
+    (byScope.get(scope) || byScope.get("process")).push({
+      name,
+      detail: (typeof v === "object" && v.detail) || "variable",
+    });
+  }
+  return SCOPES
+    .map((s) => ({ ...s, items: (byScope.get(s.key) || []).sort((a, b) => a.name.localeCompare(b.name)) }))
+    .filter((s) => s.items.length);
+}
+
+// matches is the pane filter: a case-insensitive substring over the visible text.
+const matches = (q, ...fields) => !q || fields.some((f) => String(f || "").toLowerCase().includes(q));
+
+// openDevView lifts `field` into the modal. Options:
+//   lang       language id (defaults to the field's data-devlang)
+//   title      header title (defaults to the field's label)
+//   variables  [{ name, detail, scope }] — scope is one of SCOPES' keys
+//   validate   (src) -> Promise<{ ok, error }>   live validation, as inline
+//   evaluate   (src, vars) -> Promise<{ ok, result, error }>   the Test panel (FEEL)
+//   run        (src, vars) -> Promise<{ ok, result, error }>   the Test panel (script)
+//   lockPrefix (value) -> protected leading length (the fx '=' marker)
+//   onApply    (value) -> void, after the field has been written
+// Returns a handle { close, apply, el } or null when the field isn't a code field.
+export function openDevView(field, opts = {}) {
+  if (!field || openView) return null;
+  const langId = opts.lang || field.dataset.devlang;
+  const lang = devLang(langId);
+  if (!lang) return null;
+
+  const snippets = snippetsFor(lang.id);
+  const groups = typeof lang.reference === "function" ? lang.reference() : [];
+  const canTest = !!(opts.evaluate || opts.run);
+  const original = field.value;
+  const restoreFocus = document.activeElement;
+
+  const overlay = document.createElement("div");
+  overlay.className = "dev-overlay";
+  overlay.innerHTML = `
+    <div class="dev-modal" role="dialog" aria-modal="true" aria-label="Developer view">
+      <header class="dev-head">
+        <span class="dev-badge">${esc(lang.label)}</span>
+        <strong class="dev-title">${esc(opts.title || fieldTitle(field))}</strong>
+        <span class="dev-dirty" hidden title="Unsaved changes">●</span>
+        <span class="dev-head-sp"></span>
+        ${canTest ? `<button type="button" class="btn ghost small dev-test-toggle" aria-pressed="false">Test</button>` : ""}
+        ${lang.format ? `<button type="button" class="btn ghost small dev-fmt">{ } Format</button>` : ""}
+        <button type="button" class="btn ghost small dev-cancel">Cancel</button>
+        <button type="button" class="btn small dev-apply">Apply</button>
+      </header>
+      <div class="dev-body">
+        <div class="dev-main">
+          <div class="dev-editor"><textarea class="dev-ta" spellcheck="false"></textarea></div>
+          ${canTest ? `
+          <div class="dev-run" hidden>
+            <label class="dev-run-label" for="dev-run-vars">Sample variables (JSON)</label>
+            <textarea id="dev-run-vars" class="dev-run-vars" rows="2" spellcheck="false" placeholder='{ "amount": 100 }'></textarea>
+            <div class="dev-run-row">
+              <button type="button" class="btn neutral small dev-run-btn">Run</button>
+              <span class="dev-run-out" aria-live="polite"></span>
+            </div>
+            <pre class="dev-run-detail" hidden></pre>
+          </div>` : ""}
+        </div>
+        <aside class="dev-side">
+          <div class="dev-tabs" role="tablist">
+            <button type="button" class="dev-side-toggle" title="Collapse the panel" aria-label="Collapse the panel" aria-expanded="true">›</button>
+            <button type="button" role="tab" class="dev-tab active" data-tab="vars" aria-selected="true">Variables</button>
+            <button type="button" role="tab" class="dev-tab" data-tab="fns" aria-selected="false"${groups.length ? "" : " hidden"}>Functions</button>
+            <button type="button" role="tab" class="dev-tab" data-tab="help" aria-selected="false">Help</button>
+            <button type="button" role="tab" class="dev-tab" data-tab="snips" aria-selected="false"${snippets.length ? "" : " hidden"}>Examples</button>
+          </div>
+          <input type="search" class="dev-filter" placeholder="Filter…" aria-label="Filter" />
+          <div class="dev-pane dev-pane-vars" role="tabpanel"></div>
+          <div class="dev-pane dev-pane-fns" role="tabpanel" hidden></div>
+          <div class="dev-pane dev-pane-help" role="tabpanel" hidden></div>
+          <div class="dev-pane dev-pane-snips" role="tabpanel" hidden></div>
+        </aside>
+      </div>
+      <footer class="dev-foot">
+        <span class="dev-pos">Ln 1, Col 1</span>
+        <span class="dev-count"></span>
+        <span class="dev-confirm" hidden>Discard your changes? <button type="button" class="linklike dev-discard">Discard</button> · <button type="button" class="linklike dev-keep">Keep editing</button></span>
+        <span class="dev-foot-sp"></span>
+        <span class="dev-keys"><kbd>Ctrl</kbd>+<kbd>Space</kbd> completions · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> apply · <kbd>Esc</kbd> close</span>
+      </footer>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const q = (sel) => overlay.querySelector(sel);
+  const ta = q(".dev-ta");
+  ta.value = original;
+
+  // The same editing surface as inline — only bigger, and always with a gutter so a
+  // long script's error markers and line numbers line up.
+  const editor = attachCodeEditor(ta, {
+    lang: lang.module,
+    variables: (opts.variables || []).map((v) => (typeof v === "string" ? { name: v, detail: "variable" } : v)),
+    validate: opts.validate,
+    lockPrefix: opts.lockPrefix,
+    wrap: lang.wrap,
+    gutter: true,
+  });
+
+  // ---------- panes ----------
+
+  const paneVars = q(".dev-pane-vars");
+  const paneFns = q(".dev-pane-fns");
+  const paneHelp = q(".dev-pane-help");
+  const paneSnips = q(".dev-pane-snips");
+  const filter = q(".dev-filter");
+  let selectedItem = null; // the reference item the Help pane is showing
+
+  function renderVars() {
+    const query = filter.value.trim().toLowerCase();
+    const sections = groupVariables(opts.variables);
+    if (!sections.length) {
+      paneVars.innerHTML = `<p class="dev-empty">No variables are known for this element yet. They appear as the model declares them — start variables, form fields, script and decision results, output mappings.</p>`;
+      return;
+    }
+    let html = "";
+    for (const s of sections) {
+      const rows = s.items.filter((v) => matches(query, v.name, v.detail));
+      if (!rows.length) continue;
+      html += `<div class="dev-group"><h4 title="${esc(s.hint)}">${esc(s.title)}</h4>`;
+      for (const v of rows) {
+        html += `<button type="button" class="dev-item" draggable="true" data-insert="${esc(varInsert(lang.id, v.name))}">
+          <span class="dev-item-name">${esc(v.name)}</span>
+          <span class="dev-item-detail">${esc(v.detail)}</span></button>`;
+      }
+      html += `</div>`;
+    }
+    paneVars.innerHTML = html || `<p class="dev-empty">No variable matches the filter.</p>`;
+  }
+
+  function renderFns() {
+    const query = filter.value.trim().toLowerCase();
+    let html = "";
+    for (const g of groups) {
+      const rows = (g.items || []).filter((it) => matches(query, it.name, it.sig, it.doc));
+      if (!rows.length) continue;
+      html += `<div class="dev-group"><h4>${esc(g.title)}</h4>`;
+      for (const it of rows) {
+        // The row reads; the "+" beside it inserts. Two targets, no ambiguity about
+        // which click edits the code.
+        html += `<div class="dev-row">
+          <button type="button" class="dev-item dev-fn" data-fn="${esc(it.name)}">
+            <span class="dev-item-name">${esc(it.name)}</span>
+            <span class="dev-item-detail">${esc(it.sig || "")}</span></button>
+          <button type="button" class="dev-quick dev-ins-fn" data-fn="${esc(it.name)}" title="Insert ${esc(it.name)}" aria-label="Insert ${esc(it.name)}">+</button>
+        </div>`;
+      }
+      html += `</div>`;
+    }
+    paneFns.innerHTML = html || `<p class="dev-empty">No function matches the filter.</p>`;
+  }
+
+  function findItem(name) {
+    for (const g of groups) {
+      const hit = (g.items || []).find((it) => it.name === name);
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  function renderHelp() {
+    const it = selectedItem;
+    let html = `<div class="dev-help-about"><h4>${esc(lang.label)}</h4><p>${lang.overview}</p></div>`;
+    if (it) {
+      html += `<div class="dev-help-fn">
+        <h4>${esc(it.name)}</h4>
+        <pre class="dev-help-sig">${esc(it.sig || it.name)}</pre>
+        <p>${esc(it.doc || "")}</p>`;
+      if (it.ex) {
+        html += `<h5>Example</h5><pre class="dev-help-ex">${esc(it.ex)}</pre>
+          <button type="button" class="btn ghost small dev-ins-ex">Insert example</button>`;
+      }
+      html += `<button type="button" class="btn ghost small dev-ins-fn" data-fn="${esc(it.name)}">Insert call</button></div>`;
+    } else if (groups.length) {
+      html += `<p class="dev-empty">Pick a function to read its page.</p>`;
+    }
+    paneHelp.innerHTML = html;
+  }
+
+  function renderSnips() {
+    const query = filter.value.trim().toLowerCase();
+    const rows = snippets.filter((s) => matches(query, s.title, s.doc, s.code));
+    paneSnips.innerHTML = rows.length
+      ? rows.map((s, i) => `<div class="dev-snip">
+          <h4>${esc(s.title)}</h4>
+          <p>${esc(s.doc)}</p>
+          <pre>${esc(s.code)}</pre>
+          <button type="button" class="btn ghost small dev-ins-snip" data-i="${i}">Insert</button>
+        </div>`).join("")
+      : `<p class="dev-empty">No example matches the filter.</p>`;
+  }
+
+  const renderers = { vars: renderVars, fns: renderFns, help: renderHelp, snips: renderSnips };
+  let tab = "vars";
+
+  // The side panel folds away to a rail so a wide script can have the whole modal.
+  // The choice is remembered across openings — a developer who works without the
+  // reference should not re-collapse it every time. A blocked localStorage (private
+  // mode, embedded frame) just means the panel opens expanded.
+  const side = q(".dev-side");
+  const sideToggle = q(".dev-side-toggle");
+  const setSide = (collapsed, persist) => {
+    side.classList.toggle("collapsed", collapsed);
+    sideToggle.textContent = collapsed ? "‹" : "›";
+    sideToggle.title = collapsed ? "Expand the panel" : "Collapse the panel";
+    sideToggle.setAttribute("aria-label", sideToggle.title);
+    sideToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    if (persist) { try { localStorage.setItem(SIDE_KEY, collapsed ? "collapsed" : "open"); } catch { /* no storage */ } }
+  };
+  sideToggle.addEventListener("click", () => setSide(!side.classList.contains("collapsed"), true));
+
+  function showTab(next) {
+    tab = next;
+    // Picking a tab from the collapsed rail is a request to read it.
+    if (side.classList.contains("collapsed")) setSide(false, true);
+    for (const b of overlay.querySelectorAll(".dev-tab")) {
+      const on = b.dataset.tab === next;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
+    }
+    paneVars.hidden = next !== "vars";
+    paneFns.hidden = next !== "fns";
+    paneHelp.hidden = next !== "help";
+    paneSnips.hidden = next !== "snips";
+    filter.hidden = next === "help";
+    renderers[next]();
+  }
+
+  // ---------- interactions ----------
+
+  overlay.addEventListener("click", (e) => {
+    const tabBtn = e.target.closest(".dev-tab");
+    if (tabBtn) { showTab(tabBtn.dataset.tab); return; }
+
+    // Clicking a function in the catalogue *reads* it — the pane is a reference, and
+    // a reader who is browsing must not have their code edited underneath them.
+    // Inserting is the "+" beside the row, or the Help page's button.
+    const row = e.target.closest(".dev-fn");
+    if (row) {
+      const item = findItem(row.dataset.fn);
+      if (!item) return;
+      selectedItem = item;
+      showTab("help");
+      return;
+    }
+    const ins = e.target.closest(".dev-ins-fn");
+    if (ins) { insertFn(findItem(ins.dataset.fn)); return; }
+    const ex = e.target.closest(".dev-ins-ex");
+    if (ex && selectedItem && selectedItem.ex) { insertText(ta, selectedItem.ex); return; }
+
+    const snip = e.target.closest(".dev-ins-snip");
+    if (snip) { insertText(ta, snippets[Number(snip.dataset.i)].code); return; }
+
+    const item = e.target.closest(".dev-item:not(.dev-fn)");
+    if (item) { insertText(ta, item.dataset.insert); return; }
+  });
+
+  // insertFn writes a reference item into the editor: a function as a call with the
+  // caret between the parentheses, a keyword/operator as the skeleton it declares.
+  function insertFn(item) {
+    if (!item) return;
+    if (item.insert) insertText(ta, item.insert);
+    else if (item.call !== false) insertText(ta, item.name + "()", item.name.length + 1);
+    else insertText(ta, item.name);
+  }
+
+  // Dragging a variable onto the editor is the same gesture as in the Variables
+  // panel — code-editor.js already accepts a text/plain drop at the drop point.
+  paneVars.addEventListener("dragstart", (e) => {
+    const item = e.target.closest(".dev-item");
+    if (!item || !e.dataTransfer) return;
+    e.dataTransfer.setData("text/plain", item.dataset.insert || "");
+    e.dataTransfer.effectAllowed = "copy";
+  });
+
+  filter.addEventListener("input", () => renderers[tab]());
+
+  const dirtyEl = q(".dev-dirty");
+  const posEl = q(".dev-pos");
+  const countEl = q(".dev-count");
+  const confirmEl = q(".dev-confirm");
+
+  function refreshStatus() {
+    const dirty = ta.value !== original;
+    dirtyEl.hidden = !dirty;
+    const upto = ta.value.slice(0, ta.selectionStart ?? 0);
+    const lines = upto.split("\n");
+    posEl.textContent = `Ln ${lines.length}, Col ${lines[lines.length - 1].length + 1}`;
+    const total = ta.value ? ta.value.split("\n").length : 1;
+    countEl.textContent = `${total} line${total === 1 ? "" : "s"} · ${ta.value.length} char${ta.value.length === 1 ? "" : "s"}`;
+  }
+  ta.addEventListener("input", refreshStatus);
+  ta.addEventListener("keyup", refreshStatus);
+  ta.addEventListener("click", refreshStatus);
+
+  // ---------- Test panel ----------
+
+  if (canTest) {
+    const runWrap = q(".dev-run");
+    const toggle = q(".dev-test-toggle");
+    toggle.addEventListener("click", () => {
+      runWrap.hidden = !runWrap.hidden;
+      toggle.classList.toggle("active", !runWrap.hidden);
+      toggle.setAttribute("aria-pressed", runWrap.hidden ? "false" : "true");
+    });
+    const out = q(".dev-run-out");
+    const detail = q(".dev-run-detail");
+    const setOut = (cls, text) => { out.className = "dev-run-out" + (cls ? " " + cls : ""); out.textContent = text; };
+    const setDetail = (cls, text) => {
+      detail.hidden = !text;
+      detail.className = "dev-run-detail" + (cls ? " " + cls : "");
+      detail.textContent = text || "";
+    };
+    q(".dev-run-btn").addEventListener("click", async () => {
+      let vars = {};
+      const raw = (q(".dev-run-vars").value || "").trim();
+      if (raw) {
+        try { vars = JSON.parse(raw); }
+        catch { setOut("err", "Sample variables must be valid JSON."); setDetail("", ""); return; }
+      }
+      setOut("", "Running…"); setDetail("", "");
+      const t0 = performance.now();
+      try {
+        const src = ta.value.slice(opts.lockPrefix ? opts.lockPrefix(ta.value) : 0);
+        const r = await (opts.evaluate ? opts.evaluate(src, vars) : opts.run(src, vars));
+        const ms = Math.round(performance.now() - t0);
+        if (r && r.ok) {
+          setOut("ok", `✓ ${ms} ms`);
+          let shown;
+          try { shown = JSON.stringify(r.result === undefined ? null : r.result, null, 2); }
+          catch { shown = String(r.result); }
+          // The FEEL evaluator also reports the value's type; a script run doesn't.
+          setDetail("ok", "→ " + shown + (r.kind ? `   (${r.kind})` : ""));
+        } else {
+          setOut("err", `✗ ${ms} ms`);
+          setDetail("err", (r && r.error) || "run failed");
+        }
+      } catch (err) {
+        setOut("err", "✗");
+        setDetail("err", (err && err.message) || String(err));
+      }
+    });
+  }
+
+  // ---------- apply / close ----------
+
+  function apply() {
+    field.value = ta.value;
+    // The same events a keystroke produces: `input` for anything listening live,
+    // `change` for the panel's save-on-blur wiring.
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    field.dispatchEvent(new Event("change", { bubbles: true }));
+    if (typeof opts.onApply === "function") { try { opts.onApply(ta.value); } catch { /* caller's problem */ } }
+    close();
+  }
+
+  function requestClose() {
+    if (ta.value === original) { close(); return; }
+    // Losing a screenful of code to a stray Esc is the one failure this modal must
+    // not have: the first Esc asks, the second discards.
+    confirmEl.hidden = false;
+    q(".dev-keep").focus();
+  }
+
+  function close() {
+    if (openView !== handle) return;
+    openView = null;
+    document.removeEventListener("keydown", onKeydown, true);
+    try { if (editor) editor.destroy(); } catch { /* already gone */ }
+    overlay.remove();
+    if (restoreFocus && document.contains(restoreFocus)) {
+      try { restoreFocus.focus(); } catch { /* best-effort */ }
+    }
+  }
+
+  function onKeydown(e) {
+    if (e.key === "Escape") {
+      // An open completion popup owns Escape first — it closes the popup, not the
+      // modal. That is the editor's handler, so we simply stay out of the way.
+      if (overlay.querySelector(".feel-pop:not([hidden])")) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (!confirmEl.hidden) close(); else requestClose();
+      return;
+    }
+    if (e.key === "F2" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+      // F2 is a toggle: it opened the view, and it takes the work back to the field.
+      e.preventDefault();
+      e.stopPropagation();
+      apply();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === "Enter" || e.key === "s")) {
+      e.preventDefault();
+      e.stopPropagation();
+      apply();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "F" || e.key === "f") && lang.format) {
+      e.preventDefault();
+      e.stopPropagation();
+      format();
+    }
+  }
+
+  function format() {
+    if (!lang.format) return;
+    const next = lang.format(ta.value);
+    if (next === ta.value) return;
+    ta.value = next;
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+    refreshStatus();
+  }
+
+  q(".dev-apply").addEventListener("click", apply);
+  q(".dev-cancel").addEventListener("click", requestClose);
+  q(".dev-discard").addEventListener("click", close);
+  q(".dev-keep").addEventListener("click", () => { confirmEl.hidden = true; ta.focus(); });
+  if (lang.format) q(".dev-fmt").addEventListener("click", format);
+  // Capture so Esc reaches us before the code editor's own handler closes a popup
+  // only — and before any host page binding.
+  document.addEventListener("keydown", onKeydown, true);
+
+  const handle = { close, apply, el: overlay, editor };
+  openView = handle;
+
+  let startCollapsed = false;
+  try { startCollapsed = localStorage.getItem(SIDE_KEY) === "collapsed"; } catch { /* no storage */ }
+  showTab("vars");
+  setSide(startCollapsed, false);
+  renderHelp();
+  refreshStatus();
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+  return handle;
+}
