@@ -1,5 +1,5 @@
 // End-to-end coverage for the Documentation panel in the Modeler toolbar
-// (api/web/editor.js, ADR-0138). Driven through the real vendored bpmn-js and the
+// (api/web/editor.js, ADR-0143). Driven through the real vendored bpmn-js and the
 // real editor: publishing a version, reading the history back, and sharing and
 // revoking a version's public link — the whole surface of "give this process to
 // a wider audience".

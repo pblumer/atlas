@@ -1,5 +1,5 @@
 // e2e for the dependency-free PDF writer behind the process documentation export
-// (api/web/pdf.js, ADR-0138).
+// (api/web/pdf.js, ADR-0143).
 //
 // A PDF is only a valid PDF if its cross-reference table points at the exact byte
 // offset of every object. That is not something a unit test over strings can

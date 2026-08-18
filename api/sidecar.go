@@ -24,7 +24,7 @@ func atomicWriteJSON(dir, path string, v any) error {
 
 // atomicWriteFile writes raw bytes to path with the same discipline
 // atomicWriteJSON gives a record. It exists because not every durable artifact is
-// JSON — a process documentation PDF (ADR-0138) is opaque bytes stored beside its
+// JSON — a process documentation PDF (ADR-0143) is opaque bytes stored beside its
 // sidecar, and it deserves the same "nil error means on disk" guarantee.
 func atomicWriteFile(dir, path string, data []byte) error {
 	tmp := path + ".tmp"

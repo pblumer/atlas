@@ -37,11 +37,16 @@ func DirName(appliedPos uint64) string {
 	return fmt.Sprintf("%0*d", dirNameWidth, appliedPos)
 }
 
+// DirBase is the checkpoint root's name inside a data directory. It is exported for
+// the whole-instance snapshot, which names archive entries relative to the data dir
+// and so needs the name rather than the path (ADR-0109/0131).
+const DirBase = "checkpoints"
+
 // Dir is the checkpoint root inside an Atlas data directory, alongside the WAL and the
 // state store. The server's checkpoint cadence and the recovery that reads what it
 // publishes both resolve the path through this one function, so a checkpoint can never
 // be written somewhere recovery does not look (ADR-0131).
-func Dir(dataDir string) string { return filepath.Join(dataDir, "checkpoints") }
+func Dir(dataDir string) string { return filepath.Join(dataDir, DirBase) }
 
 // Publish creates a checkpoint under root and publishes it atomically (ADR-0131).
 //

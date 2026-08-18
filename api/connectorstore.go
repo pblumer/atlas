@@ -22,7 +22,7 @@ import (
 // only the message (recipients, subject, body) is model-authored. The provider is
 // SMTP (the default), Gmail, or Microsoft Graph — see mail.Provider* and
 // mail.NewProviderClient, which own provider dispatch.
-// connectorKindSharePoint is the SharePoint connector kind (ADR-0105): a managed
+// connectorKindSharePoint is the SharePoint connector kind (ADR-0141): a managed
 // record of this kind resolves to a live Microsoft Graph client whose OAuth
 // credential is read from the vault. Like mail, its Graph base and secret are managed
 // here, never in the model; only the target (site, list, item fields) is

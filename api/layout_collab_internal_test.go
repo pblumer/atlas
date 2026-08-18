@@ -145,3 +145,47 @@ func TestGenerateCollaborationDIStacksNodes(t *testing.T) {
 		t.Errorf("output missing stacked start events:\n%s", out)
 	}
 }
+
+// TestGenerateCollaborationDISkipsUnusableMessageFlows is the message-flow
+// counterpart of TestGenerateDISkipsDanglingFlows: a flow whose ends are not both
+// laid out, or that carries no id, cannot be drawn as an edge. Hand-authored and
+// round-tripped models both produce these, so the layouter drops them and keeps
+// going rather than emitting an edge with nothing to anchor to.
+func TestGenerateCollaborationDISkipsUnusableMessageFlows(t *testing.T) {
+	src := []byte(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <collaboration id="C">
+	    <participant id="P_a" name="A" processRef="a"/>
+	    <participant id="P_b" name="B" processRef="b"/>
+	    <messageFlow id="mf_ok" sourceRef="a_end" targetRef="b_start"/>
+	    <messageFlow id="mf_ghost_target" sourceRef="a_end" targetRef="nowhere"/>
+	    <messageFlow id="mf_ghost_source" sourceRef="nowhere" targetRef="b_start"/>
+	    <messageFlow sourceRef="a_end" targetRef="b_start"/>
+	  </collaboration>
+	  <process id="a" isExecutable="true">
+	    <startEvent id="a_start"/>
+	    <endEvent id="a_end"/>
+	    <sequenceFlow id="af1" sourceRef="a_start" targetRef="a_end"/>
+	  </process>
+	  <process id="b" isExecutable="true">
+	    <startEvent id="b_start"/>
+	    <endEvent id="b_end"/>
+	    <sequenceFlow id="bf1" sourceRef="b_start" targetRef="b_end"/>
+	  </process>
+	</definitions>`)
+	di, ok := generateDI(src)
+	if !ok {
+		t.Fatal("generateDI: want ok — the usable flow still lays out")
+	}
+	if !strings.Contains(di, `bpmnElement="mf_ok"`) {
+		t.Errorf("the drawable message flow is missing:\n%s", di)
+	}
+	for _, gone := range []string{"mf_ghost_target", "mf_ghost_source", "nowhere"} {
+		if strings.Contains(di, gone) {
+			t.Errorf("undrawable message flow %q was emitted:\n%s", gone, di)
+		}
+	}
+	// The id-less flow cannot be referenced, so it must not produce an edge either.
+	if got, want := strings.Count(di, "<bpmndi:BPMNEdge"), 3; got != want {
+		t.Errorf("edge count = %d, want %d (two sequence flows + one message flow)", got, want)
+	}
+}

@@ -16,7 +16,7 @@ const graphScope = "https://graph.microsoft.com/.default"
 // ProviderConfig is the per-connector data the server resolves before building a
 // client: an optional Graph base override (Endpoint) and the resolved Secret — the
 // OAuth credential JSON bundle held in the vault under the connector's credentialsRef
-// (ADR-0105). The secret lives only here at build time, never in a model or an event
+// (ADR-0141). The secret lives only here at build time, never in a model or an event
 // (I6).
 type ProviderConfig struct {
 	Endpoint string

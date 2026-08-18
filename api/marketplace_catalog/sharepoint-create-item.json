@@ -4,7 +4,7 @@
   "kind": "connector",
   "title": "SharePoint — Create List Item",
   "author": "Atlas core",
-  "description": "Create a list item in a Microsoft SharePoint site through a server-registered Graph provider. Site, list and item fields are authored in the model; the Graph base and OAuth credential live on the server, resolved from the vault (ADR-0105).",
+  "description": "Create a list item in a Microsoft SharePoint site through a server-registered Graph provider. Site, list and item fields are authored in the model; the Graph base and OAuth credential live on the server, resolved from the vault (ADR-0141).",
   "engineCompat": ">=0.9",
   "template": {
     "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",

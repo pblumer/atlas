@@ -405,7 +405,7 @@ func TestDraftSessionJoinAnonymous(t *testing.T) {
 
 // TestDraftSessionKeepalive confirms an idle SSE stream emits periodic keepalive
 // comments — the write that lets the server detect a half-open (zombie) browser
-// connection and reap its participant (ADR-0103).
+// connection and reap its participant (ADR-0140).
 func TestDraftSessionKeepalive(t *testing.T) {
 	ts := newTestServerWith(t, api.WithCollabKeepaliveInterval(15*time.Millisecond))
 	saveDraft(t, ts)
@@ -455,10 +455,12 @@ func TestDraftSessionPostValidation(t *testing.T) {
 		{"presence bad json", "/api/v1/drafts/wip-order/session/presence", "{", http.StatusBadRequest},
 		{"presence no id", "/api/v1/drafts/wip-order/session/presence", `{"selection":"x"}`, http.StatusBadRequest},
 		{"presence unknown", "/api/v1/drafts/wip-order/session/presence", `{"participantId":"ghost"}`, http.StatusNotFound},
+		{"lock bad json", "/api/v1/drafts/wip-order/session/lock", "{", http.StatusBadRequest},
 		{"lock no id", "/api/v1/drafts/wip-order/session/lock", `{"action":"acquire"}`, http.StatusBadRequest},
 		{"lock bad action", "/api/v1/drafts/wip-order/session/lock", `{"participantId":"p","elementId":"E","action":"nope"}`, http.StatusBadRequest},
 		{"lock unknown", "/api/v1/drafts/wip-order/session/lock", `{"participantId":"ghost","elementId":"E","action":"acquire"}`, http.StatusNotFound},
 		{"release unknown", "/api/v1/drafts/wip-order/session/lock", `{"participantId":"ghost","elementId":"E","action":"release"}`, http.StatusNotFound},
+		{"change bad json", "/api/v1/drafts/wip-order/session/change", "{", http.StatusBadRequest},
 		{"change no element", "/api/v1/drafts/wip-order/session/change", `{"participantId":"p"}`, http.StatusBadRequest},
 		{"change unknown", "/api/v1/drafts/wip-order/session/change", `{"participantId":"ghost","elementId":"E"}`, http.StatusNotFound},
 	}

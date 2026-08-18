@@ -76,7 +76,7 @@ func parseCSVRows(cfg csvConfig, data []byte) ([]map[string]any, error) {
 		header := records[0]
 		dataStart = 1
 		// With no explicit column layout, derive one string column per distinct,
-		// non-empty header cell — the "just turn this CSV into JSON" case (ADR-0090).
+		// non-empty header cell — the "just turn this CSV into JSON" case (ADR-0139).
 		if len(cfg.Columns) == 0 {
 			seen := make(map[string]struct{}, len(header))
 			for _, h := range header {

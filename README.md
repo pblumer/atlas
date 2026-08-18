@@ -8,6 +8,18 @@
 
 ---
 
+## Install
+
+Atlas is a single self-contained binary — no database, no broker, no runtime dependencies. Grab it from the [releases](https://github.com/pblumer/atlas/releases), verify it against `SHA256SUMS`, and run it:
+
+```bash
+tar -xzf atlas_0.1.0_linux_amd64.tar.gz
+./atlas_0.1.0_linux_amd64/atlas serve --data-dir ./atlas-data
+# open http://127.0.0.1:8080/
+```
+
+**[Installation guide](docs/install.md)** — the step-by-step version: Linux with a systemd unit, Windows Server, macOS, turning on authentication, TLS, backups, upgrades, and the full flag and environment-variable reference. For containers and Kubernetes see **[Deploying Atlas](deploy/)**.
+
 ## Why another workflow engine?
 
 Most BPMN engines spend their time interpreting XML at runtime and writing process state to a SQL database one transaction at a time. Both are throughput killers. Atlas takes a different path, borrowed from the design lineage of log-structured, event-sourced systems:
@@ -37,6 +49,7 @@ The three core pillars:
 
 ## Documentation
 
+- **[Installation guide](docs/install.md)** — get the binary running on a server: Linux/systemd, Windows, macOS, auth, TLS, backups, and every flag and environment variable
 - **[Architecture overview](docs/ARCHITECTURE.md)** — the canonical reference for how the system fits together
   - [Graph compiler](docs/architecture/compiler.md)
   - [Processor](docs/architecture/processor.md)

@@ -310,7 +310,7 @@ const CONNECTORS = [
   {
     id: "sharepoint", name: "SharePoint", kind: "List item",
     desc: "Creates a list item in a Microsoft SharePoint site from a service task off the processor loop via the Graph API (OAuth2 app-only or refresh-token). The site, list, and item fields are model-authored (FEEL-capable) and the created item's JSON is written into a result variable; the Graph base and credentials are managed below and resolved from the vault. Authored via the SharePoint Connector service-task type.",
-    refs: "ADR-0041 · ADR-0093 · ADR-0105", status: "active", statusLabel: "configurable",
+    refs: "ADR-0041 · ADR-0093 · ADR-0141", status: "active", statusLabel: "configurable",
   },
   {
     id: "remedy", name: "BMC Remedy", kind: "ITSM",
@@ -3813,6 +3813,13 @@ async function viewTasks(preselectKey) {
           <div id="tp-vars-body"><p class="tp-msg muted">Loading&hellip;</p></div>
         </div>
       </div>`;
+    // The element's <bpmn:documentation> (ADR-0025) is the modeler's instruction for
+    // whoever picks the task up — what to check, which rule applies, when to refuse. It
+    // leads the detail, above the metadata rows, because it is what the assignee needs
+    // before doing anything; a task whose element carries none simply shows no block.
+    const docBlock = (t.documentation || "").trim()
+      ? `<div class="tasks-doc"><h2>What to do</h2><p>${esc(t.documentation.trim())}</p></div>`
+      : "";
     detailEl.innerHTML = `
       <header class="tasks-detail-head">
         <h1>${esc(taskTitle(t))}</h1>
@@ -3822,6 +3829,7 @@ async function viewTasks(preselectKey) {
           <button class="btn" id="task-complete" title="Complete (Ctrl/⌘ + Enter)">Complete task</button>
         </div>
       </header>
+      ${docBlock}
       <div class="tasks-fields">
         ${row("Process", esc(t.processId || "—"))}
         ${row("Element", `<span class="chip">${esc(t.elementId || "—")}</span>`)}

@@ -109,6 +109,13 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/backup/full":   "admin whole-instance snapshot download, not an agent action",
 	"POST /api/v1/restore/full": "admin whole-instance snapshot upload, not an agent action",
 
+	// Recovery checkpoints and WAL compaction (ADR-0131): storage housekeeping an
+	// operator watches and occasionally forces before a restart. Same category as
+	// backup/restore — it concerns the data directory, not the processes running in it,
+	// and the control deletes WAL segments when compaction is on.
+	"GET /api/v1/checkpoints":  "admin recovery-checkpoint status, not an agent action",
+	"POST /api/v1/checkpoints": "admin on-demand checkpoint/compaction, not an agent action",
+
 	// Per-server call-activity target overrides (ADR-0105): admin operator config,
 	// like connectors — an agent reads the resolution via atlas_call_activities but
 	// does not set server-local routing. requireAdmin-gated.
@@ -157,7 +164,7 @@ var mcpOmittedRoutes = map[string]string{
 	// The SSE join stream is a browser transport: an MCP agent cannot hold an
 	// event stream, so it joins via the non-streaming atlas_join_session and reads
 	// with atlas_session_poll instead. The stream endpoint itself carries no tool.
-	"GET /api/v1/drafts/{id}/session": "live SSE co-editing transport for browsers; agents use atlas_join_session + atlas_session_poll (ADR-0103)",
+	"GET /api/v1/drafts/{id}/session": "live SSE co-editing transport for browsers; agents use atlas_join_session + atlas_session_poll (ADR-0140)",
 
 	// Public start links: a human-sharing feature, not an agent action.
 	"POST /api/v1/public-links":           "human share links, not an agent action",
@@ -229,7 +236,7 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/applications/{id}/source": "bulk source-tree download; an agent reads artifacts individually via atlas_get_draft_xml / atlas_get_form",
 	"POST /api/v1/applications/source":     "bulk source-tree upload that rewrites a whole application; an agent authors via atlas_save_draft / atlas_save_form",
 
-	// Process documentation (ADR-0138): the document is *produced in the browser*,
+	// Process documentation (ADR-0143): the document is *produced in the browser*,
 	// where bpmn-js holds the authoritative picture — an agent has no rendered
 	// diagram to publish, so the create route is not a capability it can exercise.
 	// The reads are of the produced artifact rather than of the model: an agent

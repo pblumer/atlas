@@ -69,6 +69,18 @@ func TestReadBodyErrors(t *testing.T) {
 		{"publish message", "/api/v1/messages"},
 		{"complete job", "/api/v1/jobs/1/complete"},
 		{"set instance variables", "/api/v1/instances/1/variables"},
+		{"layout", "/api/v1/layout"},
+		{"complete task", "/api/v1/tasks/1/complete"},
+		// The live-session actions share decodeSessionBody, which reads before it
+		// looks the draft up — so an unreadable body is a 400 even for a draft that
+		// does not exist.
+		{"session presence", "/api/v1/drafts/ghost/session/presence"},
+		{"session lock", "/api/v1/drafts/ghost/session/lock"},
+		{"session change", "/api/v1/drafts/ghost/session/change"},
+		// The user endpoints share readJSONBody, which reports an unreadable body
+		// before it can know whether the request was even well-formed.
+		{"login", "/api/v1/auth/login"},
+		{"create user", "/api/v1/users"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -253,5 +265,41 @@ func TestDoAfterCloseIsNoop(t *testing.T) {
 	srv.do(func() { ran = true })
 	if ran {
 		t.Fatal("do ran a closure after the loop was stopped")
+	}
+}
+
+// nonFlusher is a ResponseWriter that deliberately does not implement
+// http.Flusher, standing in for a middleware or proxy wrapper that hides it.
+type nonFlusher struct{ h http.Header }
+
+func (n *nonFlusher) Header() http.Header       { return n.h }
+func (*nonFlusher) Write(b []byte) (int, error) { return len(b), nil }
+func (*nonFlusher) WriteHeader(int)             {}
+
+// TestDraftSessionRefusesUnflushableWriter pins the guard the SSE endpoint needs
+// before it commits to streaming: without a Flusher every frame would sit in the
+// buffer, so a co-editing client would join a session that never delivers an
+// event. Refusing up front with a 500 is the honest answer; net/http's own
+// writer always flushes, so only a wrapper can produce this.
+func TestDraftSessionRefusesUnflushableWriter(t *testing.T) {
+	srv := newServerForErrors(t)
+	const draftXML = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="wip" isExecutable="true"><startEvent id="s"/></process>
+	</definitions>`
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/drafts", strings.NewReader(draftXML))
+	req.Header.Set("Content-Type", "application/xml")
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("save draft = %d, body %s", rec.Code, rec.Body.String())
+	}
+
+	// Called directly rather than through the mux, so the writer is ours.
+	sess := httptest.NewRequest(http.MethodGet, "/api/v1/drafts/wip/session", nil)
+	sess.SetPathValue("id", "wip")
+	w := &nonFlusher{h: http.Header{}}
+	srv.handleDraftSession(w, sess)
+	if got := w.Header().Get("Content-Type"); strings.Contains(got, "event-stream") {
+		t.Errorf("Content-Type = %q, want the stream never to have been opened", got)
 	}
 }
