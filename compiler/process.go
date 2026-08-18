@@ -841,6 +841,7 @@ type CompiledProcess struct {
 	startFormId        int32        // interned start-form id (ADR-0028), -1 if none
 	versionTag         int32        // interned atlas:versionTag revision label, -1 if none
 	instanceTtlNanos   int64        // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
+	historyTtlNanos    int64        // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
 	isExecutable       bool         // bpmn:isExecutable — a non-executable process can't be started
 	elementIds         []int32      // interned source BPMN id per node id (-1 if unset)
 	elementDocs        []int32      // interned <bpmn:documentation> per node id (-1 if undocumented, ADR-0025)
@@ -1344,6 +1345,13 @@ func (p *CompiledProcess) VersionTag() string { return p.Intern(p.versionTag) }
 // is configured. A positive value is the self-cleaning expiry bound (ADR-0085): the
 // engine schedules a durable expiry timer at CreatedAt+TTL when an instance activates.
 func (p *CompiledProcess) InstanceTtlNanos() int64 { return p.instanceTtlNanos }
+
+// HistoryTtlNanos returns the process's history TTL in nanoseconds, or 0 when none is
+// configured. A positive value is this definition's own retention max age (ADR-0144):
+// the retention sweep hard-deletes a finished instance of this definition once it is
+// older than the TTL and its events are provably exported. Zero falls back to the
+// server-wide max age.
+func (p *CompiledProcess) HistoryTtlNanos() int64 { return p.historyTtlNanos }
 
 // Intern returns the string for an interned index, or "" if out of range.
 func (p *CompiledProcess) Intern(idx int32) string {

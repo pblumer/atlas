@@ -259,6 +259,7 @@ type Builder struct {
 	startFormId        int32            // interned start-form id (ADR-0028), -1 if the process has none
 	versionTag         int32            // interned atlas:versionTag revision label, -1 if none
 	instanceTtlNanos   int64            // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
+	historyTtlNanos    int64            // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
 	isExecutable       bool             // bpmn:isExecutable; defaults true (set in NewBuilder)
 
 	// flowScope is the enclosing scope every node added now lands in: -1 for the
@@ -493,6 +494,12 @@ func (b *Builder) SetVersionTag(s string) { b.versionTag = b.intern(s) }
 // expiry bound (ADR-0085). Zero (the default) means no TTL: instances never expire on
 // their own. The parser passes an already-validated positive duration.
 func (b *Builder) SetInstanceTtl(nanos int64) { b.instanceTtlNanos = nanos }
+
+// SetHistoryTtl records the process's history TTL in nanoseconds — how long a *finished*
+// instance of this definition is kept before retention hard-deletes it (ADR-0144). Zero
+// (the default) means the definition has no opinion: the server-wide max age applies, if
+// one is configured. The parser passes an already-validated positive duration.
+func (b *Builder) SetHistoryTtl(nanos int64) { b.historyTtlNanos = nanos }
 
 // AddMessageStartEvent adds a message start event and returns its element id. It
 // is a process entry point like a none start event — at runtime it simply flows
@@ -1843,6 +1850,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		startFormId:        b.startFormId,
 		versionTag:         b.versionTag,
 		instanceTtlNanos:   b.instanceTtlNanos,
+		historyTtlNanos:    b.historyTtlNanos,
 		isExecutable:       b.isExecutable,
 		strings:            b.strings,
 	}, nil

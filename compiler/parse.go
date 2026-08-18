@@ -466,6 +466,20 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		b.SetInstanceTtl(nanos)
 	}
+	// A per-definition history TTL (ADR-0144): how long a finished instance of this
+	// definition is kept before retention hard-deletes it. Validated up front for the
+	// same reason as the instance TTL — a typo must fail the deploy, not silently leave
+	// the history unbounded.
+	if ttl := strings.TrimSpace(proc.HistoryTtl); ttl != "" {
+		nanos, err := parseISO8601Duration(ttl)
+		if err != nil {
+			return nil, fmt.Errorf("compiler: process %q: invalid historyTtl %q: %w", proc.Id, ttl, err)
+		}
+		if nanos <= 0 {
+			return nil, fmt.Errorf("compiler: process %q: historyTtl %q must be a positive duration", proc.Id, ttl)
+		}
+		b.SetHistoryTtl(nanos)
+	}
 	ids := make(map[string]int32, len(proc.StartEvents)+len(proc.ServiceTasks)+len(proc.EndEvents))
 	reg := &registrar{b: b, ids: ids, docs: docs}
 
@@ -1082,6 +1096,7 @@ type xmlProcess struct {
 	IsExecutable string `xml:"isExecutable,attr"`
 	VersionTag   string `xml:"versionTag,attr"`
 	InstanceTtl  string `xml:"instanceTtl,attr"` // ISO-8601 duration; self-cleaning TTL (ADR-0085), empty = off
+	HistoryTtl   string `xml:"historyTtl,attr"`  // ISO-8601 duration; finished-instance retention (ADR-0144), empty = off
 
 	xmlFlowContent // the process root's flow nodes and sequence flows
 

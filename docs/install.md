@@ -383,7 +383,7 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--checkpoint-keep` | `3` | How many checkpoints to retain |
 | `--opensearch-url` | `$ATLAS_OPENSEARCH_URL` | Mirror the event log into OpenSearch; empty disables |
 | `--opensearch-index` | `$ATLAS_OPENSEARCH_INDEX` | Index the exporter writes to |
-| `--retention-max-age` | `$ATLAS_RETENTION_MAX_AGE` | Hard-delete finished instances older than this once exported, e.g. `720h`; `0` disables |
+| `--retention-max-age` | `$ATLAS_RETENTION_MAX_AGE` | Hard-delete finished instances older than this once exported, e.g. `720h`; `0` disables. A process may override it with its own `atlas:historyTtl` (ADR-0144) |
 
 The boolean flags above are all **on by default**, so they are turned off with an
 explicit `=false` — `--vault=false`, not `--no-vault`.

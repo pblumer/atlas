@@ -301,7 +301,10 @@ type Server struct {
 
 	// Retention (ADR-0115): hard-delete finished-instance history older than
 	// retentionMaxAge, gated on the safe (exported, else durable) position so nothing
-	// is deleted before it is archived. Off unless retentionMaxAge > 0 (WithRetention).
+	// is deleted before it is archived. retentionMaxAge is the server-wide default
+	// (WithRetention); a definition declaring atlas:historyTtl overrides it for its own
+	// instances and enables retention on its own (ADR-0144), so a zero here is not
+	// "retention off" but "off for everything that declares nothing".
 	// The sweep is bounded (retentionBatch per tick) and resumable (retentionCursor);
 	// all three are touched only on the run-loop goroutine (via do), so no lock.
 	retentionMaxAge   time.Duration
@@ -525,7 +528,9 @@ const (
 // WithRetention enables history retention (ADR-0115): a finished instance whose
 // terminal event is older than maxAge and whose events are already exported (its
 // terminal position is at or below the safe position) is hard-deleted from the state
-// store. A non-positive maxAge leaves retention off — the opt-in default.
+// store. A non-positive maxAge leaves the server with no default age — the opt-in
+// default — and retention then applies only to definitions declaring their own
+// atlas:historyTtl (ADR-0144).
 func WithRetention(maxAge time.Duration) Option {
 	return func(s *Server) {
 		if maxAge > 0 {
@@ -970,13 +975,15 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		go s.exporterLoop(s.exporterPoll)
 	}
 	// History retention hard-deletes finished instances past the max age, gated on the
-	// exported (else durable) position (ADR-0115). Off unless a max age is configured.
-	// Like the other pollers it computes wall-clock time off the run loop and hops onto
-	// it via do() to touch the processor and its bounded, resumable cursor.
-	if s.retentionMaxAge > 0 {
-		s.wg.Add(1)
-		go s.retentionSweeper(s.retentionInterval)
-	}
+	// exported (else durable) position (ADR-0115). The sweeper always runs: retention is
+	// configured server-wide *or* per definition (atlas:historyTtl, ADR-0144), and a
+	// definition carrying one can be deployed at any moment — so the cheap standing tick
+	// is what makes a mid-flight deploy take effect. A tick with neither configured
+	// returns immediately (sweepRetention's early-out). Like the other pollers it
+	// computes wall-clock time off the run loop and hops onto it via do() to touch the
+	// processor and its bounded, resumable cursor.
+	s.wg.Add(1)
+	go s.retentionSweeper(s.retentionInterval)
 	// Recovery checkpoints bound restart time (ADR-0131). Off unless a cadence is
 	// configured. Unlike the pollers above, this one's actual work happens *on* the run
 	// loop — a snapshot is only exact at a batch boundary (invariant I3) — so the
@@ -1071,18 +1078,25 @@ func (s *Server) retentionSweeper(every time.Duration) {
 }
 
 // sweepRetention evaluates one bounded, resumable window of finished instances and
-// hard-deletes those eligible: finished before now-maxAge AND provably exported (a
-// non-zero terminal position at or below the safe position). It runs inside a do()
+// hard-deletes those eligible: finished before now minus the max age that governs them
+// — their own definition's history TTL, else the server-wide age (ADR-0144) — AND
+// provably exported (a non-zero terminal position at or below the safe position). It
+// runs inside a do()
 // turn, so the scan, the purge commands it enqueues, and the cursor advance are one
 // atomic single-writer step (ADR-0115). Errors are logged and retried next tick.
 func (s *Server) sweepRetention(now int64) {
+	// Nothing is retained on age anywhere: no server-wide max age and no deployed
+	// definition declaring its own history TTL (ADR-0144). The standing tick costs one
+	// map walk and stops here — no store read, no scan.
+	if s.retentionMaxAge <= 0 && !s.anyDefinitionRetention() {
+		return
+	}
 	// A transient read error just skips this tick (retried on the next), matching the
 	// silent, best-effort style of the other run-loop pollers (timerScheduler).
 	safePos, err := s.retentionSafePosition()
 	if err != nil {
 		return
 	}
-	cutoff := now - s.retentionMaxAge.Nanoseconds()
 	type target struct {
 		key uint64
 		pi  model.ProcessInstanceValue
@@ -1090,10 +1104,16 @@ func (s *Server) sweepRetention(now int64) {
 	var targets []target
 	next, more, err := s.store.CompletedProcessInstancesFrom(s.retentionCursor, s.retentionBatch,
 		func(key uint64, v *model.ProcessInstanceValue) error {
+			// The max age is the instance's own definition's when it declares one, else the
+			// server-wide setting (ADR-0144); zero means nothing retains this instance.
+			maxAge := s.retentionAgeFor(v.ProcessDefKey)
+			if maxAge <= 0 {
+				return nil
+			}
 			// Eligible only when old enough AND export-provable: a zero CompletedPosition
 			// (a record written before this feature) is never provably exported, so it is
 			// conservatively skipped rather than deleted (ADR-0115).
-			if v.CompletedAt <= cutoff && v.CompletedPosition != 0 && v.CompletedPosition <= safePos {
+			if v.CompletedAt <= now-maxAge && v.CompletedPosition != 0 && v.CompletedPosition <= safePos {
 				targets = append(targets, target{key, *v})
 			}
 			return nil
@@ -1106,7 +1126,9 @@ func (s *Server) sweepRetention(now int64) {
 	}
 	if len(targets) > 0 {
 		_ = s.jobRunner.Drive() // durable purge events; a drive error is retried next tick
-		log.Printf("retention: purged %d finished instance(s) past %s", len(targets), s.retentionMaxAge)
+		// No single age to name any more: instances in one sweep may have aged out under
+		// different per-definition TTLs (ADR-0144).
+		log.Printf("retention: purged %d finished instance(s)", len(targets))
 	}
 	// Advance the cursor; wrap to genesis at the end so the next pass re-evaluates
 	// instances that have since aged past the cutoff or become exported.
@@ -1115,6 +1137,33 @@ func (s *Server) sweepRetention(now int64) {
 	} else {
 		s.retentionCursor = 0
 	}
+}
+
+// retentionAgeFor returns the retention max age in nanoseconds that governs a finished
+// instance of defKey: the definition's own atlas:historyTtl when it declares one
+// (ADR-0144), otherwise the server-wide max age. Zero means no retention applies and
+// the instance is kept indefinitely — the case for an undeployed definition (its
+// compiled process is gone, so only a server-wide setting can still reach it). Reads
+// the deployment registry, so it runs on the loop, inside the sweep's do() turn.
+func (s *Server) retentionAgeFor(defKey uint64) int64 {
+	if cp := s.processLookup(defKey); cp != nil {
+		if ttl := cp.HistoryTtlNanos(); ttl > 0 {
+			return ttl
+		}
+	}
+	return s.retentionMaxAge.Nanoseconds()
+}
+
+// anyDefinitionRetention reports whether any deployed definition declares a history TTL
+// (ADR-0144) — the condition that makes a sweep worth running when the server itself
+// configures no max age. Same loop-only access rule as retentionAgeFor.
+func (s *Server) anyDefinitionRetention() bool {
+	for _, d := range s.deployments {
+		if d.cp != nil && d.cp.HistoryTtlNanos() > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // retentionSafePosition is the highest log position safe to hard-delete up to: the
