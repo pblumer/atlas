@@ -114,7 +114,7 @@ A number belongs to exactly one decision. Take the next free one when you add a 
 | [0102](0102-receive-tasks.md) | Receive tasks — an activity that waits for a correlating message, reusing the message-catch machinery | Accepted |
 | [0103](0103-compensation.md) | Compensation and compensation handlers | Accepted |
 | [0104](0104-token-simulation-embedded-subprocesses.md) | Token simulation — entering and running expanded embedded subprocesses as scopes | Accepted |
-| [0105](0105-per-server-call-activity-target-overrides.md) | Per-server call-activity target overrides — route, pin, or disable a call activity's target on one server | Proposed |
+| [0105](0105-per-server-call-activity-target-overrides.md) | Per-server call-activity target overrides — route, pin, or disable a call activity's target on one server | Accepted |
 | [0106](0106-bmc-remedy-connector.md) | A BMC Remedy connector — server-registered ITSM entry creation via the AR System REST API | Accepted |
 | [0107](0107-backup-and-restore.md) | Backup and restore — a one-file gzip-tar download of the design-time data directory, secrets excluded | Accepted |
 | [0108](0108-bpmn-transactions.md) | BPMN transactions — a transaction subprocess whose cancel end event compensates completed work in reverse order, then routes out an always-interrupting cancel boundary | Accepted |
