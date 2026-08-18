@@ -235,6 +235,7 @@ type lnode struct {
 	x, y  int      // local position, filled during placement
 	sub   *laidOut // non-nil for an expanded subprocess: its inner layout
 	bound bool     // a boundary event
+	gwy   bool     // drawn as a diamond, so it has vertices to leave from
 	host  string   // boundary: the activity id it is attached to
 	label string   // boundary: its name, emitted as an explicit label placed clear of the host
 	atTop bool     // boundary: riding the host's top edge (label goes above, else below)
@@ -399,10 +400,17 @@ func containerNodes(c layoutContainer) (nodes []lnode, inner map[string]*laidOut
 	add(c.ReceiveTasks, kindTask)
 	add(c.SendTasks, kindTask)
 	add(c.CallActivities, kindTask)
-	add(c.ExclusiveGws, kindGateway)
-	add(c.ParallelGws, kindGateway)
-	add(c.InclusiveGws, kindGateway)
-	add(c.EventBasedGws, kindGateway)
+	addGateway := func(elems []layoutElem) {
+		for _, e := range elems {
+			if e.Id != "" {
+				nodes = append(nodes, lnode{id: e.Id, w: kindGateway.w, h: kindGateway.h, gwy: true})
+			}
+		}
+	}
+	addGateway(c.ExclusiveGws)
+	addGateway(c.ParallelGws)
+	addGateway(c.InclusiveGws)
+	addGateway(c.EventBasedGws)
 
 	subs := c.subContainers()
 	for i := range subs {
@@ -1202,30 +1210,44 @@ func columnEdges(nodes []lnode) (right, left map[int]int) {
 }
 
 // routeFlow builds the orthogonal waypoints from src to tgt. A normal source leaves
-// on its right edge, a boundary event drops out of the vertical edge facing its
-// target (top when the handler sits above, else bottom); every target is entered on
-// its left. When the two ends already share a row the run is straight; otherwise a
+// on its right edge; a boundary event, and a gateway branch that steps off the row,
+// drop out of the vertical edge facing the target instead. Every target is entered
+// on its left. When the two ends already share a row the run is straight; otherwise a
 // vertical riser at the mid-x turns the diagonal into a right-angled out-across-in
 // path.
 func routeFlow(src, tgt lnode) []point {
 	tx, ty := tgt.x, tgt.y+tgt.h/2 // target entry: left-center
 	if src.bound {
-		// Exception path: out of the edge facing the handler, then across into it.
-		sx, sy := src.x+src.w/2, src.y+src.h // default: leave from the bottom
-		if ty < src.y+src.h/2 {
-			sy = src.y // handler above: leave from the top
-		}
-		if sx == tx {
-			return []point{{sx, sy}, {tx, ty}}
-		}
-		return []point{{sx, sy}, {sx, ty}, {tx, ty}}
+		return vertexRoute(src, tx, ty) // exception path: out of the edge facing the handler
 	}
 	sx, sy := src.x+src.w, src.y+src.h/2 // source exit: right-center
 	if sy == ty {
 		return []point{{sx, sy}, {tx, ty}}
 	}
+	// A diamond has four vertices and BPMN uses them: the branch that carries on
+	// leaves the side, the one that steps to another row leaves the top or the
+	// bottom. Sharing the side exit draws both along one line for the width of the
+	// gap, so the fork reads as a single edge that splits somewhere out in the open.
+	if src.gwy {
+		return vertexRoute(src, tx, ty)
+	}
 	midX := (sx + tx) / 2
 	return []point{{sx, sy}, {midX, sy}, {midX, ty}, {tx, ty}}
+}
+
+// vertexRoute leaves src by the vertical edge facing (tx,ty) — the top when the
+// target sits higher, else the bottom — and elbows across into it. A boundary event
+// and a forking gateway route the same way: both hang off the middle of a shape
+// whose side exit belongs to another edge.
+func vertexRoute(src lnode, tx, ty int) []point {
+	vx, vy := src.x+src.w/2, src.y+src.h // default: leave from the bottom
+	if ty < src.y+src.h/2 {
+		vy = src.y // target above: leave from the top
+	}
+	if vx == tx {
+		return []point{{vx, vy}, {tx, ty}}
+	}
+	return []point{{vx, vy}, {vx, ty}, {tx, ty}}
 }
 
 // normalize shifts a laid-out container so its top-left sits at (0,0) and records
