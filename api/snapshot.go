@@ -29,6 +29,21 @@ import (
 // file read (recovery already stops cleanly at a torn tail), and state falls out of
 // replay. Because a restore replaces the open WAL and state, it cannot be applied to
 // a running engine; it is staged to disk and applied on the next start.
+//
+// # Compacted logs (ADR-0131)
+//
+// "state == replay(WAL)" holds only while the WAL still starts at genesis. Once
+// compaction deletes the segments a recovery checkpoint makes redundant, an archive of
+// `wal/` alone would restore a *silently partial* engine: an instance whose events were
+// in the deleted prefix would simply not come back. So the snapshot also carries the
+// **newest verified checkpoint**, and ApplyPendingRestore installs it as the state
+// store — the missing piece that makes the remaining WAL suffix sufficient again.
+//
+// This is ADR-0109's own option B, rejected then only for want of a checkpoint API. The
+// checkpoint is chosen *before* the WAL is read, so the WAL copy is always a superset of
+// what the checkpoint needs, matching the ordering argument for the design-time dirs
+// below. Exactly one checkpoint rides along — the archive should not carry every kept
+// snapshot of the same store.
 
 // fullBackupDirs is the whole-instance snapshot's directory set: the WAL first (so
 // the design-time and secret dirs captured after it are a superset of whatever the
@@ -50,6 +65,27 @@ var fullBackupDirs = func() []string {
 // vault key is a single file at the data-dir root.
 var fullBackupFiles = []string{"vault.key"}
 
+// newestVerifiedCheckpoint returns the archive-relative directory of the newest
+// checkpoint under dataDir that passes full verification — manifest *and* state files —
+// or "" when there is none. Verification is the whole point here: the archive's
+// checkpoint is what stands in for a deleted WAL prefix on the restoring box, so
+// shipping one that cannot be checked would trade a loud failure for a silent one.
+// An older checkpoint that still verifies is preferred to a newest one that does not.
+func newestVerifiedCheckpoint(dataDir string) string {
+	root := checkpoint.Dir(dataDir)
+	positions, err := checkpoint.List(root)
+	if err != nil {
+		return "" // no checkpoint root, or an unreadable one: the snapshot is WAL-only
+	}
+	for i := len(positions) - 1; i >= 0; i-- {
+		if _, err := checkpoint.Verify(root, positions[i]); err == nil {
+			// fs.FS and tar paths are slash-separated regardless of platform.
+			return checkpoint.DirBase + "/" + checkpoint.DirName(positions[i])
+		}
+	}
+	return ""
+}
+
 // restorePendingDir is the staging directory a full restore extracts into, under the
 // data dir; ApplyPendingRestore moves it into place on the next boot. restoreReady
 // is the marker file written last, so an interrupted upload (no marker) is never
@@ -67,26 +103,43 @@ func (s *Server) handleBackupFull(w http.ResponseWriter, r *http.Request) {
 	if !s.requireAdmin(w, r) {
 		return
 	}
+	// Hold off WAL compaction for the duration (ADR-0131). This is raised *before* the
+	// checkpoint below is chosen, which is what makes the guard sound rather than
+	// merely likely: a compaction pass that reads zero here is one whose deletion
+	// happens before this backup picks its checkpoint, so the suffix that checkpoint
+	// needs starts at or above whatever was cut.
+	s.backupsInFlight.Add(1)
+	defer s.backupsInFlight.Add(-1)
+
 	w.Header().Set("Content-Type", "application/gzip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fullBackupFilename()))
-	if err := streamFullBackup(w, os.DirFS(s.dataDir)); err != nil {
+	// Pick the checkpoint before reading the WAL, so the WAL copy is a superset of the
+	// segments that checkpoint's suffix needs (see the package comment above).
+	if err := streamFullBackup(w, os.DirFS(s.dataDir), newestVerifiedCheckpoint(s.dataDir)); err != nil {
 		log.Printf("full backup: streaming failed: %v", err)
 	}
 }
 
 // streamFullBackup writes the gzip-tar of the whole-instance snapshot in fsys to w.
-func streamFullBackup(w io.Writer, fsys fs.FS) error {
+// checkpointDir, when non-empty, is the archive-relative directory of the one
+// checkpoint to carry along (ADR-0131).
+func streamFullBackup(w io.Writer, fsys fs.FS, checkpointDir string) error {
 	gz := gzip.NewWriter(w)
 	tw := tar.NewWriter(gz)
-	if err := writeFullBackup(tw, fsys); err != nil {
+	if err := writeFullBackup(tw, fsys, checkpointDir); err != nil {
 		return err
 	}
 	return errors.Join(tw.Close(), gz.Close())
 }
 
-// writeFullBackup copies the snapshot's directories (WAL leads) and top-level files
-// into tw.
-func writeFullBackup(tw *tar.Writer, fsys fs.FS) error {
+// writeFullBackup copies the snapshot's checkpoint (when there is one), its directories
+// (WAL leads) and its top-level files into tw.
+func writeFullBackup(tw *tar.Writer, fsys fs.FS, checkpointDir string) error {
+	if checkpointDir != "" {
+		if err := walkDirInto(tw, fsys, checkpointDir); err != nil {
+			return err
+		}
+	}
 	for _, name := range fullBackupDirs {
 		if err := walkDirInto(tw, fsys, name); err != nil {
 			return err
@@ -207,6 +260,16 @@ func (s *Server) handleRestoreFull(w http.ResponseWriter, r *http.Request) {
 			"archive is not a full snapshot (no WAL); use POST /api/v1/restore for a design-time restore")
 		return
 	}
+	// A staging ALWAYS carries a checkpoint entry, empty when the archive had none
+	// (ADR-0131). That makes the apply's rename pass replace the local checkpoint root
+	// unconditionally: whatever survives there afterwards came from this archive and so
+	// belongs to the restored WAL. Deciding it here rather than in the apply also keeps
+	// the apply idempotent — a crash mid-apply re-runs against a staging whose already
+	// moved entries are simply absent, with no "was there one?" question left to ask.
+	if err := os.MkdirAll(filepath.Join(staging, checkpoint.DirBase), 0o755); err != nil {
+		failRestore(w, staging, http.StatusInternalServerError, "restore failed: "+err.Error())
+		return
+	}
 	// The marker is written last: ApplyPendingRestore acts only on a complete staging.
 	if err := os.WriteFile(filepath.Join(staging, restoreReady), []byte("1"), 0o600); err != nil {
 		failRestore(w, staging, http.StatusInternalServerError, "restore failed: "+err.Error())
@@ -215,7 +278,7 @@ func (s *Server) handleRestoreFull(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"restored":        restored,
 		"restartRequired": true,
-		"note":            "Full snapshot staged. It is applied on the next server restart, which replaces the WAL, running instances, design-time data, users and vault key, then rebuilds state from the restored WAL.",
+		"note":            "Full snapshot staged. It is applied on the next server restart, which replaces the WAL, running instances, design-time data, users and vault key, then rebuilds state from the restored snapshot's checkpoint and WAL.",
 	})
 }
 
@@ -247,6 +310,9 @@ func stageDest(staging, name string) (dest, top string, ok bool, err error) {
 // allowedFullEntry reports whether a top-level name belongs to the whole-instance
 // snapshot (a directory or the vault-key file).
 func allowedFullEntry(top string) bool {
+	if top == checkpoint.DirBase {
+		return true // the recovery checkpoint that covers a compacted prefix (ADR-0131)
+	}
 	for _, d := range fullBackupDirs {
 		if d == top {
 			return true
@@ -297,20 +363,95 @@ func ApplyPendingRestore(dataDir string) (bool, error) {
 			return false, err
 		}
 	}
-	// The snapshot omits the derivable state store; drop any existing state so it is
-	// rebuilt from the restored WAL on recovery, and remove the now-consumed staging.
-	//
-	// Recovery checkpoints go with it (ADR-0131). They describe positions in the log
-	// this restore just replaced, and their state files come from it: recovery refuses
-	// one only while the rebuilt store still trails it, so once the restored log
-	// advanced past that position a stale checkpoint would pass every guard and seed
-	// recovery from an unrelated log. Dropping them costs one full replay — which a
-	// restore does regardless — and the cadence publishes a fresh one shortly after.
-	return true, errors.Join(
-		os.RemoveAll(filepath.Join(dataDir, "state")),
-		os.RemoveAll(checkpoint.Dir(dataDir)),
-		os.RemoveAll(staging),
-	)
+	// The snapshot omits the derivable state store, so drop any existing state. The
+	// rename pass above already replaced the checkpoint root with the archive's own
+	// (empty when it carried none), so nothing here can still belong to the log this
+	// restore replaced.
+	if err := os.RemoveAll(filepath.Join(dataDir, "state")); err != nil {
+		return false, err
+	}
+	// Rebuild the starting point from the archive's checkpoint, when there is one. With
+	// a whole log this only saves a replay; with a compacted one (ADR-0131) it is what
+	// makes the restore correct at all, since the deleted prefix lives nowhere else.
+	if err := installCheckpointState(dataDir); err != nil {
+		return false, err
+	}
+	return true, os.RemoveAll(staging)
+}
+
+// installCheckpointState seeds <dataDir>/state from the newest verified checkpoint the
+// restore brought along, so recovery replays only the WAL suffix past it. With no
+// checkpoint it does nothing and recovery replays the whole log — the pre-ADR-0131
+// behaviour, still correct for an uncompacted archive.
+//
+// Checkpoints present but none verifying is an **error**, not a fallback. Falling back
+// would replay whatever WAL the archive holds and boot: fine if the log is whole,
+// silently missing every instance below the cut if it is compacted — and a restore
+// cannot tell which. Refusing to start is the only answer that is never wrong.
+func installCheckpointState(dataDir string) error {
+	root := checkpoint.Dir(dataDir)
+	// A missing root is not an error to List — it simply has no checkpoints — so only a
+	// genuinely unreadable one lands here, and that is worth refusing to boot over: it
+	// may be hiding the checkpoint a compacted log needs.
+	positions, err := checkpoint.List(root)
+	if err != nil {
+		return err
+	}
+	for i := len(positions) - 1; i >= 0; i-- {
+		if _, err := checkpoint.Verify(root, positions[i]); err != nil {
+			continue
+		}
+		return installStateFrom(filepath.Join(root, checkpoint.DirName(positions[i])), dataDir)
+	}
+	if len(positions) > 0 {
+		return fmt.Errorf("api: restored snapshot carries %d checkpoint(s) but none verifies; "+
+			"refusing to start rather than rebuild state from a possibly compacted WAL", len(positions))
+	}
+	return nil
+}
+
+// installStateFrom copies a checkpoint directory into place as the state store. A
+// published checkpoint *is* a complete Pebble directory (its manifest rides along
+// harmlessly), so this is a copy, not a conversion.
+//
+// It copies rather than renames so the checkpoint stays where it is: recovery still
+// needs it to seed the highest log position and the key counter, which a compacted
+// prefix can no longer supply. The copy lands in a temporary directory and is renamed
+// into place, so a crash leaves either the old state or none — never a half-built store
+// that Pebble would open.
+func installStateFrom(src, dataDir string) error {
+	dst := filepath.Join(dataDir, "state")
+	tmp := dst + ".restoring"
+	if err := os.RemoveAll(tmp); err != nil {
+		return err
+	}
+	if err := copyTree(src, tmp); err != nil {
+		return errors.Join(err, os.RemoveAll(tmp))
+	}
+	return os.Rename(tmp, dst)
+}
+
+// copyTree copies the regular files under src into dst, creating directories as it
+// goes. Checkpoint directories hold only regular files and directories, so nothing here
+// needs to handle links or specials.
+func copyTree(src, dst string) error {
+	return filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, strings.TrimPrefix(p, src))
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		if !d.Type().IsRegular() {
+			return nil
+		}
+		data, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, 0o644)
+	})
 }
 
 // fullBackupFilename is the download's suggested name for a whole-instance snapshot.

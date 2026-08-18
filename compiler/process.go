@@ -79,8 +79,10 @@ const (
 
 	TypeConditionalCatchEvent // a conditional intermediate catch event: waits until its boolean FEEL condition over the process's variables becomes true, then flows on (ADR-0137). Arms inert (no subscription) and is driven to Completing by a variable-change re-check; a conditional boundary/event-sub reuses TypeBoundaryEvent/TypeEventSubProcessStart with BoundaryConditional
 
+	TypeAdHocSubProcess // an ad-hoc subprocess: a container scope whose contained activities run on demand, in any order, zero or more times — not driven by sequence flow from a start event (ADR-0138). On entry it activates every entry activity (a contained node with no incoming flow) at once; after each contained activity completes an optional boolean FEEL completion condition is re-evaluated, and the first time it holds the remaining work is cancelled and the ad-hoc completes (else it completes on scope-drain)
+
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 41
+	numBpmnTypes = 42
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -130,6 +132,8 @@ func (t BpmnType) String() string {
 		return "MessageEndEvent"
 	case TypeSubProcess:
 		return "SubProcess"
+	case TypeAdHocSubProcess:
+		return "AdHocSubProcess"
 	case TypeCallActivity:
 		return "CallActivity"
 	case TypeEventSubProcessStart:
@@ -413,7 +417,7 @@ type UserTaskDetail struct {
 //   - SharePoint (JobType == SharePointJobType): Connector names the
 //     server-registered SharePoint provider; Site and List address the target list
 //     and Fields are the created item's column values (all literal-or-FEEL); the
-//     created item's JSON is written into ResultVar when set (ADR-0105).
+//     created item's JSON is written into ResultVar when set (ADR-0141).
 //   - BMC Remedy (JobType == RemedyJobType): Connector names the server-registered
 //     Remedy instance; RemedyForm and RemedyFields are the form and the entry's field
 //     values (literal-or-FEEL) an incident/entry is created with through the AR System
@@ -464,7 +468,7 @@ type ConnectorTaskDetail struct {
 	From        RestExpr
 	MailSubject RestExpr
 	Body        RestExpr
-	// CSV connector fields (JobType == CsvImportJobType, ADR-0090). CsvSource is the
+	// CSV connector fields (JobType == CsvImportJobType, ADR-0139). CsvSource is the
 	// interned name of the process variable holding the raw CSV text (-1 → the
 	// default "csvText"); CsvResult the variable the parsed rows are written to
 	// (-1 → "rows"); CsvDelimiter the field delimiter (-1 → ","); CsvHasHeader
@@ -477,7 +481,7 @@ type ConnectorTaskDetail struct {
 	CsvDelimiter int32
 	CsvHasHeader bool
 	CsvColumns   []int32
-	// SharePoint connector fields (JobType == SharePointJobType, ADR-0105). Connector
+	// SharePoint connector fields (JobType == SharePointJobType, ADR-0141). Connector
 	// (above) names the server-registered SharePoint provider (its Graph base and
 	// OAuth credential live server-side). Site and List address the target list (a
 	// site host/path or id, and a list name or id); Fields are the created item's
@@ -712,6 +716,18 @@ type ConditionalDetail struct {
 	Condition *expr.Compiled
 }
 
+// AdHocDetail is the per-ad-hoc-subprocess configuration the runtime needs (ADR-0138).
+// CompletionCondition is an optional boolean FEEL expression re-evaluated after each contained
+// activity completes; nil means the ad-hoc completes when its scope drains instead. When it
+// holds, CancelRemaining (the BPMN cancelRemainingInstances default, true) decides whether the
+// still-running contained activities are cancelled. Ordering is always the BPMN default,
+// parallel — every entry activity is activated at once; a model asking for sequential ordering
+// is refused at deploy until that driver lands, so no flag is carried for it.
+type AdHocDetail struct {
+	CompletionCondition *expr.Compiled
+	CancelRemaining     bool
+}
+
 // CompiledDataObject is one BPMN data object declared by a process: a typed,
 // named datum with an optional declared structure and initial data state. Unlike
 // a CompiledNode it is not a flow node — no token flows through it (ADR-0053) — so
@@ -813,6 +829,7 @@ type CompiledProcess struct {
 	errorEnds          []ErrorEndDetail     // error end events (ADR-0089)
 	escalations        []EscalationDetail   // shared by escalation throw and end events (ADR-0125)
 	conditionals       []ConditionalDetail  // conditional intermediate catch events (ADR-0137)
+	adHocs             []AdHocDetail        // ad-hoc subprocess containers (ADR-0138)
 	compensationThrows []CompensationDetail // shared by compensation throw and end events (ADR-0103)
 	timerStarts        []TimerStartDetail
 	dataObjects        []CompiledDataObject
@@ -826,6 +843,8 @@ type CompiledProcess struct {
 	instanceTtlNanos   int64        // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
 	isExecutable       bool         // bpmn:isExecutable — a non-executable process can't be started
 	elementIds         []int32      // interned source BPMN id per node id (-1 if unset)
+	elementDocs        []int32      // interned <bpmn:documentation> per node id (-1 if undocumented, ADR-0025)
+	documentation      int32        // interned <bpmn:documentation> of the process itself, -1 if none
 	lanes              []LaneDetail // organizational lanes (ADR-0121); a node's CompiledNode.Lane indexes this
 	strings            []string     // intern table (index → string), for debug/export
 }
@@ -1048,6 +1067,18 @@ func (p *CompiledProcess) Conditional(detail int32) *ConditionalDetail {
 // HasConditionalEvents reports whether the process contains any conditional event, so the
 // runtime only re-checks conditionals for instances that can have one (ADR-0137).
 func (p *CompiledProcess) HasConditionalEvents() bool { return p.hasConditional }
+
+// AdHoc returns the ad-hoc subprocess detail at the given table index (ADR-0138).
+func (p *CompiledProcess) AdHoc(detail int32) *AdHocDetail { return &p.adHocs[detail] }
+
+// AdHocEntries returns the element ids of an ad-hoc subprocess's entry activities — the
+// contained flow nodes with no incoming sequence flow, which the runtime activates when the
+// ad-hoc is entered (ADR-0138). Like ScopeStartEvents it is a slice into the shared topology
+// array (no allocation); empty for a non-ad-hoc node or an ad-hoc with no contained activity.
+func (p *CompiledProcess) AdHocEntries(id int32) []int32 {
+	n := &p.nodes[id]
+	return p.scopeStarts[n.ScopeStartStart : n.ScopeStartStart+n.ScopeStartCount]
+}
 
 // CompensationThrow returns the compensation-throw detail at the given table index —
 // shared by the compensation throw and end events (ADR-0103).
@@ -1331,3 +1362,20 @@ func (p *CompiledProcess) ElementBpmnId(id int32) string {
 	}
 	return p.Intern(p.elementIds[id])
 }
+
+// ElementDocumentation returns the prose an author wrote about a node — its
+// <bpmn:documentation> (ADR-0025) — or "" when the node is undocumented or the index is
+// out of range. It is design-time metadata the engine never reads: it changes no
+// execution, and is carried so a surface that shows an element to a person can read it
+// here rather than re-parsing the model. The Tasks app uses it as a user task's work
+// instruction.
+func (p *CompiledProcess) ElementDocumentation(id int32) string {
+	if id < 0 || int(id) >= len(p.elementDocs) {
+		return ""
+	}
+	return p.Intern(p.elementDocs[id])
+}
+
+// Documentation returns the process's own <bpmn:documentation> — the summary that
+// describes the process as a whole — or "" if it has none.
+func (p *CompiledProcess) Documentation() string { return p.Intern(p.documentation) }

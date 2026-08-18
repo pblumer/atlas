@@ -36,6 +36,47 @@ func compileCondition(id, raw string) (*expr.Compiled, error) {
 	return ce, nil
 }
 
+// registrar records each flow node's BPMN id against the compiled node it became,
+// and rejects an id that is empty or already taken.
+//
+// It keeps the first rejection rather than returning it, so registering a node is
+// one statement at each of the ~50 element kinds the scope walk handles instead of
+// three. The walk carries on afterwards on purpose: every *valid* id is still
+// recorded, so a later step that resolves an element through the table — a boundary
+// event finding its host — behaves exactly as it would have, and cannot raise a
+// second, misleading error caused by the first. Parse reports the kept error, in
+// preference to anything the rest of the walk raised.
+type registrar struct {
+	b   *Builder
+	ids map[string]int32
+	// docs is the model-wide element-id → <bpmn:documentation> index, so a node's prose
+	// is recorded with its id in one place rather than at each element kind (ADR-0025).
+	docs map[string]string
+	err  error
+}
+
+// node registers nodeID under its BPMN id.
+func (r *registrar) node(id string, nodeID int32) {
+	if id == "" {
+		r.reject(fmt.Errorf("compiler: element with empty id"))
+		return
+	}
+	if _, dup := r.ids[id]; dup {
+		r.reject(fmt.Errorf("compiler: duplicate element id %q", id))
+		return
+	}
+	r.ids[id] = nodeID
+	r.b.SetElementBpmnId(nodeID, id)                // retain for the live diagram overlay
+	r.b.SetElementDocumentation(nodeID, r.docs[id]) // the author's prose about this element (ADR-0025)
+}
+
+// reject keeps the first rejection; later ones are almost always its fallout.
+func (r *registrar) reject(err error) {
+	if r.err == nil {
+		r.err = err
+	}
+}
+
 // registerScope registers every flow node of one scope — the process root or an
 // embedded subprocess — into the flat node array and the shared id map, then
 // recurses into nested subprocesses under a pushed scope so their children carry
@@ -44,12 +85,12 @@ func compileCondition(id, raw string) (*expr.Compiled, error) {
 // process-scoped and are wired by the root pass in compileProcess.
 //
 // resolveMessage is threaded through so a message start/catch/throw inside a scope
-// resolves against the collaboration's messages exactly as at the root. register
-// records the string id → node id mapping (and rejects empty/duplicate ids).
+// resolves against the collaboration's messages exactly as at the root. reg owns
+// the string id → node id mapping and holds any rejection it made; the error
+// returned here is the walk's own, and Parse prefers reg's over it.
 func registerScope(
 	b *Builder,
-	ids map[string]int32,
-	register func(id string, nodeID int32) error,
+	reg *registrar,
 	resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error),
 	resolveSignal func(ownerId, signalRef string) (string, error),
 	resolveError func(ownerId, errorRef string) (string, error),
@@ -62,9 +103,7 @@ func registerScope(
 			if err != nil {
 				return err
 			}
-			if err := register(s.Id, b.AddMessageStartEvent(name, keyExpr, s.SingletonStart == "true")); err != nil {
-				return err
-			}
+			reg.node(s.Id, b.AddMessageStartEvent(name, keyExpr, s.SingletonStart == "true"))
 			continue
 		}
 		if s.Signal != nil {
@@ -72,9 +111,7 @@ func registerScope(
 			if err != nil {
 				return err
 			}
-			if err := register(s.Id, b.AddSignalStartEvent(name)); err != nil {
-				return err
-			}
+			reg.node(s.Id, b.AddSignalStartEvent(name))
 			continue
 		}
 		if s.Timer != nil {
@@ -85,14 +122,10 @@ func registerScope(
 			if schedule.IsFeel() && len(schedule.Expr.Inputs()) > 0 {
 				return fmt.Errorf("compiler: start event %q: a timer start event's FEEL schedule must be constant (reference no variables) — a start event has no instance to evaluate against (ADR-0056)", s.Id)
 			}
-			if err := register(s.Id, b.AddTimerStartEvent(schedule)); err != nil {
-				return err
-			}
+			reg.node(s.Id, b.AddTimerStartEvent(schedule))
 			continue
 		}
-		if err := register(s.Id, b.AddStartEvent()); err != nil {
-			return err
-		}
+		reg.node(s.Id, b.AddStartEvent())
 		// A none start event may carry a start form; the first one that does wins as
 		// the process's start form (ADR-0028). Only a root-scope start is a process
 		// entry, so a form on a subprocess start is ignored.
@@ -119,7 +152,8 @@ func registerScope(
 			if err != nil {
 				return err
 			}
-			return register(st.Id, id)
+			reg.node(st.Id, id)
+			return nil
 		}
 		// A service task (or send task) bearing a connector extension delegates to a
 		// server-registered connector via the job path rather than to an external
@@ -141,12 +175,13 @@ func registerScope(
 			if err != nil {
 				return err
 			}
-			return register(st.Id, id)
+			reg.node(st.Id, id)
+			return nil
 		}
 		// A service task bearing an <atlas:csvConnector> extension is a CSV-to-JSON
 		// connector task: the in-process CSV worker parses the named source variable's
 		// text against the model-authored layout into a rows collection via the job
-		// path (ADR-0090), rather than reading a columnConfig variable (ADR-0087). The
+		// path (ADR-0139), rather than reading a columnConfig variable (ADR-0087). The
 		// whole layout lives in the model; only the file arrives at runtime.
 		if cn := st.Csv; cn != nil {
 			retries, err := parseRetries(label, st.Id, firstNonBlank(cn.Retries, st.TaskDefinition.Retries))
@@ -156,7 +191,7 @@ func registerScope(
 			cols := splitCSVColumns(cn.Columns)
 			hasHeader := csvHasHeader(cn.HasHeader)
 			// A headerless file maps columns by position, so it must name them; a header
-			// file may omit them to derive the columns from the header row (ADR-0090).
+			// file may omit them to derive the columns from the header row (ADR-0139).
 			if !hasHeader && len(cols) == 0 {
 				return fmt.Errorf("compiler: csv connector task %q without a header row must list its columns", st.Id)
 			}
@@ -168,7 +203,8 @@ func registerScope(
 				Columns:   cols,
 				Retries:   retries,
 			})
-			return register(st.Id, id)
+			reg.node(st.Id, id)
+			return nil
 		}
 		if st.TaskDefinition.Type == "" {
 			// A send task reaching here has no message kind either (its messageRef/operationRef
@@ -179,7 +215,8 @@ func registerScope(
 			}
 			return fmt.Errorf("compiler: %s %q has no task definition type", label, st.Id)
 		}
-		return register(st.Id, plain(st.TaskDefinition.Type, retries))
+		reg.node(st.Id, plain(st.TaskDefinition.Type, retries))
+		return nil
 	}
 	for _, st := range c.ServiceTasks {
 		if err := registerJobWorkerTask(st, "service task", b.AddServiceTask); err != nil {
@@ -202,9 +239,7 @@ func registerScope(
 			if err != nil {
 				return err
 			}
-			if err := register(st.Id, b.AddMessageThrowEvent(name, keyExpr)); err != nil {
-				return err
-			}
+			reg.node(st.Id, b.AddMessageThrowEvent(name, keyExpr))
 			continue
 		}
 		if err := registerJobWorkerTask(st, "send task", b.AddSendTask); err != nil {
@@ -235,9 +270,7 @@ func registerScope(
 				return err
 			}
 			node := b.AddScriptJobTask(jobType, strings.ToLower(strings.TrimSpace(js.Language)), source, js.ResultVariable, retries)
-			if err := register(st.Id, node); err != nil {
-				return err
-			}
+			reg.node(st.Id, node)
 			continue
 		}
 		text := strings.TrimSpace(st.Script.Expression)
@@ -256,9 +289,7 @@ func registerScope(
 		if err != nil {
 			return fmt.Errorf("compiler: script task %q: %w", st.Id, err)
 		}
-		if err := register(st.Id, b.AddScriptTask(e, st.Script.ResultVariable)); err != nil {
-			return err
-		}
+		reg.node(st.Id, b.AddScriptTask(e, st.Script.ResultVariable))
 	}
 	for _, brt := range c.BusinessRuleTasks {
 		if brt.CalledDecision.DecisionId == "" {
@@ -292,9 +323,7 @@ func registerScope(
 		if err != nil {
 			return err
 		}
-		if err := register(brt.Id, node); err != nil {
-			return err
-		}
+		reg.node(brt.Id, node)
 	}
 	for _, ut := range c.UserTasks {
 		retries := int32(defaultRetries)
@@ -315,9 +344,7 @@ func registerScope(
 			}
 			dueDateNanos = nanos
 		}
-		if err := register(ut.Id, b.AddUserTask(ut.Name, ut.Assignment.Assignee, ut.Assignment.CandidateGroups, ut.Form.FormId, priority, dueDateNanos, retries)); err != nil {
-			return err
-		}
+		reg.node(ut.Id, b.AddUserTask(ut.Name, ut.Assignment.Assignee, ut.Assignment.CandidateGroups, ut.Form.FormId, priority, dueDateNanos, retries))
 	}
 	for _, ca := range c.CallActivities {
 		ce := ca.CalledElement
@@ -329,29 +356,19 @@ func registerScope(
 		// value propagates all variables in that direction.
 		propParent := ce.PropagateAllParentVariables != "false"
 		propChild := ce.PropagateAllChildVariables != "false"
-		if err := register(ca.Id, b.AddCallActivity(pid, decisionBinding(ce.BindingType), propParent, propChild)); err != nil {
-			return err
-		}
+		reg.node(ca.Id, b.AddCallActivity(pid, decisionBinding(ce.BindingType), propParent, propChild))
 	}
 	for _, g := range c.ExclusiveGateways {
-		if err := register(g.Id, b.AddExclusiveGateway()); err != nil {
-			return err
-		}
+		reg.node(g.Id, b.AddExclusiveGateway())
 	}
 	for _, g := range c.ParallelGateways {
-		if err := register(g.Id, b.AddParallelGateway()); err != nil {
-			return err
-		}
+		reg.node(g.Id, b.AddParallelGateway())
 	}
 	for _, g := range c.InclusiveGateways {
-		if err := register(g.Id, b.AddInclusiveGateway()); err != nil {
-			return err
-		}
+		reg.node(g.Id, b.AddInclusiveGateway())
 	}
 	for _, g := range c.EventBasedGateways {
-		if err := register(g.Id, b.AddEventBasedGateway()); err != nil {
-			return err
-		}
+		reg.node(g.Id, b.AddEventBasedGateway())
 	}
 	for _, ev := range c.IntermediateCatchEvents {
 		switch {
@@ -363,32 +380,24 @@ func registerScope(
 			if schedule.Repeats() {
 				return fmt.Errorf("compiler: intermediate catch event %q: timeCycle is not supported (a catch fires once); use timeDuration or timeDate", ev.Id)
 			}
-			if err := register(ev.Id, b.AddTimerCatchSchedule(schedule)); err != nil {
-				return err
-			}
+			reg.node(ev.Id, b.AddTimerCatchSchedule(schedule))
 		case ev.Message != nil:
 			name, keyExpr, err := resolveMessage(ev.Id, ev.Message.MessageRef)
 			if err != nil {
 				return err
 			}
-			if err := register(ev.Id, b.AddMessageCatchEvent(name, keyExpr)); err != nil {
-				return err
-			}
+			reg.node(ev.Id, b.AddMessageCatchEvent(name, keyExpr))
 		case ev.Signal != nil:
 			name, err := resolveSignal(ev.Id, ev.Signal.SignalRef)
 			if err != nil {
 				return err
 			}
-			if err := register(ev.Id, b.AddSignalCatchEvent(name)); err != nil {
-				return err
-			}
+			reg.node(ev.Id, b.AddSignalCatchEvent(name))
 		case ev.Link != nil:
 			// A link catch is the landing point of a link throw of the same name (ADR-0133).
 			// It compiles to a bare pass-through node; connectScope wires the synthetic edge
 			// from each matching throw and validates the name.
-			if err := register(ev.Id, b.AddLinkCatchEvent()); err != nil {
-				return err
-			}
+			reg.node(ev.Id, b.AddLinkCatchEvent())
 		case ev.Conditional != nil:
 			// A conditional catch waits until its boolean FEEL condition becomes true, then
 			// flows on (ADR-0137). It arms inert and is driven to Completing by a re-check on
@@ -397,9 +406,7 @@ func registerScope(
 			if err != nil {
 				return err
 			}
-			if err := register(ev.Id, b.AddConditionalCatchEvent(cond)); err != nil {
-				return err
-			}
+			reg.node(ev.Id, b.AddConditionalCatchEvent(cond))
 		default:
 			return fmt.Errorf("compiler: intermediate catch event %q: only timer, message, signal, link, and conditional events are supported yet", ev.Id)
 		}
@@ -410,18 +417,14 @@ func registerScope(
 			if err != nil {
 				return err
 			}
-			if err := register(ev.Id, b.AddSignalThrowEvent(name)); err != nil {
-				return err
-			}
+			reg.node(ev.Id, b.AddSignalThrowEvent(name))
 			continue
 		}
 		if ev.Compensation != nil {
 			// A compensation throw triggers compensation of completed activities in its
 			// scope (or of the one named by activityRef, resolved in a post-pass since the
 			// target may be registered later) — ADR-0103.
-			if err := register(ev.Id, b.AddCompensationThrowEvent()); err != nil {
-				return err
-			}
+			reg.node(ev.Id, b.AddCompensationThrowEvent())
 			continue
 		}
 		if ev.Escalation != nil {
@@ -431,17 +434,13 @@ func registerScope(
 			if err != nil {
 				return err
 			}
-			if err := register(ev.Id, b.AddEscalationThrowEvent(code)); err != nil {
-				return err
-			}
+			reg.node(ev.Id, b.AddEscalationThrowEvent(code))
 			continue
 		}
 		if ev.Link != nil {
 			// A link throw is a goto to the link catch of the same name (ADR-0133). It compiles
 			// to a bare pass-through node; connectScope adds the synthetic edge to its catch.
-			if err := register(ev.Id, b.AddLinkThrowEvent()); err != nil {
-				return err
-			}
+			reg.node(ev.Id, b.AddLinkThrowEvent())
 			continue
 		}
 		if ev.Message == nil {
@@ -451,23 +450,17 @@ func registerScope(
 		if err != nil {
 			return err
 		}
-		if err := register(ev.Id, b.AddMessageThrowEvent(name, keyExpr)); err != nil {
-			return err
-		}
+		reg.node(ev.Id, b.AddMessageThrowEvent(name, keyExpr))
 	}
 	// An undefined <task> and a <manualTask> have no execution semantics, so Atlas
 	// runs them as pass-throughs (the token flows straight on). This lets a model
 	// be drafted and its routing — e.g. a gateway's branches — tested before its
 	// tasks are given real implementations.
 	for _, t := range c.Tasks {
-		if err := register(t.Id, b.AddTask()); err != nil {
-			return err
-		}
+		reg.node(t.Id, b.AddTask())
 	}
 	for _, t := range c.ManualTasks {
-		if err := register(t.Id, b.AddTask()); err != nil {
-			return err
-		}
+		reg.node(t.Id, b.AddTask())
 	}
 	// A receive task waits for its referenced message to correlate, then continues — the
 	// message-catch semantics as an activity (ADR-0102). An empty or unknown messageRef is a
@@ -477,9 +470,7 @@ func registerScope(
 		if err != nil {
 			return err
 		}
-		if err := register(rt.Id, b.AddReceiveTask(name, keyExpr)); err != nil {
-			return err
-		}
+		reg.node(rt.Id, b.AddReceiveTask(name, keyExpr))
 	}
 	for _, e := range c.EndEvents {
 		// A terminate end event ends its enclosing flow scope at once (ADR-0116): it
@@ -487,9 +478,7 @@ func registerScope(
 		// root the instance ends, inside a subprocess that subprocess ends and the parent
 		// continues. It carries no detail.
 		if e.Terminate != nil {
-			if err := register(e.Id, b.AddTerminateEndEvent()); err != nil {
-				return err
-			}
+			reg.node(e.Id, b.AddTerminateEndEvent())
 			continue
 		}
 		// A message end event publishes its message then ends; a plain end event
@@ -499,9 +488,7 @@ func registerScope(
 			if err != nil {
 				return err
 			}
-			if err := register(e.Id, b.AddMessageEndEvent(name, keyExpr)); err != nil {
-				return err
-			}
+			reg.node(e.Id, b.AddMessageEndEvent(name, keyExpr))
 			continue
 		}
 		if e.Signal != nil {
@@ -509,9 +496,7 @@ func registerScope(
 			if err != nil {
 				return err
 			}
-			if err := register(e.Id, b.AddSignalEndEvent(name)); err != nil {
-				return err
-			}
+			reg.node(e.Id, b.AddSignalEndEvent(name))
 			continue
 		}
 		// An error end event throws its error code, ending its scope abnormally and
@@ -521,9 +506,7 @@ func registerScope(
 			if err != nil {
 				return err
 			}
-			if err := register(e.Id, b.AddErrorEndEvent(code)); err != nil {
-				return err
-			}
+			reg.node(e.Id, b.AddErrorEndEvent(code))
 			continue
 		}
 		// An escalation end event raises its escalation code, propagating up to the nearest
@@ -536,30 +519,57 @@ func registerScope(
 			if err != nil {
 				return err
 			}
-			if err := register(e.Id, b.AddEscalationEndEvent(code)); err != nil {
-				return err
-			}
+			reg.node(e.Id, b.AddEscalationEndEvent(code))
 			continue
 		}
 		// A compensation end event triggers compensation, then ends its scope (ADR-0103);
 		// its optional activityRef is resolved in the post-pass, like a compensation throw.
 		if e.Compensation != nil {
-			if err := register(e.Id, b.AddCompensationEndEvent()); err != nil {
-				return err
-			}
+			reg.node(e.Id, b.AddCompensationEndEvent())
 			continue
 		}
 		// A cancel end event cancels its enclosing transaction (ADR-0108); validation
 		// (checkTransactions) enforces that the enclosing scope really is a transaction.
 		if e.Cancel != nil {
-			if err := register(e.Id, b.AddCancelEndEvent()); err != nil {
-				return err
-			}
+			reg.node(e.Id, b.AddCancelEndEvent())
 			continue
 		}
-		if err := register(e.Id, b.AddEndEvent()); err != nil {
+		reg.node(e.Id, b.AddEndEvent())
+	}
+	// Ad-hoc subprocesses: a container scope like an embedded subprocess, but its contained
+	// activities are not sequenced from a start event — the runtime activates its entry
+	// activities (the contained nodes with no incoming flow) on entry (ADR-0138). Register the
+	// container first so its children can be scoped to it, compile its optional FEEL completion
+	// condition and its ordering / cancel-remaining flags, then recurse into its flow content.
+	for i := range c.AdHocSubProcesses {
+		ah := &c.AdHocSubProcesses[i]
+		// Sequential ordering runs one contained activity at a time. The engine implements
+		// the parallel form (ADR-0138); rather than silently running a Sequential ad-hoc as
+		// parallel — which would run every activity at once, not what the model says — it is
+		// refused at deploy until the sequential driver lands.
+		if ah.Ordering == "Sequential" {
+			return fmt.Errorf("compiler: ad-hoc subprocess %q uses ordering=\"Sequential\", which Atlas can't execute yet "+
+				"(only the default parallel ordering, where every entry activity is activated at once, is supported)", ah.Id)
+		}
+		d := AdHocDetail{
+			// BPMN defaults: cancel the remaining activities when the completion condition
+			// holds, and run the entry activities in parallel.
+			CancelRemaining: ah.CancelRemainingInstances != "false",
+		}
+		if cond := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(ah.CompletionCondition), "=")); cond != "" {
+			ce, err := expr.CompileAuto(cond)
+			if err != nil {
+				return fmt.Errorf("compiler: ad-hoc subprocess %q completion condition: %w", ah.Id, err)
+			}
+			d.CompletionCondition = ce
+		}
+		adhocID := b.AddAdHocSubProcess(d)
+		reg.node(ah.Id, adhocID)
+		b.PushScope(adhocID)
+		if err := registerScope(b, reg, resolveMessage, resolveSignal, resolveError, resolveEscalation, &ah.xmlFlowContent); err != nil {
 			return err
 		}
+		b.PopScope()
 	}
 	// Nested subprocesses: register the container node, then push its scope so its
 	// own flow nodes (registered by recursion) carry it as their FlowScope. The
@@ -568,16 +578,14 @@ func registerScope(
 	for i := range c.SubProcesses {
 		sub := &c.SubProcesses[i]
 		subID := b.AddSubProcess()
-		if err := register(sub.Id, subID); err != nil {
-			return err
-		}
+		reg.node(sub.Id, subID)
 		// A <transaction> is a subprocess with cancellation added; mark the node so the
 		// runtime and validation treat it as one (ADR-0108). It is never triggeredByEvent.
 		if sub.IsTransaction {
 			b.SetTransaction(subID)
 		}
 		b.PushScope(subID)
-		if err := registerScope(b, ids, register, resolveMessage, resolveSignal, resolveError, resolveEscalation, &sub.xmlFlowContent); err != nil {
+		if err := registerScope(b, reg, resolveMessage, resolveSignal, resolveError, resolveEscalation, &sub.xmlFlowContent); err != nil {
 			return err
 		}
 		b.PopScope()
@@ -591,7 +599,7 @@ func registerScope(
 			if st == nil {
 				return fmt.Errorf("compiler: event subprocess %q must have a start event with a message, timer, signal, error, escalation, or conditional event definition", sub.Id)
 			}
-			d := EventSubProcessDetail{StartNode: ids[st.Id], Interrupting: st.IsInterrupting != "false"}
+			d := EventSubProcessDetail{StartNode: reg.ids[st.Id], Interrupting: st.IsInterrupting != "false"}
 			switch {
 			case st.Message != nil:
 				name, keyExpr, err := resolveMessage(st.Id, st.Message.MessageRef)
@@ -651,7 +659,7 @@ func registerScope(
 	// An absent or "true" cancelActivity is interrupting (BPMN default); "false" is
 	// non-interrupting.
 	for _, ev := range c.BoundaryEvents {
-		host, ok := ids[ev.AttachedToRef]
+		host, ok := reg.ids[ev.AttachedToRef]
 		if !ok {
 			return fmt.Errorf("compiler: boundary event %q attaches to unknown activity %q", ev.Id, ev.AttachedToRef)
 		}
@@ -668,25 +676,19 @@ func registerScope(
 			if schedule.Repeats() && interrupting {
 				return fmt.Errorf("compiler: boundary event %q: an interrupting boundary timer does not support timeCycle (it fires once); use timeDuration or timeDate, or make the boundary non-interrupting", ev.Id)
 			}
-			if err := register(ev.Id, b.AddBoundaryTimerSchedule(host, interrupting, schedule)); err != nil {
-				return err
-			}
+			reg.node(ev.Id, b.AddBoundaryTimerSchedule(host, interrupting, schedule))
 		case ev.Message != nil:
 			name, keyExpr, err := resolveMessage(ev.Id, ev.Message.MessageRef)
 			if err != nil {
 				return err
 			}
-			if err := register(ev.Id, b.AddBoundaryMessageEvent(host, interrupting, name, keyExpr)); err != nil {
-				return err
-			}
+			reg.node(ev.Id, b.AddBoundaryMessageEvent(host, interrupting, name, keyExpr))
 		case ev.Signal != nil:
 			name, err := resolveSignal(ev.Id, ev.Signal.SignalRef)
 			if err != nil {
 				return err
 			}
-			if err := register(ev.Id, b.AddBoundarySignalEvent(host, interrupting, name)); err != nil {
-				return err
-			}
+			reg.node(ev.Id, b.AddBoundarySignalEvent(host, interrupting, name))
 		case ev.Error != nil:
 			// An error boundary catches an error propagating up to the host by code and is
 			// always interrupting — cancelActivity is ignored (ADR-0089).
@@ -694,9 +696,7 @@ func registerScope(
 			if err != nil {
 				return err
 			}
-			if err := register(ev.Id, b.AddBoundaryErrorEvent(host, code)); err != nil {
-				return err
-			}
+			reg.node(ev.Id, b.AddBoundaryErrorEvent(host, code))
 		case ev.Escalation != nil:
 			// An escalation boundary catches an escalation propagating up to the host by code
 			// (ADR-0125). Unlike an error boundary it honors cancelActivity — an interrupting
@@ -706,24 +706,18 @@ func registerScope(
 			if err != nil {
 				return err
 			}
-			if err := register(ev.Id, b.AddBoundaryEscalationEvent(host, code, interrupting)); err != nil {
-				return err
-			}
+			reg.node(ev.Id, b.AddBoundaryEscalationEvent(host, code, interrupting))
 		case ev.Compensation != nil:
 			// A compensation boundary is inert: it never arms, it only marks its host
 			// compensable and links to a handler (resolved from a BPMN <association> in the
 			// post-pass). cancelActivity is ignored — a compensation boundary never
 			// interrupts (ADR-0103).
-			if err := register(ev.Id, b.AddBoundaryCompensationEvent(host)); err != nil {
-				return err
-			}
+			reg.node(ev.Id, b.AddBoundaryCompensationEvent(host))
 		case ev.Cancel != nil:
 			// A cancel boundary catches its host transaction's cancellation and is always
 			// interrupting — cancelActivity is ignored (ADR-0108). validation (checkTransactions)
 			// enforces that the host really is a transaction.
-			if err := register(ev.Id, b.AddBoundaryCancelEvent(host)); err != nil {
-				return err
-			}
+			reg.node(ev.Id, b.AddBoundaryCancelEvent(host))
 		case ev.Conditional != nil:
 			// A conditional boundary fires while the host runs when its boolean FEEL condition
 			// becomes true (ADR-0137). It honors cancelActivity — interrupting tears the host
@@ -733,25 +727,24 @@ func registerScope(
 			if err != nil {
 				return err
 			}
-			if err := register(ev.Id, b.AddBoundaryConditionalEvent(host, cond, interrupting)); err != nil {
-				return err
-			}
+			reg.node(ev.Id, b.AddBoundaryConditionalEvent(host, cond, interrupting))
 		default:
 			return fmt.Errorf("compiler: boundary event %q: only timer, message, signal, error, escalation, conditional, compensation, and cancel boundary events are supported yet", ev.Id)
 		}
 	}
 	// Report an unsupported element with a clear message rather than letting it
 	// surface later as a confusing "unknown targetRef" when a flow points at it.
+	// (Ad-hoc subprocesses used to be listed here; they execute now — ADR-0138.)
 	for _, u := range []struct {
 		label string
 		nodes []xmlNode
 	}{
-		{"adHocSubProcess", c.AdHocSubProcesses},
+		{"complexGateway", c.ComplexGateways},
 	} {
 		if len(u.nodes) > 0 {
 			return fmt.Errorf("compiler: element %q is a <%s>, which Atlas can't execute yet "+
 				"(supported: start/end events, tasks (undefined/manual pass-through, service, script, "+
-				"business rule, user), embedded subprocesses, exclusive/parallel/inclusive gateways, and timer/message intermediate events)", u.nodes[0].Id, u.label)
+				"business rule, user), embedded and ad-hoc subprocesses, exclusive/parallel/inclusive gateways, and timer/message intermediate events)", u.nodes[0].Id, u.label)
 		}
 	}
 	return nil
@@ -771,6 +764,9 @@ func resolveCompensation(b *Builder, ids map[string]int32, root *xmlFlowContent)
 		scopes = append(scopes, fc)
 		for i := range fc.SubProcesses {
 			walk(&fc.SubProcesses[i].xmlFlowContent)
+		}
+		for i := range fc.AdHocSubProcesses {
+			walk(&fc.AdHocSubProcesses[i].xmlFlowContent)
 		}
 	}
 	walk(root)
@@ -941,6 +937,14 @@ func connectScope(b *Builder, ids map[string]int32, c *xmlFlowContent) error {
 	}
 	for i := range c.SubProcesses {
 		if err := connectScope(b, ids, &c.SubProcesses[i].xmlFlowContent); err != nil {
+			return err
+		}
+	}
+	// An ad-hoc subprocess's contained sequence flows are wired like any other scope's
+	// (ADR-0138) — contained activities may still be connected to each other, and a
+	// boundary event on one routes out normally.
+	for i := range c.AdHocSubProcesses {
+		if err := connectScope(b, ids, &c.AdHocSubProcesses[i].xmlFlowContent); err != nil {
 			return err
 		}
 	}

@@ -1,5 +1,5 @@
 // e2e for the process documentation collector and layout (api/web/process-doc.js,
-// ADR-0138).
+// ADR-0143).
 //
 // The whole point of the feature is that the prose modellers write *into* the
 // diagram — per-element <documentation> and the <textAnnotation> notes hanging

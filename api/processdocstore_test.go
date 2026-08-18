@@ -18,7 +18,7 @@ func newProcessDocs(t *testing.T) *processDocStore {
 
 // TestProcessDocStoreRoundTrip proves a saved version comes back with its
 // metadata and its PDF bytes intact — the two are stored as separate files, so
-// the round trip has to prove they stay bound to one id (ADR-0138).
+// the round trip has to prove they stay bound to one id (ADR-0143).
 func TestProcessDocStoreRoundTrip(t *testing.T) {
 	s := newProcessDocs(t)
 	pdf := []byte("%PDF-1.4\nfake\n%%EOF\n")
@@ -180,7 +180,7 @@ func TestProcessDocStoreLoadAllSkipsForeignFiles(t *testing.T) {
 
 // TestProcessDocStoreByShareToken proves a shared version is reachable by its
 // token and an unshared one is not, so the public route cannot serve a document
-// nobody published (ADR-0138 sharing is off by default).
+// nobody published (ADR-0143 sharing is off by default).
 func TestProcessDocStoreByShareToken(t *testing.T) {
 	s := newProcessDocs(t)
 	if err := s.save(processDoc{ID: "0a", ProcessID: "order", Version: 1, ShareToken: "beef"}, []byte("%PDF")); err != nil {

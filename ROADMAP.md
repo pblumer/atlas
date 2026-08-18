@@ -369,6 +369,22 @@ Making processes wait, react, and time out.
   false→true edge-triggering is a documented follow-up). Recovery-tested; authored in the Modeler (a
   FEEL condition field on the catch/boundary/event-subprocess start). The last unimplemented BPMN
   intermediate-event trigger, and the first that reacts to variable state.
+- ✅ **Ad-hoc subprocesses** ([ADR-0138](docs/adr/0138-adhoc-subprocesses.md)): the last major
+  **structural** BPMN element — a container whose contained activities are **not driven by sequence
+  flow**. Entering it activates every **entry activity** (a contained node with no incoming flow)
+  **at once**, each an independent token in the ad-hoc's scope; contained activities may still be
+  wired to each other, and a token then flows on inside the scope like anywhere else. It finishes
+  either when its scope **drains** — the ordinary embedded-subprocess rule — or, if it carries an
+  optional boolean **FEEL completion condition**, the first time that condition holds at the
+  checkpoint run **after each contained activity completes**: the still-running activities are then
+  cancelled (`cancelRemainingInstances`, the BPMN default) or, with `"false"`, left to finish. It is
+  built on the **existing scope machinery** (ADR-0074) and the multi-instance **completion-condition
+  eval + `terminateScope` cancel** (ADR-0077), so it adds **no value type, event, or recovery path** —
+  boundary events on it, interrupts, and recovery come for free (all recovery-tested). This is what
+  BPMN offers for **flexible / case-management** work: "do any of these, in whatever order, until
+  we're done." Authored in the Modeler (completion condition + cancel-remaining). **Sequential
+  ordering is refused at deploy** rather than silently run as parallel — a documented follow-up,
+  since a "which entries have started" cursor needs durable state.
 - ✅ Boundary events: timer and message, interrupting and non-interrupting,
   attached to waiting activities. An interrupting boundary cancels the host (and
   its job) and routes out its flow; a non-interrupting one spawns a parallel
@@ -523,8 +539,17 @@ What it takes to run this for real.
 - 🔲 Public API surface (deploy, create instance, publish message, complete job, queries)
 - 🔲 gRPC job-worker protocol (streaming pull, leases, fencing) — ADR-0007
 - 🔲 Worker SDK (Go first)
-- 🔲 Metrics (throughput, batch size, fsync latency, queue depth), structured logs, OTel traces
-- 🚧 Log compaction / snapshotting so recovery doesn't replay from genesis
+- 🚧 Metrics (throughput, batch size, fsync latency, queue depth), structured logs, OTel traces
+  ([ADR-0142](docs/adr/0142-prometheus-metrics.md), v0.2.0 programme E): a Prometheus
+  exposition at `/metrics` on Atlas's own registry. The **durability** metrics landed —
+  applied log position, checkpoints and the position/age of the newest that still
+  verifies, the last pass's outcome, WAL segments and bytes, exporter position and lag —
+  all collected at scrape time from durable state, so they cannot over-report and cost
+  the engine nothing. Remaining: engine hot-path counters (commands, events, batch size,
+  fsync duration) with the allocation benchmark that proves they are free; runtime gauges
+  once the counters behind them are O(1); job-protocol counters; recovery duration;
+  readiness distinct from liveness; then structured log event names and OTel traces.
+- ✅ Log compaction / snapshotting so recovery doesn't replay from genesis
   ([ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), v0.2.0
   programme D): the mechanism is complete. A checkpoint is a Pebble snapshot of the state
   store at a known applied log position plus a versioned, self-checksummed manifest,
@@ -533,11 +558,16 @@ What it takes to run this for real.
   (falling back to an older checkpoint or genesis on anything untrustworthy); and
   `CompactLog` deletes the segments that become redundant, gated on a fully verified
   checkpoint **and** every consumer watermark (ADR-0114 exporter, ADR-0115 retention).
-  Checkpointing is now **on in the server**: `atlas serve` snapshots every
+  Both halves now run in the server. `atlas serve` checkpoints every
   `--checkpoint-interval` (default 5m, keeping 3) and recovers through
   `<data-dir>/checkpoints` at startup, so restart time follows the cadence rather than
-  the log's length. Remaining: feed `CompactLog` the live export/retention watermarks so
-  segments are actually deleted, plus the operator status and controls.
+  the log's length; `--compact-wal` (opt-in, because deletion is irreversible) then
+  deletes the segments that checkpoint and every consumer watermark make redundant, so
+  the log's disk is bounded too. The whole-instance snapshot (ADR-0109, amended) carries
+  a verified checkpoint and installs it on restore, so backup/restore survives a
+  compacted log. `GET`/`POST /api/v1/checkpoints` expose the status — published
+  checkpoints and whether they still verify, the last pass, the WAL's footprint — and a
+  checkpoint-now control for a planned restart. **ADR-0131 is complete.**
 - 🔲 Exported-log stream for downstream analytics
 - 🔲 Operator tooling: list/inspect instances, incidents, jobs
 
@@ -735,8 +765,11 @@ panel only ever authors what the engine actually runs. The ADRs below are
 **Properties panel** ([ADR-0025](docs/adr/0025-full-properties-panel.md)) — extend
 the hand-written Details panel one vertical slice at a time:
 - 🔲 General: element id, name.
-- 🔲 Documentation: `<bpmn:documentation>` as passthrough (compiler ignores it,
-  codec preserves it).
+- ✅ Documentation: `<bpmn:documentation>` — a Documentation field beside every
+  element's name and id, on the process, each pool and the process it executes, and
+  the collaboration itself. The compiler carries it as metadata but never acts on it
+  ([ADR-0025](docs/adr/0025-full-properties-panel.md) amended), so the Tasks app can
+  show a **user task's** documentation to the assignee as the work instruction.
 - ✅ Input/output variable mappings (`zeebe:ioMapping`) — the properties-panel
   editor (input/output lists on service, script, and user tasks) landed with the
   Milestone 1 variable subsystem ([ADR-0068](docs/adr/0068-task-io-variable-mappings.md)).

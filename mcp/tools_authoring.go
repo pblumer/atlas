@@ -834,8 +834,8 @@ func authoringTools() []Tool {
 			Name: "atlas_get_task",
 			Description: "Fetch one open user task by its task key — the deep-link read primitive, so a task " +
 				"stays reachable outside a capped atlas_list_tasks page. Returns the task's process, element, " +
-				"assignee, form, priority, and due date. Refused with a not-found error if the key is not an open " +
-				"user task.",
+				"documentation (the modeler's work instruction for it, when the element carries one), assignee, " +
+				"form, priority, and due date. Refused with a not-found error if the key is not an open user task.",
 			InputSchema: keyArg("The task key (from atlas_list_tasks) to fetch."),
 			Handler: func(c *Client, args map[string]any) (string, error) {
 				key, err := argUint(args, "key")

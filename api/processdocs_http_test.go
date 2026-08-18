@@ -10,10 +10,10 @@ import (
 	"testing"
 )
 
-// documentedBPMN is a small process carrying exactly what a documentation export
+// docExportBPMN is a small process carrying exactly what a documentation export
 // is for: per-element <documentation> prose and a <textAnnotation> associated
 // with a task.
-const documentedBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+const docExportBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
                     xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
   <process id="reisebuchung" name="Reisebuchung" isExecutable="true">
     <documentation>Bucht eine Reise fuer einen Kunden.</documentation>
@@ -41,7 +41,7 @@ func docBody(t *testing.T, title string, pdf []byte) string {
 		"title":       title,
 		"note":        "Freigabe Q3",
 		"processName": "Reisebuchung",
-		"xml":         documentedBPMN,
+		"xml":         docExportBPMN,
 		"elements": []map[string]any{
 			{"id": "t", "type": "bpmn:ServiceTask", "name": "Flug buchen",
 				"documentation": "Ruft das Buchungssystem der Airline auf.",
@@ -74,7 +74,7 @@ func createDoc(t *testing.T, ts *httptest.Server, processID, title string) map[s
 
 // TestProcessDocumentationVersionsAreNumberedPerProcess proves the headline
 // promise: each export is a new, immutable, numbered version of that process, and
-// two processes number independently (ADR-0138).
+// two processes number independently (ADR-0143).
 func TestProcessDocumentationVersionsAreNumberedPerProcess(t *testing.T) {
 	ts := newTestServer(t)
 
@@ -181,7 +181,7 @@ func TestProcessDocumentationFetchAndDownload(t *testing.T) {
 // can tell which running version a document belongs to.
 func TestProcessDocumentationRecordsLiveDeployment(t *testing.T) {
 	ts := newTestServer(t)
-	if code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", documentedBPMN, "application/xml"); code != http.StatusOK {
+	if code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", docExportBPMN, "application/xml"); code != http.StatusOK {
 		t.Fatalf("deploy: %d %s", code, body)
 	}
 	created := createDoc(t, ts, "reisebuchung", "Reisebuchung")

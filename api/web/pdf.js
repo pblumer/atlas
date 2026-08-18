@@ -1,5 +1,5 @@
 // A small, dependency-free PDF writer for the process documentation export
-// (ADR-0138).
+// (ADR-0143).
 //
 // Atlas does not vendor a general PDF library for this. What a process document
 // needs is a narrow slice of PDF — pages, the two standard Helvetica faces,

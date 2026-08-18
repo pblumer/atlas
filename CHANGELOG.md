@@ -14,6 +14,41 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Every element takes a Documentation property, and a user task shows it to the person
+  doing the work** ([ADR-0025](docs/adr/0025-full-properties-panel.md) amended, reversing
+  its "the compiler ignores it" clause): the Modeler's Details panel now offers a
+  **Documentation** field on whatever is selected — every task, gateway, event, sequence
+  flow, data object and subprocess, plus the process itself (with nothing selected), each
+  pool and the process it executes, and the collaboration as a whole. It reads and writes
+  BPMN's own `<bpmn:documentation>` child, beside the element's name and id, so the
+  description of *why* a step exists lives on the step rather than in a separate document.
+  Emptying the field removes the element rather than leaving an empty one behind, and the
+  edit joins undo/redo like any other.
+
+  Documentation used to be invisible outside the model file, which meant only someone
+  opening the Modeler could read it. It is now read where the process is *run*, not just
+  where it is drawn:
+
+  - The **Tasks app** shows a user task's documentation as the **work instruction**, above
+    the form, where the assignee reads it before doing anything. For that the compiler
+    **carries** the prose — interned per element, `CompiledProcess.ElementDocumentation` /
+    `Documentation` — and `GET /api/v1/tasks` and `/api/v1/tasks/{key}` (and so
+    `atlas_list_tasks` / `atlas_get_task`) return it as `documentation`.
+  - The **Operations instance replay** shows it in the Details tab of the selected
+    element, and the process's own below the instance summary. That surface already
+    imports the diagram to draw it, so it reads the prose straight off the rendered model
+    — no request, and it covers **every** element. Including one the instance never
+    reached: selecting an un-taken branch used to fall back to the process panel, and now
+    names the element, says *Not reached in this instance*, and shows what it would have
+    done.
+
+  Documenting a process still never changes what it runs, and that is now tested rather
+  than assumed: a documented model compiles to *exactly* the graph its undocumented twin
+  compiles to, and the prose survives deploy, the served XML (including a
+  server-generated layout) and auto-layout. The processor reads none of it; nothing about
+  the event log, the record format or recovery changes, since the compiled process is
+  rebuilt from the stored XML.
+
 - **A runaway loop parks instead of spinning** ([ADR-0133](docs/adr/0133-standard-loop-activities.md)
   amended, reversing its "no hidden ceiling" decision): a standard loop that states no
   `loopMaximum` is bounded only by a FEEL condition, and a condition that is simply
@@ -99,6 +134,93 @@ _Changed_ / _Removed_ for each version.
   standard loop like a sequential multi-instance, badged ↻ and bounded by the modelled
   `loopMaximum`, and the Operations call-activity list labels a looping call activity
   **loop** rather than **multi-instance**.
+- **Prometheus metrics at `/metrics`** (v0.2.0 programme E,
+  [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 1): Atlas had no metrics at all —
+  everything observable was a JSON read of the present moment or a line in the log, so
+  "was the engine slow at 03:00 last night?" had no answer. The server now serves a
+  Prometheus exposition beside `/healthz`, on its **own registry** rather than the
+  process-wide default, so what an operator scrapes is what Atlas registered and not
+  whatever else in the binary happened to publish.
+
+  This first slice exports the **durability** metrics: the applied log position, the
+  checkpoints on disk and the position and age of the newest that **still verifies**, the
+  last checkpoint pass's timestamp, failure and segments removed, the WAL's segments and
+  bytes, and — only when an exporter is configured — its position and lag. Every one is
+  read from durable state *when Prometheus scrapes*, which is the design rather than an
+  implementation detail: there is no in-memory counter that could run ahead of the disk,
+  so a metric cannot claim more than is durable, and the engine's hot path is untouched.
+  A corrupt checkpoint is counted (it occupies disk) but never credited with a position
+  or an age — it shortens no restart, and saying otherwise would be the one lie that
+  matters.
+
+  Two rules ADR-0142 fixes and a test enforces: labels must be bounded by the code and
+  never by the data (no instance, job or correlation key, no process id or URL — a
+  per-definition breakdown is an API query, which can paginate, not a time series), and
+  every labeled handle is resolved once at construction so a future hot-path counter
+  touches a `Counter` and not a `*Vec`. `prometheus/client_golang` was already in the
+  module graph via Pebble, so this promotes an existing dependency rather than adding
+  one. `/metrics` is on by default and unauthenticated like `/healthz` — it carries only
+  aggregates — with `--metrics=false` to turn it off.
+- **Checkpoint and compaction status, and a checkpoint-now control** (v0.2.0 programme D,
+  [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 8 —
+  completing the ADR): everything checkpointing and compaction did was visible only in the
+  server log, so an operator could not answer the two questions that actually come up.
+  Now `GET /api/v1/checkpoints` reports what is configured, every published checkpoint
+  with **whether it still verifies**, the last pass's outcome, and the WAL's current
+  segment count and bytes — so "how much log would a restart replay?" and "why has my log
+  stopped shrinking?" have answers without shell access. A checkpoint whose state files no
+  longer match its manifest is flagged rather than listed as if healthy: that is exactly
+  the one that licenses no deletion and would not carry a restore.
+
+  `POST /api/v1/checkpoints` takes one on demand — and compacts, when compaction is on —
+  for an operator about to restart who would rather replay seconds of log than hours. The
+  pass runs on the checkpoint goroutine rather than beside it, so an on-demand pass and a
+  scheduled one serialize by construction and are the same code; with checkpointing
+  disabled the endpoint says so (409) instead of hanging or quietly doing nothing. Both
+  endpoints are admin-gated like backup/restore, and neither is an MCP tool: this is
+  storage housekeeping, not something an agent drives a scenario with.
+- **The WAL stops growing forever — compaction runs in the server** (v0.2.0 programme D,
+  [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 7):
+  `atlas serve --compact-wal` deletes the WAL segments a recovery checkpoint and every
+  consumer watermark make redundant, on the same tick that takes the checkpoint. Recovery
+  time was bounded in slice 5; the log's disk is bounded now.
+
+  It is **off by default**, unlike checkpointing and for the same reason history retention
+  (ADR-0115) is: this is the one step in the feature that destroys data, so an operator
+  turns it on deliberately. Everything about the wiring is fail-closed — a consumer
+  watermark that cannot be read, a whole-instance snapshot streaming the WAL, or an error
+  anywhere skips the pass, because the cost of skipping is disk and the cost of proceeding
+  is a segment recovery still needs. The cut itself is unchanged from slice 4: the newest
+  **fully verified** checkpoint at or below the store, floored by the exporter's
+  high-water mark (ADR-0114) and the retention safe position (ADR-0115).
+
+  Taking a whole-instance backup now holds compaction off for its duration, and raises
+  that hold *before* it picks the checkpoint it carries — so a pass that sees no backup is
+  one whose deletion the backup's later choice already accounts for. `--compact-wal`
+  without checkpointing warns and does nothing; the cut comes from a checkpoint.
+- **Whole-instance backup survives a compacted log** (v0.2.0 programme D,
+  [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), slice 6;
+  [ADR-0109](docs/adr/0109-full-instance-snapshot.md) amended): the whole-instance
+  snapshot carries `wal/` and not `state/` because `state == replay(WAL)` — which stops
+  being true the moment compaction deletes a WAL prefix. An archive taken then would have
+  restored an engine **silently missing** every instance whose events were below the cut.
+
+  The snapshot now also carries the **newest fully verified checkpoint** (exactly one,
+  picked before the WAL is read so the WAL copy is a superset of the suffix it needs), and
+  applying a restore installs it as the state store before recovery replays the rest. A
+  published checkpoint is itself a complete Pebble directory, so this is a copy rather
+  than a conversion, and the checkpoint is kept so recovery can still seed the highest log
+  position and key counter that a deleted prefix no longer supplies. An archive with no
+  checkpoint restores exactly as before.
+
+  Two rules keep it safe: a staged restore **always** carries a checkpoint entry — empty
+  when the archive had none — so applying it replaces the local checkpoint root and
+  nothing from the replaced log survives; and an archive whose checkpoints do not verify
+  is **refused** rather than degraded to a plain replay, which would be right for a whole
+  log and silently lossy for a compacted one. The cost is archive size: a snapshot now
+  grows by roughly the state store, against the 1 GiB restore-upload cap. Still no WAL
+  segment is deleted anywhere — that is the last ADR-0131 slice, and this was the last
+  consumer standing in its way.
 - **Bounded restart time — the server now takes recovery checkpoints** (v0.2.0
   programme D, [ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md),
   slice 5): the mechanism built by the previous slices is switched on. `atlas serve`

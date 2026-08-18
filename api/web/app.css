@@ -263,6 +263,11 @@ label.field { display: block; margin: 10px 0; }
    repainting them muted. */
 label.field > span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 
+/* A documentation field holds prose, not code — the panel's textareas default to a
+   monospace face for FEEL and scripts, which reads badly for a paragraph. Give the
+   documentation editor the UI font and let it grow vertically instead. */
+.doc-field textarea { font-family: inherit; resize: vertical; min-height: 56px; }
+
 /* Toast */
 #toast {
   position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
@@ -1027,6 +1032,12 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .ops-props dt { color: var(--muted); }
 .ops-props dd { margin: 0; color: var(--text); word-break: break-word; }
 .ops-props dt.hint { grid-column: 1 / -1; color: var(--muted); font-style: italic; margin-top: 8px; }
+/* The element's documentation in the replay's Details tab (ADR-0025) — what the modeler
+   wrote about this step, below its properties. Prose, so it keeps the author's line
+   breaks and reads at a comfortable measure rather than in the property grid. */
+.ops-doc { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.ops-doc h4 { margin: 0 0 6px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.ops-doc p { margin: 0; font-size: 13px; line-height: 1.55; white-space: pre-wrap; max-width: 70ch; }
 .ops-empty { color: var(--muted); font-size: 13px; padding: 8px 2px; }
 .ops-live { color: var(--accent); font-weight: 600; }
 
@@ -1180,7 +1191,7 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   pointer-events: auto; cursor: default;
 }
 
-/* ---------- Live collaboration sessions (ADR-0103) ---------- */
+/* ---------- Live collaboration sessions (ADR-0140) ---------- */
 /* A floating roster of co-editors, centered over the canvas, plus a lock badge on
    each element another participant is editing and a brief pulse on a remote edit. */
 .editor-body { position: relative; }
@@ -1399,6 +1410,16 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tasks-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .tasks-detail-head h1 { margin: 0; font-size: 20px; }
 .tasks-detail-actions { display: flex; gap: 8px; flex-shrink: 0; }
+/* The task's documentation — the modeler's instruction for the person doing the work
+   (ADR-0025). Prose, so it keeps the author's line breaks (pre-wrap) and the reading
+   font, and it sits between the title and the metadata rows where it is read first. */
+.tasks-doc {
+  margin: 0 0 20px; padding: 12px 14px; max-width: 70ch;
+  border-left: 3px solid var(--accent); border-radius: 0 var(--radius) var(--radius) 0;
+  background: var(--bg);
+}
+.tasks-doc h2 { margin: 0 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.tasks-doc p { margin: 0; white-space: pre-wrap; line-height: 1.55; }
 .tasks-fields { display: flex; flex-direction: column; gap: 10px; max-width: 520px; }
 .tasks-field { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 12px; }
 .tasks-field-label { font-size: 13px; }

@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-// Process documentation (ADR-0138): a BPMN process published as one structured
+// Process documentation (ADR-0143): a BPMN process published as one structured
 // PDF — the diagram plus every element's documentation text and the annotations
 // attached to it — so a reader outside Atlas can be handed the whole process.
 //

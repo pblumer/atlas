@@ -127,7 +127,7 @@ var managedConnectorKinds = []managedConnectorKind{
 	},
 	{
 		// A SharePoint connector task creates a list item through a server-registered
-		// Microsoft Graph provider (ADR-0105) and writes the created item's JSON into the
+		// Microsoft Graph provider (ADR-0141) and writes the created item's JSON into the
 		// task's result variable (HandleWithOutput). The Graph base and OAuth credential
 		// live in the managed connector store; the credential is resolved from the vault
 		// at build time (ADR-0041).
@@ -238,7 +238,7 @@ func validateRemedyConnector(p *createConnectorParams) string {
 
 // validateSharePointConnector validates a SharePoint create request: it defaults its
 // Graph API base (endpoint is an optional override) and needs a credentialsRef
-// naming a vault OAuth auth bundle (ADR-0105). Provider/Sender are mail-only.
+// naming a vault OAuth auth bundle (ADR-0141). Provider/Sender are mail-only.
 func validateSharePointConnector(p *createConnectorParams) string {
 	p.Provider, p.Sender = "", ""
 	if p.CredentialsRef == "" {

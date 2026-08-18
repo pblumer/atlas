@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// Error and edge paths of the ADR-0138 documentation layer: the handler branches
+// Error and edge paths of the ADR-0143 documentation layer: the handler branches
 // that fire only when the store cannot be read or written, the filename
 // sanitizer, and the counter rebuild. The happy paths live in
 // processdocs_http_test.go; these are the ones a successful export never reaches.

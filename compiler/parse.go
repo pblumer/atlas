@@ -1,6 +1,7 @@
 package compiler
 
 import (
+	"bytes"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -136,14 +137,14 @@ func restAuth(taskID string, c *xmlRestConnector) (RestAuth, error) {
 // (<zeebe:taskDefinition type="..." retries="..."/>), the de-facto standard for
 // executable BPMN.
 func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
-	defs, err := decodeDefinitions(r)
+	defs, docs, err := decodeDefinitions(r)
 	if err != nil {
 		return nil, err
 	}
 	if len(defs.Processes) == 0 {
 		return nil, fmt.Errorf("compiler: no <process> element in definitions")
 	}
-	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs))
+	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), docs)
 }
 
 // Deployable is one executable process compiled from a model, plus the display
@@ -165,7 +166,7 @@ type Deployable struct {
 // so a caller assigning keys sequentially advances its counter by len(result). It
 // errors only if the model has no executable process at all.
 func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) {
-	defs, err := decodeDefinitions(r)
+	defs, docs, err := decodeDefinitions(r)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +182,7 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 		if len(proc.StartEvents) == 0 {
 			continue // black-box pool: nothing to run
 		}
-		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig, resolveErr, resolveEsc, resolveOp)
+		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig, resolveErr, resolveEsc, resolveOp, docs)
 		if err != nil {
 			return nil, err
 		}
@@ -198,24 +199,99 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 // (possibly collaboration) XML it represents, so recovery recompiles exactly that
 // one under its original key.
 func ParseNamed(key uint64, version int32, r io.Reader, processId string) (*CompiledProcess, error) {
-	defs, err := decodeDefinitions(r)
+	defs, docs, err := decodeDefinitions(r)
 	if err != nil {
 		return nil, err
 	}
 	for _, proc := range defs.Processes {
 		if proc.Id == processId {
-			return compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs))
+			return compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), docs)
 		}
 	}
 	return nil, fmt.Errorf("compiler: no <process> with id %q in model", processId)
 }
 
-func decodeDefinitions(r io.Reader) (xmlDefinitions, error) {
-	var defs xmlDefinitions
-	if err := xml.NewDecoder(r).Decode(&defs); err != nil {
-		return xmlDefinitions{}, fmt.Errorf("compiler: parse BPMN: %w", err)
+// nsBPMN is the BPMN 2.0 semantic-model namespace. Only a <documentation> in it (or in
+// no namespace, as minimal hand-written models are written) is an element's own prose;
+// one in a foreign namespace belongs to whatever extension declared it.
+const nsBPMN = "http://www.omg.org/spec/BPMN/20100524/MODEL"
+
+// decodeDefinitions parses a model into the typed structs *and* indexes every element's
+// documentation by id (elementDocumentation). The model is read into memory first
+// because those are two passes over the same bytes; deploy-time only, and every caller
+// already holds the whole model in memory anyway.
+func decodeDefinitions(r io.Reader) (xmlDefinitions, map[string]string, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return xmlDefinitions{}, nil, fmt.Errorf("compiler: read BPMN: %w", err)
 	}
-	return defs, nil
+	var defs xmlDefinitions
+	if err := xml.Unmarshal(data, &defs); err != nil {
+		return xmlDefinitions{}, nil, fmt.Errorf("compiler: parse BPMN: %w", err)
+	}
+	return defs, elementDocumentation(data), nil
+}
+
+// elementDocumentation indexes each element's <bpmn:documentation> text by the id of the
+// element that carries it. It is a generic token walk rather than a field on each of the
+// ~25 element structs, because documentation is the one property *every* BPMN element may
+// carry (ADR-0025) — a walk covers the elements Atlas compiles today and the ones it will
+// compile tomorrow, with no per-type wiring to forget. An element with several
+// <documentation> children (BPMN allows one per text format) has them joined by a blank
+// line, in document order.
+//
+// It is best-effort: decodeDefinitions has already rejected malformed XML through the
+// strict decode, so a token error here just ends the walk with what was found so far
+// rather than failing a deploy over metadata.
+func elementDocumentation(data []byte) map[string]string {
+	docs := map[string]string{}
+	dec := xml.NewDecoder(bytes.NewReader(data))
+	var owners []string // the id of each open element ("" when it declares none)
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			return docs
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if t.Name.Local == "documentation" && (t.Name.Space == nsBPMN || t.Name.Space == "") {
+				var text string
+				if err := dec.DecodeElement(&text, &t); err != nil {
+					return docs
+				}
+				// DecodeElement consumed this element whole, including its end tag, so
+				// it never enters the owner stack: the owner is the element around it.
+				if len(owners) == 0 {
+					continue
+				}
+				owner := owners[len(owners)-1]
+				text = strings.TrimSpace(text)
+				if owner == "" || text == "" {
+					continue
+				}
+				if prev := docs[owner]; prev != "" {
+					text = prev + "\n\n" + text
+				}
+				docs[owner] = text
+				continue
+			}
+			owners = append(owners, attrValue(t, "id"))
+		case xml.EndElement:
+			if len(owners) > 0 {
+				owners = owners[:len(owners)-1]
+			}
+		}
+	}
+}
+
+// attrValue returns a start element's attribute by local name, or "" if it has none.
+func attrValue(t xml.StartElement, name string) string {
+	for _, a := range t.Attr {
+		if a.Name.Local == name {
+			return a.Value
+		}
+	}
+	return ""
 }
 
 // participantNames maps each referenced process id to its participant (pool) name.
@@ -365,9 +441,12 @@ func buildEscalationResolver(defs xmlDefinitions) func(ownerId, escalationRef st
 
 // compileProcess linearizes one <process> into an immutable CompiledProcess,
 // resolving message, signal, and error references through resolveMessage/resolveSignal/
-// resolveError (shared across a collaboration's processes).
-func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error), resolveError func(ownerId, errorRef string) (string, error), resolveEscalation func(ownerId, escalationRef string) (string, error), resolveOperation func(ownerId, operationRef string) (string, error)) (*CompiledProcess, error) {
+// resolveError (shared across a collaboration's processes). docs is the model-wide
+// element-id → <bpmn:documentation> index (elementDocumentation), likewise shared: it is
+// keyed by BPMN element id, and this process only ever looks up its own.
+func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error), resolveError func(ownerId, errorRef string) (string, error), resolveEscalation func(ownerId, escalationRef string) (string, error), resolveOperation func(ownerId, operationRef string) (string, error), docs map[string]string) (*CompiledProcess, error) {
 	b := NewBuilder(key, proc.Id, version)
+	b.SetDocumentation(docs[proc.Id]) // the process's own prose; "" interns to -1 (ADR-0025)
 	// isExecutable defaults to true when the attribute is absent (BPMN convention;
 	// Atlas has always run every deployed process), so an existing model without it
 	// keeps working. Only an explicit "false" marks a process non-executable.
@@ -388,17 +467,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		b.SetInstanceTtl(nanos)
 	}
 	ids := make(map[string]int32, len(proc.StartEvents)+len(proc.ServiceTasks)+len(proc.EndEvents))
-	register := func(id string, nodeID int32) error {
-		if id == "" {
-			return fmt.Errorf("compiler: element with empty id")
-		}
-		if _, dup := ids[id]; dup {
-			return fmt.Errorf("compiler: duplicate element id %q", id)
-		}
-		ids[id] = nodeID
-		b.SetElementBpmnId(nodeID, id) // retain for the live diagram overlay
-		return nil
-	}
+	reg := &registrar{b: b, ids: ids, docs: docs}
 
 	// Fold <transaction> subprocesses into SubProcesses (marked IsTransaction) before any
 	// scope walk, so a transaction is registered, wired, and validated as the subprocess it
@@ -413,8 +482,16 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	// Register every flow node — the process root and, recursively, each embedded
 	// subprocess scope — then require a root-scope start event before wiring flows.
 	// Data objects and I/O mappings below stay process-scoped (ADR-0074).
-	if err := registerScope(b, ids, register, resolveMessage, resolveSignal, resolveError, resolveEscalation, &proc.xmlFlowContent); err != nil {
-		return nil, err
+	walkErr := registerScope(b, reg, resolveMessage, resolveSignal, resolveError, resolveEscalation, &proc.xmlFlowContent)
+	// A rejected id is reported ahead of whatever else the walk found. Every step
+	// after registration resolves elements through ids, so an error raised once an
+	// id has been rejected is more likely a consequence of that rejection than an
+	// independent problem — and the author has to fix the id either way.
+	if reg.err != nil {
+		return nil, reg.err
+	}
+	if walkErr != nil {
+		return nil, walkErr
 	}
 
 	if !b.hasStartEvent() {
@@ -712,6 +789,13 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 				return err
 			}
 		}
+		// An ad-hoc subprocess is a scope too: recurse so its contained activities'
+		// I/O mappings are wired like any other scope's (ADR-0138).
+		for i := range c.AdHocSubProcesses {
+			if err := wireScopeIO(&c.AdHocSubProcesses[i].xmlFlowContent); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 	if err := wireScopeIO(&proc.xmlFlowContent); err != nil {
@@ -864,6 +948,13 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 				return err
 			}
 			if err := wireScopeMI(&sub.xmlFlowContent); err != nil {
+				return err
+			}
+		}
+		// Recurse into ad-hoc scopes so a contained activity's loop markers are wired
+		// exactly as in any other scope (ADR-0138).
+		for i := range c.AdHocSubProcesses {
+			if err := wireScopeMI(&c.AdHocSubProcesses[i].xmlFlowContent); err != nil {
 				return err
 			}
 		}
@@ -1041,9 +1132,16 @@ type xmlFlowContent struct {
 	// sub-elements. It parses into the very same shape, so xmlSendTask is an alias.
 	SendTasks []xmlSendTask `xml:"sendTask"`
 
-	// Captured only to give a clear "unsupported element" error (see registerScope); not
-	// executable yet.
-	AdHocSubProcesses []xmlNode `xml:"adHocSubProcess"`
+	// Captured only to give a clear "unsupported element" error (see registerScope) rather
+	// than a confusing "unknown targetRef" when a flow points at one; not executable.
+	ComplexGateways []xmlNode `xml:"complexGateway"`
+
+	// AdHocSubProcesses are <adHocSubProcess> containers: a scope whose contained activities
+	// run on demand, in any order, zero or more times, rather than being driven by sequence
+	// flow from a start event (ADR-0138). They share xmlSubProcess's shape (they nest the same
+	// flow content) plus the ad-hoc's own ordering / cancelRemainingInstances /
+	// <completionCondition>.
+	AdHocSubProcesses []xmlAdHocSubProcess `xml:"adHocSubProcess"`
 
 	// Associations are BPMN <association> artifacts declared in this scope. Atlas reads
 	// them only to link a compensation boundary event to its handler (ADR-0103).
@@ -1123,6 +1221,11 @@ func resolveLanes(b *Builder, ids map[string]int32, fc *xmlFlowContent) error {
 		}
 		for i := range c.SubProcesses {
 			if err := walkScope(&c.SubProcesses[i].xmlFlowContent); err != nil {
+				return err
+			}
+		}
+		for i := range c.AdHocSubProcesses {
+			if err := walkScope(&c.AdHocSubProcesses[i].xmlFlowContent); err != nil {
 				return err
 			}
 		}
@@ -1220,6 +1323,27 @@ type xmlSubProcess struct {
 	xmlFlowContent
 }
 
+// xmlAdHocSubProcess is an <adHocSubProcess>: a container whose contained activities are not
+// sequenced from a start event but run on demand, in any order, zero or more times (ADR-0138).
+// It nests the same flow content as an embedded subprocess — its own activities, sequence flows,
+// boundary events and nested subprocesses compile into the flat node array scoped by it — and
+// adds the ad-hoc's own configuration:
+//
+//   - Ordering "Sequential" runs one contained activity at a time; anything else (including the
+//     absent default) is parallel: every entry activity is activated at once.
+//   - CancelRemainingInstances "false" lets the still-running activities finish when the
+//     completion condition holds; absent/"true" is the BPMN default (cancel them).
+//   - CompletionCondition is an optional boolean FEEL expression re-evaluated after each
+//     contained activity completes; absent means the ad-hoc completes when its scope drains.
+type xmlAdHocSubProcess struct {
+	Id                       string `xml:"id,attr"`
+	Name                     string `xml:"name,attr"`
+	Ordering                 string `xml:"ordering,attr"`
+	CancelRemainingInstances string `xml:"cancelRemainingInstances,attr"`
+	CompletionCondition      string `xml:"completionCondition"`
+	xmlFlowContent
+}
+
 // foldTransactions merges each scope's <transaction> subprocesses into its SubProcesses
 // slice, marked IsTransaction, recursively down the scope tree. A transaction is
 // structurally an embedded subprocess with cancellation added (ADR-0108); folding it into
@@ -1235,6 +1359,9 @@ func foldTransactions(fc *xmlFlowContent) {
 	fc.Transactions = nil
 	for i := range fc.SubProcesses {
 		foldTransactions(&fc.SubProcesses[i].xmlFlowContent)
+	}
+	for i := range fc.AdHocSubProcesses {
+		foldTransactions(&fc.AdHocSubProcesses[i].xmlFlowContent)
 	}
 }
 
@@ -1262,6 +1389,11 @@ func resolveSendTaskOperations(fc *xmlFlowContent, resolveOperation func(ownerId
 	}
 	for i := range fc.SubProcesses {
 		if err := resolveSendTaskOperations(&fc.SubProcesses[i].xmlFlowContent, resolveOperation); err != nil {
+			return err
+		}
+	}
+	for i := range fc.AdHocSubProcesses {
+		if err := resolveSendTaskOperations(&fc.AdHocSubProcesses[i].xmlFlowContent, resolveOperation); err != nil {
 			return err
 		}
 	}
@@ -1627,10 +1759,10 @@ type xmlServiceTask struct {
 	// (ADR-0123). The pointer is nil when the <atlas:userConnector> extension is absent.
 	User *xmlUserConnector `xml:"extensionElements>userConnector"`
 	// Csv, when present, marks this service task a CSV-to-JSON connector task
-	// (ADR-0090). The pointer is nil when the <atlas:csvConnector> extension is absent.
+	// (ADR-0139). The pointer is nil when the <atlas:csvConnector> extension is absent.
 	Csv *xmlCsvConnector `xml:"extensionElements>csvConnector"`
 	// SharePoint, when present, marks this service task a SharePoint connector task
-	// (ADR-0105). The pointer is nil when the <atlas:sharepointConnector> extension is
+	// (ADR-0141). The pointer is nil when the <atlas:sharepointConnector> extension is
 	// absent.
 	SharePoint *xmlSharePointConnector `xml:"extensionElements>sharepointConnector"`
 	// Remedy, when present, marks this service task a BMC Remedy connector task
@@ -1749,7 +1881,7 @@ type xmlUserConnector struct {
 }
 
 // A CSV-to-JSON connector task's parameters, carried on a service task as an
-// <atlas:csvConnector source="..." delimiter="," .../> extension element (ADR-0090).
+// <atlas:csvConnector source="..." delimiter="," .../> extension element (ADR-0139).
 // source names the process variable holding the raw CSV text (default "csvText");
 // delimiter is the single-character field separator (default ","); hasHeader is
 // "true"/"false" (default true) — whether the first row is a header; columns is an
@@ -1768,7 +1900,7 @@ type xmlCsvConnector struct {
 // splitCSVColumns turns a csvConnector's comma-separated columns attribute into a
 // trimmed list of field names, dropping empty entries so a trailing comma or an
 // unset attribute yields no phantom column. An empty result means "derive the
-// columns from the header row" (ADR-0090).
+// columns from the header row" (ADR-0139).
 func splitCSVColumns(s string) []string {
 	if strings.TrimSpace(s) == "" {
 		return nil
@@ -1793,7 +1925,7 @@ func csvHasHeader(attr string) bool {
 
 // A SharePoint connector task's parameters, carried on a service task as an
 // <atlas:sharepointConnector connector="..." site="..." list="..."> extension
-// element (ADR-0105). connector names a server-registered SharePoint provider (its
+// element (ADR-0141). connector names a server-registered SharePoint provider (its
 // Graph base and OAuth credential live on the server, never in the model). site
 // (required) addresses the SharePoint site ("host,/sites/path" or a site id); list
 // (required) is the list name or id the item is created in; resultVariable, if set,

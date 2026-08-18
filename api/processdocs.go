@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// Process documentation export (ADR-0138). The document itself is produced in the
+// Process documentation export (ADR-0143). The document itself is produced in the
 // browser, where bpmn-js already holds the authoritative picture; this file is the
 // server half — it validates what arrives, numbers it as the next version of that
 // process, stores it durably, and serves it back, optionally through a revocable
@@ -113,7 +113,7 @@ type createProcessDocReq struct {
 }
 
 // handleCreateProcessDoc records the next documentation version of a process
-// (ADR-0138). Body: the produced PDF plus the element prose it describes.
+// (ADR-0143). Body: the produced PDF plus the element prose it describes.
 func (s *Server) handleCreateProcessDoc(w http.ResponseWriter, r *http.Request) {
 	processID := r.PathValue("processId")
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxProcessDocBytes))
@@ -360,7 +360,7 @@ func (s *Server) handleDeleteProcessDoc(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// --- public, unauthenticated endpoint (ADR-0138, ADR-0029's mechanism) ---
+// --- public, unauthenticated endpoint (ADR-0143, ADR-0029's mechanism) ---
 
 // handlePublicProcessDoc serves a shared version's PDF to a reader with no
 // account. An unknown, malformed, or revoked token is one indistinguishable 404:
