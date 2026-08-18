@@ -157,3 +157,103 @@ func TestParseNoLanes(t *testing.T) {
 		}
 	}
 }
+
+// TestParseLaneErrorsAtEveryNestingLevel checks that a bad flowNodeRef is caught
+// wherever the lane sits (ADR-0121). The lane walk recurses through childLaneSets
+// and into subprocess scopes, and an error found down there has to travel back
+// out — a laneSet nested two levels deep must not be able to smuggle a broken
+// reference into a deployable process.
+func TestParseLaneErrorsAtEveryNestingLevel(t *testing.T) {
+	tests := []struct {
+		name, laneXML string
+	}{
+		{
+			"nested childLaneSet",
+			`<laneSet id="ls">
+			   <lane id="l_outer" name="Outer">
+			     <childLaneSet id="cls"><lane id="l_inner" name="Inner"><flowNodeRef>ghost</flowNodeRef></lane></childLaneSet>
+			   </lane>
+			 </laneSet>`,
+		},
+		{
+			"laneSet inside a subprocess",
+			`<subProcess id="sub">
+			   <laneSet id="ls_sub"><lane id="l_sub" name="Sub"><flowNodeRef>ghost</flowNodeRef></lane></laneSet>
+			   <startEvent id="sub_s"/>
+			 </subProcess>`,
+		},
+		{
+			"laneSet inside an ad-hoc subprocess",
+			`<adHocSubProcess id="adhoc">
+			   <laneSet id="ls_ad"><lane id="l_ad" name="Ad"><flowNodeRef>ghost</flowNodeRef></lane></laneSet>
+			   <task id="ad_t"/>
+			 </adHocSubProcess>`,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			xml := `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+			  <process id="p" isExecutable="true">
+			    ` + tc.laneXML + `
+			    <startEvent id="s"/><endEvent id="e"/>
+			    <sequenceFlow id="f" sourceRef="s" targetRef="e"/>
+			  </process>
+			</definitions>`
+			_, err := Parse(1, 1, strings.NewReader(xml))
+			if err == nil {
+				t.Fatal("Parse: want an error for the unknown flow node, got nil")
+			}
+			if !strings.Contains(err.Error(), "ghost") {
+				t.Errorf("error %q should name the unresolved reference", err.Error())
+			}
+		})
+	}
+}
+
+// TestParseLaneUnnamedIsIdentifiedById checks the label a lane gets in an error
+// when it has no name. A model drawn without lane captions would otherwise report
+// an empty name, leaving nothing to search the XML for.
+func TestParseLaneUnnamedIsIdentifiedById(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="p" isExecutable="true">
+	    <laneSet id="ls"><lane id="l_nameless"><flowNodeRef>ghost</flowNodeRef></lane></laneSet>
+	    <startEvent id="s"/><endEvent id="e"/>
+	    <sequenceFlow id="f" sourceRef="s" targetRef="e"/>
+	  </process>
+	</definitions>`
+	_, err := Parse(1, 1, strings.NewReader(xml))
+	if err == nil {
+		t.Fatal("Parse: want an error, got nil")
+	}
+	if !strings.Contains(err.Error(), "l_nameless") {
+		t.Errorf("error %q should fall back to the lane's id", err.Error())
+	}
+}
+
+// TestParseLaneBlankFlowNodeRefIgnored checks that an empty <flowNodeRef/> is
+// skipped rather than treated as a reference to a node named "". Round-tripping a
+// model through a modeler can leave one behind, and it names nothing, so it
+// cannot be an unknown-node error.
+func TestParseLaneBlankFlowNodeRefIgnored(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="p" isExecutable="true">
+	    <laneSet id="ls">
+	      <lane id="l" name="L">
+	        <flowNodeRef></flowNodeRef>
+	        <flowNodeRef>   </flowNodeRef>
+	        <flowNodeRef>s</flowNodeRef>
+	      </lane>
+	    </laneSet>
+	    <startEvent id="s"/><endEvent id="e"/>
+	    <sequenceFlow id="f" sourceRef="s" targetRef="e"/>
+	  </process>
+	</definitions>`
+	cp, err := Parse(1, 1, strings.NewReader(xml))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	s := nodeByBpmnId(t, cp, "s")
+	if lane := cp.NodeLane(s.ElementId); lane < 0 || cp.Intern(cp.Lane(lane).Name) != "L" {
+		t.Errorf("start event lane = %d, want the real reference to still resolve to L", lane)
+	}
+}
