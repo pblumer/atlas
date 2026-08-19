@@ -318,6 +318,102 @@ test("the side panel folds away and the choice is remembered", async ({ page }) 
   await expect(page.locator(".dev-pane-snips")).toBeVisible();
 });
 
+test("the splitter resizes the side panel, and the width is remembered", async ({ page }) => {
+  await openFeel(page);
+  const width = () => page.locator(".dev-side").evaluate((el) => el.getBoundingClientRect().width);
+  const before = await width();
+
+  // Drag the divider left: the reference gets wider, the code narrower.
+  const box = await page.locator(".dev-split").boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x - 120, box.y + box.height / 2, { steps: 6 });
+  await page.mouse.up();
+  const after = await width();
+  expect(after).toBeGreaterThan(before + 80);
+
+  // It comes back that way next time.
+  await page.keyboard.press("Escape");
+  await openFeel(page);
+  expect(Math.round(await width())).toBe(Math.round(after));
+});
+
+test("the splitter cannot squeeze either pane away", async ({ page }) => {
+  await openFeel(page);
+  const box = await page.locator(".dev-split").boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  // Far past the right edge — the panel must stop at its floor, not vanish.
+  await page.mouse.move(box.x + 3000, box.y + box.height / 2, { steps: 4 });
+  await page.mouse.up();
+  expect(await page.locator(".dev-side").evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThanOrEqual(200);
+
+  // And far past the left edge — the code area must survive too.
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x - 3000, box.y + box.height / 2, { steps: 4 });
+  await page.mouse.up();
+  expect(await page.locator(".dev-main").evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(100);
+});
+
+test("the modal is dragged by its header and stays where it was put", async ({ page }) => {
+  await openFeel(page);
+  const at = () => page.locator(".dev-modal").evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return { x: Math.round(r.x), y: Math.round(r.y) };
+  });
+  const before = await at();
+
+  const head = await page.locator(".dev-head").boundingBox();
+  await page.mouse.move(head.x + head.width / 2, head.y + head.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(head.x + head.width / 2 - 60, head.y + head.height / 2 + 40, { steps: 6 });
+  await page.mouse.up();
+
+  const moved = await at();
+  expect(moved.x).toBeLessThan(before.x - 40);
+  expect(moved.y).toBeGreaterThan(before.y + 20);
+
+  // Remembered across openings…
+  await page.keyboard.press("Escape");
+  await openFeel(page);
+  expect(await at()).toEqual(moved);
+
+  // …until a double-click on the header puts it back.
+  await page.locator(".dev-head").dblclick();
+  expect(await at()).toEqual(before);
+});
+
+test("a drag that starts on a header button does not move the modal", async ({ page }) => {
+  await openFeel(page);
+  const at = () => page.locator(".dev-modal").evaluate((el) => Math.round(el.getBoundingClientRect().x));
+  const before = await at();
+  const btn = await page.locator(".dev-test-toggle").boundingBox();
+  await page.mouse.move(btn.x + btn.width / 2, btn.y + btn.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(btn.x - 80, btn.y + 30, { steps: 4 });
+  await page.mouse.up();
+  expect(await at()).toBe(before);
+});
+
+test("the modal cannot be dragged out of reach", async ({ page }) => {
+  await openFeel(page);
+  const head = await page.locator(".dev-head").boundingBox();
+  await page.mouse.move(head.x + head.width / 2, head.y + head.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(head.x - 4000, head.y + 4000, { steps: 5 });
+  await page.mouse.up();
+
+  const r = await page.locator(".dev-modal").evaluate((el) => {
+    const b = el.getBoundingClientRect();
+    return { right: b.right, top: b.top, bottom: b.bottom };
+  });
+  // A grabbable strip of the header is still on screen, in both axes.
+  expect(r.right).toBeGreaterThan(100);
+  expect(r.top).toBeLessThan(await page.evaluate(() => window.innerHeight));
+  expect(r.bottom).toBeGreaterThan(0);
+});
+
 test("the inline '</>' button opens the same view", async ({ page }) => {
   await page.locator("#feel-fld").hover();
   await page.locator(".code-editor .dev-open").click();

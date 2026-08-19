@@ -43,7 +43,11 @@ _Changed_ / _Removed_ for each version.
   `input`/`change` events, so the property panel stays the only writer and undo/redo is unchanged;
   <kbd>Esc</kbd> with unsaved changes asks before discarding. A field opts in with one
   `data-devlang` attribute, which is how every JSON editor in the app got it at once. The side panel
-  folds away to a rail when a wide script wants the whole modal, and remembers that choice. Each
+  folds away to a rail when a wide script wants the whole modal, and remembers that choice. The
+  window is arrangeable and stays that way: **drag the divider** between the code and the reference,
+  **drag the header** to move the modal, **resize it from its corner** — each remembered across
+  openings, with floors that keep neither pane squeezable away and always leave a grabbable strip of
+  the header on screen; a double-click on the header re-centres and forgets the arrangement. Each
   variable also shows **the value it actually holds in a real instance** of the process (newest
   deployed version, running instance first), and the Test panel's sample variables are prefilled from
   that same instance — so "what shape is this thing?" is answered by the running system instead of

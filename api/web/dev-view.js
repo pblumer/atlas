@@ -47,8 +47,22 @@ const SCOPES = [
   { key: "data", title: "Data objects", hint: "Per-instance data objects (ADR-0053)" },
 ];
 
-// Where the side panel's collapsed/expanded choice is remembered.
+// Where the modal's layout is remembered between openings: the side panel's
+// collapsed/expanded choice, its width, and the modal's own size and position. A
+// developer who has arranged the window for their screen should find it that way
+// next time. All three degrade to the default when localStorage is unavailable
+// (private mode, an embedded frame).
 const SIDE_KEY = "atlas.devview.side";
+const SIDEW_KEY = "atlas.devview.sidewidth";
+const GEOM_KEY = "atlas.devview.geometry";
+
+// Layout floors. The modal may be dragged and resized freely above these; below
+// them the panes stop being usable, and a window dragged fully off-screen cannot be
+// dragged back, so KEEP_ON_SCREEN of it always stays reachable.
+const MIN_SIDE = 200;
+const MIN_MODAL_W = 520;
+const MIN_MODAL_H = 320;
+const KEEP_ON_SCREEN = 120;
 
 let openView = null; // the single live Developer View, if any
 
@@ -243,7 +257,7 @@ export function openDevView(field, opts = {}) {
   overlay.className = "dev-overlay";
   overlay.innerHTML = `
     <div class="dev-modal" role="dialog" aria-modal="true" aria-label="Developer view">
-      <header class="dev-head">
+      <header class="dev-head" title="Drag to move · double-click to reset the layout">
         <span class="dev-badge">${esc(lang.label)}</span>
         <strong class="dev-title">${esc(opts.title || fieldTitle(field))}</strong>
         <span class="dev-dirty" hidden title="Unsaved changes">●</span>
@@ -268,6 +282,8 @@ export function openDevView(field, opts = {}) {
             <pre class="dev-run-detail" hidden></pre>
           </div>` : ""}
         </div>
+        <div class="dev-split" role="separator" aria-orientation="vertical"
+             aria-label="Resize the side panel" tabindex="0" title="Drag to resize · arrow keys also work"></div>
         <aside class="dev-side">
           <div class="dev-tabs" role="tablist">
             <button type="button" class="dev-side-toggle" title="Collapse the panel" aria-label="Collapse the panel" aria-expanded="true">›</button>
@@ -481,6 +497,10 @@ export function openDevView(field, opts = {}) {
   const sideToggle = q(".dev-side-toggle");
   const setSide = (collapsed, persist) => {
     side.classList.toggle("collapsed", collapsed);
+    // The rail has a width of its own, so an authored panel width steps aside while
+    // collapsed and is restored — not forgotten — when the panel comes back.
+    if (collapsed) side.style.flex = "";
+    else if (sideWidth) setSideWidth(sideWidth, false);
     sideToggle.textContent = collapsed ? "‹" : "›";
     sideToggle.title = collapsed ? "Expand the panel" : "Collapse the panel";
     sideToggle.setAttribute("aria-label", sideToggle.title);
@@ -488,6 +508,136 @@ export function openDevView(field, opts = {}) {
     if (persist) { try { localStorage.setItem(SIDE_KEY, collapsed ? "collapsed" : "open"); } catch { /* no storage */ } }
   };
   sideToggle.addEventListener("click", () => setSide(!side.classList.contains("collapsed"), true));
+
+  // ---------- layout: splitter, move, resize ----------
+  //
+  // The three gestures a window is expected to have. All of them are geometry only:
+  // nothing here touches the value being edited, so a botched drag can lose a
+  // position, never an edit.
+
+  const modal = q(".dev-modal");
+  const split = q(".dev-split");
+  const head = q(".dev-head");
+
+  const store = (key, value) => { try { localStorage.setItem(key, value); } catch { /* no storage */ } };
+  const read = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
+
+  // setSideWidth applies (and optionally remembers) the side panel's width, clamped
+  // so neither pane can be squeezed out of existence.
+  let sideWidth = 0; // the authored panel width, kept across a collapse/expand
+  function setSideWidth(px, persist) {
+    const max = Math.max(MIN_SIDE, modal.getBoundingClientRect().width - MIN_MODAL_W / 2);
+    const w = Math.round(Math.min(Math.max(px, MIN_SIDE), max));
+    sideWidth = w;
+    if (!side.classList.contains("collapsed")) side.style.flex = `0 0 ${w}px`;
+    if (persist) store(SIDEW_KEY, String(w));
+  }
+
+  // place pins the modal at an explicit position and size, taking it out of the
+  // overlay's centering grid. x/y are clamped so a strip of the header — the handle
+  // that drags it back — always stays on screen.
+  function place(x, y, w, h) {
+    const rect = modal.getBoundingClientRect();
+    const width = Math.max(w === undefined ? rect.width : w, MIN_MODAL_W);
+    const height = Math.max(h === undefined ? rect.height : h, MIN_MODAL_H);
+    modal.classList.add("placed");
+    modal.style.width = width + "px";
+    modal.style.height = height + "px";
+    modal.style.left = Math.round(Math.min(Math.max(x, KEEP_ON_SCREEN - width), window.innerWidth - KEEP_ON_SCREEN)) + "px";
+    modal.style.top = Math.round(Math.min(Math.max(y, 0), window.innerHeight - KEEP_ON_SCREEN)) + "px";
+  }
+
+  function saveGeometry() {
+    if (!modal.classList.contains("placed")) return;
+    const r = modal.getBoundingClientRect();
+    store(GEOM_KEY, JSON.stringify({ x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }));
+  }
+
+  // resetLayout returns the modal to the centered default and forgets the stored
+  // geometry — the way out of an arrangement that made sense on another screen.
+  function resetLayout() {
+    modal.classList.remove("placed");
+    modal.style.left = modal.style.top = modal.style.width = modal.style.height = "";
+    try { localStorage.removeItem(GEOM_KEY); } catch { /* no storage */ }
+  }
+
+  // drag is the shared pointer-drag loop: capture the pointer so the gesture
+  // survives leaving the element, run onMove with the delta, and finish once.
+  function drag(e, onMove, onDone) {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const target = e.currentTarget;
+    try { target.setPointerCapture(e.pointerId); } catch { /* not captureable */ }
+    const move = (ev) => onMove(ev.clientX - startX, ev.clientY - startY, ev);
+    const up = () => {
+      target.removeEventListener("pointermove", move);
+      target.removeEventListener("pointerup", up);
+      target.removeEventListener("pointercancel", up);
+      if (onDone) onDone();
+    };
+    target.addEventListener("pointermove", move);
+    target.addEventListener("pointerup", up);
+    target.addEventListener("pointercancel", up);
+  }
+
+  // The splitter: drag the divider, or nudge it with the arrow keys once focused.
+  split.addEventListener("pointerdown", (e) => {
+    const startWidth = side.getBoundingClientRect().width;
+    split.classList.add("dragging");
+    drag(e, (dx) => setSideWidth(startWidth - dx, false), () => {
+      split.classList.remove("dragging");
+      setSideWidth(side.getBoundingClientRect().width, true);
+    });
+  });
+  split.addEventListener("keydown", (e) => {
+    const step = e.key === "ArrowLeft" ? 16 : e.key === "ArrowRight" ? -16 : 0;
+    if (!step) return;
+    e.preventDefault();
+    setSideWidth(side.getBoundingClientRect().width + step, true);
+  });
+
+  // The header moves the whole modal — but only where it is chrome: a drag that
+  // starts on a button or the title text selection is not a move.
+  head.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("button, input, select, a")) return;
+    const r = modal.getBoundingClientRect();
+    place(r.left, r.top, r.width, r.height);
+    modal.classList.add("moving");
+    drag(e, (dx, dy) => place(r.left + dx, r.top + dy), () => {
+      modal.classList.remove("moving");
+      saveGeometry();
+    });
+  });
+  head.addEventListener("dblclick", (e) => {
+    if (e.target.closest("button, input, select, a")) return;
+    resetLayout();
+  });
+
+  // The modal itself carries a native resize grip (CSS `resize: both`). A native
+  // resize writes inline width/height, which is also how we tell a user's resize
+  // from the initial layout — so only the former is remembered.
+  if (typeof ResizeObserver === "function") {
+    let geomTimer = null;
+    new ResizeObserver(() => {
+      if (!modal.style.width) return; // the browser's own first layout, not a resize
+      if (!modal.classList.contains("placed")) {
+        const r = modal.getBoundingClientRect();
+        place(r.left, r.top, r.width, r.height);
+      }
+      clearTimeout(geomTimer);
+      geomTimer = setTimeout(saveGeometry, 200);
+    }).observe(modal);
+  }
+
+  // A window that shrank under a remembered geometry must not strand the modal
+  // off-screen.
+  const onWindowResize = () => {
+    if (!modal.classList.contains("placed")) return;
+    const r = modal.getBoundingClientRect();
+    place(r.left, r.top, Math.min(r.width, window.innerWidth), Math.min(r.height, window.innerHeight));
+  };
+  window.addEventListener("resize", onWindowResize);
 
   function showTab(next) {
     tab = next;
@@ -661,6 +811,7 @@ export function openDevView(field, opts = {}) {
     if (openView !== handle) return;
     openView = null;
     document.removeEventListener("keydown", onKeydown, true);
+    window.removeEventListener("resize", onWindowResize);
     try { if (editor) editor.destroy(); } catch { /* already gone */ }
     overlay.remove();
     if (restoreFocus && document.contains(restoreFocus)) {
@@ -718,6 +869,17 @@ export function openDevView(field, opts = {}) {
 
   const handle = { close, apply, el: overlay, editor };
   openView = handle;
+
+  // Restore the remembered layout: panel width first (it is independent of the
+  // modal's own box), then size and position, clamped into the window as it is now.
+  const storedWidth = Number(read(SIDEW_KEY));
+  if (storedWidth > 0) setSideWidth(storedWidth, false);
+  try {
+    const g = JSON.parse(read(GEOM_KEY) || "null");
+    if (g && g.w > 0 && g.h > 0) {
+      place(g.x, g.y, Math.min(g.w, window.innerWidth), Math.min(g.h, window.innerHeight));
+    }
+  } catch { /* a corrupt entry just means the default layout */ }
 
   let startCollapsed = false;
   try { startCollapsed = localStorage.getItem(SIDE_KEY) === "collapsed"; } catch { /* no storage */ }
