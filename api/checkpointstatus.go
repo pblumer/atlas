@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 
 	"github.com/pblumer/atlas/checkpoint"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // The operator surface for recovery checkpoints and WAL compaction (ADR-0131 slice 8).
@@ -79,7 +81,7 @@ func (s *Server) handleCheckpointStatus(w http.ResponseWriter, r *http.Request) 
 	resp.LastPass = s.lastPass
 	s.lastPassMu.Unlock()
 	resp.WALSegments, resp.WALBytes = s.walFootprint()
-	writeJSON(w, http.StatusOK, resp)
+	httpapi.JSON(w, http.StatusOK, resp)
 }
 
 // publishedCheckpoints describes every checkpoint currently on disk, newest last, each
@@ -140,7 +142,7 @@ func (s *Server) handleCheckpointNow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.checkpointRequests == nil {
-		writeError(w, http.StatusConflict,
+		httpapi.Error(w, http.StatusConflict,
 			"checkpointing is disabled on this server; start it with --checkpoint-interval to take one (ADR-0131)")
 		return
 	}
@@ -148,13 +150,13 @@ func (s *Server) handleCheckpointNow(w http.ResponseWriter, r *http.Request) {
 	select {
 	case s.checkpointRequests <- reply:
 	case <-s.quit:
-		writeError(w, http.StatusServiceUnavailable, "server is shutting down")
+		httpapi.Error(w, http.StatusServiceUnavailable, "server is shutting down")
 		return
 	}
 	select {
 	case res := <-reply:
-		writeJSON(w, http.StatusOK, res)
+		httpapi.JSON(w, http.StatusOK, res)
 	case <-s.quit:
-		writeError(w, http.StatusServiceUnavailable, "server is shutting down")
+		httpapi.Error(w, http.StatusServiceUnavailable, "server is shutting down")
 	}
 }

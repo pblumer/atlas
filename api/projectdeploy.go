@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/compiler"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // projectDeployResp reports the outcome of deploying a whole project: the BPMN
@@ -58,10 +60,10 @@ type bundleOutcome struct {
 // write renders the outcome onto the response.
 func (o bundleOutcome) write(w http.ResponseWriter) {
 	if o.errMsg != "" {
-		writeError(w, o.status, o.errMsg)
+		httpapi.Error(w, o.status, o.errMsg)
 		return
 	}
-	writeJSON(w, o.status, o.resp)
+	httpapi.JSON(w, o.status, o.resp)
 }
 
 // deployApplicationBundle runs the "validate all, then deploy all" bundle deploy

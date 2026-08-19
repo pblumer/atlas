@@ -11,6 +11,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/logging"
 )
 
@@ -40,7 +41,7 @@ func (s *Server) handleExportApplicationSource(w http.ResponseWriter, r *http.Re
 	id := r.PathValue("id")
 	proj, code, msg := s.authorizeProject(r, id, ScopeRoleViewer)
 	if code != 0 {
-		writeError(w, code, msg)
+		httpapi.Error(w, code, msg)
 		return
 	}
 	var (
@@ -49,7 +50,7 @@ func (s *Server) handleExportApplicationSource(w http.ResponseWriter, r *http.Re
 	)
 	s.do(func() { files, buildErr = s.exportApplicationSource(proj) })
 	if buildErr != nil {
-		writeError(w, http.StatusInternalServerError, "export source: "+buildErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "export source: "+buildErr.Error())
 		return
 	}
 	name := sourceArchiveName(files)
@@ -165,17 +166,17 @@ func (s *Server) handleImportApplicationSource(w http.ResponseWriter, r *http.Re
 
 	files, err := readSourceArchive(r.Body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	man, byPath, err := parseSourceTree(files)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	ownerID := ""
-	if p := principalFrom(r.Context()); p != nil {
+	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
 		ownerID = p.UserID
 	}
 	var (
@@ -200,10 +201,10 @@ func (s *Server) handleImportApplicationSource(w http.ResponseWriter, r *http.Re
 	var refusal sourceRefusal
 	switch {
 	case errors.As(applyErr, &refusal):
-		writeError(w, refusal.status, refusal.msg)
+		httpapi.Error(w, refusal.status, refusal.msg)
 	case applyErr != nil:
-		writeError(w, http.StatusInternalServerError, "import source: "+applyErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "import source: "+applyErr.Error())
 	default:
-		writeJSON(w, http.StatusOK, res)
+		httpapi.JSON(w, http.StatusOK, res)
 	}
 }

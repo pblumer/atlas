@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // maxFormBytes caps a stored form schema. form-js schemas are small JSON
@@ -42,7 +44,7 @@ func isJSONObject(raw json.RawMessage) bool {
 func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxFormBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var payload struct {
@@ -52,16 +54,16 @@ func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 		Schema    json.RawMessage `json:"schema"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 	id := strings.TrimSpace(payload.ID)
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "form id is required")
+		httpapi.Error(w, http.StatusBadRequest, "form id is required")
 		return
 	}
 	if !isJSONObject(payload.Schema) {
-		writeError(w, http.StatusBadRequest, "schema must be a JSON form-js document (an object)")
+		httpapi.Error(w, http.StatusBadRequest, "schema must be a JSON form-js document (an object)")
 		return
 	}
 	name := strings.TrimSpace(payload.Name)
@@ -90,13 +92,13 @@ func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case protected:
-		writeError(w, http.StatusForbidden, "protected system form cannot be modified")
+		httpapi.Error(w, http.StatusForbidden, "protected system form cannot be modified")
 		return
 	case saveErr != nil:
-		writeError(w, http.StatusInternalServerError, "save form: "+saveErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "save form: "+saveErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, metaOf(rec))
+	httpapi.JSON(w, http.StatusOK, metaOf(rec))
 }
 
 // handleListForms lists stored forms (metadata only), most recently saved first.
@@ -116,10 +118,10 @@ func (s *Server) handleListForms(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "list forms: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list forms: "+loadErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, list)
+	httpapi.JSON(w, http.StatusOK, list)
 }
 
 // handleGetForm returns one form including its schema — the Tasks app fetches it
@@ -134,13 +136,13 @@ func (s *Server) handleGetForm(w http.ResponseWriter, r *http.Request) {
 	s.do(func() { rec, ok, loadErr = s.forms.Get(id) })
 	switch {
 	case loadErr != nil:
-		writeError(w, http.StatusInternalServerError, "read form: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read form: "+loadErr.Error())
 	case !ok:
-		writeError(w, http.StatusNotFound, "no form with that id")
+		httpapi.Error(w, http.StatusNotFound, "no form with that id")
 	default:
 		// Schema is stored as a raw JSON string; emit it as JSON, not a
 		// re-escaped string, so the client gets the form-js document directly.
-		writeJSON(w, http.StatusOK, map[string]any{
+		httpapi.JSON(w, http.StatusOK, map[string]any{
 			"id":        rec.ID,
 			"name":      rec.Name,
 			"projectId": rec.ProjectID,
@@ -168,11 +170,11 @@ func (s *Server) handleDeleteForm(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case protected:
-		writeError(w, http.StatusForbidden, "protected system form cannot be deleted")
+		httpapi.Error(w, http.StatusForbidden, "protected system form cannot be deleted")
 		return
 	case delErr != nil:
-		writeError(w, http.StatusInternalServerError, "delete form: "+delErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "delete form: "+delErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"id": id})
+	httpapi.JSON(w, http.StatusOK, map[string]any{"id": id})
 }

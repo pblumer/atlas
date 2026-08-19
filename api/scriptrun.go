@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/pblumer/atlas/connector/script"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // maxScriptBytes caps a script-run request body (source + sample variables).
@@ -45,27 +47,27 @@ func (s *Server) handleRunScript(w http.ResponseWriter, r *http.Request) {
 	dec.UseNumber() // keep numbers exact for the interpreter
 	var req runScriptReq
 	if err := dec.Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid request body: "+err.Error())
 		return
 	}
 	lang, ok := script.LangByName(strings.ToLower(strings.TrimSpace(req.Language)))
 	if !ok {
-		writeJSON(w, http.StatusOK, runScriptResp{Error: "unsupported script language " + strconv.Quote(req.Language)})
+		httpapi.JSON(w, http.StatusOK, runScriptResp{Error: "unsupported script language " + strconv.Quote(req.Language)})
 		return
 	}
 	exec := s.scriptWorkers[lang.JobType]
 	if exec == nil {
-		writeJSON(w, http.StatusOK, runScriptResp{Error: lang.Name + " is not enabled on this server (start it with --" + lang.Name + ", and install its interpreter)"})
+		httpapi.JSON(w, http.StatusOK, runScriptResp{Error: lang.Name + " is not enabled on this server (start it with --" + lang.Name + ", and install its interpreter)"})
 		return
 	}
 	if strings.TrimSpace(req.Source) == "" {
-		writeJSON(w, http.StatusOK, runScriptResp{Error: "empty script"})
+		httpapi.JSON(w, http.StatusOK, runScriptResp{Error: "empty script"})
 		return
 	}
 	result, err := exec.Run(r.Context(), req.Source, req.Variables)
 	if err != nil {
-		writeJSON(w, http.StatusOK, runScriptResp{Error: err.Error()})
+		httpapi.JSON(w, http.StatusOK, runScriptResp{Error: err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, runScriptResp{OK: true, Result: result})
+	httpapi.JSON(w, http.StatusOK, runScriptResp{OK: true, Result: result})
 }

@@ -1,6 +1,10 @@
 package api
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/pblumer/atlas/api/httpapi"
+)
 
 // TestScopeRankOrders checks the role ladder owner > editor > viewer > none, so
 // "at least editor" comparisons in the handlers are correct (ADR-0071).
@@ -19,10 +23,10 @@ func TestScopeRankOrders(t *testing.T) {
 
 // TestEffectiveRole exercises every branch of the ADR-0071 access rule.
 func TestEffectiveRole(t *testing.T) {
-	owner := &Principal{UserID: "usr_owner", Roles: []string{RoleUser}}
-	member := &Principal{UserID: "usr_member", Roles: []string{RoleUser}}
-	stranger := &Principal{UserID: "usr_stranger", Roles: []string{RoleUser}}
-	admin := &Principal{UserID: "usr_admin", Roles: []string{RoleAdmin}}
+	owner := &httpapi.Principal{UserID: "usr_owner", Roles: []string{RoleUser}}
+	member := &httpapi.Principal{UserID: "usr_member", Roles: []string{RoleUser}}
+	stranger := &httpapi.Principal{UserID: "usr_stranger", Roles: []string{RoleUser}}
+	admin := &httpapi.Principal{UserID: "usr_admin", Roles: []string{RoleAdmin}}
 
 	memberOf := func(role string) project {
 		return project{
@@ -42,7 +46,7 @@ func TestEffectiveRole(t *testing.T) {
 	cases := []struct {
 		name        string
 		proj        project
-		pr          *Principal
+		pr          *httpapi.Principal
 		authEnabled bool
 		want        string
 	}{

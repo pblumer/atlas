@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"github.com/pblumer/atlas/dmn"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // decisionCatalogItem is one decision offered to the Modeler's business-rule-task
@@ -43,7 +45,7 @@ func (s *Server) handleListDecisions(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "list dmn references: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list dmn references: "+loadErr.Error())
 		return
 	}
 
@@ -99,7 +101,7 @@ func (s *Server) handleListDecisions(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpapi.JSON(w, http.StatusOK, out)
 }
 
 // handleDmnRefGraph returns one DMN reference's decision requirements graph for the
@@ -117,18 +119,18 @@ func (s *Server) handleDmnRefGraph(w http.ResponseWriter, r *http.Request) {
 	s.do(func() { rec, ok, getErr = s.dmnrefs.Get(id) })
 	switch {
 	case getErr != nil:
-		writeError(w, http.StatusInternalServerError, "read dmn reference: "+getErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read dmn reference: "+getErr.Error())
 		return
 	case !ok:
-		writeError(w, http.StatusNotFound, "no dmn reference with that id")
+		httpapi.Error(w, http.StatusNotFound, "no dmn reference with that id")
 		return
 	}
 	g, err := s.dmnValidator.Graph(r.Context(), rec.ModelRef)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "resolve dmn model: "+err.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "resolve dmn model: "+err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, g)
+	httpapi.JSON(w, http.StatusOK, g)
 }
 
 // handleDmnModelXML returns the raw DMN model XML for a model handle (modelRef), so
@@ -141,10 +143,10 @@ func (s *Server) handleDmnModelXML(w http.ResponseWriter, r *http.Request) {
 	xml, err := s.dmnResolver.Resolve(r.Context(), ref)
 	if err != nil {
 		if errors.Is(err, dmn.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "no DMN model matches the handle: "+ref)
+			httpapi.Error(w, http.StatusNotFound, "no DMN model matches the handle: "+ref)
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "resolve dmn model: "+err.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "resolve dmn model: "+err.Error())
 		return
 	}
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")

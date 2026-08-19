@@ -1,8 +1,6 @@
 package api
 
 import (
-	"net"
-	"net/http"
 	"sync"
 	"time"
 )
@@ -65,16 +63,4 @@ func (l *rateLimiter) allow(key string) bool {
 	}
 	l.tokens[key] = t - 1
 	return true
-}
-
-// clientIP extracts the client address key for rate limiting. It uses the TCP
-// remote address (RemoteAddr); behind a proxy the operator should map the real
-// client, but we do not trust X-Forwarded-* by default (spoofable), so the proxy
-// is the enforcement point there.
-func clientIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
 }

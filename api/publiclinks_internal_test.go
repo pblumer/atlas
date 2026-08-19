@@ -9,6 +9,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pblumer/atlas/api/httpapi"
+
+	"github.com/pblumer/atlas/api/token"
 )
 
 func newPublicLinks(t *testing.T) *publicLinkStore {
@@ -211,22 +215,22 @@ func TestIsHexToken(t *testing.T) {
 		"../etc": false,
 	}
 	for in, want := range cases {
-		if got := isHexToken(in); got != want {
-			t.Errorf("isHexToken(%q) = %v, want %v", in, got, want)
+		if got := token.IsHex(in); got != want {
+			t.Errorf("token.IsHex(%q) = %v, want %v", in, got, want)
 		}
 	}
 }
 
 func TestNewPublicTokenUnique(t *testing.T) {
-	a, err := newPublicToken()
+	a, err := token.New()
 	if err != nil {
 		t.Fatalf("newPublicToken: %v", err)
 	}
-	b, err := newPublicToken()
+	b, err := token.New()
 	if err != nil {
 		t.Fatalf("newPublicToken: %v", err)
 	}
-	if a == b || !isHexToken(a) || len(a) != 64 {
+	if a == b || !token.IsHex(a) || len(a) != 64 {
 		t.Fatalf("tokens not unique 64-char hex: %q %q", a, b)
 	}
 }
@@ -286,12 +290,12 @@ func TestRateLimiterEviction(t *testing.T) {
 func TestClientIP(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	r.RemoteAddr = "203.0.113.7:54321"
-	if got := clientIP(r); got != "203.0.113.7" {
+	if got := httpapi.ClientIP(r); got != "203.0.113.7" {
 		t.Errorf("clientIP host = %q, want 203.0.113.7", got)
 	}
 	// A RemoteAddr without a port falls back to the whole string.
 	r.RemoteAddr = "unixsocket"
-	if got := clientIP(r); got != "unixsocket" {
+	if got := httpapi.ClientIP(r); got != "unixsocket" {
 		t.Errorf("clientIP fallback = %q, want unixsocket", got)
 	}
 }

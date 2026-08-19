@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // Application releases (ADR-0128 Phase 2). Publishing an application runs the
@@ -54,14 +56,14 @@ func (s *Server) handlePublishApplication(w http.ResponseWriter, r *http.Request
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	// An absent or empty body is a plain publish with no note; only malformed JSON
 	// is an error, so `POST .../publish` with no body keeps working.
 	if len(strings.TrimSpace(string(body))) > 0 {
 		if err := json.Unmarshal(body, &payload); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+			httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 			return
 		}
 	}
@@ -77,10 +79,10 @@ func (s *Server) handlePublishApplication(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		// The definitions are deployed and durable; only the release manifest failed.
 		// Report it rather than pretending the publish did not happen.
-		writeError(w, http.StatusInternalServerError, "record release: "+err.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "record release: "+err.Error())
 		return
 	}
-	writeJSON(w, out.status, publishResp{projectDeployResp: out.resp, Release: &rel})
+	httpapi.JSON(w, out.status, publishResp{projectDeployResp: out.resp, Release: &rel})
 }
 
 // mintRelease records the release for a successful bundle deploy: the next version
@@ -104,7 +106,7 @@ func (s *Server) mintRelease(r *http.Request, out bundleOutcome, note string) (a
 		Note:          note,
 		Members:       members,
 	}
-	if p := principalFrom(r.Context()); p != nil {
+	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
 		rec.PublishedBy = p.UserID
 	}
 	var saveErr error
@@ -122,7 +124,7 @@ func (s *Server) mintRelease(r *http.Request, out bundleOutcome, note string) (a
 func (s *Server) handleListReleases(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if _, code, msg := s.authorizeProject(r, id, ScopeRoleViewer); code != 0 {
-		writeError(w, code, msg)
+		httpapi.Error(w, code, msg)
 		return
 	}
 	var (
@@ -131,10 +133,10 @@ func (s *Server) handleListReleases(w http.ResponseWriter, r *http.Request) {
 	)
 	s.do(func() { out, loadErr = s.releases.forApplication(id) })
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "list releases: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list releases: "+loadErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpapi.JSON(w, http.StatusOK, out)
 }
 
 // applicationDeploymentsResp is the per-application live view: which of this
@@ -195,7 +197,7 @@ func (s *Server) handleApplicationDeployments(w http.ResponseWriter, r *http.Req
 	id := r.PathValue("id")
 	proj, code, msg := s.authorizeProject(r, id, ScopeRoleViewer)
 	if code != 0 {
-		writeError(w, code, msg)
+		httpapi.Error(w, code, msg)
 		return
 	}
 
@@ -248,8 +250,8 @@ func (s *Server) handleApplicationDeployments(w http.ResponseWriter, r *http.Req
 		}
 	})
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "read releases: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read releases: "+loadErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpapi.JSON(w, http.StatusOK, out)
 }

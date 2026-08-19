@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pblumer/atlas/api/runloop"
 	"github.com/pblumer/atlas/api/vault"
 	"github.com/pblumer/atlas/connector/clio"
 )
@@ -523,7 +524,9 @@ func TestSetSecretBodyReadError(t *testing.T) {
 func TestSetSecretServerClosing(t *testing.T) {
 	q := make(chan struct{})
 	close(q)
-	srv := &Server{quit: q, vault: newTestVault(t)}
+	// A closing server: the run loop is built but never run, and quit is already
+	// closed, so do() takes its quit arm and the closure never produces metadata.
+	srv := &Server{quit: q, runLoop: runloop.New(q), vault: newTestVault(t)}
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/secrets/k", strings.NewReader(`{"value":"v"}`))
 	req.SetPathValue("name", "k")
 	rec := httptest.NewRecorder()

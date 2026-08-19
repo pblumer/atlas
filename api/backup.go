@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/logging"
 )
 
@@ -120,7 +121,7 @@ func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	gz, err := gzip.NewReader(r.Body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "body is not a gzip stream")
+		httpapi.Error(w, http.StatusBadRequest, "body is not a gzip stream")
 		return
 	}
 	defer gz.Close()
@@ -133,12 +134,12 @@ func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "corrupt tar archive")
+			httpapi.Error(w, http.StatusBadRequest, "corrupt tar archive")
 			return
 		}
 		entries++
 		if entries > maxRestoreEntries {
-			writeError(w, http.StatusBadRequest, "archive has too many entries")
+			httpapi.Error(w, http.StatusBadRequest, "archive has too many entries")
 			return
 		}
 		if hdr.Typeflag != tar.TypeReg {
@@ -146,19 +147,19 @@ func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
 		}
 		dest, ok, err := s.restoreDest(hdr.Name)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+			httpapi.Error(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		if !ok {
 			continue // outside the allowlist — silently ignored
 		}
 		if err := writeRestoredFile(dest, tr); err != nil {
-			writeError(w, http.StatusInternalServerError, "restore failed: "+err.Error())
+			httpapi.Error(w, http.StatusInternalServerError, "restore failed: "+err.Error())
 			return
 		}
 		restored++
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	httpapi.JSON(w, http.StatusOK, map[string]any{
 		"restored":        restored,
 		"restartRequired": true,
 		"note":            "Design-time artifacts (drafts, projects, forms, …) are live immediately; deployed processes take effect after a server restart.",

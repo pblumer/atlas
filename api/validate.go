@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	"github.com/pblumer/atlas/compiler"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // validateResp is the dry-run validation result behind ADR-0026's Problems
@@ -29,16 +31,16 @@ type validateResp struct {
 func (s *Server) handleValidate(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	if len(body) == 0 {
-		writeError(w, http.StatusBadRequest, "empty request body: expected BPMN XML")
+		httpapi.Error(w, http.StatusBadRequest, "empty request body: expected BPMN XML")
 		return
 	}
 	problems, err := compiler.ValidateModel(bytes.NewReader(body))
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "validate: "+err.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "validate: "+err.Error())
 		return
 	}
 	// A nil slice would serialize as JSON null; the panel expects an array, so
@@ -46,5 +48,5 @@ func (s *Server) handleValidate(w http.ResponseWriter, r *http.Request) {
 	if problems == nil {
 		problems = []compiler.Problem{}
 	}
-	writeJSON(w, http.StatusOK, validateResp{Version: Version, Problems: problems})
+	httpapi.JSON(w, http.StatusOK, validateResp{Version: Version, Problems: problems})
 }

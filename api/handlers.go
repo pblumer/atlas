@@ -18,6 +18,8 @@ import (
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // maxXMLBytes caps a deployment body. BPMN models are small; this is a sanity
@@ -339,12 +341,12 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 	if s.logs != nil {
 		lines = s.logs.Lines()
 	}
-	writeJSON(w, http.StatusOK, logsResp{Lines: lines})
+	httpapi.JSON(w, http.StatusOK, logsResp{Lines: lines})
 }
 
 func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
 	b := buildInfo()
-	writeJSON(w, http.StatusOK, infoResp{
+	httpapi.JSON(w, http.StatusOK, infoResp{
 		Product:   "Atlas",
 		Version:   Version,
 		Docs:      s.docsEnabled,
@@ -376,20 +378,20 @@ type validateFeelResp struct {
 func (s *Server) handleValidateFeel(w http.ResponseWriter, r *http.Request) {
 	var req validateFeelReq
 	if err := json.NewDecoder(io.LimitReader(r.Body, maxFeelBytes)).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid request body: "+err.Error())
 		return
 	}
 	// A blank expression is a no-op success: an empty field simply carries no
 	// condition/script, which the editor treats as unset rather than an error.
 	if strings.TrimSpace(req.Expression) == "" {
-		writeJSON(w, http.StatusOK, validateFeelResp{OK: true})
+		httpapi.JSON(w, http.StatusOK, validateFeelResp{OK: true})
 		return
 	}
 	if _, err := expr.CompileAuto(req.Expression); err != nil {
-		writeJSON(w, http.StatusOK, validateFeelResp{OK: false, Error: err.Error()})
+		httpapi.JSON(w, http.StatusOK, validateFeelResp{OK: false, Error: err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, validateFeelResp{OK: true})
+	httpapi.JSON(w, http.StatusOK, validateFeelResp{OK: true})
 }
 
 type evalFeelReq struct {
@@ -416,26 +418,26 @@ func (s *Server) handleEvaluateFeel(w http.ResponseWriter, r *http.Request) {
 	dec.UseNumber() // keep numbers exact (json.Number) for FEEL's decimals
 	var req evalFeelReq
 	if err := dec.Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid request body: "+err.Error())
 		return
 	}
 	if strings.TrimSpace(req.Expression) == "" {
-		writeJSON(w, http.StatusOK, evalFeelResp{OK: false, Error: "empty expression"})
+		httpapi.JSON(w, http.StatusOK, evalFeelResp{OK: false, Error: "empty expression"})
 		return
 	}
 	compiled, err := expr.CompileAuto(req.Expression)
 	if err != nil {
-		writeJSON(w, http.StatusOK, evalFeelResp{OK: false, Error: err.Error()})
+		httpapi.JSON(w, http.StatusOK, evalFeelResp{OK: false, Error: err.Error()})
 		return
 	}
 	bindings, err := feelBindings(req.Variables)
 	if err != nil {
-		writeJSON(w, http.StatusOK, evalFeelResp{OK: false, Error: err.Error()})
+		httpapi.JSON(w, http.StatusOK, evalFeelResp{OK: false, Error: err.Error()})
 		return
 	}
 	v, err := compiled.Eval(bindings)
 	if err != nil {
-		writeJSON(w, http.StatusOK, evalFeelResp{OK: false, Error: err.Error()})
+		httpapi.JSON(w, http.StatusOK, evalFeelResp{OK: false, Error: err.Error()})
 		return
 	}
 	kind, b, text := expr.Classify(v)
@@ -446,7 +448,7 @@ func (s *Server) handleEvaluateFeel(w http.ResponseWriter, r *http.Request) {
 	case expr.KindNull:
 		result = "null"
 	}
-	writeJSON(w, http.StatusOK, evalFeelResp{OK: true, Result: result, Kind: feelKindName(kind)})
+	httpapi.JSON(w, http.StatusOK, evalFeelResp{OK: true, Result: result, Kind: feelKindName(kind)})
 }
 
 // feelBindings converts the JSON sample variables into FEEL values. Numbers keep
@@ -499,11 +501,11 @@ func feelKindName(k expr.ValueKind) string {
 func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	if len(body) == 0 {
-		writeError(w, http.StatusBadRequest, "empty request body: expected BPMN XML")
+		httpapi.Error(w, http.StatusBadRequest, "empty request body: expected BPMN XML")
 		return
 	}
 
@@ -518,16 +520,16 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	)
 	s.do(func() { refs, loadErr = s.dmnrefs.LoadAll() })
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "list dmn references: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list dmn references: "+loadErr.Error())
 		return
 	}
 	dmnXMLs, refuse, dmnErr := s.dmnForDeployBody(r.Context(), body, refs)
 	if dmnErr != nil {
-		writeError(w, http.StatusInternalServerError, "resolve dmn model: "+dmnErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "resolve dmn model: "+dmnErr.Error())
 		return
 	}
 	if refuse != "" {
-		writeError(w, http.StatusConflict, refuse)
+		httpapi.Error(w, http.StatusConflict, refuse)
 		return
 	}
 
@@ -577,16 +579,16 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case projErr != nil:
-		writeError(w, http.StatusInternalServerError, "read project: "+projErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read project: "+projErr.Error())
 	case unknownProject:
-		writeError(w, http.StatusBadRequest, "unknown project id")
+		httpapi.Error(w, http.StatusBadRequest, "unknown project id")
 	case compErr != nil:
 		// A compile failure is a client error: the submitted model is invalid.
-		writeError(w, http.StatusBadRequest, compErr.Error())
+		httpapi.Error(w, http.StatusBadRequest, compErr.Error())
 	case persistErr != nil:
-		writeError(w, http.StatusInternalServerError, "persist deployment: "+persistErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "persist deployment: "+persistErr.Error())
 	default:
-		writeJSON(w, http.StatusOK, resp)
+		httpapi.JSON(w, http.StatusOK, resp)
 	}
 }
 
@@ -709,7 +711,7 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
 			})
 		}
 	})
-	writeJSON(w, http.StatusOK, list)
+	httpapi.JSON(w, http.StatusOK, list)
 }
 
 // handleProcessXML returns a deployed definition's BPMN XML for the browser to
@@ -718,7 +720,7 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) handleProcessXML(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid definition key")
+		httpapi.Error(w, http.StatusBadRequest, "invalid definition key")
 		return
 	}
 	var raw []byte
@@ -728,7 +730,7 @@ func (s *Server) handleProcessXML(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 	if raw == nil {
-		writeError(w, http.StatusNotFound, "no deployment with that key")
+		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
 		return
 	}
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
@@ -745,11 +747,11 @@ func (s *Server) handleProcessXML(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleLayout(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	if len(body) == 0 {
-		writeError(w, http.StatusBadRequest, "empty request body: expected BPMN XML")
+		httpapi.Error(w, http.StatusBadRequest, "empty request body: expected BPMN XML")
 		return
 	}
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
@@ -762,7 +764,7 @@ func (s *Server) handleLayout(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid definition key")
+		httpapi.Error(w, http.StatusBadRequest, "invalid definition key")
 		return
 	}
 	var (
@@ -810,15 +812,15 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case !found:
-		writeError(w, http.StatusNotFound, "no deployment with that key")
+		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
 	case protected:
-		writeError(w, http.StatusForbidden, "protected system process cannot be deleted")
+		httpapi.Error(w, http.StatusForbidden, "protected system process cannot be deleted")
 	case scanErr != nil:
-		writeError(w, http.StatusInternalServerError, "check instances: "+scanErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "check instances: "+scanErr.Error())
 	case running > 0:
-		writeError(w, http.StatusConflict, fmt.Sprintf("cannot delete: %d running instance(s); cancel them first", running))
+		httpapi.Error(w, http.StatusConflict, fmt.Sprintf("cannot delete: %d running instance(s); cancel them first", running))
 	case persistErr != nil:
-		writeError(w, http.StatusInternalServerError, "remove deployment: "+persistErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "remove deployment: "+persistErr.Error())
 	default:
 		w.WriteHeader(http.StatusNoContent)
 	}
@@ -833,14 +835,14 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSetProcessActive(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid definition key")
+		httpapi.Error(w, http.StatusBadRequest, "invalid definition key")
 		return
 	}
 	var body struct {
 		Active bool `json:"active"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid body: expected {\"active\": bool}")
+		httpapi.Error(w, http.StatusBadRequest, "invalid body: expected {\"active\": bool}")
 		return
 	}
 	var (
@@ -882,13 +884,13 @@ func (s *Server) handleSetProcessActive(w http.ResponseWriter, r *http.Request) 
 	})
 	switch {
 	case !found:
-		writeError(w, http.StatusNotFound, "no deployment with that key")
+		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
 	case loadErr != nil:
-		writeError(w, http.StatusInternalServerError, "read deployment: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read deployment: "+loadErr.Error())
 	case persistErr != nil:
-		writeError(w, http.StatusInternalServerError, "persist deployment: "+persistErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "persist deployment: "+persistErr.Error())
 	default:
-		writeJSON(w, http.StatusOK, map[string]any{"key": key, "active": body.Active})
+		httpapi.JSON(w, http.StatusOK, map[string]any{"key": key, "active": body.Active})
 	}
 }
 
@@ -900,7 +902,7 @@ func (s *Server) handleSetProcessActive(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid definition key")
+		httpapi.Error(w, http.StatusBadRequest, "invalid definition key")
 		return
 	}
 	// instanceFilter == 0 means "all instances"; instance keys are never 0.
@@ -908,7 +910,7 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 	if q := r.URL.Query().Get("instance"); q != "" {
 		instanceFilter, err = strconv.ParseUint(q, 10, 64)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid instance key")
+			httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
 			return
 		}
 	}
@@ -1008,11 +1010,11 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case !found:
-		writeError(w, http.StatusNotFound, "no deployment with that key")
+		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
 	case scanErr != nil:
-		writeError(w, http.StatusInternalServerError, "read runtime: "+scanErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read runtime: "+scanErr.Error())
 	default:
-		writeJSON(w, http.StatusOK, resp)
+		httpapi.JSON(w, http.StatusOK, resp)
 	}
 }
 
@@ -1024,7 +1026,7 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCollaborationRuntime(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid definition key")
+		httpapi.Error(w, http.StatusBadRequest, "invalid definition key")
 		return
 	}
 	var (
@@ -1126,9 +1128,9 @@ func (s *Server) handleCollaborationRuntime(w http.ResponseWriter, r *http.Reque
 	})
 	switch {
 	case !found:
-		writeError(w, http.StatusNotFound, "no deployment with that key")
+		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
 	case scanErr != nil:
-		writeError(w, http.StatusInternalServerError, "read collaboration runtime: "+scanErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read collaboration runtime: "+scanErr.Error())
 	default:
 		sort.Slice(flows, func(i, j int) bool {
 			if flows[i].ts != flows[j].ts {
@@ -1139,7 +1141,7 @@ func (s *Server) handleCollaborationRuntime(w http.ResponseWriter, r *http.Reque
 		for _, tf := range flows {
 			resp.MessageFlows = append(resp.MessageFlows, tf.f)
 		}
-		writeJSON(w, http.StatusOK, resp)
+		httpapi.JSON(w, http.StatusOK, resp)
 	}
 }
 
@@ -1153,7 +1155,7 @@ func (s *Server) handleCollaborationRuntime(w http.ResponseWriter, r *http.Reque
 func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid instance key")
+		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
 		return
 	}
 	var (
@@ -1465,13 +1467,13 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 	})
 	switch {
 	case scanErr != nil:
-		writeError(w, http.StatusInternalServerError, "read timeline: "+scanErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read timeline: "+scanErr.Error())
 	case !foundInstance:
-		writeError(w, http.StatusNotFound, "no instance with that key")
+		httpapi.Error(w, http.StatusNotFound, "no instance with that key")
 	case !foundDef:
-		writeError(w, http.StatusNotFound, "instance's definition is no longer deployed")
+		httpapi.Error(w, http.StatusNotFound, "instance's definition is no longer deployed")
 	default:
-		writeJSON(w, http.StatusOK, resp)
+		httpapi.JSON(w, http.StatusOK, resp)
 	}
 }
 
@@ -1481,17 +1483,17 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid definition key")
+		httpapi.Error(w, http.StatusBadRequest, "invalid definition key")
 		return
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	startVars, err := parseStartVariables(body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	var (
@@ -1522,15 +1524,15 @@ func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case !found:
-		writeError(w, http.StatusNotFound, "no deployment with that key")
+		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
 	case notExec:
-		writeError(w, http.StatusConflict, "process is not executable and cannot be started")
+		httpapi.Error(w, http.StatusConflict, "process is not executable and cannot be started")
 	case runErr != nil:
-		writeError(w, http.StatusInternalServerError, "run instance: "+runErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "run instance: "+runErr.Error())
 	case statErr != nil:
-		writeError(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
 	default:
-		writeJSON(w, http.StatusOK, createInstanceResp{DefinitionKey: key, Stats: stats})
+		httpapi.JSON(w, http.StatusOK, createInstanceResp{DefinitionKey: key, Stats: stats})
 	}
 }
 
@@ -1658,7 +1660,7 @@ func nativeVar(v *model.VariableValue) any {
 func (s *Server) handleInstanceVariables(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid instance key")
+		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
 		return
 	}
 	out := map[string]any{}
@@ -1670,10 +1672,10 @@ func (s *Server) handleInstanceVariables(w http.ResponseWriter, r *http.Request)
 		})
 	})
 	if scanErr != nil {
-		writeError(w, http.StatusInternalServerError, "read variables: "+scanErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read variables: "+scanErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpapi.JSON(w, http.StatusOK, out)
 }
 
 // handleSetInstanceVariables sets or overwrites variables on a running instance
@@ -1696,12 +1698,12 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 	}
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid instance key")
+		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
 		return
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	// Decode variables and the optional scopeKey in one pass (UseNumber so a
@@ -1714,16 +1716,16 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.UseNumber()
 	if err := dec.Decode(&payload); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
 	vars, err := startVarsFromMap(payload.Variables)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if len(vars) == 0 {
-		writeError(w, http.StatusBadRequest, "no variables to set (body must carry a non-empty \"variables\" object)")
+		httpapi.Error(w, http.StatusBadRequest, "no variables to set (body must carry a non-empty \"variables\" object)")
 		return
 	}
 	scopeKey := payload.ScopeKey
@@ -1732,7 +1734,7 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 	// unidentified. Read off the request before the run loop, like every other
 	// principal read.
 	actor := ""
-	if p := principalFrom(r.Context()); p != nil {
+	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
 		actor = p.Username
 	}
 
@@ -1768,15 +1770,15 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 	})
 	switch {
 	case scanErr != nil:
-		writeError(w, http.StatusInternalServerError, "read instance: "+scanErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read instance: "+scanErr.Error())
 	case !found:
-		writeError(w, http.StatusNotFound, "no running instance with that key")
+		httpapi.Error(w, http.StatusNotFound, "no running instance with that key")
 	case scopeBad:
-		writeError(w, http.StatusBadRequest, "scopeKey is not an element instance of this process instance")
+		httpapi.Error(w, http.StatusBadRequest, "scopeKey is not an element instance of this process instance")
 	case runErr != nil:
-		writeError(w, http.StatusInternalServerError, "set variables: "+runErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "set variables: "+runErr.Error())
 	default:
-		writeJSON(w, http.StatusOK, map[string]any{"instanceKey": key, "variablesSet": len(vars)})
+		httpapi.JSON(w, http.StatusOK, map[string]any{"instanceKey": key, "variablesSet": len(vars)})
 	}
 }
 
@@ -1820,7 +1822,7 @@ func varKindName(k model.VarKind) string {
 func (s *Server) handleInstanceVariableAudit(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid instance key")
+		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
 		return
 	}
 	out := []variableAuditView{}
@@ -1839,10 +1841,10 @@ func (s *Server) handleInstanceVariableAudit(w http.ResponseWriter, r *http.Requ
 		})
 	})
 	if scanErr != nil {
-		writeError(w, http.StatusInternalServerError, "read variable audit: "+scanErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read variable audit: "+scanErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpapi.JSON(w, http.StatusOK, out)
 }
 
 // dataObjectView renders a data object for the operator UI: its name, its BPMN
@@ -1882,7 +1884,7 @@ func toDataObjectView(v *model.DataObjectValue) dataObjectView {
 func (s *Server) handleInstanceDataObjects(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid instance key")
+		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
 		return
 	}
 	out := []dataObjectView{}
@@ -1894,10 +1896,10 @@ func (s *Server) handleInstanceDataObjects(w http.ResponseWriter, r *http.Reques
 		})
 	})
 	if scanErr != nil {
-		writeError(w, http.StatusInternalServerError, "read data objects: "+scanErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read data objects: "+scanErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpapi.JSON(w, http.StatusOK, out)
 }
 
 // decisionEvaluationView renders one DMN decision evaluation for the operator UI
@@ -1937,7 +1939,7 @@ func rawJSONOr(s, fallback string) json.RawMessage {
 func (s *Server) handleInstanceDecisions(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid instance key")
+		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
 		return
 	}
 	out := []decisionEvaluationView{}
@@ -1961,10 +1963,10 @@ func (s *Server) handleInstanceDecisions(w http.ResponseWriter, r *http.Request)
 		})
 	})
 	if scanErr != nil {
-		writeError(w, http.StatusInternalServerError, "read decisions: "+scanErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read decisions: "+scanErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpapi.JSON(w, http.StatusOK, out)
 }
 
 // handleListInstances lists process instances — live ones (with their current
@@ -2001,7 +2003,7 @@ func (s *Server) handleListInstances(w http.ResponseWriter, r *http.Request) {
 	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
 		n, err := strconv.Atoi(q)
 		if err != nil || n <= 0 {
-			writeError(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
+			httpapi.Error(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
 			return
 		}
 		limit = n
@@ -2016,7 +2018,7 @@ func (s *Server) handleListInstances(w http.ResponseWriter, r *http.Request) {
 	if q := strings.TrimSpace(r.URL.Query().Get("process")); q != "" {
 		n, err := strconv.ParseUint(q, 10, 64)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid process key")
+			httpapi.Error(w, http.StatusBadRequest, "invalid process key")
 			return
 		}
 		filterDef, hasFilter = n, true
@@ -2102,7 +2104,7 @@ func (s *Server) handleListInstances(w http.ResponseWriter, r *http.Request) {
 		scanErr = unlessTruncated(err)
 	})
 	if scanErr != nil {
-		writeError(w, http.StatusInternalServerError, "list instances: "+scanErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list instances: "+scanErr.Error())
 		return
 	}
 	// Finished instances: most recently completed first.
@@ -2112,7 +2114,7 @@ func (s *Server) handleListInstances(w http.ResponseWriter, r *http.Request) {
 		// rather than assume it received every instance.
 		w.Header().Set("X-Instances-Truncated", "true")
 	}
-	writeJSON(w, http.StatusOK, append(active, done...))
+	httpapi.JSON(w, http.StatusOK, append(active, done...))
 }
 
 type instanceSummaryRow struct {
@@ -2154,7 +2156,7 @@ func (s *Server) handleInstancesSummary(w http.ResponseWriter, _ *http.Request) 
 			})
 		}
 	})
-	writeJSON(w, http.StatusOK, out)
+	httpapi.JSON(w, http.StatusOK, out)
 }
 
 // maxInstanceSearchResults caps a variable search so a single query can't return
@@ -2214,7 +2216,7 @@ func (p varQuery) match(v variableView) bool {
 func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
 	pred, ok := parseVarQuery(r.URL.Query().Get("q"))
 	if !ok {
-		writeJSON(w, http.StatusOK, []instanceResp{})
+		httpapi.JSON(w, http.StatusOK, []instanceResp{})
 		return
 	}
 	active := []instanceResp{}
@@ -2284,7 +2286,7 @@ func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
 		})
 	})
 	if scanErr != nil {
-		writeError(w, http.StatusInternalServerError, "search instances: "+scanErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "search instances: "+scanErr.Error())
 		return
 	}
 	sort.Slice(done, func(i, j int) bool { return done[i].CompletedAt > done[j].CompletedAt })
@@ -2292,7 +2294,7 @@ func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
 	if len(out) > maxInstanceSearchResults {
 		out = out[:maxInstanceSearchResults]
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpapi.JSON(w, http.StatusOK, out)
 }
 
 type publishMessageResp struct {
@@ -2309,7 +2311,7 @@ type publishMessageResp struct {
 func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var payload struct {
@@ -2318,17 +2320,17 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(bytes.TrimSpace(body)) > 0 {
 		if err := json.Unmarshal(body, &payload); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+			httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 			return
 		}
 	}
 	if payload.Name == "" {
-		writeError(w, http.StatusBadRequest, "message name is required")
+		httpapi.Error(w, http.StatusBadRequest, "message name is required")
 		return
 	}
 	vars, err := parseStartVariables(body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	var (
@@ -2346,11 +2348,11 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case runErr != nil:
-		writeError(w, http.StatusInternalServerError, "publish message: "+runErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "publish message: "+runErr.Error())
 	case statErr != nil:
-		writeError(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
 	default:
-		writeJSON(w, http.StatusOK, publishMessageResp{Name: payload.Name, CorrelationKey: payload.CorrelationKey, Stats: stats})
+		httpapi.JSON(w, http.StatusOK, publishMessageResp{Name: payload.Name, CorrelationKey: payload.CorrelationKey, Stats: stats})
 	}
 }
 
@@ -2363,7 +2365,7 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCancelInstance(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid instance key")
+		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
 		return
 	}
 	var (
@@ -2392,15 +2394,15 @@ func (s *Server) handleCancelInstance(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case scanErr != nil:
-		writeError(w, http.StatusInternalServerError, "find instance: "+scanErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "find instance: "+scanErr.Error())
 	case !found:
-		writeError(w, http.StatusNotFound, "no active instance with that key")
+		httpapi.Error(w, http.StatusNotFound, "no active instance with that key")
 	case runErr != nil:
-		writeError(w, http.StatusInternalServerError, "cancel instance: "+runErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "cancel instance: "+runErr.Error())
 	case statErr != nil:
-		writeError(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
 	default:
-		writeJSON(w, http.StatusOK, cancelInstanceResp{InstanceKey: key, State: "terminated", Stats: stats})
+		httpapi.JSON(w, http.StatusOK, cancelInstanceResp{InstanceKey: key, State: "terminated", Stats: stats})
 	}
 }
 
@@ -2428,14 +2430,14 @@ const (
 func (s *Server) handleCancelInstancesOfProcess(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid definition key")
+		httpapi.Error(w, http.StatusBadRequest, "invalid definition key")
 		return
 	}
 	limit := bulkCancelBatchDefault
 	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
 		n, err := strconv.Atoi(q)
 		if err != nil || n <= 0 {
-			writeError(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
+			httpapi.Error(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
 			return
 		}
 		limit = n
@@ -2480,11 +2482,11 @@ func (s *Server) handleCancelInstancesOfProcess(w http.ResponseWriter, r *http.R
 	})
 	switch {
 	case !found:
-		writeError(w, http.StatusNotFound, "no deployment with that key")
+		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
 	case opErr != nil:
-		writeError(w, http.StatusInternalServerError, "cancel instances: "+opErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "cancel instances: "+opErr.Error())
 	default:
-		writeJSON(w, http.StatusOK, cancelInstancesResp{DefinitionKey: key, Canceled: len(keys), Remaining: remaining, Stats: stats})
+		httpapi.JSON(w, http.StatusOK, cancelInstancesResp{DefinitionKey: key, Canceled: len(keys), Remaining: remaining, Stats: stats})
 	}
 }
 
@@ -2526,14 +2528,14 @@ func (s *Server) handleTerminateInstances(w http.ResponseWriter, r *http.Request
 	}
 	switch {
 	case len(req.Keys) > 0 && req.ProcessDefKey != 0:
-		writeError(w, http.StatusBadRequest, "specify either keys or processDefKey, not both")
+		httpapi.Error(w, http.StatusBadRequest, "specify either keys or processDefKey, not both")
 		return
 	case len(req.Keys) > 0:
 		s.terminateByKeys(w, req.Keys)
 	case req.ProcessDefKey != 0:
 		s.terminateByFilter(w, req)
 	default:
-		writeError(w, http.StatusBadRequest, "want keys or processDefKey")
+		httpapi.Error(w, http.StatusBadRequest, "want keys or processDefKey")
 	}
 }
 
@@ -2579,10 +2581,10 @@ func (s *Server) terminateByKeys(w http.ResponseWriter, keys []uint64) {
 		stats, opErr = s.readStats()
 	})
 	if opErr != nil {
-		writeError(w, http.StatusInternalServerError, "terminate instances: "+opErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "terminate instances: "+opErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, terminateInstancesResp{
+	httpapi.JSON(w, http.StatusOK, terminateInstancesResp{
 		Terminated: terminated,
 		NotFound:   len(uniq) - terminated,
 		Stats:      stats,
@@ -2597,7 +2599,7 @@ func (s *Server) terminateByFilter(w http.ResponseWriter, req terminateInstances
 	limit := bulkCancelBatchDefault
 	if req.Limit != 0 {
 		if req.Limit < 0 {
-			writeError(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
+			httpapi.Error(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
 			return
 		}
 		limit = req.Limit
@@ -2659,11 +2661,11 @@ func (s *Server) terminateByFilter(w http.ResponseWriter, req terminateInstances
 	})
 	switch {
 	case !found:
-		writeError(w, http.StatusNotFound, "no deployment with that key")
+		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
 	case opErr != nil:
-		writeError(w, http.StatusInternalServerError, "terminate instances: "+opErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "terminate instances: "+opErr.Error())
 	default:
-		writeJSON(w, http.StatusOK, terminateInstancesResp{
+		httpapi.JSON(w, http.StatusOK, terminateInstancesResp{
 			Terminated: len(keys),
 			Remaining:  remaining,
 			Stats:      stats,
@@ -2695,7 +2697,7 @@ type jobResp struct {
 func (s *Server) handleListInstanceJobs(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid instance key")
+		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
 		return
 	}
 	jobs := []jobResp{}
@@ -2720,10 +2722,10 @@ func (s *Server) handleListInstanceJobs(w http.ResponseWriter, r *http.Request) 
 		})
 	})
 	if scanErr != nil {
-		writeError(w, http.StatusInternalServerError, "list jobs: "+scanErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list jobs: "+scanErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, jobs)
+	httpapi.JSON(w, http.StatusOK, jobs)
 }
 
 type taskResp struct {
@@ -2775,7 +2777,7 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 	if v := strings.TrimSpace(q.Get("limit")); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n <= 0 {
-			writeError(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
+			httpapi.Error(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
 			return
 		}
 		limit = n
@@ -2801,7 +2803,7 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 	if v := strings.TrimSpace(q.Get("before")); v != "" {
 		n, err := strconv.ParseUint(v, 10, 64)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid before cursor (want a job key)")
+			httpapi.Error(w, http.StatusBadRequest, "invalid before cursor (want a job key)")
 			return
 		}
 		before = n
@@ -2831,7 +2833,7 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 		scanErr = unlessTruncated(err)
 	})
 	if scanErr != nil {
-		writeError(w, http.StatusInternalServerError, "list tasks: "+scanErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list tasks: "+scanErr.Error())
 		return
 	}
 	if truncated {
@@ -2840,7 +2842,7 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Tasks-Truncated", "true")
 		w.Header().Set("X-Tasks-Next-Cursor", strconv.FormatUint(nextCursor, 10))
 	}
-	writeJSON(w, http.StatusOK, tasks)
+	httpapi.JSON(w, http.StatusOK, tasks)
 }
 
 // listTasksForInstance writes one process instance's open user tasks, resolved
@@ -2851,7 +2853,7 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 func (s *Server) listTasksForInstance(w http.ResponseWriter, raw string, limit int) {
 	instKey, err := strconv.ParseUint(raw, 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid processInstance (want an instance key)")
+		httpapi.Error(w, http.StatusBadRequest, "invalid processInstance (want an instance key)")
 		return
 	}
 	tasks := []taskResp{}
@@ -2882,13 +2884,13 @@ func (s *Server) listTasksForInstance(w http.ResponseWriter, raw string, limit i
 		scanErr = unlessTruncated(err)
 	})
 	if scanErr != nil {
-		writeError(w, http.StatusInternalServerError, "list tasks: "+scanErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list tasks: "+scanErr.Error())
 		return
 	}
 	if truncated {
 		w.Header().Set("X-Tasks-Truncated", "true")
 	}
-	writeJSON(w, http.StatusOK, tasks)
+	httpapi.JSON(w, http.StatusOK, tasks)
 }
 
 // enrichTask turns a user-task job into the response row the inbox and the
@@ -2946,7 +2948,7 @@ func (s *Server) enrichTask(jobKey uint64, jv *model.JobValue) taskResp {
 func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid task key")
+		httpapi.Error(w, http.StatusBadRequest, "invalid task key")
 		return
 	}
 	var (
@@ -2971,11 +2973,11 @@ func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case opErr != nil:
-		writeError(w, http.StatusInternalServerError, "get task: "+opErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "get task: "+opErr.Error())
 	case !found:
-		writeError(w, http.StatusNotFound, "no open task with that key")
+		httpapi.Error(w, http.StatusNotFound, "no open task with that key")
 	default:
-		writeJSON(w, http.StatusOK, task)
+		httpapi.JSON(w, http.StatusOK, task)
 	}
 }
 
@@ -2989,7 +2991,7 @@ func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid job key")
+		httpapi.Error(w, http.StatusBadRequest, "invalid job key")
 		return
 	}
 	var req failJobReq
@@ -3010,11 +3012,11 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case runErr != nil:
-		writeError(w, http.StatusInternalServerError, "fail job: "+runErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "fail job: "+runErr.Error())
 	case !found:
-		writeError(w, http.StatusNotFound, "no job with that key")
+		httpapi.Error(w, http.StatusNotFound, "no job with that key")
 	default:
-		writeJSON(w, http.StatusOK, map[string]any{"jobKey": key})
+		httpapi.JSON(w, http.StatusOK, map[string]any{"jobKey": key})
 	}
 }
 
@@ -3035,7 +3037,7 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid job key")
+		httpapi.Error(w, http.StatusBadRequest, "invalid job key")
 		return
 	}
 	// Variables are parsed (and rejected on bad JSON) before the job is looked
@@ -3043,12 +3045,12 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	// matching handleCompleteTask. An empty body completes with no variables.
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	vars, err := parseStartVariables(body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	var (
@@ -3065,11 +3067,11 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case runErr != nil:
-		writeError(w, http.StatusInternalServerError, "complete job: "+runErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "complete job: "+runErr.Error())
 	case !found:
-		writeError(w, http.StatusNotFound, "no job with that key")
+		httpapi.Error(w, http.StatusNotFound, "no job with that key")
 	default:
-		writeJSON(w, http.StatusOK, map[string]any{"jobKey": key})
+		httpapi.JSON(w, http.StatusOK, map[string]any{"jobKey": key})
 	}
 }
 
@@ -3079,7 +3081,7 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid element instance key")
+		httpapi.Error(w, http.StatusBadRequest, "invalid element instance key")
 		return
 	}
 	var req resolveIncidentReq
@@ -3107,11 +3109,11 @@ func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case runErr != nil:
-		writeError(w, http.StatusInternalServerError, "resolve incident: "+runErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "resolve incident: "+runErr.Error())
 	case !found:
-		writeError(w, http.StatusNotFound, "no incident on that element instance")
+		httpapi.Error(w, http.StatusNotFound, "no incident on that element instance")
 	default:
-		writeJSON(w, http.StatusOK, map[string]any{"elementInstanceKey": key, "jobKey": jobKey, "retries": retries})
+		httpapi.JSON(w, http.StatusOK, map[string]any{"elementInstanceKey": key, "jobKey": jobKey, "retries": retries})
 	}
 }
 
@@ -3122,7 +3124,7 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
 		n, err := strconv.Atoi(q)
 		if err != nil || n <= 0 {
-			writeError(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
+			httpapi.Error(w, http.StatusBadRequest, "invalid limit (want a positive integer)")
 			return
 		}
 		if limit = n; limit > maxTaskListMax {
@@ -3151,19 +3153,19 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 		scanErr = unlessTruncated(err)
 	})
 	if scanErr != nil {
-		writeError(w, http.StatusInternalServerError, "list incidents: "+scanErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list incidents: "+scanErr.Error())
 		return
 	}
 	if truncated {
 		w.Header().Set("X-Incidents-Truncated", "true")
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"incidents": list})
+	httpapi.JSON(w, http.StatusOK, map[string]any{"incidents": list})
 }
 
 func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid task key")
+		httpapi.Error(w, http.StatusBadRequest, "invalid task key")
 		return
 	}
 	// A completion may carry the submitted form's data as {"variables": {...}},
@@ -3172,12 +3174,12 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	// body completes with no variables.
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	vars, err := parseStartVariables(body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	var (
@@ -3197,11 +3199,11 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case runErr != nil:
-		writeError(w, http.StatusInternalServerError, "complete task: "+runErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "complete task: "+runErr.Error())
 	case !found:
-		writeError(w, http.StatusNotFound, "no open task with that key")
+		httpapi.Error(w, http.StatusNotFound, "no open task with that key")
 	default:
-		writeJSON(w, http.StatusOK, map[string]any{"taskKey": key})
+		httpapi.JSON(w, http.StatusOK, map[string]any{"taskKey": key})
 	}
 }
 
@@ -3222,15 +3224,15 @@ func (s *Server) handleClaimTask(w http.ResponseWriter, r *http.Request) {
 		Assignee string `json:"assignee"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		httpapi.Error(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 	assignee := strings.TrimSpace(body.Assignee)
 
 	if s.authEnabled {
-		p := principalFrom(r.Context())
+		p := httpapi.PrincipalFrom(r.Context())
 		if p == nil {
-			writeError(w, http.StatusUnauthorized, "authentication required")
+			httpapi.Error(w, http.StatusUnauthorized, "authentication required")
 			return
 		}
 		if assignee == "" {
@@ -3252,17 +3254,17 @@ func (s *Server) handleClaimTask(w http.ResponseWriter, r *http.Request) {
 				}
 			})
 			if vErr != nil {
-				writeError(w, http.StatusInternalServerError, "claim: "+vErr.Error())
+				httpapi.Error(w, http.StatusInternalServerError, "claim: "+vErr.Error())
 				return
 			}
 			if !known {
-				writeError(w, http.StatusBadRequest, "unknown or disabled user")
+				httpapi.Error(w, http.StatusBadRequest, "unknown or disabled user")
 				return
 			}
 			assignee = canonical
 		}
 	} else if assignee == "" {
-		writeError(w, http.StatusBadRequest, "assignee is required")
+		httpapi.Error(w, http.StatusBadRequest, "assignee is required")
 		return
 	}
 	s.assignTask(w, r, assignee)
@@ -3280,7 +3282,7 @@ func (s *Server) handleUnclaimTask(w http.ResponseWriter, r *http.Request) {
 func (s *Server) assignTask(w http.ResponseWriter, r *http.Request, assignee string) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid task key")
+		httpapi.Error(w, http.StatusBadRequest, "invalid task key")
 		return
 	}
 	var (
@@ -3297,11 +3299,11 @@ func (s *Server) assignTask(w http.ResponseWriter, r *http.Request, assignee str
 	})
 	switch {
 	case runErr != nil:
-		writeError(w, http.StatusInternalServerError, "assign task: "+runErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "assign task: "+runErr.Error())
 	case !found:
-		writeError(w, http.StatusNotFound, "no open task with that key")
+		httpapi.Error(w, http.StatusNotFound, "no open task with that key")
 	default:
-		writeJSON(w, http.StatusOK, map[string]any{"taskKey": key, "assignee": assignee})
+		httpapi.JSON(w, http.StatusOK, map[string]any{"taskKey": key, "assignee": assignee})
 	}
 }
 
@@ -3313,10 +3315,10 @@ func (s *Server) handleStats(w http.ResponseWriter, _ *http.Request) {
 	)
 	s.do(func() { stats, err = s.readStats() })
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "read stats: "+err.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read stats: "+err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, stats)
+	httpapi.JSON(w, http.StatusOK, stats)
 }
 
 type draftResp struct {
@@ -3335,16 +3337,16 @@ type draftResp struct {
 func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	if len(body) == 0 {
-		writeError(w, http.StatusBadRequest, "empty request body: expected BPMN XML")
+		httpapi.Error(w, http.StatusBadRequest, "empty request body: expected BPMN XML")
 		return
 	}
 	pid, name := processIdentity(body)
 	if pid == "" {
-		writeError(w, http.StatusBadRequest, "cannot save draft: no <process id> in the diagram")
+		httpapi.Error(w, http.StatusBadRequest, "cannot save draft: no <process id> in the diagram")
 		return
 	}
 	projectID := r.URL.Query().Get("projectId")
@@ -3382,15 +3384,15 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case projErr != nil:
-		writeError(w, http.StatusInternalServerError, "read project: "+projErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read project: "+projErr.Error())
 	case unknownProject:
-		writeError(w, http.StatusBadRequest, "unknown project id")
+		httpapi.Error(w, http.StatusBadRequest, "unknown project id")
 	case protectedProject:
-		writeError(w, http.StatusForbidden, "protected system project cannot be modified")
+		httpapi.Error(w, http.StatusForbidden, "protected system project cannot be modified")
 	case saveErr != nil:
-		writeError(w, http.StatusInternalServerError, "save draft: "+saveErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "save draft: "+saveErr.Error())
 	default:
-		writeJSON(w, http.StatusOK, draftResp{ProcessID: pid, Name: name, ProjectID: rec.ProjectID, SavedAt: rec.SavedAt})
+		httpapi.JSON(w, http.StatusOK, draftResp{ProcessID: pid, Name: name, ProjectID: rec.ProjectID, SavedAt: rec.SavedAt})
 	}
 }
 
@@ -3411,10 +3413,10 @@ func (s *Server) handleListDrafts(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "list drafts: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list drafts: "+loadErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, list)
+	httpapi.JSON(w, http.StatusOK, list)
 }
 
 // handleMoveDraft reassigns a draft to a different project (or to Ungrouped when
@@ -3424,14 +3426,14 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var payload struct {
 		ProjectID string `json:"projectId"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
 	var (
@@ -3475,19 +3477,19 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case getErr != nil:
-		writeError(w, http.StatusInternalServerError, "read draft: "+getErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read draft: "+getErr.Error())
 	case !found:
-		writeError(w, http.StatusNotFound, "no draft with that process id")
+		httpapi.Error(w, http.StatusNotFound, "no draft with that process id")
 	case projErr != nil:
-		writeError(w, http.StatusInternalServerError, "read project: "+projErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read project: "+projErr.Error())
 	case unknownProject:
-		writeError(w, http.StatusBadRequest, "unknown project id")
+		httpapi.Error(w, http.StatusBadRequest, "unknown project id")
 	case protectedProject:
-		writeError(w, http.StatusForbidden, "protected system project cannot be modified")
+		httpapi.Error(w, http.StatusForbidden, "protected system project cannot be modified")
 	case saveErr != nil:
-		writeError(w, http.StatusInternalServerError, "move draft: "+saveErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "move draft: "+saveErr.Error())
 	default:
-		writeJSON(w, http.StatusOK, view)
+		httpapi.JSON(w, http.StatusOK, view)
 	}
 }
 
@@ -3502,9 +3504,9 @@ func (s *Server) handleDraftXML(w http.ResponseWriter, r *http.Request) {
 	s.do(func() { rec, ok, readErr = s.drafts.Get(id) })
 	switch {
 	case readErr != nil:
-		writeError(w, http.StatusInternalServerError, "read draft: "+readErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "read draft: "+readErr.Error())
 	case !ok:
-		writeError(w, http.StatusNotFound, "no draft with that process id")
+		httpapi.Error(w, http.StatusNotFound, "no draft with that process id")
 	default:
 		w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 		_, _ = w.Write([]byte(rec.XML))
@@ -3518,18 +3520,8 @@ func (s *Server) handleDeleteDraft(w http.ResponseWriter, r *http.Request) {
 	var delErr error
 	s.do(func() { delErr = s.drafts.Delete(id) })
 	if delErr != nil {
-		writeError(w, http.StatusInternalServerError, "delete draft: "+delErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "delete draft: "+delErr.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func writeError(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, map[string]string{"error": msg})
 }

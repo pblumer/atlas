@@ -12,6 +12,8 @@ import (
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 func newInstalled(t *testing.T) *marketplaceStore {
@@ -419,24 +421,24 @@ func TestInstallScriptTaskAdminGate(t *testing.T) {
 
 	id := scriptTaskID(t, srv)
 
-	call := func(p *Principal) int {
+	call := func(p *httpapi.Principal) int {
 		req := httptest.NewRequest("POST", "/api/v1/marketplace/packages/"+id+"/install", nil)
 		req.SetPathValue("id", id)
 		if p != nil {
-			req = req.WithContext(withPrincipal(context.Background(), p))
+			req = req.WithContext(httpapi.WithPrincipal(context.Background(), p))
 		}
 		rr := httptest.NewRecorder()
 		srv.handleInstallMarketplacePackage(rr, req)
 		return rr.Code
 	}
 
-	if code := call(&Principal{UserID: "u1", Roles: []string{"user"}}); code != 403 {
+	if code := call(&httpapi.Principal{UserID: "u1", Roles: []string{"user"}}); code != 403 {
 		t.Errorf("non-admin script-task install = %d, want 403", code)
 	}
 	if code := call(nil); code != 403 {
 		t.Errorf("unauthenticated script-task install = %d, want 403", code)
 	}
-	if code := call(&Principal{UserID: "admin", Roles: []string{RoleAdmin}}); code != 200 {
+	if code := call(&httpapi.Principal{UserID: "admin", Roles: []string{RoleAdmin}}); code != 200 {
 		t.Errorf("admin script-task install = %d, want 200", code)
 	}
 }

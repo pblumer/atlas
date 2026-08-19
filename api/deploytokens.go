@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 // Deploy-token management (ADR-0129). Minting, listing, and revoking the
@@ -44,32 +46,32 @@ func (s *Server) handleCreateDeployToken(w http.ResponseWriter, r *http.Request)
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
 	var payload struct {
 		Name string `json:"name"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
 	name := strings.TrimSpace(payload.Name)
 	if name == "" {
-		writeError(w, http.StatusBadRequest, "deploy token name is required")
+		httpapi.Error(w, http.StatusBadRequest, "deploy token name is required")
 		return
 	}
 
 	id, err := newID()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "generate id: "+err.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "generate id: "+err.Error())
 		return
 	}
 	// 32 bytes of CSPRNG output: enough entropy that the stored SHA-256 needs no
 	// deliberate slowness to resist guessing.
 	suffix, err := randomHex(32)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "generate token: "+err.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "generate token: "+err.Error())
 		return
 	}
 	secret := deployTokenPrefix + suffix
@@ -80,7 +82,7 @@ func (s *Server) handleCreateDeployToken(w http.ResponseWriter, r *http.Request)
 		Hash:      hashDeployToken(secret),
 		CreatedAt: time.Now().Unix(),
 	}
-	if p := principalFrom(r.Context()); p != nil {
+	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
 		rec.CreatedBy = p.UserID
 	}
 
@@ -92,10 +94,10 @@ func (s *Server) handleCreateDeployToken(w http.ResponseWriter, r *http.Request)
 		s.deployTokens.add(rec)
 	})
 	if saveErr != nil {
-		writeError(w, http.StatusInternalServerError, "create deploy token: "+saveErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "create deploy token: "+saveErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, newDeployTokenResp{deployTokenView: rec.view(), Token: secret})
+	httpapi.JSON(w, http.StatusOK, newDeployTokenResp{deployTokenView: rec.view(), Token: secret})
 }
 
 // handleListDeployTokens lists the tokens by identity and provenance. The secret is
@@ -116,10 +118,10 @@ func (s *Server) handleListDeployTokens(w http.ResponseWriter, r *http.Request) 
 		}
 	})
 	if loadErr != nil {
-		writeError(w, http.StatusInternalServerError, "list deploy tokens: "+loadErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "list deploy tokens: "+loadErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	httpapi.JSON(w, http.StatusOK, out)
 }
 
 // handleRevokeDeployToken revokes a token. Revocation is deletion and takes effect
@@ -137,7 +139,7 @@ func (s *Server) handleRevokeDeployToken(w http.ResponseWriter, r *http.Request)
 		s.deployTokens.remove(id)
 	})
 	if delErr != nil {
-		writeError(w, http.StatusInternalServerError, "revoke deploy token: "+delErr.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "revoke deploy token: "+delErr.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
