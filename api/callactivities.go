@@ -3,12 +3,13 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/logging"
 
 	"github.com/pblumer/atlas/api/httpapi"
 )
@@ -188,7 +189,8 @@ func (s *Server) loadCallOverrides() error {
 	for _, rec := range recs {
 		ov, err := s.callOverrideDirective(rec)
 		if err != nil {
-			log.Printf("call-override: skipping %q: %v", rec.CalledProcessID, err)
+			logging.Warn(logging.CallOverrideSkipped, "skipping an unusable call-activity target override",
+				slog.String("calledProcessId", rec.CalledProcessID), slog.String("error", err.Error()))
 			continue
 		}
 		s.proc.SetCallTargetOverride(rec.CalledProcessID, ov)

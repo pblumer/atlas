@@ -33,7 +33,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -58,6 +58,7 @@ import (
 	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/job"
+	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/metrics"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/opensearch"
@@ -858,9 +859,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 			return nil, err
 		}
 		if source == "generated" {
-			log.Printf("vault: generated a master key at %s (mode 0600); set ATLAS_VAULT_KEY "+
-				"for a stronger at-rest posture or pass --vault=false to disable (ADR-0070)",
-				filepath.Join(dataDir, "vault.key"))
+			logging.Info(logging.VaultKeyGenerated,
+				"generated a vault master key (mode 0600); set ATLAS_VAULT_KEY for a stronger "+
+					"at-rest posture or pass --vault=false to disable (ADR-0070)",
+				slog.String("path", filepath.Join(dataDir, "vault.key")))
 		}
 	}
 	// When enforcement is on, make sure a fresh instance has an admin to log in
@@ -1075,9 +1077,11 @@ func (s *Server) exporterLoop(every time.Duration) {
 			return
 		case <-ticks:
 			if n, err := s.exporter.Tick(context.Background()); err != nil {
-				log.Printf("opensearch exporter: %v (will retry next tick)", err)
+				logging.Warn(logging.ExporterTickFailed, "opensearch export tick failed; will retry next tick",
+					slog.String("error", err.Error()))
 			} else if n > 0 {
-				log.Printf("opensearch exporter: indexed %d record(s)", n)
+				logging.Info(logging.ExporterIndexed, "indexed records into opensearch",
+					slog.Int("records", n))
 			}
 			if s.exporterTicked != nil {
 				select {
@@ -1161,7 +1165,8 @@ func (s *Server) sweepRetention(now int64) {
 	_ = s.jobRunner.Drive() // durable purge events; a drive error is retried next tick
 	// No single age to name: instances in one sweep may have come due under different
 	// per-definition TTLs, or under the server-wide age (ADR-0144).
-	log.Printf("retention: purged %d finished instance(s)", len(targets))
+	logging.Info(logging.RetentionPurged, "purged finished instances past their history TTL",
+		slog.Int("instances", len(targets)))
 }
 
 // scheduledPurges collects the instances whose declared history TTL has elapsed, by
@@ -1329,7 +1334,8 @@ func (s *Server) runCheckpointPass(last *uint64) checkpointPass {
 	}
 	if pos != 0 && pos != *last {
 		*last = pos
-		log.Printf("checkpoint: published at log position %d (recovery replays only past it)", pos)
+		logging.Info(logging.CheckpointPublished, "published a recovery checkpoint; recovery replays only past it",
+			slog.Uint64("position", pos))
 	}
 	if s.compactWAL {
 		removed, note, cerr := s.compactLog()
@@ -1364,7 +1370,8 @@ func (s *Server) takeCheckpoint() (uint64, error) {
 		pos, err = s.proc.Checkpoint(s.checkpointRoot)
 	})
 	if err != nil {
-		log.Printf("checkpoint: %v (will retry next tick)", err)
+		logging.Warn(logging.CheckpointFailed, "taking a recovery checkpoint failed; will retry next tick",
+			slog.String("error", err.Error()))
 		return 0, err
 	}
 	if pos == 0 {
@@ -1373,7 +1380,9 @@ func (s *Server) takeCheckpoint() (uint64, error) {
 	if err := checkpoint.Prune(s.checkpointRoot, s.checkpointKeep); err != nil {
 		// The checkpoint is published either way; a failed prune costs disk, not recovery,
 		// so it is reported without discarding the position that was captured.
-		log.Printf("checkpoint: prune: %v (will retry next tick)", err)
+		logging.Warn(logging.CheckpointPruneFailed,
+			"pruning old checkpoints failed; will retry next tick — this costs disk, not recovery",
+			slog.String("error", err.Error()), slog.Uint64("position", pos))
 		return pos, err
 	}
 	return pos, nil
@@ -1399,17 +1408,23 @@ func (s *Server) compactLog() (int, string, error) {
 	}
 	limits, err := s.consumerWatermarks()
 	if err != nil {
-		log.Printf("wal compaction: consumer watermark unavailable: %v (skipping this tick)", err)
+		logging.Warn(logging.WALCompactionWatermarkFailed,
+			"a consumer watermark is unavailable; skipping compaction this tick rather than "+
+				"deleting a segment a consumer may still need",
+			slog.String("error", err.Error()))
 		return 0, "", err
 	}
 	var removed int
 	s.do(func() { removed, err = s.proc.CompactLog(s.checkpointRoot, limits) })
 	if err != nil {
-		log.Printf("wal compaction: %v (will retry next tick)", err)
+		logging.Warn(logging.WALCompactionFailed, "wal compaction failed; will retry next tick",
+			slog.String("error", err.Error()))
 		return 0, "", err
 	}
 	if removed > 0 {
-		log.Printf("wal compaction: deleted %d WAL segment(s) already covered by a checkpoint and every consumer", removed)
+		logging.Info(logging.WALCompactionSegmentsDeleted,
+			"deleted WAL segments already covered by a checkpoint and every consumer watermark",
+			slog.Int("segments", removed))
 	}
 	return removed, "", nil
 }
@@ -1548,7 +1563,9 @@ func (s *Server) collabReaper(every time.Duration) {
 			return
 		case <-t.C:
 			if n := s.collab.Reap(); n > 0 {
-				log.Printf("collab: reaped %d idle session participant(s) past the %s TTL (ADR-0140)", n, collab.ParticipantTTL)
+				logging.Info(logging.CollabParticipantsReaped,
+					"reaped idle collaboration participants past their TTL (ADR-0140)",
+					slog.Int("participants", n), slog.Duration("ttl", collab.ParticipantTTL))
 			}
 		}
 	}

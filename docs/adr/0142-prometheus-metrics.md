@@ -312,9 +312,50 @@ This ADR is **not implemented in one change**. The slices:
    error when used after `Close`, and readiness is exactly the endpoint where "the store
    is gone" should be reported as a 503 with a reason instead of a dropped connection and
    a stack trace every ten seconds.
-8. Structured log event names and essential context, and only then OpenTelemetry
-   traces — after the metric contract has settled, with sampling and export kept off
-   the single-writer path.
+8. **Landed (partly)** — **structured log event names and essential context**. Every
+   operational line was a prose sentence with values interpolated into it. An operator
+   could read one; nothing could *alert* on one, except by matching a regular expression
+   against wording that changes the moment someone rewords a sentence.
+
+   The fix keeps both audiences. Each line now carries an **event name** — the stable
+   identifier an alert matches on — beside the **sentence**, which is retained because
+   "will retry next tick" is real guidance a bare name loses, with the **values** moved
+   out of the sentence into typed attributes. `--log-format=json` emits the same records
+   for a shipper; text stays the default, because a terminal is the audience Atlas has
+   always had.
+
+   Two properties are structural rather than conventional, which is the same posture the
+   label allowlist takes above:
+   - **A name cannot be invented at a call site.** `logging.Event` is a struct with an
+     unexported field, so the catalogue in `logging/events.go` is the complete set of
+     names that can ever be logged (invariant I5). A malformed or duplicate name panics
+     at package init — two subsystems quietly sharing a name would make an alert fire for
+     the wrong thing, which is not a defect worth finding during the incident it was
+     supposed to catch.
+   - **Nothing logs around the catalogue.** A test parses every non-test file in the tree
+     and fails on a direct `log.Printf` or `slog.Info`. One surviving call is a line no
+     alert can match, and it is invisible in review precisely because it looks like every
+     log call ever written.
+
+   Three consequences worth stating rather than discovering:
+   - **Event names are an API.** Renaming one is a breaking change and belongs under
+     _Changed_ in the changelog. The sentence beside it can be reworded freely — that is
+     the entire reason the name is a separate field.
+   - **No secret becomes an attribute.** The generated bootstrap admin password stays
+     inside the message text, because an attribute is what a shipper extracts, indexes
+     and keeps.
+   - **Durations encode differently per format** — `5m0s` in text, nanoseconds in JSON —
+     because that is what `slog.Duration` does. Unlike the metrics above, which are
+     seconds by convention, a log attribute is read by whatever consumes that format.
+
+   Built on `log/slog`, which is to say on nothing: no dependency is added (ADR-0010).
+   The engine still does not log at all, so the single writer is untouched (I1, I3).
+
+   **Not done here: OpenTelemetry traces.** They are the other half of this slice and
+   wait for their own change, as this ADR always ordered it — after the metric contract
+   settled, with sampling and export kept off the single-writer path. A `--log-level`
+   flag is also absent: nothing emits below Info yet, so it would be a knob over an empty
+   set.
 
 ## Links
 

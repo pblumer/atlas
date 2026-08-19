@@ -55,6 +55,34 @@ _Changed_ / _Removed_ for each version.
   branch being written about is not always the newest. Lazy, memoized per process (switching
   instances costs no request) and refreshable; a process that has never run simply says so.
 
+- **Logs with names you can alert on** (v0.2.0 programme E,
+  [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 8): every operational line Atlas
+  writes now carries a stable `event=` name beside the sentence, and the values that used
+  to be interpolated into English arrive as typed fields. `event=checkpoint.published
+  position=48213` is something an alert can match and a chart can read;
+  `"checkpoint: published at log position 48213"` was not, except by regular expression
+  against wording that changes whenever someone rewords a sentence.
+
+  The sentence is kept, not replaced — "will retry next tick" is guidance a bare event
+  name loses — and **text remains the default format**, because an operator watching
+  `atlas serve` in a terminal is the audience Atlas has always had. New `--log-format=json`
+  emits the same records as one JSON object per line for a log shipper. A typo in the
+  value fails the boot rather than silently picking a format nobody asked for.
+
+  Two rules are enforced by construction rather than by review: a call site **cannot
+  invent an event name** (`logging.Event` carries an unexported field, so the catalogue in
+  `logging/events.go` is the complete set, and a duplicate or malformed name panics at
+  init), and **nothing logs around the catalogue** (a test parses every non-test file in
+  the tree and fails on a direct `log.Printf` or `slog.Info` — it found all 37 call sites
+  that existed when it was written). Event names are treated as an API: renaming one is a
+  breaking change and will appear here under _Changed_. Secrets never become fields — the
+  generated bootstrap admin password stays inside the message text, because a field is
+  what a shipper extracts and keeps.
+
+  Built on `log/slog`, so no dependency is added, and the engine still does not log at
+  all — the single writer's hot path is untouched. OpenTelemetry traces are the other
+  half of this slice and wait for their own change.
+
 - **A readiness probe that means something** (v0.2.0 programme E,
   [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 7): `GET /readyz`, separate from
   `/healthz` and unauthenticated like it. The audit that opened this slice found the split

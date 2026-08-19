@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/logging"
 )
 
 // backupDirs is the design-time subtree of the data directory that the backup
@@ -70,7 +71,8 @@ func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request) {
 		// The header (200) is already sent, so a mid-stream failure can only be
 		// logged; the truncated archive fails gzip/tar validation on the client
 		// rather than masquerading as complete.
-		log.Printf("backup: streaming failed: %v", err)
+		logging.Error(logging.BackupStreamFailed, "design-time backup stream failed after the header was sent",
+			slog.String("error", err.Error()))
 	}
 }
 

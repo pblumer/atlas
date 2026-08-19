@@ -128,7 +128,7 @@ sudo -u atlas atlas serve --addr 127.0.0.1:8080 --data-dir /var/lib/atlas
 You should see it open the data directory and then:
 
 ```
-listening on 127.0.0.1:8080 (UI at http://127.0.0.1:8080, MCP at http://127.0.0.1:8080/mcp)
+time=2026-01-31T09:14:02.117Z level=INFO msg="listening; recovery is complete and this instance is ready" event=server.listening addr=127.0.0.1:8080 ui=http://127.0.0.1:8080/ mcp=http://127.0.0.1:8080/mcp
 ```
 
 Check it from another shell, then stop it with `Ctrl-C`:
@@ -381,6 +381,9 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--script-timeout` | `30s` | Wall-clock limit for one script task |
 | `--checkpoint-interval` | `5m` | How often to snapshot applied state so restarts replay less log; `0` disables |
 | `--checkpoint-keep` | `3` | How many checkpoints to retain |
+| `--compact-wal` | `false` | Delete WAL segments already covered by a checkpoint and every consumer watermark. Irreversible, so opt-in; requires checkpointing |
+| `--metrics` | `true` | Serve the Prometheus exposition at `/metrics` |
+| `--log-format` | `text` | `text` for a terminal, `json` for a log shipper — see [Logs](#logs) |
 | `--opensearch-url` | `$ATLAS_OPENSEARCH_URL` | Mirror the event log into OpenSearch; empty disables |
 | `--opensearch-index` | `$ATLAS_OPENSEARCH_INDEX` | Index the exporter writes to |
 | `--retention-max-age` | `$ATLAS_RETENTION_MAX_AGE` | Hard-delete finished instances older than this once exported, e.g. `720h`; `0` disables. A process may override it with its own `atlas:historyTtl` (ADR-0144) |
@@ -457,6 +460,52 @@ Note that the server does not open its listening port until startup recovery has
 finished, so a probe that gets a connection refused during a restart is seeing that
 replay. Give the startup probe enough budget to wait it out rather than restarting into
 a replay that then starts over — the bundled Helm chart allows ten minutes.
+
+### Logs
+
+Every line Atlas writes carries a stable **`event=` name** beside the sentence. The
+sentence explains, the name identifies — so an alert matches on `event=checkpoint.failed`
+and keeps working when the wording changes, and values arrive as fields instead of buried
+in English.
+
+```
+time=2026-01-31T09:19:02.884Z level=INFO msg="published a recovery checkpoint; recovery replays only past it" event=checkpoint.published position=48213
+time=2026-01-31T09:19:02.885Z level=WARN msg="wal compaction failed; will retry next tick" event=wal_compaction.failed error="no space left on device"
+```
+
+`--log-format=json` emits the same records as one JSON object per line, for a shipper
+that would otherwise need a parsing rule of its own. Text is the default because a
+terminal is the audience Atlas has always had.
+
+```json
+{"time":"2026-01-31T09:19:02.884Z","level":"INFO","msg":"published a recovery checkpoint; recovery replays only past it","event":"checkpoint.published","position":48213}
+```
+
+Everything goes to **stderr**, including lines from libraries, so `journalctl -u atlas`
+and `docker logs` see one stream in one shape. The most recent lines are also readable
+over the API at `GET /api/v1/logs` and in the UI, which is a diagnostic tail rather than
+storage — it is bounded and does not survive a restart.
+
+Event names an operator is most likely to alert on:
+
+| Event | Level | Meaning |
+|-------|-------|---------|
+| `server.listening` | INFO | The listener is up. It comes *after* recovery, so this is also "this instance finished starting" |
+| `server.shutting_down` | INFO | SIGTERM received; in-flight requests are being drained |
+| `command.failed` | ERROR | A command exited non-zero |
+| `checkpoint.published` | INFO | A recovery checkpoint was captured, with the log `position` it covers |
+| `checkpoint.failed` | WARN | The checkpoint pass failed; the next tick retries. Persistent failures mean restarts replay more log |
+| `wal_compaction.failed` | WARN | Compaction failed; segments are kept. Safe, but the log keeps growing |
+| `wal_compaction.inert` | WARN | `--compact-wal` without `--checkpoint-interval` — it is doing nothing |
+| `exporter.tick_failed` | WARN | An OpenSearch export tick failed; lag grows until it recovers |
+| `retention.purged` | INFO | Finished instances were hard-deleted, with how many |
+| `script_worker.binary_missing` | WARN | A script language is enabled but its interpreter is absent; those tasks park |
+| `auth.admin_seeded` | WARN | The bootstrap administrator was created with a generated password |
+
+Event names are treated as an API: renaming one is a breaking change and appears under
+_Changed_ in the [changelog](../CHANGELOG.md). Secrets never become fields — the seeded
+admin password stays inside the message text precisely because a field is what a log
+shipper extracts and keeps.
 
 ## The data directory
 
