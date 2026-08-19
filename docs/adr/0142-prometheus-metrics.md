@@ -198,16 +198,37 @@ This ADR is **not implemented in one change**. The slices:
    The overhead is measured, not asserted: `BenchmarkInstrumented` against
    `BenchmarkUninstrumented` in `benchmarks/` shows identical `allocs/op`, with `ns/op`
    inside the fsync's own run-to-run spread.
-3. Runtime gauges — active instances, element instances, jobs, timers, messages,
-   incidents — which first need O(1) maintained counters wherever only a scan exists
-   today.
-4. Job protocol counters (activations, completions, failures, retries, timeouts),
+3. **Landed (partly)** — **runtime population gauges**: `atlas_active_process_instances`
+   and `atlas_live_element_tokens`, summed at scrape time from the maintained
+   per-definition counters ADR-0080 already keeps (`Store.TotalActiveInstances` /
+   `TotalLiveTokens`), never by walking the runtime set.
+
+   The scan-avoidance rule this ADR set turned out to need a qualification, found by
+   measuring rather than reasoning. The per-definition counters are Pebble **merge**
+   counters, so a read also folds in whatever operands have not been compacted yet: right
+   after a burst of starts the sum costs O(recent writes), not O(definitions). A flush
+   collapses them, after which it is flat — 2,000 running instances read as fast as 100 —
+   and flushes happen on their own, with the ADR-0131 checkpoint cadence forcing one every
+   few minutes. Even un-compacted the sum stays cheaper than the scan it replaces.
+   `BenchmarkTotalActiveInstances` measures all three states so the claim is checkable
+   rather than asserted. So the rule stands, read correctly: *a metric needs a maintained
+   counter, and "maintained" means amortized-O(1), not O(1) at every instant.*
+
+   Jobs, timers, message subscriptions and incidents are **deliberately not here**. They
+   have no maintained counter at all — only a full scan — and shipping them as scans would
+   break the rule above rather than bend it. They need their own durable merge counters
+   inside `applyToState`, with a backfill for existing stores and recovery tests, which is
+   a change to durable state and so its own slice.
+4. Durable maintained counters for jobs, timers, message subscriptions and incidents —
+   merge counters written inside `applyToState`, backfilled for existing stores,
+   recovery-tested — and the gauges over them.
+5. Job protocol counters (activations, completions, failures, retries, timeouts),
    landing with or after the ADR-0007 work.
-5. Recovery duration and replayed event count, exported once recovery can report them
+6. Recovery duration and replayed event count, exported once recovery can report them
    without changing its shape.
-6. Readiness semantics: a readiness probe distinct from liveness that fails while
+7. Readiness semantics: a readiness probe distinct from liveness that fails while
    startup recovery is incomplete or a required local store cannot operate.
-7. Structured log event names and essential context, and only then OpenTelemetry
+8. Structured log event names and essential context, and only then OpenTelemetry
    traces — after the metric contract has settled, with sampling and export kept off
    the single-writer path.
 

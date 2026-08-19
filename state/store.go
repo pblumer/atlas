@@ -271,6 +271,51 @@ func (s *Store) DefInstanceCount(procDefKey uint64) (int, error) {
 	return int(decodeCounter(raw)), nil
 }
 
+// TotalActiveInstances is how many process instances are live across every definition,
+// summed from the maintained per-definition counters (ADR-0080) rather than by walking
+// the instance records.
+//
+// The distinction is the whole point: the authoritative
+// [Store.ActiveProcessInstanceCount] scans the runtime set, so it costs more the busier
+// the engine is — fine for a request, wrong for something a Prometheus scrape takes every
+// fifteen seconds. This sum reads one key per **deployed definition**, a number that
+// changes only when someone deploys (ADR-0142).
+//
+// One honest qualification, measured rather than assumed (BenchmarkTotalActiveInstances):
+// these are *merge* counters, so a read also folds in whatever operands Pebble has not
+// compacted yet — right after a burst of starts the sum costs O(recent writes), not
+// O(definitions). A flush collapses them, after which the sum is flat regardless of how
+// many instances are running: 2,000 instances read as fast as 100. Flushes happen on
+// their own, and the ADR-0131 checkpoint cadence forces one every few minutes, so the
+// backlog is bounded in a running engine. Even un-compacted it stays cheaper than the
+// scan it replaces.
+func (s *Store) TotalActiveInstances() (int64, error) {
+	return s.sumCounters([]byte{byte(cfDefInstanceCount)})
+}
+
+// TotalLiveTokens is how many element instances hold live tokens across every definition,
+// summed from the maintained per-definition-element counters (ADR-0080). Bounded by the
+// number of deployed *elements* — design-time size, not runtime population — for the same
+// reason as [Store.TotalActiveInstances].
+func (s *Store) TotalLiveTokens() (int64, error) {
+	return s.sumCounters([]byte{byte(cfElementTokenCount)})
+}
+
+// sumCounters adds up every merge counter in a family. A counter whose value is too short
+// to decode reads as zero rather than failing the whole sum: one unreadable key should
+// cost a slightly low gauge, not a broken scrape.
+func (s *Store) sumCounters(prefix []byte) (int64, error) {
+	var total int64
+	err := s.scanPrefix(prefix, func(_, raw []byte) error {
+		total += decodeCounter(raw)
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
 // DefCompletedCount returns how many instances of one definition have finished
 // (completed or terminated), from the maintained counter in O(1) rather than scanning
 // the history (ADR-0083).
